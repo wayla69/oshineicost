@@ -856,6 +856,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>
     <span class="nav-label">💵 P&amp;L รายสาขา</span>
   </div>
+  <div class="nav-item" id="nav-more" onclick="switchTab('more')" title="Insight เพิ่มเติม · daypart profit, menu-mix shift, table turnover, revenue forecast">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
+    <span class="nav-label">📈 Insight เพิ่มเติม</span>
+  </div>
 
   <!-- ─── 🍣 À LA CARTE & MENU ─── -->
   <div class="nav-section">🍣 À La Carte &amp; เมนู</div>
@@ -2133,6 +2137,47 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         </tr></thead>
         <tbody id="pnl-branches"></tbody>
       </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: MORE ANALYTICS  (daypart profit · menu-mix shift · turnover · forecast)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-more" style="display:none">
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700">เศรษฐศาสตร์ตามช่วงเวลา (Daypart)</div>
+      <div class="text-xs text-slate-400 mb-2">กำไรเป็นค่าประมาณ (drink 70% · food/other 45%)</div>
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">ช่วง</th><th class="py-1.5 pr-2 text-right">รายได้</th>
+          <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right">/คน</th>
+          <th class="py-1.5 pr-2 text-right">ดื่ม%</th><th class="py-1.5 text-right">GP ประมาณ</th></tr></thead>
+        <tbody id="more-daypart"></tbody>
+      </table>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-1">พยากรณ์รายได้ (3 เดือน)</div>
+      <div id="more-forecast-note" class="text-xs text-slate-400 mb-2"></div>
+      <div style="position:relative;height:230px"><canvas id="more-forecast"></canvas></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-1">การเปลี่ยนสัดส่วนเมนูตามมาร์จิ้น (à la carte)</div>
+      <div class="text-xs text-slate-400 mb-2">% รายได้แยกตามแถบมาร์จิ้น · เส้นคือมาร์จิ้นถ่วงน้ำหนัก</div>
+      <div style="position:relative;height:230px"><canvas id="more-mix"></canvas></div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-1">อัตราหมุนโต๊ะ (Table turnover)</div>
+      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที)</div>
+      <div style="max-height:230px;overflow:auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-slate-400 text-xs border-b">
+            <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">นาที/รอบ</th>
+            <th class="py-1.5 pr-2 text-right">รอบ</th><th class="py-1.5 text-right">คน/รอบ</th></tr></thead>
+          <tbody id="more-turnover"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 </div>
@@ -4793,12 +4838,12 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', manual:'📖 คู่มือการใช้งาน' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน' };
 
 function switchTab(name) {
   activeTab = name;
   ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','manual'].forEach(t => {
+   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','more','manual'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -4967,6 +5012,7 @@ function loadActiveTab() {
   if (activeTab === 'bomcost')     loadBomCostTab();
   if (activeTab === 'coverage')    loadCostCoverage();
   if (activeTab === 'pnlbranch')   loadPnlBranch();
+  if (activeTab === 'more')        loadMoreAnalytics();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -14587,6 +14633,80 @@ async function loadPnlBranch() {
       <td class="py-1.5 text-right text-slate-500">${b.breakeven_covers?fmtN(b.breakeven_covers):'—'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="10" class="py-3 text-slate-400 text-center">—</td></tr>';
+}
+
+// ── More Analytics tab (#4 daypart, #5 mix-shift, #7 turnover, #9 forecast) ──
+async function loadMoreAnalytics() {
+  const gen = loadGen;
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch', getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to', getMonthTo());
+  const q = p.toString();
+  const bq = getBranch() ? ('branch=' + encodeURIComponent(getBranch())) : '';
+  const [dp, mix, turn, fc] = await Promise.all([
+    getJSON('/api/analysis/daypart-economics?' + q, { gen }).catch(()=>null),
+    getJSON('/api/menu/mix-shift?' + q, { gen }).catch(()=>null),
+    getJSON('/api/analysis/table-turnover?' + q, { gen }).catch(()=>null),
+    getJSON('/api/analysis/revenue-forecast?' + bq, { gen }).catch(()=>null),
+  ]);
+  if (gen !== loadGen) return;
+
+  if (dp) document.getElementById('more-daypart').innerHTML = dp.dayparts.map(x=>`
+    <tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-2">${esc(x.label)}</td>
+      <td class="py-1.5 pr-2 text-right">${fmt(x.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right">${fmtN(x.covers)}</td>
+      <td class="py-1.5 pr-2 text-right">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
+      <td class="py-1.5 pr-2 text-right">${x.drink_pct}%</td>
+      <td class="py-1.5 text-right" style="color:#0891b2">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}</td>
+    </tr>`).join('');
+
+  if (fc) {
+    document.getElementById('more-forecast-note').textContent =
+      fc.trend ? `เทรนด์ ${fmt(fc.trend.slope_per_month)}/เดือน · R²=${fc.trend.r_squared}` : (fc.note||'');
+    const hist = fc.history||[], fore = fc.forecast||[];
+    const labels = [...hist.map(h=>h.period), ...fore.map(f=>f.period)];
+    const histData = [...hist.map(h=>h.revenue), ...fore.map(()=>null)];
+    const foreData = hist.map(()=>null);
+    if (hist.length) foreData[hist.length-1] = hist[hist.length-1].revenue;  // connect
+    fore.forEach(f=>foreData.push(f.revenue));
+    const loData = [...hist.map(()=>null), ...fore.map(f=>f.lo)];
+    const hiData = [...hist.map(()=>null), ...fore.map(f=>f.hi)];
+    mkChart('more-forecast', { type:'line',
+      data:{ labels, datasets:[
+        { label:'จริง', data:histData, borderColor:'#4f46e5', spanGaps:false },
+        { label:'พยากรณ์', data:foreData, borderColor:'#0891b2', borderDash:[6,4], spanGaps:true },
+        { label:'hi', data:hiData, borderColor:'transparent', backgroundColor:'rgba(8,145,178,.12)', fill:'+1', pointRadius:0 },
+        { label:'lo', data:loData, borderColor:'transparent', backgroundColor:'rgba(8,145,178,.12)', fill:false, pointRadius:0 },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:true, labels:{ filter:li=>li.text==='จริง'||li.text==='พยากรณ์' } }, datalabels:{display:false} },
+        scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } } });
+  }
+
+  if (mix) {
+    const t = mix.monthly_trend||[];
+    mkChart('more-mix', { type:'bar',
+      data:{ labels:t.map(r=>r.period), datasets:[
+        { label:'สูง ≥50%',   data:t.map(r=>r.high_pct), backgroundColor:'#10b981', stack:'s' },
+        { label:'กลาง 30-50%', data:t.map(r=>r.mid_pct),  backgroundColor:'#f59e0b', stack:'s' },
+        { label:'ต่ำ 0-30%',   data:t.map(r=>r.low_pct),  backgroundColor:'#f97316', stack:'s' },
+        { label:'ติดลบ',       data:t.map(r=>r.neg_pct),  backgroundColor:'#ef4444', stack:'s' },
+        { type:'line', label:'มาร์จิ้นถ่วงน้ำหนัก', data:t.map(r=>r.weighted_margin_pct), borderColor:'#1e293b', backgroundColor:'transparent' },
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{display:true}, datalabels:{display:false} },
+        scales:{ x:{stacked:true}, y:{stacked:true, max:100, ticks:{callback:v=>v+'%'}} } } });
+  }
+
+  if (turn) document.getElementById('more-turnover').innerHTML = (turn.branches||[]).map(b=>`
+    <tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-2">${esc(b.branch)}</td>
+      <td class="py-1.5 pr-2 text-right">${b.avg_turn_min!=null?b.avg_turn_min:'—'}</td>
+      <td class="py-1.5 pr-2 text-right">${fmtN(b.turns)}</td>
+      <td class="py-1.5 text-right">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
+    </tr>`).join('');
 }
 
 // ── Boot ───────────────────────────────────────────────────────

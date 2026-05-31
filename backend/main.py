@@ -8890,6 +8890,252 @@ def cost_uncosted_coverage(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/analysis/daypart-economics  (Analysis #4)
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/daypart-economics")
+@ttl_cache
+def daypart_economics(
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Per-daypart economics from transactions: ex-VAT revenue, covers, spend/cover,
+    food/drink/other mix and drink attach. Includes an ESTIMATED gross profit using
+    transparent component margins (drinks carry more margin than food) — true
+    COGS-by-daypart isn't possible (transactions have no SKU-level detail)."""
+    DRINK_GP, FOODOTHER_GP = 0.70, 0.45   # assumed contribution rates (documented)
+    filters = ["b.name != 'ALL'", "st.source='Easy'"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="SUBSTR(st.sold_at,1,7)")
+    where = "WHERE " + " AND ".join(filters)
+    # daypart bucket by hour
+    bucket = ("CASE WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 11 AND 15 THEN 'lunch' "
+              "WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 16 AND 22 THEN 'dinner' "
+              "ELSE 'other' END")
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT {bucket} AS daypart,
+                   COUNT(*)                       AS bills,
+                   SUM(st.customer_count)         AS covers,
+                   SUM(st.food_subtotal)          AS food,
+                   SUM(st.drink_subtotal)         AS drink,
+                   SUM(st.other_subtotal)         AS other,
+                   SUM(st.total_inc_vat) / 1.07   AS revenue
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            {where}
+            GROUP BY daypart
+        """, params).fetchall()
+    labels = {"lunch": "กลางวัน (11-15)", "dinner": "เย็น (16-22)", "other": "อื่น ๆ"}
+    out = []
+    for r in rows:
+        food = r["food"] or 0; drink = r["drink"] or 0; other = r["other"] or 0
+        rev = r["revenue"] or 0; covers = r["covers"] or 0
+        est_gp = drink * DRINK_GP + (food + other) * FOODOTHER_GP
+        out.append({
+            "daypart":       r["daypart"],
+            "label":         labels.get(r["daypart"], r["daypart"]),
+            "bills":         r["bills"] or 0,
+            "covers":        covers,
+            "revenue":       round(rev, 2),
+            "rev_per_cover": round(rev / covers, 2) if covers else None,
+            "drink_pct":     round(drink / (food + drink + other) * 100, 1) if (food + drink + other) else 0.0,
+            "mix": {
+                "food":  round(food, 2), "drink": round(drink, 2), "other": round(other, 2),
+            },
+            "est_gross_profit": round(est_gp, 2),
+            "est_gp_margin_pct": round(est_gp / rev * 100, 1) if rev else None,
+        })
+    order = {"lunch": 0, "dinner": 1, "other": 2}
+    out.sort(key=lambda x: order.get(x["daypart"], 9))
+    return {"dayparts": out,
+            "assumptions": {"drink_gp": DRINK_GP, "food_other_gp": FOODOTHER_GP,
+                            "note": "est_gross_profit is an estimate using fixed component rates"}}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/menu/mix-shift  (Analysis #5)  — à la carte revenue by margin band / month
+# ---------------------------------------------------------------------------
+@app.get("/api/menu/mix-shift")
+@ttl_cache
+def menu_mix_shift(
+    branch:     Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Month-over-month à la carte sales mix by BoM margin band — catches silent
+    erosion toward lower-margin items. Only costed, revenue-bearing SKUs are
+    included (buffet tiers / zero-revenue consumption rows are out of scope)."""
+    filters = ["b.name != 'ALL'"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            WITH eff AS (
+              SELECT ssm.period_month AS m, ssm.sku_id AS sku_id,
+                     ssm.qty AS qty, ssm.subtotal_ex_vat AS rev,
+                     COALESCE(
+                       (SELECT bi.sku_id FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
+                       (SELECT a.resolved_sku_id FROM bom_sku_alias a
+                          JOIN skus s ON s.sku_id = ssm.sku_id
+                         WHERE a.bom_sku_code = s.sku_code LIMIT 1)
+                     ) AS bom_sku_id
+              FROM sales_sku_monthly ssm
+              JOIN branches b ON b.branch_id = ssm.branch_id
+              {where}
+            )
+            SELECT eff.m AS m, eff.sku_id AS sku_id,
+                   SUM(eff.rev) AS rev,
+                   SUM(eff.qty * (SELECT SUM(ingredient_cost) FROM bom_ingredients bi
+                                  WHERE bi.sku_id = eff.bom_sku_id)) AS cost
+            FROM eff
+            WHERE eff.bom_sku_id IS NOT NULL AND eff.rev > 0
+            GROUP BY eff.m, eff.sku_id
+        """, params).fetchall()
+    from collections import defaultdict as _dd
+    months = _dd(lambda: {"high": 0.0, "mid": 0.0, "low": 0.0, "neg": 0.0,
+                          "rev": 0.0, "gp": 0.0})
+    for r in rows:
+        rev = r["rev"] or 0.0
+        cost = r["cost"] or 0.0
+        if rev <= 0:
+            continue
+        margin = (rev - cost) / rev
+        b = months[r["m"]]
+        b["rev"] += rev; b["gp"] += (rev - cost)
+        if   margin >= 0.50: b["high"] += rev
+        elif margin >= 0.30: b["mid"]  += rev
+        elif margin >= 0:    b["low"]  += rev
+        else:                b["neg"]  += rev
+    trend = []
+    for m in sorted(months):
+        b = months[m]; rev = b["rev"] or 1
+        trend.append({
+            "period": m,
+            "high_pct": round(b["high"] / rev * 100, 1),
+            "mid_pct":  round(b["mid"]  / rev * 100, 1),
+            "low_pct":  round(b["low"]  / rev * 100, 1),
+            "neg_pct":  round(b["neg"]  / rev * 100, 1),
+            "weighted_margin_pct": round(b["gp"] / rev * 100, 1),
+            "revenue":  round(b["rev"], 2),
+        })
+    return {"monthly_trend": trend,
+            "bands": {"high": "≥50%", "mid": "30-50%", "low": "0-30%", "neg": "<0%"}}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/analysis/table-turnover  (Analysis #7)
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/table-turnover")
+@ttl_cache
+def table_turnover(
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Seat-time proxy from gaps between consecutive bills on the same table/day.
+    Gaps are clamped to 10-240 min to exclude noise/overnight. Returns per-branch
+    avg turn minutes, turns/table/day and covers/turn."""
+    filters = ["b.name != 'ALL'", "st.source='Easy'", "st.table_no IS NOT NULL", "st.table_no != ''"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="SUBSTR(st.sold_at,1,7)")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            WITH seq AS (
+              SELECT b.name AS branch, st.customer_count AS covers,
+                     (julianday(st.sold_at) - julianday(
+                        LAG(st.sold_at) OVER (
+                          PARTITION BY st.branch_id, st.table_no, DATE(st.sold_at)
+                          ORDER BY st.sold_at))) * 24 * 60 AS gap_min
+              FROM sales_transaction st
+              JOIN branches b ON b.branch_id = st.branch_id
+              {where}
+            )
+            SELECT branch,
+                   AVG(CASE WHEN gap_min BETWEEN 10 AND 240 THEN gap_min END) AS avg_turn_min,
+                   COUNT(CASE WHEN gap_min BETWEEN 10 AND 240 THEN 1 END)     AS turns,
+                   AVG(covers)                                                AS avg_covers
+            FROM seq
+            GROUP BY branch
+        """, params).fetchall()
+    out = []
+    for r in sorted(rows, key=lambda x: (x["avg_turn_min"] or 9e9)):
+        out.append({
+            "branch":        r["branch"],
+            "avg_turn_min":  round(r["avg_turn_min"], 1) if r["avg_turn_min"] is not None else None,
+            "turns":         r["turns"] or 0,
+            "avg_covers_per_turn": round(r["avg_covers"], 1) if r["avg_covers"] is not None else None,
+        })
+    return {"branches": out, "note": "gap = minutes between consecutive bills on a table within a day (10-240 clamp)"}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/analysis/forecast  (Analysis #9)  — short-horizon revenue projection
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/revenue-forecast")
+@ttl_cache
+def revenue_forecast(
+    branch:  Optional[str] = Query(None),
+    horizon: int = Query(3),
+):
+    """Project ex-VAT revenue for the next `horizon` months from the monthly trend
+    via OLS, with a ± band from the residual spread. Branch-specific or chain."""
+    horizon = max(1, min(6, horizon))
+    filters = ["b.name != 'ALL'"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT ssm.period_month AS m, SUM(ssm.subtotal_ex_vat) AS rev
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            {where}
+            GROUP BY ssm.period_month
+            ORDER BY ssm.period_month
+        """, params).fetchall()
+    hist = [{"period": r["m"], "revenue": round(r["rev"] or 0, 2)} for r in rows]
+    if len(hist) < 3:
+        return {"history": hist, "forecast": [], "note": "need >=3 months of history"}
+    xs = list(range(len(hist)))
+    ys = [h["revenue"] for h in hist]
+    slope, intercept, r2 = _ols_regression(xs, ys)
+    resid = [ys[i] - (slope * xs[i] + intercept) for i in xs]
+    sd = (sum(e * e for e in resid) / len(resid)) ** 0.5
+    band = 1.5 * sd
+    # advance YYYY-MM
+    def add_month(ym, k):
+        y, mo = _ym_parts(ym); mo += k
+        y += (mo - 1) // 12; mo = (mo - 1) % 12 + 1
+        return f"{y:04d}-{mo:02d}"
+    forecast = []
+    for k in range(1, horizon + 1):
+        x = len(hist) - 1 + k
+        pred = slope * x + intercept
+        forecast.append({
+            "period": add_month(hist[-1]["period"], k),
+            "revenue": round(max(0, pred), 2),
+            "lo": round(max(0, pred - band), 2),
+            "hi": round(max(0, pred + band), 2),
+        })
+    return {
+        "history": hist, "forecast": forecast,
+        "trend": {"slope_per_month": round(slope, 2), "r_squared": round(r2, 3)},
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/buffet/gp/export   🟢7
 # Download GP analysis as formatted Excel
 # ---------------------------------------------------------------------------
