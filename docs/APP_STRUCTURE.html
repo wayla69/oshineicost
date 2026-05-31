@@ -46,7 +46,7 @@
 
 <header class="doc">
   <h1>Oshinei Cost Analysis Dashboard — App Structure</h1>
-  <div class="meta">Last updated: 2026-05-28 · Easy POS only · 26 active branches · period 2025-05 → 2026-05</div>
+  <div class="meta">Last updated: 2026-06-01 · Easy POS only · 26 active branches · period 2025-05 → 2026-05</div>
 </header>
 
 <h2><span class="n">1.</span> File tree</h2>
@@ -87,7 +87,7 @@
     ├── CODE_REVIEW_2026-05-31.html
     └── COST_DATA_AUDIT_2026-06-01.html</pre>
 
-<h2><span class="n">2.</span> Sidebar navigation (6 sections, 20 tabs)</h2>
+<h2><span class="n">2.</span> Sidebar navigation (6 sections, 23 tabs)</h2>
 <pre class="tree">🏠 หน้าแรก                      → /api/home/brief
 
 📊 ภาพรวม
@@ -116,6 +116,10 @@
     ├── 🏪 รายสาขา                → /api/branch-bom/analysis + /api/bom-cost/recipe/{sku}
     ├── ⚖️  เปรียบเทียบ            → /api/bom-cost/compare?branches=A,B,...
     └── 🎮 Simulator              → /api/bom-cost/simulator-base + /simulate + /scenarios
+├── 🎯 ความครอบคลุมต้นทุน         → /api/cost/uncosted-coverage            (NEW 2026-06-01)
+├── 💵 P&amp;L รายสาขา               → /api/pnl/branch · BoM COGS + break-even (NEW 2026-06-01)
+└── 📈 Insight เพิ่มเติม          → daypart-economics · menu/mix-shift ·    (NEW 2026-06-01)
+                                   table-turnover · revenue-forecast
 
 🍣 À La Carte &amp; เมนู
 ├── ⭐ Menu Engineering          → /api/menu/engineering, /api/menu/lifecycle
@@ -243,6 +247,8 @@ _ym_parts(s)                                    <span class="c"># validate 'YYYY
     <tr><td class="ph">18c</td><td>Double-count / missing audit</td></tr>
     <tr><td class="ph">2026-05-31</td><td>Security/correctness review + fixes (see CODE_REVIEW)</td></tr>
     <tr><td class="ph">2026-06-01</td><td>git init, test suite, sku_cost price-as-cost remediation</td></tr>
+    <tr><td class="ph">2026-06-01b</td><td>Global chart-legibility defaults + vendor-race fix; fix duplicate <code>_gpGran</code> blank-page bug</td></tr>
+    <tr><td class="ph">2026-06-01c</td><td>New tabs: Cost Coverage, Branch P&amp;L (BoM-based), and Insight เพิ่มเติม (daypart · menu-mix · turnover · forecast)</td></tr>
   </tbody>
 </table>
 
