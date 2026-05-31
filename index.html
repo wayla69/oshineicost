@@ -1501,9 +1501,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         </div>
         <div class="flex items-center gap-2">
           <div class="flex rounded-lg overflow-hidden border border-slate-200 text-xs font-medium">
-            <button id="gpGran-day"   onclick="setGpGran('day')"   class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50">วัน</button>
-            <button id="gpGran-week"  onclick="setGpGran('week')"  class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50 border-l border-slate-200">สัปดาห์</button>
-            <button id="gpGran-month" onclick="setGpGran('month')" class="px-3 py-1.5 bg-emerald-600 text-white border-l border-slate-200">เดือน</button>
+            <button id="gpGran-day"   onclick="setBgpGran('day')"   class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50">วัน</button>
+            <button id="gpGran-week"  onclick="setBgpGran('week')"  class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50 border-l border-slate-200">สัปดาห์</button>
+            <button id="gpGran-month" onclick="setBgpGran('month')" class="px-3 py-1.5 bg-emerald-600 text-white border-l border-slate-200">เดือน</button>
           </div>
           <a id="gpExportBtn" href="#" onclick="exportGpExcel(event)" class="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg font-medium flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -13013,9 +13013,9 @@ async function loadForecast() {
 }
 
 // ── Buffet GP from BoM ───────────────────────────────────────────────────
-let _gpGran = 'month';
-function setGpGran(g) {
-  _gpGran = g;
+let _bgpGran = 'month';
+function setBgpGran(g) {
+  _bgpGran = g;
   ['day','week','month'].forEach(x => {
     const btn = document.getElementById('gpGran-'+x);
     if (!btn) return;
@@ -13028,11 +13028,11 @@ function setGpGran(g) {
 
 let _lastGpKey = null;
 async function loadBuffetGP() {
-  const _fk = _filterKey() + '|' + _gpGran;
+  const _fk = _filterKey() + '|' + _bgpGran;
   if (_lastGpKey === _fk) return;
   _lastGpKey = _fk;
 
-  const params = new URLSearchParams({ granularity: _gpGran });
+  const params = new URLSearchParams({ granularity: _bgpGran });
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
@@ -13207,7 +13207,7 @@ async function loadBuffetGP() {
 // ── Export GP Excel ──────────────────────────────────────────────────────
 function exportGpExcel(e) {
   e.preventDefault();
-  const params = new URLSearchParams({ granularity: _gpGran });
+  const params = new URLSearchParams({ granularity: _bgpGran });
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
