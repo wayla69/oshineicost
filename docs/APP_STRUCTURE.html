@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei Cost Analysis Dashboard — App Structure</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0;
+    --accent:#4f46e5; --code-bg:#f1f5f9; --code-ink:#9333ea; --ok:#15803d; --ok-bg:#dcfce7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+    line-height:1.6;font-size:15px}
+  .wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:18px;margin-bottom:10px}
+  header.doc h1{font-size:25px;margin:0 0 6px;letter-spacing:-.3px}
+  .meta{color:var(--muted);font-size:13px}
+  h2{font-size:20px;margin:34px 0 12px;padding-top:12px;border-top:2px solid var(--line)}
+  h2 .n{color:var(--accent)}
+  p{margin:10px 0}
+  code{background:var(--code-bg);color:var(--code-ink);padding:1px 6px;border-radius:5px;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:.85em}
+  strong{font-weight:650}
+  ol,ul{margin:10px 0;padding-left:22px}
+  li{margin:6px 0}
+  pre.tree{background:var(--card);border:1px solid var(--line);color:#334155;padding:14px 16px;
+    border-radius:9px;overflow-x:auto;font-family:"SF Mono",Consolas,"Roboto Mono",monospace;
+    font-size:12.5px;line-height:1.5;margin:12px 0}
+  pre.code{background:#0f172a;color:#e2e8f0;padding:14px 16px;border-radius:9px;overflow-x:auto;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:12.5px;line-height:1.55;margin:12px 0}
+  pre.code .c{color:#7c8aa5}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:8px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td.ph{font-family:"SF Mono",Consolas,monospace;white-space:nowrap;color:var(--accent);font-weight:600}
+  .callout{background:#eff6ff;border-left:4px solid #3b82f6;padding:11px 15px;margin:14px 0;border-radius:0 8px 8px 0;font-size:14px}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Oshinei Cost Analysis Dashboard — App Structure</h1>
+  <div class="meta">Last updated: 2026-05-28 · Easy POS only · 26 active branches · period 2025-05 → 2026-05</div>
+</header>
+
+<h2><span class="n">1.</span> File tree</h2>
+<pre class="tree">Cost Analysis/
+├── index.html                          &larr; canonical SPA (served at GET /)
+├── เปิด Oshinei Dashboard.bat          &larr; Windows launcher (starts uvicorn)
+├── vendor/                             &larr; Chart.js / Tailwind / plugins (offline)
+│
+├── backend/
+│   ├── main.py                         &larr; FastAPI app (~11K lines, ~80 endpoints)
+│   ├── schema.sql                      &larr; SQLite DDL
+│   ├── oshinei.db                      &larr; live DB (~252 MB)
+│   ├── oshinei.db.backup_*             &larr; timestamped safety backups
+│   ├── ingest_easy.py                  &larr; Easy POS xlsx parser
+│   ├── ingest_cm.py                    &larr; (legacy) CM POS parser
+│   ├── ingest_bom.py                   &larr; BoM Excel recipe parser
+│   ├── reingest_easy_safe.py           &larr; Phase 17a safe re-ingest tool
+│   ├── match_bom_skus.py               &larr; BoM↔SKU alias mapper
+│   ├── fix_sku_cost_2026.py            &larr; price-as-cost remediation tool (2026-06-01)
+│   ├── test_invariants.py              &larr; hermetic regression tests (pytest)
+│   ├── audit_easy*.py                  &larr; Phase 17a audit scripts
+│   ├── db_maintenance.py
+│   ├── requirements.txt                &larr; fastapi, openpyxl, reportlab, matplotlib, pytest
+│   └── uvicorn*.log
+│
+├── BoM/                                &larr; Excel recipe source files
+│   ├── 1. หมวด สเต๊ก STEAK ... /        &larr; 17 category folders
+│   ├── OSHINEI_SKU_BOM.csv
+│   └── OSHINEI_BOM_Workbook.xlsx
+│
+├── Data for Oshinei/                   &larr; POS export source files
+│   ├── ES1_*.xlsx                      &larr; Easy monthly SKU reports (13 files)
+│   ├── 23 ES_*.xlsx                    &larr; Easy per-transaction reports (13 files)
+│   └── ต้นทุนร้านโอชิเน.zip
+│
+└── docs/
+    ├── APP_STRUCTURE.html              &larr; this file
+    ├── CODE_REVIEW_2026-05-31.html
+    └── COST_DATA_AUDIT_2026-06-01.html</pre>
+
+<h2><span class="n">2.</span> Sidebar navigation (6 sections, 20 tabs)</h2>
+<pre class="tree">🏠 หน้าแรก                      → /api/home/brief
+
+📊 ภาพรวม
+├── Overview / KPIs            → /api/summary, /api/sales/category, /api/sales/skus
+├── 📈 แนวโน้ม                  → /api/analysis/gross_profit, /api/analysis/daily
+├── ⚖️  Compare A/B             → /api/analysis/compare
+├── 👥 Guest &amp; SPH              → /api/analysis/persona, /api/analysis/sph
+└── 🏆 Benchmark สาขา           → /api/analysis/branches, /api/analysis/health
+
+🍱 บุฟเฟ่ต์
+└── 🥘 Buffet Performance       → /api/buffet/performance (+ 6 nested sub-tabs)
+    ├── 📊 ภาพรวม                  (Overview)
+    ├── 👥 ลูกค้า &amp; ที่นั่ง
+    │   ├── 💎 Tier Mix             → /api/buffet/tier-mix
+    │   └── 🪑 Cover &amp; RevPASH      → /api/buffet/cover-economics, /api/buffet/revpash
+    ├── 💰 กำไร &amp; P&amp;L              → /api/profit/buffet_per_bill, /api/buffet/pnl
+    └── 🔬 BoM &amp; จำลอง
+        ├── 🔬 BoM Deep-dive       → /api/bom/composition, /api/bom/consumption-analysis
+        └── 🎛️  Simulators          → /api/buffet/upgrade-simulator, /api/buffet/cost-sensitivity
+
+🌐 ระดับเครือ &amp; ต้นทุน          &larr; chain-wide profit + cost intelligence
+├── 📊 GP รายสาขา                → /api/gp/by-branch-month  (granularity: day/week/month)
+├── 🔬 BoM รายสาขา               → /api/branch-bom/analysis (branch=X|ALL, granularity)
+└── 🎮 BoM Cost + Simulator     &larr; ⭐ flagship
+    ├── 📊 ภาพรวม                 → /api/bom-cost/overview
+    ├── 🏪 รายสาขา                → /api/branch-bom/analysis + /api/bom-cost/recipe/{sku}
+    ├── ⚖️  เปรียบเทียบ            → /api/bom-cost/compare?branches=A,B,...
+    └── 🎮 Simulator              → /api/bom-cost/simulator-base + /simulate + /scenarios
+
+🍣 À La Carte &amp; เมนู
+├── ⭐ Menu Engineering          → /api/menu/engineering, /api/menu/lifecycle
+├── 📋 Menu Analysis             → /api/sales/skus, /api/analysis/affinity
+├── 💰 ต้นทุน                    → /api/cost/analysis, /api/cost/detail
+└── 📈 กำไร                      → /api/profit/by-branch, /api/profit/by-sku
+
+📦 การดำเนินงาน
+├── Staff                       → /api/analysis/cashiers
+├── Discounts                   → /api/analysis/discounts
+├── Time &amp; Flow                 → /api/analysis/hourly, /api/analysis/dow, /daypart_grid
+└── การดำเนินงานสาขา             → /api/analysis/branch_peak, /api/analysis/health
+
+⚙️  เครื่องมือ
+├── Reports                     → /api/export/monthly-pack?format=xlsx|pdf
+└── ตั้งค่า                      → 6 sub-tabs (see Settings tree below)</pre>
+
+<h2><span class="n">3.</span> Settings sub-tabs</h2>
+<pre class="tree">⚙️  Settings
+├── 🎯 Cost Management          (THE primary cost editing UI)
+│   ├── 🎯 Cost Recalibration tool (target food% → suggested costs)
+│   ├── ประเภท column (buffet/alacarte/beverage/takeaway/fee/buffet_tier/other)
+│   ├── Monthly cost upload + history view
+│   ├── BoM ingredient audit
+│   └── CSV template + bulk upload
+├── 🎯 Branch targets           (rev/customer targets per month)
+├── 💼 Branch fixed costs       (rent/labor/utilities)
+├── 🏢 Branches                  (active/inactive, branch_type)
+├── 🚫 Deactivate
+├── 🕐 Operating hours
+└── 🎨 Preferences</pre>
+
+<h2><span class="n">4.</span> Database schema</h2>
+<pre class="tree">branches (27)
+  ├─ branch_id PK
+  ├─ name UNIQUE
+  ├─ branch_type DEFAULT 'master'
+  └─ active                &larr; 26 active + 1 inactive (OSHINEI ชลบุรี, CM-only)
+
+categories (66) → skus.category_id
+
+skus (1,988)
+  ├─ sku_id PK · sku_code UNIQUE · description · category_id FK · unit
+  └─ business_type        &larr; buffet_tier|buffet|alacarte|beverage|takeaway|fee|other
+
+sku_cost (1,754)          &larr; lifetime default cost  (⚠ see cost-data audit)
+  ├─ sku_id PK FK · unit_cost · effective_from · updated_at
+
+sku_cost_monthly          &larr; Phase 8: monthly override  (sku_id, period_month) PK
+cost_change_log           &larr; Phase 17b: audit trail (any unit_cost write)
+cost_scenario + cost_scenario_item   &larr; Phase 17b: save what-if scenarios
+
+bom_ingredients (1,230)   &larr; parsed from BoM Excel  (sku_id, seq) PK
+  └─ ingredient_cost (THB) · ingredient_type (protein|carb|veg|sauce|oil|seasoning|other)
+
+bom_sku_alias (94)        &larr; Phase 10: maps B0xxx codes → A0xxx SKUs
+  └─ match_method (name_exact|name_fuzzy|code_normalised|manual) · confidence (0-1)
+
+sales_sku_monthly (99,224)         &larr; Easy SKU report by month
+  └─ (branch_id, period_month, sku_id, source) PK · qty · subtotal_ex_vat · tax_total · total_inc_vat
+
+sales_transaction (535,243)        &larr; Easy per-bill detail
+  └─ (branch_id, receipt_no, source) PK · sold_at · cashier · table_no · customer_count
+     · food/drink/other_subtotal · tip · sp_discount · discount · service_charge · total_inc_vat
+
+sales_month_summary (265)          &larr; Easy month-level summary
+branch_targets, branch_fixed_costs, app_settings, closed_hours
+
+──── ARCHIVED (Phase 5, read-only via /api/legacy/cm) ────
+sales_sku_monthly_archive (57,323) · sales_month_summary_archive (155)
+sales_transaction_test_archive (39)</pre>
+
+<h2><span class="n">5.</span> Helper functions <span style="font-size:14px;color:var(--muted)">(canonical — DO NOT bypass)</span></h2>
+<pre class="code"><span class="c"># In backend/main.py</span>
+_EASY_TIER_CODES = ('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')
+<span class="c"># Tier SKUs whose unit_cost is intentionally ignored to avoid double-counting</span>
+<span class="c"># with item-level B0xxx consumption.</span>
+
+_cogs_case(ssm='ssm', sk='sk', sc='sc')         <span class="c"># SQL CASE for COGS expression</span>
+_costed_rev_case(ssm='ssm', sk='sk', sc='sc')   <span class="c"># SQL CASE for "revenue that has cost data"</span>
+_effective_cost_subquery(ssm='ssm', sc='sc')    <span class="c"># COALESCE: monthly exact → monthly prior → default → 0</span>
+_variant_filter(variant, sk='sk', ssm='ssm')    <span class="c"># 'A'|'B' filter by revenue behaviour</span>
+_iso_week_sql(col)                              <span class="c"># ISO-8601 week label (matches isocalendar); A6 fix</span>
+_ym_parts(s)                                    <span class="c"># validate 'YYYY-MM' → (y,m) or HTTP 400; C3 fix</span></pre>
+
+<h2><span class="n">6.</span> Hard rules</h2>
+<ol>
+  <li><strong>VAT is NOT revenue</strong> — always use <code>subtotal_ex_vat</code>. <code>total_inc_vat</code> only for POS reconciliation.</li>
+  <li><strong>Analytics must be time-series</strong> — every endpoint returns a <code>monthly_trend</code>/<code>weekly_trend</code>/<code>daily_trend</code> array, not just cumulative totals.</li>
+  <li><strong>COGS via canonical helpers</strong> — every COGS-bearing query must JOIN <code>skus sk</code> and use <code>_cogs_case()</code> (handles tier exclusion + monthly cost overrides).</li>
+  <li><strong>Index.html is served</strong> — <code>backend/main.py</code> <code>INDEX = HERE.parent / "index.html"</code>. Do NOT split into multiple HTML files.</li>
+</ol>
+
+<div class="callout"><strong>Note (2026-06-01):</strong> <code>sku_cost.unit_cost</code> held the selling price (not cost) for ~90% of SKUs — remediated via <code>fix_sku_cost_2026.py</code>. See <a href="COST_DATA_AUDIT_2026-06-01.html">COST_DATA_AUDIT_2026-06-01.html</a>. The BoM-based cost path was always correct.</div>
+
+<h2><span class="n">7.</span> Phase history</h2>
+<table>
+  <thead><tr><th>Phase</th><th>Delivered</th></tr></thead>
+  <tbody>
+    <tr><td class="ph">0</td><td>GP formula fix (source-aware <code>_cogs_case</code>)</td></tr>
+    <tr><td class="ph">1</td><td>Premium tier % split</td></tr>
+    <tr><td class="ph">2</td><td>Benchmark 55-70%</td></tr>
+    <tr><td class="ph">3</td><td>GP รายสาขา tab</td></tr>
+    <tr><td class="ph">4</td><td>BoM ingredient deep-dive</td></tr>
+    <tr><td class="ph">5</td><td>CM POS archive → Easy-only</td></tr>
+    <tr><td class="ph">7</td><td>Calendar year picker</td></tr>
+    <tr><td class="ph">8</td><td>Monthly unit_cost (<code>sku_cost_monthly</code>)</td></tr>
+    <tr><td class="ph">9</td><td>(A)/(B) variant filter</td></tr>
+    <tr><td class="ph">10</td><td>BoM alias mapping (94 SKUs)</td></tr>
+    <tr><td class="ph">11</td><td>Cost Recalibration tool</td></tr>
+    <tr><td class="ph">12</td><td>BoM by branch tab</td></tr>
+    <tr><td class="ph">13</td><td>VAT + time-series + monthly cost audit</td></tr>
+    <tr><td class="ph">14</td><td>Daily/Weekly granularity + Excel/PDF export</td></tr>
+    <tr><td class="ph">15</td><td>Buffet Performance 4-group nested tabs</td></tr>
+    <tr><td class="ph">16</td><td>BoM chain-wide toggle</td></tr>
+    <tr><td class="ph">17a</td><td>Easy re-ingest (+17K rows, food cost 186%→100%)</td></tr>
+    <tr><td class="ph">17b</td><td>business_type + audit log + scenarios</td></tr>
+    <tr><td class="ph">17c</td><td>Cost Mgmt tagging UI</td></tr>
+    <tr><td class="ph">17d</td><td>BoM Cost Analysis 4-mode + Simulator</td></tr>
+    <tr><td class="ph">17d-fix</td><td>Port UI + serve index.html (root cause of UI invisibility)</td></tr>
+    <tr><td class="ph">17e</td><td>Sidebar 4-group reorganize</td></tr>
+    <tr><td class="ph">BUFFET fix</td><td>Add plain 'BUFFET' to tier exclusion (food cost 100%→10.8%)</td></tr>
+    <tr><td class="ph">18a</td><td>Consolidate HTML (one file only)</td></tr>
+    <tr><td class="ph">18b</td><td>App structure docs + in-app User Manual</td></tr>
+    <tr><td class="ph">18c</td><td>Double-count / missing audit</td></tr>
+    <tr><td class="ph">2026-05-31</td><td>Security/correctness review + fixes (see CODE_REVIEW)</td></tr>
+    <tr><td class="ph">2026-06-01</td><td>git init, test suite, sku_cost price-as-cost remediation</td></tr>
+  </tbody>
+</table>
+
+<footer>Oshinei Cost Analysis · app structure · see also
+  <a href="CODE_REVIEW_2026-05-31.html">CODE_REVIEW</a> ·
+  <a href="COST_DATA_AUDIT_2026-06-01.html">COST_DATA_AUDIT</a></footer>
+</div>
+</body>
+</html>
