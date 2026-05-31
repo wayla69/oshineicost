@@ -848,6 +848,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
     <span class="nav-label">🎮 BoM Cost + Simulator</span>
   </div>
+  <div class="nav-item" id="nav-coverage" onclick="switchTab('coverage')" title="ความครอบคลุมต้นทุน · how much revenue still sits on uncosted SKUs (worklist)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/></svg>
+    <span class="nav-label">🎯 ความครอบคลุมต้นทุน</span>
+  </div>
 
   <!-- ─── 🍣 À LA CARTE & MENU ─── -->
   <div class="nav-section">🍣 À La Carte &amp; เมนู</div>
@@ -2061,6 +2065,43 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div id="bc-pane-branch"    class="bc-pane hidden"></div>
   <div id="bc-pane-compare"   class="bc-pane hidden"></div>
   <div id="bc-pane-simulator" class="bc-pane hidden"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: COST COVERAGE  (how much revenue still sits on uncosted SKUs)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-coverage" style="display:none">
+  <p class="text-sm text-slate-500 mb-4">รายได้ที่มี/ไม่มีข้อมูลต้นทุน · ใช้จัดลำดับ SKU ที่ต้องใส่ต้นทุน (บุฟเฟ่ต์นับว่ามีต้นทุนผ่าน BoM)</p>
+  <div id="cov-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+  <div class="card p-4 mb-5">
+    <div class="text-sm font-semibold text-slate-700 mb-2">แนวโน้ม % รายได้ที่ยังไม่มีต้นทุน</div>
+    <div style="position:relative;height:240px"><canvas id="cov-trend"></canvas></div>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-2">รายสาขา · % ไม่มีต้นทุน (มาก→น้อย)</div>
+      <div style="max-height:380px;overflow:auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-slate-400 text-xs border-b">
+            <th class="py-1.5 pr-3">สาขา</th><th class="py-1.5 pr-3 text-right">รายได้</th>
+            <th class="py-1.5 pr-3 text-right">ไม่มีต้นทุน</th><th class="py-1.5 pr-3 text-right">% ไม่มี</th>
+            <th class="py-1.5 text-right">SKU ค้าง</th></tr></thead>
+          <tbody id="cov-branches"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-2">25 SKU ที่ขาดต้นทุน เรียงตามรายได้ (worklist)</div>
+      <div style="max-height:380px;overflow:auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-slate-400 text-xs border-b">
+            <th class="py-1.5 pr-3">SKU</th><th class="py-1.5 pr-3">เมนู</th>
+            <th class="py-1.5 pr-3">หมวด</th><th class="py-1.5 text-right">รายได้</th></tr></thead>
+          <tbody id="cov-top"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
@@ -4506,6 +4547,8 @@ const fmtM = n => { const v=_num(n); return v==null ? '—' : (v >= 0 ? '+' : ''
 // generation at start; if it has changed by the time a response arrives, the
 // response is stale (the user moved on) and must NOT overwrite the new view.
 let loadGen = 0;
+let _chartsPending = false;   // set when mkChart was called before Chart.js finished loading
+let _chartSetupDone = false;  // guards one-time plugin registration + global chart defaults
 const STALE = Symbol('stale-response');
 
 // Standard JSON fetch: checks response.ok and (optionally) drops stale responses.
@@ -4554,7 +4597,11 @@ function resetZoom(chartId) {
 }
 
 function mkChart(id, config) {
-  ensureChartSetup();   // apply global defaults before the first chart is built (vendor-race safe)
+  // Vendor-load race: a tab loader can fire before chart.umd.min.js finishes
+  // loading. Fail soft (the chart re-renders on the next tab/filter load) rather
+  // than throwing a ReferenceError that aborts the whole loader.
+  if (typeof Chart === 'undefined') { _chartsPending = true; return null; }
+  ensureChartSetup();   // apply global defaults before the first chart is built
   if (chartInstances[id]) { chartInstances[id].destroy(); }
   const ctx = document.getElementById(id);
   if (!ctx) return null;
@@ -4713,12 +4760,12 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', manual:'📖 คู่มือการใช้งาน' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', manual:'📖 คู่มือการใช้งาน' };
 
 function switchTab(name) {
   activeTab = name;
   ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','manual'].forEach(t => {
+   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','manual'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -4885,6 +4932,7 @@ function loadActiveTab() {
   if (activeTab === 'gpbranch')    loadGpBranch();
   if (activeTab === 'branchbom')   loadBranchBom();
   if (activeTab === 'bomcost')     loadBomCostTab();
+  if (activeTab === 'coverage')    loadCostCoverage();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -14418,19 +14466,62 @@ function tfDiveIn() {
   });
 })();
 
-// ── Boot ───────────────────────────────────────────────────────
-try {
-  if (typeof Chart === 'undefined') throw new Error('Chart.js not loaded — check vendor/chart.umd.min.js');
-  if (typeof ChartDataLabels === 'undefined') throw new Error('ChartDataLabels not loaded — check vendor/chartjs-plugin-datalabels.min.js');
-  ensureChartSetup();
-} catch(bootErr) {
-  console.error('Boot error:', bootErr);
+// ── Cost Coverage tab (Analysis #3) ────────────────────────────
+async function loadCostCoverage() {
+  const gen = loadGen;
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch', getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to', getMonthTo());
+  let d;
+  try { d = await getJSON('/api/cost/uncosted-coverage?' + p.toString(), { gen }); }
+  catch(e){ if (e === STALE) return; throw e; }
+  if (gen !== loadGen) return;
+  const ch = d.chain || {};
+  document.getElementById('cov-kpis').innerHTML = [
+    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4f46e5'],
+    ['มีต้นทุนแล้ว',        fmt(ch.costed_revenue), '#10b981'],
+    ['ยังไม่มีต้นทุน',       fmt(ch.uncosted_revenue), '#ef4444'],
+    ['% ยังไม่มีต้นทุน',     (ch.pct_uncosted != null ? ch.pct_uncosted.toFixed(1)+'%' : '—'), '#f59e0b'],
+  ].map(([l,v,c]) => `<div class="card p-4" style="border-top:3px solid ${c}">
+      <div class="text-xs text-slate-500">${esc(l)}</div>
+      <div class="text-2xl font-bold" style="color:${c}">${v}</div></div>`).join('');
+  const tr = d.monthly_trend || [];
+  mkChart('cov-trend', {
+    type:'line',
+    data:{ labels: tr.map(r=>r.period), datasets:[{
+      label:'% ไม่มีต้นทุน', data: tr.map(r=>r.pct_uncosted),
+      borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.12)', fill:true }]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, datalabels:{display:false} },
+      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>v+'%' } } } }
+  });
+  document.getElementById('cov-branches').innerHTML = (d.branches||[]).map(b=>`
+    <tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-3">${esc(b.branch)}</td>
+      <td class="py-1.5 pr-3 text-right">${fmt(b.total_revenue)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:#e11d48">${fmt(b.uncosted_revenue)}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold">${(b.pct_uncosted??0).toFixed(1)}%</td>
+      <td class="py-1.5 text-right">${b.uncosted_skus}</td>
+    </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-slate-400 text-center">—</td></tr>';
+  document.getElementById('cov-top').innerHTML = (d.top_uncosted||[]).map(r=>`
+    <tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-3 font-mono text-xs">${esc(r.sku_code)}</td>
+      <td class="py-1.5 pr-3 max-w-[180px] truncate" title="${esc(r.description)}">${esc(r.description)}</td>
+      <td class="py-1.5 pr-3 text-xs text-slate-500">${esc(r.category)}</td>
+      <td class="py-1.5 text-right">${fmt(r.revenue)}</td>
+    </tr>`).join('') || '<tr><td colspan="4" class="py-3 text-slate-400 text-center">ไม่มี 🎉</td></tr>';
 }
+
+// ── Boot ───────────────────────────────────────────────────────
+// Register plugins + apply global chart defaults if the vendor scripts are
+// already loaded. If they're still loading (async), ensureChartSetup() no-ops
+// and waitForCharts() below retries — so no noisy "not loaded" errors.
+ensureChartSetup();
 
 // Idempotent: registers plugins + applies global defaults the first time it can.
 // Called from boot AND from mkChart, so it works regardless of the vendor-load
 // race (the inline script may parse before chart.umd.min.js finishes loading).
-let _chartSetupDone = false;
 function ensureChartSetup() {
   if (_chartSetupDone || typeof Chart === 'undefined') return;
   if (typeof ChartDataLabels !== 'undefined') Chart.register(ChartDataLabels);
@@ -14494,6 +14585,17 @@ function setupChartDefaults() {
   };
 }
 init().catch(console.error);
+
+// Vendor-load race recovery: if any chart was requested before Chart.js was ready,
+// wait for it to load, then re-render the active tab once so the charts appear.
+(function waitForCharts(tries) {
+  if (typeof Chart !== 'undefined') {
+    ensureChartSetup();
+    if (_chartsPending) { _chartsPending = false; try { loadActiveTab(); } catch(e){} }
+    return;
+  }
+  if (tries > 0) setTimeout(() => waitForCharts(tries - 1), 150);
+})(40);   // up to ~6s
 
 // ════════════════════════════════════════════════════════════════
 // Phase 4 — Ingredient-level BoM Composition Deep-dive

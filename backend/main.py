@@ -8653,6 +8653,225 @@ def buffet_pnl(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/pnl/branch   — full branch P&L waterfall + break-even (Analysis #1)
+# ---------------------------------------------------------------------------
+@app.get("/api/pnl/branch")
+@ttl_cache
+def pnl_branch(
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Per-branch P&L: Revenue (ex-VAT) -> COGS (canonical _cogs_case) -> Gross
+    Profit -> minus monthly fixed costs (app_settings) -> Operating Profit, plus
+    break-even covers and margin of safety. Includes a chain roll-up."""
+    filters = ["b.name != 'ALL'"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    cogs_expr = _cogs_case()
+
+    tf = ["b.name != 'ALL'", "st.source='Easy'", "st.customer_count > 0"]
+    tp: dict = {}
+    if branch:
+        tf.append("b.name = :branch"); tp["branch"] = branch
+    _month_range_filter(tf, tp, month_from, month_to, month, col="SUBSTR(st.sold_at,1,7)")
+    twhere = "WHERE " + " AND ".join(tf)
+
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch,
+                   COUNT(DISTINCT ssm.period_month) AS months,
+                   SUM(ssm.subtotal_ex_vat)         AS revenue,
+                   SUM({cogs_expr})                 AS cogs
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id  = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            {where}
+            GROUP BY b.name
+        """, params).fetchall()
+        cov = con.execute(f"""
+            SELECT b.name AS branch, SUM(st.customer_count) AS covers
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            {twhere}
+            GROUP BY b.name
+        """, tp).fetchall()
+        fc_row = con.execute(
+            "SELECT value FROM app_settings WHERE key='branch_fixed_costs'"
+        ).fetchone()
+
+    fixed = {}
+    if fc_row:
+        try:
+            fixed = _json.loads(fc_row["value"])
+        except Exception:
+            pass
+    covmap = {r["branch"]: (r["covers"] or 0) for r in cov}
+
+    out = []
+    tot = {"revenue": 0.0, "cogs": 0.0, "fixed": 0.0, "covers": 0}
+    for r in sorted(rows, key=lambda x: -(x["revenue"] or 0)):
+        br      = r["branch"]
+        rev     = round(r["revenue"] or 0.0, 2)
+        cogs_v  = round(r["cogs"] or 0.0, 2)
+        gp      = round(rev - cogs_v, 2)
+        months  = r["months"] or 1
+        fcm     = float(fixed.get(br, 0) or 0)
+        fcp     = round(fcm * months, 2)
+        op      = round(gp - fcp, 2)
+        covers  = covmap.get(br, 0)
+        gp_per_cover = (gp / covers) if covers else None
+        breakeven_covers = round(fcp / gp_per_cover) if (gp_per_cover and gp_per_cover > 0) else None
+        mos_pct = round((covers - breakeven_covers) / covers * 100, 1) if (breakeven_covers and covers) else None
+        out.append({
+            "branch":            br,
+            "months":            months,
+            "revenue":           rev,
+            "cogs":              cogs_v,
+            "gross_profit":      gp,
+            "gp_margin_pct":     round(gp / rev * 100, 1) if rev else None,
+            "fixed_cost_period": fcp,
+            "fixed_cost_monthly": round(fcm, 2),
+            "operating_profit":  op,
+            "op_margin_pct":     round(op / rev * 100, 1) if rev else None,
+            "covers":            covers,
+            "op_per_cover":      round(op / covers, 2) if covers else None,
+            "gp_per_cover":      round(gp_per_cover, 2) if gp_per_cover is not None else None,
+            "breakeven_covers":  breakeven_covers,
+            "margin_of_safety_pct": mos_pct,
+        })
+        tot["revenue"] += rev; tot["cogs"] += cogs_v; tot["fixed"] += fcp; tot["covers"] += covers
+
+    chain_gp = round(tot["revenue"] - tot["cogs"], 2)
+    chain_op = round(chain_gp - tot["fixed"], 2)
+    chain = {
+        "revenue":          round(tot["revenue"], 2),
+        "cogs":             round(tot["cogs"], 2),
+        "gross_profit":     chain_gp,
+        "gp_margin_pct":    round(chain_gp / tot["revenue"] * 100, 1) if tot["revenue"] else None,
+        "fixed_cost_period": round(tot["fixed"], 2),
+        "operating_profit": chain_op,
+        "op_margin_pct":    round(chain_op / tot["revenue"] * 100, 1) if tot["revenue"] else None,
+        "covers":           tot["covers"],
+        "fixed_costs_set":  bool(fixed),
+    }
+    return {"branches": out, "chain": chain}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/cost/uncosted-coverage  — cost-data coverage tracker (Analysis #3)
+# ---------------------------------------------------------------------------
+@app.get("/api/cost/uncosted-coverage")
+@ttl_cache
+def cost_uncosted_coverage(
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """How much revenue rests on costed vs uncosted SKUs. 'Costed' = the SKU has an
+    effective unit cost OR is a buffet tier (costed via item-level BoM). Returns
+    per-branch coverage, a monthly trend, and the top uncosted SKUs by revenue —
+    a prioritised worklist for filling in missing costs."""
+    filters = ["b.name != 'ALL'"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    costed = _costed_rev_case()            # tier rev + costed-sku rev, else 0
+    eff    = _effective_cost_subquery()
+    uncosted_pred = (f"({eff}) IS NULL AND ssm.subtotal_ex_vat > 0 "
+                     f"AND sk.sku_code NOT IN {_EASY_TIER_CODES_SQL}")
+
+    with get_db() as con:
+        brows = con.execute(f"""
+            SELECT b.name AS branch,
+                   SUM(ssm.subtotal_ex_vat) AS total_rev,
+                   SUM({costed})            AS costed_rev,
+                   COUNT(DISTINCT ssm.sku_id) AS skus,
+                   COUNT(DISTINCT CASE WHEN {uncosted_pred} THEN ssm.sku_id END) AS uncosted_skus
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            {where}
+            GROUP BY b.name
+        """, params).fetchall()
+        trows = con.execute(f"""
+            SELECT ssm.period_month AS m,
+                   SUM(ssm.subtotal_ex_vat) AS total_rev,
+                   SUM({costed})            AS costed_rev
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            {where}
+            GROUP BY ssm.period_month ORDER BY ssm.period_month
+        """, params).fetchall()
+        urows = con.execute(f"""
+            SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
+                   c.name AS category,
+                   SUM(ssm.subtotal_ex_vat) AS rev, ROUND(SUM(ssm.qty),0) AS qty
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id  = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            JOIN categories c ON c.category_id = sk.category_id
+            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            {where} AND {uncosted_pred}
+            GROUP BY sk.sku_id
+            ORDER BY rev DESC LIMIT 25
+        """, params).fetchall()
+
+    branches = []
+    tot_rev = tot_costed = 0.0
+    for r in sorted(brows, key=lambda x: -((x["total_rev"] or 0) - (x["costed_rev"] or 0))):
+        total = r["total_rev"] or 0.0
+        costed_v = r["costed_rev"] or 0.0
+        unc = total - costed_v
+        tot_rev += total; tot_costed += costed_v
+        branches.append({
+            "branch":          r["branch"],
+            "total_revenue":   round(total, 2),
+            "costed_revenue":  round(costed_v, 2),
+            "uncosted_revenue": round(unc, 2),
+            "pct_uncosted":    round(unc / total * 100, 1) if total else 0.0,
+            "skus":            r["skus"] or 0,
+            "uncosted_skus":   r["uncosted_skus"] or 0,
+        })
+    trend = []
+    for r in trows:
+        total = r["total_rev"] or 0.0
+        costed_v = r["costed_rev"] or 0.0
+        trend.append({
+            "period": r["m"],
+            "pct_uncosted": round((total - costed_v) / total * 100, 1) if total else 0.0,
+            "uncosted_revenue": round(total - costed_v, 2),
+        })
+    top_uncosted = [{
+        "sku_code": r["sku_code"], "description": r["description"], "category": r["category"],
+        "revenue": round(r["rev"] or 0, 2), "qty": r["qty"] or 0,
+    } for r in urows]
+
+    return {
+        "chain": {
+            "total_revenue":    round(tot_rev, 2),
+            "costed_revenue":   round(tot_costed, 2),
+            "uncosted_revenue": round(tot_rev - tot_costed, 2),
+            "pct_uncosted":     round((tot_rev - tot_costed) / tot_rev * 100, 1) if tot_rev else 0.0,
+        },
+        "branches":     branches,
+        "monthly_trend": trend,
+        "top_uncosted": top_uncosted,
+    }
+
+
+# ---------------------------------------------------------------------------
 # GET /api/buffet/gp/export   🟢7
 # Download GP analysis as formatted Excel
 # ---------------------------------------------------------------------------
