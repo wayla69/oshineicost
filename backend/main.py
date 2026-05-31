@@ -8682,17 +8682,34 @@ def pnl_branch(
     twhere = "WHERE " + " AND ".join(tf)
 
     with get_db() as con:
-        rows = con.execute(f"""
+        rev_rows = con.execute(f"""
             SELECT b.name AS branch,
                    COUNT(DISTINCT ssm.period_month) AS months,
-                   SUM(ssm.subtotal_ex_vat)         AS revenue,
-                   SUM({cogs_expr})                 AS cogs
+                   SUM(ssm.subtotal_ex_vat)         AS revenue
             FROM sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id  = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            JOIN branches b ON b.branch_id = ssm.branch_id
             {where}
             GROUP BY b.name
+        """, params).fetchall()
+        # COGS from the BoM model (real recipe costs), resolving each sales SKU to its
+        # recipe directly or via bom_sku_alias — same approach as the BoM Cost tab.
+        bom_rows = con.execute(f"""
+            WITH eff AS (
+              SELECT b.name AS branch, ssm.qty AS qty,
+                     COALESCE(
+                       (SELECT bi.sku_id FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
+                       (SELECT a.resolved_sku_id FROM bom_sku_alias a
+                          JOIN skus s ON s.sku_id = ssm.sku_id
+                         WHERE a.bom_sku_code = s.sku_code LIMIT 1)
+                     ) AS bom_sku_id
+              FROM sales_sku_monthly ssm
+              JOIN branches b ON b.branch_id = ssm.branch_id
+              {where}
+            )
+            SELECT eff.branch AS branch, SUM(eff.qty * bi.ingredient_cost) AS bom_cost
+            FROM eff JOIN bom_ingredients bi ON bi.sku_id = eff.bom_sku_id
+            WHERE eff.bom_sku_id IS NOT NULL
+            GROUP BY eff.branch
         """, params).fetchall()
         cov = con.execute(f"""
             SELECT b.name AS branch, SUM(st.customer_count) AS covers
@@ -8712,13 +8729,14 @@ def pnl_branch(
         except Exception:
             pass
     covmap = {r["branch"]: (r["covers"] or 0) for r in cov}
+    bom_map = {r["branch"]: (r["bom_cost"] or 0.0) for r in bom_rows}
 
     out = []
     tot = {"revenue": 0.0, "cogs": 0.0, "fixed": 0.0, "covers": 0}
-    for r in sorted(rows, key=lambda x: -(x["revenue"] or 0)):
+    for r in sorted(rev_rows, key=lambda x: -(x["revenue"] or 0)):
         br      = r["branch"]
         rev     = round(r["revenue"] or 0.0, 2)
-        cogs_v  = round(r["cogs"] or 0.0, 2)
+        cogs_v  = round(bom_map.get(br, 0.0), 2)
         gp      = round(rev - cogs_v, 2)
         months  = r["months"] or 1
         fcm     = float(fixed.get(br, 0) or 0)

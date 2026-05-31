@@ -852,6 +852,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/></svg>
     <span class="nav-label">🎯 ความครอบคลุมต้นทุน</span>
   </div>
+  <div class="nav-item" id="nav-pnlbranch" onclick="switchTab('pnlbranch')" title="P&amp;L รายสาขา · Revenue -> BoM COGS -> Gross Profit -> fixed costs -> Operating Profit + break-even">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>
+    <span class="nav-label">💵 P&amp;L รายสาขา</span>
+  </div>
 
   <!-- ─── 🍣 À LA CARTE & MENU ─── -->
   <div class="nav-section">🍣 À La Carte &amp; เมนู</div>
@@ -2100,6 +2104,35 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <tbody id="cov-top"></tbody>
         </table>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: BRANCH P&L  (Revenue -> BoM COGS -> GP -> fixed -> Operating Profit)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-pnlbranch" style="display:none">
+  <p class="text-sm text-slate-500 mb-4">รายได้ → ต้นทุน BoM → กำไรขั้นต้น → หักค่าใช้จ่ายคงที่ → กำไรจากการดำเนินงาน · ต้นทุนคำนวณจากสูตร BoM จริง</p>
+  <div id="pnl-note" class="hidden mb-4 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e"></div>
+  <div id="pnl-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+  <div class="card p-4">
+    <div class="text-sm font-semibold text-slate-700 mb-3">P&amp;L รายสาขา (เรียงตามกำไรจากการดำเนินงาน)</div>
+    <div style="max-height:460px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-slate-400 text-xs border-b sticky top-0 bg-white">
+          <th class="py-1.5 pr-3">สาขา</th>
+          <th class="py-1.5 pr-3 text-right">รายได้</th>
+          <th class="py-1.5 pr-3 text-right">ต้นทุน BoM</th>
+          <th class="py-1.5 pr-3 text-right">กำไรขั้นต้น</th>
+          <th class="py-1.5 pr-3 text-right">GP%</th>
+          <th class="py-1.5 pr-3 text-right">ค่าใช้จ่ายคงที่</th>
+          <th class="py-1.5 pr-3 text-right">กำไรดำเนินงาน</th>
+          <th class="py-1.5 pr-3 text-right">OP%</th>
+          <th class="py-1.5 pr-3 text-right">ลูกค้า</th>
+          <th class="py-1.5 text-right">จุดคุ้มทุน</th>
+        </tr></thead>
+        <tbody id="pnl-branches"></tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -4760,12 +4793,12 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', manual:'📖 คู่มือการใช้งาน' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', manual:'📖 คู่มือการใช้งาน' };
 
 function switchTab(name) {
   activeTab = name;
   ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','manual'].forEach(t => {
+   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','manual'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -4933,6 +4966,7 @@ function loadActiveTab() {
   if (activeTab === 'branchbom')   loadBranchBom();
   if (activeTab === 'bomcost')     loadBomCostTab();
   if (activeTab === 'coverage')    loadCostCoverage();
+  if (activeTab === 'pnlbranch')   loadPnlBranch();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -14511,6 +14545,48 @@ async function loadCostCoverage() {
       <td class="py-1.5 pr-3 text-xs text-slate-500">${esc(r.category)}</td>
       <td class="py-1.5 text-right">${fmt(r.revenue)}</td>
     </tr>`).join('') || '<tr><td colspan="4" class="py-3 text-slate-400 text-center">ไม่มี 🎉</td></tr>';
+}
+
+// ── Branch P&L tab (Analysis #1, BoM-based COGS) ───────────────
+async function loadPnlBranch() {
+  const gen = loadGen;
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch', getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to', getMonthTo());
+  let d;
+  try { d = await getJSON('/api/pnl/branch?' + p.toString(), { gen }); }
+  catch(e){ if (e === STALE) return; throw e; }
+  if (gen !== loadGen) return;
+  const c = d.chain || {};
+  document.getElementById('pnl-kpis').innerHTML = [
+    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4f46e5'],
+    ['ต้นทุน BoM',           fmt(c.cogs),             '#f59e0b'],
+    ['กำไรขั้นต้น',          fmt(c.gross_profit) + (c.gp_margin_pct!=null?` · ${c.gp_margin_pct}%`:''), '#10b981'],
+    ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444')],
+  ].map(([l,v,col]) => `<div class="card p-4" style="border-top:3px solid ${col}">
+      <div class="text-xs text-slate-500">${esc(l)}</div>
+      <div class="text-xl font-bold" style="color:${col}">${v}</div></div>`).join('');
+  const note = document.getElementById('pnl-note');
+  if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
+    note.classList.remove('hidden');
+    note.textContent = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น. ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา';
+  } else { note.classList.add('hidden'); }
+  document.getElementById('pnl-branches').innerHTML = (d.branches||[]).map(b => {
+    const opCol = (b.operating_profit>=0) ? '#0891b2' : '#e11d48';
+    return `<tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-3 font-medium">${esc(b.branch)}</td>
+      <td class="py-1.5 pr-3 text-right">${fmt(b.revenue)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmt(b.cogs)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:#047857">${fmt(b.gross_profit)}</td>
+      <td class="py-1.5 pr-3 text-right">${b.gp_margin_pct!=null?b.gp_margin_pct+'%':'—'}</td>
+      <td class="py-1.5 pr-3 text-right text-slate-500">${b.fixed_cost_period?fmt(b.fixed_cost_period):'—'}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold" style="color:${opCol}">${fmt(b.operating_profit)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:${opCol}">${b.op_margin_pct!=null?b.op_margin_pct+'%':'—'}</td>
+      <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.covers)}</td>
+      <td class="py-1.5 text-right text-slate-500">${b.breakeven_covers?fmtN(b.breakeven_covers):'—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="10" class="py-3 text-slate-400 text-center">—</td></tr>';
 }
 
 // ── Boot ───────────────────────────────────────────────────────
