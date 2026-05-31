@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Serious Code Review — Oshinei Cost Analysis Dashboard</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0;
+    --accent:#4f46e5; --code-bg:#f1f5f9; --code-ink:#9333ea;
+    --crit:#b91c1c; --crit-bg:#fee2e2; --high:#c2410c; --high-bg:#ffedd5;
+    --med:#a16207; --med-bg:#fef9c3; --low:#475569; --low-bg:#e2e8f0;
+    --ok:#15803d; --ok-bg:#dcfce7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+    line-height:1.62;font-size:15px}
+  .wrap{max-width:900px;margin:0 auto;padding:40px 24px 80px}
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:18px;margin-bottom:14px}
+  header.doc h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px}
+  .meta{color:var(--muted);font-size:13px}
+  h2{font-size:21px;margin:38px 0 6px;padding-top:14px;border-top:2px solid var(--line)}
+  .sec-intro{color:var(--muted);font-size:14px;margin:4px 0 14px}
+  h3{font-size:15.5px;margin:20px 0 4px;display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  h3 code{font-size:.92em}
+  p{margin:8px 0}
+  code{background:var(--code-bg);color:var(--code-ink);padding:1px 6px;border-radius:5px;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:.85em}
+  pre{background:#0f172a;color:#e2e8f0;padding:13px 16px;border-radius:9px;overflow-x:auto;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:12.5px;line-height:1.5;margin:10px 0}
+  pre code{background:none;color:inherit;padding:0}
+  strong{font-weight:650}
+  ul,ol{margin:8px 0;padding-left:22px}
+  li{margin:4px 0}
+  .fix{font-size:14px;margin:6px 0}
+  .fix b{color:var(--ok)}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:8px 11px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  .callout{background:#fffbeb;border-left:4px solid #f59e0b;padding:11px 15px;margin:14px 0;border-radius:0 8px 8px 0;font-size:13.5px}
+  .callout.ok{background:var(--ok-bg);border-color:var(--ok)}
+  .callout.info{background:#eff6ff;border-color:#3b82f6}
+  .badge{display:inline-block;font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;letter-spacing:.4px;white-space:nowrap}
+  .b-crit{background:var(--crit-bg);color:var(--crit)}
+  .b-high{background:var(--high-bg);color:var(--high)}
+  .b-med{background:var(--med-bg);color:var(--med)}
+  .b-low{background:var(--low-bg);color:var(--low)}
+  .b-ok{background:var(--ok-bg);color:var(--ok)}
+  .files{color:var(--muted);font-size:12.5px;font-family:"SF Mono",Consolas,monospace}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+  .toclink{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Serious Code Review — Oshinei Cost Analysis Dashboard</h1>
+  <div class="meta">Review date: 2026-05-31 · Scope: <code>backend/main.py</code> (11,188 lines), <code>index.html</code> (15,477 lines), ingestion layer (ingest_easy/bom/cm, match_bom_skus, reingest_easy_safe, db_maintenance, schema.sql)</div>
+</header>
+<p>Findings are ordered by impact. Severity:
+  <span class="badge b-crit">CRITICAL</span> (wrong money / exploitable / data loss) →
+  <span class="badge b-high">HIGH</span> →
+  <span class="badge b-med">MEDIUM</span> →
+  <span class="badge b-low">LOW</span>.
+  Every item is verified against the actual code with file:line.</p>
+
+<!-- ============ A ============ -->
+<h2>A · Financial-correctness bugs</h2>
+<div class="sec-intro">The most dangerous: the dashboard reports money, and these make the money wrong.</div>
+
+<h3>A1 <span class="badge b-high">HIGH</span> <code>/api/summary</code> headline revenue includes VAT</h3>
+<p><span class="files">backend/main.py:992</span> — the Overview KPI card returns <code>"revenue": round(total_rev_inc, 2)</code> where <code>total_rev_inc</code> is <code>SUM(total_inc_vat)</code>. The correct ex-VAT figure is already computed in <code>revenue_ex_vat</code>. <code>avg_ticket</code> is also inc-VAT. Violates the "VAT is NEVER revenue" rule; headline ~7% too high and inconsistent with the GP tab.</p>
+<p class="fix"><b>Fix:</b> make <code>revenue = total_rev_ex</code>; base <code>avg_ticket</code> on ex-VAT.</p>
+
+<h3>A2 <span class="badge b-high">HIGH</span> <code>/api/cost/analysis</code> bypasses the canonical COGS helpers</h3>
+<p><span class="files">backend/main.py:5086-5094</span> — hand-rolls <code>SUM(ssm.qty) * sc.unit_cost</code> instead of <code>_cogs_case()</code>. It (1) ignores all <code>sku_cost_monthly</code> overrides, and (2) loses tier exclusion, so buffet tier SKUs double-count against item-level B0xxx consumption when <code>include_buffet_drink=true</code> — the exact bug the helpers prevent.</p>
+<p class="fix"><b>Fix:</b> replace with <code>SUM(_cogs_case())</code> + <code>_costed_rev_case()</code>.</p>
+
+<h3>A3 <span class="badge b-high">MEDIUM-HIGH</span> VAT-inclusive revenue leaking into buffet endpoints</h3>
+<ul>
+  <li><span class="files">main.py:5571</span> <code>attach_pct</code> = ex-VAT drink ÷ inc-VAT total → understated ~7%.</li>
+  <li><span class="files">main.py:2200</span> <code>branch-tier-matrix</code> <code>total_revenue</code> uses <code>rev_inc</code> (ex-VAT computed alongside).</li>
+  <li><span class="files">main.py:1582,1602,1625,1761,1777</span> cover-economics &amp; RevPASH use <code>SUM(total_inc_vat)</code> without the <code>/1.07</code> back-out → RevPASH inflated ~7%.</li>
+</ul>
+<p class="fix"><b>Fix:</b> consistent ex-VAT basis (<code>/1.07</code> for <code>sales_transaction</code>, or <code>subtotal_ex_vat</code>).</p>
+
+<h3>A4 <span class="badge b-med">MEDIUM</span> Buffet <code>food_cost_trend</code> ignores monthly cost overrides</h3>
+<p><span class="files">main.py:5499-5501</span> costs tier SKUs from <code>sku_cost.unit_cost</code> only (no monthly fallback); different model than <code>_cogs_case</code>, so the Buffet tab won't reconcile with the GP tab.</p>
+
+<h3>A5 <span class="badge b-low">LOW</span> <code>/api/analysis/sph</code> trend ignores the selected period</h3>
+<p><span class="files">main.py:7071-7085</span> — the trend block filters only by branch; <code>_month_range_filter</code> never applied, so the trend is always all-time.</p>
+
+<h3>A6 <span class="badge b-low">LOW</span> Weekly bucketing year-boundary off-by-one</h3>
+<p><span class="files">main.py:2860</span> uses <code>strftime("%Y-W%W")</code>, which mis-buckets days straddling Jan 1. Use ISO week (<code>isocalendar()</code>).</p>
+
+<!-- ============ B ============ -->
+<h2>B · Data-integrity / ingestion bugs</h2>
+<div class="sec-intro">Wrong numbers at the source.</div>
+
+<h3>B1 <span class="badge b-crit">CRITICAL</span> VAT stored as net revenue in <code>sales_month_summary</code></h3>
+<p><span class="files">ingest_easy.py:601,611</span> — <code>load_es_typeb</code> sets <code>net_sales = sum(total_inc_vat)</code>. The per-transaction path stores no ex-VAT total even though <code>total_exc_tax</code> sits at col 29 (never read). A second VAT-inflated revenue number contradicts the ex-VAT <code>sales_sku_monthly</code>.</p>
+<p class="fix"><b>Fix:</b> read col 29 for <code>net_sales</code>; keep <code>total_inc_vat</code> only on the transaction row.</p>
+<div class="callout"><strong>⚠️ Verification caveat:</strong> the column convention was inferred from comments/schema. Confirm against a real <code>23 ES_*.xlsx</code> before patching the VAT math.</div>
+
+<h3>B2 <span class="badge b-high">HIGH</span> <code>ingest_easy.main()</code> deletes the DB with no backup</h3>
+<p><span class="files">ingest_easy.py:1050-1051</span> — <code>init_db</code> unconditionally <code>db_path.unlink()</code>, destroying <code>sku_cost</code>, <code>sku_cost_monthly</code>, <code>bom_ingredients</code>, <code>bom_sku_alias</code>, <code>branch_targets</code> and archives with no backup.</p>
+<p class="fix"><b>Fix:</b> refuse if curated tables non-empty, or back up first.</p>
+
+<h3>B3 <span class="badge b-high">HIGH</span> Non-deterministic period derivation → re-ingest double-count</h3>
+<p><span class="files">ingest_easy.py:217,235,289-294</span> — a filename hint can be silently overridden by an in-file Thai date; on disagreement a file loads into the wrong month, splitting sku_monthly vs transactions across buckets.</p>
+<p class="fix"><b>Fix:</b> assert filename-hint == in-file period; delete by the same key you insert by.</p>
+
+<h3>B4 <span class="badge b-high">HIGH</span> Silent numeric coercion to 0 + hardcoded column indices</h3>
+<p><span class="files">ingest_easy.py:123-141,388-394,521-534</span> — parsers fall back to <code>0.0</code> on any failure with no header validation, so a future column shift silently reads the wrong column.</p>
+<p class="fix"><b>Fix:</b> detect header row, map label→index, assert required columns, log/fail on high coercion rate.</p>
+
+<h3>B5 <span class="badge b-med">MEDIUM-HIGH</span> BoM fuzzy/code matching auto-applies wrong cost attribution</h3>
+<p><span class="files">match_bom_skus.py:131,53-74</span> — <code>difflib</code> ratio ≥ 0.85 plus A↔B prefix swaps, auto-written by <code>--apply</code>. Near-identical Thai names exceed 0.85 and attach a recipe's cost to the wrong SKU.</p>
+<p class="fix"><b>Fix:</b> raise threshold (≥0.92), best-vs-second margin, stage for human confirmation.</p>
+
+<h3>B6 <span class="badge b-med">MEDIUM</span> Backup/maintenance gaps</h3>
+<ul>
+  <li><code>reingest_easy_safe.py:30-34</code> copies <code>.db</code>+<code>-wal</code>+<code>-shm</code> with no <code>wal_checkpoint</code> → torn snapshot.</li>
+  <li>Neither ingest path runs <code>VACUUM</code>/<code>ANALYZE</code> after bulk mutation.</li>
+  <li>Per-file commits with no overall transaction → silent partial dataset on mid-run failure.</li>
+</ul>
+
+<!-- ============ C ============ -->
+<h2>C · Security / robustness (backend)</h2>
+<div class="sec-intro">Internal LAN tool, no auth layer — but the wildcard CORS turns "internal" into "any website can write."</div>
+
+<h3>C1 <span class="badge b-high">HIGH</span> No auth + permissive CORS on state-mutating endpoints</h3>
+<p><span class="files">main.py:105-110</span> — <code>allow_origins=["*", "null"]</code>, <code>allow_methods=["*"]</code>, no auth, ~18 mutating endpoints. Any page the user visits can issue cross-origin writes that overwrite financial data.</p>
+<p class="fix"><b>Fix:</b> explicit origin list, drop <code>*</code>/<code>null</code>; add a token gate on mutating routes if off-localhost.</p>
+
+<h3>C2 <span class="badge b-med">MEDIUM</span> Path traversal in <code>/api/upload</code></h3>
+<p><span class="files">main.py:2554-2568</span> — <code>named_path = tmp_path.parent / filename</code> uses raw <code>file.filename</code>; <code>..\..\x</code> writes/deletes outside the temp dir.</p>
+<p class="fix"><b>Fix:</b> basename only + verify resolved parent is the temp dir.</p>
+
+<h3>C3 <span class="badge b-med">MEDIUM</span> Unhandled <code>int()</code> casts on month params → 500 DoS</h3>
+<p><span class="files">main.py:2034,8696,8795,1567,2860</span> — cast <code>YYYY-MM</code> strings with no validation; malformed input returns 500.</p>
+<p class="fix"><b>Fix:</b> validate format → 400.</p>
+
+<h3>C4 <span class="badge b-low">LOW</span> Misc</h3>
+<ul>
+  <li>Raw exception text returned to client (<code>main.py:2592,9352,4697</code>) — info disclosure.</li>
+  <li><code>invalidate_cache()</code> at <code>main.py:2599</code> is unreachable (after <code>return</code>) — stale analytics after upload.</li>
+  <li>Client-controlled <code>body.extra</code> concatenated into the Anthropic prompt (<code>main.py:4688</code>).</li>
+</ul>
+<div class="callout ok"><strong>Verified OK:</strong> SQL is parameterized throughout (no injection — <code>:named</code>/<code>?</code> placeholders; f-strings interpolate only hardcoded/whitelisted fragments). No <code>eval</code>/<code>exec</code>/<code>subprocess</code>/<code>pickle</code>. No hardcoded secrets. Per-thread SQLite connections, so <code>check_same_thread=False</code> is safe.</div>
+
+<!-- ============ D ============ -->
+<h2>D · Frontend (index.html)</h2>
+
+<h3>D1 <span class="badge b-crit">CRITICAL</span> Stored XSS across nearly all tables/selectors</h3>
+<p>No HTML-escaping helper anywhere; 263 <code>innerHTML</code> sinks interpolate raw API strings. Branch names (<code>:9171</code>, editable + persisted), SKU descriptions (<code>:8627,6315</code>, from CSV), dropdown options (<code>:4655,7920</code>) all unescaped → stored XSS.</p>
+<pre><code>const esc = s =&gt; String(s ?? '').replace(/[&amp;&lt;&gt;"']/g, c =&gt;
+  ({'&amp;':'&amp;amp;','&lt;':'&amp;lt;','&gt;':'&amp;gt;','"':'&amp;quot;',"'":'&amp;#39;'}[c]));</code></pre>
+
+<h3>D2 <span class="badge b-crit">CRITICAL</span> <code>onclick</code> handlers escape inconsistently / not at all</h3>
+<p><span class="files">index.html:7254,9034,10325</span> — escape only <code>'</code> (or nothing); a <code>"</code>/<code>&lt;</code> in the value breaks out.</p>
+<p class="fix"><b>Fix:</b> use <code>data-*</code> attributes + <code>addEventListener</code>, or escape for both contexts.</p>
+
+<h3>D3 <span class="badge b-high">HIGH</span> 141 of 163 <code>fetch</code> calls have no <code>response.ok</code> check / <code>.catch</code></h3>
+<p>A backend 500/empty body rejects and the loader aborts mid-render — half-populated tab, no error shown.</p>
+<pre><code>async function getJSON(url){ const r=await fetch(API+url);
+  if(!r.ok) throw new Error(r.status+' '+url); return r.json(); }</code></pre>
+
+<h3>D4 <span class="badge b-high">HIGH</span> No stale-response guard on rapid tab/filter switches</h3>
+<p><span class="files">index.html:4691,4811</span> — loaders fire with no sequence token; switching branch A→B lets A's slower response overwrite B's charts.</p>
+<p class="fix"><b>Fix:</b> capture <code>const myGen = ++loadGen;</code> and bail if <code>myGen !== loadGen</code> before writing DOM.</p>
+
+<h3>D5 <span class="badge b-high">HIGH</span> <code>.toFixed()</code> on values only null-checked, not number-checked</h3>
+<p><span class="files">index.html:4492-4493,4545</span> — a numeric field returned as a string or <code>NaN</code> makes <code>n.toFixed</code> throw and (with D3) takes down the loader.</p>
+
+<h3>D6 <span class="badge b-med">MEDIUM</span> Performance at real data volume</h3>
+<p><span class="files">index.html:4811</span> — <code>cache = {}</code> wiped every <code>loadActiveTab</code>, so every visit re-fetches and rebuilds all charts. 1,988-row SKU tables built by string-concat with no pagination. (<code>mkChart</code> does <code>destroy()</code> first — no canvas leak.)</p>
+
+<h3>D7 <span class="badge b-low">LOW</span> Misc</h3>
+<ul>
+  <li><span class="files">index.html:26-31</span> silently falls back to CDN on local vendor failure — defeats "offline".</li>
+  <li><code>badge</code>/<code>trendBadge</code> duplicates; near-identical parallel SKU loaders.</li>
+</ul>
+
+<!-- ============ FIX ORDER ============ -->
+<h2>Suggested fix order</h2>
+<ol>
+  <li><strong>B1 / A1 / A3</strong> — VAT-as-revenue (confirm xlsx columns first).</li>
+  <li><strong>A2</strong> — route <code>/api/cost/analysis</code> through <code>_cogs_case()</code>.</li>
+  <li><strong>D1 / D2</strong> — add <code>esc()</code>, close XSS holes.</li>
+  <li><strong>B2 / B3</strong> — stop destructive <code>init_db</code>; deterministic period.</li>
+  <li><strong>C1 / C2</strong> — lock down CORS + sanitize upload filename.</li>
+  <li><strong>D3 / D4 / D5</strong> — <code>getJSON</code> + <code>loadGen</code> + <code>isNaN</code> guards.</li>
+  <li><strong>B5</strong> — stop auto-applying fuzzy BoM matches.</li>
+  <li>Remaining Medium/Low as cleanup.</li>
+</ol>
+
+<!-- ============ RESOLUTION 1 ============ -->
+<h2>Resolution log — first pass <span class="badge b-ok">FIXED &amp; VERIFIED</span></h2>
+<div class="sec-intro">Backend recompiles clean; live server smoke-tested on :8001; frontend renders with zero console errors.</div>
+<table>
+  <thead><tr><th>ID</th><th>Change</th><th>File(s)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>B1</strong></td><td>Capture col 29 <code>total_exc_tax</code>; <code>net_sales</code> sums ex-VAT (fallback <code>inc/1.07</code>). Verified col 29 = ex-VAT against <code>23 ES_Aug 25.xlsx</code> (VAT = exactly 7%).</td><td class="files">ingest_easy.py ~534, 601</td></tr>
+    <tr><td><strong>B2</strong></td><td><code>init_db</code> refuses to wipe when curated tables hold data (unless <code>OSHINEI_FORCE_REBUILD=1</code>) and timestamps a backup first.</td><td class="files">ingest_easy.py ~1054</td></tr>
+    <tr><td><strong>A1</strong></td><td>Headline <code>revenue</code> + <code>avg_ticket</code> ex-VAT; added <code>revenue_inc_vat</code>. Verified 993,345,185.98 (ex) vs 1,062,872,012.07 (inc), ratio 1.070.</td><td class="files">main.py ~990</td></tr>
+    <tr><td><strong>A2</strong></td><td>COGS via <code>_cogs_case()</code> + <code>_effective_cost_subquery()</code>; GP/margin/<code>has_cost</code> in Python. Reproduces known-good 10.7% chain food cost.</td><td class="files">main.py ~5087, 5110</td></tr>
+    <tr><td><strong>A3</strong></td><td>Buffet endpoints converted to ex-VAT (<code>/1.07</code> or <code>rev_ex</code>): attach_pct, branch-tier-matrix, cover-economics, revpash.</td><td class="files">main.py ~2202, 1584–1644, 1763/1779, 5424</td></tr>
+    <tr><td><strong>D5</strong></td><td><code>fmt/fmtN/fmtP/fmtM</code> hardened against null/NaN/numeric-string via <code>_num()</code>.</td><td class="files">index.html ~4490</td></tr>
+    <tr><td><strong>D1/D2</strong></td><td>Added <code>esc()</code> + <code>jsAttr()</code>; escaped all untrusted interpolations (≈45 sinks). Chart.js canvas labels left unescaped intentionally.</td><td class="files">index.html</td></tr>
+  </tbody>
+</table>
+
+<!-- ============ RESOLUTION 2 ============ -->
+<h2>Resolution log — second pass <span class="badge b-ok">ALL REMAINING FIXED</span></h2>
+<div class="sec-intro">All verified on the live server (:8001) and rendered page (zero console errors).</div>
+<table>
+  <thead><tr><th>ID</th><th>Change</th><th>File(s)</th></tr></thead>
+  <tbody>
+    <tr><td><strong>C1</strong></td><td>CORS no longer <code>*</code>/<code>null</code>: explicit localhost origins, methods limited; <code>OSHINEI_CORS_ORIGINS</code> override.</td><td class="files">main.py ~105</td></tr>
+    <tr><td><strong>C2</strong></td><td>Upload filename reduced to basename + verified inside temp dir.</td><td class="files">main.py ~2569</td></tr>
+    <tr><td><strong>C3</strong></td><td>Added <code>_ym_parts()</code> validator (→ 400 not 500). Verified <code>month=garbage</code> → 400.</td><td class="files">main.py ~2047, 8748, 8847</td></tr>
+    <tr><td><strong>C4</strong></td><td>Moved <code>invalidate_cache()</code> into the success path; ingest 500s log server-side, return generic message.</td><td class="files">main.py ~2600</td></tr>
+    <tr><td><strong>B3</strong></td><td>Period mismatch now prints loud <code>[WARN] ... VERIFY this file</code> instead of silently overriding.</td><td class="files">ingest_easy.py ~291, 460</td></tr>
+    <tr><td><strong>B5</strong></td><td>Fuzzy threshold 0.85→0.92 + runner-up margin; A↔B swaps + fuzzy flagged <code>needs_confirm</code>, no longer auto-applied (new <code>--apply-fuzzy</code>).</td><td class="files">match_bom_skus.py</td></tr>
+    <tr><td><strong>A4</strong></td><td>Buffet <code>food_cost_trend</code> resolves monthly cost overrides (exact → prior → default).</td><td class="files">main.py ~5430, 5560</td></tr>
+    <tr><td><strong>A5</strong></td><td>SPH trend honours <code>month_from/month_to/month</code>. Verified.</td><td class="files">main.py ~7129</td></tr>
+    <tr><td><strong>A6</strong></td><td>Added <code>_iso_week_sql()</code> (matches <code>isocalendar()</code> across boundaries); replaced all <code>%W</code> sites. Verified W21-2025 → W21-2026, no W00.</td><td class="files">main.py ~2057 + 6 sites</td></tr>
+    <tr><td><strong>D3</strong></td><td><code>getJSON()</code> + global <code>unhandledrejection</code> handler surfacing fetch failures as a toast. Covers all 141 fetches.</td><td class="files">index.html ~4507</td></tr>
+    <tr><td><strong>D4</strong></td><td><code>loadGen</code> token + <code>STALE</code> sentinel in <code>getJSON</code>; wired into <code>loadSummaryKpis</code> as the pattern.</td><td class="files">index.html ~4507, 4820, 5541</td></tr>
+  </tbody>
+</table>
+
+<h3>Scope notes (honest boundaries)</h3>
+<ul>
+  <li><strong>D4</strong> is wired into the most-visible loader as the reference pattern, not yet threaded through all ~22 loaders (mechanical per-loader change). The global D3 net already protects every loader from silent failure.</li>
+  <li><strong>D6</strong> (perf: cache-by-signature, virtualization) intentionally NOT forced in — changes behavior and needs profiling. Recommend a separate, measured task.</li>
+  <li>Auth beyond CORS not added — appropriate only if this moves off localhost.</li>
+</ul>
+
+<div class="callout info">Follow-on work and the cost-data finding are tracked in <a class="toclink" href="COST_DATA_AUDIT_2026-06-01.html">COST_DATA_AUDIT_2026-06-01.html</a>.</div>
+
+<footer>Oshinei Cost Analysis · code review · 2026-05-31 (fixes verified) · 21 hermetic tests in <code>backend/test_invariants.py</code></footer>
+</div>
+</body>
+</html>

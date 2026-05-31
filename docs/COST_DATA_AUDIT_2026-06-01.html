@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cost-Data Audit — sku_cost is selling price, not cost</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0;
+    --accent:#4f46e5; --code-bg:#f1f5f9; --code-ink:#9333ea;
+    --crit:#b91c1c; --crit-bg:#fee2e2; --high:#c2410c; --high-bg:#ffedd5;
+    --med:#a16207; --med-bg:#fef9c3; --low:#475569; --low-bg:#e2e8f0;
+    --ok:#15803d; --ok-bg:#dcfce7;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+    line-height:1.6;font-size:15px}
+  .wrap{max-width:880px;margin:0 auto;padding:40px 24px 80px}
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:18px;margin-bottom:8px}
+  header.doc h1{font-size:26px;margin:0 0 6px;letter-spacing:-.3px}
+  .meta{color:var(--muted);font-size:13px}
+  h2{font-size:20px;margin:34px 0 12px;padding-top:10px;border-top:1px solid var(--line)}
+  h2:first-of-type{border-top:none}
+  h3{font-size:16px;margin:22px 0 6px}
+  p{margin:10px 0}
+  code{background:var(--code-bg);color:var(--code-ink);padding:1px 6px;border-radius:5px;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:.86em}
+  strong{font-weight:650}
+  ul,ol{margin:10px 0;padding-left:22px}
+  li{margin:5px 0}
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:14px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .callout{background:#fffbeb;border-left:4px solid #f59e0b;padding:12px 16px;margin:16px 0;border-radius:0 8px 8px 0;font-size:14px}
+  .callout.ok{background:var(--ok-bg);border-color:var(--ok)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;
+    letter-spacing:.4px;vertical-align:middle}
+  .b-ok{background:var(--ok-bg);color:var(--ok)}
+  .b-crit{background:var(--crit-bg);color:var(--crit)}
+  .kpi-row{display:flex;gap:14px;flex-wrap:wrap;margin:18px 0}
+  .kpi{flex:1;min-width:150px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .kpi .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+  .kpi .v{font-size:22px;font-weight:700;margin-top:4px}
+  .kpi .d{font-size:12px;color:var(--muted);margin-top:2px}
+  .arrow{color:var(--ok);font-weight:700}
+  footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Cost-Data Audit — <code>sku_cost</code> is selling price, not cost</h1>
+  <div class="meta">2026-06-01 · read-only investigation · triggered by the negative à-la-carte margins the COGS fix (A2) surfaced</div>
+</header>
+
+<h2>Finding <span class="badge b-crit">HIGH CONFIDENCE</span></h2>
+<p>The negative à-la-carte margins are <strong>not a code bug</strong> — they are a <strong>data-entry error in <code>sku_cost.unit_cost</code></strong>. For ~90% of costed SKUs, the stored "cost" is actually the <strong>VAT-inclusive selling price</strong>.</p>
+<p>Evidence — across <strong>567</strong> costed non-tier SKUs (Easy, qty&gt;0, rev&gt;0):</p>
+
+<table>
+  <thead><tr><th><code>unit_cost / (ex-VAT price)</code> ratio</th><th class="num"># SKUs</th><th>Interpretation</th></tr></thead>
+  <tbody>
+    <tr><td><strong>1.05 – 1.09</strong> (median <strong>1.070</strong>)</td><td class="num"><strong>513</strong></td><td>cost == inc-VAT <strong>selling price</strong> (price × 1.07)</td></tr>
+    <tr><td>0.95 – 1.05</td><td class="num">3</td><td>cost == ex-VAT price</td></tr>
+    <tr><td>&gt; 1.09</td><td class="num">29</td><td>cost above price (also wrong)</td></tr>
+    <tr><td>0.60 – 0.95</td><td class="num">2</td><td>implausibly high but maybe real</td></tr>
+    <tr><td><strong>&lt; 0.60</strong></td><td class="num"><strong>20</strong></td><td>looks like a <strong>genuine</strong> cost</td></tr>
+  </tbody>
+</table>
+
+<p>The median ratio is <strong>exactly 1.070</strong> — i.e. <code>unit_cost = price × 1.07</code>. Examples: BV0021 cost 48.1 vs price 45.0; DEL0002 cost 788.4 vs price 736.7; A0032 (sashimi) cost 573.9 vs price 535.4. Only ~20 SKUs (&lt;4%) have a plausible real cost.</p>
+<p><strong>Consequence:</strong> any food-cost / GP / margin computed from <code>sku_cost</code> reads ≈ 100–107% by construction. The <code>/api/cost/analysis</code>, <code>/api/profit/*</code>, and Menu-Engineering tabs (which use <code>sku_cost</code>) are therefore showing placeholder economics.</p>
+
+<h2>What is NOT affected</h2>
+<p>The flagship <strong>BoM Cost Analysis</strong> tab and the chain food-cost figure (<strong>10.7%</strong>) come from <code>bom_ingredients</code> (real recipe costs), <strong>not</strong> <code>sku_cost</code> — so that path is trustworthy. The problem is isolated to the older <code>sku_cost</code>-based endpoints.</p>
+
+<h2>Exposure &amp; recoverability</h2>
+<ul>
+  <li>The 513 price-as-cost SKUs carry <strong>65% of the 148 M THB</strong> non-tier à-la-carte revenue.</li>
+  <li><strong>128</strong> of them already have a <strong>real BoM recipe cost</strong> in <code>bom_ingredients</code> → can be substituted directly.</li>
+  <li><strong>385</strong> have no recipe → need a cost source (real cost import, a food-cost-% assumption, or flag as uncosted).</li>
+  <li><code>bom_sku_alias</code> has 94 B-code→A-SKU maps that may extend BoM coverage further.</li>
+</ul>
+
+<h2>Recommended remediation</h2>
+<ol>
+  <li><strong>Back up first</strong> (and now that the repo is in git, commit a checkpoint).</li>
+  <li><strong>For the 128 with BoM cost:</strong> overwrite <code>sku_cost.unit_cost</code> with the BoM-derived per-serving cost. Route every write through <code>cost_change_log</code>.</li>
+  <li><strong>For the 385 without:</strong> decide a policy —
+    <ul>
+      <li>import real purchase/recipe costs (best), or</li>
+      <li>apply a category food-cost-% assumption (food ~32%, beverage ~25% of ex-VAT price) as an explicit placeholder, or</li>
+      <li>set them <strong>uncosted</strong> so the UI shows "uncosted" instead of a fake 107% — most honest interim state (the <code>has_cost</code> flag added in A2 supports it).</li>
+    </ul>
+  </li>
+  <li>Re-verify: à-la-carte <code>overall_margin</code> should turn positive and reconcile with the BoM tab.</li>
+</ol>
+
+<h2>Update — remediation <span class="badge b-ok">APPLIED (Mode A)</span></h2>
+<p>Ran <code>backend/fix_sku_cost_2026.py --apply</code> (threshold ratio ≥ 1.0):</p>
+<ul>
+  <li><strong>544 SKUs</strong> remediated · DB backed up to <code>oshinei.db.backup_pre_costfix_20260601_004011</code> · <code>VACUUM</code>+<code>ANALYZE</code> run.</li>
+  <li><strong>128</strong> set to real <strong>BoM recipe cost</strong>; <strong>416</strong> set <strong>uncosted</strong> (row deleted; <code>unit_cost</code> is <code>NOT NULL</code> so uncosted = no row).</li>
+  <li><strong>544</strong> rows written to <code>cost_change_log</code> (source <code>fix_sku_cost_2026-06-01</code>) — fully reversible/auditable.</li>
+</ul>
+
+<div class="kpi-row">
+  <div class="kpi"><div class="l">À-la-carte margin</div><div class="v">−5.9% <span class="arrow">→ +75.0%</span></div><div class="d">≈25% food cost (plausible)</div></div>
+  <div class="kpi"><div class="l">Costed SKUs</div><div class="v">767 <span class="arrow">→ 484</span></div><div class="d">now honest (real BoM cost)</div></div>
+  <div class="kpi"><div class="l">Uncosted SKUs</div><div class="v">506</div><div class="d">flagged, not faked</div></div>
+</div>
+
+<p>Sample costed items show healthy margins (A0032 77.9%, A0108 89.3%).</p>
+<div class="callout"><strong>Remaining work (data, ongoing):</strong> progressively cost the 506 uncosted SKUs — beverages especially (BV*: high volume, were uncosted because no BoM recipe). Load real supplier/recipe costs or extend BoM coverage; the <code>has_cost</code> flag makes the gap visible in the UI.</div>
+
+<h2>Verification queries used</h2>
+<ul>
+  <li>ratio distribution over <code>sku_cost.unit_cost ÷ (Σ subtotal_ex_vat ÷ Σ qty)</code> per SKU</li>
+  <li>BoM coverage via <code>SUM(bom_ingredients.ingredient_cost)</code> per <code>sku_id</code></li>
+</ul>
+<p>All read-only; no data mutated during the audit phase.</p>
+
+<footer>Oshinei Cost Analysis · cost-data audit · generated 2026-06-01</footer>
+</div>
+</body>
+</html>
