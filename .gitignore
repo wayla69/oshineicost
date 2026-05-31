@@ -1,0 +1,31 @@
+# ── Databases & backups (large, regenerable from source data) ───────────────
+*.db
+*.db-shm
+*.db-wal
+*.db.backup_*
+backend/*.backup_*
+backup_*.html
+backend/backup_*
+
+# ── Logs & generated audit artifacts ────────────────────────────────────────
+*.log
+backend/audit_easy_out*.txt
+backend/audit_easy_report*.json
+backend/reingest_out.txt
+
+# ── Python ──────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# ── Raw POS / BoM source exports (large binaries; live in OneDrive) ──────────
+# Comment these out if you want the source data tracked in git too.
+Data for Oshinei/
+BoM/
+*.zip
+
+# ── OS / editor cruft ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

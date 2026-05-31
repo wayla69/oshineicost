@@ -1,0 +1,1755 @@
+﻿sku_code,unit_cost,description,category,ref_total_revenue,ref_qty_sold,ref_last_sold
+BUFFET590,#N/A,Buffet 590 ผู้ใหญ่ (Easy),BUFFET,586347736,948029,2026-05
+BUFFET799,#N/A,Buffet 799 ผู้ใหญ่ (Easy),BUFFET,163355286,224308,2026-05
+SERVICECHARGE,#N/A,Service Charge,Payment,43583966,468570,2026-05
+BUFFET500,#N/A,Buffet 500 ผู้ใหญ่ (Easy),BUFFET,15069238,27791,2026-05
+BUFFETCHILD,#N/A,Buffet  590++No Salmon เด็ก,BUFFET,13818192,43632,2026-05
+BUFFET350,#N/A,Buffet 350 ผู้ใหญ่ (Easy),BUFFET,6679353,15416,2026-05
+SV0013,#N/A,พริก + กระเทียม,Oshinei SERVICE,25,156367,2026-05
+SV0005,#N/A,น้ำจิ้มสุกี้,Oshinei SERVICE,9,483090,2026-05
+1150-003,#N/A,เนื้อวากิวย่างใบโฮบะ(Buffet),Oshinei GRILL,0,69,2026-05
+1150-004,#N/A,เนื้อวากิวสไลด์ย่างใบโฮบะ(Buffet),Oshinei GRILL,0,79,2026-05
+1150-008,#N/A,ข้าวปั้นเนื้อวากิวโรยด้วยต้นหอมซอย ไข่กุ้ง และขิงฝน (1คำ)(Buffet),Oshinei SUSHI,0,2,2026-05
+1150-009A,#N/A,HAMACHI KAMA SHIO YAKI  (1 Pcs),A LA CARTE,0,0,
+1150-009B,#N/A,HAMACHI KAMA TERI YAKI  (1 Pcs),A LA CARTE,0,0,
+1150-010,#N/A,ข้าวปั้นหน้าตับห่าน (1คำ)(Buffet),Oshinei SUSHI,0,84,2026-05
+1150-015,#N/A,ปลาแซลมอนคลุกต้นหอมซอย ห่อสาหร่ายด้วยมือ(Buffet),Oshinei SASHIMI,0,4,2026-05
+1150-016,#N/A,ข้าวหน้าไข่ปลาแซลมอน (ขนาดเล็ก)(Buffet),Oshinei DON,0,6,2026-05
+1150-017,#N/A,หอยเชลล์ย่างกระเทียม (1 ตัว)(Buffet),Oshinei GRILL,0,48,2026-05
+1150-018,#N/A,ข้าวหน้าครีบปลาตาเดียวเบิร์น และไข่ปลาแซลมอน(Buffet),Oshinei DON,0,1,2026-05
+1150-022,#N/A,ข้าวปั้นหน้าเนื้อวากิวและมันปู (1คำ)(Buffet),Oshinei SUSHI,0,7,2026-05
+1150-023,#N/A,ข้าวปั้นหน้าเนื้อวากิวและตับห่าน (1คำ)(Buffet),Oshinei SUSHI,0,4,2026-05
+1150-026,#N/A,ข้าวหน้าตับห่าน และไข่ปลาแซลมอน(Buffet),Oshinei DON,0,4,2026-05
+1150-027,#N/A,ข้าวหน้าหอยเชลล์ และไข่ปลาแซลมอน(Buffet),Oshinei DON,0,1,2026-05
+1150-028,#N/A,หอยเชลลล์ซาชิมิ (1 ชิ้น)(Buffet),Oshinei SASHIMI,0,76,2026-05
+1150-030,#N/A,หอยเชลล์ย่างมันปู (1 ชิ้น)(Buffet),Oshinei GRILL,0,65,2026-05
+1150-031,#N/A,หอยนางรมดอง (1ตัว)(Buffet),Oshinei SHUYU,0,23,2026-05
+1150-032,#N/A,ข้าวหน้าเนื้อวากิว ราดด้วยซอสเทอริแล้วใส่ไข่ออนเซน(Buffet),Oshinei GRILL,0,6,2026-05
+1150-033,#N/A,หอยเชลล์ย่างห่อสาหร่ายโนริ ปลาไหล (1 ชิ้น)(Buffet),Oshinei GRILL,0,12,2026-05
+1150-034,#N/A,หอยเชลล์ย่างห่อสาหร่ายโนริ ตับห่าน(Buffet),Oshinei GRILL,0,33,2026-05
+1150-035,#N/A,หอยเชลล์ย่างห่อสาหร่ายโนริ ไข่กุ้ง (1 ชิ้น)(Buffet),Oshinei GRILL,0,12,2026-05
+1150-036,#N/A,หอยเชลล์ย่างห่อสาหร่ายโนริ ไข่ปลาแซลมอน (1 ชิ้น)(Buffet),Oshinei GRILL,0,32,2026-05
+1150-037,#N/A,หอยเชลล์ย่างห่อสาหร่ายโนริ มันปู (1 ชิ้น)(Buffet),Oshinei GRILL,0,18,2026-05
+1150-038,#N/A,กุ้งอาเจนติน่าดอง (3 ตัว)(Buffet),Oshinei SHUYU,0,28,2026-05
+1150-039,#N/A,หอยเชลล์ดอง (5 ตัว)(Buffet),Oshinei SHUYU,0,9,2026-05
+1150-040,#N/A,ข้าวหน้าเนื้อวากิวและไข่ปลาแซลมอน(Buffet),Oshinei DON,0,1,2026-05
+1150-041,#N/A,WAGYU ROLL (3 Pcs),A LA CARTE,0,0,
+1150-044,#N/A,สเต็กกุ้ง (5 ชิ้น)(Buffet),Oshinei STEAK,0,9,2026-05
+1150-050,#N/A,ข้าวปั้นหน้าครีบปลาตาเดียวเบิร์นโรยด้วยต้นหอมซอยและหัวไชเท้าฝนผสม โมเมจิ โอโรชิ (1ชิ้น)(Buffet),Oshinei SUSHI,0,3,2026-05
+1150-053,#N/A,HOTATE SUSHI  (1 Pcs),A LA CARTE,0,0,
+1150-054,#N/A,ข้าวปั้นหน้าหอยเชลล์เบิร์นราดชีส (1ชิ้น)(Buffet),Oshinei SUSHI,0,2,2026-05
+1150-056,#N/A,เนื้อออสเตรเลียย่างใบโฮบะ(Buffet),Oshinei GRILL,0,10,2026-05
+1150-057,#N/A,เนื้อออสเตรเลียสไลด์ย่างใบโฮบะ(Buffet),Oshinei GRILL,0,18,2026-05
+1150-058,#N/A,ข้าวหน้าเนื้อออสเตรเลียและไข่ปลาแซลมอน(Buffet),Oshinei DON,0,1,2026-05
+1150-062,#N/A,ข้าวหน้าไข่กุ้ง(Buffet),Oshinei DON,0,1,2026-05
+1150-063,#N/A,ข้าวหน้าปลาไหล(Buffet),Oshinei DON,0,4,2026-05
+1150-068,#N/A,AUSTRALIA BEEF TATAKI (3 Pcs),A LA CARTE,0,0,
+1150-080,#N/A,ข้าวหน้าตับห่านและไข่กุ้ง(Buffet),Oshinei DON,0,6,2026-05
+1150-082,#N/A,SALMON TARTARE TRUFFLE,Oshinei SASHIMI,0,0,
+1150-087,#N/A,อูนิ ซาชิมิ(Buffet),Oshinei SASHIMI,0,312,2026-05
+1150-088,#N/A,วากิว (5 ชิ้น)(Buffet),Oshinei GRILL,0,25,2026-05
+1150-089,#N/A,วากิวสไลด์ (1 ชิ้น)(Buffet),Oshinei GRILL,0,39,2026-05
+1150-090,#N/A,เนื้อออสเตเลีย (5ชิ้น)(Buffet),Oshinei GRILL,0,5,2026-05
+1150-091,#N/A,เนื้อออสเตเลีย สไลด์(Buffet),Oshinei GRILL,0,7,2026-05
+1150-780,#N/A,EBI SHOYU (3 Pcs),A LA CARTE,0,0,
+1150-IC1,#N/A,ฟรี ไอศกรีมรสชาเขียว,Oshinei ICE-CREAM(B),0,5,2026-05
+1150-IC15,#N/A,Free ICE - CREAM SOFT SERV WARABIMOSHI (รสนม),A LA CARTE,0,0,
+1150-IC16,#N/A,Free ICE - CREAM SOFT SERV WARABIMOSHI (ทูโทน),A LA CARTE,0,0,
+1150-IC17,#N/A,Free ICE - CREAM SOFT SERV WARABIMOSHI (ชาเขียว),A LA CARTE,0,0,
+1150-IC2,#N/A,ฟรี ไอศกรีมรสนมฮอกไกโด,Oshinei ICE-CREAM(B),0,14,2026-05
+1150-IC20,#N/A,มินิฮันนี่โทสต์ (เลือกไอศครีม),Oshinei ICE-CREAM,0,93,2026-05
+1150-IC21,#N/A,วาฟเฟิล (เลือกไอศครีม),Oshinei ICE-CREAM,0,42,2026-05
+1150-IC3,#N/A,ฟรี ไอศกรีมรสทูโทน,Oshinei ICE-CREAM(B),0,7,2026-05
+1150-OTH1,#N/A,เตาย่างเล็ก,A LA CARTE,0,0,
+1150-OTH2,#N/A,เตาย่างยาว(Buffet),Oshinei GRILL,0,38,2026-05
+290-018,#N/A,แกงกระหรี่หมู(Buffet),Oshinei AGE MONOMIRI,0,2,2026-05
+290-020,#N/A,ข้าวหน้าแกงกะหรี่หมูทอด(Buffet),Oshinei AGE MONOMIRI,0,1,2026-05
+290-023,#N/A,KIMCHI,A LA CARTE,0,0,
+399-003,#N/A,Udon Noodles,A LA CARTE,0,0,
+399-004,#N/A,Soba Noodles,A LA CARTE,0,0,
+399-005,#N/A,Wakame Seaweed,A LA CARTE,0,0,
+399-006,#N/A,รีฟิว เป๊ปซี่(Buffet),Oshinei DRINKING,0,9,2026-05
+399-008,#N/A,รีฟิว น้ำส้ม มิรินด้า(Buffet),Oshinei DRINKING,0,2,2026-05
+399-009,#N/A,รีฟิว เซเว่น - อัพ(Buffet),Oshinei DRINKING,0,1,2026-05
+399-010,#N/A,รีฟิว ชาเขียวเย็น(Buffet),Oshinei DRINKING,0,8,2026-05
+399-011,#N/A,รีฟิว ชาเขียวร้อน(Buffet),Oshinei DRINKING,0,1,2026-05
+550-009,#N/A,ปลาแซลมอน สไลด์บาง (9 ชิ้น)(Buffet),Oshinei SASHIMI,0,210,2026-05
+550-010,#N/A,IZUMIDAI USUZUKURI (9 Pcs),A LA CARTE,0,0,
+550-017,#N/A,TUNA SPECIAL SUSHI (1 PCS),A LA CARTE,0,0,
+550-049,#N/A,KANI MISO DON,A LA CARTE,0,0,
+550-065,#N/A,ยำไทยปลาหมึก(Buffet),Oshinei SASHIMI,0,7,2026-05
+550-102,#N/A,FRIED CHICKEN (5 Pcs),A LA CARTE,0,0,
+550-108,#N/A,ผักรวมทอดเทมปุระ(Buffet),Oshinei AGE MONOMIRI,0,2,2026-05
+550-148,#N/A,CHINESE CABBAGE,A LA CARTE,0,0,
+550-149,#N/A,JAPANESE SCALLION,A LA CARTE,0,0,
+550-150,#N/A,SPRING ONION,A LA CARTE,0,0,
+550-151,#N/A,CARROT,A LA CARTE,0,0,
+550-152,#N/A,SHIITAKE,A LA CARTE,0,0,
+550-153,#N/A,ERYNGII MUSHROOM,A LA CARTE,0,0,
+550-157,#N/A,SALMON+KANIKAMABOKO ANCHOVY,Oshinei SASHIMI,0,0,
+550-165,#N/A,WAGYU SPECIAL SUSHI SET,A LA CARTE,0,0,
+550-166,#N/A,ชุดข้าวปั้นรวมหน้าพิเศษ (10 รสชาติ),A LA CARTE,0,0,
+550-169,#N/A,SQUID BALL (3PCS),A LA CARTE,0,0,
+550-170,#N/A,SHRIMP BALL (3PCS),A LA CARTE,0,0,
+550-173,#N/A,ลูกชิ้นกุ้งปรุงรสยำไทย (3 Pcs),A LA CARTE,0,0,
+550-174,#N/A,ลูกชิ้นปลาหมึกยำไทย (3 Pcs),A LA CARTE,0,0,
+550-176,#N/A,ลูกชิ้นกุ้งปรุงรสยำปลาร้า (3 Pcs),A LA CARTE,0,0,
+550-177,#N/A,ลูกชิ้นปลาหมึกยำปลาร้า (3 Pcs),A LA CARTE,0,0,
+550-183,#N/A,กุ้งโบตั๋นอาเจนติน่าย่างมันปู (1 Pcs),A LA CARTE,0,0,
+550-184,#N/A,ข้าวห่อสาหร่ายกุ้งโบตั๋นอาเจนติน่าเบิร์น 1 ชิ้น,A LA CARTE,0,0,
+550-185,#N/A,Salmon Toro Sashimi (1 Pcs),Oshinei SASHIMI,0,0,
+550-188,#N/A,(B) เทมปุระทุเรียนมัทฉะ,A LA CARTE,0,0,
+A0171,#N/A,(A) สโมคเบคอน (ชุดเปิดโต๊ะ),Oshinei SHABU,0,4,2026-04
+ABVG-030,#N/A,REFILL-SYRUP,Oshinei SOFT DRINK,0,0,
+AS-ALL-001,#N/A,น้ำจิ้มเทมปุระ(Buffet),Oshinei AGE MONOMIRI,0,1,2026-05
+AS-ALL-002,#N/A,ขิงดอง(Buffet),Oshinei AGE MONOMIRI,0,7,2026-05
+AS-ALL-004,#N/A,PONTSU SAUCE,A LA CARTE,0,0,
+AS-ALL-005,#N/A,น้ำจิ้มสุกี้(Buffet),Oshinei CONDIMENT,0,19,2026-05
+AS-ALL-007,#N/A,สเต็กซอส(Buffet),Oshinei CONDIMENT,0,2,2026-05
+AS-ALL-008,#N/A,ซอสเทอริยากิ(Buffet),Oshinei CONDIMENT,0,1,2026-05
+AS-ALL-009,#N/A,CHILII,A LA CARTE,0,0,
+AS-ALL-011,#N/A,มะนาว(Buffet),Oshinei CONDIMENT,0,6,2026-05
+AS-ALL-012,#N/A,ซอส มายองเนส(Buffet),Oshinei CONDIMENT,0,2,2026-05
+AS-ALL-013,#N/A,พริก + กระเทียม(Buffet),Oshinei CONDIMENT,0,1,2026-05
+AS-ALL-014,#N/A,SUMA,A LA CARTE,0,0,
+AS-ALL-016,#N/A,WASABI,A LA CARTE,0,0,
+AS-MDH-011,#N/A,ข้าวด้งแซลมอนส้ม,A LA CARTE,0,0,
+ASPC-CBR-011,#N/A,ไอศครีมชาเขียว,A LA CARTE,0,0,
+ASPC-CBR-012,#N/A,ไอศครีมช็อคโกแลต,A LA CARTE,0,0,
+ASPC-CBR-013,#N/A,ไอศครีมสตอร์เบอร์รี่,A LA CARTE,0,0,
+ASPC-CBR-014,#N/A,ไอศครีมวนิลา,A LA CARTE,0,0,
+ASPC-CBR-015,#N/A,ไอศครีมมะนาว,A LA CARTE,0,0,
+ASPC-CBR-016,#N/A,ไอศครีมกะทิ,A LA CARTE,0,0,
+ASPC-CBR-032,#N/A,chocolate chip ice cream,A LA CARTE,0,0,
+ASPC-CBR-033,#N/A,หอยเซลล์ ซาซิมิ,A LA CARTE,0,0,
+ASPC-CBR-034,#N/A,หอยเซลล์ย่างห่อสาหร่ายโนริไข่กุ้ง,A LA CARTE,0,0,
+ASPC-CBR-040,#N/A,ชูชิอูนิ,A LA CARTE,0,0,
+ASPC-CBR-041,#N/A,โอโทโร่ออนท็อปด้วยอูนิ,A LA CARTE,0,0,
+ASPC-CBR-042,#N/A,Special Sashimi,Oshinei SASHIMI,0,0,
+ASPC-CBR-046,#N/A,เทมปุระปูอัด,A LA CARTE,0,0,
+ASPC-CBR-050,#N/A,ไอศครีมบลูเบอร์รี่,A LA CARTE,0,0,
+ASPC-KR2L-006,#N/A,(A) CRUNCHY ROLL (S12),A LA CARTE,0,0,
+ASPC-RYGCCS-01,#N/A,แซลมอนซาชิมิ 8ชิ้น รูปกุหลาบ,A LA CARTE,0,0,
+ASPC-RYGCCS-02,#N/A,SOFT CREAM (ชาเขียว),Oshinei ICE-CREAM,0,15,2026-05
+ASPC-RYGCCS-03,#N/A,SOFT CREAM (นมฮอกไกโด),Oshinei ICE-CREAM,0,15,2026-05
+ASPC-RYGCCS-04,#N/A,SOFT CREAM (ทูโทน),Oshinei ICE-CREAM,0,11,2026-05
+ASPC-RYGCCS-05,#N/A,SOFT CREAM MOJI WARABI,A LA CARTE,0,0,
+B0097,#N/A,(B) น้ำซุปชาบู,Oshinei SHABU,0,10260,2026-05
+B0098,#N/A,(B) น้ำซุปสุกี้ยากี้,Oshinei SHABU,0,30738,2026-05
+B01600,#N/A,(B) อูด้ง น้ำยาแซลมอน,Oshinei SOBA,0,3852,2025-12
+B0168,#N/A,(B) ข้าวห่อสาหร่ายเบบี้สแกลลอปสไปซี่ชีส (3 ชิ้น 6 ตัว),Oshinei ROLL,0,5099,2026-05
+B0169,#N/A,(B) เบบี้สแกลลอปทอดเทมปุระ (5 ตัว),Oshinei APPETIZER,0,29764,2026-05
+B0170,#N/A,(B) ยำไทยเบบี้สแกลลอป (10 ตัว),Oshinei YUM,0,20339,2026-05
+B0171,#N/A,(B) ยำเบบี้สแกลลอปน้ำปลาร้า (10 ตัว),Oshinei YUM,0,24311,2026-05
+B0174,#N/A,(B) เป็ดย่างรมควัน,Oshinei STEAK,0,28166,2026-04
+B0175,#N/A,(B) เป็ดย่างรมควัน ซอสยูซุ ซีซันนิ่ง,Oshinei STEAK,0,29655,2026-04
+B0176,#N/A,(B) เป็ดย่างรมควัน ซอสบัลซามิกเกลซ,Oshinei STEAK,0,42030,2026-04
+B0181,#N/A,(B) หมูผัดกิมจิ(Buffet),Oshinei STEAK,0,80,2026-05
+B0184,#N/A,(B) กุ้งลายเสือย่างกระเทียม (1 ตัว)(Buffet),Oshinei STEAK,0,62525,2026-04
+B0185,#N/A,(B) กุ้งลายเสือผัดเนยกระเทียม (1 ตัว)(Buffet),Oshinei STEAK,0,84045,2026-03
+B0186,#N/A,(B) กุ้งลายเสือย่างชีส (1 ตัว)(Buffet),Oshinei STEAK,0,86646,2026-05
+B0187,#N/A,(B) กุ้งลายเสือชาบู (1 ตัว),Oshinei SHABU,0,656,2026-03
+B0200,#N/A,(B) ซามูไร เทมปูระ(Buffet),Promotion,0,186,2026-03
+B0300,#N/A,(B) น้ำซุป 2 ช่อง(ชาบู+สุกี้ยากี้),Oshinei SHABU,0,203227,2026-05
+B0307,#N/A,(B)เบคอนพันเห็ดเข็มทอง 3 ชิ้น,Oshinei SHABU,0,1678,2026-05
+B0308,#N/A,(B)เบคอนพันต้นหอมไทย &เห็ดเข็มทอง 3 ชิ้น,Oshinei SHABU,0,573,2026-05
+B0309,#N/A,(B)เบคอนพันหน่อไม้ฝรั่ง 3 ชิ้น,Oshinei SHABU,0,1094,2026-05
+B0310,#N/A,(B)เบคอนพันกระเจี๊ยบ 3 ชิ้น,Oshinei SHABU,0,465,2026-05
+B0311,#N/A,(B)เบคอนพันเห็ดเข็มทองย่าง 3 ชิ้น,Oshinei STEAK,0,3726,2026-05
+B0312,#N/A,(B)เบคอนพันหน่อไม้ฝรั่งย่าง 3 ชิ้น,Oshinei STEAK,0,3306,2026-05
+B0313,#N/A,(B)เบคอนพันกระเจี๊ยบย่าง 3 ชิ้น,Oshinei STEAK,0,1300,2026-05
+B0314,#N/A,(B)เบคอนพันไส้กรอกย่าง 3 ชิ้น,Oshinei STEAK,0,1590,2026-05
+B162,#N/A,(B) ข้าวห่อสาหร่ายครั้นชี่สไปซี่แซลมอน (3 ชิ้น)(Buffet),Oshinei ROLL,0,6600,2026-05
+B37,#N/A,Buffet OLD 295++200++,BUFFET,0,0,
+BFP001,#N/A,หม้อน้ำซุป 2 ช่อง,Oshinei หม้อและน้ำซุป,0,1239,2026-05
+BFP002,#N/A,Pot 0 Slot,A LA CARTE,0,0,
+BFS001,#N/A,ชาบู,Oshinei หม้อและน้ำซุป,0,40,2026-05
+BFS002,#N/A,สุกี้ยากี้,Oshinei หม้อและน้ำซุป,0,155,2026-05
+BFS003,#N/A,No Soup,A LA CARTE,0,0,
+BRR001,#N/A,(B) ยำกุ้งขาวน้ำปลาร้า(Buffet),Special BRR,0,1536,2026-05
+BRR002,#N/A,(B) กิมจิ,Special BRR,0,28820,2026-05
+BRR012,#N/A,(B) ท้องปลาแซลมอนซาซิมิ (1ชิ้น),Special BRR,0,1238,2026-02
+BRR013,#N/A,ยำน้ำปลาร้า,Oshinei SERVICE,0,2,2025-11
+BSPC-001,#N/A,Chocolate Nikuman Yaki,A LA CARTE,0,0,
+BSPC-002,#N/A,Thai Tea Nikuman Yak,A LA CARTE,0,0,
+BSPC-ALL-003,#N/A,Sukiyaki Soup,A LA CARTE,0,0,
+BSPC-BRM-001,#N/A,เส้นบุก,A LA CARTE,0,0,
+BSPC-CBR-001,#N/A,หอยเซลล์ย่างห่อสาหร่ายโนริมันปู,A LA CARTE,0,0,
+BSPC-CBR-002,#N/A,หอยเซลล์ย่างห่อสาหร่ายโนริไข่ปลาแซลมอน,A LA CARTE,0,0,
+BSPC-CBR-007,#N/A,หอยเซลล์ย่างห่อสาหร่ายโนริปลาไหล,A LA CARTE,0,0,
+BSPC-KKN-012,#N/A,WAGYU ANGO SPECIAL SUSHI,A LA CARTE,0,0,
+BSPC-KKN-013,#N/A,WAGYU KANI MISO SPECIAL SUSHI,A LA CARTE,0,0,
+BSPC-KKN-015,#N/A,WAGYU CHEES MISO SPECIAL SUSHI,A LA CARTE,0,0,
+BSPC-KKN-054,#N/A,NEGITORO KANIMISO SUSHI,A LA CARTE,0,0,
+BSPC-KKN-055,#N/A,SALMON ANGO SPECIAL SUSHI,Oshinei SASHIMI,0,0,
+BSPC-KKN-056,#N/A,SALMON EBIKO SPECIAL SUSHI,Oshinei SASHIMI,0,0,
+BSPC-KKN-057,#N/A,SALMON CHEESE SPECIAL SUSHI,Oshinei SASHIMI,0,0,
+BSPC-KKN-058,#N/A,SALMON KANI MISO SPECIAL SUSHI,Oshinei SASHIMI,0,0,
+BSPC-KKN-059,#N/A,SALMON TRUFFLE SPECIAL SUSHI,Oshinei SASHIMI,0,0,
+BSPC-KKN-061,#N/A,SHIBUYA HONEY TOAST,A LA CARTE,0,0,
+BSPC-NKS-040,#N/A,ซาลาเปาย่าง คลัสตาทไข่เค็มลาวา,A LA CARTE,0,0,
+BSPC-PSL-006,#N/A,TOAST Wish ice cream,A LA CARTE,0,0,
+BSPC-PSL-014,#N/A,WAFFLE Wish ice cream,A LA CARTE,0,0,
+BV00070,#N/A,ไอศกรีม รสนม,Oshinei DESSERT,0,7,2026-03
+BV0069,#N/A,(B) น้ำเปล่า (รีฟิว),Oshinei DESSERT,0,3,2025-07
+C001,#N/A,Rare,A LA CARTE,0,0,
+C002,#N/A,Medium,A LA CARTE,0,0,
+C003,#N/A,Well Done,A LA CARTE,0,0,
+C004,#N/A,Normal,A LA CARTE,0,0,
+C006,#N/A,Extra,A LA CARTE,0,0,
+C007,#N/A,1 แก้ว,A LA CARTE,0,0,
+C008,#N/A,2 แก้ว,A LA CARTE,0,0,
+C009,#N/A,3 แก้ว,A LA CARTE,0,0,
+C01,#N/A,Galic,A LA CARTE,0,0,
+C010,#N/A,4 แก้ว,A LA CARTE,0,0,
+C011,#N/A,ชุดเด็ก,A LA CARTE,0,0,
+C012,#N/A,น้ำแข็ง,A LA CARTE,0,0,
+C013,#N/A,ไม่น้ำแข็ง,A LA CARTE,0,0,
+C014,#N/A,น้ำเติม,A LA CARTE,0,0,
+C017,#N/A,แก้วร้อน,A LA CARTE,0,0,
+C018,#N/A,แก้วเย็น,A LA CARTE,0,0,
+C02,#N/A,No Galic,A LA CARTE,0,0,
+C020,#N/A,รับเตาฮิดะ,A LA CARTE,0,0,
+C021,#N/A,ไม่รับเตาฮิดะ,A LA CARTE,0,0,
+C022,#N/A,สุกพร้อมทาน,A LA CARTE,0,0,
+C025,#N/A,Medium Rare,A LA CARTE,0,0,
+C11,#N/A,ขม = (แบบขม),A LA CARTE,0,0,
+C12,#N/A,เปรี้ยว = (แบบเปรี้ยว),A LA CARTE,0,0,
+C14,#N/A,ไม่รับ,A LA CARTE,0,0,
+C15,#N/A,ปกติ,A LA CARTE,0,0,
+CP001,#N/A,ถั่วแระญี่ปุ่น + หนังปลาแซลมอนทอดกรอบ,Oshinei SERVICE,0,4,2026-05
+CP004,#N/A,Free MELON+KUROMAME,Other,0,0,
+CP009,#N/A,Free Tangmo (3 Pcs),Other,0,0,
+CP011,#N/A,Free KURUMAME,Other,0,0,
+CP015,#N/A,มันปู (2ที่/ท่าน)(Buffet),Oshinei GRILL,0,149,2026-05
+DEL0057,#N/A,ข้าวห่อสาหร่ายปลาไหลญี่ปุ่น,Oshinei DELIVERY,0,2,2026-04
+DEL0058,#N/A,หมูสไลด์ย่างซีอิ๊ว,Oshinei DELIVERY,0,2,2025-11
+DEL0059,#N/A,หัวปลาแซลมอนต้มซีอิ๊ว Take Away (1ที่/1คน),Oshinei DELIVERY,0,5795,2026-05
+DUR-006,#N/A,ทุเรียน,A LA CARTE,0,0,
+DUR-999,#N/A,ทุเรียน (B)(Buffet),Oshinei SERVICE,0,57,2026-05
+EV12-03,#N/A,SALMON DONG,Oshinei SASHIMI,0,0,
+EV12-04,#N/A,EBI DONG,A LA CARTE,0,0,
+EV12-05,#N/A,SALMON DONG + EBI DONG,Oshinei SASHIMI,0,0,
+EV1224-04,#N/A,(B) หัวปลาแซลมอนย่างมะนาว 250 กรัม / ครึ่งหัว(Buffet),Oshinei GRILL,0,1,2026-05
+EV1224-05,#N/A,(B) SAKEGASHIRA NO MATSHA - YAKI,Oshinei ALCOHOL,0,0,
+EVT-12-01,#N/A,(B) Glitter Christmas Roll,A LA CARTE,0,0,
+FR005,#N/A,"1,150 2 ท่าน อูนิ 100g./1 คน",A LA CARTE,0,0,
+FR027,#N/A,ซุปใสบริการ,A LA CARTE,0,0,
+ITEMSET-006,#N/A,กุ้งเทมปุระทอดกรอบ,Oshinei ITEMSET,0,33,2026-02
+ITEMSET-014,#N/A,ปลาไหลย่างซีอิ๊ว,Oshinei ITEMSET,0,7,2026-05
+KKN001,#N/A,ท้องปลาซาซิมิ,Special KKN,0,2798,2026-05
+KKN003,#N/A,ยำน้ำปลาร้า(Buffet),Special KKN,0,17884,2026-05
+KKN018,#N/A,(B) ทุเรียน (1 พู),Special KKN,0,61348,2026-05
+KKN019,#N/A,(B) ทุเรียน (1 เม็ด),Special KKN,0,620160,2026-05
+KORAT002,#N/A,หอยนางรมน้ำจิ้มพอนสึ,Special Korat,0,2391,2026-05
+KORAT003,#N/A,เมล่อน+ถั่วดำ,Special Korat,0,3366,2026-05
+KORAT004,#N/A,ชุดจานเด็ก,Special Korat,0,4897,2026-05
+KORAT007,#N/A,(B) ข้าวผัดกระเทียม (299)(Buffet),Oshinei APPETIZER,0,485,2025-09
+KORAT008,#N/A,(B) เฟรนช์ฟรายส์ทอด (299)(Buffet),Oshinei APPETIZER,0,604,2025-11
+KORAT009,#N/A,(B) ข้าวเปล่า (299)(Buffet),Oshinei APPETIZER,0,131,2025-09
+KORAT010,#N/A,"(B) กุ้งไม่แกะเปลือก (299, 5 ชิ้น)(Buffet)",Oshinei SHABU,0,3654,2025-09
+KORAT011,#N/A,(B) หมูสามชั้น 50 g (299)(Buffet),Oshinei SHABU,0,3178,2025-09
+KORAT013,#N/A,"(B) ปลาดอลลี่ (299, 2 ชิ้น 40 g)(Buffet)",Oshinei SHABU,0,1518,2025-09
+KORAT014,#N/A,(B) ผักกาดขาว (299)(Buffet),Oshinei SHABU,0,874,2025-09
+KORAT015,#N/A,(B) เห็ดออรินจิ (299)(Buffet),Oshinei SHABU,0,917,2025-09
+KORAT016,#N/A,(B) แครอท (299)(Buffet),Oshinei SHABU,0,197,2025-09
+KORAT019,#N/A,(B) สลัดกะหล่ำ (299)(Buffet),Oshinei SALAD,0,326,2025-09
+KORAT020,#N/A,"(B) หมูย่างสไลด์ย่างซีอิ๊ว (299, 5 ชิ้น)(Buffet)",Oshinei STEAK,0,1508,2025-09
+KORAT021,#N/A,"(B) ปูอัด ซาชิมิ (299, 2 ชิ้น 4 แท่ง)(Buffet)",Oshinei SASHIMI,0,2284,2025-09
+KORAT022,#N/A,"(B) ข้าวปั้นหน้าไข่กุ้ง (299, 1 ชิ้น)(Buffet)",Oshinei SUSHI,0,2078,2025-09
+KORAT023,#N/A,"(B) ข้าวปั้นหน้ายำสาหร่าย (299, 1 ชิ้น)(Buffet)",Oshinei SUSHI,0,614,2025-09
+KORAT024,#N/A,"(B) เกี๊ยวซ่า (299, 3 ชิ้น)(Buffet)",Oshinei APPETIZER,0,1333,2025-09
+KORAT025,#N/A,"(B) ไข่หวาน (299, 3 ชิ้น)(Buffet)",Oshinei APPETIZER,0,1519,2025-11
+KORAT026,#N/A,(B) ซุปสุกี้ยากี้ (299)(Buffet),Oshinei SHABU,0,84,2025-09
+KORAT030,#N/A,"(B) ชุดผักรวม (299, ไม่มีเส้น)(Buffet)",Oshinei SHABU,0,1847,2026-03
+KORAT035,#N/A,"(B) เนื้อเสือร้องไห้ ออสเตรเลียสไลด์ (299, 5 ชิ้น )(Buffet)",Oshinei SHABU,0,7424,2025-09
+KORAT036,#N/A,"(B) หมูสไลด์ (299, 5 ชิ้น)(Buffet)",Oshinei SHABU,0,3902,2025-09
+KORAT037,#N/A,(B) เทมปุระรวม (299)(Buffet),Oshinei APPETIZER,0,2143,2025-09
+KORAT038,#N/A,(B) ยำสาหร่ายสด (299)(Buffet),Oshinei APPETIZER,0,1940,2025-11
+KORAT039,#N/A,(B) ถั่วแระญี่ปุ่น (299)(Buffet),Oshinei APPETIZER,0,927,2025-11
+KORAT040,#N/A,(B) ซุปใส (299)(Buffet),Oshinei APPETIZER,0,1185,2026-03
+KORAT041,#N/A,"(B) ครั้นชี่โรล (299, 3 ชิ้น)(Buffet)",Oshinei ROLL,0,1248,2025-09
+KORAT042,#N/A,"(B) แคลิฟอเนีย มากิ (299, 3 ชิ้น)(Buffet)",Oshinei ROLL,0,924,2025-09
+KORAT043,#N/A,"(B) ข้าวห่อสาหร่ายครั้นชี่สไปซี่แซลมอน (299, 3 ชิ้น)(Buffet)",Oshinei ROLL,0,952,2025-09
+KORAT044,#N/A,(B) ปลาซาบะย่างซีอิ๊ว (299)(Buffet),Oshinei STEAK,0,1606,2025-09
+KORAT045,#N/A,(B) ยำไทยปูอัด (299)(Buffet),Oshinei YUM,0,1829,2025-09
+KORAT046,#N/A,(B) ปลาดอรี่ย่างเกลือ (299)(Buffet),Oshinei STEAK,0,564,2025-09
+KORAT047,#N/A,(B) ปลาซาบะย่างเกลือ (299)(Buffet),Oshinei STEAK,0,473,2025-09
+KORAT048,#N/A,(B) ไข่ (299)(Buffet),Oshinei SHABU,0,1327,2026-03
+KORAT049,#N/A,(B) ปลาดอรี่ย่างซี่อิ๊ว (299)(Buffet),Oshinei STEAK,0,626,2025-09
+KORAT050,#N/A,(B) ไก่ย่างซีอิ้ว (299)(Buffet),Oshinei STEAK,0,370,2025-09
+KORAT051,#N/A,(B) ไก่ย่างเกลือ (299)(Buffet),Oshinei STEAK,0,303,2025-09
+KORAT052,#N/A,(B) ข้าวผัดมันเนื้อ (299)(Buffet),Special,0,1001,2025-09
+KORAT054,#N/A,(B) เส้นอุด้ง (299)(Buffet),Oshinei SHABU,0,741,2025-09
+KORAT055,#N/A,(B) เส้นโซบะ (299)(Buffet),Oshinei SHABU,0,557,2025-09
+KORAT056,#N/A,"(B) เต้าหู้คินุ (299, 3 ชิ้น)(Buffet)",Oshinei SHABU,0,625,2025-09
+KORAT057,#N/A,"(B) ข้าวปั้นหน้าปูอัด (299, 1ชิ้น)(Buffet)",Oshinei SUSHI,0,438,2025-09
+KORAT058,#N/A,"(B) ข้าวปั้นหน้าไข่หวาน (299, 1ชิ้น)(Buffet)",Oshinei SUSHI,0,633,2026-05
+KORAT059,#N/A,(B) สาหร่ายวากาเมะ (299)(Buffet),Oshinei SHABU,0,2252,2025-09
+LPB003,#N/A,โรลแซลม่อนชีสเบิร์นไฟ,Special LPB,0,21,2025-11
+MDH0019,#N/A,(B) สลัดปูอัดทอดกรอบ,Special MDH,0,692,2026-05
+MDH0020,#N/A,(B) แซลมอนสไลด์บาง (9ชิ้น),Special MDH,0,3576,2026-05
+MDH0023,#N/A,(B) ยำไทยปลาหมึก,Special MDH,0,3759,2026-05
+NPT004,#N/A,(B) เบียร์ รีฟิล (บุฟเฟต์ 799),Oshinei ALCOHOL,0,403,2026-03
+OTH-001,#N/A,TEMPURA SAUCE,Other,0,0,
+OTH-002,#N/A,PICKLED GINGER,Other,0,0,
+OTH-003,#N/A,น้ำจิ้มซีฟู๊ด(Buffet),Oshinei CONDIMENT,0,73,2026-05
+OTH-005,#N/A,SUKIYAKI SAUCE,Other,0,0,
+OTH-006,#N/A,น้ำจิ้มแจ่ว(Buffet),Oshinei CONDIMENT,0,23,2026-05
+OTH-007,#N/A,STEAK SAUCE,Oshinei STEAK,0,0,
+OTH-008,#N/A,TERI YAKI SAUCE,Other,0,0,
+OTH-019,#N/A,LEMON,Other,0,0,
+OTH-021,#N/A,MAYONNAISE SAUCE,Other,0,0,
+OTH-023,#N/A,CHILII + GALIC,Other,0,0,
+OTH-027,#N/A,น้ำจิ้มงา,Other,0,0,
+P0010C,#N/A,(B) รีฟิว เป๊ปซี่ ยูซุ,Promotion,0,968,2026-05
+P0011C,#N/A,(B) รีฟิว เป๊ปซี่ อูเมะ,Promotion,0,1654,2026-05
+P0014,#N/A,(B) หอยเชลล์ต้มฮอกไกโก (5ชิ้น),Oshinei SHABU,0,4244,2026-04
+P0015,#N/A,(B) ปลาดอลลี่,Oshinei SHABU,0,949,2026-05
+P0016,#N/A,(B) เส้นอุดง(Buffet),Oshinei SOBA,0,567,2025-09
+P0017,#N/A,(B) เส้นโซบะ(Buffet),Oshinei SOBA,0,379,2025-09
+P0018,#N/A,(B) สาหร่ายวากาเมะ(Buffet),Oshinei SHABU,0,5134,2026-05
+PLK001,#N/A,(B) ไอศกรีมช็อคโกแลต,Oshinei DESSERT,0,6910,2026-05
+PLK002,#N/A,(B) ไอศกรีมสตอร์เบอร์รี่,Oshinei DESSERT,0,4155,2026-05
+PLK003,#N/A,(B) ไอศกรีมมะนาว,Oshinei DESSERT,0,6777,2026-05
+PLK004,#N/A,(B) ไอศกรีมช็อคโกแลตชิพ,Oshinei DESSERT,0,6938,2026-05
+PM0003,#N/A,(B) ข้าวปั้นหน้าปลาแซลมอนเบิร์นราดซอสเทริยากิ (1 ชิ้น),Promotion,0,953,2025-09
+PM0004,#N/A,(B) กุ้งดอง,Promotion,0,566,2026-04
+PM0005,#N/A,(B) ปลาดอรี่ ชาบู,Promotion,0,611,2025-09
+PM0006,#N/A,(B) เส้นอูด้ง ชาบู,Promotion,0,364,2025-12
+PM0007,#N/A,(B) เส้นโซบะ ชาบู,Promotion,0,109,2025-11
+PM0008,#N/A,(B) พวงมาลัยแซลมอน 20 ชิ้น.,Promotion,0,211,2025-08
+PM0010,#N/A,(B) ทุเรียนยำน้ำปลาร้า,Promotion,0,995,2025-11
+PM0011,#N/A,(B) เทมปุระทุเรียนมัทฉะ (5 ชิ้น),Promotion,0,863,2025-12
+PM0013,#N/A,ตั๋วหนัง Major Cineplex (2 ใบ),Promotion,0,19,2026-01
+PM0023,#N/A,(B)แซลมอนกุหลาบ (44ชิ้น),Promotion,0,1211,2026-05
+PM0024,#N/A,ข้าวหน้าหมูกิมจิ(Buffet),Promotion,0,298,2026-05
+PM0025,#N/A,ลิ้นวัวตุ๋นสไตล์ญี่ปุ่น(Buffet),Promotion,0,568,2026-05
+PM0026,#N/A,ซุปชาบูกิมจิ(Buffet),Promotion,0,64,2026-05
+PM072,#N/A,หอยเชลล์ดองซีอิ๋ว (10 ตัว),A LA CARTE,0,0,
+PM073,#N/A,ข้าวห่อสาหร่ายไส้รวมหน้าหอยเชลล์ย่างซอสสไปซี่ชีส (3 ชิ้น 6 ตัว),A LA CARTE,0,0,
+PM074,#N/A,แฮนด์โรลหอยเชลล์ทอดเทมปุระ (1 ชิ้น 3 ตัว)(Buffet),Oshinei ROLL,0,1,2026-05
+PM075,#N/A,หอยเชลล์ทอดเทมปุระ (5 ตัว)(Buffet),Oshinei AGE MONOMIRI,0,9,2026-05
+PM076,#N/A,ยำไทยหอยเชลล์ (10 ตัว),A LA CARTE,0,0,
+PM077,#N/A,ยำหอยเชลล์น้ำปลาร้า (3ตัว)(Buffet),Oshinei YUM&SALAD,0,1,2026-05
+PM078,#N/A,ซาชิมิ หอยเชลล์ (10 ตัว),A LA CARTE,0,0,
+PM080,#N/A,เป็ดย่างรมควัน ซอสยูสุ ซีซันนิ่ง,A LA CARTE,0,0,
+PM082,#N/A,แมงกะพรุนหัวกระสุน ดองน้ำมันงา(Buffet),Oshinei SHUYU,0,16,2026-05
+PM084,#N/A,แมงกะพรุนหัวกระสุน น้ำจิ้มซีฟู้ด(Buffet),Oshinei YUM&SALAD,0,7,2026-05
+PM085,#N/A,แมงกะพรุนหัวกระสุน ชาบู(Buffet),Oshinei SHABU&SUKIYAKI,0,1,2026-05
+PTY0001,#N/A,(T) ฟรีหัวแซลมอนต้มซีอิ๊วครึ่งหัว (1 ที่),Promotion,0,39,2026-01
+S-004,#N/A,SALMON SAIKYO SUSHI 7 PCS.,Oshinei SASHIMI,0,0,
+S-005,#N/A,SALMON SUSHI 7 PCS.,Oshinei SASHIMI,0,0,
+S-006,#N/A,WATER 2,Oshinei SASHIMI,0,0,
+S-046,#N/A,ข้าวหน้าหมูชุปแป้งทอด,Oshinei SASHIMI,0,0,
+S-095,#N/A,SALMON SHIO YAKI DON,Oshinei SASHIMI,0,0,
+S-115,#N/A,FRIED CHICKEN WING,Oshinei SASHIMI,0,0,
+S00005,#N/A,(ชุดเซ็ทข้าวปั้นหน้าเนื้อวากิว 5 รสชาติ),Special No.1,0,8598,2026-05
+S00006,#N/A,(ชุดข้าวปั้นรวมหน้าพิเศษ 10 รสชาติ,Special No.1,0,3527,2026-05
+S00007,#N/A,(ข้าวปั้นหน้าวากิวท็อปตับปลาอังโกะ 2 คำ),Special No.1,0,4896,2026-05
+S00008,#N/A,(ข้าวปั้นหน้าวากิวท็อปมันปูฮอกไกโด 2 คำ),Special No.1,0,5241,2026-05
+S00009,#N/A,(ข้าวปั้นหน้าวากิว ราดด้วยซอสมิโสะครีมชีสโรยด้วยหอยซอยไข่กุ้ง งา 2 คำ),Special No.1,0,5909,2026-05
+S00010,#N/A,(โอโทโร่สับท็อปด้วยมันปูฮอกไกโด โรยด้วยหอมสับ ไข่ปลาแซลมอน และงา 2 คำ),Special No.1,0,10374,2026-05
+S00011,#N/A,(แซลมอนทรัฟเฟิลท็อปด้วยตับปลาอังโกะโรยด้วยหอมสับไข่กุ้ง และงา 2 คำ),Special No.1,0,8454,2026-05
+S00012,#N/A,(แซลมอนทรัฟเฟิลท็อปด้วยไข่กุ้งโรยด้วยหอมสับ และงา 2 คำ),Special No.1,0,4649,2026-05
+S00013,#N/A,(แซลมอนทรัฟเฟิลท็อปด้วยซอสชีสโรยด้วยหอมสับไข่กุ้ง และงา 2 คำ),Special No.1,0,4003,2026-05
+S00014,#N/A,(แซลมอนทรัฟเฟิลท็อปด้วยมันปูฮอกไกโดโรยด้วยหอมสับไข่กุ้ง และงา 2 คำ),Special No.1,0,10273,2026-05
+S00015,#N/A,(แซลมอนทรัฟเฟิลโรยด้วยหอมสับไข่กุ้ง และงา 2 คำ),Special No.1,0,2374,2026-05
+S00016,#N/A,(แซลมอนทาท่าร์คลุกน้ำมันเห็ดทรัฟเฟิลท็อปด้วยไข่แดง 1 จาน),Special No.1,0,8711,2026-05
+S00017,#N/A,(ข้าวหน้ามันปู 1 จาน),Special No.1,0,27794,2026-05
+S00018,#N/A,ซาลาเปาย่างชาไทย 1 ลูก,Special No.1,0,11476,2026-04
+S00019,#N/A,ซาลาเปาย่างช็อคโกแลต 1 ลูก,Special No.1,0,10964,2026-04
+S00020,#N/A,ซาลาเปาย่างคลัสตาท ไข่เค็มลาวา 1 ลูก,Special No.1,0,35219,2026-05
+SCC0011,#N/A,(T)แถมฟรี หัวปลาต้มซีอิ๊ว,Special Chachoengsao,0,1247,2026-04
+SCC0033,#N/A,(A) แถมฟรี โมจิหยดน้ำ,Special Chachoengsao,0,35,2026-01
+SCC0034,#N/A,(A) แถมฟรี วาราบิโมจิ,Special Chachoengsao,0,48,2025-09
+SCC0035,#N/A,(A) แถมฟรี เมล่อน+ถั่วดำ,Special Chachoengsao,0,2729,2026-05
+SCC0062,#N/A,ฟรีซุปมิโซะ,Oshinei YUM,0,587,2026-05
+SLINE,#N/A,--------------,Payment,0,3,2026-05
+SPC-001,#N/A,HANA SASHIMI,Oshinei SASHIMI,0,0,
+SPC-002,#N/A,UNI LOVER,A LA CARTE,0,0,
+SU002,#N/A,ปลาไหลญี่ปุ่นเสียบไม้ย่าง(Buffet),Oshinei GRILL,0,11,2026-05
+SU004,#N/A,แฮนด์โรล ปลาไหลญี่ปุ่น(Buffet),Oshinei ROLL,0,1,2026-05
+SV0001,#N/A,น้ำจิ้มเทมปุระ,Oshinei SERVICE,0,25983,2026-05
+SV0002,#N/A,ขิงดอง,Oshinei SERVICE,0,202144,2026-05
+SV0003,#N/A,(B) น้ำจิ้มซีฟู๊ด,Oshinei SERVICE,0,528577,2026-05
+SV0004,#N/A,น้ำจิ้มพอนซึ,Oshinei SERVICE,0,31908,2026-05
+SV0006,#N/A,น้ำจิ้มแจ่ว,Oshinei SERVICE,0,142097,2026-05
+SV0007,#N/A,สเต็กซอส,Oshinei SERVICE,0,60757,2026-05
+SV0008,#N/A,ซอสเทอริยากิ,Oshinei SERVICE,0,35437,2026-05
+SV0009,#N/A,พริก,Oshinei SERVICE,0,58971,2026-05
+SV0010,#N/A,กระเทียม,Oshinei SERVICE,0,75563,2026-05
+SV0011,#N/A,มะนาว,Oshinei SERVICE,0,60589,2026-05
+SV0012,#N/A,ซอส มายองเนส,Oshinei SERVICE,0,24941,2026-05
+SV0014,#N/A,หัวไชเท้าฝอย,Oshinei SERVICE,0,49273,2026-05
+SV0015,#N/A,วาซาบิ,Oshinei SERVICE,0,75007,2026-05
+SV0016,#N/A,(A) ฟรี - ถั่วแระญี่ปุ่น + หนังปลาแซลมอนทอดกรอบ (ชุดเปิดโต๊ะ),Oshinei SERVICE,0,19098,2026-05
+SV0017,#N/A,น้ำจิ้มปลาร้าญี่ปุ่น,Oshinei SERVICE,0,5954,2026-05
+SV0019,#N/A,น้ำจิ้มงา(Buffet),Oshinei SERVICE,0,1577,2026-05
+Sp0005,#N/A,(B) คางปลาฮามาจิย่างซีอิ๊ว,Special,0,440,2026-05
+Sp0006,#N/A,(B) คางปลาฮามาจิย่างเกลือ,Special,0,650,2026-05
+TEST1,#N/A,(B) TEST,Oshinei YUM,0,13,2026-01
+THBFDON00247,#N/A,(BF) ข้าวมันปูหอยเชลล์ฮอกไกโด,(NEW)OSHINEI DON,0,440,2026-05
+YB0019,#N/A,(B) เนื้อเสือร้องไห้ (3ชิ้น),(YAKI)BEEF,0,1,2026-01
+YB0054,#N/A,(B) แมงกะพรุนดอง,(YAKI)APPETIZER,0,3,2025-12
+YB0070,#N/A,(B) ปูอัด ซาชิมิ (3ชิ้น),(YAKI)SASHIMI,0,1,2025-08
+aspc-brm-03,#N/A,แซลมอนซาชิมิ 1 กก. ฟรี แก้มปลาฮามาจิ,A LA CARTE,0,0,
+c13,#N/A,รับ,A LA CARTE,0,0,
+c17,#N/A,นมฮอกไกโด,A LA CARTE,0,0,
+c18,#N/A,ทูโทน,A LA CARTE,0,0,
+spc-kkn-01,#N/A,EBI TEMPURA PINK,A LA CARTE,0,0,
+catering,250000,catering,Service,233645,1,2026-01
+CR0001,37450,ค่าอาหารจัดเลี้ยง,Oshinei CATERING,35000,1,2025-12
+ASPC-UBN-038,5591,(A) UNI,A LA CARTE,0,0,
+ABVG-26,5056,เบียร์สดสิงห์ ขนาด 30 ลิตร/ถัง,Oshinei SOFT DRINK,0,0,
+EVT004,5000,EVENT 5000,A LA CARTE,0,0,
+PM055,2808.67,(A)TARABA,A LA CARTE,0,0,
+DEL0005,2401.49,ปลาแซลมอลซาซิมิ (2 Kg),Oshinei DELIVERY,96508,43,2026-04
+FB799-1,2359.33,ค่าปรับบุฟเฟ่ต์ 799++ (1 กิโลกรัม),BUFFET,0,0,
+OT0017,2247,ค่าปรับบุฟเฟ่ต์ 799++ (1000 กรัม),Oshinei other,50400,24,2026-05
+DEL0018,2242,SET C (สำหรับ 3 ท่าน),Oshinei DELIVERY,16763,8,2026-05
+SS-03,2242,SET C,A LA CARTE,0,0,
+S-127,2197.79,SALMON SASHIMI (2 Kg.),Oshinei SASHIMI,0,0,
+PM020,2191,(A)LobsterB,A LA CARTE,0,0,
+DEL0016,2029,SET A (สำหรับ 5 ท่าน),Oshinei DELIVERY,24651,13,2026-04
+SS-01,2029,SET A,A LA CARTE,0,0,
+ABVG-027,2022.31,UME CHU,Oshinei SOFT DRINK,0,0,
+DEPOSIT,2000,Deposit - เงินมัดจำ,DISCOUNT,6000,3,2025-12
+DEL0004,1989.11,ปลาแซลมอลซาซิมิ (1.5 Kg),Oshinei DELIVERY,83654,45,2026-05
+S-126,1967.08,SALMON SASHIMI (1.5 Kg.),Oshinei SASHIMI,0,0,
+BV0012,1926,(A) เหล้าบ๊วย,Oshinei ALCOHOL,117000,65,2026-05
+ABVG-043,1910,OZEKI SILVER,Oshinei SOFT DRINK,0,0,
+BV0006,1819,(A) ทันเรย์ จูนมัย,Oshinei ALCOHOL,95200,56,2026-05
+BV0074,1819,สาเกโอเซกิ 1.8 ลิตร,Oshinei ALCOHOL,1700,1,2026-03
+TA006,1817.93,"แซลมอนซาซิมิ 1,000 กรัม",Oshinei DELIVERY,344897,203,2026-05
+ABVG-021,1788.69,TNREI JUNMAI 1800 ML,Oshinei SOFT DRINK,0,0,
+FB590-1,1788.58,ค่าปรับบุฟเฟ่ต์ 590++ (1 กิโลกรัม),BUFFET,0,0,
+DEL0017,1769,SET B (สำหรับ 2 ท่าน),Oshinei DELIVERY,41332,25,2026-05
+OT0014,1712,ค่าปรับบุฟเฟ่ต์ 590++ (1000 กรัม),Oshinei other,134400,84,2026-05
+PM014,1552,(A)Uni 50g,A LA CARTE,0,0,
+DEL0031,1491.36,SALMON SASHIMI (1 Kg),Oshinei DELIVERY,220220,158,2026-03
+FB500-1,1460.67,ค่าปรับบุฟเฟ่ต์ 500++ (1 กิโลกรัม),BUFFET,0,0,
+ASPC-003,1383.89,(A) OSHINEI FAMILY SET,A LA CARTE,0,0,
+S-002,1377.98,SALMON SASHIMI ( 1 Kg.),Oshinei SASHIMI,0,0,
+SS-02,1352.94,SET B,A LA CARTE,0,0,
+DEL0003,1342.61,ปลาแซลมอลซาซิมิ (1 Kg),Oshinei DELIVERY,2021451,1611,2026-05
+EX0010,1303.55,(EX) ชุดปลาดิบรวมพิเศษ 7 อย่าง,Oshinei SASHIMI,160813,132,2026-05
+B03,1243.63,Buffet 1150++,BUFFET,0,0,
+DEL0021,1165,SET F (สำหรับ 2 ท่าน),Oshinei DELIVERY,4355,4,2026-05
+SS-06,1165,SET F,A LA CARTE,0,0,
+S-121,1135.41,SALMON-TUNA-TAKO SASHIMI (0.6 Kg.),Oshinei SASHIMI,0,0,
+FB350-1,1123.5,ค่าปรับบุฟเฟ่ต์ 350++ (1 กิโลกรัม),BUFFET,0,0,
+DEL0007,1123.35,ปลาแซลมอน-ทูน่า-ทาโกะซาซิมิ (0.6 Kg),Oshinei DELIVERY,51443,49,2026-05
+B26,1111.23,Buffet 799++ 200++,BUFFET,0,0,
+S-088,1075.29,SALMON CAKE 2 ปอนด์,Oshinei SASHIMI,0,0,
+OT0008,1070,ค่าปรับบุฟเฟ่ต์ 350++ (1000 กรัม),Oshinei other,1000,1,2025-12
+EV0225-01,1052.18,Salmon Sashimi 1 Kg Free Fish Head,Oshinei SASHIMI,0,0,
+DEL0019C,1046,SET D (สำหรับ 2 ท่าน),Oshinei DELIVERY,3910,4,2026-02
+SS-04,1046,SET D,A LA CARTE,0,0,
+ASPC-004,1033.33,(A) SASHIMI MORI,Oshinei SASHIMI,65582,69,2026-05
+TA005,1026.13,แซลมอนซาซิมิ 500 กรัม,Oshinei DELIVERY,500598,522,2026-05
+EVT003,1000,EVENT 1000,A LA CARTE,0,0,
+VC01-0005,1000,OSHINEI GIFT VOUCHER 1000,A LA CARTE,0,0,
+TA003,996.78,(T) แซลมอน (1 กก.) แถมฟรีหัวปลาแซลมอน (1 หัว),Oshinei DELIVERY,1142101,1226,2026-05
+EX0012,993.55,(EX) ชุดปลาดิบรวมพิเศษ 6 อย่าง,Oshinei SASHIMI,345420,372,2026-05
+TW-004,972.17,แซลมอน 1 กก. ฟรีหัวปลาแซลมอน 1 หัว,A LA CARTE,0,0,
+VC01-0004,949,OSHINEI GIFT VOUCHER 799++,A LA CARTE,0,0,
+ASPC-CCO-003,898.75,ค่าห้องใหญ่,Other,0,0,
+B11,890.68,Buffet 799++,BUFFET,0,0,
+BF-12,888,Buffet 888 Net,BUFFET,0,0,
+B23,886.85,Buffet 590++ 200++,BUFFET,0,0,
+ABVG-020,870.47,REGENCY 700 ML,Oshinei SOFT DRINK,0,0,
+OT0003,856,ค่าเปิดห้อง (ใหญ่),Oshinei other,22400,28,2026-05
+VOU-005-3branch,854.93,Cash Voucher 799++,Promotion,44744,56,2026-04
+BV0005,834.6,(A) รีเจนซี่ (กลม),Oshinei ALCOHOL,78780,101,2026-05
+S-025,832.6,SALMON SAIKYO ABURI SUSHI 12 คำ,Oshinei SASHIMI,0,0,
+DEL0036,832.28,SALMON SAIKYO ABURI SUSHI (12คำ),Oshinei DELIVERY,71560,92,2026-05
+SCC0002,813.17,(S) ข้าวหน้าตับห่านและไข่ปลาแซลมอน 1แถม1,Special Chachoengsao,4560,6,2026-03
+PM0009,812,(T) พวงมาลัยแซลมอน 700 กรัม.,Promotion,28837,38,2025-08
+ASPC-CCO-019,812,พวงมาลัยแซลมอน,A LA CARTE,0,0,
+A1150-026,808.32,(A) FOIE GRAS IKURA DON,A LA CARTE,0,0,
+S-001,801.39,SALMON SASHIMI (0.5 Kg.),Oshinei SASHIMI,0,0,
+S-087,800.4,SALMON CAKE 1 ปอนด์,Oshinei SASHIMI,0,0,
+A1150-005,796.9,(A) WAGYU TATAKI,A LA CARTE,0,0,
+BRR007,793.95,ข้าวหน้าตับห่านและไข่ปลาแซลมอน,Special BRR,28196,38,2026-05
+DEL0009,793.28,ปลาแซลมอน-ทูน่าซาซิมิ (0.5 Kg),Oshinei DELIVERY,256519,346,2026-05
+SCC0023,790.15,"(T)เค้กแซลมอน(กลม,หัวใจ) 2 ปอนด์",Special Chachoengsao,86400,117,2026-05
+DEL0002,788.38,ปลาแซลมอลซาซิมิ (0.5 Kg),Oshinei DELIVERY,2935442,3984,2026-05
+S-119,788.23,SALMON-TUNA SASHIMI (0.5 Kg.),Oshinei SASHIMI,0,0,
+ABVG-051,786.33,HAKUTSURU NAMA 300 ML (PRO) 2 BOTTLE (KK),Oshinei SOFT DRINK,0,0,
+ABVG-25,786.33,OZEKI NAMA 300 ML (PRO) 2ขวด (KK),Oshinei SOFT DRINK,0,0,
+TA002,777.85,(T) แซลมอน (1 กิโลกรัม.),Special DELIVERY,2417139,3325,2025-12
+TW-001,776.34,แซลมอน 1 กก.,A LA CARTE,0,0,
+B25,774.44,Buffet 500++ 200++,BUFFET,0,0,
+S-117,765.27,TUNA SASHIMI (0.5 Kg.),Oshinei SASHIMI,0,0,
+A0030C,765.16,(A) สเต็กเนื้อออสเตรเลีย วากิว 200ก.,Oshinei STEAK,72225,101,2026-05
+DEL0011,759.22,ปลาทูน่าซาซิมิ (0.5 Kg),Oshinei DELIVERY,60312,85,2026-05
+EV0225-02,750.22,Salmon Sashimi 500 g. Free Fish Head,Oshinei SASHIMI,0,0,
+KKN016,749,(A) สาเกสด ฮากุซุรุ 2 ขวด 700 บาท,Special KKN,14000,20,2026-05
+KKN017,749,(A) สาเกสด โอเซกิ 2 ขวด 700 บาท,Special KKN,4200,6,2026-05
+NPT007,748,"(A) เบียร์สด Asahi ทาวเวอร์  (3,000ml.)",Oshinei ALCOHOL,699,1,2025-12
+DEL0030,744.1,SALMON SASHIMI (0.5 Kg),Oshinei DELIVERY,58415,84,2026-04
+ASPC-008,724.03,(A) SANSHOKU USUZUKURI,A LA CARTE,0,0,
+ASPC-020,723.6,(A) HOTATE BUTTER STEAK,Oshinei STEAK,0,0,
+EX0015,723.37,(EX) ปลาแซลมอน ปลาฮามาจิ ปลาทูน่า สไลด์บาง โรยด้วยไข่ปลาแซลมอน,Oshinei SASHIMI,38535,57,2026-05
+VC01-0003,714,OSHINEI GIFT VOUCHER 590++,A LA CARTE,0,0,
+A1150-077,710.15,(A) AUSTRALIAN WAGYU STEAK,Oshinei STEAK,0,0,
+DEL0022,710,SET G (สำหรับ 1 ท่าน),Oshinei DELIVERY,2654,4,2026-04
+SS-07,710,SET G,A LA CARTE,0,0,
+SS-13,709,BENTO F,A LA CARTE,4638,7,2026-02
+DEL0035,707,SALMON SUSHI (12 PCS),Oshinei DELIVERY,51538,78,2026-05
+DEL0037,707,SALMON ABURI SUSHI(12คำ),Oshinei DELIVERY,38984,59,2026-05
+S-026,706.83,SALMON ABURI SUSHI 12 คำ,Oshinei SASHIMI,0,0,
+TW-005,699,แซลมอน 500 ก. แถมฟรีหัวแซลมอน ครึ่งหัว,A LA CARTE,0,0,
+ABVG-019,698.11,REGENCY 350 ML,Oshinei SOFT DRINK,0,0,
+TA004,698.02,(T) แซลมอน (500 ก.) แถมฟรีหัวแซลมอน (ครึ่งหัว),Oshinei DELIVERY,290296,445,2026-05
+BV0004,695.5,(A) รีเจนซี่ (แบน),Oshinei ALCOHOL,365950,563,2026-05
+S-024,683.58,SALMON SUSHI 12 คำ,Oshinei SASHIMI,0,0,
+BUFFET,679.08,[Deprecated — split into tiers] Buffet 350 ผู้ใหญ่,BUFFET,0,0,
+BF-13,678,Buffet 678 Net,BUFFET,0,0,
+A1150-018,674,(A) ENGAWA ABURI IKURA DON,A LA CARTE,0,0,
+B39,673.5,Buffet OLD 399.5++200++,BUFFET,0,0,
+B31,670.98,Buffet Child 399.5++200++,BUFFET,0,0,
+ASPC-CCO-020,663,Voucher 590 THB,A LA CARTE,0,0,
+B02,660.03,Buffet 590++,BUFFET,0,0,
+VOU-004-3branch,652.82,Cash Voucher 590++,Promotion,13423,22,2025-12
+B21,646,Buffet Older 575++,BUFFET,0,0,
+B41,633,Buffet 633 Net,BUFFET,0,0,
+S-120,631.43,SALMON-TUNA-TAKO SASHIMI (0.3 Kg.),Oshinei SASHIMI,0,0,
+A1150-076,627.66,(A) FOIE GRAS EBIKO DON,A LA CARTE,0,0,
+B06,627.58,Buffet Child 575++,BUFFET,0,0,
+DEL0006,621.67,ปลาแซลมอน-ทูน่า-ทาโกะซาซิมิ (0.3 Kg),Oshinei DELIVERY,95865,165,2026-05
+SCC0003,620.67,(S) ข้าวหน้าตับห่านและไข่กุ้ง 1 แถม1,Special Chachoengsao,3480,6,2026-05
+A1150-032,618,(A) WAGYU TERI ONSEN DON,A LA CARTE,0,0,
+A1150-040,618,(A) WAGYU IKURA DON,A LA CARTE,0,0,
+VC01-0002,613,OSHINEI GIFT VOUCHER 500++,A LA CARTE,0,0,
+BRR008,608.2,ข้าวหน้าตับห่านและไข่กุ้ง,Special BRR,17052,30,2026-05
+A1150-028,603.17,(A) HOTATE SASHIMI,Oshinei SASHIMI,0,0,
+A550-001,594.84,(A) SASHIMI OMAKASE,Oshinei SASHIMI,0,0,
+aspc-brm-02,590,แซลมอนซาชิมิ 300 กรัม,A LA CARTE,0,0,
+AYT-SP-0026,589,ข้าวหน้าเนื้อวากิวและไข่ปลาแซลมอน,A la carte 1150,550,1,2026-05
+B42,587.79,Buffet 588 Net,BUFFET,0,0,
+A0032,573.93,(A) ชุดปลาดิบรวม 4 อย่าง,Oshinei SASHIMI,1129618,2109,2026-05
+MDH0013,567,(A) ปลาหิมะย่างซีอิ๊ว พร้อมซุปมิโซะ,Special MDH,530,1,2026-01
+SS-37,567,SET-09,A LA CARTE,0,0,
+EX0008,563.07,(EX) สเต็กปลาหิมะ,Oshinei STEAK,7367,14,2026-05
+ASPC-KR-001,562,Projector,A LA CARTE,0,0,
+ASPC-CCO-002,561.8,ค่าห้องกลาง,Other,0,0,
+ASPC-UBN-005,561.78,ชุดปลาหิมะย่าง,A LA CARTE,3348,7,2026-05
+C019,560.9,ค่าห้อง 500,Other,0,0,
+B07,560.47,Buffet 500++,BUFFET,0,0,
+RY005,558.85,(A) เบียร์สดอาซาฮี (3 ลิตร),Special SOFT DRINK,141540,271,2026-05
+MDH0012,557.67,(A) ปลาหิมะย่างเกลือ พร้อมซุปมิโซะ,Special MDH,3127,6,2025-11
+B28,556.13,Buffet Child 295++200++,BUFFET,0,0,
+SCC0022,552.99,"(T)เค้กแซลมอน (กลม,หัวใจ)1 ปอนด์",Special Chachoengsao,36176,70,2026-05
+ASPC-UDN-010,551,(A) IKURA DON,A LA CARTE,0,0,
+ASPC-015,534.49,(A) GOSHOKU DON,A LA CARTE,0,0,
+OT0002,534.3,ค่าเปิดห้อง (กลาง),Oshinei other,113850,228,2026-05
+A1150-066,528.25,(A) UNAGI IKURA DON,A LA CARTE,0,0,
+AYT-SP-0023,524,ข้าวหน้าปลาไหลและไข่ปลาแซลมอน,A la carte 1150,490,1,2026-05
+EX0002,520.24,(EX) ปลาหิมะย่างซีอิ๊ว,Oshinei STEAK,36465,75,2026-05
+EX0031,519.15,(EX) ข้าวหน้าไข่ปลาแซลมอน,Oshinei DON,29596,61,2026-05
+ASPC-019,518.9,(A) SNOW STEAK,Oshinei STEAK,0,0,
+DEL0025,517.97,BENTO C,Oshinei DELIVERY,36308,75,2026-05
+EX0003,516.19,(EX) ปลาหิมะย่างเกลือ,Oshinei STEAK,65127,135,2026-05
+AYT-SP-0001,514,วากิวสเต็ก,A la carte 1150,480,1,2026-05
+EX0029,512.86,(EX) ข้าวหน้าปลาดิบรวม 5 อย่าง,Oshinei DON,52724,110,2026-05
+ASPC-016,511.59,(A) SNOW TERI YAKI,A LA CARTE,0,0,
+DEL0024,511.43,BENTO B,Oshinei DELIVERY,44538,92,2026-05
+B38,506,Buffet OLD 250++ 200++,BUFFET,0,0,
+B30,505.6,Buffet Child 250++ 200++,BUFFET,0,0,
+ASPC-038,504.3,(A) SNOW SHIO YAKI,A LA CARTE,0,0,
+VOU-001,500,Gift vouches 500,Voucher,30000,60,2025-08
+EVT002,500,EVENT 500,A LA CARTE,0,0,
+S-122,498.67,SALMON SHOYU (200g.),Oshinei SASHIMI,0,0,
+DEL0014,495.39,ปลาแซลมอนดองซีอิ๊ว (200 g),Oshinei DELIVERY,175006,378,2026-05
+A550-170,481.5,(A) DELUXE SASHIMI SET,Oshinei SASHIMI,0,0,
+A1150-001,475.63,(A) WAGYU STEAK 100 G.,Oshinei STEAK,0,0,
+DEL0023,459,BENTO A,Oshinei DELIVERY,30028,70,2026-05
+TA001,455.94,(T) แซลมอน (500 กรัม.),Special DELIVERY,368583,865,2025-08
+ABVG-067,449.5,OZEKI NAMA (300 ML)  (KK),Oshinei SOFT DRINK,0,0,
+B12,447.99,Buffet Child 399.5++,BUFFET,0,0,
+B16,447.96,Buffet Older 399.5++,BUFFET,0,0,
+A1150-004,447.94,(A) WAGYU BEEF SLIDE HOBA YAKI,A LA CARTE,0,0,
+TW-002,447.12,แซลมอน 500 ก.,A LA CARTE,0,0,
+ABVG-024,446.03,HAKUTSURU NAMA 300 ML,Oshinei SOFT DRINK,0,0,
+A550-171,443.79,(A) HAPPY SASHIMI SET,Oshinei SASHIMI,0,0,
+ASPC-005,441.83,(A) UME SASHIMI,Oshinei SASHIMI,0,0,
+A1150-011,440.67,(A) UNAGI KABA YAKI,A LA CARTE,15308,30,2026-05
+EX0011,440.4,(EX) ปลาดิบรวม 4 อย่าง,Oshinei SASHIMI,184392,448,2026-05
+DEL0010,438.33,ปลาทูน่าซาซิมิ (0.2 Kg),Oshinei DELIVERY,61038,149,2026-05
+ABVG-025,437.59,OZEKI NAMA 300 ML,Oshinei SOFT DRINK,0,0,
+A0031,437.32,(A) ปลาไหลย่างซีอิ๊ว (1ตัว),Oshinei STEAK,195363,478,2026-05
+S-116,435.48,TUNA SASHIMI (0.2 Kg.),Oshinei SASHIMI,0,0,
+BV0009,428,(A) สาเกสด ฮากุซุรุ ขวดเล็ก,Oshinei ALCOHOL,489600,1224,2026-05
+A1150-025,424.22,(A) ENGAWA FOIE GRAS EBIKO ONSEN DON,A LA CARTE,0,0,
+DEL0001,421.1,ปลาแซลมอลซาซิมิ (0.2 Kg),Oshinei DELIVERY,845353,2148,2026-05
+BV0010,417.89,(A) สาเกสด โอเซกิ ขวดเล็ก,Oshinei ALCOHOL,226520,580,2026-05
+BRR006,417.31,ข้าวหน้าครีบปลาตาเดียว ตับห่าน ไข่กุ้ง และไข่ออนเซ็น,Special BRR,5070,13,2026-05
+DEL0008,417.27,ปลาแซลมอน-ทูน่าซาซิมิ (0.2 Kg),Oshinei DELIVERY,154039,395,2026-05
+ASPC-025,416,(A) THAI FRENCH 200G,A LA CARTE,0,0,
+A1150-061,415.5,(A) AUSTRALIA BEEF TERI ONSEN DON,A LA CARTE,0,0,
+A1150-044,413.35,(A) SHRIMP STEAK,Oshinei STEAK,0,0,
+SS-12,413,BENTO E,A LA CARTE,20071,52,2026-05
+A1150-020,411.73,(A) UNAGI HOTATE DON,A LA CARTE,0,0,
+S-118,411.64,SALMON-TUNA SASHIMI (0.2 Kg.),Oshinei SASHIMI,0,0,
+S-125,411.44,SALMON SASHIMI (0.2 Kg.),Oshinei SASHIMI,0,0,
+A1150-019,410.75,(A) ENGAWA NEGI SALMON IKURA DON,Oshinei SASHIMI,0,0,
+UBN002,409.25,(A) เนื้อวากิวสไลด์ย่างใบโฮบะ,Oshinei STEAK,14850,35,2026-05
+ASPC-014,408.49,(A) OSHINEI SALAD,A LA CARTE,0,0,
+A1150-058,408.25,(A) AUSTRALIA BEEF IKURA DON,A LA CARTE,0,0,
+A1150-027,405.83,(A) HOTATE IKURA DON,A LA CARTE,0,0,
+ASPC-046,403.06,(A) SALMON IKURA DON,Oshinei SASHIMI,0,0,
+ASPC-018,400.86,(A) THAI FRENCH STEAK 200G,Oshinei STEAK,0,0,
+EX0028,396.59,(EX) สลัดโอชิเน ซีฟู้ด,Oshinei SALAD,72276,195,2026-05
+DEL0015,396,ข้าวหน้าปลาแซลมอลสด+ไข่ปลาแซลมอล,Oshinei DELIVERY,13693,37,2026-05
+AYT-SP-0016,396,ข้าวหน้าครีบปลาตาเดียวและไข่ปลาแซลมอน,A la carte 1150,740,2,2026-05
+AYT-SP-0017,396,ข้าวหน้าปลาไหลและหอยเชลล์,A la carte 1150,370,1,2026-05
+SS-11,395,BENTO D,A LA CARTE,28056,76,2026-05
+DEL0041,394.11,SALMON - IKURA DON,Oshinei DELIVERY,143596,388,2026-05
+FR021,393.25,(A) แก้มปลาฮามาจิ ย่างเกลือ (APR24),A LA CARTE,0,0,
+ASPC-BBR-01,393,แก้มปลาฮามาจิ 1 แถม 1,A LA CARTE,0,0,
+ASPC-UBN-034,393,(A) ท้องปลาแซลมอนย่างซีอิ้ว (5ชิ้น),A LA CARTE,0,0,
+ABVG-062,392.48,GEON-BAE SOJU PROMOTION (KK),Oshinei SOFT DRINK,0,0,
+B01,391.89,Buffet 350++,BUFFET,0,0,
+FR022,391.67,(A)แก้มปลาฮามาจิ ย่างซีอิ้ว (APR24),A LA CARTE,0,0,
+S-124,391.49,SALMON - EBI SHOYU (200g.),Oshinei SASHIMI,0,0,
+EX0007,390.85,(EX) เนื้อไทยเฟรนซ์ 200G.,Oshinei STEAK,53391,148,2026-05
+A1150-021,389.62,(A) ENGAWA FOIE GRAS EBIKO DON,A LA CARTE,0,0,
+ASPC-007,389.45,(A) IKURA TSUMAMI,A LA CARTE,0,0,
+EX0014,387.76,(EX) ไข่ปลาแซลมอนเสิร์ฟพร้อมสาหร่ายโนริ,Oshinei SASHIMI,108355,299,2026-05
+BRR009,383.92,ข้าวหน้าครีบปลาตาเดียว ตับห่าน ไข่กุ้ง,Special BRR,13635,38,2026-05
+EX0030,383.75,(EX) ข้าวหน้าปลาแซลมอนสไลด์ และไข่ปลาแซลมอน,Oshinei DON,81770,228,2026-05
+PLK0001,382,(A) Sashi Ume,Special PLK,357,1,2025-12
+DEL0012,377.26,แซลมอนดอง-กุ้งสดดองซีอิ้ว (200 g),Oshinei DELIVERY,140327,398,2026-05
+SS-25,375,SET-E SPECIAL,A LA CARTE,0,0,
+KKN014,374.6,(A) คอมเบโซจู รสยาคูลท์ 3 ขวด 350 บาท,Special KKN,1750,5,2025-11
+KKN015,374.5,(A) คอมเบโซจู คละรส 3 ขวด 350 บาท,Special KKN,9800,28,2026-05
+KKN013,374.5,(A) คอมเบโซจู รสสตอเบอรี่ 3 ขวด 350 บาท,Special KKN,4900,14,2026-03
+KKN012,374.5,(A) คอมเบโซจู รสองุ่นขาว 3 ขวด 350 บาท,Special KKN,1400,4,2026-05
+SCC0040,374.5,(A) โปรโมชั่นแทยัง (คละรสได้) โซจู 3 ขวด,Special Chachoengsao,700,2,2026-01
+MDH0022,374.3,(A) แก้มปลาฮามาจิย่างเกลือ,Special MDH,23088,456,2026-05
+A550-125,368.21,(A) SALMON (ชุดเปิดโต๊ะ),Oshinei SASHIMI,0,0,
+MDH0021,367.94,(A) แก้มปลาฮามาจิย่างซีอิ๊ว,Special MDH,5846,226,2026-05
+NPT002,363.77,(A) กุ้งสด (ชุดเปิดโต๊ะ),Oshinei SHABU,4420,13,2026-05
+ASPC-UBN-033,360.25,(A) ท้องปลาแซลมอนย่างเกลือ (5ชิ้น),A LA CARTE,0,0,
+A550-124,359.83,(A) EBI (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A1150-041,356,(A) WAGYU ROLL,A LA CARTE,0,0,
+UBN017,352.9,(A) กุ้งสด 15 ตัว ชุดแรก (รวมผัก),Oshinei SHABU,3298,10,2026-05
+A550-128,346.75,(A) BEEF (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A1150-009A,346.46,(A) HAMACHI KAMA SHIO YAKI,A LA CARTE,0,0,
+BV0008,342.4,(A) สปาคกิ้ง สาเก พีช (180 ML.),Oshinei ALCOHOL,45760,143,2026-05
+BV0007,342.4,(A) สปาคกิ้ง สาเก เบอร์รี่ (180 ML.),Oshinei ALCOHOL,32000,100,2026-05
+A0170,342.38,(A) ลิ้นวัวสไลด์ (ชุดเปิดโต๊ะ),Oshinei SHABU,2560,8,2026-05
+BRR036,342,(D) ปลาแซลมอนอย่างเกลือ,Special DELIVERY,4155,13,2026-05
+BRR037,342,(D) ปลาแซลมอนย่างซีอิ๊ว,Special DELIVERY,2877,9,2026-04
+A0163,340.04,(A) แซลมอน (ชุดเปิดโต๊ะ),Oshinei SHABU,35275,111,2026-05
+A550-132,339.58,(A) GYUTAN SLICE (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A550-130,339.51,(A) AUSTRALIA BRISKET (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A550-131,339.49,(A) BEEF OYSTER BLADE SLICE (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A0168,337.44,(A) เนื้อเสือร้องไห้ ออสเตรเลียสไลด์ (ชุดเปิดโต๊ะ),Oshinei SHABU,69696,221,2026-05
+ASPC-CCO-001,337.06,ค่าห้อง เล็ก,Other,0,0,
+CP005,337.05,ค่าห้อง 300,Other,0,0,
+ASPC-UBN-020,337,ชุดหัวปลาย่าง,A LA CARTE,0,0,
+C028,337,ค่าเปิดไวน์ 300,A LA CARTE,0,0,
+FB1150-2,337,"ค่าปรับบุฟเฟ่ต์ 1,150++ (100 กรัม)",BUFFET,0,0,
+PM040,337,(A)Otoro Sa,A LA CARTE,0,0,
+ABVG-022,336.81,SPARKING SAKE 180 ML MIX BERRY,Oshinei SOFT DRINK,0,0,
+A550-060,336.23,(A) SALMON SALAD,Oshinei SASHIMI,13963,45,2026-05
+A0166,335.49,(A) เนื้อสไลด์ (ชุดเปิดโต๊ะ),Oshinei SHABU,32608,104,2026-05
+b18,331.44,ส่วนลดพยาบาล 295++,BUFFET,0,0,
+B14,331.18,Buffet Older 295++,BUFFET,0,0,
+B05,331.05,Buffet Child 295++,BUFFET,0,0,
+A0083,328.61,(A) ข้าวปั้นหน้าเนื้อวากิวสไลด์ น้ำมันเห็ดทรัฟเฟิลราดด้วยซอสสไปซี่มายองเนส โรยด้วยต้นหอมซอย ไข่กุ้ง และงา (1 ชิ้น),Oshinei SUSHI,52208,170,2026-05
+A1150-007,327.81,(A) WAGYU SPECIAL TRUFFLE OIL SUSHI,A LA CARTE,0,0,
+A0169,326.38,(A) เนื้อใบพายออสเตรเลียสไลด์ (ชุดเปิดโต๊ะ),Oshinei SHABU,95168,312,2026-05
+ABVG-016,325.82,HENEKEN BEER L,Oshinei SOFT DRINK,0,0,
+ABVG-017,325.81,ASAHI BEER L,Oshinei SOFT DRINK,0,0,
+ABVG-090,325.56,โปรโมชั่น เบียร์อาซาฮี 3 ขวด (CCS),Oshinei SOFT DRINK,0,0,
+ABVG-089,325.36,โปรโมชั่น เบียร์ไฮเนเก้น 3 ขวด (CCS),Oshinei SOFT DRINK,0,0,
+ABVG-071,324.5,BUFFET SINGHA  (A La Carte) (LBR),BUFFET,0,0,
+A0133,323.93,(A) สลัดปลาแซลมอน,Oshinei SALAD,221002,84981,2026-05
+ABVG-023,322.98,SPARKING SAKE 180 ML PEACH,Oshinei SOFT DRINK,0,0,
+UBN009,321,(A) ชุดสเต็กแซลมอน,Special UBN,3600,12,2026-05
+OT0001,320.47,ค่าเปิดห้อง (เล็ก),Oshinei other,532820,1779,2026-05
+BRR021,320,(D) แซลมอนสไลด์บาง,Special DELIVERY,2093,7,2026-04
+S-056,319.9,Salmon slide,Oshinei SASHIMI,0,0,
+BV0072,319.64,โปรโมชั่นบุฟเฟ่ต์เบียร์299,Oshinei ALCOHOL,86632,315,2026-05
+ASPC-010,315.15,(A) DRAGON ROLL,A LA CARTE,0,0,
+A1150-063,312.52,(A) UNA DON,A LA CARTE,0,0,
+SCC0043,310.3,(A) โปรโมชั่นเบียร์อาซาฮี 3 ขวด,Special Chachoengsao,92510,319,2026-05
+SCC0041,310.29,(A) โปรโมชั่นเบียร์ไฮเนเก็น 3 ขวด,Special Chachoengsao,8120,28,2025-08
+B40,309.9,Buffet 399 Net,BUFFET,0,0,
+A550-127,303.86,(A) IKA (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A550-035,303.84,(A) CHIRASHI,A LA CARTE,0,0,
+EX0017,303.62,(EX) ข้าวห่อสาหร่ายไส้ชีสปลาไหลและห่อด้วยอโวคาโด้ ราดด้วยซอสเทอริ (5 ชิ้น),Oshinei ROLL,3689,13,2026-05
+A1150-056,303.33,(A) AUSTRALIA BEEF  HOBA YAKI,A LA CARTE,0,0,
+A1150-024,302.17,(A) ENGAWA NEGI SALMON EBIKO DON,Oshinei SASHIMI,0,0,
+A550-046,301.36,(A) URA MAKI,A LA CARTE,26355,94,2026-05
+BRR031,300,(D) กุ้งเทมปุระ,Special DELIVERY,5888,21,2026-03
+A0164,299.67,(A) ไก่ (ชุดปิดโต๊ะ),Oshinei SHABU,1680,6,2026-05
+A550-126,299.67,(A) TORI  (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+S-077,299.67,EBI Tampura,Oshinei SASHIMI,0,0,
+A550-138B,296.13,(A) SALMON HARATSU TERI YAKI,Oshinei SASHIMI,0,0,
+UBN005,295.11,(A) ชุดแซลม่อนย่าง,Special UBN,33096,120,2026-05
+A0082,294.27,(A) ซูพรีม อูนิ ซูชิ (1 ชิ้น),Oshinei SUSHI,229642,835,2026-05
+A550-009,293.64,(A) SALMON USUZUKURI (15 Pcs),Oshinei SASHIMI,0,0,
+EX0018,293.33,(EX) ข้าวห่อสาหร่ายตับห่าน (5 ชิ้น),Oshinei ROLL,15078,55,2026-05
+A0051,292.67,(A) ข้าวห่อสาหร่ายปลาไหลญี่ปุ่น (5 ชิ้น),Oshinei ROLL,244526,894,2026-05
+A550-129,292.57,(A) BUTA (ชุดเปิดโต๊ะ),A LA CARTE,0,0,
+A550-083,292.12,(A) SALMON STEAK,Oshinei STEAK,0,0,
+ABVG-088,292.11,โปรโมชั่น เบียร์สิงห์ 3 ขวด (CCS),Oshinei SOFT DRINK,0,0,
+ASPC-CBR-038,292.1,เฟเดอร์บอย โปร 2 แถม 1,A LA CARTE,0,0,
+A0180,290.65,SET NIGIRI SUSHI ลด 20% (5 ชิ้น),Oshinei SUSHI,40474,149,2026-05
+A0167,290.07,(A) หมูสไลด์ (ชุดเปิดโต๊ะ),Oshinei SHABU,307692,1135,2026-05
+ASPC-009,289.68,(A) SALMON USUZUKURI,Oshinei SASHIMI,0,0,
+SCC0008,289,(D)ข้าวห่อสาหร่ายไส้หนังปลาแซลมอนทอดกรอบ+สลัดหนังปลาแซลมอนทอดกรอบ,Special Chachoengsao,1080,4,2026-04
+AYT-SP-0031,289,เนื้อออสเตรเลียย่างใบโฮบะ,A la carte 1150,270,1,2026-05
+A1150-078,287.53,(A) SUPREME UNI SUSHI (1 Pcs),A LA CARTE,0,0,
+A1150-057,284.79,(A) AUSTRALIA BEEF SLIDE HOBA YAKI,A LA CARTE,0,0,
+EX0016,283.59,(EX) ปลาแซลมอน สไลด์บาง,Oshinei SASHIMI,305586,1153,2026-05
+A550-138A,283.41,(A) SALMON HARATSU SHIO YAKI,Oshinei SASHIMI,0,0,
+S-123,282.49,EBI SHOYU (200g.),Oshinei SASHIMI,0,0,
+A0004,281.37,(A) สเต็กปลาแซลมอน,Oshinei STEAK,247303,96829,2026-05
+PLK0002,281.23,(A) ข้าวหน้าปลาไหลมินิ,Special PLK,29174,111,2026-05
+A0030,281.18,(A) ท้องปลาแซลมอนย่างซีอิ๊ว (5 ชิ้น),Oshinei STEAK,30483,116,2026-05
+EX0004,281,(EX) หัวปลาแซลมอนย่างซีอิ๊ว,Oshinei STEAK,2889,11,2026-05
+PM041,281,(A)Chutoro Sa,A LA CARTE,0,0,
+B15,280.87,Buffet Older 250++,BUFFET,0,0,
+A1150-022,280.8,(A) WAGYU KANI MISO SUSHI,A LA CARTE,0,0,
+B08,280.71,Buffet Child 250++,BUFFET,0,0,
+A290-015,279.39,(A) EBI TEMPURA,A LA CARTE,0,0,
+A550-062,278.77,(A) SALMON YAMTHAI,Oshinei SASHIMI,111339,427,2026-05
+A1150-039,278.67,(A) HOTATE SHOYU,A LA CARTE,0,0,
+A1150-045,278.45,(A) AUSTRALIA BEEF ROLL,A LA CARTE,0,0,
+SCC0042,278.2,(A) โปรโมชั่นเบียร์สิงห์ 3 ขวด,Special Chachoengsao,152100,585,2026-05
+A550-147,278.03,(A) SALMON ANCHOVY,Oshinei SASHIMI,0,0,
+A550-037,277.89,(A) SALMON TERI DON,Oshinei SASHIMI,0,0,
+RY002,277,(D) ข้าวหน้าปลาแซลมอน + ไข่ปลาแซลม่อน 30%,Special DELIVERY,54624,211,2026-05
+S-155,277,SALMON IKURA DON 30%,Oshinei SASHIMI,0,0,
+DEL0013,276.95,กุ้งสดดองซีอิ้ว (200 g),Oshinei DELIVERY,95509,369,2026-05
+A0029,276.6,(A) ท้องปลาแซลมอนย่างเกลือ (5 ชิ้น),Oshinei STEAK,39811,154,2026-05
+A550-039,276.58,(A) SALMON SAIKYO DON,Oshinei SASHIMI,0,0,
+A550-038,276.13,(A)SALMON DON,Oshinei SASHIMI,0,0,
+EX0005,274.5,(EX) หัวปลาแซลมอนย่างเกลือ,Oshinei STEAK,1539,6,2026-02
+A550-040,274.06,(A) SALMON TERI YAKI DON,Oshinei SASHIMI,51460,161,2026-05
+SCC0053,273,Set. 02 หัวปลาต้มซีอิ๋ว+สลัดหนังปลา+ข้าวผัด,Special Chachoengsao,1810,8,2026-01
+Special007,272.85,ปลาแซลมอนต้มซีอิ๊ว ข้าวผัด+สลัดหนังปลา ลดทั้งวัน 50%,Special,8670,34,2026-05
+A0128,272.33,(A) ยำไทยปลาแซลมอน,Oshinei YUM,788481,195381,2026-05
+A0130,271.39,(A) ยำแซลมอนน้ำปลาร้า,Oshinei YUM,965417,350771,2026-05
+A1150-DS3,271.26,MELON+KUROMAME,A LA CARTE,0,0,
+A0108,271.09,(A) กุ้งชุบแป้งทอดเทมปุระ (5 ตัว),Oshinei APPETIZER,747136,243481,2026-05
+SPCB035,270,ปลาแซลมอน สไลด์บาง,Special CBI,252,1,2026-03
+ABVG-050,269.63,HEINEKEN BEER L (PRO) 2 BOTTLE (KK),Oshinei SOFT DRINK,0,0,
+ABVG-101,269.6,HEINEKEN BEER L (PRO) 2 BOTTLE (NKSW),Oshinei SOFT DRINK,0,0,
+EX0001,269.54,(EX) หัวปลาแซลมอนต้มซีอิ๊ว,Oshinei STEAK,33251,132,2026-05
+A1150-030,269.43,(A) HOTATE KANI MISO IKURA YAKI,A LA CARTE,0,0,
+A0138,269.05,(A) ข้าวหน้าปลาแซลมอนเบิร์น ราดซอสเทอริยากิ,Oshinei DON,213231,3975,2026-05
+A550-142,268.94,(A) SALMON SHIO YAKI,Oshinei SASHIMI,0,0,
+AYT-SP-0021,268,กุ้งอาเจนติน่า ดอง,A la carte 1150,250,1,2026-05
+SCC0044,268,(A) Hoegaeden Rosee 650 ml.,Special Chachoengsao,250,1,2025-11
+A0143,267.95,(A) ข้าวหน้าปลาแซลมอนย่างซีอิ้ว,Oshinei DON,746006,2979,2026-05
+A0141,267.53,(A) ข้าวหน้าปลาแซลมอนเบิร์น ราดซอสมิโซะข้าว,Oshinei DON,123764,2163,2026-05
+A550-057,267.51,(A) SPARKEY ROLL,A LA CARTE,0,0,
+NPT006,267.5,"(A) เบียร์สด Asahi เหยือก (1,000ml.)",Oshinei ALCOHOL,500,2,2025-12
+A0139,267.15,(A) ข้าวหน้าปลาแซลมอนสด,Oshinei DON,442224,1763,2026-05
+BV0045,267.12,(A) เมล่อน+ถั่วดำญี่ปุ่น,Oshinei DESSERT,61163,245,2026-05
+ASPC-032,264.07,(A) AVOCADO SALAD,A LA CARTE,1681,7,2026-02
+A550-122,263.82,(A) SEAFOOD,A LA CARTE,0,0,
+A0165,263,(A) ปลาหมึกบั้ง (ชุดเปิดโต๊ะ ),Oshinei SHABU,2212,9,2026-05
+A550-146,261.98,(A) SALMON TERI YAKI,Oshinei SASHIMI,24295,97,2026-05
+A0023,260.46,(A) ปลาแซลมอนย่างซีอิ้ว,Oshinei STEAK,254130,103240,2026-05
+A0024,260.39,(A) ปลาแซลมอนย่างเกลือ,Oshinei STEAK,141875,61475,2026-05
+A1150-038,260.34,(A) ARGENTINA SHOYU (5 Pcs),A LA CARTE,0,0,
+A1150-023,260.2,(A) WAGYU FOIE GARS SUSHI,A LA CARTE,0,0,
+DEL0020,260,SET E (สำหรับ 1 ท่าน),Oshinei DELIVERY,108131,445,2026-05
+BRR038,260,(D) ท้องปลาแซลมอนย่างเกลือ,Special DELIVERY,4131,17,2026-05
+BRR039,260,(D) ท้องปลาแซลมอนย่างซีอิ๊ว,Special DELIVERY,1944,8,2026-04
+PM0015,260,(A) แซลมอนดอง (10 ชิ้น),UBN BADMINTON,1215,5,2025-11
+SS-05,259.58,SET E,A LA CARTE,0,0,
+A550-066,259.52,(A) TUNA SALAD,A LA CARTE,0,0,
+PK001,259.48,(A) กุ้งอาร์เจนติน่าดอง,Oshinei PICKLED,12125,50,2026-05
+S-051,258.93,Tuna Yumthai,Oshinei SASHIMI,0,0,
+S-066,258.93,Salmon Haratsu shio,Oshinei SASHIMI,0,0,
+A0054,258.72,(A) ข้าวห่อสาหร่ายไส้ปลาทูน่า แซลมอน และคลุกด้วยซอสสไปซี่มิโซะ (5 ชิ้น ),Oshinei ROLL,63109,261,2026-05
+ABVG-056,258.43,HOEGAARDEN  (500 ML) (PRO) (KK),Oshinei SOFT DRINK,0,0,
+ABVG-048,258.41,ASAHI BEER L (PRO) 2 BOTTLE (KK),Oshinei SOFT DRINK,0,0,
+ABVG-053,258.4,HOEGAARDEN ROSE (500 ML) (PRO) (KK),Oshinei SOFT DRINK,0,0,
+ABVG-103,258.4,ASAHI BEER L (PRO) 2 BOTTLE (NKSW),Oshinei SOFT DRINK,0,0,
+ABVG-055,258.33,HOEGAARDEN WITBIER (500 ML) (PRO) (KK),Oshinei SOFT DRINK,0,0,
+A0044,257.09,(A) เนื้อวากิวทาทากิ (5 ชิ้น),Oshinei SASHIMI,10813,45,2026-05
+AYT-SP-0002,257,สเต็กเนื้อออสเตรเลีย,A la carte 1150,240,1,2026-05
+S-017,256.97,BEEF TERI DON,Oshinei SASHIMI,0,0,
+SS-33,256.81,SET-05,A LA CARTE,0,0,
+KKN005,256.8,(A) เบียร์ไฮเนเก้น 2 ขวด 240 บาท,Special KKN,33360,139,2026-05
+MDH0008,256.8,(A) สเต๊กปลาแซลมอน พร้อมซุปมิโซะ,Special MDH,19920,83,2026-05
+A550-042,256.69,(A) BEEF DON,A LA CARTE,32665,136,2026-05
+EX0027,256.21,(EX) ยำไทยปลาหมึก,Oshinei YUM,46933,196,2026-05
+SS-40,254.93,SALMON KAMA NITSUKE SET B,Oshinei SASHIMI,0,0,
+BRR010,254.8,ข้าวปั้นหน้าเนื้อวากิวและตับห่าน,Special BRR,23575,99,2026-05
+A550-065,253.58,(A) TAKO YAMTHAI,A LA CARTE,0,0,
+A0140,251.63,(A) ข้าวหน้าเนื้อสไลด์ เทริ,Oshinei DON,275621,1172,2026-05
+A550-063,250,(A) TUNA YAMTHAI,A LA CARTE,0,0,
+A0134,249.31,(A) สลัดปลาทูน่า,Oshinei SALAD,75492,20697,2026-05
+ABVG-049,247.17,SINGHA BEER 620ML (PRO) 2 BOTTLE (KK),Oshinei SOFT DRINK,0,0,
+ABVG-102,247.17,SINGHA BEER 620ML (PRO) 2 BOTTLE (NKSW),Oshinei SOFT DRINK,0,0,
+A550-159,247,(A) YAKI UDON BUTA,A LA CARTE,0,0,
+ABVG-075,247,PAIULANER WEISSBIER 500 ML (SSK),Oshinei SOFT DRINK,0,0,
+KKN011,246.11,(A) ฮูการ์เด้น โรเซ่ + วิทเบียร์ 2 กระป๋อง 230 บาท,Special KKN,2070,9,2026-04
+KKN009,246.1,(A) ฮูการ์เด้น โรเซ่ 2 กระป๋อง 230 บาท,Special KKN,11040,48,2026-05
+KKN010,246.1,(A) ฮูการ์เด้น วิทเบียร์ 2 กระป๋อง 230 บาท,Special KKN,4600,20,2026-05
+KKN006,246.01,(A) เบียร์อาซาฮี 2 ขวด 230 บาท,Special KKN,123694,538,2026-05
+KKN007,245.98,(A) เบียร์สิงห์ 2 ขวด 230 บาท,Special KKN,139081,605,2026-05
+A0010,245.3,(A) สเต็กเนื้อออสเตรเลีย 100 ก.,Oshinei STEAK,28656,125,2026-05
+A550-158,243.33,(A) YAKI UDON SEAFOOD,A LA CARTE,0,0,
+EX0042,243.25,(EX) สลัดอโวคาโด้,Oshinei VEGETARIAN,12048,53,2026-04
+PLK0006,239.79,(A) กุ้งอาร์เจนดอง,Special PLK,3138,14,2026-05
+A0129,237.42,(A) ยำไทยปลาทูน่า,Oshinei YUM,77158,33051,2026-05
+OT0016,235.93,ค่าปรับบุฟเฟ่ต์ 799++ (100 กรัม),Oshinei other,755769,3599,2026-05
+SS-32,235.41,SET-04,A LA CARTE,0,0,
+NN0001,235.4,(A) เบียร์สิงห์ 2 ขวด 220 บาท,Oshinei ALCOHOL,29480,134,2026-05
+MDH0007,235.4,(A) ปลาแซลมอนย่างซีอิ้ว พร้อมซุปมิโซะ,Special MDH,19360,88,2026-05
+MDH0006,235.39,(A) ปลาแซลมอนย่างเกลือ พร้อมซุปมิโซะ,Special MDH,3960,18,2026-05
+SCC0014,235,(D)สลัดหนังปลาแซลมอนทอดกรอบ1แถม1,Special Chachoengsao,1757,8,2026-04
+A550-160,235,(A) YAKI UDON TORI,A LA CARTE,0,0,
+S-114,235,SALMON SKIN SALAD 1 FREE 1,Oshinei SASHIMI,0,0,
+ABVG-070,234.81,BUFFET SINGHA  (Buffet) (LBR),BUFFET,0,0,
+A550-094B,233.84,(A) YAKI SOBA BUTA,A LA CARTE,0,0,
+A550-094A,233.12,(A) YAKI SOBA SEAFOOD,A LA CARTE,12131,55,2026-05
+A0149,230.77,(A) ยากิโซบะ ไก่,Oshinei SOBA,18117,84,2026-05
+A0148,229.8,(A) ยากิโซบะ หมู,Oshinei SOBA,75812,6692,2026-05
+A0147,229.32,(A) ยากิโซบะ ซีฟู้ด,Oshinei SOBA,211576,35037,2026-05
+BRR026,229,(D) ข้าวห่อสาหร่ายหน้าปลาแซลมอนชีสเบิร์นไฟ,Special DELIVERY,11985,56,2026-05
+ASPC-CBR-026,228.5,Set:ข้าวหมูทอดแกงกะหรี่+ซุป,A LA CARTE,0,0,
+A0131,228.27,(A) สลัดหนังปลาแซลมอนทอดกรอบ,Oshinei SALAD,200535,105223,2026-05
+A550-079,227.61,(A) BEEF SLIDE SHIO YAKI,A LA CARTE,0,0,
+A1150-042,227.15,(A) AUSTRALIA BEEF STEAK 100 G.,Oshinei STEAK,0,0,
+LPB005,226.1,(A) เบียร์สิงห์ รีฟิล(สำหรับอลาคลาส),Special LPB,24723,117,2026-04
+ASPC-011,225,(A) FOIE GRAS ROLL,A LA CARTE,0,0,
+B33,225,Buffet KID 590++200+,BUFFET,0,0,
+EX0034,224.8,(EX) เนื้อไทยเฟรนซ์ 100G.,Oshinei SOBA,1050,5,2026-03
+ASPC-CBR-037,224.73,เบียร์ช้างโครว์บรูว์ โปร 2 แถม 1,A LA CARTE,0,0,
+OT0004,224.72,"ค่าเปิดเหล้า,ไวน์,เบียร์",Oshinei other,24000,120,2026-05
+B36,224.72,Buffet KID 799++200++,BUFFET,0,0,
+ASPC-RYN-004,224.7,ค่าเปิดไวท์,A LA CARTE,0,0,
+ASPC-CBR-036,224.69,เบียร์ช้างคลาสสิค โปร 2 แถม 1,A LA CARTE,0,0,
+ASPC-026,224.67,(A) AVOCADO SAIKAYO,A LA CARTE,0,0,
+ASPC-RYN-005,224.67,ค่าเปิดเหล้า,A LA CARTE,0,0,
+FB750-2,224.67,ค่าปรับบุฟเฟ่ต์ 750++ (100 กรัม),BUFFET,0,0,
+AYT-SP-0034,224.5,ปลาเนื้อขาวสไลด์บาง,A la carte 1150,420,2,2026-05
+B35,224.5,Buffet KID 500++ 200++,BUFFET,0,0,
+ASPC-CBR-020,223.57,Asahi-เบียร์สด,A LA CARTE,0,0,
+LPB004,223.32,(B) เบียร์สิงห์ รีฟิล(สำหรับบุฟเฟ่),Special LPB,125849,603,2026-05
+A550-078,223.18,(A) BEEF SLIDE TERI YAKI,A LA CARTE,0,0,
+A550-010,222.91,(A) IZUMIDAI USUZUKURI (15 Pcs),A LA CARTE,0,0,
+Special008,221.78,ปลาแซลมอนต้มซีอิ๊ว ข้าวผัด+สลัดหนังปลา Flash Sale 59%,Special,3731,18,2025-11
+A1150-009B,220.25,(A) HAMACHI KAMA TERI YAKI,A LA CARTE,0,0,
+A550-162,220.25,(A) SALMON,Oshinei SASHIMI,0,0,
+A0021,220.02,(A) เนื้อสไลด์ย่างซีอิ๊ว (10 ชิ้น),Oshinei STEAK,29610,36358,2026-05
+ASPC-UBN-013,219.82,ชุดสเต็กหมู,A LA CARTE,920,5,2026-04
+A550-094C,219,(A) YAKI SOBA TORI,A LA CARTE,0,0,
+ASPC-UBN-008,215.83,ชุดเทมปุระรวม,A LA CARTE,0,0,
+SV0018,214,คีบไข่ปลาแซลมอน,Oshinei SERVICE,8800,44,2026-05
+MDH0009,214,(A) สเต๊กไก่ พร้อมซุปมิโซะ,Special MDH,2200,11,2026-02
+MDH0005,214,(A) ปลาดอลลี่อย่างซีอิ๊ว พร้อมซุปมิโซะ,Special MDH,1800,9,2026-04
+EX0036,214,(EX) อโวคาโด้ทอดใส่ซอสมิโซะญี่ปุ่น,Oshinei VEGETARIAN,1000,5,2025-12
+MDH0004,214,(A) ปลาดอลลี่ย่างเกลือ พร้อมซุปมิโซะ,Special MDH,400,2,2026-03
+SS-34,214,SET-06,A LA CARTE,0,0,
+MDH0025,213,(A) โรลอโวคาโด,Special MDH,398,2,2025-10
+A550-155,213,SHIRATAKI,A LA CARTE,0,0,
+DEL0060,212.93,(D)ข้าวด้งหน้าแซลมอนดองล้วน,Oshinei DON,42657,215,2026-05
+DEL0062,212.93,(D)ข้าวด้งหน้ารวมดอง,Oshinei DON,18912,96,2026-05
+EVT0168-08,212.88,(A) USHI HIRE NIKU,A LA CARTE,0,0,
+A0022,212.35,(A) เนื้อสไลด์ย่างเกลือ (10 ชิ้น),Oshinei STEAK,3969,7924,2026-05
+ABVG-119,212.34,SINGHA BEER REFILL (AYT),Oshinei SOFT DRINK,0,0,
+A550-161,209.98,(A) EBI,A LA CARTE,0,0,
+A1150-008,209.14,(A) WAGYU SUSHI,A LA CARTE,0,0,
+A0095,208.61,(A) แซลมอน (15 ชิ้น),Oshinei SHABU,21250,109,2026-05
+A550-076,208.11,(A) SALMON KAMA SHIO YAKI,Oshinei SASHIMI,0,0,
+A0218,207.69,(A)ข้าวหน้าปลาไหลญี่ปุ่น,Oshinei DON,11452,59,2026-05
+S-061,206.79,Bara Chirashi Don,Oshinei SASHIMI,0,0,
+A0094,206.06,(A) กุ้งสด (15 ชิ้น),Oshinei SHABU,101680,528,2026-05
+A550-036,205.33,(A) BARA CHIRASHI,A LA CARTE,0,0,
+A550-077,204.54,(A) SALMON KAMA TERI YAKI,Oshinei SASHIMI,0,0,
+SCC0010,204,หัวปลาต้มซีอิ๊ว 1 แถม 1,Special Chachoengsao,36796,193,2026-05
+A1150-002,203.84,(A) KANI MISO GOHAN YAKI,A LA CARTE,0,0,
+S-153,203.81,SALMON KAMA NITSUKE (1 Free 1) RYN,Oshinei SASHIMI,0,0,
+SS-35,203.31,SET-07,A LA CARTE,0,0,
+MDH0010,203.3,(A) หมูทอดคลุกเกล็ดขนมปัง พร้อมซุปมิโซะ,Special MDH,17290,91,2026-02
+SCC0020,203,(T)หัวปลาต้มซีอิ๊ว+ข้าวญี่ปุ่น,Special Chachoengsao,1138,6,2026-03
+ASPC-SKN-005,203,หัวปลาแซลม่อน 1 แถม 1,A LA CARTE,0,0,
+RY004,202.97,(A) เบียร์สดอาซาฮี (1 ลิตร),Special SOFT DRINK,228008,1202,2026-05
+A550-058,202.8,(A) SALMON SHOYU,Oshinei SASHIMI,0,0,
+SCC0015,202.55,(D)ข้าวหน้าปลาดิบรวมหั่นเต๋า,Special Chachoengsao,46756,247,2026-05
+BV0078,202.23,(A) รีฟิล เบียร์สด สิงห์,Oshinei ALCOHOL,13230,70,2026-05
+ABVG-058,202.23,LEO BEER (620 ML) 2 ฺBOTTLE (PRO) (KK),Oshinei SOFT DRINK,0,0,
+ABVG-104,202.22,LEO BEER (620 ML) 2 ฺBOTTLE (PRO) (NKSW),Oshinei SOFT DRINK,0,0,
+A1150-074,202.17,(A) SMOKE BACON (10 Pcs),A LA CARTE,0,0,
+A550-180,202,(A) HOKKAIDO HOTATE STEAK,Oshinei STEAK,0,0,
+A550-068,200.6,(A) SHIRA U-O SALAD,A LA CARTE,41372,217,2026-05
+PM0014,200,(A) แซลมอนซาชิมิ (10 ชิ้น),UBN BADMINTON,3364,18,2025-11
+A0026,199.29,(A) หัวปลาแซลมอนย่างซีอิ๊ว,Oshinei STEAK,44888,20070,2026-05
+A290-020,198.75,(A) KATSU CURRY RICE,A LA CARTE,191,1,2026-05
+MDH0018,198.71,(A) มันปูย่าง,Special MDH,65740,354,2026-05
+A0137,198.6,(A) ข้าวหน้าปลาดิบรวมหั่นลูกเต๋า,Oshinei DON,523935,18591,2026-05
+SCC0057,197.95,(A) มันปู,Special Chachoengsao,26201,140,2026-05
+A0161,197.88,(A) แซลมอนดอง (5 ชิ้น),Oshinei PICKLED,510416,2760,2026-05
+A0006,197.59,(A) หัวปลาแซลมอนต้มซีอิ๊ว,Oshinei STEAK,348284,61586,2026-05
+B04,196.48,Buffet Child 175++,BUFFET,0,0,
+A550-059,196.13,(A) EBI SHOYU,A LA CARTE,0,0,
+B13,195.84,Buffet Older 175++,BUFFET,0,0,
+A0132,195.54,(A) สลัดปลาเงินทอดกรอบ,Oshinei SALAD,442245,109743,2026-05
+A550-179,195.53,(A)KANI MISO HOTATE,A LA CARTE,0,0,
+S-063,194.67,Dolly Steak,Oshinei STEAK,0,0,
+A550-135,194.42,(A) GYUTAN SLICE SHIO YAKI (10 Pcs),A LA CARTE,0,0,
+A550-139,193.32,(A) หมูสามชั้นสไลด์,A LA CARTE,0,0,
+A550-167,192.75,(A) AUSTRALIA BRISKET,A LA CARTE,0,0,
+SS-36,192.56,SET-08,A LA CARTE,0,0,
+KKN008,192.52,(A) เบียร์ลีโอ 2 ขวด 180 บาท,Special KKN,43902,244,2026-05
+MDH0011,192.5,(A) สเต๊กปลาซาบะ พร้อมซุปมิโซะ,Special MDH,720,4,2025-11
+A550-165,192.47,(A) BEEF,A LA CARTE,0,0,
+UBN008,191.69,(A) ชุดหมูย่าง,Special UBN,7524,42,2026-05
+A550-169,191.31,(A) GYUTAN SLICE,A LA CARTE,0,0,
+A550-168,190.6,(A) BEEF OYSTER BLADE SLICE,A LA CARTE,0,0,
+BRR030,190,(D) โซบะเย็นเสิร์ฟพร้อมเทมปุระ,Special DELIVERY,1421,8,2026-05
+EVUBN-01-01,190,SALMON SASHIMI (8 ชิ้น),Oshinei SASHIMI,0,0,
+ABVG-118,189.83,SINGHA BEER 1 JUG (AYT),Oshinei SOFT DRINK,0,0,
+A290-007,189.71,(A) SALMON SKIN SALAD,Oshinei SASHIMI,21615,98,2026-05
+A0146,189.55,(A) ข้าวหน้ามันปูฮอกไกโด,Oshinei DON,124182,701,2026-05
+A0098,188.96,(A) เนื้อสไลด์ (15 ชิ้น),Oshinei SHABU,22428,127,2026-05
+ASPC-BRM-011,188.5,(A) Okonomiyaki,A LA CARTE,0,0,
+A0100,188.17,(A) เนื้อเสือร้องไห้ ออสเตรเลียสไลด์ (15 ชิ้น ),Oshinei SHABU,66825,380,2026-05
+A0028,188.04,(A) ลิ้นวัวสไลด์ย่างเกลือ (10 Pcs),Oshinei STEAK,127062,93721,2026-05
+A0162,187.82,(A) กุ้งสดดอง (5 ชิ้น),Oshinei PICKLED,270846,509230,2026-05
+A550-095,185.93,(A) TEMPURA UDON,A LA CARTE,0,0,
+A0104,185.77,(A) หมูสามชั้นสไลด์ (15 ชิ้น),Oshinei SHABU,8334,48,2026-05
+A550-093,185.29,(A) TEMPURA SOBA,A LA CARTE,0,0,
+ASPC-051,185.22,(A) OKONOMI YAKI,A LA CARTE,0,0,
+A290-001A,185.2,(A) BUTA STEAK,Oshinei STEAK,0,0,
+A290-006,185.17,(A) TEMPURA MORI (ผัก 3 อย่าง กุ้ง 2 ตัว),A LA CARTE,0,0,
+A0101,184.3,(A) เนื้อใบพายออสเตรเลียสไลด์ (15 ชิ้น),Oshinei SHABU,66141,384,2026-05
+A550-055,184.28,(A) RAINBOW ROLL,A LA CARTE,0,0,
+A0102,184.15,(A) ลิ้นวัวสไลด์ (15 ชิ้น),Oshinei SHABU,16866,98,2026-05
+A550-089,184.11,(A) NIKU SOBA,A LA CARTE,0,0,
+A550-090,184.09,(A) NIKU UDON,A LA CARTE,0,0,
+A550-056,182.94,(A) SALMON CHEESE ABURI ROLL,Oshinei SASHIMI,0,0,
+A550-098,182.68,(A) TEN ZARU UDON,A LA CARTE,0,0,
+PLK0008,182.53,(A) KANI MISO GOHAN,Special PLK,19789,116,2026-05
+A550-043,181.09,(A) BUTA DON,A LA CARTE,74501,438,2026-05
+BV0079,180.8,(A) เบียร์สด สิงห์ เหยือก,Oshinei ALCOHOL,845,5,2026-05
+BRR003,180.29,ข้าวหน้้าแกงกะหรี่หมูทอด,Special BRR,1179,7,2026-05
+ASPC-UBN-019,180,ชุดปลาดอรี่ย่าง,A LA CARTE,0,0,
+ABVG-076,179.75,HOEGAARDEN ORIGINAL 248 ML (SSK),Oshinei SOFT DRINK,0,0,
+OT0013,179.7,ค่าปรับบุฟเฟ่ต์ 590++ (100 กรัม),Oshinei other,1266920,7922,2026-05
+A0159,179.57,(A) เส้นโซบะร้อน หน้าเนื้อสไลด์,Oshinei SOBA,33397,7840,2026-05
+ABVG-109,179.5,SINGHA BEER 1 JUG (CBR),Oshinei SOFT DRINK,0,0,
+A550-097,179.2,(A) TEN ZARU SOBA,A LA CARTE,0,0,
+A0209,179,(A)ข้าวด้งหน้ากุ้งดองล้วน,Oshinei DON,534,3,2026-03
+A0050,178.94,(A) เรนโบว์โรล ( 5 ชิ้น ),Oshinei ROLL,78600,470,2026-05
+A550-091,178.66,(A) TANUKI SOBA,A LA CARTE,0,0,
+A0142,178.43,(A) ข้าวหน้าหมูสไลด์ เทริ,Oshinei DON,417057,10563,2026-05
+A0154,178.01,(A) บะหมี่ร้อนเส้นอูด้ง เสิร์ฟพร้อมเทมปุระ,Oshinei SOBA,139239,12435,2026-05
+A0153,177.72,(A) บะหมี่ร้อนเส้นโซบะ เสิร์ฟพร้อมเทมปุระ,Oshinei SOBA,59296,5008,2026-05
+A0107,177.21,(A) เทมปุระรวม (ผัก 3 อย่าง กุ้ง 2 ตัว),Oshinei APPETIZER,115932,51945,2026-05
+A0053,177.06,(A) ข้าวห่อสาหร่ายหน้าปลาแซลมอนชีสเบิร์นไฟ (5 ชิ้น ),Oshinei ROLL,300178,1814,2026-05
+BRR018,177,(D) ข้าวห่อสาหร่ายไส้สไปซี่แซลมอน,Special DELIVERY,23821,144,2026-05
+A0160,176.79,(A) เส้นอูด้งร้อน หน้าเนื้อสไลด์,Oshinei SOBA,75837,14852,2026-05
+A0002,176.56,(A) สเต็กหมู,Oshinei STEAK,151554,29598,2026-05
+S-083,176.55,โปรโมชั่น ลด 20%  Spicy Salmon Roll,Oshinei SASHIMI,0,0,
+A1150-054,175.35,(A) HOTATE CHEESE ABURI SUSHI,A LA CARTE,0,0,
+A550-092,175.22,(A) TANUKI UDON,A LA CARTE,0,0,
+A1150-069,174.07,(A) NEW ZEALAND MUSSELS STEAK,Oshinei STEAK,0,0,
+A550-067,173.86,(A) KANI KAMABOKO SALAD,A LA CARTE,0,0,
+A0156,172.67,(A) โซบะเย็น เสิร์ฟพร้อมเทมปุระ,Oshinei SOBA,53254,330,2026-05
+A0157,171.7,(A) อูด้งเย็น เสิร์ฟพร้อมเทมปุระ,Oshinei SOBA,14603,3255,2026-05
+MDH0002,171.21,(A) ปลาซาบะย่างเกลือ พร้อมซุปมิโซะ,Special MDH,2240,14,2026-02
+A0205,171.17,(A) ข้าวห่อสาหร่ายแคลิฟอเนียท็อปคาโมะกราส์ 3ชิ้น,Oshinei ROLL,960,6,2026-03
+SS-30,171.17,SET-02,A LA CARTE,0,0,
+MDH0003,171.01,(A) ปลาซาบะย่างซีอิ้ว พร้อมซุปมิโซะ,Special MDH,14544,91,2026-05
+A550-109,169.43,(A) GYOZA CHEESE,A LA CARTE,6591,41,2026-05
+A550-044,169.26,(A) TEN DON,A LA CARTE,0,0,
+A0152,169.22,(A) อูด้งร้อนหน้าเทมปุระทอดกรอบ,Oshinei SOBA,25936,15337,2026-05
+A0151,168.76,(A) โซบะร้อนหน้าเทมปุระทอดกรอบ,Oshinei SOBA,6624,42,2026-05
+ASPC-028,168.5,(A) AVOCADO TEMPURA,A LA CARTE,0,0,
+ASPC-UBN-014,168.5,ชุดสเต็กปลาซาบะ,A LA CARTE,0,0,
+SCC0058,168.47,(A) ข้าวหน้าเทมปุระ,Special Chachoengsao,11808,114,2026-05
+A0008,168.1,(A) สเต็กหอยเชลล์ฮอกไกโด (5 ตัว),Oshinei STEAK,9112,70935,2026-05
+A0123,167.85,(A) เกี๊ยวซ่าชีส (5 ชิ้น),Oshinei APPETIZER,143537,915,2026-05
+A0009,167.85,(A) สเต็กหอยแมลงภู่นิวซีแลนด์ (5ตัว),Oshinei STEAK,72632,463,2026-05
+B0033,167.7257058,(B) ชุดปลาดิบรวม 4 อย่าง (24 ชิ้น),Oshinei SASHIMI,0,111049,2026-05
+A0135,166.69,(A) สลัดปูอัด,Oshinei SALAD,64184,18235,2026-05
+A1150-036,166.11,(A) HOTATE NORI IKURA,A LA CARTE,0,0,
+A550-088,165.84,(A) KOKE SOBA,A LA CARTE,0,0,
+A550-157,165.4,(A) BUTA KIMCHI,A LA CARTE,0,0,
+A1150-037,165.34,(A) HOTATE NORI KANI MISO,A LA CARTE,0,0,
+A1150-033,165.16,(A) HOTATE NORI UNAGI,A LA CARTE,0,0,
+A550-086,165.02,(A) DORY STEAK,Oshinei STEAK,0,0,
+A1150-035,164.65,(A) HOTATE NORI EBIKO,A LA CARTE,0,0,
+A550-087,163.95,(A) ZARU SOBA,A LA CARTE,0,0,
+A290-001B,163.75,(A) BUTA TERI YAKI,A LA CARTE,0,0,
+A0189,163.45,(A) สเต็กหมู ลด 10%,Oshinei STEAK,19400,127,2026-05
+A290-003A,163.05,(A) DORํY STEAK,Oshinei STEAK,0,0,
+A290-013,162.81,(A) SPICY SALMON ROLL,Oshinei SASHIMI,0,0,
+ASPC-006,162.58,(A) EBIKO TSUMAMI,A LA CARTE,0,0,
+A550-136,162.57,(A) THAI FRENCH SAIKORO STEAK,Oshinei STEAK,0,0,
+A550-080,162.49,(A) BUTA  SLIDE TERI YAKI,A LA CARTE,0,0,
+A550-096,162.31,(A) ZARU UDON,A LA CARTE,0,0,
+A290-010,162.03,(A) KANI KAMABOKO KARAGE SALAD,A LA CARTE,0,0,
+A1150-017,161.73,(A) HOTATE GARLIC PASTA YAKI  (1 Pcs),A LA CARTE,0,0,
+A550-047,161.57,(A) ENGAWA ROLL,A LA CARTE,0,0,
+A550-134,160.95,(A) NEGI TORO IKURA TRUFFLE OIL,A LA CARTE,0,0,
+A1150-DS2,160.57,KURO MAME,A LA CARTE,0,0,
+A290-001C,160.56,(A) BUTA SHIO YAKI,A LA CARTE,0,0,
+A1150-053,160.45,(A) HOTATE SUSHI,A LA CARTE,0,0,
+BV0042,160.26,(A) ถั่วดำญี่ปุ่น,Oshinei DESSERT,20070,134,2026-05
+BV0001,160.1,(A) เบียร์ไฮเนเก้นขวดใหญ่,Oshinei ALCOHOL,410120,2741,2026-05
+EV12-02,160,SALMON SASHIMI + KANI KAMABOKO,Oshinei SASHIMI,0,0,
+EVUBN-01-02,160,SALMON SA (5ชิ้น) + KANI (3ชิ้น),Oshinei SASHIMI,0,0,
+A0150,159.85,(A) บะหมี่ร้อนเส้นโซบะ,Oshinei SOBA,27638,23176,2026-05
+BV0002,159.76,(A) เบียร์อาซาฮีขวดใหญ่,Oshinei ALCOHOL,888700,5952,2026-05
+A1150-034,159.27,(A) HOTATE NORI FOIE GARS,A LA CARTE,0,0,
+EX0013,159.04,(EX) ไข่กุ้งเสิร์ฟพร้อมสาหร่ายโนริ,Oshinei SASHIMI,35970,242,2026-05
+A0055,158.25,(A) ข้าวห่อสาหร่ายครีบปลาตาเดียว (5 ชิ้น),Oshinei ROLL,29432,199,2026-05
+A0174,158.14,(A) หมูผัดกิมจิ,Oshinei STEAK,1035,7,2026-04
+EX0024,157.59,(EX) ปลาร้าญี่ปุ่นยำไทย,Oshinei APPETIZER,3240,22,2026-05
+A0155,157.46,(A) อูด้งเย็น,Oshinei SOBA,10890,16034,2026-05
+A0003,157.36,(A) สเต็กปลาดอรี่,Oshinei STEAK,39484,12401,2026-05
+A0013,156.78,(A) หมูสไลด์ย่างเกลือ,Oshinei STEAK,87765,599,2026-05
+A0046,156.76,(A) ข้าวห่อสาหร่ายไส้สไปซี่แซลมอน (5 ชิ้น ),Oshinei ROLL,594821,4060,2026-05
+A0011,156.65,(A) หมูย่างซีอิ๊ว,Oshinei STEAK,45825,313,2026-05
+EX0038,156.5,(EX) อโวคาโด้ชุบแป้งทอดเทมปุระ,Oshinei VEGETARIAN,878,6,2026-02
+A0007,156.46,(A) สเต็กเนื้อลูกเต๋า (150กรัม),Oshinei STEAK,452700,94114,2026-05
+A0158,156.31,(A) โซบะเย็น,Oshinei SOBA,49815,40924,2026-05
+A0091,155.97,(A) ข้าวปั้นหน้าโอโทโร่สับใส่หอมไข่หอยเม่น และไข่ปลาแซลมอน ทรัฟเฟิล,Oshinei SUSHI,68220,468,2026-05
+A550-071,155.76,(A) BUTA SLIDE SHIO YAKI,A LA CARTE,0,0,
+SCC0052,155.18,Set. 01 หัวปลาต้มซีอิ๋ว+ข้าวผัดแซลมอน,Special Chachoengsao,3237,25,2026-05
+Special005,155.15,หัวปลาแซลมอนต้มซีอิ๊ว+ข้าวผัดแซลมอลลดทั้งวั้น 50 %,Special,9715,67,2026-05
+A1150-060,155.12,(A) AUSTRALIA BEEF  SPECIAL TRUFFLE OIL SUSHI (1 Pcs),A LA CARTE,0,0,
+A0012,154.76,(A) หมูย่างเกลือ,Oshinei STEAK,40208,9698,2026-05
+A550-163,154.23,(A) TORI,A LA CARTE,0,0,
+A0014,154.14,(A) หมูสไลด์ย่างซีอี๊ว (10 ชิ้น),Oshinei STEAK,250515,30813,2026-05
+A550-164,153.59,(A) IKA,A LA CARTE,0,0,
+ASPC-NKS-015,151.18,โซจู รส โยเกิร์ต,A LA CARTE,0,0,
+ASPC-NKS-013,150.75,โซจู รส องุ่น,A LA CARTE,0,0,
+BRR017,150,(D) ข้าวห่อสาหร่ายหนังปลาแซลมอนทอดกรอบ,Special DELIVERY,21028,150,2026-05
+UBN012,149.81,(A) ชุดสเต็กไก่,Special UBN,8680,62,2026-04
+A550-045,148.92,(A) KATSU DON,A LA CARTE,54953,392,2026-05
+A0096,148.47,(A) ไก่ (15 ชิ้น),Oshinei SHABU,4718,34,2026-05
+ASPC-013,148.36,(A) IKA SHIOKARA YAMTHAI,A LA CARTE,0,0,
+A550-166,147.91,(A) BUTA,A LA CARTE,0,0,
+SS-39,147.77,SALMON KAMA NITSUKE SET A,Oshinei SASHIMI,0,0,
+A550-123,147.69,(A) MIXED VEGETABLE,A LA CARTE,0,0,
+A0145,146.81,(A) ข้าวหน้าหมูทอด,Oshinei DON,224610,1639,2026-05
+A0103,146.8,(A) สโมคเบคอน (15 ชิ้น),Oshinei SHABU,2744,20,2026-05
+ASPC-CBR-025,146.08,เฟเดอร์บอย,A LA CARTE,0,0,
+ABVG-059,146.06,GEON-BAE SOJU GREEN GRAPE (KK),Oshinei SOFT DRINK,0,0,
+ABVG-060,146.06,GEON-BAE SOJU STRAWBERRY (KK),Oshinei SOFT DRINK,0,0,
+ABVG-061,146.04,GEON-BAE SOJU YOGURT (KK),Oshinei SOFT DRINK,0,0,
+ABVG-031,146,TAEYANG SOJU GRAPE,Oshinei SOFT DRINK,0,0,
+ABVG-032,146,TAEYANG SOJU YOGHURT,Oshinei SOFT DRINK,0,0,
+ABVG-033,146,TAEYANG SOJU STRAWBERRY,Oshinei SOFT DRINK,0,0,
+ABVG-034,146,TAEYANG SOJU PEACH,Oshinei SOFT DRINK,0,0,
+ABVG-077,146,SAPPORO BEER 500 ML (SSK),Oshinei SOFT DRINK,0,0,
+ASPC-NKS-014,146,โซจู รส สตอเบอรรี่,A LA CARTE,0,0,
+PM042,146,(A)Akami Sa,A LA CARTE,0,0,
+ABVG-052,145.7,HOEGAARDEN ROSE (500 ML) (KK),Oshinei SOFT DRINK,0,0,
+A0099,145.66,(A) หมูสไลด์ (15 ชิ้น),Oshinei SHABU,80318,590,2026-05
+SCC0009,145,(D)ข้าวห่อสาหร่ายไส้หนังปลาแซลมอนทอดกรอบ 1แถม1,Special Chachoengsao,22224,164,2026-05
+BRR019,145,(D) ซาบะดองซาซิมิ,Special DELIVERY,136,1,2025-09
+ASPC-UBN-041,145,(A) หัวปลาแซลมอนย่างเกลือ+ข้าวสวย,A LA CARTE,0,0,
+ABVG-018,144.98,SINGHA L,Oshinei SOFT DRINK,0,0,
+ABVG-054,144.83,HOEGAARDEN WITBIER (500 ML) (KK),Oshinei SOFT DRINK,0,0,
+S-113,144.76,SALMON SKIN ROLL 1 FREE 1,Oshinei SASHIMI,0,0,
+ASPC-033,144.18,(A) KAKI AGE ROLL,A LA CARTE,0,0,
+RY001,143.01,(D) ข้าวหน้าปลาดิบรวมหั่นเต๋า 30%,Special DELIVERY,95961,718,2026-05
+ASPC-RYG-061,143.01,Bara Chirashi Don  ลด 30%,A LA CARTE,0,0,
+ASPC-030,142.84,(A) TOFU MISOYAKI,A LA CARTE,0,0,
+A550-173,142.5,(A) CRISPY SKIN YUMTHAI,A LA CARTE,0,0,
+ASPC-UBN-040,142.2,(A) หัวปลาแซลมอนซีอิ๊วต้ม+ข้าวสวย,A LA CARTE,0,0,
+A550-073,141.54,(A) DORY TERI YAKI,A LA CARTE,0,0,
+A0097,141.3,(A) ปลาหมึกบั้ง (15 ชิ้น ),Oshinei SHABU,19677,149,2026-05
+A550-048,140.95,(A) CRUNCHY ROLL,A LA CARTE,64112,490,2026-05
+A1150-016,140.81,(A) MINI IKURA DON,A LA CARTE,0,0,
+A550-054,140.7,(A) CRUNCHY SPICY SALMON ROLL,Oshinei SASHIMI,0,0,
+A0194,140.56,(A) ยากิโซบะ ซีฟู้ด ลด 40%,Oshinei SOBA,27324,208,2026-05
+A290-011,140.49,(A) KANI KAMABOKO YAMTHAI,A LA CARTE,0,0,
+A0093,140.44,(A) ชุดผักรวม,Oshinei SHABU,41608,283716,2026-05
+A0048,140.32,(A) ข้าวห่อสาหร่ายหนังปลาแซลมอนทอดกรอบ (5 ชิ้น ),Oshinei ROLL,222548,1697,2026-05
+BV0003,140.19,(A) เบียร์สิงห์ขวดใหญ่,Oshinei ALCOHOL,1325900,10120,2026-05
+A290-009,140.17,(A) SALMON SKIN ROLL,Oshinei SASHIMI,0,0,
+EVE-028,140,SALMON YAMTHAI (100 G.),Oshinei SASHIMI,0,0,
+EVE-029,140,SALMON ANCHOVY (100 G.),Oshinei SASHIMI,0,0,
+A550-111,139.61,(A) TAKOYAKI,A LA CARTE,0,0,
+A290-003C,139.43,(A) DORY SHIO YAKI,A LA CARTE,0,0,
+BV0053,139.11,(A) คอมเบโซจู รสยาคูลท์,Oshinei ALCOHOL,11050,85,2026-05
+FB500-2,139.1,ค่าปรับบุฟเฟ่ต์ 500++ (100 กรัม),BUFFET,23660,182,2026-02
+BV0052,139.1,(A) คอมเบโซจู รสสตอเบอรี่,Oshinei ALCOHOL,15340,118,2026-05
+BV0051,139.1,(A) คอมเบโซจู รสองุ่นขาว,Oshinei ALCOHOL,14430,111,2026-05
+BV0048,139.1,(A) ฮูการ์เด้น โรเซ่ (กระป๋อง),Oshinei ALCOHOL,6240,48,2026-05
+BV0049,139.1,(A) ฮูการ์เด้น วิทเบียร์ (กระป๋อง),Oshinei ALCOHOL,2600,20,2026-05
+AYT-SP-0015,139,ข้าวหน้าไข่ปลาแซลมอน,A la carte 1150,260,2,2026-05
+MDH0028,139,(A) ผักรวมซูชิเซท,Special MDH,260,2,2026-01
+SCC0036,139,(A) แทยัง โซจู พีช,Special Chachoengsao,130,1,2025-11
+UBN006,138.18,(A) ชุดปลาซาบะย่าง,Special UBN,11622,90,2026-05
+A0172,137.56,(A) ปลาแซลมอนคลุกหอมห่อสาหร่ายด้วยมือ,Oshinei SASHIMI,5785,45,2026-05
+EX0040,137.54,(EX) เต้าหู้ญี่ปุ่นย่างราดด้วยชิลามิโซะ,Oshinei VEGETARIAN,17225,134,2026-05
+Y001,137.47,(A) ยำกุ้งขาวน้ำปลาร้า,Oshinei YUM,3976,119856,2026-05
+A0125,137.38,(A) หนังปลาแซลมอนทอดกรอบยำไทย,Oshinei YUM,1027,34830,2026-05
+A1150-015,137.16,(A) SALMON TE,Oshinei SASHIMI,2600,23,2026-05
+EX0021,137.03,(EX) ข้าวปั้นหน้าไข่ปลาแซลมอน (1 ชิ้น),Oshinei SUSHI,60320,471,2026-05
+EX0043,136.62,(EX) ข้าวห่อสาหร่ายไส้ผักรวมทอดเทมปุระ (5 ชิ้น),Oshinei VEGETARIAN,12896,101,2026-05
+A0018,136.6,(A) ปลาดอรี่ย่างซีอิ๊ว,Oshinei STEAK,26056,204,2026-05
+A0052,136.46,(A) ข้าวห่อสาหร่ายครั้นชี่สไปซี่แซลมอน (5 ชิ้น ),Oshinei ROLL,70142,550,2026-05
+A0195,136.4,(A) เทมปุระรวม (ผัก 3 ย่าง กุ้ง 2 ตัว) ลด 25%,Oshinei APPETIZER,29958,235,2026-05
+A0049,135.83,(A) ครั้นชี่โรล (5 ชิ้น),Oshinei ROLL,462204,3641,2026-05
+A0017,135.82,(A) ปลาดอรี่ย่างเกลือ,Oshinei STEAK,32995,259,2026-05
+ASPC-001,135.82,(A) IKURA SUSHI,A LA CARTE,0,0,
+A0122,135.69,(A) ขนมครกญี่ปุ่น (5 ชิ้น),Oshinei APPETIZER,193512,1526,2026-05
+ASPC-UDN-006,135,Kuzukiri,A LA CARTE,0,0,
+A0126,134.89,(A) ยำไทยปูอัด,Oshinei YUM,68452,43974,2026-05
+CP016,134.8,ค่าสมัคร  Member,Other,0,0,
+ASPC-BRM-002,134.67,(A) ปลาเงินทอดกรอบ,A LA CARTE,0,0,
+Special0011,133.76,แซลมอน คัตสีดัง ลดวัน 50 %,Special,12250,98,2026-05
+A0042,132.66,(A) ปลาฮามาจิ ซาชิมิ (1ชิ้น),Oshinei SASHIMI,137001,1105,2026-05
+ASPC-KR-003,132,UNI SUSHI (1 Pcs.),A LA CARTE,0,0,
+S-054,132,Shime Saba 3 Pcs,Oshinei SASHIMI,0,0,
+A550-084,131.97,(A) SABA STEAK,Oshinei STEAK,0,0,
+A550-175,131.48,(A) SEAFOOD YUMTHAI,A LA CARTE,0,0,
+ASPC-KR2L-005,131,(A) NAMA KAKI SEAFOOD SAUCE 5 PCS (S10),A LA CARTE,0,0,
+A1150-DS1,130.99,MELON,A LA CARTE,0,0,
+ASPC-057,130.93,MON KATSU DON,A LA CARTE,0,0,
+SPCB038,130,ข้าวห่อสาหร่ายไส้ผักรวมทอดเทมปุระ,Special CBI,243,2,2025-11
+S-045,129,SABA SHIO YAKI DON,Oshinei SASHIMI,0,0,
+A0203,128.5,(A) คาโมะกราส์ซอสมันปู,Oshinei SUSHI,480,14158,2026-05
+A0202,128.5,(A) ซูชิปลาไหลญี่ปุ่นท็อปคาโมะฟัวกราส์,Oshinei SUSHI,240,2,2026-02
+A0127,128.49,(A) ยำไทยซีฟู้ด,Oshinei YUM,9607,65481,2026-05
+SCC0005,128.38,(S) แฮนโรลเนื้อวากิว+ตับห่าน,Special Chachoengsao,1920,16,2026-05
+A0173,128.33,(A) ข้าวหน้าปลาซาบะย่างเกลือ,Oshinei DON,360,3,2026-03
+A550-041,128.25,(A) SABA TERI YAKI DON,A LA CARTE,190365,1579,2026-05
+BV0041,128.13,(A) เมล่อน,Oshinei DESSERT,42270,353,2026-05
+ALOTS00004,128,ไข่ตุ๋นญี่ปุ่น,(Renshin)OTSUMAMI,120,1,2026-03
+A550-133,127.49,(A) NEGI TORO IKURA GUNKAN,A LA CARTE,0,0,
+Special006,127.33,หัวปลาแซลมอนต้มซีอิ๊ว+ข้าวผัดแซลมอล Flash Sale 59%,Special,2499,21,2025-11
+ASPC-UBN-007,126.33,ชุดไก่ย่าง,A LA CARTE,0,0,
+A0005,125.31,(A) สเต็กปลาซาบะ,Oshinei STEAK,51286,11990,2026-05
+A0182,125.01,(A) ครั้นชี่โรล ลด 10% (5 ชิ้น),Oshinei ROLL,64022,548,2026-05
+A0144,124.99,(A) ข้าวหน้าปลาซาบะย่างซีอิ้ว,Oshinei DON,449483,3848,2026-05
+SCC0004,124.91,(S) แฮนโรลปลาไหล+ตับห่าน,Special Chachoengsao,2568,22,2026-03
+A550-182,124.53,FOIE GARS UNEGI IKURA HAND  ROLL (1 Pcs),A LA CARTE,0,0,
+A550-177,124.05,(A)SPICY SHRIMP SALAD WITH FERMENTED FISH,A LA CARTE,0,0,
+A0090,123.48,(A) ข้าวปั้นหน้าโอโทโร่สับใส่หอมและไข่ปลาแซลมอน (1 ชิ้น),Oshinei SUSHI,29658,257,2026-05
+A1150-067,123.07,(A) HAMACHI SASHIMI,Oshinei SASHIMI,0,0,
+A550-181,122.43,FOIE GARS IKURA WAGYU HAND  ROLL (1 Pcs),A LA CARTE,0,0,
+RY003,122,(D) หัวปลาต้มซีอิ๊ว พิเศษ 40%,Special DELIVERY,14822,130,2026-05
+S-154,122,SALMON KAMA NITSUKE (RYN),Oshinei SASHIMI,0,0,
+ASPC-012,120.75,(A) IKA SHIOKARA,A LA CARTE,0,0,
+T00004,120.36,ป๊อปแอนด์โรล ไส้สไปซี่แซลมอนราดซอสสไปซี่,Take Away,24184,215,2026-04
+SCC0024,120,(T)หนังปลาแซลมอนทอดกรอบ2แถม1,Special Chachoengsao,112,1,2026-01
+PLK0004,118.25,(A) มินิข้าวหน้าไข่ปลาแซลมอน,Special PLK,1326,12,2026-05
+SCC0056,117.75,(FS) แซลมอนอาเกะ มากิ สไปซีซอส,Special Chachoengsao,3553,35,2026-01
+MDH0017,117.7,(A) ข้าวปั้นหน้าตับห่าน,Special MDH,134910,1258,2026-05
+Special0013,117.7,แซลมอล อาเกะมาสไปซี่ซอส ลดทั้งวัน 50 %,Special,54560,496,2026-05
+A290-002A,117.58,(A) TORI STEAK,Oshinei STEAK,0,0,
+A0184,117.53,(A) สลัดหนังปลาแซลมอนทอดกรอบ ลด 50%,Oshinei SALAD,22847,208,2026-05
+SCC0050,116.6,(FS) แซลมอนคัตสึดัง,Special Chachoengsao,8795,71,2026-05
+SCC0001,116.47,(S) ข้าวปั้นหน้าตับห่าน1แถม1,Special Chachoengsao,31675,291,2026-05
+EX0023,116.31,(EX) ปลาร้าญี่ปุ่น,Oshinei APPETIZER,1414,13,2026-05
+A0207,116,(A) ซูชิคาโมะฟัวกราส์,Oshinei SUSHI,759,7,2026-03
+A0204,116,(A) ซูชิเนื้อวากิวท็อปคาโมะกราส์,Oshinei SUSHI,108,6728,2026-05
+KORAT005,115.59,แซลมอน คัตสึด้ง Flash Sale 56%,Special Korat,1837,17,2025-11
+A0188,115.32,(A) สเต็กปลาซาบะ ลด 10%,Oshinei STEAK,12825,119,2026-05
+ASPC-056,114.8,SALMON AGE MAKI SPICY SAUCE,Oshinei SASHIMI,0,0,
+EVUBN-01-03,114.78,CALIFONIA MAKI (5คำ),A LA CARTE,0,0,
+Special0012,114.73,หัวปลาแซลมอน ต้มซีอิ๊ว Flash Sale 59%,Special,3968,37,2025-11
+A0001,114.42,(A) สเต็กไก่,Oshinei STEAK,38605,8001,2026-05
+A1150-010,114.42,(A) FOIE GRAS SUSHI,A LA CARTE,0,0,
+BRR005,113.41,(A) ข้าวปั้นตับห่าน,Special BRR,82676,780,2026-05
+C024,112.37,ค่าเปิดขวด 100,A LA CARTE,0,0,
+OT0007,112.35,ค่าปรับบุฟเฟ่ต์ 350++ (100 กรัม),Oshinei other,13270,133,2026-05
+ABVG-057,112.34,LEO BEER (620 ML) (KK),Oshinei SOFT DRINK,0,0,
+ASPC-CBR-021,112.34,เบียร์ช้างคลาสสิค,A LA CARTE,0,0,
+ABVG-100,112.33,LEO BEER (620 ML) (NKSW),Oshinei SOFT DRINK,0,0,
+ASPC-CBR-022,112.21,เบียร์ช้างโครว์บรูว์,A LA CARTE,0,0,
+SS-19,112,BENTO SET-I,A LA CARTE,0,0,
+ABVG-086,110.62,โซจู ลิ้นจี่ (SSK),Oshinei SOFT DRINK,0,0,
+ASPC-031,110.06,(A) TOFU STEAK,Oshinei STEAK,0,0,
+ASPC-029,110.01,(A) HIYAYAKO,A LA CARTE,0,0,
+aspc-brm-01,109.71,โรลหนังแลาแซลมอนทอดกรอบ,A LA CARTE,0,0,
+A550-103,107.53,(A) CHICKEN WINGS,A LA CARTE,0,0,
+BV0047,107,(A) เบียร์ลีโอขวดใหญ่,Oshinei ALCOHOL,12100,121,2026-05
+NPT003,107,(B) เบียร์ รีฟิล (บุฟเฟต์ 590),Oshinei ALCOHOL,5900,59,2026-03
+OT0018,107,"ค่าเปิดเหล้า,ไวน์,เบียร์(100)",Oshinei other,4600,46,2026-05
+BRR025,107,(D) ข้าวปั้นหน้าแซลมอนเบิร์นท็อปด้วยปลาไหล,Special DELIVERY,1300,13,2026-05
+A0178,107,(A) แมงกะพรุนหัวกระสุนน้ำปลาร้า (1 ตัว),Oshinei YUM,700,7,2025-11
+A0179,107,(A) แมงกะพรุนหัวกระสุน น้ำจิ้มซีฟู้ด (1 ตัว),Oshinei YUM,700,7,2025-11
+NPT005,107,(A) เบียร์สด Asahi แก้ว (320ml.),Oshinei ALCOHOL,100,1,2026-01
+A550-102,107,(A) FRIED CHICKEN,A LA CARTE,0,0,
+ASPC-UBN-002,107,ชุดหมูทอดทงคัตสึ,A LA CARTE,0,0,
+A550-072A,106.29,(A) SABA SHIO YAKI,A LA CARTE,0,0,
+A290-018,106.22,(A) CURRY,A LA CARTE,0,0,
+EV0225-03,106.18,Salmon Kama Netsuke 99+,Oshinei SASHIMI,0,0,
+A0192,105.95,(A) ยากิโซบะ ไก่ ลด 55%,Oshinei SOBA,1881,19,2026-04
+A550-072B,105.92,(A) SABA TERI YAKI,A LA CARTE,0,0,
+BRR011,105.88,หัวปลาแซลมอนต้มซีอิ้ว แลกซื้อ 99 บาท,Special BRR,792,8,2025-07
+Special0014,105.62,แซลมอล อาเกะมาสไปซี่ซอส Flash Sale55 %,Special,4935,50,2026-01
+EX0039,105.61,(EX) เต้าหู้ญี่ปุ่นเย็น,Oshinei VEGETARIAN,12535,127,2026-05
+A0187,105.58,(A) สเต็กไก่ ลด 10%,Oshinei STEAK,6118,62,2026-05
+A0193,105.4,(A) ยากิโซบะ หมู ลด 55%,Oshinei SOBA,7880,80,2026-05
+A550-100,105.05,(A) KOROKKE,A LA CARTE,0,0,
+MDH0026,105.04,(A) ผักรวมโรล,Special MDH,2356,24,2026-04
+S-081,105,โปรโมชั่น ลด30% SALMON SKIN ROLL,Oshinei SASHIMI,0,0,
+A550-108,104.92,(A) KAKIAGE,A LA CARTE,0,0,
+A550-105,104.47,(A) YASAI TEMPURA,A LA CARTE,0,0,
+A0118,104.44,(A) มันบดทอด (2 ชิ้น),Oshinei APPETIZER,23915,35605,2026-05
+A0121,104.42,(A) ผักชุบแป้งทอดเทมปุระ (5 ชิ้น),Oshinei APPETIZER,14540,149,2026-05
+A1150-062,104.39,(A) EBIKO DON (Mini),A LA CARTE,0,0,
+EX0041,104.16,(EX) สเต็กเต้าหู้ญี่ปุ่น,Oshinei VEGETARIAN,11000,113,2026-05
+A0019,103.54,(A) ปลาซาบะย่างซีอิ๊ว,Oshinei STEAK,157730,34426,2026-05
+ASPC-UBN-042,103.5,(A) หัวปลาแซลมอนย่างซีอิ๊ว+ข้าวสวย,A LA CARTE,0,0,
+A0120,103.38,(A) ปีกไก่ทอด (5 ชิ้น),Oshinei APPETIZER,63479,657,2026-05
+A1150-051,103,(A) AUTRALIA BEEF SUSHI  (1 Pcs),A LA CARTE,0,0,
+A1150-065,102.91,(A) TAKO WASABI,A LA CARTE,0,0,
+A0113,102.89,(A) ข้าวผัดปลาแซลมอน,Oshinei APPETIZER,298946,75545,2026-05
+A550-101,102.79,(A) FRENCH FRIES CHEESE,A LA CARTE,0,0,
+A550-082,102.78,(A)SALMON KAMA NITSUKE,Oshinei SASHIMI,19826,74,2026-05
+EX0020,102.55,(EX) ข้าวปั้นหน้าปลาแซลมอนเบิร์นวางทับด้วยตับห่าน (1 ชิ้น),Oshinei SUSHI,6325,66,2026-05
+A0020,102.52,(A) ปลาซาบะย่างเกลือ,Oshinei STEAK,74545,16625,2026-05
+AYT-SP-0036,102,แกงกะหรี่,A la carte 1150,95,1,2026-05
+A1150-046,101.75,(A) BOTAN ARGENTINA ABURI CHEESE SUSHI,A LA CARTE,0,0,
+A0191,101.65,(A) หัวปลาแซลมอนย่างเกลือ ลด 65%,Oshinei STEAK,10640,112,2026-05
+A0196,101.65,(A) หัวปลาแซลมอนย่างซีอิ๊ว ลด 65%,Oshinei STEAK,5890,62,2026-05
+SCC0054,101.48,(FS) หัวปลาต้มซีอิ้ว,Special Chachoengsao,18941,299,2026-05
+A0190,101.45,(A) หัวปลาแซลมอนต้มซีอิ๊ว ลด 65%,Oshinei STEAK,70918,748,2026-05
+A0183,101.04,(A) สลัดปลาเงินทอดกรอบ ลด 50%,Oshinei SALAD,52127,552,2026-05
+EVT0168-07,100.97,(A) ยูเกะญี่ปุ่น,A LA CARTE,0,37483,2026-05
+A550-110,100.82,(A) CALAMARI,A LA CARTE,0,0,
+EVT0168-06,100.75,(A) ISAAN NIKU YAKKE,A LA CARTE,0,0,
+EX0037,100.65,(EX) ผักรวมทอดเทมปุระ,Oshinei VEGETARIAN,4327,46,2026-05
+ABVG-008,100.52,BLENDER GREEN TEA,Oshinei SOFT DRINK,0,0,
+A0214,100.47,(A)ข้าวปั้นหน้าปลาไหลญี่ปุ่นและอูนิ(1ชิ้น),Oshinei SUSHI,1596,31150,2026-05
+A0136,100,(A) ข้าวหน้าปลาดิบรวม,Oshinei DON,438762,1615,2026-05
+LPB007,100,(A) ข้าวหน้าปลาไหล,Special LPB,242100,854,2026-05
+PM0020,100,(A) ข้าวหน้าหมูสไลด์,UBN BADMINTON,654,7,2025-11
+SPCB037,100,ผักรวมทอดเทมปุระ,Special CBI,280,3,2025-12
+EVT001,100,EVENT 100,A LA CARTE,0,0,
+EVUBN-01-04,100,SALMONSKIN ROLL (5คำ),Oshinei SASHIMI,0,0,
+EVUBN-01-05,100,SPICY SALMON ROLL (5คำ),Oshinei SASHIMI,0,0,
+EVUBN-01-06,100,SALMON SUSHI (3คำ),Oshinei SASHIMI,0,0,
+EVUBN-01-07,100,SALMON SUSHI (1คำ)+CALIFORNIA(2คำ)+KANI SUSHI(2คำ),Oshinei SASHIMI,0,0,
+T00003,99.91,ป๊อปแอนด์โรล หนังปลาแซลมอนทอดกรอบราดซอสสไปซี่,Take Away,14940,160,2026-04
+A0119,99.81,(A) เฟรนช์ฟรายส์ราดชีส,Oshinei APPETIZER,36566,71078,2026-05
+A0045,99.55,(A) หนวดปลาหมึกดองวาซาบิ,Oshinei SASHIMI,100942,1085,2026-05
+A0047,99.42,(A) แคลิฟอเนีย มากิ (5 ชิ้น ),Oshinei ROLL,373695,4022,2026-05
+A0109,99.08,(A) หมูคลุกเกล็ดขนมปังทอด,Oshinei APPETIZER,46669,504,2026-05
+A290-008,99.07,(A) CALIFORNIA MAKI,A LA CARTE,159835,1677,2026-05
+EVE-045,99,ADD SALMON (100 G.),Oshinei SASHIMI,0,0,
+A550-172,98.91,(A) CRISPY SKIN,A LA CARTE,0,0,
+A0124,98.73,(A) ปลาหมึกทอด (5 ชิ้น),Oshinei APPETIZER,14302,46567,2026-05
+UBN004,97.89,(A) วาซาบิดอง,Special UBN,5580,61,2026-05
+A550-099,96.78,(A) TONKATSU,A LA CARTE,0,0,
+A0084,96.56,(A) ข้าวปั้นหน้ากุ้งอาร์เจนติน่าเบิร์นราดด้วยชีส (1 ชิ้น),Oshinei SUSHI,5776,64,2026-05
+BV0014,96.2,(A) ชาเขียวปั่น,Oshinei SOFT DRINK,67518,751,2026-05
+A550-174,96,(A)CRISPY SPICY SALMON,Oshinei SASHIMI,0,0,
+A0186,95.99,(A) ปลาซาบะย่างซีอิ๊ว 10%,Oshinei STEAK,25029,279,2026-05
+A0185,95.89,(A) ปลาซาบะย่างเกลือ ลด 10%,Oshinei STEAK,10395,116,2026-05
+PM0001,94.96,แซลมอน 100 กรัม,Promotion,4970,56,2025-08
+KORAT031,94.29,"(B) แซลมอน ซาซิมิ (299, 100 g)",Oshinei SASHIMI,20003,227,2025-12
+A0116,94.12,(A) หนังปลาแซลมอนทอดกรอบ,Oshinei APPETIZER,3519,65779,2026-05
+ASPC-045,93.15,(A) ENGAWA SHIO LEMON SUSHI,A LA CARTE,0,0,
+A550-029,92.8,(A) UNAGI SUSHI,A LA CARTE,0,0,
+A290-002B,92.56,(A) TORI TERI YAKI,A LA CARTE,0,0,
+ASPC-050,92.28,(A) KITSU MI WASABI,A LA CARTE,0,0,
+A290-002C,92.21,(A) TORI SHIO YAKI,A LA CARTE,0,0,
+A0016,92.19,(A) ไก่ย่างซีอิ้ว,Oshinei STEAK,25418,6089,2026-05
+A0015,92.08,(A) ไก่ย่างเกลือ,Oshinei STEAK,27538,320,2026-05
+A550-028,91.52,(A) SALMON ENGAWA ABURI SUSHI,Oshinei SASHIMI,0,0,
+MDH0033,91.5,(A) เห็ดย่างรวมเจ,Special MDH,171,2,2026-04
+T00001,91.1,ป๊อปแอนด์โรล แคลิฟอร์เนียมากิ,Take Away,7322,86,2026-04
+DUR-003,91,Volcano Durian Tempura Maki Roll,A LA CARTE,0,0,
+A550-024,90.38,(A) SALMON UNAGI ABURI SUSHI,Oshinei SASHIMI,0,0,
+T00002,90.32,ป๊อปแอนด์โรล ปูอัดโรล ราดซอสมันปู,Take Away,3207,38,2026-04
+BRR045,90,(D) ยำสาหร่าย,Special DELIVERY,1935,36,2026-05
+A0075,89.39,(A) ข้าวปั้นหน้าปลาแซลมอนเบิร์นวางด้วยปลาไหลไข่กุ้ง (1 ชิ้น),Oshinei SUSHI,126569,92480,2026-05
+ASPC-042,89.34,(A) ENGAWA PONZU SUSHI,A LA CARTE,0,0,
+A0087,89.19,(A) ข้าวปั้นหน้าปลาแซลมอนเบิร์น วางด้วยครีบปลาตาเดียว (1 ชิ้น),Oshinei SUSHI,68098,817,2026-05
+A0070,88.77,(A) ข้าวปั้นหน้าปลาไหล (1 ชิ้น),Oshinei SUSHI,214136,2581,2026-05
+ABVG-010,88.37,BLENDER LEMON,Oshinei SOFT DRINK,0,0,
+ABVG-014,88.35,BLENDER MELON,Oshinei SOFT DRINK,0,0,
+ABVG-013,88.21,BLENDER WATERMELON,Oshinei SOFT DRINK,0,0,
+A0213,88,(A)ข้าวปั้นหน้าปลาไหลญี่ปุ่นและเอบิโกะ(1ชิ้น),Oshinei SUSHI,493,10890,2026-05
+B0031,87.93734,(B) ปลาไหลย่างซีอิ๊ว (1ตัว)(Buffet),Oshinei STEAK,0,79131,2026-05
+1150-011,87.93734,UNAGI KABA YAKI  (1 Pcs),A LA CARTE,0,0,
+B0142,87.90752614,(B) ข้าวหน้าปลาแซลมอนย่างซีอิ้ว(Buffet),Oshinei DON,0,5128,2026-05
+A0089,87.7,(A) ข้าวปั้นหน้าปลาฮามาจิเบิร์นราดด้วยซอสมิโซะข้าว (1 ชิ้น),Oshinei SUSHI,14671,179,2026-05
+A1150-048,87.35,(A) BOTAN ARGENTINA ABURI TERI SUSHI  (1 Pcs),A LA CARTE,0,0,
+A0085,87.02,(A) ข้าวปั้นหน้ากุ้งอาร์เจนติน่าเบิร์นแล้วราดด้วยซอสเทอริ (1ชิ้น),Oshinei SUSHI,14476,178,2026-05
+A1150-052,86.9,(A) HAMACHI SAIKYO ABURI SUSHI  (1 Pcs),A LA CARTE,0,0,
+MDH0031,86,(A) ข้าวผัดเจ,Special MDH,80,1,2025-10
+B0135,85.84091829,(B) ข้าวหน้าปลาดิบรวม(Buffet),Oshinei DON,0,9981,2026-05
+EV1224-01,85.62,SAKEGASHIRA NO GURIRU REMON SOE,Oshinei ALCOHOL,0,0,
+A1150-050,85.23,(A) ENGAWA ABURI SUSHI  (1 Pcs),A LA CARTE,0,0,
+EX0019,84.86,(EX) ข้าวปั้นหน้าครีบปลาตาเดียว (1 ชิ้น),Oshinei SUSHI,35373,446,2026-05
+BV0020,84.51,(A) เมล่อนปั่น,Oshinei SOFT DRINK,169100,2141,2026-05
+BV0019,84.5,(A) แตงโมปั่น,Oshinei SOFT DRINK,782693,9911,2026-05
+BV0016,84.46,(A) มะนาวปั่น,Oshinei SOFT DRINK,95906,1215,2026-05
+A1150-DS5,84.28,FUKUOKA SNOW ICE,A LA CARTE,0,0,
+ABVG-083,82.9,HOFBRAU ORIGINAL LAGER BEER 500 ML (SSK),Oshinei SOFT DRINK,0,0,
+ASPC-048,82.5,(A)Green Salad,A LA CARTE,0,0,
+A0181,81.22,(A) แคลิฟอเนีย มากิ ลด 20% (5 ชิ้น),Oshinei ROLL,51159,674,2026-05
+DUR-002,81,Volcano Durian Lava Roll,A LA CARTE,0,0,
+A290-012,80.69,(A) HIYASHI WAKAME,A LA CARTE,0,0,
+A1150-047,80.57,(A) BOTAN ARGENTINA SUSHI,A LA CARTE,0,0,
+A290-019,80.55,(A) EDAMAME,A LA CARTE,0,0,
+EVUBN-01-10,80,CURRY RICE,A LA CARTE,0,0,
+EVUBN-01-12,80,CALIFONAI DON,A LA CARTE,0,0,
+A1150-049,79.67,(A) HAMACHI SUSHI,A LA CARTE,0,0,
+BV0046,79.07,(A) น้ำแข็งใสฟุกุโอกะ,Oshinei DESSERT,1035,14,2026-03
+EVT0168-09,79,(A) KARUBI USHI CHAHAN,A LA CARTE,0,0,
+A0041,78.86,(A) กุ้งอาเจนติน่าซาชิมิ (1 ชิ้น),Oshinei SASHIMI,88808,1205,2026-05
+A0112,78.79,(A) ถั่วแระญี่ปุ่น,Oshinei APPETIZER,49410,178185,2026-05
+A1150-031,78.28,(A) OYSTER SHOYU,A LA CARTE,0,0,
+A0110,78.24,(A) ยำสาหร่ายสด,Oshinei APPETIZER,140835,339403,2026-05
+DST-005,78.11,ICE - CREAM TWO TONE(79),A LA CARTE,0,0,
+EVT0168-10,77.75,(A) ข้าวผัดมันเนื้อญี่ปุ่น,A LA CARTE,0,0,
+A0086,77.72,(A) ข้าวปั้นหน้ากุ้งอาร์เจนติน่า (1 ชิ้น),Oshinei SUSHI,12349,170,2026-05
+A0088,77.35,(A) ข้าวปั้นหน้าปลาฮามาจิ (1ชิ้น),Oshinei SUSHI,24578,340,2026-05
+B0145,77.17833678,(B) ข้าวหน้ามันปู(Buffet),Oshinei DON,0,87212,2026-05
+DST-006,77.15,ICE - CREAM HOKKAIDO MILK(79),A LA CARTE,0,0,
+MDH0027,77,(A) ผัดผักรวมเจ,Special MDH,72,1,2025-12
+DST-015,75.62,MIZU SHINGEN MOCHI (CCS),A LA CARTE,0,0,
+ASPC-CBR-031,74.53,(A) หัวปลาแซลมอนต้มซีอิ้ว,A LA CARTE,0,0,
+A1150-029,74.25,(A) BOTAN ARGENTINA SASHIMI,Oshinei SASHIMI,0,0,
+ABVG-081,74.18,HOFBRAUSHAUS FREISING DUNKEL EXPORTBIER 500 ML (SSK),Oshinei SOFT DRINK,0,0,
+SCC0032,74,(A) โมจิหยดน้ำ,Special Chachoengsao,69,1,2025-11
+A0216,73.85,(A)แฮนด์โรล ปลาไหลญี่ปุ่นเทมปุระ(1ชิ้น),Oshinei ROLL,1380,7447,2026-05
+ABVG-012,72.59,ORANGE JUICE,Oshinei SOFT DRINK,0,0,
+ABVG-009,71.99,LEMON JUICE,Oshinei SOFT DRINK,0,0,
+A290-022,71.9,(A) SOUP,A LA CARTE,0,0,
+A550-017,71.42,(A) TUNA SPECIAL SUSHI,A LA CARTE,0,0,
+550-125,71.11107794,SALMON (5 Pcs),Oshinei SASHIMI,0,0,
+B0101,71.11107794,(B) แซลมอน ชาบู(5 ชิ้น),Oshinei SHABU,0,52309,2026-05
+ASPC-047,71.05,(A) MISO SOUP,A LA CARTE,0,0,
+A1150-DS4,71.02,KORI AZUKI,A LA CARTE,0,0,
+A550-016,70.84,(A) TUNA SUSHI,A LA CARTE,0,0,
+A550-031,70.77,(A) SALMON CHEESE ABURI,Oshinei SASHIMI,0,0,
+ASPC-034,70.67,(A) TUNA SASHIMI,Oshinei SASHIMI,0,0,
+A550-025,70.55,(A) BEEF SUSHI,A LA CARTE,0,0,
+A550-015,70.32,(A) SALMON ABURI TERI SUSHI,Oshinei SASHIMI,0,0,
+A550-002,70.02,(A) SEARED TUNA SASHIMI,Oshinei SASHIMI,0,0,
+BRR047,70,(D) หอยนางรม น้ำจิ้มซีฟู้ด,Special DELIVERY,3598,55,2026-04
+BRR020,70,(D) แซลมอนซาซิมิ,Special DELIVERY,327,5,2026-02
+A550-004,69.99,(A) TUNA SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+B0140,69.76066499,(B) ข้าวหน้าปลาแซลมอนสด(Buffet),Oshinei DON,0,3117,2026-05
+A550-012,69.7,(A) SALMON SAIKYO ABURI SUSHI,Oshinei SASHIMI,0,0,
+ABVG-011,69.59,LEMON SODA,Oshinei SOFT DRINK,0,0,
+ASPC-021,69.58,(A) CHAWAN MUSHI,A LA CARTE,0,0,
+A0197,69.53,(A) ซูชิเต้าหู้ อิคุระและแซลมอนสับ (1 คำ),Oshinei SUSHI,1235,69811,2026-05
+S-053,69.53,Salmon sashimi 1 Pcs,Oshinei SASHIMI,0,0,
+BV0018,69.52,(A) น้ำส้ม,Oshinei SOFT DRINK,134615,2072,2026-05
+BV0017,69.51,(A) มะนาวโซดา,Oshinei SOFT DRINK,112382,1730,2026-05
+BV0015,69.51,(A) น้ำมะนาว,Oshinei SOFT DRINK,106340,1637,2026-05
+BV0043,69.37,(A) ถั่วแดงเย็น,Oshinei DESSERT,12578,194,2026-05
+A550-013,69.22,(A) SALMON CHEESE ABURI SUSHI,Oshinei SASHIMI,0,0,
+KORAT006,68.7,(A) ซุปมิโซะ,Special Korat,119091,1867,2026-05
+A0114,68.51,(A) ซุปใส,Oshinei APPETIZER,120380,446737,2026-05
+B0329,68.2,(B) สเต็กเนื้อคารูบิหั่นเต๋า,Oshinei STEAK,0,272,2026-05
+A290-021,68.11,(A) SALMON CHAHAN,Oshinei SASHIMI,43787,442,2026-05
+A0037,68.11,(A) ปลาทูน่าพริกไทย ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,39146,316698,2026-05
+A0062,68.07,(A) ข้าวปั้นหน้าปลาแซลมอนเบิร์นใส่ชีส (1 ชิ้น),Oshinei SUSHI,159032,191683,2026-05
+A0038,67.99,(A) ทูน่า ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,247871,1106038,2026-05
+A0066,67.82,(A) ข้าวปั้นหน้าเนื้อสไลด์ (1 ชิ้น),Oshinei SUSHI,39553,51877,2026-05
+A0076,67.72,(A) ข้าวปั้นหน้าปลาทูน่า (1 ชิ้น),Oshinei SUSHI,126958,44107,2026-05
+A0078,67.61,(A) แซลมอนเบิร์นใส่ชีส (1 ชิ้น),Oshinei SUSHI,59963,180995,2026-05
+EX0025,67.57,(EX) ไข่ตุ๋น,Oshinei APPETIZER,26774,424,2026-05
+A0064,67.54,(A) ข้าวปั้นหน้าปลาแซลมอนราดซอสเทอริยากิ (1 ชิ้น),Oshinei SUSHI,146884,81149,2026-05
+A0073,67.51,(A) ข้าวปั้นหน้าปลาแซลมอนเบิร์นใส่ซอสมิโซะข้าว (1 ชิ้น),Oshinei SUSHI,114017,1807,2026-05
+DUR-007,67.41,ทุเรียนไม่อั้น,A LA CARTE,14160,236,2025-09
+BRR044,67,(D) ไข่หวาน,Special DELIVERY,2505,40,2026-05
+ASPC-UBN-026,67,Crab sticks,A LA CARTE,0,0,
+ITEMSET-011,66.92,มิโซะซุป,Oshinei ITEMSET,3315,53,2026-03
+B0030,66.84853823,(B) สเต็กเนื้อออสเตรเลีย 100 ก.(Buffet),Oshinei STEAK,0,33278,2026-05
+1150-001,66.84853823,WAGYU STEAK 200 g.,Oshinei STEAK,0,0,
+A550-061,66.09,(A) EBIKO HAND ROLL (1 Pcs),A LA CARTE,0,0,
+A550-064,65.5,(A) SALMON TOBIKO HAND ROLL (1 Pcs),Oshinei SASHIMI,0,0,
+A550-072,65.35,(A) UNAGI HAND ROLL (1 Pcs),A LA CARTE,0,0,
+BRR024,65,(D) ข้าวปั้นหน้าแซลมอนเบิร์น,Special DELIVERY,7411,122,2026-04
+BRR023,65,(D) ข้าวปั้นหน้าแซลมอนสด,Special DELIVERY,5042,83,2026-05
+A0025,64.88,(A) หัวปลาแซลมอนย่างเกลือ,Oshinei STEAK,45895,12914,2026-05
+ASPC-CBR-030,64.22,(A) หัวปลาแซลมอนย่างซีอิ้ว,A LA CARTE,0,0,
+A0217,64.19,(A)ปลาไหลญี่ปุ่นเสียบไม้ย่าง(1ชิ้น),Oshinei STEAK,2220,60869,2026-05
+550-136,64.01396267,THAI FRENCH SAIKORO STEAK (150g.),Oshinei STEAK,0,0,
+A550-070,63.14,(A) WAGYU HAND ROLL (1 Pcs),A LA CARTE,0,0,
+A0215,63.06,(A)แฮนด์โรล ปลาไหลญี่ปุ่น(1ชิ้น),Oshinei ROLL,5068,27209,2026-05
+A0060,62.5,(A) ข้าวห่อสาหร่ายไข่กุ้ง (1 ชิ้น),Oshinei ROLL,15420,99297,2026-05
+A550-069,62.48,(A) EBI TEMPURA HAND ROLL (1 Pcs),A LA CARTE,0,0,
+A0059,62.09,(A) ข้าวห่อสาหร่ายแซลมอนและไข่กุ้ง (1 ชิ้น),Oshinei ROLL,27040,174989,2026-05
+KORAT028,62,(B) ถั่วแดงเย็น (299),Oshinei DESSERT,116,2,2025-09
+DUR-001,62,Volcano Durian Onigiri,A LA CARTE,0,0,
+A0056,61.86,(A) ข้าวห่อสาหร่ายวากิวและไข่ปลาแซลมอน (1 ชิ้น),Oshinei ROLL,22488,145983,2026-05
+550-104,61.66067603,HOKKAIDO HOTATE STEAK (5 Pcs),Oshinei STEAK,0,0,
+A0058,61.58,(A) ข้าวห่อสาหร่ายกุ้งเทมปุระ (1 ชิ้น),Oshinei ROLL,17957,81595,2026-05
+A0057,61.57,(A) ข้าวห่อสาหร่ายปลาไหลย่าง (1 ชิ้น),Oshinei ROLL,24512,232751,2026-05
+ASPC-UBN-043,61.29,(A) ข้าวผัดมันเนื้อ,A LA CARTE,401,24437,2026-05
+P0008,61.17823392,(B) ข้าวห่อสาหร่ายตับห่าน (3 ชิ้น)(Buffet),Oshinei ROLL,0,364,2026-05
+ABVG-007,60.74,SWEET GREEN TEA,Oshinei SOFT DRINK,0,0,
+A550-011,60.61,(A) SALMON SUSHI,Oshinei SASHIMI,0,0,
+A550-027,60.11,(A) BEEF TERI SPECIALS SUSHI,A LA CARTE,0,0,
+SCC0025,60,หนังปลาแซลมอนทอดกรอบถุงละ,Special Chachoengsao,112,2,2026-02
+A550-030,59.78,(A) SALMON ABURI,Oshinei SASHIMI,0,0,
+A1150-014,58.97,(A) NAMA KAKI PONSU,A LA CARTE,0,0,
+A0199,58.86,(A) ซูชิเต้าหู้ แซลมอนสไปซี่ ไข่กุ้ง (1 คำ),Oshinei SUSHI,385,26933,2026-05
+A550-021,58.84,(A) EBI CHEESE ABURI SUSHI,A LA CARTE,0,0,
+BV0013,58.82,(A) ชาเขียวเย็นใส่นม,Oshinei SOFT DRINK,76406,1390,2026-05
+A0198,58.75,(A) ข้าวปั้นเต้าหู้ทอด ครั้ชชี่แซลมอน (1 คำ),Oshinei SUSHI,220,10648,2026-05
+A550-178,58.75,(A)BIG SALMON COCKTAIL SASHIMI,Oshinei SASHIMI,0,0,
+A550-003,58.71,(A) SALMON SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+A550-033,58.38,(A) SALMON MAYO ABURI,Oshinei SASHIMI,0,0,
+A550-032,58.13,(A) SALMON SAIKYO ABURI,Oshinei SASHIMI,0,0,
+A1150-013,58.07,(A) NAMA KAKI SEAFOOD SAUCE,A LA CARTE,0,0,
+A0043,57.93,(A) หอยนางรมเสิร์มพร้อมน้ำจิ้มซีฟู้ด (1 ตัว),Oshinei SASHIMI,354101,6541,2026-05
+A0068,57.9,(A) ข้าวปั้นหน้ากุ้งเบิร์นใส่ชีส (1 ชิ้น),Oshinei SUSHI,42103,47331,2026-05
+A0074,57.72,(A) ข้าวปั้นหน้าปลาแซลมอนเบิร์น (1 ชิ้น),Oshinei SUSHI,170354,63594,2026-05
+A0063,57.52,(A) ข้าวปั้นหน้าปลาแซลมอน (1 ชิ้น),Oshinei SUSHI,338451,153002,2026-05
+A550-014,57.47,(A) SALMON ABURI SUSHI,Oshinei SASHIMI,0,0,
+A0081,57.46,(A) แซลมอนมายองเนสเบิร์น (1 ชิ้น),Oshinei SUSHI,49354,152598,2026-05
+A0200,57.46,(A) ซูชิเต้าหู้ แซลมอนสไปซี่ (1 คำ),Oshinei SUSHI,699,26096,2026-05
+A0033,57.34,(A) แซลมอน ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,1112551,7587704,2026-05
+A0201,57.1,(A) ซูชิเต้าหู้ ไข่กุ้ง (1 คำ),Oshinei SUSHI,534,18707,2026-05
+A0079,57.09,(A) แซลมอนเบิร์น (1 ชิ้น),Oshinei SUSHI,45136,93873,2026-05
+B0110,56.90202557,(B) หมูคลุกเกล็ดขนมปังทอด(Buffet),Oshinei APPETIZER,0,12475,2026-05
+A0071,56.52,(A) ข้าวปั้นหน้าเนื้อสไลด์เบิร์น (1 ชิ้น),Oshinei SUSHI,81722,81597,2026-05
+SPCB029,56.12,หอยนางรมเสิร์ฟพร้อมซอสพอนสึ,Special CBI,1364,26,2026-05
+A0080,56.11,(A) แซลมอนเบิร์นใส่ซอสมิโซะข้าว (1 ชิ้น),Oshinei SUSHI,41214,141831,2026-05
+A1150-DS6,55.9,OSHIRUKO,A LA CARTE,0,0,
+ASPC-CBR-001,55.83,(A) Garlic Fried Rice,A LA CARTE,0,0,
+SPCB030,55,หอยนางรมเสิร์ฟพร้อมน้ำจิ้มซีฟู้ด,Special CBI,206,4,2026-01
+IKR02,54.96448257,KANIMISO IKURA MINIDON,A LA CARTE,0,0,
+P0003,54.96448257,มินิข้าวหน้ามันปูไข่ปลาแซลมอน(Buffet),Oshinei DON,0,1136,2026-05
+EVE-043,53.75,Udon in Thai Salmon Curry,Oshinei SASHIMI,0,0,
+B0029,53.70580726,(B) สเต็กหอยแมลงภู่นิวซีแลนด์ (5ตัว)(Buffet),Oshinei STEAK,0,28563,2026-05
+1150-069,53.70580726,NEW ZEALAND MUSSELS STEAK (5 Pcs),Oshinei STEAK,0,0,
+UBN003,53.48,(A) ข้าวผัดกระเทียม,Special UBN,7348,147,2026-05
+BV0044,53.34,(A) ถั่วแดงร้อน,Oshinei DESSERT,25223,506,2026-05
+Special009,53.23,หัวปลาแซลมอน ต้มซีอิ๊ว ลดทั้งวัน 50%,Special,57261,867,2026-05
+B0057,53.17398443,(B) ข้าวห่อสาหร่ายครีบปลาตาเดียว (3 ชิ้น)(Buffet),Oshinei ROLL,0,5234,2026-05
+550-047,53.17398443,ENGAWA ROLL (3 Pcs),A LA CARTE,0,0,
+CNX0001,53,(D) อูด้ง น้ำยาปลาแซลมอน,Oshinei DELIVERY,743,15,2025-11
+IKR-0001,52.88,คีบ IKURA 10 วิ,A LA CARTE,395,8,2025-08
+B0046,52.70701331,(B) ข้าวห่อสาหร่ายไส้สไปซี่แซลมอน (3 ชิ้น ),Oshinei ROLL,0,94895,2026-05
+290-013,52.70701331,SPICY SALMON ROLL (3 Pcs),Oshinei SASHIMI,0,0,
+A0027,52.13,(A) เนื้อเสียบไม้ย่าง (2 ชิ้น),Oshinei STEAK,66940,159243,2026-05
+A550-007,51.42,(A) TAKO SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+DUR-004,51.33,Durian Rice Ball,A LA CARTE,0,0,
+A550-137,51.26,(A) NIKU KUSHIYAKI (2 Pcs),A LA CARTE,0,0,
+A0039,51.08,(A) หนวดปลาหมึก ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,78672,914757,2026-05
+ABVG-047,51,REFILL เครื่องดื่ม (True-Dtac),Oshinei SOFT DRINK,0,0,
+ABVG-044,50.56,REFILL-RED WARTER,Oshinei SOFT DRINK,0,0,
+ABVG-045,50.54,REFILL-LIPTON TEA,Oshinei SOFT DRINK,0,0,
+A550-176,50.5,(A)JAPANESE FERMENTED FISH SAUCE,A LA CARTE,0,0,
+ABVG-005,50.45,REFILL-ICE GREEN TEA,Oshinei SOFT DRINK,0,0,
+ABVG-006,50.4,REFILL-HOT GREEN TEA,Oshinei SOFT DRINK,0,0,
+ASPC-CCO-007,49.78,MATCHA SOFT CREAM (CONE),A LA CARTE,0,0,
+550-100,49.64859751,KOROKKE (2 Pcs),A LA CARTE,0,0,
+ASPC-CCO-008,49.48,MILK SOFT CREAM (CONE),A LA CARTE,0,0,
+PM0002,49.13,ขนมจีนน้ำยาแซลมอนสไตล์ญี่ปุ่น,Promotion,1423,83,2026-03
+A550-022,48.94,(A) TAKO SUSHI,A LA CARTE,0,0,
+A290-016,48.9,(A)TAMAGO YAKI,A LA CARTE,0,0,
+ASPC-CCO-009,48.85,TWO TONE SOFT CREAM (CONE),A LA CARTE,0,0,
+ABVG-004,48.35,REFILL-SEVEN UP,Oshinei SOFT DRINK,0,0,
+ABVG-001,48.28,REFILL-PEPSI,Oshinei SOFT DRINK,0,0,
+ABVG-002,48.22,REFILL-PEPSI MAX,Oshinei SOFT DRINK,0,0,
+SCC0030,48.2,(A) ซอล์ฟครีมทูโทน (โคน),Special Chachoengsao,900,20,2026-05
+BV0021,48.14,(A) รีฟิว เเป๊ปซี่,Oshinei SOFT DRINK,13096951,291123,2026-05
+BV0022,48.14,(A) รีฟิว เป๊ปซี่ แม็กซ์,Oshinei SOFT DRINK,3065227,84852,2026-05
+BV0024,48.14,(A) รีฟิว น้ำส้ม มิรินด้า,Oshinei SOFT DRINK,1951687,56906,2026-05
+BV0070,48.14,(A) ลิปตัน,Oshinei SOFT DRINK,137075,3047,2026-05
+BV0023,48.13,(A) รีฟิว เซเว่น - อัพ,Oshinei SOFT DRINK,2596928,76099,2026-05
+BV0026,48.12,(A) รีฟิว ชาเขียวเย็น,Oshinei SOFT DRINK,12878180,350274,2026-05
+BV0025,48.12,(A) รีฟิว ชาเขียวร้อน,Oshinei SOFT DRINK,3481147,92156,2026-05
+OS-BV-RF001,48.12,น้ำเปล่ารีฟิล,Oshinei SOFT DRINK,23252,517,2026-05
+P0011,48.11,รีฟิล เป๊ปซี่ อูเมะ,Oshinei SOFT DRINK,128921,2867,2026-05
+BV0076,48.11,(A) รีฟิว น้ำเก๊กฮวย,Oshinei SOFT DRINK,5531,565,2026-05
+P0010,48.07,รีฟิล เป๊ปซี่ ยูซุ,Oshinei SOFT DRINK,116575,2595,2026-05
+BV0077,48.05,(A) รีฟิว น้ำลำไย,Oshinei SOFT DRINK,1931,216,2026-05
+ABVG-003,48.05,REFILL-ORANGE,Oshinei SOFT DRINK,0,0,
+SCC0028,48,(A) ซอล์ฟครีมนม (โคน),Special Chachoengsao,1125,25,2026-05
+SCC0029,48,(A) ซอล์ฟครีมชาเขียว (โคน),Special Chachoengsao,630,14,2026-04
+YBV0001,48,(A) รีฟิว เป๊ปซี่,(YAKI)SOFT DRINK,45,62507,2026-05
+ASPC-002,47.98,(A) EBIKO SUSHI,A LA CARTE,0,0,
+A550-005,47.5,(A) IZUMIDAI SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+BV0075,47.39,(A) รีฟิว น้ำกระเจี๊ยบ,Oshinei SOFT DRINK,1816,262,2026-05
+A0111,47.11,(A) ไข่หวาน (6 ชิ้น),Oshinei APPETIZER,60841,109324,2026-05
+A0034,47.08,(A) ปลาเนื้อขาว ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,61693,717474,2026-05
+A0077,47.05,(A) ข้าวปั้นหน้าหนวดปลาหมึกยักษ์ (1 ชิ้น),Oshinei SUSHI,26870,20679,2026-05
+A0067,46.98,(A) ข้าวปั้นหน้ากุ้ง (1 ชิ้น),Oshinei SUSHI,79162,46317,2026-05
+KORAT017,46.67,(B) น้้ำซุปต้มยำ ชาบู (299),Oshinei SHABU,2093,48,2025-09
+KORAT018,46.66,(B) น้ำซุปหมาล่า ชาบู (299),Oshinei SHABU,8678,199,2026-04
+EX0022,46.38,(EX) ข้าวปั้นหน้าไข่กุ้ง (1 ชิ้น),Oshinei SUSHI,25963,599,2026-05
+ABVG-122,46.07,REFILL-PEPSI UME,Oshinei SOFT DRINK,0,0,
+A550-020,45.97,(A) EBI SUSHI,A LA CARTE,0,0,
+ABVG-121,45.95,REFILL-PEPSI YUZU,Oshinei SOFT DRINK,0,0,
+SPO1,45.31,(S) เนื้อทอด10 วิ,Special,0,2209,2026-05
+Sp0001,45.31,(S) เนื้อทอด 10 วิ,Special,0,182450,2026-05
+DST-009,45.29,โคนไอศกรีมรสทูโทน,A LA CARTE,0,0,
+DST-007,45.05,โคนไอศกรีมรสชาเขียว,A LA CARTE,0,0,
+DST-008,45,โคนไอศกรีมรสนมฮอกไกโด,A LA CARTE,0,0,
+ABVG-099,44.93,PEPSI 245.ml,Oshinei SOFT DRINK,0,0,
+S-043,43.88,Wasabi 50g.,Oshinei SASHIMI,0,0,
+BRR022,43,(D) ข้าวปั้นหน้าไข่หวาน,Special DELIVERY,1206,30,2026-05
+SCC0017,42.88,(D) น้ำจิ้มซีฟู้ด 1 ขวด.,Special Chachoengsao,34426,859,2026-05
+A550-156,42.85,(A) สาหร่ายโนริ(8 ชิ้น),A LA CARTE,0,0,
+RY006,42.8,(A) เป๊ปซี่ กระป๋อง,Special SOFT DRINK,11320,283,2026-05
+550-057,42.30036589,SPARKEY ROLL (3 Pcs),A LA CARTE,0,0,
+B0050,42.30036589,(B) ข้าวห่อสาหร่ายไส้ปลาทูน่า แซลมอน และคลุกด้วยซอสสไปซี่มิโซะ ( 3 ชิ้น ),Oshinei ROLL,0,13141,2026-05
+P0006,41.70758854,(B) โนริไข่ปลาแซลมอนสไตน์โอมากาเสะ (1 ชิ้น)(Buffet),Oshinei SUSHI,0,1125,2026-05
+IKR08,41.70758854,NORI IKURA OMAKASE STYLE,A LA CARTE,0,0,
+B0143,40.69537335,(B) ข้าวหน้าปลาซาบะย่างซีอิ้ว(Buffet),Oshinei DON,0,3663,2026-05
+550-078,40.04475352,BEEF SLIDE TERI YAKI (10 pcs),A LA CARTE,0,0,
+550-079,39.55944944,BEEF SLIDE SHIO YAKI (10 Pcs),A LA CARTE,0,0,
+B0173,39.35,(B) น้ำซุปหม่าล่า,Oshinei SHABU,87294,2366,2026-05
+B0192,38.78167076,(B) สเต็กปลาหมึกสไตล์ญี่ปุ่น (1 ตัว),Oshinei STEAK,0,13776,2026-05
+1150-005,38.76755689,WAGYU TATAKI  (3 Pcs),A LA CARTE,0,0,
+B0044,38.76755689,(B) เนื้อวากิวทาทากิ (3 ชิ้น)(Buffet),Oshinei SASHIMI,0,83803,2026-05
+BRR004,38.46,ไอศกรีมโคน,Special BRR,4853,135,2026-05
+B0144,38.21168499,(B) ข้าวหน้าหมูทอด(Buffet),Oshinei DON,0,3549,2026-05
+A550-018,38.17,(A) SHIME SABA SUSHI,A LA CARTE,0,0,
+A550-019,38.12,(A) SHIME SABA ABURI SUSHI,A LA CARTE,0,0,
+A550-117,37.95,(A) GOHAN,A LA CARTE,0,0,
+A550-008,37.53,(A) SHIME SABA SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+399-001,36.96420341,Hokkaido Boiled Scallops (5 PCS),A LA CARTE,0,0,
+A0072,36.94,(A) ข้าวปั้นหน้าปลาซาบะเบิร์น (1 ชิ้น),Oshinei SUSHI,17295,501,2026-05
+A0065,36.87,(A) ข้าวปั้นหน้าปลาซาบะ (1ชิ้น),Oshinei SUSHI,14266,11161,2026-05
+A0069,36.67,(A) ข้าวปั้นหน้าไข่หวาน (1 ชิ้น),Oshinei SUSHI,68957,47861,2026-05
+A0115,36.43,(A) ข้าวสวยญี่ปุ่น,Oshinei APPETIZER,164411,51920,2026-05
+EX0026,36.08,(EX) ข้าวเปล่า,Oshinei APPETIZER,10117,300,2026-05
+A0035,36.04,(A) ปลาซาบะดอง ซาชิมิ (1 ชิ้น),Oshinei SASHIMI,44595,313358,2026-05
+P0005,35.71526268,(B) แซลมอนอิคุระ คาบายากิ ยามะ (1 ชิ้น)(Buffet),Oshinei SUSHI,0,1350,2026-05
+IKR07,35.71526268,SALMON IKURA KABAYAGI YAMA,Oshinei SASHIMI,0,0,
+550-110,35.13633037,CALAMARI (5 Pcs),A LA CARTE,0,0,
+A550-026,35.12,(A) TAMAGO SUSHI,A LA CARTE,0,0,
+P0007,34.88695585,(B) ข้าวปั้นหน้าตับห่าน(Buffet),Oshinei SUSHI,0,19302,2026-05
+Sp0002,34.88010381,ยูเกะอีสาน,Special,0,20060,2026-05
+B0160,34.32155397,(B) แซลมอนดอง (3 ชิ้น),Oshinei PICKLED,0,914589,2026-05
+550-058,34.32155397,SALMON SHOYU (3 Pcs),Oshinei SASHIMI,0,0,
+S-040,33.91,โชยุ(ขวดรังนก),Oshinei SASHIMI,0,0,
+ABVG-039,33.7,COKE 325 ml.,Oshinei SOFT DRINK,0,0,
+ABVG-040,33.7,COKE zero 325ml,Oshinei SOFT DRINK,0,0,
+ABVG-041,33.7,SPRITE 325.ml.,Oshinei SOFT DRINK,0,0,
+FB1150-3,33.7,"ค่าปรับบุฟเฟ่ต์ 1,150++ (10 กรัม)",BUFFET,0,0,
+ABVG-029,33.58,ICE BUCKET,Oshinei SOFT DRINK,0,0,
+S-038,33.52,น้ำจิ้มซีฟู้ด,Oshinei SASHIMI,29659,727,2026-05
+ABVG-026,33.37,SODA,Oshinei SOFT DRINK,0,0,
+P00011C,33.25,(A) สาหร่ายแผ่นโนริ (8แผ่น),Oshinei PICKLED,7925,255,2026-05
+ABVG-120,32.58,AQUAFINA,Oshinei SOFT DRINK,0,0,
+MDH0015,32.25,(A) โค้ก ไม่มีน้ำตาล กระป๋อง,Special SOFT DRINK,10007,332,2026-05
+IKR03,32.24513576,IKURA MINIDON,A LA CARTE,0,0,
+P0004,32.24513576,มินิข้าวหน้าไข่ปลาแซลมอน(Buffet),Oshinei DON,0,620,2026-05
+MDH0014,32.17,(A) โค้ก กระป๋อง,Special SOFT DRINK,50059,1665,2026-05
+MDH0016,32.16,(A) สไปร์ท กระป๋อง,Special SOFT DRINK,3577,119,2026-05
+DST-002,32.11,ICE - CREAM HOKKAIDO MILK,A LA CARTE,0,0,
+550-059,32.10062132,EBI SHOYU (5 Pcs),A LA CARTE,0,0,
+BV0011,32.1,(A) โซดา,Oshinei ALCOHOL,170280,5676,2026-05
+BV0034,32.08,(A) น้ำเเข็ง,Oshinei SOFT DRINK,46200,1541,2026-05
+DST-004,31.99,ICE - CREAM GREEN TEA,Oshinei SOFT DRINK,0,0,
+DST-003,31.94,ICE - CREAM TWO TONE,A LA CARTE,0,0,
+A0061,31.57,(A) ข้าวปั้นหน้าปูอัด (1 ชิ้น),Oshinei SUSHI,38912,34260,2026-05
+B0096,31.02565037,(B) กุ้งสด (5 ชิ้น ),Oshinei SHABU,0,662400,2026-05
+B0182,31.02565037,(B) กุ้งขาวไม่แกะเปลือก,Oshinei SHABU,0,473,2026-04
+550-124,31.02565037,EBI (5 Pcs),A LA CARTE,0,0,
+BV0080,30.94,(A) น้ำแร่,Oshinei SOFT DRINK,6303,218,2026-05
+BV0040,30.94,(A) ซอล์ครีม ทูโทน,Oshinei DESSERT,3152,458133,2026-05
+BV0039,30.81,(A) ซอล์ครีม รสชาเขียว,Oshinei DESSERT,2246,242036,2026-05
+BV0038,30.79,(A) ซอล์ครีม รสนม,Oshinei DESSERT,3741,281481,2026-05
+A290-004,30.32,(A) KANI KAMABOKO NIGIRI,A LA CARTE,0,0,
+B0116,30.1406634,(B) หนังปลาแซลมอนทอดกรอบหน้าแซลมอนสับ,Oshinei APPETIZER,0,81404,2026-05
+550-109,30.08669942,GYOZA CHEESE (1 Pcs),A LA CARTE,0,0,
+B0123,30.08669942,(B) เกี๊ยวซ่าชีส (1 ชิ้น),Oshinei APPETIZER,0,141379,2026-05
+B0193,29.53135263,(B) ปลาหมึกผัดเนยกระเทียมสไตล์ญี่ปุ่น (1 ตัว),Oshinei STEAK,0,37540,2026-05
+B0121,28.66424229,(B) ขนมครกญี่ปุ่น (1 ชิ้น),Oshinei APPETIZER,0,226305,2026-05
+550-111,28.66424229,TAKOYAKI (1 Pcs),A LA CARTE,0,0,
+B0191,28.3222804,(B) ปลาหมึกย่างซอสมิโซะไซเคียว (1 ตัว),Oshinei STEAK,0,38740,2026-05
+B0194,28.26215885,(B) ปลาหมึกยำซีฟู้ด (1 ตัว),Oshinei YUM,0,46291,2026-05
+ABVG-082,28.1,HABER WEISSES ORIGINAL 500 ML (SSK),Oshinei SOFT DRINK,0,0,
+S-044,28,พอนสึ (ขวดรังนก),Oshinei SASHIMI,0,0,
+ABVG-015,27.96,WATER,Oshinei SOFT DRINK,0,0,
+B0026,27.72030029,(B) หมูสไลด์ย่างเกลือ (10 ชิ้น)(Buffet),Oshinei STEAK,0,7367,2026-05
+550-071,27.72030029,BUTA SLIDE SHIO YAKI (10 Pcs),A LA CARTE,0,0,
+290-001B,27.71196073,BUTA TERI,A LA CARTE,0,0,
+B0008,27.71196073,(B) หมูย่างซีอิ้ว,Oshinei STEAK,0,13620,2026-05
+550-080,27.33042849,BUTA  SLIDE TERI YAKI (10 Pcs),A LA CARTE,0,0,
+B0120,27.02238295,(B) ผักชุบแป้งทอดเทมปุระ (5 ชิ้น)(Buffet),Oshinei APPETIZER,0,10211,2026-05
+550-105,27.02238295,YASAI TEMPURA (5 Pcs),A LA CARTE,0,0,
+A290-014,26.95,(A) KANI KAMABOKO SASHIMI,Oshinei SASHIMI,0,0,
+BV0033,26.74,(A) น้ำเปล่า,Oshinei SOFT DRINK,4731701,189370,2026-05
+B0080,26.64797825,(B) ซูพรีม อูนิ ซูชิ (1 ชิ้น)(Buffet),Oshinei SUSHI,0,401422,2026-05
+A550-051,26.31,(A) ENJOY ROLL,A LA CARTE,0,0,
+B0082,26.05329973,(B) ข้าวปั้นหน้ากุ้งอาร์เจนติน่าเบิร์นราดด้วยชีส (1 ชิ้น)(Buffet),Oshinei SUSHI,0,6616,2026-05
+1150-046,26.05329973,BOTAN ARGENTINA ABURI CHEESE SUSHI  (1 Pcs),A LA CARTE,0,0,
+A0036,25.99,(A) ปูอัด ซาชิมิ (3 แท่ง 6 ชิ้น),Oshinei SASHIMI,27330,127777,2026-05
+B0083,25.32715569,(B) ข้าวปั้นหน้ากุ้งอาร์เจนติน่าเบิร์นแล้วราดด้วยซอสเทอริ (1ชิ้น)(Buffet),Oshinei SUSHI,0,4883,2026-05
+ABVG-124,25.29,REFILL-PEPSI UME(KID),Oshinei SOFT DRINK,0,0,
+ABVG-126,25.29,REFILL-HOT GREEN TEA (KID),Oshinei SOFT DRINK,0,0,
+ABVG-106,25.28,REFILL-PEPSI MAX (KID),Oshinei SOFT DRINK,0,0,
+ABVG-107,25.28,REFILL-ORANGE (KID),Oshinei SOFT DRINK,0,0,
+ABVG-108,25.28,REFILL-SEVEN UP (KID),Oshinei SOFT DRINK,0,0,
+ABVG-11,25.28,REFILL-WARTER,Oshinei SOFT DRINK,0,0,
+ABVG-123,25.27,REFILL-PEPSI YUZU (KID),Oshinei SOFT DRINK,0,0,
+ABVG-105,25.25,REFILL-PEPSI (KID),Oshinei SOFT DRINK,0,0,
+PM0016,25,(A) สาหร่ายเปล่า,UBN BADMINTON,117,5,2025-11
+ABVG-125,24.92,REFILL-ICE GREEN TEA (KID),Oshinei SOFT DRINK,0,0,
+B0041,24.86942438,(B) กุ้งอาเจนติน่าซาชิมิ (1 ตัว)(Buffet),Oshinei SASHIMI,0,445921,2026-05
+1150-029,24.86942438,BOTAN ARGENTINA SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+1150-047,24.21,BOTAN ARGENTINA SUSHI  (1 Pcs),A LA CARTE,0,0,
+B0084,24.21,(B) ข้าวปั้นหน้ากุ้งอาร์เจนติน่า (1 ชิ้น)(Buffet),Oshinei SUSHI,0,3591,2026-05
+B0178,24.15361071,(B) แมงกะพรุนหัวกระสุนน้ำปลาร้า,Oshinei YUM,0,91964,2026-05
+BV0071,24.08,(A) ลิปตัน (เด็ก),Oshinei SOFT DRINK,1440,64,2026-05
+P0012,24.08,รีฟิว เป๊ปซี่ ยูซุ (เด็ก),Oshinei SOFT DRINK,1148,64,2026-05
+BV0027,24.07,(A) รีฟิว เป๊ปซี่ (เด็ก),Oshinei SOFT DRINK,86595,4211,2026-05
+BV0029,24.07,(A) รีฟิว เซเว่น - อัพ (เด็ก),Oshinei SOFT DRINK,19888,1071,2026-05
+BV0032,24.07,(A) รีฟิว ชาเขียวเย็น (เด็ก),Oshinei SOFT DRINK,15566,774,2026-05
+BV0030,24.07,(A) รีฟิว น้ำส้ม มิรินด้า (เด็ก),Oshinei SOFT DRINK,15075,791,2026-05
+BV0028,24.07,(A) รีฟิว เป๊ปซี่ แม็กซ์ (เด็ก),Oshinei SOFT DRINK,11430,565,2026-05
+BV0031,24.07,(A) รีฟิว ชาเขียวร้อน (เด็ก),Oshinei SOFT DRINK,6930,342,2026-05
+S-042,24.07,น้ำจิ้มเเจ่ว(ขวดรังนก),Oshinei SASHIMI,0,0,
+B0051,24.0688365,(B) ข้าวห่อสาหร่ายปลาไหลญี่ปุ่น (3 ชิ้น)(Buffet),Oshinei ROLL,0,38273,2026-05
+550-046,24.0688365,URA MAKI (3 Pcs),A LA CARTE,0,0,
+P0013,24.06,รีฟิว เป๊ปซี่ อูเมะ (เด็ก),Oshinei SOFT DRINK,383,21,2026-05
+B0137,23.73933554,(B) ข้าวหน้าเนื้อสไลด์ เทริ(Buffet),Oshinei DON,0,8937,2026-05
+OT0015,23.59,ค่าปรับบุฟเฟ่ต์ 799++ (10 กรัม),Oshinei other,102665,4889,2026-05
+550-028,22.582047,SALMON ENGAWA ABURI SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+B0079,22.582047,(B) ข้าวปั้นหน้าปลาแซลมอนเบิร์น วางด้วยครีบปลาตาเดียว (1 ชิ้น)(Buffet),Oshinei SUSHI,0,11379,2026-05
+FB750-3,22.5,ค่าปรับบุฟเฟ่ต์ 750++ (10 กรัม),BUFFET,0,0,
+B0177,21.96970396,(B) แมงกะพรุนหัวกระสุน ดองน้ำมันงา,Oshinei PICKLED,0,121815,2026-05
+IKR01,21.78980667,IKURA GUNKANMAKI,A LA CARTE,0,0,
+P0002,21.78980667,(B) ข้าวปั้นห่อสาหร่ายไข่ปลาแซลมอน (1 ชิ้น)(Buffet),Oshinei SUSHI,0,4470,2026-05
+550-054,21.35291483,CRUNCHY SPICY SALMON ROLL (3 Pcs),Oshinei SASHIMI,0,0,
+B0330,21.26,(B) เนื้อคารูบิเสียบไม้ย่าง เสิร์ฟพร้อมซอสโคชูจัง (1 ไม้),Oshinei STEAK,0,648,2026-05
+B0188,20.59105263,(B) หมึกย่างเกลือ (1 ตัว),Oshinei STEAK,0,149,2026-04
+B0179,20.00444536,(B) แมงกะพรุนหัวกระสุน น้ำจิ้มซีฟู้ด,Oshinei YUM,0,150693,2026-05
+1150-067,19.50892735,HAMACHI SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+B0042,19.50892735,(B) ปลาฮามาจิ ซาชิมิ (1ชิ้น)(Buffet),Oshinei SASHIMI,0,428855,2026-05
+B0155,19.14690003,(B) โซบะเย็น เสิร์ฟพร้อมเทมปุระ(Buffet),Oshinei SOBA,0,13315,2026-05
+B0090,19.02048431,(B) เนื้อสไลด์ (5 ชิ้น ),Oshinei SHABU,0,74319,2026-05
+B0331,19.02048431,(B) เนื้อคารูบิสไลด์ (10 ชิ้น),Oshinei SHABU,0,319,2026-05
+550-128,19.02048431,BEEF (5 Pcs),A LA CARTE,0,0,
+550-131,18.896,BEEF OYSTER BLADE SLICE (5 Pcs),A LA CARTE,0,0,
+B0102,18.896,(B) เนื้อใบพายออสเตรเลียสไลด์ (5 ชิ้น),Oshinei SHABU,0,358009,2026-05
+1150-014,18.89336607,NAMA KAKI PONSU  (1 Pcs),A LA CARTE,0,0,
+B00001,18.89336607,(B) หอยนางรมน้ำจิ้มพอนสึ 1 ตัว(Buffet),Oshinei SASHIMI,0,30907,2026-05
+550-132,18.70696721,GYUTAN SLICE (5 Pcs),A LA CARTE,0,0,
+B0103,18.70696721,(B) ลิ้นวัวสไลด์ (5 ชิ้น),Oshinei SHABU,0,104985,2026-05
+550-056,18.48643153,SALMON CHEESE ABURI ROLL (3 Pcs),Oshinei SASHIMI,0,0,
+B163,18.48643153,(B) ข้าวห่อสาหร่ายหน้าปลาแซลมอนชีสเบิร์นไฟ (3 ชิ้น),Oshinei ROLL,0,24010,2026-05
+B0180,18.30807911,(B) แมงกะพรุนหัวกระสุน ชาบู,Oshinei SHABU,0,40242,2026-05
+550-024,18.08150647,SALMON UNAGI ABURI SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+B0190,18.06,(B) ปลาหมึกย่างเกลือ (1 ตัว),Oshinei STEAK,0,100418,2026-05
+OT0012,17.97,ค่าปรับบุฟเฟ่ต์ 590++ (10 กรัม),Oshinei other,167188,10459,2026-05
+550-134,17.89018295,NEGI TORO IKURA TRUFFLE OIL (1 Pcs),A LA CARTE,0,0,
+B0088,17.89018295,(B)ข้าวปั้นหน้าโอโทโร่สับใส่หอมและไข่ปลาแซลมอน(1คำ)(Buffet),Oshinei SUSHI,0,68237,2026-05
+B0323,17.89018295,(B)ข้าวปั้นโอโทโร่สับใส่หอมไข่หอยเม่นและไข่ปลาแซลมอน ทรัฟเฟิล(1คำ/ที่),Oshinei SUSHI,0,27712,2026-05
+B0089,17.54454,(B) เนื้อเสือร้องไห้ ออสเตรเลียสไลด์ (5 ชิ้น ),Oshinei SHABU,0,532357,2026-05
+550-130,17.54454,AUSTRALIA BRISKET (5 Pcs),A LA CARTE,0,0,
+EV12-08,17.04,CALIFONIA MAKI,A LA CARTE,0,0,
+B0306,17,(B) ซูชิคาโมะ,Oshinei SUSHI,0,19595,2026-05
+B0048,16.94834469,(B) ข้าวห่อสาหร่ายหนังปลาแซลมอนทอดกรอบ (3 ชิ้น ),Oshinei ROLL,0,49110,2026-05
+290-009,16.94834469,SALMON SKIN ROLL (3 Pcs),Oshinei SASHIMI,0,0,
+B0005,16.63362409,(B) ไก่ย่างเกลือ(Buffet),Oshinei STEAK,0,6768,2026-05
+550-013,16.06907673,SALMON CHEESE ABURI SUSHI (1PCS),Oshinei SASHIMI,0,0,
+B0086,15.89531414,(B) ข้าวปั้นหน้าปลาฮามาจิเบิร์นราดด้วยซอสมิโซะข้าว (1 ชิ้น)(Buffet),Oshinei SUSHI,0,9084,2026-05
+B0163,15.87373058,(B) ค็อกเทลแซลมอน (1 ชิ้น),Oshinei SASHIMI,0,244401,2026-05
+KKN004,15.87373058,ค็อกเทลแซลมอน,Special KKN,0,167065,2026-05
+550-120,15.87373058,BIG SALMON COCKTAIL SASHIMI  (1ชิ้น),Oshinei SASHIMI,0,0,
+B0305,15.8,(B) ซูชิปลาแซลมอนเบิร์นท็อปคาโมะกราส์,Oshinei SUSHI,0,2892,2026-05
+A0092,15.75,(A) ไข่,Oshinei SHABU,7184,121397,2026-05
+550-031,15.71388819,SALMON CHEESE ABURI (1 PCS),Oshinei SASHIMI,0,0,
+B0304,15.53,(B) ข้าวห่อสาหร่ายแคลิฟอเนียท็อปคาโมะกราส์ 3 ชื้น,Oshinei ROLL,0,2243,2026-04
+A550-121,15.46,(A) EGG,A LA CARTE,0,0,
+B0148,15.40290638,(B) ยากิโซบะ ไก่(Buffet),Oshinei SOBA,0,1767,2026-05
+1150-013,15.24853689,NAMA KAKI SEAFOOD SAUCE  (1 Pcs),A LA CARTE,0,0,
+B0043,15.24853689,(B) หอยนางรมเสิร์ฟพร้อมน้ำจิ้มซีฟู้ด 1ตัว(Buffet),Oshinei SASHIMI,0,505922,2026-05
+550-033,15.22577216,SALMON MAYO ABURI (1 PCS),Oshinei SASHIMI,0,0,
+KORAT012,15,(B) หอยแมลงภู่ชิลี (5 ตัว)(Buffet),Oshinei STEAK,0,4539,2026-05
+OT0009,14.61,ค่าปรับบุฟเฟ่ต์ 500++ (10 กรัม),Oshinei other,2678,206,2026-05
+550-015,14.52653847,SALMON ABURI TERI SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+550-126,14.46256395,TORI (5 Pcs),A LA CARTE,0,0,
+B0092,14.46256395,(B) ไก่ (5 ชิ้น )(Buffet),Oshinei SHABU,0,4633,2026-05
+B0071,14.44027584,(B) ข้าวปั้นหน้าปลาแซลมอนเบิร์นใส่ซอสมิโซะข้าว (1ชิ้น),Oshinei SUSHI,0,46861,2026-05
+550-012,14.44027584,SALMON SAIKYO ABURI SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+550-032,14.15066107,SALMON SAIKYO ABURI (1 PCS),Oshinei SASHIMI,0,0,
+B0045,13.82951654,(B) หนวดปลาหมึกดองวาซาบิ(Buffet),Oshinei SASHIMI,0,72453,2026-05
+550-011,13.56358899,SALMON SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+550-014,13.56358899,SALMON ABURI SUSHI (1 PCS),Oshinei SASHIMI,0,0,
+B0040,13.39741497,(B) หอยเชลล์ต้ม ฮอกไกโด (1 ชิ้น),Oshinei SASHIMI,0,340196,2026-05
+B0322,13.39741497,(B)หอยเชลล์ฮอกไกโดซาชิมิ(1ตัว),Oshinei SASHIMI,0,12640,2026-05
+1150-084,13.39741497,HOKKAIDO HOTATE SASHIMI (1PCS),Oshinei SASHIMI,0,0,
+550-030,13.20840046,SALMON ABURI (1 PCS),Oshinei SASHIMI,0,0,
+B0087,13.17258612,(B)ข้าวปั้นโอโทโร่ on top อูนิ(1ชิ้น) 590(Buffet),Oshinei SUSHI,0,33019,2026-05
+550-133,13.17258612,NEGI TORO IKURA GUNKAN (1 Pcs),A LA CARTE,0,0,
+1150-049,12.92152385,HAMACHI SUSHI  (1 Pcs),A LA CARTE,0,0,
+B0085,12.92152385,(B) ข้าวปั้นหน้าปลาฮามาจิ (1ชิ้น)(Buffet),Oshinei SUSHI,0,6520,2026-05
+550-002,12.82891893,SEARED TUNA SASHIMI (1 Pcs),Oshinei SASHIMI,0,0,
+B0049,12.572445,(B) ครั้นชี่โรล (3 ชิ้น),Oshinei ROLL,0,41116,2026-05
+290-005,12.572445,CRUNCHY ROLL (3 Pcs),A LA CARTE,0,0,
+B0119,12.426165,(B) ปีกไก่ทอด (1 ชิ้น),Oshinei APPETIZER,10,204744,2026-05
+550-103,12.426165,CHICKEN WINGS (1 Pcs),A LA CARTE,0,0,
+B0150,12.36422572,(B) โซบะร้อนหน้าเทมปุระทอดกรอบ(Buffet),Oshinei SOBA,0,3435,2026-05
+B0007,12.29564918,(B) ปลาดอรี่ย่างเกลือ(Buffet),Oshinei STEAK,0,26698,2026-05
+LPB001,12.16534416,(B) เรนโบว์โรล (3 ชิ้น),Oshinei ROLL,0,2256,2026-05
+550-055,12.16534416,RAINBOW ROLL (3 Pcs),A LA CARTE,0,0,
+B0006,11.94378113,(B) ปลาดอรี่ย่างซี่อิ๊ว(Buffet),Oshinei STEAK,0,23687,2026-05
+1150-075,11.62215485,UNAGI SUSHI (1 Pcs),A LA CARTE,0,0,
+B0068C,11.62215485,(B) ข้าวปั้นหน้าปลาไหล 799 (1ชิ้น)(Buffet),Oshinei SUSHI,0,47335,2026-05
+290-008,11.43218281,CALIFORNIA MAKI (3 Pcs),A LA CARTE,0,0,
+B0047,11.43218281,(B) แคลิฟอเนีย มากิ (3 ชิ้น),Oshinei ROLL,0,54179,2026-05
+B0104,11.26676667,(B) สโมคเบคอน (5 ชิ้น),Oshinei SHABU,0,89633,2026-05
+1150-074,11.26676667,SMOKE BACON (5 Pcs),A LA CARTE,0,0,
+OT0006,11.23,ค่าปรับบุฟเฟ่ต์ 350++ (10 กรัม),Oshinei other,2795,287,2026-05
+B0301,11.07,(B) ซูชิปลาไหลญี่ปุ่นท็อปคาโมะ,Oshinei SUSHI,0,3827,2026-04
+B0167,11.01885049,(B) เบบี้สแกลลอปดองซีอิ๊ว (10 ตัว),Oshinei PICKLED,0,63431,2026-05
+290-016,10.88179475,TAMAGO YAKI (6 Pcs),A LA CARTE,0,0,
+B0172,10.13147644,(B) หอยเชลล์ ซาชิมิ (10 ตัว),Oshinei SASHIMI,0,187666,2026-05
+B0091,9.974184464,(B) หมูสไลด์ ( 5 ชิ้น ),Oshinei SHABU,0,269462,2026-05
+B0105,9.974184464,(B) หมูสามชั้นสไลด์ (5 ชิ้น),Oshinei SHABU,0,94411,2026-05
+550-129,9.974184464,BUTA(5 Pcs),A LA CARTE,0,0,
+550-139,9.974184464,หมูสามชั้นสไลด์ (5 Pcs),A LA CARTE,0,0,
+550-018,9.439119657,SHIME SABA SUSHI (1 PCS),A LA CARTE,0,0,
+550-022,9.055014698,TAKO SUSHI (1 PCS),A LA CARTE,0,0,
+KORAT032,8.59,(B) ซอล์ครีม ทูโทน (299),Oshinei DESSERT,176,22,2025-09
+KORAT034,8.59,(B) ซอล์ครีม รสนม (299),Oshinei DESSERT,136,17,2025-09
+KORAT033,8.58,(B) ซอล์ครีม ชาเขียว (299),Oshinei DESSERT,96,12,2025-09
+B0081,8.507566721,(B) ข้าวปั้นหน้าเนื้อวากิวสไลด์ น้ำมันเห็ดทรัฟเฟิลราดด้วยซอสสไปซี่มายองเนส โรยด้วยต้นหอมซอย ไข่กุ้ง และงา (1 ชิ้น)(Buffet),Oshinei SUSHI,0,49515,2026-05
+1150-007,8.507566721,WAGYU SPECIAL TRUFFLE OIL SUSHI  (1 Pcs),A LA CARTE,0,0,
+B0070,8.494088091,(B) ข้าวปั้นหน้าปลาซาบะเบิร์น (1 ชิ้น)(Buffet),Oshinei SUSHI,0,11720,2026-05
+550-019,8.494088091,SHIME SABA ABURI SUSHI (1 PCS),A LA CARTE,0,0,
+B0189,8.16,(B) ซุปต้มยำ,Oshinei SHABU,28640,3642,2026-05
+B0166,7.977083827,(B) แฮนด์โรลเบบี้สแกลลอปทอดเทมปุระ (1 ชิ้น 3 ตัว),Oshinei ROLL,0,42642,2026-05
+550-029,6.664138008,UNAGI SUSHI (590) (1 PCS),A LA CARTE,0,0,
+B0068,6.664138008,(B) ข้าวปั้นหน้าปลาไหล 590  (1 ชิ้น),Oshinei SUSHI,0,132380,2026-05
+550-016,6.142916984,TUNA SUSHI (1 PCS),A LA CARTE,0,0,
+550-027,6.069776641,BEEF TERI SPECIALS SUSHI (1 PCS ),A LA CARTE,0,0,
+550-025,5.810629167,BEEF SUSHI (1 PCS),A LA CARTE,0,0,
+550-127,5.664019495,IKA (5 Pcs),A LA CARTE,0,0,
+B0095,5.664019495,(B) ปลาหมึกบั้ง ( 5 ชิ้น ),Oshinei SHABU,0,49287,2026-05
+550-021,4.596633901,EBI CHEESE ABURI SUSHI (1 PCS),A LA CARTE,0,0,
+B0100,4.411428571,(B) เส้นชิราตากิ,Oshinei SHABU,0,27347,2026-05
+CP007,4.253251886,Free ICE - CREAM HOKKAIDO MILK,Other,0,0,
+CP008,4.252724412,Free ICE - CREAM TWO TONE,Other,0,0,
+CP006,4.252196938,Free ICE - CREAM GREEN TEA,Oshinei SOFT DRINK,0,0,
+399-002,4.06588,Dory Fish (2 PCS),A LA CARTE,0,0,
+550-154,3.364444444,KINU TOFU (3 Pcs),A LA CARTE,0,0,
+B0099,3.364444444,(B) เต้าหู้คินุ (3 ชิ้น),Oshinei SHABU,0,27917,2026-05
+B0025,3.214633755,(B) ท้องปลาแซลมอนย่างซีอิ๊ว (3 ชิ้น),Oshinei STEAK,0,43429,2026-05
+550-138B,3.214633755,SALMON HARATSU TERI YAKI (3 Pcs),Oshinei SASHIMI,0,0,
+550-026,3.207694231,TAMAGO SUSHI (1 PCS),A LA CARTE,0,0,
+ITEMSET-015,3,หัวปลาต้มซีอิ๊ว,Oshinei ITEMSET,0,16,2026-05
+550-020,2.988521868,EBI SUSHI (1 PCS),A LA CARTE,0,0,
+B0164,2.944469095,(B) หัวปลาแซลมอนนึ่งมะนาว 250 กรัม / ครึ่งหัว(Buffet),Oshinei STEAK,0,4198,2026-05
+B0165,2.944469095,(B) หัวปลาแซลมอนย่างชาเขียว 250 กรัม / ครึ่งหัว(Buffet),Oshinei STEAK,0,824,2026-05
+B0024,2.738480818,(B) ท้องปลาแซลมอนย่างเกลือ (3 ชิ้น),Oshinei STEAK,0,43249,2026-05
+550-138A,2.738480818,SALMON HARATSU SHIO YAKI (3 Pcs),Oshinei SASHIMI,0,0,
+290-004,2.004093772,KANI KAMABOKO NIGIRI (1 Pcs),A LA CARTE,0,0,
+BSPC-ALL-001,1.95634392,Pot 2 Slot,A LA CARTE,0,0,
+290-014,1.107024376,KANI KAMABOKO SASHIMI (3 แท่ง 6 ชิ้น),Oshinei SASHIMI,0,0,
+P00011,0.470715712,สาหร่ายแผ่นโนริ(8แผ่น),Oshinei SUSHI,0,905849,2026-05
+P0009,0.36,ข้าวหน้าตับห่านและไข่ปลาแซลมอน(Buffet),Oshinei DON,760,2256,2026-05
+DISCOUNT,-186.21,สำหรับบัตรคนพิการ 600Net,Payment,-476844,2740,2026-05
