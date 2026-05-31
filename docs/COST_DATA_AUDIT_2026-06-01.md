@@ -43,6 +43,17 @@ The flagship **BoM Cost Analysis** tab and the chain food-cost figure (**10.7%**
 
 A migration script can do steps 2–3 deterministically and log every change. **This is a financial-data change, so it needs an explicit go-ahead and a backup** — flagged here, not executed.
 
+## UPDATE 2026-06-01 — remediation APPLIED (Mode A)
+
+Ran `backend/fix_sku_cost_2026.py --apply` (threshold ratio ≥ 1.0):
+- **544 SKUs** remediated · DB backed up to `oshinei.db.backup_pre_costfix_20260601_004011` · `VACUUM`+`ANALYZE` run.
+- **128** set to real **BoM recipe cost**; **416** set **uncosted** (row deleted; `unit_cost` is `NOT NULL` so uncosted = no row).
+- **544** rows written to `cost_change_log` (source `fix_sku_cost_2026-06-01`) — fully reversible/auditable.
+
+**Result:** `/api/cost/analysis` à-la-carte `overall_margin` went **−5.9% → +75.0%** (≈25% food cost, plausible), `costed_skus` 767→**484** (now honest), `uncosted_skus`→**506**. Sample costed items show healthy margins (A0032 77.9%, A0108 89.3%).
+
+**Remaining work (data, ongoing):** progressively cost the 506 uncosted SKUs — beverages especially (BV*: high volume, were uncosted because no BoM recipe). Load real supplier/recipe costs or extend BoM coverage; the `has_cost` flag makes the gap visible in the UI.
+
 ## Verification queries used
 - ratio distribution over `sku_cost.unit_cost ÷ (Σ subtotal_ex_vat ÷ Σ qty)` per SKU
 - BoM coverage via `SUM(bom_ingredients.ingredient_cost)` per `sku_id`
