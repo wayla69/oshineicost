@@ -4,7 +4,13 @@
     {
       "name": "oshinei-backend",
       "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "uvicorn", "main:app", "--port", "8001"],
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--port",
+        "8001"
+      ],
       "cwd": "${workspaceFolder}/backend",
       "port": 8001
     }
