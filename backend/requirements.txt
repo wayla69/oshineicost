@@ -4,3 +4,4 @@ openpyxl
 python-multipart
 reportlab
 matplotlib
+pytest        # dev: run `python -m pytest test_invariants.py`

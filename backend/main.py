@@ -2052,7 +2052,8 @@ def _ym_parts(s: str) -> tuple:
     clean 400 instead of an unhandled ValueError -> 500.
     """
     import re as _re
-    if not isinstance(s, str) or not _re.fullmatch(r"\d{4}-\d{2}", s.strip()):
+    s = s.strip() if isinstance(s, str) else s
+    if not isinstance(s, str) or not _re.fullmatch(r"\d{4}-\d{2}", s):
         raise HTTPException(status_code=400, detail=f"Invalid month '{s}'; expected YYYY-MM")
     y, m = int(s[:4]), int(s[5:7])
     if not (1 <= m <= 12):
