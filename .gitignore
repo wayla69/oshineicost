@@ -3,9 +3,17 @@
 *.db-shm
 *.db-wal
 *.db.backup_*
+# safebak_cli_*, bak-*, fullbak-*, pre_bomimport_* snapshots
+*.db.*
 backend/*.backup_*
 backup_*.html
 backend/backup_*
+
+# ── Scratch / debug dumps ───────────────────────────────────────────────────
+backend/bp.json
+backend/bpchk.txt
+backend/gpb.txt
+backend/tier.txt
 
 # ── Logs & generated audit artifacts ────────────────────────────────────────
 *.log

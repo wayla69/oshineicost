@@ -71,6 +71,30 @@ EXPLAIN_QUERIES = [
 ]
 
 
+def safe_backup(db_path: Path, tag: str = "manual") -> Path:
+    """Create a CONSISTENT, full-state backup using SQLite's online backup API.
+
+    Unlike `cp oshinei.db backup` (which copies only the main file and SILENTLY
+    drops any rows still living in the -wal), this checkpoints the WAL and copies
+    the merged logical database, so the backup is never lossy. Always use this
+    (or `python db_maintenance.py --backup`) before any bulk mutation.
+    """
+    from datetime import datetime
+    ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dst = db_path.with_name(f"{db_path.name}.safebak_{tag}_{ts}")
+    src = sqlite3.connect(str(db_path))
+    try:
+        src.execute("PRAGMA wal_checkpoint(TRUNCATE)")   # fold WAL into main first
+        out = sqlite3.connect(str(dst))
+        with out:
+            src.backup(out)        # atomic, consistent, includes everything
+        out.close()
+    finally:
+        src.close()
+    print(f"  safe backup -> {dst.name} ({dst.stat().st_size/1024/1024:.1f} MiB)")
+    return dst
+
+
 def apply_pragmas(con: sqlite3.Connection) -> None:
     for p in PRAGMAS:
         result = con.execute(p).fetchone()
@@ -111,11 +135,18 @@ def main() -> int:
                     help="Skip VACUUM/ANALYZE; only run EXPLAIN QUERY PLAN.")
     ap.add_argument("--skip-vacuum", action="store_true",
                     help="Skip VACUUM (which can be slow / rewrites DB).")
+    ap.add_argument("--backup", action="store_true",
+                    help="Create a consistent full-state backup (sqlite backup API) and exit.")
     args = ap.parse_args()
 
     if not DB_PATH.exists():
         print(f"DB not found at {DB_PATH}", file=sys.stderr)
         return 1
+
+    if args.backup:
+        print(f"DB: {DB_PATH}")
+        safe_backup(DB_PATH, tag="cli")
+        return 0
 
     size_before = DB_PATH.stat().st_size
     print(f"DB: {DB_PATH}")

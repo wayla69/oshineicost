@@ -47,6 +47,18 @@ def fresh_db() -> sqlite3.Connection:
     # must be ignored by _cogs_case to avoid double-counting with item rows).
     con.executemany("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(?,?)",
                     [(1, 99.0), (2, 10.0)])  # sku 3 deliberately uncosted
+    # BoM tables (the unified COGS expr, 2026-06-02, resolves recipe cost first
+    # then falls back to sku_cost). Create them if schema.sql didn't, and leave
+    # them EMPTY so A0001 falls back to its sku_cost (10.0) — keeping the original
+    # test expectations valid while exercising the unified expression.
+    con.executescript("""
+      CREATE TABLE IF NOT EXISTS bom_ingredients (
+        sku_id INTEGER, seq INTEGER, ingredient_code TEXT, ingredient_name TEXT,
+        qty_per_serving REAL, unit TEXT, price_per_unit REAL, ingredient_cost REAL,
+        ingredient_type TEXT, source_file TEXT);
+      CREATE TABLE IF NOT EXISTS bom_sku_alias (
+        bom_sku_code TEXT, resolved_sku_id INTEGER);
+    """)
     con.commit()
     return con
 
@@ -183,6 +195,80 @@ def test_ym_parts_rejects_bad(bad):
     with pytest.raises(HTTPException) as ei:
         main._ym_parts(bad)
     assert ei.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# R1 — VAT is centralized and ex_vat() is correct (guards the persona-style bug)
+# ---------------------------------------------------------------------------
+def test_vat_constants_and_helper():
+    assert main.VAT_RATE == 0.07
+    assert abs(main.VAT_DIVISOR - 1.07) < 1e-9
+    assert abs(main.ex_vat(1070.0) - 1000.0) < 1e-6
+    assert main.ex_vat(0) == 0
+    assert main.ex_vat(None) == 0
+
+
+def test_per_head_is_ex_vat_not_inc_vat():
+    """Spend-per-head must be ex-VAT. Locks in the persona fix: a bill of
+    inc-VAT 1070 for 2 covers is 500 ex-VAT/head, NOT 535."""
+    con = fresh_db()
+    con.execute(
+        "INSERT INTO sales_transaction"
+        "(branch_id,receipt_no,sold_at,customer_count,food_subtotal,drink_subtotal,"
+        " other_subtotal,total_inc_vat,source) VALUES(1,'R1','2025-06-01T12:00:00',2,1000,0,0,1070.0,'Easy')"
+    )
+    con.commit()
+    per_head = con.execute(
+        "SELECT SUM(total_inc_vat)/1.07/NULLIF(SUM(customer_count),0) FROM sales_transaction"
+    ).fetchone()[0]
+    assert abs(per_head - 500.0) < 1e-6           # ex-VAT
+    assert abs(per_head - 535.0) > 1.0            # would be the inc-VAT bug
+
+
+# ---------------------------------------------------------------------------
+# R2 — price-as-cost guard (the recurrence defense): catches price loaded as
+#      cost, never blocks a genuine (fractional) food cost, exempts nothing by
+#      itself (tier exemption is applied at the call site).
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("unit_cost,ex_price,expected", [
+    (107.0, 100.0, True),    # exactly price x 1.07  -> bogus
+    (104.0, 100.0, True),    # within band
+    (112.0, 100.0, True),    # top of band
+    (30.0,  100.0, False),   # real 30% food cost   -> fine
+    (50.0,  100.0, False),   # real 50% food cost   -> fine
+    (120.0, 100.0, False),   # above band (data weird, but not the VAT signature)
+    (0,     100.0, False),   # no cost
+    (50.0,  0,     False),   # no price to compare
+    (50.0,  None,  False),   # price unknown -> cannot judge -> allowed
+])
+def test_is_price_as_cost(unit_cost, ex_price, expected):
+    assert main.is_price_as_cost(unit_cost, ex_price) is expected
+
+
+def test_price_as_cost_band_brackets_vat_multiplier():
+    # The band must straddle the VAT divisor so the canonical signature is caught.
+    assert main.PRICE_AS_COST_LO < main.VAT_DIVISOR < main.PRICE_AS_COST_HI
+
+
+# ---------------------------------------------------------------------------
+# R3 — unified COGS must be alias-safe (2026-06-02 overhaul).
+# The unified expr embeds a correlated subquery that joins `skus`; if its inner
+# alias collides with the caller's outer alias, COGS inflates ~40×. This locks
+# in that COGS is identical whether the sales table is aliased 'ssm' or 's'.
+# ---------------------------------------------------------------------------
+def test_unified_cogs_alias_safe():
+    con = fresh_db()
+    add_sales(con, 2, "2025-06", qty=10, ex_vat=1000.0)   # A0001, sku_cost 10.0
+    add_sales(con, 1, "2025-06", qty=5,  ex_vat=2500.0)   # BUFFET tier -> 0 cost
+    def cogs(alias):
+        expr = main._unified_cogs_expr(alias)
+        sql = (f"SELECT ROUND(SUM({expr}),2) FROM sales_sku_monthly {alias} "
+               f"JOIN skus sk ON sk.sku_id = {alias}.sku_id")
+        return con.execute(sql).fetchone()[0]
+    c_ssm = cogs("ssm")
+    c_s   = cogs("s")     # the alias that used to collide
+    assert c_ssm == c_s, f"alias collision: ssm={c_ssm} vs s={c_s}"
+    assert c_ssm == 100.0, f"expected 10 qty x 10.0 cost = 100 (tier excluded), got {c_ssm}"
 
 
 if __name__ == "__main__":

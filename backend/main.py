@@ -100,6 +100,63 @@ DB_PATH = HERE / "oshinei.db"
 STATIC  = HERE.parent / "vendor"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')
 
+# ---------------------------------------------------------------------------
+# VAT — single source of truth. Easy POS uses 7% VAT.
+# Revenue is ALWAYS ex-VAT (rule: "VAT is never revenue"). To convert an
+# inc-VAT total to ex-VAT, divide by VAT_DIVISOR. SQL queries embed the literal
+# `1.07` for performance/readability; this constant is the canonical reference
+# and is enforced by test_invariants (per-head/ticket must be ex-VAT).
+# ---------------------------------------------------------------------------
+VAT_RATE    = 0.07
+VAT_DIVISOR = 1.0 + VAT_RATE          # 1.07  — inc-VAT ➜ ex-VAT divisor
+
+def ex_vat(inc_vat_amount: float) -> float:
+    """Convert an inc-VAT amount to ex-VAT (net) revenue."""
+    return (inc_vat_amount or 0.0) / VAT_DIVISOR
+
+# Price-as-cost detector: a unit_cost that lands in this ratio band vs the SKU's
+# ex-VAT selling price is almost certainly the (inc-VAT) PRICE loaded as cost,
+# not a real cost. Used to guard POST /api/cost and by fix_sku_cost_2026.py.
+PRICE_AS_COST_LO = 1.03
+PRICE_AS_COST_HI = 1.12
+
+# ---------------------------------------------------------------------------
+# "Real food menu" classifier — used by menu rankings (Top SKUs / Most Ordered).
+# Category-based (robust) rather than code-prefix. A category is EXCLUDED if its
+# name contains any of these keywords (case-insensitive). Excludes: drinks &
+# alcohol, non-product lines, dessert/ice-cream, and per-branch 'Special' menus.
+# Requires the query to JOIN categories AS c.
+# ---------------------------------------------------------------------------
+_NONFOOD_CATEGORY_KEYWORDS = (
+    "BUFFET", "SOFT DRINK", "DRINK", "ALCOHOL", "DRINKING", "BEER",   # drinks/alcohol
+    "PAYMENT", "DELIVERY", "SERVICE", "PROMOTI", "VOUCHER", "DISCOUNT",
+    "DEPOSIT", "TAKE AWAY", "TAKEAWAY", "CATERING", "CONDIMENT", "SHUYU",
+    "ITEMSET", "BADMINTON",                                            # non-product
+    "DESSERT", "ICE-CREAM", "ICECREAM",                               # dessert
+    "SPECIAL",                                                         # branch 'Special <x>' menus
+)
+_FOOD_CATEGORY_FILTER = (
+    "(" + " AND ".join(
+        f"UPPER(c.name) NOT LIKE '%{kw}%'" for kw in _NONFOOD_CATEGORY_KEYWORDS
+    ) + ")"
+    # Code-level guards: OT* = penalty / room-opening charges, SERVICECHARGE/SP =
+    # service, DEL* = delivery — these can sit inside food categories but are not
+    # dishes, so exclude by code too.
+    " AND sk.sku_code NOT GLOB 'OT[0-9]*'"
+    " AND sk.sku_code NOT GLOB 'DEL[0-9]*'"
+    " AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE','SP','SERVICE','DISCOUNT','DEPOSIT')"
+    " AND sk.sku_code NOT LIKE 'BUFFET%'"
+)
+
+
+def is_price_as_cost(unit_cost, ex_vat_price) -> bool:
+    """True if unit_cost looks like the (inc-VAT) selling price entered as cost,
+    i.e. ratio vs ex-VAT price falls in the VAT-multiplier band. Real food costs
+    are a fraction of price (ratio « 1), so this band cannot catch a genuine cost."""
+    if not unit_cost or not ex_vat_price or unit_cost <= 0 or ex_vat_price <= 0:
+        return False
+    return PRICE_AS_COST_LO <= (unit_cost / ex_vat_price) <= PRICE_AS_COST_HI
+
 app = FastAPI(title="Oshinei Dashboard API")
 
 # The SPA is served same-origin from this app (GET /), so it needs no CORS at all.
@@ -666,11 +723,22 @@ def top_skus(
     group:      Optional[str] = Query(None),
     source:     Optional[str] = Query(None),
     category:   Optional[str] = Query(None),
+    sort:       str           = Query("revenue", description="'revenue' or 'qty'"),
     limit:      int           = Query(20, ge=1, le=200),
 ):
-    """Top SKUs by revenue, with cost and margin if sku_cost is populated."""
+    """Top SKUs by revenue/qty, with cost and margin if sku_cost is populated.
+
+    FOOD-ONLY menu ranking (2026-06-01): classified by CATEGORY (robust, vs the
+    earlier fragile A#/B# code-prefix rule). Excludes drinks/alcohol, non-product
+    lines (buffet tier, payment, delivery, service, promotion, voucher, discount,
+    deposit, take-away, catering, condiment), dessert/ice-cream, and per-branch
+    'Special <branch>' menus — leaving the core Oshinei food dishes. See
+    _FOOD_CATEGORY_FILTER.
+    """
     filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1", "COALESCE(sk.active,1) = 1"]
     params: dict = {}
+
+    filters.append(_FOOD_CATEGORY_FILTER)   # real food dishes only
 
     if branch:
         filters.append("b.name = :branch")
@@ -707,7 +775,7 @@ def top_skus(
             LEFT JOIN sku_cost sc ON sc.sku_id   = sm.sku_id
             {where}
             GROUP BY sk.sku_id
-            ORDER BY revenue DESC
+            ORDER BY {"qty" if sort == "qty" else "revenue"} DESC
             LIMIT :limit
             """,
             params,
@@ -968,7 +1036,7 @@ def summary(
             continue  # sku_monthly already counted this branch×month
         # Use month_summary as fallback — net_sales is post-discount; treat as inc-VAT and divide by 1.07 for ex-VAT
         total_rev_inc += r["net"] or 0
-        total_rev_ex  += (r["net"] or 0) / 1.07
+        total_rev_ex  += ex_vat(r["net"] or 0)
         covered.add(k)
 
     # Tx + customers
@@ -1051,11 +1119,35 @@ def get_cost():
 
 @app.post("/api/cost")
 def post_cost(entries: List[CostEntry]):
-    """Upsert unit costs by sku_code. Returns count of rows updated."""
+    """Upsert unit costs by sku_code. Returns count of rows updated.
+
+    GUARD (2026-06-01): rejects any non-tier entry whose unit_cost lands in the
+    price-as-cost band vs the SKU's ex-VAT selling price (ratio 1.03–1.12 ≈ the
+    VAT multiplier). This is the ONLY code path that writes sku_cost, so it's
+    where re-uploading the price spreadsheet as "costs" reintroduces the bad
+    data. Such rows are skipped and reported instead of silently corrupting
+    every margin number. Tier SKUs (BUFFET*) are exempt — their cost is ignored
+    by _cogs_case anyway.
+    """
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
     updated = 0
+    skipped: list = []
     with get_db() as con:
         cur = con.cursor()
+        # Pre-compute ex-VAT avg selling price for the incoming SKUs (one query).
+        codes = [e.sku_code for e in entries]
+        price_by_code: dict = {}
+        if codes:
+            ph = ",".join("?" for _ in codes)
+            for code, q, rev in cur.execute(
+                f"""SELECT sk.sku_code, SUM(ssm.qty), SUM(ssm.subtotal_ex_vat)
+                    FROM skus sk JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+                    WHERE sk.sku_code IN ({ph})
+                    GROUP BY sk.sku_code
+                    HAVING SUM(ssm.qty) > 0 AND SUM(ssm.subtotal_ex_vat) > 0""",
+                codes,
+            ).fetchall():
+                price_by_code[code] = (rev or 0) / (q or 1)
         for entry in entries:
             row = cur.execute(
                 "SELECT sku_id FROM skus WHERE sku_code = ?", (entry.sku_code,)
@@ -1063,6 +1155,16 @@ def post_cost(entries: List[CostEntry]):
             if row is None:
                 continue
             sku_id = row[0]
+            is_tier = str(entry.sku_code).upper().startswith("BUFFET")
+            price = price_by_code.get(entry.sku_code)
+            if not is_tier and is_price_as_cost(entry.unit_cost, price):
+                skipped.append({
+                    "sku_code":  entry.sku_code,
+                    "unit_cost": round(entry.unit_cost, 2),
+                    "ex_vat_price": round(price, 2),
+                    "ratio":     round(entry.unit_cost / price, 3),
+                })
+                continue   # looks like price-as-cost — do NOT write
             cur.execute(
                 """INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)
                    VALUES(?, ?, ?, ?)""",
@@ -1071,7 +1173,16 @@ def post_cost(entries: List[CostEntry]):
             updated += 1
         con.commit()
     invalidate_cache()   # cost data changed — clear all cached analytics responses
-    return {"updated": updated}
+    resp = {"updated": updated}
+    if skipped:
+        resp["skipped_price_as_cost"] = len(skipped)
+        resp["skipped_samples"] = skipped[:10]
+        resp["warning"] = (
+            f"{len(skipped)} entr{'y' if len(skipped)==1 else 'ies'} skipped: "
+            "the value matched the ex-VAT selling price × ~1.07, i.e. it looks "
+            "like the PRICE was entered as cost. Enter the real per-unit cost."
+        )
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -1436,6 +1547,204 @@ def sales_margin(
             "margin_pct": total_pct,
         },
         "uncosted_sku_count": uncosted_total,
+    }
+
+
+# ---------------------------------------------------------------------------
+# /api/sales/category-movers  -  MoM revenue change by category (Overview)
+# ---------------------------------------------------------------------------
+def _month_add(ym: str, delta: int) -> str:
+    """'YYYY-MM' shifted by `delta` months (delta may be negative)."""
+    y, m = _ym_parts(ym)
+    idx = (y * 12 + (m - 1)) + delta
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+
+@app.get("/api/sales/category-movers")
+@ttl_cache
+def sales_category_movers(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+    limit:      int           = Query(6, ge=1, le=20),
+):
+    """Category revenue (ex-VAT) for the selected period vs the immediately
+    preceding period of equal length — biggest gainers/decliners.
+
+    Revenue-based, so it is ALWAYS reliable regardless of cost coverage (unlike
+    per-category margin, which is distorted by the ~46%-costed buffet model).
+    Non-product categories (Payment/Delivery) are excluded so the movers reflect
+    real menu performance.
+    """
+    cur_to   = month_to or month
+    cur_from = month_from or month
+    if not cur_to:
+        # default to the latest month present in the data
+        with get_db() as con:
+            cur_to = con.execute(
+                "SELECT MAX(period_month) FROM sales_sku_monthly WHERE source='Easy'"
+            ).fetchone()[0]
+        cur_from = cur_to
+    if not cur_from:
+        cur_from = cur_to
+
+    # length of the current window in months (inclusive)
+    fy, fm = _ym_parts(cur_from); ty, tm = _ym_parts(cur_to)
+    span = (ty * 12 + tm) - (fy * 12 + fm)            # 0 for a single month
+    prev_to   = _month_add(cur_from, -1)
+    prev_from = _month_add(prev_to, -span)
+
+    EXCLUDED = ('Payment', 'Other', 'Oshinei DELIVERY', 'Special DELIVERY')
+    excl_ph  = ",".join(f":_x{i}" for i in range(len(EXCLUDED)))
+
+    def _cat_rev(mf: str, mt: str) -> dict:
+        filters = ["b.name != 'ALL'", "sm.source = 'Easy'",
+                   "sm.period_month >= :mf", "sm.period_month <= :mt",
+                   f"c.name NOT IN ({excl_ph})"]
+        params = {"mf": mf, "mt": mt}
+        for i, c in enumerate(EXCLUDED):
+            params[f"_x{i}"] = c
+        if branch:
+            filters.append("b.name = :branch"); params["branch"] = branch
+        where = "WHERE " + " AND ".join(filters)
+        with get_db() as con:
+            rows = con.execute(
+                f"""SELECT c.name AS category, ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue
+                    FROM sales_sku_monthly sm
+                    JOIN branches b   ON b.branch_id   = sm.branch_id
+                    JOIN skus sk      ON sk.sku_id      = sm.sku_id
+                    JOIN categories c ON c.category_id  = sk.category_id
+                    {where}
+                    GROUP BY c.name""",
+                params,
+            ).fetchall()
+        return {r["category"]: (r["revenue"] or 0.0) for r in rows}
+
+    cur_rev  = _cat_rev(cur_from, cur_to)
+    prev_rev = _cat_rev(prev_from, prev_to)
+
+    movers = []
+    for cat in set(cur_rev) | set(prev_rev):
+        now  = cur_rev.get(cat, 0.0)
+        was  = prev_rev.get(cat, 0.0)
+        delta = round(now - was, 2)
+        pct   = round(delta / was * 100, 1) if was > 0 else (None if now == 0 else float('inf'))
+        movers.append({
+            "category":     cat,
+            "revenue":      round(now, 2),
+            "prev_revenue": round(was, 2),
+            "delta":        delta,
+            "delta_pct":    (None if pct == float('inf') else pct),
+            "is_new":       was == 0 and now > 0,
+        })
+
+    # rank by absolute revenue change (biggest movers in baht, both directions)
+    movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
+    top = movers[:limit]
+    gainers = sorted([m for m in top if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)
+    decliners = sorted([m for m in top if m["delta"] < 0], key=lambda m: m["delta"])
+
+    return {
+        "current":  {"from": cur_from, "to": cur_to},
+        "previous": {"from": prev_from, "to": prev_to},
+        "gainers":   gainers,
+        "decliners": decliners,
+        "movers":    top,
+    }
+
+
+# ---------------------------------------------------------------------------
+# /api/sales/dish-movers  -  per-DISH MoM movers (food menu items)
+# ---------------------------------------------------------------------------
+@app.get("/api/sales/dish-movers")
+@ttl_cache
+def sales_dish_movers(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+    metric:     str           = Query("qty", description="'qty' or 'revenue'"),
+    limit:      int           = Query(8, ge=1, le=30),
+):
+    """Which FOOD DISHES rose/fell most vs the previous equal-length period.
+
+    Per-dish (not category) and food-only (uses _FOOD_CATEGORY_FILTER), so it
+    surfaces actionable menu movement. Default metric = qty (orders), which is
+    buffet-aware (buffet dishes have ~0 à-la-carte revenue). Set metric=revenue
+    for à-la-carte revenue movement.
+    """
+    cur_to   = month_to or month
+    cur_from = month_from or month
+    if not cur_to:
+        with get_db() as con:
+            cur_to = con.execute(
+                "SELECT MAX(period_month) FROM sales_sku_monthly WHERE source='Easy'"
+            ).fetchone()[0]
+        cur_from = cur_to
+    if not cur_from:
+        cur_from = cur_to
+
+    fy, fm = _ym_parts(cur_from); ty, tm = _ym_parts(cur_to)
+    span = (ty * 12 + tm) - (fy * 12 + fm)
+    prev_to   = _month_add(cur_from, -1)
+    prev_from = _month_add(prev_to, -span)
+
+    val_col = "ssm.qty" if metric == "qty" else "ssm.subtotal_ex_vat"
+
+    def _dish_vals(mf: str, mt: str) -> dict:
+        filters = ["b.name != 'ALL'", "ssm.source = 'Easy'",
+                   "ssm.period_month >= :mf", "ssm.period_month <= :mt",
+                   _FOOD_CATEGORY_FILTER]
+        params = {"mf": mf, "mt": mt}
+        if branch:
+            filters.append("b.name = :branch"); params["branch"] = branch
+        where = "WHERE " + " AND ".join(filters)
+        with get_db() as con:
+            rows = con.execute(
+                f"""SELECT sk.sku_code AS code,
+                           COALESCE(sk.description, sk.sku_code) AS name,
+                           c.name AS category,
+                           SUM({val_col}) AS val
+                    FROM sales_sku_monthly ssm
+                    JOIN branches b   ON b.branch_id   = ssm.branch_id
+                    JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+                    JOIN categories c ON c.category_id  = sk.category_id
+                    {where}
+                    GROUP BY sk.sku_id""",
+                params,
+            ).fetchall()
+        return {r["code"]: {"name": r["name"], "category": r["category"],
+                            "val": r["val"] or 0} for r in rows}
+
+    cur_v  = _dish_vals(cur_from, cur_to)
+    prev_v = _dish_vals(prev_from, prev_to)
+
+    movers = []
+    for code in set(cur_v) | set(prev_v):
+        now = cur_v.get(code, {}).get("val", 0)
+        was = prev_v.get(code, {}).get("val", 0)
+        meta = cur_v.get(code) or prev_v.get(code)
+        delta = round(now - was, 2)
+        if delta == 0:
+            continue
+        pct = round(delta / was * 100, 1) if was > 0 else None
+        movers.append({
+            "code": code, "name": meta["name"], "category": meta["category"],
+            "now": round(now, 2), "was": round(was, 2),
+            "delta": delta, "delta_pct": pct, "is_new": was == 0 and now > 0,
+        })
+
+    movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
+    top = movers[:limit]
+    gainers   = sorted([m for m in top if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)
+    decliners = sorted([m for m in top if m["delta"] < 0], key=lambda m: m["delta"])
+    return {
+        "metric":   metric,
+        "current":  {"from": cur_from, "to": cur_to},
+        "previous": {"from": prev_from, "to": prev_to},
+        "gainers":   gainers,
+        "decliners": decliners,
     }
 
 
@@ -2855,7 +3164,7 @@ def analysis_gross_profit(
         day_rev_inc = r["rev_inc"] or 0.0
         if not bm or bm["rev_inc"] <= 0 or bm_daily_total_inc.get(k, 0) <= 0:
             # No monthly costing info or no monthly revenue — fall back to day_rev_ex with 0 COGS
-            day_rev_ex = day_rev_inc / 1.07
+            day_rev_ex = ex_vat(day_rev_inc)
             daily_out.append({
                 "branch":       r["branch"],
                 "day":          r["day"],
@@ -3218,8 +3527,8 @@ def analysis_persona(
                      ELSE customer_count
                    END AS party_size,
                    COUNT(*)                          AS tx_count,
-                   ROUND(AVG(total_inc_vat), 2)     AS avg_bill,
-                   ROUND(AVG(total_inc_vat / CASE WHEN customer_count <= 0 THEN 1
+                   ROUND(AVG(total_inc_vat / 1.07), 2)     AS avg_bill,
+                   ROUND(AVG(total_inc_vat / 1.07 / CASE WHEN customer_count <= 0 THEN 1
                                                    ELSE customer_count END), 2) AS avg_per_head
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -3263,8 +3572,8 @@ def analysis_persona(
             f"""
             SELECT COUNT(*)                          AS tx_count,
                    ROUND(AVG(customer_count), 2)    AS avg_party_size,
-                   ROUND(AVG(total_inc_vat), 2)     AS avg_ticket,
-                   ROUND(SUM(total_inc_vat) /
+                   ROUND(AVG(total_inc_vat / 1.07), 2)     AS avg_ticket,
+                   ROUND(SUM(total_inc_vat) / 1.07 /
                          NULLIF(SUM(customer_count), 0), 2) AS avg_per_head
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -3645,8 +3954,10 @@ def _fetch_period_kpis(con, branch, month_from, month_to, date_from, date_to):
         params,
     ).fetchall()
 
-    # Top SKUs (uses sales_sku_monthly w/ month range only)
-    sku_filters = ["b.name != 'ALL'"]
+    # Top SKUs (uses sales_sku_monthly w/ month range only) — FOOD-ONLY so the
+    # report's "Top SKUs" lists real dishes, not the deprecated BUFFET aggregate
+    # or service charge (see _FOOD_CATEGORY_FILTER; needs the categories join).
+    sku_filters = ["b.name != 'ALL'", _FOOD_CATEGORY_FILTER]
     sku_params: dict = {}
     if branch:
         sku_filters.append("b.name = :branch")
@@ -3669,6 +3980,7 @@ def _fetch_period_kpis(con, branch, month_from, month_to, date_from, date_to):
         FROM sales_sku_monthly sm
         JOIN branches b ON b.branch_id = sm.branch_id
         JOIN skus sk    ON sk.sku_id    = sm.sku_id
+        JOIN categories c ON c.category_id = sk.category_id
         {sku_where}
         GROUP BY sk.sku_id
         ORDER BY revenue DESC
@@ -5010,6 +5322,14 @@ def get_cost_detail(
         having_clause = "HAVING total_revenue >= :min_rev"
         params["min_rev"] = min_rev
 
+    # SCOPE (2026-06-01): Cost Management lists ONLY menu items actually sold via
+    # Easy. This excludes ~845 legacy / CM-POS-era / never-sold active SKUs that
+    # are not part of the current (Easy-only since 2026-05-27) menu and would
+    # otherwise clutter the cost worklist. Enforced by requiring an Easy sales row.
+    filters.append(
+        "EXISTS (SELECT 1 FROM sales_sku_monthly s "
+        "WHERE s.sku_id = sk.sku_id AND s.source = 'Easy')"
+    )
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
     cnt_params = {k: v for k, v in params.items() if k not in ("limit", "offset")}
 
@@ -5019,10 +5339,10 @@ def get_cost_detail(
             SELECT sk.sku_id, sk.sku_code,
                    COALESCE(sk.description,'') AS description,
                    c.name AS category,
-                   COALESCE(sk.business_type,'other') AS business_type,
+                   COALESCE(sk.business_type,'buffet') AS business_type,  -- buffet-first default (85% of business)
                    sc.unit_cost, sc.updated_at,
-                   ROUND(SUM(ssm.subtotal_ex_vat), 0) AS total_revenue,
-                   ROUND(SUM(ssm.qty), 0)            AS total_qty
+                   ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.subtotal_ex_vat END), 0) AS total_revenue,
+                   ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.qty END), 0)            AS total_qty
             FROM skus sk
             JOIN  categories c   ON c.category_id = sk.category_id
             LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
@@ -5058,8 +5378,15 @@ def get_cost_detail(
 # ---------------------------------------------------------------------------
 @app.get("/api/cost/template")
 def cost_template():
-    """All active SKUs with sales context + current unit_cost for CSV template download.
-    Sorted by total revenue desc so highest-volume items appear first."""
+    """SKUs actually sold through Easy (real line items) with sales context +
+    current unit_cost for CSV template download.
+
+    Scope (2026-06-01): only SKUs with at least one Easy sale — excludes the
+    ~847 never-sold active SKUs that just bloat the sheet — and excludes buffet
+    TIER codes (BUFFET*), whose 'cost' is the customer payment, not a line-item
+    cost (they're handled by _cogs_case, never costed here). Sorted by revenue
+    desc so highest-volume items to cost appear first.
+    """
     with get_db() as con:
         rows = con.execute(
             """
@@ -5067,15 +5394,19 @@ def cost_template():
                    COALESCE(sk.description, sk.sku_code) AS description,
                    c.name AS category,
                    COALESCE(CAST(sc.unit_cost AS TEXT), '') AS unit_cost,
-                   ROUND(COALESCE(SUM(ssm.subtotal_ex_vat), 0), 0) AS total_revenue,
-                   ROUND(COALESCE(SUM(ssm.qty), 0), 0)            AS total_qty,
-                   MAX(ssm.period_month)                           AS last_sold
+                   ROUND(SUM(ssm.subtotal_ex_vat), 0) AS total_revenue,
+                   ROUND(SUM(ssm.qty), 0)             AS total_qty,
+                   MAX(ssm.period_month)              AS last_sold
             FROM skus sk
             JOIN  categories c    ON c.category_id = sk.category_id
+            JOIN  sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id AND ssm.source = 'Easy'
             LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
-            LEFT JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
             WHERE COALESCE(sk.active, 1) = 1
+              AND sk.sku_code NOT LIKE 'BUFFET%'
+              AND c.name NOT IN ('Payment', 'Other', 'Oshinei DELIVERY', 'Special DELIVERY')
+              AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE', 'SP', 'SERVICE')
             GROUP BY sk.sku_id
+            HAVING SUM(ssm.qty) > 0
             ORDER BY total_revenue DESC, sk.sku_code
             """
         ).fetchall()
@@ -5183,9 +5514,18 @@ def cost_analysis(
     total_cogs        = sum(r["cogs"]        or 0 for r in costed_items)
     total_gp          = sum(r["gross_profit"] or 0 for r in costed_items)
     costed_rev_ex     = sum(r["revenue_ex_vat"] or 0 for r in costed_items)
-    overall_margin    = (
-        round(total_gp / costed_rev_ex * 100, 1) if costed_rev_ex > 0 else None
-    )
+    # Revenue-weighted margin EXCLUDING implausible items (margin < -100%, i.e.
+    # cost > 2x revenue). Those are near-zero-revenue, high-qty buffet-component
+    # SKUs that otherwise drag the headline KPI to nonsense (e.g. -7500%). They
+    # remain in the table; only the aggregate excludes them.
+    sane_margin_items = [
+        r for r in costed_items
+        if r["margin_pct"] is not None and r["margin_pct"] >= -100
+    ]
+    sane_gp     = sum(r["gross_profit"]   or 0 for r in sane_margin_items)
+    sane_rev_ex = sum(r["revenue_ex_vat"] or 0 for r in sane_margin_items)
+    overall_margin = round(sane_gp / sane_rev_ex * 100, 1) if sane_rev_ex > 0 else None
+    excluded_outliers = len(costed_items) - len(sane_margin_items)
 
     for r in items:
         r["revenue_mix_pct"] = round(r["revenue"] / total_revenue * 100, 2) if total_revenue else 0
@@ -5196,22 +5536,28 @@ def cost_analysis(
     # Filter them out for the avg/quadrant math; otherwise sum() raises TypeError.
     quad_items = [r for r in costed_items if r["margin_pct"] is not None]
     if quad_items:
-        avg_qty    = sum(r["qty"]        for r in quad_items) / len(quad_items)
-        avg_margin = sum(r["margin_pct"] for r in quad_items) / len(quad_items)
+        def _median(xs):
+            s = sorted(xs); n = len(s)
+            return 0 if n == 0 else (s[n // 2] if n % 2 else (s[n // 2 - 1] + s[n // 2]) / 2)
+        # MEDIAN boundaries, not mean: a few tiny-revenue SKUs produce margins of
+        # ±thousands-of-% (gross_profit / a few baht), which drag a mean off-scale
+        # and misclassify everything (the classic "everything is a Puzzle" bug).
+        med_qty    = _median([r["qty"]        for r in quad_items])
+        med_margin = _median([r["margin_pct"] for r in quad_items])
         for r in items:
             if r["unit_cost"] is None or r["margin_pct"] is None:
                 r["quadrant"] = "uncosted"
             else:
-                hi_pop = r["qty"]        >= avg_qty
-                hi_mar = r["margin_pct"] >= avg_margin
+                hi_pop = r["qty"]        >= med_qty
+                hi_mar = r["margin_pct"] >= med_margin
                 r["quadrant"] = (
                     "star"      if hi_pop and hi_mar  else
                     "plowhorse" if hi_pop             else
                     "puzzle"    if hi_mar             else
                     "dog"
                 )
-        avg_qty_all    = avg_qty
-        avg_margin_all = avg_margin
+        avg_qty_all    = med_qty
+        avg_margin_all = med_margin
     else:
         for r in items:
             r["quadrant"] = "uncosted"
@@ -5223,19 +5569,54 @@ def cost_analysis(
         cumrev += r["revenue"] or 0
         r["cum_revenue_pct"] = round(cumrev / total_revenue * 100, 1) if total_revenue else 0
 
+    # ── WHOLE-STORE reconciled headline totals (2026-06 fix) ──────────────────
+    # The per-item table above is à-la-carte-focused (BUFFET category excluded for
+    # menu-engineering). But its summed revenue (฿31M, à-la-carte only) does NOT
+    # reconcile with the COGS (which includes buffet B0xxx dish cost) → produced a
+    # nonsense GROSS PROFIT of -242M with a 70.8% margin. The KPI cards must show
+    # the WHOLE-STORE figures (all categories, unified COGS) so rev/COGS/GP/margin
+    # agree with every other tab (~฿944M rev, ~40% GP). Per-item analytics keep
+    # their own à-la-carte scope below.
+    ws_filters = ["b.name != 'ALL'", "ssm.source = 'Easy'"]
+    ws_params: dict = {}
+    if branch:
+        ws_filters.append("b.name = :wbranch"); ws_params["wbranch"] = branch
+    _month_range_filter(ws_filters, ws_params, month_from, month_to, month, col="ssm.period_month")
+    ws_where = "WHERE " + " AND ".join(ws_filters)
+    with get_db() as con:
+        ws = con.execute(f"""
+            SELECT ROUND(SUM(ssm.subtotal_ex_vat), 2) AS revenue,
+                   ROUND(SUM({_unified_cogs_expr('ssm')}), 2) AS cogs,
+                   ROUND(SUM(ssm.qty), 0) AS qty
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            {ws_where}
+        """, ws_params).fetchone()
+    ws_rev  = (ws["revenue"] or 0) if ws else 0
+    ws_cogs = (ws["cogs"] or 0) if ws else 0
+    ws_gp   = ws_rev - ws_cogs
+    ws_margin = round(ws_gp / ws_rev * 100, 1) if ws_rev > 0 else None
+
     return {
         "items": items,
         "summary": {
-            "total_revenue":      round(total_revenue, 2),
-            "total_cogs":         round(total_cogs, 2),
-            "total_gross_profit": round(total_gp, 2),
-            "overall_margin_pct": overall_margin,
-            "total_qty":          total_qty,
+            # Headline = whole-store reconciled (rev/COGS/GP/margin all agree)
+            "total_revenue":      round(ws_rev, 2),
+            "total_cogs":         round(ws_cogs, 2),
+            "total_gross_profit": round(ws_gp, 2),
+            "overall_margin_pct": ws_margin,
+            "total_qty":          round(ws["qty"] or 0, 0) if ws else 0,
+            # à-la-carte menu-engineering scope (for the table / scatter / pareto)
+            "alacarte_revenue":   round(total_revenue, 2),
+            "alacarte_cogs":      round(total_cogs, 2),
+            "alacarte_margin_pct": overall_margin,
             "total_skus":         len(items),
             "costed_skus":        len(costed_items),
             "uncosted_skus":      len(items) - len(costed_items),
             "avg_qty":            round(avg_qty_all, 1) if avg_qty_all else None,
             "avg_margin":         round(avg_margin_all, 1) if avg_margin_all else None,
+            "margin_outliers_excluded": excluded_outliers,
         },
     }
 
@@ -5312,17 +5693,77 @@ def _effective_cost_subquery(ssm: str = "ssm", sc: str = "sc") -> str:
 
 
 def _cogs_case(ssm: str = "ssm", sk: str = "sk", sc: str = "sc") -> str:
-    """SQL CASE expression for COGS. Requires JOIN skus sk and LEFT JOIN sku_cost sc.
+    """DEPRECATED shim → delegates to _unified_cogs_expr (2026-06-02 overhaul).
 
-    Uses the monthly-aware effective cost (Phase 8) — falls back to sku_cost.unit_cost
-    when no monthly override exists. Easy buffet tier rows still contribute zero cost
-    (consumption is logged via item-level B0xxx rows).
+    Kept so the ~34 existing call sites keep working unchanged. The `sc` arg is
+    ignored (the unified expr uses a correlated subquery for the sku_cost
+    fallback, so no sku_cost join is needed). All COGS in the app now flows
+    through one definition: BoM recipe first, sku_cost fallback, tier rows = 0.
     """
-    eff = _effective_cost_subquery(ssm, sc)
+    return _unified_cogs_expr(ssm, sk)
+
+
+def _bom_cogs_expr(ssm: str = "ssm") -> str:
+    """SQL expression for per-row COGS from the BoM RECIPE model (the trustworthy
+    path: real ingredient costs from bom_ingredients, resolved directly or via
+    bom_sku_alias). This is the SAME basis as the BoM Cost tab and Branch P&L —
+    use it for profit/GP so margins reflect reality (~42%), not the inflated
+    'costed-revenue-only' figure from sku_cost.
+
+    Returns 0 for SKUs with no recipe (uncosted) — so pair revenue with
+    _bom_costed_rev_expr() if you want margin over costed revenue only.
+
+    NOTE (2026-06-02): now delegates to _unified_cogs_expr so BoM and the old
+    _cogs_case sites produce IDENTICAL COGS. (Requires a `sk`/skus join, which
+    every caller already has.)
+    """
+    return _unified_cogs_expr(ssm, "sk")
+
+
+def _bom_costed_rev_expr(ssm: str = "ssm") -> str:
+    """Revenue portion that has a BoM recipe (pairs with _bom_cogs_expr)."""
     return (
-        f"CASE WHEN {ssm}.source = 'Easy' AND {sk}.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0 "
-        f"     WHEN {eff} IS NOT NULL THEN {ssm}.qty * {eff} "
-        f"     ELSE 0 END"
+        f"CASE WHEN COALESCE("
+        f"(SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id LIMIT 1), "
+        f"(SELECT 1 FROM bom_sku_alias a JOIN skus s_al ON s_al.sku_id = {ssm}.sku_id "
+        f"   WHERE a.bom_sku_code = s_al.sku_code LIMIT 1)) IS NOT NULL "
+        f"THEN {ssm}.subtotal_ex_vat ELSE 0 END"
+    )
+
+
+def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
+    """THE single COGS expression for the whole app (2026-06-02 overhaul).
+
+    Per row:
+      1. Easy buffet TIER rows (BUFFET350/500/590/799/CHILD) → 0
+         (consumption is logged on the item-level B0xxx rows; counting the tier
+          too would double-count).
+      2. else if the SKU has a BoM RECIPE (direct or via bom_sku_alias)
+         → qty × recipe ingredient cost   (the trustworthy path)
+      3. else if the SKU has a sku_cost.unit_cost
+         → qty × unit_cost                 (fallback for the ~284 recipe-less
+                                            à-la-carte / beverage SKUs)
+      4. else → 0 (genuinely uncosted)
+
+    Self-contained: needs only the sales row alias <ssm> (it resolves sku_code,
+    recipe, and unit_cost via correlated subqueries), so it's a true drop-in for
+    every old call site regardless of how/whether they join skus or sku_cost.
+    The `sk` arg is accepted for signature compatibility but not required.
+    Buffet revenue stays intact; only the cost side is unified.
+    """
+    return (
+        f"CASE "
+        f"  WHEN {ssm}.source = 'Easy' AND "
+        f"       (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id) "
+        f"       IN {_EASY_TIER_CODES_SQL} THEN 0 "
+        f"  ELSE {ssm}.qty * COALESCE("
+        f"    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id), "
+        f"    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
+        f"       JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id "
+        f"       JOIN skus s_al ON s_al.sku_id = {ssm}.sku_id WHERE a.bom_sku_code = s_al.sku_code), "
+        f"    (SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id = {ssm}.sku_id), "
+        f"    0) "
+        f"END"
     )
 
 
@@ -5550,6 +5991,48 @@ def buffet_performance(
             ORDER BY b.name, sm.period_month
         """, tier_named).fetchall()
 
+        # ── Real buffet food-cost trend (2026-06-02 fix) ──────────────────────
+        # The old food_cost_trend multiplied tier pax × tier unit_cost, but the
+        # per-tier rows (BUFFET350/500/…) carry no data — all adult buffet is on
+        # code 'BUFFET', child on 'BUFFETCHILD', and the actual food consumed is
+        # logged on the item-level rows (business_type='buffet'). So buffet food
+        # cost = unified COGS of buffet items, revenue = the buffet_tier rows.
+        bf_cost_rows = con.execute(f"""
+            SELECT sm.period_month AS m,
+                   SUM(CASE WHEN sk.business_type = 'buffet_tier'
+                            THEN sm.subtotal_ex_vat ELSE 0 END)  AS rev_ex,
+                   SUM({_unified_cogs_expr('sm', 'sk')})         AS cogs
+            FROM sales_sku_monthly sm
+            JOIN skus     sk ON sk.sku_id   = sm.sku_id
+            JOIN branches b  ON b.branch_id = sm.branch_id
+            {where_sku}
+              AND sk.business_type IN ('buffet', 'buffet_tier')
+            GROUP BY sm.period_month
+            ORDER BY sm.period_month
+        """, params_sku).fetchall()
+
+    bf_cost_by_month = {r["m"]: (float(r["rev_ex"] or 0), float(r["cogs"] or 0))
+                        for r in bf_cost_rows}
+
+    # ── Adult vs Child split (real codes: BUFFET = adult, BUFFETCHILD = child) ─
+    with get_db() as con:
+        ac_rows = con.execute(f"""
+            SELECT sk.sku_code AS code, SUM(sm.qty) AS qty,
+                   SUM(sm.subtotal_ex_vat) AS rev
+            FROM sales_sku_monthly sm
+            JOIN skus sk     ON sk.sku_id   = sm.sku_id
+            JOIN branches b  ON b.branch_id = sm.branch_id
+            {where_sku}
+              AND sk.sku_code IN ('BUFFET', 'BUFFETCHILD')
+            GROUP BY sk.sku_code
+        """, params_sku).fetchall()
+    adult_pax = next((float(r["qty"] or 0) for r in ac_rows if r["code"] == 'BUFFET'), 0.0)
+    child_pax = next((float(r["qty"] or 0) for r in ac_rows if r["code"] == 'BUFFETCHILD'), 0.0)
+    adult_rev = next((float(r["rev"] or 0) for r in ac_rows if r["code"] == 'BUFFET'), 0.0)
+    child_rev = next((float(r["rev"] or 0) for r in ac_rows if r["code"] == 'BUFFETCHILD'), 0.0)
+    buffet_billed_pax = adult_pax + child_pax  # buffet covers sold (tier rows)
+    child_pct = (child_pax / buffet_billed_pax * 100) if buffet_billed_pax else 0
+
     # ── Aggregate tier_trend (pax + cost%) ──────────────────────────────────
     from collections import defaultdict
     tier_trend = defaultdict(lambda: defaultdict(float))
@@ -5567,24 +6050,13 @@ def buffet_performance(
         "total_pax": sum(tier_trend[mo].values()),
     } for mo in months]
 
-    # ── Food cost trend (Buffet only — qty × tier_cost) ─────────────────────
-    def _eff_tier_cost(period, code):
-        # Phase 8 resolution: monthly exact -> latest monthly prior -> lifetime default.
-        if (period, code) in tier_cost_monthly:
-            return tier_cost_monthly[(period, code)]
-        priors = [m for (m, c) in tier_cost_monthly if c == code and m < period]
-        if priors:
-            return tier_cost_monthly[(max(priors), code)]
-        return tier_cost.get(code)
-
+    # ── Food cost trend (Buffet only — real unified COGS) ───────────────────
+    # 2026-06-02: replaced the tier-pax × tier-unit-cost calc (which produced 0
+    # because per-tier rows are empty) with the real buffet COGS computed above.
+    fc_months = sorted(bf_cost_by_month.keys()) or months
     food_cost_trend = []
-    for mo in months:
-        rev_ex = sum(tier_rev[mo].values())
-        cost = 0.0
-        for t in tier_list:
-            unit_cost = _eff_tier_cost(mo, t)
-            if unit_cost is not None:
-                cost += tier_trend[mo].get(t, 0) * unit_cost
+    for mo in fc_months:
+        rev_ex, cost = bf_cost_by_month.get(mo, (0.0, 0.0))
         pct = (cost / rev_ex * 100) if rev_ex else None
         food_cost_trend.append({
             "period": mo, "revenue_ex": round(rev_ex, 0), "cost": round(cost, 0),
@@ -5802,10 +6274,20 @@ def buffet_performance(
     c_gp_pct      = (c_gp   / c_costed_rev * 100) if c_costed_rev > 0 else None
     c_food_pct    = (c_cogs / c_costed_rev * 100) if c_costed_rev > 0 else None
 
+    # Real pax = customer_count from sales_transaction (the trustworthy headcount),
+    # not the tier-row qty which only counts buffet covers sold.
+    real_total_pax = sum((r["pax"] or 0) for r in daily_pax_rows)
+    waste_rate_real = (waste_total_qty / buffet_billed_pax * 100) if buffet_billed_pax else 0
+
     kpis = {
-        "total_pax":             int(total_buffet_pax),
+        "total_pax":             int(real_total_pax),
         "total_bills":           int(total_bills),
-        "avg_pax_per_bill":      round(total_buffet_pax / total_bills, 2) if total_bills else 0,
+        "avg_pax_per_bill":      round(real_total_pax / total_bills, 2) if total_bills else 0,
+        # Adult vs Child (real buffet codes) — replaces the empty tier split
+        "adult_pax":             int(adult_pax),
+        "child_pax":             int(child_pax),
+        "child_pct":             round(child_pct, 1),
+        "buffet_food_cost_pct":  round(food_cost_pct_overall, 1),  # buffet-only, real COGS
         "premium_tier_pct":      round(premium_pct, 1),
         "premium_tier_pct_target": round(
             (pricing_rec["target_mix"].get("BUFFET590", 0)
@@ -5815,7 +6297,7 @@ def buffet_performance(
         "food_cost_pct":         round(food_cost_pct_overall, 1),
         "food_cost_target_lo":   food_cost_target_lo,
         "food_cost_target_hi":   food_cost_target_hi,
-        "over_consumption_pct":  round(waste_rate_overall, 2),
+        "over_consumption_pct":  round(waste_rate_real, 2),
         "beverage_attach_pct":   round(bev_attach_overall, 1),
         "branch_count":          len(branch_pax),
         # ── Combined whole-restaurant (Phase 12) ──────────────────────────
@@ -5875,20 +6357,42 @@ def buffet_per_bill(
                         col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
 
-    # Tier price → cost mapping (use BUFFETxxx SKU costs from sku_cost table)
+    # 2026-06-02: per-bill cost now uses the REAL buffet food-cost ratio per month
+    # (unified COGS of buffet items ÷ buffet revenue), NOT a fabricated tier-price
+    # assumption. The old code looked up BUFFET350/500/590/799 unit_cost (which is
+    # empty) and fell back to a flat 45%-margin guess, so margins were fictional.
+    sm_filters = ["b.name != 'ALL'", "sk.business_type IN ('buffet','buffet_tier')"]
+    sm_params: dict = {}
+    if branch:
+        sm_filters.append("b.name = :branch")
+        sm_params["branch"] = branch
+    _month_range_filter(sm_filters, sm_params, month_from, month_to, None, col="sm.period_month")
+    sm_where = "WHERE " + " AND ".join(sm_filters)
     with get_db() as con:
-        tier_costs = {}
-        for r in con.execute("""
-            SELECT sk.sku_code, sc.unit_cost
-            FROM sku_cost sc JOIN skus sk ON sk.sku_id = sc.sku_id
-            WHERE sk.sku_code IN ('BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')
-        """).fetchall():
-            tier_costs[r["sku_code"]] = r["unit_cost"]
+        ratio_by_month = {}
+        _rrev_tot = _rcogs_tot = 0.0
+        for r in con.execute(f"""
+            SELECT sm.period_month AS m,
+                   SUM(CASE WHEN sk.business_type='buffet_tier'
+                            THEN sm.subtotal_ex_vat ELSE 0 END) AS rev_ex,
+                   SUM({_unified_cogs_expr('sm', 'sk')})        AS cogs
+            FROM sales_sku_monthly sm
+            JOIN skus sk     ON sk.sku_id   = sm.sku_id
+            JOIN branches b  ON b.branch_id = sm.branch_id
+            {sm_where}
+            GROUP BY sm.period_month
+        """, sm_params).fetchall():
+            rev = float(r["rev_ex"] or 0); cg = float(r["cogs"] or 0)
+            if rev > 0:
+                ratio_by_month[r["m"]] = cg / rev
+                _rrev_tot += rev; _rcogs_tot += cg
+        overall_ratio = (_rcogs_tot / _rrev_tot) if _rrev_tot else 0.60
 
-        # Pull all eligible buffet bills with per-head food spend → infer tier per bill
+        # Pull all eligible buffet bills (per-head spend used only for the spend-bracket mix)
         rows = con.execute(f"""
             SELECT b.name AS branch,
                    {period_expr} AS period,
+                   strftime('%Y-%m', st.sold_at)                  AS ym,
                    st.customer_count                              AS pax,
                    st.food_subtotal / st.customer_count           AS per_head,
                    st.total_inc_vat                               AS rev_inc,
@@ -5900,11 +6404,12 @@ def buffet_per_bill(
               AND (st.food_subtotal / st.customer_count) BETWEEN 200 AND 1500
         """, params).fetchall()
 
+    # Spend-bracket label from real per-head spend (NOT the dead tier SKU codes)
     def tier_of(per_head):
-        if per_head < 450:  return ("BUFFET350",  350)
-        if per_head < 600:  return ("BUFFET500",  500)
-        if per_head < 720:  return ("BUFFET590",  590)
-        return ("BUFFET799", 799)
+        if per_head < 450:  return ("≤450",    450)
+        if per_head < 600:  return ("450-600", 600)
+        if per_head < 720:  return ("600-720", 720)
+        return (">720", 800)
 
     from collections import defaultdict
     agg = defaultdict(lambda: {"bills": 0, "pax": 0, "revenue_ex": 0.0, "revenue_inc": 0.0,
@@ -5915,9 +6420,10 @@ def buffet_per_bill(
 
     for r in rows:
         tier_code, tier_price = tier_of(r["per_head"])
-        unit_cost = tier_costs.get(tier_code) or tier_price * 0.55  # fallback 45% margin assumption
         pax = r["pax"] or 0
-        cost = unit_cost * pax
+        rev_ex_bill = r["rev_ex"] or 0
+        # Real cost = bill revenue × that month's buffet food-cost ratio
+        cost = rev_ex_bill * ratio_by_month.get(r["ym"], overall_ratio)
         a = agg[r["period"]]
         a["bills"]       += 1
         a["pax"]         += pax
@@ -5996,23 +6502,32 @@ def profit_summary(
               ROUND(SUM(ssm.subtotal_ex_vat), 2)               AS revenue,
               ROUND(SUM(ssm.subtotal_ex_vat), 2)               AS revenue_ex_vat,
               ROUND(SUM(ssm.total_inc_vat), 2)                 AS pos_total_inc_vat_diagnostic,
-              ROUND(SUM({_cogs_case()}), 2)                    AS cogs,
-              ROUND(SUM({_costed_rev_case()}), 2)              AS costed_revenue_ex_vat,
+              ROUND(SUM({_bom_cogs_expr()}), 2)                AS cogs,
+              SUM(CASE WHEN COALESCE(
+                    (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
+                    (SELECT 1 FROM bom_sku_alias a JOIN skus s2 ON s2.sku_id = ssm.sku_id
+                       WHERE a.bom_sku_code = s2.sku_code LIMIT 1)) IS NOT NULL
+                   THEN ssm.qty ELSE 0 END)                    AS costed_qty,
               SUM(ssm.qty) AS qty_sold
             FROM sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus     sk ON sk.sku_id  = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
         """, params).fetchone()
 
     revenue        = row["revenue"]                or 0   # ex-VAT (Rule 1)
     revenue_ex     = row["revenue_ex_vat"]         or 0
-    cogs           = row["cogs"]                   or 0
-    costed_rev_ex  = row["costed_revenue_ex_vat"]  or 0
-    gross_profit   = costed_rev_ex - cogs
-    margin_pct     = round(gross_profit / costed_rev_ex * 100, 2) if costed_rev_ex > 0 else None
-    coverage_pct   = round(costed_rev_ex / revenue_ex   * 100, 1) if revenue_ex    > 0 else 0
+    cogs           = row["cogs"]                   or 0   # BoM recipe COGS (real)
+    qty_sold       = row["qty_sold"]               or 0
+    costed_qty     = row["costed_qty"]             or 0
+    costed_rev_ex  = revenue_ex   # BoM applies across all revenue; kept for response compat
+    gross_profit   = revenue_ex - cogs
+    # Margin over TOTAL revenue (honest) — not just costed revenue, which inflated
+    # GP to ~72%. With BoM coverage ~70-92%, this reflects the real ~42% margin.
+    margin_pct     = round(gross_profit / revenue_ex * 100, 2) if revenue_ex > 0 else None
+    # Coverage = % of QTY SOLD that has a BoM recipe. (Revenue-based coverage is
+    # meaningless for buffet: dishes are costed but their revenue is on the tier.)
+    coverage_pct   = round(costed_qty / qty_sold * 100, 1) if qty_sold > 0 else 0
 
     # tx count from sales_transaction (bills only — total_inc_vat is diagnostic, not revenue)
     tx_where, tx_params = _tx_filters(branch, group, month_from, month_to, month)
@@ -6035,12 +6550,11 @@ def profit_summary(
         trend_rows = con.execute(f"""
             SELECT ssm.period_month                              AS period_month,
               ROUND(SUM(ssm.subtotal_ex_vat), 2)                 AS revenue,
-              ROUND(SUM({_cogs_case()}), 2)                      AS cogs,
-              ROUND(SUM({_costed_rev_case()}), 2)                AS costed_revenue_ex_vat
+              ROUND(SUM({_bom_cogs_expr()}), 2)                  AS cogs,
+              ROUND(SUM({_bom_costed_rev_expr()}), 2)            AS costed_revenue_ex_vat
             FROM sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus     sk ON sk.sku_id  = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
             GROUP BY ssm.period_month
             ORDER BY ssm.period_month
@@ -6048,9 +6562,10 @@ def profit_summary(
     monthly_trend = []
     for tr in trend_rows:
         d = dict(tr)
-        gp = (d["costed_revenue_ex_vat"] or 0) - (d["cogs"] or 0)
+        rev = d["revenue"] or 0
+        gp = rev - (d["cogs"] or 0)   # GP over total revenue (BoM COGS)
         d["gross_profit"] = round(gp, 2)
-        d["margin_pct"]   = round(gp / d["costed_revenue_ex_vat"] * 100, 2) if (d["costed_revenue_ex_vat"] or 0) > 0 else None
+        d["margin_pct"]   = round(gp / rev * 100, 2) if rev > 0 else None
         monthly_trend.append(d)
 
     return {
@@ -6083,12 +6598,11 @@ def profit_trend(
         rows = con.execute(f"""
             SELECT ssm.period_month,
               ROUND(SUM(ssm.subtotal_ex_vat), 2)   AS revenue_ex_vat,
-              ROUND(SUM({_cogs_case()}), 2)        AS cogs,
-              ROUND(SUM({_costed_rev_case()}), 2)  AS costed_revenue_ex_vat
+              ROUND(SUM({_bom_cogs_expr()}), 2)    AS cogs,
+              ROUND(SUM({_bom_costed_rev_expr()}), 2)  AS costed_revenue_ex_vat
             FROM sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus     sk ON sk.sku_id  = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
             GROUP BY ssm.period_month
             ORDER BY ssm.period_month
@@ -6096,9 +6610,10 @@ def profit_trend(
     out = []
     for r in rows:
         d = dict(r)
-        gp = (d["costed_revenue_ex_vat"] or 0) - (d["cogs"] or 0)
+        rev = d["revenue_ex_vat"] or 0
+        gp = rev - (d["cogs"] or 0)   # BoM COGS, margin over total revenue
         d["gross_profit"] = round(gp, 2)
-        d["margin_pct"]   = round(gp / d["costed_revenue_ex_vat"] * 100, 2) if d["costed_revenue_ex_vat"] > 0 else None
+        d["margin_pct"]   = round(gp / rev * 100, 2) if rev > 0 else None
         out.append(d)
     return out
 
@@ -6117,23 +6632,23 @@ def profit_by_branch(
         rows = con.execute(f"""
             SELECT b.branch_id, b.name AS branch,
               ROUND(SUM(ssm.subtotal_ex_vat), 2)   AS revenue_ex_vat,
-              ROUND(SUM({_cogs_case()}), 2)        AS cogs,
-              ROUND(SUM({_costed_rev_case()}), 2)  AS costed_revenue_ex_vat,
+              ROUND(SUM({_bom_cogs_expr()}), 2)    AS cogs,
+              ROUND(SUM({_bom_costed_rev_expr()}), 2)  AS costed_revenue_ex_vat,
               SUM(ssm.qty) AS qty
             FROM sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus     sk ON sk.sku_id  = ssm.sku_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
             GROUP BY b.branch_id
-            ORDER BY costed_revenue_ex_vat DESC
+            ORDER BY revenue_ex_vat DESC
         """, params).fetchall()
     out = []
     for r in rows:
         d = dict(r)
-        gp = (d["costed_revenue_ex_vat"] or 0) - (d["cogs"] or 0)
+        rev = d["revenue_ex_vat"] or 0
+        gp = rev - (d["cogs"] or 0)   # BoM COGS, margin over total revenue
         d["gross_profit"] = round(gp, 2)
-        d["margin_pct"]   = round(gp / d["costed_revenue_ex_vat"] * 100, 2) if d["costed_revenue_ex_vat"] > 0 else None
+        d["margin_pct"]   = round(gp / rev * 100, 2) if rev > 0 else None
         out.append(d)
     return out
 
@@ -6179,8 +6694,10 @@ def gp_by_branch_month(
         filters.append(var_clause)
     where = "WHERE " + " AND ".join(filters)
 
-    # Phase 8: use the central helper so monthly cost overrides are honored.
-    cogs_expr = f"SUM({_cogs_case('ssm','sk','sc')})"
+    # COGS from the BoM RECIPE model (real ingredient cost), consistent with the
+    # Profit tab, Branch P&L, and BoM Cost tab. Was _cogs_case (sku_cost), which
+    # gave inflated GP; switched to BoM 2026-06-01 so GP รายสาขา matches reality.
+    cogs_expr = f"SUM({_bom_cogs_expr('ssm')})"
 
     with get_db() as con:
         rows = con.execute(f"""
@@ -6192,7 +6709,6 @@ def gp_by_branch_month(
               FROM sales_sku_monthly ssm
               JOIN branches b ON b.branch_id = ssm.branch_id
               JOIN skus     sk ON sk.sku_id  = ssm.sku_id
-              LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
             GROUP BY b.branch_id, ssm.period_month, ssm.source
             ORDER BY b.name, ssm.period_month
@@ -6457,8 +6973,22 @@ def profit_per_bill_distribution(
     """Approximate distribution of profit per bill.
     Since transactions don't link to SKUs, we apply the period's overall
     costed-margin to each transaction's food+drink+other subtotal."""
-    summary = profit_summary(branch=branch, group=group, month_from=month_from, month_to=month_to, month=month)
-    margin_pct = summary["margin_pct"] or 0
+    # NOTE: do NOT call profit_summary() here — it's @ttl_cache-wrapped and returns
+    # a Response (JSON bytes), not a dict, so subscripting it 500s. Compute the
+    # costed-margin directly from the same source.
+    _ps_where, _ps_params = _profit_filters(branch, group, month_from, month_to, month)
+    with get_db() as con:
+        _ps = con.execute(f"""
+            SELECT ROUND(SUM({_bom_cogs_expr()}), 2)         AS cogs,
+                   ROUND(SUM(ssm.subtotal_ex_vat), 2)        AS revenue
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus     sk ON sk.sku_id  = ssm.sku_id
+            {_ps_where}
+        """, _ps_params).fetchone()
+    _rev   = (_ps["revenue"] or 0) if _ps else 0
+    _cogs  = (_ps["cogs"] or 0) if _ps else 0
+    margin_pct  = round((_rev - _cogs) / _rev * 100, 2) if _rev > 0 else 0  # BoM, over total rev
 
     if margin_pct == 0:
         return {
@@ -6675,6 +7205,8 @@ def pnl_branch_detail(
     with get_db() as con:
         monthly_rows = con.execute(_pnl_sku_query(sku_where, sku_params), sku_params).fetchall()
 
+        # Top 60 dishes by BoM COST (real recipe cost), with each dish's share of
+        # the branch's total COGS — so you can see what drives the branch's cost.
         top_skus = con.execute(f"""
             SELECT sk.sku_code,
                    COALESCE(sk.description, sk.sku_code) AS description,
@@ -6682,12 +7214,11 @@ def pnl_branch_detail(
                    ROUND(SUM(ssm.qty), 0)                AS qty,
                    ROUND(SUM(ssm.subtotal_ex_vat), 2)    AS revenue,
                    ROUND(SUM(ssm.subtotal_ex_vat), 2)    AS revenue_ex_vat,
-                   ROUND(SUM(ssm.total_inc_vat), 2)      AS pos_total_inc_vat_diagnostic,
                    sc.unit_cost,
-                   ROUND(SUM({_cogs_case()}), 2)           AS cogs,
-                   ROUND(SUM(ssm.subtotal_ex_vat) - SUM({_cogs_case()}), 2) AS gp,
+                   ROUND(SUM({_bom_cogs_expr()}), 2)        AS cogs,
+                   ROUND(SUM(ssm.subtotal_ex_vat) - SUM({_bom_cogs_expr()}), 2) AS gp,
                    CASE WHEN SUM(ssm.subtotal_ex_vat) > 0
-                        THEN ROUND(100.0*(SUM(ssm.subtotal_ex_vat) - SUM({_cogs_case()}))
+                        THEN ROUND(100.0*(SUM(ssm.subtotal_ex_vat) - SUM({_bom_cogs_expr()}))
                                    / SUM(ssm.subtotal_ex_vat), 1) ELSE NULL END AS margin_pct
             FROM sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
@@ -6696,9 +7227,9 @@ def pnl_branch_detail(
             LEFT JOIN sku_cost sc ON sc.sku_id  = ssm.sku_id
             {sku_where}
             GROUP BY sk.sku_id
-            HAVING SUM(ssm.qty) > 0
-            ORDER BY SUM(ssm.subtotal_ex_vat) - SUM({_cogs_case()}) DESC
-            LIMIT 50
+            HAVING SUM(ssm.qty) > 0 AND SUM({_bom_cogs_expr()}) > 0
+            ORDER BY SUM({_bom_cogs_expr()}) DESC
+            LIMIT 60
         """, sku_params).fetchall()
 
         bill_vals = con.execute(f"""
@@ -6780,11 +7311,184 @@ def pnl_branch_detail(
         "avg_profit":       round(sum(vals) * margin_frac / n, 2) if n else 0,
     }
 
+    # Each dish's share of the branch's TOTAL BoM cost (across ALL dishes, not
+    # just the top 60) so the % is honest.
+    with get_db() as con:
+        _tc = con.execute(f"""
+            SELECT ROUND(SUM({_bom_cogs_expr()}), 2) AS total_cogs
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            {sku_where}
+        """, sku_params).fetchone()
+
+        # Per-branch INGREDIENT consumption (which raw materials drive this
+        # branch's cost) + per-branch CATEGORY cost mix — the "go deeper" asks.
+        ing_rows = con.execute(f"""
+            SELECT bi.ingredient_name AS name, bi.ingredient_type AS type,
+                   SUM(ssm.qty * bi.ingredient_cost) AS cost
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN skus sk    ON sk.sku_id   = ssm.sku_id
+            JOIN bom_ingredients bi ON bi.sku_id = ssm.sku_id
+            {sku_where}
+            GROUP BY bi.ingredient_name
+        """, sku_params).fetchall()
+
+        cat_rows = con.execute(f"""
+            SELECT c.name AS category,
+                   ROUND(SUM(ssm.subtotal_ex_vat), 2) AS revenue,
+                   ROUND(SUM({_bom_cogs_expr()}), 2)  AS cogs
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id   = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+            JOIN categories c ON c.category_id  = sk.category_id
+            {sku_where}
+            GROUP BY c.name
+        """, sku_params).fetchall()
+
+    branch_total_cogs = (_tc["total_cogs"] or 0) if _tc else 0
+    top_list = [dict(r) for r in top_skus]
+    for d in top_list:
+        d["cost_pct"] = round((d["cogs"] or 0) / branch_total_cogs * 100, 1) if branch_total_cogs > 0 else 0
+
+    # Group ingredients into families (salmon variants → Salmon), top 15 by cost.
+    fam: dict = {}
+    for r in ing_rows:
+        label = _ingredient_family(r["name"])
+        fam[label] = fam.get(label, 0.0) + (r["cost"] or 0)
+    ing_total = sum(fam.values()) or 1
+    top_ingredients = [
+        {"name": k, "cost": round(v, 2), "pct": round(v / ing_total * 100, 1)}
+        for k, v in sorted(fam.items(), key=lambda x: -x[1])
+    ][:15]
+
+    # Category cost mix (top by cost), each as % of branch COGS.
+    cat_mix = []
+    for r in sorted(cat_rows, key=lambda x: -(x["cogs"] or 0)):
+        cogs_v = r["cogs"] or 0
+        if cogs_v <= 0:
+            continue
+        cat_mix.append({
+            "category":  r["category"],
+            "revenue":   r["revenue"] or 0,
+            "cogs":      cogs_v,
+            "cost_pct":  round(cogs_v / branch_total_cogs * 100, 1) if branch_total_cogs > 0 else 0,
+        })
+
     return {
         "branch":   branch,
         "monthly":  monthly_out,
-        "top_skus": [dict(r) for r in top_skus],
+        "top_skus": top_list,
+        "branch_total_cogs": branch_total_cogs,
+        "top_ingredients":   top_ingredients,
+        "category_mix":      cat_mix,
         "bill_stats": bill_stats,
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/pnl/branch-month-detail  — drill a branch+month from the P&L table
+#   • P&L summary for that month (rev / COGS / GP)
+#   • BoM cost broken down by dish (each dish's % of the month's COGS)
+#   • top ingredients (families) driving cost
+#   • MoM: which dishes rose/fell most in SERVINGS vs the previous month
+# ---------------------------------------------------------------------------
+@app.get("/api/pnl/branch-month-detail")
+@ttl_cache
+def pnl_branch_month_detail(
+    branch: str = Query(...),
+    month:  str = Query(..., description="YYYY-MM"),
+    limit:  int = Query(40, ge=5, le=200),
+):
+    prev = _month_add(month, -1)
+    cogs_x = _unified_cogs_expr("ssm")
+
+    def _dishes(mon: str) -> dict:
+        with get_db() as con:
+            rows = con.execute(f"""
+                SELECT sk.sku_code,
+                       COALESCE(sk.description, sk.sku_code) AS description,
+                       c.name AS category,
+                       SUM(ssm.qty)             AS servings,
+                       SUM({cogs_x})            AS cogs,
+                       SUM(ssm.subtotal_ex_vat) AS revenue
+                FROM sales_sku_monthly ssm
+                JOIN branches b   ON b.branch_id   = ssm.branch_id
+                JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+                JOIN categories c ON c.category_id  = sk.category_id
+                WHERE b.name = :branch AND ssm.period_month = :m
+                GROUP BY sk.sku_id
+                HAVING SUM(ssm.qty) > 0
+            """, {"branch": branch, "m": mon}).fetchall()
+        return {r["sku_code"]: dict(r) for r in rows}
+
+    cur = _dishes(month)
+    pre = _dishes(prev)
+
+    tot_cogs = sum((d["cogs"] or 0) for d in cur.values())
+    tot_rev  = sum((d["revenue"] or 0) for d in cur.values())
+
+    # BoM cost breakdown by dish (this month), each as % of month COGS
+    cost_breakdown = sorted(
+        ({"sku_code": k, "description": d["description"], "category": d["category"],
+          "servings": round(d["servings"] or 0, 0), "cogs": round(d["cogs"] or 0, 2),
+          "cost_pct": round((d["cogs"] or 0) / tot_cogs * 100, 1) if tot_cogs > 0 else 0}
+         for k, d in cur.items()),
+        key=lambda x: -x["cogs"]
+    )[:limit]
+
+    # Ingredient families this month
+    fam: dict = {}
+    with get_db() as con:
+        ing = con.execute("""
+            SELECT bi.ingredient_name AS name, SUM(ssm.qty*bi.ingredient_cost) AS cost
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            JOIN bom_ingredients bi ON bi.sku_id = ssm.sku_id
+            WHERE b.name = :branch AND ssm.period_month = :m
+            GROUP BY bi.ingredient_name
+        """, {"branch": branch, "m": month}).fetchall()
+    for r in ing:
+        lbl = _ingredient_family(r["name"]); fam[lbl] = fam.get(lbl, 0.0) + (r["cost"] or 0)
+    ing_tot = sum(fam.values()) or 1
+    top_ingredients = [{"name": k, "cost": round(v, 2), "pct": round(v/ing_tot*100, 1)}
+                       for k, v in sorted(fam.items(), key=lambda x: -x[1])][:12]
+
+    # MoM rising/falling dishes by servings
+    movers = []
+    for code in set(cur) | set(pre):
+        now = (cur.get(code, {}).get("servings") or 0)
+        was = (pre.get(code, {}).get("servings") or 0)
+        if now == was:
+            continue
+        meta = cur.get(code) or pre.get(code)
+        delta = now - was
+        pct = round(delta / was * 100, 1) if was > 0 else None
+        movers.append({"sku_code": code, "description": meta["description"],
+                       "now": round(now, 0), "was": round(was, 0), "delta": round(delta, 0),
+                       "delta_pct": pct, "is_new": was == 0 and now > 0})
+    movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
+    rising   = sorted([m for m in movers if m["delta"] > 0], key=lambda m: -m["delta"])[:10]
+    falling  = sorted([m for m in movers if m["delta"] < 0], key=lambda m: m["delta"])[:10]
+
+    prev_cogs = sum((d["cogs"] or 0) for d in pre.values())
+    prev_rev  = sum((d["revenue"] or 0) for d in pre.values())
+    return {
+        "branch": branch, "month": month, "prev_month": prev,
+        "summary": {
+            "revenue": round(tot_rev, 2), "cogs": round(tot_cogs, 2),
+            "gross_profit": round(tot_rev - tot_cogs, 2),
+            "gp_margin_pct": round((tot_rev - tot_cogs)/tot_rev*100, 1) if tot_rev > 0 else None,
+            "food_cost_pct": round(tot_cogs/tot_rev*100, 1) if tot_rev > 0 else None,
+            "prev_revenue": round(prev_rev, 2), "prev_cogs": round(prev_cogs, 2),
+            "rev_delta_pct": round((tot_rev-prev_rev)/prev_rev*100, 1) if prev_rev > 0 else None,
+            "dish_count": len(cur),
+        },
+        "cost_breakdown": cost_breakdown,
+        "top_ingredients": top_ingredients,
+        "rising_dishes": rising,
+        "falling_dishes": falling,
     }
 
 
@@ -7072,7 +7776,7 @@ def analysis_sph(
 
     with get_db() as con:
         rows = con.execute(f"""
-            SELECT st.total_inc_vat / st.customer_count AS sph,
+            SELECT (st.total_inc_vat / 1.07) / st.customer_count AS sph,
                    b.name                               AS branch,
                    CAST(strftime('%H', st.sold_at) AS INTEGER) AS hour
             FROM sales_transaction st
@@ -8157,8 +8861,19 @@ def cost_audit():
         uc = item["unit_cost"]
         z  = round((uc - mean_uc) / sd_uc, 2) if sd_uc > 0 else 0
         ratio = item["ratio"]
+        implied = item["implied_selling_price"]
+        qty = item["total_qty"] or 0
 
-        if item["is_tier"]:
+        # Buffet-included dish: sold in volume (qty>0) but ~zero à-la-carte revenue
+        # (customer pays via the buffet tier, not per plate) → avg sell ≈ 0, which
+        # makes the cost/price ratio meaningless (huge false 'Error'). Detect these
+        # by data (implied≈0 with real qty), NOT a stale code-prefix list, and
+        # skip the ratio check — rely on z-score only. Mark as 'tier' so the UI
+        # groups them as buffet, not errors.
+        is_buffet_incl = qty > 0 and (implied is None or implied < 1.0)
+        item["is_buffet_included"] = is_buffet_incl
+
+        if item["is_tier"] or is_buffet_incl:
             flag = "tier"
         elif ratio is not None and ratio > 1.0:
             flag = "error"       # cost exceeds selling price per unit
@@ -8186,6 +8901,74 @@ def cost_audit():
         "tier_count":    sum(1 for x in result if x["flag"] == "tier"),
     }
     return {"summary": summary, "flagged": flagged, "all": result}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-efficiency   (Phase 6, 2026-06-02)
+# Per-dish: servings, % of total servings, BoM cost, % of total cost,
+# cost/serving. The key buffet question: which dishes are served a LOT and cost a
+# LOT (→ re-engineer recipe / portion to cut cost), vs served a lot but cheap
+# (→ promote). Per-branch capable.
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-efficiency")
+@ttl_cache
+def buffet_menu_cost_efficiency(
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    limit:      int           = Query(80, ge=10, le=300),
+):
+    """For every food dish: servings (qty), cost (unified COGS), and each as a %
+    of the total — so you can target HIGH-volume × HIGH-cost dishes for cost
+    reduction. Buffet tier rows excluded (cost lives on the item dishes)."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
+                   c.name AS category,
+                   SUM(ssm.qty)               AS servings,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost,
+                   SUM(ssm.subtotal_ex_vat)   AS revenue
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id   = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+            JOIN categories c ON c.category_id  = sk.category_id
+            {where}
+            GROUP BY sk.sku_id
+            HAVING SUM(ssm.qty) > 0
+        """, params).fetchall()
+    tot_serv = sum((r["servings"] or 0) for r in rows) or 1
+    tot_cost = sum((r["cost"] or 0) for r in rows) or 1
+    items = []
+    for r in rows:
+        serv = r["servings"] or 0; cost = r["cost"] or 0
+        serv_pct = serv / tot_serv * 100
+        cost_pct = cost / tot_cost * 100
+        items.append({
+            "sku_code": r["sku_code"], "description": r["description"], "category": r["category"],
+            "servings": round(serv, 0), "serving_pct": round(serv_pct, 2),
+            "cost": round(cost, 2), "cost_pct": round(cost_pct, 2),
+            "cost_per_serving": round(cost / serv, 2) if serv else 0,
+            "revenue": round(r["revenue"] or 0, 2),
+            # priority = how much this dish drives cost relative to volume.
+            # high cost_pct AND high serving_pct = top re-engineering target.
+            "reduce_priority": round(cost_pct, 2),
+            "is_high_volume": serv_pct >= (100 / max(1, len(rows)) * 2),  # >2× avg share
+        })
+    items.sort(key=lambda x: -x["cost_pct"])
+    return {
+        "branch": branch or "ทุกสาขา",
+        "total_servings": round(tot_serv, 0),
+        "total_cost": round(tot_cost, 2),
+        "items": items[:limit],
+        "n_dishes": len(rows),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -8691,25 +9474,14 @@ def pnl_branch(
             {where}
             GROUP BY b.name
         """, params).fetchall()
-        # COGS from the BoM model (real recipe costs), resolving each sales SKU to its
-        # recipe directly or via bom_sku_alias — same approach as the BoM Cost tab.
+        # COGS via the UNIFIED expression (BoM recipe first, sku_cost fallback,
+        # tier rows = 0) so this matches every other tab exactly (2026-06-02).
         bom_rows = con.execute(f"""
-            WITH eff AS (
-              SELECT b.name AS branch, ssm.qty AS qty,
-                     COALESCE(
-                       (SELECT bi.sku_id FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
-                       (SELECT a.resolved_sku_id FROM bom_sku_alias a
-                          JOIN skus s ON s.sku_id = ssm.sku_id
-                         WHERE a.bom_sku_code = s.sku_code LIMIT 1)
-                     ) AS bom_sku_id
-              FROM sales_sku_monthly ssm
-              JOIN branches b ON b.branch_id = ssm.branch_id
-              {where}
-            )
-            SELECT eff.branch AS branch, SUM(eff.qty * bi.ingredient_cost) AS bom_cost
-            FROM eff JOIN bom_ingredients bi ON bi.sku_id = eff.bom_sku_id
-            WHERE eff.bom_sku_id IS NOT NULL
-            GROUP BY eff.branch
+            SELECT b.name AS branch, SUM({_unified_cogs_expr('ssm')}) AS bom_cost
+            FROM sales_sku_monthly ssm
+            JOIN branches b ON b.branch_id = ssm.branch_id
+            {where}
+            GROUP BY b.name
         """, params).fetchall()
         cov = con.execute(f"""
             SELECT b.name AS branch, SUM(st.customer_count) AS covers
@@ -8911,10 +9683,13 @@ def daypart_economics(
         filters.append("b.name = :branch"); params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, month, col="SUBSTR(st.sold_at,1,7)")
     where = "WHERE " + " AND ".join(filters)
-    # daypart bucket by hour
-    bucket = ("CASE WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 11 AND 15 THEN 'lunch' "
-              "WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 16 AND 22 THEN 'dinner' "
-              "ELSE 'other' END")
+    # Finer daypart buckets (5 instead of 3) for more detail.
+    bucket = ("CASE "
+              "WHEN CAST(strftime('%H', st.sold_at) AS INT) < 11 THEN 'morning' "
+              "WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 11 AND 14 THEN 'lunch' "
+              "WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 15 AND 17 THEN 'afternoon' "
+              "WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 18 AND 21 THEN 'dinner' "
+              "ELSE 'late' END")
     with get_db() as con:
         rows = con.execute(f"""
             SELECT {bucket} AS daypart,
@@ -8929,19 +9704,24 @@ def daypart_economics(
             {where}
             GROUP BY daypart
         """, params).fetchall()
-    labels = {"lunch": "กลางวัน (11-15)", "dinner": "เย็น (16-22)", "other": "อื่น ๆ"}
+    labels = {"morning": "เช้า (ก่อน 11)", "lunch": "กลางวัน (11-14)",
+              "afternoon": "บ่าย (15-17)", "dinner": "เย็น (18-21)", "late": "ดึก (22+)"}
+    total_rev = sum((r["revenue"] or 0) for r in rows) or 1
     out = []
     for r in rows:
         food = r["food"] or 0; drink = r["drink"] or 0; other = r["other"] or 0
-        rev = r["revenue"] or 0; covers = r["covers"] or 0
+        rev = r["revenue"] or 0; covers = r["covers"] or 0; bills = r["bills"] or 0
         est_gp = drink * DRINK_GP + (food + other) * FOODOTHER_GP
         out.append({
             "daypart":       r["daypart"],
             "label":         labels.get(r["daypart"], r["daypart"]),
-            "bills":         r["bills"] or 0,
+            "bills":         bills,
             "covers":        covers,
             "revenue":       round(rev, 2),
+            "revenue_pct":   round(rev / total_rev * 100, 1),
             "rev_per_cover": round(rev / covers, 2) if covers else None,
+            "avg_bill":      round(rev / bills, 2) if bills else None,
+            "covers_per_bill": round(covers / bills, 2) if bills else None,
             "drink_pct":     round(drink / (food + drink + other) * 100, 1) if (food + drink + other) else 0.0,
             "mix": {
                 "food":  round(food, 2), "drink": round(drink, 2), "other": round(other, 2),
@@ -8949,7 +9729,7 @@ def daypart_economics(
             "est_gross_profit": round(est_gp, 2),
             "est_gp_margin_pct": round(est_gp / rev * 100, 1) if rev else None,
         })
-    order = {"lunch": 0, "dinner": 1, "other": 2}
+    order = {"morning": 0, "lunch": 1, "afternoon": 2, "dinner": 3, "late": 4}
     out.sort(key=lambda x: order.get(x["daypart"], 9))
     return {"dayparts": out,
             "assumptions": {"drink_gp": DRINK_GP, "food_other_gp": FOODOTHER_GP,
@@ -10266,6 +11046,64 @@ def bom_composition(sku: str = Query(..., description="SKU code, e.g. B0005")):
     }
 
 
+# Ingredient family keyword map — rolls up the many name variants (e.g. 24 salmon
+# spellings) into one family so consumption truly reflects the dominant proteins.
+# Order matters: first matching family wins. TH + EN keywords.
+_INGREDIENT_FAMILIES = [
+    # --- specific seafood/proteins FIRST (so generic "ปลา"/"หอย"/"ไข่" don't steal them) ---
+    ("Salmon · แซลมอน",      ("แซลมอน", "แซม่อน", "แซลมอล", "salmon")),
+    ("Eel/Unagi · ปลาไหล",   ("ปลาไหล", "อูนางิ", "unagi", "eel")),
+    ("Tuna · ทูน่า",         ("ทูน่า", "มากุโระ", "โอโทโร่", "ชูโทโร่", "อาคามิ", "tuna", "maguro", "toro", "akami")),
+    ("Hamachi · ฮามาจิ",     ("ฮามาจิ", "hamachi", "yellowtail", "buri")),
+    ("Roe · ไข่ปลา/ไข่กุ้ง",   ("ไข่กุ้ง", "ไข่ปลา", "ไข่หอย", "roe", "ikura", "tobiko", "masago")),
+    ("Shrimp · กุ้ง",        ("กุ้ง", "shrimp", "prawn", "ebi")),
+    ("Crab · ปู",            ("ปูอัด", "มันปู", "ปู ", "crab", "kani")),
+    ("Squid/Octopus · หมึก", ("ปลาหมึก", "หมึก", "ทาโกะ", "squid", "octopus", "ika", "tako")),
+    ("Scallop · หอยเชลล์",   ("หอยเชลล์", "scallop", "hotate")),
+    ("Oyster · หอยนางรม",    ("หอยนางรม", "oyster")),
+    ("Uni · อูนิ",           ("อูนิ", "uni", "sea urchin")),
+    ("Shellfish · หอย",      ("หอยแมลงภู่", "หอยลาย", "หอย", "mussel", "clam")),  # generic หอย AFTER scallop/oyster
+    ("Fish (other) · ปลาอื่นๆ", ("ปลาเนื้อขาว", "ปลาซาบะ", "ซาบะ", "ปลาดอลลี่", "ปลาตาเดียว",
+                              "คามาโบโกะ", "ลูกชิ้นปลา", "ปลา", "fish", "saba", "dory", "tai")),  # generic ปลา last among fish
+    # --- meats ---
+    ("Beef · เนื้อวัว",       ("เนื้อวัว", "ลิ้นวัว", "โคขุน", "ชาโรเล่ส์", "เสือร้องไห้", "ใบพาย",
+                              "ออสเตรเลีย", "วากิว", "สเต็ก", "เนื้อสไลด์", "เนื้อสันใน", "เนื้อเสือ",
+                              "beef", "wagyu", "charolais", "sirloin")),
+    ("Pork · หมู",           ("หมู", "เบคอน", "pork", "bacon", "buta")),
+    ("Chicken · ไก่",        ("ไก่", "chicken", "tori")),
+    ("Egg · ไข่",            ("ไข่", "ไข่หวาน", "ทามาโกะ", "egg", "tamago")),  # generic ไข่ AFTER roe
+    # --- staples / sides ---
+    ("Noodle · เส้น",        ("เส้น", "โซบะ", "อุด้ง", "ราเมน", "บุก", "ชิราตากิ", "udon", "soba", "ramen", "noodle")),
+    ("Rice · ข้าว",          ("ข้าวญี่ปุ่น", "ข้าวสวย", "ข้าว", "rice", "gohan")),
+    ("Seaweed · สาหร่าย",    ("สาหร่าย", "โนริ", "วากาเมะ", "nori", "seaweed", "wakame")),
+    ("Tofu · เต้าหู้",        ("เต้าหู้", "tofu")),
+    ("Cheese/Dairy · ชีส/นม", ("ชีส", "เนย", "ครีม", "นมสด", "cheese", "butter", "cream")),
+    ("Flour/Batter · แป้ง",   ("แป้ง", "เทมปุระ", "เกล็ดขนมปัง", "เกล็ดแป้ง", "tempura", "breadcrumb", "flour", "panko")),
+    ("Mushroom · เห็ด",      ("เห็ด", "mushroom", "shiitake", "enoki")),
+    # --- fats / seasonings (seasoning BEFORE veg so พริกไทย≠พริก) ---
+    ("Oil · น้ำมัน",         ("น้ำมัน", "oil")),
+    ("Sauce/Seasoning · ซอส/เครื่องปรุง",
+                            ("ซอส", "น้ำซุป", "น้ำดอง", "น้ำจิ้ม", "น้ำพอนสึ", "พอนสึ", "น้ำยำ",
+                             "โชยุ", "โชยู", "มิริน", "มายองเนส", "เทอริยากิ", "สาเก", "เกลือ",
+                             "พริกไทย", "ดาชิ", "มิโซะ", "sauce", "teriyaki", "mayo", "mirin",
+                             "soy", "shoyu", "dashi", "ponzu", "miso", "broth", "soup")),
+    ("Vegetable · ผัก",      ("ผัก", "สลัด", "แตงกวา", "ต้นหอม", "ขิง", "หอมใหญ่", "หอม",
+                             "หัวไชเท้า", "มะเขือเทศ", "พริก", "กระเทียม", "แครอท", "มะนาว",
+                             "ใบโอบะ", "veg", "salad", "lettuce", "onion", "garlic", "carrot")),
+]
+
+def _ingredient_family(name: str) -> str:
+    """Map an ingredient name to its family label, else 'Other · อื่นๆ'."""
+    if not name:
+        return "Other · อื่นๆ"
+    low = name.lower()
+    for label, kws in _INGREDIENT_FAMILIES:
+        for kw in kws:
+            if kw.lower() in low:
+                return label
+    return "Other · อื่นๆ"
+
+
 @app.get("/api/bom/consumption-analysis")
 @ttl_cache
 def bom_consumption_analysis(
@@ -10273,10 +11111,15 @@ def bom_consumption_analysis(
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
     limit:      int           = Query(50),
+    group_family: bool        = Query(False, description="Roll up name variants into ingredient families (e.g. all salmon → Salmon)"),
 ):
     """
     Period rollup of ingredient consumption across all sold menus.
     Joins sales_sku_monthly x bom_ingredients.
+
+    group_family=true consolidates the many spelling variants of the same
+    ingredient (e.g. 24 salmon names) into one family line, so the list reflects
+    true ingredient dominance (salmon ≈ 25% of cost) instead of being fragmented.
     """
     filters = ["b.name != 'ALL'"]
     params:  Dict = {}
@@ -10323,6 +11166,26 @@ def bom_consumption_analysis(
             "pct":      round(100.0 * cost / grand_total, 2) if grand_total > 0 else 0,
             "n_menus":  int(r["n_menus"] or 0),
         })
+    # Optional family roll-up: consolidate name variants (24 salmon spellings →
+    # one "Salmon" line) so dominance is visible instead of fragmented.
+    if group_family:
+        fam: Dict[str, dict] = {}
+        for r in all_rows:
+            label = _ingredient_family(r["name"])
+            f = fam.setdefault(label, {
+                "code": "", "name": label, "type": r["type"], "unit": r["unit"],
+                "total_qty": 0.0, "total_cost": 0.0, "n_menus": 0, "n_variants": 0,
+            })
+            f["total_qty"]  += r["total_qty"]
+            f["total_cost"] += r["total_cost"]
+            f["n_menus"]     = max(f["n_menus"], r["n_menus"])
+            f["n_variants"] += 1
+        all_rows = sorted(fam.values(), key=lambda x: x["total_cost"], reverse=True)
+        for r in all_rows:
+            r["total_qty"]  = round(r["total_qty"], 2)
+            r["total_cost"] = round(r["total_cost"], 2)
+            r["pct"]        = round(100.0 * r["total_cost"] / grand_total, 2) if grand_total > 0 else 0
+
     by_type = {k: round(100.0 * v / grand_total, 2) if grand_total > 0 else 0
                for k, v in type_totals.items()}
     by_type_cost = {k: round(v, 2) for k, v in type_totals.items()}
@@ -10347,6 +11210,7 @@ def bom_consumption_analysis(
         "month_to":   month_to,
         "branch":     branch,
         "grand_total_cost": round(grand_total, 2),
+        "grouped":          group_family,
         "ingredients":      all_rows[:limit],
         "n_ingredients_total": len(all_rows),
         "by_type":          by_type,
