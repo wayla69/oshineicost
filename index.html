@@ -3832,6 +3832,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <p class="text-xs text-slate-600 mt-1">รวมวิธีใช้งานแต่ละ tab · กฎสำคัญ · workflow ที่ใช้บ่อย · troubleshooting</p>
         <p class="text-xs text-slate-500 mt-2">📌 Easy POS only · 27 สาขา · 2025-05 → 2026-05 · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · COGS ใช้สูตร BoM เดียวกันทุกหน้า (GP ~40%)</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
+        <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
       </div>
     </div>
   </div>
@@ -3872,7 +3873,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="mb-3">
       <p class="text-sm font-bold text-amber-800 mb-1.5">🍱 บุฟเฟ่ต์</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 Buffet Performance</b> — seat util, tier mix, waste, beverage attach · <b>🎯 เมนูเสิร์ฟเยอะ×สัดส่วนต้นทุน</b> (หาเป้าลดต้นทุน) <span class="text-indigo-600">[ใหม่]</span></div>
+        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 Buffet Performance</b> — pax จริง (2.70/บิล), food cost จริง (66%), ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×สัดส่วนต้นทุน</b> (หาเป้าลดต้นทุน)</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⏰ Time & Flow</b> — daypart heatmap, peak hours</div>
       </div>
     </div>
@@ -3881,7 +3882,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-rose-800 mb-1.5">🍣 เมนู & ต้นทุน</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-slate-200 rounded-lg p-2.5"><b>📋 Menu Analysis</b> — most ordered (เมนูจริง, ตัด junk), persona, affinity</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⭐ Menu Engineering</b> — Stars/Plowhorses/Puzzles/Dogs รายเมนู</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>⭐ Menu Engineering</b> — 4 กลุ่มแนะนำการกระทำ: ⭐ดาวเด่น (รักษา) · 🐴ม้างาน (แก้ต้นทุน) · 🔮เพชรในตม (โปรโมท) · 🐕ตัวถ่วง (ถอด) + ตารางเต็ม + กราฟ BCG (พับเก็บ)</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>💰 ต้นทุน</b> — margin by category, ABC, Pareto</div>
         <div class="border-2 border-fuchsia-500 rounded-lg p-2.5" style="background:#fdf4ff"><b>🎮 BoM Cost + Simulator ⭐</b> — ภาพรวม/รายสาขา/เปรียบเทียบ/Simulator (what-if)</div>
         <div class="border border-fuchsia-300 rounded-lg p-2.5" style="background:#fdf4ff"><b>🔬 BoM รายสาขา</b> — top menus + top ingredients ต่อสาขา</div>
@@ -3960,6 +3961,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <p class="text-sm text-emerald-800 mb-2">แก้ปัญหา price-as-cost แล้ว (เคยพบ 98.6% ของ unit_cost = ราคาขาย×1.07). นำเข้าสูตร BoM จริงจาก workbook → ครอบคลุม ~71% ของจำนวนเสิร์ฟ.</p>
     <p class="text-sm text-emerald-800 mb-2"><b>COGS เป็นสูตรเดียวทั้งแอป:</b> BoM recipe ก่อน → ถ้าไม่มีรีซิปีใช้ sku_cost → buffet tier นับ 0. ทุกหน้าแสดง GP ตรงกัน (~40%, food cost ~60%).</p>
     <p class="text-sm text-emerald-800"><b>ยังเหลือ:</b> ~29% ของเมนู (ส่วนใหญ่เครื่องดื่ม/à-la-carte) ยังไม่มีรีซิปี — เติมได้ที่ <b>Settings → Cost Management</b> (แก้ในหน้า auto-save) หรือดูเป้าที่ <b>🎯 ความครอบคลุมต้นทุน</b></p>
+    <p class="text-sm text-amber-800 mt-2" style="background:#fffbeb;border-left:3px solid #f59e0b;padding:6px 10px;border-radius:4px"><b>⚠️ จุดที่ต้องระวัง:</b> (1) <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → margin เครื่องดื่มในหน้า Menu Engineering ขึ้น ~100% (ปลอม) — ควรเติม unit_cost เครื่องดื่มก่อน. (2) à-la-carte บางตัว unit_cost ≈ ราคาขาย → margin อาจติดลบ/แปลก เป็นปัญหา<b>คุณภาพข้อมูล</b> ไม่ใช่บั๊ก. (3) Over-consumption Rate = 0 เพราะข้อมูล Easy ไม่มีรหัสค่าปรับ OT</p>
   </div>
 
   <!-- Hard rules -->
@@ -3968,7 +3970,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <ul class="list-disc list-inside text-sm text-slate-700 space-y-1.5">
       <li><b>VAT ไม่ใช่รายได้</b> — ตัวเลข "รายได้" ทุกที่ในแอปใช้ <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> (ก่อน VAT) เท่านั้น. <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">total_inc_vat</code> ใช้สำหรับ reconcile กับใบเสร็จ POS เท่านั้น</li>
       <li><b>วิเคราะห์ต้องเป็น time-series</b> — ตัวเลขสะสมอย่างเดียวไม่มีประโยชน์ ทุก analytics ต้องดูได้รายวัน/สัปดาห์/เดือน</li>
-      <li><b>Tier SKUs ไม่นับ cost</b> — BUFFET/BUFFET350/500/590/799/CHILD ใส่ unit_cost ไม่ส่งผล (เพราะ cost จริงนับที่ B0xxx items แล้ว) เพื่อป้องกัน double-counting</li>
+      <li><b>Tier SKUs ไม่นับ cost</b> — BUFFET/BUFFETCHILD ใส่ unit_cost ไม่ส่งผล (cost จริงนับที่ B0xxx items แล้ว) เพื่อกัน double-counting</li>
+      <li><b>Buffet ไม่ได้แยก tier จริง</b> — รหัส BUFFET350/500/590/799 <b>ไม่มีข้อมูล</b> (เลิกใช้แล้ว) บุฟเฟ่ต์ผู้ใหญ่อยู่บนรหัส BUFFET เดียว, เด็กบน BUFFETCHILD. <b>pax จริง</b> ใช้ customer_count จาก transaction (ไม่ใช่ qty). เมตริก Premium%/tier mix/tier pricing จึงถูกซ่อนไว้</li>
       <li><b>COGS สูตรเดียว (unified 2026-06)</b> — ทุกหน้าใช้ BoM recipe ก่อน → fallback sku_cost → tier=0. GP ต้องตรงกันทุกหน้า (~40%). ถ้าหน้าไหนไม่ตรง = bug</li>
       <li><b>CM POS data archived แล้ว</b> — ตั้งแต่ 2026-05-27 ใช้ Easy data เท่านั้น (May 2025 onwards). ดู CM history ที่ <code>/api/legacy/cm</code></li>
     </ul>
@@ -4004,7 +4007,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <b>Oshinei Sales & Cost Analysis Dashboard</b> · FastAPI + SQLite + Chart.js<br>
       Data source: Easy POS (easyrestaurant.asia / Infogrammer) — 27 สาขา, period 2025-05 → 2026-05<br>
       Architecture & full phase history: <code>docs/APP_STRUCTURE.md</code><br>
-      <span class="text-slate-400">Build: 2026-05-28 · Phase 18 complete</span>
+      <span class="text-slate-400">Build: 2026-06-02 · buffet pax/food-cost fix · Menu Engineering redesign · endpoint VAT/COGS audit</span>
     </p>
   </div>
 </div><!-- /tab-manual -->
