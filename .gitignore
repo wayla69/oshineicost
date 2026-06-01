@@ -39,3 +39,6 @@ BoM/
 # ── OS / editor cruft ───────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# Volatile runtime lock
+.claude/scheduled_tasks.lock
