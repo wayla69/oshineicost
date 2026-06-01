@@ -1325,18 +1325,11 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
 
-    <!-- Bills per Table + Over-consumption -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="card p-5">
-        <h2 class="section-title mb-1">🕐 Bills per Table (Turnover Proxy)</h2>
-        <p class="text-xs text-slate-400 mb-3">จำนวนบิลต่อโต๊ะต่อวัน · สูง = turnover ดี · ต่ำ = ลูกค้านั่งนาน</p>
-        <div style="height:220px"><canvas id="bperfTurnover"></canvas></div>
-      </div>
-      <div class="card p-5">
-        <h2 class="section-title mb-1">♻️ Over-consumption Rate</h2>
-        <p class="text-xs text-slate-400 mb-3">% บิลที่ลูกค้ากินเหลือจ่ายค่าปรับ (OT0012/0013/0016)</p>
-        <div style="height:220px"><canvas id="bperfWaste"></canvas></div>
-      </div>
+    <!-- Bills per Table (all branches) -->
+    <div class="card p-5">
+      <h2 class="section-title mb-1">🕐 Bills per Table (Turnover Proxy) — รายสาขา</h2>
+      <p class="text-xs text-slate-400 mb-3">จำนวนบิลต่อโต๊ะต่อวัน · สูง = turnover ดี · ต่ำ = ลูกค้านั่งนาน</p>
+      <div style="height:220px"><canvas id="bperfTurnover"></canvas></div>
     </div>
 
   </div><!-- /bperftab-overview -->
@@ -3836,6 +3829,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
   </div>
+
+  <!-- Business Analysis Report link -->
+  <a href="/docs/BUSINESS_ANALYSIS_2026-06.html" target="_blank" class="card p-4 mb-4" style="display:block;text-decoration:none;background:linear-gradient(135deg,#312e81,#4f46e5);color:#fff">
+    <div class="flex items-center gap-3">
+      <span style="font-size:30px">📑</span>
+      <div class="flex-1">
+        <div class="font-bold text-base">รายงานวิเคราะห์ธุรกิจ (Business Analysis Report) →</div>
+        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้</div>
+        <div class="text-[11px] mt-1" style="opacity:.8">สร้างใหม่ทุกเดือน: <code style="background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px">python backend/gen_analysis_report.py</code></div>
+      </div>
+    </div>
+  </a>
 
   <!-- Quick start -->
   <div class="card p-5 mb-4">
@@ -12434,7 +12439,7 @@ async function loadBuffetPerformance() {
     kpiCard('💰 Food Cost รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${k.food_cost_target_lo}-${k.food_cost_target_hi}% · ภาพรวม`, fcColor),
     kpiCard('📈 GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${_fmtBaht(cGp)} · ทั้งร้าน`,                    gpColor),
     kpiCard('👥 Pax / บิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `${(Number(k.total_pax)||0).toLocaleString()} pax · เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#8b5cf6'),
-    kpiCard('🥤 Beverage %',    k.beverage_attach_pct.toFixed(1) + '%',    `เครื่องดื่ม/ยอดรวม · เป้า ≥15%`,                bevColor),
+    kpiCard('🥤 บิลที่สั่งดื่ม',  (Number(k.beverage_bill_attach_pct)||0).toFixed(0) + '%',  `เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้`, (k.beverage_bill_attach_pct>=60?'#10b981':k.beverage_bill_attach_pct>=40?'#f59e0b':'#ef4444')),
   ].join('');
 
   // ── Tier mix trend (100% stacked bar) ────────────────────────────────
@@ -12656,33 +12661,6 @@ async function loadBuffetPerformance() {
     }
   });
 
-  // ── Waste / over-consumption trend ──────────────────────────────────
-  const wt = d.waste;
-  mkChart('bperfWaste', {
-    type: 'bar',
-    data: {
-      labels: wt.map(r => r.period),
-      datasets: [{
-        label: 'Over-consumption %',
-        data: wt.map(r => r.rate_pct),
-        backgroundColor: wt.map(r => r.rate_pct >= 5 ? '#ef4444' : r.rate_pct >= 2 ? '#f59e0b' : '#10b981'),
-        borderRadius: 3,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { display: false },
-        datalabels: { display: true, anchor: 'end', align: 'top', color: '#1e293b', font: { size: 9, weight: '600' }, formatter: v => (Number(v)||0).toFixed(2) + '%' },
-        tooltip: { callbacks: { label: ctx => {
-          const r = wt[ctx.dataIndex];
-          return [` Rate: ${r.rate_pct}%`, ` ค่าปรับเก็บได้: ${fmt(r.revenue)}`, ` จำนวนครั้ง: ${r.qty}`];
-        } } },
-      },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%', font: { size: 9 } } }, x: { ticks: { font: { size: 9 } } } }
-    }
-  });
-
   // ── Beverage attach ────────────────────────────────────────────────
   const bv = d.beverage;
   mkChart('bperfBevAttach', {
@@ -12801,10 +12779,7 @@ async function loadBuffetPerformance() {
     actions.push({ icon:'✅', tone:'green', html:`<b>Food Cost ${k.food_cost_pct.toFixed(1)}% ต่ำกว่าเป้า</b> — อาจหมายความว่า portion น้อยเกินไป (ลูกค้ารู้สึกไม่คุ้ม) หรือคุณลด BoM ได้สำเร็จ` });
   }
   if (k.beverage_attach_pct < 10) {
-    actions.push({ icon:'🥤', tone:'amber', html:`<b>Beverage attach ${k.beverage_attach_pct.toFixed(1)}%</b> ต่ำเกินไป — เครื่องดื่มคือ profit center หลักของบุฟเฟ่ต์ ควรฝึกพนักงานเสนอเครื่องดื่มเสมอ (target ≥15%)` });
-  }
-  if (k.over_consumption_pct > 5) {
-    actions.push({ icon:'♻️', tone:'red', html:`<b>Over-consumption ${k.over_consumption_pct.toFixed(2)}%</b> สูง — ลูกค้ากินเหลือมาก = waste BoM ต้องปรับ portion ตักหรือเตือนลูกค้าให้ตักพอดี` });
+    actions.push({ icon:'🥤', tone:'amber', html:`<b>เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้</b> — แม้ ${(Number(k.beverage_bill_attach_pct)||0).toFixed(0)}% ของบิลสั่งดื่ม แต่สัดส่วนรายได้ยังต่ำ ดันเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร` });
   }
   // Top vs bottom utilization
   if (d.seat_util.length >= 2) {

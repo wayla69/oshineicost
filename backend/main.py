@@ -98,6 +98,7 @@ def invalidate_cache(*prefixes: str):
 HERE    = Path(__file__).parent.resolve()
 DB_PATH = HERE / "oshinei.db"
 STATIC  = HERE.parent / "vendor"
+DOCS    = HERE.parent / "docs"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')
 
 # ---------------------------------------------------------------------------
@@ -182,6 +183,10 @@ app.add_middleware(
 # Serve vendor JS/CSS
 if STATIC.exists():
     app.mount("/vendor", StaticFiles(directory=str(STATIC)), name="vendor")
+
+# Serve generated reports / docs (HTML) so they open in-browser
+if DOCS.exists():
+    app.mount("/docs", StaticFiles(directory=str(DOCS), html=True), name="docs")
 
 
 # ---------------------------------------------------------------------------
@@ -6238,6 +6243,11 @@ def buffet_performance(
     bev_total = sum(b["drink_revenue"] for b in bev_trend)
     total_billed = sum(b["total_revenue"] for b in bev_trend)
     bev_attach_overall = (bev_total / total_billed * 100) if total_billed else 0
+    # Bill-level attach: % of bills that ordered a drink (the actionable headline,
+    # vs revenue-share which buffet dominates). From raw bev_rows counts.
+    _bev_bills = sum((r["bills"] or 0) for r in bev_rows)
+    _bev_bills_drink = sum((r["bills_with_drink"] or 0) for r in bev_rows)
+    bev_bill_attach_overall = (_bev_bills_drink / _bev_bills * 100) if _bev_bills else 0
     food_cost_overall = sum(f["cost"] for f in food_cost_trend)
     rev_ex_overall    = sum(f["revenue_ex"] for f in food_cost_trend)
     food_cost_pct_overall = (food_cost_overall / rev_ex_overall * 100) if rev_ex_overall else 0
@@ -6299,6 +6309,7 @@ def buffet_performance(
         "food_cost_target_hi":   food_cost_target_hi,
         "over_consumption_pct":  round(waste_rate_real, 2),
         "beverage_attach_pct":   round(bev_attach_overall, 1),
+        "beverage_bill_attach_pct": round(bev_bill_attach_overall, 1),
         "branch_count":          len(branch_pax),
         # ── Combined whole-restaurant (Phase 12) ──────────────────────────
         "combined_revenue_ex_vat":  round(c_rev_ex, 2),
@@ -7869,7 +7880,7 @@ def analysis_sph(
     with get_db() as con:
         trend_rows = con.execute(f"""
             SELECT strftime('%Y-%m', st.sold_at) AS period_month,
-                   ROUND(AVG(st.total_inc_vat / st.customer_count), 2) AS avg_sph
+                   ROUND(AVG((st.total_inc_vat / 1.07) / st.customer_count), 2) AS avg_sph
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where2}

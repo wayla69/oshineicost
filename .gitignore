@@ -14,6 +14,8 @@ backend/bp.json
 backend/bpchk.txt
 backend/gpb.txt
 backend/tier.txt
+backend/_*.json
+backend/_*.txt
 
 # ── Logs & generated audit artifacts ────────────────────────────────────────
 *.log

@@ -271,5 +271,57 @@ def test_unified_cogs_alias_safe():
     assert c_ssm == 100.0, f"expected 10 qty x 10.0 cost = 100 (tier excluded), got {c_ssm}"
 
 
+# ---------------------------------------------------------------------------
+# R4 — endpoint audit fixes (2026-06-02). Lock in the two data-correctness
+# fixes found during the full endpoint audit so they can't silently regress.
+# ---------------------------------------------------------------------------
+import inspect  # noqa: E402
+
+
+def test_sph_endpoint_uses_ex_vat():
+    """Spend-per-head must be ex-VAT: total_inc_vat / 1.07 / customer_count.
+    Regression: it used to divide raw total_inc_vat by customer_count (+7%)."""
+    src = inspect.getsource(inspect.unwrap(main.analysis_sph))
+    assert "/ 1.07" in src, "SPH no longer divides by VAT divisor"
+    assert "total_inc_vat / st.customer_count" not in src, \
+        "SPH regressed to VAT-inflated raw inc-VAT / customer_count"
+
+
+def test_buffet_per_bill_uses_real_cost_ratio():
+    """Per-bill cost must use the real per-month buffet food-cost ratio, not the
+    old fabricated 'tier_price * 0.55' (flat 45%-margin) guess."""
+    src = inspect.getsource(inspect.unwrap(main.buffet_per_bill))
+    assert "ratio_by_month" in src, "buffet_per_bill no longer uses real cost ratio"
+    assert "* 0.55" not in src, "buffet_per_bill regressed to fabricated 45%-margin guess"
+
+
+def test_buffet_food_cost_ratio_logic():
+    """Buffet food cost % = unified COGS of buffet ITEM rows ÷ buffet TIER revenue.
+    Tier rows carry revenue but ZERO cost; item rows carry the cost."""
+    con = fresh_db()
+    # The trimmed test schema has no business_type column — add it (real schema has it).
+    cols = [r["name"] for r in con.execute("PRAGMA table_info(skus)").fetchall()]
+    if "business_type" not in cols:
+        con.execute("ALTER TABLE skus ADD COLUMN business_type TEXT")
+    # Make sku 1 the buffet tier (revenue, cost excluded) and add a buffet item.
+    con.execute("UPDATE skus SET business_type='buffet_tier' WHERE sku_id=1")
+    con.execute("INSERT INTO skus(sku_id,sku_code,description,category_id,unit,business_type)"
+                " VALUES(4,'B0001','Buffet item',1,'plate','buffet')")
+    con.execute("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(4, 8.0)")
+    con.commit()
+    add_sales(con, 1, "2025-06", qty=100, ex_vat=10000.0)  # tier: revenue 10000, cost 0
+    add_sales(con, 4, "2025-06", qty=500, ex_vat=0.0)       # item: cost 500*8 = 4000
+    expr = main._unified_cogs_expr("sm", "sk")
+    row = con.execute(f"""
+        SELECT SUM(CASE WHEN sk.business_type='buffet_tier' THEN sm.subtotal_ex_vat ELSE 0 END) AS rev,
+               SUM({expr}) AS cogs
+        FROM sales_sku_monthly sm JOIN skus sk ON sk.sku_id = sm.sku_id
+        WHERE sk.business_type IN ('buffet','buffet_tier')
+    """).fetchone()
+    assert row["rev"] == 10000.0          # only tier rows count as buffet revenue
+    assert row["cogs"] == 4000.0          # tier=0 + item 500*8
+    assert round(row["cogs"] / row["rev"] * 100, 1) == 40.0  # food cost %
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
