@@ -101,6 +101,38 @@ HERE    = Path(__file__).parent.resolve()
 # Defaults to the in-repo path for local development.
 import os as _os_db
 DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
+
+
+def _maybe_swap_incoming_db():
+    """Apply a staged DB refresh at startup, before any connection is opened.
+
+    The refresh endpoint (/api/_admin/seed-db) streams a new DB to
+    ``<DB_PATH>.incoming`` instead of touching the live file. Here — at import,
+    while nothing holds the DB — we validate that staged file and atomically
+    swap it in. A corrupt/empty upload is discarded, so the live DB is never put
+    at risk by a bad or partial transfer.
+    """
+    inc = Path(str(DB_PATH) + ".incoming")
+    if not inc.exists():
+        return
+    try:
+        chk = sqlite3.connect(str(inc))
+        ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
+        n   = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
+        chk.close()
+    except Exception:
+        ok, n = "bad", 0
+    if ok != "ok" or not n:
+        try: inc.unlink()
+        except OSError: pass
+        return
+    # Discard stale WAL/SHM of the OLD db, then atomically replace it.
+    for suf in ("-wal", "-shm"):
+        try: _os_db.remove(str(DB_PATH) + suf)
+        except OSError: pass
+    _os_db.replace(str(inc), str(DB_PATH))   # atomic on same filesystem
+
+_maybe_swap_incoming_db()
 STATIC  = HERE.parent / "vendor"
 DOCS    = HERE.parent / "docs"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')
@@ -275,12 +307,18 @@ def root():
 
 
 # ---------------------------------------------------------------------------
-# One-time DB bootstrap (hosted deploys). Lets a gzipped SQLite file be pushed
-# over HTTPS to seed an *empty* volume — far more reliable than the WireGuard
-# SFTP tunnel for large files. Double-gated and safe to leave in place:
-#   1) requires env OSHINEI_SEED_TOKEN to be set AND to match ?token=
-#   2) refuses if the DB already holds sales rows (can never clobber real data)
-# Remove the Fly secret after seeding to make this endpoint inert (404).
+# DB refresh/seed over HTTPS (hosted deploys). Accepts a gzipped SQLite file —
+# far more reliable than the WireGuard SFTP tunnel for large files. Used both to
+# seed an empty volume and to refresh an existing one with newer data.
+#
+# Safe by design:
+#   • token-gated — requires env OSHINEI_SEED_TOKEN set AND matching ?token=
+#     (unset the Fly secret to disable the endpoint entirely → 404).
+#   • the upload is STAGED to <DB_PATH>.incoming and validated (integrity_check
+#     + non-empty sales_transaction); the live DB is never touched here.
+#   • _maybe_swap_incoming_db() atomically swaps it in at the next startup, so a
+#     bad/partial upload can never corrupt the running DB. Caller restarts the
+#     machine after a successful upload (see backend/refresh_fly_db.py).
 # ---------------------------------------------------------------------------
 @app.post("/api/_admin/seed-db", include_in_schema=False)
 async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
@@ -288,37 +326,37 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     expected = _os2.environ.get("OSHINEI_SEED_TOKEN")
     if not expected or token != expected:
         raise HTTPException(status_code=404, detail="not found")
-    # Safety: only seed a blank DB.
-    try:
-        with get_db() as con:
-            n = con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
-        if n and n > 0:
-            raise HTTPException(status_code=409, detail=f"DB already populated ({n} rows)")
-    except HTTPException:
-        raise
-    except Exception:
-        pass  # table missing → empty DB → safe to seed
-    # Stream upload → temp file, then stream-decompress into DB_PATH (low memory).
+    inc = str(DB_PATH) + ".incoming"
+    # Stream upload → temp gz, then stream-decompress into the .incoming stage.
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp, 1024 * 1024)
         tmp_path = tmp.name
     try:
-        with gzip.open(tmp_path, "rb") as gz, open(str(DB_PATH), "wb") as out:
+        with gzip.open(tmp_path, "rb") as gz, open(inc, "wb") as out:
             shutil.copyfileobj(gz, out, 1024 * 1024)
+    except Exception as e:
+        for p in (tmp_path, inc):
+            try: _os2.remove(p)
+            except OSError: pass
+        raise HTTPException(status_code=400, detail=f"decompress failed: {e}")
     finally:
-        try:
-            _os2.remove(tmp_path)
-        except OSError:
-            pass
-    # Drop any stale WAL/SHM so the next (post-restart) open reads the new file.
-    for suf in ("-wal", "-shm"):
-        try:
-            _os2.remove(str(DB_PATH) + suf)
-        except OSError:
-            pass
-    size = _os2.path.getsize(str(DB_PATH))
-    return {"ok": True, "db_bytes": size,
-            "note": "restart the machine so pooled connections reopen the new DB"}
+        try: _os2.remove(tmp_path)
+        except OSError: pass
+    # Validate the staged DB before we ever consider swapping it in.
+    try:
+        chk = sqlite3.connect(inc)
+        ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
+        rows = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
+        chk.close()
+    except Exception as e:
+        ok, rows = f"error: {e}", 0
+    if ok != "ok" or not rows:
+        try: _os2.remove(inc)
+        except OSError: pass
+        raise HTTPException(status_code=422,
+                            detail=f"staged DB rejected (integrity={ok}, rows={rows})")
+    return {"ok": True, "staged_bytes": _os2.path.getsize(inc), "staged_rows": rows,
+            "note": "restart the machine to apply (atomic swap at startup)"}
 
 
 # ---------------------------------------------------------------------------
@@ -428,7 +466,7 @@ def sales_monthly(
     """
     Revenue trend at the requested granularity.
     daily/weekly  â†' sales_transaction  (date_from / date_to)
-    monthly       â†' sales_sku_monthly + CM POS fallback  (month_from / month_to)
+    monthly       â†' sales_sku_monthly  (month_from / month_to)
     quarterly     â†' sales_sku_monthly aggregated to quarters
     """
     # â"€â"€ daily â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -617,34 +655,6 @@ def sales_monthly(
             """,
             params_sku,
         ).fetchall()
-        sku_months = {r["period_month"] for r in sku_rows}
-
-        # CM POS months not already covered by Easy SKU data
-        filters_sms: list = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-        params_sms: dict = {}
-        if branch:
-            filters_sms.append("b.name = :branch")
-            params_sms["branch"] = branch
-        _group_filter(filters_sms, params_sms, group)
-        _month_range_filter(filters_sms, params_sms, month_from, month_to, month, col="sms.period_month")
-        where_sms = "WHERE " + " AND ".join(filters_sms)
-
-        sms_rows = con.execute(
-            f"""
-            SELECT sms.period_month,
-                   ROUND(SUM(sms.net_sales), 2)   AS revenue,
-                   ROUND(SUM(sms.net_sales), 2)   AS revenue_ex_vat,
-                   SUM(sms.transaction_count)      AS tx_count,
-                   SUM(sms.customer_count)         AS customer_count
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where_sms}
-            GROUP BY sms.period_month
-            ORDER BY sms.period_month
-            """,
-            params_sms,
-        ).fetchall()
-
         # Transaction counts from sales_transaction (Easy data)
         filters_tx: list = ["b.name != 'ALL'"]
         params_tx: dict = {}
@@ -673,48 +683,23 @@ def sales_monthly(
         ).fetchall()
 
     tx_map = {r["period_month"]: dict(r) for r in tx_rows}
-    sms_map = {r["period_month"]: dict(r) for r in sms_rows}
 
-    # Union of all months that have any data
-    all_months = sorted(set(r["period_month"] for r in sku_rows) | set(sms_map.keys()))
+    all_months = sorted(r["period_month"] for r in sku_rows)
     sku_map = {r["period_month"]: dict(r) for r in sku_rows}
 
     result = []
     for mo in all_months:
         sku = sku_map.get(mo, {})
         tx  = tx_map.get(mo, {})
-        cm  = sms_map.get(mo, {})
-
-        # Revenue: prefer SKU-level (more detailed); else fall back to CM POS net_sales
-        revenue        = sku.get("revenue")        if sku else None
-        revenue_ex_vat = sku.get("revenue_ex_vat") if sku else None
-        if revenue is None:
-            revenue        = cm.get("revenue") or cm.get("net_sales") or 0
-            revenue_ex_vat = cm.get("revenue_ex_vat") or cm.get("net_sales") or 0
-
-        # Tx/customers: Easy + CM POS (different branches, no overlap)
-        easy_tx   = (tx.get("tx_count")       or 0)
-        easy_cust = (tx.get("customer_count") or 0)
-        cm_tx     = (cm.get("tx_count")       or 0)
-        cm_cust   = (cm.get("customer_count") or 0)
-        total_tx   = easy_tx + cm_tx
-        total_cust = easy_cust + cm_cust
-
-        # Source label: which side dominates (for badging on chart)
-        if easy_tx > 0 and cm_tx > 0:
-            src = "Mixed"
-        elif cm_tx > 0:
-            src = "CM POS"
-        else:
-            src = "Easy"
-
+        total_tx   = tx.get("tx_count")       or 0
+        total_cust = tx.get("customer_count") or 0
         result.append({
             "period_month":   mo,
-            "revenue":        revenue,
-            "revenue_ex_vat": revenue_ex_vat,
+            "revenue":        sku.get("revenue"),
+            "revenue_ex_vat": sku.get("revenue_ex_vat"),
             "tx_count":       total_tx if total_tx else None,
             "customer_count": total_cust if total_cust else None,
-            "source":         src,
+            "source":         "Easy",
         })
 
     return result
@@ -988,6 +973,8 @@ def summary(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),   # YYYY-MM-DD — daily/weekly window
+    date_to:    Optional[str] = Query(None),   # YYYY-MM-DD — daily/weekly window
     branch:     Optional[str] = Query(None),
     group:      Optional[str] = Query(None),
 ):
@@ -995,7 +982,52 @@ def summary(
     High-level KPIs for the header cards:
     total revenue, transaction count, avg ticket, customer count.
     If month is omitted, returns all-time totals.
+
+    When date_from/date_to are supplied (daily/weekly granularity), the KPIs are
+    computed at day resolution straight from sales_transaction (Easy-only — the
+    only day-resolved source). The monthly tables have no sub-month resolution,
+    so they cannot answer a Day/Week window.
     """
+    # ── date-window mode (daily/weekly) — transaction-level, Easy-only ──────
+    if date_from or date_to:
+        filters = ["b.name != 'ALL'", "st.source = 'Easy'"]
+        params: dict = {}
+        if branch:
+            filters.append("b.name = :branch")
+            params["branch"] = branch
+        _group_filter(filters, params, group)
+        if date_from:
+            filters.append("DATE(st.sold_at) >= :date_from")
+            params["date_from"] = date_from
+        if date_to:
+            filters.append("DATE(st.sold_at) <= :date_to")
+            params["date_to"] = date_to
+        where = "WHERE " + " AND ".join(filters)
+        with get_db() as con:
+            r = con.execute(
+                f"""
+                SELECT SUM(st.total_inc_vat)   AS rev_inc,
+                       COUNT(*)                AS tx,
+                       SUM(st.customer_count)  AS cust
+                FROM sales_transaction st
+                JOIN branches b ON b.branch_id = st.branch_id
+                {where}
+                """,
+                params,
+            ).fetchone()
+        rev_inc = r["rev_inc"] or 0.0
+        tx      = r["tx"] or 0
+        cust    = r["cust"] or 0
+        rev_ex  = ex_vat(rev_inc)          # VAT is never revenue
+        return {
+            "revenue":         round(rev_ex, 2),
+            "revenue_ex_vat":  round(rev_ex, 2),
+            "revenue_inc_vat": round(rev_inc, 2),
+            "tx_count":        tx,
+            "customer_count":  cust,
+            "avg_ticket":      round(rev_ex / tx, 2) if tx else 0,
+        }
+
     filters_sku = ["b.name != 'ALL'"]
     filters_tx  = ["b.name != 'ALL'"]
     params_sku: dict = {}
@@ -1014,7 +1046,8 @@ def summary(
     where_sku = "WHERE " + " AND ".join(filters_sku)
     where_tx  = "WHERE " + " AND ".join(filters_tx)
 
-    # month_summary filter (ALL sources — Easy + CM POS — for revenue fallback)
+    # month_summary filter (Easy — used as a revenue/tx fallback for any
+    # branch×month missing from sku_monthly / sales_transaction)
     filters_ms = ["b.name != 'ALL'"]
     params_ms: dict = {}
     if branch:
@@ -1043,14 +1076,13 @@ def summary(
         ms_rev_rows = con.execute(
             f"""
             SELECT b.name AS branch, sms.period_month AS m,
-                   sms.source AS src,
                    SUM(sms.net_sales) AS net,
                    SUM(sms.transaction_count) AS tx,
                    SUM(sms.customer_count) AS cust
             FROM sales_month_summary sms
             JOIN branches b ON b.branch_id = sms.branch_id
             {where_ms}
-            GROUP BY b.name, sms.period_month, sms.source
+            GROUP BY b.name, sms.period_month
             """,
             params_ms,
         ).fetchall()
@@ -1096,12 +1128,12 @@ def summary(
         covered.add(k)
 
     # Tx + customers
-    # For each (br, m): use easy_tx if available, otherwise use ms tx (only CM POS source — Easy aggregates
-    # would double-count Easy transactions we already have)
+    # For each (br, m): use transaction-level Easy counts when available, otherwise
+    # fall back to the monthly summary aggregate (some months were only loaded monthly).
     ms_tx_by_key = {}
     for r in ms_rev_rows:
         k = (r["branch"], r["m"])
-        ms_tx_by_key.setdefault(k, []).append({"src": r["src"], "tx": r["tx"] or 0, "cust": r["cust"] or 0})
+        ms_tx_by_key.setdefault(k, []).append({"tx": r["tx"] or 0, "cust": r["cust"] or 0})
 
     all_keys = set(easy_tx_map.keys()) | set(ms_tx_by_key.keys())
     for k in all_keys:
@@ -1110,19 +1142,11 @@ def summary(
             total_tx   += e["tx"]
             total_cust += e["cust"]
             continue
-        # No Easy tx — try CM POS aggregate
+        # No transaction-level rows — fall back to the monthly summary aggregate
         for ms in ms_tx_by_key.get(k, []):
-            if ms["src"] == "CM POS":
-                total_tx   += ms["tx"]
-                total_cust += ms["cust"]
-                break
-        else:
-            # No CM POS either, but maybe Easy aggregate row exists (sometimes Easy POS only loaded monthly)
-            for ms in ms_tx_by_key.get(k, []):
-                if ms["src"] == "Easy":
-                    total_tx   += ms["tx"]
-                    total_cust += ms["cust"]
-                    break
+            total_tx   += ms["tx"]
+            total_cust += ms["cust"]
+            break
 
     # Hard rule: VAT is never revenue. Headline revenue + avg ticket are ex-VAT.
     avg_ticket = round(total_rev_ex / total_tx, 2) if total_tx else 0
@@ -2983,13 +3007,31 @@ async def upload_file(file: UploadFile = File(...)):
         tmp_path.rename(named_path)
         tmp_path = named_path
 
-        # Import ingest_easy from the same directory
-        ingest_mod_path = HERE / "ingest_easy.py"
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("ingest_easy", str(ingest_mod_path))
-        ingest_easy = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(ingest_easy)
+        # Two upload paths, one per format, sharing the SAME engines as the CLI:
+        #  • cleansed flat raw .xlsx (ES1_*_raw / 23 ES_*_raw) → upload_data.ingest_one
+        #    (period+branch-scoped upsert; preserves curated cost tables).
+        #  • legacy Easy .txt (Type A/B)                       → ingest_easy.ingest_file.
+        import sys as _sys
+        if str(HERE) not in _sys.path:
+            _sys.path.insert(0, str(HERE))
 
+        import upload_data
+        if upload_data.classify(tmp_path):
+            with get_db() as con:
+                con.execute("PRAGMA journal_mode=WAL")
+                # allow_new_branch=False keeps the duplicate-branch guard on for
+                # live uploads; the loaders never touch curated cost tables.
+                r = upload_data.ingest_one(con, tmp_path, apply=True, allow_new_branch=False)
+            invalidate_cache()
+            return {
+                "file":          filename,
+                "branch":        f"{r['branches']} branch(es)",
+                "period":        r["period"],
+                "rows_ingested": r["rows"],
+                "file_type":     r["kind"],
+            }
+
+        import ingest_easy
         with get_db() as con:
             con.execute("PRAGMA journal_mode=WAL")
             result = ingest_easy.ingest_file(tmp_path, con)
@@ -3498,7 +3540,7 @@ def analysis_compare(
             p,
         ).fetchone()
 
-        # Use Easy data when available, else fall back to CM POS summary
+        # Use SKU/transaction data when available, else fall back to the monthly summary
         revenue     = (rev["revenue"]        or 0) if rev else 0
         revenue_ex  = (rev["revenue_ex_vat"] or 0) if rev else 0
         tx_count    = (tx["tx_count"]        or 0) if tx else 0
@@ -3685,19 +3727,12 @@ def analysis_branches(
     month_to:   Optional[str] = Query(None),
     group:      Optional[str] = Query(None),
 ):
-    """KPIs for every branch side-by-side. Combines Easy (transaction-level) and
-    CM POS (monthly aggregates) so transition months show full coverage."""
+    """KPIs for every branch side-by-side (Easy transaction-level data)."""
     filters_tx = ["b.name != 'ALL'"]
     params_tx: dict = {}
     _group_filter(filters_tx, params_tx, group)
     _month_range_filter(filters_tx, params_tx, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
-
-    filters_cm = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-    params_cm: dict = {}
-    _group_filter(filters_cm, params_cm, group)
-    _month_range_filter(filters_cm, params_cm, month_from, month_to, month, col="sms.period_month")
-    where_cm = "WHERE " + " AND ".join(filters_cm)
 
     with get_db() as con:
         easy_rows = con.execute(
@@ -3715,20 +3750,6 @@ def analysis_branches(
             """,
             params_tx,
         ).fetchall()
-        cm_rows = con.execute(
-            f"""
-            SELECT b.name AS branch,
-                   SUM(sms.transaction_count) AS tx_count,
-                   SUM(sms.customer_count)    AS customer_count,
-                   ROUND(SUM(sms.net_sales), 2) AS revenue,
-                   ROUND(SUM(sms.discounts),2) AS total_discount
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where_cm}
-            GROUP BY b.name
-            """,
-            params_cm,
-        ).fetchall()
 
     merged: dict = {}
     for r in easy_rows:
@@ -3740,22 +3761,6 @@ def analysis_branches(
             "discount_tx":    r["discount_tx"] or 0,
             "total_discount": r["total_discount"] or 0,
         }
-    for r in cm_rows:
-        if r["branch"] in merged:
-            m = merged[r["branch"]]
-            m["tx_count"]       += r["tx_count"] or 0
-            m["customer_count"] += r["customer_count"] or 0
-            m["revenue"]        += r["revenue"] or 0
-            m["total_discount"] += r["total_discount"] or 0
-        else:
-            merged[r["branch"]] = {
-                "branch": r["branch"],
-                "tx_count":       r["tx_count"] or 0,
-                "customer_count": r["customer_count"] or 0,
-                "revenue":        r["revenue"] or 0,
-                "discount_tx":    0,
-                "total_discount": r["total_discount"] or 0,
-            }
 
     # Compute derived metrics
     out = []
@@ -4171,22 +4176,14 @@ def heatmap_branch(
     granularity: str           = Query("weekly"),  # daily|weekly|monthly
 ):
     """Branch × period revenue grid (ex-VAT).
-    Monthly: Easy from sales_sku_monthly (source=Easy) + CM POS from sales_month_summary (source=CM POS).
-    Daily/Weekly: Easy from sales_transaction + CM POS monthly aggregates (period label = YYYY-MM)."""
+    Monthly: Easy SKU-level (sales_sku_monthly). Daily/Weekly: Easy transactions."""
 
-    # ── MONTHLY: Easy SKU-level + CM POS monthly summary ───────────────────────
+    # ── MONTHLY: Easy SKU-level ────────────────────────────────────────────────
     if granularity == "monthly":
-        # Easy: use SKU-level subtotal (ex-VAT) — source='Easy' only to avoid double-counting
         filters_easy = ["b.name != 'ALL'", "sm.source = 'Easy'"]
         params_easy: dict = {}
         _month_range_filter(filters_easy, params_easy, month_from, month_to, None, col="sm.period_month")
         where_easy = "WHERE " + " AND ".join(filters_easy)
-
-        # CM POS: use monthly net_sales aggregate — source='CM POS' only
-        filters_cm = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-        params_cm: dict = {}
-        _month_range_filter(filters_cm, params_cm, month_from, month_to, None, col="sms.period_month")
-        where_cm = "WHERE " + " AND ".join(filters_cm)
 
         with get_db() as con:
             easy_rows = con.execute(
@@ -4201,44 +4198,13 @@ def heatmap_branch(
                 """,
                 params_easy,
             ).fetchall()
-            cm_rows = con.execute(
-                f"""
-                SELECT b.name AS branch,
-                       sms.period_month AS period,
-                       ROUND(SUM(sms.net_sales), 2) AS revenue
-                FROM sales_month_summary sms
-                JOIN branches b ON b.branch_id = sms.branch_id
-                {where_cm}
-                GROUP BY b.name, sms.period_month
-                """,
-                params_cm,
-            ).fetchall()
+        return [{"branch": r["branch"], "period": r["period"], "revenue": r["revenue"] or 0}
+                for r in sorted(easy_rows, key=lambda x: (x["branch"], x["period"]))]
 
-        # Additive merge — Easy branches and CM POS branches use different POS systems
-        # so the same branch×month should never appear in both, but SUM defensively if it does
-        merged: dict = {}
-        for r in easy_rows:
-            merged[(r["branch"], r["period"])] = {"branch": r["branch"], "period": r["period"], "revenue": r["revenue"] or 0}
-        for r in cm_rows:
-            k = (r["branch"], r["period"])
-            if k in merged:
-                merged[k]["revenue"] = round(merged[k]["revenue"] + (r["revenue"] or 0), 2)
-            else:
-                merged[k] = {"branch": r["branch"], "period": r["period"], "revenue": r["revenue"] or 0}
-        out = sorted(merged.values(), key=lambda x: (x["branch"], x["period"]))
-        return out
-
-    # ── DAILY / WEEKLY: Easy transaction-level + CM POS monthly fallback ────────
-    # CM POS has no daily granularity; include its monthly aggregates so those
-    # branches still appear in the heatmap (period label will be YYYY-MM)
+    # ── DAILY / WEEKLY: Easy transaction-level ─────────────────────────────────
     period_expr = "DATE(st.sold_at)" if granularity == "daily" else _iso_week_sql('st.sold_at')
     filters, params = _build_period_filters(None, month_from, month_to, date_from, date_to)
     where = "WHERE " + " AND ".join(filters)
-
-    filters_cm2 = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-    params_cm2: dict = {}
-    _month_range_filter(filters_cm2, params_cm2, month_from, month_to, None, col="sms.period_month")
-    where_cm2 = "WHERE " + " AND ".join(filters_cm2)
 
     with get_db() as con:
         rows = con.execute(
@@ -4255,20 +4221,7 @@ def heatmap_branch(
             """,
             params,
         ).fetchall()
-        cm2_rows = con.execute(
-            f"""
-            SELECT b.name AS branch,
-                   sms.period_month AS period,
-                   ROUND(SUM(sms.net_sales), 2) AS revenue,
-                   0 AS tx_count
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where_cm2}
-            GROUP BY b.name, sms.period_month
-            """,
-            params_cm2,
-        ).fetchall()
-    return [dict(r) for r in rows] + [dict(r) for r in cm2_rows]
+    return [dict(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -4291,7 +4244,7 @@ def analysis_anomalies(
     """
     insights: List[dict] = []
 
-    # 1. Monthly revenue z-score: Easy tx + CM POS monthly aggregates
+    # 1. Monthly revenue z-score: Easy transaction-level
     filters_tx = ["b.name != 'ALL'"]
     params: dict = {}
     if branch:
@@ -4300,14 +4253,6 @@ def analysis_anomalies(
     _month_range_filter(filters_tx, params, month_from, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
-
-    filters_cm = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-    params_cm: dict = {}
-    if branch:
-        filters_cm.append("b.name = :branch")
-        params_cm["branch"] = branch
-    _month_range_filter(filters_cm, params_cm, month_from, month_to, None, col="sms.period_month")
-    where_cm = "WHERE " + " AND ".join(filters_cm)
 
     with get_db() as con:
         easy_monthly = con.execute(
@@ -4321,19 +4266,6 @@ def analysis_anomalies(
             ORDER BY month
             """,
             params,
-        ).fetchall()
-
-        cm_monthly = con.execute(
-            f"""
-            SELECT sms.period_month AS month,
-                   ROUND(SUM(sms.net_sales), 2) AS revenue
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where_cm}
-            GROUP BY sms.period_month
-            ORDER BY sms.period_month
-            """,
-            params_cm,
         ).fetchall()
 
         # Branch MoM growth — Easy tx
@@ -4350,35 +4282,16 @@ def analysis_anomalies(
             """,
         ).fetchall()
 
-        # Branch MoM growth — CM POS
-        bgrowth_cm = con.execute(
-            """
-            SELECT b.name AS branch,
-                   sms.period_month AS month,
-                   ROUND(SUM(sms.net_sales), 2) AS revenue
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            WHERE b.name != 'ALL' AND sms.source = 'CM POS'
-            GROUP BY b.name, sms.period_month
-            ORDER BY b.name, sms.period_month
-            """,
-        ).fetchall()
-
-    # Merge Easy + CM POS monthly totals
+    # Monthly revenue totals (Easy)
     rev_by_month: dict = {}
     for r in easy_monthly:
         rev_by_month[r["month"]] = (rev_by_month.get(r["month"]) or 0) + (r["revenue"] or 0)
-    for r in cm_monthly:
-        rev_by_month[r["month"]] = (rev_by_month.get(r["month"]) or 0) + (r["revenue"] or 0)
     monthly_combined = [{"month": m, "revenue": v} for m, v in sorted(rev_by_month.items())]
 
-    # Merge branch growth rows
+    # Branch growth rows (Easy)
     bgrowth_map: dict = {}
     for r in bgrowth_easy:
         bgrowth_map.setdefault(r["branch"], {})[r["month"]] = (r["revenue"] or 0)
-    for r in bgrowth_cm:
-        prev = bgrowth_map.setdefault(r["branch"], {}).get(r["month"]) or 0
-        bgrowth_map[r["branch"]][r["month"]] = prev + (r["revenue"] or 0)
     bgrowth = [
         {"branch": br, "month": mo, "revenue": rev}
         for br, months in bgrowth_map.items()
@@ -4506,7 +4419,7 @@ def analysis_health(
       + 0.3 * growth_score     (last vs prior month, capped ±50%)
       + 0.2 * consistency_score (1 - coefficient of variation)
       + 0.1 * momentum_score   (slope of last 3 periods)
-    Combines Easy (sales_transaction) + CM POS (sales_month_summary) so all branches are scored.
+    Uses Easy transaction-level data (sales_transaction).
     """
     filters_tx = ["b.name != 'ALL'"]
     params_tx: dict = {}
@@ -4514,12 +4427,6 @@ def analysis_health(
     _month_range_filter(filters_tx, params_tx, month_from, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
-
-    filters_cm = ["b.name != 'ALL'", "sms.source = 'CM POS'"]
-    params_cm: dict = {}
-    _group_filter(filters_cm, params_cm, group)
-    _month_range_filter(filters_cm, params_cm, month_from, month_to, None, col="sms.period_month")
-    where_cm = "WHERE " + " AND ".join(filters_cm)
 
     with get_db() as con:
         easy_rows = con.execute(
@@ -4535,26 +4442,9 @@ def analysis_health(
             """,
             params_tx,
         ).fetchall()
-        cm_rows_h = con.execute(
-            f"""
-            SELECT b.name AS branch,
-                   sms.period_month AS month,
-                   ROUND(SUM(sms.net_sales), 2) AS revenue
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where_cm}
-            GROUP BY b.name, sms.period_month
-            ORDER BY b.name, sms.period_month
-            """,
-            params_cm,
-        ).fetchall()
 
-    # Merge Easy + CM POS per branch×month (additive — different POS systems)
     branch_month_h: dict = {}
     for r in easy_rows:
-        branch_month_h.setdefault(r["branch"], {})[r["month"]] = \
-            branch_month_h.get(r["branch"], {}).get(r["month"], 0) + (r["revenue"] or 0)
-    for r in cm_rows_h:
         branch_month_h.setdefault(r["branch"], {})[r["month"]] = \
             branch_month_h.get(r["branch"], {}).get(r["month"], 0) + (r["revenue"] or 0)
 
@@ -5725,16 +5615,14 @@ def _tx_filters(branch, group, month_from, month_to, month):
 # consumption). Using tier unit_cost AND item unit_cost double-counts.
 # Rule: for Easy rows whose sku_code is a buffet tier, contribute zero cost
 # (and zero costed-revenue); for everything else, use unit_cost normally.
-# CM / CM POS only have tier-level rows (no items) — tier cost is the only
-# cost data so it must be included.
-# 'BUFFET' (plain, sku_id=1) is the deprecated legacy code from CM era. Some Easy
+# 'BUFFET' (plain, sku_id=1) is a deprecated legacy buffet code. Some Easy
 # bills still emit it as a fallback. Treat same as tiered codes: count revenue,
 # skip unit_cost (avoid double-counting 825M of phantom COGS).
 _EASY_TIER_CODES = ('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')
 _EASY_TIER_CODES_SQL = "('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')"
-# CM POS only exposes tier-level rows under these codes (no item breakdown).
-_CM_TIER_CODES = ('B01','B02','B03','B07','B11')
-_ALL_TIER_CODES = _EASY_TIER_CODES + _CM_TIER_CODES
+# Legacy buffet tier-level codes (no item breakdown) — kept as a SKU exclusion list.
+_LEGACY_TIER_CODES = ('B01','B02','B03','B07','B11')
+_ALL_TIER_CODES = _EASY_TIER_CODES + _LEGACY_TIER_CODES
 
 
 def _effective_cost_subquery(ssm: str = "ssm", sc: str = "sc") -> str:
@@ -6729,10 +6617,9 @@ def profit_by_branch(
 
 
 # -----------------------------------------------------------------------------
-# GP by Branch x Month - combines BOTH Easy + CM POS with the new BoM rule:
-#   Easy: COGS = SUM(qty*unit_cost) EXCLUDING tier SKUs (BUFFET350/500/590/799/CHILD)
-#   CM:   COGS = SUM(qty*unit_cost) for ALL SKUs (tier is the only cost signal)
-#   Revenue = SUM(subtotal_ex_vat) for all sources
+# GP by Branch x Month - BoM rule (Easy):
+#   COGS = SUM(qty*unit_cost) EXCLUDING tier SKUs (BUFFET350/500/590/799/CHILD)
+#   Revenue = SUM(subtotal_ex_vat)
 # -----------------------------------------------------------------------------
 @app.get("/api/gp/by-branch-month")
 @ttl_cache
@@ -6740,16 +6627,10 @@ def gp_by_branch_month(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     month:      Optional[str] = Query(None),
-    source:     Optional[str] = Query("all"),
     variant:    Optional[str] = Query(None, description="A | B | all — filter à la carte vs buffet SKUs"),
     granularity: str          = Query("month", description="day | week | month — bucket size for per-branch trend"),
 ):
-    """GP per branch x month using the source-aware BoM rule.
-
-    Note: CM POS data was archived 2026-05-27 (now in *_archive tables).
-    Main tables are Easy-only since 2025-05. The `source` param is kept
-    for backwards compatibility but practically all rows are Easy now.
-    Use /api/legacy/cm/by-branch-month for Jan-Apr 2025 historical view.
+    """GP per branch x month using the BoM rule (Easy data).
 
     `granularity` ∈ {day, week, month}: when day/week, each branch row also
     gains a `trend` array of pro-rated buckets (monthly COGS pro-rated by
@@ -6758,11 +6639,6 @@ def gp_by_branch_month(
         granularity = "month"
     filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
     params: dict = {}
-    src = (source or "all").lower()
-    if src == "easy":
-        filters.append("ssm.source = 'Easy'")
-    elif src == "cm":
-        filters.append("ssm.source IN ('CM','CM POS')")
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
     var_clause = _variant_filter(variant)
     if var_clause:
@@ -6930,54 +6806,6 @@ def gp_by_branch_month(
             "gp_pct":        round(grand_gp / grand_rev * 100, 2) if grand_rev > 0 else None,
             "food_cost_pct": round(grand_cogs / grand_rev * 100, 2) if grand_rev > 0 else None,
         },
-    }
-
-
-@app.get("/api/legacy/cm")
-@ttl_cache
-def legacy_cm_summary():
-    """Read-only view of archived CM POS data (Jan-Apr 2025 + overlap May-Oct 2025).
-
-    Main tables hold only Easy data since 2026-05-27 archive. This endpoint
-    surfaces what was moved to sales_sku_monthly_archive for historical reference."""
-    with get_db() as con:
-        # Check archive exists
-        exists = con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='sales_sku_monthly_archive'"
-        ).fetchone()
-        if not exists:
-            return {"available": False, "reason": "Archive table not found"}
-
-        months = [dict(r) for r in con.execute("""
-            SELECT period_month, ROUND(SUM(subtotal_ex_vat),2) AS revenue,
-                   COUNT(DISTINCT branch_id) AS branches
-            FROM sales_sku_monthly_archive
-            GROUP BY period_month ORDER BY period_month
-        """).fetchall()]
-
-        branches = [dict(r) for r in con.execute("""
-            SELECT b.name AS branch,
-                   ROUND(SUM(a.subtotal_ex_vat),2) AS revenue,
-                   COUNT(DISTINCT a.period_month) AS months
-            FROM sales_sku_monthly_archive a
-            JOIN branches b ON b.branch_id = a.branch_id
-            GROUP BY b.branch_id ORDER BY revenue DESC
-        """).fetchall()]
-
-        totals = dict(con.execute("""
-            SELECT COUNT(*) AS rows,
-                   ROUND(SUM(subtotal_ex_vat),2) AS total_revenue,
-                   MIN(period_month) AS min_month,
-                   MAX(period_month) AS max_month
-            FROM sales_sku_monthly_archive
-        """).fetchone())
-
-    return {
-        "available": True,
-        "note": "CM POS data archived 2026-05-27. Main dashboard uses Easy only from 2025-05 onwards.",
-        "totals":   totals,
-        "months":   months,
-        "branches": branches,
     }
 
 
