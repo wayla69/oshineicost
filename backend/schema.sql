@@ -78,19 +78,40 @@ CREATE TABLE IF NOT EXISTS sales_month_summary (
   PRIMARY KEY (branch_id, period_month, source)
 );
 
+-- ── sales_transaction indexes ──────────────────────────────────────────────
+-- NOTE: this is the single source of truth for ALL performance indexes. The
+-- covering indexes below were previously created ad-hoc in the live DB only,
+-- so a full re-ingest silently lost them; they now live here. Three former
+-- single/short indexes (idx_tx_yearmonth, idx_sku_branch_per, idx_ssku_sku)
+-- were dropped as exact prefix-duplicates of the covering indexes — the query
+-- planner uses the covering index for those access paths just as well.
 CREATE INDEX IF NOT EXISTS idx_tx_date          ON sales_transaction(sold_at);
 CREATE INDEX IF NOT EXISTS idx_tx_branch        ON sales_transaction(branch_id, sold_at);
 CREATE INDEX IF NOT EXISTS idx_tx_source_date   ON sales_transaction(source, sold_at);
 CREATE INDEX IF NOT EXISTS idx_tx_branch_src    ON sales_transaction(branch_id, source, sold_at);
--- Expression index for strftime('%Y-%m', sold_at) = :month filters used by many endpoints
-CREATE INDEX IF NOT EXISTS idx_tx_yearmonth     ON sales_transaction(strftime('%Y-%m', sold_at));
+CREATE INDEX IF NOT EXISTS idx_tx_source_branch ON sales_transaction(source, branch_id);
 -- Composite for branch + month filter (very common)
 CREATE INDEX IF NOT EXISTS idx_tx_branch_ym     ON sales_transaction(branch_id, strftime('%Y-%m', sold_at));
+-- Covering indexes: leading expr/col + (source, branch_id, total_inc_vat, customer_count)
+-- so the common revenue/cover aggregations are answered index-only.
+CREATE INDEX IF NOT EXISTS idx_tx_ym_covering   ON sales_transaction(strftime('%Y-%m', sold_at), source, branch_id, total_inc_vat, customer_count);
+CREATE INDEX IF NOT EXISTS idx_tx_day_covering  ON sales_transaction(date(sold_at), source, branch_id, total_inc_vat, customer_count);
+CREATE INDEX IF NOT EXISTS idx_tx_src_day       ON sales_transaction(source, date(sold_at), branch_id, total_inc_vat, customer_count);
+CREATE INDEX IF NOT EXISTS idx_tx_src_week      ON sales_transaction(source, strftime('%Y-W%W', sold_at), branch_id, total_inc_vat, customer_count);
+CREATE INDEX IF NOT EXISTS idx_tx_src_dow       ON sales_transaction(source, strftime('%w', sold_at), branch_id, total_inc_vat, customer_count);
+CREATE INDEX IF NOT EXISTS idx_tx_src_hour      ON sales_transaction(source, strftime('%H', sold_at), branch_id, total_inc_vat, customer_count);
+
+-- ── sales_sku_monthly indexes ──────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sku_period       ON sales_sku_monthly(period_month);
-CREATE INDEX IF NOT EXISTS idx_sku_branch_per   ON sales_sku_monthly(branch_id, period_month);
-CREATE INDEX IF NOT EXISTS idx_ssku_sku         ON sales_sku_monthly(sku_id);
+CREATE INDEX IF NOT EXISTS idx_ssm_sku_period      ON sales_sku_monthly(sku_id, period_month, qty, subtotal_ex_vat, total_inc_vat);
+CREATE INDEX IF NOT EXISTS idx_ssm_sku_covering    ON sales_sku_monthly(sku_id, branch_id, period_month, qty, total_inc_vat, subtotal_ex_vat);
+CREATE INDEX IF NOT EXISTS idx_ssm_branch_covering ON sales_sku_monthly(branch_id, period_month, sku_id, qty, subtotal_ex_vat, total_inc_vat);
+
 CREATE INDEX IF NOT EXISTS idx_sms_period       ON sales_month_summary(period_month);
 CREATE INDEX IF NOT EXISTS idx_sku_category     ON skus(category_id);
+
+-- Refresh query-planner statistics. Re-run ANALYZE after any bulk re-ingest.
+ANALYZE;
 
 -- Monthly revenue / customer targets per branch
 CREATE TABLE IF NOT EXISTS branch_targets (
