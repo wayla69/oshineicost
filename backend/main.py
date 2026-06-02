@@ -3848,9 +3848,16 @@ def analysis_cashiers(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    by_branch:  bool          = Query(False),
     limit:      int           = Query(30, ge=1, le=100),
 ):
-    """Cashier performance ranked by revenue."""
+    """Cashier performance ranked by revenue.
+
+    by_branch=False (default): one row per cashier, aggregated across all branches
+    they keyed in (primary_branch + branch_count summarise the spread).
+    by_branch=True: one row per (cashier, branch) pair — so a shared POS account like
+    'Manager' becomes a separate row for each branch instead of being merged.
+    """
     filters = ["b.name != 'ALL'", "TRIM(COALESCE(st.cashier,'')) != ''"]
     params: dict = {}
     if branch:
@@ -3859,6 +3866,9 @@ def analysis_cashiers(
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
     params["limit"] = limit
+
+    group_by   = "st.cashier, b.name" if by_branch else "st.cashier"
+    branch_sel = "b.name AS branch," if by_branch else ""
 
     with get_db() as con:
         # Per-(cashier, branch) revenue so we can find the primary branch in Python
@@ -3880,6 +3890,7 @@ def analysis_cashiers(
         rows = con.execute(
             f"""
             SELECT st.cashier,
+                   {branch_sel}
                    COUNT(*)                                           AS tx_count,
                    SUM(st.customer_count)                            AS customer_count,
                    ROUND(SUM(st.total_inc_vat) / 1.07, 2)                  AS revenue,
@@ -3891,7 +3902,7 @@ def analysis_cashiers(
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
-            GROUP BY st.cashier
+            GROUP BY {group_by}
             ORDER BY revenue DESC
             LIMIT :limit
             """,
@@ -3900,11 +3911,17 @@ def analysis_cashiers(
     out = []
     for r in rows:
         d = dict(r)
-        brs = per_cashier.get(d["cashier"], [])
-        brs.sort(key=lambda x: -x["rev"])
-        d["primary_branch"] = brs[0]["branch"] if brs else None
-        d["branch_count"]   = len(brs)
-        d["branches"]       = [b["branch"] for b in brs]
+        if by_branch:
+            # one branch per row already
+            d["primary_branch"] = d.get("branch")
+            d["branch_count"]   = 1
+            d["branches"]       = [d.get("branch")] if d.get("branch") else []
+        else:
+            brs = per_cashier.get(d["cashier"], [])
+            brs.sort(key=lambda x: -x["rev"])
+            d["primary_branch"] = brs[0]["branch"] if brs else None
+            d["branch_count"]   = len(brs)
+            d["branches"]       = [b["branch"] for b in brs]
         out.append(d)
     return out
 
@@ -4060,6 +4077,180 @@ def analysis_discounts(
         "common_amounts": [dict(r) for r in common_amounts],
         "outlier_threshold_pct": round(flag_at, 1),
     }
+
+
+# ---------------------------------------------------------------------------
+# /api/analysis/discount_bills  -  individual bills (receipts) with a discount
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/discount_bills")
+def analysis_discount_bills(
+    month:        Optional[str]   = Query(None),
+    month_from:   Optional[str]   = Query(None),
+    month_to:     Optional[str]   = Query(None),
+    branch:       Optional[str]   = Query(None),
+    cashier:      Optional[str]   = Query(None),
+    min_discount: float           = Query(0.0, ge=0),
+    amount:       Optional[float] = Query(None),
+    min_pct:      Optional[float] = Query(None),
+    max_pct:      Optional[float] = Query(None),
+    gross_zero:   bool            = Query(False),
+    sort:         str             = Query("discount", pattern="^(discount|pct|date|total)$"),
+    limit:        int             = Query(100, ge=1, le=1000),
+):
+    """Receipt-level drill-down of discounted bills, newest/biggest first.
+
+    Lets a manager see the actual bills behind an abnormally high discount total —
+    receipt no, date/time, cashier, table, bill value and the discount given, plus
+    the discount as a % of the bill's gross. Also returns a summary (count, total,
+    average, max, and the p95 threshold) so "abnormally high" can be flagged.
+
+    Drill filters used by the Discounts tab:
+      amount=N      → bills with exactly that discount value (common fixed amounts).
+      min_pct/max_pct → discount as % of bill gross within [min,max) (pattern buckets).
+      gross_zero=1  → bills whose gross is <= 0 (discount-only / zeroed bills).
+    """
+    gross_expr = "(st.food_subtotal + st.drink_subtotal + st.other_subtotal)"
+    filters = ["b.name != 'ALL'", "st.discount > 0"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch")
+        params["branch"] = branch
+    if cashier:
+        filters.append("st.cashier = :cashier")
+        params["cashier"] = cashier
+    if min_discount > 0:
+        filters.append("st.discount >= :min_discount")
+        params["min_discount"] = min_discount
+    if amount is not None:
+        filters.append("st.discount = :amount")
+        params["amount"] = amount
+    if gross_zero:
+        filters.append(f"{gross_expr} <= 0")
+    else:
+        # percentage-of-bill bucket (only meaningful when gross > 0)
+        if min_pct is not None:
+            filters.append(f"{gross_expr} > 0 AND 100.0 * st.discount / {gross_expr} >= :min_pct")
+            params["min_pct"] = min_pct
+        if max_pct is not None:
+            filters.append(f"{gross_expr} > 0 AND 100.0 * st.discount / {gross_expr} < :max_pct")
+            params["max_pct"] = max_pct
+    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+
+    order = {
+        "discount": "st.discount DESC",
+        "pct":      "disc_pct DESC",
+        "date":     "st.sold_at DESC",
+        "total":    "st.total_inc_vat DESC",
+    }[sort]
+    params["limit"] = limit
+
+    with get_db() as con:
+        rows = con.execute(
+            f"""
+            SELECT st.receipt_no, st.sold_at, st.cashier, st.table_no,
+                   st.customer_count,
+                   b.name AS branch,
+                   ROUND(st.total_inc_vat, 2)                    AS total_inc_vat,
+                   ROUND(st.discount, 2)                         AS discount,
+                   ROUND(st.sp_discount, 2)                      AS sp_discount,
+                   (st.food_subtotal + st.drink_subtotal + st.other_subtotal) AS gross,
+                   ROUND(100.0 * st.discount
+                         / NULLIF(st.food_subtotal + st.drink_subtotal + st.other_subtotal, 0), 1) AS disc_pct
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            {where}
+            ORDER BY {order}
+            LIMIT :limit
+            """,
+            params,
+        ).fetchall()
+
+        summary = con.execute(
+            f"""
+            SELECT COUNT(*) AS bills,
+                   ROUND(SUM(st.discount), 2) AS total_discount,
+                   ROUND(AVG(st.discount), 2) AS avg_discount,
+                   ROUND(MAX(st.discount), 2) AS max_discount
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            {where}
+            """,
+            params,
+        ).fetchone()
+
+    # p95 of discount amount — anything above is "abnormally high" for this scope.
+    discs = sorted((r["discount"] or 0) for r in rows)
+    p95 = discs[min(len(discs) - 1, int(len(discs) * 0.95))] if discs else 0
+    return {
+        "bills": [dict(r) for r in rows],
+        "summary": {
+            **(dict(summary) if summary else {}),
+            "p95_discount": round(p95, 2),
+            "returned": len(rows),
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# /api/analysis/discount_composition  -  per-branch discount split by type
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/discount_composition")
+@ttl_cache
+def analysis_discount_composition(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+):
+    """Per-branch discount composition by discount-as-%-of-bill bucket, for a period.
+
+    Lets §9 of the report show the *nature* of each branch's discounting (mostly
+    small markdowns vs heavy 50%+/free bills) and compare it month-over-month.
+    Buckets mirror the discounts-tab pattern groups. Amounts are baht of discount.
+    """
+    gross = "(st.food_subtotal + st.drink_subtotal + st.other_subtotal)"
+    bucket = f"""CASE
+        WHEN {gross} <= 0            THEN 'zero_gross'
+        WHEN st.discount >= {gross}  THEN 'free'
+        WHEN st.discount*1.0/{gross} >= 0.5 THEN 'ge50'
+        WHEN st.discount*1.0/{gross} >= 0.2 THEN 'p20_50'
+        WHEN st.discount*1.0/{gross} >= 0.1 THEN 'p10_20'
+        ELSE 'lt10' END"""
+    filters = ["b.name != 'ALL'", "st.discount > 0"]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch")
+        params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch, {bucket} AS bucket,
+                   COUNT(*) AS bills, ROUND(SUM(st.discount), 2) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where}
+            GROUP BY b.name, bucket
+        """, params).fetchall()
+
+    keys = ["free", "ge50", "p20_50", "p10_20", "lt10", "zero_gross"]
+    per: dict = {}
+    for r in rows:
+        d = per.setdefault(r["branch"], {
+            "branch": r["branch"], "total_discount": 0.0, "bills": 0,
+            "buckets": {k: 0.0 for k in keys}, "bucket_bills": {k: 0 for k in keys},
+        })
+        d["buckets"][r["bucket"]] = r["baht"] or 0
+        d["bucket_bills"][r["bucket"]] = r["bills"] or 0
+        d["total_discount"] += r["baht"] or 0
+        d["bills"] += r["bills"] or 0
+    out = sorted(per.values(), key=lambda x: -x["total_discount"])
+    for d in out:
+        d["total_discount"] = round(d["total_discount"], 2)
+        # dominant bucket by baht
+        d["dominant"] = max(d["buckets"], key=lambda k: d["buckets"][k]) if d["total_discount"] else None
+    return {"bucket_keys": keys, "branches": out}
 
 
 # ===========================================================================
@@ -4851,6 +5042,102 @@ def analysis_forecast(
         "lo":           round(projected - band, 2),
         "hi":           round(projected + band, 2),
         "daily":        [{"day": r["day"], "revenue": r["rev"] or 0} for r in daily],
+    }
+
+
+@app.get("/api/analysis/forecast_branches")
+@ttl_cache
+def analysis_forecast_branches(group: Optional[str] = Query(None)):
+    """Per-branch month-end revenue projection (run-rate) for the latest month,
+    plus the prior month's actual for trend.
+
+    Methodology: projected = MTD / days_elapsed * days_in_month, where days_elapsed
+    is the calendar day-of-month of the latest sale date (closed days count as zero
+    revenue, the honest run-rate). Every branch shares the same days_elapsed divisor,
+    so the per-branch projections sum exactly to the total. Revenue is ex-VAT
+    (inc-VAT / 1.07). mom_pct compares the projected month-end vs the prior full month.
+    """
+    filters = ["b.name != 'ALL'", "st.source = 'Easy'"]
+    params: dict = {}
+    _group_filter(filters, params, group)
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        latest = con.execute(
+            f"""SELECT MAX(DATE(st.sold_at)) AS d
+                FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id {where}""",
+            params,
+        ).fetchone()
+        if not latest or not latest["d"]:
+            return {"available": False}
+        from datetime import datetime as _dt
+        from calendar import monthrange
+        d = _dt.strptime(latest["d"], "%Y-%m-%d")
+        period = d.strftime("%Y-%m")
+        days_in_month = monthrange(d.year, d.month)[1]
+        days_elapsed = d.day
+        py, pm = (d.year - 1, 12) if d.month == 1 else (d.year, d.month - 1)
+        prior = f"{py:04d}-{pm:02d}"
+
+        params_cur = dict(params); params_cur["period"] = period
+        cur = con.execute(
+            f"""SELECT b.name AS branch, SUM(st.total_inc_vat) / 1.07 AS mtd
+                FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+                {where} AND strftime('%Y-%m', st.sold_at) = :period
+                GROUP BY b.name""", params_cur,
+        ).fetchall()
+        params_pri = dict(params); params_pri["period"] = prior
+        pri = con.execute(
+            f"""SELECT b.name AS branch, SUM(st.total_inc_vat) / 1.07 AS rev
+                FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+                {where} AND strftime('%Y-%m', st.sold_at) = :period
+                GROUP BY b.name""", params_pri,
+        ).fetchall()
+        # All real branches + their last sale date — to flag inactive ones (no sales
+        # in the forecast month) so the 26-vs-27 gap is explained, not silently dropped.
+        allbr = con.execute(
+            f"""SELECT b.name AS branch, MAX(DATE(st.sold_at)) AS last_sale
+                FROM branches b LEFT JOIN sales_transaction st ON st.branch_id = b.branch_id
+                {where} GROUP BY b.name""", params,
+        ).fetchall()
+
+    active_names = {r["branch"] for r in cur}
+    inactive = [{"branch": r["branch"], "last_sale": r["last_sale"]}
+                for r in allbr if r["branch"] not in active_names]
+    prior_map = {r["branch"]: (r["rev"] or 0) for r in pri}
+    factor = days_in_month / max(1, days_elapsed)
+    out = []
+    for r in cur:
+        mtd = r["mtd"] or 0
+        projected = mtd * factor
+        prior_rev = prior_map.get(r["branch"])
+        mom_pct = round((projected - prior_rev) / prior_rev * 100, 1) if prior_rev else None
+        out.append({
+            "branch":       r["branch"],
+            "mtd":          round(mtd, 2),
+            "projected":    round(projected, 2),
+            "prior_actual": round(prior_rev, 2) if prior_rev is not None else None,
+            "mom_pct":      mom_pct,
+        })
+    out.sort(key=lambda x: -x["projected"])
+    total_mtd   = sum(x["mtd"] for x in out)
+    total_proj  = sum(x["projected"] for x in out)
+    total_prior = sum(prior_map.values())
+    return {
+        "available":    True,
+        "period":       period,
+        "prior_period": prior,
+        "days_elapsed": days_elapsed,
+        "days_total":   days_in_month,
+        "branches":     out,
+        "total_branches":    len(allbr),
+        "active_branches":   len(out),
+        "inactive_branches": inactive,
+        "total": {
+            "mtd":          round(total_mtd, 2),
+            "projected":    round(total_proj, 2),
+            "prior_actual": round(total_prior, 2) if total_prior else None,
+            "mom_pct":      round((total_proj - total_prior) / total_prior * 100, 1) if total_prior else None,
+        },
     }
 
 
@@ -7595,6 +7882,53 @@ def analysis_hourly_open(
         h["avg_daily_tx"]      = round((h["tx_count"] or 0) / total_days, 2)
         h["total_days"]        = total_days
     return raw
+
+
+@app.get("/api/analysis/hour_detail")
+@ttl_cache
+def analysis_hour_detail(
+    hour:       int           = Query(..., ge=0, le=23),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+):
+    """Drill-down for one hour-of-day: revenue/tx/customers split by branch and by
+    day-of-week, powering the Time & Flow peak-hour cards. Revenue is ex-VAT."""
+    filters = ["b.name != 'ALL'", "st.source = 'Easy'",
+               "CAST(strftime('%H', st.sold_at) AS INTEGER) = :hour"]
+    params: dict = {"hour": hour}
+    if branch:
+        filters.append("b.name = :branch")
+        params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, month,
+                        col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        by_branch = con.execute(f"""
+            SELECT b.name AS branch, COUNT(*) AS tx_count,
+                   COALESCE(SUM(st.customer_count), 0) AS customer_count,
+                   ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where} GROUP BY b.name ORDER BY revenue DESC""", params).fetchall()
+        by_dow = con.execute(f"""
+            SELECT CAST(strftime('%w', st.sold_at) AS INTEGER) AS dow,
+                   COUNT(*) AS tx_count,
+                   ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where} GROUP BY dow ORDER BY dow""", params).fetchall()
+        dd = con.execute(f"""SELECT COUNT(DISTINCT DATE(st.sold_at)) AS c
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where}""", params).fetchone()
+    total_days = max(dd["c"] if dd else 1, 1)
+    grand = sum(r["revenue"] or 0 for r in by_branch)
+    return {
+        "hour":        hour,
+        "total_days":  total_days,
+        "grand_revenue": round(grand, 2),
+        "by_branch":   [dict(r) for r in by_branch],
+        "by_dow":      [dict(r) for r in by_dow],
+    }
 
 
 # ---------------------------------------------------------------------------
