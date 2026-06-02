@@ -1045,6 +1045,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <button onclick="loadPresetRange('last_6m')" class="preset-chip">Last 6M</button>
     <button onclick="loadPresetRange('ytd')" class="preset-chip">YTD</button>
     <button onclick="loadPresetRange('all')" class="preset-chip">All Time</button>
+    <button onclick="toggleCustomRange()" id="customRangeChip" class="preset-chip">🗓 กำหนดเอง</button>
+    <span id="customRangeBox" class="hidden items-center gap-1">
+      <select id="customFrom" class="border border-slate-300 rounded px-2 py-1 text-xs"></select>
+      <span class="text-xs text-slate-400">→</span>
+      <select id="customTo" class="border border-slate-300 rounded px-2 py-1 text-xs"></select>
+      <button onclick="applyCustomRange()" class="preset-chip" style="background:#e0e7ff;color:#3730a3">ใช้ช่วงนี้</button>
+      <span id="customRangeMsg" class="text-xs text-red-500"></span>
+    </span>
     <span class="text-slate-300 mx-1">|</span>
     <span class="text-xs text-slate-500 font-medium">My presets:</span>
     <div id="userPresets" class="flex items-center gap-1.5 flex-wrap"></div>
@@ -2134,6 +2142,25 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
   </div>
+  <!-- 🛠️ No-cost fixer: editable worklist — fill unit_cost right here -->
+  <div class="card p-4 mt-5" style="border:1px solid #e0e7ff">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="text-sm font-semibold text-slate-700">🛠️ เติมต้นทุนที่ขาด — แก้ได้เลย (SKU รายได้สูงสุดที่ยังไม่มีต้นทุน)</div>
+      <button id="cov-fixer-saveall" onclick="saveAllUncosted()" class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#4f46e5;color:#fff">💾 บันทึกทั้งหมดที่กรอก</button>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าธรรมเนียม เช่น Service Charge ใส่ <b>0</b> ได้ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · แสดง Top 25 (ครอบคลุมช่องว่างส่วนใหญ่)</p>
+    <div style="max-height:440px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">SKU</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">จำนวน</th>
+          <th class="py-1.5 pr-2 text-right">ราคาขาย/หน่วย</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th><th class="py-1.5 text-center">บันทึก</th>
+        </tr></thead>
+        <tbody id="cov-fixer"></tbody>
+      </table>
+    </div>
+    <div id="cov-fixer-msg" class="text-xs mt-2"></div>
+  </div>
   <div class="card p-4 mt-5">
     <div class="text-sm font-semibold text-slate-700 mb-2">⏰ ชั่วโมงขายดี (Peak hours by revenue)</div>
     <div class="text-xs text-slate-400 mb-2">รายได้เฉลี่ยต่อชั่วโมง · ใช้วางแผนกำลังคน/เตรียมของ</div>
@@ -2360,8 +2387,39 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
+  <!-- Discount pattern groups + common fixed amounts -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <div class="card p-5">
+      <h2 class="section-title mb-1">ลักษณะการลด (จัดกลุ่มตาม % ของบิล)</h2>
+      <p class="text-xs text-slate-400 mb-3">บิลที่ลด 20–50% ของยอด มักเป็นจุดรั่วของเงินส่วนลดมากที่สุด</p>
+      <div style="max-height:280px;overflow:auto"><table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">กลุ่ม</th><th class="py-1.5 pr-2 text-right">บิล</th>
+          <th class="py-1.5 pr-2 text-right">มูลค่า</th><th class="py-1.5 text-right">% เงินลด</th></tr></thead>
+        <tbody id="disc-pattern"></tbody>
+      </table></div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-1">ค่าลดยอดฮิต (น่าจะเป็นคูปอง/โปรคงที่)</h2>
+      <p class="text-xs text-slate-400 mb-3">ค่าส่วนลดที่ซ้ำบ่อย = โปรโมชั่นมาตรฐาน ใช้ตรวจว่าตรงนโยบายไหม</p>
+      <div style="max-height:280px;overflow:auto"><table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">ส่วนลด/บิล</th><th class="py-1.5 pr-2 text-right">จำนวนครั้ง</th>
+          <th class="py-1.5 text-right">มูลค่ารวม</th></tr></thead>
+        <tbody id="disc-amounts"></tbody>
+      </table></div>
+    </div>
+  </div>
+
   <div class="card p-5 mb-5 overflow-x-auto">
-    <h2 class="section-title mb-3">แคชเชียร์ส่วนลดสูงสุด</h2>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h2 class="section-title mb-0">แคชเชียร์ส่วนลดสูงสุด</h2>
+      <div class="flex items-center gap-1 text-xs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px">
+        <button id="discGrpFlat"   onclick="setDiscGroup(false)" class="subtab-btn active px-3 py-1">รวม</button>
+        <button id="discGrpBranch" onclick="setDiscGroup(true)"  class="subtab-btn px-3 py-1">จัดกลุ่มรายสาขา</button>
+      </div>
+    </div>
+    <div id="disc-outlier-note" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b"></div>
     <table class="text-xs w-full">
       <thead>
         <tr class="text-left border-b border-slate-200">
@@ -2370,6 +2428,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <th class="py-2 pr-3 text-right">Tx</th>
           <th class="py-2 pr-3 text-right">Discount Tx</th>
           <th class="py-2 pr-3 text-right">Rate</th>
+          <th class="py-2 pr-3 text-right">% ยอดขาย</th>
           <th class="py-2 pr-3 text-right">Total Discount</th>
           <th class="py-2 text-right">Avg Discount</th>
         </tr>
@@ -2563,6 +2622,35 @@ body.dark .skeleton-kpi { border-color: var(--border); }
      TAB 2 — MENU ANALYSIS
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-menu" class="hidden">
+
+  <!-- 🔍 Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
+  <div class="card p-4 mb-4">
+    <div class="flex items-center gap-2 flex-wrap mb-3">
+      <div class="flex-1 min-w-[220px]">
+        <input id="menuFindSearch" oninput="renderMenuFinder()" autocomplete="off"
+               placeholder="🔍 พิมพ์ชื่อเมนูหรือรหัส SKU เพื่อค้นหา…"
+               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none">
+      </div>
+      <select id="menuFindCat" onchange="renderMenuFinder()" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
+        <option value="">ทุกหมวด</option>
+      </select>
+      <select id="menuFindSort" onchange="renderMenuFinder()" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
+        <option value="revenue">เรียงตาม: รายได้</option>
+        <option value="qty">เรียงตาม: จำนวนขาย</option>
+        <option value="margin_pct">เรียงตาม: กำไร/จาน %</option>
+      </select>
+      <span id="menuFindCount" class="text-xs text-slate-400 ml-auto"></span>
+    </div>
+    <div style="max-height:340px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+          <th class="py-1.5 pr-2 text-right">จำนวนขาย</th><th class="py-1.5 pr-2 text-right">รายได้</th>
+          <th class="py-1.5 text-right">กำไร/จาน %</th></tr></thead>
+        <tbody id="menuFindBody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <div class="subtab-bar">
     <button class="subtab-btn active" onclick="switchSubtab('mostOrdered')">สั่งบ่อยที่สุด</button>
@@ -6395,10 +6483,56 @@ async function loadMarginTable() {   // now: Category Movers (MoM revenue change
 // TAB 2 — MENU ANALYSIS
 // ════════════════════════════════════════════════════════════════
 async function loadMenuSubtab() {
+  loadMenuFinder();   // refresh the search/filter finder for current branch+period
   if (activeSubtab === 'mostOrdered') await loadMostOrdered();
   if (activeSubtab === 'mostCost')    await loadMostRev();
   if (activeSubtab === 'engineering') await loadMenuEngineering();
   if (activeSubtab === 'persona')     await loadPersona();
+}
+
+// ── Menu Finder: one searchable/sortable list of all food menus ──────────────
+let _menuFinderData = [];
+async function loadMenuFinder() {
+  try {
+    const data = await fetch(`${API}/api/sales/skus${qp({ limit: 200, sort: 'revenue' })}`).then(r => r.json());
+    _menuFinderData = Array.isArray(data) ? data : [];
+  } catch(e){ _menuFinderData = []; }
+  // populate category dropdown (preserve current choice)
+  const sel = document.getElementById('menuFindCat');
+  if (sel) {
+    const cur = sel.value;
+    const cats = [...new Set(_menuFinderData.map(r => r.category).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">ทุกหมวด</option>' + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+    sel.value = cur;
+  }
+  renderMenuFinder();
+}
+
+function renderMenuFinder() {
+  const body = document.getElementById('menuFindBody');
+  if (!body) return;
+  const q    = (document.getElementById('menuFindSearch')?.value || '').trim().toLowerCase();
+  const cat  = document.getElementById('menuFindCat')?.value || '';
+  const sort = document.getElementById('menuFindSort')?.value || 'revenue';
+  let rows = _menuFinderData.filter(r => {
+    if (cat && r.category !== cat) return false;
+    if (!q) return true;
+    return (`${r.description||''} ${r.sku_code||''}`).toLowerCase().includes(q);
+  });
+  rows.sort((a,b) => (b[sort]??-Infinity) - (a[sort]??-Infinity));
+  document.getElementById('menuFindCount').textContent = `${rows.length} เมนู`;
+  body.innerHTML = rows.slice(0, 100).map(r => {
+    const m  = r.margin_pct;
+    const mc = m==null ? '#94a3b8' : m>=60?'#10b981':m>=40?'#f59e0b':'#ef4444';
+    const name = esc((r.description||r.sku_code||'—').replace(/^\((?:A|B|T)\)\s*/,''));
+    return `<tr class="border-b border-slate-50 hover:bg-indigo-50/40">
+      <td class="py-1.5 pr-2">${name} <span class="text-[10px] text-slate-300 font-mono">${esc(r.sku_code)}</span></td>
+      <td class="py-1.5 pr-2 text-xs text-slate-400">${esc(r.category||'')}</td>
+      <td class="py-1.5 pr-2 text-right text-slate-600">${fmtN(r.qty)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold">${fmt(r.revenue)}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${m!=null?m.toFixed(1)+'%':'—'}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่พบเมนูที่ตรงกับ “${esc(q)}”</td></tr>`;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -6663,10 +6797,11 @@ async function loadMostOrdered() {
   const body = document.getElementById('orderedBody');
   body.innerHTML = '';
   sorted.slice(0,20).forEach((r,i) => {
-    body.innerHTML += `<tr class="border-t border-slate-100">
+    const name = esc((r.description||'—').replace(/^\((?:A|B|T)\)\s*/,''));
+    body.innerHTML += `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-4 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-4 font-mono text-indigo-600 text-xs">${r.sku_code}</td>
-      <td class="py-1.5 pr-4 text-xs max-w-xs truncate" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
+      <td class="py-1.5 pr-4 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
+      <td class="py-1.5 pr-4 text-xs max-w-xs truncate" title="${esc(r.description||'')}">${name}</td>
       <td class="py-1.5 pr-4 text-right font-semibold">${fmtN(r.qty)}</td>
       <td class="py-1.5 text-right">${fmtN(r.revenue)}</td>
     </tr>`;
@@ -6695,10 +6830,11 @@ async function loadMostRev() {
   data.forEach((r,i) => {
     const mpct = r.margin_pct;
     const mc = mpct==null ? '#94a3b8' : mpct>=60?'#10b981':mpct>=40?'#f59e0b':'#ef4444';
-    body.innerHTML += `<tr class="border-t border-slate-100">
+    const name = esc((r.description||'—').replace(/^\((?:A|B|T)\)\s*/,''));
+    body.innerHTML += `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-4 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-4 font-mono text-indigo-600 text-xs">${r.sku_code}</td>
-      <td class="py-1.5 pr-4 text-xs truncate max-w-xs" title="${esc(r.description||'')}">${esc(r.description||'—')}</td>
+      <td class="py-1.5 pr-4 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
+      <td class="py-1.5 pr-4 text-xs truncate max-w-xs" title="${esc(r.description||'')}">${name}</td>
       <td class="py-1.5 pr-4 text-right font-semibold">${fmtN(r.revenue)}</td>
       <td class="py-1.5 pr-4 text-right text-slate-500">${r.unit_cost!=null?fmtN(r.unit_cost):'—'}</td>
       <td class="py-1.5 text-right font-semibold" style="color:${mc}">${fmtP(mpct)}</td>
@@ -10706,6 +10842,37 @@ function loadPresetRange(range) {
   }
 }
 
+// Custom month-range picker in the Quick-load bar
+function toggleCustomRange() {
+  const box = document.getElementById('customRangeBox');
+  const open = box.classList.contains('hidden');
+  if (open) {
+    // populate both selects from available months (newest first), prefill current range
+    const opts = allMonths.map(m => `<option value="${m}">${typeof fmtPeriod==='function'?fmtPeriod(m):m}</option>`).reverse().join('');
+    const f = document.getElementById('customFrom'), t = document.getElementById('customTo');
+    f.innerHTML = opts; t.innerHTML = opts;
+    f.value = getMonthFrom() || allMonths[0] || '';
+    t.value = getMonthTo()   || allMonths[allMonths.length-1] || '';
+    box.classList.remove('hidden'); box.classList.add('inline-flex');
+    document.getElementById('customRangeChip').classList.add('active');
+  } else {
+    box.classList.add('hidden'); box.classList.remove('inline-flex');
+    document.getElementById('customRangeChip').classList.remove('active');
+  }
+}
+
+function applyCustomRange() {
+  const from = document.getElementById('customFrom').value;
+  const to   = document.getElementById('customTo').value;
+  const msg  = document.getElementById('customRangeMsg');
+  if (from > to) { msg.textContent = 'เดือนเริ่มต้องไม่เกินเดือนสิ้นสุด'; return; }
+  msg.textContent = '';
+  setGranularity('monthly');
+  document.getElementById('selMonthFrom').value = from;
+  document.getElementById('selMonthTo').value   = to;
+  onFilterChange();
+}
+
 function saveCurrentAsPreset() {
   const name = prompt('Name this preset:', 'My preset');
   if (!name) return;
@@ -14453,17 +14620,97 @@ async function loadDiscountsTab() {
     }
   });
 
-  // Top cashiers table
-  document.getElementById('discCashierBody').innerHTML = (d.top_cashiers || []).map(r => `
-    <tr class="border-t border-slate-100 hover:bg-slate-50">
-      <td class="py-2 pr-3 font-medium">${r.cashier || '—'}</td>
+  // Discount pattern groups (bucket by % of bill)
+  const pat = d.pattern_groups || [];
+  const patTot = pat.reduce((s,r)=>s+(r.baht||0),0) || 1;
+  document.getElementById('disc-pattern').innerHTML = pat.map(r => {
+    const share = (r.baht||0)/patTot*100;
+    const heavy = /20–50|50% ขึ้น|100%/.test(r.grp);
+    return `<tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-2 ${heavy?'font-semibold text-red-600':''}">${esc(r.grp)}</td>
+      <td class="py-1.5 pr-2 text-right">${fmtN(r.bills)}</td>
+      <td class="py-1.5 pr-2 text-right">${fmt(r.baht)}</td>
+      <td class="py-1.5 text-right font-semibold">${share.toFixed(1)}%</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="py-3 text-center text-slate-400">—</td></tr>';
+
+  // Common fixed amounts
+  document.getElementById('disc-amounts').innerHTML = (d.common_amounts||[]).map(r => `
+    <tr class="border-b border-slate-50">
+      <td class="py-1.5 pr-2 font-medium">${fmtN(r.amount)} ฿</td>
+      <td class="py-1.5 pr-2 text-right">${fmtN(r.bills)}</td>
+      <td class="py-1.5 text-right text-slate-500">${fmt(r.baht)}</td>
+    </tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
+
+  // Outlier callout
+  const cashiers = d.top_cashiers || [];
+  const outliers = cashiers.filter(c => c.is_outlier);
+  const note = document.getElementById('disc-outlier-note');
+  if (outliers.length) {
+    note.classList.remove('hidden');
+    note.innerHTML = `🚩 <b>${outliers.length} แคชเชียร์</b>ให้ส่วนลดเกิน <b>${d.outlier_threshold_pct}%</b> ของยอดขาย (เกณฑ์ = 2× ค่ากลาง) — ` +
+      outliers.slice(0,5).map(c=>`${esc(c.cashier)} (${esc(c.branch)}) ${(c.disc_pct_of_sales||0).toFixed(1)}%`).join(' · ');
+  } else { note.classList.add('hidden'); }
+
+  // Top cashiers table — store data, render in current (flat | grouped) mode
+  _discData = d;
+  renderDiscCashiers();
+}
+
+let _discData = null;
+let _discGroupByBranch = false;
+
+function setDiscGroup(on) {
+  _discGroupByBranch = on;
+  document.getElementById('discGrpFlat').classList.toggle('active', !on);
+  document.getElementById('discGrpBranch').classList.toggle('active', on);
+  renderDiscCashiers();
+}
+
+function _discCashierRow(r) {
+  return `<tr class="border-t border-slate-100 hover:bg-slate-50 ${r.is_outlier?'bg-red-50':''}">
+      <td class="py-2 pr-3 font-medium">${r.is_outlier?'🚩 ':''}${esc(r.cashier || '—')}</td>
       <td class="py-2 pr-3 text-xs text-slate-500">${esc(r.branch || '—')}</td>
       <td class="py-2 pr-3 text-right">${fmtN(r.total_tx)}</td>
       <td class="py-2 pr-3 text-right">${fmtN(r.discount_tx)}</td>
-      <td class="py-2 pr-3 text-right"><span class="${(r.rate||0)>20?'text-red-600 font-bold':''}">${(r.rate||0).toFixed(1)}%</span></td>
+      <td class="py-2 pr-3 text-right">${(r.rate||0).toFixed(1)}%</td>
+      <td class="py-2 pr-3 text-right"><span class="${r.is_outlier?'text-red-600 font-bold':''}">${(r.disc_pct_of_sales!=null?r.disc_pct_of_sales.toFixed(1)+'%':'—')}</span></td>
       <td class="py-2 pr-3 text-right">${fmt(r.total_discount)}</td>
       <td class="py-2 text-right">${fmt(r.avg_discount)}</td>
-    </tr>`).join('');
+    </tr>`;
+}
+
+function renderDiscCashiers() {
+  const body = document.getElementById('discCashierBody');
+  if (!body || !_discData) return;
+  const cashiers = _discData.top_cashiers || [];
+
+  if (!_discGroupByBranch) {
+    body.innerHTML = cashiers.map(_discCashierRow).join('') ||
+      '<tr><td colspan="8" class="py-3 text-center text-slate-400">—</td></tr>';
+    return;
+  }
+
+  // Grouped by branch: use full branch totals (from by_branch) as group headers,
+  // list each branch's top cashiers underneath.
+  const bTot = {};
+  (_discData.by_branch || []).forEach(b => { bTot[b.branch] = b; });
+  const groups = {};
+  cashiers.forEach(c => { (groups[c.branch] = groups[c.branch] || []).push(c); });
+  const branches = Object.keys(groups).sort((a,b) =>
+    ((bTot[b]?.total_discount)||0) - ((bTot[a]?.total_discount)||0));
+
+  body.innerHTML = branches.map(br => {
+    const bt = bTot[br] || {};
+    const rows = groups[br].sort((x,y)=>(y.total_discount||0)-(x.total_discount||0));
+    const flag = bt.disc_pct_of_sales != null && bt.disc_pct_of_sales >= (_discData.outlier_threshold_pct||99);
+    const header = `<tr style="background:#eef2ff"><td colspan="5" class="py-1.5 pr-3 font-bold text-indigo-800">
+        ${flag?'🚩 ':'📍 '}${esc(br)} <span class="font-normal text-slate-500">· ${rows.length} แคชเชียร์</span></td>
+      <td class="py-1.5 pr-3 text-right font-bold ${flag?'text-red-600':'text-indigo-800'}">${bt.disc_pct_of_sales!=null?bt.disc_pct_of_sales.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 pr-3 text-right font-bold text-indigo-800">${fmt(bt.total_discount||0)}</td>
+      <td class="py-1.5"></td></tr>`;
+    return header + rows.map(_discCashierRow).join('');
+  }).join('') || '<tr><td colspan="8" class="py-3 text-center text-slate-400">—</td></tr>';
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -14950,8 +15197,84 @@ async function loadCostCoverage() {
       <td class="py-1.5 pr-3 text-right font-semibold">${(b.pct_uncosted??0).toFixed(1)}%</td>
       <td class="py-1.5 text-right">${b.uncosted_skus}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-slate-400 text-center">—</td></tr>';
+  // 🛠️ No-cost fixer worklist — editable unit_cost inputs
+  renderUncostedFixer(d.top_uncosted || []);
   // Top cost-driver ingredients (grouped families) + peak hours
   loadCoverageExtras();
+}
+
+// Render the editable "fill missing cost" worklist into #cov-fixer.
+function renderUncostedFixer(rows) {
+  const tb = document.getElementById('cov-fixer');
+  if (!tb) return;
+  document.getElementById('cov-fixer-msg').textContent = '';
+  tb.innerHTML = rows.map(r => {
+    const price = (r.qty > 0) ? (r.revenue / r.qty) : 0;          // ex-VAT avg selling price = ceiling for cost
+    const sku   = jsAttr(r.sku_code);
+    return `<tr data-sku="${esc(r.sku_code)}" data-price="${price.toFixed(2)}" class="border-b border-slate-50">
+      <td class="py-1.5 pr-2 font-mono text-xs text-slate-500">${esc(r.sku_code)}</td>
+      <td class="py-1.5 pr-2">${esc((r.description||'').replace(/^\((?:A|B|T)\)\s*/,''))}</td>
+      <td class="py-1.5 pr-2 text-xs text-slate-400">${esc(r.category||'')}</td>
+      <td class="py-1.5 pr-2 text-right">${fmt(r.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right text-slate-400">${fmtN(r.qty)}</td>
+      <td class="py-1.5 pr-2 text-right text-slate-500">${price>0?fmtN(price):'—'}</td>
+      <td class="py-1.5 pr-2 text-right">
+        <input type="number" min="0" step="0.01" placeholder="0.00"
+               class="cov-cost-inp w-24 text-right border border-slate-200 rounded px-2 py-1 text-sm"
+               onkeydown="if(event.key==='Enter')saveUncostedRow('${sku}')"></td>
+      <td class="py-1.5 text-center"><button onclick="saveUncostedRow('${sku}')"
+            class="text-xs px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50">💾</button></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="py-4 text-center text-emerald-600">🎉 ไม่มี SKU ค้างต้นทุนในช่วงนี้</td></tr>';
+}
+
+// POST one or more {sku_code, unit_cost} to /api/cost, then surface result + reload.
+async function _postCosts(entries, msgEl) {
+  try {
+    const res = await fetch(`${API}/api/cost`, {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(entries),
+    });
+    const out = await res.json();
+    if (!res.ok) { msgEl.innerHTML = `<span class="text-red-500">บันทึกไม่สำเร็จ: ${esc(out.detail||res.status)}</span>`; return out; }
+    return out;
+  } catch(e){ msgEl.innerHTML = `<span class="text-red-500">บันทึกไม่สำเร็จ: ${esc(String(e.message||e))}</span>`; return null; }
+}
+
+async function saveUncostedRow(skuCode) {
+  const msg = document.getElementById('cov-fixer-msg');
+  const row = document.querySelector(`#cov-fixer tr[data-sku="${CSS.escape(skuCode)}"]`);
+  if (!row) return;
+  const inp = row.querySelector('.cov-cost-inp');
+  const val = parseFloat(inp.value);
+  if (isNaN(val) || val < 0) { msg.innerHTML = '<span class="text-amber-600">กรอกต้นทุนเป็นตัวเลข ≥ 0 ก่อน</span>'; inp.focus(); return; }
+  const out = await _postCosts([{ sku_code: skuCode, unit_cost: val }], msg);
+  if (!out) return;
+  if (out.skipped_price_as_cost) {
+    msg.innerHTML = `<span class="text-amber-600">⚠ ${esc(skuCode)}: ค่าที่ใส่ใกล้เคียง "ราคาขาย×1.07" — น่าจะใส่ราคาขายแทนต้นทุน กรุณาใส่ต้นทุนจริง</span>`;
+    inp.classList.add('border-amber-400'); return;
+  }
+  if (out.updated > 0) {
+    row.style.background = '#ecfdf5';
+    row.querySelector('button').textContent = '✓';
+    msg.innerHTML = `<span class="text-emerald-600">บันทึก ${esc(skuCode)} = ${val} แล้ว · กำลังรีเฟรช…</span>`;
+    loadCostCoverage();
+  }
+}
+
+async function saveAllUncosted() {
+  const msg = document.getElementById('cov-fixer-msg');
+  const entries = [];
+  document.querySelectorAll('#cov-fixer tr[data-sku]').forEach(row => {
+    const v = parseFloat(row.querySelector('.cov-cost-inp')?.value);
+    if (!isNaN(v) && v >= 0) entries.push({ sku_code: row.dataset.sku, unit_cost: v });
+  });
+  if (!entries.length) { msg.innerHTML = '<span class="text-amber-600">ยังไม่ได้กรอกต้นทุนช่องไหนเลย</span>'; return; }
+  const out = await _postCosts(entries, msg);
+  if (!out) return;
+  let txt = `บันทึก ${out.updated||0} รายการแล้ว`;
+  if (out.skipped_price_as_cost) txt += ` · ข้าม ${out.skipped_price_as_cost} รายการ (ค่าดูเหมือนราคาขาย ไม่ใช่ต้นทุน)`;
+  msg.innerHTML = `<span class="${out.skipped_price_as_cost?'text-amber-600':'text-emerald-600'}">${esc(txt)} · กำลังรีเฟรช…</span>`;
+  loadCostCoverage();
 }
 
 async function loadCoverageExtras() {
@@ -15052,16 +15375,23 @@ async function openPnlDrill(branch) {
   const modal = document.getElementById('pnlDrillModal');
   const body  = document.getElementById('pnlDrillBody');
   const title = document.getElementById('pnlDrillTitle');
-  // pick the month: tab dropdown → else latest in range → else global month_to
-  const month = _pnlActiveMonth || getMonthTo() || getMonthFrom();
-  if (!month) { alert('เลือกเดือนก่อน (dropdown "แยกตามเดือน")'); return; }
+  // pick the month: tab dropdown → range bounds → else fall back to the latest
+  // month available in the dropdown (avoids a dead-end in All-Time / "ทุกเดือน" mode)
+  let month = _pnlActiveMonth || getMonthTo() || getMonthFrom();
+  if (!month) {
+    const msel = document.getElementById('pnlMonthSel');
+    if (msel) month = [...msel.options].map(o => o.value).find(v => v) || '';
+  }
+  if (!month) { alert('ยังไม่มีข้อมูลเดือนให้แสดง — โหลดข้อมูลก่อน'); return; }
   title.textContent = `🔍 ${branch} · ${typeof fmtPeriod==='function'?fmtPeriod(month):month}`;
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   let d;
   try {
-    d = await fetch(`${API}/api/pnl/branch-month-detail?branch=${encodeURIComponent(branch)}&month=${month}&limit=40`).then(r=>r.json());
-  } catch(e){ body.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้</p>'; return; }
+    const r = await fetch(`${API}/api/pnl/branch-month-detail?branch=${encodeURIComponent(branch)}&month=${month}&limit=40`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    d = await r.json();
+  } catch(e){ body.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ' + esc(String(e.message||e)) + '</p>'; return; }
   const s = d.summary || {};
   const revDelta = s.rev_delta_pct;
   const deltaChip = revDelta==null ? '' :

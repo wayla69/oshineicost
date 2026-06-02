@@ -3958,12 +3958,14 @@ def analysis_discounts(
                    ROUND(100.0 * SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END)
                          / COUNT(*), 1) AS rate,
                    ROUND(SUM(discount), 2) AS total_discount,
-                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount
+                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
+                   ROUND(100.0 * SUM(discount)
+                         / NULLIF(SUM(food_subtotal+drink_subtotal+other_subtotal),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
             GROUP BY b.name
-            ORDER BY rate DESC
+            ORDER BY total_discount DESC
             """,
             params,
         ).fetchall()
@@ -3994,23 +3996,69 @@ def analysis_discounts(
                    ROUND(100.0 * SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END)
                          / COUNT(*), 1) AS rate,
                    ROUND(SUM(discount), 2) AS total_discount,
-                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount
+                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
+                   ROUND(100.0 * SUM(discount)
+                         / NULLIF(SUM(food_subtotal+drink_subtotal+other_subtotal),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
             GROUP BY st.cashier, b.name
             HAVING SUM(discount) > 0
             ORDER BY total_discount DESC
-            LIMIT 20
+            LIMIT 25
             """,
             params,
         ).fetchall()
+
+        # Discount PATTERN groups — bucket each discounted bill by discount / gross ratio
+        pattern_groups = con.execute(
+            f"""
+            WITH t AS (
+              SELECT discount AS d, (food_subtotal+drink_subtotal+other_subtotal) AS gross
+              FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+              {where} AND discount > 0
+            )
+            SELECT CASE
+                     WHEN gross <= 0          THEN 'ไม่มียอดบิล (เฉพาะส่วนลด)'
+                     WHEN d >= gross          THEN '100% (ฟรี/เท่ายอดบิล)'
+                     WHEN d*1.0/gross >= 0.5  THEN '50% ขึ้นไป'
+                     WHEN d*1.0/gross >= 0.2  THEN '20–50%'
+                     WHEN d*1.0/gross >= 0.1  THEN '10–20%'
+                     ELSE 'ต่ำกว่า 10%' END AS grp,
+                   COUNT(*) AS bills,
+                   ROUND(SUM(d), 0) AS baht
+            FROM t GROUP BY grp ORDER BY baht DESC
+            """,
+            params,
+        ).fetchall()
+
+        # Most common fixed discount amounts (likely coupons / standard promos)
+        common_amounts = con.execute(
+            f"""
+            SELECT discount AS amount, COUNT(*) AS bills, ROUND(SUM(discount),0) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where} AND discount > 0
+            GROUP BY discount ORDER BY bills DESC LIMIT 15
+            """,
+            params,
+        ).fetchall()
+
+    # Flag outlier cashiers: discount % of sales >= 2× the chain median (min 4%)
+    cashiers = [dict(r) for r in top_cashiers]
+    pcts = sorted(c["disc_pct_of_sales"] for c in cashiers if c.get("disc_pct_of_sales") is not None)
+    median = pcts[len(pcts)//2] if pcts else 0
+    flag_at = max(median * 2, 4.0)
+    for c in cashiers:
+        c["is_outlier"] = (c.get("disc_pct_of_sales") or 0) >= flag_at
 
     return {
         "overall":      dict(overall) if overall else {},
         "by_branch":    [dict(r) for r in by_branch],
         "trend":        [dict(r) for r in trend],
-        "top_cashiers": [dict(r) for r in top_cashiers],
+        "top_cashiers": cashiers,
+        "pattern_groups": [dict(r) for r in pattern_groups],
+        "common_amounts": [dict(r) for r in common_amounts],
+        "outlier_threshold_pct": round(flag_at, 1),
     }
 
 
