@@ -8796,6 +8796,7 @@ def buffet_mix(
         rows = con.execute(
             f"""
             SELECT sm.period_month,
+                   b.name AS branch,
                    COALESCE(cat.name, '') AS category,
                    sk.sku_code,
                    COALESCE(sk.description, sk.sku_code) AS description,
@@ -8806,7 +8807,7 @@ def buffet_mix(
             JOIN skus sk      ON sk.sku_id     = sm.sku_id
             LEFT JOIN categories cat ON cat.category_id = sk.category_id
             {where}
-            GROUP BY sm.period_month, cat.name, sk.sku_code, sk.description
+            GROUP BY b.name, sm.period_month, cat.name, sk.sku_code, sk.description
             ORDER BY sm.period_month
             """,
             params,
@@ -8814,25 +8815,49 @@ def buffet_mix(
 
     TIERS = ['350', '500', '590', '799']
     ALACARTE_KEYWORDS = ['อลาคาท', 'ala carte', 'a la carte', 'alacarte', 'อา ลา คาร์ท']
+    # Buffet "charge" SKUs = a per-cover price (vs the B0xxx food-item rows that
+    # are logged at 0 baht). In this data the whole adult buffet is booked under
+    # one generic 'BUFFET' code, so we recover the tier from the realised price.
+    CHARGE_CODES = {'BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
+                    'B01', 'B02', 'B07', 'B11'}
 
-    def detect_tier(cat, sku, desc):
+    def price_tier(unit_price_ex_vat):
+        """Map a per-head ex-VAT price to the nearest legacy tier (midpoints
+        425/545/695 between 350·500·590·799)."""
+        up = unit_price_ex_vat or 0
+        if up < 425: return '350'
+        if up < 545: return '500'
+        if up < 695: return '590'
+        return '799'
+
+    def classify(cat, sku, desc, qty, rev):
         combined = f"{cat} {sku} {desc}".lower()
         for kw in ALACARTE_KEYWORDS:
             if kw.lower() in combined:
                 return 'à la carte'
-        for t in TIERS:
+        if sku == 'BUFFETCHILD' or ('เด็ก' in combined and 'บุฟเฟ' in combined):
+            return 'เด็ก (Child)'
+        for t in TIERS:                       # explicit tier in code/desc wins
             if t in combined:
                 return t
-        if 'บุฟเฟ่ต์' in combined or 'buffet' in combined:
-            return 'buffet (unknown tier)'
-        return 'other'
+        is_buffet_charge = (sku in CHARGE_CODES) or ('บุฟเฟ' in combined) or ('buffet' in combined)
+        if is_buffet_charge:
+            if qty and rev and rev > 0:        # priced buffet cover → bucket by price
+                return price_tier(rev / qty)
+            return None                        # 0-baht buffet food item → not a price level
+        # Non-buffet regular menu / à-la-carte food: not a buffet price level —
+        # exclude so this chart is purely the buffet price-tier mix (covers & ฿).
+        return None
 
     # Aggregate
     totals: dict = {}   # tier -> {qty, revenue}
     monthly: dict = {}  # period_month -> tier -> revenue
 
     for r in rows:
-        tier = detect_tier(r["category"], r["sku_code"], r["description"])
+        tier = classify(r["category"], r["sku_code"], r["description"],
+                        r["qty"] or 0, r["revenue"] or 0)
+        if tier is None:
+            continue
         t = totals.setdefault(tier, {"qty": 0.0, "revenue": 0.0})
         t["qty"]     += r["qty"]     or 0
         t["revenue"] += r["revenue"] or 0
