@@ -907,6 +907,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
     <span class="nav-label">🏷️ Discounts</span>
   </div>
+  <div class="nav-item" id="nav-childbuffet" onclick="switchTab('childbuffet')" title="บุฟเฟ่ต์เด็ก · child-tier covers, %, MoM, YTD trend per branch">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+    <span class="nav-label">🧒 บุฟเฟ่ต์เด็ก</span>
+  </div>
 
   <!-- ═══ GROUP 6: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
   <div class="nav-section">⚙️ เครื่องมือ</div>
@@ -2425,6 +2429,38 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <!-- ══════════════════════════════════════════════════════════════════════════
      TAB: DISCOUNTS & LEAKAGE
 ══════════════════════════════════════════════════════════════════════════ -->
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: CHILD BUFFET (บุฟเฟ่ต์เด็ก)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-childbuffet" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fdf2f8 0%,#eff6ff 100%);border-left:4px solid #ec4899">
+    <div class="flex items-start gap-3">
+      <span style="font-size:26px">🧒</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#9d174d">บุฟเฟ่ต์เด็ก (Child buffet) — รายสาขา</h2>
+        <p class="text-xs text-slate-600 mt-1">จำนวน covers เด็ก · รายได้ · % ของบุฟเฟ่ต์ทั้งหมด · เทียบเดือนปัจจุบันกับเดือนก่อนหน้า (MoM) · เส้น trend YTD ทั้งปี
+          <br><span class="text-slate-400">หมายเหตุ: ข้อมูลนี้คือ tier "บุฟเฟ่ต์ (เด็ก)" (BUFFETCHILD) — POS ไม่ได้บันทึก "ส่วนลดผู้สูงอายุ" หรือประเภทส่วนลด จึงแสดงเฉพาะส่วนเด็กที่มีข้อมูลจริง</span></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="childKpiRow" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
+
+  <div class="card p-5 mb-5">
+    <h2 class="section-title mb-1">แนวโน้ม covers เด็ก — YTD</h2>
+    <p class="text-xs text-slate-400 mb-3" id="childTrendNote">รายเดือนปีนี้</p>
+    <div style="height:240px"><canvas id="chartChildYtd"></canvas></div>
+  </div>
+
+  <div class="card p-5">
+    <div class="flex items-baseline justify-between mb-1 flex-wrap gap-2">
+      <h2 class="section-title mb-0">รายสาขา — เดือนล่าสุด</h2>
+      <span class="text-xs text-slate-400" id="childBranchSub"></span>
+    </div>
+    <div id="childBranchBoxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3"></div>
+  </div>
+</div>
+
 <div id="tab-discounts" style="display:none">
   <div id="disc-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
@@ -4106,7 +4142,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="mb-3">
       <p class="text-sm font-bold text-slate-700 mb-1.5">📦 พนักงาน & ส่วนลด · ⚙️ เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 Staff</b> (cashier scorecard) · <b>🏷️ Discounts</b> (leakage)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 Staff</b> (cashier scorecard) · <b>🏷️ Discounts</b> (leakage) · <b>🧒 บุฟเฟ่ต์เด็ก</b> (covers/รายได้/%/MoM/YTD รายสาขา)</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ Settings → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), default=buffet, Recalibration, BoM audit, CSV · <b>Reports</b> · <b>คู่มือ</b></div>
       </div>
     </div>
@@ -5136,12 +5172,12 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'Branch Ops', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน' };
 
 function switchTab(name) {
   activeTab = name;
   ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','more','manual'].forEach(t => {
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','more','manual'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -5304,6 +5340,7 @@ function loadActiveTab() {
   if (activeTab === 'buffetperf')  loadBuffetPerformance();
   if (activeTab === 'staff')       loadStaff();
   if (activeTab === 'discounts')   loadDiscountsTab();
+  if (activeTab === 'childbuffet') loadChildBuffet();
   if (activeTab === 'timeflow')    loadTimeflow();
   if (activeTab === 'gpbranch')    loadGpBranch();
   if (activeTab === 'branchbom')   loadBranchBom();
@@ -15637,6 +15674,77 @@ async function loadStaff() {
 // ════════════════════════════════════════════════════════════════
 // DISCOUNTS & LEAKAGE
 // ════════════════════════════════════════════════════════════════
+async function loadChildBuffet() {
+  const d = await fetch(`${API}/api/buffet/child${getBranch()?'?branch='+encodeURIComponent(getBranch()):''}`).then(r => r.json()).catch(() => null);
+  if (!d || !d.by_branch) return;
+  const bb = d.by_branch;
+  const momChip = p => p == null ? '<span class="text-slate-300 text-xs">—</span>'
+    : `<span class="text-xs font-semibold" style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+
+  // Chain summary KPIs (latest vs prev from the trend)
+  const tr = d.trend || [];
+  const last = tr[tr.length - 1], prev = tr.length >= 2 ? tr[tr.length - 2] : null;
+  const totCovers = bb.reduce((s, b) => s + (b.covers || 0), 0);
+  const totRev    = bb.reduce((s, b) => s + (b.revenue || 0), 0);
+  const totPrev   = bb.reduce((s, b) => s + (b.prev_covers || 0), 0);
+  const momCovers = totPrev > 0 ? (totCovers - totPrev) / totPrev * 100 : null;
+  const momRev    = (prev && prev.revenue > 0) ? ((last.revenue - prev.revenue) / prev.revenue * 100) : null;
+  // % of buffet (chain): weighted by covers
+  const wPct = bb.reduce((s, b) => s + (b.pct_of_buffet || 0) * (b.covers || 0), 0) / (totCovers || 1);
+  const kpi = (label, value, chip, accent, sub) =>
+    `<div class="card p-4" style="border-top:3px solid ${accent}">
+      <div class="flex items-center justify-between gap-2"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${label}</p>${chip||''}</div>
+      <p class="text-2xl font-bold" style="color:${accent}">${value}</p>
+      <p class="text-[11px] text-slate-400">${sub||''}</p></div>`;
+  document.getElementById('childKpiRow').innerHTML =
+    kpi('covers เด็ก (เดือนล่าสุด)', fmtN(totCovers), momChip(momCovers), '#ec4899', `${d.latest_month||''} · เทียบ ${d.prev_month||'—'}`) +
+    kpi('รายได้บุฟเฟ่ต์เด็ก', fmt(totRev), momChip(momRev), '#8b5cf6', 'เดือนล่าสุด (ex-VAT)') +
+    kpi('% ของบุฟเฟ่ต์', wPct.toFixed(1) + '%', '', '#0891b2', 'covers เด็ก ÷ covers บุฟเฟ่ต์รวม') +
+    kpi('สาขาที่มีเด็กมากสุด', bb[0] ? esc(bb[0].branch) : '—', '', '#f59e0b', bb[0] ? fmtN(bb[0].covers) + ' covers' : '');
+
+  // YTD trend (current year only)
+  const curYear = (d.latest_month || '').slice(0, 4);
+  const ytd = tr.filter(t => (t.month || '').slice(0, 4) === curYear);
+  const noteEl = document.getElementById('childTrendNote');
+  if (noteEl) noteEl.textContent = `รายเดือนปี ${curYear} · ${ytd.length} เดือน`;
+  mkChart('chartChildYtd', {
+    type: 'line',
+    data: {
+      labels: ytd.map(t => fmtMonth(t.month)),
+      datasets: [
+        { label: 'covers เด็ก', data: ytd.map(t => t.covers), borderColor: '#ec4899',
+          backgroundColor: 'rgba(236,72,153,0.10)', borderWidth: 2.5, pointRadius: 3, fill: true, tension: 0.3, yAxisID: 'y' },
+        { label: 'รายได้', data: ytd.map(t => t.revenue), borderColor: '#8b5cf6',
+          borderWidth: 2, borderDash: [5, 4], pointRadius: 2, fill: false, tension: 0.3, yAxisID: 'yRev' },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { font: { size: 10 } } }, datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + (ctx.dataset.yAxisID === 'yRev' ? fmt(ctx.raw) : fmtN(ctx.raw)) } } },
+      scales: {
+        y:    { position: 'left',  beginAtZero: true, ticks: { font: { size: 9 }, callback: v => fmtN(v) }, title: { display: true, text: 'covers', font: { size: 9 } } },
+        yRev: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { font: { size: 9 }, callback: v => fmt(v) }, title: { display: true, text: 'รายได้', font: { size: 9 } } },
+        x:    { ticks: { font: { size: 9 } } },
+      }
+    }
+  });
+
+  // Per-branch boxes (latest month)
+  document.getElementById('childBranchSub').textContent =
+    `${bb.length} สาขา · ${d.latest_month || ''}${d.prev_month ? ` · MoM เทียบ ${d.prev_month}` : ''}`;
+  document.getElementById('childBranchBoxes').innerHTML = bb.map(b => {
+    const c = (b.mom_pct == null) ? '#94a3b8' : b.mom_pct >= 0 ? '#059669' : '#dc2626';
+    return `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
+      <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
+      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:#db2777">${fmtN(b.covers)}</p>
+      <p class="text-[11px] text-slate-400 mt-0.5">covers เด็ก · ${b.pct_of_buffet != null ? b.pct_of_buffet.toFixed(1) + '% ของบุฟเฟ่ต์' : '—'}</p>
+      <p class="text-xs font-semibold mt-1" style="color:${c}">${b.mom_pct == null ? '<span class="text-slate-400">ไม่มีเดือนก่อน</span>' : (b.mom_pct >= 0 ? '▲' : '▼') + ' ' + Math.abs(b.mom_pct).toFixed(1) + '% MoM'}</p>
+      <p class="text-[11px] text-slate-400 mt-0.5">รายได้ ${fmt(b.revenue)}</p>
+    </div>`;
+  }).join('');
+}
+
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const params = new URLSearchParams();

@@ -987,6 +987,72 @@ def top_ordered(
             "latest_month": latest, "prev_month": prev, "items": items}
 
 
+@app.get("/api/buffet/child")
+@ttl_cache
+def buffet_child(branch: Optional[str] = Query(None)):
+    """Child-buffet (BUFFETCHILD) summary per branch: latest-month covers,
+    revenue, % of buffet covers, MoM vs previous month, plus a chain-wide
+    monthly trend for the YTD line. (There is no senior/age discount data, and
+    'child' is a buffet TIER, not a tagged discount — this is the closest
+    available signal.)"""
+    bfilt = ["b.name != 'ALL'"]
+    bparams: dict = {}
+    if branch:
+        bfilt.append("b.name = :branch")
+        bparams["branch"] = branch
+    where = "WHERE " + " AND ".join(bfilt + ["sk.sku_code IN ('BUFFETCHILD','BUFFET')"])
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch, sm.period_month AS m, sk.sku_code AS code,
+                   ROUND(SUM(sm.qty), 0)             AS qty,
+                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS rev
+            FROM sales_sku_monthly sm
+            JOIN branches b ON b.branch_id = sm.branch_id
+            JOIN skus sk    ON sk.sku_id   = sm.sku_id
+            {where}
+            GROUP BY b.name, sm.period_month, sk.sku_code
+        """, bparams).fetchall()
+
+    from collections import defaultdict
+    # per branch -> month -> {child_qty, child_rev, adult_qty}
+    bm: dict = defaultdict(lambda: defaultdict(lambda: {"cq": 0.0, "cr": 0.0, "aq": 0.0}))
+    trend_m: dict = defaultdict(lambda: {"covers": 0.0, "revenue": 0.0})
+    months: set = set()
+    for r in rows:
+        months.add(r["m"])
+        cell = bm[r["branch"]][r["m"]]
+        if r["code"] == "BUFFETCHILD":
+            cell["cq"] += r["qty"] or 0; cell["cr"] += r["rev"] or 0
+            tm = trend_m[r["m"]]; tm["covers"] += r["qty"] or 0; tm["revenue"] += r["rev"] or 0
+        else:
+            cell["aq"] += r["qty"] or 0
+
+    months_sorted = sorted(months)
+    latest = months_sorted[-1] if months_sorted else None
+    prev   = months_sorted[-2] if len(months_sorted) > 1 else None
+
+    by_branch = []
+    for br, mm in bm.items():
+        last = mm.get(latest, {"cq": 0, "cr": 0, "aq": 0}) if latest else {"cq": 0, "cr": 0, "aq": 0}
+        pv   = mm.get(prev,   {"cq": 0, "cr": 0, "aq": 0}) if prev   else {"cq": 0, "cr": 0, "aq": 0}
+        covers = last["cq"]; prev_covers = pv["cq"]
+        tot_buffet = last["cq"] + last["aq"]
+        by_branch.append({
+            "branch":        br,
+            "covers":        round(covers),
+            "revenue":       round(last["cr"], 2),
+            "prev_covers":   round(prev_covers),
+            "pct_of_buffet": round(last["cq"] / tot_buffet * 100, 1) if tot_buffet else None,
+            "mom_pct":       round((covers - prev_covers) / prev_covers * 100, 1) if prev_covers > 0 else None,
+        })
+    by_branch.sort(key=lambda x: -x["covers"])
+
+    trend = [{"month": m, "covers": round(trend_m[m]["covers"]),
+              "revenue": round(trend_m[m]["revenue"], 2)} for m in months_sorted]
+    return {"latest_month": latest, "prev_month": prev,
+            "by_branch": by_branch, "trend": trend}
+
+
 # ---------------------------------------------------------------------------
 # /api/sales/payment   -  payment method breakdown
 # ---------------------------------------------------------------------------
