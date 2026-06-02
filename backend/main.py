@@ -5016,7 +5016,7 @@ def get_closed_hours():
             """
             SELECT b.branch_id, b.name AS branch, ch.dow,
                    COALESCE(ch.hour_from, 10)  AS hour_from,
-                   COALESCE(ch.hour_to,   22)  AS hour_to,
+                   COALESCE(ch.hour_to,   21)  AS hour_to,
                    COALESCE(ch.is_closed, 0)   AS is_closed
             FROM branches b
             LEFT JOIN closed_hours ch ON ch.branch_id = b.branch_id
@@ -7995,20 +7995,25 @@ def analysis_hourly_open(
             ).fetchall()
 
     if ch_rows:
-        closed_set = set()
+        # OPEN-WINDOW model: each (branch, dow) row gives an open window
+        # [hour_from..hour_to] unless is_closed (whole day shut). The chart's
+        # is_open is the UNION of open windows across the rows in scope.
+        open_set = set()
+        any_open = False
         for r in ch_rows:
             if r["is_closed"]:
-                hf = r["hour_from"] if r["hour_from"] is not None else 23
-                ht = r["hour_to"]   if r["hour_to"]   is not None else 9
-                # Support wraparound (hf > ht means range crosses midnight)
-                if hf <= ht:
-                    for h in range(hf, ht + 1): closed_set.add(h)
-                else:
-                    for h in range(hf, 24):     closed_set.add(h)
-                    for h in range(0, ht + 1):  closed_set.add(h)
-        open_hours = set(range(24)) - closed_set
+                continue  # this (branch, dow) is fully closed → contributes no open hours
+            hf = r["hour_from"] if r["hour_from"] is not None else 10
+            ht = r["hour_to"]   if r["hour_to"]   is not None else 21
+            if hf <= ht:
+                for h in range(hf, ht + 1): open_set.add(h)
+            else:  # window wraps past midnight
+                for h in range(hf, 24):    open_set.add(h)
+                for h in range(0, ht + 1): open_set.add(h)
+            any_open = True
+        open_hours = open_set if any_open else set(range(10, 22))
     else:
-        open_hours = set(range(10, 23))  # default 10:00–22:00
+        open_hours = set(range(10, 22))  # default 10:00–21:00 (open hours 10..21)
     for h in raw:
         h["is_open"] = h["hour"] in open_hours
         h["avg_daily_revenue"] = round((h["revenue"] or 0) / total_days, 2)
