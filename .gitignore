@@ -42,3 +42,8 @@ Thumbs.db
 
 # Volatile runtime lock
 .claude/scheduled_tasks.lock
+
+# Deploy bootstrap artifacts (local only)
+backend/.seed_token.txt
+backend/dbchunks/
+backend/*.db.gz

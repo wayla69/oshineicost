@@ -30,6 +30,23 @@ def thb_m(n):
 def pct(n, d=1):
     return "—" if n is None else f"{n:.{d}f}%"
 
+def mom(curr, prev, good_up=True, as_pts=False):
+    """Month-on-month delta pill. as_pts → percentage-point change (for ratios
+    like GP%/food%); otherwise a % growth. Colour reflects good vs bad direction."""
+    if curr is None or prev in (None, 0):
+        return '<span class="mom" style="color:var(--mut)">—</span>'
+    if as_pts:
+        d = curr - prev
+        txt = f"{d:+.1f} จุด MoM"
+    else:
+        d = (curr / prev - 1) * 100
+        txt = f"{d:+.1f}% MoM"
+    rising = d >= 0
+    good = rising if good_up else (not rising)
+    color = "var(--em)" if good else "var(--rd)"
+    arrow = "▲" if rising else "▼"
+    return f'<span class="mom" style="color:{color};font-weight:700">{arrow} {txt}</span>'
+
 def bar(value, vmax, color, label="", width=160):
     w = 0 if not vmax else max(1, round(value / vmax * width))
     return (f'<div class="bar-wrap"><div class="bar" style="width:{w}px;background:{color}"></div>'
@@ -100,13 +117,11 @@ def main():
     period = f"{mt[0]['period_month']} – {mt[-1]['period_month']}"
     n_months = len(mt)
 
-    # derived
+    # derived — full-period structural figures (used only by the menu §6 and
+    # ingredient §7 sections, which are mix-of-period by nature and labelled so)
     buffet_rev = next((c["revenue"] for c in cats if c.get("category") == "BUFFET"), 0)
     buffet_share = buffet_rev / grand["revenue"] * 100
-    gp_gap = max(b["total_gp_pct"] for b in branches) - min(b["total_gp_pct"] for b in branches)
     TARGET_GP = 40.0
-    equal_uplift = sum(b["total_revenue"] * (TARGET_GP - b["total_gp_pct"]) / 100
-                       for b in branches if b["total_gp_pct"] < TARGET_GP)
     ings = bom.get("top_ingredients", [])[:12]
     salmon_cost = sum(i["total_cost"] for i in ings if "แซลมอน" in (i["ingredient_name"] or ""))
     salmon_pct = sum(i["pct_of_chain_cogs"] for i in ings if "แซลมอน" in (i["ingredient_name"] or ""))
@@ -119,9 +134,44 @@ def main():
                    key=lambda i: -(i.get("revenue") or 0))[:8]
     s = me["summary"]
 
-    best = sorted(branches, key=lambda b: -b["total_gp_pct"])[:3]
-    worst = sorted(branches, key=lambda b: b["total_gp_pct"])[:3]
-    max_rev = max(b["total_revenue"] for b in branches)
+    # ── MONTH-ON-MONTH basis (house rule: analyse per month, never cumulative) ──
+    latest_month = mt[-1]["period_month"]
+    prev_month   = mt[-2]["period_month"] if n_months >= 2 else None
+    last_mt = mt[-1]                       # {revenue, cogs, gross_profit, margin_pct,…}
+    prev_mt = mt[-2] if n_months >= 2 else None
+
+    def _branch_month_stats(b, month):
+        """Revenue/GP for one branch in one YYYY-MM (None if no sales that month)."""
+        if not month:
+            return None
+        rev = cogs = 0.0; seen = False
+        for m in b["monthly"]:
+            if m["month"] == month:
+                seen = True
+                rev  += m.get("revenue") or 0
+                cogs += m.get("cogs") or 0
+        if not seen or rev <= 0:
+            return None
+        gp = rev - cogs
+        return {"revenue": rev, "cogs": cogs, "gp": gp,
+                "gp_pct": gp / rev * 100, "food_cost_pct": cogs / rev * 100}
+
+    for b in branches:
+        b["_cur"]  = _branch_month_stats(b, latest_month)
+        b["_prev"] = _branch_month_stats(b, prev_month)
+
+    active = [b for b in branches if b["_cur"]]          # branches with sales this month
+    active.sort(key=lambda b: -b["_cur"]["revenue"])
+    gp_gap = (max(b["_cur"]["gp_pct"] for b in active)
+              - min(b["_cur"]["gp_pct"] for b in active)) if active else 0
+    # Uplift if every sub-target branch reached TARGET_GP — computed on the latest
+    # month, annualised ×12 for the "/ปี" headline (no cumulative period figures).
+    equal_uplift_mo = sum(b["_cur"]["revenue"] * (TARGET_GP - b["_cur"]["gp_pct"]) / 100
+                          for b in active if b["_cur"]["gp_pct"] < TARGET_GP)
+    equal_uplift = equal_uplift_mo * 12
+    best  = sorted(active, key=lambda b: -b["_cur"]["gp_pct"])[:3]
+    worst = sorted(active, key=lambda b: b["_cur"]["gp_pct"])[:3]
+    max_rev = max((b["_cur"]["revenue"] for b in active), default=1)
 
     # ── HTML ────────────────────────────────────────────────────────────────
     H = []
@@ -188,11 +238,11 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     A(f"""<div class="cover"><div class="wrap" style="padding:0">
   <div class="eyebrow">Invisible Consulting · Enterprise ERP Analytics</div>
   <h1>Oshinei Enterprise<br>รายงานวิเคราะห์ธุรกิจ</h1>
-  <div class="sub">เครือบุฟเฟ่ต์ปลาแซลมอน · {len(branches)} สาขา · ข้อมูล Easy POS</div>
+  <div class="sub">เครือบุฟเฟ่ต์ปลาแซลมอน · {len(branches)} สาขา · ข้อมูล Easy POS · วิเคราะห์แบบเดือนต่อเดือน (MoM)</div>
   <div class="meta">
-    <div><b>{thb_m(grand['revenue'])}</b>รายได้รวม (ex-VAT)</div>
-    <div><b>{pct(grand['gp_pct'])}</b>กำไรขั้นต้น</div>
-    <div><b>{format(profit['tx_count'],',')}</b>ใบเสร็จ</div>
+    <div><b>{thb_m(last_mt['revenue'])}</b>รายได้เดือนล่าสุด · {latest_month}<br>{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</div>
+    <div><b>{pct(last_mt['margin_pct'])}</b>GP เดือนล่าสุด<br>{mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}</div>
+    <div><b>{len(active)}</b>สาขาที่มียอดขายเดือนนี้</div>
     <div><b>{period}</b>ช่วงข้อมูล ({n_months} เดือน)</div>
     <div><b>{gen_date}</b>วันที่ออกรายงาน</div>
   </div>
@@ -212,68 +262,83 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
       <a href="#s9">9 · คุณภาพข้อมูลและระเบียบวิธี</a>
     </div></section>""")
 
-    # §1 Executive summary
-    growth = (mt[-1]['revenue'] / mt[3]['revenue'] - 1) * 100 if len(mt) > 3 else 0
+    # §1 Executive summary  (month-on-month)
+    last3_avg = sum(m['revenue'] for m in mt[-3:]) / min(3, n_months)
+    peak = max(mt, key=lambda m: m['revenue'])
+    last_fc = (last_mt['cogs'] / last_mt['revenue'] * 100) if last_mt['revenue'] else None
+    prev_fc = (prev_mt['cogs'] / prev_mt['revenue'] * 100) if (prev_mt and prev_mt['revenue']) else None
+    bf_vals = [x for x in buf_ft if x['cost_pct'] is not None]
+    bf_cur  = bf_vals[-1]['cost_pct'] if bf_vals else None
+    bf_prev = bf_vals[-2]['cost_pct'] if len(bf_vals) >= 2 else None
     A(f"""<section id="s1"><h2 class="sec"><span class="num">1</span>บทสรุปผู้บริหาร</h2>
-    <p class="sec-sub">ภาพรวมสถานะธุรกิจและประเด็นสำคัญที่ต้องตัดสินใจ</p>
-    <p>ในรอบ {n_months} เดือน ({period}) เครือ Oshinei ทำรายได้ <b>{thb_m(grand['revenue'])}</b> (ก่อน VAT)
-    กำไรขั้นต้น <b>{thb_m(grand['gp'])}</b> คิดเป็นมาร์จิ้น <b>{pct(grand['gp_pct'])}</b>
-    (food cost {pct(grand['food_cost_pct'])}) จาก {format(profit['tx_count'],',')} ใบเสร็จ
-    ยอดเฉลี่ย <b>{thb(profit['avg_ticket'])}</b>/บิล และลูกค้ารวม {format(buf['total_pax'],',')} ที่นั่ง
-    (เฉลี่ย {buf['avg_pax_per_bill']}/บิล)</p>
-    <div class="callout good">📈 <b>ธุรกิจกำลังขยายตัวแข็งแรง</b> — รายได้รายเดือนเพิ่มจาก {thb_m(mt[3]['revenue'])} (ส.ค. 2025) สู่จุดสูงสุด {thb_m(max(m['revenue'] for m in mt))} (ม.ค. 2026) สะท้อนการเปิดสาขาใหม่ต่อเนื่องตลอดปี</div>
-    <div class="callout">🍱 <b>บุฟเฟ่ต์คือหัวใจ ({pct(buffet_share)} ของรายได้)</b> — ต้นทุนอาหารบุฟเฟ่ต์ลดลงต่อเนื่องจาก 73% → {pct(buf_ft[-1]['cost_pct'])} แสดงถึงการคุมต้นทุนที่ดีขึ้น</div>
-    <div class="callout risk">🐟 <b>ความเสี่ยงกระจุกตัว: ปลาแซลมอน = {pct(salmon_pct)} ของต้นทุนทั้งเครือ</b> ({thb_m(salmon_cost)}) — วัตถุดิบเดียวกำหนดกำไรของทั้งธุรกิจ ราคาผันผวน = ความเสี่ยงสูงสุด</div>
-    <div class="callout warn">🏪 <b>ช่องว่างระหว่างสาขากว้าง {gp_gap:.1f} จุด</b> (GP {min(b['total_gp_pct'] for b in branches):.1f}% – {max(b['total_gp_pct'] for b in branches):.1f}%) — ยกสาขาล่างขึ้นสู่ค่ากลาง {TARGET_GP:.0f}% = โอกาสกำไรเพิ่ม ~{thb_m(equal_uplift)}/ปี</div>
+    <p class="sec-sub">วิเคราะห์แบบเดือนต่อเดือน (MoM) — โฟกัสเดือนล่าสุดและการเปลี่ยนแปลงเทียบเดือนก่อน</p>
+    <p>เดือนล่าสุด <b>{latest_month}</b> เครือ Oshinei ทำรายได้ <b>{thb_m(last_mt['revenue'])}</b> (ก่อน VAT)
+    {mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)} · กำไรขั้นต้น <b>{thb_m(last_mt['gross_profit'])}</b>
+    ที่มาร์จิ้น <b>{pct(last_mt['margin_pct'])}</b> {mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}
+    (food cost {pct(last_fc)} {mom(last_fc, prev_fc, good_up=False, as_pts=True)}) จาก {len(active)} สาขาที่เปิดขายในเดือนนี้ ·
+    ค่าเฉลี่ย 3 เดือนล่าสุด ~<b>{thb_m(last3_avg)}</b>/เดือน</p>
+    <div class="callout good">📈 <b>โมเมนตัมรายเดือน</b> — รายได้ {thb_m(prev_mt['revenue']) if prev_mt else '—'} → {thb_m(last_mt['revenue'])} ({mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}); จุดสูงสุดอยู่เดือน <b>{peak['period_month']}</b> ที่ {thb_m(peak['revenue'])}</div>
+    <div class="callout">🍱 <b>บุฟเฟ่ต์คือหัวใจ ({pct(buffet_share)} ของรายได้)</b> — food cost บุฟเฟ่ต์เดือนล่าสุด {pct(bf_cur)} {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} (เทรนด์รายเดือนในข้อ 5)</div>
+    <div class="callout risk">🐟 <b>ความเสี่ยงกระจุกตัว: ปลาแซลมอน = {pct(salmon_pct)} ของต้นทุนวัตถุดิบ</b> ({thb_m(salmon_cost)}, รวมทั้งช่วง) — วัตถุดิบเดียวกำหนดกำไรของทั้งธุรกิจ ราคาผันผวน = ความเสี่ยงสูงสุด</div>
+    <div class="callout warn">🏪 <b>ช่องว่างระหว่างสาขาเดือน {latest_month} กว้าง {gp_gap:.1f} จุด</b> (GP {min(b['_cur']['gp_pct'] for b in active):.1f}% – {max(b['_cur']['gp_pct'] for b in active):.1f}%) — ยกสาขาล่างขึ้นสู่ค่ากลาง {TARGET_GP:.0f}% = โอกาสกำไรเพิ่ม ~{thb_m(equal_uplift_mo)}/เดือน (~{thb_m(equal_uplift)}/ปี)</div>
     </section>""")
 
-    # §2 scorecard
+    # §2 scorecard  (latest month + MoM; period-only metrics shown as /เดือน average)
     cov = profit.get("cost_coverage_pct")
-    A(f"""<section id="s2"><h2 class="sec"><span class="num">2</span>ดัชนีชี้วัดหลัก</h2>
-    <p class="sec-sub">ตัวเลขทั้งหมดอ้างอิงสูตร COGS เดียว (BoM → sku_cost) · รายได้ใช้ subtotal_ex_vat</p>
+    rcpt_mo  = profit['tx_count'] / n_months
+    covers_mo = buf['total_pax'] / n_months
+    A(f"""<section id="s2"><h2 class="sec"><span class="num">2</span>ดัชนีชี้วัดหลัก — เดือนล่าสุด ({latest_month})</h2>
+    <p class="sec-sub">เทียบเดือนก่อน (MoM) · COGS สูตรเดียว (BoM → sku_cost) · รายได้ใช้ subtotal_ex_vat · ตัวเลขที่ไม่มีอนุกรมรายเดือนแสดงเป็นค่าเฉลี่ย/เดือน</p>
     <div class="kpis">
-      <div class="kpi"><div class="lbl">รายได้ (ex-VAT)</div><div class="val">{thb_m(grand['revenue'])}</div><div class="sub">{n_months} เดือน</div></div>
-      <div class="kpi"><div class="lbl">กำไรขั้นต้น</div><div class="val" style="color:var(--em)">{thb_m(grand['gp'])}</div><div class="sub">{pct(grand['gp_pct'])} margin</div></div>
-      <div class="kpi"><div class="lbl">Food Cost</div><div class="val" style="color:var(--am)">{pct(grand['food_cost_pct'])}</div><div class="sub">เป้า 55–70%</div></div>
-      <div class="kpi"><div class="lbl">ใบเสร็จ</div><div class="val">{format(profit['tx_count'],',')}</div><div class="sub">{thb(profit['avg_ticket'])}/บิล</div></div>
-      <div class="kpi"><div class="lbl">ลูกค้า (covers)</div><div class="val">{buf['total_pax']/1e6:.2f}M</div><div class="sub">{buf['avg_pax_per_bill']}/บิล</div></div>
-      <div class="kpi"><div class="lbl">กำไร/บิล</div><div class="val" style="color:var(--em)">{thb(profit['profit_per_bill'])}</div><div class="sub">เฉลี่ยทั้งเครือ</div></div>
-      <div class="kpi"><div class="lbl">สาขา</div><div class="val">{len(branches)}</div><div class="sub">เฉลี่ย {thb_m(grand['revenue']/len(branches))}/สาขา</div></div>
+      <div class="kpi"><div class="lbl">รายได้ (ex-VAT)</div><div class="val">{thb_m(last_mt['revenue'])}</div><div class="sub">{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</div></div>
+      <div class="kpi"><div class="lbl">กำไรขั้นต้น</div><div class="val" style="color:var(--em)">{thb_m(last_mt['gross_profit'])}</div><div class="sub">{pct(last_mt['margin_pct'])} · {mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}</div></div>
+      <div class="kpi"><div class="lbl">Food Cost</div><div class="val" style="color:var(--am)">{pct(last_fc)}</div><div class="sub">{mom(last_fc, prev_fc, good_up=False, as_pts=True)} · เป้า 55–70%</div></div>
+      <div class="kpi"><div class="lbl">ใบเสร็จ/เดือน (เฉลี่ย)</div><div class="val">{format(int(round(rcpt_mo)),',')}</div><div class="sub">{thb(profit['avg_ticket'])}/บิล</div></div>
+      <div class="kpi"><div class="lbl">ลูกค้า/เดือน (เฉลี่ย)</div><div class="val">{format(int(round(covers_mo)),',')}</div><div class="sub">{buf['avg_pax_per_bill']}/บิล</div></div>
+      <div class="kpi"><div class="lbl">กำไร/บิล</div><div class="val" style="color:var(--em)">{thb(profit['profit_per_bill'])}</div><div class="sub">เฉลี่ยทั้งช่วง</div></div>
+      <div class="kpi"><div class="lbl">สาขาเปิดขายเดือนนี้</div><div class="val">{len(active)}</div><div class="sub">จากทั้งหมด {len(branches)}</div></div>
       <div class="kpi"><div class="lbl">ความครอบคลุมต้นทุน</div><div class="val">{pct(cov)}</div><div class="sub">ของจำนวนเสิร์ฟ</div></div>
     </div></section>""")
 
     # §3 revenue trend
     rev_series = [(m['period_month'], m['revenue']) for m in mt]
-    A(f"""<section id="s3"><h2 class="sec"><span class="num">3</span>รายได้และการเติบโต</h2>
+    gp_series  = [(m['period_month'], m['margin_pct']) for m in mt if m['margin_pct'] is not None]
+    A(f"""<section id="s3"><h2 class="sec"><span class="num">3</span>รายได้และกำไรรายเดือน (MoM)</h2>
     <p class="sec-sub">รายได้รายเดือน (ex-VAT) · {period}</p>
     {svg_line(rev_series, "#4f46e5", "rgba(79,70,229,.10)")}
-    <p>รายได้เร่งตัวจากการเปิดสาขาใหม่ตลอดปี โดยทำจุดสูงสุดในเดือน <b>ม.ค. 2026</b> ที่ {thb_m(max(m['revenue'] for m in mt))}
-    (ช่วงเทศกาล/ปีใหม่) สามเดือนล่าสุดทรงตัวที่ระดับ ~{thb_m(sum(m['revenue'] for m in mt[-3:])/3)}/เดือน
-    บ่งชี้ฐานรายได้ที่มั่นคงหลังการขยายสาขา</p>
+    <p>เดือนล่าสุด <b>{latest_month}</b> รายได้ <b>{thb_m(last_mt['revenue'])}</b>
+    {mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)} เทียบเดือนก่อน ({thb_m(prev_mt['revenue']) if prev_mt else '—'});
+    จุดสูงสุดอยู่เดือน <b>{peak['period_month']}</b> ที่ {thb_m(peak['revenue'])} · ค่าเฉลี่ย 3 เดือนล่าสุด ~{thb_m(last3_avg)}/เดือน</p>
+    <p class="sec-sub" style="margin:14px 0 2px">มาร์จิ้นกำไรขั้นต้นรายเดือน (%)</p>
+    {svg_line(gp_series, "#10b981", "rgba(16,185,129,.10)", y_is_pct=True, y_suffix="%")}
+    <p>มาร์จิ้นเดือนล่าสุด <b>{pct(last_mt['margin_pct'])}</b>
+    {mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)} เทียบเดือนก่อน ({pct(prev_mt['margin_pct']) if prev_mt else '—'})</p>
     </section>""")
 
-    # §4 branches
+    # §4 branches — latest month with MoM revenue change (no cumulative totals)
     rows_html = ""
-    for b in branches:
-        fc = b["total_food_cost_pct"]
+    for b in active:
+        cur = b["_cur"]; prev = b["_prev"]
+        fc = cur["food_cost_pct"]
         fccol = "var(--em)" if 40 <= fc <= 62 else ("var(--rd)" if fc > 67 else "var(--am)")
         rows_html += (f"<tr><td>{b['branch']}</td>"
-                      f"<td>{bar(b['total_revenue'],max_rev,'#4f46e5',thb_m(b['total_revenue']))}</td>"
-                      f"<td>{thb_m(b['total_gp'])}</td>"
-                      f"<td><b>{b['total_gp_pct']:.1f}%</b></td>"
-                      f"<td style='color:{fccol};font-weight:700'>{fc:.1f}%</td></tr>")
-    A(f"""<section id="s4"><h2 class="sec"><span class="num">4</span>ผลการดำเนินงานรายสาขา</h2>
-    <p class="sec-sub">เรียงตามรายได้ · {len(branches)} สาขา · COGS แบบ BoM</p>
+                      f"<td>{bar(cur['revenue'],max_rev,'#4f46e5',thb_m(cur['revenue']))}</td>"
+                      f"<td>{thb_m(cur['gp'])}</td>"
+                      f"<td><b>{cur['gp_pct']:.1f}%</b></td>"
+                      f"<td style='color:{fccol};font-weight:700'>{fc:.1f}%</td>"
+                      f"<td>{mom(cur['revenue'], prev['revenue'] if prev else None)}</td></tr>")
+    A(f"""<section id="s4"><h2 class="sec"><span class="num">4</span>ผลการดำเนินงานรายสาขา — เดือนล่าสุด ({latest_month})</h2>
+    <p class="sec-sub">เรียงตามรายได้เดือนล่าสุด · {len(active)} สาขาที่เปิดขายเดือนนี้ · MoM = เทียบ {prev_month or '—'} · COGS แบบ BoM</p>
     <div class="grid2" style="margin-bottom:16px">
-      <div class="callout good">🏆 <b>GP สูงสุด:</b> {', '.join(f"{x['branch']} ({x['total_gp_pct']:.1f}%)" for x in best)}</div>
-      <div class="callout warn">⚠️ <b>GP ต่ำสุด:</b> {', '.join(f"{x['branch']} ({x['total_gp_pct']:.1f}%)" for x in worst)}</div>
+      <div class="callout good">🏆 <b>GP สูงสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in best)}</div>
+      <div class="callout warn">⚠️ <b>GP ต่ำสุด (เดือนนี้):</b> {', '.join(f"{x['branch']} ({x['_cur']['gp_pct']:.1f}%)" for x in worst)}</div>
     </div>
-    <table><thead><tr><th>สาขา</th><th>รายได้</th><th>กำไรขั้นต้น</th><th>GP%</th><th>Food%</th></tr></thead>
+    <table><thead><tr><th>สาขา</th><th>รายได้ (เดือน)</th><th>กำไรขั้นต้น</th><th>GP%</th><th>Food%</th><th>รายได้ MoM</th></tr></thead>
     <tbody>{rows_html}</tbody>
-    <tfoot><tr><td>รวมทุกสาขา ({len(branches)})</td><td style="text-align:right">{thb_m(grand['revenue'])}</td><td>{thb_m(grand['gp'])}</td><td>{grand['gp_pct']:.1f}%</td><td>{grand['food_cost_pct']:.1f}%</td></tr></tfoot>
+    <tfoot><tr><td>รวมเดือน {latest_month} ({len(active)} สาขา)</td><td style="text-align:right">{thb_m(last_mt['revenue'])}</td><td>{thb_m(last_mt['gross_profit'])}</td><td>{last_mt['margin_pct']:.1f}%</td><td>{pct(last_fc)}</td><td>{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</td></tr></tfoot>
     </table>
-    <div class="callout">💡 <b>โอกาสจากการยกระดับสาขา:</b> หากทุกสาขาที่ GP ต่ำกว่า {TARGET_GP:.0f}% ขยับขึ้นถึงค่ากลาง {TARGET_GP:.0f}%
-    จะเพิ่มกำไรขั้นต้น ~<b>{thb_m(equal_uplift)}/ปี</b> โดยไม่ต้องเพิ่มยอดขาย — เป็นการถ่ายทอด best practice จากสาขาเก่ง (สกลนคร 47%, มุกดาหาร 46%) สู่สาขาอ่อน</div>
+    <div class="callout">💡 <b>โอกาสจากการยกระดับสาขา (ฐานเดือนล่าสุด):</b> หากทุกสาขาที่ GP ต่ำกว่า {TARGET_GP:.0f}% ขยับขึ้นถึง {TARGET_GP:.0f}%
+    จะเพิ่มกำไรขั้นต้น ~<b>{thb_m(equal_uplift_mo)}/เดือน</b> (~{thb_m(equal_uplift)}/ปี) โดยไม่ต้องเพิ่มยอดขาย — ถ่ายทอด best practice จากสาขาเก่งเดือนนี้ ({', '.join(x['branch'] for x in best[:2])}) สู่สาขาอ่อน</div>
     </section>""")
 
     # §5 buffet
@@ -281,14 +346,14 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     A(f"""<section id="s5"><h2 class="sec"><span class="num">5</span>เศรษฐศาสตร์บุฟเฟ่ต์</h2>
     <p class="sec-sub">หัวใจของธุรกิจ — {pct(buffet_share)} ของรายได้ทั้งเครือ</p>
     <div class="kpis" style="margin-bottom:18px">
-      <div class="kpi"><div class="lbl">ลูกค้าบุฟเฟ่ต์</div><div class="val">{buf['total_pax']/1e6:.2f}M</div><div class="sub">{buf['avg_pax_per_bill']} คน/บิล</div></div>
+      <div class="kpi"><div class="lbl">ลูกค้า/เดือน (เฉลี่ย)</div><div class="val">{format(int(round(buf['total_pax']/n_months)),',')}</div><div class="sub">{buf['avg_pax_per_bill']} คน/บิล</div></div>
       <div class="kpi"><div class="lbl">ผู้ใหญ่ / เด็ก</div><div class="val">{100-buf['child_pct']:.0f}/{buf['child_pct']:.0f}</div><div class="sub">เด็ก {buf['child_pct']:.1f}%</div></div>
-      <div class="kpi"><div class="lbl">Food Cost บุฟเฟ่ต์</div><div class="val" style="color:var(--am)">{pct(buf['buffet_food_cost_pct'])}</div><div class="sub">ล่าสุด {pct(bf_series[-1][1])}</div></div>
+      <div class="kpi"><div class="lbl">Food Cost บุฟเฟ่ต์ (เดือนล่าสุด)</div><div class="val" style="color:var(--am)">{pct(bf_cur)}</div><div class="sub">{mom(bf_cur, bf_prev, good_up=False, as_pts=True)}</div></div>
       <div class="kpi"><div class="lbl">เครื่องดื่ม (attach)</div><div class="val">~80%</div><div class="sub">ของบิลสั่งดื่ม · {pct(buf['beverage_attach_pct'])} ของรายได้</div></div>
     </div>
     <p class="sec-sub" style="margin-bottom:2px">แนวโน้ม Food Cost บุฟเฟ่ต์รายเดือน (เป้า 55–70%)</p>
     {svg_line(bf_series, "#ec4899", "rgba(236,72,153,.10)", y_is_pct=True, y_suffix="%", target=65)}
-    <div class="callout good">✅ ต้นทุนอาหารบุฟเฟ่ต์ปรับลดต่อเนื่อง <b>73% → {pct(bf_series[-1][1])}</b> ในรอบปี — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
+    <div class="callout good">✅ ต้นทุนอาหารบุฟเฟ่ต์รายเดือนปรับลดจาก <b>{pct(bf_series[0][1])} ({bf_series[0][0]}) → {pct(bf_cur)} ({bf_vals[-1]['period']})</b> · เดือนล่าสุด {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
     <div class="callout warn">🥤 <b>เครื่องดื่มเป็นโอกาสที่ยังไม่ถูกใช้เต็มที่</b> — ~80% ของบิลสั่งเครื่องดื่ม แต่คิดเป็นเพียง {pct(buf['beverage_attach_pct'])} ของรายได้ การดันเครื่องดื่มมาร์จิ้นสูง (เครื่องดื่มพิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</div>
     </section>""")
 
@@ -298,7 +363,8 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
                          f"<td>{thb(i.get('revenue') or 0)}</td>"
                          f"<td><b>{(i.get('margin_pct') or 0):.0f}%</b></td></tr>" for i in stars)
     A(f"""<section id="s6"><h2 class="sec"><span class="num">6</span>วิเคราะห์เมนูและมาร์จิ้น</h2>
-    <p class="sec-sub">à-la-carte {s['total_skus']} เมนู · จัดกลุ่มได้ {qc['star']+qc['plowhorse']+qc['puzzle']+qc['dog']} เมนูที่มีข้อมูลต้นทุน</p>
+    <p class="sec-sub">à-la-carte {s['total_skus']} เมนู · จัดกลุ่มได้ {qc['star']+qc['plowhorse']+qc['puzzle']+qc['dog']} เมนูที่มีข้อมูลต้นทุน
+    · <b>ข้อมูลรวมทั้งช่วง {period}</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
     <div class="kpis" style="margin-bottom:18px">
       <div class="kpi"><div class="lbl">⭐ ดาวเด่น</div><div class="val" style="color:var(--em)">{qc['star']}</div><div class="sub">ขายดี+กำไรดี</div></div>
       <div class="kpi"><div class="lbl">🐴 ม้างาน</div><div class="val" style="color:var(--am)">{qc['plowhorse']}</div><div class="sub">ขายดี กำไรบาง</div></div>
@@ -317,11 +383,11 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
                        f"<td>{bar(i['total_cost'],imax,'#ef4444' if 'แซลมอน' in (i['ingredient_name'] or '') else '#94a3b8',thb_m(i['total_cost']))}</td>"
                        f"<td><b>{i['pct_of_chain_cogs']:.1f}%</b></td></tr>" for i in ings)
     A(f"""<section id="s7"><h2 class="sec"><span class="num">7</span>ความเสี่ยงด้านวัตถุดิบ (Supply Concentration)</h2>
-    <p class="sec-sub">วัตถุดิบ 12 อันดับแรกตามสัดส่วนต้นทุนทั้งเครือ</p>
+    <p class="sec-sub">วัตถุดิบ 12 อันดับแรกตามสัดส่วนต้นทุน · <b>ข้อมูลรวมทั้งช่วง {period}</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
     <table><thead><tr><th>วัตถุดิบ</th><th>ประเภท</th><th>ต้นทุนรวม</th><th>% ของ COGS</th></tr></thead><tbody>{ing_html}</tbody></table>
-    <div class="callout risk">🐟 <b>ปลาแซลมอนคิดเป็น {pct(salmon_pct)} ของต้นทุนวัตถุดิบทั้งเครือ</b> ({thb_m(salmon_cost)})
-    — วัตถุดิบเดียวที่กำหนดความอยู่รอดของกำไร หากราคาแซลมอนขึ้น 10% กำไรขั้นต้นทั้งเครือหายไป ~{thb_m(salmon_cost*0.10)}/ปีทันที</div>
-    <div class="callout good">💰 <b>โอกาส:</b> ลดต้นทุนแซลมอนเพียง 5% (เจรจาสัญญาระยะยาว / dual-source / คุม yield การขูดเนื้อ) = กำไรเพิ่ม ~<b>{thb_m(salmon_save)}/ปี</b></div>
+    <div class="callout risk">🐟 <b>ปลาแซลมอนคิดเป็น {pct(salmon_pct)} ของต้นทุนวัตถุดิบทั้งเครือ</b> ({thb_m(salmon_cost)} ตลอดช่วง {period})
+    — วัตถุดิบเดียวที่กำหนดความอยู่รอดของกำไร หากราคาแซลมอนขึ้น 10% กำไรขั้นต้นหายไป ~{thb_m(salmon_cost*0.10)} ต่อช่วงข้อมูลทันที</div>
+    <div class="callout good">💰 <b>โอกาส:</b> ลดต้นทุนแซลมอนเพียง 5% (เจรจาสัญญาระยะยาว / dual-source / คุม yield การขูดเนื้อ) = กำไรเพิ่ม ~<b>{thb_m(salmon_save)} ต่อช่วงข้อมูล</b></div>
     </section>""")
 
     # §8 recommendations
@@ -337,12 +403,12 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
           'คุม yield การขูด/ตัดเนื้อแซลมอนต่อจาน (ใช้ BoM Cost Simulator จำลองผล)',
           'ทดสอบเมนูโปรตีนทางเลือก (ทูน่า/หอยเชลล์) เพื่อกระจายความเสี่ยงในเมนูบุฟเฟ่ต์'])}
     {rec('#f59e0b','ลำดับ 2 · ผลกระทบสูง','ยกระดับสาขาที่กำไรต่ำสู่ค่ากลางเครือ',
-         f'กำไรเพิ่ม ~{thb_m(equal_uplift)}/ปี โดยไม่ต้องเพิ่มยอดขาย',
-         [f'โฟกัส 3 สาขาล่าง: {", ".join(x["branch"] for x in worst)} (GP {worst[-1]["total_gp_pct"]:.0f}–{worst[0]["total_gp_pct"]:.0f}%)',
-          'ถอด best practice จากสาขาเก่ง (สกลนคร 47%, มุกดาหาร 46%) — portion control, การสั่งซื้อ, waste',
+         f'กำไรเพิ่ม ~{thb_m(equal_uplift_mo)}/เดือน (~{thb_m(equal_uplift)}/ปี) โดยไม่ต้องเพิ่มยอดขาย',
+         [f'โฟกัส 3 สาขาล่างเดือน {latest_month}: {", ".join(x["branch"] for x in worst)} (GP {worst[-1]["_cur"]["gp_pct"]:.0f}–{worst[0]["_cur"]["gp_pct"]:.0f}%)',
+          f'ถอด best practice จากสาขาเก่งเดือนนี้ ({", ".join(x["branch"] for x in best[:2])}) — portion control, การสั่งซื้อ, waste',
           'ใช้ P&L รายสาขา + BoM เปรียบเทียบ หา เมนู/วัตถุดิบที่ทำให้ food cost สูงผิดปกติ']) }
     {rec('#10b981','ลำดับ 3 · กำไรเพิ่ม','ดันยอดเครื่องดื่ม (profit center)',
-         'เครื่องดื่ม attach 80% แต่เพียง 5.3% ของรายได้ — มี upside สูง',
+         f'เครื่องดื่ม attach ~80% แต่เพียง {pct(buf["beverage_attach_pct"])} ของรายได้ — มี upside สูง',
          ['ฝึกพนักงานเสนอเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) ทุกโต๊ะ',
           'ออกเซ็ตเครื่องดื่ม + โปรโมชันคู่บุฟเฟ่ต์',
           'เติมต้นทุนเครื่องดื่มในระบบเพื่อวัดกำไรจริง (ดูข้อ 9)'])}
@@ -358,6 +424,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     <p class="sec-sub">ความโปร่งใสของข้อมูล — เพื่อให้ตัวเลขทุกตัวตรวจสอบย้อนกลับได้</p>
     <ul style="font-size:14px;color:#334155">
       <li><b>แหล่งข้อมูล:</b> Easy POS (easyrestaurant.asia) · {len(branches)} สาขา · {period} ({n_months} เดือน)</li>
+      <li><b>ฐานการวิเคราะห์:</b> เดือนต่อเดือน (MoM) — ตัวเลขหลักคือ<b>เดือนล่าสุด {latest_month}</b> พร้อมการเปลี่ยนแปลงเทียบเดือนก่อน ({prev_month or '—'}) · <u>ไม่ใช้</u>ยอดสะสมทั้งช่วงเป็นตัวชี้วัด · ข้อ 6–7 (เมนู/วัตถุดิบ) เป็น mix สะสมทั้งช่วงโดยธรรมชาติ จึงระบุกำกับไว้</li>
       <li><b>รายได้</b> ใช้ <code>subtotal_ex_vat</code> (ก่อน VAT 7%) เสมอ — VAT ไม่นับเป็นรายได้</li>
       <li><b>COGS</b> สูตรเดียวทั้งระบบ: BoM recipe ก่อน → ถ้าไม่มีใช้ sku_cost → buffet tier นับ 0 (กัน double-count). ทุกหน้า/รายงาน GP ตรงกันที่ {pct(grand['gp_pct'])}</li>
       <li><b>ความครอบคลุมต้นทุน {pct(cov)}</b> ของจำนวนเสิร์ฟ — ส่วนที่เหลือยังไม่มีรีซิปี/ต้นทุน</li>
@@ -365,7 +432,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     <div class="callout warn"><b>ข้อควรระวัง (อ่านก่อนตีความ):</b><br>
       • <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → มาร์จิ้นเครื่องดื่มในวิเคราะห์เมนูขึ้น ~100% (ปลอม) ควรเติมก่อนนำไปตัดสินใจ<br>
       • à-la-carte บางรายการ <code>unit_cost ≈ ราคาขาย</code> → มาร์จิ้นอาจติดลบ/ผิดปกติ เป็นปัญหาคุณภาพข้อมูล ไม่ใช่ผลประกอบการจริง<br>
-      • Food cost บุฟเฟ่ต์ {pct(buf['buffet_food_cost_pct'])} คำนวณจากต้นทุนเมนูบุฟเฟ่ต์ (B0xxx) ÷ รายได้บุฟเฟ่ต์ · ลูกค้า (pax) ใช้ customer_count จริง</li>
+      • Food cost บุฟเฟ่ต์เดือนล่าสุด {pct(bf_cur)} ({latest_month}) คำนวณจากต้นทุนเมนูบุฟเฟ่ต์ (B0xxx) ÷ รายได้บุฟเฟ่ต์ · ลูกค้า (pax) ใช้ customer_count จริง</li>
     </div>
     <p class="muted">รายงานนี้สร้างอัตโนมัติจาก API ของระบบ (สูตรเดียวกับแดชบอร์ด) — ตัวเลขจึงตรงกับหน้าจอทุกประการ
     · สร้างใหม่ได้ด้วย <code>python backend/gen_analysis_report.py</code></p>

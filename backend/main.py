@@ -275,6 +275,53 @@ def root():
 
 
 # ---------------------------------------------------------------------------
+# One-time DB bootstrap (hosted deploys). Lets a gzipped SQLite file be pushed
+# over HTTPS to seed an *empty* volume — far more reliable than the WireGuard
+# SFTP tunnel for large files. Double-gated and safe to leave in place:
+#   1) requires env OSHINEI_SEED_TOKEN to be set AND to match ?token=
+#   2) refuses if the DB already holds sales rows (can never clobber real data)
+# Remove the Fly secret after seeding to make this endpoint inert (404).
+# ---------------------------------------------------------------------------
+@app.post("/api/_admin/seed-db", include_in_schema=False)
+async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
+    import gzip, shutil, tempfile, os as _os2
+    expected = _os2.environ.get("OSHINEI_SEED_TOKEN")
+    if not expected or token != expected:
+        raise HTTPException(status_code=404, detail="not found")
+    # Safety: only seed a blank DB.
+    try:
+        with get_db() as con:
+            n = con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
+        if n and n > 0:
+            raise HTTPException(status_code=409, detail=f"DB already populated ({n} rows)")
+    except HTTPException:
+        raise
+    except Exception:
+        pass  # table missing → empty DB → safe to seed
+    # Stream upload → temp file, then stream-decompress into DB_PATH (low memory).
+    with tempfile.NamedTemporaryFile(delete=False) as tmp:
+        shutil.copyfileobj(file.file, tmp, 1024 * 1024)
+        tmp_path = tmp.name
+    try:
+        with gzip.open(tmp_path, "rb") as gz, open(str(DB_PATH), "wb") as out:
+            shutil.copyfileobj(gz, out, 1024 * 1024)
+    finally:
+        try:
+            _os2.remove(tmp_path)
+        except OSError:
+            pass
+    # Drop any stale WAL/SHM so the next (post-restart) open reads the new file.
+    for suf in ("-wal", "-shm"):
+        try:
+            _os2.remove(str(DB_PATH) + suf)
+        except OSError:
+            pass
+    size = _os2.path.getsize(str(DB_PATH))
+    return {"ok": True, "db_bytes": size,
+            "note": "restart the machine so pooled connections reopen the new DB"}
+
+
+# ---------------------------------------------------------------------------
 # /api/branches
 # ---------------------------------------------------------------------------
 @app.get("/api/branches")
