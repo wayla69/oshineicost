@@ -1916,6 +1916,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- Summary cards -->
   <div id="gpbSummary" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
 
+  <!-- Per-branch GP% boxes (latest month + MoM progression) -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h2 class="section-title mb-0">🧱 GP% รายสาขา — กล่องรายสาขา</h2>
+      <span class="text-xs text-slate-400">เรียงตาม GP% เดือนล่าสุด · ▲/▼ = พัฒนาการเทียบเดือนก่อนหน้า (pp)</span>
+    </div>
+    <div id="gpbBoxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3"></div>
+  </div>
+
   <!-- GP% bar chart -->
   <div class="card p-5 mb-4">
     <h2 class="section-title mb-1">📊 GP% รายสาขา</h2>
@@ -2731,15 +2740,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <div style="height:360px"><canvas id="chartMostOrdered"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title" style="margin-bottom:12px">แยกตามจำนวน</h2>
+        <h2 class="section-title" style="margin-bottom:12px">แยกตามจำนวน <span class="text-xs font-normal text-slate-400">· % เทียบยอดรวม · MoM เทียบเดือนก่อน</span></h2>
         <div class="overflow-auto" style="max-height:360px">
-          <table class="text-xs text-slate-700">
+          <table class="text-xs text-slate-700 w-full">
             <thead><tr class="text-left text-slate-500">
               <th class="py-2 pr-4">#</th>
               <th class="py-2 pr-4">SKU</th>
               <th class="py-2 pr-4">Description</th>
               <th class="py-2 pr-4 text-right">Qty</th>
-              <th class="py-2 text-right">Revenue</th>
+              <th class="py-2 pr-4 text-right">% รวม</th>
+              <th class="py-2 text-right">MoM</th>
             </tr></thead>
             <tbody id="orderedBody"></tbody>
           </table>
@@ -3055,14 +3065,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div id="rptRevHeadline" class="text-sm text-slate-600 mb-3"></div>
       <div class="overflow-auto">
         <table class="text-sm text-slate-700 w-full">
+          <caption class="text-left text-[11px] text-slate-400 pb-1">ตัวเลขเล็กใต้แต่ละค่า = MoM เทียบเดือนก่อนหน้า</caption>
           <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
             <th class="py-2 pr-6">Month</th>
-            <th class="py-2 pr-6 text-right">Revenue</th>
-            <th class="py-2 pr-6 text-right">vs Last Year</th>
-            <th class="py-2 pr-6 text-right">MoM</th>
-            <th class="py-2 pr-6 text-right">Transactions</th>
-            <th class="py-2 pr-6 text-right">Customers</th>
-            <th class="py-2 text-right">Avg Ticket</th>
+            <th class="py-2 pr-6 text-right">Revenue · MoM</th>
+            <th class="py-2 pr-6 text-right">Transactions · MoM</th>
+            <th class="py-2 pr-6 text-right">Customers · MoM</th>
+            <th class="py-2 text-right">Avg Ticket · MoM</th>
           </tr></thead>
           <tbody id="rptTrendBody"></tbody>
         </table>
@@ -3071,18 +3080,23 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
     <!-- §3 Branch Performance Ranking -->
     <div class="card p-6" id="rpt3">
-      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">3. Branch Performance Ranking</h2>
+      <h2 class="text-base font-bold text-slate-700 mb-1 pb-2 border-b border-slate-100">3. Branch Performance Ranking</h2>
+      <p class="text-xs text-slate-400 mb-3" id="rptBranchRankSub">จัดอันดับตามรายได้เดือนล่าสุด · MoM = เทียบเดือนก่อน · ขยับ = การเปลี่ยนอันดับเทียบเดือนก่อน · YTD = แนวโน้มรายได้ปีนี้</p>
+      <div class="overflow-x-auto">
       <table class="text-sm text-slate-700 w-full">
         <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
           <th class="py-2 pr-4">Rank</th>
           <th class="py-2 pr-4">สาขา</th>
-          <th class="py-2 pr-4 text-right">Revenue</th>
+          <th class="py-2 pr-4 text-right">รายได้ (เดือนล่าสุด)</th>
+          <th class="py-2 pr-4 text-right">MoM</th>
+          <th class="py-2 pr-4 text-center">ขยับ</th>
           <th class="py-2 pr-4 text-right">Share</th>
-          <th class="py-2 pr-4 text-right">Transactions</th>
-          <th class="py-2 text-right">Avg Ticket</th>
+          <th class="py-2 pr-4 text-right">Avg Ticket</th>
+          <th class="py-2 text-center">YTD Trend</th>
         </tr></thead>
         <tbody id="rptBranchBody"></tbody>
       </table>
+      </div>
 
       <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">โปรไฟล์รายสาขา — จุดเด่น/ผิดปกติเทียบเครือ</h3>
       <p class="text-xs text-slate-400 mb-3">เทียบแต่ละสาขากับค่ากลาง (median) ของทั้งเครือ · แสดงเฉพาะจุดที่ต่างชัด (เกิน ±20%)</p>
@@ -3112,7 +3126,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="card p-6" id="rpt5">
       <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">5. Customer Behavior</h2>
       <div id="rptPersona" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3"></div>
-      <p id="rptPersonaNarrative" class="text-sm text-slate-500"></p>
+      <p id="rptPersonaNarrative" class="text-sm text-slate-500 mb-4"></p>
+      <div id="rptPersonaRich"></div>
     </div>
 
     <!-- §6 Time & Operations -->
@@ -3184,6 +3199,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <!-- §10 Forecasts & Action Items -->
     <div class="card p-6" id="rpt10">
       <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">10. Forecasts &amp; Action Items</h2>
+
+      <!-- Next-month forecast (for real tracking — compare vs actuals at month-end) -->
+      <div id="rptNextMonth" class="mb-5"></div>
+
       <div id="rptForecast" class="text-sm text-slate-700 mb-3"></div>
 
       <!-- Forecast scorecard: projected / MoM / YoY / target attainment -->
@@ -6934,8 +6953,9 @@ function exportMenuEngTable() {
 }
 
 async function loadMostOrdered() {
-  const data = await fetch(`${API}/api/sales/skus${qp({limit:15, sort:'qty'})}`).then(r => r.json());
-  const sorted = [...data].sort((a,b) => (b.qty||0) - (a.qty||0));
+  const d = await fetch(`${API}/api/sales/top_ordered${qp({limit:15, sort:'qty'})}`).then(r => r.json()).catch(()=>null);
+  const sorted = (d && d.items) ? d.items : [];
+  const totalQty = d ? (d.total_qty||0) : 0;
   mkChart('chartMostOrdered', {
     type: 'bar',
     data: {
@@ -6944,7 +6964,15 @@ async function loadMostOrdered() {
     },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{display:false}, datalabels:{display:false}, tooltip:{callbacks:{label: ctx=>' '+fmtN(ctx.raw)+' pcs'}} },
+      layout: { padding: { right: 56 } },
+      plugins: {
+        legend:{display:false},
+        datalabels:{
+          display:true, anchor:'end', align:'end', color:'#475569', font:{size:9,weight:'600'},
+          formatter:(v,ctx)=>{ const r=sorted[ctx.dataIndex]; return fmtN(v)+(r&&r.qty_share_pct!=null?'  '+r.qty_share_pct+'%':''); }
+        },
+        tooltip:{callbacks:{label: ctx=>{ const r=sorted[ctx.dataIndex]; return ' '+fmtN(ctx.raw)+' pcs'+(r&&r.qty_share_pct!=null?' · '+r.qty_share_pct+'% ของยอดรวม':''); }}}
+      },
       scales: {
         x: { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
         y: { grid:{display:false}, ticks:{color:'#64748b',font:{size:11}} }
@@ -6953,14 +6981,19 @@ async function loadMostOrdered() {
   });
   const body = document.getElementById('orderedBody');
   body.innerHTML = '';
-  sorted.slice(0,20).forEach((r,i) => {
+  if (!sorted.length) { body.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
+  sorted.forEach((r,i) => {
     const name = esc((r.description||'—').replace(/^\((?:A|B|T)\)\s*/,''));
+    const mom = r.qty_mom_pct;
+    const momHtml = mom==null ? '<span class="text-slate-300">—</span>'
+      : `<span style="color:${mom>0?'#10b981':mom<0?'#ef4444':'#94a3b8'}">${mom>0?'▲':mom<0?'▼':''} ${Math.abs(mom).toFixed(1)}%</span>`;
     body.innerHTML += `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-4 text-slate-400">${i+1}</td>
       <td class="py-1.5 pr-4 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
       <td class="py-1.5 pr-4 text-xs max-w-xs truncate" title="${esc(r.description||'')}">${name}</td>
       <td class="py-1.5 pr-4 text-right font-semibold">${fmtN(r.qty)}</td>
-      <td class="py-1.5 text-right">${fmtN(r.revenue)}</td>
+      <td class="py-1.5 pr-4 text-right text-slate-600">${r.qty_share_pct!=null?r.qty_share_pct.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 text-right">${momHtml}</td>
     </tr>`;
   });
 }
@@ -7512,10 +7545,28 @@ async function loadReport() {
     fetch(`${API}/api/analysis/forecast_branches${getGroup()?'?group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
   ]);
 
+  // Full monthly history (branch/group only, no month-range) so MoM/YTD framing
+  // works even when the user narrows the filter to a single month — otherwise
+  // `trend` has 1 row and every MoM chip collapses to "—".
+  const _fullP = new URLSearchParams();
+  if (branch) _fullP.set('branch', branch);
+  if (typeof getGroup === 'function' && getGroup()) _fullP.set('group', getGroup());
+  const _fullQp = _fullP.toString() ? '?' + _fullP.toString() : '';
+  const trendFull = await fetch(`${API}/api/sales/monthly${_fullQp}`).then(r=>r.json()).catch(()=>trend);
+  // Per-branch monthly revenue (all branches, full history) → powers §3 ranking
+  // movement, per-branch MoM, and YTD sparklines.
+  const branchMonthlyRaw = await fetch(`${API}/api/gp/by-branch-month`).then(r=>r.json()).catch(()=>({rows:[]}));
+
   // ── Monthly-framing helpers (used across the whole report — avoid misleading
   //    accumulated totals; lead with latest month + MoM/YoY/YTD movement).
   const mLast = trend[trend.length-1] || {};
-  const mPrev = trend.length >= 2 ? trend[trend.length-2] : null;
+  let mPrev = trend.length >= 2 ? trend[trend.length-2] : null;
+  // Backfill the previous month from full history when the filtered window can't
+  // supply it (single-month filter) — keeps MoM populated in every §1/§2 box.
+  if (!mPrev && mLast.period_month && Array.isArray(trendFull)) {
+    const _i = trendFull.findIndex(r => r.period_month === mLast.period_month);
+    if (_i > 0) mPrev = trendFull[_i - 1];
+  }
   const mLastLabel = mLast.period_month ? fmtMonth(mLast.period_month) : '—';
   const pctDelta = (cur, prev) => (prev && prev > 0) ? ((cur - prev) / prev * 100) : null;
   const momChip = p => p == null ? '<span class="text-slate-300">—</span>'
@@ -7532,11 +7583,12 @@ async function loadReport() {
     { label:`ลูกค้า · ${mLastLabel}`, value:fmtN(mLast.customer_count||0), mom:pctDelta(mLast.customer_count, mPrev?.customer_count) },
     { label:`ยอดบิลเฉลี่ย · ${mLastLabel}`, value:fmtN(lastAov), mom:pctDelta(lastAov, prevAov) },
   ];
+  const mPrevLabel = (mPrev && mPrev.period_month) ? fmtMonth(mPrev.period_month) : '—';
   document.getElementById('rptKpis').innerHTML = exKpis.map(k =>
     `<div class="p-4 bg-slate-50 rounded-lg">
       <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">${k.label}</p>
       <p class="text-2xl font-bold text-indigo-700">${k.value}</p>
-      <p class="text-[11px] mt-1 text-slate-500">MoM ${momChip(k.mom)}${k.yoy!=null?` · YoY ${momChip(k.yoy)}`:''}</p>
+      <p class="text-[11px] mt-1 text-slate-500">MoM ${momChip(k.mom)} <span class="text-slate-400">vs ${mPrevLabel}</span></p>
     </div>`).join('');
 
   // ── KPI hero band — latest month at-a-glance (+ period margin)
@@ -7600,7 +7652,7 @@ async function loadReport() {
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">เดือนล่าสุด (${mLastLabel})</p>
         <p class="text-lg font-bold text-indigo-700">${fmt(mLast.revenue||0)}</p>
-        <p class="text-[11px]">MoM ${momChip(momLast)}${yoyLast!=null?` · YoY ${momChip(yoyLast)}`:''}</p>
+        <p class="text-[11px]">MoM ${momChip(momLast)} <span class="text-slate-400">vs ${mPrevLabel}</span></p>
       </div>
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">YTD ${curYear} (${ytdMonths.length} เดือน)</p>
@@ -7618,39 +7670,102 @@ async function loadReport() {
         <p class="text-[11px] text-slate-400">${bestMonth?fmt(bestMonth.revenue||0):''}</p>
       </div>
     </div>`;
-  document.getElementById('rptTrendBody').innerHTML = trendWithYoy.map((r,i) => {
-    const avgTicket = r.tx_count ? Math.round(r.revenue / r.tx_count) : 0;
-    const yoyCell = r.yoy && r.yoy.yoy_pct != null
-      ? `<span style="color:${r.yoy.yoy_pct>=0?'#10b981':'#ef4444'}">${r.yoy.yoy_pct>=0?'+':''}${r.yoy.yoy_pct.toFixed(1)}%</span>` : '<span class="text-slate-300">—</span>';
+  const _miniMoM = (cur, prev) => {
+    if (!(prev > 0) || cur == null) return '';
+    const p = (cur - prev) / prev * 100;
+    return `<span class="block text-[10px]" style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+  };
+  document.getElementById('rptTrendBody').innerHTML = trend.map((r,i) => {
     const prev = trend[i-1];
-    const mom = (prev && prev.revenue > 0)
-      ? `<span style="color:${r.revenue>=prev.revenue?'#10b981':'#ef4444'}">${r.revenue>=prev.revenue?'+':''}${((r.revenue-prev.revenue)/prev.revenue*100).toFixed(1)}%</span>` : '<span class="text-slate-300">—</span>';
+    const avgTicket = r.tx_count ? Math.round(r.revenue / r.tx_count) : 0;
+    const prevAT = (prev && prev.tx_count) ? Math.round(prev.revenue / prev.tx_count) : 0;
     return `<tr class="border-t border-slate-100">
       <td class="py-2 pr-6">${fmtMonth(r.period_month)}</td>
-      <td class="py-2 pr-6 text-right font-semibold">${fmtN(r.revenue)}</td>
-      <td class="py-2 pr-6 text-right">${yoyCell}</td>
-      <td class="py-2 pr-6 text-right">${mom}</td>
-      <td class="py-2 pr-6 text-right">${r.tx_count!=null?fmtN(r.tx_count):'—'}</td>
-      <td class="py-2 pr-6 text-right">${r.customer_count!=null?fmtN(r.customer_count):'—'}</td>
-      <td class="py-2 text-right">${avgTicket?fmtN(avgTicket):'—'}</td>
+      <td class="py-2 pr-6 text-right font-semibold">${fmtN(r.revenue)}${_miniMoM(r.revenue, prev?.revenue)}</td>
+      <td class="py-2 pr-6 text-right">${r.tx_count!=null?fmtN(r.tx_count):'—'}${_miniMoM(r.tx_count, prev?.tx_count)}</td>
+      <td class="py-2 pr-6 text-right">${r.customer_count!=null?fmtN(r.customer_count):'—'}${_miniMoM(r.customer_count, prev?.customer_count)}</td>
+      <td class="py-2 text-right">${avgTicket?fmtN(avgTicket):'—'}${_miniMoM(avgTicket, prevAT)}</td>
     </tr>`;
   }).join('');
 
-  // ── §3 Branch Performance Ranking
-  const bSorted = [...branches].sort((a,b)=>(b.revenue||0)-(a.revenue||0));
-  const totalAllRev = bSorted.reduce((a,r)=>a+(r.revenue||0),0);
-  document.getElementById('rptBranchBody').innerHTML = bSorted.map((b,i) => {
-    const share = totalAllRev ? (b.revenue/totalAllRev*100) : 0;
-    const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
-    return `<tr class="border-t border-slate-100">
-      <td class="py-2 pr-4">${medal}</td>
-      <td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
-      <td class="py-2 pr-4 text-right">${fmtN(b.revenue||0)}</td>
-      <td class="py-2 pr-4 text-right">${share.toFixed(1)}%</td>
-      <td class="py-2 pr-4 text-right">${fmtN(b.tx_count||0)}</td>
-      <td class="py-2 text-right">${fmtN(b.avg_ticket||0)}</td>
-    </tr>`;
-  }).join('');
+  // ── §3 Branch Performance Ranking — latest month, MoM, rank movement, YTD spark
+  const _bm = {};   // branch -> { month: revenue }
+  (branchMonthlyRaw.rows || []).forEach(r => {
+    const mm = _bm[r.branch] || (_bm[r.branch] = {});
+    (r.monthly || []).forEach(m => { mm[m.month] = (mm[m.month] || 0) + (m.revenue || 0); });
+  });
+  const _allMonthsB = Array.from(new Set(Object.values(_bm).flatMap(o => Object.keys(o)))).sort();
+  const _lastMo = _allMonthsB[_allMonthsB.length - 1] || null;
+  const _prevMo = _allMonthsB.length >= 2 ? _allMonthsB[_allMonthsB.length - 2] : null;
+  const revOf = (br, mo) => (mo && _bm[br]) ? (_bm[br][mo] || 0) : 0;
+  const rankByMonth = mo => {
+    const map = {};
+    Object.keys(_bm).map(br => ({ br, rev: revOf(br, mo) })).filter(x => x.rev > 0)
+      .sort((a, b) => b.rev - a.rev).forEach((x, i) => map[x.br] = i + 1);
+    return map;
+  };
+  const _curRank  = rankByMonth(_lastMo);
+  const _prevRank = _prevMo ? rankByMonth(_prevMo) : {};
+  const _spark = (vals, w = 84, h = 22) => {
+    const v = (vals || []).filter(x => x != null);
+    if (v.length < 2) return '<span class="text-slate-300 text-[10px]">—</span>';
+    const mn = Math.min(...v), mx = Math.max(...v), rng = (mx - mn) || 1;
+    const pts = v.map((x, i) => `${(i / (v.length - 1) * w).toFixed(1)},${(h - ((x - mn) / rng) * h).toFixed(1)}`).join(' ');
+    const up = v[v.length - 1] >= v[0];
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="${up?'#10b981':'#ef4444'}" stroke-width="1.5" stroke-linejoin="round"/></svg>`;
+  };
+  const _curYear = (_lastMo || '').slice(0, 4);
+  const _ytdMonths = _allMonthsB.filter(m => m.slice(0, 4) === _curYear);
+  const _curTotalRev = Object.keys(_bm).reduce((a, br) => a + revOf(br, _lastMo), 0) || 1;
+
+  const branchesByLast = Object.keys(_bm).map(br => {
+    const last = revOf(br, _lastMo), prev = revOf(br, _prevMo);
+    const meta = branches.find(x => x.branch === br) || {};
+    return {
+      branch: br, last, prev,
+      // A branch whose prior month is <5% of this month barely operated last
+      // month (newly opened) — its MoM% would be a meaningless 5-digit number.
+      mom: (prev > 0 && prev >= last * 0.05) ? (last - prev) / prev * 100 : null,
+      ramp: (prev > 0 && prev < last * 0.05),
+      dRank: (_curRank[br] && _prevRank[br]) ? (_prevRank[br] - _curRank[br]) : null,
+      isNew: (_curRank[br] && !_prevRank[br]),
+      share: last / _curTotalRev * 100,
+      avg_ticket: meta.avg_ticket || 0,
+      ytd: _ytdMonths.map(m => revOf(br, m)),
+    };
+  }).filter(b => b.last > 0).sort((a, b) => b.last - a.last);
+
+  const _momChipS = p => p == null ? '<span class="text-slate-300">—</span>'
+    : `<span style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+  const _rankMove = b => {
+    if (b.isNew) return '<span style="color:#0891b2">🆕</span>';
+    if (b.dRank == null || b.dRank === 0) return '<span class="text-slate-400">—</span>';
+    return b.dRank > 0
+      ? `<span style="color:#059669">▲ ${b.dRank}</span>`
+      : `<span style="color:#dc2626">▼ ${Math.abs(b.dRank)}</span>`;
+  };
+  const rankSub = document.getElementById('rptBranchRankSub');
+  if (rankSub && _lastMo) rankSub.innerHTML = `จัดอันดับตามรายได้เดือน <b>${fmtMonth(_lastMo)}</b>${_prevMo?` · MoM/ขยับ เทียบ ${fmtMonth(_prevMo)}`:''} · YTD = แนวโน้มรายได้ปี ${_curYear}`;
+
+  document.getElementById('rptBranchBody').innerHTML = branchesByLast.length
+    ? branchesByLast.map((b, i) => {
+        const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+        return `<tr class="border-t border-slate-100">
+          <td class="py-2 pr-4">${medal}</td>
+          <td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
+          <td class="py-2 pr-4 text-right font-semibold">${fmtN(b.last)}</td>
+          <td class="py-2 pr-4 text-right">${b.ramp?'<span style="color:#0891b2">🆕 พุ่ง</span>':_momChipS(b.mom)}</td>
+          <td class="py-2 pr-4 text-center">${_rankMove(b)}</td>
+          <td class="py-2 pr-4 text-right">${b.share.toFixed(1)}%</td>
+          <td class="py-2 pr-4 text-right">${fmtN(b.avg_ticket||0)}</td>
+          <td class="py-2 text-center">${_spark(b.ytd)}</td>
+        </tr>`;
+      }).join('')
+    : [...branches].sort((a,b)=>(b.revenue||0)-(a.revenue||0)).map((b,i)=>`<tr class="border-t border-slate-100">
+        <td class="py-2 pr-4">${i+1}</td><td class="py-2 pr-4 font-medium">${esc(b.branch)}</td>
+        <td class="py-2 pr-4 text-right">${fmtN(b.revenue||0)}</td><td class="py-2 pr-4 text-right">—</td>
+        <td class="py-2 pr-4 text-center">—</td><td class="py-2 pr-4 text-right">—</td>
+        <td class="py-2 pr-4 text-right">${fmtN(b.avg_ticket||0)}</td><td class="py-2 text-center">—</td></tr>`).join('');
 
   // ── §3b Branch profiling — how each branch deviates from the network median
   (function renderBranchProfile() {
@@ -7738,6 +7853,58 @@ async function loadReport() {
     const fdPct = k => ((fd[k]||0)/fdTotal*100).toFixed(1);
     document.getElementById('rptPersonaNarrative').textContent = `Mix: ${fdPct('food')}% food, ${fdPct('drink')}% drink, ${fdPct('other')}% other.`;
   }
+
+  // ── §5 rich — party-size distribution, spend/head consistency, sales structure
+  (function renderPersonaRich() {
+    const el = document.getElementById('rptPersonaRich'); if (!el) return;
+    const ps = (persona.party_sizes || []).filter(p => (p.tx_count||0) > 0);
+    if (!ps.length) { el.innerHTML = ''; return; }
+    const totTx = ps.reduce((a,p)=>a+(p.tx_count||0),0) || (o.tx_count||1);
+    const maxTx = Math.max(...ps.map(p=>p.tx_count||0), 1);
+    const couples = ps.find(p=>p.size===2);
+    const couplesPct = couples ? (couples.tx_count/totTx*100) : null;
+    const phVals = ps.map(p=>p.avg_per_head||0).filter(Boolean);
+    const phMin = phVals.length?Math.min(...phVals):0, phMax = phVals.length?Math.max(...phVals):0;
+    const phSpread = phMax>0 ? ((phMax-phMin)/phMax*100) : 0;
+    const bh = (persona.busy_hours||[]).filter(h=>(h.tx_count||0)>0);
+    const peakH = bh.length ? bh.reduce((mx,h)=>h.tx_count>(mx?.tx_count||0)?h:mx,null) : null;
+    const fdAbs = persona.food_drink_split || {};
+    const fdTot = (fdAbs.food_abs||0)+(fdAbs.drink_abs||0)+(fdAbs.other_abs||0);
+    const fdSeg = (lbl,val,color)=>{ const p = fdTot? val/fdTot*100:0; return p<0.5?'':`<div style="width:${p}%;background:${color}" class="h-full flex items-center justify-center text-[10px] text-white font-semibold" title="${lbl} ${p.toFixed(1)}%">${p>=8?p.toFixed(0)+'%':''}</div>`; };
+    const rows = ps.map(p=>{
+      const sharePct = p.tx_count/totTx*100, w = p.tx_count/maxTx*100;
+      return `<tr class="border-t border-slate-50">
+        <td class="py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap">${p.label} คน</td>
+        <td class="py-1.5 pr-3" style="width:42%"><div class="bg-slate-100 rounded-full h-3"><div style="width:${w.toFixed(0)}%;background:#6366f1;height:100%;border-radius:9999px"></div></div></td>
+        <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(p.tx_count)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums font-semibold">${sharePct.toFixed(1)}%</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmtN(p.avg_bill||0)}</td>
+        <td class="py-1.5 text-right tabular-nums text-slate-500">${fmtN(p.avg_per_head||0)}</td>
+      </tr>`;
+    }).join('');
+    el.innerHTML = `
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+        ${[
+          ['คู่/2 คน = กลุ่มหลัก', couplesPct!=null?couplesPct.toFixed(0)+'%':'—', 'ของบิลทั้งหมดเป็นโต๊ะ 2 คน', '#6366f1'],
+          ['ยอด/หัวเกือบคงที่', phVals.length?`${fmtN(phMin)}–${fmtN(phMax)}`:'—', `ต่างแค่ ${phSpread.toFixed(0)}% ทุกขนาดกลุ่ม — บุฟเฟ่ต์คุมต่อหัวได้แม่น`, '#059669'],
+          ['ชั่วโมงพีค', peakH?`${peakH.hour}:00 น.`:'—', peakH?`${fmtN(peakH.tx_count)} บิล/ชม.`:'', '#d97706'],
+        ].map(([l,v,s,c])=>`<div class="p-3 rounded-lg border" style="border-color:${c}33;background:${c}0a">
+          <p class="text-[11px] text-slate-500">${l}</p><p class="text-2xl font-extrabold" style="color:${c}">${v}</p>
+          <p class="text-[11px] text-slate-400 mt-0.5">${s}</p></div>`).join('')}
+      </div>
+      <p class="text-xs font-semibold text-slate-600 mb-1">การกระจายขนาดกลุ่มลูกค้า — สัดส่วนบิล · ยอด/บิล · ยอด/หัว</p>
+      <table class="text-xs w-full mb-4"><thead><tr class="text-left text-slate-400">
+        <th class="pb-1 pr-3">กลุ่ม</th><th class="pb-1 pr-3">สัดส่วนบิล</th><th class="pb-1 pr-3 text-right">บิล</th>
+        <th class="pb-1 pr-3 text-right">% บิล</th><th class="pb-1 pr-3 text-right">ยอด/บิล</th><th class="pb-1 text-right">ยอด/หัว</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+      <p class="text-xs font-semibold text-slate-600 mb-1">โครงสร้างยอดขาย</p>
+      <div class="rounded-lg overflow-hidden border border-slate-200 flex" style="height:30px">
+        ${fdSeg('บุฟเฟ่ต์ & อื่นๆ', fdAbs.other_abs||0, '#6366f1')}
+        ${fdSeg('Food à la carte', fdAbs.food_abs||0, '#10b981')}
+        ${fdSeg('Drink', fdAbs.drink_abs||0, '#f59e0b')}
+      </div>
+      <p class="text-[11px] text-slate-400 mt-1">🟦 บุฟเฟ่ต์&อื่นๆ ${fdTot?((fdAbs.other_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟩 Food ${fdTot?((fdAbs.food_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟧 Drink ${fdTot?((fdAbs.drink_abs||0)/fdTot*100).toFixed(1):'—'}%</p>`;
+  })();
 
   // ── §6 Time & Operations
   const openHours = timeHourly.filter(h => h.is_open !== false);
@@ -7920,6 +8087,55 @@ async function loadReport() {
       }).join('')}</tbody></table>
       <div class="flex flex-wrap gap-3 mt-2 text-[11px] text-slate-500">${BK.map(bk=>`<span class="flex items-center gap-1"><span style="width:10px;height:10px;background:${bk.color};border-radius:2px;display:inline-block"></span>${bk.label}</span>`).join('')}</div>`;
   } catch(e) { console.error('discount composition failed', e); }
+
+  // ── §10 Next-month forecast — projects the month AFTER the latest complete
+  //    month so it can be tracked: at month-end, drop actuals next to it.
+  (function renderNextMonth() {
+    const el = document.getElementById('rptNextMonth'); if (!el) return;
+    const series = (trendFull || []).map(r => r.revenue || 0);
+    if (series.length < 3 || !_lastMo) { el.innerHTML = ''; return; }
+    const ols = ys => {
+      const n = ys.length, xs = ys.map((_, i) => i);
+      const mx = xs.reduce((a,b)=>a+b,0)/n, my = ys.reduce((a,b)=>a+b,0)/n;
+      let num=0, den=0; for (let i=0;i<n;i++){ num+=(xs[i]-mx)*(ys[i]-my); den+=(xs[i]-mx)**2; }
+      const slope = den?num/den:0, inter = my-slope*mx;
+      const sd = Math.sqrt(ys.reduce((a,y,i)=>a+(y-(inter+slope*i))**2,0)/n);
+      return { sd, pred: inter + slope*n };
+    };
+    const f = ols(series);
+    const pred = Math.max(0, f.pred);
+    const lo = Math.max(0, pred - 1.28*f.sd), hi = pred + 1.28*f.sd;  // ~80% band
+    const [yy, mm] = _lastMo.split('-').map(Number);
+    const nextMo = mm === 12 ? `${yy+1}-01` : `${yy}-${String(mm+1).padStart(2,'0')}`;
+    const lastRev = series[series.length-1];
+    const momProj = lastRev > 0 ? (pred-lastRev)/lastRev*100 : null;
+    const branchProj = Object.keys(_bm).map(br => {
+      const ys = _allMonthsB.map(m => revOf(br, m)).filter(v => v > 0);
+      const p = ys.length >= 3 ? Math.max(0, ols(ys).pred) : (ys.length ? ys[ys.length-1] : 0);
+      return { branch: br, last: revOf(br, _lastMo), proj: p };
+    }).filter(b => b.proj > 0).sort((a,b)=>b.proj-a.proj);
+    const sumProj = branchProj.reduce((a,b)=>a+b.proj,0);
+    const chip = p => p==null ? '' : `<span style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    el.innerHTML = `
+      <div class="rounded-xl border-2 p-4 mb-3" style="border-color:#4f46e533;background:linear-gradient(135deg,#eef2ff 0%,#ffffff 70%)">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <h3 class="text-sm font-bold text-indigo-900">🔮 พยากรณ์เดือนถัดไป — ${fmtMonth(nextMo)}</h3>
+          <span class="text-[11px] text-slate-500">linear trend จาก ${series.length} เดือน · สิ้นเดือนนำ actual มาเทียบช่องนี้เพื่อติดตาม</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div class="p-3 rounded-lg bg-white border border-slate-100"><p class="text-[11px] text-slate-500">คาดการณ์รายได้</p><p class="text-2xl font-extrabold text-indigo-700">${fmt(pred)}</p><p class="text-[11px] text-slate-400">${fmtN(Math.round(pred))} บาท</p></div>
+          <div class="p-3 rounded-lg bg-white border border-slate-100"><p class="text-[11px] text-slate-500">ช่วงเชื่อมั่น ~80%</p><p class="text-sm font-bold text-slate-700">${fmt(lo)} – ${fmt(hi)}</p><p class="text-[11px] text-slate-400">low – high</p></div>
+          <div class="p-3 rounded-lg bg-white border border-slate-100"><p class="text-[11px] text-slate-500">vs ${fmtMonth(_lastMo)} (ล่าสุด)</p><p class="text-lg font-bold">${chip(momProj)}</p><p class="text-[11px] text-slate-400">${fmt(lastRev)} → ${fmt(pred)}</p></div>
+          <div class="p-3 rounded-lg bg-white border border-slate-100"><p class="text-[11px] text-slate-500">รวมจากรายสาขา</p><p class="text-lg font-bold text-slate-700">${fmt(sumProj)}</p><p class="text-[11px] text-slate-400">${branchProj.length} สาขา</p></div>
+        </div>
+      </div>
+      <details class="mb-1"><summary class="text-xs font-semibold text-slate-600 cursor-pointer">พยากรณ์รายสาขา — ${fmtMonth(nextMo)} (กดเพื่อดู)</summary>
+        <div class="overflow-x-auto mt-2"><table class="w-full text-xs">
+          <thead><tr class="text-left text-slate-400 border-b border-slate-200"><th class="py-1 pr-3">สาขา</th><th class="py-1 pr-3 text-right">${fmtMonth(_lastMo)} (ล่าสุด)</th><th class="py-1 pr-3 text-right">คาด ${fmtMonth(nextMo)}</th><th class="py-1 text-right">Δ</th></tr></thead>
+          <tbody>${branchProj.map(b=>{const d=b.last>0?(b.proj-b.last)/b.last*100:null;return `<tr class="border-b border-slate-50"><td class="py-1 pr-3 font-medium">${esc(b.branch)}</td><td class="py-1 pr-3 text-right text-slate-500">${fmtN(b.last)}</td><td class="py-1 pr-3 text-right font-semibold">${fmtN(Math.round(b.proj))}</td><td class="py-1 text-right">${chip(d)}</td></tr>`;}).join('')}</tbody>
+        </table></div>
+      </details>`;
+  })();
 
   // ── §10 Forecasts & Action Items
   const fcEl = document.getElementById('rptForecast');
@@ -9581,7 +9797,15 @@ function renderAbcAnalysis() {
   const metricLabel = byCost ? 'ต้นทุน BoM' : 'รายได้';
   const valFmt = byCost ? fmt : fmt;
 
-  const card = (cls, color, border, items2, val, pct) => `
+  // Each group's share of TOTAL BoM cost (independent of the ranking metric) —
+  // so even in revenue mode you can see how much ingredient cost each class drives.
+  const allCogs = (items.reduce((s, r) => s + (r.cogs || 0), 0)) || 1;
+  const cogsOf  = grp => grp.reduce((s, r) => s + (r.cogs || 0), 0);
+  const TOPN = 15;   // show up to 15 items per class (was 3)
+
+  const card = (cls, color, border, items2, val, pct) => {
+    const cogsPct = cogsOf(items2) / allCogs * 100;
+    return `
     <div class="card p-4" style="border-top:3px solid ${border}">
       <div class="flex items-center gap-2 mb-2">
         <span class="text-lg font-black" style="color:${border}">Class ${cls}</span>
@@ -9589,11 +9813,16 @@ function renderAbcAnalysis() {
       </div>
       <p class="text-xl font-bold" style="color:${border}">${valFmt(val)}</p>
       <p class="text-xs text-slate-400 mt-0.5">${pct.toFixed(1)}% ของ${metricLabel}</p>
-      <div class="mt-2 space-y-0.5">
-        ${items2.slice(0,3).map(r=>`<div class="text-xs text-slate-600 truncate">• ${esc(r.description)}</div>`).join('')}
-        ${items2.length > 3 ? `<div class="text-xs text-slate-400">+${items2.length-3} รายการ</div>` : ''}
+      <p class="text-[11px] font-semibold mt-0.5" style="color:${border}">🧾 ${cogsPct.toFixed(1)}% ของต้นทุน BoM รวม</p>
+      <div class="mt-2 space-y-0.5 overflow-auto" style="max-height:240px">
+        ${items2.slice(0,TOPN).map((r,i)=>`<div class="flex items-baseline justify-between gap-2 text-xs">
+          <span class="text-slate-600 truncate" title="${esc(r.description)}">${i+1}. ${esc(r.description)}</span>
+          <span class="text-slate-400 flex-shrink-0 tabular-nums">${fmt(byCost ? (r.cogs||0) : (r.revenue||0))}</span>
+        </div>`).join('')}
+        ${items2.length > TOPN ? `<div class="text-xs text-slate-400 pt-0.5">+${items2.length-TOPN} รายการ</div>` : ''}
       </div>
     </div>`;
+  };
 
   const pA = (valA/tot*100).toFixed(1), pB = (valB/tot*100).toFixed(1), pC = (valC/tot*100).toFixed(1);
 
@@ -12003,6 +12232,7 @@ async function loadGpBranch() {
     _gpbData = data;
     document.getElementById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
     _gpbRenderSummary(data);
+    _gpbRenderBoxes();
     _gpbRenderTable();
     _gpbRenderBarChart();
     _gpbRenderHeatmap();
@@ -12031,6 +12261,55 @@ function _gpbRenderSummary(data) {
     card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#8b5cf6'),
     card('Food Cost %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
   ].join('');
+}
+
+function _gpbRenderBoxes() {
+  if (!_gpbData) return;
+  const el = document.getElementById('gpbBoxes');
+  if (!el) return;
+  const lo = _gpbData.target_lo, hi = _gpbData.target_hi;
+  const boxes = (_gpbData.rows || []).map(r => {
+    // Roll up monthly (Easy+CM) → GP% per month, then take latest vs previous.
+    const byMonth = {};
+    (r.monthly || []).forEach(m => {
+      if (!byMonth[m.month]) byMonth[m.month] = { revenue: 0, cogs: 0 };
+      byMonth[m.month].revenue += (m.revenue || 0);
+      byMonth[m.month].cogs    += (m.cogs    || 0);
+    });
+    const months = Object.keys(byMonth).filter(m => byMonth[m].revenue > 0).sort();
+    const gpPctOf = m => { const c = byMonth[m]; return (c && c.revenue > 0) ? (c.revenue - c.cogs) / c.revenue * 100 : null; };
+    const fcPctOf = m => { const c = byMonth[m]; return (c && c.revenue > 0) ? c.cogs / c.revenue * 100 : null; };
+    const lastM = months[months.length - 1] || null;
+    const prevM = months.length >= 2 ? months[months.length - 2] : null;
+    const cur  = lastM ? gpPctOf(lastM) : (r.total_gp_pct ?? null);
+    const prev = prevM ? gpPctOf(prevM) : null;
+    return {
+      branch: r.branch,
+      cur, prev,
+      delta: (cur != null && prev != null) ? (cur - prev) : null,
+      lastM, prevM,
+      fc: lastM ? fcPctOf(lastM) : r.total_food_cost_pct,
+    };
+  }).filter(b => b.cur != null)
+    .sort((a, b) => (b.cur ?? -999) - (a.cur ?? -999));
+
+  if (!boxes.length) { el.innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
+  // Colour the box by GP MAGNITUDE (higher GP = better) — the food-cost-vs-target
+  // band lives in the table/heatmap; here we want a clean progression read.
+  el.innerHTML = boxes.map(b => {
+    const gpColor = b.cur >= 50 ? '#059669' : b.cur >= 40 ? '#0ea5e9' : b.cur >= 30 ? '#d97706' : '#dc2626';
+    const dColor = b.delta == null ? '#94a3b8' : b.delta >= 0 ? '#059669' : '#dc2626';
+    const dTxt = b.delta == null
+      ? '<span class="text-slate-400">ไม่มีเดือนก่อนเทียบ</span>'
+      : `${b.delta >= 0 ? '▲' : '▼'} ${Math.abs(b.delta).toFixed(1)} pp <span class="text-slate-400">vs ${b.prevM}</span>`;
+    return `<div class="rounded-xl border p-3" style="border-color:${gpColor}33;background:${gpColor}0a">
+      <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
+      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${gpColor}">${b.cur.toFixed(1)}%</p>
+      <p class="text-[11px] text-slate-400 mt-0.5">GP% · ${b.lastM || ''}</p>
+      <p class="text-xs font-semibold mt-1" style="color:${dColor}">${dTxt}</p>
+      <p class="text-[11px] text-slate-400 mt-0.5">Food cost ${b.fc != null ? b.fc.toFixed(1) + '%' : '—'}</p>
+    </div>`;
+  }).join('');
 }
 
 function _gpbSort(key) {
@@ -12850,8 +13129,11 @@ async function loadGuest(force) {
   // SPH distribution — tier-based 100% stacked bar with percentile ruler
   renderSphDistribution(sph);
 
-  // SPH by branch
-  const byBranch = sph.by_branch || [];
+  // SPH by branch — sorted high→low, with avg/median/covers in the tooltip
+  const byBranch = (sph.by_branch || []).slice().sort((a, b) => (b.avg_sph || 0) - (a.avg_sph || 0));
+  const sphNetAvg = byBranch.length
+    ? byBranch.reduce((s, b) => s + (b.avg_sph || 0) * (b.tx_count || 0), 0) / (byBranch.reduce((s, b) => s + (b.tx_count || 0), 0) || 1)
+    : 0;
   mkChart('chartSphBranch', {
     type: 'bar',
     data: {
@@ -12859,15 +13141,23 @@ async function loadGuest(force) {
       datasets: [{
         label: 'Avg SPH ',
         data: byBranch.map(b => b.avg_sph),
-        backgroundColor: PALETTE_6,
+        backgroundColor: byBranch.map(b => (b.avg_sph || 0) >= sphNetAvg ? '#10b981' : '#f59e0b'),
         borderRadius: 4,
       }]
     },
     options: {
       indexAxis: 'y',
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, datalabels: { display: false } },
-      scales: { x: { ticks: { callback: v => fmt(v) } } }
+      plugins: {
+        legend: { display: false },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => {
+          const b = byBranch[ctx.dataIndex]; if (!b) return '';
+          return [` เฉลี่ย: ${fmt(b.avg_sph)}`, ` มัธยฐาน: ${fmt(b.median_sph)}`,
+                  ` บิล: ${fmtN(b.tx_count)}`, ` เทียบเครือ: ${((b.avg_sph/sphNetAvg-1)*100>=0?'+':'')}${((b.avg_sph/sphNetAvg-1)*100).toFixed(1)}%`];
+        } } }
+      },
+      scales: { x: { ticks: { callback: v => fmt(v) } }, y: { ticks: { font: { size: 9 } } } }
     }
   });
 
@@ -13057,31 +13347,28 @@ async function loadBuffetMix() {
   const d = await fetch(`${API}/api/analysis/buffet_mix?${params}`).then(r => r.json()).catch(() => null);
   if (!d || !d.summary || !d.summary.length) return;
 
-  const TIER_COLORS = { '350': '#818cf8', '500': '#34d399', '590': '#fbbf24', '799': '#f87171',
-    'à la carte': '#60a5fa', 'buffet (unknown tier)': '#94a3b8', 'other': '#cbd5e1' };
+  // Graduated premium palette: entry tier (blue) → premium (rose); à-la-carte violet.
+  const TIER_COLORS = { '350': '#60a5fa', '500': '#22d3ee', '590': '#34d399', '799': '#fb7185',
+    'à la carte': '#a78bfa', 'buffet (unknown tier)': '#6366f1', 'other': '#cbd5e1' };
   const colors = d.summary.map(s => TIER_COLORS[s.tier] || '#94a3b8');
 
-  mkChart('chartBuffetRevPie', {
+  const _doughnut = (canvasId, field, unitFmt) => mkChart(canvasId, {
     type: 'doughnut',
-    data: { labels: d.summary.map(s => s.tier), datasets: [{ data: d.summary.map(s => s.revenue_pct), backgroundColor: colors }] },
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: {
-        formatter: v => v > 3 ? v.toFixed(0) + '%' : '',
-        color: '#fff', font: { weight: 'bold', size: 11 }
-      }}
+    data: { labels: d.summary.map(s => s.tier),
+      datasets: [{ data: d.summary.map(s => s[field]), backgroundColor: colors,
+        borderColor: '#ffffff', borderWidth: 2, hoverOffset: 8, hoverBorderColor: '#ffffff' }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '60%', layout: { padding: 6 },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 10 }, usePointStyle: true, pointStyle: 'circle', padding: 10 } },
+        datalabels: { formatter: v => v >= 4 ? v.toFixed(0) + '%' : '', color: '#fff',
+          font: { weight: 'bold', size: 11 }, textStrokeColor: 'rgba(15,23,42,0.35)', textStrokeWidth: 3 },
+        tooltip: { callbacks: { label: ctx => { const s = d.summary[ctx.dataIndex];
+          return ` ${s.tier}: ${(s[field]||0).toFixed(1)}% · ${unitFmt(field === 'revenue_pct' ? s.revenue : s.qty)}`; } } }
+      }
     }
   });
-
-  mkChart('chartBuffetQtyPie', {
-    type: 'doughnut',
-    data: { labels: d.summary.map(s => s.tier), datasets: [{ data: d.summary.map(s => s.qty_pct), backgroundColor: colors }] },
-    options: { responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: {
-        formatter: v => v > 3 ? v.toFixed(0) + '%' : '',
-        color: '#fff', font: { weight: 'bold', size: 11 }
-      }}
-    }
-  });
+  _doughnut('chartBuffetRevPie', 'revenue_pct', fmt);
+  _doughnut('chartBuffetQtyPie', 'qty_pct', fmtN);
 
   document.getElementById('buffetTierBody').innerHTML = d.summary.map(s => `
     <tr class="border-t border-slate-100">
@@ -13957,6 +14244,22 @@ async function loadGpCalendar() {
   const dayMap = {};
   d.days.forEach(r => { dayMap[r.date] = r; });
 
+  // Heatmap intensity is driven by daily GROSS PROFIT (฿). Margin% is ~flat
+  // across days because COGS is a monthly figure pro-rated onto days by revenue,
+  // so it cannot vary day-to-day — GP (฿) is the signal that actually moves.
+  const gpVals = d.days.map(r => r.gp).filter(v => v != null);
+  const maxGp  = gpVals.length ? Math.max(...gpVals) : 0;
+  const _cellColor = gp => {
+    if (gp == null || maxGp <= 0) return '#e2e8f0';
+    const t = Math.max(0, gp) / maxGp;
+    if (t >= 0.85) return '#065f46';
+    if (t >= 0.65) return '#059669';
+    if (t >= 0.45) return '#34d399';
+    if (t >= 0.25) return '#a7f3d0';
+    return '#d1fae5';
+  };
+  const _cellText = gp => (gp != null && maxGp > 0 && (Math.max(0,gp)/maxGp) >= 0.45) ? '#ffffff' : '#064e3b';
+
   const DOW_TH = ['อา','จ','อ','พ','พฤ','ศ','ส'];
   let html = `<div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;min-width:420px">`;
   DOW_TH.forEach(h => { html += `<div class="text-center text-[10px] font-semibold text-slate-400 py-1">${h}</div>`; });
@@ -13964,30 +14267,38 @@ async function loadGpCalendar() {
   for (let day=1; day<=daysInMonth; day++) {
     const dateStr = `${month}-${String(day).padStart(2,'0')}`;
     const r = dayMap[dateStr];
+    const gp   = r?.gp ?? null;
     const pct  = r?.margin_pct ?? null;
-    const bg   = _gpColor(pct);
-    const tc   = _gpTextColor(pct);
-    const tip  = r ? `Rev: ${fmt(r.revenue_inc)}\nGP: ${r.gp != null ? fmt(r.gp) : '—'}\nMargin: ${pct != null ? pct.toFixed(1)+'%' : 'N/A'}\nPax: ${fmtN(r.customer_count)}` : '';
+    const bg   = _cellColor(gp);
+    const tc   = _cellText(gp);
+    const cogsPct = (r && r.revenue_ex && r.cogs != null) ? (100*r.cogs/r.revenue_ex) : null;
+    const tip  = r
+      ? `${dateStr}`
+        + `\nRevenue (ex VAT): ${fmt(r.revenue_ex)}`
+        + `\nCOGS: ${r.cogs != null ? fmt(r.cogs) : '—'}${cogsPct != null ? '  ('+cogsPct.toFixed(1)+'% ของยอดขาย)' : ''}`
+        + `\nGross Profit: ${gp != null ? fmt(gp) : '—'}${pct != null ? '  ('+pct.toFixed(1)+'%)' : ''}`
+        + `\nPax: ${fmtN(r.customer_count)} · บิล: ${fmtN(r.tx_count)}`
+      : '';
     html += `<div title="${tip}" style="background:${bg};color:${tc};border-radius:6px;padding:6px 4px;text-align:center;cursor:default">
       <div style="font-size:11px;font-weight:700">${day}</div>
-      <div style="font-size:10px">${pct != null ? pct.toFixed(0)+'%' : r ? fmt(r.revenue_inc||0).replace('','') : ''}</div>
+      <div style="font-size:9px">${gp != null ? fmt(gp) : (r ? fmt(r.revenue_ex||0) : '')}</div>
     </div>`;
   }
   html += '</div>';
   document.getElementById('gpCalendarGrid').innerHTML = html;
 
-  // KPI strip
+  // KPI strip — best/worst day measured by GP (฿), plus the headline margin
   const days = d.days;
-  const withGp = days.filter(r => r.margin_pct != null);
-  const bestDay  = withGp.reduce((a,b) => (b.margin_pct > (a?.margin_pct??-999) ? b : a), null);
-  const worstDay = withGp.reduce((a,b) => (b.margin_pct < (a?.margin_pct??999)  ? b : a), null);
-  const avgGp    = withGp.length ? withGp.reduce((s,r)=>s+r.margin_pct,0)/withGp.length : null;
+  const withGp = days.filter(r => r.gp != null);
+  const bestDay  = withGp.reduce((a,b) => (b.gp > (a?.gp??-Infinity) ? b : a), null);
+  const worstDay = withGp.reduce((a,b) => (b.gp < (a?.gp?? Infinity) ? b : a), null);
   const totalRev = days.reduce((s,r)=>s+(r.revenue_inc||0),0);
+  const totalGp  = withGp.reduce((s,r)=>s+(r.gp||0),0);
   document.getElementById('gpCalKpis').innerHTML = [
-    { label:'Revenue รวม',    value: fmt(totalRev),                                    color:'#4f46e5' },
-    { label:'Avg GP%',        value: avgGp != null ? avgGp.toFixed(1)+'%' : '—',       color: avgGp >= 40 ? '#059669' : '#f59e0b' },
-    { label:'วันดีสุด',       value: bestDay  ? bestDay.date.slice(8)+' ('+bestDay.margin_pct.toFixed(1)+'%)'  : '—', color:'#059669' },
-    { label:'วันแย่สุด',      value: worstDay ? worstDay.date.slice(8)+' ('+worstDay.margin_pct.toFixed(1)+'%)': '—', color:'#ef4444' },
+    { label:'Revenue รวม (inc VAT)', value: fmt(totalRev),                                                       color:'#4f46e5' },
+    { label:'GP รวม / Margin',       value: `${fmt(totalGp)} · ${d.monthly_margin_pct != null ? d.monthly_margin_pct.toFixed(1)+'%' : '—'}`, color: (d.monthly_margin_pct||0) >= 40 ? '#059669' : '#f59e0b' },
+    { label:'วัน GP สูงสุด',         value: bestDay  ? bestDay.date.slice(8)+' ('+fmt(bestDay.gp)+')'  : '—',     color:'#059669' },
+    { label:'วัน GP ต่ำสุด',         value: worstDay ? worstDay.date.slice(8)+' ('+fmt(worstDay.gp)+')': '—',     color:'#ef4444' },
   ].map(k=>`<div class="rounded p-3 bg-slate-50"><p class="text-[10px] text-slate-500 uppercase">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
 }
 
@@ -14296,7 +14607,17 @@ async function loadBuffetGP() {
       plugins: {
         legend: { labels: { font: { size: 10 } } },
         datalabels: { display: false },
-        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ' + fmt(ctx.raw) } },
+        tooltip: { callbacks: {
+          label: ctx => ctx.dataset.label + ': ' + fmt(ctx.raw),
+          afterBody: (items) => {
+            const s = series[items[0].dataIndex];
+            if (!s || !s.revenue) return '';
+            const out = ['', '— สัดส่วนของยอดขาย —'];
+            if (s.bom_cost != null) out.push('COGS: ' + (s.bom_cost / s.revenue * 100).toFixed(1) + '%');
+            if (s.gp != null)       out.push('Gross Profit: ' + (s.gp / s.revenue * 100).toFixed(1) + '%');
+            return out;
+          }
+        } },
       },
       scales: {
         x:   { ticks: { font: { size: 9 }, maxRotation: 45 } },
@@ -15090,18 +15411,24 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
   const head = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
     <th class="py-2 pr-3">ใบเสร็จ</th><th class="py-2 pr-3">วันเวลา</th>
     ${showBranch?'<th class="py-2 pr-3">สาขา</th>':''}${showCashier?'<th class="py-2 pr-3">แคชเชียร์</th>':''}
-    <th class="py-2 pr-3">โต๊ะ</th><th class="py-2 pr-3 text-right">ยอดบิล</th>
-    <th class="py-2 pr-3 text-right">ส่วนลด</th><th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`;
+    <th class="py-2 pr-3">โต๊ะ</th>
+    <th class="py-2 pr-3 text-right">ยอดก่อนลด</th>
+    <th class="py-2 pr-3 text-right">ส่วนลด</th>
+    <th class="py-2 pr-3 text-right">จ่ายจริง</th>
+    <th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`;
   const rows = bills.map(b => {
     const hot = (b.discount||0) >= p95 && p95 > 0;
+    // pre-discount base: prefer reconstructed bill_base; fall back to paid+discount
+    const base = b.bill_base != null ? b.bill_base : (b.total_inc_vat||0) + (b.discount||0);
     return `<tr class="border-b border-slate-100 ${hot?'bg-red-50':''}">
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-500">${esc((b.sold_at||'').replace('T',' ').slice(0,16))}</td>
       ${showBranch?`<td class="py-1.5 pr-3">${esc(b.branch||'—')}</td>`:''}
       ${showCashier?`<td class="py-1.5 pr-3">${esc(b.cashier||'—')}</td>`:''}
       <td class="py-1.5 pr-3 text-slate-500">${esc(b.table_no||'—')}</td>
-      <td class="py-1.5 pr-3 text-right">${fmtN(b.total_inc_vat||0)}</td>
+      <td class="py-1.5 pr-3 text-right text-slate-600">${fmtN(base)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
+      <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
       <td class="py-1.5 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td></tr>`;
   }).join('');
   return head + rows + '</tbody></table>';

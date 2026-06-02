@@ -858,6 +858,121 @@ def top_skus(
     return result
 
 
+@app.get("/api/sales/top_ordered")
+def top_ordered(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    sort:       str           = Query("qty", description="'qty' or 'revenue'"),
+    limit:      int           = Query(15, ge=1, le=100),
+):
+    """Most-ordered food SKUs with share-of-total quantity and month-over-month
+    change. Share = SKU qty ÷ total food qty in the selected window. MoM compares
+    the two most recent months present (≤ month_to) so it stays meaningful even
+    when the ranking window is a single month or a wide range."""
+    base = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1", "COALESCE(sk.active,1) = 1",
+            _FOOD_CATEGORY_FILTER]
+    params: dict = {}
+    if branch:
+        base.append("b.name = :branch")
+        params["branch"] = branch
+    _group_filter(base, params, group)
+    _month_range_filter(base, params, month_from, month_to, month, col="sm.period_month")
+    where = "WHERE " + " AND ".join(base)
+    order = "qty" if sort == "qty" else "revenue"
+
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT sk.sku_id, sk.sku_code, sk.description, c.name AS category,
+                   ROUND(SUM(sm.qty), 2)             AS qty,
+                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue
+            FROM sales_sku_monthly sm
+            JOIN branches b    ON b.branch_id   = sm.branch_id
+            JOIN skus sk       ON sk.sku_id     = sm.sku_id
+            JOIN categories c  ON c.category_id = sk.category_id
+            {where}
+            GROUP BY sk.sku_id
+            ORDER BY {order} DESC
+            LIMIT :limit
+        """, {**params, "limit": limit}).fetchall()
+
+        total_row = con.execute(f"""
+            SELECT ROUND(SUM(sm.qty), 2) AS total_qty
+            FROM sales_sku_monthly sm
+            JOIN branches b    ON b.branch_id   = sm.branch_id
+            JOIN skus sk       ON sk.sku_id     = sm.sku_id
+            JOIN categories c  ON c.category_id = sk.category_id
+            {where}
+        """, params).fetchone()
+
+        # MoM: two most recent months present in the (branch/group) scope, ≤ month_to
+        mfilt = ["b.name != 'ALL'", _FOOD_CATEGORY_FILTER]
+        mparams: dict = {}
+        if branch:
+            mfilt.append("b.name = :branch")
+            mparams["branch"] = branch
+        _group_filter(mfilt, mparams, group)
+        cutoff = month_to or month
+        if cutoff:
+            mfilt.append("sm.period_month <= :cutoff")
+            mparams["cutoff"] = cutoff
+        months = con.execute(f"""
+            SELECT DISTINCT sm.period_month AS m
+            FROM sales_sku_monthly sm
+            JOIN branches b    ON b.branch_id   = sm.branch_id
+            JOIN skus sk       ON sk.sku_id     = sm.sku_id
+            JOIN categories c  ON c.category_id = sk.category_id
+            WHERE {' AND '.join(mfilt)}
+            ORDER BY m DESC LIMIT 2
+        """, mparams).fetchall()
+        latest = months[0]["m"] if months else None
+        prev   = months[1]["m"] if len(months) > 1 else None
+
+        mom_map: dict = {}
+        ids = [r["sku_id"] for r in rows]
+        if latest and ids:
+            ph  = ",".join(f":id{i}" for i in range(len(ids)))
+            idp = {f"id{i}": v for i, v in enumerate(ids)}
+            mom_params = {**idp, "lm": latest, "pm": prev or "__none__"}
+            branch_clause = ""
+            if branch:
+                branch_clause = "AND b.name = :branch"
+                mom_params["branch"] = branch
+            mrows = con.execute(f"""
+                SELECT sm.sku_id, sm.period_month AS m, SUM(sm.qty) AS q
+                FROM sales_sku_monthly sm
+                JOIN branches b ON b.branch_id = sm.branch_id
+                WHERE sm.sku_id IN ({ph})
+                  AND sm.period_month IN (:lm, :pm) {branch_clause}
+                GROUP BY sm.sku_id, sm.period_month
+            """, mom_params).fetchall()
+            tmp: dict = {}
+            for mr in mrows:
+                tmp.setdefault(mr["sku_id"], {})[mr["m"]] = mr["q"] or 0
+            for sid, mm in tmp.items():
+                cur = mm.get(latest, 0)
+                pr  = mm.get(prev) if prev else None
+                mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
+
+    total_qty = (total_row["total_qty"] or 0) if total_row else 0
+    items = []
+    for r in rows:
+        q = r["qty"] or 0.0
+        mom = mom_map.get(r["sku_id"])
+        items.append({
+            "sku_code":      r["sku_code"],
+            "description":   r["description"],
+            "category":      r["category"],
+            "qty":           q,
+            "revenue":       r["revenue"],
+            "qty_share_pct": round(q / total_qty * 100, 1) if total_qty else None,
+            "qty_mom_pct":   round(mom, 1) if mom is not None else None,
+        })
+    return {"total_qty": total_qty, "latest_month": latest, "prev_month": prev, "items": items}
+
+
 # ---------------------------------------------------------------------------
 # /api/sales/payment   -  payment method breakdown
 # ---------------------------------------------------------------------------
@@ -2494,8 +2609,13 @@ def buffet_gp_calendar(
     """Daily GP calendar for a given YYYY-MM. Prorates monthly COGS/revenue to daily."""
     params: dict = {"month": month}
 
-    # --- Daily revenue & tx from sales_transaction (Easy, dine-in) ---
-    day_filters = ["st.source = 'Easy'", "(st.table_no LIKE 'T%' OR st.table_no LIKE 'G%')",
+    # --- Daily revenue & tx from sales_transaction (all Easy receipts) -----
+    # NOTE: do NOT restrict to table_no LIKE 'T%'/'G%' — in this dataset tables
+    # are mostly numeric ("1","2","25, 26"…) and that filter dropped ~82% of
+    # revenue, leaving the calendar near-empty and margins nonsensical. Using
+    # all Easy receipts keeps the revenue base consistent with the all-SKU BoM
+    # COGS below (both reconcile to ~120M ex-VAT / 54% food cost for 2026-05).
+    day_filters = ["st.source = 'Easy'",
                    "SUBSTR(st.sold_at, 1, 7) = :month"]
     if branch:
         day_filters.append("b.name = :branch")
@@ -2514,20 +2634,21 @@ def buffet_gp_calendar(
         ORDER BY DATE(st.sold_at)
     """
 
-    # --- Monthly BUFFET COGS & revenue_ex from sales_sku_monthly ---
-    mon_filters = ["sm.period_month = :month", "c.name = 'BUFFET'"]
+    # --- Monthly BoM COGS from sales_sku_monthly ---------------------------
+    # Revenue comes from the actual dine-in receipts above (total_inc_vat ÷1.07),
+    # so COGS must be the matching ALL-SKU BoM cost — NOT category='BUFFET'
+    # (that bucket holds only the tier SKUs, whose COGS is deliberately 0 since
+    #  consumption is logged on the item-level B0xxx rows). Filtering to BUFFET
+    #  therefore returned null cogs and an inflated revenue base (~4×). We use
+    #  _unified_cogs_expr over every SKU and pro-rate it onto days by revenue.
+    mon_filters = ["sm.period_month = :month", "b.name != 'ALL'"]
     if branch:
         mon_filters.append("b.name = :branch")
 
     mon_sql = f"""
-        SELECT
-            SUM(sm.subtotal_ex_vat)         AS rev_ex,
-            SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs
+        SELECT SUM({_unified_cogs_expr(ssm='sm')}) AS cogs
         FROM sales_sku_monthly sm
-        JOIN branches   b  ON b.branch_id  = sm.branch_id
-        JOIN skus       sk ON sk.sku_id    = sm.sku_id
-        JOIN categories c  ON c.category_id = sk.category_id
-        LEFT JOIN sku_cost sc ON sc.sku_id = sm.sku_id
+        JOIN branches b ON b.branch_id = sm.branch_id
         WHERE {' AND '.join(mon_filters)}
     """
 
@@ -2535,17 +2656,17 @@ def buffet_gp_calendar(
         day_rows  = con.execute(day_sql, params).fetchall()
         mon_row   = con.execute(mon_sql, params).fetchone()
 
-    monthly_rev_ex = (mon_row["rev_ex"] or 0.0) if mon_row else 0.0
-    monthly_cogs   = (mon_row["cogs"]   or None) if mon_row else None
+    monthly_cogs = (mon_row["cogs"] or None) if mon_row else None
 
     total_rev_inc = sum(r["revenue_inc"] or 0.0 for r in day_rows)
+    total_rev_ex  = round(total_rev_inc / 1.07, 2)
 
     days_out = []
     for r in day_rows:
         day_rev = r["revenue_inc"] or 0.0
         weight  = day_rev / total_rev_inc if total_rev_inc else 0.0
 
-        day_rev_ex = round(monthly_rev_ex * weight, 2)
+        day_rev_ex = round(day_rev / 1.07, 2)
         day_cogs   = round(monthly_cogs * weight, 2) if monthly_cogs is not None else None
 
         if day_cogs is not None and day_rev_ex:
@@ -2568,8 +2689,8 @@ def buffet_gp_calendar(
         })
 
     # Monthly margin
-    if monthly_cogs is not None and monthly_rev_ex:
-        monthly_margin_pct = round((monthly_rev_ex - monthly_cogs) / monthly_rev_ex * 100, 2)
+    if monthly_cogs is not None and total_rev_ex:
+        monthly_margin_pct = round((total_rev_ex - monthly_cogs) / total_rev_ex * 100, 2)
     else:
         monthly_margin_pct = None
 
@@ -4110,6 +4231,14 @@ def analysis_discount_bills(
       gross_zero=1  → bills whose gross is <= 0 (discount-only / zeroed bills).
     """
     gross_expr = "(st.food_subtotal + st.drink_subtotal + st.other_subtotal)"
+    # TRUE pre-discount bill value (ex-VAT, ex-service). The three *_subtotal
+    # columns only capture à-la-carte lines — for a buffet bill the per-head
+    # buffet charge is NOT in them, so discount / subtotal overshot wildly
+    # (221 bills read >100%, e.g. discount 2,962 on an 825 subtotal but an
+    #  8,851 bill). Reconstruct the real base from what was actually paid
+    # (total_inc_vat, minus service, de-VATed) plus the discount added back.
+    # For à-la-carte bills this reproduces the subtotal to within ~0.3%.
+    base_expr = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
     if branch:
@@ -4129,10 +4258,10 @@ def analysis_discount_bills(
     else:
         # percentage-of-bill bucket (only meaningful when gross > 0)
         if min_pct is not None:
-            filters.append(f"{gross_expr} > 0 AND 100.0 * st.discount / {gross_expr} >= :min_pct")
+            filters.append(f"{base_expr} > 0 AND 100.0 * st.discount / {base_expr} >= :min_pct")
             params["min_pct"] = min_pct
         if max_pct is not None:
-            filters.append(f"{gross_expr} > 0 AND 100.0 * st.discount / {gross_expr} < :max_pct")
+            filters.append(f"{base_expr} > 0 AND 100.0 * st.discount / {base_expr} < :max_pct")
             params["max_pct"] = max_pct
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
@@ -4155,8 +4284,8 @@ def analysis_discount_bills(
                    ROUND(st.discount, 2)                         AS discount,
                    ROUND(st.sp_discount, 2)                      AS sp_discount,
                    (st.food_subtotal + st.drink_subtotal + st.other_subtotal) AS gross,
-                   ROUND(100.0 * st.discount
-                         / NULLIF(st.food_subtotal + st.drink_subtotal + st.other_subtotal, 0), 1) AS disc_pct
+                   ROUND({base_expr}, 2)                         AS bill_base,
+                   ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -4727,7 +4856,11 @@ def analysis_health(
     filters_tx = ["b.name != 'ALL'"]
     params_tx: dict = {}
     _group_filter(filters_tx, params_tx, group)
-    _month_range_filter(filters_tx, params_tx, month_from, month_to, None,
+    # Health is a TRAILING metric (MoM growth, consistency, momentum all need a
+    # multi-month series). Ignore month_from so a single-month / "This Month"
+    # filter doesn't collapse the series to length 1 (which made MoM read 0.0%
+    # and zeroed the score). We still honour month_to as an "as-of" cutoff.
+    _month_range_filter(filters_tx, params_tx, None, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
 
