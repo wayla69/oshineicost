@@ -899,7 +899,8 @@ def top_ordered(
         """, {**params, "limit": limit}).fetchall()
 
         total_row = con.execute(f"""
-            SELECT ROUND(SUM(sm.qty), 2) AS total_qty
+            SELECT ROUND(SUM(sm.qty), 2) AS total_qty,
+                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS total_rev
             FROM sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
@@ -931,6 +932,7 @@ def top_ordered(
         prev   = months[1]["m"] if len(months) > 1 else None
 
         mom_map: dict = {}
+        rev_mom_map: dict = {}
         ids = [r["sku_id"] for r in rows]
         if latest and ids:
             ph  = ",".join(f":id{i}" for i in range(len(ids)))
@@ -941,36 +943,48 @@ def top_ordered(
                 branch_clause = "AND b.name = :branch"
                 mom_params["branch"] = branch
             mrows = con.execute(f"""
-                SELECT sm.sku_id, sm.period_month AS m, SUM(sm.qty) AS q
+                SELECT sm.sku_id, sm.period_month AS m,
+                       SUM(sm.qty) AS q, SUM(sm.subtotal_ex_vat) AS rev
                 FROM sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 WHERE sm.sku_id IN ({ph})
                   AND sm.period_month IN (:lm, :pm) {branch_clause}
                 GROUP BY sm.sku_id, sm.period_month
             """, mom_params).fetchall()
-            tmp: dict = {}
+            tmp: dict = {}; tmpR: dict = {}
             for mr in mrows:
-                tmp.setdefault(mr["sku_id"], {})[mr["m"]] = mr["q"] or 0
+                tmp.setdefault(mr["sku_id"], {})[mr["m"]]  = mr["q"]   or 0
+                tmpR.setdefault(mr["sku_id"], {})[mr["m"]] = mr["rev"] or 0
             for sid, mm in tmp.items():
                 cur = mm.get(latest, 0)
                 pr  = mm.get(prev) if prev else None
                 mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
+            for sid, mm in tmpR.items():
+                cur = mm.get(latest, 0)
+                pr  = mm.get(prev) if prev else None
+                rev_mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
 
     total_qty = (total_row["total_qty"] or 0) if total_row else 0
+    total_rev = (total_row["total_rev"] or 0) if total_row else 0
     items = []
     for r in rows:
         q = r["qty"] or 0.0
+        rev = r["revenue"] or 0.0
         mom = mom_map.get(r["sku_id"])
+        rmom = rev_mom_map.get(r["sku_id"])
         items.append({
             "sku_code":      r["sku_code"],
             "description":   r["description"],
             "category":      r["category"],
             "qty":           q,
-            "revenue":       r["revenue"],
+            "revenue":       rev,
             "qty_share_pct": round(q / total_qty * 100, 1) if total_qty else None,
             "qty_mom_pct":   round(mom, 1) if mom is not None else None,
+            "rev_share_pct": round(rev / total_rev * 100, 1) if total_rev else None,
+            "rev_mom_pct":   round(rmom, 1) if rmom is not None else None,
         })
-    return {"total_qty": total_qty, "latest_month": latest, "prev_month": prev, "items": items}
+    return {"total_qty": total_qty, "total_rev": total_rev,
+            "latest_month": latest, "prev_month": prev, "items": items}
 
 
 # ---------------------------------------------------------------------------
@@ -1845,8 +1859,10 @@ def sales_category_movers(
     # rank by absolute revenue change (biggest movers in baht, both directions)
     movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
     top = movers[:limit]
-    gainers = sorted([m for m in top if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)
-    decliners = sorted([m for m in top if m["delta"] < 0], key=lambda m: m["delta"])
+    # Pick top gainers and top decliners INDEPENDENTLY from the full list — else
+    # the biggest absolute movers (all high-volume gainers) crowd out decliners.
+    gainers = sorted([m for m in movers if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)[:limit]
+    decliners = sorted([m for m in movers if m["delta"] < 0], key=lambda m: m["delta"])[:limit]
 
     return {
         "current":  {"from": cur_from, "to": cur_to},
@@ -1940,8 +1956,10 @@ def sales_dish_movers(
 
     movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
     top = movers[:limit]
-    gainers   = sorted([m for m in top if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)
-    decliners = sorted([m for m in top if m["delta"] < 0], key=lambda m: m["delta"])
+    # Independent top gainers / decliners (not a shared abs-delta top-N, which
+    # was all gainers for high-volume dishes → empty decliners).
+    gainers   = sorted([m for m in movers if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)[:limit]
+    decliners = sorted([m for m in movers if m["delta"] < 0], key=lambda m: m["delta"])[:limit]
     return {
         "metric":   metric,
         "current":  {"from": cur_from, "to": cur_to},
@@ -4892,12 +4910,15 @@ def analysis_health(
     if not by_branch:
         return []
 
-    max_total = max(sum(v) for v in by_branch.values()) or 1
+    # Score the LATEST MONTH's standing (monthly), not the cumulative total —
+    # otherwise a long-open branch wins on accumulation, not current performance.
+    max_last = max((v[-1] if v else 0) for v in by_branch.values()) or 1
 
     out = []
     for branch, revs in by_branch.items():
         total = sum(revs)
-        revenue_score = min(100, total / max_total * 100)
+        last_rev = revs[-1] if revs else 0
+        revenue_score = min(100, last_rev / max_last * 100)
 
         if len(revs) >= 2 and revs[-2] > 0:
             growth_pct = (revs[-1] - revs[-2]) / revs[-2] * 100
