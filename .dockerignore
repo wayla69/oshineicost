@@ -1,0 +1,39 @@
+# Keep the image small — the DB lives on the Fly volume, not in the image.
+*.db
+*.db-shm
+*.db-wal
+*.db.*
+backend/*.backup_*
+backend/backup_*
+backup_*.html
+
+# Source exports (large) — DB is built from these locally, not in-image
+Data for Oshinei/
+BoM/
+*.zip
+
+# Logs / scratch
+*.log
+backend/_*.json
+backend/_*.txt
+backend/bp.json
+backend/bpchk.txt
+backend/gpb.txt
+backend/tier.txt
+backend/audit_easy_out*.txt
+backend/audit_easy_report*.json
+backend/reingest_out.txt
+
+# Python cruft
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Git / editor
+.git/
+.vscode/
+.claude/
+.DS_Store
+Thumbs.db

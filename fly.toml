@@ -1,0 +1,26 @@
+# fly.toml — Oshinei Dashboard
+# App name is set on first `fly launch`; adjust if it clashes.
+app = "oshinei-dashboard"
+primary_region = "sin"   # Singapore — closest to Thailand
+
+[build]
+
+[env]
+  OSHINEI_DB = "/data/oshinei.db"
+  PORT = "8080"
+
+# Persistent disk for the SQLite database (survives redeploys/restarts)
+[[mounts]]
+  source = "oshinei_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # scale to zero when idle → keeps cost ~$0
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"                 # matplotlib/reportlab + 256MiB mmap headroom

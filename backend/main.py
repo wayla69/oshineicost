@@ -96,7 +96,11 @@ def invalidate_cache(*prefixes: str):
 # Paths
 # ---------------------------------------------------------------------------
 HERE    = Path(__file__).parent.resolve()
-DB_PATH = HERE / "oshinei.db"
+# DB location is overridable so the database can live on a mounted persistent
+# volume in hosted deployments (e.g. Fly.io: OSHINEI_DB=/data/oshinei.db).
+# Defaults to the in-repo path for local development.
+import os as _os_db
+DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 STATIC  = HERE.parent / "vendor"
 DOCS    = HERE.parent / "docs"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')
