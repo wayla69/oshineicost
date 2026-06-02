@@ -7761,10 +7761,24 @@ async function onSalesDataSelected(ev) {
   }
   const fd = new FormData();
   fd.append('file', file);
+  // Hosted deploys require an upload token (X-Upload-Token). Local dev needs none.
+  const doUpload = (tok) => {
+    const headers = tok ? { 'X-Upload-Token': tok } : {};
+    return fetch(`${API}/api/upload`, { method: 'POST', body: fd, headers });
+  };
   try {
-    const res = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
+    let res = await doUpload(localStorage.getItem('oshinei_upload_token') || '');
+    if (res.status === 403) {
+      const tok = prompt('การอัพโหลดบนเซิร์ฟเวอร์นี้ต้องใช้ Upload Token:');
+      if (!tok) { ev.target.value = ''; return; }
+      localStorage.setItem('oshinei_upload_token', tok.trim());
+      res = await doUpload(tok.trim());
+    }
     const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || 'upload failed');
+    if (!res.ok) {
+      if (res.status === 403) localStorage.removeItem('oshinei_upload_token');
+      throw new Error(data.detail || 'upload failed');
+    }
     alert(`✓ อัพโหลดสำเร็จ\n• ไฟล์: ${data.file}\n• ชนิด: ${data.file_type}\n• เดือน: ${data.period}\n• สาขา: ${data.branch}\n• แถว: ${data.rows_ingested}`);
     location.reload();
   } catch (err) {
@@ -10089,7 +10103,7 @@ async function loadAnomalyBanner() {
         <span class="font-semibold text-amber-800" style="color:inherit">Insights:</span>
         ${data.insights.map(ins => `
           <span class="anomaly-item ${ins.severity === 'good' ? 'anomaly-good' : 'anomaly-bad'}"
-            title="z=${ins.z_score || '—'}">${ins.message}</span>
+            title="${ins.mom_pct != null ? 'MoM ' + ins.mom_pct + '%' : (ins.period || '')}">${ins.message}</span>
         `).join('')}
       </div>
       <button onclick="this.closest('.anomaly-banner').classList.add('hidden')"

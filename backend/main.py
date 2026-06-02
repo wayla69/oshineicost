@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import FastAPI, Query, HTTPException, UploadFile, File
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -332,8 +332,18 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
         shutil.copyfileobj(file.file, tmp, 1024 * 1024)
         tmp_path = tmp.name
     try:
+        # Cap the DECOMPRESSED size so a gzip-bomb can't fill the volume.
+        max_bytes = 2 * 1024 * 1024 * 1024  # 2 GB — well above a real ~270 MB DB
+        written = 0
         with gzip.open(tmp_path, "rb") as gz, open(inc, "wb") as out:
-            shutil.copyfileobj(gz, out, 1024 * 1024)
+            while True:
+                chunk = gz.read(1024 * 1024)
+                if not chunk:
+                    break
+                written += len(chunk)
+                if written > max_bytes:
+                    raise ValueError("decompressed payload exceeds size limit")
+                out.write(chunk)
     except Exception as e:
         for p in (tmp_path, inc):
             try: _os2.remove(p)
@@ -2977,12 +2987,37 @@ def buffet_forecast(
 # ---------------------------------------------------------------------------
 # /api/upload   -  ingest an Easy .txt file
 # ---------------------------------------------------------------------------
+# Max accepted upload size (anti disk-fill). Real Easy exports are < ~60 MB.
+_MAX_UPLOAD_BYTES = 150 * 1024 * 1024
+
+# NOTE: sync `def` (not async) on purpose — the body parses xlsx and writes
+# SQLite synchronously, so Starlette runs it in a threadpool and it never blocks
+# the event loop for other requests.
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
-    """Accept a multipart Easy .txt upload, ingest it, return summary."""
-    import sys
-    import importlib
+def upload_file(
+    file: UploadFile = File(...),
+    token: str = Query(""),
+    x_upload_token: str = Header(None),
+):
+    """Accept a multipart Easy data upload, ingest it, return a summary.
+
+    AUTH: when OSHINEI_SEED_TOKEN is set (hosted deploys), a matching token is
+    required via the `X-Upload-Token` header or `?token=` — otherwise this
+    public mutation could let anyone overwrite a month of sales data. When the
+    env var is unset (local dev), uploads are allowed without a token.
+
+    The DB is backed up before any write, and curated cost tables are verified
+    unchanged afterwards (Easy SALES rows only; period+branch-scoped upsert).
+    """
+    import hmac
     from pathlib import Path as _Path
+
+    # ── AUTH gate ──────────────────────────────────────────────────────────
+    expected = _os_db.environ.get("OSHINEI_SEED_TOKEN")
+    if expected:
+        provided = x_upload_token or token or ""
+        if not hmac.compare_digest(provided, expected):
+            raise HTTPException(status_code=403, detail="A valid upload token is required.")
 
     # Use the basename only — file.filename is attacker-controlled and a value like
     # "..\\..\\x" would otherwise let the rename below write/delete outside the temp dir.
@@ -2991,10 +3026,20 @@ async def upload_file(file: UploadFile = File(...)):
 
     tmp_path = None
     try:
+        # Stream to disk with a hard size cap (anti disk-fill DoS).
+        total = 0
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=suffix, prefix="easy_upload_"
         ) as tmp:
-            shutil.copyfileobj(file.file, tmp)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > _MAX_UPLOAD_BYTES:
+                    tmp_path = _Path(tmp.name)
+                    raise HTTPException(status_code=413, detail="File too large.")
+                tmp.write(chunk)
             tmp_path = _Path(tmp.name)
 
         # Rename the temp file to match original name so pattern matching works.
@@ -3005,44 +3050,65 @@ async def upload_file(file: UploadFile = File(...)):
         tmp_path.rename(named_path)
         tmp_path = named_path
 
+        import sys as _sys
+        if str(HERE) not in _sys.path:
+            _sys.path.insert(0, str(HERE))
+        import upload_data
+
+        is_raw = bool(upload_data.classify(tmp_path))
+
+        # Validate the cleansed-raw file BEFORE the (expensive) backup, so a bad
+        # file fails fast without copying the whole DB.
+        if is_raw:
+            with get_db() as con:
+                upload_data.ingest_one(con, tmp_path, apply=False, allow_new_branch=False)
+
+        # Back up the live DB before any write so a bad upload is recoverable.
+        backup = upload_data.rr.safe_backup(DB_PATH)
+
+        def _curated_snapshot(con):
+            return {t: con.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+                    for t in upload_data.CURATED}
+
         # Two upload paths, one per format, sharing the SAME engines as the CLI:
         #  • cleansed flat raw .xlsx (ES1_*_raw / 23 ES_*_raw) → upload_data.ingest_one
         #    (period+branch-scoped upsert; preserves curated cost tables).
         #  • legacy Easy .txt (Type A/B)                       → ingest_easy.ingest_file.
-        import sys as _sys
-        if str(HERE) not in _sys.path:
-            _sys.path.insert(0, str(HERE))
-
-        import upload_data
-        if upload_data.classify(tmp_path):
-            with get_db() as con:
-                con.execute("PRAGMA journal_mode=WAL")
-                # allow_new_branch=False keeps the duplicate-branch guard on for
-                # live uploads; the loaders never touch curated cost tables.
-                r = upload_data.ingest_one(con, tmp_path, apply=True, allow_new_branch=False)
-            invalidate_cache()
-            return {
-                "file":          filename,
-                "branch":        f"{r['branches']} branch(es)",
-                "period":        r["period"],
-                "rows_ingested": r["rows"],
-                "file_type":     r["kind"],
-            }
-
-        import ingest_easy
         with get_db() as con:
             con.execute("PRAGMA journal_mode=WAL")
-            result = ingest_easy.ingest_file(tmp_path, con)
+            pre = _curated_snapshot(con)
+            if is_raw:
+                # allow_new_branch=False keeps the duplicate-branch guard on.
+                r = upload_data.ingest_one(con, tmp_path, apply=True, allow_new_branch=False)
+                resp = {
+                    "file":          filename,
+                    "branch":        f"{r['branches']} branch(es)",
+                    "period":        r["period"],
+                    "rows_ingested": r["rows"],
+                    "file_type":     r["kind"],
+                }
+            else:
+                import ingest_easy
+                result = ingest_easy.ingest_file(tmp_path, con)
+                resp = {
+                    "file":          filename,
+                    "branch":        result["branch"],
+                    "period":        result["period"],
+                    "rows_ingested": result["rows_ingested"],
+                    "file_type":     result["file_type"],
+                }
+            post = _curated_snapshot(con)
+
+        if pre != post:
+            # Loaders must never touch curated cost tables — fail loudly if they did.
+            import sys as _sys
+            print(f"UPLOAD ABORT — curated tables changed: {pre} -> {post}. "
+                  f"Backup at {backup.name}", file=_sys.stderr)
+            raise HTTPException(status_code=500,
+                                detail="Upload changed protected cost tables and was rejected.")
 
         invalidate_cache()   # new data uploaded — clear cached analytics responses
-
-        return {
-            "file":          filename,
-            "branch":        result["branch"],
-            "period":        result["period"],
-            "rows_ingested": result["rows_ingested"],
-            "file_type":     result["file_type"],
-        }
+        return resp
 
     except HTTPException:
         raise
@@ -4233,11 +4299,12 @@ def analysis_anomalies(
     threshold:  float         = Query(1.5, description="z-score threshold"),
 ):
     """
-    Statistical outliers + insights. Returns:
-    - spikes / dips in revenue (z > threshold)
+    Actionable month-on-month insights. Returns:
+    - revenue spike / dip: latest month vs prior month (>= 5% MoM)
     - fastest-growing / biggest-dropping branches month-over-month
-    - top-performing / underperforming SKUs vs their own average
-    Uses Easy transaction-level data (sales_transaction).
+    - BoM cost % spike / dip month-over-month
+    All comparisons are like-for-like consecutive months (house rule), never
+    against an all-period average. Uses Easy transaction-level data.
     """
     insights: List[dict] = []
 
@@ -4296,30 +4363,30 @@ def analysis_anomalies(
     ]
     monthly = monthly_combined
 
-    revs = [r["revenue"] for r in monthly if r["revenue"]]
-    if len(revs) >= 3:
-        mean = sum(revs) / len(revs)
-        var  = sum((v - mean) ** 2 for v in revs) / len(revs)
-        sd   = var ** 0.5
-        if sd > 0:
-            for r in monthly:
-                if not r["revenue"]:
-                    continue
-                z = (r["revenue"] - mean) / sd
-                if z >= threshold:
-                    insights.append({
-                        "type": "spike", "severity": "good",
-                        "metric": "revenue", "period": r["month"],
-                        "value": r["revenue"], "z_score": round(z, 2),
-                        "message": f"📈 รายได้พุ่งในเดือน {r['month']} — {r['revenue']:,.0f} ({(z * sd / mean * 100):+.1f}% เทียบค่าเฉลี่ย)",
-                    })
-                elif z <= -threshold:
-                    insights.append({
-                        "type": "dip", "severity": "bad",
-                        "metric": "revenue", "period": r["month"],
-                        "value": r["revenue"], "z_score": round(z, 2),
-                        "message": f"📉 รายได้ลดในเดือน {r['month']} — {r['revenue']:,.0f} ({(z * sd / mean * 100):+.1f}% เทียบค่าเฉลี่ย)",
-                    })
+    # Revenue MoM: latest month vs the immediately-prior month (house rule —
+    # always compare like-for-like consecutive periods, never against an
+    # all-period average, which mixes seasons and is not actionable).
+    if len(monthly) >= 2:
+        last = monthly[-1]
+        prev = monthly[-2]
+        last_rev = last["revenue"] or 0
+        prev_rev = prev["revenue"] or 0
+        if prev_rev > 0:
+            mom_pct = (last_rev - prev_rev) / prev_rev * 100
+            if mom_pct >= 5:
+                insights.append({
+                    "type": "spike", "severity": "good",
+                    "metric": "revenue", "period": last["month"],
+                    "value": last_rev, "mom_pct": round(mom_pct, 1),
+                    "message": f"📈 รายได้เดือน {last['month']} โต {mom_pct:+.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f})",
+                })
+            elif mom_pct <= -5:
+                insights.append({
+                    "type": "dip", "severity": "bad",
+                    "metric": "revenue", "period": last["month"],
+                    "value": last_rev, "mom_pct": round(mom_pct, 1),
+                    "message": f"📉 รายได้เดือน {last['month']} ลด {mom_pct:.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f})",
+                })
 
     # Branch MoM growth
     by_branch: dict = {}
