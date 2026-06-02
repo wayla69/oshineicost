@@ -266,7 +266,7 @@ def get_db():
 
 # ---------------------------------------------------------------------------
 # Tier SKU codes to exclude from BoM cost (seat-tier pricing; included separately)
-# Phase 18d 2026-05-28: added 'BUFFET' (plain, legacy CM-era code that still
+# Phase 18d 2026-05-28: added 'BUFFET' (plain, deprecated legacy code that still
 # appears in some Easy bills). Was leaking ~825M phantom COGS at insight/MTD
 # endpoints that referenced this constant. See _EASY_TIER_CODES at line ~5211
 # for the canonical SQL constant used by all helper-based queries.
@@ -862,8 +862,6 @@ def payment_breakdown(
     """Payment method totals from sales_month_summary.
 
     branch='ALL' or omitted → aggregate across all real branches.
-    (The literal 'ALL' branch row from old CM grand-summary was removed when
-    CM data was archived 2026-05-27.)
     """
     filters = []
     params: dict = {}
@@ -3073,8 +3071,7 @@ def analysis_daily(
 ):
     """
     Daily revenue, tx count, and customer count for each calendar day
-    in the given month. Only Easy months have per-transaction data.
-    Falls back to a single summary row from sales_month_summary for CM POS months.
+    in the given month (Easy transaction-level data).
     """
     filters = ["b.name != 'ALL'", "strftime('%Y-%m', st.sold_at) = :month"]
     params: dict = {"month": month}
@@ -3492,7 +3489,7 @@ def analysis_compare(
     Returns KPI objects for `month` and `vs` side by side:
     revenue, revenue_ex_vat, tx_count, customer_count, avg_ticket,
     gross_sales, net_sales, discounts.
-    Pulls from sales_sku_monthly (Easy) + sales_month_summary (CM POS).
+    Pulls from sales_sku_monthly + sales_month_summary (Easy).
     """
     def fetch_kpis(period: str, con) -> dict:
         branch_filter = "AND b.name = :branch" if branch else ""
@@ -4240,7 +4237,7 @@ def analysis_anomalies(
     - spikes / dips in revenue (z > threshold)
     - fastest-growing / biggest-dropping branches month-over-month
     - top-performing / underperforming SKUs vs their own average
-    Combines Easy (sales_transaction) + CM POS (sales_month_summary) so all branches are included.
+    Uses Easy transaction-level data (sales_transaction).
     """
     insights: List[dict] = []
 
@@ -8443,12 +8440,10 @@ def buffet_gp(
     where_tx = "WHERE " + " AND ".join(tx_filters)
 
     with get_db() as con:
-        # Source-aware BoM cost rule (Phase 0 fix):
-        #   Easy source: exclude tier SKUs (BUFFET350/500/590/799/CHILD) — their
-        #     cost is captured at item level (B0xxx rows logged with qty>0,
-        #     revenue=0). Including tier unit_cost would double-count.
-        #   CM / CM POS source: include ALL SKUs — only tier rows exist there
-        #     (B01/B02/B07/B11), and tier unit_cost is the only cost data we have.
+        # BoM cost rule (Phase 0 fix):
+        #   Exclude Easy tier SKUs (BUFFET350/500/590/799/CHILD) — their cost is
+        #   captured at item level (B0xxx rows logged with qty>0, revenue=0).
+        #   Including tier unit_cost would double-count.
         bom_cost_sql = _cogs_case(ssm="sm")
         # Uncovered = item SKU without cost (Easy tier SKUs are intentionally
         # treated as "covered via items" so they don't count as uncovered).

@@ -1028,6 +1028,11 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <button onclick="openCostModal()" class="upload-btn whitespace-nowrap">
         ↑ อัพโหลดต้นทุน
       </button>
+      <!-- Upload sales data (cleansed-raw Easy export → shared upload_data engine via /api/upload) -->
+      <button onclick="document.getElementById('salesDataFile').click()" class="upload-btn whitespace-nowrap" title="อัพโหลดไฟล์ยอดขาย Easy (ES1_*_raw.xlsx / 23 ES_*_raw.xlsx)">
+        ↑ อัพโหลดยอดขาย
+      </button>
+      <input id="salesDataFile" type="file" accept=".xlsx,.txt" class="hidden" onchange="onSalesDataSelected(event)">
     </div>
   </div>
 
@@ -1857,7 +1862,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
-     TAB: GP BY BRANCH (NEW BoM formula, combines Easy + CM POS)
+     TAB: GP BY BRANCH (BoM formula)
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-gpbranch" class="tab-content" style="display:none">
 
@@ -1868,7 +1873,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div class="flex-1">
         <h2 class="text-base font-bold text-emerald-900">GP รายสาขา (Gross Profit by Branch)</h2>
         <p class="text-xs text-slate-600 mt-1">
-          <b>ภาพรวม — รวมทุก SKU ทั้งบุฟเฟ่ต์และอลาคาท</b> · ใช้สูตร BoM: <b>Easy</b> = ตัด tier SKU (BUFFET350/500/590/799/CHILD) ออก เพราะนับซ้ำกับ B0xxx · <b>CM POS</b> = ใช้ tier SKU เป็นต้นทุน · รวมทั้งสองระบบเข้าด้วยกัน
+          <b>ภาพรวม — รวมทุก SKU ทั้งบุฟเฟ่ต์และอลาคาท</b> · ใช้สูตร BoM: ตัด tier SKU (BUFFET350/500/590/799/CHILD) ออก เพราะนับซ้ำกับ B0xxx
           <br>เป้าหมาย Food Cost: <b id="gpbTargetText">55-70%</b> · สถานะ ✅ ในเป้า · ⚠️ ใกล้ขอบ · 🔴 เกินเป้า
         </p>
       </div>
@@ -1881,12 +1886,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <select id="gpbMonthFrom" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
     <label class="text-xs text-slate-500">ถึง</label>
     <select id="gpbMonthTo" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
-    <label class="text-xs text-slate-500 ml-4">แหล่งข้อมูล</label>
-    <select id="gpbSource" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
-      <option value="all">ทั้งหมด (Easy + CM)</option>
-      <option value="Easy">Easy POS เท่านั้น</option>
-      <option value="CM">CM POS เท่านั้น</option>
-    </select>
     <label class="text-xs text-slate-500 ml-3">ความถี่</label>
     <div class="inline-flex" role="group" aria-label="ความถี่">
       <button type="button" class="subtab-btn text-xs px-3 py-1" id="gpbGran-day"   onclick="setGpbGranularity('day')">วัน</button>
@@ -3978,7 +3977,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <li><b>Tier SKUs ไม่นับ cost</b> — BUFFET/BUFFETCHILD ใส่ unit_cost ไม่ส่งผล (cost จริงนับที่ B0xxx items แล้ว) เพื่อกัน double-counting</li>
       <li><b>Buffet ไม่ได้แยก tier จริง</b> — รหัส BUFFET350/500/590/799 <b>ไม่มีข้อมูล</b> (เลิกใช้แล้ว) บุฟเฟ่ต์ผู้ใหญ่อยู่บนรหัส BUFFET เดียว, เด็กบน BUFFETCHILD. <b>pax จริง</b> ใช้ customer_count จาก transaction (ไม่ใช่ qty). เมตริก Premium%/tier mix/tier pricing จึงถูกซ่อนไว้</li>
       <li><b>COGS สูตรเดียว (unified 2026-06)</b> — ทุกหน้าใช้ BoM recipe ก่อน → fallback sku_cost → tier=0. GP ต้องตรงกันทุกหน้า (~40%). ถ้าหน้าไหนไม่ตรง = bug</li>
-      <li><b>CM POS data archived แล้ว</b> — ตั้งแต่ 2026-05-27 ใช้ Easy data เท่านั้น (May 2025 onwards). ดู CM history ที่ <code>/api/legacy/cm</code></li>
     </ul>
   </div>
 
@@ -4549,8 +4547,6 @@ const SEMANTIC = {
   // Branch group
   master:     '#4f46e5',
   franchise:  '#f59e0b',
-  // CM POS historical marker
-  cmpos:      '#f59e0b',
   easy:       '#4f46e5',
 };
 
@@ -4844,6 +4840,26 @@ function qp(extra = {}) {
   Object.assign(p, extra);
   const s = new URLSearchParams(p).toString();
   return s ? '?' + s : '';
+}
+
+// Params for the KPI summary cards. Same as qp(), but in daily/weekly mode the
+// summary follows the date-range pickers instead of the month range (the month
+// selects are hidden then, so their values are stale). /api/summary computes the
+// window from sales_transaction when date_from/date_to are present.
+function summaryParams() {
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  if (g === 'daily' || g === 'weekly') {
+    const p = {};
+    if (getBranch()) p.branch = getBranch();
+    if (getGroup())  p.group  = getGroup();
+    const df = document.getElementById('selDateFrom')?.value;
+    const dt = document.getElementById('selDateTo')?.value;
+    if (df) p.date_from = df;
+    if (dt) p.date_to   = dt;
+    const s = new URLSearchParams(p).toString();
+    return s ? '?' + s : '';
+  }
+  return qp();
 }
 
 // ── Calendar year quick selector (Phase 7) ─────────────────────────
@@ -5760,7 +5776,7 @@ async function loadSummaryKpis() {
   let d, trendData;
   try {
     [d, trendData] = await Promise.all([
-      getJSON(`/api/summary${qp()}`, { gen }),
+      getJSON(`/api/summary${summaryParams()}`, { gen }),
       getJSON(`/api/sales/monthly${getTrendParams()}`, { gen }),
     ]);
   } catch(err) {
@@ -5771,8 +5787,8 @@ async function loadSummaryKpis() {
 
   renderTrendAnalysisBar(trendData);
 
-  // Last 6 Easy POS months for sparklines
-  const recent = trendData.filter(r => r.source !== 'CM POS').slice(-6);
+  // Last 6 months for sparklines
+  const recent = trendData.slice(-6);
   const revSpark = recent.map(r => r.revenue || 0);
   const txSpark  = recent.map(r => r.tx_count  || 0);
 
@@ -5797,10 +5813,20 @@ async function loadSummaryKpis() {
 
   const revClass = revDelta == null ? 'kpi-neu' : revDelta >= 0 ? 'kpi-up' : 'kpi-down';
   const txClass  = txDelta  == null ? 'kpi-neu' : txDelta  >= 0 ? 'kpi-up' : 'kpi-down';
-  const _mf = getMonthFrom(), _mt = getMonthTo();
-  const _periodScope = (_mf && _mt && _mf !== _mt)
-    ? `รวม ${fmtMonth(_mf)} → ${fmtMonth(_mt)}`
-    : (_mf || _mt ? fmtMonth(_mt || _mf) : 'ตลอดช่วง');
+  const _useDates = currentGranularity === 'daily' || currentGranularity === 'weekly';
+  let _periodScope;
+  if (_useDates) {
+    const _df = document.getElementById('selDateFrom')?.value;
+    const _dt = document.getElementById('selDateTo')?.value;
+    _periodScope = (_df && _dt)
+      ? `รวม ${fmtPeriod(_df)} → ${fmtPeriod(_dt)}`
+      : (_df || _dt ? fmtPeriod(_dt || _df) : 'ตลอดช่วง');
+  } else {
+    const _mf = getMonthFrom(), _mt = getMonthTo();
+    _periodScope = (_mf && _mt && _mf !== _mt)
+      ? `รวม ${fmtMonth(_mf)} → ${fmtMonth(_mt)}`
+      : (_mf || _mt ? fmtMonth(_mt || _mf) : 'ตลอดช่วง');
+  }
 
   document.getElementById('kpiGrid').innerHTML = `
     <div class="card kpi-card ${revClass} p-4">
@@ -5911,9 +5937,7 @@ function renderTrendAnalysisBar(trendData) {
   const el = document.getElementById('trendAnalysisBar');
   if (!el || !trendData || !trendData.length) return;
 
-  // Filter to Easy POS months only for meaningful stats
-  const easy = trendData.filter(r => r.source !== 'CM POS');
-  const data  = easy.length ? easy : trendData;
+  const data = trendData;
 
   const total   = data.reduce((s, r) => s + (r.revenue || 0), 0);
   const avg     = total / data.length;
@@ -6039,7 +6063,6 @@ async function loadTrendChart() {
 
   const labels = data.map(d => fmtPeriod(d.period_month));
   const revenues = data.map(d => scaleRevenue(d.revenue, d.tx_count, d.customer_count));
-  const isCMPOS = data.map(d => d.source === 'CM POS');
 
   // Fetch YoY + Targets + Forecast in parallel (monthly granularity only)
   let yoyMap = {}, targetMap = {}, fc = null;
@@ -6070,7 +6093,7 @@ async function loadTrendChart() {
     backgroundColor: 'rgba(79,70,229,0.08)',
     borderWidth: 2.5,
     pointRadius: 4,
-    pointBackgroundColor: data.map((d,i) => d.source === 'CM POS' ? SEMANTIC.cmpos : SEMANTIC.revenue),
+    pointBackgroundColor: SEMANTIC.revenue,
     fill: true,
     tension: 0.35,
   }];
@@ -6194,8 +6217,7 @@ async function loadTrendChart() {
                 const att = (data[ctx.dataIndex].revenue/tgt*100).toFixed(1);
                 lines.push(`Target: ${fmtN(tgt)} · ${att}% attained`);
               }
-              if (isCMPOS[ctx.dataIndex]) lines.push('(CM POS historical)');
-              else                         lines.push('click to dive in');
+              lines.push('click to dive in');
               return lines.join('\n');
             }
           }
@@ -7156,8 +7178,8 @@ async function loadReport() {
     const prev = trend[i-1];
     const mom = (prev && prev.revenue > 0)
       ? `<span style="color:${r.revenue>=prev.revenue?'#10b981':'#ef4444'}">${r.revenue>=prev.revenue?'+':''}${((r.revenue-prev.revenue)/prev.revenue*100).toFixed(1)}%</span>` : '<span class="text-slate-300">—</span>';
-    return `<tr class="border-t border-slate-100 ${r.source==='CM POS'?'text-amber-700':''}">
-      <td class="py-2 pr-6">${fmtMonth(r.period_month)} ${r.source==='CM POS'?'<span class="text-xs bg-amber-100 text-amber-700 px-1 rounded">CM</span>':''}</td>
+    return `<tr class="border-t border-slate-100">
+      <td class="py-2 pr-6">${fmtMonth(r.period_month)}</td>
       <td class="py-2 pr-6 text-right font-semibold">${fmtN(r.revenue)}</td>
       <td class="py-2 pr-6 text-right">${yoyCell}</td>
       <td class="py-2 pr-6 text-right">${mom}</td>
@@ -7727,6 +7749,29 @@ function onMonthlyCsvSelected(ev) {
     }
   };
   reader.readAsText(file);
+}
+
+// Upload a sales-data file (cleansed-raw Easy export or legacy .txt) to /api/upload.
+// The backend auto-detects format and routes to the shared upload_data engine.
+async function onSalesDataSelected(ev) {
+  const file = ev.target.files && ev.target.files[0];
+  if (!file) return;
+  if (!confirm(`อัพโหลดไฟล์ยอดขาย "${file.name}" เข้าฐานข้อมูล?\n(จะแทนที่ข้อมูลของเดือนนั้น — curated cost ไม่ถูกแตะ)`)) {
+    ev.target.value = ''; return;
+  }
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${API}/api/upload`, { method: 'POST', body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'upload failed');
+    alert(`✓ อัพโหลดสำเร็จ\n• ไฟล์: ${data.file}\n• ชนิด: ${data.file_type}\n• เดือน: ${data.period}\n• สาขา: ${data.branch}\n• แถว: ${data.rows_ingested}`);
+    location.reload();
+  } catch (err) {
+    alert('อัพโหลดไม่สำเร็จ: ' + err.message);
+  } finally {
+    ev.target.value = '';
+  }
 }
 
 async function openMcHistory(sku) {
@@ -11165,7 +11210,7 @@ function setupShortcuts() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-// GP by Branch tab — NEW BoM formula, combines Easy + CM POS
+// GP by Branch tab — BoM formula (Easy)
 // ══════════════════════════════════════════════════════════════════════════
 let _gpbData = null;
 let _gpbSortKey = 'total_revenue';
@@ -11217,11 +11262,9 @@ async function loadGpBranch() {
   if (status) status.textContent = 'กำลังโหลด…';
   const mf = document.getElementById('gpbMonthFrom')?.value || '';
   const mt = document.getElementById('gpbMonthTo')?.value   || '';
-  const src = document.getElementById('gpbSource')?.value   || 'all';
   const params = new URLSearchParams();
   if (mf) params.set('month_from', mf);
   if (mt) params.set('month_to',   mt);
-  if (src && src !== 'all') params.set('source', src);
   const gran = window.gpbGranularity || 'month';
   if (gran !== 'month') params.set('granularity', gran);
   const qs = params.toString();
