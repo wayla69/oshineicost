@@ -37,3 +37,12 @@ venv/
 .claude/
 .DS_Store
 Thumbs.db
+
+# extra large/local artifacts
+backend/dbchunks/
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db.*
+**/*.db.gz
+backend/.seed_token.txt

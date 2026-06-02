@@ -5134,6 +5134,17 @@ def _init_settings_tables():
     if not DB_PATH.exists():
         return
     with get_db() as con:
+        # Bootstrap core schema if the DB is empty/partial (e.g. a fresh hosted
+        # volume). schema.sql is shipped beside this file and is fully idempotent
+        # (CREATE TABLE IF NOT EXISTS …). On a populated DB `branches` already
+        # exists, so this is skipped and behaviour is unchanged.
+        has_branches = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='branches'"
+        ).fetchone()
+        if not has_branches:
+            schema_path = HERE / "schema.sql"
+            if schema_path.exists():
+                con.executescript(schema_path.read_text(encoding="utf-8"))
         con.executescript("""
             CREATE TABLE IF NOT EXISTS branch_targets (
                 id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -5148,15 +5159,17 @@ def _init_settings_tables():
                 value TEXT NOT NULL DEFAULT ''
             );
         """)
-        # branch_type migration (idempotent)
-        cols = [r[1] for r in con.execute("PRAGMA table_info(branches)").fetchall()]
-        if "branch_type" not in cols:
+        # branch_type migration (idempotent). Guarded so a DB still missing the
+        # core tables (schema.sql absent) can't crash import.
+        branch_cols = [r[1] for r in con.execute("PRAGMA table_info(branches)").fetchall()]
+        cols = branch_cols
+        if branch_cols and "branch_type" not in branch_cols:
             con.execute("ALTER TABLE branches ADD COLUMN branch_type TEXT DEFAULT 'master'")
-        if "active" not in cols:
+        if branch_cols and "active" not in branch_cols:
             con.execute("ALTER TABLE branches ADD COLUMN active INTEGER DEFAULT 1")
         # skus.active migration (idempotent)
         sku_cols = [r[1] for r in con.execute("PRAGMA table_info(skus)").fetchall()]
-        if "active" not in sku_cols:
+        if sku_cols and "active" not in sku_cols:
             con.execute("ALTER TABLE skus ADD COLUMN active INTEGER DEFAULT 1")
         for k, v in [
             ("default_branch", ""),
