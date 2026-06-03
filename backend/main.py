@@ -4957,35 +4957,35 @@ def analysis_anomalies(
 # stdlib only (urllib + xml.etree) — no new pip dependency. NOT wrapped in the
 # 5-min response cache so a transient feed failure isn't cached as "unavailable".
 # ---------------------------------------------------------------------------
-MARKET_AS_OF = "Q3 2025 figures · compiled 2026-02"   # vintage of curated data
+MARKET_AS_OF = "2025 actuals + 2026F · refreshed 2026-06"   # vintage of curated data
 
 MARKET_MACRO = [
     {"label": "GDP Growth (TH)",     "value": "+2.4%",  "year": "2025",     "trend": "down",
-     "sub": "2026F ~+1.5% — slowing",                 "source": "BoT / IMF"},
+     "sub": "2026F ~+1.7–2.0% — slowing",             "source": "BoT / Min. of Finance"},
     {"label": "Headline Inflation",  "value": "~0%",    "year": "2025",     "trend": "flat",
-     "sub": "2026F ~+0.8% — subdued",                 "source": "IMF / AMRO"},
-    {"label": "Consumer Confidence", "value": "50.7",   "year": "Sep 2025", "trend": "down",
-     "sub": "near 3-yr low — demand soft",            "source": "UTCC"},
-    {"label": "Foreign Tourists",    "value": "~33.3M", "year": "2025F",    "trend": "down",
-     "sub": "H1 −5.6% YoY · China −50%",              "source": "TAT"},
+     "sub": "2026F ~+1% — subdued",                   "source": "IMF / BoT"},
+    {"label": "Consumer Confidence", "value": "50.6",   "year": "Apr 2026", "trend": "down",
+     "sub": "lowest since Aug — demand soft",         "source": "UTCC"},
+    {"label": "Foreign Tourists",    "value": "32.9M",  "year": "2025",     "trend": "down",
+     "sub": "−7.2% YoY — first drop since COVID",      "source": "TAT"},
 ]
 
 MARKET_INDUSTRY = [
-    {"label": "TH Foodservice market",     "value": "$35.4B",
-     "sub": "2025 · ~+5% YoY (CAGR ~7.7% to 2030)",            "source": "Mordor Intelligence"},
+    {"label": "TH Foodservice market",     "value": "$38.1B",
+     "sub": "2026F · +7.6% YoY (CAGR ~7.6% to 2031)",          "source": "Mordor Intelligence"},
     {"label": "Restaurant sales growth",   "value": "+4–5%/yr",
      "sub": "2024–26 · restaurants = 93% of F&B income",       "source": "Krungsri Research"},
     {"label": "Japanese restaurants (TH)", "value": "5,916",
-     "sub": "2024 · +2.9% YoY (+165 outlets)",                 "source": "JETRO Bangkok"},
-    {"label": "Japanese segment growth",   "value": "+5.9%/yr",
-     "sub": "premium +13.9% (2024) · buffet = price wars, thin margins", "source": "Phoenix Research"},
+     "sub": "2024 census · +2.9% YoY (+165 outlets)",          "source": "JETRO Bangkok"},
+    {"label": "Japanese segment growth",   "value": "+6.0%/yr",
+     "sub": "$1.45B (2025) → $2.31B (2033) · buffet = price wars, thin margins", "source": "Phoenix Research"},
 ]
 
 # Annual industry growth used as the benchmark line against the chain's own YoY.
 MARKET_BENCHMARK = {
-    "industry_growth_pct": 5.0,     # TH foodservice ~+5%/yr (2025)
-    "jp_segment_growth_pct": 5.9,   # Japanese-restaurant segment CAGR
-    "label": "TH foodservice ~+5%/yr · Japanese segment ~+5.9%/yr",
+    "industry_growth_pct": 6.0,     # blended TH restaurant/foodservice growth (2026)
+    "jp_segment_growth_pct": 6.0,   # Japanese-restaurant segment CAGR (2026–33)
+    "label": "TH foodservice ~+7.6%/yr · restaurant ~+4–5% · Japanese ~+6%/yr",
 }
 
 MARKET_SOURCES = [
