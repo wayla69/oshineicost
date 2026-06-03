@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Settings — Oshinei UI Kit</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<style>
+  .seg { display:grid; grid-template-columns: 200px 1fr; gap:24px; }
+  .seg-nav .seg-item { padding:9px 12px; border-radius:var(--r-sm); font-size:13px; font-weight:500; color:var(--text-secondary); cursor:pointer; margin-bottom:2px; }
+  .seg-nav .seg-item.active { background:var(--indigo-soft); color:var(--indigo); font-weight:600; }
+  .seg-nav .seg-item:hover:not(.active){ background:var(--bg-subtle); }
+  .field-row { display:grid; grid-template-columns: 1fr 140px; gap:12px; align-items:center; padding:9px 0; border-bottom:1px solid var(--border-soft); }
+  .field-row:last-child{ border-bottom:none; }
+  .switch { position:relative; width:40px; height:22px; }
+  .switch input { display:none; }
+  .switch .track { position:absolute; inset:0; background:var(--border); border-radius:999px; transition:.2s; cursor:pointer; }
+  .switch .track::before { content:''; position:absolute; width:16px; height:16px; border-radius:50%; background:#fff; top:3px; left:3px; transition:.2s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+  .switch input:checked + .track { background:var(--indigo); }
+  .switch input:checked + .track::before { transform:translateX(18px); }
+  .save-bar { position:sticky; bottom:0; background:var(--bg-card); border-top:1px solid var(--border); padding:14px 28px; display:flex; justify-content:flex-end; gap:10px; margin:24px -28px -28px; }
+  .btn-primary { background:var(--indigo); color:#fff; border:none; border-radius:var(--r-sm); padding:9px 20px; font-size:13px; font-weight:600; cursor:pointer; }
+  .btn-ghost { background:var(--bg-subtle); color:var(--text-secondary); border:1px solid var(--border); border-radius:var(--r-sm); padding:9px 18px; font-size:13px; cursor:pointer; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark">OS</div><div><div class="name">OSHINEI</div><div class="sub">Cost Analysis</div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><span class="nav-ico">🏠</span> หน้าแรก</div>
+      <div class="nav-section">📊 ภาพรวม</div>
+      <div class="nav-item"><span class="nav-ico">📈</span> Dashboard</div>
+      <div class="nav-item"><span class="nav-ico">⚖️</span> Compare A/B</div>
+      <div class="nav-item"><span class="nav-ico">⭐</span> Menu Engineering</div>
+      <div class="nav-section">💰 ต้นทุน</div>
+      <div class="nav-item"><span class="nav-ico">🎮</span> BoM Cost + Simulator</div>
+      <div class="nav-section">⚙️ เครื่องมือ</div>
+      <div class="nav-item active"><span class="nav-ico">⚙️</span> Settings</div>
+    </nav>
+  </aside>
+
+  <div class="main-wrapper">
+    <div class="top-bar">
+      <div class="page-title">⚙️ Settings</div>
+      <div class="controls">
+        <button onclick="document.body.classList.toggle('dark')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;cursor:pointer">🌓</button>
+      </div>
+    </div>
+
+    <div class="content-area tab-active">
+      <div class="seg">
+        <!-- section nav -->
+        <div class="seg-nav">
+          <div class="seg-item active" onclick="seg('cost',this)">💰 Cost Management</div>
+          <div class="seg-item" onclick="seg('targets',this)">🎯 Branch Targets</div>
+          <div class="seg-item" onclick="seg('fixed',this)">🏢 Fixed Costs</div>
+          <div class="seg-item" onclick="seg('prefs',this)">🎛️ Preferences</div>
+        </div>
+
+        <!-- panes -->
+        <div>
+          <!-- Cost Management -->
+          <div id="pane-cost" class="card pad seg-pane">
+            <div class="flex between center mb-3">
+              <div class="section-title mb-0">Cost Management · ต้นทุนต่อหน่วย (unit_cost)</div>
+              <div class="flex center" style="gap:8px">
+                <input type="text" placeholder="🔍 ค้นหา SKU…" style="max-width:180px">
+                <button class="btn-ghost">⬆ นำเข้า CSV</button>
+              </div>
+            </div>
+            <div class="anomaly-banner mb-4" style="font-size:12.5px"><span>⚠️</span><span><b>เตือน:</b> ถ้า margin ติดลบมาก ตรวจว่า unit_cost ใส่เป็น <b>ราคาต้นทุน</b> ไม่ใช่ราคาขาย</span></div>
+            <div style="overflow:hidden;border:1px solid var(--border);border-radius:var(--r-md)">
+              <table>
+                <thead><tr><th>SKU</th><th>เมนู</th><th>หมวด</th><th class="num">ราคาขาย</th><th class="num">ต้นทุน/หน่วย</th><th class="num">margin %</th></tr></thead>
+                <tbody id="costRows"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Branch Targets -->
+          <div id="pane-targets" class="card pad seg-pane" style="display:none">
+            <div class="section-title">Branch Targets · เป้ารายเดือน (฿)</div>
+            <div id="targetRows"></div>
+          </div>
+
+          <!-- Fixed Costs -->
+          <div id="pane-fixed" class="card pad seg-pane" style="display:none">
+            <div class="section-title">Fixed Costs · ค่าใช้จ่ายคงที่ต่อเดือน</div>
+            <div class="field-row"><span>ค่าเช่า (รวมทุกสาขา)</span><input type="number" value="1180000"></div>
+            <div class="field-row"><span>เงินเดือนพนักงาน</span><input type="number" value="980000"></div>
+            <div class="field-row"><span>ค่าน้ำ/ไฟ/แก๊ส</span><input type="number" value="210000"></div>
+            <div class="field-row"><span>การตลาด</span><input type="number" value="95000"></div>
+            <div class="field-row"><span>อื่น ๆ</span><input type="number" value="65000"></div>
+            <p class="muted mt-3" style="font-size:11.5px">GP − Fixed Costs = Net Profit · รวม ฿2.53M/เดือน</p>
+          </div>
+
+          <!-- Preferences -->
+          <div id="pane-prefs" class="card pad seg-pane" style="display:none">
+            <div class="section-title">Preferences</div>
+            <div class="field-row"><div><b style="font-size:13px">รวมค่าบริการในรายได้</b><div class="muted" style="font-size:11.5px">incl_service · service charge เป็นรายได้แยก (ex-VAT)</div></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+            <div class="field-row"><div><b style="font-size:13px">ฐานรายได้ ex-VAT</b><div class="muted" style="font-size:11.5px">VAT ไม่นับเป็นรายได้ (ใช้ subtotal_ex_vat)</div></div><label class="switch"><input type="checkbox" checked><span class="track"></span></label></div>
+            <div class="field-row"><div><b style="font-size:13px">โหมดมืด</b><div class="muted" style="font-size:11.5px">Dark theme เริ่มต้น</div></div><label class="switch"><input type="checkbox" onchange="document.body.classList.toggle('dark')"><span class="track"></span></label></div>
+            <div class="field-row"><div><b style="font-size:13px">เวลาเปิดร้านเริ่มต้น</b><div class="muted" style="font-size:11.5px">หน้าต่างเปิด-ปิด</div></div><span style="font-size:13px;font-weight:600">10:00–21:00</span></div>
+          </div>
+
+          <div class="save-bar"><button class="btn-ghost">ยกเลิก</button><button class="btn-primary">💾 บันทึก</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const GOOD='#10b981', WARN='#f59e0b', BAD='#ef4444';
+// cost rows
+const skus=[
+  ['SK-1042','แซลมอนซาชิมิ','ซาชิมิ',520,118],
+  ['SK-2210','ชุดแซลมอนดอน','ข้าวหน้า',389,165],
+  ['SK-3301','ข้าวหน้าไก่','ข้าวหน้า',249,158],
+  ['SK-5520','ชุดอูนิ','พรีเมียม',880,520],
+  ['SK-7781','สลัดสาหร่าย','สลัด',95,58],
+];
+document.getElementById('costRows').innerHTML = skus.map(([sku,name,cat,price,cost])=>{
+  const m=(price-cost)/price*100;
+  return `<tr><td class="secondary" style="font-family:monospace;font-size:12px">${sku}</td><td><b>${name}</b></td><td class="secondary">${cat}</td>
+    <td class="num">฿${price}</td><td class="num"><input type="number" value="${cost}" style="width:84px;text-align:right;padding:4px 8px"></td>
+    <td class="num"><b style="color:${m>=45?GOOD:m>=30?WARN:BAD}">${m.toFixed(0)}%</b></td></tr>`;
+}).join('');
+
+// branch targets
+const tg=[['เซ็นทรัล',396000],['ขอนแก่น',358000],['โคราช',436000],['อุดรธานี',306000],['หาดใหญ่',291000],['เชียงใหม่',288000]];
+document.getElementById('targetRows').innerHTML = tg.map(([n,v])=>`
+  <div class="field-row"><span><b style="font-size:13px">${n}</b></span><input type="number" value="${v}"></div>`).join('')
+  + `<p class="muted mt-3" style="font-size:11.5px">หมายเหตุ: โคราช2 ปิดตั้งแต่ 2025-12 — ไม่รวมในเป้า</p>`;
+
+function seg(id, el){
+  document.querySelectorAll('.seg-item').forEach(s=>s.classList.remove('active'));
+  el.classList.add('active');
+  document.querySelectorAll('.seg-pane').forEach(p=>p.style.display='none');
+  document.getElementById('pane-'+id).style.display='';
+}
+</script>
+</body>
+</html>

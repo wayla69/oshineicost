@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei UI Kit</title>
+<link rel="stylesheet" href="colors_and_type.css">
+<style>
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 48px 32px; }
+  .hero { display:flex; align-items:center; gap:18px; margin-bottom: 8px; }
+  .hero .logo-mark { width:52px; height:52px; font-size:20px; border-radius:14px; }
+  .hero h1 { font:var(--t-h1); font-size:24px; }
+  .lead { color: var(--text-secondary); font-size:14px; max-width:680px; line-height:1.6; margin: 14px 0 40px; }
+  .grp-title { font-size:11px; font-weight:800; color:var(--indigo); text-transform:uppercase; letter-spacing:.12em; margin:36px 0 14px; }
+  .tiles { display:grid; grid-template-columns: repeat(3,1fr); gap:16px; }
+  @media(max-width:760px){ .tiles{grid-template-columns:1fr} }
+  .tile { display:block; text-decoration:none; color:inherit; padding:18px; }
+  .tile .ico { font-size:24px; }
+  .tile h3 { font-size:14.5px; font-weight:700; margin:10px 0 4px; }
+  .tile p { font-size:12px; color:var(--text-muted); line-height:1.5; }
+  .swatches { display:flex; gap:10px; flex-wrap:wrap; }
+  .sw { width:64px; text-align:center; font-size:10px; color:var(--text-muted); }
+  .sw .chip { height:48px; border-radius:10px; border:1px solid var(--border); margin-bottom:5px; }
+  .ext-tag { display:inline-block; font-size:9px; font-weight:800; color:#b45309; background:#fef3c7; padding:1px 7px; border-radius:999px; margin-left:6px; vertical-align:middle; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div class="logo-mark">OS</div>
+    <div><h1>Oshinei UI Kit</h1><div class="muted" style="font-size:12.5px">Design system &amp; screen gallery · mirrors the live Cost Analysis dashboard</div></div>
+    <button onclick="document.body.classList.toggle('dark')" style="margin-left:auto;background:var(--indigo);color:#fff;border:none;border-radius:var(--r-sm);padding:8px 16px;font-weight:600;cursor:pointer">🌓 Dark</button>
+  </div>
+  <p class="lead">Every screen and component below is built on the shared <code style="background:var(--bg-subtle);padding:1px 5px;border-radius:4px">colors_and_type.css</code> tokens, copied verbatim from <code style="background:var(--bg-subtle);padding:1px 5px;border-radius:4px">index.html</code>. Vanilla HTML — no build step. Open any tile to preview.</p>
+
+  <div class="grp-title">Screens</div>
+  <div class="tiles">
+    <a class="tile card" href="screens/home-brief.html"><div class="ico">🏠</div><h3>หน้าแรก · Home Brief</h3><p>Yesterday KPIs, MTD branch progress, by-branch bars, month-end forecast, alert bullets.</p></a>
+    <a class="tile card" href="screens/menu-engineering.html"><div class="ico">⭐</div><h3>Menu Engineering</h3><p>BCG quadrant tiles, scatter w/ median axes, action board, sortable contribution table.</p></a>
+    <a class="tile card" href="screens/bom-cost.html"><div class="ico">🎮</div><h3>BoM Cost + Simulator</h3><p>Chain KPIs, Revenue vs BoM combo, per-branch table, what-if cost sliders.</p></a>
+    <a class="tile card" href="screens/compare.html"><div class="ico">⚖️</div><h3>Compare A/B</h3><p>Period selectors, KPI delta cards, paired index bars, side-by-side detail.</p></a>
+    <a class="tile card" href="screens/settings.html"><div class="ico">⚙️</div><h3>Settings</h3><p>Cost Management, branch targets, fixed costs, preferences (toggles).</p></a>
+    <a class="tile card" href="../COMPONENTS.html"><div class="ico">🧩</div><h3>Component Gallery</h3><p>KPI cards, pills, tables, modal, skeletons, focus states, animation reference.</p></a>
+  </div>
+
+  <div class="grp-title">Brand Palette</div>
+  <div class="card pad">
+    <div class="swatches mb-4">
+      <div class="sw"><div class="chip" style="background:#4f46e5"></div>indigo</div>
+      <div class="sw"><div class="chip" style="background:#6366f1"></div>indigo-mid</div>
+      <div class="sw"><div class="chip" style="background:#10b981"></div>good</div>
+      <div class="sw"><div class="chip" style="background:#ef4444"></div>bad</div>
+      <div class="sw"><div class="chip" style="background:#f59e0b"></div>warn</div>
+      <div class="sw"><div class="chip" style="background:#06b6d4"></div>cyan</div>
+    </div>
+    <div class="grp-title" style="margin:6px 0 12px">Optional Extension <span class="ext-tag">NOT IN SOURCE PRODUCT</span></div>
+    <div class="swatches">
+      <div class="sw"><div class="chip" style="background:#F97066"></div>salmon</div>
+      <div class="sw"><div class="chip" style="background:#E8685A"></div>salmon-deep</div>
+      <div class="sw"><div class="chip" style="background:#0D9488"></div>teal</div>
+    </div>
+    <p class="muted" style="font-size:11.5px;margin-top:14px"><b>--salmon</b> (product-literal, salmon buffet) and <b>--teal</b> (data-viz secondary) are defined in colors_and_type.css for consumer/marketing surfaces only. Keep the dashboard on the core palette.</p>
+  </div>
+
+  <div class="grp-title">Deck</div>
+  <div class="tiles">
+    <a class="tile card" href="deck/cover.html"><div class="ico">🖼️</div><h3>Business Deck (HTML)</h3><p>Minimal slides — logo on white, navy edge decoration. Arrow keys to navigate.</p></a>
+    <a class="tile card" href="deck/Oshinei-Business-Deck.pptx"><div class="ico">📊</div><h3>Business Deck (.pptx)</h3><p>Editable PowerPoint version of the same deck.</p></a>
+  </div>
+</div>
+</body>
+</html>

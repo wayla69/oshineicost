@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>หน้าแรก · Home Brief — Oshinei UI Kit</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .hb-forecast-wrap { height: 240px; }
+  .hb-bar-wrap { height: 240px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-mark">OS</div>
+      <div><div class="name">OSHINEI</div><div class="sub">Cost Analysis</div></div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active"><span class="nav-ico">🏠</span> หน้าแรก</div>
+      <div class="nav-section">📊 ภาพรวม</div>
+      <div class="nav-item"><span class="nav-ico">📈</span> Dashboard</div>
+      <div class="nav-item"><span class="nav-ico">⚖️</span> Compare A/B</div>
+      <div class="nav-item"><span class="nav-ico">⭐</span> Menu Engineering</div>
+      <div class="nav-section">💰 ต้นทุน</div>
+      <div class="nav-item"><span class="nav-ico">🎮</span> BoM Cost + Simulator</div>
+      <div class="nav-section">⚙️ เครื่องมือ</div>
+      <div class="nav-item"><span class="nav-ico">⚙️</span> Settings</div>
+    </nav>
+  </aside>
+
+  <div class="main-wrapper">
+    <!-- ── Topbar ── -->
+    <div class="top-bar">
+      <div class="page-title">🏠 หน้าแรก — สรุปเมื่อวาน</div>
+      <div class="controls">
+        <span class="muted" style="font-size:12px">อัปเดต 2026-06-03 08:05</span>
+        <select><option>🏬 ทุกสาขา</option></select>
+        <button class="topbar-icon-btn" onclick="document.body.classList.toggle('dark')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;cursor:pointer">🌓</button>
+      </div>
+    </div>
+
+    <div class="content-area tab-active">
+
+      <!-- ── Yesterday KPIs ── -->
+      <div class="section-title">ยอดเมื่อวาน · Tuesday 2026-06-02</div>
+      <div class="grid g-5 mb-5">
+        <div class="kpi-card card kpi-up">
+          <div class="kpi-card-top"><span class="kpi-label">รายได้</span><span class="pill pill-up">▲ 6.4%</span></div>
+          <div class="kpi-value">฿84.2K</div>
+          <div class="kpi-card-bottom"><span class="kpi-sub">vs avg วันอังคาร</span></div>
+        </div>
+        <div class="kpi-card card kpi-up">
+          <div class="kpi-card-top"><span class="kpi-label">ลูกค้า</span><span class="pill pill-up">▲ 3.1%</span></div>
+          <div class="kpi-value">1,338</div>
+          <div class="kpi-card-bottom"><span class="kpi-sub">บิลทั้งหมด</span></div>
+        </div>
+        <div class="kpi-card card kpi-neu">
+          <div class="kpi-card-top"><span class="kpi-label">AOV / บิล</span><span class="pill pill-neu">— flat</span></div>
+          <div class="kpi-value">฿629</div>
+          <div class="kpi-card-bottom"><span class="kpi-sub">เฉลี่ย/ลูกค้า</span></div>
+        </div>
+        <div class="kpi-card card kpi-down">
+          <div class="kpi-card-top"><span class="kpi-label">Food Cost</span><span class="pill pill-down">▲ 1.2pp</span></div>
+          <div class="kpi-value">36.8%</div>
+          <div class="kpi-card-bottom"><span class="kpi-sub">เป้า ≤ 35%</span></div>
+        </div>
+        <div class="kpi-card card kpi-up">
+          <div class="kpi-card-top"><span class="kpi-label">MTD รายได้</span><span class="pill pill-up">▲ 9.0%</span></div>
+          <div class="kpi-value">฿1.61M</div>
+          <div class="kpi-card-bottom"><span class="kpi-sub">1–2 มิ.ย. · vs LM</span></div>
+        </div>
+      </div>
+
+      <div class="grid g-2 mb-5" style="grid-template-columns: 1.15fr 1fr">
+        <!-- ── MTD branch progress ── -->
+        <div class="card pad">
+          <div class="flex between center mb-3">
+            <div class="section-title mb-0">MTD ความคืบหน้าเทียบเป้า · ต่อสาขา</div>
+            <div style="font-size:11px" class="muted">
+              <span class="ontrack-dot on"></span>on-track
+              <span class="ontrack-dot near" style="margin-left:8px"></span>ใกล้
+              <span class="ontrack-dot off" style="margin-left:8px"></span>ต่ำกว่าเป้า
+            </div>
+          </div>
+          <div id="mtdProgress"></div>
+        </div>
+
+        <!-- ── Yesterday by branch bar ── -->
+        <div class="card pad">
+          <div class="section-title">รายได้เมื่อวาน · แยกตามสาขา</div>
+          <div class="hb-bar-wrap"><canvas id="hbBar"></canvas></div>
+        </div>
+      </div>
+
+      <div class="grid g-2 mb-5" style="grid-template-columns: 1.3fr 1fr">
+        <!-- ── Month-end forecast ── -->
+        <div class="card pad">
+          <div class="flex between center mb-3">
+            <div class="section-title mb-0">พยากรณ์สิ้นเดือน · มิถุนายน 2026</div>
+            <span class="pill pill-up">คาดเกินเป้า ฿0.4M</span>
+          </div>
+          <div class="hb-forecast-wrap"><canvas id="hbForecast"></canvas></div>
+        </div>
+
+        <!-- ── Alerts ── -->
+        <div class="card pad">
+          <div class="section-title">⚡ สิ่งที่ต้องสนใจวันนี้</div>
+          <div class="alert-bullet bad"><span class="ico">🔴</span><div><b>โคราช2</b> ปิดต่อเนื่อง — ไม่มียอดตั้งแต่ 2025-12 ควรนำออกจากเป้ารวม</div></div>
+          <div class="alert-bullet warn"><span class="ico">🟠</span><div><b>Food cost +1.2pp</b> เมื่อวาน นำโดยหมวดเนื้อ — ตรวจราคารับเข้า</div></div>
+          <div class="alert-bullet good"><span class="ico">🟢</span><div><b>Delivery +31%</b> WoW — โปรช่วงเย็นได้ผล ขยายต่อ</div></div>
+          <div class="alert-bullet info"><span class="ico">🔵</span><div><b>บุฟเฟ่ต์เด็ก</b> สัดส่วน 11% ของบิล — พิจารณาเพิ่ม mix tier</div></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const CSS = getComputedStyle(document.documentElement);
+const C = n => CSS.getPropertyValue(n).trim();
+const INDIGO = '#4f46e5', GOOD = '#10b981', WARN = '#f59e0b', BAD = '#ef4444';
+
+// ── MTD branch progress bars ──
+const branches = [
+  { n: 'เซ็นทรัล',  pct: 104, val: '฿412K', tgt: '฿396K', s: 'on'   },
+  { n: 'ขอนแก่น',   pct: 98,  val: '฿351K', tgt: '฿358K', s: 'near' },
+  { n: 'โคราช',     pct: 89,  val: '฿388K', tgt: '฿436K', s: 'off'  },
+  { n: 'อุดรธานี',  pct: 101, val: '฿309K', tgt: '฿306K', s: 'on'   },
+  { n: 'หาดใหญ่',   pct: 76,  val: '฿221K', tgt: '฿291K', s: 'off'  },
+  { n: 'เชียงใหม่', pct: 95,  val: '฿274K', tgt: '฿288K', s: 'near' },
+];
+document.getElementById('mtdProgress').innerHTML = branches.map(b => `
+  <div class="progress-row">
+    <div class="pname"><span class="ontrack-dot ${b.s}"></span>${b.n}</div>
+    <div class="progress-track"><div class="progress-fill ${b.s}" style="width:${Math.min(b.pct,100)}%"></div></div>
+    <div class="progress-meta"><b style="color:var(--text-primary)">${b.pct}%</b> · ${b.val}/${b.tgt}</div>
+  </div>`).join('');
+
+// ── Yesterday by branch bar ──
+new Chart(document.getElementById('hbBar'), {
+  type: 'bar',
+  data: {
+    labels: ['เซ็นทรัล','ขอนแก่น','โคราช','อุดร','หาดใหญ่','เชียงใหม่'],
+    datasets: [{ label: 'รายได้ (฿)', data: [16800,14200,13100,11900,9600,12200],
+      backgroundColor: 'rgba(79,70,229,0.65)', borderRadius: 4 }]
+  },
+  options: { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ display:false } },
+    scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>'฿'+(v/1000)+'K', font:{size:10} }, grid:{color:'rgba(148,163,184,0.12)'} },
+             x:{ ticks:{ font:{size:11} }, grid:{ display:false } } } }
+});
+
+// ── Month-end forecast (actual + projection line) ──
+const days = Array.from({length:30}, (_,i)=>i+1);
+const actual = days.map(d => d<=2 ? [760000,1610000][d-1] : null);  // MTD through day 2
+const projection = days.map(d => d>=2 ? 1610000/2*d*0.99 : null);   // dashed projection
+const target = days.map(()=> 1610000/2*30*0.94);                    // flat target ref
+new Chart(document.getElementById('hbForecast'), {
+  type:'line',
+  data:{ labels: days, datasets:[
+    { label:'Actual (MTD)', data: actual, borderColor: INDIGO, backgroundColor:'rgba(79,70,229,0.08)', tension:0.3, pointRadius:3, fill:true, spanGaps:false },
+    { label:'Projection', data: projection, borderColor: GOOD, borderDash:[5,3], tension:0.3, pointRadius:0 },
+    { label:'Target', data: target, borderColor: WARN, borderDash:[2,3], pointRadius:0, borderWidth:1 },
+  ]},
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{ boxWidth:10, font:{size:11} } } },
+    scales:{ y:{ ticks:{ callback:v=>'฿'+(v/1000000).toFixed(1)+'M', font:{size:10} }, grid:{color:'rgba(148,163,184,0.12)'} },
+             x:{ ticks:{ maxTicksLimit:8, font:{size:10} }, grid:{ display:false }, title:{ display:true, text:'วันของเดือน', font:{size:10}, color:'#94a3b8' } } } }
+});
+</script>
+</body>
+</html>

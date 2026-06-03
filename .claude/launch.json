@@ -13,6 +13,17 @@
       ],
       "cwd": "${workspaceFolder}/backend",
       "port": 8010
+    },
+    {
+      "name": "docs-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "http.server",
+        "8011"
+      ],
+      "cwd": "${workspaceFolder}/docs",
+      "port": 8011
     }
   ]
 }

@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei — Business Deck</title>
+<style>
+  :root{ --navy:#1f3a6b; --navy-deep:#16294d; --ink:#0f172a; --muted:#64748b; --line:#1f3a6b; }
+  *{ box-sizing:border-box; margin:0; font-family:'Prompt',system-ui,-apple-system,'Segoe UI',sans-serif; }
+  body{ background:#0b1220; color:var(--ink); }
+
+  /* slide = 16:9 white page */
+  .slide{
+    position:relative; width:100vw; height:100vh; background:#ffffff;
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    padding:8vh 10vw; text-align:center; overflow:hidden;
+  }
+  .slide.active{ display:flex; animation:fade .4s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(8px)} to{opacity:1; transform:none} }
+
+  /* ── navy line edge decoration ── */
+  .frame{ position:absolute; inset:26px; border:1px solid rgba(31,58,107,.18); pointer-events:none; }
+  .corner{ position:absolute; width:46px; height:46px; border:2px solid var(--line); pointer-events:none; }
+  .corner.tl{ top:20px; left:20px; border-right:none; border-bottom:none; }
+  .corner.tr{ top:20px; right:20px; border-left:none; border-bottom:none; }
+  .corner.bl{ bottom:20px; left:20px; border-right:none; border-top:none; }
+  .corner.br{ bottom:20px; right:20px; border-left:none; border-top:none; }
+  .edge-line{ position:absolute; background:var(--line); }
+  .edge-line.top{ top:0; left:0; right:0; height:5px; background:linear-gradient(90deg,var(--navy),var(--navy-deep)); }
+
+  /* ── logo ── */
+  .logo{ width:120px; height:120px; }
+  .logo.sm{ width:54px; height:54px; }
+
+  .eyebrow{ font-size:13px; font-weight:700; letter-spacing:.32em; color:var(--navy); text-transform:uppercase; }
+  h1{ font-size:52px; font-weight:800; letter-spacing:-.02em; color:var(--ink); line-height:1.1; }
+  h2{ font-size:34px; font-weight:800; letter-spacing:-.01em; color:var(--ink); }
+  .sub{ font-size:18px; color:var(--muted); font-weight:500; max-width:680px; line-height:1.6; }
+  .rule{ width:60px; height:3px; background:var(--navy); border-radius:2px; }
+
+  /* content slides: left-aligned header */
+  .slide.doc{ align-items:flex-start; text-align:left; justify-content:flex-start; padding:14vh 12vw; }
+  .slide.doc .corner-logo{ position:absolute; top:30px; right:40px; display:flex; align-items:center; gap:10px; }
+  .slide.doc .corner-logo span{ font-weight:800; font-size:13px; letter-spacing:.18em; color:var(--navy); }
+
+  .feat{ display:grid; grid-template-columns:repeat(2,1fr); gap:22px 40px; margin-top:38px; width:100%; max-width:880px; }
+  .feat .item{ display:flex; gap:14px; align-items:flex-start; }
+  .feat .ico{ font-size:26px; flex-shrink:0; }
+  .feat h3{ font-size:18px; font-weight:700; color:var(--ink); }
+  .feat p{ font-size:14px; color:var(--muted); line-height:1.55; margin-top:3px; }
+
+  .metrics{ display:flex; gap:60px; margin-top:42px; }
+  .metric .n{ font-size:48px; font-weight:800; color:var(--navy); letter-spacing:-.02em; }
+  .metric .l{ font-size:14px; color:var(--muted); font-weight:500; }
+
+  .swatch-row{ display:flex; gap:18px; margin-top:34px; }
+  .sw{ text-align:center; font-size:11px; color:var(--muted); }
+  .sw .c{ width:84px; height:84px; border-radius:14px; margin-bottom:8px; border:1px solid rgba(0,0,0,.06); }
+  .sw .hex{ font-size:10px; color:#94a3b8; }
+  .ext{ display:inline-block; font-size:10px; font-weight:800; color:#b45309; background:#fef3c7; padding:2px 9px; border-radius:999px; }
+
+  /* nav */
+  .pager{ position:fixed; bottom:18px; left:50%; transform:translateX(-50%); display:flex; gap:8px; z-index:50; }
+  .pager .dot{ width:8px; height:8px; border-radius:50%; background:#cbd5e1; cursor:pointer; transition:.2s; }
+  .pager .dot.on{ background:var(--navy); width:22px; border-radius:999px; }
+  .hint{ position:fixed; bottom:16px; right:22px; font-size:11px; color:#94a3b8; z-index:50; }
+  .pagenum{ position:absolute; bottom:30px; left:44px; font-size:12px; color:#94a3b8; font-weight:600; }
+</style>
+</head>
+<body>
+
+<!-- reusable logo SVG via <symbol> -->
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="oshinei-logo" viewBox="0 0 120 120">
+    <circle cx="60" cy="60" r="58" fill="#1f3a6b"/>
+    <circle cx="60" cy="60" r="54" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.85"/>
+    <text x="60" y="52" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800" font-family="Prompt,sans-serif" letter-spacing="1">OSHINEI</text>
+    <text x="60" y="72" text-anchor="middle" fill="#ffffff" font-size="13" font-family="sans-serif" opacity="0.95">おしねい</text>
+    <path d="M22 92 L40 74 L52 84 L70 64 L84 78 L98 68" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+  </symbol>
+</svg>
+
+<!-- ── Slide 1 · Cover ── -->
+<section class="slide active">
+  <div class="edge-line top"></div>
+  <div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <svg class="logo" style="margin-bottom:30px"><use href="#oshinei-logo"/></svg>
+  <div class="eyebrow" style="margin-bottom:18px">Oshinei Enterprise</div>
+  <h1>Sales &amp; Cost Analysis</h1>
+  <div class="rule" style="margin:24px 0"></div>
+  <p class="sub">A unified analytics dashboard for the salmon-buffet chain — revenue, gross profit, menu engineering, and BoM cost in one place.</p>
+  <div style="position:absolute;bottom:44px;font-size:13px;color:#94a3b8">Business Overview · 2026</div>
+</section>
+
+<!-- ── Slide 2 · What it is ── -->
+<section class="slide doc">
+  <div class="edge-line top"></div>
+  <div class="frame"></div><div class="corner tl"></div><div class="corner br"></div>
+  <div class="corner-logo"><svg class="logo sm"><use href="#oshinei-logo"/></svg><span>OSHINEI</span></div>
+  <div class="eyebrow" style="margin-bottom:12px">Overview</div>
+  <h2>One dashboard, every cost question answered</h2>
+  <div class="rule" style="margin:20px 0 0"></div>
+  <div class="feat">
+    <div class="item"><span class="ico">📈</span><div><h3>Revenue &amp; GP</h3><p>Ex-VAT revenue, gross profit, and net profit across 26 active branches — daily to yearly.</p></div></div>
+    <div class="item"><span class="ico">⭐</span><div><h3>Menu Engineering</h3><p>BCG analysis sorts every dish into Stars, Plowhorses, Puzzles, and Dogs with clear actions.</p></div></div>
+    <div class="item"><span class="ico">🎮</span><div><h3>BoM Cost + Simulator</h3><p>Bill-of-materials costing with a live what-if simulator for ingredient and price changes.</p></div></div>
+    <div class="item"><span class="ico">⚖️</span><div><h3>Compare &amp; Forecast</h3><p>A/B period comparison and month-end projection with on-track branch indicators.</p></div></div>
+  </div>
+  <div class="pagenum">02</div>
+</section>
+
+<!-- ── Slide 3 · By the numbers ── -->
+<section class="slide">
+  <div class="edge-line top"></div>
+  <div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <div class="eyebrow" style="margin-bottom:10px">At a glance · May 2026</div>
+  <h2>The business in five figures</h2>
+  <div class="metrics">
+    <div class="metric"><div class="n">฿9.4M</div><div class="l">Revenue (ex-VAT)</div></div>
+    <div class="metric"><div class="n">39.7%</div><div class="l">Gross Profit</div></div>
+    <div class="metric"><div class="n">26</div><div class="l">Active branches</div></div>
+  </div>
+  <div class="metrics" style="margin-top:30px">
+    <div class="metric"><div class="n">฿629</div><div class="l">Avg / bill</div></div>
+    <div class="metric"><div class="n">41.1K</div><div class="l">Customers / mo</div></div>
+  </div>
+  <div class="pagenum">03</div>
+</section>
+
+<!-- ── Slide 4 · Brand palette ── -->
+<section class="slide doc">
+  <div class="edge-line top"></div>
+  <div class="frame"></div><div class="corner tl"></div><div class="corner br"></div>
+  <div class="corner-logo"><svg class="logo sm"><use href="#oshinei-logo"/></svg><span>OSHINEI</span></div>
+  <div class="eyebrow" style="margin-bottom:12px">Brand</div>
+  <h2>A tight, purposeful palette</h2>
+  <div class="rule" style="margin:20px 0 0"></div>
+  <p class="sub" style="margin-top:18px">Indigo accent with semantic green / red / amber — built for clarity in a B2B analytics tool.</p>
+  <div class="swatch-row">
+    <div class="sw"><div class="c" style="background:#4f46e5"></div>Indigo<div class="hex">#4F46E5</div></div>
+    <div class="sw"><div class="c" style="background:#10b981"></div>Good<div class="hex">#10B981</div></div>
+    <div class="sw"><div class="c" style="background:#ef4444"></div>Bad<div class="hex">#EF4444</div></div>
+    <div class="sw"><div class="c" style="background:#f59e0b"></div>Warn<div class="hex">#F59E0B</div></div>
+    <div class="sw"><div class="c" style="background:#06b6d4"></div>Cyan<div class="hex">#06B6D4</div></div>
+  </div>
+  <div style="margin-top:30px"><span class="ext">OPTIONAL EXTENSION · NOT IN SOURCE PRODUCT</span></div>
+  <div class="swatch-row" style="margin-top:14px">
+    <div class="sw"><div class="c" style="background:#F97066"></div>Salmon<div class="hex">#F97066</div></div>
+    <div class="sw"><div class="c" style="background:#E8685A"></div>Salmon-deep<div class="hex">#E8685A</div></div>
+    <div class="sw"><div class="c" style="background:#0D9488"></div>Teal<div class="hex">#0D9488</div></div>
+  </div>
+  <div class="pagenum">04</div>
+</section>
+
+<!-- ── Slide 5 · Close ── -->
+<section class="slide">
+  <div class="edge-line top"></div>
+  <div class="frame"></div>
+  <div class="corner tl"></div><div class="corner tr"></div><div class="corner bl"></div><div class="corner br"></div>
+  <svg class="logo" style="margin-bottom:26px"><use href="#oshinei-logo"/></svg>
+  <h2>Thank you</h2>
+  <div class="rule" style="margin:20px 0"></div>
+  <p class="sub">Oshinei — Sales &amp; Cost Analysis · oshinei-dashboard.fly.dev</p>
+  <div class="pagenum">05</div>
+</section>
+
+<div class="pager" id="pager"></div>
+<div class="hint">← → or click dots</div>
+
+<script>
+  const slides=[...document.querySelectorAll('.slide')]; let i=0;
+  const pager=document.getElementById('pager');
+  slides.forEach((_,n)=>{ const d=document.createElement('div'); d.className='dot'+(n===0?' on':''); d.onclick=()=>go(n); pager.appendChild(d); });
+  function go(n){ i=Math.max(0,Math.min(slides.length-1,n));
+    slides.forEach((s,k)=>s.classList.toggle('active',k===i));
+    [...pager.children].forEach((d,k)=>d.classList.toggle('on',k===i)); }
+  addEventListener('keydown',e=>{ if(e.key==='ArrowRight'||e.key===' ')go(i+1); if(e.key==='ArrowLeft')go(i-1); });
+  addEventListener('click',e=>{ if(e.target.closest('.dot'))return; if(e.clientX>innerWidth*0.5)go(i+1); else go(i-1); });
+</script>
+</body>
+</html>

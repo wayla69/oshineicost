@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei — Design System & Component Gallery</title>
+<style>
+/* ════════════════════════════════════════════════════════════
+   TOKENS — copied verbatim from index.html :root so this gallery
+   stays a faithful mirror of the live dashboard. If a token
+   changes there, change it here.
+════════════════════════════════════════════════════════════ */
+:root {
+  --bg-page:    #f0f4f8;
+  --bg-card:    #ffffff;
+  --bg-input:   #ffffff;
+  --bg-subtle:  #f8fafc;
+  --bg-sidebar: #0c1525;
+  --bg-topbar:  #ffffff;
+  --bg-hover:   #eef2ff;
+  --text-primary:   #0f172a;
+  --text-secondary: #475569;
+  --text-muted:     #94a3b8;
+  --border:     #e2e8f0;
+  --border-soft:#f1f5f9;
+  --indigo:     #4f46e5;
+  --indigo-mid: #6366f1;
+  --indigo-soft:#eef2ff;
+  --shadow-xs:  0 1px 2px rgba(15,23,42,0.05);
+  --shadow-sm:  0 1px 3px rgba(15,23,42,0.04), 0 2px 8px rgba(15,23,42,0.06);
+  --shadow-md:  0 4px 8px rgba(15,23,42,0.05), 0 12px 24px rgba(15,23,42,0.08);
+  --shadow-lg:  0 12px 32px rgba(15,23,42,0.12), 0 4px 10px rgba(15,23,42,0.05);
+  --shadow-card: 0 1px 3px rgba(15,23,42,0.04), 0 2px 10px rgba(15,23,42,0.05);
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+}
+body.dark {
+  --bg-page:    #080e1c;
+  --bg-card:    #0f1a2e;
+  --bg-input:   #131f35;
+  --bg-subtle:  #111828;
+  --bg-sidebar: #060d1a;
+  --bg-topbar:  #0f1a2e;
+  --bg-hover:   #1e2a4a;
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #475569;
+  --border:     #1e2d45;
+  --border-soft:#131f35;
+  --indigo:     #818cf8;
+  --indigo-mid: #6366f1;
+  --indigo-soft:#1c2060;
+  --shadow-card: 0 1px 3px rgba(0,0,0,0.2), 0 2px 10px rgba(0,0,0,0.15);
+}
+
+* { font-family: 'Prompt', system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
+body { background: var(--bg-page); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
+
+/* ── Gallery chrome ── */
+.gallery-top {
+  position: sticky; top: 0; z-index: 80;
+  background: var(--bg-topbar);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 32px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  box-shadow: var(--shadow-xs);
+}
+.gallery-top h1 { font-size: 17px; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
+.gallery-top .sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.gallery-body { max-width: 1100px; margin: 0 auto; padding: 32px; }
+
+.sec-head {
+  font-size: 11px; font-weight: 800; color: var(--indigo);
+  text-transform: uppercase; letter-spacing: 0.12em;
+  margin: 40px 0 4px; display: flex; align-items: center; gap: 8px;
+}
+.sec-head:first-child { margin-top: 0; }
+.sec-desc { font-size: 13px; color: var(--text-secondary); margin: 0 0 18px; max-width: 720px; line-height: 1.6; }
+.sec-desc code { background: var(--bg-subtle); border: 1px solid var(--border-soft); padding: 1px 5px; border-radius: 4px; font-size: 12px; }
+
+.preview {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-card);
+  padding: 24px;
+  margin-bottom: 18px;
+  position: relative;
+  overflow: visible;            /* FIX #2: parent never clips child accents (e.g. sidebar rail) */
+}
+.preview-label {
+  position: absolute; top: 10px; right: 14px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-muted); text-transform: uppercase;
+}
+.preview-grid { display: grid; gap: 16px; }
+.cols-3 { grid-template-columns: repeat(3, 1fr); }
+.cols-2 { grid-template-columns: repeat(2, 1fr); }
+@media (max-width: 720px) { .cols-3, .cols-2 { grid-template-columns: 1fr; } }
+
+.toggle-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 14px; font-size: 12.5px; font-weight: 600;
+  background: var(--indigo); color: #fff; border: none;
+  border-radius: var(--r-sm); cursor: pointer;
+  box-shadow: 0 2px 8px rgba(79,70,229,0.3); transition: all 0.15s;
+}
+.toggle-pill:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* ════════════════════════════════════════════════════════════
+   CARDS / KPI — verbatim from index.html
+════════════════════════════════════════════════════════════ */
+.card {
+  background: var(--bg-card);
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(226,232,240,0.7);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+body.dark .card { border-color: var(--border); }
+.card:hover { box-shadow: 0 4px 10px rgba(15,23,42,0.06), 0 14px 30px rgba(15,23,42,0.08); transform: translateY(-1px); }
+.card { transition: box-shadow 0.2s ease, transform 0.2s ease; }
+
+/* FIX #1: top accent is a real border-top on the card — no negative-margin stripe hack */
+.kpi-card.card { border-top: 3px solid var(--indigo); }
+.kpi-up   { border-top-color: #10b981 !important; }
+.kpi-down { border-top-color: #ef4444 !important; }
+.kpi-neu  { border-top-color: #4f46e5 !important; }
+.kpi-card { transition: all 0.2s ease; cursor: default; padding: 16px; }
+.kpi-card:hover { transform: translateY(-2px); }
+.kpi-card-top { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+.kpi-label { font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.09em; }
+.kpi-value { font-size:26px; font-weight:800; color:var(--text-primary); line-height:1.15; margin-bottom:10px; letter-spacing:-0.02em; }
+.kpi-card-bottom { display:flex; align-items:flex-end; justify-content:space-between; gap:8px; }
+.kpi-sub { font-size:11px; color:var(--text-muted); }
+
+/* ════════════════════════════════════════════════════════════
+   PILLS & BADGES — verbatim
+════════════════════════════════════════════════════════════ */
+.pill { display:inline-flex; align-items:center; padding:2px 8px; font-size:10.5px; font-weight:600; border-radius:999px; flex-shrink:0; }
+.pill-up     { background:#dcfce7; color:#166534; }
+.pill-down   { background:#fee2e2; color:#991b1b; }
+.pill-neu    { background:#e0e7ff; color:#3730a3; }
+.pill-warn   { background:#fef3c7; color:#92400e; }
+.pill-danger { background:#fee2e2; color:#991b1b; font-weight:700; }
+
+/* ════════════════════════════════════════════════════════════
+   TABLE — verbatim, with breathing-room column widths (FIX #3)
+════════════════════════════════════════════════════════════ */
+table { border-collapse: collapse; width: 100%; }
+thead th {
+  background: var(--bg-subtle); font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted);
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
+}
+tbody td { padding: 10px 16px; font-size: 13px; }
+tbody tr { border-bottom: 1px solid var(--border-soft); transition: background 0.1s; }
+tbody tr:last-child { border-bottom: none; }
+tbody tr:nth-child(even) { background: rgba(248,250,252,0.5); }
+tbody tr:hover { background: #eef2ff !important; }
+body.dark tbody tr:nth-child(even) { background: var(--bg-subtle); }
+body.dark tbody tr:hover { background: var(--bg-hover) !important; }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ════════════════════════════════════════════════════════════
+   SIDEBAR NAV — verbatim
+════════════════════════════════════════════════════════════ */
+.sidebar-demo { background: var(--bg-sidebar); border-radius: var(--r-md); width: 224px; }
+.sidebar-nav { padding: 10px 8px; overflow: visible; }   /* FIX #2: visible so the active rail shows */
+.nav-section {
+  font-size: 9.5px; font-weight: 700; color: #2d4060;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  padding: 6px 10px 5px; white-space: nowrap;
+}
+.nav-item {
+  position: relative;
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px; color: #4a6080;
+  cursor: pointer; border-radius: 9px; margin-bottom: 1px;
+  transition: all 0.15s ease; white-space: nowrap; user-select: none;
+  border: 1px solid transparent; font-size: 13px; font-weight: 500;
+}
+.nav-item:hover { background: rgba(255,255,255,0.06); color: #a5b4fc; }
+.nav-item.active {
+  background: rgba(99,102,241,0.14);
+  color: #a5b4fc;
+  border-color: rgba(99,102,241,0.2);
+}
+.nav-item.active::before {
+  content: ''; position: absolute; left: -8px;
+  top: 50%; transform: translateY(-50%);
+  height: 18px; width: 3px;
+  background: linear-gradient(180deg, #818cf8, #6366f1);
+  border-radius: 0 3px 3px 0;
+}
+.nav-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.6; flex-shrink: 0; }
+
+/* ════════════════════════════════════════════════════════════
+   SUBTAB / GRANULARITY TOGGLE — verbatim
+════════════════════════════════════════════════════════════ */
+.gran-track { display: inline-flex; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 8px; padding: 3px; gap: 2px; }
+.gran-btn { padding: 5px 12px; font-size: 12px; font-weight: 500; color: var(--text-secondary); border: none; background: none; cursor: pointer; border-radius: 6px; transition: all 0.15s; }
+.gran-btn:hover:not(.gran-active) { color: var(--indigo); }
+.gran-active {
+  background: var(--bg-card) !important;
+  color: var(--indigo) !important;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.1), 0 1px 2px rgba(15,23,42,0.06);
+}
+body.dark .gran-active { background: rgba(20,32,56,0.95) !important; }
+
+/* ════════════════════════════════════════════════════════════
+   ANOMALY BANNER — verbatim
+════════════════════════════════════════════════════════════ */
+.anomaly-banner {
+  background: linear-gradient(90deg, #fef3c7 0%, #fef9e8 100%);
+  border-left: 4px solid #f59e0b;
+  border-radius: 10px;
+  padding: 12px 16px;
+  display: flex; align-items: center; gap: 12px;
+  font-size: 13px;
+  animation: slideDown 0.25s ease;
+}
+body.dark .anomaly-banner { background: linear-gradient(90deg, #422006 0%, #1c1917 100%); color: #fde68a; }
+@keyframes slideDown { from { opacity:0; transform:translateY(-6px); } to { opacity:1; transform:translateY(0); } }
+.anomaly-item { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; font-weight: 500; cursor: pointer; }
+.anomaly-good { background: #d1fae5; color: #065f46; }
+.anomaly-bad  { background: #fee2e2; color: #991b1b; }
+
+/* ════════════════════════════════════════════════════════════
+   GLOBAL SEARCH DROPDOWN — verbatim
+════════════════════════════════════════════════════════════ */
+.search-wrap { position: relative; max-width: 360px; }
+.search-input {
+  width: 100%; padding: 8px 12px; font-size: 13px;
+  background: var(--bg-input); color: var(--text-primary);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.search-input:focus { border-color: var(--indigo); outline: none; box-shadow: 0 0 0 3px rgba(79,70,229,0.12); }
+.search-results {
+  position: absolute; top: 100%; left: 0; right: 0;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; margin-top: 4px; padding: 6px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.15);
+  z-index: 60; max-height: 360px; overflow-y: auto;
+}
+.search-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.search-item:hover { background: var(--bg-hover); }
+.search-item .badge { font-size: 9px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: #e0e7ff; color: #3730a3; }
+.search-item .badge-sku { background: #d1fae5; color: #065f46; }
+.search-item .label { flex: 1; }
+.search-group-title { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; padding: 6px 10px 2px; letter-spacing: 0.05em; }
+
+/* ════════════════════════════════════════════════════════════
+   SKELETON LOADERS — verbatim
+════════════════════════════════════════════════════════════ */
+@keyframes skeletonPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-subtle) 25%, var(--border-soft) 50%, var(--bg-subtle) 75%);
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease infinite;
+  border-radius: 6px;
+}
+@keyframes skeletonShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton-kpi {
+  background: var(--bg-card); border-radius: var(--r-lg);
+  border: 1px solid rgba(226,232,240,0.7); box-shadow: var(--shadow-card);
+  padding: 16px; border-top: 3px solid var(--border);
+  animation: skeletonPulse 1.4s ease infinite;
+}
+body.dark .skeleton-kpi { border-color: var(--border); }
+
+/* ════════════════════════════════════════════════════════════
+   DIVE-IN MODAL BACKDROP — verbatim
+════════════════════════════════════════════════════════════ */
+.drill-modal {
+  position: fixed; inset: 0;
+  background: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 100; padding: 16px;
+  animation: backdropIn 0.2s ease;
+}
+@keyframes backdropIn { from { opacity:0; backdrop-filter: blur(0); } to { opacity:1; backdrop-filter: blur(8px); } }
+.drill-panel {
+  background: var(--bg-card); color: var(--text-primary);
+  border-radius: 12px; width: min(620px, 92vw); max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  animation: drillIn 0.18s ease; padding: 24px 28px;
+}
+@keyframes drillIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
+.dive-section-title { font-size: 10px; font-weight: 800; color: var(--indigo); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 8px; }
+.dive-bullet { display: flex; gap: 8px; align-items: flex-start; padding: 9px 10px; border-radius: 8px; margin-bottom: 6px; font-size: 12px; line-height: 1.5; background: var(--bg-subtle); border-left: 3px solid transparent; }
+.dive-bullet.good { border-left-color: #10b981; background: rgba(16,185,129,0.06); }
+.dive-bullet.info { border-left-color: #4f46e5; background: rgba(79,70,229,0.06); }
+.dive-bullet.warn { border-left-color: #f59e0b; background: rgba(245,158,11,0.06); }
+
+/* ════════════════════════════════════════════════════════════
+   FOCUS RING — verbatim accessibility token
+════════════════════════════════════════════════════════════ */
+.focus-demo {
+  padding: 8px 12px; font-size: 13px; border-radius: var(--r-sm);
+  border: 1px solid var(--indigo); background: var(--bg-input); color: var(--text-primary);
+  box-shadow: 0 0 0 3px rgba(79,70,229,0.12);   /* the always-on focus ring token */
+}
+
+/* ── animation reference table ── */
+.anim-table td { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 12px; }
+.anim-chip { display:inline-block; width:48px; height:18px; border-radius:4px; background: var(--indigo); animation: tabFadeIn 1.6s ease infinite alternate; }
+@keyframes tabFadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+
+<div class="gallery-top">
+  <div>
+    <h1>Oshinei — Design System &amp; Component Gallery</h1>
+    <div class="sub">Faithful mirror of <code style="font-size:11px">index.html</code> tokens · toggle dark mode to verify both themes</div>
+  </div>
+  <button class="toggle-pill" onclick="document.body.classList.toggle('dark')">🌓 Toggle dark mode</button>
+</div>
+
+<div class="gallery-body">
+
+  <!-- ════════ KPI CARDS ════════ -->
+  <div class="sec-head">KPI Cards</div>
+  <p class="sec-desc">Top accent uses a real <code>border-top: 3px solid {color}</code> on the card container — not a negative-margin stripe. Variants: <code>.kpi-up</code> (green), <code>.kpi-down</code> (red), <code>.kpi-neu</code> / default (indigo).</p>
+  <div class="preview">
+    <span class="preview-label">border-top accent</span>
+    <div class="preview-grid cols-3">
+      <div class="kpi-card card kpi-up">
+        <div class="kpi-card-top"><span class="kpi-label">Net Sales</span><span class="pill pill-up">▲ 8.2%</span></div>
+        <div class="kpi-value">฿2.41M</div>
+        <div class="kpi-card-bottom"><span class="kpi-sub">vs last month</span></div>
+      </div>
+      <div class="kpi-card card kpi-down">
+        <div class="kpi-card-top"><span class="kpi-label">Gross Profit %</span><span class="pill pill-down">▼ 1.4pp</span></div>
+        <div class="kpi-value">39.6%</div>
+        <div class="kpi-card-bottom"><span class="kpi-sub">target 41%</span></div>
+      </div>
+      <div class="kpi-card card kpi-neu">
+        <div class="kpi-card-top"><span class="kpi-label">Avg / Bill</span><span class="pill pill-neu">— flat</span></div>
+        <div class="kpi-value">฿612</div>
+        <div class="kpi-card-bottom"><span class="kpi-sub">26 branches</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ PILLS & BADGES ════════ -->
+  <div class="sec-head">Pills &amp; Badges</div>
+  <p class="sec-desc">Status pills used in tables, KPI corners, and anomaly chips.</p>
+  <div class="preview" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <span class="pill pill-up">▲ up</span>
+    <span class="pill pill-down">▼ down</span>
+    <span class="pill pill-neu">— neutral</span>
+    <span class="pill pill-warn">⚠ warn</span>
+    <span class="pill pill-danger">‼ danger</span>
+  </div>
+
+  <!-- ════════ SIDEBAR NAV ════════ -->
+  <div class="sec-head">Sidebar Navigation</div>
+  <p class="sec-desc">Active items get a left rail via <code>::before { left: -8px }</code>. In the live app the rail sits flush to the sidebar edge; this gallery sets <code>overflow: visible</code> on the parent so the rail is never clipped in the small preview.</p>
+  <div class="preview" style="display:flex;justify-content:center">
+    <div class="sidebar-demo">
+      <div class="sidebar-nav">
+        <div class="nav-section">Overview</div>
+        <div class="nav-item active"><span class="nav-dot"></span> Dashboard</div>
+        <div class="nav-item"><span class="nav-dot"></span> Sales Trend</div>
+        <div class="nav-section">Cost</div>
+        <div class="nav-item"><span class="nav-dot"></span> Food Cost</div>
+        <div class="nav-item"><span class="nav-dot"></span> Branch BoM</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ GRANULARITY TOGGLE ════════ -->
+  <div class="sec-head">Granularity Toggle</div>
+  <p class="sec-desc">Product-unique pill track for time resolution. Active pill = <code>.gran-active</code> (raised card with inner shadow).</p>
+  <div class="preview" style="display:flex;justify-content:center">
+    <div class="gran-track" id="granTrack">
+      <button class="gran-btn">Day</button>
+      <button class="gran-btn">Week</button>
+      <button class="gran-btn gran-active">Month</button>
+      <button class="gran-btn">Qtr</button>
+      <button class="gran-btn">Year</button>
+    </div>
+  </div>
+
+  <!-- ════════ ANOMALY BANNER ════════ -->
+  <div class="sec-head">Anomaly Banner</div>
+  <p class="sec-desc">Amber gradient <code>#fef3c7 → #fef9e8</code> with a 4px left border. Appears near the top of most screens; chips drill into the anomaly.</p>
+  <div class="preview">
+    <div class="anomaly-banner">
+      <span style="font-size:16px">⚠️</span>
+      <span style="flex:1"><b>3 anomalies detected</b> this period</span>
+      <span class="anomaly-item anomaly-bad">โคราช2 sales ▼ 22%</span>
+      <span class="anomaly-item anomaly-good">Delivery ▲ 31%</span>
+    </div>
+  </div>
+
+  <!-- ════════ GLOBAL SEARCH ════════ -->
+  <div class="sec-head">Global Search Dropdown</div>
+  <p class="sec-desc">Results grouped by type with distinct badges — <code>.badge</code> (branch, indigo) vs <code>.badge-sku</code> (SKU, green).</p>
+  <div class="preview" style="min-height:240px">
+    <div class="search-wrap">
+      <input class="search-input" type="text" value="bu" placeholder="Search branches, SKUs…">
+      <div class="search-results">
+        <div class="search-group-title">Branches</div>
+        <div class="search-item"><span class="badge">BR</span><span class="label">Buffet — สาขาเซ็นทรัล</span></div>
+        <div class="search-item"><span class="badge">BR</span><span class="label">Buffet — สาขาโคราช</span></div>
+        <div class="search-group-title">SKUs</div>
+        <div class="search-item"><span class="badge badge-sku">SKU</span><span class="label">บุฟเฟ่ต์ผู้ใหญ่ 399</span></div>
+        <div class="search-item"><span class="badge badge-sku">SKU</span><span class="label">บุฟเฟ่ต์เด็ก 199</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ SKELETON LOADERS ════════ -->
+  <div class="sec-head">Skeleton / Loading State</div>
+  <p class="sec-desc">Shown on every tab during fetch. <code>.skeleton</code> shimmers via <code>skeletonShimmer</code>; <code>.skeleton-kpi</code> pulses the whole card.</p>
+  <div class="preview">
+    <div class="preview-grid cols-3">
+      <div class="skeleton-kpi">
+        <div class="skeleton" style="height:10px;width:50%;margin-bottom:14px"></div>
+        <div class="skeleton" style="height:24px;width:70%;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:9px;width:40%"></div>
+      </div>
+      <div class="skeleton-kpi">
+        <div class="skeleton" style="height:10px;width:50%;margin-bottom:14px"></div>
+        <div class="skeleton" style="height:24px;width:70%;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:9px;width:40%"></div>
+      </div>
+      <div class="skeleton-kpi">
+        <div class="skeleton" style="height:10px;width:50%;margin-bottom:14px"></div>
+        <div class="skeleton" style="height:24px;width:70%;margin-bottom:12px"></div>
+        <div class="skeleton" style="height:9px;width:40%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════ DATA TABLE ════════ -->
+  <div class="sec-head">Data Table</div>
+  <p class="sec-desc">Sticky <code>thead th</code> at 10px uppercase (deliberate for the wide live columns). Zebra rows + indigo hover. Numerics use <code>.num</code> (tabular figures, right-aligned).</p>
+  <div class="preview" style="padding:0;overflow:hidden">
+    <table>
+      <thead><tr><th>Branch</th><th class="num">Net Sales</th><th class="num">GP %</th><th class="num">MoM</th></tr></thead>
+      <tbody>
+        <tr><td>เซ็นทรัล</td><td class="num">฿412,900</td><td class="num">40.2%</td><td class="num"><span class="pill pill-up">▲ 6.1%</span></td></tr>
+        <tr><td>โคราช</td><td class="num">฿388,140</td><td class="num">38.9%</td><td class="num"><span class="pill pill-down">▼ 2.3%</span></td></tr>
+        <tr><td>ขอนแก่น</td><td class="num">฿351,020</td><td class="num">41.5%</td><td class="num"><span class="pill pill-up">▲ 9.0%</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ════════ DIVE-IN MODAL ════════ -->
+  <div class="sec-head">Dive-in Modal Backdrop</div>
+  <p class="sec-desc">The most distinctive motion in the app: <code>backdrop-filter: blur(8px)</code> backdrop (<code>backdropIn</code>) + scale-in panel (<code>drillIn</code>, 0.18s).</p>
+  <div class="preview" style="display:flex;justify-content:center">
+    <button class="toggle-pill" onclick="document.getElementById('demoModal').style.display='flex'">🔍 Open dive-in modal</button>
+  </div>
+
+  <!-- ════════ FOCUS STATES ════════ -->
+  <div class="sec-head">Focus States</div>
+  <p class="sec-desc">Accessibility token: <code>box-shadow: 0 0 0 3px rgba(79,70,229,0.12)</code>. The first input shows it always-on; tab into the second to see it live.</p>
+  <div class="preview" style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+    <input class="focus-demo" value="Focused (token shown)">
+    <input class="search-input" style="max-width:240px" placeholder="Tab here to see real focus">
+  </div>
+
+  <!-- ════════ DARK MODE ════════ -->
+  <div class="sec-head">Dark Mode</div>
+  <p class="sec-desc">All components above respond to <code>body.dark</code>. Below: KPI card, a table row, and the sidebar nav forced into dark to verify contrast without toggling the whole page.</p>
+  <div class="preview dark" style="background:var(--bg-page)">
+    <span class="preview-label">forced .dark</span>
+    <div class="preview-grid cols-2" style="align-items:start">
+      <div class="kpi-card card kpi-up">
+        <div class="kpi-card-top"><span class="kpi-label">Net Sales</span><span class="pill pill-up">▲ 8.2%</span></div>
+        <div class="kpi-value">฿2.41M</div>
+        <div class="kpi-card-bottom"><span class="kpi-sub">vs last month</span></div>
+      </div>
+      <div class="sidebar-demo" style="margin:0 auto">
+        <div class="sidebar-nav">
+          <div class="nav-section">Overview</div>
+          <div class="nav-item active"><span class="nav-dot"></span> Dashboard</div>
+          <div class="nav-item"><span class="nav-dot"></span> Sales Trend</div>
+        </div>
+      </div>
+    </div>
+    <div style="margin-top:16px;border:1px solid var(--border);border-radius:var(--r-md);overflow:hidden">
+      <table>
+        <thead><tr><th>Branch</th><th class="num">Net Sales</th><th class="num">GP %</th></tr></thead>
+        <tbody>
+          <tr><td>เซ็นทรัล</td><td class="num">฿412,900</td><td class="num">40.2%</td></tr>
+          <tr><td>โคราช</td><td class="num">฿388,140</td><td class="num">38.9%</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ════════ ANIMATION REFERENCE ════════ -->
+  <div class="sec-head">Animation Reference</div>
+  <p class="sec-desc">Named keyframes used across the app, with timing.</p>
+  <div class="preview" style="padding:0;overflow:hidden">
+    <table class="anim-table">
+      <thead><tr><th>Animation</th><th>Duration / Easing</th><th>Used by</th><th>Preview</th></tr></thead>
+      <tbody>
+        <tr><td>tabFadeIn</td><td>0.22s cubic-bezier(.16,1,.3,1)</td><td>tab switch</td><td><span class="anim-chip"></span></td></tr>
+        <tr><td>drillIn</td><td>0.18s ease</td><td>dive-in panel</td><td><span style="font-size:11px;color:var(--text-muted)">scale 0.96 → 1</span></td></tr>
+        <tr><td>backdropIn</td><td>0.20s ease</td><td>modal backdrop</td><td><span style="font-size:11px;color:var(--text-muted)">blur 0 → 8px</span></td></tr>
+        <tr><td>skeletonShimmer</td><td>1.4s ease infinite</td><td>loaders</td><td><span class="skeleton" style="display:inline-block;width:48px;height:18px"></span></td></tr>
+        <tr><td>slideDown</td><td>0.25s ease</td><td>anomaly banner</td><td><span style="font-size:11px;color:var(--text-muted)">Y −6px → 0</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+</div>
+
+<!-- ════════ DIVE-IN MODAL (live) ════════ -->
+<div class="drill-modal" id="demoModal" style="display:none" onclick="if(event.target===this)this.style.display='none'">
+  <div class="drill-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="margin:0;font-size:18px;font-weight:800">เซ็นทรัล — Net Sales</h2>
+      <button class="toggle-pill" style="background:var(--bg-subtle);color:var(--text-secondary);box-shadow:none" onclick="document.getElementById('demoModal').style.display='none'">✕ Close</button>
+    </div>
+    <div style="margin-bottom:18px">
+      <div class="dive-section-title">Summary</div>
+      <div class="dive-bullet good">✅ <div><b>+6.1% MoM</b> — strongest branch this period.</div></div>
+      <div class="dive-bullet info">ℹ️ <div>Avg bill ฿634, up from ฿598.</div></div>
+      <div class="dive-bullet warn">⚠️ <div>GP slipped 0.8pp — watch food cost.</div></div>
+    </div>
+    <div style="height:140px;border-radius:var(--r-md);background:linear-gradient(135deg,var(--indigo-soft),var(--bg-subtle));display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:13px">[ chart area ]</div>
+  </div>
+</div>
+
+<script>
+  // granularity toggle interaction
+  document.getElementById('granTrack').addEventListener('click', function(e){
+    if(!e.target.classList.contains('gran-btn')) return;
+    this.querySelectorAll('.gran-btn').forEach(b=>b.classList.remove('gran-active'));
+    e.target.classList.add('gran-active');
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Compare A/B — Oshinei UI Kit</title>
+<link rel="stylesheet" href="../colors_and_type.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  .cmp-chart { height: 300px; }
+  .period-chip { display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border-radius:999px; font-size:12.5px; font-weight:600; }
+  .chip-a { background:rgba(79,70,229,.1); color:#4338ca; }
+  .chip-b { background:rgba(13,148,136,.12); color:#0f766e; }
+  .delta-card { text-align:center; padding:18px; }
+</style>
+</head>
+<body>
+<div class="app-layout">
+
+  <aside class="sidebar">
+    <div class="sidebar-logo"><div class="logo-mark">OS</div><div><div class="name">OSHINEI</div><div class="sub">Cost Analysis</div></div></div>
+    <nav class="sidebar-nav">
+      <div class="nav-item"><span class="nav-ico">🏠</span> หน้าแรก</div>
+      <div class="nav-section">📊 ภาพรวม</div>
+      <div class="nav-item"><span class="nav-ico">📈</span> Dashboard</div>
+      <div class="nav-item active"><span class="nav-ico">⚖️</span> Compare A/B</div>
+      <div class="nav-item"><span class="nav-ico">⭐</span> Menu Engineering</div>
+      <div class="nav-section">💰 ต้นทุน</div>
+      <div class="nav-item"><span class="nav-ico">🎮</span> BoM Cost + Simulator</div>
+      <div class="nav-section">⚙️ เครื่องมือ</div>
+      <div class="nav-item"><span class="nav-ico">⚙️</span> Settings</div>
+    </nav>
+  </aside>
+
+  <div class="main-wrapper">
+    <div class="top-bar">
+      <div class="page-title">⚖️ Compare A/B — เปรียบเทียบช่วงเวลา</div>
+      <div class="controls">
+        <button onclick="document.body.classList.toggle('dark')" style="background:var(--bg-input);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;cursor:pointer">🌓</button>
+      </div>
+    </div>
+
+    <div class="content-area tab-active">
+
+      <!-- period selectors -->
+      <div class="card pad mb-5">
+        <div class="grid g-2" style="gap:24px">
+          <div>
+            <div class="flex center mb-2" style="gap:8px"><span class="period-chip chip-a">A</span><span class="secondary" style="font-size:12px;font-weight:600">ช่วงฐาน</span></div>
+            <div class="flex center" style="gap:8px"><input type="date" value="2026-04-01"><span class="muted">→</span><input type="date" value="2026-04-30"></div>
+          </div>
+          <div>
+            <div class="flex center mb-2" style="gap:8px"><span class="period-chip chip-b">B</span><span class="secondary" style="font-size:12px;font-weight:600">ช่วงเทียบ</span></div>
+            <div class="flex center" style="gap:8px"><input type="date" value="2026-05-01"><span class="muted">→</span><input type="date" value="2026-05-31"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI deltas -->
+      <div class="grid g-4 mb-5" id="deltas"></div>
+
+      <div class="grid g-2 mb-5" style="grid-template-columns:1.2fr 1fr">
+        <!-- paired bars -->
+        <div class="card pad">
+          <div class="section-title">A vs B · ตัวชี้วัดหลัก</div>
+          <div class="cmp-chart"><canvas id="paired"></canvas></div>
+        </div>
+        <!-- side-by-side detail -->
+        <div class="card pad">
+          <div class="section-title">รายละเอียดเทียบเคียง</div>
+          <div style="overflow:hidden;border:1px solid var(--border);border-radius:var(--r-md)">
+            <table>
+              <thead><tr><th>ตัวชี้วัด</th><th class="num"><span class="chip-a period-chip" style="padding:2px 8px">A</span></th><th class="num"><span class="chip-b period-chip" style="padding:2px 8px">B</span></th><th class="num">Δ</th></tr></thead>
+              <tbody id="detail"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+const GOOD='#10b981', BAD='#ef4444', INDIGO='#4f46e5', TEAL='#0d9488';
+const fmtM=v=>'฿'+(v/1e6).toFixed(2)+'M';
+
+// metric, A, B, format, higherBetter
+const M = [
+  ['รายได้ (ex-VAT)', 9.10e6, 9.42e6, fmtM, true],
+  ['Gross Profit', 3.55e6, 3.74e6, fmtM, true],
+  ['GP %', 39.0, 39.7, v=>v.toFixed(1)+'%', true],
+  ['Food Cost %', 35.9, 36.4, v=>v.toFixed(1)+'%', false],
+  ['ลูกค้า', 39200, 41100, v=>v.toLocaleString(), true],
+  ['AOV / บิล', 612, 629, v=>'฿'+v, true],
+];
+function deltaPct(a,b){ return (b-a)/a*100; }
+
+// KPI delta cards (first 4)
+document.getElementById('deltas').innerHTML = M.slice(0,4).map(([name,a,b,f,hb])=>{
+  const d=deltaPct(a,b), good=(d>=0)===hb;
+  return `<div class="card delta-card kpi-card ${good?'kpi-up':'kpi-down'}">
+    <div class="kpi-label">${name}</div>
+    <div class="kpi-value" style="font-size:22px">${f(b)}</div>
+    <div style="font-size:12px"><span class="${good?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}%</span> <span class="muted">vs A ${f(a)}</span></div>
+  </div>`;
+}).join('');
+
+// detail table
+document.getElementById('detail').innerHTML = M.map(([name,a,b,f,hb])=>{
+  const d=deltaPct(a,b), good=(d>=0)===hb;
+  return `<tr><td><b>${name}</b></td><td class="num">${f(a)}</td><td class="num">${f(b)}</td>
+    <td class="num"><span class="${good?'up':'down'}">${d>=0?'+':''}${d.toFixed(1)}%</span></td></tr>`;
+}).join('');
+
+// paired bars (normalized to A=100 for visual parity)
+new Chart(document.getElementById('paired'), {
+  type:'bar',
+  data:{ labels:['รายได้','GP','ลูกค้า','AOV'],
+    datasets:[
+      { label:'A · เม.ย.', data:[100,100,100,100], backgroundColor:'rgba(79,70,229,0.6)', borderRadius:4 },
+      { label:'B · พ.ค.', data:[103.5,105.4,104.8,102.8], backgroundColor:'rgba(13,148,136,0.7)', borderRadius:4 },
+    ] },
+  options:{ responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{ position:'bottom', labels:{boxWidth:10,font:{size:11}} },
+      tooltip:{ callbacks:{ label:c=>c.dataset.label+': index '+c.raw } } },
+    scales:{ y:{ beginAtZero:false, suggestedMin:90, ticks:{ callback:v=>v, font:{size:10} }, grid:{color:'rgba(148,163,184,0.1)'}, title:{display:true,text:'index (A=100)',font:{size:10},color:'#94a3b8'} },
+             x:{ grid:{display:false}, ticks:{font:{size:11}} } } }
+});
+</script>
+</body>
+</html>
