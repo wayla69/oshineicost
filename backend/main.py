@@ -4946,6 +4946,123 @@ def analysis_anomalies(
 
 
 # ---------------------------------------------------------------------------
+# /api/market   -  external market & industry context for the Home brief.
+# Two parts:
+#   (1) CURATED, SOURCED figures (Thai macro + F&B + Japanese-buffet segment).
+#       Hand-compiled from public reports — update MARKET_* + MARKET_AS_OF when
+#       refreshing. These are static, so they never break the page.
+#   (2) LIVE news-headline strip fetched server-side from Google News RSS,
+#       cached with a TTL and degrading gracefully (status flag) so a slow or
+#       blocked feed can never break the dashboard.
+# stdlib only (urllib + xml.etree) — no new pip dependency. NOT wrapped in the
+# 5-min response cache so a transient feed failure isn't cached as "unavailable".
+# ---------------------------------------------------------------------------
+MARKET_AS_OF = "Q3 2025 figures · compiled 2026-02"   # vintage of curated data
+
+MARKET_MACRO = [
+    {"label": "GDP Growth (TH)",     "value": "+2.4%",  "year": "2025",     "trend": "down",
+     "sub": "2026F ~+1.5% — slowing",                 "source": "BoT / IMF"},
+    {"label": "Headline Inflation",  "value": "~0%",    "year": "2025",     "trend": "flat",
+     "sub": "2026F ~+0.8% — subdued",                 "source": "IMF / AMRO"},
+    {"label": "Consumer Confidence", "value": "50.7",   "year": "Sep 2025", "trend": "down",
+     "sub": "near 3-yr low — demand soft",            "source": "UTCC"},
+    {"label": "Foreign Tourists",    "value": "~33.3M", "year": "2025F",    "trend": "down",
+     "sub": "H1 −5.6% YoY · China −50%",              "source": "TAT"},
+]
+
+MARKET_INDUSTRY = [
+    {"label": "TH Foodservice market",     "value": "$35.4B",
+     "sub": "2025 · ~+5% YoY (CAGR ~7.7% to 2030)",            "source": "Mordor Intelligence"},
+    {"label": "Restaurant sales growth",   "value": "+4–5%/yr",
+     "sub": "2024–26 · restaurants = 93% of F&B income",       "source": "Krungsri Research"},
+    {"label": "Japanese restaurants (TH)", "value": "5,916",
+     "sub": "2024 · +2.9% YoY (+165 outlets)",                 "source": "JETRO Bangkok"},
+    {"label": "Japanese segment growth",   "value": "+5.9%/yr",
+     "sub": "premium +13.9% (2024) · buffet = price wars, thin margins", "source": "Phoenix Research"},
+]
+
+# Annual industry growth used as the benchmark line against the chain's own YoY.
+MARKET_BENCHMARK = {
+    "industry_growth_pct": 5.0,     # TH foodservice ~+5%/yr (2025)
+    "jp_segment_growth_pct": 5.9,   # Japanese-restaurant segment CAGR
+    "label": "TH foodservice ~+5%/yr · Japanese segment ~+5.9%/yr",
+}
+
+MARKET_SOURCES = [
+    {"name": "Bank of Thailand — Economic Outlook",
+     "url": "https://www.bot.or.th/en/thai-economy/economic-outlook.html"},
+    {"name": "IMF — Thailand 2025 Article IV",
+     "url": "https://www.imf.org/en/news/articles/2026/02/13/pr26048-thailand-imf-executive-board-concludes-2025-article-iv-consultation-with-thailand"},
+    {"name": "Mordor Intelligence — Thailand Foodservice Market",
+     "url": "https://www.mordorintelligence.com/industry-reports/thailand-foodservice-market"},
+    {"name": "Krungsri Research — F&B / Restaurant Outlook 2024-26",
+     "url": "https://www.krungsri.com/en/research/industry/industry-outlook/services/food-beverages/io/io-food-beverage-restaurant-2024-2026"},
+    {"name": "JETRO — Japanese restaurants in Thailand (≈5,916)",
+     "url": "https://www.nationthailand.com/business/economy/40045018"},
+    {"name": "Phoenix Research — Thailand Japanese Restaurant Market",
+     "url": "https://www.pheonixresearch.com/food-beverages/foodservice-restaurant/market-report/thailand-japanese-restaurant-market/"},
+]
+
+_MARKET_NEWS_CACHE = {"ts": 0.0, "items": None}
+_MARKET_NEWS_TTL = 3 * 3600   # 3 hours
+
+def _fetch_market_news():
+    """Fetch a few Thailand restaurant-industry headlines from Google News RSS.
+    Returns (items, status) where status ∈ {'ok','stale','unavailable'}.
+    Never raises — degrades gracefully so the Home page never breaks."""
+    import time as _t
+    now = _t.time()
+    cache = _MARKET_NEWS_CACHE
+    if cache["items"] is not None and (now - cache["ts"]) < _MARKET_NEWS_TTL:
+        return cache["items"], "ok"
+    try:
+        import urllib.request as _u, urllib.parse as _up, xml.etree.ElementTree as _ET
+        q = _up.quote('Thailand restaurant industry OR ร้านอาหาร')
+        url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
+        req = _u.Request(url, headers={"User-Agent": "Mozilla/5.0 (OshineiDashboard)"})
+        with _u.urlopen(req, timeout=6) as resp:
+            raw = resp.read()
+        root = _ET.fromstring(raw)
+        items = []
+        for it in root.findall(".//item")[:6]:
+            title = (it.findtext("title") or "").strip()
+            link  = (it.findtext("link") or "").strip()
+            pub   = (it.findtext("pubDate") or "").strip()
+            src_el = it.find("source")
+            src = (src_el.text.strip() if src_el is not None and src_el.text else "")
+            if src and title.endswith(f" - {src}"):
+                title = title[: -(len(src) + 3)].strip()
+            if title and link:
+                items.append({"title": title, "url": link, "source": src, "published": pub})
+        if items:
+            cache["items"] = items
+            cache["ts"] = now
+            return items, "ok"
+        if cache["items"]:
+            return cache["items"], "stale"
+        return [], "unavailable"
+    except Exception:
+        if cache["items"]:
+            return cache["items"], "stale"
+        return [], "unavailable"
+
+
+@app.get("/api/market")
+def api_market():
+    """Curated market/industry context + a live (server-fetched) news strip."""
+    news, status = _fetch_market_news()
+    return {
+        "as_of": MARKET_AS_OF,
+        "macro": MARKET_MACRO,
+        "industry": MARKET_INDUSTRY,
+        "benchmark": MARKET_BENCHMARK,
+        "sources": MARKET_SOURCES,
+        "news": news,
+        "news_status": status,
+    }
+
+
+# ---------------------------------------------------------------------------
 # /api/analysis/health   -  composite Health Score per branch
 # ---------------------------------------------------------------------------
 @app.get("/api/analysis/health")
