@@ -34,6 +34,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import calendar
 import sqlite3
 import sys
 from pathlib import Path
@@ -79,6 +80,44 @@ def detect(path: Path) -> tuple[str, str]:
     return kind, period
 
 
+def _day_coverage(parsed: dict, period: str) -> dict | None:
+    """Calendar-day coverage check for a per-transaction (tx) parse.
+
+    The Easy POS monthly exports have a confirmed upstream bug: they DROP the
+    last calendar day of the month (exclusive end-date on the export). That day's
+    sales then silently vanish — every absolute total (revenue, COGS, bills) runs
+    ~1 day (often a payday peak) low. This turns that silent loss into a loud,
+    per-file warning so it can never pass unnoticed again.
+
+    Returns {expected_days, present_days, missing_days, last_present,
+    expected_last, last_day_missing} or None if the period is unparseable.
+    Fix lives UPSTREAM (re-export with an inclusive end date) — the data simply
+    is not in the file, so the loader cannot reconstruct it.
+    """
+    try:
+        y, mo = (int(x) for x in period.split("-"))
+        ndays = calendar.monthrange(y, mo)[1]
+    except Exception:
+        return None
+    present = set()
+    for txs in parsed.get("branches", {}).values():
+        for t in txs:
+            sa = t.get("sold_at") or ""
+            if len(sa) >= 10:
+                present.add(sa[:10])
+    expected = {f"{y:04d}-{mo:02d}-{d:02d}" for d in range(1, ndays + 1)}
+    missing = sorted(expected - present)
+    last_expected = f"{y:04d}-{mo:02d}-{ndays:02d}"
+    return {
+        "expected_days":  ndays,
+        "present_days":   len(present & expected),
+        "missing_days":   [d[-2:] for d in missing],
+        "last_present":   max(present) if present else None,
+        "expected_last":  last_expected,
+        "last_day_missing": last_expected not in present,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Per-file ingest on an OPEN connection — shared by the CLI and the web endpoint
 # ---------------------------------------------------------------------------
@@ -121,6 +160,7 @@ def ingest_one(con: sqlite3.Connection, path: Path, *,
         )
 
     rows = sum(len(v) for v in parsed["branches"].values())
+    coverage = _day_coverage(parsed, period) if kind == "tx" else None
 
     if apply:
         if kind == "es1":
@@ -137,6 +177,7 @@ def ingest_one(con: sqlite3.Connection, path: Path, *,
         "new_branches": new_branches,
         "rows": rows,
         "applied": apply,
+        "coverage": coverage,
     }
 
 
@@ -185,6 +226,12 @@ def run(files: list[str], folder: str | None, *,
             print(f"  [{r['kind']:<12}] {p.name:34} {r['period']}  "
                   f"rows={r['rows']:>7,}  branches={r['branches']}"
                   + (f"  NEW BRANCHES: {r['new_branches']}" if r['new_branches'] else ""))
+            cov = r.get("coverage")
+            if cov and cov["missing_days"]:
+                tail = " (incl. LAST DAY — upstream export off-by-one)" if cov["last_day_missing"] else ""
+                print(f"      ⚠ COVERAGE: {r['period']} missing {len(cov['missing_days'])} "
+                      f"day(s) {cov['missing_days']} — last present {cov['last_present']}, "
+                      f"expected {cov['expected_last']}{tail}", file=sys.stderr)
     except ValueError as e:
         print(f"\nABORT — {e}", file=sys.stderr)
         con.close()
