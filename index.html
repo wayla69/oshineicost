@@ -941,6 +941,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="top-bar">
     <div class="flex items-center gap-3 flex-1 min-w-0">
       <h1 class="page-title flex-shrink-0" id="pageTitle">Overall</h1>
+      <!-- Data coverage note (populated by initDataCoverageNote) -->
+      <span id="dataCoverageNote" class="flex-shrink-0" style="display:none;font-size:11px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap" title=""></span>
       <!-- Global search -->
       <div class="relative flex-shrink-0" style="width:220px">
         <input id="globalSearch" type="text" placeholder="Search branches / SKUs…"
@@ -2052,7 +2054,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- Top menus table -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-2">
-      <h2 class="section-title mb-0">🍽️ Top 30 เมนูที่ใช้ต้นทุนมากที่สุด</h2>
+      <h2 class="section-title mb-0">🍽️ Top 60 เมนูที่ใช้ต้นทุนมากที่สุด</h2>
       <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียงข้อมูล · 🔬 = มีสูตร BoM</span>
     </div>
     <div class="overflow-x-auto">
@@ -2078,8 +2080,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
     <div class="card p-5 lg:col-span-2">
       <h2 class="section-title mb-1">🧪 Top 25 วัตถุดิบที่มีต้นทุนมากที่สุด</h2>
-      <p class="text-xs text-slate-400 mb-3">สีตามชนิดวัตถุดิบ · hover เพื่อดูเมนูที่ใช้</p>
-      <div style="position:relative;height:560px"><canvas id="bbomIngChart"></canvas></div>
+      <p class="text-xs text-slate-400 mb-3">เรียงตามต้นทุนรวม · สีแถบ = ชนิดวัตถุดิบ · ความยาวแถบ = สัดส่วนต้นทุน</p>
+      <div class="overflow-y-auto" style="max-height:560px"><div id="bbomIngList"></div></div>
     </div>
     <div class="card p-5">
       <h2 class="section-title mb-1">🥩 ต้นทุนตามชนิดวัตถุดิบ</h2>
@@ -2118,6 +2120,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </select>
     </label>
     <button onclick="loadBomCostTab()" class="px-3 py-1 bg-indigo-600 text-white rounded-lg font-medium">โหลด</button>
+    <label class="flex items-center gap-1.5 cursor-pointer select-none" title="นับ service charge (ex-VAT) เป็นรายได้ และรวมในตัวหาร Food Cost % — มีผลทุกหน้าวิเคราะห์">
+      <input type="checkbox" id="bcInclServiceChk" onchange="setInclService(this.checked)">
+      <span>รวม Service Charge เป็นรายได้</span>
+    </label>
     <span id="bcStatus" class="text-slate-400 ml-auto"></span>
   </div>
 
@@ -5763,6 +5769,7 @@ async function init() {
     try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
     document.getElementById('presetBar').classList.remove('hidden');
     loadActiveTab();
+    initDataCoverageNote();
     // Periodic health check every 30 s (silent badge update only)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
@@ -5775,6 +5782,34 @@ async function init() {
   } finally {
     hideLoadingBar();
   }
+}
+
+// Show "ข้อมูลถึง <date>" in the top bar, with a warning tint when the latest
+// month is missing its final day (known upstream Easy-export off-by-one).
+async function initDataCoverageNote() {
+  const el = document.getElementById('dataCoverageNote');
+  if (!el) return;
+  try {
+    const c = await fetch(`${API}/api/data-coverage`).then(r => r.json());
+    if (!c || !c.last_date) return;
+    const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+    const [y, m, d] = c.last_date.split('-').map(Number);
+    const human = `${d} ${TH_MON[m-1]} ${y+543}`;   // พ.ศ.
+    if (c.last_day_missing) {
+      el.textContent = `⚠ ข้อมูลถึง ${human}`;
+      el.style.background = '#fef3c7';
+      el.style.color = '#92400e';
+      el.title = `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
+               + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น Food Cost % กระทบน้อย. `
+               + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`;
+    } else {
+      el.textContent = `ข้อมูลถึง ${human}`;
+      el.style.background = 'var(--bg-subtle)';
+      el.style.color = 'var(--text-secondary)';
+      el.title = `ข้อมูลล่าสุดถึง ${human}`;
+    }
+    el.style.display = '';
+  } catch (e) { /* note is non-critical */ }
 }
 
 async function loadBranches() {
@@ -12703,7 +12738,7 @@ async function loadBranchBom(force) {
   }
   const status = document.getElementById('bbomStatus');
   status.textContent = 'กำลังโหลด…';
-  const params = new URLSearchParams({ branch, top_n: 50 });
+  const params = new URLSearchParams({ branch, top_n: 60 });
   if (mf) params.set('month_from', mf);
   if (mt) params.set('month_to',   mt);
   const gran = window.bbomGranularity || 'month';
@@ -12923,43 +12958,62 @@ function _bbomRenderMenuTable() {
       <td class="px-3 py-1.5 text-center">${bomBadge}</td>
     </tr>`;
   }).join('');
+
+  // ── Totals row (sum of the displayed Top-N menus) ───────────────────
+  const tQty  = rows.reduce((s, r) => s + (r.qty || 0), 0);
+  const tCogs = rows.reduce((s, r) => s + (r.total_cogs || 0), 0);
+  const tPct  = rows.reduce((s, r) => s + (r.pct_of_branch_cogs || 0), 0);
+  const wAvg  = tQty > 0 ? tCogs / tQty : 0;   // weighted avg cost/unit
+  tbody.innerHTML += `<tr style="border-top:2px solid var(--border);background:var(--bg-subtle);font-weight:700">
+    <td class="px-3 py-2 text-xs" colspan="2">รวม Top ${rows.length}</td>
+    <td class="px-3 py-2 text-right text-xs">${tQty.toLocaleString('th-TH', {maximumFractionDigits:0})}</td>
+    <td class="px-3 py-2 text-right text-xs" style="color:var(--text-muted)">${wAvg.toFixed(2)}</td>
+    <td class="px-3 py-2 text-right text-xs">${_bbomFmtB(tCogs)}</td>
+    <td class="px-3 py-2 text-right text-xs" style="color:#d946ef">${tPct.toFixed(2)}%</td>
+    <td class="px-3 py-2"></td>
+    <td class="px-3 py-2"></td>
+  </tr>`;
 }
 
 function _bbomRenderIngredients(d) {
   const ings = d.top_ingredients_by_cost || [];
-  if (chartInstances['bbomIng']) { chartInstances['bbomIng'].destroy(); }
-  const ctx = document.getElementById('bbomIngChart').getContext('2d');
-  if (!ings.length) return;
-  const labels = ings.map(i => i.ingredient_name + (i.ingredient_code ? ` (${i.ingredient_code})` : ''));
-  const data   = ings.map(i => i.total_cost);
-  const colors = ings.map(i => _BBOM_TYPE_COLORS[i.ingredient_type] || _BBOM_TYPE_COLORS.other);
-  chartInstances['bbomIng'] = new Chart(ctx, {
-    type:'bar',
-    data:{ labels, datasets:[{ label:'ต้นทุน ()', data, backgroundColor:colors, borderRadius:3 }] },
-    options:{
-      indexAxis:'y',
-      responsive:true, maintainAspectRatio:false,
-      plugins:{
-        legend:{ display:false },
-        datalabels:{ display:false },
-        tooltip:{
-          callbacks:{
-            label: ctx => ` ${_bbomFmtB(ctx.parsed.x)} (${(ings[ctx.dataIndex].pct_of_branch_cogs||0).toFixed(2)}%)`,
-            afterLabel: ctx => {
-              const i = ings[ctx.dataIndex];
-              const tline = `ชนิด: ${_BBOM_TYPE_LABELS[i.ingredient_type] || i.ingredient_type}`;
-              const ml = `ใช้ใน ${i.n_menus_using} เมนู${i.top_menus && i.top_menus.length ? ' · เช่น ' + i.top_menus.join(', ') : ''}`;
-              return [tline, ml];
-            },
-          },
-        },
-      },
-      scales:{
-        x:{ ticks:{ callback: v => _bbomFmtB(v), font:{ size:9 } } },
-        y:{ ticks:{ font:{ size:9 }, autoSkip:false } },
-      },
-    },
-  });
+  // Drop any leftover chart instance from older bar-chart version
+  if (chartInstances['bbomIng']) { chartInstances['bbomIng'].destroy(); delete chartInstances['bbomIng']; }
+  const host = document.getElementById('bbomIngList');
+  if (!host) return;
+  if (!ings.length) {
+    host.innerHTML = '<p class="text-center py-8 text-slate-400 text-sm">ไม่มีข้อมูลวัตถุดิบ</p>';
+    return;
+  }
+  const maxCost = Math.max(...ings.map(i => i.total_cost || 0), 1);
+  host.innerHTML = ings.map((i, idx) => {
+    const color   = _BBOM_TYPE_COLORS[i.ingredient_type] || _BBOM_TYPE_COLORS.other;
+    const typeLbl = _BBOM_TYPE_LABELS[i.ingredient_type] || i.ingredient_type || 'อื่นๆ';
+    const barW    = Math.max(2, (i.total_cost || 0) / maxCost * 100);
+    const qtyTxt  = (i.total_qty || 0).toLocaleString('th-TH', {maximumFractionDigits:1}) + (i.unit ? ' ' + esc(i.unit) : '');
+    const menus   = (i.top_menus && i.top_menus.length) ? ' · เช่น ' + esc(i.top_menus.join(', ')) : '';
+    return `<div style="padding:7px 0;border-bottom:1px solid var(--border)">
+      <div class="flex items-center justify-between" style="gap:8px">
+        <div class="flex items-center" style="gap:8px;min-width:0">
+          <span style="flex:none;width:22px;text-align:right;color:var(--text-muted);font-size:11px;font-weight:600">${idx+1}</span>
+          <span style="flex:none;width:9px;height:9px;border-radius:2px;background:${color}"></span>
+          <span class="text-xs font-medium truncate" title="${esc(i.ingredient_name||'')}">${esc(i.ingredient_name||'')}</span>
+          ${i.ingredient_code ? `<span class="text-xs font-mono text-slate-400" style="flex:none">${esc(i.ingredient_code)}</span>` : ''}
+          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:9px;background:${color}22;color:${color};font-weight:600">${esc(typeLbl)}</span>
+        </div>
+        <div class="text-right" style="flex:none">
+          <span class="text-xs font-semibold">${_bbomFmtB(i.total_cost)}</span>
+          <span class="text-xs" style="color:#d946ef;font-weight:600;margin-left:4px">${(i.pct_of_branch_cogs||0).toFixed(2)}%</span>
+        </div>
+      </div>
+      <div class="flex items-center" style="gap:8px;margin-top:4px;padding-left:30px">
+        <div style="flex:1;height:7px;border-radius:4px;background:var(--bg-subtle);overflow:hidden">
+          <div style="width:${barW.toFixed(1)}%;height:100%;background:${color};border-radius:4px"></div>
+        </div>
+        <span class="text-slate-400" style="flex:none;font-size:10px">${qtyTxt} · ใช้ใน ${i.n_menus_using||0} เมนู${menus}</span>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function _bbomRenderTypeChart(d) {
@@ -17450,6 +17504,7 @@ async function updateBizType(skuCode, newType, el) {
 // ═════════════════════════════════════════════════════════════════════════════
 let bcMode = 'overview';
 let bcOverviewData = null;
+let bcFoodMomData  = null;
 let bcSimBase = null;
 let bcSimOverrides = {};   // {sku_code: unit_cost}
 let bcCompareSelection = [];
@@ -17468,6 +17523,23 @@ function bcPeriod() {
   const mt = document.getElementById('bcMonthTo')?.value   || '';
   const gr = document.getElementById('bcGranularity')?.value || 'month';
   return { mf, mt, gr };
+}
+
+// ─── Global "count service charge as revenue" toggle (persisted, all analysis pages) ───
+function inclService() { return localStorage.getItem('inclService') === '1'; }
+function setInclService(on) {
+  localStorage.setItem('inclService', on ? '1' : '0');
+  // keep every visible toggle checkbox in sync
+  document.querySelectorAll('input[id$="InclServiceChk"]').forEach(c => { c.checked = on; });
+  // reload only the analysis view that is actually on screen (tabs hide via display:none)
+  const visible = id => { const el = document.getElementById(id); return el && el.offsetParent !== null; };
+  if (typeof loadBomCostTab === 'function' && visible('tab-bomcost')) loadBomCostTab();
+  if (typeof loadBranchBom === 'function' && visible('tab-branchbom')) loadBranchBom(true);
+}
+// reflect persisted state on any checkbox when the page/tab renders
+function _syncInclServiceChecks() {
+  const on = inclService();
+  document.querySelectorAll('input[id$="InclServiceChk"]').forEach(c => { c.checked = on; });
 }
 
 function bcFmtN(n) {
@@ -17503,23 +17575,33 @@ async function loadBomCostTab() {
 
 // ─── MODE 1: Overview ────────────────────────────────────────────────────────
 async function bcLoadOverview() {
+  _syncInclServiceChecks();
   const { mf, mt, gr } = bcPeriod();
+  const svc = inclService();
   const qp = new URLSearchParams({ granularity: gr });
   if (mf) qp.set('month_from', mf);
   if (mt) qp.set('month_to',   mt);
-  const data = await fetch(`${API}/api/bom-cost/overview?${qp}`).then(r => r.json());
+  if (svc) qp.set('incl_service', 'true');
+  const momQp = svc ? '?incl_service=true' : '';
+  const [data, mom] = await Promise.all([
+    fetch(`${API}/api/bom-cost/overview?${qp}`).then(r => r.json()),
+    fetch(`${API}/api/bom-cost/branch-foodcost-mom${momQp}`).then(r => r.json()).catch(() => ({branches:[]})),
+  ]);
   bcOverviewData = data;
+  bcFoodMomData  = mom;
   const t = data.totals || {};
   const pane = document.getElementById('bc-pane-overview');
   const fc = t.food_cost_pct;
   const con = data.concentration || {};
+  const svcOn = !!t.incl_service;
+  const revSub = svcOn ? `ex-VAT + service ${bcFmtN(t.service_charge)}` : 'ex-VAT';
   const kpis = `
     <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5">
-      ${bcKpiCard('Total Revenue',  bcFmtN(t.revenue),       'ex-VAT',                 '#0284c7')}
+      ${bcKpiCard('Total Revenue',  bcFmtN(t.revenue),       revSub,                   '#0284c7')}
       ${bcKpiCard('Total COGS',     bcFmtN(t.cogs),          'BoM/Unit Cost',          '#dc2626')}
       ${bcKpiCard('Total GP',       bcFmtN(t.gp),            `${bcFmtPct(t.gp_pct)}`,  t.gp>=0?'#10b981':'#ef4444')}
       ${bcKpiCard('GP %',           bcFmtPct(t.gp_pct),      '',                        '#10b981')}
-      ${bcKpiCard('Food Cost %',    bcFmtPct(t.food_cost_pct), '(เป้า 55–70%)',
+      ${bcKpiCard('Food Cost %',    bcFmtPct(t.food_cost_pct), svcOn?'(เป้า 55–70% · รวม service)':'(เป้า 55–70%)',
                                     (fc!=null && fc>70)?'#dc2626':(fc!=null && fc>=55)?'#10b981':'#f59e0b')}
     </div>`;
 
@@ -17605,45 +17687,157 @@ async function bcLoadOverview() {
       <p class="text-[10px] text-slate-400 mt-2">เขียว 55–70% (เป้า) · เหลือง/ส้ม > เป้า · แดง > 100% (ขาดทุน)</p>
     </div>`;
 
-  // Branch breakdown bar
-  const br = data.branch_breakdown || [];
-  const brHtml = `
-    <div class="card p-4 mb-5">
-      <h3 class="font-semibold mb-3">Branch Breakdown · Food Cost % (เป้า 55–70%)</h3>
-      <div class="space-y-1.5">
-        ${br.map(r => {
-          const fcv = r.food_cost_pct;
-          const w  = Math.min(100, fcv==null?0:fcv);
-          return `<div class="flex items-center gap-2 text-xs">
-            <div class="w-40 truncate" title="${esc(r.branch)}">${esc(r.branch)}</div>
-            <div class="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden relative">
-              <div class="h-full ${bcFoodPctColor(fcv).replace('text-','bg-')}" style="width:${w}%;opacity:.7"></div>
-              <div class="absolute inset-0 flex items-center justify-between px-2"><span class="${bcFoodPctColor(fcv)} font-semibold">${bcFmtPct(fcv)}</span><span class="text-[10px] text-slate-500">${bcFmtN(r.cogs)}</span></div>
-            </div>
-          </div>`;
-        }).join('')}
+  // Branch breakdown — colored KPI boxes (latest month + MoM, click to drill down)
+  const brHtml = bcRenderFoodCostBoxes(mom);
+
+  pane.innerHTML = kpis + topTbl + heatmapHtml + brHtml;
+}
+
+// Hex color for the Food-Cost zone (matches bcFoodPctColor zones)
+function bcFoodPctHex(p) {
+  if (p == null)  return '#94a3b8';
+  if (p < 55)     return '#2563eb';   // below target (too low)
+  if (p <= 70)    return '#059669';   // on target
+  if (p <= 85)    return '#d97706';   // above target
+  return '#dc2626';                   // far above target
+}
+
+// Renders the per-branch Food-Cost KPI grid + a shared drill-down panel.
+function bcRenderFoodCostBoxes(mom) {
+  bcFoodDrillOpen = null;   // panel is rebuilt empty — keep toggle state in sync
+  const brs = (mom && mom.branches) || [];
+  const monLbl = mom && mom.month ? mom.month : '';
+  const prevLbl = mom && mom.prev_month ? mom.prev_month : '';
+  if (!brs.length) {
+    return `<div class="card p-4 mb-5"><h3 class="font-semibold mb-1">Branch Breakdown · Food Cost %</h3>
+      <p class="text-xs text-slate-400">ไม่มีข้อมูล</p></div>`;
+  }
+  const boxes = brs.map((r, i) => {
+    const fcv  = r.food_cost_pct;
+    const hex  = bcFoodPctHex(fcv);
+    const dp   = r.delta_pp;
+    let momHtml = '<span class="text-[10px] text-slate-400">— ไม่มีเดือนก่อน</span>';
+    if (dp != null) {
+      // Food cost: lower = better → a drop is good (green), a rise is bad (red)
+      const good = dp < 0;
+      const col  = dp === 0 ? '#64748b' : (good ? '#059669' : '#dc2626');
+      const arr  = dp === 0 ? '→' : (dp > 0 ? '▲' : '▼');
+      momHtml = `<span class="text-[11px] font-semibold" style="color:${col}">${arr} ${dp>0?'+':''}${dp.toFixed(1)}pp</span>
+             <span class="text-[10px] text-slate-400"> vs ${prevLbl}</span>`;
+    }
+    return `<button type="button" onclick="bcDrillBranch(${i})"
+        class="card p-3 text-left hover:shadow-md transition" data-bcbox="${i}"
+        style="border-left:4px solid ${hex};cursor:pointer">
+      <div class="text-xs font-medium text-slate-600 truncate" title="${esc(r.branch)}">${esc(r.branch)}</div>
+      <div class="flex items-baseline gap-1 mt-0.5">
+        <span class="text-2xl font-bold" style="color:${hex}">${bcFmtPct(fcv)}</span>
+      </div>
+      <div class="mt-0.5">${momHtml}</div>
+      <div class="text-[10px] text-slate-400 mt-1">COGS ${bcFmtN(r.cogs)} · ${monLbl}</div>
+    </button>`;
+  }).join('');
+
+  return `<div class="card p-4 mb-5">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-semibold">Branch Breakdown · Food Cost % <span class="text-xs font-normal text-slate-400">(เป้า 55–70%)</span></h3>
+      <span class="text-xs text-slate-500">${monLbl}${prevLbl?` เทียบ ${prevLbl}`:''} · คลิกสาขาเพื่อดูรายละเอียด</span>
+    </div>
+    <p class="text-[10px] text-slate-400 mb-3">
+      <span style="color:#2563eb">◼</span> ต่ำกว่าเป้า ·
+      <span style="color:#059669">◼</span> ตามเป้า 55–70% ·
+      <span style="color:#d97706">◼</span> สูงกว่าเป้า ·
+      <span style="color:#dc2626">◼</span> สูงมาก · ▼ ลด = ดี · ▲ เพิ่ม = ต้องระวัง
+    </p>
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">${boxes}</div>
+    <div id="bcFoodDrill" class="mt-4"></div>
+  </div>`;
+}
+
+// Drill-down: show one branch's MoM detail + top menu cost movers.
+let bcFoodDrillOpen = null;
+function bcDrillBranch(idx) {
+  const host = document.getElementById('bcFoodDrill');
+  const r = bcFoodMomData && bcFoodMomData.branches && bcFoodMomData.branches[idx];
+  if (!host || !r) return;
+  // toggle: clicking the open one again closes it
+  if (bcFoodDrillOpen === idx) { host.innerHTML = ''; bcFoodDrillOpen = null; _bcHighlightBox(null); return; }
+  bcFoodDrillOpen = idx;
+  _bcHighlightBox(idx);
+
+  const monLbl = bcFoodMomData.month || '';
+  const prevLbl = bcFoodMomData.prev_month || '';
+  const dpTxt = r.delta_pp == null ? '—'
+    : `${r.delta_pp>0?'+':''}${r.delta_pp.toFixed(1)}pp`;
+  const dpCol = r.delta_pp == null ? '#64748b' : (r.delta_pp < 0 ? '#059669' : (r.delta_pp>0?'#dc2626':'#64748b'));
+  const cogsDeltaCol = r.cogs_delta > 0 ? '#dc2626' : (r.cogs_delta < 0 ? '#059669' : '#64748b');
+
+  const moverRow = (m) => {
+    const up = m.delta > 0;
+    const col = up ? '#dc2626' : '#059669';
+    const badge = m.is_new  ? '<span class="text-[9px] px-1 rounded bg-blue-100 text-blue-700 ml-1">ใหม่</span>'
+              : (m.is_gone  ? '<span class="text-[9px] px-1 rounded bg-slate-200 text-slate-600 ml-1">หยุดขาย</span>' : '');
+    return `<div class="flex items-center justify-between gap-2 py-1 border-b border-slate-100 text-xs">
+      <div class="truncate min-w-0">
+        <span class="font-mono text-indigo-600">${esc(m.sku_code||'')}</span>
+        <span class="text-slate-600">${esc(m.description||'')}</span>${badge}
+      </div>
+      <div class="text-right whitespace-nowrap" style="flex:none">
+        <span class="font-semibold" style="color:${col}">${up?'+':''}${bcFmtN(m.delta)}</span>
+        <span class="text-[10px] text-slate-400 ml-1">${bcFmtN(m.prev_cogs)}→${bcFmtN(m.cogs)}</span>
       </div>
     </div>`;
+  };
+  const ups   = (r.movers_up   || []);
+  const downs = (r.movers_down || []);
+  const empty = '<p class="text-[11px] text-slate-400 py-2">— ไม่มี</p>';
 
-  // Top 30 ingredients (horizontal bar)
-  const ings = data.top_ingredients || [];
-  const maxIng = Math.max(1, ...ings.map(x => x.total_cost));
-  const ingHtml = `
-    <div class="card p-4 mb-5">
-      <h3 class="font-semibold mb-3">Top 30 Ingredients by Chain COGS</h3>
-      <div class="space-y-1">
-        ${ings.map(r => `<div class="flex items-center gap-2 text-xs">
-          <div class="w-48 truncate" title="${r.ingredient_name}">${r.ingredient_name} <span class="text-[10px] text-slate-400">(${r.ingredient_type})</span></div>
-          <div class="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
-            <div class="h-full bg-indigo-400" style="width:${(r.total_cost/maxIng*100).toFixed(1)}%"></div>
-          </div>
-          <div class="w-24 text-right">${bcFmtN(r.total_cost)}</div>
-          <div class="w-12 text-right text-slate-500">${bcFmtPct(r.pct_of_chain_cogs,1)}</div>
-        </div>`).join('')}
+  host.innerHTML = `
+    <div class="rounded-lg border border-slate-200 p-4" style="background:#f8fafc">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h4 class="font-semibold">${esc(r.branch)} · ${monLbl} เทียบ ${prevLbl||'—'}</h4>
+        <button onclick="bcDrillBranch(${idx})" class="text-xs text-slate-400 hover:text-slate-600">✕ ปิด</button>
       </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-center">
+        <div class="bg-white rounded p-2 border border-slate-100">
+          <div class="text-[10px] text-slate-400">Food Cost %</div>
+          <div class="text-lg font-bold" style="color:${bcFoodPctHex(r.food_cost_pct)}">${bcFmtPct(r.food_cost_pct)}</div>
+          <div class="text-[10px] text-slate-400">ก่อน ${bcFmtPct(r.prev_food_cost_pct)}</div>
+        </div>
+        <div class="bg-white rounded p-2 border border-slate-100">
+          <div class="text-[10px] text-slate-400">MoM</div>
+          <div class="text-lg font-bold" style="color:${dpCol}">${dpTxt}</div>
+          <div class="text-[10px] text-slate-400">เป้า 55–70%</div>
+        </div>
+        <div class="bg-white rounded p-2 border border-slate-100">
+          <div class="text-[10px] text-slate-400">COGS</div>
+          <div class="text-base font-bold">${bcFmtN(r.cogs)}</div>
+          <div class="text-[10px]" style="color:${cogsDeltaCol}">${r.cogs_delta>0?'+':''}${bcFmtN(r.cogs_delta)} MoM</div>
+        </div>
+        <div class="bg-white rounded p-2 border border-slate-100">
+          <div class="text-[10px] text-slate-400">รายได้ฐานคิดต้นทุน (costed)</div>
+          <div class="text-base font-bold">${bcFmtN(r.costed_revenue)}</div>
+          <div class="text-[10px] text-slate-400">ทั้งหมด ex-VAT ${bcFmtN(r.revenue)}</div>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <h5 class="text-xs font-semibold mb-1" style="color:#dc2626">▲ เมนูที่ต้นทุนเพิ่มมากสุด (Top ${ups.length})</h5>
+          ${ups.length ? ups.map(moverRow).join('') : empty}
+        </div>
+        <div>
+          <h5 class="text-xs font-semibold mb-1" style="color:#059669">▼ เมนูที่ต้นทุนลดมากสุด (Top ${downs.length})</h5>
+          ${downs.length ? downs.map(moverRow).join('') : empty}
+        </div>
+      </div>
+      <p class="text-[10px] text-slate-400 mt-3">ตัวเลข = ส่วนต่าง COGS ระหว่าง ${prevLbl||'เดือนก่อน'} → ${monLbl} (บาท) · เรียงตามขนาดการเปลี่ยนแปลง</p>
     </div>`;
+  host.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
 
-  pane.innerHTML = kpis + topTbl + heatmapHtml + brHtml + ingHtml;
+function _bcHighlightBox(idx) {
+  document.querySelectorAll('[data-bcbox]').forEach(b => {
+    b.style.outline = (idx != null && +b.dataset.bcbox === idx) ? '2px solid #6366f1' : 'none';
+  });
 }
 
 function bcKpiCard(label, val, sub, color) {

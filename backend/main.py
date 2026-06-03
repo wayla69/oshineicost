@@ -457,6 +457,31 @@ def list_months(branch: Optional[str] = Query(None)):
     return [r["period_month"] for r in rows]
 
 
+@app.get("/api/data-coverage")
+@ttl_cache
+def data_coverage():
+    """Latest date the sales data actually covers — for the dashboard 'ข้อมูลถึง…'
+    note. Flags when the latest month is missing its final calendar day (the known
+    upstream Easy-export off-by-one; see upload_data._day_coverage)."""
+    import calendar as _cal
+    with get_db() as con:
+        row = con.execute(
+            "SELECT MAX(substr(sold_at,1,10)) AS d FROM sales_transaction"
+        ).fetchone()
+    last_day = row["d"] if row and row["d"] else None
+    last_month = last_day[:7] if last_day else None
+    last_day_missing = None
+    if last_day:
+        y, mo, dd = (int(x) for x in last_day.split("-"))
+        ndays = _cal.monthrange(y, mo)[1]
+        last_day_missing = dd < ndays
+    return {
+        "last_date":        last_day,     # 'YYYY-MM-DD'
+        "last_month":       last_month,   # 'YYYY-MM'
+        "last_day_missing": last_day_missing,
+    }
+
+
 # ---------------------------------------------------------------------------
 # /api/sales/monthly   -  monthly revenue trend
 # ---------------------------------------------------------------------------
@@ -12562,6 +12587,36 @@ def update_sku_business_type(sku_code: str, body: BusinessTypeUpdate):
 # =============================================================================
 # Phase 17d — BoM Cost Analysis (4-mode page) + Simulator
 # =============================================================================
+def _service_charge_map(con, month_from=None, month_to=None, branches=None):
+    """Per-(branch_name, period_month) EX-VAT service charge from the bill-level
+    `sales_transaction` table.
+
+    The `service_charge` column is stored PRE-VAT (verified: total_inc_vat ≈
+    (food+drink+other - discount + service_charge) * 1.07), so it pairs directly
+    with ex-VAT revenue / costed revenue. Returns {(branch, 'YYYY-MM'): amount}.
+    """
+    filt = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
+    params: dict = {}
+    if month_from:
+        filt.append("substr(st.sold_at,1,7) >= :sf"); params["sf"] = month_from
+    if month_to:
+        filt.append("substr(st.sold_at,1,7) <= :stt"); params["stt"] = month_to
+    if branches:
+        ph = ",".join(f":sb{i}" for i in range(len(branches)))
+        filt.append(f"b.name IN ({ph})")
+        for i, br in enumerate(branches):
+            params[f"sb{i}"] = br
+    rows = con.execute(f"""
+        SELECT b.name AS branch, substr(st.sold_at,1,7) AS m,
+               COALESCE(SUM(st.service_charge), 0) AS svc
+          FROM sales_transaction st
+          JOIN branches b ON b.branch_id = st.branch_id
+         WHERE {' AND '.join(filt)}
+         GROUP BY b.name, m
+    """, params).fetchall()
+    return {(r["branch"], r["m"]): float(r["svc"] or 0) for r in rows}
+
+
 def _bom_cost_period_filters(month_from, month_to, branches=None):
     """Build (where_sql, params) for chain-wide BoM cost queries."""
     filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
@@ -12581,6 +12636,7 @@ def bom_cost_overview(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     granularity: str          = Query("month", description="day | week | month"),
+    incl_service: bool        = Query(False, description="Count ex-VAT service charge as revenue (and in the Food-Cost%/GP% denominator)"),
 ):
     """Chain-wide BoM cost overview - KPIs, heatmap, top-50 SKUs, top-30 ingredients,
     branch breakdown."""
@@ -12673,6 +12729,8 @@ def bom_cost_overview(
             ORDER BY cogs DESC
         """, params).fetchall()
 
+        svc_map = _service_charge_map(con, month_from, month_to) if incl_service else {}
+
         ing_rows = con.execute(f"""
             WITH eff AS (
               SELECT ssm.sku_id AS sales_sku_id, ssm.qty AS qty,
@@ -12701,9 +12759,14 @@ def bom_cost_overview(
              LIMIT 30
         """, params).fetchall()
 
-    revenue_ex    = float(tot["revenue_ex"]    or 0)
+    svc_total     = sum(svc_map.values())           # 0 when incl_service is False
+    svc_by_branch: Dict[str, float] = {}
+    for (br, _m), v in svc_map.items():
+        svc_by_branch[br] = svc_by_branch.get(br, 0.0) + v
+
+    revenue_ex    = float(tot["revenue_ex"]    or 0) + svc_total
     cogs          = float(tot["cogs"]          or 0)
-    costed_rev_ex = float(tot["costed_rev_ex"] or 0)
+    costed_rev_ex = float(tot["costed_rev_ex"] or 0) + svc_total   # service = pure revenue, no COGS
     gp            = costed_rev_ex - cogs
     gp_pct        = (gp   / costed_rev_ex * 100) if costed_rev_ex > 0 else None
     food_pct      = (cogs / costed_rev_ex * 100) if costed_rev_ex > 0 else None
@@ -12751,11 +12814,12 @@ def bom_cost_overview(
     branches_out = []
     for r in branch_rows:
         c      = float(r["cogs"]   or 0)
-        costed = float(r["costed"] or 0)
+        svc    = svc_by_branch.get(r["branch"], 0.0)
+        costed = float(r["costed"] or 0) + svc
         fc     = (c / costed * 100) if costed > 0 else None
         branches_out.append({
             "branch": r["branch"],
-            "revenue": round(float(r["rev"] or 0), 2),
+            "revenue": round(float(r["rev"] or 0) + svc, 2),
             "cogs": round(c, 2),
             "food_cost_pct": round(fc, 1) if fc is not None else None,
         })
@@ -12784,6 +12848,8 @@ def bom_cost_overview(
             "gp_pct":        round(gp_pct, 1)   if gp_pct   is not None else None,
             "food_cost_pct": round(food_pct, 1) if food_pct is not None else None,
             "menus_total":   int(tot["menus_total"] or 0),
+            "service_charge": round(svc_total, 2),
+            "incl_service":  bool(incl_service),
         },
         "heatmap":          heatmap,
         "top_skus":         top_skus,
@@ -12792,6 +12858,145 @@ def bom_cost_overview(
         "top_ingredients":  ings,
         "cost_by_ingredient_type": {k: round(v, 2) for k, v in by_type.items()},
     }
+
+
+@app.get("/api/bom-cost/branch-foodcost-mom")
+@ttl_cache
+def bom_cost_branch_foodcost_mom(
+    month: Optional[str] = Query(None, description="'Current' month (YYYY-MM); default = latest in data"),
+    movers_n: int        = Query(5, description="How many top menu movers up/down per branch"),
+    incl_service: bool   = Query(False, description="Count ex-VAT service charge as revenue (and in the Food-Cost% denominator)"),
+):
+    """Per-branch Food Cost % for the latest month vs the previous month (MoM),
+    plus the top menu cost movers (increase/decrease) that drove each branch's change.
+    Powers the Branch Food-Cost KPI boxes + drill-down."""
+    cogs_expr       = _cogs_case('ssm', 'sk', 'sc')
+    costed_rev_expr = _costed_rev_case('ssm', 'sk', 'sc')
+    movers_n = max(1, min(20, int(movers_n)))
+
+    with get_db() as con:
+        months = [r["m"] for r in con.execute(
+            "SELECT DISTINCT period_month AS m FROM sales_sku_monthly "
+            "ORDER BY period_month DESC LIMIT 36"
+        ).fetchall()]
+        if not months:
+            return {"month": None, "prev_month": None, "branches": []}
+        cur_m  = month if (month and month in months) else months[0]
+        idx    = months.index(cur_m)
+        prev_m = months[idx + 1] if idx + 1 < len(months) else None
+
+        ms = [cur_m] + ([prev_m] if prev_m else [])
+        ph = ",".join(f":m{i}" for i in range(len(ms)))
+        params = {f"m{i}": m for i, m in enumerate(ms)}
+
+        agg_rows = con.execute(f"""
+            SELECT b.name AS branch, ssm.period_month AS m,
+                   COALESCE(SUM(ssm.subtotal_ex_vat), 0) AS rev,
+                   COALESCE(SUM({cogs_expr}), 0)         AS cogs,
+                   COALESCE(SUM({costed_rev_expr}), 0)   AS costed
+              FROM sales_sku_monthly ssm
+              JOIN branches b   ON b.branch_id = ssm.branch_id
+              JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
+              LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+             WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+               AND ssm.period_month IN ({ph})
+             GROUP BY b.name, ssm.period_month
+        """, params).fetchall()
+
+        mover_rows = con.execute(f"""
+            SELECT b.name AS branch, ssm.sku_id AS sku_id,
+                   sk.sku_code AS sku_code,
+                   COALESCE(sk.description,'') AS description,
+                   ssm.period_month AS m,
+                   COALESCE(SUM({cogs_expr}), 0) AS cogs,
+                   COALESCE(SUM(ssm.qty), 0)     AS qty
+              FROM sales_sku_monthly ssm
+              JOIN branches b   ON b.branch_id = ssm.branch_id
+              JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
+              LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+             WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+               AND ssm.period_month IN ({ph})
+             GROUP BY b.name, ssm.sku_id, ssm.period_month
+        """, params).fetchall()
+
+        svc_map = _service_charge_map(con, prev_m or cur_m, cur_m) if incl_service else {}
+
+    # ── assemble per-branch aggregates (service charge folded into rev + costed) ──
+    agg: Dict[str, dict] = {}
+    for r in agg_rows:
+        svc = svc_map.get((r["branch"], r["m"]), 0.0)
+        d = agg.setdefault(r["branch"], {})
+        d[r["m"]] = {
+            "rev":    float(r["rev"]    or 0) + svc,
+            "cogs":   float(r["cogs"]   or 0),
+            "costed": float(r["costed"] or 0) + svc,   # service = revenue with no COGS
+        }
+
+    # ── per-branch menu movers (cur_cogs - prev_cogs) ───────────────────
+    mv: Dict[str, Dict[int, dict]] = {}
+    for r in mover_rows:
+        bm = mv.setdefault(r["branch"], {})
+        s  = bm.setdefault(r["sku_id"], {
+            "sku_code": r["sku_code"], "description": r["description"],
+            "cur": 0.0, "prev": 0.0, "cur_qty": 0.0, "prev_qty": 0.0,
+        })
+        if r["m"] == cur_m:
+            s["cur"]      = float(r["cogs"] or 0)
+            s["cur_qty"]  = float(r["qty"] or 0)
+        elif prev_m and r["m"] == prev_m:
+            s["prev"]     = float(r["cogs"] or 0)
+            s["prev_qty"] = float(r["qty"] or 0)
+
+    def _fc(v):
+        return (v["cogs"] / v["costed"] * 100) if v.get("costed", 0) > 0 else None
+
+    out = []
+    for branch, d in agg.items():
+        cur  = d.get(cur_m, {"rev": 0, "cogs": 0, "costed": 0})
+        prev = d.get(prev_m, {"rev": 0, "cogs": 0, "costed": 0}) if prev_m else None
+        fc      = _fc(cur)
+        prev_fc = _fc(prev) if prev else None
+        delta_pp = round(fc - prev_fc, 1) if (fc is not None and prev_fc is not None) else None
+
+        # menu movers for this branch
+        movers = []
+        for sid, s in mv.get(branch, {}).items():
+            delta = s["cur"] - s["prev"]
+            if abs(delta) < 1:    # ignore noise under ฿1
+                continue
+            movers.append({
+                "sku_code":    s["sku_code"],
+                "description": s["description"],
+                "cogs":        round(s["cur"], 2),
+                "prev_cogs":   round(s["prev"], 2),
+                "delta":       round(delta, 2),
+                "qty":         round(s["cur_qty"], 2),
+                "prev_qty":    round(s["prev_qty"], 2),
+                "is_new":      s["prev"] <= 0 and s["cur"] > 0,
+                "is_gone":     s["cur"] <= 0 and s["prev"] > 0,
+            })
+        ups   = sorted([m for m in movers if m["delta"] > 0], key=lambda x: -x["delta"])[:movers_n]
+        downs = sorted([m for m in movers if m["delta"] < 0], key=lambda x: x["delta"])[:movers_n]
+
+        out.append({
+            "branch":             branch,
+            "revenue":            round(cur["rev"], 2),
+            "costed_revenue":     round(cur["costed"], 2),
+            "prev_costed_revenue": round(prev["costed"], 2) if prev else None,
+            "cogs":               round(cur["cogs"], 2),
+            "food_cost_pct":      round(fc, 1) if fc is not None else None,
+            "prev_revenue":       round(prev["rev"], 2)  if prev else None,
+            "prev_cogs":          round(prev["cogs"], 2) if prev else None,
+            "prev_food_cost_pct": round(prev_fc, 1) if prev_fc is not None else None,
+            "delta_pp":           delta_pp,
+            "cogs_delta":         round(cur["cogs"] - (prev["cogs"] if prev else 0), 2),
+            "movers_up":          ups,
+            "movers_down":        downs,
+        })
+
+    # worst (highest food cost %) first; None food-cost sinks to the bottom
+    out.sort(key=lambda x: (x["food_cost_pct"] is None, -(x["food_cost_pct"] or 0)))
+    return {"month": cur_m, "prev_month": prev_m, "incl_service": bool(incl_service), "branches": out}
 
 
 @app.get("/api/bom-cost/compare")
