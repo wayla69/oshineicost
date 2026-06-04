@@ -1244,21 +1244,22 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <!-- Branch comparison table -->
   <div class="card p-5 mb-5 overflow-x-auto">
-    <h2 class="section-title mb-3">เปรียบเทียบ KPI รายสาขา</h2>
+    <h2 class="section-title mb-1">เปรียบเทียบ KPI รายสาขา</h2>
+    <p id="benchCompareLabel" class="text-xs text-slate-400 mb-3">คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่าคือเทียบเดือนก่อนหน้า (MoM)</p>
     <table class="text-xs w-full" id="benchmarkTable">
       <thead>
         <tr class="text-left border-b border-slate-200">
-          <th class="py-2 pr-3 font-semibold">สาขา</th>
-          <th class="py-2 pr-3 text-right">รายได้ <span class="font-normal text-slate-400">(เดือนล่าสุด)</span></th>
-          <th class="py-2 pr-3 text-right">บิล</th>
-          <th class="py-2 pr-3 text-right">ยอดบิลเฉลี่ย</th>
-          <th class="py-2 pr-3 text-right">% ส่วนลด</th>
-          <th class="py-2 pr-3 text-right">ลูกค้า/บิล</th>
-          <th class="py-2 pr-3 text-right">รายได้<br><span class="font-normal text-slate-400">40%</span></th>
-          <th class="py-2 pr-3 text-right">เติบโต<br><span class="font-normal text-slate-400">30%</span></th>
-          <th class="py-2 pr-3 text-right">สม่ำเสมอ<br><span class="font-normal text-slate-400">20%</span></th>
-          <th class="py-2 pr-3 text-right">โมเมนตัม<br><span class="font-normal text-slate-400">10%</span></th>
-          <th class="py-2 text-right">คะแนน</th>
+          <th class="py-2 pr-3 font-semibold cursor-pointer select-none" onclick="sortBench('branch')">สาขา <span class="bench-caret text-indigo-500" data-k="branch"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('revenue')">รายได้ <span class="bench-caret text-indigo-500" data-k="revenue"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('tx_count')">บิล <span class="bench-caret text-indigo-500" data-k="tx_count"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('avg_ticket')">ยอดบิลเฉลี่ย <span class="bench-caret text-indigo-500" data-k="avg_ticket"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('discount_rate')">% ส่วนลด <span class="bench-caret text-indigo-500" data-k="discount_rate"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('cust_per_tx')">ลูกค้า/บิล <span class="bench-caret text-indigo-500" data-k="cust_per_tx"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('revenue_score')">รายได้<br><span class="font-normal text-slate-400">40%</span> <span class="bench-caret text-indigo-500" data-k="revenue_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('growth_score')">เติบโต<br><span class="font-normal text-slate-400">30%</span> <span class="bench-caret text-indigo-500" data-k="growth_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('consistency_score')">สม่ำเสมอ<br><span class="font-normal text-slate-400">20%</span> <span class="bench-caret text-indigo-500" data-k="consistency_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('momentum_score')">โมเมนตัม<br><span class="font-normal text-slate-400">10%</span> <span class="bench-caret text-indigo-500" data-k="momentum_score"></span></th>
+          <th class="py-2 text-right cursor-pointer select-none" onclick="sortBench('score')">คะแนน <span class="bench-caret text-indigo-500" data-k="score"></span></th>
         </tr>
       </thead>
       <tbody id="benchmarkBody"></tbody>
@@ -15403,37 +15404,39 @@ async function loadBenchmark() {
     { label: '% ส่วนลดเครือข่าย', value: `${avgDisc.toFixed(1)}%`, sub: 'ของยอดบิล', color: '#f59e0b' },
   ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
-  const cellScore = (v, accent) => {
-    if (v == null) return '<td class="py-2 pr-3 text-right text-slate-300">—</td>';
-    const pct = Math.max(0, Math.min(100, v));
-    return `<td class="py-2 pr-3 text-right">
-      <div class="inline-flex items-center justify-end gap-1.5">
-        <div class="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div style="width:${pct}%;height:100%;background:${accent}"></div></div>
-        <span class="text-[11px] tabular-nums" style="color:${accent};font-weight:600">${v.toFixed(0)}</span>
-      </div>
-    </td>`;
-  };
-
-  // Table
-  document.getElementById('benchmarkBody').innerHTML = branches.map((b, i) => {
-    const h = healthMap[b.branch];
-    const scoreColor = h ? (h.score >= 70 ? '#059669' : h.score >= 50 ? '#f59e0b' : '#ef4444') : '#94a3b8';
-    const custPerTx = b.tx_count > 0 ? (b.customer_count / b.tx_count).toFixed(1) : '—';
-    const breakdown = h ? `รายได้ ${h.revenue_score?.toFixed(0)}×40% + เติบโต ${h.growth_score?.toFixed(0)}×30% + สม่ำเสมอ ${h.consistency_score?.toFixed(0)}×20% + โมเมนตัม ${h.momentum_score?.toFixed(0)}×10% = ${h.score.toFixed(1)}` : '';
-    return `<tr class="border-t border-slate-100 hover:bg-slate-50">
-      <td class="py-2 pr-3 font-medium">${esc(b.branch)}</td>
-      <td class="py-2 pr-3 text-right tabular-nums">${fmt(h?.last_month_revenue ?? b.revenue)}</td>
-      <td class="py-2 pr-3 text-right tabular-nums">${fmtN(b.tx_count)}</td>
-      <td class="py-2 pr-3 text-right tabular-nums">${fmt(b.avg_ticket)}</td>
-      <td class="py-2 pr-3 text-right tabular-nums ${(b.discount_rate||0) > 15 ? 'text-red-500 font-medium' : ''}">${(b.discount_rate||0).toFixed(1)}%</td>
-      <td class="py-2 pr-3 text-right tabular-nums">${custPerTx}</td>
-      ${cellScore(h?.revenue_score, '#4f46e5')}
-      ${cellScore(h?.growth_score, '#10b981')}
-      ${cellScore(h?.consistency_score, '#06b6d4')}
-      ${cellScore(h?.momentum_score, '#f59e0b')}
-      <td class="py-2 text-right" title="${breakdown}"><span style="color:${scoreColor};font-weight:700;font-size:13px">${h ? h.score.toFixed(0) : '—'}</span></td>
-    </tr>`;
-  }).join('');
+  // ── Branch KPI table: latest month vs previous month (MoM), sortable ──
+  const curMonth = getMonthTo() || await fetch(`${API}/api/months`).then(r => r.json())
+    .then(ms => Array.isArray(ms) && ms.length ? ms[ms.length - 1] : '').catch(() => '');
+  const prevMonth = curMonth ? monthAdd(curMonth, -1) : '';
+  const grp = getGroup() ? `&group=${encodeURIComponent(getGroup())}` : '';
+  const snap = m => m
+    ? fetch(`${API}/api/analysis/branches?month_from=${m}&month_to=${m}${grp}`).then(r => r.json()).catch(() => [])
+    : Promise.resolve([]);
+  const [curB, prevB] = await Promise.all([snap(curMonth), snap(prevMonth)]);
+  const prevMap = {}; (prevB || []).forEach(b => prevMap[b.branch] = b);
+  const baseRows = (curB && curB.length) ? curB : branches;   // fallback to range if no month resolved
+  _benchRows = baseRows.map(b => {
+    const h = healthMap[b.branch] || {};
+    const p = prevMap[b.branch];
+    return {
+      branch: b.branch,
+      revenue: b.revenue,         prev_revenue: p ? p.revenue : null,
+      tx_count: b.tx_count,       prev_tx_count: p ? p.tx_count : null,
+      avg_ticket: b.avg_ticket,   prev_avg_ticket: p ? p.avg_ticket : null,
+      discount_rate: b.discount_rate, prev_discount_rate: p ? p.discount_rate : null,
+      cust_per_tx: b.tx_count > 0 ? b.customer_count / b.tx_count : null,
+      prev_cust_per_tx: (p && p.tx_count > 0) ? p.customer_count / p.tx_count : null,
+      revenue_score: h.revenue_score ?? null, growth_score: h.growth_score ?? null,
+      consistency_score: h.consistency_score ?? null, momentum_score: h.momentum_score ?? null,
+      score: h.score ?? null,
+      breakdown: (h && h.score != null) ? `รายได้ ${h.revenue_score?.toFixed(0)}×40% + เติบโต ${h.growth_score?.toFixed(0)}×30% + สม่ำเสมอ ${h.consistency_score?.toFixed(0)}×20% + โมเมนตัม ${h.momentum_score?.toFixed(0)}×10% = ${h.score.toFixed(1)}` : '',
+    };
+  });
+  const lbl = document.getElementById('benchCompareLabel');
+  if (lbl) lbl.textContent = curMonth
+    ? `เทียบ ${curMonth} กับเดือนก่อน ${prevMonth || '—'} · คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่า = MoM`
+    : 'คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่า = MoM';
+  renderBenchTable();
 
   // Revenue bar chart
   mkChart('chartBenchRevenue', {
@@ -15473,6 +15476,72 @@ async function loadBenchmark() {
       scales: { y: { min: 0, max: 100, ticks: { callback: v => v + '%' } } }
     }
   });
+}
+
+// ── Branch KPI table: sortable + MoM (vs previous month) ──
+let _benchRows = [];
+let _benchSort = { key: 'revenue', dir: -1 };
+function monthAdd(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, (m - 1) + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function _benchMom(cur, prev, opt) {
+  opt = opt || {};
+  if (cur == null || prev == null || prev === 0) return '';
+  const pp = !!opt.pp, hb = opt.hb !== false;
+  const d = pp ? (cur - prev) : (cur - prev) / prev * 100;
+  if (!isFinite(d)) return '';
+  const good = hb ? d >= 0 : d <= 0;
+  const col = Math.abs(d) < 0.05 ? '#94a3b8' : (good ? '#10b981' : '#ef4444');
+  const ar = d > 0 ? '▲' : (d < 0 ? '▼' : '▬');
+  return `<div class="text-[10px] tabular-nums" style="color:${col}">${ar} ${Math.abs(d).toFixed(1)}${pp ? 'pp' : '%'}</div>`;
+}
+function _benchScoreCell(v, accent) {
+  if (v == null) return '<td class="py-2 pr-3 text-right text-slate-300">—</td>';
+  const pct = Math.max(0, Math.min(100, v));
+  return `<td class="py-2 pr-3 text-right"><div class="inline-flex items-center justify-end gap-1.5">
+    <div class="w-10 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div style="width:${pct}%;height:100%;background:${accent}"></div></div>
+    <span class="text-[11px] tabular-nums" style="color:${accent};font-weight:600">${v.toFixed(0)}</span></div></td>`;
+}
+function sortBench(key) {
+  if (_benchSort.key === key) _benchSort.dir *= -1;
+  else _benchSort = { key, dir: key === 'branch' ? 1 : -1 };
+  renderBenchTable();
+}
+function renderBenchTable() {
+  const { key, dir } = _benchSort;
+  const rows = [..._benchRows].sort((a, b) => {
+    const x = a[key], y = b[key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * dir;
+  });
+  document.querySelectorAll('.bench-caret').forEach(s => {
+    s.textContent = (s.dataset.k === key) ? (dir < 0 ? '▾' : '▴') : '';
+  });
+  const body = document.getElementById('benchmarkBody');
+  if (!body) return;
+  body.innerHTML = rows.map(r => {
+    const scoreColor = r.score != null ? (r.score >= 70 ? '#059669' : r.score >= 50 ? '#f59e0b' : '#ef4444') : '#94a3b8';
+    const cpt = r.cust_per_tx != null ? r.cust_per_tx.toFixed(1) : '—';
+    const cell = (val, mom) => `<td class="py-2 pr-3 text-right tabular-nums"><div>${val}</div>${mom}</td>`;
+    const discCls = (r.discount_rate || 0) > 15 ? 'text-red-500 font-medium' : '';
+    return `<tr class="border-t border-slate-100 hover:bg-slate-50">
+      <td class="py-2 pr-3 font-medium">${esc(r.branch)}</td>
+      ${cell(fmt(r.revenue), _benchMom(r.revenue, r.prev_revenue, { hb: true }))}
+      ${cell(fmtN(r.tx_count), _benchMom(r.tx_count, r.prev_tx_count, { hb: true }))}
+      ${cell(fmt(r.avg_ticket), _benchMom(r.avg_ticket, r.prev_avg_ticket, { hb: true }))}
+      ${cell(`<span class="${discCls}">${(r.discount_rate || 0).toFixed(1)}%</span>`, _benchMom(r.discount_rate, r.prev_discount_rate, { hb: false, pp: true }))}
+      ${cell(cpt, _benchMom(r.cust_per_tx, r.prev_cust_per_tx, { hb: true }))}
+      ${_benchScoreCell(r.revenue_score, '#4f46e5')}
+      ${_benchScoreCell(r.growth_score, '#10b981')}
+      ${_benchScoreCell(r.consistency_score, '#06b6d4')}
+      ${_benchScoreCell(r.momentum_score, '#f59e0b')}
+      <td class="py-2 text-right" title="${r.breakdown || ''}"><span style="color:${scoreColor};font-weight:700;font-size:13px">${r.score != null ? r.score.toFixed(0) : '—'}</span></td>
+    </tr>`;
+  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
