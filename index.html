@@ -5057,6 +5057,19 @@ const getMonthFrom = () => document.getElementById('selMonthFrom').value;
 const getMonthTo   = () => document.getElementById('selMonthTo').value;
 const getMonth     = () => getMonthTo() || getMonthFrom(); // backward compat for single-month contexts
 const getVariant   = () => document.getElementById('selVariant')?.value || '';
+
+// A per-dish margin / cost% is only meaningful for items that carry a real
+// à-la-carte price. Buffet (B) dishes are included in the buffet package
+// (revenue ≈ 0 per dish — the price lives on the buffet-package SKU), so their
+// margin explodes to garbage (e.g. -29,709,896%). Exclude them from margin
+// analysis; their ingredient cost is still counted in chain COGS elsewhere.
+function _hasMenuPrice(r){
+  if (!r) return false;
+  const d = r.description || '';
+  if (/^\(\s*B\s*\)/.test(d)) return false;                       // (B) = buffet-included dish
+  if (/BUFFET/i.test((r.sku_code||'') + ' ' + (r.category||''))) return false;
+  return (r.revenue_ex_vat ?? r.revenue ?? 0) > 0;
+}
 function qp(extra = {}) {
   const p = {};
   if (getBranch())    p.branch     = getBranch();
@@ -6848,15 +6861,19 @@ function renderMenuFinder() {
   rows.sort((a,b) => (b[sort]??-Infinity) - (a[sort]??-Infinity));
   document.getElementById('menuFindCount').textContent = `${rows.length} เมนู`;
   body.innerHTML = rows.slice(0, 100).map(r => {
-    const m  = r.margin_pct;
+    const priced = _hasMenuPrice(r);                 // buffet (B) has no per-dish price
+    const m  = priced ? r.margin_pct : null;
     const mc = m==null ? '#94a3b8' : m>=60?'#10b981':m>=40?'#f59e0b':'#ef4444';
+    const mShow = !priced
+      ? '<span class="text-[10px]" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      : (m!=null ? m.toFixed(1)+'%' : '—');
     const name = esc((r.description||r.sku_code||'—').replace(/^\((?:A|B|T)\)\s*/,''));
     return `<tr class="border-b border-slate-50 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2">${name} <span class="text-[10px] text-slate-300 font-mono">${esc(r.sku_code)}</span></td>
       <td class="py-1.5 pr-2 text-xs text-slate-400">${esc(r.category||'')}</td>
       <td class="py-1.5 pr-2 text-right text-slate-600">${fmtN(r.qty)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold">${fmt(r.revenue)}</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${m!=null?m.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${mShow}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่พบเมนูที่ตรงกับ “${esc(q)}”</td></tr>`;
 }
@@ -7069,11 +7086,18 @@ function renderMenuEngTable() {
   });
   document.getElementById('meTableCount').textContent = `${items.length} SKUs · sorted by ${_meSortKey} ${_meSortDir === 'desc' ? '↓' : '↑'}`;
   document.getElementById('meTableBody').innerHTML = sorted.map(r => {
-    const mp = r.margin_pct;
+    const priced = _hasMenuPrice(r);              // buffet (B) has no per-dish price → margin undefined
+    const mp = priced ? r.margin_pct : null;
     const mpColor = mp == null ? 'text-slate-400'
                   : mp >= 60 ? 'text-emerald-600 font-medium'
                   : mp >= 30 ? 'text-amber-600'
                   : 'text-red-500 font-medium';
+    const mpShow = !priced
+      ? '<span class="text-[10px]" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      : (mp != null ? mp.toFixed(1)+'%' : '—');
+    const gpShow = !priced ? '<span class="text-slate-300">—</span>'
+      : (r.gross_profit != null ? fmtN(r.gross_profit) : '—');
+    const gpCls = (!priced || r.gross_profit == null) ? 'text-slate-400' : (r.gross_profit < 0 ? 'text-red-500' : 'text-emerald-600');
     return `
       <tr class="border-t border-slate-100 hover:bg-slate-50">
         <td class="py-1.5 pr-2"><span class="font-mono text-indigo-600">${r.sku_code}</span> <span class="text-slate-700">${(r.description||'').slice(0,50)}</span></td>
@@ -7081,9 +7105,9 @@ function renderMenuEngTable() {
         <td class="py-1.5 pr-2 text-right">${fmtN(r.qty||0)}</td>
         <td class="py-1.5 pr-2 text-right">${fmtN(r.revenue||0)}</td>
         <td class="py-1.5 pr-2 text-right">${r.unit_cost != null ? fmtN(r.unit_cost) : '<span class="text-slate-300">—</span>'}</td>
-        <td class="py-1.5 pr-2 text-right ${r.gross_profit != null ? (r.gross_profit < 0 ? 'text-red-500' : 'text-emerald-600') : 'text-slate-400'}">${r.gross_profit != null ? fmtN(r.gross_profit) : '—'}</td>
-        <td class="py-1.5 pr-2 text-right ${mpColor}">${mp != null ? mp.toFixed(1)+'%' : '—'}</td>
-        <td class="py-1.5 text-center">${QUAD_BADGE[r.quadrant] || ''}</td>
+        <td class="py-1.5 pr-2 text-right ${gpCls}">${gpShow}</td>
+        <td class="py-1.5 pr-2 text-right ${mpColor}">${mpShow}</td>
+        <td class="py-1.5 text-center">${priced ? (QUAD_BADGE[r.quadrant] || '') : '<span class="pill" style="background:#fef3c7;color:#92400e">🍽️ บุฟเฟต์</span>'}</td>
       </tr>`;
   }).join('');
 }
@@ -10089,9 +10113,14 @@ function renderCostDetail() {
   const QPILLS  = { star:'pill-up', puzzle:'pill-neu', plowhorse:'pill-warn', dog:'pill-down', uncosted:'' };
 
   document.getElementById('costItemBody').innerHTML = rows.map((r, i) => {
-    const mc = r.margin_pct == null ? '#94a3b8'
-      : r.margin_pct >= 60 ? '#10b981'
-      : r.margin_pct >= 40 ? '#f59e0b' : '#ef4444';
+    const priced = _hasMenuPrice(r);              // buffet (B) has no per-dish price → margin undefined
+    const mpv = priced ? r.margin_pct : null;
+    const mc = mpv == null ? '#94a3b8'
+      : mpv >= 60 ? '#10b981'
+      : mpv >= 40 ? '#f59e0b' : '#ef4444';
+    const mpShow = !priced
+      ? '<span class="text-[10px] font-normal" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      : (mpv != null ? mpv.toFixed(1)+'%' : '<span class="text-slate-300 font-normal">—</span>');
     return `<tr class="border-t border-slate-100">
       <td class="py-2 pr-2 text-slate-400 text-xs">${i+1}</td>
       <td class="py-2 pr-3 font-mono text-indigo-600 text-xs">${r.sku_code}</td>
@@ -10107,9 +10136,11 @@ function renderCostDetail() {
         </div>
       </td>
       <td class="py-2 pr-3 text-right text-slate-500">${r.unit_cost != null ? fmtN(r.unit_cost) : '<span class="text-slate-300">—</span>'}</td>
-      <td class="py-2 pr-3 text-right font-bold" style="color:${mc}">${r.margin_pct != null ? r.margin_pct.toFixed(1)+'%' : '<span class="text-slate-300 font-normal">—</span>'}</td>
+      <td class="py-2 pr-3 text-right font-bold" style="color:${mc}">${mpShow}</td>
       <td class="py-2 text-center">
-        <span class="pill ${QPILLS[r.quadrant]||''} text-xs">${QLABELS[r.quadrant]||''} ${r.quadrant !== 'uncosted' ? r.quadrant : '—'}</span>
+        ${priced
+          ? `<span class="pill ${QPILLS[r.quadrant]||''} text-xs">${QLABELS[r.quadrant]||''} ${r.quadrant !== 'uncosted' ? r.quadrant : '—'}</span>`
+          : '<span class="pill text-xs" style="background:#fef3c7;color:#92400e">🍽️ บุฟเฟต์</span>'}
       </td>
     </tr>`;
   }).join('');
@@ -10188,8 +10219,13 @@ function renderSuggestions() {
     const puzzles    = items.filter(r => r.quadrant === 'puzzle');
     const dogs       = items.filter(r => r.quadrant === 'dog');
 
-    // High-cost SKUs (cost > 50% of price) — actionable for renegotiation
-    const highCostItems = items.filter(r => r.unit_cost != null && r.revenue_ex_vat > 0 && r.cogs/r.revenue_ex_vat > 0.5)
+    // High-cost SKUs (cost > 50% of price) — actionable for renegotiation.
+    // Exclude buffet (B) items: they have NO à-la-carte price (revenue ≈ 0), so
+    // cogs/revenue explodes to meaningless % (e.g. -29,709,896%). Per-dish margin
+    // is only defined for à-la-carte items. Also cap the ratio at a sane 3× as a
+    // backstop against price-as-cost data errors. See _hasMenuPrice().
+    const highCostItems = items.filter(r => r.unit_cost != null && _hasMenuPrice(r)
+                                  && r.cogs/r.revenue_ex_vat > 0.5 && r.cogs/r.revenue_ex_vat <= 3)
                                .sort((a,b)=>b.cogs-a.cogs).slice(0,8);
     if (highCostItems.length) {
       const topCostBurden = highCostItems.slice(0,3).reduce((s,r)=>s+r.cogs,0);
