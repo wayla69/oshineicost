@@ -1252,10 +1252,11 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
 
 @app.get("/api/sales/menu-spike")
 def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
-               limit: int = Query(15, ge=1, le=50)):
-    """Menus whose QTY on a given day spiked abnormally vs their trailing 21-day
-    average, per branch (answers '#5: which menu was abnormally high that day').
-    Qty-only from sales_sku_daily — NO cost (iron rule)."""
+               group: Optional[str] = Query(None), limit: int = Query(300, ge=1, le=1000),
+               threshold: float = Query(1.5, ge=1.0)):
+    """Menus whose QTY on a given day spiked vs their trailing 21-day average, per
+    branch (answers '#5: which menu was abnormally high that day'). Shows ALL items
+    above `threshold`× (default 1.5×). Qty-only from sales_sku_daily — NO cost (iron rule)."""
     import datetime as _dt
     with get_db() as con:
         try:
@@ -1269,7 +1270,9 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
         wstart = (_dt.date(fy, fm, fd) - _dt.timedelta(days=21)).isoformat()
         bfilt = ""; params = {"focus": focus, "ws": wstart}
         if branch:
-            bfilt = " AND b.name=:branch"; params["branch"] = branch
+            bfilt += " AND b.name=:branch"; params["branch"] = branch
+        if group:
+            bfilt += " AND COALESCE(b.branch_type,'master')=:grp"; params["grp"] = group
         rows = con.execute(f"""
             WITH today AS (
               SELECT d.branch_id, d.sku_id, SUM(d.qty) q
@@ -1290,14 +1293,18 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
             name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
             if avg > 0 and n >= 5:
                 x = today / avg
-                if x >= 2.0 and today >= avg + 10:
+                # show ALL items above the threshold (default 1.5×); tiny floor (≥5
+                # plates) keeps trivial 1→2 jumps out of the list.
+                if x >= threshold and today >= 5:
                     spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
-                                   "avg": round(avg, 1), "x": round(x, 1), "excess": round(today - avg), "is_new": False})
-            elif n < 5 and today >= 30:
+                                   "avg": round(avg, 1), "x": round(x, 1), "pct": round((x - 1) * 100),
+                                   "excess": round(today - avg), "is_new": False})
+            elif n < 5 and today >= 20:
                 spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
-                               "avg": 0, "x": None, "excess": round(today), "is_new": True})
+                               "avg": 0, "x": None, "pct": None, "excess": round(today), "is_new": True})
         spikes.sort(key=lambda s: -s["excess"])
-    return {"date": focus, "window_days": 21, "spikes": spikes[:limit]}
+    return {"date": focus, "window_days": 21, "threshold": threshold,
+            "count": len(spikes), "spikes": spikes[:limit]}
 
 
 @app.get("/api/sales/cost-per-head")
@@ -1627,6 +1634,163 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
     return {"month": mon, "payment": payment, "channel": channel, "void": void,
             "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0},
             "table": table, "promo": promo}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# EXTRA — deeper POS analytics from previously-untapped tables (separate group)
+# All counts/amounts only · NO POS cost (iron rule: COGS stays on our BoM).
+# ═══════════════════════════════════════════════════════════════════════════
+def _extra_months(con, table, col="period_month"):
+    r = con.execute(f"SELECT MAX({col}) m FROM {table}").fetchone()
+    return r["m"] if r else None
+
+
+@app.get("/api/extra/cash")
+def extra_cash(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+               group: Optional[str] = Query(None)):
+    """Cash over/short + ops summary per branch per day (loss prevention)."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mon = month or _extra_months(con, "pos_cashcount_day", "substr(day,1,7)")
+        if not mon:
+            return {"month": None, "branches": [], "worst_days": [], "summary": {}}
+        pm = {**p, "m": mon}
+        JN = "FROM pos_cashcount_day x JOIN branches b ON b.branch_id=x.branch_id WHERE " + tw + " AND substr(x.day,1,7)=:m"
+        branches = [dict(r) for r in con.execute(
+            f"""SELECT b.name branch, ROUND(SUM(x.over_short)) over_short, ROUND(SUM(x.total_sales)) sales,
+                SUM(x.pax) pax, ROUND(SUM(x.discount)) discount, ROUND(SUM(x.cancel)) cancel,
+                SUM(CASE WHEN x.over_short<0 THEN 1 ELSE 0 END) short_days
+                {JN} GROUP BY b.name ORDER BY over_short ASC""", pm).fetchall()]
+        worst = [dict(r) for r in con.execute(
+            f"""SELECT b.name branch, x.day, ROUND(x.over_short) over_short, ROUND(x.total_sales) sales, x.pax
+                {JN} AND x.over_short<>0 ORDER BY x.over_short ASC LIMIT 15""", pm).fetchall()]
+        s = con.execute(
+            f"""SELECT ROUND(SUM(x.over_short)) net, ROUND(SUM(CASE WHEN x.over_short<0 THEN x.over_short ELSE 0 END)) short_total,
+                ROUND(SUM(CASE WHEN x.over_short>0 THEN x.over_short ELSE 0 END)) over_total,
+                SUM(CASE WHEN x.over_short<0 THEN 1 ELSE 0 END) short_days, COUNT(*) day_branch
+                {JN}""", pm).fetchone()
+        summary = {"net": (s["net"] or 0), "short_total": (s["short_total"] or 0),
+                   "over_total": (s["over_total"] or 0), "short_days": (s["short_days"] or 0),
+                   "day_branch": (s["day_branch"] or 0)}
+    return {"month": mon, "branches": branches, "worst_days": worst, "summary": summary}
+
+
+@app.get("/api/extra/customer-type")
+def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                        group: Optional[str] = Query(None)):
+    """Customer-type / channel mix: walk-in vs Grab vs Line Man vs takeaway vs credit."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mon = month or _extra_months(con, "pos_customer_type_month")
+        if not mon:
+            return {"month": None, "types": []}
+        rows = [dict(r) for r in con.execute(
+            f"""SELECT x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)) net
+                FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
+                WHERE {tw} AND x.period_month=:m GROUP BY x.type_name ORDER BY customers DESC""",
+            {**p, "m": mon}).fetchall()]
+        tc = sum(r["customers"] or 0 for r in rows) or 1
+        tn = sum(r["net"] or 0 for r in rows) or 1
+        for r in rows:
+            r["cust_pct"] = round((r["customers"] or 0) / tc * 100, 1)
+            r["net_pct"] = round((r["net"] or 0) / tn * 100, 1)
+            r["net_per_head"] = round((r["net"] or 0) / r["customers"]) if r["customers"] else None
+    return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn}
+
+
+@app.get("/api/extra/modifiers")
+def extra_modifiers(branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                    limit: int = Query(25)):
+    """Top customer special-requests (free modifiers) — for kitchen prep planning.
+    All-time counts (no revenue; choices are free)."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        JN = "FROM pos_modifier x JOIN branches b ON b.branch_id=x.branch_id WHERE " + tw
+        choices = [dict(r) for r in con.execute(
+            f"SELECT x.choice_name choice, SUM(x.n) n, ROUND(SUM(x.qty)) qty {JN} "
+            f"GROUP BY x.choice_name ORDER BY n DESC LIMIT :lim", {**p, "lim": limit}).fetchall()]
+        tot = con.execute(f"SELECT SUM(x.n) n {JN}", p).fetchone()
+    total = (tot["n"] or 0) if tot else 0
+    for r in choices:
+        r["pct"] = round((r["n"] or 0) / total * 100, 1) if total else 0
+    return {"choices": choices, "total": total}
+
+
+@app.get("/api/extra/price-zone")
+def extra_price_zone(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                     group: Optional[str] = Query(None), limit: int = Query(100)):
+    """Price-override log (governance) + table-zone layout per branch."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mfilt = ""
+        if month:
+            mfilt = " AND substr(x.change_date,1,7)=:m"; p["m"] = month
+        changes = [dict(r) for r in con.execute(
+            f"""SELECT x.change_date date, b.name branch, COALESCE(s.description,x.item_desc) item,
+                ROUND(x.default_price) default_price, ROUND(x.new_price) new_price,
+                ROUND(x.new_price - x.default_price) delta, x.user_name user
+                FROM pos_price_change x JOIN branches b ON b.branch_id=x.branch_id
+                LEFT JOIN skus s ON s.sku_id=x.sku_id WHERE {tw}{mfilt}
+                ORDER BY x.change_date DESC LIMIT :lim""", {**p, "lim": limit}).fetchall()]
+        # strip month param for the zone query (zones have no date)
+        zp = {k: v for k, v in p.items() if k != "m"}
+        zones = [dict(r) for r in con.execute(
+            f"""SELECT b.name branch, COUNT(*) zones, SUM(x.tables) tables, SUM(x.seats) seats
+                FROM pos_zone x JOIN branches b ON b.branch_id=x.branch_id WHERE {tw}
+                GROUP BY b.name ORDER BY tables DESC""", zp).fetchall()]
+        cnt = con.execute(f"SELECT COUNT(*) n FROM pos_price_change x JOIN branches b ON b.branch_id=x.branch_id WHERE {tw}{mfilt}", p).fetchone()
+    return {"changes": changes, "zones": zones, "change_count": (cnt["n"] or 0) if cnt else 0,
+            "month": month}
+
+
+@app.get("/api/extra/cancel-bills")
+def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                       group: Optional[str] = Query(None)):
+    """Whole BILLS voided/deleted (Sale.Active=0), by branch and by reason.
+    Distinct from item-level Void in the Ops report."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mon = month or _extra_months(con, "pos_cancel_bill")
+        if not mon:
+            return {"month": None, "branches": [], "reasons": [], "summary": {}}
+        pm = {**p, "m": mon}
+        JN = "FROM pos_cancel_bill x JOIN branches b ON b.branch_id=x.branch_id WHERE " + tw + " AND x.period_month=:m"
+        branches = [dict(r) for r in con.execute(
+            f"SELECT b.name branch, SUM(x.bills) bills, ROUND(SUM(x.amount)) amount {JN} "
+            f"GROUP BY b.name ORDER BY bills DESC", pm).fetchall()]
+        reasons = [dict(r) for r in con.execute(
+            f"""SELECT CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
+                         ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason,
+                   SUM(x.bills) bills, ROUND(SUM(x.amount)) amount
+                FROM pos_cancel_bill x JOIN branches b ON b.branch_id=x.branch_id
+                LEFT JOIN pos_cancel_reason rr ON rr.reason_id=x.reason_id
+                WHERE {tw} AND x.period_month=:m
+                GROUP BY x.reason_id ORDER BY bills DESC""", pm).fetchall()]
+        s = con.execute(f"SELECT SUM(x.bills) bills, ROUND(SUM(x.amount)) amount {JN}", pm).fetchone()
+        # context: valid bills that month (to express cancel rate)
+        vb = con.execute(
+            f"""SELECT COUNT(*) n FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE {tw} AND t.source='Easy' AND substr(t.sold_at,1,7)=:m""", pm).fetchone()
+        valid = (vb["n"] or 0) if vb else 0
+        cbills = (s["bills"] or 0) if s else 0
+        summary = {"bills": cbills, "amount": (s["amount"] or 0) if s else 0, "valid_bills": valid,
+                   "cancel_rate": round(cbills / (valid + cbills) * 100, 2) if (valid + cbills) else None}
+    return {"month": mon, "branches": branches, "reasons": reasons, "summary": summary}
 
 
 @app.get("/api/buffet/child")

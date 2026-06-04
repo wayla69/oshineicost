@@ -896,7 +896,30 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">🔬 วิเคราะห์เชิงลึก</span>
   </div>
 
-  <!-- ═══ GROUP 6: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
+  <!-- ═══ GROUP 6: 🧩 Extra — POS เชิงลึก (untapped POS data) ═══ -->
+  <div class="nav-section">🧩 Extra (POS เชิงลึก)</div>
+  <div class="nav-item" id="nav-cashctl" onclick="switchTab('cashctl')" title="เงินสดขาด/เกิน · over/short รายวันต่อสาขา (loss prevention) จาก CashCount">
+    <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
+    <span class="nav-label">💵 เงินสดขาด/เกิน</span>
+  </div>
+  <div class="nav-item" id="nav-custtype" onclick="switchTab('custtype')" title="ประเภทลูกค้า & Delivery · walk-in vs Grab vs Line Man vs ห่อกลับ vs เครดิต">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87"/></svg>
+    <span class="nav-label">👥 ประเภทลูกค้า</span>
+  </div>
+  <div class="nav-item" id="nav-modifiers" onclick="switchTab('modifiers')" title="ความต้องการพิเศษยอดฮิต · พริก/ไข่/ระดับเผ็ด (วางแผนเตรียมครัว)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 002-2V2M5 11v11M11 2v20M11 12h3a2 2 0 002-2V5a3 3 0 00-3-3"/></svg>
+    <span class="nav-label">🍽️ ความต้องการพิเศษ</span>
+  </div>
+  <div class="nav-item" id="nav-pricezone" onclick="switchTab('pricezone')" title="ประวัติแก้ราคา (governance) + โซนโต๊ะรายสาขา">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+    <span class="nav-label">🏷️ ราคา & โซนโต๊ะ</span>
+  </div>
+  <div class="nav-item" id="nav-cancelbill" onclick="switchTab('cancelbill')" title="บิลที่ยกเลิก/ลบทั้งบิล (Sale.Active=0) · ตามเหตุผล + รายสาขา">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h2a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+    <span class="nav-label">🗑️ บิลยกเลิก/ลบ</span>
+  </div>
+
+  <!-- ═══ GROUP 7: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
   <div class="nav-section">⚙️ เครื่องมือ</div>
   <div class="nav-item" id="nav-manual" onclick="switchTab('manual')" title="คู่มือการใช้งาน · How to use each tab, hard rules, common workflows">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
@@ -1162,8 +1185,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
   <div class="card p-5 mb-5">
-    <h2 class="section-title mb-1">🔼 เมนูพุ่งผิดปกติ (วันที่เลือก) <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· qty เทียบค่าเฉลี่ย 21 วัน · แยกสาขา</span></h2>
-    <div id="dsSpike" class="overflow-x-auto" style="max-height:360px;overflow-y:auto"></div>
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <h2 class="section-title mb-0">🔼 เมนูพุ่งผิดปกติ (วันที่เลือก) <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· qty เทียบค่าเฉลี่ย 21 วัน · สูงกว่า ≥1.5×</span></h2>
+      <div class="flex items-center gap-2">
+        <select id="spikeBranch" onchange="renderMenuSpike()" style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)"><option value="">ทุกสาขา</option></select>
+        <span id="spikeCount" class="text-[11px]" style="color:var(--text-muted)"></span>
+        <button onclick="exportTable('spikeTable','menu_spike.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
+    </div>
+    <div id="dsSpike" class="overflow-x-auto" style="max-height:420px;overflow-y:auto"></div>
   </div>
 </div>
 
@@ -1284,6 +1314,119 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">คูปอง (series)</th><th class="py-1.5 pr-2 text-right">ครั้งที่ใช้</th><th class="py-1.5 text-right">ส่วนลดรวม</th>
       </tr></thead><tbody id="opPromo"></tbody></table></div>
+  </div>
+</div>
+
+<!-- ══ 🧩 EXTRA: 💵 เงินสดขาด/เกิน (CashCount) ══ -->
+<div id="tab-cashctl" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="ccMonth" onchange="loadCashCtl(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span id="ccRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-[11px] ml-auto" style="color:#92400e">⚠ เงินสดขาด = ความเสี่ยง (ตรวจสอบสาขา/กะ)</span>
+  </div>
+  <div id="ccKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายสาขา — เงินสดขาด/เกินสะสมในเดือน</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ขาด/เกิน</th><th class="py-1.5 pr-2 text-right">วันที่ขาด</th>
+        <th class="py-1.5 pr-2 text-right">ยอดขาย</th><th class="py-1.5 text-right">% ของยอด</th>
+      </tr></thead><tbody id="ccBody"></tbody></table>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">🔴 วันที่ขาดหนักสุด (Top 15)</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">วันที่</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ขาด/เกิน</th>
+        <th class="py-1.5 pr-2 text-right">ยอดขาย</th><th class="py-1.5 text-right">ลูกค้า</th>
+      </tr></thead><tbody id="ccWorst"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 🧩 EXTRA: 👥 ประเภทลูกค้า & Delivery ══ -->
+<div id="tab-custtype" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="ctMonth" onchange="loadCustType(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span id="ctRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">walk-in vs Grab / Line Man / ห่อกลับ / เครดิต</span>
+  </div>
+  <div id="ctKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-5"><h2 class="section-title mb-3">สัดส่วนตามจำนวนลูกค้า</h2><div id="ctBars"></div></div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายละเอียดตามประเภท</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">ประเภท</th><th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right">%</th>
+        <th class="py-1.5 pr-2 text-right">ยอด (ex-VAT)</th><th class="py-1.5 text-right">ยอด/ราย</th>
+      </tr></thead><tbody id="ctBody"></tbody></table>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">* "ลูกค้า" = จำนวนที่ POS นับตามประเภท (อาจไม่เท่า pax reconciled) — ใช้ดู<b>สัดส่วน/แนวโน้ม</b>เป็นหลัก</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 🧩 EXTRA: 🍽️ ความต้องการพิเศษ (Modifiers) ══ -->
+<div id="tab-modifiers" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-[11px]" style="color:var(--text-muted)">ความต้องการพิเศษที่ลูกค้าสั่งบ่อย (ฟรี ไม่ใช่รายได้) — ใช้วางแผนเตรียมของ/portion ในครัว · ข้อมูลสะสมทั้งหมด</span>
+    <span id="modTotal" class="text-[11px] ml-auto font-semibold" style="color:var(--indigo)"></span>
+  </div>
+  <div class="card p-5">
+    <h2 class="section-title mb-3">ความต้องการพิเศษยอดฮิต (Top 25)</h2>
+    <div id="modBars"></div>
+  </div>
+</div>
+
+<!-- ══ 🧩 EXTRA: 🏷️ ราคา & โซนโต๊ะ ══ -->
+<div id="tab-pricezone" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="pzMonth" onchange="loadPriceZone(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"><option value="">ทั้งหมด</option></select>
+    <span id="pzCount" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <button onclick="exportTable('pzTable','price_changes.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5 ml-auto" style="color:var(--text-muted)">⬇ CSV</button>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+    <div class="card p-5 overflow-x-auto lg:col-span-2">
+      <h2 class="section-title mb-3">📝 ประวัติแก้ราคา (ล่าสุด)</h2>
+      <div style="max-height:480px;overflow-y:auto">
+        <table class="text-xs w-full" id="pzTable"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">เวลา</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2">เมนู</th>
+          <th class="py-1.5 pr-2 text-right">เดิม</th><th class="py-1.5 pr-2 text-right">ใหม่</th><th class="py-1.5 pr-2 text-right">Δ</th><th class="py-1.5">โดย</th>
+        </tr></thead><tbody id="pzBody"></tbody></table>
+      </div>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">🪑 โซนโต๊ะรายสาขา</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">โซน</th><th class="py-1.5 text-right">โต๊ะ</th>
+      </tr></thead><tbody id="pzZones"></tbody></table>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 🧩 EXTRA: 🗑️ บิลยกเลิก/ลบ (whole-bill voids) ══ -->
+<div id="tab-cancelbill" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="cbMonth" onchange="loadCancelBill(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span id="cbRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">บิลที่ถูกลบ/ยกเลิกทั้งใบ (คนละอันกับ Void รายเมนูใน รายงานปฏิบัติการ)</span>
+  </div>
+  <div id="cbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">ตามเหตุผล</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">เหตุผล</th><th class="py-1.5 pr-2 text-right">บิล</th><th class="py-1.5 pr-2 text-right">%</th><th class="py-1.5 text-right">มูลค่า</th>
+      </tr></thead><tbody id="cbReasons"></tbody></table>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายสาขา (เรียงตามจำนวนบิล)</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">บิลยกเลิก</th><th class="py-1.5 text-right">มูลค่า</th>
+      </tr></thead><tbody id="cbBranches"></tbody></table>
+    </div>
   </div>
 </div>
 
@@ -5400,12 +5543,13 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)' };
 
 function switchTab(name) {
   activeTab = name;
   ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport'].forEach(t => {
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
+   'cashctl','custtype','modifiers','pricezone','cancelbill'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -5566,6 +5710,11 @@ function loadActiveTab() {
   if (activeTab === 'costhead')    loadCostHead();
   if (activeTab === 'pnlbill')     loadPnlBill();
   if (activeTab === 'opsreport')   loadOpsReport();
+  if (activeTab === 'cashctl')     loadCashCtl();
+  if (activeTab === 'custtype')    loadCustType();
+  if (activeTab === 'modifiers')   loadModifiers();
+  if (activeTab === 'pricezone')   loadPriceZone();
+  if (activeTab === 'cancelbill')  loadCancelBill();
   if (activeTab === 'guest')       loadGuest();
   if (activeTab === 'benchmark')   loadBenchmark();
   if (activeTab === 'engineering') loadEngineering();
@@ -13759,25 +13908,48 @@ async function loadDailySales(force) {
   renderMenuSpike(d.focus);
 }
 
-// #5 menu-spike: which menus were abnormally high (qty) on the focus day, per branch
+// #5 menu-spike: which menus were abnormally high (qty) on the focus day, per branch.
+// Shows ALL items ≥1.5× their 21-day average; has its own branch picker.
+let _spikeBranchesLoaded = false, _spikeFocus = null;
 async function renderMenuSpike(focusDate) {
   const el = document.getElementById('dsSpike'); if (!el) return;
+  if (focusDate) _spikeFocus = focusDate;     // remember focus across branch-picker changes
+  // populate the local branch picker once
+  const bsel = document.getElementById('spikeBranch');
+  if (bsel && !_spikeBranchesLoaded) {
+    try {
+      const bl = await fetch(`${API}/api/branches`).then(r => r.json());
+      const names = (bl || []).map(b => (typeof b === 'string' ? b : (b.name || b.branch))).filter(Boolean)
+        .filter(n => n !== 'ALL').sort();
+      bsel.innerHTML = '<option value="">ทุกสาขา</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+      _spikeBranchesLoaded = true;
+    } catch (e) {}
+  }
   el.innerHTML = '<p class="text-xs text-slate-400 py-2">กำลังโหลด…</p>';
-  const p = new URLSearchParams();
-  if (focusDate) p.set('date', focusDate);
-  if (getBranch()) p.set('branch', getBranch());
+  const p = new URLSearchParams(); p.set('threshold', '1.5'); p.set('limit', '500');
+  if (_spikeFocus) p.set('date', _spikeFocus);
+  const localBr = bsel?.value || '';
+  if (localBr) p.set('branch', localBr);
+  else if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
   let d;
   try { d = await fetch(`${API}/api/sales/menu-spike?${p}`).then(r => r.json()); } catch (e) { el.innerHTML = ''; return; }
   const sp = d.spikes || [];
-  if (!sp.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-2">ไม่พบเมนูที่พุ่งผิดปกติในวันนี้</p>'; return; }
-  el.innerHTML = `<table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-    <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">วันนี้ (จาน)</th><th class="py-1.5 pr-2 text-right">เฉลี่ย 21 วัน</th><th class="py-1.5 text-right">สูงกว่า</th></tr></thead><tbody>` +
-    sp.map(s => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+  const cntEl = document.getElementById('spikeCount');
+  if (cntEl) cntEl.textContent = (d.count || 0) + ' รายการ' + ((d.count || 0) > sp.length ? ` (แสดง ${sp.length})` : '');
+  if (!sp.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-2">ไม่พบเมนูที่พุ่ง ≥1.5× ในวันนี้</p>'; return; }
+  el.innerHTML = `<table class="text-xs w-full" id="spikeTable"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+    <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สาขา</th>
+    <th class="py-1.5 pr-2 text-right">วันนี้ (จาน)</th><th class="py-1.5 pr-2 text-right">เฉลี่ย 21 วัน</th>
+    <th class="py-1.5 pr-2 text-right">+จาน</th><th class="py-1.5 text-right">สูงกว่า</th></tr></thead><tbody>` +
+    sp.map((s, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+      <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
       <td class="py-1.5 pr-2 font-medium">${esc(s.menu)}</td>
       <td class="py-1.5 pr-2 text-slate-500">${esc(s.branch)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${s.is_new ? '<span class="text-amber-600">เมนูใหม่</span>' : fmtN(s.avg)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:#ef4444;font-weight:700">${s.x != null ? '×' + s.x : '🆕'}</span></td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#f59e0b">+${fmtN(s.excess)}</td>
+      <td class="py-1.5 text-right tabular-nums"><span style="color:#ef4444;font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : '🆕'}</span></td>
     </tr>`).join('') + `</tbody></table>`;
 }
 
@@ -14050,6 +14222,162 @@ async function loadOpsReport(force) {
   document.getElementById('opPromo').innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
     <td class="py-1.5 pr-2 font-mono text-[11px]">${esc(String(x.series))}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#f59e0b">${fmt(x.discount)}</td></tr>`).join('')
+    || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+
+// ══════════ 🧩 EXTRA (POS เชิงลึก) ══════════
+async function _extraMonths(selId, valNow) {
+  const sel = document.getElementById(selId);
+  if (!sel || sel.dataset.loaded) return;
+  try {
+    const mi = await fetch(`${API}/api/months`).then(r => r.json());
+    const months = ((mi.months || mi) || []).slice().sort().reverse();
+    const keep = sel.querySelector('option[value=""]');
+    sel.innerHTML = (keep ? keep.outerHTML : '') + months.map(m => `<option value="${m}">${m}</option>`).join('');
+    sel.dataset.loaded = '1';
+  } catch (e) {}
+}
+const _extKpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${c}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub||''}</p></div>`;
+
+// 💵 เงินสดขาด/เกิน
+async function loadCashCtl(force) {
+  await _extraMonths('ccMonth');
+  const mv = document.getElementById('ccMonth')?.value || '';
+  const _fk = _filterKey() + '|' + mv;
+  if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
+  const p = new URLSearchParams(); if (mv) p.set('month', mv);
+  if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/extra/cash?${p}`).then(r => r.json()); } catch (e) { return; }
+  if (d.month) { const el = document.getElementById('ccMonth'); if (el && !el.value) el.value = d.month; }
+  document.getElementById('ccRange').textContent = d.month ? `เดือน ${d.month}` : '';
+  const s = d.summary || {};
+  document.getElementById('ccKpis').innerHTML = [
+    _extKpi('ขาด/เกิน สุทธิ', fmt(s.net || 0), 'ทั้งเครือเดือนนี้', (s.net || 0) < 0 ? '#ef4444' : '#10b981'),
+    _extKpi('ยอดขาดรวม', fmt(s.short_total || 0), (s.short_days || 0) + ' วัน-สาขา ที่ขาด', '#ef4444'),
+    _extKpi('ยอดเกินรวม', fmt(s.over_total || 0), 'เงินเกินลิ้นชัก', '#10b981'),
+    _extKpi('ระเบียบเงินสด', ((s.day_branch ? (1 - (s.short_days || 0) / s.day_branch) * 100 : 100)).toFixed(0) + '%', 'วัน-สาขาที่ไม่ขาด', '#0891b2'),
+  ].join('');
+  document.getElementById('ccBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${r.short_days || 0}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td>
+    <td class="py-1.5 text-right tabular-nums">${r.sales ? (r.over_short / r.sales * 100).toFixed(2) + '%' : '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  document.getElementById('ccWorst').innerHTML = (d.worst_days || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+    <td class="py-1.5 pr-2 tabular-nums">${esc(r.day)}</td><td class="py-1.5 pr-2">${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td><td class="py-1.5 text-right tabular-nums">${fmtN(r.pax)}</td>
+  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีวันที่ขาด/เกิน 🎉</td></tr>';
+}
+
+// 👥 ประเภทลูกค้า
+async function loadCustType(force) {
+  await _extraMonths('ctMonth');
+  const mv = document.getElementById('ctMonth')?.value || '';
+  const _fk = _filterKey() + '|' + mv;
+  if (!force && _tabLastKey.custtype === _fk) return; _tabLastKey.custtype = _fk;
+  const p = new URLSearchParams(); if (mv) p.set('month', mv);
+  if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/extra/customer-type?${p}`).then(r => r.json()); } catch (e) { return; }
+  if (d.month) { const el = document.getElementById('ctMonth'); if (el && !el.value) el.value = d.month; }
+  document.getElementById('ctRange').textContent = d.month ? `เดือน ${d.month}` : '';
+  const types = d.types || [];
+  const dineIn = types.filter(t => /ลูกค้าทั่วไป|เครดิต/.test(t.type)).reduce((a, b) => a + (b.customers || 0), 0);
+  const deliv = types.filter(t => /Grab|Line|Food|Delivery/i.test(t.type)).reduce((a, b) => a + (b.customers || 0), 0);
+  const tc = d.total_customers || 1;
+  document.getElementById('ctKpis').innerHTML = [
+    _extKpi('ยอดรวม (ex-VAT)', fmt(d.total_net || 0), 'ทุกประเภทเดือนนี้', '#4f46e5'),
+    _extKpi('ทานที่ร้าน/เครดิต', (dineIn / tc * 100).toFixed(1) + '%', fmtN(dineIn) + ' ราย', '#10b981'),
+    _extKpi('เดลิเวอรี (Grab/LINE)', (deliv / tc * 100).toFixed(1) + '%', fmtN(deliv) + ' ราย', '#f59e0b'),
+    _extKpi('จำนวนประเภท', String(types.length), 'ช่องทางลูกค้า', '#0891b2'),
+  ].join('');
+  const maxC = Math.max(1, ...types.map(t => t.customers || 0));
+  const palette = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#0891b2', '#a855f7', '#64748b'];
+  document.getElementById('ctBars').innerHTML = types.map((t, i) => `
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-[11px] w-28 shrink-0 truncate" style="color:var(--text-secondary)" title="${esc(t.type)}">${esc(t.type)}</span>
+      <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${(t.customers || 0) / maxC * 100}%;background:${palette[i % palette.length]}"></div></div>
+      <span class="text-[11px] tabular-nums w-12 text-right font-semibold" style="color:var(--text-primary)">${t.cust_pct}%</span>
+    </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+  document.getElementById('ctBody').innerHTML = types.map(t => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+    <td class="py-1.5 pr-2 font-medium">${esc(t.type)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(t.customers)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${t.cust_pct}%</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmt(t.net)}</td>
+    <td class="py-1.5 text-right tabular-nums font-semibold">${t.net_per_head != null ? fmt(t.net_per_head) : '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+
+// 🍽️ ความต้องการพิเศษ (modifiers)
+async function loadModifiers(force) {
+  const _fk = _filterKey();
+  if (!force && _tabLastKey.modifiers === _fk) return; _tabLastKey.modifiers = _fk;
+  const p = new URLSearchParams(); p.set('limit', '25');
+  if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/extra/modifiers?${p}`).then(r => r.json()); } catch (e) { return; }
+  document.getElementById('modTotal').textContent = `รวม ${fmtN(d.total || 0)} ครั้ง`;
+  const ch = d.choices || []; const maxN = Math.max(1, ...ch.map(x => x.n || 0));
+  document.getElementById('modBars').innerHTML = ch.map((x, i) => `
+    <div class="flex items-center gap-2 mb-2">
+      <span class="text-[11px] w-6 text-right tabular-nums" style="color:var(--text-muted)">${i + 1}</span>
+      <span class="text-xs w-52 shrink-0 truncate" style="color:var(--text-secondary)" title="${esc(x.choice)}">${esc(x.choice)}</span>
+      <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${(x.n || 0) / maxN * 100}%;background:#6366f1"></div></div>
+      <span class="text-[11px] tabular-nums w-16 text-right font-semibold" style="color:var(--text-primary)">${fmtN(x.n)}</span>
+      <span class="text-[10px] tabular-nums w-10 text-right" style="color:var(--text-muted)">${x.pct}%</span>
+    </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+}
+
+// 🏷️ ราคา & โซนโต๊ะ
+async function loadPriceZone(force) {
+  await _extraMonths('pzMonth');
+  const mv = document.getElementById('pzMonth')?.value || '';
+  const _fk = _filterKey() + '|' + mv;
+  if (!force && _tabLastKey.pricezone === _fk) return; _tabLastKey.pricezone = _fk;
+  const p = new URLSearchParams(); p.set('limit', '200'); if (mv) p.set('month', mv);
+  if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/extra/price-zone?${p}`).then(r => r.json()); } catch (e) { return; }
+  document.getElementById('pzCount').textContent = `แก้ราคา ${fmtN(d.change_count || 0)} ครั้ง${(d.changes || []).length >= 200 ? ' (แสดง 200 ล่าสุด)' : ''}`;
+  document.getElementById('pzBody').innerHTML = (d.changes || []).map(r => {
+    const dn = (r.delta || 0) < 0;
+    return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+    <td class="py-1.5 pr-2 tabular-nums text-[10.5px]">${esc((r.date || '').replace('T', ' ').slice(0, 16))}</td>
+    <td class="py-1.5 pr-2">${esc(r.branch)}</td><td class="py-1.5 pr-2">${esc(r.item || '')}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.default_price)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.new_price)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dn ? '#ef4444' : '#10b981'}">${dn ? '' : '+'}${fmt(r.delta)}</td>
+    <td class="py-1.5 text-[11px]">${esc(r.user || '')}</td></tr>`;
+  }).join('') || '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  document.getElementById('pzZones').innerHTML = (d.zones || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${r.zones}</td>
+    <td class="py-1.5 text-right tabular-nums">${fmtN(r.tables)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+
+// 🗑️ บิลยกเลิก/ลบ (whole-bill voids)
+async function loadCancelBill(force) {
+  await _extraMonths('cbMonth');
+  const mv = document.getElementById('cbMonth')?.value || '';
+  const _fk = _filterKey() + '|' + mv;
+  if (!force && _tabLastKey.cancelbill === _fk) return; _tabLastKey.cancelbill = _fk;
+  const p = new URLSearchParams(); if (mv) p.set('month', mv);
+  if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/extra/cancel-bills?${p}`).then(r => r.json()); } catch (e) { return; }
+  if (d.month) { const el = document.getElementById('cbMonth'); if (el && !el.value) el.value = d.month; }
+  document.getElementById('cbRange').textContent = d.month ? `เดือน ${d.month}` : '';
+  const s = d.summary || {};
+  document.getElementById('cbKpis').innerHTML = [
+    _extKpi('บิลยกเลิก/ลบ', fmtN(s.bills || 0), 'ทั้งบิล (เดือนนี้)', '#ef4444'),
+    _extKpi('มูลค่ารวม', fmt(s.amount || 0), 'ยอดบิลที่ถูกยกเลิก', '#f59e0b'),
+    _extKpi('อัตรายกเลิก', s.cancel_rate != null ? s.cancel_rate + '%' : '—', 'ของบิลทั้งหมด', '#7c3aed'),
+    _extKpi('บิลปกติ', fmtN(s.valid_bills || 0), 'เทียบเป็นฐาน', '#0891b2'),
+  ].join('');
+  const tb = (s.bills || 1);
+  document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+    <td class="py-1.5 pr-2">${esc(r.reason)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${(r.bills / tb * 100).toFixed(1)}%</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
+    || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  document.getElementById('cbBranches').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 

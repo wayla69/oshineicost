@@ -375,6 +375,113 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
     print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
 
+    # ── Extra POS-deep-dive tables (separate "Extra" report group) ──
+    stage_extra(sq, mc, since, bid_map, item_map)
+
+
+def _th(s):
+    """Decode TIS-620 (CP874) varchar that pymssql returns mis-decoded as latin1
+    under the default UTF-8 connection. Returns the original string on failure."""
+    if not s:
+        return s
+    try:
+        return s.encode("latin1").decode("cp874")
+    except Exception:
+        return s
+
+
+def stage_extra(sq, mc, since, bid_map, item_map):
+    """Extra analytics from previously-untapped POS tables (separate UI group).
+    IRON RULE: still NO POS cost — quantities / counts / amounts / over-short only."""
+    def run(sql, params=None):
+        mc.execute(sql, params if params is not None else (since,)); return mc.fetchall()
+
+    # ── pos_cashcount_day: cash over/short + ops summary per branch per day ──
+    sq.executescript("DROP TABLE IF EXISTS pos_cashcount_day; CREATE TABLE pos_cashcount_day("
+                     "branch_id INT, day TEXT, over_short REAL, total_sales REAL, pax INT, "
+                     "invoices INT, discount REAL, cancel REAL);")
+    rows = run("""SELECT BranchId bid, CONVERT(char(10),SalesDate,126) d,
+                 SUM(CAST(OverShortAmount AS float)) os, SUM(CAST(TotalSales AS float)) ts,
+                 SUM(CountPax) pax, SUM(CountInvoice) inv, SUM(CAST(TotalDiscount AS float)) disc,
+                 SUM(CAST(TotalCancel AS float)) cancel
+                 FROM CashCount WHERE ISNULL(Active,1)=1 AND SalesDate >= %s
+                 GROUP BY BranchId, CONVERT(char(10),SalesDate,126)""")
+    sq.executemany("INSERT INTO pos_cashcount_day VALUES(?,?,?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], round(r["os"] or 0,2), round(r["ts"] or 0,2), r["pax"] or 0,
+          r["inv"] or 0, round(r["disc"] or 0,2), round(r["cancel"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_cc ON pos_cashcount_day(branch_id, day)")
+    print(f"        pos_cashcount_day: {len(rows)} groups")
+
+    # ── pos_customer_type_month: walk-in vs Grab vs Line Man vs takeaway vs credit ──
+    sq.executescript("DROP TABLE IF EXISTS pos_customer_type_month; CREATE TABLE pos_customer_type_month("
+                     "branch_id INT, period_month TEXT, type_name TEXT, customers INT, net REAL);")
+    rows = run("""SELECT b.BranchId bid, CONVERT(char(7),sct.SaleDate,126) ym, sct.CustomerTypeName tn,
+                 SUM(sct.NumOfCustomer) cust, SUM(CAST(sct.NetAmnt AS float)) net
+                 FROM SaleByCustomerType sct JOIN Branch b ON b.BranchCode=sct.BranchCode
+                 WHERE sct.SaleDate >= %s
+                 GROUP BY b.BranchId, CONVERT(char(7),sct.SaleDate,126), sct.CustomerTypeName""")
+    sq.executemany("INSERT INTO pos_customer_type_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], _th(r["tn"]), r["cust"] or 0, round(r["net"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_customer_type_month: {len(rows)} groups")
+
+    # ── pos_modifier: top special requests per menu per branch (all-time, free choices) ──
+    sq.executescript("DROP TABLE IF EXISTS pos_modifier; CREATE TABLE pos_modifier("
+                     "branch_id INT, sku_id INT, choice_name TEXT, n INT, qty REAL);")
+    rows = run("""SELECT BranchId bid, ItemId iid, ChoiceName cn, COUNT(*) n,
+                 SUM(CAST(ISNULL(ChoiceQty,1) AS float)) q
+                 FROM SaleItemModifier WHERE ChoiceName IS NOT NULL
+                 GROUP BY BranchId, ItemId, ChoiceName HAVING COUNT(*) >= 20""", ())
+    sq.executemany("INSERT INTO pos_modifier VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), item_map.get(r["iid"]), r["cn"], r["n"], round(r["q"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_mod ON pos_modifier(branch_id)")
+    print(f"        pos_modifier: {len(rows)} groups")
+
+    # ── pos_price_change: price-override log (governance) — rolling since ──
+    sq.executescript("DROP TABLE IF EXISTS pos_price_change; CREATE TABLE pos_price_change("
+                     "branch_id INT, change_date TEXT, sku_id INT, item_desc TEXT, "
+                     "default_price REAL, new_price REAL, user_name TEXT);")
+    rows = run("""SELECT BranchId bid, CONVERT(char(19),ChangeDate,126) cd, ItemId iid, ItemDesc descr,
+                 CAST(DefaultPrice AS float) dp, CAST(NewPrice AS float) np, UserName un
+                 FROM ChangePriceLog WHERE ChangeDate >= %s""")
+    sq.executemany("INSERT INTO pos_price_change VALUES(?,?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["cd"], item_map.get(r["iid"]), r["descr"],
+          round(r["dp"] or 0,2), round(r["np"] or 0,2), r["un"])
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_price_change: {len(rows)} rows")
+
+    # ── pos_zone: table zones — #tables + seats per zone per branch (FBTable master) ──
+    sq.executescript("DROP TABLE IF EXISTS pos_zone; CREATE TABLE pos_zone("
+                     "branch_id INT, zone_id INT, tables INT, seats INT);")
+    rows = run("""SELECT BranchId bid, ISNULL(ZoneId,0) zid, COUNT(*) tabs, SUM(ISNULL(NumberOfSeat,0)) seats
+                 FROM FBTable WHERE ISNULL(Active,1)=1 GROUP BY BranchId, ISNULL(ZoneId,0)""", ())
+    sq.executemany("INSERT INTO pos_zone VALUES(?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["zid"], r["tabs"], r["seats"] or 0) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_zone: {len(rows)} groups")
+
+    # ── pos_cancel_reason: delete/void reason lookup (decoded Thai) ──
+    sq.executescript("DROP TABLE IF EXISTS pos_cancel_reason; CREATE TABLE pos_cancel_reason("
+                     "reason_id INT PRIMARY KEY, reason_desc TEXT);")
+    rrows = run("SELECT ReasonId rid, ReasonDesc rd FROM DeleteSaleReason", ())
+    sq.executemany("INSERT OR REPLACE INTO pos_cancel_reason VALUES(?,?)",
+        [(r["rid"], _th(r["rd"])) for r in rrows])
+    print(f"        pos_cancel_reason: {len(rrows)} rows")
+
+    # ── pos_cancel_bill: whole BILLS voided/deleted (Sale.Active=0) per branch/month/reason.
+    #    Distinct from pos_void (which is cancelled ITEMS within otherwise-valid bills). ──
+    sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill; CREATE TABLE pos_cancel_bill("
+                     "branch_id INT, period_month TEXT, reason_id INT, bills INT, amount REAL);")
+    rows = run("""SELECT BranchId bid, CONVERT(char(7),SaleDate,126) ym, ISNULL(DeleteReasonId,0) rid,
+                 COUNT(*) n, SUM(CAST(ISNULL(Total,0) AS float)) amt
+                 FROM Sale WHERE ISNULL(Active,1)=0 AND SaleDate >= %s
+                 GROUP BY BranchId, CONVERT(char(7),SaleDate,126), ISNULL(DeleteReasonId,0)""")
+    sq.executemany("INSERT INTO pos_cancel_bill VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["rid"], r["n"], round(r["amt"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_cancel_bill: {len(rows)} groups")
+
 
 def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
