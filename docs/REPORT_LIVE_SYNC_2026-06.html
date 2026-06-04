@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei — รายงานเชื่อมต่อ POS Real-time (มิ.ย. 2026)</title>
+<style>
+  *{box-sizing:border-box;margin:0;font-family:'Prompt','Segoe UI',sans-serif}
+  body{background:#f0f4f8;color:#0f172a;padding:24px;line-height:1.6}
+  .wrap{max-width:820px;margin:0 auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 2px 14px rgba(15,23,42,.08)}
+  .top{background:linear-gradient(135deg,#1f3a6b,#16294d);color:#fff;padding:26px 30px}
+  .top h1{font-size:21px;font-weight:800}
+  .top p{font-size:13px;opacity:.85;margin-top:4px}
+  .body{padding:24px 30px}
+  h2{font-size:13px;font-weight:800;color:#4f46e5;text-transform:uppercase;letter-spacing:.08em;margin:24px 0 10px;display:flex;align-items:center;gap:8px}
+  h2:first-child{margin-top:0}
+  p.lead{font-size:14px;color:#475569}
+  .rule{height:3px;width:46px;background:#1f3a6b;border-radius:2px;margin:6px 0 0}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:6px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid #eef2f7}
+  th{background:#f8fafc;color:#64748b;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .ok{color:#059669;font-weight:700}
+  .pill{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:999px}
+  .pill-green{background:#dcfce7;color:#166534}
+  .iron{background:#fef2f2;border-left:4px solid #ef4444;border-radius:10px;padding:12px 16px;font-size:13.5px;color:#991b1b}
+  .warn{background:#fffbeb;border-left:4px solid #f59e0b;border-radius:10px;padding:12px 16px;font-size:13px;color:#92400e}
+  .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:8px}
+  .stat{background:#f8fafc;border:1px solid #eef2f7;border-radius:10px;padding:12px 14px}
+  .stat .l{font-size:11px;color:#64748b;text-transform:uppercase}
+  .stat .v{font-size:18px;font-weight:800;color:#0f172a;margin-top:2px}
+  .foot{padding:16px 30px;border-top:1px solid #eef2f7;font-size:11.5px;color:#94a3b8}
+  ul{margin:6px 0 0 18px;font-size:13px;color:#475569}
+  @media(max-width:640px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>🔗 Oshinei — เชื่อมต่อ POS แบบ Real-time + เตรียมข้อมูลรายงานใหม่</h1>
+    <p>Sales &amp; Cost Analysis · รายงานสถานะ ณ 4 มิถุนายน 2026 · oshinei-dashboard.fly.dev</p>
+  </div>
+  <div class="body">
+
+    <h2>📌 สรุปผู้บริหาร</h2>
+    <div class="rule"></div>
+    <p class="lead" style="margin-top:10px">เชื่อมต่อระบบ Dashboard เข้ากับฐานข้อมูล POS (Easy POS / MS SQL Server) โดยตรงสำเร็จแล้ว
+    ทำให้ข้อมูลบนเว็บเป็น <b>near real-time</b> (อัปเดตอัตโนมัติทุก 30 นาที) และได้เตรียมชุดข้อมูลสำหรับรายงานเชิงลึกชุดใหม่ 7 รายการไว้ในฐานข้อมูลแล้ว</p>
+
+    <div class="grid">
+      <div class="stat"><div class="l">สถานะข้อมูล</div><div class="v">สดถึง มิ.ย. 2026 <span class="pill pill-green">LIVE</span></div></div>
+      <div class="stat"><div class="l">รอบอัปเดต</div><div class="v">ทุก 30 นาที (อัตโนมัติ)</div></div>
+      <div class="stat"><div class="l">ความถูกต้อง — อุบลฯ เม.ย.</div><div class="v ok">+0.00%</div></div>
+      <div class="stat"><div class="l">ความถูกต้อง — ทั้งเครือ พ.ค.</div><div class="v ok">+0.07%</div></div>
+    </div>
+
+    <h2>🔴 กฎเหล็ก (Standing Rule)</h2>
+    <div class="iron"><b>ต้นทุน/COGS ในทุกการคำนวณ ใช้ BoM ของเราเท่านั้น</b> — ระบบ POS ไม่มีการบันทึกต้นทุนวัตถุดิบ
+    (ตรวจสอบแล้ว: ต้นทุนใน POS = 0 ทุกรายการ) ดังนั้น margin / กำไร ทั้งหมดอ้างอิงสูตร BoM ของเรา ไม่นำต้นทุนจาก POS มาใช้</div>
+
+    <h2>📊 ข้อมูลรายงานใหม่ที่เตรียมไว้แล้ว</h2>
+    <table>
+      <thead><tr><th>รายงาน</th><th>ตัวอย่างที่พบ (พ.ค. 2026)</th></tr></thead>
+      <tbody>
+        <tr><td>💳 สัดส่วนการชำระเงิน</td><td>Credit ฿201.7M · โอน ฿196.7M · KNNQR ฿144.6M · เงินสด ฿126.9M</td></tr>
+        <tr><td>🗑️ การยกเลิก/Void</td><td>฿2.31M (3,494 รายการ) — แยกสาขา/เหตุผลได้</td></tr>
+        <tr><td>🪑 โต๊ะหมุนเวียน</td><td>เฉลี่ย 91 นาที/โต๊ะ · 61,997 โต๊ะ</td></tr>
+        <tr><td>🚚 ช่องทางขาย</td><td>ทานที่ร้าน 57,749 · เดลิเวอรี 2,081 · กลับบ้าน 825 บิล</td></tr>
+        <tr><td>🎟️ คูปอง/โปรโมชัน</td><td>ส่วนลด ฿1.54M (4,501 ครั้ง)</td></tr>
+        <tr><td>👤 ผลงานพนักงาน/upsell</td><td>เตรียมข้อมูลพร้อมใช้ (ต่อพนักงาน/เดือน)</td></tr>
+        <tr><td>⏱️ เวลาในครัว (KDS)</td><td>มีข้อมูลเฉพาะ 2/27 สาขาที่ใช้ KDS</td></tr>
+      </tbody>
+    </table>
+
+    <h2>⚠️ ข้อจำกัด (ตามจริง)</h2>
+    <div class="warn">
+      <ul style="margin-left:16px">
+        <li>POS <b>ไม่มีต้นทุน/วัตถุดิบ</b> → ทุก margin ใช้ BoM (ตามกฎเหล็ก) · stock variance ทำไม่ได้จาก POS</li>
+        <li>เวลาในครัวมีเฉพาะสาขาที่ใช้ KDS (2/27)</li>
+        <li>P&amp;L ต่อบิล (COGS via BoM รายบิล) เป็นงานชิ้นถัดไป</li>
+      </ul>
+    </div>
+
+    <h2>➡️ ขั้นตอนถัดไป</h2>
+    <ul>
+      <li>สร้างหน้ารายงานบน Dashboard จากข้อมูลที่เตรียมไว้ (เริ่มจาก P&amp;L ต่อบิล, Payment mix, Void)</li>
+      <li>เปลี่ยนรหัสผ่าน DB (security) และพิจารณาเปิดเวลาในครัว/ต้นทุนใน POS หากต้องการ margin จาก POS ในอนาคต</li>
+    </ul>
+  </div>
+  <div class="foot">จัดทำโดยระบบ Oshinei Dashboard · ข้อมูลตรวจสอบเทียบบัญชี (อุบลฯ เม.ย. 2026 = ฿6,597,937) · COGS = BoM เท่านั้น</div>
+</div>
+</body>
+</html>
