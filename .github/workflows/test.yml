@@ -22,7 +22,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
           # app runtime deps needed to import main / the ingest chain
-          pip install "uvicorn" "openpyxl" "python-pptx" "python-dateutil"
+          pip install "uvicorn" "python-multipart" "openpyxl" "python-pptx" "python-dateutil"
       - name: Run tests (with coverage)
         env:
           OSHINEI_NO_SWAP: "1"   # never touch a real DB during import
