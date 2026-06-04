@@ -1057,6 +1057,489 @@ def top_ordered(
             "spark_months": spark_months, "items": items}
 
 
+@app.get("/api/sales/daily")
+def sales_daily(
+    date:   Optional[str] = Query(None),
+    branch: Optional[str] = Query(None),
+    group:  Optional[str] = Query(None),
+    gran:   str           = Query("day"),     # day | week | month
+    trend:  int           = Query(8, ge=2, le=26),
+):
+    """Per-branch sales for a day/week/month with same-period MoM & YoY deltas,
+    revenue/head, a trailing trend, and anomaly flags. REVENUE ONLY (ex-VAT
+    goods = food+drink+other) — no cost here; COGS stays on BoM elsewhere."""
+    import datetime as _dt, calendar as _cal
+    if gran not in ("day", "week", "month"):
+        gran = "day"
+    base = ["t.source='Easy'", "b.name!='ALL'"]
+    params: dict = {}
+    if branch:
+        base.append("b.name=:branch"); params["branch"] = branch
+    _group_filter(base, params, group)
+    where = " AND ".join(base)
+
+    def bounds(d):
+        if gran == "day":
+            return d, d
+        if gran == "week":
+            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
+        s = d.replace(day=1)
+        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
+        return s, nxt - _dt.timedelta(days=1)
+
+    def minus_month(d, n=1):
+        idx = d.year * 12 + (d.month - 1) - n
+        y, m = idx // 12, idx % 12 + 1
+        return _dt.date(y, m, min(d.day, _cal.monthrange(y, m)[1]))
+
+    def comp(fdate, back):       # back = 'month' | 'year'
+        if gran == "day":
+            if back == "month":
+                return minus_month(fdate, 1)
+            try:    return fdate.replace(year=fdate.year - 1)
+            except ValueError: return fdate.replace(year=fdate.year - 1, day=28)
+        if gran == "week":
+            return fdate - _dt.timedelta(days=28 if back == "month" else 364)
+        if back == "month":
+            return minus_month(fdate.replace(day=1), 1)
+        return fdate.replace(year=fdate.year - 1, day=1)
+
+    def pct(c, p):
+        return round((c - p) / p * 100, 1) if p else None
+
+    with get_db() as con:
+        maxd = con.execute(
+            f"SELECT MAX(substr(t.sold_at,1,10)) FROM sales_transaction t "
+            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
+        if not maxd:
+            return {"gran": gran, "focus": None, "branches": [], "total": {}, "trend": [], "anomalies": []}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        fdate = _dt.date(fy, fm, fd)
+
+        def fetch(d):
+            s, e = bounds(d)
+            # revenue ex-VAT = total_inc_vat / 1.07 (the reconciled basis that matches
+            # accounting & sales_sku_monthly). NOT food+drink+other — those double-count
+            # buffet (buffet dishes duplicated in food + the package in other → +~50%).
+            rows = con.execute(f"""
+                SELECT b.name branch,
+                       ROUND(SUM(t.total_inc_vat)/1.07,2) rev,
+                       SUM(t.customer_count) cust, COUNT(*) bills
+                FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE {where} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
+                GROUP BY b.name""", {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
+            return {r["branch"]: {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]} for r in rows}, (s, e)
+
+        cur, (cs, ce) = fetch(fdate)
+        pm,  (pms, pme) = fetch(comp(fdate, "month"))
+        py,  (pys, pye) = fetch(comp(fdate, "year"))
+
+        # Guard partial coverage: if a comparison period starts before our data
+        # begins, it's incomplete → drop it (avoids bogus deltas like YoY +472%
+        # vs the partial first month). Same idea as the benchmark guard.
+        mind = con.execute(
+            f"SELECT MIN(substr(t.sold_at,1,10)) FROM sales_transaction t "
+            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0] or "9999-99"
+        if pms.isoformat() < mind:
+            pm = {}
+        if pys.isoformat() < mind:
+            py = {}
+
+        out = []
+        for nm in sorted(set(cur) | set(pm) | set(py)):
+            c = cur.get(nm, {"rev": 0, "cust": 0, "bills": 0})
+            p = pm.get(nm); y = py.get(nm)
+            crev, ccust = c["rev"], c["cust"]
+            out.append({
+                "branch": nm, "revenue": crev, "customers": ccust, "bills": c["bills"],
+                "rev_per_head": round(crev / ccust, 1) if ccust else None,
+                "mom_rev": (p or {}).get("rev"),
+                "mom_delta": round(crev - (p or {}).get("rev", 0), 2) if p else None,
+                "mom_pct": pct(crev, (p or {}).get("rev", 0)) if p else None,
+                "yoy_rev": (y or {}).get("rev"),
+                "yoy_delta": round(crev - (y or {}).get("rev", 0), 2) if y else None,
+                "yoy_pct": pct(crev, (y or {}).get("rev", 0)) if y else None,
+            })
+        out.sort(key=lambda r: -r["revenue"])
+
+        def tot(d): return sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values())
+        crv, ccu = tot(cur); prv, _ = tot(pm); yrv, _ = tot(py)
+        total = {"revenue": round(crv, 2), "customers": ccu,
+                 "rev_per_head": round(crv / ccu, 1) if ccu else None,
+                 "mom_delta": round(crv - prv, 2), "mom_pct": pct(crv, prv),
+                 "yoy_delta": round(crv - yrv, 2), "yoy_pct": pct(crv, yrv)}
+
+        # trailing trend (chain total rev), `trend` periods ending at focus
+        tr = []; d = fdate
+        for _ in range(trend):
+            data, (s, e) = fetch(d)
+            tr.append({"start": s.isoformat(), "end": e.isoformat(),
+                       "revenue": round(sum(x["rev"] for x in data.values()), 2)})
+            d = d - _dt.timedelta(days=1) if gran == "day" else \
+                d - _dt.timedelta(days=7) if gran == "week" else minus_month(d.replace(day=1), 1)
+        tr.reverse()
+
+        # anomaly: chain total vs trailing average + big per-branch MoM movers
+        prior = [x["revenue"] for x in tr[:-1]]
+        avg = sum(prior) / len(prior) if prior else 0
+        anomalies = []
+        ap = pct(crv, avg)
+        if ap is not None and abs(ap) >= 20:
+            anomalies.append({"scope": "chain", "pct": ap,
+                              "msg": f"ยอดรวม{'สูง' if ap > 0 else 'ต่ำ'}กว่าค่าเฉลี่ย {abs(ap):.0f}%"})
+        for r in out:
+            if r["mom_pct"] is not None and abs(r["mom_pct"]) >= 30:
+                anomalies.append({"scope": r["branch"], "pct": r["mom_pct"],
+                                  "msg": f"{r['branch']} {'พุ่ง' if r['mom_pct'] > 0 else 'ตก'} {abs(r['mom_pct']):.0f}% vs ช่วงก่อน"})
+
+    return {"gran": gran, "focus": focus,
+            "cur_range": [cs.isoformat(), ce.isoformat()],
+            "prev_range": [pms.isoformat(), pme.isoformat()],
+            "yoy_range": [pys.isoformat(), pye.isoformat()],
+            "branches": out, "total": total, "trend": tr, "anomalies": anomalies}
+
+
+@app.get("/api/home/branch-scorecard")
+def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head,
+    7-day sparkline, vs trailing-7-day average %, vs same-weekday-last-week %, and
+    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 = reconciled)."""
+    import datetime as _dt
+    base = ["t.source='Easy'", "b.name!='ALL'"]; params: dict = {}
+    _group_filter(base, params, group)
+    where = " AND ".join(base)
+    with get_db() as con:
+        maxd = con.execute(f"SELECT MAX(substr(t.sold_at,1,10)) FROM sales_transaction t "
+                           f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
+        if not maxd:
+            return {"date": None, "days": [], "branches": []}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        fdate = _dt.date(fy, fm, fd)
+        start = fdate - _dt.timedelta(days=7)
+        days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
+        rows = con.execute(f"""
+            SELECT b.name branch, substr(t.sold_at,1,10) d,
+                   ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust, COUNT(*) bills
+            FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+            WHERE {where} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
+            GROUP BY b.name, substr(t.sold_at,1,10)""",
+            {**params, "s": start.isoformat(), "e": focus}).fetchall()
+        bm: dict = {}
+        for r in rows:
+            bm.setdefault(r["branch"], {})[r["d"]] = {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]}
+        out = []
+        for nm, dm in bm.items():
+            spark = [round(dm.get(d, {}).get("rev", 0), 0) for d in days]
+            today = dm.get(focus, {})
+            trev, tcust, tbills = today.get("rev", 0), today.get("cust", 0), today.get("bills", 0)
+            prior = [dm.get(d, {}).get("rev", 0) for d in days[:-1]]
+            prior = [x for x in prior if x > 0]
+            avg7 = sum(prior) / len(prior) if prior else 0
+            wow = dm.get(days[0], {}).get("rev")        # same weekday last week
+            vs_avg = round((trev - avg7) / avg7 * 100, 1) if avg7 else None
+            vs_wow = round((trev - wow) / wow * 100, 1) if wow else None
+            status = "up" if (vs_avg is not None and vs_avg >= 10) else \
+                     "down" if (vs_avg is not None and vs_avg <= -10) else "ok"
+            out.append({"branch": nm, "revenue": trev, "customers": tcust, "bills": tbills,
+                        "rev_per_head": round(trev / tcust, 1) if tcust else None,
+                        "spark": spark, "avg7": round(avg7, 0),
+                        "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status})
+        out.sort(key=lambda r: -r["revenue"])
+    return {"date": focus, "days": days, "branches": out}
+
+
+@app.get("/api/sales/menu-spike")
+def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+               limit: int = Query(15, ge=1, le=50)):
+    """Menus whose QTY on a given day spiked abnormally vs their trailing 21-day
+    average, per branch (answers '#5: which menu was abnormally high that day').
+    Qty-only from sales_sku_daily — NO cost (iron rule)."""
+    import datetime as _dt
+    with get_db() as con:
+        try:
+            maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        except Exception:
+            return {"date": None, "spikes": [], "note": "no daily sku data"}
+        if not maxd:
+            return {"date": None, "spikes": []}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        wstart = (_dt.date(fy, fm, fd) - _dt.timedelta(days=21)).isoformat()
+        bfilt = ""; params = {"focus": focus, "ws": wstart}
+        if branch:
+            bfilt = " AND b.name=:branch"; params["branch"] = branch
+        rows = con.execute(f"""
+            WITH today AS (
+              SELECT d.branch_id, d.sku_id, SUM(d.qty) q
+              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              WHERE d.day=:focus {bfilt} GROUP BY d.branch_id, d.sku_id),
+            hist AS (
+              SELECT branch_id, sku_id, AVG(qty) avgq, COUNT(*) n
+              FROM sales_sku_daily WHERE day>=:ws AND day<:focus GROUP BY branch_id, sku_id)
+            SELECT b.name branch, s.description, s.sku_code, t.q today,
+                   COALESCE(h.avgq,0) avgq, COALESCE(h.n,0) n
+            FROM today t JOIN branches b ON b.branch_id=t.branch_id
+            JOIN skus s ON s.sku_id=t.sku_id
+            LEFT JOIN hist h ON h.branch_id=t.branch_id AND h.sku_id=t.sku_id
+            WHERE t.q>0""", params).fetchall()
+        spikes = []
+        for r in rows:
+            today = r["today"] or 0; avg = r["avgq"] or 0; n = r["n"] or 0
+            name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
+            if avg > 0 and n >= 5:
+                x = today / avg
+                if x >= 2.0 and today >= avg + 10:
+                    spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
+                                   "avg": round(avg, 1), "x": round(x, 1), "excess": round(today - avg), "is_new": False})
+            elif n < 5 and today >= 30:
+                spikes.append({"branch": r["branch"], "menu": name, "today": round(today),
+                               "avg": 0, "x": None, "excess": round(today), "is_new": True})
+        spikes.sort(key=lambda s: -s["excess"])
+    return {"date": focus, "window_days": 21, "spikes": spikes[:limit]}
+
+
+@app.get("/api/sales/cost-per-head")
+def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                  group: Optional[str] = Query(None), gran: str = Query("day")):
+    """#10 — BoM cost per head per branch, with previous-period comparison.
+    COGS via our BoM only (_unified_cogs_expr). Daily grain from sales_sku_daily
+    (rolling window), customers from sales_transaction."""
+    import datetime as _dt, calendar as _cal
+    if gran not in ("day", "week", "month"):
+        gran = "day"
+    cogs_expr = _unified_cogs_expr("ssm")
+
+    def bounds(d):
+        if gran == "day": return d, d
+        if gran == "week":
+            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
+        s = d.replace(day=1)
+        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
+        return s, nxt - _dt.timedelta(days=1)
+
+    def prev_focus(d):
+        if gran == "day":  return d - _dt.timedelta(days=1)
+        if gran == "week": return d - _dt.timedelta(days=7)
+        idx = d.year * 12 + (d.month - 1) - 1
+        y, m = idx // 12, idx % 12 + 1
+        return _dt.date(y, m, min(d.day, _cal.monthrange(y, m)[1]))
+
+    tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
+    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
+    _group_filter(tfilt, tp, group)
+    twhere = " AND ".join(tfilt)
+    dbf = ""  # branch filter for the daily-sku side (by name via join)
+    if branch: dbf = " AND b.name=:branch"
+
+    with get_db() as con:
+        maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        if not maxd:
+            return {"gran": gran, "focus": None, "branches": [], "total": {}}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        fdate = _dt.date(fy, fm, fd)
+
+        def fetch(d):
+            s, e = bounds(d)
+            cust = {r["branch"]: r["cust"] or 0 for r in con.execute(
+                f"""SELECT b.name branch, SUM(t.customer_count) cust
+                    FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {twhere} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
+                    GROUP BY b.name""", {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()}
+            cogs = {r["branch"]: r["cogs"] or 0 for r in con.execute(
+                f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs
+                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM sales_sku_daily
+                          WHERE day BETWEEN :s AND :e) ssm
+                    JOIN branches b ON b.branch_id=ssm.branch_id
+                    WHERE b.name!='ALL'{dbf} GROUP BY b.name""",
+                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {})}).fetchall()}
+            return cust, cogs, (s, e)
+
+        cust, cogs, (cs, ce) = fetch(fdate)
+        pcust, pcogs, (ps, pe) = fetch(prev_focus(fdate))
+
+        def pct(c, p): return round((c - p) / p * 100, 1) if p else None
+        out = []
+        for nm in sorted(set(cust) | set(cogs)):
+            cu, co = cust.get(nm, 0), cogs.get(nm, 0)
+            pcu, pco = pcust.get(nm, 0), pcogs.get(nm, 0)
+            ch = round(co / cu, 1) if cu else None
+            pch = round(pco / pcu, 1) if pcu else None
+            out.append({"branch": nm, "customers": cu, "cogs": round(co, 2), "cost_per_head": ch,
+                        "prev_cost_per_head": pch, "delta_pct": pct(ch or 0, pch or 0) if pch else None})
+        out.sort(key=lambda r: -(r["cost_per_head"] or 0))
+        tcu = sum(cust.values()); tco = sum(cogs.values())
+        ptcu = sum(pcust.values()); ptco = sum(pcogs.values())
+        tch = round(tco / tcu, 1) if tcu else None
+        ptch = round(ptco / ptcu, 1) if ptcu else None
+        total = {"customers": tcu, "cogs": round(tco, 2), "cost_per_head": tch,
+                 "prev_cost_per_head": ptch, "delta_pct": pct(tch or 0, ptch or 0) if ptch else None}
+    return {"gran": gran, "focus": focus, "cur_range": [cs.isoformat(), ce.isoformat()],
+            "prev_range": [ps.isoformat(), pe.isoformat()], "branches": out, "total": total}
+
+
+@app.get("/api/overall/latest-month-mtd")
+def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Fair month-to-date comparison for the latest (possibly incomplete) month:
+    current month 1→latest-day vs previous month 1→same-day. Returns revenue (ex-VAT),
+    customers, discount, and BoM COGS for both periods. COGS via our BoM only (iron rule)."""
+    import datetime as _dt, calendar as _cal
+    cogs_expr = _unified_cogs_expr("ssm")
+    tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
+    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
+    _group_filter(tfilt, tp, group)
+    twhere = " AND ".join(tfilt)
+    dbf = " AND b.name=:branch" if branch else ""
+    dbp = {"branch": branch} if branch else {}
+
+    with get_db() as con:
+        maxday = con.execute("SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        if not maxday:
+            return {"available": False}
+        y, m, d = (int(x) for x in maxday.split("-"))
+        last_dom = _cal.monthrange(y, m)[1]
+        partial = d < last_dom
+        cur_s = _dt.date(y, m, 1); cur_e = _dt.date(y, m, d)
+        pidx = y * 12 + (m - 1) - 1; py, pm = pidx // 12, pidx % 12 + 1
+        prev_s = _dt.date(py, pm, 1)
+        prev_e = _dt.date(py, pm, min(d, _cal.monthrange(py, pm)[1]))
+
+        def agg(s, e):
+            r = con.execute(
+                f"""SELECT ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust,
+                    ROUND(SUM(t.discount),2) disc, COUNT(*) bills
+                    FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {twhere} AND substr(t.sold_at,1,10) BETWEEN :s AND :e""",
+                {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
+            co = con.execute(
+                f"""SELECT ROUND(SUM({cogs_expr}),2) cogs
+                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM sales_sku_daily
+                          WHERE day BETWEEN :s AND :e) ssm
+                    JOIN branches b ON b.branch_id=ssm.branch_id
+                    WHERE b.name!='ALL'{dbf}""",
+                {"s": s.isoformat(), "e": e.isoformat(), **dbp}).fetchone()
+            rev = r["rev"] or 0; cogs = co["cogs"] or 0
+            return {"revenue_ex_vat": rev, "customers": r["cust"] or 0, "discount": r["disc"] or 0,
+                    "bills": r["bills"] or 0, "cogs": cogs, "gross_profit": round(rev - cogs, 2)}
+
+        cur = agg(cur_s, cur_e); prev = agg(prev_s, prev_e)
+        # COGS window is rolling — flag if prev period predates available daily-sku data
+        mindd = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0]
+        cogs_ok = bool(mindd) and mindd <= prev_s.isoformat()
+    return {"available": True, "partial": partial, "cutoff_day": d, "days_in_month": last_dom,
+            "cur_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
+            "cur_range": [cur_s.isoformat(), cur_e.isoformat()],
+            "prev_range": [prev_s.isoformat(), prev_e.isoformat()],
+            "cur": cur, "prev": prev, "cogs_comparable": cogs_ok}
+
+
+@app.get("/api/reports/pnl-bill")
+def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+             group: Optional[str] = Query(None), gran: str = Query("day")):
+    """Per-bill P&L for a day/week/month: revenue − BoM COGS = gross profit, gp/bill,
+    gp/head, gp% distribution, and worst (lowest-margin / heavy-discount) bills.
+    COGS via our BoM only (sale_bill_cogs). Limited to the costed rolling window."""
+    import datetime as _dt
+    if gran not in ("day", "week", "month"):
+        gran = "day"
+    tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
+    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
+    _group_filter(tfilt, tp, group)
+    tw = " AND ".join(tfilt)
+
+    def bounds(d):
+        if gran == "day": return d, d
+        if gran == "week":
+            s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
+        s = d.replace(day=1)
+        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
+        return s, nxt - _dt.timedelta(days=1)
+
+    with get_db() as con:
+        try:
+            maxd = con.execute("SELECT MAX(day) FROM sale_bill_cogs").fetchone()[0]
+        except Exception:
+            return {"focus": None, "note": "no per-bill cost data", "summary": {}, "dist": [], "worst": []}
+        if not maxd:
+            return {"focus": None, "summary": {}, "dist": [], "worst": []}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-")); fdate = _dt.date(fy, fm, fd)
+        s, e = bounds(fdate)
+        JN = (f"FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+              f"JOIN branches b ON b.branch_id=t.branch_id "
+              f"WHERE {tw} AND substr(t.sold_at,1,10) BETWEEN :s AND :e AND t.total_inc_vat>0")
+        params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
+        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM(t.total_inc_vat/1.07),2) rev, "
+                        f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
+                        f"ROUND(SUM(t.discount),2) disc {JN}", params).fetchone()
+        bills = r["bills"] or 0; rev = r["rev"] or 0; cogs = r["cogs"] or 0; cust = r["cust"] or 0
+        gp = round(rev - cogs, 2); gpp = round(gp / rev * 100, 1) if rev else None
+        summary = {"bills": bills, "revenue": rev, "cogs": cogs, "gross_profit": gp, "gp_pct": gpp,
+                   "discount": r["disc"] or 0, "customers": cust,
+                   "gp_per_bill": round(gp / bills) if bills else None,
+                   "gp_per_head": round(gp / cust) if cust else None}
+        d = con.execute(f"""SELECT
+            SUM(CASE WHEN p<0 THEN 1 ELSE 0 END) neg, SUM(CASE WHEN p>=0 AND p<30 THEN 1 ELSE 0 END) b0,
+            SUM(CASE WHEN p>=30 AND p<50 THEN 1 ELSE 0 END) b30, SUM(CASE WHEN p>=50 AND p<70 THEN 1 ELSE 0 END) b50,
+            SUM(CASE WHEN p>=70 THEN 1 ELSE 0 END) b70
+            FROM (SELECT (t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100 p {JN}) g""", params).fetchone()
+        dist = [{"label": "ขาดทุน (<0%)", "n": d["neg"] or 0}, {"label": "0–30%", "n": d["b0"] or 0},
+                {"label": "30–50%", "n": d["b30"] or 0}, {"label": "50–70%", "n": d["b50"] or 0},
+                {"label": "≥70%", "n": d["b70"] or 0}]
+        worst = [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
+                  "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
+                 for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND(t.total_inc_vat/1.07) rev,
+                   ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
+                   ROUND((t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100,1) gpp
+                   {JN} ORDER BY gpp ASC LIMIT 12""", params).fetchall()]
+    return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()],
+            "summary": summary, "dist": dist, "worst": worst}
+
+
+_DTYPE_LABEL = {0: "ทานที่ร้าน", 1: "ทานที่ร้าน", 2: "เดลิเวอรี", 3: "กลับบ้าน", 4: "อื่น ๆ"}
+
+@app.get("/api/reports/ops")
+def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Query(None)):
+    """Ops/sales-side report: payment mix, channel mix, void, table turnover, promo
+    — from the staged pos_* tables. Revenue/qty only (no cost). Latest month default."""
+    with get_db() as con:
+        bid = None
+        if branch:
+            row = con.execute("SELECT branch_id FROM branches WHERE name=?", (branch,)).fetchone()
+            bid = row["branch_id"] if row else -1
+        def bf(col="branch_id"):
+            return (f" AND {col}=:bid", {"bid": bid}) if bid is not None else ("", {})
+        mrow = con.execute("SELECT MAX(period_month) m FROM pos_payment_month").fetchone()
+        mon = month or (mrow["m"] if mrow else None)
+        if not mon:
+            return {"month": None, "payment": [], "channel": [], "void": [], "table": {}, "promo": []}
+        bfc, bp = bf()
+        payment = [dict(r) for r in con.execute(
+            f"SELECT payment_code code, ROUND(SUM(amount)) amount, SUM(txn_count) n FROM pos_payment_month "
+            f"WHERE period_month=:m{bfc} GROUP BY payment_code ORDER BY amount DESC", {"m": mon, **bp}).fetchall()]
+        ch = con.execute(f"SELECT delivery_type dt, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
+                         f"FROM pos_channel_month WHERE period_month=:m{bfc} GROUP BY delivery_type", {"m": mon, **bp}).fetchall()
+        channel = [{"label": _DTYPE_LABEL.get(r["dt"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
+        void = [dict(r) for r in con.execute(
+            f"SELECT COALESCE(s.description,s.sku_code) menu, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.ext_price)) value "
+            f"FROM pos_void v JOIN skus s ON s.sku_id=v.sku_id WHERE v.period_month=:m{bfc} "
+            f"GROUP BY v.sku_id ORDER BY value DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
+        vt = con.execute(f"SELECT ROUND(SUM(ext_price)) total, ROUND(SUM(qty)) qty FROM pos_void WHERE period_month=:m{bfc}", {"m": mon, **bp}).fetchone()
+        # table turnover (daily table → month avg)
+        tbf, tbp = bf()
+        tt = con.execute(f"SELECT ROUND(AVG(avg_turn_min),0) avg_min, SUM(tabs) tabs, SUM(customers) cust "
+                         f"FROM pos_table_turn_day WHERE substr(day,1,7)=:m{tbf} AND avg_turn_min>0", {"m": mon, **tbp}).fetchone()
+        table = {"avg_turn_min": tt["avg_min"], "tabs": tt["tabs"] or 0, "customers": tt["cust"] or 0}
+        promo = [dict(r) for r in con.execute(
+            f"SELECT coupon_series_id series, SUM(used_count) uses, ROUND(SUM(discount_amount)) discount "
+            f"FROM pos_coupon_month WHERE period_month=:m{bfc} GROUP BY coupon_series_id ORDER BY uses DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
+    return {"month": mon, "payment": payment, "channel": channel, "void": void,
+            "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0},
+            "table": table, "promo": promo}
+
+
 @app.get("/api/buffet/child")
 @ttl_cache
 def buffet_child(branch: Optional[str] = Query(None)):

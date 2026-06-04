@@ -297,6 +297,75 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
         [(bid_map.get(r["bid"]), r["ym"], round(r["avgsec"] or 0,1), r["cooked"] or 0) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_kitchen_month: {len(rows)} groups")
 
+    # ── sales_sku_daily: per-branch per-sku DAILY qty/revenue (rolling 120 days) ──
+    #    Foundation for daily menu-spike anomaly (#5) and daily cost/head (#10,
+    #    COGS via our BoM only). Bounded window keeps the DB push light.
+    import datetime as _dt
+    mc.execute("SELECT CONVERT(char(10), MAX(SaleDate), 126) AS mx FROM Sale")
+    mx = mc.fetchone()["mx"]
+    dly_since = since
+    if mx:
+        y, m, d = (int(x) for x in mx.split("-"))
+        dly_since = (_dt.date(y, m, d) - _dt.timedelta(days=120)).isoformat()
+    sq.executescript("DROP TABLE IF EXISTS sales_sku_daily; CREATE TABLE sales_sku_daily("
+                     "branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);")
+    mc.execute(f"""
+        SELECT si.BranchId bid, si.ItemId iid, CONVERT(char(10), s.SaleDate, 126) d,
+               SUM(CAST(si.Qty AS float)) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
+        FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        GROUP BY si.BranchId, si.ItemId, CONVERT(char(10), s.SaleDate, 126)
+    """, (dly_since,))
+    drows = mc.fetchall()
+    sq.executemany("INSERT INTO sales_sku_daily VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), round(r["qty"] or 0,2), round(r["rev"] or 0,2))
+         for r in drows if bid_map.get(r["bid"]) and item_map.get(r["iid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_ssd ON sales_sku_daily(branch_id, day, sku_id)")
+    print(f"        sales_sku_daily: {len(drows)} rows (since {dly_since})")
+
+    # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
+    #    Per-sku BoM unit cost from OUR data (recipe → sku_cost → BUFFET tier=0;
+    #    IRON RULE: BoM only). Heavy pull (bill×item) but stored per-bill (lean).
+    bill_since = dly_since
+    if mx:
+        y, m, d = (int(x) for x in mx.split("-"))
+        bill_since = (_dt.date(y, m, d) - _dt.timedelta(days=31)).isoformat()
+    costmap = {}
+    for r in sq.execute("""
+        SELECT s.sku_id, s.sku_code,
+          COALESCE(
+            (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
+            (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
+               JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code),
+            (SELECT sc.unit_cost FROM sku_cost sc WHERE sc.sku_id=s.sku_id), 0) AS c
+        FROM skus s""").fetchall():
+        costmap[r["sku_id"]] = 0.0 if (r["sku_code"] or "").startswith("BUFFET") else (r["c"] or 0.0)
+    sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
+                     "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
+    mc.execute(f"""
+        SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
+               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty
+        FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
+    """, (bill_since,))
+    bills = {}
+    for r in mc.fetchall():
+        bid = bid_map.get(r["bid"])
+        if bid is None:
+            continue
+        c = costmap.get(item_map.get(r["iid"]), 0.0)
+        rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
+        b = bills.get(rcpt)
+        if b is None:
+            bills[rcpt] = [bid, r["d"], (r["qty"] or 0) * c]
+        else:
+            b[2] += (r["qty"] or 0) * c
+    sq.executemany("INSERT OR REPLACE INTO sale_bill_cogs VALUES(?,?,?,?)",
+        [(rc, v[0], v[1], round(v[2], 2)) for rc, v in bills.items()])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
+    print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
+
 
 def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
