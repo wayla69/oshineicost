@@ -191,6 +191,9 @@ def main():
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
     print(f"      inserted {len(txr):,} transactions")
 
+    print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")
+    stage_reports(sq, mc, args.since, bid_map, item_map, name2bid)
+
     sq.commit()
     ms.close()
 
@@ -202,6 +205,98 @@ def main():
         sys.exit(3)
     print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
     print("       python refresh_fly_db.py --db oshinei.db.incoming")
+
+def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
+    """Stage POS report data into pos_* tables — server-side aggregates only.
+    IRON RULE: NO POS cost is staged. We keep quantities / revenue / counts /
+    timings; all COGS valuation is done later from our BoM."""
+    F = SALE_FILTER
+
+    def run(sql, params=None):
+        mc.execute(sql, params or (since,)); return mc.fetchall()
+
+    # ── pos_void: cancelled/void items (qty + sale price; cost via BoM later) ──
+    sq.executescript("DROP TABLE IF EXISTS pos_void; CREATE TABLE pos_void("
+                     "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
+    rows = run(f"""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
+                 SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
+                 FROM CancelSaleItem WHERE CancelDate >= %s GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""")
+    sq.executemany("INSERT INTO pos_void VALUES(?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], item_map.get(r["iid"]), r["rid"], round(r["q"] or 0,2), round(r["ext"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_void: {len(rows)} groups")
+
+    # ── pos_staff_month: items served per staff (upsell/performance) ──
+    sq.executescript("DROP TABLE IF EXISTS pos_staff_month; CREATE TABLE pos_staff_month("
+                     "branch_id INT, period_month TEXT, staff_id INT, staff_name TEXT, item_qty REAL);")
+    rows = run(f"""SELECT st.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, st.StaffId sid, st.StaffName nm,
+                 SUM(CAST(st.Qty AS float)) q
+                 FROM SaleItemStaff st JOIN Sale s ON s.SaleId=st.SaleId AND s.BranchId=st.BranchId
+                 WHERE {F} AND s.SaleDate >= %s GROUP BY st.BranchId, CONVERT(char(7),s.SaleDate,126), st.StaffId, st.StaffName""")
+    sq.executemany("INSERT INTO pos_staff_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["sid"], r["nm"], round(r["q"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_staff_month: {len(rows)} groups")
+
+    # ── pos_payment_month: payment mix ──
+    sq.executescript("DROP TABLE IF EXISTS pos_payment_month; CREATE TABLE pos_payment_month("
+                     "branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT);")
+    rows = run(f"""SELECT p.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, p.PaymentCode pc,
+                 SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
+                 FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
+                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(7),s.SaleDate,126), p.PaymentCode""")
+    sq.executemany("INSERT INTO pos_payment_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_payment_month: {len(rows)} groups")
+
+    # ── pos_table_turn_day: turnover / dwell ──
+    sq.executescript("DROP TABLE IF EXISTS pos_table_turn_day; CREATE TABLE pos_table_turn_day("
+                     "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")
+    rows = run(f"""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
+                 CAST(AVG(CASE WHEN EndTime>StartTime THEN DATEDIFF(minute,StartTime,EndTime)*1.0 END) AS float) avgmin
+                 FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND StartTime >= %s
+                 GROUP BY BranchId, CONVERT(char(10),StartTime,126)""")
+    sq.executemany("INSERT INTO pos_table_turn_day VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], r["tabs"], r["cust"] or 0, round(r["avgmin"] or 0,1)) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_table_turn_day: {len(rows)} groups")
+
+    # ── pos_channel_month: dine-in vs delivery vs takeaway (from Sale, revenue side) ──
+    # (SaleByDeliveryType uses varchar Thai branch names that mojibake under UTF-8,
+    #  so we derive channel from Sale.DeliveryType / OrderChannel instead — int codes,
+    #  branch via BranchId. Map codes→labels in the report layer.)
+    sq.executescript("DROP TABLE IF EXISTS pos_channel_month; CREATE TABLE pos_channel_month("
+                     "branch_id INT, period_month TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL);")
+    rows = run(f"""SELECT s.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym,
+                 ISNULL(s.DeliveryType,0) dt, ISNULL(s.OrderChannel,0) oc,
+                 COUNT(*) bills, SUM(s.NumOfCust) cust, SUM(CAST(s.Total AS float)) total
+                 FROM Sale s WHERE {F} AND s.SaleDate >= %s
+                 GROUP BY s.BranchId, CONVERT(char(7),s.SaleDate,126), ISNULL(s.DeliveryType,0), ISNULL(s.OrderChannel,0)""")
+    sq.executemany("INSERT INTO pos_channel_month VALUES(?,?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["dt"], r["oc"], r["bills"], r["cust"] or 0, round(r["total"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_channel_month: {len(rows)} groups")
+
+    # ── pos_coupon_month: promo / coupon usage ──
+    sq.executescript("DROP TABLE IF EXISTS pos_coupon_month; CREATE TABLE pos_coupon_month("
+                     "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
+    rows = run(f"""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
+                 COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
+                 FROM CouponCardOutsideSystemUsed WHERE UsedDate >= %s GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""")
+    sq.executemany("INSERT INTO pos_coupon_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_coupon_month: {len(rows)} groups")
+
+    # ── pos_kitchen_month: cook/ticket time ──
+    sq.executescript("DROP TABLE IF EXISTS pos_kitchen_month; CREATE TABLE pos_kitchen_month("
+                     "branch_id INT, period_month TEXT, avg_cook_sec REAL, cooked_count INT);")
+    rows = run(f"""SELECT si.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym,
+                 CAST(AVG(CASE WHEN si.CookedTime IS NOT NULL AND si.CookedTime>si.InsertDate THEN DATEDIFF(second,si.InsertDate,si.CookedTime)*1.0 END) AS float) avgsec,
+                 SUM(CASE WHEN si.CookedTime IS NOT NULL THEN 1 ELSE 0 END) cooked
+                 FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+                 WHERE {F} AND s.SaleDate >= %s GROUP BY si.BranchId, CONVERT(char(7),s.SaleDate,126)""")
+    sq.executemany("INSERT INTO pos_kitchen_month VALUES(?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], round(r["avgsec"] or 0,1), r["cooked"] or 0) for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_kitchen_month: {len(rows)} groups")
+
 
 def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
