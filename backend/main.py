@@ -890,6 +890,25 @@ def top_skus(
     return result
 
 
+def _mtd_window(con):
+    """Equal-period (MTD) comparison window when the latest month is incomplete.
+    Returns None when the latest month is complete (use normal monthly MoM).
+    STANDING RULE: never compare a partial month against a full month."""
+    import calendar as _cal
+    row = con.execute("SELECT MAX(day) m FROM sales_sku_daily").fetchone()
+    dmax = row["m"] if row else None
+    if not dmax:
+        return None
+    y, m, d = (int(x) for x in dmax.split("-"))
+    if d >= _cal.monthrange(y, m)[1]:
+        return None
+    pidx = y * 12 + (m - 1) - 1; py, pm = pidx // 12, pidx % 12 + 1
+    ped = min(d, _cal.monthrange(py, pm)[1])
+    return {"cutoff_day": d, "latest_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
+            "cur_s": f"{y:04d}-{m:02d}-01", "cur_e": dmax,
+            "prev_s": f"{py:04d}-{pm:02d}-01", "prev_e": f"{py:04d}-{pm:02d}-{ped:02d}"}
+
+
 @app.get("/api/sales/top_ordered")
 def top_ordered(
     month:      Optional[str] = Query(None),
@@ -965,6 +984,8 @@ def top_ordered(
 
         mom_map: dict = {}
         rev_mom_map: dict = {}
+        mom_basis = "month"
+        mtd_cut = None
         ids = [r["sku_id"] for r in rows]
         if latest and ids:
             ph  = ",".join(f":id{i}" for i in range(len(ids)))
@@ -995,6 +1016,33 @@ def top_ordered(
                 cur = mm.get(latest, 0)
                 pr  = mm.get(prev) if prev else None
                 rev_mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
+
+        # MTD override (STANDING RULE): if the latest month is incomplete, recompute
+        # MoM from sales_sku_daily over the SAME day-range of both months.
+        mtd = _mtd_window(con)
+        if mtd and latest == mtd["latest_month"] and ids:
+            mom_basis = "mtd"; mtd_cut = mtd["cutoff_day"]
+            phd = ",".join(f":mid{i}" for i in range(len(ids)))
+            dparams = {f"mid{i}": v for i, v in enumerate(ids)}
+            dparams.update({"cs": mtd["cur_s"], "ce": mtd["cur_e"], "ps": mtd["prev_s"], "pe": mtd["prev_e"]})
+            dwhere = [f"d.sku_id IN ({phd})", "(d.day BETWEEN :cs AND :ce OR d.day BETWEEN :ps AND :pe)"]
+            if branch:
+                dwhere.append("b.name = :dbranch"); dparams["dbranch"] = branch
+            gf: list = []; _group_filter(gf, dparams, group)
+            dwhere += gf
+            drows = con.execute(f"""
+                SELECT d.sku_id,
+                  SUM(CASE WHEN d.day BETWEEN :cs AND :ce THEN d.qty ELSE 0 END) cq,
+                  SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.qty ELSE 0 END) pq,
+                  SUM(CASE WHEN d.day BETWEEN :cs AND :ce THEN d.subtotal_ex_vat ELSE 0 END) cr,
+                  SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.subtotal_ex_vat ELSE 0 END) pr
+                FROM sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
+                WHERE {' AND '.join(dwhere)} GROUP BY d.sku_id""", dparams).fetchall()
+            mom_map = {}; rev_mom_map = {}
+            for dr in drows:
+                mom_map[dr["sku_id"]]     = ((dr["cq"] - dr["pq"]) / dr["pq"] * 100) if dr["pq"] else None
+                rev_mom_map[dr["sku_id"]] = ((dr["cr"] - dr["pr"]) / dr["pr"] * 100) if dr["pr"] else None
+            latest = mtd["latest_month"]; prev = mtd["prev_month"]
 
         # Sparkline: per-SKU monthly qty series (YTD / last 12 months ≤ cutoff)
         spark_map: dict = {}
@@ -1054,6 +1102,7 @@ def top_ordered(
         })
     return {"total_qty": total_qty, "total_rev": total_rev,
             "latest_month": latest, "prev_month": prev,
+            "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
             "spark_months": spark_months, "items": items}
 
 
@@ -1594,6 +1643,16 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
             "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000}
 
 
+def _bom_unit_cost_sql(s: str = "s") -> str:
+    """Per-serving BoM unit cost for a SKU (alias `s` = skus). recipe → alias →
+    sku_cost → 0; BUFFET tier = 0 (iron rule: BoM only)."""
+    return (f"CASE WHEN {s}.sku_code LIKE 'BUFFET%' THEN 0 ELSE COALESCE("
+            f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id={s}.sku_id),"
+            f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
+            f" JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code={s}.sku_code),"
+            f"(SELECT sc.unit_cost FROM sku_cost sc WHERE sc.sku_id={s}.sku_id),0) END")
+
+
 _DTYPE_LABEL = {0: "ทานที่ร้าน", 1: "ทานที่ร้าน", 2: "เดลิเวอรี", 3: "กลับบ้าน", 4: "อื่น ๆ"}
 
 @app.get("/api/reports/ops")
@@ -1618,11 +1677,15 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
         ch = con.execute(f"SELECT delivery_type dt, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
                          f"FROM pos_channel_month WHERE period_month=:m{bfc} GROUP BY delivery_type", {"m": mon, **bp}).fetchall()
         channel = [{"label": _DTYPE_LABEL.get(r["dt"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
+        _uc = _bom_unit_cost_sql("s")
         void = [dict(r) for r in con.execute(
-            f"SELECT COALESCE(s.description,s.sku_code) menu, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.ext_price)) value "
+            f"SELECT COALESCE(s.description,s.sku_code) menu, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.ext_price)) value, "
+            f"ROUND(SUM(v.qty * ({_uc}))) bom_cost "
             f"FROM pos_void v JOIN skus s ON s.sku_id=v.sku_id WHERE v.period_month=:m{bfc} "
-            f"GROUP BY v.sku_id ORDER BY value DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
-        vt = con.execute(f"SELECT ROUND(SUM(ext_price)) total, ROUND(SUM(qty)) qty FROM pos_void WHERE period_month=:m{bfc}", {"m": mon, **bp}).fetchone()
+            f"GROUP BY v.sku_id ORDER BY bom_cost DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
+        vt = con.execute(
+            f"SELECT ROUND(SUM(v.ext_price)) total, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.qty * ({_uc}))) bom_cost "
+            f"FROM pos_void v JOIN skus s ON s.sku_id=v.sku_id WHERE v.period_month=:m{bfc}", {"m": mon, **bp}).fetchone()
         # table turnover (daily table → month avg)
         tbf, tbp = bf()
         tt = con.execute(f"SELECT ROUND(AVG(avg_turn_min),0) avg_min, SUM(tabs) tabs, SUM(customers) cust "
@@ -1632,7 +1695,8 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
             f"SELECT coupon_series_id series, SUM(used_count) uses, ROUND(SUM(discount_amount)) discount "
             f"FROM pos_coupon_month WHERE period_month=:m{bfc} GROUP BY coupon_series_id ORDER BY uses DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
     return {"month": mon, "payment": payment, "channel": channel, "void": void,
-            "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0},
+            "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0,
+                           "bom_cost": (vt["bom_cost"] or 0) if vt else 0},
             "table": table, "promo": promo}
 
 
@@ -1738,12 +1802,45 @@ def extra_price_zone(month: Optional[str] = Query(None), branch: Optional[str] =
         if month:
             mfilt = " AND substr(x.change_date,1,7)=:m"; p["m"] = month
         changes = [dict(r) for r in con.execute(
-            f"""SELECT x.change_date date, b.name branch, COALESCE(s.description,x.item_desc) item,
+            f"""SELECT x.change_date date, b.name branch, x.branch_id bid, x.sku_id sid,
+                COALESCE(s.description,x.item_desc) item,
                 ROUND(x.default_price) default_price, ROUND(x.new_price) new_price,
                 ROUND(x.new_price - x.default_price) delta, x.user_name user
                 FROM pos_price_change x JOIN branches b ON b.branch_id=x.branch_id
                 LEFT JOIN skus s ON s.sku_id=x.sku_id WHERE {tw}{mfilt}
                 ORDER BY x.change_date DESC LIMIT :lim""", {**p, "lim": limit}).fetchall()]
+        # Price elasticity: avg daily qty 14d before vs 14d after each change
+        # (same branch+sku, from sales_sku_daily). Directional signal only.
+        import datetime as _dt
+        drange = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sales_sku_daily").fetchone()
+        dlo = drange["lo"] if drange else None; dhi = drange["hi"] if drange else None
+        for c in changes:
+            c["elasticity"] = None; c["qty_pct"] = None; c["before_qty"] = None; c["after_qty"] = None
+            if not (c.get("sid") and c.get("bid") and dlo and c.get("date")):
+                continue
+            cd = c["date"][:10]
+            if cd < dlo or cd > dhi:
+                continue
+            d0 = _dt.date(*(int(x) for x in cd.split("-")))
+            bS = (d0 - _dt.timedelta(days=14)).isoformat(); bE = (d0 - _dt.timedelta(days=1)).isoformat()
+            aS = cd; aE = (d0 + _dt.timedelta(days=13)).isoformat()
+            er = con.execute("""
+                SELECT AVG(CASE WHEN day BETWEEN :bS AND :bE THEN qty END) bq,
+                       AVG(CASE WHEN day BETWEEN :aS AND :aE THEN qty END) aq
+                FROM sales_sku_daily WHERE branch_id=:bid AND sku_id=:sid
+                  AND day BETWEEN :bS AND :aE""",
+                {"bid": c["bid"], "sid": c["sid"], "bS": bS, "bE": bE, "aS": aS, "aE": aE}).fetchone()
+            bq = er["bq"]; aq = er["aq"]
+            if bq and bq > 0 and aq is not None:
+                c["before_qty"] = round(bq, 1); c["after_qty"] = round(aq, 1)
+                qpct = (aq - bq) / bq * 100
+                c["qty_pct"] = round(qpct, 1)
+                dp = (c["new_price"] or 0) - (c["default_price"] or 0)
+                ppct = (dp / c["default_price"] * 100) if c["default_price"] else None
+                if ppct:
+                    c["elasticity"] = round(qpct / ppct, 2)
+        for c in changes:
+            c.pop("bid", None); c.pop("sid", None)
         # strip month param for the zone query (zones have no date)
         zp = {k: v for k, v in p.items() if k != "m"}
         zones = [dict(r) for r in con.execute(
@@ -13773,6 +13870,104 @@ def bom_cost_overview(
     }
 
 
+@app.get("/api/bom-cost/cost-drivers")
+@ttl_cache
+def bom_cost_drivers(
+    scope:      str           = Query("chain", description="chain | branch"),
+    branch:     Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    limit:      int           = Query(60, ge=1, le=200),
+):
+    """Unified Top-N cost-driver SKUs (BoM COGS) used by ALL BoM-cost modes
+    (overview / branch / compare) so they look identical. Returns per-SKU window
+    COGS + %share + prev-period COGS + MoM% (MTD-aware, STANDING RULE) and a
+    grand-total row. COGS via our BoM only (iron rule)."""
+    brs = [branch] if (scope == "branch" and branch and branch != "ALL") else None
+    where, params = _bom_cost_period_filters(month_from, month_to, brs)
+    cogs_expr = _cogs_case("ssm", "sk", "sc")
+    JOINS = ("FROM sales_sku_monthly ssm JOIN branches b ON b.branch_id=ssm.branch_id "
+             "JOIN skus sk ON sk.sku_id=ssm.sku_id LEFT JOIN sku_cost sc ON sc.sku_id=ssm.sku_id")
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT ssm.sku_id, sk.sku_code, COALESCE(sk.description,'') description,
+                   COALESCE(sk.business_type,'other') business_type,
+                   COALESCE(SUM(ssm.qty),0) qty, COALESCE(SUM({cogs_expr}),0) total_cogs,
+                   CASE WHEN SUM(ssm.qty)>0 THEN SUM({cogs_expr})/SUM(ssm.qty) ELSE 0 END unit_cost
+            {JOINS} {where} GROUP BY ssm.sku_id HAVING total_cogs>0
+            ORDER BY total_cogs DESC LIMIT :lim""", {**params, "lim": limit}).fetchall()
+        tot = con.execute(f"SELECT COALESCE(SUM({cogs_expr}),0) c, COALESCE(SUM(ssm.qty),0) q {JOINS} {where}", params).fetchone()
+        total_all = float(tot["c"] or 0); qty_all = float(tot["q"] or 0)
+        ids = [r["sku_id"] for r in rows]
+
+        # MoM per SKU: equal-period (MTD) when latest month incomplete, else month-over-month.
+        mom_map: dict = {}; mom_basis = "month"; cutoff = None
+        cur_tot = prev_tot = 0.0
+        mtd = _mtd_window(con)
+        if ids:
+            phd = ",".join(f":k{i}" for i in range(len(ids)))
+            kp = {f"k{i}": v for i, v in enumerate(ids)}
+            bclause = ""
+            if brs:
+                bclause = " AND b.name=:cbr"; kp["cbr"] = branch
+            if mtd:
+                mom_basis = "mtd"; cutoff = mtd["cutoff_day"]
+                ucx = _unified_cogs_expr("ssm")
+                kp.update({"cs": mtd["cur_s"], "ce": mtd["cur_e"], "ps": mtd["prev_s"], "pe": mtd["prev_e"]})
+                drows = con.execute(f"""
+                    SELECT ssm.sku_id,
+                      SUM(CASE WHEN ssm.day BETWEEN :cs AND :ce THEN ({ucx}) ELSE 0 END) cur,
+                      SUM(CASE WHEN ssm.day BETWEEN :ps AND :pe THEN ({ucx}) ELSE 0 END) prev
+                    FROM (SELECT branch_id, sku_id, qty, day, 'Easy' AS source FROM sales_sku_daily
+                          WHERE sku_id IN ({phd}) AND (day BETWEEN :cs AND :ce OR day BETWEEN :ps AND :pe)) ssm
+                    JOIN branches b ON b.branch_id=ssm.branch_id
+                    WHERE b.name!='ALL'{bclause} GROUP BY ssm.sku_id""", kp).fetchall()
+                for d in drows:
+                    cur = float(d["cur"] or 0); prev = float(d["prev"] or 0)
+                    cur_tot += cur; prev_tot += prev
+                    mom_map[d["sku_id"]] = {"prev": round(prev, 2),
+                                            "mom": round((cur - prev) / prev * 100, 1) if prev > 0 else None}
+            else:
+                # monthly: latest two months present in window
+                mrows = con.execute(f"""SELECT DISTINCT ssm.period_month m {JOINS} {where} ORDER BY m DESC LIMIT 2""", params).fetchall()
+                lm = mrows[0]["m"] if mrows else None
+                pm = mrows[1]["m"] if len(mrows) > 1 else None
+                if lm:
+                    kp2 = {**kp, "lm": lm, "pm": pm or "__none__"}
+                    mrows2 = con.execute(f"""
+                        SELECT ssm.sku_id, ssm.period_month m, COALESCE(SUM({cogs_expr}),0) c
+                        {JOINS} WHERE ssm.sku_id IN ({phd}) AND ssm.period_month IN (:lm,:pm){bclause}
+                        GROUP BY ssm.sku_id, ssm.period_month""", kp2).fetchall()
+                    tmp: dict = {}
+                    for d in mrows2:
+                        tmp.setdefault(d["sku_id"], {})[d["m"]] = float(d["c"] or 0)
+                    for sid, mm in tmp.items():
+                        cur = mm.get(lm, 0); prev = mm.get(pm) if pm else None
+                        cur_tot += cur; prev_tot += (prev or 0)
+                        mom_map[sid] = {"prev": round(prev, 2) if prev is not None else None,
+                                        "mom": round((cur - prev) / prev * 100, 1) if (prev and prev > 0) else None}
+
+        items = []
+        for r in rows:
+            mm = mom_map.get(r["sku_id"], {})
+            items.append({
+                "sku_code": r["sku_code"], "description": r["description"],
+                "business_type": r["business_type"], "qty": round(float(r["qty"] or 0), 2),
+                "unit_cost": round(float(r["unit_cost"] or 0), 2),
+                "total_cogs": round(float(r["total_cogs"] or 0), 2),
+                "pct_of_total": round(float(r["total_cogs"] or 0) / total_all * 100, 1) if total_all else None,
+                "prev_cogs": mm.get("prev"), "mom_pct": mm.get("mom"),
+            })
+        shown = sum(i["total_cogs"] for i in items)
+        total_mom = round((cur_tot - prev_tot) / prev_tot * 100, 1) if (mom_basis and prev_tot > 0) else None
+        return {"scope": scope, "branch": branch, "mom_basis": mom_basis, "mtd_cutoff_day": cutoff,
+                "items": items, "total": {
+                    "total_cogs": round(total_all, 2), "qty": round(qty_all, 2),
+                    "shown_cogs": round(shown, 2),
+                    "shown_pct": round(shown / total_all * 100, 1) if total_all else None,
+                    "prev_cogs": round(prev_tot, 2) if prev_tot else None, "mom_pct": total_mom}}
+
+
 @app.get("/api/bom-cost/branch-foodcost-mom")
 @ttl_cache
 def bom_cost_branch_foodcost_mom(
@@ -14077,6 +14272,7 @@ def bom_cost_simulator_base(
                    COALESCE(sk.description,'') AS description,
                    COALESCE(sk.business_type,'other') AS business_type,
                    COALESCE(SUM(ssm.qty), 0)            AS qty,
+                   COALESCE(SUM(ssm.subtotal_ex_vat), 0) AS period_revenue,
                    COALESCE(SUM({cogs_expr}), 0)        AS period_cogs,
                    CASE WHEN SUM(ssm.qty) > 0 THEN SUM({cogs_expr})/SUM(ssm.qty) ELSE 0 END
                      AS current_unit_cost
@@ -14110,6 +14306,7 @@ def bom_cost_simulator_base(
             "description":       r["description"],
             "business_type":     r["business_type"],
             "qty":               round(float(r["qty"] or 0), 2),
+            "period_revenue":    round(float(r["period_revenue"] or 0), 2),
             "period_cogs":       round(float(r["period_cogs"] or 0), 2),
             "current_unit_cost": round(float(r["current_unit_cost"] or 0), 4),
         } for r in sku_rows],
@@ -14119,6 +14316,16 @@ def bom_cost_simulator_base(
 class ScenarioOverride(BaseModel):
     sku_code: str
     unit_cost: float
+    qty: Optional[float] = None        # scenario serving count (None = unchanged)
+    disabled: Optional[bool] = False   # menu closed / discontinued
+
+
+def _ensure_scenario_cols(con):
+    cols = {r["name"] for r in con.execute("PRAGMA table_info(cost_scenario_item)")}
+    if "new_qty" not in cols:
+        con.execute("ALTER TABLE cost_scenario_item ADD COLUMN new_qty REAL")
+    if "disabled" not in cols:
+        con.execute("ALTER TABLE cost_scenario_item ADD COLUMN disabled INTEGER DEFAULT 0")
 
 
 class ScenarioCreate(BaseModel):
@@ -14139,6 +14346,7 @@ def create_scenario(body: ScenarioCreate):
     if not nm:
         raise HTTPException(400, "name is required")
     with get_db() as con:
+        _ensure_scenario_cols(con)
         cur = con.execute(
             "INSERT INTO cost_scenario(name, description) VALUES(?, ?)",
             (nm, body.description),
@@ -14155,8 +14363,10 @@ def create_scenario(body: ScenarioCreate):
                 sid = sku_map.get(o.sku_code)
                 if sid is None: continue
                 con.execute(
-                    "INSERT OR REPLACE INTO cost_scenario_item(scenario_id, sku_id, unit_cost) "
-                    "VALUES(?,?,?)", (scen_id, sid, float(o.unit_cost))
+                    "INSERT OR REPLACE INTO cost_scenario_item(scenario_id, sku_id, unit_cost, new_qty, disabled) "
+                    "VALUES(?,?,?,?,?)", (scen_id, sid, float(o.unit_cost),
+                                          (float(o.qty) if o.qty is not None else None),
+                                          1 if o.disabled else 0)
                 )
                 inserted += 1
         else:
@@ -14183,6 +14393,7 @@ def list_scenarios():
 @app.get("/api/bom-cost/scenarios/{scen_id}")
 def get_scenario(scen_id: int):
     with get_db() as con:
+        _ensure_scenario_cols(con)
         head = con.execute("SELECT * FROM cost_scenario WHERE id=?", (scen_id,)).fetchone()
         if head is None:
             raise HTTPException(404, "scenario not found")
@@ -14190,7 +14401,7 @@ def get_scenario(scen_id: int):
             SELECT csi.sku_id, sk.sku_code,
                    COALESCE(sk.description,'') AS description,
                    COALESCE(sk.business_type,'other') AS business_type,
-                   csi.unit_cost
+                   csi.unit_cost, csi.new_qty, COALESCE(csi.disabled,0) AS disabled
               FROM cost_scenario_item csi
               JOIN skus sk ON sk.sku_id = csi.sku_id
              WHERE csi.scenario_id=?
