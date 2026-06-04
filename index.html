@@ -773,57 +773,65 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">🏠 หน้าแรก</span>
   </div>
 
-  <!-- ═══ GROUP 1: 📊 ภาพรวม (Overview, trends, compare, insights) ═══ -->
+  <!-- ═══ GROUP 1: 📊 ภาพรวม (Overview, daily sales, trend, compare, insights) ═══ -->
   <div class="nav-section">📊 ภาพรวม</div>
-  <div class="nav-item active" id="nav-overall" onclick="switchTab('overall')" title="Overview · KPIs, heatmap, insights">
+  <div class="nav-item active" id="nav-overall" onclick="switchTab('overall')" title="ภาพรวม & KPI · ตัวชี้วัดหลัก, heatmap, insights">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    <span class="nav-label">Overview / KPIs</span>
-  </div>
-  <div class="nav-item" id="nav-trend" onclick="switchTab('trend')" title="Trend · MoM trajectory & sparklines">
-    <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-    <span class="nav-label">📈 แนวโน้ม</span>
-  </div>
-  <div class="nav-item" id="nav-compare" onclick="switchTab('compare')" title="เปรียบเทียบช่วงเวลา · A vs B side-by-side">
-    <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="6 9 3 12 6 15"/><polyline points="18 9 21 12 18 15"/></svg>
-    <span class="nav-label">⚖️ Compare A/B</span>
-  </div>
-  <div class="nav-item" id="nav-more" onclick="switchTab('more')" title="Insight เพิ่มเติม · daypart, category mix, table turnover, forecast">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
-    <span class="nav-label">📈 Insight เพิ่มเติม</span>
-  </div>
-
-  <!-- ═══ GROUP 2: 🍱 บุฟเฟ่ต์ (core buffet business) ═══ -->
-  <div class="nav-section">🍱 บุฟเฟ่ต์</div>
-  <div class="nav-item" id="nav-buffetperf" onclick="switchTab('buffetperf')" title="Buffet Performance · seat utilization, tier mix, waste, beverage attach">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg>
-    <span class="nav-label">🥘 Buffet Performance</span>
-  </div>
-  <div class="nav-item" id="nav-timeflow" onclick="switchTab('timeflow')" title="Time & Flow · Daypart heatmap, peak hours">
-    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    <span class="nav-label">⏰ Time &amp; Flow</span>
-  </div>
-
-  <!-- ═══ GROUP 3: 🍣 เมนู & ต้นทุน (menu, cost, BoM, guest) ═══ -->
-  <div class="nav-section">🍣 เมนู &amp; ต้นทุน</div>
-  <div class="nav-item" id="nav-menu" onclick="switchTab('menu')" title="Menu Analysis · Most ordered, persona, item mix">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
-    <span class="nav-label">📋 Menu Analysis</span>
+    <span class="nav-label">📊 ภาพรวม &amp; KPI</span>
   </div>
   <div class="nav-item" id="nav-dailysales" onclick="switchTab('dailysales')" title="ยอดขายรายวัน · รายสาขา วัน/สัปดาห์/เดือน + เทียบเดือนก่อน/ปีก่อน + ผิดปกติ">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
     <span class="nav-label">📅 ยอดขายรายวัน</span>
   </div>
-  <div class="nav-item" id="nav-engineering" onclick="switchTab('engineering')" title="Menu Engineering · Stars, Plowhorses, Puzzles, Dogs (per-dish; buffet tier aggregate excluded)">
-    <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-    <span class="nav-label">⭐ Menu Engineering</span>
+  <div class="nav-item" id="nav-trend" onclick="switchTab('trend')" title="แนวโน้ม · MoM trajectory & sparklines">
+    <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
+    <span class="nav-label">📈 แนวโน้ม</span>
   </div>
-  <div class="nav-item" id="nav-cost" onclick="switchTab('cost')" title="Cost Analysis · Margins, ABC, Pareto">
+  <div class="nav-item" id="nav-compare" onclick="switchTab('compare')" title="เปรียบเทียบช่วงเวลา · A vs B side-by-side">
+    <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="6 9 3 12 6 15"/><polyline points="18 9 21 12 18 15"/></svg>
+    <span class="nav-label">⚖️ เปรียบเทียบ A/B</span>
+  </div>
+  <div class="nav-item" id="nav-more" onclick="switchTab('more')" title="Insight เพิ่มเติม · daypart, category mix, table turnover, forecast">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
+    <span class="nav-label">📊 Insight เพิ่มเติม</span>
+  </div>
+
+  <!-- ═══ GROUP 2: 🍱 บุฟเฟ่ต์ & ลูกค้า (buffet business + guests) ═══ -->
+  <div class="nav-section">🍱 บุฟเฟ่ต์ &amp; ลูกค้า</div>
+  <div class="nav-item" id="nav-buffetperf" onclick="switchTab('buffetperf')" title="ผลงานบุฟเฟ่ต์ · seat utilization, tier mix, waste, beverage attach">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg>
+    <span class="nav-label">🥘 ผลงานบุฟเฟ่ต์</span>
+  </div>
+  <div class="nav-item" id="nav-childbuffet" onclick="switchTab('childbuffet')" title="บุฟเฟ่ต์เด็ก · child-tier covers, %, MoM, YTD trend per branch">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
+    <span class="nav-label">🧒 บุฟเฟ่ต์เด็ก</span>
+  </div>
+  <div class="nav-item" id="nav-guest" onclick="switchTab('guest')" title="ลูกค้า & ยอด/หัว · Spend-per-head, party size, daypart">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="21" x2="23" y2="19"/><line x1="19" y1="21" x2="19" y2="19"/><path d="M21 8a2 2 0 10-4 0v5h4V8z"/></svg>
+    <span class="nav-label">👥 ลูกค้า &amp; ยอด/หัว</span>
+  </div>
+  <div class="nav-item" id="nav-timeflow" onclick="switchTab('timeflow')" title="ช่วงเวลา & การไหล · Daypart heatmap, peak hours">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    <span class="nav-label">⏰ ช่วงเวลา &amp; การไหล</span>
+  </div>
+
+  <!-- ═══ GROUP 3: 🍣 เมนู & ต้นทุน (menu, engineering, cost, BoM) ═══ -->
+  <div class="nav-section">🍣 เมนู &amp; ต้นทุน</div>
+  <div class="nav-item" id="nav-menu" onclick="switchTab('menu')" title="วิเคราะห์เมนู · Most ordered, persona, item mix">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
+    <span class="nav-label">📋 วิเคราะห์เมนู</span>
+  </div>
+  <div class="nav-item" id="nav-engineering" onclick="switchTab('engineering')" title="เมนูทำเงิน (Menu Engineering) · Stars, Plowhorses, Puzzles, Dogs (per-dish; buffet tier aggregate excluded)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+    <span class="nav-label">⭐ เมนูทำเงิน</span>
+  </div>
+  <div class="nav-item" id="nav-cost" onclick="switchTab('cost')" title="ต้นทุน (Cost Analysis) · Margins, ABC, Pareto">
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
     <span class="nav-label">💰 ต้นทุน</span>
   </div>
   <div class="nav-item" id="nav-bomcost" onclick="switchTab('bomcost')" title="🔬 BoM Cost Analysis · Chain overview, per-branch, compare, scenario simulator" style="background:linear-gradient(90deg,rgba(217,70,239,.10),transparent);border-left:2px solid #d946ef">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
-    <span class="nav-label">🎮 BoM Cost + Simulator</span>
+    <span class="nav-label">🎮 BoM + Simulator</span>
   </div>
   <!-- hidden 2026-06: redundant with BoM Cost + Simulator (per-branch mode). Code kept; unhide by removing display:none. -->
   <div class="nav-item" id="nav-branchbom" style="display:none" onclick="switchTab('branchbom')" title="BoM วิเคราะห์รายสาขา · per-branch cost deep-dive (Phase 12)">
@@ -839,13 +847,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/></svg>
     <span class="nav-label">🎯 ความครอบคลุมต้นทุน</span>
   </div>
-  <div class="nav-item" id="nav-guest" onclick="switchTab('guest')" title="Guest & SPH · Spend-per-head, party size, daypart">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="21" x2="23" y2="19"/><line x1="19" y1="21" x2="19" y2="19"/><path d="M21 8a2 2 0 10-4 0v5h4V8z"/></svg>
-    <span class="nav-label">👥 Guest &amp; SPH</span>
-  </div>
 
-  <!-- ═══ GROUP 4: 💵 สาขา & P&L (branch profit, P&L, benchmark, ops) ═══ -->
-  <div class="nav-section">💵 สาขา &amp; P&amp;L</div>
+  <!-- ═══ GROUP 4: 💵 สาขา & กำไร (branch GP, P&L, per-bill, benchmark) ═══ -->
+  <div class="nav-section">💵 สาขา &amp; กำไร</div>
   <div class="nav-item" id="nav-gpbranch" onclick="switchTab('gpbranch')" title="GP รายสาขา · Gross Profit per branch (unified BoM COGS)">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
     <span class="nav-label">📊 GP รายสาขา</span>
@@ -858,10 +862,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 2h6l2 2v16l-2-1-2 1-2-1-2 1V4z"/><path d="M9 8h6M9 12h6"/></svg>
     <span class="nav-label">🧾 P&amp;L ต่อบิล</span>
   </div>
-  <div class="nav-item" id="nav-opsreport" onclick="switchTab('opsreport')" title="รายงานปฏิบัติการ · การชำระเงิน, ช่องทางขาย, การยกเลิก/Void, โต๊ะหมุนเวียน, โปรโมชัน">
-    <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-    <span class="nav-label">🛒 รายงานปฏิบัติการ</span>
-  </div>
   <!-- hidden 2026-06: redundant — GP รายสาขา + P&L รายสาขา cover branch/SKU margins. Code kept. -->
   <div class="nav-item" id="nav-profit" style="display:none" onclick="switchTab('profit')" title="Profit Analysis · Margins by branch and SKU">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
@@ -871,35 +871,35 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span class="nav-label">🏆 Benchmark สาขา</span>
   </div>
-  <div class="nav-item" id="nav-ops" onclick="switchTab('ops')" title="Advanced analytics · Cohort, Affinity, What-If">
+
+  <!-- ═══ GROUP 5: 🧾 ปฏิบัติการ & ส่วนลด (ops report, staff, discounts, advanced) ═══ -->
+  <div class="nav-section">🧾 ปฏิบัติการ &amp; ส่วนลด</div>
+  <div class="nav-item" id="nav-opsreport" onclick="switchTab('opsreport')" title="รายงานปฏิบัติการ · การชำระเงิน, ช่องทางขาย, การยกเลิก/Void, โต๊ะหมุนเวียน, โปรโมชัน">
+    <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    <span class="nav-label">🛒 รายงานปฏิบัติการ</span>
+  </div>
+  <div class="nav-item" id="nav-staff" onclick="switchTab('staff')" title="พนักงาน (Staff Scorecard) · Cashier performance, AOV, discount rate">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span class="nav-label">👤 พนักงาน</span>
+  </div>
+  <div class="nav-item" id="nav-discounts" onclick="switchTab('discounts')" title="ส่วนลด (Discounts & Leakage) · Monitor discount patterns">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+    <span class="nav-label">🏷️ ส่วนลด</span>
+  </div>
+  <div class="nav-item" id="nav-ops" onclick="switchTab('ops')" title="วิเคราะห์เชิงลึก · Cohort, Affinity, What-If">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
     <span class="nav-label">🔬 วิเคราะห์เชิงลึก</span>
-  </div>
-
-  <!-- ═══ GROUP 5: 📦 พนักงาน & ส่วนลด ═══ -->
-  <div class="nav-section">📦 พนักงาน &amp; ส่วนลด</div>
-  <div class="nav-item" id="nav-staff" onclick="switchTab('staff')" title="Staff Scorecard · Cashier performance, AOV, discount rate">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    <span class="nav-label">👤 Staff</span>
-  </div>
-  <div class="nav-item" id="nav-discounts" onclick="switchTab('discounts')" title="Discounts & Leakage · Monitor discount patterns">
-    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-    <span class="nav-label">🏷️ Discounts</span>
-  </div>
-  <div class="nav-item" id="nav-childbuffet" onclick="switchTab('childbuffet')" title="บุฟเฟ่ต์เด็ก · child-tier covers, %, MoM, YTD trend per branch">
-    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
-    <span class="nav-label">🧒 บุฟเฟ่ต์เด็ก</span>
   </div>
 
   <!-- ═══ GROUP 6: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
   <div class="nav-section">⚙️ เครื่องมือ</div>
   <div class="nav-item" id="nav-manual" onclick="switchTab('manual')" title="คู่มือการใช้งาน · How to use each tab, hard rules, common workflows">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-    <span class="nav-label">📖 คู่มือการใช้งาน</span>
+    <span class="nav-label">📖 คู่มือ</span>
   </div>
-  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="Reports · Exportable summary">
+  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="รายงาน · Exportable summary">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span class="nav-label">Reports</span>
+    <span class="nav-label">📄 รายงาน</span>
   </div>
   <div class="nav-item" id="nav-settings" onclick="switchTab('settings')" title="Settings · Targets, costs, branches, hours, prefs">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -1195,23 +1195,46 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <button class="gran-btn"             data-g="week"  onclick="pbSetGran('week')">สัปดาห์</button>
       <button class="gran-btn"             data-g="month" onclick="pbSetGran('month')">เดือน</button>
     </div>
+    <span class="text-xs font-semibold ml-1" style="color:var(--text-secondary)">มุมมอง:</span>
+    <div id="pbViewTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+      <button class="gran-btn gran-active" data-v="gm"   onclick="pbSetView('gm')">📈 กำไร (GM)</button>
+      <button class="gran-btn"             data-v="cogs" onclick="pbSetView('cogs')">📉 ต้นทุน (COGS)</button>
+    </div>
     <span id="pbRange" class="text-[11px]" style="color:var(--text-muted)"></span>
     <span class="text-[11px]" style="color:#92400e">🔴 ต้นทุน/บิล ใช้สูตร BoM เท่านั้น · ข้อมูลย้อนหลัง ~31 วัน</span>
   </div>
   <div id="pbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
     <div class="card p-5">
-      <h2 class="section-title mb-3">การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)</h2>
+      <h2 class="section-title mb-3" id="pbDistTitle">การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)</h2>
       <div id="pbDist"></div>
     </div>
     <div class="card p-5 overflow-x-auto">
-      <h2 class="section-title mb-3">บิลกำไรต่ำสุด / ขาดทุน <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· margin ต่ำสุด 12 บิล</span></h2>
+      <h2 class="section-title mb-3">บิลกำไรต่ำสุด <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· margin ต่ำสุด 12 บิล</span></h2>
       <table class="text-xs w-full">
         <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
           <th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
           <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS</th>
-          <th class="py-1.5 pr-2 text-right">ส่วนลด</th><th class="py-1.5 text-right">GM%</th>
+          <th class="py-1.5 pr-2 text-right">ส่วนลด</th><th class="py-1.5 text-right" id="pbWorstMetric">GM%</th>
         </tr></thead><tbody id="pbWorst"></tbody></table>
+    </div>
+  </div>
+  <div class="card p-5 overflow-x-auto">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h2 class="section-title mb-0">🔴 บิลขาดทุนทั้งหมด (COGS &gt; รายได้)</h2>
+      <div class="flex items-center gap-3">
+        <span id="pbLossSummary" class="text-[11px]" style="color:var(--text-muted)"></span>
+        <button onclick="exportTable('pbLossTable','loss_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
+    </div>
+    <div style="max-height:520px;overflow-y:auto">
+      <table class="text-xs w-full" id="pbLossTable">
+        <thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS (BoM)</th>
+          <th class="py-1.5 pr-2 text-right">ขาดทุน</th><th class="py-1.5 pr-2 text-right">ส่วนลด</th>
+          <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 text-right" id="pbLossMetric">GM%</th>
+        </tr></thead><tbody id="pbLoss"></tbody></table>
     </div>
   </div>
 </div>
@@ -13732,11 +13755,16 @@ async function loadCostHead(force) {
 }
 
 // ══ 🧾 P&L ต่อบิล (per-bill profit, COGS = BoM) ══
-let _pbGran = 'day';
+let _pbGran = 'day', _pbView = 'gm', _pbData = null;
 function pbSetGran(g) {
   _pbGran = g;
   document.querySelectorAll('#pbGranTrack .gran-btn').forEach(b => b.classList.toggle('gran-active', b.dataset.g === g));
   loadPnlBill(true);
+}
+function pbSetView(v) {
+  _pbView = v;
+  document.querySelectorAll('#pbViewTrack .gran-btn').forEach(b => b.classList.toggle('gran-active', b.dataset.v === v));
+  if (_pbData) renderPnlBill(_pbData);
 }
 async function loadPnlBill(force) {
   const dv = document.getElementById('pbDate')?.value || '';
@@ -13750,32 +13778,84 @@ async function loadPnlBill(force) {
   let d;
   try { d = await fetch(`${API}/api/reports/pnl-bill?${p}`).then(r => r.json()); } catch (e) { return; }
   if (d.focus && !dv) { const el = document.getElementById('pbDate'); if (el) el.value = d.focus; }
+  _pbData = d;
+  renderPnlBill(d);
+}
+function renderPnlBill(d) {
+  const cogsView = _pbView === 'cogs';
   const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_pbGran];
   document.getElementById('pbRange').textContent = `${lbl}: ${(d.range || [''])[0]}${d.range && d.range[1] !== d.range[0] ? ' → ' + d.range[1] : ''}`;
   const s = d.summary || {};
-  document.getElementById('pbKpis').innerHTML = [
+  const cogsPct = (s.revenue ? s.cogs / s.revenue * 100 : null);
+  const cogsPerBill = (s.bills ? Math.round(s.cogs / s.bills) : null);
+  const cogsPerHead = (s.customers ? Math.round(s.cogs / s.customers) : null);
+  const kpis = cogsView ? [
+    { l: 'จำนวนบิล', v: fmtN(s.bills || 0), sub: 'ลูกค้า ' + fmtN(s.customers || 0) + ' คน', c: '#0891b2' },
+    { l: 'ต้นทุนรวม (COGS·BoM)', v: fmt(s.cogs || 0), sub: 'COGS ' + (cogsPct != null ? cogsPct.toFixed(1) + '% ของรายได้' : '—'), c: '#ef4444' },
+    { l: 'COGS/บิล เฉลี่ย', v: fmt(cogsPerBill || 0), sub: 'รายได้รวม ' + fmt(s.revenue || 0), c: '#f59e0b' },
+    { l: 'COGS/หัว เฉลี่ย', v: fmt(cogsPerHead || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#7c3aed' },
+  ] : [
     { l: 'จำนวนบิล', v: fmtN(s.bills || 0), sub: 'ลูกค้า ' + fmtN(s.customers || 0) + ' คน', c: '#0891b2' },
     { l: 'กำไรขั้นต้นรวม (BoM)', v: fmt(s.gross_profit || 0), sub: 'GM ' + (s.gp_pct != null ? s.gp_pct + '%' : '—'), c: '#10b981' },
     { l: 'กำไร/บิล เฉลี่ย', v: fmt(s.gp_per_bill || 0), sub: 'รายได้รวม ' + fmt(s.revenue || 0), c: '#7c3aed' },
     { l: 'กำไร/หัว เฉลี่ย', v: fmt(s.gp_per_head || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#f59e0b' },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
-  // distribution bars
-  const dist = d.dist || []; const maxN = Math.max(1, ...dist.map(x => x.n));
-  const cols = { 'ขาดทุน (<0%)': '#ef4444', '0–30%': '#f59e0b', '30–50%': '#eab308', '50–70%': '#84cc16', '≥70%': '#10b981' };
+  ];
+  document.getElementById('pbKpis').innerHTML = kpis.map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  // distribution bars — GM% buckets, or mirrored to COGS%-of-revenue buckets
+  document.getElementById('pbDistTitle').textContent = cogsView
+    ? 'การกระจายต้นทุนต่อบิล (COGS % ของรายได้)' : 'การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)';
+  const distSrc = d.dist || [];
+  // GM buckets: [<0,0-30,30-50,50-70,≥70]; COGS = 100−GM → [>100,70-100,50-70,30-50,≤30]
+  const cogsLabels = ['ขาดทุน (>100%)', '70–100%', '50–70%', '30–50%', '≤30%'];
+  const dist = cogsView
+    ? distSrc.map((x, i) => ({ label: cogsLabels[i], n: x.n })).slice().reverse()
+    : distSrc;
+  const maxN = Math.max(1, ...dist.map(x => x.n));
+  const colGM = { 'ขาดทุน (<0%)': '#ef4444', '0–30%': '#f59e0b', '30–50%': '#eab308', '50–70%': '#84cc16', '≥70%': '#10b981' };
+  const colCOGS = { 'ขาดทุน (>100%)': '#ef4444', '70–100%': '#f59e0b', '50–70%': '#eab308', '30–50%': '#84cc16', '≤30%': '#10b981' };
+  const cols = cogsView ? colCOGS : colGM;
   document.getElementById('pbDist').innerHTML = dist.map(x => `
     <div class="flex items-center gap-2 mb-2">
       <span class="text-[11px] w-24 shrink-0" style="color:var(--text-secondary)">${esc(x.label)}</span>
       <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${x.n / maxN * 100}%;background:${cols[x.label] || '#64748b'}"></div></div>
       <span class="text-[11px] tabular-nums w-14 text-right font-semibold" style="color:var(--text-primary)">${fmtN(x.n)}</span>
     </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+  // metric column label + cell renderer (GM% or COGS%)
+  const metricLbl = cogsView ? 'COGS%' : 'GM%';
+  document.getElementById('pbWorstMetric').textContent = metricLbl;
+  document.getElementById('pbLossMetric').textContent = metricLbl;
+  const metricCell = r => {
+    if (r.gp_pct == null) return '—';
+    const val = cogsView ? (100 - r.gp_pct) : r.gp_pct;
+    const color = cogsView ? (val > 100 ? '#ef4444' : val > 70 ? '#f59e0b' : '#10b981')
+                           : (r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981');
+    return `<span style="color:${color}">${val.toFixed(1)}%</span>`;
+  };
   document.getElementById('pbWorst').innerHTML = (d.worst || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
     <td class="py-1.5 pr-2 font-mono text-[10.5px]">${esc(r.receipt)}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
-    <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981'}">${r.gp_pct != null ? r.gp_pct + '%' : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  // ALL loss-making bills
+  const loss = d.loss || [];
+  const ls = document.getElementById('pbLossSummary');
+  if (ls) ls.innerHTML = (d.loss_count || 0) > 0
+    ? `ขาดทุน <b style="color:#ef4444">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:#ef4444">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
+    : 'ไม่มีบิลขาดทุนในช่วงนี้ 🎉';
+  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+    <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
+    <td class="py-1.5 pr-2 font-mono text-[10.5px]">${esc(r.receipt)}</td>
+    <td class="py-1.5 pr-2">${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(Math.round(r.cogs - r.rev))}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cust)}</td>
+    <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
+  </tr>`).join('') || '<tr><td colspan="9" class="py-4 text-center text-slate-400">— ไม่มีบิลขาดทุน —</td></tr>';
 }
 
 // ══ 🛒 รายงานปฏิบัติการ (Payment · Channel · Void · Table · Promo) ══

@@ -1488,14 +1488,23 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         dist = [{"label": "ขาดทุน (<0%)", "n": d["neg"] or 0}, {"label": "0–30%", "n": d["b0"] or 0},
                 {"label": "30–50%", "n": d["b30"] or 0}, {"label": "50–70%", "n": d["b50"] or 0},
                 {"label": "≥70%", "n": d["b70"] or 0}]
-        worst = [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
-                  "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
-                 for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND(t.total_inc_vat/1.07) rev,
-                   ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
-                   ROUND((t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100,1) gpp
-                   {JN} ORDER BY gpp ASC LIMIT 12""", params).fetchall()]
+        def rows_for(extra_where, limit):
+            return [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
+                     "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
+                    for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND(t.total_inc_vat/1.07) rev,
+                      ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
+                      ROUND((t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100,1) gpp
+                      {JN}{extra_where} ORDER BY gpp ASC {limit}""", params).fetchall()]
+        worst = rows_for("", "LIMIT 12")
+        # ALL loss-making bills (COGS > revenue, i.e. negative gross profit). Capped
+        # high for safety; loss_count/loss_total report the true totals regardless.
+        loss = rows_for(" AND c.cogs_bom > t.total_inc_vat/1.07", "LIMIT 2000")
+        ls = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(c.cogs_bom - t.total_inc_vat/1.07)) loss
+                             {JN} AND c.cogs_bom > t.total_inc_vat/1.07""", params).fetchone()
     return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()],
-            "summary": summary, "dist": dist, "worst": worst}
+            "summary": summary, "dist": dist, "worst": worst,
+            "loss": loss, "loss_count": (ls["n"] or 0) if ls else 0,
+            "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000}
 
 
 _DTYPE_LABEL = {0: "ทานที่ร้าน", 1: "ทานที่ร้าน", 2: "เดลิเวอรี", 3: "กลับบ้าน", 4: "อื่น ๆ"}
@@ -5323,14 +5332,29 @@ def analysis_anomalies(
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
 
+    # Fair comparison (same logic as the latest-month hero): if the most recent
+    # month is incomplete, compare month-to-date vs the SAME day-range of the
+    # prior month instead of a partial-vs-full month. We do this by clamping ALL
+    # months to day ≤ cutoff; only the last two are ever surfaced below.
+    import calendar as _cal
+    mtd_note = ""
     with get_db() as con:
+        maxday = con.execute(
+            "SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        day_clause = ""
+        if maxday:
+            _y, _m, _d = (int(x) for x in maxday.split("-"))
+            if _d < _cal.monthrange(_y, _m)[1]:   # latest month is partial
+                day_clause = f" AND CAST(strftime('%d', st.sold_at) AS INT) <= {_d}"
+                mtd_note = f" (เทียบ 1–{_d} วันเท่ากัน · MTD)"
+
         easy_monthly = con.execute(
             f"""
             SELECT strftime('%Y-%m', st.sold_at) AS month,
                    ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
-            {where_tx}
+            {where_tx}{day_clause}
             GROUP BY month
             ORDER BY month
             """,
@@ -5339,13 +5363,13 @@ def analysis_anomalies(
 
         # Branch MoM growth — Easy tx
         bgrowth_easy = con.execute(
-            """
+            f"""
             SELECT b.name AS branch,
                    strftime('%Y-%m', st.sold_at) AS month,
                    ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
-            WHERE b.name != 'ALL'
+            WHERE b.name != 'ALL'{day_clause}
             GROUP BY b.name, month
             ORDER BY b.name, month
             """,
@@ -5383,14 +5407,14 @@ def analysis_anomalies(
                     "type": "spike", "severity": "good",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
-                    "message": f"📈 รายได้เดือน {last['month']} โต {mom_pct:+.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f})",
+                    "message": f"📈 รายได้เดือน {last['month']} โต {mom_pct:+.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f}){mtd_note}",
                 })
             elif mom_pct <= -5:
                 insights.append({
                     "type": "dip", "severity": "bad",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
-                    "message": f"📉 รายได้เดือน {last['month']} ลด {mom_pct:.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f})",
+                    "message": f"📉 รายได้เดือน {last['month']} ลด {mom_pct:.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f}){mtd_note}",
                 })
 
     # Branch MoM growth
@@ -5415,14 +5439,14 @@ def analysis_anomalies(
             insights.append({
                 "type": "growth", "severity": "good", "metric": "branch_mom",
                 "branch": top["branch"], "value": top["growth_pct"],
-                "message": f"🚀 เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% MoM ({top['last_revenue']:,.0f})",
+                "message": f"🚀 เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% MoM ({top['last_revenue']:,.0f}){mtd_note}",
             })
         worst = growths[-1]
         if worst["growth_pct"] < -5:
             insights.append({
                 "type": "drop", "severity": "bad", "metric": "branch_mom",
                 "branch": worst["branch"], "value": worst["growth_pct"],
-                "message": f"⚠️ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% MoM ({worst['last_revenue']:,.0f})",
+                "message": f"⚠️ ลดมากสุด: {worst['branch']} {worst['growth_pct']:.1f}% MoM ({worst['last_revenue']:,.0f}){mtd_note}",
             })
 
     # BoM cost % spike / dip detection (MoM delta >= 5 pp)

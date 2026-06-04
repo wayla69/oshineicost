@@ -197,6 +197,15 @@ def main():
     sq.commit()
     ms.close()
 
+    # Optimize after the bulk rebuild: refresh query-planner stats + compact the
+    # file (house rule: VACUUM+ANALYZE after a bulk mutate). Autocommit so VACUUM
+    # is not attempted inside a transaction.
+    print("[4c/6] optimize (ANALYZE + VACUUM)")
+    sq.isolation_level = None
+    sq.execute("ANALYZE")
+    sq.execute("VACUUM")
+    sq.isolation_level = ""
+
     print("[5/6] reconcile .incoming vs current DB")
     ok = reconcile(sq)
     sq.close()
