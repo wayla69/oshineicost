@@ -179,6 +179,11 @@ body.dark .dive-btn { background: rgba(30,41,59,0.8); }
   .dive-chart-wrap { min-height: 360px; }
   .dive-side { height: auto; max-height: none; }
 }
+/* P&L per-bill gross-margin distribution bands (clickable drill-in) */
+.pb-band { padding: 2px 4px; border-radius: 6px; transition: background .12s; }
+.pb-band:hover { background: var(--bg-subtle); }
+.pb-band-active { background: rgba(79,70,229,.10); outline: 1px solid var(--indigo); }
+
 /* ── World-class Dive-in Insight Panel (JC-inspired narrative) ── */
 .dive-insight-bar { font-size: 13px; color: var(--text-secondary); }
 .dive-section { margin-bottom: 18px; }
@@ -1217,6 +1222,25 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS</th>
           <th class="py-1.5 pr-2 text-right">ส่วนลด</th><th class="py-1.5 text-right" id="pbWorstMetric">GM%</th>
         </tr></thead><tbody id="pbWorst"></tbody></table>
+    </div>
+  </div>
+  <div id="pbDrill" class="card p-5 mb-4" style="display:none;border:1px solid var(--indigo);box-shadow:0 0 0 3px rgba(79,70,229,.08)">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h2 class="section-title mb-0">🔎 เจาะลึกช่วง <span id="pbDrillBand" style="color:var(--indigo)"></span></h2>
+      <div class="flex items-center gap-3">
+        <button onclick="exportTable('pbDrillTable','drill_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="pbCloseDrill()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">✕ ปิด (zoom out)</button>
+      </div>
+    </div>
+    <div id="pbDrillStat" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4"></div>
+    <div style="max-height:420px;overflow-y:auto">
+      <table class="text-xs w-full" id="pbDrillTable">
+        <thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS (BoM)</th>
+          <th class="py-1.5 pr-2 text-right">กำไร</th><th class="py-1.5 pr-2 text-right">ส่วนลด</th>
+          <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 text-right" id="pbDrillMetric">GM%</th>
+        </tr></thead><tbody id="pbDrillBody"></tbody></table>
     </div>
   </div>
   <div class="card p-5 overflow-x-auto">
@@ -4170,9 +4194,41 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div class="flex-1">
         <h2 class="text-lg font-bold text-indigo-900">คู่มือการใช้งาน Oshinei Dashboard</h2>
         <p class="text-xs text-slate-600 mt-1">รวมวิธีใช้งานแต่ละ tab · กฎสำคัญ · workflow ที่ใช้บ่อย · troubleshooting</p>
-        <p class="text-xs text-slate-500 mt-2">📌 Easy POS only · 27 สาขา · 2025-05 → 2026-05 · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · COGS ใช้สูตร BoM เดียวกันทุกหน้า (GP ~40%)</p>
+        <p class="text-xs text-slate-500 mt-2">📌 Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร BoM ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- What's new — 2026-06-04 feature drop -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #4f46e5">
+    <h3 class="font-bold text-base mb-1 text-slate-800">🆕 อัปเดต 2026-06-04 — เชื่อม POS real-time + รายงานใหม่</h3>
+    <p class="text-xs text-slate-500 mb-3">เชื่อมฐานข้อมูล Easy POS โดยตรง (อัปเดตอัตโนมัติทุก 30 นาที) + หน้า P&L ต่อบิล/ปฏิบัติการ + เทียบเดือนแบบแฟร์</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+      <div class="border border-indigo-200 rounded-lg p-3" style="background:#eef2ff">
+        <p class="font-bold text-slate-700 mb-1">🔗 ข้อมูล Real-time</p>
+        เชื่อม Easy POS (MS SQL) → Dashboard ตรง · ข้อมูลสดถึงวันล่าสุด อัปเดตทุก 30 นาที. <b>กฎเหล็ก: ต้นทุน/COGS ใช้สูตร BoM ของเราเท่านั้น</b> — POS ไม่มีข้อมูลต้นทุนวัตถุดิบ.
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <p class="font-bold text-slate-700 mb-1">📅 เทียบเดือนแบบแฟร์ (MTD)</p>
+        <b>📊 ภาพรวม</b> + กล่อง <b>Insights</b> — เมื่อเดือนยังไม่จบ จะเทียบ <b>ช่วงวันเท่ากัน</b> (เช่น 1–3 มิ.ย. เทียบ 1–3 พ.ค.) ไม่ใช่เดือนเต็มเทียบเดือนไม่เต็ม.
+      </div>
+      <div class="border border-emerald-200 rounded-lg p-3" style="background:#ecfdf5">
+        <p class="font-bold text-slate-700 mb-1">🧾 P&L ต่อบิล (ใหม่)</p>
+        <b>💵 สาขา & กำไร → P&L ต่อบิล</b> — กำไร/บิล, กำไร/หัว · <b>ปุ่มสลับ GM ⇄ COGS</b> · การกระจาย gross margin <b>ละเอียด</b> (ช่วงละ 5% ใน 0–50%, 10% เหนือนั้น) — <b>คลิกแถบเพื่อเจาะลึก</b> เห็นสรุป + บิลรายใบในช่วงนั้น · <b>บิลขาดทุนทั้งหมด</b> + export CSV. (COGS = BoM)
+      </div>
+      <div class="border border-indigo-200 rounded-lg p-3" style="background:#eef2ff">
+        <p class="font-bold text-slate-700 mb-1">🛒 รายงานปฏิบัติการ (ใหม่)</p>
+        <b>🧾 ปฏิบัติการ → รายงานปฏิบัติการ</b> — สัดส่วนการชำระเงิน · ช่องทางขาย · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือน).
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <p class="font-bold text-slate-700 mb-1">🗂️ จัดเมนูใหม่ (6 กลุ่ม)</p>
+        แถบซ้ายจัดใหม่ให้สมดุล + ชื่อไทยทั้งหมด · ย้าย <b>ยอดขายรายวัน → ภาพรวม</b>, <b>บุฟเฟ่ต์เด็ก & ลูกค้า → กลุ่มบุฟเฟ่ต์</b>. ดูตารางครบด้านล่าง.
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
+        <p class="font-bold text-slate-700 mb-1">⚡ Optimize ฐานข้อมูล</p>
+        VACUUM + ANALYZE อัตโนมัติทุกครั้งที่ sync — query เร็วขึ้น, ไฟล์เล็กลง.
       </div>
     </div>
   </div>
@@ -4228,69 +4284,79 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700">
       <li><b>เลือกช่วงเวลา</b> ที่ topbar — month from/to หรือกด <b>YTD / ปีก่อน / YoY</b></li>
       <li><b>เลือกสาขา</b> ที่ topbar — หรือเลือก "ทุกสาขา" สำหรับภาพรวม</li>
-      <li>ดูข้อมูลภาพรวมที่ <b>📊 ภาพรวม → Overview / KPIs</b></li>
+      <li>ดูข้อมูลภาพรวมที่ <b>📊 ภาพรวม → ภาพรวม & KPI</b> (เดือนไม่เต็มเทียบแบบ MTD อัตโนมัติ)</li>
       <li>วิเคราะห์ลึก (เมนูจัดเป็น 6 กลุ่มในแถบซ้าย):
         <ul class="list-disc list-inside ml-6 mt-1 space-y-1 text-xs text-slate-600">
-          <li><b>กำไร/ขาดทุนรายสาขา:</b> 💵 สาขา & P&L → 📊 GP รายสาขา / 💵 P&L รายสาขา</li>
-          <li><b>เมนูเสิร์ฟเยอะ vs ต้นทุน (หาเป้าลดต้นทุน):</b> 🍱 บุฟเฟ่ต์ → 🥘 Buffet Performance</li>
-          <li><b>ต้นทุนรายเมนู + จำลอง:</b> 🍣 เมนู & ต้นทุน → 🎮 BoM Cost + Simulator</li>
+          <li><b>กำไร/ขาดทุนรายสาขา:</b> 💵 สาขา & กำไร → 📊 GP รายสาขา / 💵 P&L รายสาขา</li>
+          <li><b>กำไร/ขาดทุนรายบิล + บิลขาดทุน:</b> 💵 สาขา & กำไร → 🧾 P&L ต่อบิล</li>
+          <li><b>เมนูเสิร์ฟเยอะ vs ต้นทุน (หาเป้าลดต้นทุน):</b> 🍱 บุฟเฟ่ต์ & ลูกค้า → 🥘 ผลงานบุฟเฟ่ต์</li>
+          <li><b>ต้นทุนรายเมนู + จำลอง:</b> 🍣 เมนู & ต้นทุน → 🎮 BoM + Simulator</li>
         </ul>
       </li>
-      <li>แก้ unit_cost: <b>⚙️ เครื่องมือ → Settings → Cost Management → 🎯 Cost Recalibration</b></li>
+      <li>แก้ unit_cost: <b>⚙️ เครื่องมือ → ตั้งค่า → Cost Management → 🎯 Cost Recalibration</b></li>
     </ol>
   </div>
 
-  <!-- Tabs reference — 6 groups (2026-06 restructure) -->
+  <!-- Tabs reference — 6 groups (2026-06-04 restructure) -->
   <div class="card p-5 mb-4">
     <h3 class="font-bold text-base mb-1 text-slate-800">📋 เมนู 6 กลุ่ม — แต่ละ Tab ทำอะไร</h3>
-    <p class="text-xs text-slate-500 mb-3">จัดกลุ่มใหม่จาก 24 tab เดิม ให้หาง่ายขึ้น</p>
+    <p class="text-xs text-slate-500 mb-3">จัดกลุ่มใหม่ (2026-06-04) ให้สมดุล + ชื่อภาษาไทยทั้งหมด · ย้าย ยอดขายรายวัน→ภาพรวม, บุฟเฟ่ต์เด็ก & ลูกค้า→กลุ่มบุฟเฟ่ต์</p>
 
     <div class="mb-3">
       <p class="text-sm font-bold text-slate-700 mb-1.5">📊 ภาพรวม</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>Overview / KPIs</b> — <b>ภาพรวมเดือนล่าสุด + MoM</b> (รายได้/GP ฿/Pax/บิล/ยอดต่อหัว/%ส่วนลด) + พยากรณ์เดือนถัดไป · ยอดรวมช่วง · <b>สาขาเด่น/ต้องดู</b> · category mix (มี MoM) · แยกรายได้ตามประเภท · <b>Top 60 เมนู</b> (รายได้+MoM) · heatmap · เมนูมาแรง/ตก · แนวโน้มพยากรณ์ถึงสิ้นปี</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 ภาพรวม & KPI</b> — <b>ภาพรวมเดือนล่าสุด + MoM</b> (รายได้/GP ฿/Pax/บิล/ยอดต่อหัว/%ส่วนลด). <b>เดือนที่ยังไม่จบ เทียบแบบ MTD</b> (1→วันล่าสุด เทียบช่วงวันเท่ากันเดือนก่อน) · กล่อง Insights ก็ใช้ MTD · ยอดรวมช่วง · สาขาเด่น/ต้องดู · category mix · Top 60 เมนู · heatmap · พยากรณ์</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📅 ยอดขายรายวัน</b> — รายสาขา + รวม วัน/สัปดาห์/เดือน · เทียบเดือนก่อน/ปีก่อน (มี partial-guard) · ผิดปกติ + เมนูพุ่งรายสาขา</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>📈 แนวโน้ม</b> — รายได้/ลูกค้า/GP รายเดือน, MoM%, sparklines</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚖️ Compare A/B</b> — เทียบ 2 ช่วงเวลา side-by-side</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📈 Insight เพิ่มเติม</b> — daypart 5 ช่วง, category mix, table turnover ทุกสาขา, forecast</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚖️ เปรียบเทียบ A/B</b> — เทียบ 2 ช่วงเวลา side-by-side</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 Insight เพิ่มเติม</b> — daypart 5 ช่วง, category mix, table turnover ทุกสาขา, forecast</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-amber-800 mb-1.5">🍱 บุฟเฟ่ต์</p>
+      <p class="text-sm font-bold text-amber-800 mb-1.5">🍱 บุฟเฟ่ต์ & ลูกค้า</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 Buffet Performance</b> — pax จริง (2.70/บิล), food cost จริง (66%), ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×สัดส่วนต้นทุน</b> (หาเป้าลดต้นทุน)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⏰ Time & Flow</b> — daypart heatmap, peak hours</div>
+        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 ผลงานบุฟเฟ่ต์</b> — pax จริง (2.70/บิล), food cost จริง, ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×ต้นทุน</b></div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>🧒 บุฟเฟ่ต์เด็ก</b> — covers/รายได้/%/MoM/YTD รายสาขา <span style="color:#92400e">(ย้ายมาจากกลุ่มพนักงาน)</span></div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>👥 ลูกค้า & ยอด/หัว</b> — spend per head, party size, daypart <span style="color:#92400e">(ย้ายมาจากกลุ่มเมนู)</span></div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>⏰ ช่วงเวลา & การไหล</b> — daypart heatmap, peak hours</div>
       </div>
     </div>
 
     <div class="mb-3">
       <p class="text-sm font-bold text-rose-800 mb-1.5">🍣 เมนู & ต้นทุน</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📋 Menu Analysis</b> — most ordered (เมนูจริง, ตัด junk), persona, affinity</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⭐ Menu Engineering</b> — 4 กลุ่มแนะนำการกระทำ: ⭐ดาวเด่น (รักษา) · 🐴ม้างาน (แก้ต้นทุน) · 🔮เพชรในตม (โปรโมท) · 🐕ตัวถ่วง (ถอด) + ตารางเต็ม + กราฟ BCG (พับเก็บ)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📋 วิเคราะห์เมนู</b> — most ordered (เมนูจริง, ตัด junk), persona, affinity</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>⭐ เมนูทำเงิน</b> — 4 กลุ่ม: ⭐ดาวเด่น · 🐴ม้างาน · 🔮เพชรในตม · 🐕ตัวถ่วง + ตารางเต็ม + กราฟ BCG</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>💰 ต้นทุน</b> — margin by category, ABC, Pareto</div>
-        <div class="border-2 border-fuchsia-500 rounded-lg p-2.5" style="background:#fdf4ff"><b>🎮 BoM Cost + Simulator ⭐</b> — ภาพรวม/รายสาขา/เปรียบเทียบ/Simulator (what-if)</div>
-        <div class="border border-fuchsia-300 rounded-lg p-2.5" style="background:#fdf4ff"><b>🔬 BoM รายสาขา</b> — top menus + top ingredients ต่อสาขา</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>🎯 ความครอบคลุมต้นทุน</b> — top วัตถุดิบแพงสุด + peak hours</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👥 Guest & SPH</b> — spend per head, party size</div>
+        <div class="border-2 border-fuchsia-500 rounded-lg p-2.5" style="background:#fdf4ff"><b>🎮 BoM + Simulator ⭐</b> — ภาพรวม/รายสาขา/เปรียบเทียบ/Simulator (what-if)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>💸 ต้นทุน/หัว</b> — BoM cost ต่อหัว รายสาขา วัน/สัปดาห์/เดือน + เทียบช่วงก่อน</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-emerald-800 mb-1.5">💵 สาขา & P&L</p>
+      <p class="text-sm font-bold text-emerald-800 mb-1.5">💵 สาขา & กำไร</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>📊 GP รายสาขา</b> — GP/Food%/Status รายสาขา (COGS แบบ BoM), heatmap</div>
         <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>💵 P&L รายสาขา</b> — Revenue→COGS→GP→fixed→Operating Profit + 60 เมนูขับต้นทุน + top ingredients</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📈 กำไร</b> — profit summary, per-bill, by branch (COGS แบบ BoM)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>🏆 Benchmark สาขา</b> · <b>🔬 วิเคราะห์เชิงลึก</b> (Cohort/Affinity/What-If)</div>
+        <div class="border-2 border-emerald-400 rounded-lg p-2.5" style="background:#ecfdf5"><b>🧾 P&L ต่อบิล ⭐ใหม่</b> — กำไร/บิล, กำไร/หัว · <b>toggle GM ⇄ COGS</b> · การกระจาย gross margin ละเอียด (5% ใน 0–50%, 10% เหนือนั้น) <b>คลิกแถบเพื่อเจาะลึก</b> (สรุป+บิลรายใบ) · <b>บิลขาดทุนทั้งหมด</b> (COGS&gt;รายได้) + CSV</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>🏆 Benchmark สาขา</b> — KPI ข้ามสาขา, health score</div>
       </div>
     </div>
 
     <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">📦 พนักงาน & ส่วนลด · ⚙️ เครื่องมือ</p>
+      <p class="text-sm font-bold text-slate-700 mb-1.5">🧾 ปฏิบัติการ & ส่วนลด</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 Staff</b> (cashier scorecard) · <b>🏷️ Discounts</b> (leakage) · <b>🧒 บุฟเฟ่ต์เด็ก</b> (covers/รายได้/%/MoM/YTD รายสาขา)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ Settings → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), default=buffet, Recalibration, BoM audit, CSV · <b>Reports</b> · <b>คู่มือ</b></div>
+        <div class="border-2 border-indigo-300 rounded-lg p-2.5" style="background:#eef2ff"><b>🛒 รายงานปฏิบัติการ ⭐ใหม่</b> — การชำระเงิน · ช่องทางขาย (ทานที่ร้าน/เดลิเวอรี/กลับบ้าน) · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือนได้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> (Cohort/Affinity/What-If)</div>
+      </div>
+    </div>
+
+    <div class="mb-1">
+      <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 รายงาน</b> (export pack) · <b>📖 คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
@@ -4353,7 +4419,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-5 mb-4" style="background:#fef2f2;border-left:4px solid #ef4444">
     <h3 class="font-bold text-base mb-2 text-red-900">⚠️ กฎสำคัญ (Hard Rules)</h3>
     <ul class="list-disc list-inside text-sm text-slate-700 space-y-1.5">
+      <li><b>🔴 COGS ใช้ BoM ของเราเท่านั้น (กฎเหล็ก)</b> — ทุกการคำนวณต้นทุน/กำไรใช้สูตร BoM ของเรา <b>ห้ามใช้ต้นทุนจาก POS</b> เพราะ Easy POS ไม่ได้บันทึกต้นทุนวัตถุดิบ (ตรวจแล้ว = 0 ทุกรายการ). ใช้ทั้งหน้า P&L ต่อบิล, ต้นทุน/หัว, GP/P&L รายสาขา</li>
       <li><b>VAT ไม่ใช่รายได้</b> — ตัวเลข "รายได้" ทุกที่ในแอปใช้ <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> (ก่อน VAT) เท่านั้น. <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">total_inc_vat</code> ใช้สำหรับ reconcile กับใบเสร็จ POS เท่านั้น</li>
+      <li><b>เดือนไม่เต็มเทียบแบบ MTD</b> — เมื่อเดือนล่าสุดยังไม่จบ การเทียบ MoM ในภาพรวม + Insights จะใช้ช่วงวันเท่ากัน (1→วันล่าสุด) ของทั้งสองเดือน ไม่เอาเดือนเต็มมาเทียบเดือนไม่เต็ม</li>
       <li><b>วิเคราะห์ต้องเป็น time-series</b> — ตัวเลขสะสมอย่างเดียวไม่มีประโยชน์ ทุก analytics ต้องดูได้รายวัน/สัปดาห์/เดือน</li>
       <li><b>Tier SKUs ไม่นับ cost</b> — BUFFET/BUFFETCHILD ใส่ unit_cost ไม่ส่งผล (cost จริงนับที่ B0xxx items แล้ว) เพื่อกัน double-counting</li>
       <li><b>Buffet ไม่ได้แยก tier จริง</b> — รหัส BUFFET350/500/590/799 <b>ไม่มีข้อมูล</b> (เลิกใช้แล้ว) บุฟเฟ่ต์ผู้ใหญ่อยู่บนรหัส BUFFET เดียว, เด็กบน BUFFETCHILD. <b>pax จริง</b> ใช้ customer_count จาก transaction (ไม่ใช่ qty). เมตริก Premium%/tier mix/tier pricing จึงถูกซ่อนไว้</li>
@@ -13755,7 +13823,7 @@ async function loadCostHead(force) {
 }
 
 // ══ 🧾 P&L ต่อบิล (per-bill profit, COGS = BoM) ══
-let _pbGran = 'day', _pbView = 'gm', _pbData = null;
+let _pbGran = 'day', _pbView = 'gm', _pbData = null, _pbDrillIdx = null;
 function pbSetGran(g) {
   _pbGran = g;
   document.querySelectorAll('#pbGranTrack .gran-btn').forEach(b => b.classList.toggle('gran-active', b.dataset.g === g));
@@ -13779,7 +13847,64 @@ async function loadPnlBill(force) {
   try { d = await fetch(`${API}/api/reports/pnl-bill?${p}`).then(r => r.json()); } catch (e) { return; }
   if (d.focus && !dv) { const el = document.getElementById('pbDate'); if (el) el.value = d.focus; }
   _pbData = d;
+  _pbDrillIdx = null; pbCloseDrill();   // a fresh period/filter closes any open drill
   renderPnlBill(d);
+}
+// Zoom dive-in: drill into a single gross-margin band → its bills + an insight summary
+async function pbDrill(idx, keepOpen) {
+  _pbDrillIdx = idx;
+  document.querySelectorAll('#pbDist .pb-band').forEach(el => el.classList.toggle('pb-band-active', +el.dataset.idx === idx));
+  const dv = document.getElementById('pbDate')?.value || '';
+  const p = new URLSearchParams(); p.set('idx', idx); p.set('gran', _pbGran);
+  if (dv) p.set('date', dv);
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  let d;
+  try { d = await fetch(`${API}/api/reports/pnl-bill-drill?${p}`).then(r => r.json()); } catch (e) { return; }
+  const cogsView = _pbView === 'cogs';
+  const panel = document.getElementById('pbDrill');
+  const st = d.stat || {};
+  const bandLbl = cogsView
+    ? (idx < 0 ? 'ขาดทุน (COGS > 100%)' : `COGS ${100 - d.hi}–${100 - d.lo}%`)
+    : `GM ${esc(d.label || '')}`;
+  document.getElementById('pbDrillBand').textContent = bandLbl + (d.capped ? ' (แสดง 500 บิลแรก)' : '');
+  document.getElementById('pbDrillMetric').textContent = cogsView ? 'COGS%' : 'GM%';
+  const gpBill = st.n ? Math.round(st.gp / st.n) : 0;
+  const stats = [
+    { l: 'จำนวนบิล', v: fmtN(st.n || 0), c: '#0891b2' },
+    { l: cogsView ? 'COGS เฉลี่ย/บิล' : 'GM เฉลี่ย', v: (st.avg_gm != null ? (cogsView ? (100 - st.avg_gm).toFixed(1) : st.avg_gm.toFixed(1)) + '%' : '—'), c: '#4f46e5' },
+    { l: 'รายได้รวม', v: fmt(st.rev || 0), c: '#6366f1' },
+    { l: 'COGS รวม (BoM)', v: fmt(st.cogs || 0), c: '#ef4444' },
+    { l: 'กำไรรวม', v: fmt(st.gp || 0), c: '#10b981' },
+    { l: 'กำไร/บิล', v: fmt(gpBill), c: '#7c3aed' },
+    { l: 'ลูกค้า', v: fmtN(st.cust || 0), c: '#f59e0b' },
+  ];
+  document.getElementById('pbDrillStat').innerHTML = stats.map(k => `<div class="rounded-lg p-2.5" style="background:var(--bg-subtle);border-top:2px solid ${k.c}"><p class="text-[10px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-base font-bold" style="color:${k.c}">${k.v}</p></div>`).join('');
+  const metricCell = r => {
+    if (r.gp_pct == null) return '—';
+    const val = cogsView ? (100 - r.gp_pct) : r.gp_pct;
+    const color = cogsView ? (val > 100 ? '#ef4444' : val > 70 ? '#f59e0b' : '#10b981')
+                           : (r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981');
+    return `<span style="color:${color}">${val.toFixed(1)}%</span>`;
+  };
+  document.getElementById('pbDrillBody').innerHTML = (d.bills || []).map((r, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+    <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
+    <td class="py-1.5 pr-2 font-mono text-[10.5px]">${esc(r.receipt)}</td>
+    <td class="py-1.5 pr-2">${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.rev - r.cogs < 0 ? '#ef4444' : '#10b981'}">${fmt(Math.round(r.rev - r.cogs))}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cust)}</td>
+    <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
+  </tr>`).join('') || '<tr><td colspan="9" class="py-4 text-center text-slate-400">ไม่มีบิลในช่วงนี้</td></tr>';
+  panel.style.display = 'block';
+  if (!keepOpen) panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function pbCloseDrill() {
+  _pbDrillIdx = null;
+  const panel = document.getElementById('pbDrill'); if (panel) panel.style.display = 'none';
+  document.querySelectorAll('#pbDist .pb-band').forEach(el => el.classList.remove('pb-band-active'));
 }
 function renderPnlBill(d) {
   const cogsView = _pbView === 'cogs';
@@ -13801,25 +13926,37 @@ function renderPnlBill(d) {
     { l: 'กำไร/หัว เฉลี่ย', v: fmt(s.gp_per_head || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#f59e0b' },
   ];
   document.getElementById('pbKpis').innerHTML = kpis.map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
-  // distribution bars — GM% buckets, or mirrored to COGS%-of-revenue buckets
-  document.getElementById('pbDistTitle').textContent = cogsView
-    ? 'การกระจายต้นทุนต่อบิล (COGS % ของรายได้)' : 'การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)';
-  const distSrc = d.dist || [];
-  // GM buckets: [<0,0-30,30-50,50-70,≥70]; COGS = 100−GM → [>100,70-100,50-70,30-50,≤30]
-  const cogsLabels = ['ขาดทุน (>100%)', '70–100%', '50–70%', '30–50%', '≤30%'];
-  const dist = cogsView
-    ? distSrc.map((x, i) => ({ label: cogsLabels[i], n: x.n })).slice().reverse()
-    : distSrc;
+  // distribution bars — fine GM% bands, or mirrored to COGS%-of-revenue
+  document.getElementById('pbDistTitle').innerHTML = (cogsView
+    ? 'การกระจายต้นทุนต่อบิล (COGS % ของรายได้)' : 'การกระจายอัตรากำไรขั้นต้นต่อบิล (Gross margin / bill)')
+    + ' <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· คลิกแถบเพื่อเจาะลึก</span>';
+  const distSrc = (d.dist || []).slice();
+  const totalN = distSrc.reduce((a, b) => a + (b.n || 0), 0) || 1;
+  const totalGP = distSrc.reduce((a, b) => a + (b.gp || 0), 0) || 1;
+  // color ramp by margin health (idx -1 loss → red; higher GM → green)
+  const bandColor = b => {
+    if (b.idx < 0) return '#ef4444';
+    const mid = (b.lo + b.hi) / 2;
+    return mid < 20 ? '#f97316' : mid < 35 ? '#f59e0b' : mid < 50 ? '#eab308' : mid < 70 ? '#84cc16' : '#10b981';
+  };
+  // COGS view: relabel each band to its COGS%-of-revenue mirror, render high→low
+  const cogsLabel = b => b.idx < 0 ? 'ขาดทุน (>100%)' : `${100 - b.hi}–${100 - b.lo}%`;
+  const dist = cogsView ? distSrc.slice().reverse() : distSrc;
   const maxN = Math.max(1, ...dist.map(x => x.n));
-  const colGM = { 'ขาดทุน (<0%)': '#ef4444', '0–30%': '#f59e0b', '30–50%': '#eab308', '50–70%': '#84cc16', '≥70%': '#10b981' };
-  const colCOGS = { 'ขาดทุน (>100%)': '#ef4444', '70–100%': '#f59e0b', '50–70%': '#eab308', '30–50%': '#84cc16', '≤30%': '#10b981' };
-  const cols = cogsView ? colCOGS : colGM;
-  document.getElementById('pbDist').innerHTML = dist.map(x => `
-    <div class="flex items-center gap-2 mb-2">
-      <span class="text-[11px] w-24 shrink-0" style="color:var(--text-secondary)">${esc(x.label)}</span>
-      <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${x.n / maxN * 100}%;background:${cols[x.label] || '#64748b'}"></div></div>
-      <span class="text-[11px] tabular-nums w-14 text-right font-semibold" style="color:var(--text-primary)">${fmtN(x.n)}</span>
-    </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+  document.getElementById('pbDist').innerHTML = dist.map(x => {
+    const lbl = cogsView ? cogsLabel(x) : x.label;
+    const pctBills = (x.n / totalN * 100);
+    const gpShare = (x.gp / totalGP * 100);
+    return `<div class="flex items-center gap-2 mb-1.5 cursor-pointer pb-band ${_pbDrillIdx === x.idx ? 'pb-band-active' : ''}" data-idx="${x.idx}" onclick="pbDrill(${x.idx})"
+        title="${esc(lbl)} · ${fmtN(x.n)} บิล (${pctBills.toFixed(1)}%) · กำไรรวม ${fmt(x.gp)} (${gpShare.toFixed(1)}% ของกำไร) · รายได้ ${fmt(x.rev)}">
+      <span class="text-[11px] w-20 shrink-0 tabular-nums" style="color:var(--text-secondary)">${esc(lbl)}</span>
+      <div class="flex-1 rounded-full h-3.5" style="background:var(--bg-subtle)"><div class="h-3.5 rounded-full" style="width:${x.n / maxN * 100}%;background:${bandColor(x)}"></div></div>
+      <span class="text-[11px] tabular-nums w-12 text-right font-semibold" style="color:var(--text-primary)">${fmtN(x.n)}</span>
+      <span class="text-[10px] tabular-nums w-10 text-right" style="color:var(--text-muted)">${pctBills.toFixed(0)}%</span>
+    </div>`;
+  }).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+  // re-open the drill panel for the active band after a re-render (e.g. view toggle)
+  if (_pbDrillIdx !== null) pbDrill(_pbDrillIdx, true);
   // metric column label + cell renderer (GM% or COGS%)
   const metricLbl = cogsView ? 'COGS%' : 'GM%';
   document.getElementById('pbWorstMetric').textContent = metricLbl;

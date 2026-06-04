@@ -1435,6 +1435,76 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
             "cur": cur, "prev": prev, "cogs_comparable": cogs_ok}
 
 
+# Gross-margin distribution bands: (idx, label, lo, hi). lo/hi are GM% bounds
+# (lo inclusive, hi exclusive). idx -1 = loss bucket. Shared by the dist build
+# and the drill-down endpoint so labels/ranges never drift.
+def _build_gm_buckets():
+    out = [(-1, "ขาดทุน (<0%)", None, 0.0)]
+    for i in range(10):                       # 0–5 … 45–50 (5% bands)
+        lo = i * 5; out.append((i, f"{lo}–{lo+5}%", float(lo), float(lo + 5)))
+    for j in range(5):                        # 50–60 … 90–100 (10% bands)
+        lo = 50 + j * 10; out.append((10 + j, f"{lo}–{lo+10}%", float(lo), float(lo + 10)))
+    return out
+_PNL_GM_BUCKETS = _build_gm_buckets()
+
+
+def _pnl_bounds(d, gran):
+    import datetime as _dt
+    if gran == "day": return d, d
+    if gran == "week":
+        sd = d - _dt.timedelta(days=d.weekday()); return sd, sd + _dt.timedelta(days=6)
+    sd = d.replace(day=1)
+    nxt = sd.replace(year=sd.year + 1, month=1) if sd.month == 12 else sd.replace(month=sd.month + 1)
+    return sd, nxt - _dt.timedelta(days=1)
+
+
+@app.get("/api/reports/pnl-bill-drill")
+def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
+                   branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                   gran: str = Query("day"), limit: int = Query(500)):
+    """Drill-down: bills whose gross margin falls in distribution band `idx`
+    (see _PNL_GM_BUCKETS). COGS via BoM only."""
+    import datetime as _dt
+    if gran not in ("day", "week", "month"):
+        gran = "day"
+    band = next((b for b in _PNL_GM_BUCKETS if b[0] == idx), None)
+    if band is None:
+        return {"idx": idx, "bills": [], "stat": {}}
+    _, label, lo, hi = band
+    tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
+    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
+    _group_filter(tfilt, tp, group)
+    tw = " AND ".join(tfilt)
+    with get_db() as con:
+        maxd = con.execute("SELECT MAX(day) FROM sale_bill_cogs").fetchone()[0]
+        if not maxd:
+            return {"idx": idx, "label": label, "bills": [], "stat": {}}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        s, e = _pnl_bounds(_dt.date(fy, fm, fd), gran)
+        JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+              "JOIN branches b ON b.branch_id=t.branch_id "
+              f"WHERE {tw} AND substr(t.sold_at,1,10) BETWEEN :s AND :e AND t.total_inc_vat>0")
+        params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
+        gm = "(t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100"
+        cond = f"{gm} < 0" if idx == -1 else f"{gm} >= {lo} AND {gm} < {hi}"
+        bills = [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
+                  "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
+                 for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND(t.total_inc_vat/1.07) rev,
+                   ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
+                   ROUND({gm},1) gpp {JN} AND {cond} ORDER BY gpp ASC LIMIT :lim""",
+                   {**params, "lim": limit}).fetchall()]
+        st = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(t.total_inc_vat/1.07)) rev,
+                   ROUND(SUM(c.cogs_bom)) cogs, SUM(t.customer_count) cust, ROUND(SUM(t.discount)) disc,
+                   ROUND(AVG({gm}),1) avg_gm {JN} AND {cond}""", params).fetchone()
+        rev = (st["rev"] or 0) if st else 0; cogs = (st["cogs"] or 0) if st else 0
+        stat = {"n": (st["n"] or 0) if st else 0, "rev": rev, "cogs": cogs, "gp": round(rev - cogs),
+                "cust": (st["cust"] or 0) if st else 0, "disc": (st["disc"] or 0) if st else 0,
+                "avg_gm": (st["avg_gm"]) if st else None}
+    return {"idx": idx, "label": label, "lo": lo, "hi": hi, "range": [s.isoformat(), e.isoformat()],
+            "bills": bills, "capped": len(bills) >= limit, "stat": stat}
+
+
 @app.get("/api/reports/pnl-bill")
 def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
              group: Optional[str] = Query(None), gran: str = Query("day")):
@@ -1480,14 +1550,24 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
                    "discount": r["disc"] or 0, "customers": cust,
                    "gp_per_bill": round(gp / bills) if bills else None,
                    "gp_per_head": round(gp / cust) if cust else None}
-        d = con.execute(f"""SELECT
-            SUM(CASE WHEN p<0 THEN 1 ELSE 0 END) neg, SUM(CASE WHEN p>=0 AND p<30 THEN 1 ELSE 0 END) b0,
-            SUM(CASE WHEN p>=30 AND p<50 THEN 1 ELSE 0 END) b30, SUM(CASE WHEN p>=50 AND p<70 THEN 1 ELSE 0 END) b50,
-            SUM(CASE WHEN p>=70 THEN 1 ELSE 0 END) b70
-            FROM (SELECT (t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100 p {JN}) g""", params).fetchone()
-        dist = [{"label": "ขาดทุน (<0%)", "n": d["neg"] or 0}, {"label": "0–30%", "n": d["b0"] or 0},
-                {"label": "30–50%", "n": d["b30"] or 0}, {"label": "50–70%", "n": d["b50"] or 0},
-                {"label": "≥70%", "n": d["b70"] or 0}]
+        # Fine-grained gross-margin distribution: 5% bands across 0–50%, 10% above.
+        # bkt = -1 loss · 0..9 = 0–5..45–50 · 10..14 = 50–60..90–100.
+        gm_expr = "(t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100"
+        rows = con.execute(f"""SELECT bkt, COUNT(*) n, ROUND(SUM(rev)) rev, ROUND(SUM(cogs)) cogs,
+                   ROUND(SUM(rev-cogs)) gp, SUM(cust) cust FROM (
+                     SELECT rev, cogs, cust,
+                       CASE WHEN gm<0 THEN -1 WHEN gm<50 THEN CAST(gm/5 AS INT)
+                            ELSE 10+MIN(4,CAST((gm-50)/10 AS INT)) END bkt
+                     FROM (SELECT t.total_inc_vat/1.07 rev, c.cogs_bom cogs, t.customer_count cust,
+                           {gm_expr} gm {JN}) x) y GROUP BY bkt""", params).fetchall()
+        bmap = {r["bkt"]: r for r in rows}
+        dist = []
+        for idx, label, lo, hi in _PNL_GM_BUCKETS:
+            r = bmap.get(idx)
+            dist.append({"idx": idx, "label": label, "lo": lo, "hi": hi,
+                         "n": (r["n"] if r else 0), "rev": (r["rev"] or 0) if r else 0,
+                         "cogs": (r["cogs"] or 0) if r else 0, "gp": (r["gp"] or 0) if r else 0,
+                         "cust": (r["cust"] or 0) if r else 0})
         def rows_for(extra_where, limit):
             return [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
                      "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
