@@ -23,6 +23,12 @@ backend/audit_easy_out*.txt
 backend/audit_easy_report*.json
 backend/reingest_out.txt
 
+# ── Secrets (MSSQL sync creds) — NEVER commit ───────────────────────────────
+.env
+backend/.env
+*.env
+!*.env.example
+
 # ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
 *.pyc
