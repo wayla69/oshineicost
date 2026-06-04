@@ -1,0 +1,5 @@
+# Test/dev dependencies (the app itself needs: fastapi, uvicorn, openpyxl, ...)
+pytest>=7.4
+pytest-cov>=4.1
+httpx>=0.27          # required by fastapi.testclient
+fastapi>=0.110

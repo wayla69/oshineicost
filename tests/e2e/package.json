@@ -1,0 +1,12 @@
+{
+  "name": "oshinei-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright smoke test: every dashboard tab renders with no console errors.",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.45.0"
+  }
+}

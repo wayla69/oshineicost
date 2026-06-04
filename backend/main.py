@@ -130,9 +130,16 @@ def _maybe_swap_incoming_db():
     for suf in ("-wal", "-shm"):
         try: _os_db.remove(str(DB_PATH) + suf)
         except OSError: pass
-    _os_db.replace(str(inc), str(DB_PATH))   # atomic on same filesystem
+    try:
+        _os_db.replace(str(inc), str(DB_PATH))   # atomic on same filesystem
+    except OSError:
+        # incoming locked (e.g. OneDrive sync) — leave it; a later restart retries.
+        pass
 
-_maybe_swap_incoming_db()
+# Skip the startup DB swap during tests / tooling (set OSHINEI_NO_SWAP=1).
+# Importing this module then has no filesystem side effects.
+if _os_db.environ.get("OSHINEI_NO_SWAP") != "1":
+    _maybe_swap_incoming_db()
 STATIC  = HERE.parent / "vendor"
 DOCS    = HERE.parent / "docs"
 INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: was 'Oshinei Dashboard.html')

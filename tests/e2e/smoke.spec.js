@@ -1,0 +1,45 @@
+// @ts-check
+// End-to-end smoke: load the dashboard, walk EVERY sidebar tab, and assert each
+// renders content with ZERO console errors. Codifies the manual preview_eval
+// smoke run before each deploy. Targets BASE_URL (default the live Fly app).
+const { test, expect } = require('@playwright/test');
+
+const TABS = [
+  'home', 'overall', 'dailysales', 'trend', 'compare', 'more',
+  'buffetperf', 'childbuffet', 'guest', 'timeflow',
+  'menu', 'engineering', 'cost', 'bomcost', 'costhead',
+  'gpbranch', 'pnlbranch', 'pnlbill', 'benchmark',
+  'opsreport', 'staff', 'discounts', 'ops',
+  'cashctl', 'custtype', 'modifiers', 'pricezone', 'cancelbill',
+  'manual', 'report', 'settings',
+];
+
+// Benign console noise to ignore (favicon, third-party CDN, aborted fetches on tab-switch).
+const IGNORE = [/favicon/i, /Failed to load resource/i, /net::ERR_ABORTED/i, /cdn\.tailwindcss/i];
+
+test('every tab renders with no console errors', async ({ page }) => {
+  const errors = [];
+  page.on('console', m => { if (m.type() === 'error' && !IGNORE.some(re => re.test(m.text()))) errors.push(m.text()); });
+  page.on('pageerror', e => errors.push('pageerror: ' + e.message));
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => typeof window.switchTab === 'function', null, { timeout: 30_000 });
+
+  const results = {};
+  for (const t of TABS) {
+    await page.evaluate(name => window.switchTab(name), t);
+    await page.waitForTimeout(900);
+    const info = await page.evaluate(name => {
+      const el = document.getElementById('tab-' + name);
+      const visible = !!(el && el.style.display !== 'none' && !el.classList.contains('hidden'));
+      const len = el ? el.innerText.replace(/\s/g, '').length : 0;
+      return { visible, len };
+    }, t);
+    results[t] = info;
+    expect(info.visible, `tab '${t}' should be visible`).toBeTruthy();
+    expect(info.len, `tab '${t}' should render content`).toBeGreaterThan(30);
+  }
+
+  if (errors.length) console.log('Console errors:\n' + errors.join('\n'));
+  expect(errors, `console errors:\n${errors.join('\n')}`).toHaveLength(0);
+});

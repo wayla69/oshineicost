@@ -323,5 +323,19 @@ def test_buffet_food_cost_ratio_logic():
     assert round(row["cogs"] / row["rev"] * 100, 1) == 40.0  # food cost %
 
 
+# ---------------------------------------------------------------------------
+# R5 — _bom_unit_cost_sql (waste-BoM, cost-drivers): recipe → alias → sku_cost
+#      → 0, with BUFFET tier forced to 0. Mirrors _cogs_case but per-serving.
+# ---------------------------------------------------------------------------
+def test_bom_unit_cost_sql_tier_zero_and_fallback():
+    con = fresh_db()
+    expr = main._bom_unit_cost_sql("s")
+    rows = con.execute(f"SELECT s.sku_code AS code, {expr} AS uc FROM skus s").fetchall()
+    uc = {r["code"]: r["uc"] for r in rows}
+    assert uc["BUFFET"] == 0          # tier forced to 0 despite sku_cost 99
+    assert uc["A0001"] == 10.0        # falls back to sku_cost
+    assert uc["A0002"] in (0, None) or uc["A0002"] == 0   # uncosted → 0
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

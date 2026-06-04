@@ -23,9 +23,18 @@ from datetime import datetime
 
 import openpyxl
 
-# Force UTF-8 stdout so Thai characters print correctly on Windows
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# Force UTF-8 stdout so Thai characters print correctly on Windows.
+# Guarded: only when the streams expose a real binary .buffer (a console). Under
+# pytest/imported-as-library, stdout is a capture object without .buffer — touching
+# it there detaches pytest's capture and crashes teardown, so we skip it.
+for _name in ("stdout", "stderr"):
+    _s = getattr(sys, _name, None)
+    _buf = getattr(_s, "buffer", None)
+    if _buf is not None and getattr(_s, "encoding", "").lower() not in ("utf-8", "utf8"):
+        try:
+            setattr(sys, _name, io.TextIOWrapper(_buf, encoding="utf-8", errors="replace"))
+        except (ValueError, AttributeError):
+            pass
 
 # ---------------------------------------------------------------------------
 # Paths
