@@ -19425,6 +19425,10 @@ async function bcLoadSimulator() {
       <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">💾 Save current</button>
       <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">🗑 Delete</button>
       <button onclick="bcResetOverrides()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg">↺ Reset</button>
+      <span class="border-l border-slate-200 h-5 mx-1"></span>
+      <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">⬇ Export template</button>
+      <button onclick="document.getElementById('bcTplFile').click()" class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg font-medium">⬆ Upload template</button>
+      <input type="file" id="bcTplFile" accept=".csv,text/csv" style="display:none" onchange="bcImportTemplate(this)">
       <span class="text-xs text-slate-400 ml-auto" id="bcSimMeta">SKUs ในตาราง: ${data.skus.length}</span>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -19583,6 +19587,69 @@ function bcApplyTargetFood() {
 function bcResetOverrides() {
   bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};   // คืนค่าทั้งหมด (ต้นทุน + จำนวน + ปิดเมนู)
   bcRenderSimEditor(); bcRecomputeKpis();
+}
+// ── Template export/import (edit 337 menus in Excel instead of inline) ──
+function bcExportTemplate() {
+  if (!bcSimBase) return;
+  const hdr = ['sku_code','description','current_unit_cost','current_qty','new_unit_cost','new_qty','close(1=ปิดเมนู)'];
+  const rows = [hdr.join(',')];
+  (bcSimBase.skus||[]).forEach(r => {
+    const newCost = bcSimOverrides[r.sku_code] != null ? bcSimOverrides[r.sku_code] : r.current_unit_cost;
+    const newQty  = bcSimQty[r.sku_code] != null ? bcSimQty[r.sku_code] : Math.round(r.qty);
+    const close   = bcSimDisabled[r.sku_code] ? 1 : 0;
+    const desc = '"' + String(r.description||'').replace(/"/g,'""') + '"';
+    rows.push([r.sku_code, desc, r.current_unit_cost, Math.round(r.qty), newCost, newQty, close].join(','));
+  });
+  downloadCSV(rows.join('\n'), `simulator_template_${new Date().toISOString().slice(0,10)}.csv`);
+}
+function _parseCSV(text) {
+  // minimal RFC-4180 parser (handles quoted fields, commas, "" escapes, CRLF)
+  const rows = []; let row = [], cur = '', q = false;
+  text = text.replace(/^﻿/, '');
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (q) {
+      if (c === '"') { if (text[i+1] === '"') { cur += '"'; i++; } else q = false; }
+      else cur += c;
+    } else if (c === '"') q = true;
+    else if (c === ',') { row.push(cur); cur = ''; }
+    else if (c === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+    else if (c === '\r') { /* skip */ }
+    else cur += c;
+  }
+  if (cur.length || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+function bcImportTemplate(input) {
+  const file = input.files && input.files[0];
+  if (!file || !bcSimBase) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const rows = _parseCSV(String(e.target.result));
+      if (rows.length < 2) { alert('ไฟล์ว่างหรือรูปแบบไม่ถูกต้อง'); return; }
+      const hdr = rows[0].map(h => h.trim().toLowerCase());
+      const ix = n => hdr.findIndex(h => h.startsWith(n));
+      const iSku = ix('sku_code'), iCost = ix('new_unit_cost'), iQty = ix('new_qty'), iClose = ix('close');
+      if (iSku < 0 || iCost < 0) { alert('ไม่พบคอลัมน์ sku_code / new_unit_cost — กรุณาใช้ template ที่ export'); return; }
+      const cur = {}; (bcSimBase.skus||[]).forEach(r => { cur[r.sku_code] = r; });
+      let nCost = 0, nQty = 0, nClose = 0, unknown = 0;
+      bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};   // template replaces current scenario
+      for (let i = 1; i < rows.length; i++) {
+        const r = rows[i]; if (!r || !r[iSku]) continue;
+        const sku = String(r[iSku]).trim(); const base = cur[sku];
+        if (!base) { unknown++; continue; }
+        const nc = parseFloat(r[iCost]);
+        if (isFinite(nc) && Math.abs(nc - base.current_unit_cost) > 1e-9) { bcSimOverrides[sku] = nc; nCost++; }
+        if (iQty >= 0) { const nq = parseFloat(r[iQty]); if (isFinite(nq) && Math.abs(nq - base.qty) >= 0.5) { bcSimQty[sku] = nq; nQty++; } }
+        if (iClose >= 0) { const cl = String(r[iClose]).trim(); if (cl === '1' || cl.toLowerCase() === 'true' || cl === 'ปิด') { bcSimDisabled[sku] = true; nClose++; } }
+      }
+      bcRenderSimEditor(); bcRecomputeKpis();
+      alert(`อัปโหลดสำเร็จ ✓\nปรับต้นทุน ${nCost} · จำนวนเสิร์ฟ ${nQty} · ปิดเมนู ${nClose}` + (unknown ? `\n(ข้าม ${unknown} แถวที่ไม่รู้จัก SKU)` : ''));
+    } catch (err) { alert('อ่านไฟล์ไม่สำเร็จ: ' + err.message); }
+    finally { input.value = ''; }
+  };
+  reader.readAsText(file, 'utf-8');
 }
 async function bcSaveScenario() {
   const name = prompt('ชื่อ Scenario:', 'My scenario');
