@@ -996,6 +996,42 @@ def top_ordered(
                 pr  = mm.get(prev) if prev else None
                 rev_mom_map[sid] = ((cur - pr) / pr * 100) if (pr and pr > 0) else None
 
+        # Sparkline: per-SKU monthly qty series (YTD / last 12 months ≤ cutoff)
+        spark_map: dict = {}
+        spark_months: list = []
+        if ids:
+            allm = con.execute(f"""
+                SELECT DISTINCT sm.period_month AS m
+                FROM sales_sku_monthly sm
+                JOIN branches b   ON b.branch_id   = sm.branch_id
+                JOIN skus sk      ON sk.sku_id      = sm.sku_id
+                JOIN categories c ON c.category_id  = sk.category_id
+                WHERE {' AND '.join(mfilt)}
+                ORDER BY m
+            """, mparams).fetchall()
+            spark_months = [r["m"] for r in allm][-12:]
+            if spark_months:
+                ph2 = ",".join(f":sid{i}" for i in range(len(ids)))
+                mph = ",".join(f":spm{i}" for i in range(len(spark_months)))
+                sp_params = {f"sid{i}": v for i, v in enumerate(ids)}
+                sp_params.update({f"spm{i}": v for i, v in enumerate(spark_months)})
+                sbranch = ""
+                if branch:
+                    sbranch = "AND b.name = :sbranch"; sp_params["sbranch"] = branch
+                srows = con.execute(f"""
+                    SELECT sm.sku_id, sm.period_month AS m, SUM(sm.qty) AS q
+                    FROM sales_sku_monthly sm
+                    JOIN branches b ON b.branch_id = sm.branch_id
+                    WHERE sm.sku_id IN ({ph2})
+                      AND sm.period_month IN ({mph}) {sbranch}
+                    GROUP BY sm.sku_id, sm.period_month
+                """, sp_params).fetchall()
+                tmpS: dict = {}
+                for sr in srows:
+                    tmpS.setdefault(sr["sku_id"], {})[sr["m"]] = round(sr["q"] or 0, 2)
+                for sid, mm in tmpS.items():
+                    spark_map[sid] = [mm.get(m, 0) for m in spark_months]
+
     total_qty = (total_row["total_qty"] or 0) if total_row else 0
     total_rev = (total_row["total_rev"] or 0) if total_row else 0
     items = []
@@ -1014,9 +1050,11 @@ def top_ordered(
             "qty_mom_pct":   round(mom, 1) if mom is not None else None,
             "rev_share_pct": round(rev / total_rev * 100, 1) if total_rev else None,
             "rev_mom_pct":   round(rmom, 1) if rmom is not None else None,
+            "spark":         spark_map.get(r["sku_id"]) or [],
         })
     return {"total_qty": total_qty, "total_rev": total_rev,
-            "latest_month": latest, "prev_month": prev, "items": items}
+            "latest_month": latest, "prev_month": prev,
+            "spark_months": spark_months, "items": items}
 
 
 @app.get("/api/buffet/child")

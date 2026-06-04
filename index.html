@@ -384,6 +384,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   border-bottom: 1px solid rgba(226,232,240,0.9);
   padding: 9px 28px;
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  flex-wrap: wrap; row-gap: 8px;   /* controls drop to a new line instead of overlapping */
   flex-shrink: 0; z-index: 40;
   box-shadow: 0 1px 3px rgba(15,23,42,0.04);
   backdrop-filter: blur(12px);
@@ -2177,7 +2178,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
   <div class="card p-4 mt-5">
     <div class="text-sm font-semibold text-slate-700 mb-2">⏰ ชั่วโมงขายดี (Peak hours by revenue)</div>
-    <div class="text-xs text-slate-400 mb-2">รายได้เฉลี่ยต่อชั่วโมง · ใช้วางแผนกำลังคน/เตรียมของ</div>
+    <div class="text-xs text-slate-400 mb-2">รายได้เฉลี่ยต่อชั่วโมง · ไม่รวมเวลาปิดร้าน · ใช้วางแผนกำลังคน/เตรียมของ</div>
     <div style="position:relative;height:240px"><canvas id="cov-peak"></canvas></div>
   </div>
 </div>
@@ -6062,6 +6063,24 @@ function renderKpiHero(trendData, gpb, disc) {
     gpTile = tile('กำไรขั้นต้น (GP)', '<span class="text-slate-300">…</span>', '', '#059669', 'กำลังโหลด');
   }
 
+  // ── COGS (฿) — Revenue − GP; higher = worse so the delta colour is inverted ──
+  let cogsTile;
+  if (gpb && gpb.rows && Object.keys(gpByMonth).length) {
+    const gm = Object.keys(gpByMonth).sort();
+    const cogsSeries = gm.map(m => gpByMonth[m].cogs);
+    const lm = gm[gm.length-1], pm = gm[gm.length-2];
+    const cogsLast = lm ? gpByMonth[lm].cogs : 0;
+    const cogsPrev = pm ? gpByMonth[pm].cogs : null;
+    const cogsPct  = (lm && gpByMonth[lm].rev) ? cogsLast/gpByMonth[lm].rev*100 : null;
+    const cogsMomPct = (cogsPrev && cogsPrev>0) ? (cogsLast-cogsPrev)/cogsPrev*100 : null;
+    const cogsBadge = cogsMomPct==null ? '' :
+      `<span class="text-xs font-semibold" style="color:${cogsMomPct<=0?'#059669':'#dc2626'}">${cogsMomPct<=0?'▼':'▲'} ${Math.abs(cogsMomPct).toFixed(1)}%</span>`;
+    cogsTile = tile('ต้นทุน (COGS)', fmt(cogsLast), cogsBadge, '#ef4444',
+      cogsPct!=null?`${cogsPct.toFixed(1)}% ของรายได้ · BoM`:'BoM COGS', spark(cogsSeries, '#ef4444'));
+  } else {
+    cogsTile = tile('ต้นทุน (COGS)', '<span class="text-slate-300">…</span>', '', '#ef4444', 'กำลังโหลด');
+  }
+
   // ── Discount rate (latest month + MoM in points; lower is better) ──
   let discTile;
   const dtr = (disc && Array.isArray(disc.trend)) ? disc.trend : null;
@@ -6090,6 +6109,7 @@ function renderKpiHero(trendData, gpb, disc) {
 
   el.innerHTML =
     tile('รายได้ (ไม่รวม VAT)', fmt(revOf(last)), badge(mom(revOf(last), revOf(prev))), '#4f46e5', prev?`เดือนก่อน ${fmt(revOf(prev))}`:'รายได้เดือนนี้', spark(sparkOf('revenue'), '#4f46e5')) +
+    cogsTile +
     gpTile +
     tile('ลูกค้า (Pax)', fmtN(last.customer_count||0), badge(mom(last.customer_count, prev?.customer_count)), '#7c3aed', 'จำนวนลูกค้าเดือนนี้', spark(sparkOf('customer_count'), '#7c3aed')) +
     tile('จำนวนบิล', fmtN(last.tx_count||0), badge(mom(last.tx_count, prev?.tx_count)), '#10b981', 'ใบเสร็จเดือนนี้', spark(sparkOf('tx_count'), '#10b981')) +
@@ -11261,6 +11281,8 @@ function closeDive() {
 }
 
 function diveInChart(chartId) {
+  // Dedicated rich dive for the Most-Ordered chart (TOP 50 + % + MoM)
+  if (chartId === 'chartMostOrdered') { diveMostOrdered(); return; }
   const orig = chartInstances[chartId];
   if (!orig) { console.warn('diveInChart: no chart instance for', chartId); return; }
 
@@ -11346,6 +11368,125 @@ function diveInChart(chartId) {
 
 // Esc closes dive modal
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDive(); });
+
+// ── Dedicated dive for "สั่งบ่อยที่สุด": TOP 50 + % share + MoM vs last month ──
+// (keeps the standard dive-layout format; uses qty_share_pct / qty_mom_pct the
+//  top_ordered endpoint already returns. Sparkline/YTD is a follow-up that needs
+//  a per-SKU monthly series from the backend.)
+function _sparkSvg(vals, color) {
+  if (!vals || vals.length < 2) return '';
+  const w = 60, h = 16, max = Math.max(...vals), min = Math.min(...vals), rng = (max - min) || 1;
+  const pts = vals.map((v, i) => `${(i / (vals.length - 1) * w).toFixed(1)},${(h - (v - min) / rng * (h - 2) - 1).toFixed(1)}`).join(' ');
+  const lastUp = vals[vals.length - 1] >= vals[0];
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="vertical-align:middle;margin-left:6px;opacity:.9"><polyline points="${pts}" fill="none" stroke="${color || (lastUp ? '#10b981' : '#ef4444')}" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+}
+async function diveMostOrdered() {
+  const modal = document.getElementById('diveModal');
+  const title = document.getElementById('diveTitle');
+  const body  = document.getElementById('diveBody');
+  if (!modal || !title || !body) return;
+  title.textContent = '🔍 สั่งบ่อยที่สุด · TOP 50';
+  body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด TOP 50…</p>';
+  modal.classList.remove('hidden');
+
+  let d;
+  try { d = await fetch(`${API}/api/sales/top_ordered${qp({ limit: 50, sort: 'qty' })}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ${e.message}</p>`; return; }
+  const items = (d && d.items) ? d.items : [];
+  if (!items.length) { body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">ไม่มีข้อมูล</p>'; return; }
+
+  const clean = s => esc((s || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
+  const totalAll = d.total_qty || items.reduce((s, r) => s + (r.qty || 0), 0);
+  const sharePct = r => r.qty_share_pct != null ? r.qty_share_pct : (totalAll ? r.qty / totalAll * 100 : 0);
+  const nums = items.map(r => r.qty || 0);
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const avg = sum / nums.length;
+  const peak = items[0], low = items[items.length - 1];
+
+  // Outlier (reuse the shared IQR detector)
+  const o = _detectOutliers(nums);
+  let outlierSection = '';
+  if (o.hasOutliers) {
+    const names = o.indices.map(i => clean(items[i].description)).slice(0, 3).join(', ');
+    outlierSection = _diveSection('การวิเคราะห์ Outlier', '🎯', _diveBullet('🎯',
+      `พบ <b>${o.indices.length}</b> ค่าผิดปกติ (${names}${o.indices.length > 3 ? ', …' : ''}) — ทำให้ค่าเฉลี่ยเบี่ยงเบนไป <b>${o.gainPct.toFixed(1)}%</b><br>ถ้าตัด outlier ออก ค่าเฉลี่ยจะเป็น <b>${fmtN(Math.round(o.trimmedAvg))}</b> (จาก <b>${fmtN(Math.round(o.fullAvg))}</b>)`,
+      'warn'));
+  }
+
+  // MoM movement vs previous month
+  const withMom = items.filter(r => r.qty_mom_pct != null);
+  const ups = withMom.filter(r => r.qty_mom_pct > 0).sort((a, b) => b.qty_mom_pct - a.qty_mom_pct);
+  const downs = withMom.filter(r => r.qty_mom_pct < 0).sort((a, b) => a.qty_mom_pct - b.qty_mom_pct);
+  const newCnt = items.length - withMom.length;
+  const momRow = (r, up) => `<div class="dive-metric"><span class="lbl">${clean(r.description)}${_sparkSvg(r.spark, up ? '#10b981' : '#ef4444')}</span><span class="val ${up ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${Math.abs(r.qty_mom_pct).toFixed(1)}%</span></div>`;
+  const momHtml = withMom.length
+    ? `<p class="text-[11px] mb-1" style="color:var(--text-muted)">▲ ${ups.length} ขึ้น · ▼ ${downs.length} ลง${newCnt ? ` · ✦ ${newCnt} ใหม่` : ''} · เส้น = YTD</p>`
+        + (ups.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#10b981">มาแรง</p>` + ups.slice(0, 5).map(r => momRow(r, true)).join('') : '')
+        + (downs.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#ef4444">แผ่วลง</p>` + downs.slice(0, 5).map(r => momRow(r, false)).join('') : '')
+    : '<p class="text-xs" style="color:var(--text-muted)">ไม่มีข้อมูลเดือนก่อนให้เทียบ</p>';
+
+  const analysisHtml =
+    _diveSection('Overview', '📊',
+      _diveMetric('Total', fmtN(sum)) +
+      _diveMetric('Average', fmtN(Math.round(avg))) +
+      _diveMetric('Peak', `${fmtN(peak.qty)} · ${clean(peak.description)}`, 'good') +
+      _diveMetric('Low', `${fmtN(low.qty)} · ${clean(low.description)}`, 'bad') +
+      _diveMetric('Points', String(items.length)))
+    + outlierSection
+    + _diveSection('เทียบเดือนก่อน (MoM)', '🔄', momHtml);
+
+  body.innerHTML = `
+    <div class="dive-layout">
+      <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative">
+        <canvas id="zoomChart"></canvas>
+      </div>
+      <div class="dive-insight-bar dive-side">
+        ${analysisHtml}
+        <div class="dive-section">
+          <div class="dive-section-title">🛠️ Actions</div>
+          <button onclick="exportChartData('chartMostOrdered')" class="dive-action-btn">⬇ Export this chart data (CSV)</button>
+          <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button>
+        </div>
+      </div>
+    </div>`;
+
+  setTimeout(() => {
+    if (chartInstances['zoomChart']) chartInstances['zoomChart'].destroy();
+    const canvas = document.getElementById('zoomChart');
+    if (!canvas) return;
+    const maxV = Math.max(...nums, 1);
+    chartInstances['zoomChart'] = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: items.map(r => clean(r.description).slice(0, 28)),
+        datasets: [{ label: 'Qty', data: nums, backgroundColor: nums.map(v => v === maxV ? '#ef4444' : '#10b981'), borderRadius: 4 }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        layout: { padding: { right: 70 } },
+        plugins: {
+          legend: { display: false },
+          datalabels: {
+            display: true, anchor: 'end', align: 'end', color: '#475569', font: { size: 9, weight: '600' },
+            formatter: (v, ctx) => fmtN(v) + '  ' + sharePct(items[ctx.dataIndex]).toFixed(1) + '%'
+          },
+          tooltip: {
+            callbacks: {
+              label: ctx => {
+                const r = items[ctx.dataIndex], mom = r.qty_mom_pct;
+                return ' ' + fmtN(ctx.raw) + ' pcs · ' + sharePct(r).toFixed(1) + '%' + (mom != null ? ` · MoM ${mom > 0 ? '+' : ''}${mom.toFixed(1)}%` : ' · ใหม่');
+              }
+            }
+          }
+        },
+        scales: {
+          x: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8', font: { size: 10 } } },
+          y: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 10 }, autoSkip: false } }
+        }
+      }
+    });
+  }, 50);
+}
 
 // ── World-class analysis builder (JC-inspired) ────────────────
 function _diveSection(title, icon, content) {
@@ -16794,7 +16935,10 @@ async function loadCoverageExtras() {
   if (getMonthFrom()) hp.set('month_from', getMonthFrom());
   if (getMonthTo())   hp.set('month_to', getMonthTo());
   fetch(`${API}/api/analysis/hourly_open?${hp}`).then(r=>r.json()).then(d=>{
-    const hrs = (d.hourly||d||[]).filter(h=>h.hour!=null);
+    const all = (d.hourly||d||[]).filter(h=>h.hour!=null);
+    // ตัดเวลาร้านปิดออก: ใช้ closed_hours config ถ้ามี ไม่งั้น fallback ตัดชั่วโมงที่รายได้ = 0
+    const hasClosed = all.some(h=>h.is_open===false);
+    const hrs = all.filter(h => hasClosed ? h.is_open!==false : (h.avg_daily_revenue ?? h.revenue ?? 0) > 0);
     const rev = hrs.map(h=>h.avg_daily_revenue ?? h.revenue ?? 0);
     const mx = Math.max(...rev, 1);
     mkChart('cov-peak', { type:'bar',
