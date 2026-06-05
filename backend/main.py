@@ -117,7 +117,11 @@ def _maybe_swap_incoming_db():
         return
     try:
         chk = sqlite3.connect(str(inc))
-        ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
+        # quick_check (page-level) not integrity_check (full index cross-check):
+        # the realistic failure of a freshly streamed upload is a truncated/partial
+        # transfer, which quick_check catches — and it's ~20x faster on a large DB
+        # (0.45s vs ~10s on 348 MB), so this no longer dominates startup.
+        ok  = chk.execute("PRAGMA quick_check").fetchone()[0]
         n   = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
         chk.close()
     except Exception:
@@ -1895,6 +1899,90 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         summary = {"bills": cbills, "amount": (s["amount"] or 0) if s else 0, "valid_bills": valid,
                    "cancel_rate": round(cbills / (valid + cbills) * 100, 2) if (valid + cbills) else None}
     return {"month": mon, "branches": branches, "reasons": reasons, "summary": summary}
+
+
+@app.get("/api/extra/closing-time")
+def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Per-branch data freshness + typical shop closing time.
+
+    Surfaces the data-lag issue: each branch's LATEST transaction (all-time) shows
+    how current its synced data is; a branch sitting several days behind the chain
+    maximum has not reported / synced recent sales. The typical closing time (avg
+    of each day's last bill over the trailing 30 days) is the operational read —
+    times before 06:00 are treated as after-midnight closes (+24h) so a 01:30 close
+    sorts after a 23:00 one rather than looking like the earliest open."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    import datetime as _dt
+    with get_db() as con:
+        dm = con.execute("SELECT MAX(sold_at) mx FROM sales_transaction").fetchone()["mx"]
+        if not dm:
+            return {"data_max": None, "today": _dt.date.today().isoformat(),
+                    "branches": [], "summary": {}}
+        data_max_date = dm[:10]
+        d_hi = _dt.date(*(int(x) for x in data_max_date.split("-")))
+        since = (d_hi - _dt.timedelta(days=30)).isoformat()
+
+        # All-time latest per branch (freshness) + lifetime bill count.
+        last_rows = {r["branch"]: r for r in con.execute(
+            f"""SELECT b.name branch, MAX(t.sold_at) last_sold, COUNT(*) total_bills
+                FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE {tw} GROUP BY b.name""", p).fetchall()}
+
+        # Trailing-30d typical close: average of each day's last-bill time-of-day.
+        close_rows = {r["branch"]: r for r in con.execute(
+            f"""WITH day_close AS (
+                  SELECT t.branch_id, substr(t.sold_at,1,10) d, MAX(t.sold_at) last_at
+                  FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                  WHERE {tw} AND t.sold_at >= :since
+                  GROUP BY t.branch_id, substr(t.sold_at,1,10)
+                )
+                SELECT b.name branch, COUNT(*) days_open,
+                  AVG( CAST(substr(dc.last_at,12,2) AS REAL)*60 + CAST(substr(dc.last_at,15,2) AS REAL)
+                       + CASE WHEN CAST(substr(dc.last_at,12,2) AS INTEGER) < 6 THEN 1440 ELSE 0 END
+                     ) avg_close_min
+                FROM day_close dc JOIN branches b ON b.branch_id=dc.branch_id
+                GROUP BY b.name""", {**p, "since": since}).fetchall()}
+
+    branches = []
+    behind = current = 0
+    max_behind = 0
+    for name, lr in last_rows.items():
+        last_sold = lr["last_sold"]
+        last_date = last_sold[:10] if last_sold else None
+        days_behind = None
+        if last_date:
+            d_b = _dt.date(*(int(x) for x in last_date.split("-")))
+            days_behind = (d_hi - d_b).days
+        cr = close_rows.get(name)
+        avg_min = round(cr["avg_close_min"]) if cr and cr["avg_close_min"] is not None else None
+        avg_close = None
+        if avg_min is not None:
+            hh = (avg_min // 60) % 24; mm = avg_min % 60
+            avg_close = f"{hh:02d}:{mm:02d}"
+        if days_behind == 0:
+            status = "current"; current += 1
+        elif days_behind is not None and days_behind >= 14:
+            status = "inactive"; behind += 1
+        else:
+            status = "behind"; behind += 1
+        if days_behind is not None:
+            max_behind = max(max_behind, days_behind)
+        branches.append({
+            "branch": name, "last_sold": last_sold, "last_date": last_date,
+            "days_behind": days_behind, "avg_close": avg_close, "avg_close_min": avg_min,
+            "days_open": (cr["days_open"] if cr else 0), "total_bills": lr["total_bills"],
+            "status": status,
+        })
+    # Most-stale first so problems sit at the top.
+    branches.sort(key=lambda r: (-(r["days_behind"] if r["days_behind"] is not None else 9999)))
+    summary = {"behind": behind, "current": current, "max_days_behind": max_behind,
+               "branch_count": len(branches)}
+    return {"data_max": dm, "data_max_date": data_max_date,
+            "today": _dt.date.today().isoformat(),
+            "branches": branches, "summary": summary}
 
 
 @app.get("/api/buffet/child")
