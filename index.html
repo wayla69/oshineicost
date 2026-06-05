@@ -3401,10 +3401,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div class="overflow-auto" style="max-height:560px">
         <table class="tbl-top60 w-full" id="orderedTable">
           <thead><tr>
-            <th class="num">#</th><th>SKU</th><th>เมนู</th><th>หมวด</th>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">เทรนด์</th>
             <th class="num">จำนวนขาย</th>
             <th class="num">% เทียบยอดรวม</th>
-            <th class="num">จำนวนขาย<span class="sub">เดือนก่อน (ช่วงเดียวกัน)</span></th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
+            <th class="num">GP%<span class="sub">à-la-carte</span></th>
+            <th class="num">อันดับ<span class="sub">Δ vs เดือนก่อน</span></th>
             <th class="num">เปลี่ยนแปลง %<span class="sub">จำนวนขาย</span></th>
           </tr></thead>
           <tbody id="orderedBody"></tbody>
@@ -3422,8 +3425,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div class="overflow-auto" style="max-height:560px">
         <table class="tbl-top60 w-full" id="costHeadTable">
           <thead><tr>
-            <th class="num">#</th><th>SKU</th><th>เมนู</th><th>หมวด</th>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
             <th class="num">ต้นทุน/หัว</th>
+            <th class="num">% ของต้นทุนรวม</th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
             <th class="num">ต้นทุน/หัว<span class="sub">เดือนก่อน (ช่วงเดียวกัน)</span></th>
             <th class="num">เปลี่ยนแปลง %<span class="sub">ต้นทุน/หัว · ขึ้น = แย่</span></th>
           </tr></thead>
@@ -7982,37 +7987,62 @@ function _top60MomLabel(d, prefix) {
   return (d && d.mom_basis === 'mtd') ? `${prefix}1–${d.mtd_cutoff_day} วันเท่ากัน (MTD)` : `${prefix}เดือนก่อน`;
 }
 
+// ABC class badge from a running cumulative-share % (Pareto): A ≤80%, B ≤95%, C tail.
+function _abcBadge(cum) {
+  const c = cum <= 80 ? 'A' : cum <= 95 ? 'B' : 'C';
+  const s = c === 'A' ? 'background:#dcfce7;color:#166534' : c === 'B' ? 'background:#fef9c3;color:#854d0e' : 'background:#f1f5f9;color:#64748b';
+  return `<span style="${s};font-weight:700;font-size:10px;padding:1px 6px;border-radius:999px">${c}</span>`;
+}
 function _renderTop60Sales(d) {
   const items = (d && d.items) || [];
   const noteEl = document.getElementById('orderedMomNote');
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'MoM เทียบ ');
   const cn = document.getElementById('orderedCoverNote');
-  if (cn) cn.textContent = '% เทียบยอดรวม = สัดส่วนจำนวนขายของเมนู เทียบจำนวนขายรวมทุกเมนู · เปลี่ยนแปลง % = จำนวนขายเทียบช่วงเดียวกันเดือนก่อน';
+  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · อันดับ = ขยับกี่อันดับเทียบเดือนก่อน · GP% เฉพาะเมนูมีราคา (บุฟเฟต์ = —)';
   const body = document.getElementById('orderedBody'), foot = document.getElementById('orderedFoot');
-  if (!items.length) { body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
-  let sumQty = 0, sumShare = 0, sumPrev = 0;
+  if (!items.length) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
+  // derived prev-period rank (by prev qty) for the rank-change column
+  const prevQtyOf = r => (r.qty_mom_pct != null && r.qty_mom_pct != -100) ? (r.qty || 0) / (1 + r.qty_mom_pct / 100) : null;
+  const prevRank = {};
+  items.map(r => ({ sku: r.sku_code, pq: prevQtyOf(r) })).filter(x => x.pq != null)
+       .sort((a, b) => b.pq - a.pq).forEach((x, idx) => { prevRank[x.sku] = idx + 1; });
+  let sumQty = 0, sumShare = 0, sumPrev = 0, gpRev = 0, gpCogs = 0, cum = 0;
   body.innerHTML = items.map((r, i) => {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const mom = r.qty_mom_pct;
-    const prevQty = (mom != null && mom != -100) ? Math.round((r.qty || 0) / (1 + mom / 100)) : null;
-    sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (prevQty != null) sumPrev += prevQty;
+    const pq = prevQtyOf(r);
+    cum += r.qty_share_pct || 0;
+    sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
     const momCell = mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true);
+    const pr = prevRank[r.sku_code];
+    let rankCell;
+    if (mom == null || pr == null) rankCell = '<span class="text-amber-600 text-[10px]">ใหม่</span>';
+    else { const dr = pr - (i + 1); rankCell = dr === 0 ? '<span class="text-slate-400">–</span>' : `<span style="color:${dr > 0 ? '#10b981' : '#ef4444'};font-weight:600">${dr > 0 ? '▲' : '▼'}${Math.abs(dr)}</span>`; }
+    const gp = (typeof _hasMenuPrice === 'function' && _hasMenuPrice(r)) ? (r.revenue - r.cogs) / r.revenue * 100 : null;
+    if (gp != null) { gpRev += r.revenue; gpCogs += r.cogs; }
+    const gpCell = gp == null ? '<span class="text-slate-300">—</span>' : `<span style="color:${gp >= 60 ? '#10b981' : gp >= 40 ? '#f59e0b' : '#ef4444'};font-weight:600">${gp.toFixed(0)}%</span>`;
+    const spk = (typeof mkSparkline === 'function' && Array.isArray(r.spark) && r.spark.length >= 2) ? mkSparkline(r.spark.slice(-8), '#6366f1', 64, 22) : '';
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
+      <td class="num">${_abcBadge(cum)}</td>
       <td class="font-mono text-slate-400 text-[10px]">${esc(r.sku_code)}</td>
       <td class="max-w-xs truncate" title="${esc(r.description || '')}">${name}</td>
-      <td class="text-[11px] text-slate-500">${esc(r.category || '')}</td>
+      <td class="num">${spk}</td>
       <td class="num tabular font-semibold">${fmtN(r.qty)}</td>
       <td class="num tabular text-slate-600">${r.qty_share_pct != null ? r.qty_share_pct.toFixed(1) + '%' : '—'}</td>
-      <td class="num tabular text-slate-400">${prevQty != null ? fmtN(prevQty) : '—'}</td>
+      <td class="num tabular text-slate-400">${cum.toFixed(1)}%</td>
+      <td class="num tabular">${gpCell}</td>
+      <td class="num tabular">${rankCell}</td>
       <td class="num tabular">${momCell}</td>
     </tr>`;
   }).join('');
   if (foot) foot.innerHTML = `<tr>
-    <td></td><td></td><td>รวม Top 60</td><td></td>
+    <td></td><td></td><td></td><td>รวม Top 60</td><td></td>
     <td class="num tabular">${fmtN(sumQty)}</td>
     <td class="num tabular">${sumShare.toFixed(1)}%</td>
-    <td class="num tabular">${fmtN(sumPrev)}</td>
+    <td class="num tabular">${cum.toFixed(1)}%</td>
+    <td class="num tabular">${gpRev > 0 ? ((gpRev - gpCogs) / gpRev * 100).toFixed(0) + '%' : '—'}</td>
+    <td></td>
     <td class="num tabular">${_momSpan(sumPrev > 0 ? (sumQty - sumPrev) / sumPrev * 100 : null, true)}</td>
   </tr>`;
 }
@@ -8026,34 +8056,40 @@ function _renderTop60CostHead(d) {
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'เทียบ ');
   const cn = document.getElementById('costHeadNote');
   if (cn) cn.textContent = covers
-    ? `ต้นทุน/หัว = ต้นทุน BoM ของเมนู ÷ จำนวนลูกค้าทั้งหมด ${fmtN(covers)} หัว · เปลี่ยนแปลง % รวมผลของทั้งต้นทุนเมนูและจำนวนลูกค้า (ขึ้น = แย่)`
+    ? `ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)`
     : 'ต้นทุน/หัว: ไม่มีข้อมูลจำนวนลูกค้าในช่วงนี้';
   const body = document.getElementById('costHeadBody'), foot = document.getElementById('costHeadFoot');
-  if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
-  let sumCur = 0, sumPrev = 0;
+  if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
+  const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  let sumCur = 0, sumPrev = 0, sumShare = 0, cum = 0;
   body.innerHTML = items.map((r, i) => {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const chCur = (r.cogs || 0) / covers;
     const qm = r.qty_mom_pct;   // = cogs MoM (BoM recipe unit cost is constant across periods)
     const chMomFrac = (qm != null && coversRatio != null) ? (1 + qm / 100) * coversRatio - 1 : null;
     const chPrev = (chMomFrac != null && chMomFrac > -1) ? chCur / (1 + chMomFrac) : null;
-    sumCur += chCur; if (chPrev != null) sumPrev += chPrev;
+    cum += r.cogs_share_pct || 0;
+    sumCur += chCur; if (chPrev != null) sumPrev += chPrev; sumShare += r.cogs_share_pct || 0;
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
+      <td class="num">${_abcBadge(cum)}</td>
       <td class="font-mono text-slate-400 text-[10px]">${esc(r.sku_code)}</td>
       <td class="max-w-xs truncate" title="${esc(r.description || '')}">${name}</td>
-      <td class="text-[11px] text-slate-500">${esc(r.category || '')}</td>
-      <td class="num tabular font-medium text-orange-700">${fmt(chCur)}</td>
-      <td class="num tabular text-slate-400">${chPrev != null ? fmt(chPrev) : '—'}</td>
+      <td class="num tabular font-medium text-orange-700">${f2(chCur)}</td>
+      <td class="num tabular text-slate-600">${r.cogs_share_pct != null ? r.cogs_share_pct.toFixed(1) + '%' : '—'}</td>
+      <td class="num tabular text-slate-400">${cum.toFixed(1)}%</td>
+      <td class="num tabular text-slate-400">${f2(chPrev)}</td>
       <td class="num tabular">${_momSpan(chMomFrac != null ? chMomFrac * 100 : null, false)}</td>
     </tr>`;
   }).join('');
   if (foot) {
     const totMom = (sumPrev > 0) ? (sumCur - sumPrev) / sumPrev * 100 : null;
     foot.innerHTML = `<tr>
-      <td></td><td></td><td>รวม Top 60</td><td></td>
-      <td class="num tabular">${fmt(sumCur)}</td>
-      <td class="num tabular">${sumPrev > 0 ? fmt(sumPrev) : '—'}</td>
+      <td></td><td></td><td></td><td>รวม Top 60</td>
+      <td class="num tabular">${f2(sumCur)}</td>
+      <td class="num tabular">${sumShare.toFixed(1)}%</td>
+      <td class="num tabular">${cum.toFixed(1)}%</td>
+      <td class="num tabular">${f2(sumPrev)}</td>
       <td class="num tabular">${_momSpan(totMom, false)}</td>
     </tr>`;
   }
