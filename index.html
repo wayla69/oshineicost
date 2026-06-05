@@ -1256,12 +1256,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div id="pbDist"></div>
     </div>
     <div class="card p-5 overflow-x-auto">
-      <h2 class="section-title mb-3">บิลกำไรต่ำสุด <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· margin ต่ำสุด 12 บิล</span></h2>
+      <h2 class="section-title mb-3">กำไรต่อบิล รายสาขา <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· margin ต่ำสุดอยู่บนสุด · GP/บิล · บิลขาดทุน</span></h2>
       <table class="text-xs w-full">
         <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-          <th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
-          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS</th>
-          <th class="py-1.5 pr-2 text-right">ส่วนลด</th><th class="py-1.5 text-right" id="pbWorstMetric">GM%</th>
+          <th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">บิล</th>
+          <th class="py-1.5 pr-2 text-right">GM%</th>
+          <th class="py-1.5 pr-2 text-right">GP/บิล</th>
+          <th class="py-1.5 text-right">บิลขาดทุน</th>
         </tr></thead><tbody id="pbWorst"></tbody></table>
     </div>
   </div>
@@ -14376,7 +14378,6 @@ function renderPnlBill(d) {
   if (_pbDrillIdx !== null) pbDrill(_pbDrillIdx, true);
   // metric column label + cell renderer (GM% or COGS%)
   const metricLbl = cogsView ? 'COGS%' : 'GM%';
-  document.getElementById('pbWorstMetric').textContent = metricLbl;
   document.getElementById('pbLossMetric').textContent = metricLbl;
   const metricCell = r => {
     if (r.gp_pct == null) return '—';
@@ -14385,14 +14386,18 @@ function renderPnlBill(d) {
                            : (r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981');
     return `<span style="color:${color}">${val.toFixed(1)}%</span>`;
   };
-  document.getElementById('pbWorst').innerHTML = (d.worst || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
-    <td class="py-1.5 pr-2 font-mono text-[10.5px]">${esc(r.receipt)}</td>
-    <td class="py-1.5 pr-2">${esc(r.branch)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
-    <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
-  </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  // กำไรต่อบิล รายสาขา — aggregate margin per branch, worst GM% on top.
+  document.getElementById('pbWorst').innerHTML = (d.by_branch || []).map(r => {
+    const gmCol = r.gm_pct == null ? '#94a3b8' : r.gm_pct < 0 ? '#ef4444' : r.gm_pct < 30 ? '#f59e0b' : '#10b981';
+    const rowBg = (r.loss_bills > 0 || (r.gm_pct != null && r.gm_pct < 30)) ? 'background:rgba(239,68,68,0.05)' : '';
+    return `<tr class="border-t border-slate-100 hover:bg-rose-50/40" style="${rowBg}">
+      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${gmCol}">${r.gm_pct != null ? r.gm_pct + '%' : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${r.gp_per_bill != null ? fmt(r.gp_per_bill) : '—'}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:${r.loss_bills > 0 ? '#ef4444' : '#94a3b8'}">${r.loss_bills > 0 ? fmtN(r.loss_bills) : '0'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   // ALL loss-making bills
   const loss = d.loss || [];
   const ls = document.getElementById('pbLossSummary');

@@ -1683,13 +1683,32 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
                       ROUND((t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100,1) gpp
                       {JN}{extra_where} ORDER BY gpp ASC {limit}""", params).fetchall()]
         worst = rows_for("", "LIMIT 12")
+        # Per-branch margin aggregate (replaces the noisy 12-worst-bills list):
+        # avg GM%, GP/bill, bill count and loss-bill count — sorted worst margin first.
+        by_branch = []
+        for x in con.execute(f"""
+            SELECT b.name branch, COUNT(*) bills,
+                   ROUND(SUM(t.total_inc_vat/1.07)) rev,
+                   ROUND(SUM(c.cogs_bom)) cogs,
+                   ROUND(SUM(t.total_inc_vat/1.07 - c.cogs_bom)) gp,
+                   SUM(CASE WHEN c.cogs_bom > t.total_inc_vat/1.07 THEN 1 ELSE 0 END) loss_bills,
+                   SUM(t.customer_count) cust
+            {JN} GROUP BY b.name""", params).fetchall():
+            bb_rev = x["rev"] or 0; bb_gp = x["gp"] or 0; bb_bills = x["bills"] or 0
+            by_branch.append({
+                "branch": x["branch"], "bills": bb_bills, "rev": bb_rev, "cogs": x["cogs"] or 0,
+                "gp": bb_gp, "gm_pct": round(bb_gp / bb_rev * 100, 1) if bb_rev else None,
+                "gp_per_bill": round(bb_gp / bb_bills) if bb_bills else None,
+                "loss_bills": x["loss_bills"] or 0, "cust": x["cust"] or 0,
+            })
+        by_branch.sort(key=lambda r: (r["gm_pct"] if r["gm_pct"] is not None else 999))
         # ALL loss-making bills (COGS > revenue, i.e. negative gross profit). Capped
         # high for safety; loss_count/loss_total report the true totals regardless.
         loss = rows_for(" AND c.cogs_bom > t.total_inc_vat/1.07", "LIMIT 2000")
         ls = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(c.cogs_bom - t.total_inc_vat/1.07)) loss
                              {JN} AND c.cogs_bom > t.total_inc_vat/1.07""", params).fetchone()
     return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()],
-            "summary": summary, "dist": dist, "worst": worst,
+            "summary": summary, "dist": dist, "worst": worst, "by_branch": by_branch,
             "loss": loss, "loss_count": (ls["n"] or 0) if ls else 0,
             "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000}
 
