@@ -1902,7 +1902,8 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
 
 
 @app.get("/api/extra/closing-time")
-def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                       date: Optional[str] = Query(None)):
     """Per-branch data freshness + typical shop closing time.
 
     Surfaces the data-lag issue: each branch's LATEST transaction (all-time) shows
@@ -1910,26 +1911,62 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
     maximum has not reported / synced recent sales. The typical closing time (avg
     of each day's last bill over the trailing 30 days) is the operational read —
     times before 06:00 are treated as after-midnight closes (+24h) so a 01:30 close
-    sorts after a 23:00 one rather than looking like the earliest open."""
+    sorts after a 23:00 one rather than looking like the earliest open.
+
+    When ``date`` (YYYY-MM-DD) is given, switches to single-day mode: for that exact
+    date it shows each branch's last-bill time + bill count and flags branches that
+    posted NO data that day (mode='date'). Use it to inspect a specific day's gaps,
+    e.g. which branches reported on 2026-06-04."""
     filt = ["b.name!='ALL'"]; p: dict = {}
     if branch: filt.append("b.name=:branch"); p["branch"] = branch
     _group_filter(filt, p, group)
     tw = " AND ".join(filt)
     import datetime as _dt
     with get_db() as con:
-        dm = con.execute("SELECT MAX(sold_at) mx FROM sales_transaction").fetchone()["mx"]
+        bounds = con.execute("SELECT MAX(sold_at) mx, MIN(sold_at) mn FROM sales_transaction").fetchone()
+        dm = bounds["mx"]
         if not dm:
             return {"data_max": None, "today": _dt.date.today().isoformat(),
                     "branches": [], "summary": {}}
         data_max_date = dm[:10]
+        data_min_date = (bounds["mn"] or dm)[:10]
         d_hi = _dt.date(*(int(x) for x in data_max_date.split("-")))
         since = (d_hi - _dt.timedelta(days=30)).isoformat()
 
-        # All-time latest per branch (freshness) + lifetime bill count.
+        # All-time latest per branch (freshness) + lifetime bill count. This is also
+        # the branch universe — so single-day mode can flag branches with NO data.
         last_rows = {r["branch"]: r for r in con.execute(
             f"""SELECT b.name branch, MAX(t.sold_at) last_sold, COUNT(*) total_bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {tw} GROUP BY b.name""", p).fetchall()}
+
+        # ── Single-day mode ──────────────────────────────────────────────────
+        if date:
+            day_rows = {r["branch"]: r for r in con.execute(
+                f"""SELECT b.name branch, MAX(t.sold_at) day_last, COUNT(*) day_bills
+                    FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {tw} AND substr(t.sold_at,1,10)=:date
+                    GROUP BY b.name""", {**p, "date": date}).fetchall()}
+            out = []; reported = missing = 0; day_bill_total = 0
+            for name, lr in last_rows.items():
+                dr = day_rows.get(name)
+                day_bills = (dr["day_bills"] if dr else 0) or 0
+                day_last = dr["day_last"] if dr else None
+                day_close = None
+                if day_last:
+                    day_close = f"{day_last[11:13]}:{day_last[14:16]}"
+                rep = day_bills > 0
+                reported += int(rep); missing += int(not rep); day_bill_total += day_bills
+                out.append({"branch": name, "day_bills": day_bills, "day_last": day_last,
+                            "day_close": day_close, "last_sold": lr["last_sold"],
+                            "status": "reported" if rep else "missing"})
+            # Missing branches first (the gaps you came to see), then by name.
+            out.sort(key=lambda r: (r["status"] != "missing", r["branch"]))
+            return {"mode": "date", "date": date, "data_max": dm,
+                    "data_max_date": data_max_date, "data_min_date": data_min_date,
+                    "today": _dt.date.today().isoformat(), "branches": out,
+                    "summary": {"reported": reported, "missing": missing,
+                                "branch_count": len(out), "day_bills": day_bill_total}}
 
         # Trailing-30d typical close: average of each day's last-bill time-of-day.
         close_rows = {r["branch"]: r for r in con.execute(
@@ -1980,8 +2017,8 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
     branches.sort(key=lambda r: (-(r["days_behind"] if r["days_behind"] is not None else 9999)))
     summary = {"behind": behind, "current": current, "max_days_behind": max_behind,
                "branch_count": len(branches)}
-    return {"data_max": dm, "data_max_date": data_max_date,
-            "today": _dt.date.today().isoformat(),
+    return {"mode": "latest", "data_max": dm, "data_max_date": data_max_date,
+            "data_min_date": data_min_date, "today": _dt.date.today().isoformat(),
             "branches": branches, "summary": summary}
 
 

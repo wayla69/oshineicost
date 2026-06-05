@@ -1439,21 +1439,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <!-- ══ 🧩 EXTRA: ⏰ เวลาปิดร้าน / ความสดของข้อมูล ══ -->
 <div id="tab-closetime" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เลือกวันที่:</span>
+    <input type="date" id="ctmDate" onchange="loadCloseTime(true)"
+      style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <button onclick="document.getElementById('ctmDate').value='';loadCloseTime(true)"
+      style="border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
     <span id="ctmFresh" class="text-xs font-semibold" style="color:var(--text-secondary)"></span>
-    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">ข้อมูลล่าสุดต่อสาขา (all-time) · เวลาปิด = เฉลี่ยเวลาบิลใบสุดท้ายของแต่ละวัน 30 วันล่าสุด</span>
+    <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
   </div>
   <div id="ctmKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div class="card p-5 overflow-x-auto">
-    <h2 class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
-    <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-      <th class="py-1.5 pr-2">สาขา</th>
-      <th class="py-1.5 pr-2">สถานะ</th>
-      <th class="py-1.5 pr-2">ข้อมูลล่าสุด</th>
-      <th class="py-1.5 pr-2 text-right">ล่าช้า (วัน)</th>
-      <th class="py-1.5 pr-2 text-right">เวลาปิดเฉลี่ย</th>
-      <th class="py-1.5 pr-2 text-right">วันเปิด (30วัน)</th>
-      <th class="py-1.5 text-right">บิลรวม</th>
-    </tr></thead><tbody id="ctmRows"></tbody></table>
+    <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
+    <table class="text-xs w-full"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
   </div>
 </div>
 
@@ -14400,22 +14397,61 @@ async function loadCancelBill(force) {
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
-// ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch)
+// ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)
 async function loadCloseTime(force) {
-  const _fk = _filterKey();
+  const dateSel = document.getElementById('ctmDate')?.value || '';
+  const _fk = _filterKey() + '|' + dateSel;
   if (!force && _tabLastKey.closetime === _fk) return; _tabLastKey.closetime = _fk;
   const p = new URLSearchParams();
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
+  if (dateSel) p.set('date', dateSel);
   let d; try { d = await fetch(`${API}/api/extra/closing-time?${p}`).then(r => r.json()); } catch (e) { return; }
   const s = d.summary || {};
+  const head = document.getElementById('ctmHead');
+  const title = document.getElementById('ctmTitle');
+  // Constrain the date picker to the available data window.
+  const di = document.getElementById('ctmDate');
+  if (di) { if (d.data_min_date) di.min = d.data_min_date; if (d.today) di.max = d.today; }
   document.getElementById('ctmFresh').textContent =
     d.data_max ? `ข้อมูลล่าสุดทั้งระบบ: ${d.data_max}  ·  วันนี้: ${d.today}` : 'ไม่มีข้อมูล';
+  const TH = (cols) => '<tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">' +
+    cols.map(c => `<th class="py-1.5 pr-2${c.r ? ' text-right' : ''}">${c.t}</th>`).join('') + '</tr>';
+
+  if (d.mode === 'date') {
+    // ── Single-day mode ──
+    title.textContent = `รายสาขา — วันที่ ${d.date} (บนสุด = ไม่มีข้อมูลวันนี้)`;
+    document.getElementById('ctmKpis').innerHTML = [
+      _extKpi('สาขาทั้งหมด', fmtN(s.branch_count || 0), 'ที่มีข้อมูลขาย', '#0891b2'),
+      _extKpi('มีข้อมูลวันนี้', fmtN(s.reported || 0), `วันที่ ${d.date}`, '#10b981'),
+      _extKpi('ไม่มีข้อมูล', fmtN(s.missing || 0), 'สาขาที่ไม่มีบิลวันนี้', s.missing ? '#ef4444' : '#94a3b8'),
+      _extKpi('บิลรวมวันนี้', fmtN(s.day_bills || 0), 'ทุกสาขารวมกัน', '#7c3aed'),
+    ].join('');
+    head.innerHTML = TH([{t:'สาขา'},{t:'สถานะ'},{t:'เวลาปิด (วันนี้)',r:1},{t:'บิล (วันนี้)',r:1},{t:'ข้อมูลล่าสุด (all-time)'}]);
+    document.getElementById('ctmRows').innerHTML = (d.branches || []).map(r => {
+      const rep = r.status === 'reported';
+      const bdg = rep
+        ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#dcfce7;color:#15803d">มีข้อมูล</span>'
+        : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#fee2e2;color:#b91c1c">ไม่มีข้อมูล</span>';
+      return `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
+        <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+        <td class="py-1.5 pr-2">${bdg}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${r.day_close || '—'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${rep ? '#0f172a' : '#ef4444'}">${rep ? fmtN(r.day_bills) : '0'}</td>
+        <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${esc(r.last_sold || '—')}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+    return;
+  }
+
+  // ── Latest / freshness mode (default) ──
+  title.textContent = 'รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)';
   document.getElementById('ctmKpis').innerHTML = [
     _extKpi('สาขาทั้งหมด', fmtN(s.branch_count || 0), 'ที่มีข้อมูลขาย', '#0891b2'),
     _extKpi('อัปเดตล่าสุด', fmtN(s.current || 0), 'ข้อมูลถึงวันล่าสุด', '#10b981'),
     _extKpi('ข้อมูลล่าช้า', fmtN(s.behind || 0), 'ยังไม่ sync วันล่าสุด', s.behind ? '#ef4444' : '#94a3b8'),
     _extKpi('ค้างนานสุด', (s.max_days_behind || 0) + ' วัน', 'จากวันข้อมูลล่าสุด', s.max_days_behind ? '#f59e0b' : '#94a3b8'),
   ].join('');
+  head.innerHTML = TH([{t:'สาขา'},{t:'สถานะ'},{t:'ข้อมูลล่าสุด'},{t:'ล่าช้า (วัน)',r:1},{t:'เวลาปิดเฉลี่ย',r:1},{t:'วันเปิด (30วัน)',r:1},{t:'บิลรวม',r:1}]);
   const badge = st => {
     if (st === 'current')  return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#dcfce7;color:#15803d">อัปเดต</span>';
     if (st === 'inactive') return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#e2e8f0;color:#475569">ไม่เคลื่อนไหว</span>';
