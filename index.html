@@ -3333,6 +3333,22 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
+  <!-- Discount reason / type (Sale.DiscountReasonId → DiscountSaleReason) -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🏷️ ประเภทส่วนลด (เหตุผลที่เลือกใน POS)</h2>
+      <span id="disc-reason-note" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p>
+    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
+    <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
+      <thead><tr>
+        <th>เหตุผล</th><th class="num">บิล</th><th class="num">มูลค่าลด</th><th class="num">% ของเงินลด</th><th>สัดส่วน</th>
+      </tr></thead>
+      <tbody id="disc-reason-body"></tbody>
+    </table></div>
+  </div>
+
   <div class="card p-5 mb-5 overflow-x-auto">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <h2 class="section-title mb-0">แคชเชียร์ส่วนลดสูงสุด</h2>
@@ -15614,7 +15630,6 @@ async function cancelBillDrill(branch, month) {
     <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
     <td class="py-1.5 pr-3">${esc(x.reason)}</td>
     <td class="py-1.5 pr-3">${x.cancel_user ? esc(x.cancel_user) : '<span class="text-slate-300">—</span>'}</td>
-    <td class="py-1.5 pr-3">${x.cancel_staff ? esc(x.cancel_staff) : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
   body.innerHTML = `<div style="padding:4px 8px">
     <div class="flex gap-4 text-sm mb-3 flex-wrap">
@@ -15622,8 +15637,8 @@ async function cancelBillDrill(branch, month) {
       <span class="text-slate-500">มูลค่ารวม: <b style="color:#ef4444">${fmt(total)}</b></span>
     </div>
     <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล <span class="text-[10px] text-slate-400">(login)</span></th><th class="py-1.5 pr-3">พนักงานหลัก <span class="text-[10px] text-slate-400">(รายคน)</span></th><th class="py-1.5 text-right">มูลค่า</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
+      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล <span class="text-[10px] text-slate-400">(login)</span></th><th class="py-1.5 text-right">มูลค่า</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
     <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
 
@@ -18598,6 +18613,43 @@ async function loadChildBuffet() {
   }).join('');
 }
 
+async function loadDiscountReasons(params) {
+  const body = document.getElementById('disc-reason-body');
+  const cards = document.getElementById('disc-reason-cards');
+  const note = document.getElementById('disc-reason-note');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
+  let d; try { d = await fetch(`${API}/api/analysis/discount-reasons?${params}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (d.staged === false) {
+    if (note) note.textContent = '';
+    cards.innerHTML = '';
+    body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">ยังไม่มีข้อมูล — รัน sync รอบใหม่เพื่อเก็บประเภทส่วนลด</td></tr>';
+    return;
+  }
+  const reasons = d.reasons || [];
+  if (note) note.textContent = `${fmtN(d.total_bills || 0)} บิลมีส่วนลด · รวม ${fmt(d.total_amount || 0)}`;
+  const untyped = reasons.find(r => r.reason_id === 0);
+  const typedAmt = (d.total_amount || 0) - ((untyped && untyped.amount) || 0);
+  cards.innerHTML = [
+    { l: 'มูลค่าลดทั้งหมด', v: fmt(d.total_amount || 0), s: `${fmtN(d.total_bills || 0)} บิล`, c: '#ef4444' },
+    { l: '⚠️ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
+    { l: '✓ ระบุเหตุผล', v: (d.total_amount ? (100 - (d.untyped_pct || 0)).toFixed(1) + '%' : '—'), s: fmt(typedAmt), c: '#10b981' },
+  ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+  const maxAmt = Math.max(1, ...reasons.map(r => r.amount || 0));
+  body.innerHTML = reasons.map(r => {
+    const unty = r.reason_id === 0;
+    const w = Math.round(100 * (r.amount || 0) / maxAmt);
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:#f59e0b' : ''}">${unty ? '⚠️ ' : ''}${esc(r.reason)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.amount)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${r.pct}%</td>
+      <td class="py-1.5 pr-2" style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${unty ? '#f59e0b' : '#6366f1'}"></div></div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
+}
+
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const params = new URLSearchParams();
@@ -18605,6 +18657,7 @@ async function loadDiscountsTab() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
+  loadDiscountReasons(new URLSearchParams(params));
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   const o = d.overall || {};
 

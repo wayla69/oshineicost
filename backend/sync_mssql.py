@@ -507,27 +507,45 @@ def stage_extra(sq, mc, since, bid_map, item_map):
          for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_cancel_bill: {len(rows)} groups")
 
+    # ── pos_discount_reason: discount-reason lookup (Sale.DiscountReasonId -> name) ──
+    #    e.g. "ส่วนลด 10%", "ส่วนลดด่วน". ReasonId 0 = no reason set on the bill.
+    sq.executescript("DROP TABLE IF EXISTS pos_discount_reason; CREATE TABLE pos_discount_reason("
+                     "reason_id INT PRIMARY KEY, reason_desc TEXT, amount_percent REAL);")
+    drrows = run("SELECT ReasonId rid, ReasonDesc rd, CAST(ISNULL(AmountPercent,0) AS float) pct FROM DiscountSaleReason", ())
+    sq.executemany("INSERT OR REPLACE INTO pos_discount_reason VALUES(?,?,?)",
+        [(r["rid"], _th(r["rd"]), r["pct"] or 0) for r in drrows])
+    print(f"        pos_discount_reason: {len(drrows)} rows")
+
+    # ── pos_discount_month: discounted BILLS per branch/month/reason (Sale.Discount>0).
+    #    Surfaces "why was it discounted" — reason_id 0 = untyped (no reason chosen). ──
+    sq.executescript("DROP TABLE IF EXISTS pos_discount_month; CREATE TABLE pos_discount_month("
+                     "branch_id INT, period_month TEXT, reason_id INT, bills INT, amount REAL);")
+    rows = run(f"""SELECT s.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, ISNULL(s.DiscountReasonId,0) rid,
+                 COUNT(*) n, SUM(CAST(s.Discount AS float)) amt
+                 FROM Sale s WHERE {SALE_FILTER} AND s.Discount>0 AND s.SaleDate >= %s
+                 GROUP BY s.BranchId, CONVERT(char(7),s.SaleDate,126), ISNULL(s.DiscountReasonId,0)""")
+    sq.executemany("INSERT INTO pos_discount_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["rid"], r["n"], round(r["amt"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_discount_month: {len(rows)} groups")
+
     # ── pos_cancel_bill_detail: INDIVIDUAL voided bills (TOP 20000 most recent) so the
     #    UI can drill per-bill to inspect each error. Bounded for size. ──
     # Sale has no dedicated "delete user" column (only DeleteReasonId/Notes/Date), so the
     # best "who" for a voided bill is the login user who owned it: Sale.UserId -> Users.Username.
-    # cancel_user = login user (often a role account: admin/Manager/Cashier).
-    # cancel_staff = the INDIVIDUAL who handled the bill: the SaleItemStaff.StaffName with the
-    #   largest total Qty on that bill (the main server). Login users are shared role accounts,
-    #   so this is the closest per-person attribution the POS exposes for a voided bill.
+    # NOTE: individual (per-person) attribution is NOT possible in this POS — the Staff
+    # master table is empty and SaleItemStaff.StaffName is blank for all rows, so cancel_user
+    # (a shared login/role account) is the only "who" available.
     sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
-                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT, cancel_staff TEXT);")
+                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT);")
     drows = run("""SELECT TOP 20000 s.BranchId bid, CONVERT(char(19),s.SaleDate,126) dt, s.SaleNum num,
                  ISNULL(s.DeleteReasonId,0) rid, CAST(ISNULL(s.Total,0) AS float) amt,
-                 LTRIM(RTRIM(COALESCE(u.Username,''))) duser,
-                 (SELECT TOP 1 LTRIM(RTRIM(sis.StaffName)) FROM SaleItemStaff sis
-                    WHERE sis.SaleId=s.SaleId AND sis.BranchId=s.BranchId AND LTRIM(RTRIM(ISNULL(sis.StaffName,'')))<>''
-                    GROUP BY sis.StaffName ORDER BY SUM(CAST(sis.Qty AS float)) DESC) dstaff
+                 LTRIM(RTRIM(COALESCE(u.Username,''))) duser
                  FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
                  WHERE ISNULL(s.Active,1)=0 AND s.SaleDate >= %s ORDER BY s.SaleDate DESC""")
-    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?,?)",
+    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2),
-          (r["duser"] or None), (r["dstaff"] or None))
+          (r["duser"] or None))
          for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_cbd_branch ON pos_cancel_bill_detail(branch_id, period_month)")
     print(f"        pos_cancel_bill_detail: {len(drows)} bills")
