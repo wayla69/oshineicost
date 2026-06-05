@@ -169,8 +169,10 @@ def main():
         SELECT s.BranchId AS bid, s.SaleId AS sid, s.SaleNum AS num, s.SaleDate AS dt,
                s.NumOfCust AS cust, CAST(s.Discount AS float) AS disc,
                CAST(ISNULL(s.ServiceChargeAmount,0) AS float) AS svc,
-               CAST(ISNULL(s.TipsAmount,0) AS float) AS tip, CAST(s.Total AS float) AS total
-        FROM Sale s WHERE {SALE_FILTER} AND s.SaleDate >= %s
+               CAST(ISNULL(s.TipsAmount,0) AS float) AS tip, CAST(s.Total AS float) AS total,
+               LTRIM(RTRIM(COALESCE(u.Username,''))) AS cashier
+        FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
+        WHERE {SALE_FILTER} AND s.SaleDate >= %s
     """, (args.since,))
     txr = []
     for r in mc.fetchall():
@@ -181,7 +183,7 @@ def main():
         dt = r["dt"]
         sold = dt.strftime("%Y-%m-%d %H:%M:%S") if hasattr(dt, "strftime") else str(dt)
         receipt = f"{sold[:10]}-{r['num']}-{r['sid']}"
-        txr.append((bid, receipt, sold, "", "", r["cust"] or 0,
+        txr.append((bid, receipt, sold, r["cashier"] or "", "", r["cust"] or 0,
                     round(f, 2), round(d, 2), round(o, 2), round(r["tip"] or 0, 2),
                     0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy"))
     sq.execute("DELETE FROM sales_transaction")
@@ -507,31 +509,18 @@ def stage_extra(sq, mc, since, bid_map, item_map):
 
     # ── pos_cancel_bill_detail: INDIVIDUAL voided bills (TOP 20000 most recent) so the
     #    UI can drill per-bill to inspect each error. Bounded for size. ──
-    # Discover the delete/void-user column on Sale (its name varies by POS build). We stage
-    # NULL when none of the candidates exist, so the sync never crashes on a wrong guess.
-    _del_user_col = None
-    try:
-        mc.execute("""SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
-                      WHERE TABLE_NAME='Sale' AND COLUMN_NAME IN
-                      ('DeleteUserName','DeleteUser','DeleteBy','DeleteStaffName','CancelUserName',
-                       'CancelBy','DeleteUserId','DeleteStaffId','CancelUserId')""")
-        cand = {r[0] for r in mc.fetchall()}
-        for pref in ('DeleteUserName','DeleteUser','DeleteBy','DeleteStaffName','CancelUserName',
-                     'CancelBy','DeleteUserId','DeleteStaffId','CancelUserId'):
-            if pref in cand:
-                _del_user_col = pref; break
-    except Exception:
-        _del_user_col = None
-    print(f"        void delete-user column: {_del_user_col or '(none found - staging NULL)'}")
+    # Sale has no dedicated "delete user" column (only DeleteReasonId/Notes/Date), so the
+    # best "who" for a voided bill is the login user who owned it: Sale.UserId -> Users.Username.
     sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
                      "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT);")
-    _du_sel = f"CAST({_del_user_col} AS NVARCHAR(120))" if _del_user_col else "NULL"
-    drows = run(f"""SELECT TOP 20000 BranchId bid, CONVERT(char(19),SaleDate,126) dt, SaleNum num,
-                 ISNULL(DeleteReasonId,0) rid, CAST(ISNULL(Total,0) AS float) amt, {_du_sel} duser
-                 FROM Sale WHERE ISNULL(Active,1)=0 AND SaleDate >= %s ORDER BY SaleDate DESC""")
+    drows = run("""SELECT TOP 20000 s.BranchId bid, CONVERT(char(19),s.SaleDate,126) dt, s.SaleNum num,
+                 ISNULL(s.DeleteReasonId,0) rid, CAST(ISNULL(s.Total,0) AS float) amt,
+                 LTRIM(RTRIM(COALESCE(u.Username,''))) duser
+                 FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
+                 WHERE ISNULL(s.Active,1)=0 AND s.SaleDate >= %s ORDER BY s.SaleDate DESC""")
     sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2),
-          ((str(r["duser"]).strip() or None) if r["duser"] is not None else None))
+          (r["duser"] or None))
          for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_cbd_branch ON pos_cancel_bill_detail(branch_id, period_month)")
     print(f"        pos_cancel_bill_detail: {len(drows)} bills")
