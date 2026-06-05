@@ -4056,25 +4056,24 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div id="rptBranchProfile" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
     </div>
 
-    <!-- §4 Menu Engineering -->
+    <!-- §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (same view as Menu tab; shared renderer) -->
     <div class="card p-6" id="rpt4">
-      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">4. Menu Engineering Snapshot</h2>
-      <div class="grid grid-cols-4 gap-3 mb-4" id="rptQuadCounts"></div>
-      <table class="text-sm text-slate-700 w-full">
-        <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
-          <th class="py-2 pr-4">#</th>
-          <th class="py-2 pr-4">SKU</th>
-          <th class="py-2 pr-4">Description</th>
-          <th class="py-2 pr-4">Category</th>
-          <th class="py-2 pr-4 text-right">Qty</th>
-          <th class="py-2 pr-4 text-right">Revenue</th>
-          <th class="py-2 pr-4 text-right">Margin %</th>
-          <th class="py-2 pr-4 text-right">ต้นทุน BoM</th>
-          <th class="py-2 pr-4 text-right">% ต้นทุนรวม</th>
-          <th class="py-2 text-center">Quad</th>
-        </tr></thead>
-        <tbody id="rptSkuBody"></tbody>
-      </table>
+      <h2 class="text-base font-bold text-slate-700 mb-1 pb-2 border-b border-slate-100">4. Top 60 เมนู — เทียบต้นทุนต่อหัว <span class="text-xs font-normal text-slate-400">· <span id="rpt4MomNote">เทียบเดือนก่อน</span></span></h2>
+      <p id="rpt4Note" class="text-[11px] text-slate-400 mb-3"></p>
+      <div class="overflow-x-auto">
+        <table class="tbl-top60 w-full" id="rpt4Table">
+          <thead><tr>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">ต้นทุน/หัว</th>
+            <th class="num">% ของต้นทุนรวม</th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
+            <th class="num">ต้นทุน/หัว<span class="sub">เดือนก่อน (ช่วงเดียวกัน)</span></th>
+            <th class="num">เปลี่ยนแปลง %<span class="sub">ต้นทุน/หัว · ขึ้น = แย่</span></th>
+          </tr></thead>
+          <tbody id="rpt4Body"></tbody>
+          <tfoot id="rpt4Foot"></tfoot>
+        </table>
+      </div>
     </div>
 
     <!-- §5 Customer Behavior -->
@@ -8371,18 +8370,21 @@ function _renderTop60Sales(d) {
   </tr>`;
 }
 
-function _renderTop60CostHead(d) {
+function _renderTop60CostHead(d, ids) {
+  // ids lets a second placement (e.g. §4 of the Analysis Report) reuse this exact
+  // renderer so the numbers match the Menu tab. Defaults to the Menu-tab elements.
+  ids = ids || { body:'costHeadBody', foot:'costHeadFoot', momNote:'costHeadMomNote', note:'costHeadNote' };
   const items = (d && d.items) || [];
   const covers = (d && d.total_covers) || 0;
   const cCur = (d && d.cmp_covers_cur) || 0, cPrev = (d && d.cmp_covers_prev) || 0;
   const coversRatio = (cCur > 0 && cPrev > 0) ? cPrev / cCur : null;   // prev ÷ cur
-  const noteEl = document.getElementById('costHeadMomNote');
+  const noteEl = document.getElementById(ids.momNote);
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'เทียบ ');
-  const cn = document.getElementById('costHeadNote');
+  const cn = document.getElementById(ids.note);
   if (cn) cn.textContent = covers
     ? `ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)`
     : 'ต้นทุน/หัว: ไม่มีข้อมูลจำนวนลูกค้าในช่วงนี้';
-  const body = document.getElementById('costHeadBody'), foot = document.getElementById('costHeadFoot');
+  const body = document.getElementById(ids.body), foot = document.getElementById(ids.foot);
   if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
   const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
   let sumCur = 0, sumPrev = 0, sumShare = 0, cum = 0;
@@ -8928,7 +8930,7 @@ async function loadReport() {
   // Sticky section nav — clickable chips that scroll to each §
   const topics = [
     'สรุปผู้บริหาร','รายได้และการเติบโต','อันดับสาขา',
-    'วิเคราะห์เมนู','พฤติกรรมลูกค้า','เวลาและการดำเนินงาน',
+    'ต้นทุน/หัว เมนู','พฤติกรรมลูกค้า','เวลาและการดำเนินงาน',
     'รายได้ตามวันและเวลา','ต้นทุนเมนูสูง','ราคาและส่วนลด','พยากรณ์และข้อเสนอแนะ',
   ];
   document.getElementById('rptNavInner').innerHTML = topics.map((t,i) =>
@@ -8955,6 +8957,7 @@ async function loadReport() {
     summary, trend, skus, cats, persona,
     branches, yoy, costAnalysis, costPrior,
     timeHourly, timeDow, discounts, anomalies, forecast, forecastBranches,
+    costHead,
   ] = await Promise.all([
     fetch(`${API}/api/summary${qpStr}`).then(r=>r.json()),
     fetch(`${API}/api/sales/monthly${qpStr}`).then(r=>r.json()),
@@ -8971,6 +8974,7 @@ async function loadReport() {
     fetch(`${API}/api/analysis/anomalies${qpStr}`).then(r=>r.json()).catch(()=>[]),
     fetch(`${API}/api/analysis/forecast${branch?'?branch='+encodeURIComponent(branch):''}`).then(r=>r.json()).catch(()=>({available:false})),
     fetch(`${API}/api/analysis/forecast_branches${getGroup()?'?group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
+    fetch(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).then(r=>r.json()).catch(()=>null),
   ]);
 
   // Full monthly history (branch/group only, no month-range) so MoM/YTD framing
@@ -9251,43 +9255,12 @@ async function loadReport() {
     }).join('');
   })();
 
-  // ── §4 Menu Engineering — use food items from costAnalysis (excludes BUFFET/drinks)
+  // ── §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (reuses the Menu tab's renderer so the
+  // numbers are identical; fed by /api/sales/top_ordered?sort=cogs with covers).
+  _renderTop60CostHead(costHead, { body:'rpt4Body', foot:'rpt4Foot', momNote:'rpt4MomNote', note:'rpt4Note' });
+  // costAnalysis food items (with menu-engineering quadrant) still power the §10
+  // Action Items below — keep them available.
   const items = costAnalysis.items || [];
-  const quads = ['star','puzzle','plowhorse','dog','uncosted'];
-  const quadEmoji = { star:'⭐', puzzle:'🔮', plowhorse:'🐴', dog:'🐕', uncosted:'⚪' };
-  const quadColor = { star:'#10b981', puzzle:'#4f46e5', plowhorse:'#f59e0b', dog:'#ef4444', uncosted:'#94a3b8' };
-  document.getElementById('rptQuadCounts').innerHTML = quads.map(q => {
-    const n = items.filter(r=>r.quadrant===q).length;
-    return `<div class="text-center p-3 bg-slate-50 rounded-lg" style="border-top:2px solid ${quadColor[q]}">
-      <p class="text-xs text-slate-500 mb-1">${quadEmoji[q]} ${q[0].toUpperCase()+q.slice(1)}</p>
-      <p class="text-xl font-bold" style="color:${quadColor[q]}">${n}</p>
-    </div>`;
-  }).join('');
-  // Top 20 by qty (most ordered food items) — shows what customers actually eat most.
-  // % ต้นทุนรวม = this SKU's BoM COGS as a share of ALL menu BoM COGS in the period.
-  // Uses bom_cogs (raw unified recipe cost) so recipe-costed items are not dropped —
-  // the denominator is complete, so the percentages are accurate.
-  const totalCogs = items.reduce((a,r)=>a+(r.bom_cogs||0),0) || 0;
-  const topFoodItems = [...items].sort((a,b)=>(b.qty||0)-(a.qty||0)).slice(0,20);
-  document.getElementById('rptSkuBody').innerHTML = topFoodItems.length
-    ? topFoodItems.map((r,i) => {
-        const quad = r.quadrant || 'uncosted';
-        const bomCogs = r.bom_cogs;
-        const costPct = (bomCogs!=null && totalCogs) ? (bomCogs/totalCogs*100) : null;
-        return `<tr class="border-t border-slate-100">
-          <td class="py-2 pr-4 text-slate-400">${i+1}</td>
-          <td class="py-2 pr-4 font-mono text-indigo-600 text-xs">${r.sku_code}</td>
-          <td class="py-2 pr-4 text-xs truncate max-w-xs">${esc(r.description||'—')}</td>
-          <td class="py-2 pr-4 text-xs text-slate-500">${r.category||'—'}</td>
-          <td class="py-2 pr-4 text-right">${fmtN(r.qty||0)}</td>
-          <td class="py-2 pr-4 text-right font-semibold">${fmtN(r.revenue||0)}</td>
-          <td class="py-2 pr-4 text-right">${r.margin_pct!=null?r.margin_pct.toFixed(1)+'%':'—'}</td>
-          <td class="py-2 pr-4 text-right text-orange-700">${bomCogs?fmtN(Math.round(bomCogs)):'—'}</td>
-          <td class="py-2 pr-4 text-right font-semibold">${costPct!=null?costPct.toFixed(1)+'%':'—'}</td>
-          <td class="py-2 text-center text-xs">${quadEmoji[quad]||''}</td>
-        </tr>`;
-      }).join('')
-    : '<tr><td colspan="10" class="py-4 text-center text-xs text-slate-400">ไม่มีข้อมูลเมนู — ตรวจสอบ Cost Management หรือกำหนด SKU cost</td></tr>';
 
   // ── §5 Customer Behavior
   const o = persona.overall;
