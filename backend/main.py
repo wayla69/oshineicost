@@ -1117,6 +1117,27 @@ def top_ordered(
                 rev_mom_map[dr["sku_id"]] = ((dr["cr"] - dr["pr"]) / dr["pr"] * 100) if dr["pr"] else None
             latest = mtd["latest_month"]; prev = mtd["prev_month"]
 
+        # Covers over the SAME comparison windows used for MoM (MTD-fair when the latest
+        # month is partial) — lets the client show how each menu's cost-per-head changed,
+        # reflecting BOTH the dish's volume change and the traffic (covers) change.
+        def _covers_window(ds, de):
+            cf = ["b.name != 'ALL'", "t.source = 'Easy'", "substr(t.sold_at,1,10) BETWEEN :wf AND :wt"]
+            cp = {"wf": ds, "wt": de}
+            if branch:
+                cf.append("b.name = :wbranch"); cp["wbranch"] = branch
+            _group_filter(cf, cp, group)
+            row = con.execute(f"SELECT SUM(t.customer_count) c FROM sales_transaction t "
+                              f"JOIN branches b ON b.branch_id = t.branch_id "
+                              f"WHERE {' AND '.join(cf)}", cp).fetchone()
+            return (row["c"] or 0) if row else 0
+        cmp_covers_cur = cmp_covers_prev = 0
+        if mom_basis == "mtd" and mtd:
+            cmp_covers_cur  = _covers_window(mtd["cur_s"],  mtd["cur_e"])
+            cmp_covers_prev = _covers_window(mtd["prev_s"], mtd["prev_e"])
+        elif latest and prev:
+            cmp_covers_cur  = _covers_window(latest + "-01", latest + "-31")
+            cmp_covers_prev = _covers_window(prev   + "-01", prev   + "-31")
+
         # Sparkline: per-SKU monthly qty series (YTD / last 12 months ≤ cutoff)
         spark_map: dict = {}
         spark_months: list = []
@@ -1179,9 +1200,146 @@ def top_ordered(
         })
     return {"total_qty": total_qty, "total_rev": total_rev, "total_cogs": total_cogs,
             "total_covers": total_covers,
+            "cmp_covers_cur": cmp_covers_cur, "cmp_covers_prev": cmp_covers_prev,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
             "spark_months": spark_months, "items": items}
+
+
+# Shared aggregator for the A/B-compare endpoints: groups a sales window (month
+# range via sm, OR day range via sales_sku_daily) by an arbitrary GROUP BY column.
+def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom, dto):
+    base = list(extra_where); p = dict(p_base)
+    if dfrom or dto:
+        if dfrom: base.append("d.day>=:df"); p["df"] = dfrom
+        if dto:   base.append("d.day<=:dt"); p["dt"] = dto
+        # sales_sku_daily has no `source` column (it's Easy-only), so use a daily-specific
+        # COGS expr that drops the source check but keeps buffet-tier=0 + BoM/unit_cost logic.
+        cogs = (f"CASE WHEN (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=d.sku_id) "
+                f"IN {_EASY_TIER_CODES_SQL} THEN 0 ELSE d.qty * COALESCE("
+                f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=d.sku_id), "
+                f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
+                f"JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id "
+                f"JOIN skus s_al ON s_al.sku_id=d.sku_id WHERE a.bom_sku_code=s_al.sku_code), "
+                f"(SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id=d.sku_id), 0) END")
+        sql = (f"SELECT {gb_select}, ROUND(SUM(d.qty),2) qty, ROUND(SUM(d.subtotal_ex_vat),2) rev, "
+               f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_daily d "
+               f"JOIN branches b ON b.branch_id=d.branch_id JOIN skus sk ON sk.sku_id=d.sku_id "
+               f"JOIN categories c ON c.category_id=sk.category_id "
+               f"WHERE {' AND '.join(base)} GROUP BY {gb_col}")
+    else:
+        if mfrom: base.append("sm.period_month>=:mf"); p["mf"] = mfrom
+        if mto:   base.append("sm.period_month<=:mt"); p["mt"] = mto
+        cogs = _unified_cogs_expr("sm")
+        sql = (f"SELECT {gb_select}, ROUND(SUM(sm.qty),2) qty, ROUND(SUM(sm.subtotal_ex_vat),2) rev, "
+               f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_monthly sm "
+               f"JOIN branches b ON b.branch_id=sm.branch_id JOIN skus sk ON sk.sku_id=sm.sku_id "
+               f"JOIN categories c ON c.category_id=sk.category_id "
+               f"WHERE {' AND '.join(base)} GROUP BY {gb_col}")
+    return [dict(r) for r in con.execute(sql, p).fetchall()]
+
+
+def _cmp_pct(c, pv):
+    return round((c - pv) / pv * 100, 1) if pv else None
+
+
+def _covers_by_branch(con, mfrom, mto, dfrom, dto, group):
+    """{branch: total covers} over a month range OR a day range — for per-head views."""
+    base = ["b.name!='ALL'", "t.source='Easy'"]; p: dict = {}
+    _group_filter(base, p, group)
+    if dfrom or dto:
+        if dfrom: base.append("substr(t.sold_at,1,10)>=:cf"); p["cf"] = dfrom
+        if dto:   base.append("substr(t.sold_at,1,10)<=:ct"); p["ct"] = dto
+    else:
+        if mfrom: base.append("substr(t.sold_at,1,7)>=:cmf"); p["cmf"] = mfrom
+        if mto:   base.append("substr(t.sold_at,1,7)<=:cmt"); p["cmt"] = mto
+    rows = con.execute(f"SELECT b.name br, SUM(t.customer_count) c "
+                       f"FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id "
+                       f"WHERE {' AND '.join(base)} GROUP BY b.name", p).fetchall()
+    return {r["br"]: (r["c"] or 0) for r in rows}
+
+
+@app.get("/api/sales/menu-compare")
+def menu_compare(
+    a_from: Optional[str] = Query(None), a_to: Optional[str] = Query(None),
+    b_from: Optional[str] = Query(None), b_to: Optional[str] = Query(None),
+    a_date_from: Optional[str] = Query(None), a_date_to: Optional[str] = Query(None),
+    b_date_from: Optional[str] = Query(None), b_date_to: Optional[str] = Query(None),
+    branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+    limit:  int           = Query(60, ge=1, le=300),
+):
+    """Top-N menu items compared across two arbitrary periods A and B — each a
+    MONTH range (*_from/*_to, YYYY-MM) or a DAY range (*_date_from/*_date_to,
+    YYYY-MM-DD). Per-SKU qty/rev/cogs for each period + deltas, ranked by
+    combined volume, with a totals row over the shown rows."""
+    ew = ["b.name!='ALL'", "COALESCE(sk.active,1)=1", _FOOD_CATEGORY_FILTER]
+    pb: dict = {}
+    if branch:
+        ew.append("b.name=:br"); pb["br"] = branch
+    _group_filter(ew, pb, group)
+    sel = "sk.sku_id sku_id, sk.sku_code sku_code, sk.description description"
+    with get_db() as con:
+        A = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, a_from, a_to, a_date_from, a_date_to)}
+        B = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, b_from, b_to, b_date_from, b_date_to)}
+    items = []
+    for sid in set(A) | set(B):
+        a = A.get(sid); b = B.get(sid); meta = a or b
+        qa = (a or {}).get("qty", 0) or 0; qb = (b or {}).get("qty", 0) or 0
+        ra = (a or {}).get("rev", 0) or 0; rb = (b or {}).get("rev", 0) or 0
+        items.append({
+            "sku_id": sid, "sku_code": meta["sku_code"], "description": meta["description"],
+            "qty_a": qa, "qty_b": qb, "qty_delta_pct": _cmp_pct(qa, qb),
+            "rev_a": ra, "rev_b": rb, "rev_delta_pct": _cmp_pct(ra, rb),
+            "cogs_a": (a or {}).get("cogs", 0) or 0, "cogs_b": (b or {}).get("cogs", 0) or 0,
+            "only_in_a": b is None, "only_in_b": a is None,
+        })
+    items.sort(key=lambda r: -((r["qty_a"] or 0) + (r["qty_b"] or 0)))
+    items = items[:limit]
+    s = lambda k: round(sum(i[k] for i in items), 2)
+    totals = {"qty_a": s("qty_a"), "qty_b": s("qty_b"), "rev_a": s("rev_a"), "rev_b": s("rev_b"),
+              "cogs_a": s("cogs_a"), "cogs_b": s("cogs_b"),
+              "qty_delta_pct": _cmp_pct(s("qty_a"), s("qty_b")), "rev_delta_pct": _cmp_pct(s("rev_a"), s("rev_b"))}
+    return {"a_range": [a_from or a_date_from, a_to or a_date_to],
+            "b_range": [b_from or b_date_from, b_to or b_date_to],
+            "n": len(items), "items": items, "totals": totals}
+
+
+@app.get("/api/sales/menu-compare/drill")
+def menu_compare_drill(
+    sku_code: str = Query(...),
+    a_from: Optional[str] = Query(None), a_to: Optional[str] = Query(None),
+    b_from: Optional[str] = Query(None), b_to: Optional[str] = Query(None),
+    a_date_from: Optional[str] = Query(None), a_date_to: Optional[str] = Query(None),
+    b_date_from: Optional[str] = Query(None), b_date_to: Optional[str] = Query(None),
+    group: Optional[str] = Query(None),
+):
+    """Dive-in for ONE menu from the compare tab: per-branch A/B breakdown + a
+    full monthly trend (qty/rev/cogs). BoM detail is fetched separately from
+    /api/bom-cost/recipe/{sku_code}."""
+    ew = ["b.name!='ALL'", "sk.sku_code=:sc"]; pb = {"sc": sku_code}
+    _group_filter(ew, pb, group)
+    with get_db() as con:
+        A = {r["br"]: r for r in _menucmp_agg(con, "b.name br", "b.name", ew, pb, a_from, a_to, a_date_from, a_date_to)}
+        B = {r["br"]: r for r in _menucmp_agg(con, "b.name br", "b.name", ew, pb, b_from, b_to, b_date_from, b_date_to)}
+        covA = _covers_by_branch(con, a_from, a_to, a_date_from, a_date_to, group)
+        covB = _covers_by_branch(con, b_from, b_to, b_date_from, b_date_to, group)
+        cogs_m = _unified_cogs_expr("sm")
+        trend = [dict(r) for r in con.execute(
+            f"""SELECT sm.period_month month, ROUND(SUM(sm.qty),2) qty,
+                       ROUND(SUM(sm.subtotal_ex_vat),2) rev, ROUND(SUM({cogs_m}),2) cogs
+                FROM sales_sku_monthly sm JOIN branches b ON b.branch_id=sm.branch_id
+                JOIN skus sk ON sk.sku_id=sm.sku_id
+                WHERE {' AND '.join(ew)} GROUP BY sm.period_month ORDER BY sm.period_month""", pb).fetchall()]
+    branches = []
+    for nm in set(A) | set(B):
+        a = A.get(nm); b = B.get(nm)
+        qa = (a or {}).get("qty", 0) or 0; qb = (b or {}).get("qty", 0) or 0
+        branches.append({"branch": nm, "qty_a": qa, "qty_b": qb, "qty_delta_pct": _cmp_pct(qa, qb),
+                         "rev_a": (a or {}).get("rev", 0) or 0, "rev_b": (b or {}).get("rev", 0) or 0,
+                         "cogs_a": (a or {}).get("cogs", 0) or 0, "cogs_b": (b or {}).get("cogs", 0) or 0,
+                         "covers_a": covA.get(nm, 0), "covers_b": covB.get(nm, 0)})
+    branches.sort(key=lambda r: -((r["qty_a"] or 0) + (r["qty_b"] or 0)))
+    return {"sku_code": sku_code, "branches": branches, "trend": trend}
 
 
 @app.get("/api/sales/daily")
@@ -1301,11 +1459,18 @@ def sales_daily(
         out.sort(key=lambda r: -r["revenue"])
 
         def tot(d): return sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values())
-        crv, ccu = tot(cur); prv, _ = tot(pm); yrv, _ = tot(py)
+        crv, ccu = tot(cur); prv, pcu = tot(pm); yrv, ycu = tot(py)
+        cur_rph  = crv / ccu if ccu else None
+        prev_rph = prv / pcu if pcu else None
+        yoy_rph  = yrv / ycu if ycu else None
         total = {"revenue": round(crv, 2), "customers": ccu,
                  "rev_per_head": round(crv / ccu, 1) if ccu else None,
                  "mom_delta": round(crv - prv, 2), "mom_pct": pct(crv, prv),
-                 "yoy_delta": round(crv - yrv, 2), "yoy_pct": pct(crv, yrv)}
+                 "yoy_delta": round(crv - yrv, 2), "yoy_pct": pct(crv, yrv),
+                 # customer-count + revenue/head deltas over the SAME MTD-fair periods as revenue
+                 "cust_mom_pct": pct(ccu, pcu), "cust_yoy_pct": pct(ccu, ycu),
+                 "rph_mom_pct": pct(cur_rph, prev_rph) if cur_rph is not None else None,
+                 "rph_yoy_pct": pct(cur_rph, yoy_rph) if cur_rph is not None else None}
 
         # trailing trend (chain total rev), `trend` periods ending at focus
         tr = []; d = fdate
@@ -2097,10 +2262,15 @@ def extra_cancel_bills_detail(branch: str = Query(...), month: Optional[str] = Q
             mfilt = ""
             if month:
                 mfilt = " AND x.period_month=:m"; params["m"] = month
+            # cancel_user column only exists after a sync with the updated sync_mssql; select it
+            # defensively so the drill keeps working on an older DB that predates the column.
+            has_user = any(r[1] == "cancel_user" for r in con.execute("PRAGMA table_info(pos_cancel_bill_detail)"))
+            user_sel = "x.cancel_user" if has_user else "NULL"
             rows = [dict(r) for r in con.execute(
                 f"""SELECT x.sale_date, x.receipt_no, x.amount, x.reason_id,
                        CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
-                            ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason
+                            ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason,
+                       {user_sel} AS cancel_user
                     FROM pos_cancel_bill_detail x JOIN branches b ON b.branch_id=x.branch_id
                     LEFT JOIN pos_cancel_reason rr ON rr.reason_id=x.reason_id
                     WHERE b.name=:branch{mfilt}

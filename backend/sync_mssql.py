@@ -507,13 +507,31 @@ def stage_extra(sq, mc, since, bid_map, item_map):
 
     # ── pos_cancel_bill_detail: INDIVIDUAL voided bills (TOP 20000 most recent) so the
     #    UI can drill per-bill to inspect each error. Bounded for size. ──
+    # Discover the delete/void-user column on Sale (its name varies by POS build). We stage
+    # NULL when none of the candidates exist, so the sync never crashes on a wrong guess.
+    _del_user_col = None
+    try:
+        mc.execute("""SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                      WHERE TABLE_NAME='Sale' AND COLUMN_NAME IN
+                      ('DeleteUserName','DeleteUser','DeleteBy','DeleteStaffName','CancelUserName',
+                       'CancelBy','DeleteUserId','DeleteStaffId','CancelUserId')""")
+        cand = {r[0] for r in mc.fetchall()}
+        for pref in ('DeleteUserName','DeleteUser','DeleteBy','DeleteStaffName','CancelUserName',
+                     'CancelBy','DeleteUserId','DeleteStaffId','CancelUserId'):
+            if pref in cand:
+                _del_user_col = pref; break
+    except Exception:
+        _del_user_col = None
+    print(f"        void delete-user column: {_del_user_col or '(none found - staging NULL)'}")
     sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
-                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL);")
-    drows = run("""SELECT TOP 20000 BranchId bid, CONVERT(char(19),SaleDate,126) dt, SaleNum num,
-                 ISNULL(DeleteReasonId,0) rid, CAST(ISNULL(Total,0) AS float) amt
+                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT);")
+    _du_sel = f"CAST({_del_user_col} AS NVARCHAR(120))" if _del_user_col else "NULL"
+    drows = run(f"""SELECT TOP 20000 BranchId bid, CONVERT(char(19),SaleDate,126) dt, SaleNum num,
+                 ISNULL(DeleteReasonId,0) rid, CAST(ISNULL(Total,0) AS float) amt, {_du_sel} duser
                  FROM Sale WHERE ISNULL(Active,1)=0 AND SaleDate >= %s ORDER BY SaleDate DESC""")
-    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?)",
-        [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2))
+    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2),
+          ((str(r["duser"]).strip() or None) if r["duser"] is not None else None))
          for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_cbd_branch ON pos_cancel_bill_detail(branch_id, period_month)")
     print(f"        pos_cancel_bill_detail: {len(drows)} bills")
