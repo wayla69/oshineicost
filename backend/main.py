@@ -973,6 +973,25 @@ def top_ordered(
             {where}
         """, params).fetchone()
 
+        # Total covers (heads) in the same window — for cost-per-head normalization.
+        # All paying customers, not food-only: cost/head spreads a dish's ingredient
+        # cost across every cover served that period.
+        cov_filt = ["b.name != 'ALL'", "t.source = 'Easy'"]
+        cov_params: dict = {}
+        if branch:
+            cov_filt.append("b.name = :cbranch"); cov_params["cbranch"] = branch
+        _group_filter(cov_filt, cov_params, group)
+        _cf = month_from or month; _ct = month_to or month
+        if _cf:
+            cov_filt.append("substr(t.sold_at,1,7) >= :cmf"); cov_params["cmf"] = _cf
+        if _ct:
+            cov_filt.append("substr(t.sold_at,1,7) <= :cmt"); cov_params["cmt"] = _ct
+        cov_row = con.execute(
+            f"""SELECT SUM(t.customer_count) AS covers
+                FROM sales_transaction t JOIN branches b ON b.branch_id = t.branch_id
+                WHERE {' AND '.join(cov_filt)}""", cov_params).fetchone()
+        total_covers = (cov_row["covers"] or 0) if cov_row else 0
+
         # MoM: two most recent months present in the (branch/group) scope, ≤ month_to
         mfilt = ["b.name != 'ALL'", _FOOD_CATEGORY_FILTER]
         mparams: dict = {}
@@ -1119,6 +1138,7 @@ def top_ordered(
             "spark":         spark_map.get(r["sku_id"]) or [],
         })
     return {"total_qty": total_qty, "total_rev": total_rev, "total_cogs": total_cogs,
+            "total_covers": total_covers,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
             "spark_months": spark_months, "items": items}
