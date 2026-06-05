@@ -6217,7 +6217,20 @@ function switchTab(name) {
   // Reset buffet subtab to overview whenever user navigates to/from buffetperf
   if (name === 'buffetperf') switchBperfTab('overview');
   showLoadingBar();
-  // Re-size all chart instances so charts rendered while hidden get correct dimensions
+  // Free charts that belong to the tab we just left. Chart.js instances are not
+  // garbage-collected while registered, so without this they pile up (~80 live
+  // after a full session), each holding a resize listener that fires on every
+  // switch/resize and keeps the renderer busy. Each tab rebuilds its own charts
+  // via mkChart() when re-opened (loadActiveTab below), so dropping them is safe.
+  for (const [id, inst] of Object.entries(chartInstances)) {
+    const panel = inst && inst.canvas && inst.canvas.closest('[id^="tab-"]');
+    if (panel && panel.id !== 'tab-' + name) {
+      try { inst.destroy(); } catch(e){}
+      delete chartInstances[id];
+    }
+  }
+  // Re-size remaining (now just this tab's) charts so any rendered while hidden
+  // get correct dimensions.
   setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
   Promise.resolve(loadActiveTab()).finally(() => hideLoadingBar());
 }

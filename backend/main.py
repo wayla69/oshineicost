@@ -237,6 +237,11 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+# Compress responses (esp. the ~1.3 MB index.html and JSON API payloads). Browsers
+# that send Accept-Encoding: gzip get a ~5× smaller transfer; biggest win on the
+# Fly.io cold start. minimum_size skips tiny bodies where framing overhead dominates.
+from fastapi.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Serve vendor JS/CSS
 if STATIC.exists():
