@@ -779,6 +779,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   .page-title { font-size: 14px; }
   #globalSearch { width: 140px !important; font-size: 11px; }
   .content-area { padding: 12px; }
+
+  /* ── Responsive full-dashboard (when owner taps "เต็ม →" on a phone) ──
+     Scoped to .content-area so the dedicated mobile app (#mobileSummary) is
+     untouched. Collapses dense KPI/stat grids to 2 columns and lets wide
+     tables scroll horizontally inside their card instead of overflowing. */
+  .content-area [class*="grid-cols-3"],
+  .content-area [class*="grid-cols-4"],
+  .content-area [class*="grid-cols-5"],
+  .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .content-area .card { overflow-x: auto; }
+  .content-area canvas { max-width: 100%; }
+  #clusterBar { flex-wrap: wrap; height: auto; }
+  .cluster-tab, .gran-btn { font-size: 11px; }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -814,9 +827,23 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
 .ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 8px;
   padding: 6px 10px; font-size: 12px; font-weight: 600; }
-#backToMobile { position: fixed; bottom: 16px; right: 16px; z-index: 60;
-  width: 52px; height: 52px; border-radius: 50%; border: 0; background: #6366f1; color: #fff;
-  font-size: 22px; box-shadow: 0 4px 14px rgba(79,70,229,.5); align-items: center; justify-content: center; }
+#backToMobile { position: fixed; bottom: 84px; right: 16px; z-index: 60;
+  width: 48px; height: 48px; border-radius: 50%; border: 0; background: #6366f1; color: #fff;
+  font-size: 20px; box-shadow: 0 4px 14px rgba(79,70,229,.5); align-items: center; justify-content: center; }
+/* bottom tab bar for the mobile app */
+#msNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  background: var(--bg-card,#fff); border-top: 1px solid var(--border,#e2e8f0);
+  display: none; justify-content: space-around; padding: 5px 2px;
+  padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+#msNav button { flex: 1; background: none; border: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; font-size: 10px; color: var(--text-muted,#94a3b8); padding: 4px 0; cursor: pointer; }
+#msNav button .ic { font-size: 19px; line-height: 1; }
+#msNav button.active { color: #6366f1; font-weight: 700; }
+@media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
+#mobileSummary { padding-bottom: 80px; }
+.ms-seg { flex: 1; padding: 7px 6px; border-radius: 9px; border: 1px solid var(--border,#e2e8f0);
+  background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
+.ms-seg-on { background: #6366f1; color: #fff; border-color: #6366f1; }
 </style>
 </head>
 <body>
@@ -861,29 +888,72 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <div id="msStatus" class="ms-section" style="margin-top:8px;font-size:11px;color:var(--text-muted,#64748b)"></div>
 
-  <div class="ms-section">
-    <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+  <!-- VIEW: สรุป -->
+  <div id="msv-summary" class="ms-view">
+    <div class="ms-section">
+      <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
+    <div class="ms-section" id="msSignalsWrap" style="display:none">
+      <div class="ms-section-title">🔔 ต้องดู</div>
+      <div id="msSignals" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">🏆 ดีสุด / ⚠️ ต้องดู (เทียบเดือนก่อน)</div>
+      <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
   </div>
 
-  <div class="ms-section" id="msSignalsWrap" style="display:none">
-    <div class="ms-section-title">🔔 ต้องดู</div>
-    <div id="msSignals" class="ms-card"></div>
+  <!-- VIEW: ยอดขาย -->
+  <div id="msv-sales" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button id="msGranDay" class="ms-seg" onclick="msSetSalesGran('day')">รายวัน</button>
+        <button id="msGranMonth" class="ms-seg ms-seg-on" onclick="msSetSalesGran('month')">รายเดือน</button>
+      </div>
+      <div id="msSalesTrend" class="ms-card"></div>
+    </div>
   </div>
 
-  <div class="ms-section">
-    <div class="ms-section-title">🏆 ดีสุด / ⚠️ ต้องดู (เทียบเดือนก่อน)</div>
-    <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+  <!-- VIEW: สาขา -->
+  <div id="msv-branches" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button id="msSortRev" class="ms-seg ms-seg-on" onclick="msSetBranchSort('rev')">ยอดสูงสุด</button>
+        <button id="msSortMom" class="ms-seg" onclick="msSetBranchSort('mom')">โต/ตก %</button>
+        <button id="msSortRph" class="ms-seg" onclick="msSetBranchSort('rph')">/หัว</button>
+      </div>
+      <div id="msBranches" class="ms-card"></div>
+    </div>
   </div>
 
-  <div class="ms-section">
-    <div class="ms-section-title">🏪 รายสาขา</div>
-    <div id="msBranches" class="ms-card"></div>
+  <!-- VIEW: เมนู -->
+  <div id="msv-menu" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div class="ms-section-title">🍣 เมนูขายดี (ตามจำนวน)</div>
+      <div id="msMenu" class="ms-card"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: กำไร/ต้นทุน -->
+  <div id="msv-profit" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div id="msProfitKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"></div>
+      <div class="ms-section-title">🍽️ ต้นทุน/หัว รายสาขา</div>
+      <div id="msProfitBranches" class="ms-card"></div>
+    </div>
   </div>
 
   <div class="ms-section" style="margin-top:18px;text-align:center">
     <button onclick="showFullDashboard()" style="font-size:12px;color:var(--text-muted,#64748b);background:none;border:0;text-decoration:underline">เปิดแดชบอร์ดเต็ม (เดสก์ท็อป) →</button>
   </div>
 </div>
+<nav id="msNav">
+  <button id="msnav-summary"  class="active" onclick="msSwitchView('summary')"><span class="ic">🏠</span>สรุป</button>
+  <button id="msnav-sales"    onclick="msSwitchView('sales')"><span class="ic">📈</span>ยอดขาย</button>
+  <button id="msnav-branches" onclick="msSwitchView('branches')"><span class="ic">🏪</span>สาขา</button>
+  <button id="msnav-menu"     onclick="msSwitchView('menu')"><span class="ic">🍣</span>เมนู</button>
+  <button id="msnav-profit"   onclick="msSwitchView('profit')"><span class="ic">💰</span>กำไร</button>
+</nav>
 <button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ">📱</button>
 
 <div class="app-layout">
@@ -19611,51 +19681,77 @@ function showMobileSummary() {
   window.scrollTo(0, 0);
   loadMobileSummary(true);
 }
-let _msLoaded = false, _msBranchesFilled = false;
+
+// ── shared state + helpers ──
+let _msView = 'summary', _msMonth = null, _msBranchesFilled = false,
+    _msSalesGran = 'month', _msBranchSort = 'rev';
+function msBranch() { return document.getElementById('msBranch')?.value || ''; }
+function msPchip(v, goodUp = true) {
+  if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
+  const good = goodUp ? v >= 0 : v <= 0;
+  const c = v === 0 ? '#64748b' : good ? '#10b981' : '#ef4444';
+  const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
+  return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
+}
+function msBar(w, col) {
+  return `<div style="flex:1;background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div>`;
+}
+
+function msSwitchView(v) {
+  _msView = v;
+  ['summary', 'sales', 'branches', 'menu', 'profit'].forEach(x => {
+    const el = document.getElementById('msv-' + x); if (el) el.style.display = x === v ? '' : 'none';
+    document.getElementById('msnav-' + x)?.classList.toggle('active', x === v);
+  });
+  window.scrollTo(0, 0);
+  msRenderActive();
+}
+function msRenderActive() {
+  if (!_msMonth) { loadMobileSummary(true); return; }
+  if (_msView === 'summary')      msRenderSummary();
+  else if (_msView === 'branches') msRenderBranches();
+  else if (_msView === 'sales')    msLoadSales();
+  else if (_msView === 'menu')     msLoadMenu();
+  else if (_msView === 'profit')   msLoadProfit();
+}
+
+// ── entry point: fetch shared month payload, then render the active view ──
 async function loadMobileSummary(force) {
-  if (_msLoaded && !force) return;
-  _msLoaded = true;
   const status = document.getElementById('msStatus');
   if (status) status.textContent = 'กำลังโหลด…';
-  const br = document.getElementById('msBranch')?.value || '';
+  const br = msBranch();
   const mq = new URLSearchParams({ gran: 'month' }); if (br) mq.set('branch', br);
-  let m;
-  try { m = await fetch(`${API}/api/sales/daily?${mq}`).then(r => r.json()); }
+  try { _msMonth = await fetch(`${API}/api/sales/daily?${mq}`).then(r => r.json()); }
   catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; return; }
-  const t = m.total || {}, branches = m.branches || [];
+  const m = _msMonth;
 
-  // populate branch picker once
-  if (!_msBranchesFilled && branches.length) {
+  if (!_msBranchesFilled && (m.branches || []).length) {
     const sel = document.getElementById('msBranch');
     if (sel) {
-      branches.slice().sort((a, b) => a.branch.localeCompare(b.branch, 'th'))
+      m.branches.slice().sort((a, b) => a.branch.localeCompare(b.branch, 'th'))
         .forEach(b => { const o = document.createElement('option'); o.value = b.branch; o.textContent = b.branch; sel.appendChild(o); });
       _msBranchesFilled = true;
     }
   }
-
   document.getElementById('msSubtitle').textContent =
     (br || 'ทุกสาขา') + ' · ' + (m.mtd ? `MTD ถึงวันที่ ${m.mtd_cutoff_day}` : 'เดือนล่าสุด') + ` (${(m.focus || '').slice(0, 7)})`;
   if (status) status.textContent = `เทียบเดือนก่อนแบบ MTD-fair · อัปเดต ${(m.focus || '').slice(0, 10)}`;
+  msRenderActive();
+}
 
-  const pchip = (v, goodUp = true) => {
-    if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
-    const good = goodUp ? v >= 0 : v <= 0;
-    const c = v === 0 ? '#64748b' : good ? '#10b981' : '#ef4444';
-    const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
-    return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
-  };
+// ── VIEW: สรุป ──
+function msRenderSummary() {
+  const m = _msMonth; if (!m) return;
+  const t = m.total || {}, branches = m.branches || [];
   document.getElementById('msKpis').innerHTML = [
-    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: pchip(t.mom_pct), span: true, c: '#4338ca' },
-    { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: pchip(t.cust_mom_pct), c: '#0891b2' },
-    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: pchip(t.rph_mom_pct), c: '#7c3aed' },
+    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: msPchip(t.mom_pct), span: true, c: '#4338ca' },
+    { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: msPchip(t.cust_mom_pct), c: '#0891b2' },
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: msPchip(t.rph_mom_pct), c: '#7c3aed' },
   ].map(k => `<div class="ms-kpi" style="${k.span ? 'grid-column:1/-1;' : ''}">
-      <p class="lbl">${k.l}</p>
-      <p class="val" style="color:${k.c}">${k.v}</p>
+      <p class="lbl">${k.l}</p><p class="val" style="color:${k.c}">${k.v}</p>
       <p class="sub">${k.chip} <span style="color:var(--text-muted,#94a3b8);font-size:11px">vs เดือนก่อน</span></p>
     </div>`).join('');
 
-  // signals (anomalies)
   const sig = m.anomalies || [];
   const sw = document.getElementById('msSignalsWrap');
   if (sig.length) {
@@ -19667,23 +19763,109 @@ async function loadMobileSummary(force) {
     }).join('');
   } else { sw.style.display = 'none'; }
 
-  // best / worst by MoM
   const withMom = branches.filter(b => b.mom_pct != null);
   const best = withMom.slice().sort((a, b) => b.mom_pct - a.mom_pct)[0];
   const worst = withMom.slice().sort((a, b) => a.mom_pct - b.mom_pct)[0];
   const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border-left:4px solid ${good ? '#10b981' : '#ef4444'}">
       <p class="lbl">${good ? '🏆 โตสุด' : '⚠️ ตกสุด'}</p>
       <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)}</p>
-      <p class="sub">${pchip(b.mom_pct)} · ${fmt(b.revenue)}</p>
-    </div>`;
+      <p class="sub">${msPchip(b.mom_pct)} · ${fmt(b.revenue)}</p></div>`;
   document.getElementById('msBestWorst').innerHTML = bwCard(best, true) + bwCard(worst, false);
+}
 
-  // branch list (top by revenue)
-  document.getElementById('msBranches').innerHTML = branches.slice(0, 30).map(b => `
-    <div class="ms-row">
-      <span style="flex:1;font-size:13px;font-weight:500;color:var(--text-primary,#1e293b)">${esc(b.branch)}</span>
-      <span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>
-      ${pchip(b.mom_pct)}
+// ── VIEW: สาขา ──
+function msSetBranchSort(s) {
+  _msBranchSort = s;
+  ['rev', 'mom', 'rph'].forEach(x => document.getElementById('msSort' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', x === s));
+  msRenderBranches();
+}
+function msRenderBranches() {
+  const m = _msMonth; if (!m) return;
+  let branches = (m.branches || []).slice();
+  if (_msBranchSort === 'rev') branches.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+  else if (_msBranchSort === 'mom') branches.sort((a, b) => (b.mom_pct ?? -1e9) - (a.mom_pct ?? -1e9));
+  else if (_msBranchSort === 'rph') branches.sort((a, b) => (b.rev_per_head ?? -1e9) - (a.rev_per_head ?? -1e9));
+  const maxRev = Math.max(1, ...branches.map(b => b.revenue || 0));
+  document.getElementById('msBranches').innerHTML = branches.map(b => {
+    const right = _msBranchSort === 'rph'
+      ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
+      : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.mom_pct)}`;
+    return `<div class="ms-row">
+      <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}</span>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (b.revenue || 0) / maxRev), '#6366f1')}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${right}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: ยอดขาย (trend) ──
+function msSetSalesGran(g) {
+  _msSalesGran = g;
+  document.getElementById('msGranDay')?.classList.toggle('ms-seg-on', g === 'day');
+  document.getElementById('msGranMonth')?.classList.toggle('ms-seg-on', g === 'month');
+  msLoadSales();
+}
+async function msLoadSales() {
+  const wrap = document.getElementById('msSalesTrend');
+  wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ gran: _msSalesGran, trend: '12' });
+  const br = msBranch(); if (br) q.set('branch', br);
+  let d; try { d = await fetch(`${API}/api/sales/daily?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const tr = (d.trend || []);
+  const maxV = Math.max(1, ...tr.map(x => x.revenue || 0));
+  const lblOf = x => _msSalesGran === 'month' ? (x.start || '').slice(0, 7) : (x.start || '').slice(5, 10);
+  wrap.innerHTML = tr.map((x, i) => {
+    const w = Math.round(100 * (x.revenue || 0) / maxV);
+    const last = i === tr.length - 1;
+    return `<div class="ms-row">
+      <span style="width:58px;font-size:11px;color:var(--text-muted,#64748b)">${lblOf(x)}</span>
+      ${msBar(w, last ? '#4338ca' : '#a5b4fc')}
+      <span style="width:64px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: เมนู ──
+async function msLoadMenu() {
+  const wrap = document.getElementById('msMenu');
+  wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ sort: 'qty', limit: '20' });
+  const br = msBranch(); if (br) q.set('branch', br);
+  const mon = (_msMonth?.focus || '').slice(0, 7); if (mon) q.set('month', mon);
+  let d; try { d = await fetch(`${API}/api/sales/top_ordered?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const items = (d.items || []);
+  const maxQ = Math.max(1, ...items.map(x => x.qty || 0));
+  wrap.innerHTML = items.map((x, i) => {
+    const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
+    return `<div class="ms-row">
+      <span style="width:18px;font-size:11px;color:var(--text-muted,#94a3b8)">${i + 1}</span>
+      <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</span>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (x.qty || 0) / maxQ), '#0891b2')}</span></span>
+      <span style="width:74px;text-align:right;flex-shrink:0"><span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(x.qty || 0)}</span><br>${msPchip(x.qty_mom_pct)}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: กำไร/ต้นทุน ──
+async function msLoadProfit() {
+  const kp = document.getElementById('msProfitKpis'), br = document.getElementById('msProfitBranches');
+  kp.innerHTML = ''; br.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ gran: 'month' });
+  const b = msBranch(); if (b) q.set('branch', b);
+  let d; try { d = await fetch(`${API}/api/sales/cost-per-head?${q}`).then(r => r.json()); } catch (e) { br.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const t = d.total || {};
+  const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
+  kp.innerHTML = [
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', c: '#0891b2' },
+    { l: 'ต้นทุน/หัว (BoM)', v: t.cost_per_head != null ? fmt(t.cost_per_head) : '—', c: '#ef4444' },
+    { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', c: '#10b981' },
+    { l: 'Food cost %', v: t.cost_pct != null ? t.cost_pct + '%' : '—', c: cpColor(t.cost_pct) },
+  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${k.c}">${k.v}</p></div>`).join('');
+  const branches = (d.branches || []).filter(r => r.cost_pct != null);
+  br.innerHTML = branches.map(r => `<div class="ms-row">
+      <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
+      <span style="font-size:12px;color:var(--text-muted,#64748b);font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
+      <span class="ms-chip" style="background:${cpColor(r.cost_pct)}22;color:${cpColor(r.cost_pct)}">${r.cost_pct}%</span>
     </div>`).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
 
