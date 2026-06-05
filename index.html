@@ -780,6 +780,43 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   #globalSearch { width: 140px !important; font-size: 11px; }
   .content-area { padding: 12px; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE OWNER SUMMARY — dedicated phone-first overlay.
+   On phones it replaces the full desktop app (which is cramped on a
+   small screen); a toggle switches to the full dashboard and back.
+════════════════════════════════════════════════════════════ */
+#mobileSummary { display: none; }
+#backToMobile { display: none; }
+@media (max-width: 700px) {
+  body:not(.force-desktop) .app-layout { display: none; }
+  body:not(.force-desktop) #mobileSummary { display: block; }
+  body.force-desktop #backToMobile { display: flex; }
+}
+#mobileSummary { min-height: 100vh; background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
+.ms-header { position: sticky; top: 0; z-index: 20; background: #4338ca;
+  background: linear-gradient(135deg,#4338ca,#6366f1); color: #fff;
+  padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.ms-header .ms-logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.ms-section { padding: 0 14px; margin-top: 16px; }
+.ms-section-title { font-size: 13px; font-weight: 700; color: var(--text-primary,#1e293b); margin-bottom: 8px; }
+.ms-kpi { background: var(--bg-card,#fff); border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
+.ms-kpi .lbl { font-size: 11px; color: var(--text-muted,#64748b); }
+.ms-kpi .val { font-size: 26px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
+.ms-kpi .sub { font-size: 12px; margin-top: 3px; }
+.ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
+.ms-row:first-child { border-top: 0; }
+.ms-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; }
+.ms-card { background: var(--bg-card,#fff); border-radius: 14px; padding: 6px 16px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
+.ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600; }
+#backToMobile { position: fixed; bottom: 16px; right: 16px; z-index: 60;
+  width: 52px; height: 52px; border-radius: 50%; border: 0; background: #6366f1; color: #fff;
+  font-size: 22px; box-shadow: 0 4px 14px rgba(79,70,229,.5); align-items: center; justify-content: center; }
 </style>
 </head>
 <body>
@@ -800,6 +837,54 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <button class="retry-btn" onclick="retryConnection()">↻ Retry connection</button>
   <p style="font-size:12px;color:var(--text-muted);margin-top:4px">Auto-retrying every 5 seconds…</p>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MOBILE OWNER SUMMARY (phone-first) — see CSS block "MOBILE OWNER SUMMARY".
+     Shown instead of the full app on screens ≤700px (unless body.force-desktop).
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="mobileSummary">
+  <div class="ms-header">
+    <div class="ms-logo">お</div>
+    <div style="flex:1;min-width:0">
+      <p style="font-weight:700;font-size:15px;line-height:1.1">Oshinei</p>
+      <p id="msSubtitle" style="font-size:11px;opacity:.85">สรุปสำหรับเจ้าของ</p>
+    </div>
+    <button class="ms-toggle" onclick="loadMobileSummary(true)" aria-label="รีเฟรช">↻</button>
+    <button class="ms-toggle" onclick="showFullDashboard()">เต็ม →</button>
+  </div>
+
+  <div class="ms-section" style="margin-top:12px">
+    <select id="msBranch" onchange="loadMobileSummary(true)" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+      <option value="">🏢 ทุกสาขา</option>
+    </select>
+  </div>
+
+  <div id="msStatus" class="ms-section" style="margin-top:8px;font-size:11px;color:var(--text-muted,#64748b)"></div>
+
+  <div class="ms-section">
+    <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+  </div>
+
+  <div class="ms-section" id="msSignalsWrap" style="display:none">
+    <div class="ms-section-title">🔔 ต้องดู</div>
+    <div id="msSignals" class="ms-card"></div>
+  </div>
+
+  <div class="ms-section">
+    <div class="ms-section-title">🏆 ดีสุด / ⚠️ ต้องดู (เทียบเดือนก่อน)</div>
+    <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+  </div>
+
+  <div class="ms-section">
+    <div class="ms-section-title">🏪 รายสาขา</div>
+    <div id="msBranches" class="ms-card"></div>
+  </div>
+
+  <div class="ms-section" style="margin-top:18px;text-align:center">
+    <button onclick="showFullDashboard()" style="font-size:12px;color:var(--text-muted,#64748b);background:none;border:0;text-decoration:underline">เปิดแดชบอร์ดเต็ม (เดสก์ท็อป) →</button>
+  </div>
+</div>
+<button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ">📱</button>
 
 <div class="app-layout">
 
@@ -6604,6 +6689,8 @@ async function init() {
     document.getElementById('presetBar').classList.remove('hidden');
     loadActiveTab();
     initDataCoverageNote();
+    // Phone-first: load the mobile owner summary when on a small screen
+    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) loadMobileSummary(); } catch(e) {}
     // Periodic health check every 30 s (silent badge update only)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
@@ -15457,6 +15544,7 @@ async function cancelBillDrill(branch, month) {
     <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
     <td class="py-1.5 pr-3">${esc(x.reason)}</td>
     <td class="py-1.5 pr-3">${x.cancel_user ? esc(x.cancel_user) : '<span class="text-slate-300">—</span>'}</td>
+    <td class="py-1.5 pr-3">${x.cancel_staff ? esc(x.cancel_staff) : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
   body.innerHTML = `<div style="padding:4px 8px">
     <div class="flex gap-4 text-sm mb-3 flex-wrap">
@@ -15464,8 +15552,8 @@ async function cancelBillDrill(branch, month) {
       <span class="text-slate-500">มูลค่ารวม: <b style="color:#ef4444">${fmt(total)}</b></span>
     </div>
     <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล</th><th class="py-1.5 text-right">มูลค่า</th>
-    </tr></thead><tbody>${rows || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
+      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล <span class="text-[10px] text-slate-400">(login)</span></th><th class="py-1.5 pr-3">พนักงานหลัก <span class="text-[10px] text-slate-400">(รายคน)</span></th><th class="py-1.5 text-right">มูลค่า</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
     <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
 
@@ -19510,6 +19598,95 @@ async function openPnlDrill(branch) {
 }
 
 // ── More Analytics tab (#4 daypart, #5 mix-shift, #7 turnover, #9 forecast) ──
+// ════════════════════════════════════════════════════════════════
+// MOBILE OWNER SUMMARY
+// ════════════════════════════════════════════════════════════════
+function showFullDashboard() {
+  document.body.classList.add('force-desktop');
+  try { if (!activeTab) switchTab('home'); else loadActiveTab(); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+function showMobileSummary() {
+  document.body.classList.remove('force-desktop');
+  window.scrollTo(0, 0);
+  loadMobileSummary(true);
+}
+let _msLoaded = false, _msBranchesFilled = false;
+async function loadMobileSummary(force) {
+  if (_msLoaded && !force) return;
+  _msLoaded = true;
+  const status = document.getElementById('msStatus');
+  if (status) status.textContent = 'กำลังโหลด…';
+  const br = document.getElementById('msBranch')?.value || '';
+  const mq = new URLSearchParams({ gran: 'month' }); if (br) mq.set('branch', br);
+  let m;
+  try { m = await fetch(`${API}/api/sales/daily?${mq}`).then(r => r.json()); }
+  catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; return; }
+  const t = m.total || {}, branches = m.branches || [];
+
+  // populate branch picker once
+  if (!_msBranchesFilled && branches.length) {
+    const sel = document.getElementById('msBranch');
+    if (sel) {
+      branches.slice().sort((a, b) => a.branch.localeCompare(b.branch, 'th'))
+        .forEach(b => { const o = document.createElement('option'); o.value = b.branch; o.textContent = b.branch; sel.appendChild(o); });
+      _msBranchesFilled = true;
+    }
+  }
+
+  document.getElementById('msSubtitle').textContent =
+    (br || 'ทุกสาขา') + ' · ' + (m.mtd ? `MTD ถึงวันที่ ${m.mtd_cutoff_day}` : 'เดือนล่าสุด') + ` (${(m.focus || '').slice(0, 7)})`;
+  if (status) status.textContent = `เทียบเดือนก่อนแบบ MTD-fair · อัปเดต ${(m.focus || '').slice(0, 10)}`;
+
+  const pchip = (v, goodUp = true) => {
+    if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
+    const good = goodUp ? v >= 0 : v <= 0;
+    const c = v === 0 ? '#64748b' : good ? '#10b981' : '#ef4444';
+    const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
+    return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
+  };
+  document.getElementById('msKpis').innerHTML = [
+    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: pchip(t.mom_pct), span: true, c: '#4338ca' },
+    { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: pchip(t.cust_mom_pct), c: '#0891b2' },
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: pchip(t.rph_mom_pct), c: '#7c3aed' },
+  ].map(k => `<div class="ms-kpi" style="${k.span ? 'grid-column:1/-1;' : ''}">
+      <p class="lbl">${k.l}</p>
+      <p class="val" style="color:${k.c}">${k.v}</p>
+      <p class="sub">${k.chip} <span style="color:var(--text-muted,#94a3b8);font-size:11px">vs เดือนก่อน</span></p>
+    </div>`).join('');
+
+  // signals (anomalies)
+  const sig = m.anomalies || [];
+  const sw = document.getElementById('msSignalsWrap');
+  if (sig.length) {
+    sw.style.display = '';
+    document.getElementById('msSignals').innerHTML = sig.slice(0, 6).map(a => {
+      const bad = (a.pct || 0) < 0;
+      return `<div class="ms-row"><span style="font-size:16px">${bad ? '🔴' : '🟢'}</span>
+        <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.msg)}</span></div>`;
+    }).join('');
+  } else { sw.style.display = 'none'; }
+
+  // best / worst by MoM
+  const withMom = branches.filter(b => b.mom_pct != null);
+  const best = withMom.slice().sort((a, b) => b.mom_pct - a.mom_pct)[0];
+  const worst = withMom.slice().sort((a, b) => a.mom_pct - b.mom_pct)[0];
+  const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border-left:4px solid ${good ? '#10b981' : '#ef4444'}">
+      <p class="lbl">${good ? '🏆 โตสุด' : '⚠️ ตกสุด'}</p>
+      <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)}</p>
+      <p class="sub">${pchip(b.mom_pct)} · ${fmt(b.revenue)}</p>
+    </div>`;
+  document.getElementById('msBestWorst').innerHTML = bwCard(best, true) + bwCard(worst, false);
+
+  // branch list (top by revenue)
+  document.getElementById('msBranches').innerHTML = branches.slice(0, 30).map(b => `
+    <div class="ms-row">
+      <span style="flex:1;font-size:13px;font-weight:500;color:var(--text-primary,#1e293b)">${esc(b.branch)}</span>
+      <span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>
+      ${pchip(b.mom_pct)}
+    </div>`).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
 async function loadMoreAnalytics() {
   const gen = loadGen;
   const p = new URLSearchParams();

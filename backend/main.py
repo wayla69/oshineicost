@@ -2373,13 +2373,14 @@ def extra_cancel_bills_detail(branch: str = Query(...), month: Optional[str] = Q
                 mfilt = " AND x.period_month=:m"; params["m"] = month
             # cancel_user column only exists after a sync with the updated sync_mssql; select it
             # defensively so the drill keeps working on an older DB that predates the column.
-            has_user = any(r[1] == "cancel_user" for r in con.execute("PRAGMA table_info(pos_cancel_bill_detail)"))
-            user_sel = "x.cancel_user" if has_user else "NULL"
+            cols = {r[1] for r in con.execute("PRAGMA table_info(pos_cancel_bill_detail)")}
+            user_sel = "x.cancel_user" if "cancel_user" in cols else "NULL"
+            staff_sel = "x.cancel_staff" if "cancel_staff" in cols else "NULL"
             rows = [dict(r) for r in con.execute(
                 f"""SELECT x.sale_date, x.receipt_no, x.amount, x.reason_id,
                        CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
                             ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason,
-                       {user_sel} AS cancel_user
+                       {user_sel} AS cancel_user, {staff_sel} AS cancel_staff
                     FROM pos_cancel_bill_detail x JOIN branches b ON b.branch_id=x.branch_id
                     LEFT JOIN pos_cancel_reason rr ON rr.reason_id=x.reason_id
                     WHERE b.name=:branch{mfilt}
