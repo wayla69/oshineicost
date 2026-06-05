@@ -3962,6 +3962,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div id="foodCostInsight" class="mt-4"></div>
   </div>
 
+  <!-- Cost per head — branch comparison (extra analytical view) -->
+  <div class="card p-5 mb-5" id="cphCompareCard">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <div>
+        <h2 class="section-title mb-0">ต้นทุน/หัว เปรียบเทียบรายสาขา (BoM)</h2>
+        <p class="text-xs text-slate-400 mt-1">ต้นทุนวัตถุดิบต่อลูกค้า · แท่งแดง = สูงกว่าค่าเฉลี่ยเครือ (กินต้นทุน/หัวมาก) · เทียบ ต้นทุน/หัว ข้ามสาขาให้เห็นว่าใครคุมต้นทุนได้ดี</p>
+      </div>
+      <span id="cphCompareMonth" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="cphCompareInsight" class="mb-3"></div>
+    <div style="height:380px"><canvas id="chartCphCompare"></canvas></div>
+  </div>
+
 </div><!-- /tab-cost -->
 
 
@@ -10142,6 +10155,62 @@ async function loadCostAnalysis() {
   if (activeCostTab === 'detail')      renderCostDetail();
   if (activeCostTab === 'suggestions') renderSuggestions();
   loadFoodCostTrend();
+  renderCphCompare();
+}
+
+// Branch cost/head comparison — reuses the enriched cost-per-head endpoint.
+// Uses the selected end month (or the last COMPLETE month, to avoid a 3-day
+// partial month) so cost/head is a fair full-month figure.
+async function renderCphCompare() {
+  let month = getMonthTo() || getMonthFrom() || '';
+  if (!month) {
+    try { const w = await fetch(`${API}/api/meta/data-window`).then(r=>r.json()); month = w.last_complete_month || w.max_month || ''; }
+    catch (e) {}
+  }
+  const p = new URLSearchParams(); p.set('gran', 'month');
+  if (month) p.set('date', month + '-15');
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/sales/cost-per-head?${p}`).then(r=>r.json()); } catch (e) { return; }
+  const branches = (d.branches || []).filter(b => b.cost_per_head != null).sort((a,b)=>b.cost_per_head - a.cost_per_head);
+  const avg = (d.total || {}).cost_per_head;
+  const mLabel = (d.cur_range && d.cur_range[0]) ? (typeof fmtMonth==='function'?fmtMonth((d.cur_range[0]||'').slice(0,7)):(d.cur_range[0]||'').slice(0,7)) : (month||'');
+  const mEl = document.getElementById('cphCompareMonth'); if (mEl) mEl.textContent = `เดือน ${mLabel}${avg!=null?` · เฉลี่ยเครือ ${fmt(avg)}/หัว`:''}`;
+  const ins = document.getElementById('cphCompareInsight');
+  if (ins && branches.length >= 2 && avg != null) {
+    const hi = branches[0], lo = branches[branches.length-1];
+    ins.innerHTML = `<div class="text-xs flex flex-wrap gap-x-6 gap-y-1 p-2 rounded-lg" style="background:var(--bg-subtle)">
+      <span>🔴 สูงสุด <b>${esc(hi.branch)}</b> ${fmt(hi.cost_per_head)}/หัว (ต้นทุน ${hi.cost_pct}% · รายได้/หัว ${fmt(hi.rev_per_head)})</span>
+      <span>🟢 ต่ำสุด <b>${esc(lo.branch)}</b> ${fmt(lo.cost_per_head)}/หัว (ต้นทุน ${lo.cost_pct}%)</span>
+      <span style="color:var(--text-muted)">ช่วงห่าง ${fmt(hi.cost_per_head - lo.cost_per_head)}/หัว</span></div>`;
+  } else if (ins) { ins.innerHTML = ''; }
+  if (!branches.length) { if (chartInstances['chartCphCompare']) chartInstances['chartCphCompare'].destroy(); return; }
+  mkChart('chartCphCompare', {
+    type: 'bar',
+    data: {
+      labels: branches.map(b => b.branch),
+      datasets: [{
+        label: 'ต้นทุน/หัว (BoM)',
+        data: branches.map(b => b.cost_per_head),
+        backgroundColor: branches.map(b => (avg != null && b.cost_per_head > avg) ? '#ef4444' : '#10b981'),
+        borderRadius: 4,
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => {
+          const b = branches[ctx.dataIndex];
+          return ` ต้นทุน/หัว ${fmt(b.cost_per_head)} · ต้นทุน ${b.cost_pct}% · รายได้/หัว ${fmt(b.rev_per_head)} · GP/หัว ${fmt(b.gp_per_head)}`;
+        } } }
+      },
+      scales: {
+        x: { ticks: { callback: v => fmt(v) }, title: { display: true, text: avg!=null?`เฉลี่ยเครือ ${fmt(avg)}/หัว`:'' } },
+        y: { ticks: { font: { size: 10 }, autoSkip: false } }
+      }
+    }
+  });
 }
 
 async function loadFoodCostTrend() {
