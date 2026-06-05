@@ -2612,6 +2612,27 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <p class="text-sm text-slate-500 mb-4">รายได้ → ต้นทุน BoM → กำไรขั้นต้น → หักค่าใช้จ่ายคงที่ → กำไรจากการดำเนินงาน · ต้นทุนคำนวณจากสูตร BoM จริง</p>
   <div id="pnl-note" class="hidden mb-4 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e"></div>
   <div id="pnl-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+  <!-- 🏭 Prime Cost = Food% + Labor% (the two biggest controllable costs) -->
+  <div class="card p-5 mb-5" style="border-left:4px solid #7c3aed">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🏭 Prime Cost · ต้นทุนหลัก (Food% + Labor%)</h2>
+      <span id="primeChain" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">ต้นทุน<b>ที่ควบคุมได้</b>ที่ใหญ่สุด 2 ตัว · Food% (BoM จริง) + Labor% (จาก Settings) · เกณฑ์บุฟเฟ่ต์ AYCE: ดี &lt;70% · เฝ้าระวัง 70-78% · สูง &gt;78%</p>
+    <div id="primeBanner" class="mb-3"></div>
+    <div class="overflow-x-auto">
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th>
+        <th class="py-1.5 pr-2 text-right">รายได้</th>
+        <th class="py-1.5 pr-2 text-right">Food %</th>
+        <th class="py-1.5 pr-2 text-right">Labor %</th>
+        <th class="py-1.5 pr-2 text-right">Prime %</th>
+        <th class="py-1.5 text-right">กำไรดำเนินงาน %</th>
+      </tr></thead><tbody id="primeBody"></tbody></table>
+    </div>
+  </div>
+
   <div class="card p-4">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <div class="text-sm font-semibold text-slate-700">P&amp;L รายสาขา (เรียงตามกำไรจากการดำเนินงาน)</div>
@@ -4479,6 +4500,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <p class="text-xs text-slate-500 mt-2">📌 Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร BoM ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
+        <p class="text-[11px] mt-1" style="color:#7c3aed"><b>อัปเดต 2026-06-05 (Prime Cost):</b> ⭐ <b>🏭 Prime Cost = Food% + Labor%</b> ในแท็บ <b>P&amp;L รายสาขา</b> — ต้นทุนควบคุมได้ที่ใหญ่สุด 2 ตัว · ใส่ <b>ค่าแรงแยกจากค่าเช่า</b> ที่ <b>Settings → ค่าแรง + ค่าใช้จ่ายคงที่</b> (กรอกครั้งเดียว/สาขา) → ปลดล็อก Prime% เทียบเกณฑ์ AYCE (ดี &lt;70% · สูง &gt;78%). Food% แสดงจริงทันทีแม้ยังไม่ใส่ค่าแรง</p>
         <p class="text-[11px] mt-1" style="color:#9d174d"><b>อัปเดต 2026-06-05:</b> ⭐ <b>🍖 Heavy-Eater Margin Tail</b> + <b>⏱️ Turn-Time & Table Throughput</b> (ใน Buffet Performance → กำไร & P&L) · <b>เมนูฝั่งซ้ายกระชับขึ้น</b> — แท็บ <b>ต้นทุน</b> และ <b>กำไร & P&L</b> รวมเป็นแถบ "มุมมองที่เกี่ยวข้อง" ด้านบนของหน้า (คลิกสลับได้) · <b>⏰ เวลาปิดร้าน/ความสดข้อมูล</b> (เลือกวันที่ได้) · <b>ต้นทุน/หัว รายสาขา</b> = เครื่องมือวัดประสิทธิภาพ (รายได้/หัว, ต้นทุน%, GP/หัว, เทียบเฉลี่ยเครือ) · <b>ต้นทุน → เปรียบเทียบ ต้นทุน/หัว รายสาขา</b> · <b>P&L ต่อบิล</b> เพิ่ม margin รายสาขา · <b>รายงาน §2/§3</b> เทียบเดือนเต็มจริง (กันเดือนไม่จบ) · Extra: <b>คลิกสาขาเพื่อเจาะลึกรายวัน/รายบิล</b> (เงินสด/บิลยกเลิก) + <b>ประเภทลูกค้าแยกสาขา</b> (ยอด ex-VAT แล้ว) + ธงเตือน<b>อัตรายกเลิก</b>สูง</p>
       </div>
     </div>
@@ -4621,7 +4643,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-emerald-800 mb-1.5">💵 สาขา & กำไร</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>📊 GP รายสาขา</b> — GP/Food%/Status รายสาขา (COGS แบบ BoM), heatmap</div>
-        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>💵 P&L รายสาขา</b> — Revenue→COGS→GP→fixed→Operating Profit + 60 เมนูขับต้นทุน + top ingredients</div>
+        <div class="border border-emerald-300 rounded-lg p-2.5" style="background:#ecfdf5"><b>💵 P&L รายสาขา</b> — Revenue→COGS→GP→fixed→Operating Profit + <b>🏭 Prime Cost (Food%+Labor%) ⭐ใหม่</b> + 60 เมนูขับต้นทุน + top ingredients</div>
         <div class="border-2 border-emerald-400 rounded-lg p-2.5" style="background:#ecfdf5"><b>🧾 P&L ต่อบิล ⭐ใหม่</b> — กำไร/บิล, กำไร/หัว · <b>toggle GM ⇄ COGS</b> · การกระจาย gross margin ละเอียด (5% ใน 0–50%, 10% เหนือนั้น) <b>คลิกแถบเพื่อเจาะลึก</b> (สรุป+บิลรายใบ) · <b>บิลขาดทุนทั้งหมด</b> (COGS&gt;รายได้) + CSV</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>🏆 Benchmark สาขา</b> — KPI ข้ามสาขา, health score</div>
       </div>
@@ -5066,15 +5088,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="card p-5">
       <div class="flex items-start justify-between mb-4 flex-wrap gap-3">
         <div>
-          <h3 class="text-sm font-bold text-slate-800">🏢 ค่าใช้จ่ายคงที่ต่อสาขา (Monthly Fixed Costs)</h3>
-          <p class="text-xs text-slate-500 mt-0.5">ค่าเช่า ค่าแรง สาธารณูปโภค รวมต่อเดือน — ใช้คำนวณ Net Profit ใน Buffet Performance</p>
+          <h3 class="text-sm font-bold text-slate-800">🏢 ค่าแรง + ค่าใช้จ่ายคงที่ ต่อสาขา (Labor + Fixed Costs / month)</h3>
+          <p class="text-xs text-slate-500 mt-0.5">ใส่ <b>ค่าแรงแยกต่างหาก</b> (controllable cost ที่ใหญ่สุด) จากค่าเช่า/น้ำไฟ → ปลดล็อก <b>Prime Cost = Food% + Labor%</b> ในแท็บ P&amp;L รายสาขา · ใช้คำนวณ Net Profit ด้วย</p>
         </div>
         <div class="flex gap-2">
           <button onclick="saveFixedCosts()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg">💾 Save</button>
           <span id="fixedCostStatus" class="text-sm self-center"></span>
         </div>
       </div>
-      <div id="fixedCostRows" class="space-y-3 max-w-lg">
+      <div id="fixedCostRows" class="space-y-1 max-w-2xl">
         <p class="text-xs text-slate-400">กำลังโหลด…</p>
       </div>
     </div>
@@ -17208,49 +17230,55 @@ async function loadBomAudit(force) {
 
 // ── Fixed Costs (Settings) ───────────────────────────────────────────────
 async function loadFixedCosts() {
-  const [fcRes, brRes] = await Promise.all([
+  const [fcRes, lcRes, brRes] = await Promise.all([
     fetch(`${API}/api/branches/fixed-costs`).then(r => r.json()).catch(() => ({})),
+    fetch(`${API}/api/branches/labor-costs`).then(r => r.json()).catch(() => ({})),
     fetch(`${API}/api/branches`).then(r => r.json()).catch(() => []),
   ]);
-  // GET returns the dict directly (not wrapped)
-  const saved = (fcRes && typeof fcRes === 'object' && !Array.isArray(fcRes)) ? fcRes : {};
+  const fc = (fcRes && typeof fcRes === 'object' && !Array.isArray(fcRes)) ? fcRes : {};
+  const lc = (lcRes && typeof lcRes === 'object' && !Array.isArray(lcRes)) ? lcRes : {};
   const branches = (Array.isArray(brRes) ? brRes : (brRes.branches || [])).filter(b => b.active && b.name !== 'ALL');
   if (!branches.length) {
     document.getElementById('fixedCostRows').innerHTML = '<p class="text-xs text-slate-400">ยังไม่มีสาขา</p>';
     return;
   }
-  document.getElementById('fixedCostRows').innerHTML = branches.map(b => `
-    <div class="flex items-center gap-3">
-      <label class="text-sm font-medium text-slate-700 w-36 flex-shrink-0">${esc(b.name)}</label>
-      <div class="relative flex-1">
-        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></span>
-        <input type="number" min="0" step="1000"
-          id="fc_${b.name.replace(/\s/g,'_')}"
-          value="${saved[b.name] != null ? saved[b.name] : ''}"
-          placeholder="0"
-          class="w-full border border-slate-300 rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
-      </div>
-      <span class="text-xs text-slate-400">/month</span>
-    </div>`).join('');
+  const inp = (id, v) => `<input type="number" min="0" step="1000" id="${id}" value="${v != null ? v : ''}" placeholder="0"
+      class="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">`;
+  document.getElementById('fixedCostRows').innerHTML =
+    `<div class="flex items-center gap-3 mb-1 text-[11px] font-semibold" style="color:var(--text-muted)">
+      <span class="w-36 flex-shrink-0">สาขา</span>
+      <span class="flex-1">💼 ค่าแรง/เดือน (labor)</span>
+      <span class="flex-1">🏠 ค่าใช้จ่ายคงที่/เดือน (เช่า/น้ำไฟ)</span>
+    </div>` +
+    branches.map(b => {
+      const k = b.name.replace(/\s/g, '_');
+      return `<div class="flex items-center gap-3 mb-1.5">
+        <label class="text-sm font-medium text-slate-700 w-36 flex-shrink-0">${esc(b.name)}</label>
+        <div class="flex-1">${inp('lc_' + k, lc[b.name])}</div>
+        <div class="flex-1">${inp('fc_' + k, fc[b.name])}</div>
+      </div>`;
+    }).join('');
 }
 async function saveFixedCosts() {
   const brRes = await fetch(`${API}/api/branches`).then(r => r.json()).catch(() => []);
   const branches = (Array.isArray(brRes) ? brRes : (brRes.branches || [])).filter(b => b.active && b.name !== 'ALL');
-  const payload = {};
+  const fcPayload = {}, lcPayload = {};
   branches.forEach(b => {
-    const el = document.getElementById('fc_' + b.name.replace(/\s/g,'_'));
-    if (el) { const v = parseFloat(el.value); if (!isNaN(v)) payload[b.name] = v; }
+    const k = b.name.replace(/\s/g, '_');
+    const fe = document.getElementById('fc_' + k); const le = document.getElementById('lc_' + k);
+    if (fe) { const v = parseFloat(fe.value); if (!isNaN(v)) fcPayload[b.name] = v; }
+    if (le) { const v = parseFloat(le.value); if (!isNaN(v)) lcPayload[b.name] = v; }
   });
   const st = document.getElementById('fixedCostStatus');
   st.textContent = 'กำลังบันทึก…'; st.style.color = '#94a3b8';
-  const res = await fetch(`${API}/api/branches/fixed-costs`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ costs: payload }),
-  }).then(r => r.json()).catch(() => null);
-  if (res && res.saved != null) { st.textContent = '✅ บันทึกแล้ว'; st.style.color = '#10b981'; }
+  const [r1, r2] = await Promise.all([
+    fetch(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).then(r => r.json()).catch(() => null),
+    fetch(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).then(r => r.json()).catch(() => null),
+  ]);
+  if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = '✅ บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = '#10b981'; }
   else { st.textContent = '❌ บันทึกไม่ได้'; st.style.color = '#ef4444'; }
   setTimeout(() => { st.textContent = ''; }, 3000);
-  _lastPnlKey = null;  // force P&L reload
+  _lastPnlKey = null; _primeKey = null;   // force P&L + Prime-cost reload
 }
 
 async function loadBenchmark() {
@@ -18742,8 +18770,43 @@ async function loadCoverageExtras() {
   }).catch(()=>{});
 }
 
+// 🏭 Prime Cost = Food% + Labor% per branch (the biggest controllable costs).
+let _primeKey = null;
+async function loadPrimeCost() {
+  const msel = document.getElementById('pnlMonthSel');
+  const month = (msel && msel.value) || getMonthTo() || getMonthFrom() || '';
+  const _fk = month + '|' + (getGroup() || '');
+  if (_primeKey === _fk) return; _primeKey = _fk;
+  const p = new URLSearchParams();
+  if (month) p.set('month', month);
+  if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/finance/prime-cost?${p}`).then(r => r.json()); } catch (e) { return; }
+  const ch = d.chain || {}; const band = d.band || { good: 70, high: 78 };
+  const rows = d.branches || [];
+  const pcCol = pp => pp == null ? '#94a3b8' : pp > band.high ? '#ef4444' : pp > band.good ? '#f59e0b' : '#10b981';
+  const cw = document.getElementById('primeChain');
+  if (cw) cw.textContent = `เดือน ${d.month || '—'} · เฉลี่ยเครือ Food ${ch.food_pct != null ? ch.food_pct + '%' : '—'}${ch.labor_pct != null ? ' + Labor ' + ch.labor_pct + '% = Prime ' + ch.prime_pct + '%' : ''}`;
+  const bn = document.getElementById('primeBanner');
+  if (bn) {
+    if (!ch.branches_with_labor) {
+      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border-left:3px solid #f59e0b">💼 ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">Settings → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
+    } else if (ch.branches_with_labor < ch.branch_count) {
+      bn.innerHTML = `<div class="text-xs" style="color:var(--text-muted)">ใส่ค่าแรงแล้ว ${ch.branches_with_labor}/${ch.branch_count} สาขา — ที่เหลือแสดงเฉพาะ Food%</div>`;
+    } else { bn.innerHTML = ''; }
+  }
+  document.getElementById('primeBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.rev)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? '#ef4444' : r.food_pct > 50 ? '#f59e0b' : '#10b981'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${r.labor_pct != null ? r.labor_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${pcCol(r.prime_pct)}">${r.prime_pct != null ? r.prime_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? '#94a3b8' : r.operating_pct < 0 ? '#ef4444' : '#10b981'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+
 // ── Branch P&L tab (Analysis #1, BoM-based COGS) ───────────────
 async function loadPnlBranch() {
+  loadPrimeCost();
   const gen = loadGen;
   // populate month dropdown once (from selMonthFrom options)
   const msel = document.getElementById('pnlMonthSel');

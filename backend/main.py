@@ -11425,6 +11425,82 @@ def save_branch_fixed_costs(body: BranchFixedCostBody):
     return {"saved": len(body.costs)}
 
 
+@app.get("/api/branches/labor-costs")
+def get_branch_labor_costs():
+    """Return {branch_name: monthly_labor_cost} from app_settings."""
+    with get_db() as con:
+        row = con.execute("SELECT value FROM app_settings WHERE key='branch_labor_costs'").fetchone()
+    if row:
+        try: return _json.loads(row["value"])
+        except Exception: return {}
+    return {}
+
+
+class BranchLaborCostBody(BaseModel):
+    costs: Dict[str, float]   # {branch_name: monthly_labor_cost}
+
+
+@app.post("/api/branches/labor-costs")
+def save_branch_labor_costs(body: BranchLaborCostBody):
+    """Save per-branch monthly labor cost (the largest CONTROLLABLE cost)."""
+    value = _json.dumps(body.costs)
+    with get_db() as con:
+        con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('branch_labor_costs', :v)", {"v": value})
+        con.commit()
+    return {"saved": len(body.costs)}
+
+
+@app.get("/api/finance/prime-cost")
+def finance_prime_cost(month: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Prime cost = food% + labor% per branch — the two biggest CONTROLLABLE costs.
+    Food COGS is real (unified BoM); labor + fixed come from Settings inputs. Shows
+    nothing for labor until entered (food% is always real)."""
+    cogs_expr = _unified_cogs_expr("sm")
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if group: _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mon = month or con.execute(
+            "SELECT MAX(period_month) FROM sales_sku_monthly WHERE source='Easy'").fetchone()[0]
+        rows = {r["branch"]: dict(r) for r in con.execute(f"""
+            SELECT b.name branch, ROUND(SUM(sm.subtotal_ex_vat)) rev, ROUND(SUM({cogs_expr})) food_cogs
+            FROM sales_sku_monthly sm JOIN branches b ON b.branch_id=sm.branch_id
+            WHERE {tw} AND sm.period_month=:m GROUP BY b.name""", {**p, "m": mon}).fetchall()}
+        def _load(k):
+            r = con.execute("SELECT value FROM app_settings WHERE key=:k", {"k": k}).fetchone()
+            if r:
+                try: return _json.loads(r["value"])
+                except Exception: return {}
+            return {}
+        labor = _load('branch_labor_costs'); fixed = _load('branch_fixed_costs')
+    out = []
+    for nm, r in rows.items():
+        rev = r["rev"] or 0; fc = r["food_cogs"] or 0
+        lb = labor.get(nm, 0) or 0; fx = fixed.get(nm, 0) or 0
+        has_lb = lb > 0
+        op = rev - fc - lb - fx
+        out.append({
+            "branch": nm, "rev": rev, "food_cogs": fc,
+            "food_pct": round(fc / rev * 100, 1) if rev else None,
+            "labor": lb, "labor_pct": round(lb / rev * 100, 1) if (rev and lb) else None,
+            "prime_pct": round((fc + lb) / rev * 100, 1) if (rev and lb) else None,
+            "fixed": fx, "fixed_pct": round(fx / rev * 100, 1) if (rev and fx) else None,
+            "operating": round(op) if (lb or fx) else None,
+            "operating_pct": round(op / rev * 100, 1) if (rev and (lb or fx)) else None,
+            "has_labor": has_lb,
+        })
+    out.sort(key=lambda r: -(r["prime_pct"] if r["prime_pct"] is not None else (r["food_pct"] or -1)))
+    trev = sum(r["rev"] for r in out); tfood = sum(r["food_cogs"] for r in out)
+    tlabor = sum(r["labor"] for r in out); tfixed = sum(r["fixed"] for r in out)
+    chain = {"rev": trev, "food_cogs": tfood, "labor": tlabor, "fixed": tfixed,
+             "food_pct": round(tfood / trev * 100, 1) if trev else None,
+             "labor_pct": round(tlabor / trev * 100, 1) if (trev and tlabor) else None,
+             "prime_pct": round((tfood + tlabor) / trev * 100, 1) if (trev and tlabor) else None,
+             "branches_with_labor": sum(1 for r in out if r["has_labor"]), "branch_count": len(out)}
+    # AYCE buffet prime-cost band (food ~50-55% + labor ~15-22%): good <70, watch 70-78, high >78
+    return {"month": mon, "branches": out, "chain": chain, "band": {"good": 70, "high": 78}}
+
+
 # ---------------------------------------------------------------------------
 # GET /api/buffet/pnl   🟡6 (part 2)
 # Net P&L = GP - Fixed Costs per branch
