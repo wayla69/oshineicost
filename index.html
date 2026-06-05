@@ -8144,6 +8144,8 @@ async function loadTrend() {
 
   // Delta KPIs
   const cur = cmp.current, pri = cmp.prior, del = cmp.delta;
+  const isMtd = !!cmp.mtd;                       // primary month still partial → MTD-fair
+  const mtdTag = isMtd ? ` · MTD 1–${cmp.mtd_cutoff_day}` : '';
   const kpis = [
     { id:'Rev',    cur: fmt(cur.revenue), pri: fmt(pri.revenue), pct: del.revenue },
     { id:'Tx',     cur: fmtN(cur.tx_count),   pri: fmtN(pri.tx_count),   pct: del.tx_count },
@@ -8152,7 +8154,7 @@ async function loadTrend() {
   ];
   kpis.forEach(k => {
     document.getElementById('delta'+k.id+'Current').textContent = k.cur;
-    document.getElementById('delta'+k.id+'Prior').textContent   = 'vs ' + k.pri + ' (' + fmtMonth(vs) + ')';
+    document.getElementById('delta'+k.id+'Prior').textContent   = 'vs ' + k.pri + ' (' + fmtMonth(vs) + mtdTag + ')';
     document.getElementById('delta'+k.id+'Badge').outerHTML =
       `<span id="delta${k.id}Badge">${badge(k.pct)}</span>`;
   });

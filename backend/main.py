@@ -36,12 +36,23 @@ from fastapi.responses import Response as _Response
 
 _cache_stats: dict = {"hits": 0, "misses": 0}
 
+_cached_fn_names: set = set()
+
 def ttl_cache(fn):
     """Decorator: caches the pre-serialized JSON bytes for 5 min.
 
     Returning a ``Response(content=bytes)`` skips FastAPI's jsonable_encoder,
     which matters for large responses (e.g. lifecycle = 270 KB).
+
+    Cache key = fn.__name__ + params, so two cached endpoints MUST NOT share a
+    function name (they would poison each other's cache — the table_turnover bug).
+    Guard it at import time so the collision can never recur silently.
     """
+    if fn.__name__ in _cached_fn_names:
+        raise RuntimeError(
+            f"ttl_cache: duplicate cached function name '{fn.__name__}' — "
+            f"rename one (same name = colliding cache key, serves wrong responses)")
+    _cached_fn_names.add(fn.__name__)
     import inspect as _inspect
     sig = _inspect.signature(fn)          # capture original signature once
 
@@ -5006,11 +5017,29 @@ def analysis_compare(
     gross_sales, net_sales, discounts.
     Pulls from sales_sku_monthly + sales_month_summary (Easy).
     """
-    def fetch_kpis(period: str, con) -> dict:
+    import calendar as _cal
+    def fetch_kpis(period: str, con, mtd_cut=None) -> dict:
         branch_filter = "AND b.name = :branch" if branch else ""
         p: dict = {"period": period}
         if branch:
             p["branch"] = branch
+
+        if mtd_cut:
+            # MTD-fair: compare the SAME elapsed days, all from sales_transaction
+            # (day-capable) so a partial current month isn't matched to a full month.
+            p["s"] = f"{period}-01"; p["e"] = f"{period}-{mtd_cut:02d}"
+            r = con.execute(f"""
+                SELECT ROUND(SUM(st.total_inc_vat)/1.07, 2) revenue, COUNT(*) tx_count,
+                       SUM(st.customer_count) customer_count, ROUND(AVG(st.total_inc_vat), 2) avg_ticket
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE b.name!='ALL' AND st.source='Easy'
+                  AND substr(st.sold_at,1,10) BETWEEN :s AND :e {branch_filter}""", p).fetchone()
+            _rev = (r["revenue"] or 0) if r else 0
+            return {"period": period, "revenue": _rev, "revenue_ex": _rev,
+                    "tx_count": (r["tx_count"] or 0) if r else 0,
+                    "customer_count": (r["customer_count"] or 0) if r else 0,
+                    "avg_ticket": (r["avg_ticket"] or 0) if r else 0,
+                    "gross_sales": 0, "net_sales": _rev, "discounts": 0}
 
         rev = con.execute(
             f"""
@@ -5085,12 +5114,24 @@ def analysis_compare(
         return round((a - b) / b * 100, 1)
 
     with get_db() as con:
-        current = fetch_kpis(month, con)
-        prior   = fetch_kpis(vs, con)
+        # MTD-fair when the PRIMARY month is the latest, still-partial month.
+        maxd = con.execute("SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        mtd_cut = None
+        if maxd:
+            my, mm, mdd = (int(x) for x in maxd.split("-"))
+            try:
+                py, pm = (int(x) for x in month.split("-")[:2])
+                if (py, pm) == (my, mm) and mdd < _cal.monthrange(my, mm)[1]:
+                    mtd_cut = mdd
+            except Exception:
+                mtd_cut = None
+        current = fetch_kpis(month, con, mtd_cut)
+        prior   = fetch_kpis(vs, con, mtd_cut)
 
     return {
         "current": current,
         "prior":   prior,
+        "mtd": mtd_cut is not None, "mtd_cutoff_day": mtd_cut,
         "delta": {
             "revenue":        pct_change(current["revenue"],        prior["revenue"]),
             "tx_count":       pct_change(current["tx_count"],       prior["tx_count"]),
@@ -11404,6 +11445,29 @@ def buffet_cost_sensitivity(
 # ---------------------------------------------------------------------------
 import json as _json
 
+
+def _assert_known_branch_keys(con, costs: Dict[str, float], setting_label: str):
+    """Reject cost payloads whose keys don't match a real branches.name.
+
+    Guards against silently persisting corrupt/garbled keys — e.g. the
+    branch_fixed_costs '?????'-key incident where Thai names were mangled to
+    literal ASCII '?' at write time, so every P&L fixed.get(name, 0) read 0 and
+    operating profit collapsed to gross profit. A bad key now fails loudly
+    (HTTP 422) and nothing is saved, instead of corrupting the settings row.
+    """
+    valid = {r["name"] for r in con.execute("SELECT name FROM branches")}
+    unknown = sorted(k for k in costs if k not in valid)
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": f"Unknown branch name(s) in {setting_label}; nothing saved.",
+                "unknown_keys": unknown,
+                "valid_branches": sorted(valid),
+            },
+        )
+
+
 @app.get("/api/branches/fixed-costs")
 def get_branch_fixed_costs():
     """Return {branch_name: monthly_fixed_cost} from app_settings."""
@@ -11428,6 +11492,7 @@ def save_branch_fixed_costs(body: BranchFixedCostBody):
     """Save per-branch monthly fixed costs."""
     value = _json.dumps(body.costs)
     with get_db() as con:
+        _assert_known_branch_keys(con, body.costs, "branch_fixed_costs")
         con.execute(
             "INSERT OR REPLACE INTO app_settings(key, value) VALUES('branch_fixed_costs', :v)",
             {"v": value},
@@ -11456,6 +11521,7 @@ def save_branch_labor_costs(body: BranchLaborCostBody):
     """Save per-branch monthly labor cost (the largest CONTROLLABLE cost)."""
     value = _json.dumps(body.costs)
     with get_db() as con:
+        _assert_known_branch_keys(con, body.costs, "branch_labor_costs")
         con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('branch_labor_costs', :v)", {"v": value})
         con.commit()
     return {"saved": len(body.costs)}
@@ -11995,49 +12061,42 @@ def menu_mix_shift(
 # ---------------------------------------------------------------------------
 @app.get("/api/analysis/table-turnover")
 @ttl_cache
-def table_turnover(
-    branch:     Optional[str] = Query(None),
-    month:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
+def table_turnover_branches(   # distinct __name__ — was 'table_turnover', which collided
+    branch:     Optional[str] = Query(None),   # in ttl_cache with /api/analysis/table_turnover
+    month:      Optional[str] = Query(None),    # and served its wrong-shaped cached response
+    month_from: Optional[str] = Query(None),    # (the More-tab "no data" bug).
     month_to:   Optional[str] = Query(None),
 ):
-    """Seat-time proxy from gaps between consecutive bills on the same table/day.
-    Gaps are clamped to 10-240 min to exclude noise/overnight. Returns per-branch
-    avg turn minutes, turns/table/day and covers/turn."""
-    filters = ["b.name != 'ALL'", "st.source='Easy'", "st.table_no IS NOT NULL", "st.table_no != ''"]
+    """Per-branch table turnover from the POS turn-time feed (pos_table_turn_day).
+    Source change: the MSSQL sync leaves sales_transaction.table_no empty, so the
+    old bill-gap method returned nothing; pos_table_turn_day carries the real
+    avg_turn_min + table-occasions + covers per branch/day."""
+    filters = ["b.name != 'ALL'"]
     params: dict = {}
     if branch:
         filters.append("b.name = :branch"); params["branch"] = branch
-    _month_range_filter(filters, params, month_from, month_to, month, col="SUBSTR(st.sold_at,1,7)")
+    _month_range_filter(filters, params, month_from, month_to, month, col="SUBSTR(x.day,1,7)")
     where = "WHERE " + " AND ".join(filters)
     with get_db() as con:
         rows = con.execute(f"""
-            WITH seq AS (
-              SELECT b.name AS branch, st.customer_count AS covers,
-                     (julianday(st.sold_at) - julianday(
-                        LAG(st.sold_at) OVER (
-                          PARTITION BY st.branch_id, st.table_no, DATE(st.sold_at)
-                          ORDER BY st.sold_at))) * 24 * 60 AS gap_min
-              FROM sales_transaction st
-              JOIN branches b ON b.branch_id = st.branch_id
-              {where}
-            )
-            SELECT branch,
-                   AVG(CASE WHEN gap_min BETWEEN 10 AND 240 THEN gap_min END) AS avg_turn_min,
-                   COUNT(CASE WHEN gap_min BETWEEN 10 AND 240 THEN 1 END)     AS turns,
-                   AVG(covers)                                                AS avg_covers
-            FROM seq
-            GROUP BY branch
+            SELECT b.name AS branch,
+                   AVG(x.avg_turn_min)                              AS avg_turn_min,
+                   SUM(x.tabs)                                       AS turns,
+                   SUM(x.customers) * 1.0 / NULLIF(SUM(x.tabs), 0)   AS avg_covers
+            FROM pos_table_turn_day x
+            JOIN branches b ON b.branch_id = x.branch_id
+            {where}
+            GROUP BY b.name
         """, params).fetchall()
     out = []
     for r in sorted(rows, key=lambda x: (x["avg_turn_min"] or 9e9)):
         out.append({
             "branch":        r["branch"],
             "avg_turn_min":  round(r["avg_turn_min"], 1) if r["avg_turn_min"] is not None else None,
-            "turns":         r["turns"] or 0,
+            "turns":         int(r["turns"]) if r["turns"] is not None else 0,
             "avg_covers_per_turn": round(r["avg_covers"], 1) if r["avg_covers"] is not None else None,
         })
-    return {"branches": out, "note": "gap = minutes between consecutive bills on a table within a day (10-240 clamp)"}
+    return {"branches": out, "note": "จาก POS turn-time feed (pos_table_turn_day) · นาที/รอบ เฉลี่ย, รอบ = table-occasions รวม"}
 
 
 # ---------------------------------------------------------------------------
