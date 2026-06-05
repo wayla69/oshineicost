@@ -779,7 +779,71 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   .page-title { font-size: 14px; }
   #globalSearch { width: 140px !important; font-size: 11px; }
   .content-area { padding: 12px; }
+
+  /* ── Responsive full-dashboard (when owner taps "เต็ม →" on a phone) ──
+     Scoped to .content-area so the dedicated mobile app (#mobileSummary) is
+     untouched. Collapses dense KPI/stat grids to 2 columns and lets wide
+     tables scroll horizontally inside their card instead of overflowing. */
+  .content-area [class*="grid-cols-3"],
+  .content-area [class*="grid-cols-4"],
+  .content-area [class*="grid-cols-5"],
+  .content-area [class*="grid-cols-6"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .content-area .card { overflow-x: auto; }
+  .content-area canvas { max-width: 100%; }
+  #clusterBar { flex-wrap: wrap; height: auto; }
+  .cluster-tab, .gran-btn { font-size: 11px; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   MOBILE OWNER SUMMARY — dedicated phone-first overlay.
+   On phones it replaces the full desktop app (which is cramped on a
+   small screen); a toggle switches to the full dashboard and back.
+════════════════════════════════════════════════════════════ */
+#mobileSummary { display: none; }
+#backToMobile { display: none; }
+@media (max-width: 700px) {
+  body:not(.force-desktop) .app-layout { display: none; }
+  body:not(.force-desktop) #mobileSummary { display: block; }
+  body.force-desktop #backToMobile { display: flex; }
+}
+#mobileSummary { min-height: 100vh; background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
+.ms-header { position: sticky; top: 0; z-index: 20; background: #4338ca;
+  background: linear-gradient(135deg,#4338ca,#6366f1); color: #fff;
+  padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+.ms-header .ms-logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.18);
+  display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.ms-section { padding: 0 14px; margin-top: 16px; }
+.ms-section-title { font-size: 13px; font-weight: 700; color: var(--text-primary,#1e293b); margin-bottom: 8px; }
+.ms-kpi { background: var(--bg-card,#fff); border-radius: 14px; padding: 14px 16px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
+.ms-kpi .lbl { font-size: 11px; color: var(--text-muted,#64748b); }
+.ms-kpi .val { font-size: 26px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
+.ms-kpi .sub { font-size: 12px; margin-top: 3px; }
+.ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
+.ms-row:first-child { border-top: 0; }
+.ms-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; }
+.ms-card { background: var(--bg-card,#fff); border-radius: 14px; padding: 6px 16px;
+  box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
+.ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius: 8px;
+  padding: 6px 10px; font-size: 12px; font-weight: 600; }
+#backToMobile { position: fixed; bottom: 84px; right: 16px; z-index: 60;
+  width: 48px; height: 48px; border-radius: 50%; border: 0; background: #6366f1; color: #fff;
+  font-size: 20px; box-shadow: 0 4px 14px rgba(79,70,229,.5); align-items: center; justify-content: center; }
+/* bottom tab bar for the mobile app */
+#msNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
+  background: var(--bg-card,#fff); border-top: 1px solid var(--border,#e2e8f0);
+  display: none; justify-content: space-around; padding: 5px 2px;
+  padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+#msNav button { flex: 1; background: none; border: 0; display: flex; flex-direction: column;
+  align-items: center; gap: 2px; font-size: 10px; color: var(--text-muted,#94a3b8); padding: 4px 0; cursor: pointer; }
+#msNav button .ic { font-size: 19px; line-height: 1; }
+#msNav button.active { color: #6366f1; font-weight: 700; }
+@media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
+#mobileSummary { padding-bottom: 80px; }
+.ms-seg { flex: 1; padding: 7px 6px; border-radius: 9px; border: 1px solid var(--border,#e2e8f0);
+  background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
+.ms-seg-on { background: #6366f1; color: #fff; border-color: #6366f1; }
 </style>
 </head>
 <body>
@@ -800,6 +864,97 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <button class="retry-btn" onclick="retryConnection()">↻ Retry connection</button>
   <p style="font-size:12px;color:var(--text-muted);margin-top:4px">Auto-retrying every 5 seconds…</p>
 </div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MOBILE OWNER SUMMARY (phone-first) — see CSS block "MOBILE OWNER SUMMARY".
+     Shown instead of the full app on screens ≤700px (unless body.force-desktop).
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="mobileSummary">
+  <div class="ms-header">
+    <div class="ms-logo">お</div>
+    <div style="flex:1;min-width:0">
+      <p style="font-weight:700;font-size:15px;line-height:1.1">Oshinei</p>
+      <p id="msSubtitle" style="font-size:11px;opacity:.85">สรุปสำหรับเจ้าของ</p>
+    </div>
+    <button class="ms-toggle" onclick="loadMobileSummary(true)" aria-label="รีเฟรช">↻</button>
+    <button class="ms-toggle" onclick="showFullDashboard()">เต็ม →</button>
+  </div>
+
+  <div class="ms-section" style="margin-top:12px">
+    <select id="msBranch" onchange="loadMobileSummary(true)" style="width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+      <option value="">🏢 ทุกสาขา</option>
+    </select>
+  </div>
+
+  <div id="msStatus" class="ms-section" style="margin-top:8px;font-size:11px;color:var(--text-muted,#64748b)"></div>
+
+  <!-- VIEW: สรุป -->
+  <div id="msv-summary" class="ms-view">
+    <div class="ms-section">
+      <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
+    <div class="ms-section" id="msSignalsWrap" style="display:none">
+      <div class="ms-section-title">🔔 ต้องดู</div>
+      <div id="msSignals" class="ms-card"></div>
+    </div>
+    <div class="ms-section">
+      <div class="ms-section-title">🏆 ดีสุด / ⚠️ ต้องดู (เทียบเดือนก่อน)</div>
+      <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: ยอดขาย -->
+  <div id="msv-sales" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button id="msGranDay" class="ms-seg" onclick="msSetSalesGran('day')">รายวัน</button>
+        <button id="msGranMonth" class="ms-seg ms-seg-on" onclick="msSetSalesGran('month')">รายเดือน</button>
+      </div>
+      <div id="msSalesTrend" class="ms-card"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: สาขา -->
+  <div id="msv-branches" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button id="msSortRev" class="ms-seg ms-seg-on" onclick="msSetBranchSort('rev')">ยอดสูงสุด</button>
+        <button id="msSortMom" class="ms-seg" onclick="msSetBranchSort('mom')">โต/ตก %</button>
+        <button id="msSortRph" class="ms-seg" onclick="msSetBranchSort('rph')">/หัว</button>
+      </div>
+      <div id="msBranches" class="ms-card"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: เมนู -->
+  <div id="msv-menu" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div class="ms-section-title">🍣 เมนูขายดี (ตามจำนวน)</div>
+      <div id="msMenu" class="ms-card"></div>
+    </div>
+  </div>
+
+  <!-- VIEW: กำไร/ต้นทุน -->
+  <div id="msv-profit" class="ms-view" style="display:none">
+    <div class="ms-section">
+      <div id="msProfitKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px"></div>
+      <div class="ms-section-title">🍽️ ต้นทุน/หัว รายสาขา</div>
+      <div id="msProfitBranches" class="ms-card"></div>
+    </div>
+  </div>
+
+  <div class="ms-section" style="margin-top:18px;text-align:center">
+    <button onclick="showFullDashboard()" style="font-size:12px;color:var(--text-muted,#64748b);background:none;border:0;text-decoration:underline">เปิดแดชบอร์ดเต็ม (เดสก์ท็อป) →</button>
+  </div>
+</div>
+<nav id="msNav">
+  <button id="msnav-summary"  class="active" onclick="msSwitchView('summary')"><span class="ic">🏠</span>สรุป</button>
+  <button id="msnav-sales"    onclick="msSwitchView('sales')"><span class="ic">📈</span>ยอดขาย</button>
+  <button id="msnav-branches" onclick="msSwitchView('branches')"><span class="ic">🏪</span>สาขา</button>
+  <button id="msnav-menu"     onclick="msSwitchView('menu')"><span class="ic">🍣</span>เมนู</button>
+  <button id="msnav-profit"   onclick="msSwitchView('profit')"><span class="ic">💰</span>กำไร</button>
+</nav>
+<button id="backToMobile" onclick="showMobileSummary()" aria-label="กลับหน้าสรุปมือถือ">📱</button>
 
 <div class="app-layout">
 
@@ -825,6 +980,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="nav-item active" id="nav-overall" onclick="switchTab('overall')" title="ภาพรวม & KPI · ตัวชี้วัดหลัก, heatmap, insights">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
     <span class="nav-label">📊 ภาพรวม &amp; KPI</span>
+  </div>
+  <div class="nav-item" id="nav-action" onclick="switchTab('action')" title="🔔 ต้องดูวันนี้ — รวมสัญญาณเตือน/โอกาส ทั้งระบบไว้ที่เดียว (MTD-fair)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+    <span class="nav-label">🔔 ต้องดูวันนี้</span>
   </div>
   <div class="nav-item" id="nav-dailysales" onclick="switchTab('dailysales')" title="ยอดขายรายวัน · รายสาขา วัน/สัปดาห์/เดือน + เทียบเดือนก่อน/ปีก่อน + ผิดปกติ">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
@@ -888,6 +1047,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="nav-item" id="nav-costhead" style="display:none" onclick="switchTab('costhead')" title="ต้นทุน/หัว รายสาขา (BoM) · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
     <span class="nav-label">💸 ต้นทุน/หัว</span>
+  </div>
+  <div class="nav-item" id="nav-heavyeater" style="display:none" onclick="switchTab('heavyeater')" title="🍽️ ต่อหัว & นักกินหนัก · เศรษฐศาสตร์ต่อคน + การกระจาย COGS/หัว + บิลขาดทุน · เข้าถึงผ่านแถบ 💰 ต้นทุน">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>
+    <span class="nav-label">🍽️ นักกินหนัก</span>
   </div>
   <!-- hidden 2026-06: redundant cost-driver/ingredient view (BoM Cost+Sim & ต้นทุน cover it). Code kept. -->
   <div class="nav-item" id="nav-coverage" style="display:none" onclick="switchTab('coverage')" title="ความครอบคลุมต้นทุน · top cost-driver ingredients + peak hours">
@@ -2625,6 +2788,78 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: 🔔 ACTION CENTER — consolidated "watch today" signals
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-action" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fff7ed 0%,#fef2f2 100%);border-left:4px solid #f97316">
+    <h2 class="text-base font-bold" style="color:#9a3412">🔔 ต้องดูวันนี้ — Action Center</h2>
+    <p class="text-xs text-slate-500 mt-1">รวมสัญญาณเตือน/โอกาส จากทั้งระบบไว้ที่เดียว · เทียบแบบ MTD-fair · กดการ์ดเพื่อเจาะดู</p>
+  </div>
+  <p id="acStatus" class="text-[11px] text-slate-400 mb-2"></p>
+  <div id="acBody"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: 🍽️ HEAVY EATERS / PER-COVER ECONOMICS
+     Per-bill revenue/head vs BoM COGS/head → margin/head distribution.
+     "Heavy eater" = COGS/head in the costly tail (≥ p90). AYCE buffet: revenue
+     per cover is ~fixed, so the COGS/head tail is exactly the margin risk.
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-heavyeater" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fff7ed 0%,#fffbeb 100%);border-left:4px solid #f59e0b">
+    <h2 class="text-base font-bold" style="color:#b45309">🍽️ ต่อหัว & นักกินหนัก (Heavy Eaters)</h2>
+    <p class="text-xs text-slate-500 mt-1">บุฟเฟ่ต์รายได้/หัวเกือบคงที่ → ความเสี่ยงกำไรอยู่ที่ <b>ต้นทุน(BoM)/หัว</b> ที่กระจายตัว · "นักกินหนัก" = บิลที่ต้นทุน/หัวอยู่หาง 10% บนสุด (≥ p90) · คำนวณต่อบิลจริง (sale_bill_cogs × จำนวนลูกค้า)</p>
+  </div>
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <span class="text-xs font-bold" style="color:#b45309">ช่วงวันที่</span>
+    <input type="date" id="heFrom" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-slate-400">–</span>
+    <input type="date" id="heTo" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs text-slate-500">ลูกค้า/บิล ≥</span>
+    <select id="heMinCov" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)">
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+    </select>
+    <button onclick="loadHeavyEaters(true)" class="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium">โหลด</button>
+    <span id="heStatus" class="text-[11px] text-slate-400 ml-auto"></span>
+  </div>
+  <div id="heKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+  <div id="heCallouts" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"></div>
+  <div class="card p-5 mb-4">
+    <h3 class="text-sm font-bold text-slate-700 mb-1">การกระจายต้นทุน(BoM)/หัว ต่อบิล</h3>
+    <p class="text-[11px] text-slate-400 mb-3">แต่ละแถบ = จำนวนบิลในช่วงต้นทุน/หัวนั้น · เส้นสีส้ม = เกณฑ์นักกินหนัก (p90)</p>
+    <div id="heHist"></div>
+  </div>
+  <div class="card p-5 mb-4">
+    <h3 class="text-sm font-bold text-slate-700 mb-2">รายสาขา — สัดส่วนบิลนักกินหนัก & เศรษฐศาสตร์ต่อหัว</h3>
+    <div class="overflow-auto" style="max-height:520px">
+      <table class="tbl-top60 w-full text-xs">
+        <thead><tr>
+          <th>สาขา</th><th class="num">บิล</th><th class="num">นักกินหนัก</th><th class="num">% นักกินหนัก</th>
+          <th class="num">รายได้/หัว</th><th class="num">ต้นทุน/หัว</th><th class="num">มาร์จิน/หัว</th>
+        </tr></thead>
+        <tbody id="heBranchBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-sm font-bold text-slate-700">บิลมาร์จิน/หัว แย่สุด (ตรวจสอบ/เฝ้าระวัง)</h3>
+      <button onclick="exportTable('heExTable','heavy_eaters_worst.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+    </div>
+    <p class="text-[11px] text-slate-400 mb-3">ต้นทุน/หัว สูงกว่ารายได้/หัว = ขาดทุนต่อหัว · บิลต้นทุน/หัวสูงผิดปกติอาจเป็นข้อมูลผิด (จำนวนลูกค้าผิด) ที่ควรเช็ก</p>
+    <div class="overflow-auto" style="max-height:520px">
+      <table class="tbl-top60 w-full text-xs" id="heExTable">
+        <thead><tr>
+          <th>วันที่</th><th>สาขา</th><th>ใบเสร็จ</th><th class="num">ลูกค้า</th>
+          <th class="num">รายได้/หัว</th><th class="num">ต้นทุน/หัว</th><th class="num">มาร์จิน/หัว</th>
+        </tr></thead>
+        <tbody id="heExBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════════════
      TAB: 🆚 MENU COMPARE A/B — compare Top menus across two arbitrary periods
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-menucompare" style="display:none">
@@ -2820,31 +3055,46 @@ body.dark .skeleton-kpi { border-color: var(--border); }
      TAB: MORE ANALYTICS  (daypart profit · menu-mix shift · turnover · forecast)
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-more" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#f0fdfa 100%);border-left:4px solid #6366f1">
+    <h2 class="text-base font-bold" style="color:#4338ca">📈 Insight เพิ่มเติม — จังหวะเวลา · พยากรณ์ · การหมุนโต๊ะ</h2>
+    <p class="text-xs text-slate-500 mt-1">ช่วงเวลาไหนทำเงิน/กำไรดีสุด · รายได้กำลังไปทางไหน · สาขาไหนหมุนโต๊ะเร็ว/ช้า — สรุปไฮไลต์อัตโนมัติด้านล่าง</p>
+  </div>
+
+  <!-- auto-generated highlight chips -->
+  <div id="more-highlights" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4"></div>
+
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
     <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700">เศรษฐศาสตร์ตามช่วงเวลา (Daypart)</div>
-      <div class="text-xs text-slate-400 mb-2">5 ช่วงเวลา · กำไรเป็นค่าประมาณ (drink 70% · food/other 45%)</div>
+      <div class="flex items-baseline justify-between">
+        <div class="text-sm font-semibold text-slate-700">🕒 เศรษฐศาสตร์ตามช่วงเวลา (Daypart)</div>
+        <span id="more-daypart-note" class="text-[11px] text-slate-400"></span>
+      </div>
+      <div class="text-xs text-slate-400 mb-2">5 ช่วงเวลา · แถบ = สัดส่วนรายได้ · กำไรเป็นค่าประมาณ (drink 70% · food/other 45%)</div>
       <table class="w-full text-xs">
         <thead><tr class="text-left text-slate-400 border-b">
           <th class="py-1.5 pr-2">ช่วง</th><th class="py-1.5 pr-2 text-right">รายได้</th>
-          <th class="py-1.5 pr-2 text-right">%</th><th class="py-1.5 pr-2 text-right">ลูกค้า</th>
+          <th class="py-1.5 pr-2">สัดส่วน</th><th class="py-1.5 pr-2 text-right">ลูกค้า</th>
           <th class="py-1.5 pr-2 text-right">/คน</th><th class="py-1.5 pr-2 text-right">/บิล</th>
           <th class="py-1.5 pr-2 text-right">ดื่ม%</th><th class="py-1.5 text-right">GP ปต.</th></tr></thead>
         <tbody id="more-daypart"></tbody>
       </table>
     </div>
     <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700 mb-1">พยากรณ์รายได้ (3 เดือน)</div>
+      <div class="flex items-baseline justify-between">
+        <div class="text-sm font-semibold text-slate-700">🔮 พยากรณ์รายได้ (3 เดือน)</div>
+        <span id="more-forecast-badge" class="text-[11px] font-semibold"></span>
+      </div>
       <div id="more-forecast-note" class="text-xs text-slate-400 mb-2"></div>
       <div style="position:relative;height:230px"><canvas id="more-forecast"></canvas></div>
     </div>
-    <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700 mb-1">อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
-      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · เร็ว = หมุนโต๊ะดี</div>
-      <div style="max-height:260px;overflow:auto">
+    <div class="card p-4 lg:col-span-2">
+      <div class="text-sm font-semibold text-slate-700 mb-1">🔄 อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
+      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · แถบสั้น/เขียว = หมุนเร็ว = ดี</div>
+      <div style="max-height:300px;overflow:auto">
         <table class="w-full text-sm">
           <thead><tr class="text-left text-slate-400 text-xs border-b">
             <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">นาที/รอบ</th>
+            <th class="py-1.5 pr-2" style="width:160px">เร็ว → ช้า</th>
             <th class="py-1.5 pr-2 text-right">รอบ</th><th class="py-1.5 text-right">คน/รอบ</th></tr></thead>
           <tbody id="more-turnover"></tbody>
         </table>
@@ -3081,6 +3331,22 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <tbody id="disc-amounts"></tbody>
       </table></div>
     </div>
+  </div>
+
+  <!-- Discount reason / type (Sale.DiscountReasonId → DiscountSaleReason) -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🏷️ ประเภทส่วนลด (เหตุผลที่เลือกใน POS)</h2>
+      <span id="disc-reason-note" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p>
+    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
+    <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
+      <thead><tr>
+        <th>เหตุผล</th><th class="num">บิล</th><th class="num">มูลค่าลด</th><th class="num">% ของเงินลด</th><th>สัดส่วน</th>
+      </tr></thead>
+      <tbody id="disc-reason-body"></tbody>
+    </table></div>
   </div>
 
   <div class="card p-5 mb-5 overflow-x-auto">
@@ -5881,13 +6147,13 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   activeTab = name;
-  ['home','overall','menu','trend','cost','profit','pnl','compare','report','ops','settings',
+  ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','ops','settings',
    'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
-   'cashctl','custtype','modifiers','pricezone','cancelbill','closetime'].forEach(t => {
+   'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -5918,7 +6184,7 @@ function switchTab(name) {
 // Cost & Profit clusters: the secondary tabs are hidden from the sidebar and
 // reached via this in-page bar — fewer nav items, zero lost functionality.
 const TAB_CLUSTERS = [
-  { key: 'cost',   label: '💰 ต้นทุน',    tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','🎮 Simulators'],['costhead','ต้นทุน/หัว'],['coverage','ความครอบคลุม']] },
+  { key: 'cost',   label: '💰 ต้นทุน',    tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','🎮 Simulators'],['costhead','ต้นทุน/หัว'],['heavyeater','🍽️ นักกินหนัก'],['coverage','ความครอบคลุม']] },
   { key: 'profit', label: '💵 กำไร & P&L', tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
 ];
 function _updateClusterBar(name) {
@@ -6056,6 +6322,7 @@ function loadActiveTab() {
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
   if (activeTab === 'overall')     loadOverall();
+  if (activeTab === 'action')      loadActionCenter();
   if (activeTab === 'menu')        loadMenuSubtab();
   if (activeTab === 'trend')       loadTrend();
   if (activeTab === 'cost')        loadCostAnalysis();
@@ -6092,6 +6359,7 @@ function loadActiveTab() {
   if (activeTab === 'coverage')    loadCostCoverage();
   if (activeTab === 'pnlbranch')   loadPnlBranch();
   if (activeTab === 'more')        loadMoreAnalytics();
+  if (activeTab === 'heavyeater')  loadHeavyEaters();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -6507,6 +6775,8 @@ async function init() {
     document.getElementById('presetBar').classList.remove('hidden');
     loadActiveTab();
     initDataCoverageNote();
+    // Phone-first: load the mobile owner summary when on a small screen
+    try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) loadMobileSummary(); } catch(e) {}
     // Periodic health check every 30 s (silent badge update only)
     _healthTimer = setInterval(checkApiHealth, 30000);
   } catch(err) {
@@ -12224,6 +12494,134 @@ async function loadAnomalyBanner() {
   } catch(e) { banner.classList.add('hidden'); }
 }
 
+// 🔔 Action Center — consolidate anomalies + branch-pace (MTD-fair) into one
+// prioritized "watch today" panel with drill-through. Reuses existing endpoints.
+async function loadHeavyEaters(force) {
+  const fromEl = document.getElementById('heFrom'), toEl = document.getElementById('heTo'),
+        mcEl = document.getElementById('heMinCov');
+  const p = new URLSearchParams();
+  if (fromEl?.value) p.set('date_from', fromEl.value);
+  if (toEl?.value)   p.set('date_to', toEl.value);
+  if (mcEl?.value)   p.set('min_covers', mcEl.value);
+  if (getBranch())   p.set('branch', getBranch());
+  if (getGroup())    p.set('group', getGroup());
+  const status = document.getElementById('heStatus');
+  if (status) status.textContent = 'กำลังโหลด…';
+  let d;
+  try { d = await fetch(`${API}/api/sales/heavy-eaters?${p}`).then(r => r.json()); }
+  catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ'; return; }
+  if (fromEl && !fromEl.value && d.window?.lo) fromEl.value = d.window.lo;
+  if (toEl && !toEl.value && d.window?.hi) toEl.value = d.window.hi;
+  if (status) status.textContent = `${fmtN(d.n_bills || 0)} บิล · ${fmtN(d.total_covers || 0)} หัว · ข้อมูลมี ${d.window?.lo || '—'} ถึง ${d.window?.hi || '—'}`;
+
+  const pc = d.percentiles || {};
+  document.getElementById('heKpis').innerHTML = [
+    { l: 'รายได้/หัว (เฉลี่ย)', v: fmt(d.avg_rev_head || 0), s: 'ex-VAT ต่อลูกค้า', c: '#0891b2' },
+    { l: 'ต้นทุน(BoM)/หัว', v: fmt(d.avg_cogs_head || 0), s: `มัธยฐาน ${fmt(pc.p50 || 0)} · p90 ${fmt(pc.p90 || 0)}`, c: '#ef4444' },
+    { l: 'มาร์จิน/หัว (เฉลี่ย)', v: fmt(d.avg_margin_head || 0), s: 'รายได้ − ต้นทุน ต่อหัว', c: '#10b981' },
+    { l: 'เกณฑ์นักกินหนัก', v: fmt(d.heavy_threshold || 0), s: 'ต้นทุน/หัว ≥ p90', c: '#f59e0b' },
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+
+  const H = d.heavy || {}, L = d.loss || {};
+  document.getElementById('heCallouts').innerHTML = `
+    <div class="card p-4" style="background:linear-gradient(135deg,#fffbeb,#fff7ed);border-left:4px solid #f59e0b">
+      <p class="text-sm font-bold" style="color:#b45309">🍖 นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
+      <p class="text-2xl font-bold mt-1" style="color:#b45309">${fmtN(H.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${H.pct_bills || 0}% ของบิล)</span></p>
+      <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? '#ef4444' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
+    </div>
+    <div class="card p-4" style="background:linear-gradient(135deg,#fef2f2,#fff1f2);border-left:4px solid #ef4444">
+      <p class="text-sm font-bold" style="color:#b91c1c">🩸 บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
+      <p class="text-2xl font-bold mt-1" style="color:#b91c1c">${fmtN(L.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${L.pct_bills || 0}% ของบิล)</span></p>
+      <p class="text-xs text-slate-600 mt-1">ขาดทุนเฉลี่ย/หัว <b style="color:#ef4444">${fmt(L.avg_margin_head || 0)}</b> · รวมต้นทุน ${fmt(L.cogs || 0)} (${L.pct_cogs || 0}% ของต้นทุน)</p>
+    </div>`;
+
+  const hist = d.histogram || []; const maxc = Math.max(1, ...hist.map(h => h.count || 0));
+  const thr = d.heavy_threshold || 0;
+  document.getElementById('heHist').innerHTML = hist.map(h => {
+    const w = Math.round(100 * (h.count || 0) / maxc);
+    const lbl = h.hi == null ? `${fmtN(h.lo)}+` : `${fmtN(h.lo)}–${fmtN(h.hi)}`;
+    const isHeavy = thr > 0 && h.lo >= thr;
+    const col = isHeavy ? '#f59e0b' : '#38bdf8';
+    return `<div class="flex items-center gap-2 mb-1">
+      <span class="text-[10px] text-slate-400 text-right" style="width:104px">${lbl}</span>
+      <div class="flex-1" style="background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+        <div style="width:${w}%;min-width:2px;height:16px;background:${col}"></div>
+      </div>
+      <span class="text-[10px] tabular-nums text-slate-500" style="width:54px">${fmtN(h.count || 0)}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('heBranchBody').innerHTML = (d.by_branch || []).map(r => {
+    const hpCol = r.heavy_pct >= 15 ? '#ef4444' : r.heavy_pct >= 12 ? '#f59e0b' : '#64748b';
+    const mCol = (r.margin_head || 0) < 0 ? '#ef4444' : '#10b981';
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.heavy_bills)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${hpCol}">${r.heavy_pct}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.cogs_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${mCol}">${fmt(r.margin_head)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="text-center text-slate-400 py-4">ไม่มีข้อมูล</td></tr>';
+
+  document.getElementById('heExBody').innerHTML = (d.examples || []).map(r => {
+    const mCol = (r.margin_head || 0) < 0 ? '#ef4444' : '#10b981';
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 text-slate-500">${esc(r.day)}</td>
+      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2 text-slate-400 text-[11px]">${esc(r.receipt)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.covers)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.cogs_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${mCol}">${fmt(r.margin_head)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="text-center text-slate-400 py-4">ไม่มีข้อมูล</td></tr>';
+}
+
+async function loadActionCenter() {
+  const body = document.getElementById('acBody'); if (!body) return;
+  body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
+  const p = new URLSearchParams();
+  if (getBranch()) p.set('branch', getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo()) p.set('month_to', getMonthTo());
+  const dp = new URLSearchParams({ gran: 'month' });
+  if (getBranch()) dp.set('branch', getBranch());
+  if (getGroup()) dp.set('group', getGroup());
+  let an = { insights: [] }, dy = { branches: [] };
+  try {
+    [an, dy] = await Promise.all([
+      fetch(`${API}/api/analysis/anomalies?${p}`).then(r => r.json()),
+      fetch(`${API}/api/sales/daily?${dp}`).then(r => r.json()),
+    ]);
+  } catch (e) {}
+  const items = [];
+  (an.insights || []).forEach(ins => items.push({
+    sev: ins.severity === 'good' ? 'good' : 'bad',
+    msg: ins.message,
+    drill: (ins.metric || '').includes('cost') ? 'bomcost' : 'dailysales',
+  }));
+  const isMtd = !!dy.mtd;
+  const br = (dy.branches || []).filter(b => b.mom_pct != null);
+  br.slice().sort((a, b) => a.mom_pct - b.mom_pct).slice(0, 3).forEach(b => {
+    if (b.mom_pct <= -10) items.push({ sev: 'bad', msg: `📉 ${b.branch} ยอดตก ${Math.abs(b.mom_pct).toFixed(0)}%${isMtd ? ' (MTD เทียบเดือนก่อน)' : ''} — รายได้ ${fmt(b.revenue)}`, drill: 'dailysales' });
+  });
+  br.slice().sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 2).forEach(b => {
+    if (b.mom_pct >= 10) items.push({ sev: 'good', msg: `📈 ${b.branch} ยอดโต ${b.mom_pct.toFixed(0)}%${isMtd ? ' (MTD)' : ''}`, drill: 'dailysales' });
+  });
+  const bad = items.filter(i => i.sev === 'bad'), good = items.filter(i => i.sev === 'good');
+  const card = (i, color) => `<div class="card p-3 mb-2 flex items-center justify-between gap-3 cursor-pointer hover:shadow-md transition-shadow" style="border-left:4px solid ${color}" onclick="switchTab('${i.drill}')">
+    <span class="text-sm" style="color:var(--text-primary)">${esc(i.msg)}</span>
+    <span class="text-[11px] text-indigo-500 whitespace-nowrap">ดู ›</span></div>`;
+  body.innerHTML =
+    `<div class="mb-5"><h3 class="text-sm font-bold mb-2" style="color:#dc2626">🔴 ต้องดู / แก้ (${bad.length})</h3>` +
+    (bad.length ? bad.map(i => card(i, '#ef4444')).join('') : '<p class="text-xs text-slate-400">ไม่มีสัญญาณเตือน 👍</p>') + '</div>' +
+    `<div><h3 class="text-sm font-bold mb-2" style="color:#059669">🟢 ไปได้ดี (${good.length})</h3>` +
+    (good.length ? good.map(i => card(i, '#10b981')).join('') : '<p class="text-xs text-slate-400">—</p>') + '</div>';
+  const st = document.getElementById('acStatus'); if (st) st.textContent = `รวม ${items.length} สัญญาณ · อัปเดตตามตัวกรองด้านบน`;
+}
+
 // ════════════════════════════════════════════════════════════════
 // FEATURE 3: CSV EXPORT
 // ════════════════════════════════════════════════════════════════
@@ -15239,7 +15637,7 @@ async function cancelBillDrill(branch, month) {
       <span class="text-slate-500">มูลค่ารวม: <b style="color:#ef4444">${fmt(total)}</b></span>
     </div>
     <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล</th><th class="py-1.5 text-right">มูลค่า</th>
+      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล <span class="text-[10px] text-slate-400">(login)</span></th><th class="py-1.5 text-right">มูลค่า</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
     <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
@@ -18215,6 +18613,43 @@ async function loadChildBuffet() {
   }).join('');
 }
 
+async function loadDiscountReasons(params) {
+  const body = document.getElementById('disc-reason-body');
+  const cards = document.getElementById('disc-reason-cards');
+  const note = document.getElementById('disc-reason-note');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
+  let d; try { d = await fetch(`${API}/api/analysis/discount-reasons?${params}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (d.staged === false) {
+    if (note) note.textContent = '';
+    cards.innerHTML = '';
+    body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">ยังไม่มีข้อมูล — รัน sync รอบใหม่เพื่อเก็บประเภทส่วนลด</td></tr>';
+    return;
+  }
+  const reasons = d.reasons || [];
+  if (note) note.textContent = `${fmtN(d.total_bills || 0)} บิลมีส่วนลด · รวม ${fmt(d.total_amount || 0)}`;
+  const untyped = reasons.find(r => r.reason_id === 0);
+  const typedAmt = (d.total_amount || 0) - ((untyped && untyped.amount) || 0);
+  cards.innerHTML = [
+    { l: 'มูลค่าลดทั้งหมด', v: fmt(d.total_amount || 0), s: `${fmtN(d.total_bills || 0)} บิล`, c: '#ef4444' },
+    { l: '⚠️ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
+    { l: '✓ ระบุเหตุผล', v: (d.total_amount ? (100 - (d.untyped_pct || 0)).toFixed(1) + '%' : '—'), s: fmt(typedAmt), c: '#10b981' },
+  ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+  const maxAmt = Math.max(1, ...reasons.map(r => r.amount || 0));
+  body.innerHTML = reasons.map(r => {
+    const unty = r.reason_id === 0;
+    const w = Math.round(100 * (r.amount || 0) / maxAmt);
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:#f59e0b' : ''}">${unty ? '⚠️ ' : ''}${esc(r.reason)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.amount)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${r.pct}%</td>
+      <td class="py-1.5 pr-2" style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${unty ? '#f59e0b' : '#6366f1'}"></div></div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
+}
+
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const params = new URLSearchParams();
@@ -18222,6 +18657,7 @@ async function loadDiscountsTab() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
+  loadDiscountReasons(new URLSearchParams(params));
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   const o = d.overall || {};
 
@@ -19285,6 +19721,207 @@ async function openPnlDrill(branch) {
 }
 
 // ── More Analytics tab (#4 daypart, #5 mix-shift, #7 turnover, #9 forecast) ──
+// ════════════════════════════════════════════════════════════════
+// MOBILE OWNER SUMMARY
+// ════════════════════════════════════════════════════════════════
+function showFullDashboard() {
+  document.body.classList.add('force-desktop');
+  try { if (!activeTab) switchTab('home'); else loadActiveTab(); } catch (e) {}
+  window.scrollTo(0, 0);
+}
+function showMobileSummary() {
+  document.body.classList.remove('force-desktop');
+  window.scrollTo(0, 0);
+  loadMobileSummary(true);
+}
+
+// ── shared state + helpers ──
+let _msView = 'summary', _msMonth = null, _msBranchesFilled = false,
+    _msSalesGran = 'month', _msBranchSort = 'rev';
+function msBranch() { return document.getElementById('msBranch')?.value || ''; }
+function msPchip(v, goodUp = true) {
+  if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
+  const good = goodUp ? v >= 0 : v <= 0;
+  const c = v === 0 ? '#64748b' : good ? '#10b981' : '#ef4444';
+  const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
+  return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
+}
+function msBar(w, col) {
+  return `<div style="flex:1;background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div>`;
+}
+
+function msSwitchView(v) {
+  _msView = v;
+  ['summary', 'sales', 'branches', 'menu', 'profit'].forEach(x => {
+    const el = document.getElementById('msv-' + x); if (el) el.style.display = x === v ? '' : 'none';
+    document.getElementById('msnav-' + x)?.classList.toggle('active', x === v);
+  });
+  window.scrollTo(0, 0);
+  msRenderActive();
+}
+function msRenderActive() {
+  if (!_msMonth) { loadMobileSummary(true); return; }
+  if (_msView === 'summary')      msRenderSummary();
+  else if (_msView === 'branches') msRenderBranches();
+  else if (_msView === 'sales')    msLoadSales();
+  else if (_msView === 'menu')     msLoadMenu();
+  else if (_msView === 'profit')   msLoadProfit();
+}
+
+// ── entry point: fetch shared month payload, then render the active view ──
+async function loadMobileSummary(force) {
+  const status = document.getElementById('msStatus');
+  if (status) status.textContent = 'กำลังโหลด…';
+  const br = msBranch();
+  const mq = new URLSearchParams({ gran: 'month' }); if (br) mq.set('branch', br);
+  try { _msMonth = await fetch(`${API}/api/sales/daily?${mq}`).then(r => r.json()); }
+  catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; return; }
+  const m = _msMonth;
+
+  if (!_msBranchesFilled && (m.branches || []).length) {
+    const sel = document.getElementById('msBranch');
+    if (sel) {
+      m.branches.slice().sort((a, b) => a.branch.localeCompare(b.branch, 'th'))
+        .forEach(b => { const o = document.createElement('option'); o.value = b.branch; o.textContent = b.branch; sel.appendChild(o); });
+      _msBranchesFilled = true;
+    }
+  }
+  document.getElementById('msSubtitle').textContent =
+    (br || 'ทุกสาขา') + ' · ' + (m.mtd ? `MTD ถึงวันที่ ${m.mtd_cutoff_day}` : 'เดือนล่าสุด') + ` (${(m.focus || '').slice(0, 7)})`;
+  if (status) status.textContent = `เทียบเดือนก่อนแบบ MTD-fair · อัปเดต ${(m.focus || '').slice(0, 10)}`;
+  msRenderActive();
+}
+
+// ── VIEW: สรุป ──
+function msRenderSummary() {
+  const m = _msMonth; if (!m) return;
+  const t = m.total || {}, branches = m.branches || [];
+  document.getElementById('msKpis').innerHTML = [
+    { l: 'รายได้ (MTD)', v: fmt(t.revenue || 0), chip: msPchip(t.mom_pct), span: true, c: '#4338ca' },
+    { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: msPchip(t.cust_mom_pct), c: '#0891b2' },
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: msPchip(t.rph_mom_pct), c: '#7c3aed' },
+  ].map(k => `<div class="ms-kpi" style="${k.span ? 'grid-column:1/-1;' : ''}">
+      <p class="lbl">${k.l}</p><p class="val" style="color:${k.c}">${k.v}</p>
+      <p class="sub">${k.chip} <span style="color:var(--text-muted,#94a3b8);font-size:11px">vs เดือนก่อน</span></p>
+    </div>`).join('');
+
+  const sig = m.anomalies || [];
+  const sw = document.getElementById('msSignalsWrap');
+  if (sig.length) {
+    sw.style.display = '';
+    document.getElementById('msSignals').innerHTML = sig.slice(0, 6).map(a => {
+      const bad = (a.pct || 0) < 0;
+      return `<div class="ms-row"><span style="font-size:16px">${bad ? '🔴' : '🟢'}</span>
+        <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.msg)}</span></div>`;
+    }).join('');
+  } else { sw.style.display = 'none'; }
+
+  const withMom = branches.filter(b => b.mom_pct != null);
+  const best = withMom.slice().sort((a, b) => b.mom_pct - a.mom_pct)[0];
+  const worst = withMom.slice().sort((a, b) => a.mom_pct - b.mom_pct)[0];
+  const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border-left:4px solid ${good ? '#10b981' : '#ef4444'}">
+      <p class="lbl">${good ? '🏆 โตสุด' : '⚠️ ตกสุด'}</p>
+      <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)}</p>
+      <p class="sub">${msPchip(b.mom_pct)} · ${fmt(b.revenue)}</p></div>`;
+  document.getElementById('msBestWorst').innerHTML = bwCard(best, true) + bwCard(worst, false);
+}
+
+// ── VIEW: สาขา ──
+function msSetBranchSort(s) {
+  _msBranchSort = s;
+  ['rev', 'mom', 'rph'].forEach(x => document.getElementById('msSort' + x[0].toUpperCase() + x.slice(1))?.classList.toggle('ms-seg-on', x === s));
+  msRenderBranches();
+}
+function msRenderBranches() {
+  const m = _msMonth; if (!m) return;
+  let branches = (m.branches || []).slice();
+  if (_msBranchSort === 'rev') branches.sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+  else if (_msBranchSort === 'mom') branches.sort((a, b) => (b.mom_pct ?? -1e9) - (a.mom_pct ?? -1e9));
+  else if (_msBranchSort === 'rph') branches.sort((a, b) => (b.rev_per_head ?? -1e9) - (a.rev_per_head ?? -1e9));
+  const maxRev = Math.max(1, ...branches.map(b => b.revenue || 0));
+  document.getElementById('msBranches').innerHTML = branches.map(b => {
+    const right = _msBranchSort === 'rph'
+      ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
+      : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.mom_pct)}`;
+    return `<div class="ms-row">
+      <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}</span>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (b.revenue || 0) / maxRev), '#6366f1')}</span></span>
+      <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${right}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: ยอดขาย (trend) ──
+function msSetSalesGran(g) {
+  _msSalesGran = g;
+  document.getElementById('msGranDay')?.classList.toggle('ms-seg-on', g === 'day');
+  document.getElementById('msGranMonth')?.classList.toggle('ms-seg-on', g === 'month');
+  msLoadSales();
+}
+async function msLoadSales() {
+  const wrap = document.getElementById('msSalesTrend');
+  wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ gran: _msSalesGran, trend: '12' });
+  const br = msBranch(); if (br) q.set('branch', br);
+  let d; try { d = await fetch(`${API}/api/sales/daily?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const tr = (d.trend || []);
+  const maxV = Math.max(1, ...tr.map(x => x.revenue || 0));
+  const lblOf = x => _msSalesGran === 'month' ? (x.start || '').slice(0, 7) : (x.start || '').slice(5, 10);
+  wrap.innerHTML = tr.map((x, i) => {
+    const w = Math.round(100 * (x.revenue || 0) / maxV);
+    const last = i === tr.length - 1;
+    return `<div class="ms-row">
+      <span style="width:58px;font-size:11px;color:var(--text-muted,#64748b)">${lblOf(x)}</span>
+      ${msBar(w, last ? '#4338ca' : '#a5b4fc')}
+      <span style="width:64px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: เมนู ──
+async function msLoadMenu() {
+  const wrap = document.getElementById('msMenu');
+  wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ sort: 'qty', limit: '20' });
+  const br = msBranch(); if (br) q.set('branch', br);
+  const mon = (_msMonth?.focus || '').slice(0, 7); if (mon) q.set('month', mon);
+  let d; try { d = await fetch(`${API}/api/sales/top_ordered?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const items = (d.items || []);
+  const maxQ = Math.max(1, ...items.map(x => x.qty || 0));
+  wrap.innerHTML = items.map((x, i) => {
+    const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
+    return `<div class="ms-row">
+      <span style="width:18px;font-size:11px;color:var(--text-muted,#94a3b8)">${i + 1}</span>
+      <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</span>
+      <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (x.qty || 0) / maxQ), '#0891b2')}</span></span>
+      <span style="width:74px;text-align:right;flex-shrink:0"><span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(x.qty || 0)}</span><br>${msPchip(x.qty_mom_pct)}</span>
+    </div>`;
+  }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
+// ── VIEW: กำไร/ต้นทุน ──
+async function msLoadProfit() {
+  const kp = document.getElementById('msProfitKpis'), br = document.getElementById('msProfitBranches');
+  kp.innerHTML = ''; br.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  const q = new URLSearchParams({ gran: 'month' });
+  const b = msBranch(); if (b) q.set('branch', b);
+  let d; try { d = await fetch(`${API}/api/sales/cost-per-head?${q}`).then(r => r.json()); } catch (e) { br.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  const t = d.total || {};
+  const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
+  kp.innerHTML = [
+    { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', c: '#0891b2' },
+    { l: 'ต้นทุน/หัว (BoM)', v: t.cost_per_head != null ? fmt(t.cost_per_head) : '—', c: '#ef4444' },
+    { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', c: '#10b981' },
+    { l: 'Food cost %', v: t.cost_pct != null ? t.cost_pct + '%' : '—', c: cpColor(t.cost_pct) },
+  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${k.c}">${k.v}</p></div>`).join('');
+  const branches = (d.branches || []).filter(r => r.cost_pct != null);
+  br.innerHTML = branches.map(r => `<div class="ms-row">
+      <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
+      <span style="font-size:12px;color:var(--text-muted,#64748b);font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
+      <span class="ms-chip" style="background:${cpColor(r.cost_pct)}22;color:${cpColor(r.cost_pct)}">${r.cost_pct}%</span>
+    </div>`).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+}
+
 async function loadMoreAnalytics() {
   const gen = loadGen;
   const p = new URLSearchParams();
@@ -19304,21 +19941,46 @@ async function loadMoreAnalytics() {
   ]);
   if (gen !== loadGen) return;
 
-  if (dp) document.getElementById('more-daypart').innerHTML = dp.dayparts.map(x=>`
-    <tr class="border-b border-slate-50">
-      <td class="py-1.5 pr-2">${esc(x.label)}</td>
-      <td class="py-1.5 pr-2 text-right">${fmt(x.revenue)}</td>
-      <td class="py-1.5 pr-2 text-right text-slate-400">${x.revenue_pct}%</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(x.covers)}</td>
-      <td class="py-1.5 pr-2 text-right">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${x.avg_bill!=null?fmtN(x.avg_bill):'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${x.drink_pct}%</td>
-      <td class="py-1.5 text-right" style="color:#0891b2">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}</td>
-    </tr>`).join('');
+  const dayparts = (dp && dp.dayparts) || [];
+  if (dp) {
+    const maxPct = Math.max(1, ...dayparts.map(x=>x.revenue_pct||0));
+    const maxGp = Math.max(...dayparts.map(x=>x.est_gp_margin_pct||0));
+    const minGp = Math.min(...dayparts.map(x=>x.est_gp_margin_pct==null?999:x.est_gp_margin_pct));
+    const gpCol = m => m==null ? '#94a3b8' : m>=55 ? '#10b981' : m>=45 ? '#0891b2' : '#f59e0b';
+    document.getElementById('more-daypart').innerHTML = dayparts.map(x=>{
+      const w = Math.round(100*(x.revenue_pct||0)/maxPct);
+      const isTopGp = x.est_gp_margin_pct!=null && x.est_gp_margin_pct===maxGp;
+      return `<tr class="border-b border-slate-50">
+        <td class="py-1.5 pr-2 font-medium">${esc(x.label)}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(x.revenue)}</td>
+        <td class="py-1.5 pr-2" style="min-width:96px">
+          <div class="flex items-center gap-1.5">
+            <div class="flex-1" style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#6366f1"></div></div>
+            <span class="text-[10px] text-slate-400 tabular-nums" style="width:30px">${x.revenue_pct}%</span>
+          </div>
+        </td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.covers)}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${x.avg_bill!=null?fmtN(x.avg_bill):'—'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${x.drink_pct}%</td>
+        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${gpCol(x.est_gp_margin_pct)}">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}${isTopGp?' 👑':''}</td>
+      </tr>`;
+    }).join('');
+    const topRev = dayparts.slice().sort((a,b)=>(b.revenue||0)-(a.revenue||0))[0];
+    document.getElementById('more-daypart-note').textContent = topRev ? `ช่วงพีค: ${topRev.label}` : '';
+  }
 
   if (fc) {
     document.getElementById('more-forecast-note').textContent =
       fc.trend ? `เทรนด์ ${fmt(fc.trend.slope_per_month)}/เดือน · R²=${fc.trend.r_squared}` : (fc.note||'');
+    const slope = fc.trend ? fc.trend.slope_per_month : null;
+    const fb = document.getElementById('more-forecast-badge');
+    if (fb) {
+      if (slope == null) { fb.textContent = ''; }
+      else if (slope > 0) { fb.textContent = '▲ ขาขึ้น'; fb.style.color = '#10b981'; }
+      else if (slope < 0) { fb.textContent = '▼ ขาลง'; fb.style.color = '#ef4444'; }
+      else { fb.textContent = '→ ทรงตัว'; fb.style.color = '#64748b'; }
+    }
     const hist = fc.history||[], fore = fc.forecast||[];
     const labels = [...hist.map(h=>h.period), ...fore.map(f=>f.period)];
     const histData = [...hist.map(h=>h.revenue), ...fore.map(()=>null)];
@@ -19339,14 +20001,55 @@ async function loadMoreAnalytics() {
         scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } } });
   }
 
-  if (turn) document.getElementById('more-turnover').innerHTML = (turn.branches||[]).map((b,i)=>`
-    <tr class="border-b border-slate-50">
-      <td class="py-1.5 pr-2 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-2">${esc(b.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-medium">${b.avg_turn_min!=null?b.avg_turn_min:'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(b.turns)}</td>
-      <td class="py-1.5 text-right">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
-    </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">—</td></tr>';
+  const tbr = (turn && turn.branches) || [];
+  if (turn) {
+    const turns = tbr.filter(b=>b.avg_turn_min!=null).map(b=>b.avg_turn_min);
+    const maxT = Math.max(1, ...turns), minT = Math.min(...turns);
+    const med = turns.length ? turns.slice().sort((a,b)=>a-b)[Math.floor(turns.length/2)] : 0;
+    const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    document.getElementById('more-turnover').innerHTML = tbr.map((b,i)=>{
+      const t = b.avg_turn_min;
+      const w = t!=null ? Math.round(100*t/maxT) : 0;
+      const fast = t!=null && t<=med;
+      const col = t==null ? '#cbd5e1' : fast ? '#10b981' : '#f59e0b';
+      return `<tr class="border-b border-slate-50">
+        <td class="py-1.5 pr-2 text-slate-400">${medal(i)}</td>
+        <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
+        <td class="py-1.5 pr-2 text-right font-medium tabular-nums" style="color:${col}">${t!=null?t:'—'}</td>
+        <td class="py-1.5 pr-2"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div></td>
+        <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(b.turns)}</td>
+        <td class="py-1.5 text-right tabular-nums">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">—</td></tr>';
+  }
+
+  // ── auto-generated highlight chips (from the three datasets above) ──
+  const chips = [];
+  if (dayparts.length) {
+    const topRev = dayparts.slice().sort((a,b)=>(b.revenue||0)-(a.revenue||0))[0];
+    chips.push({ icon:'🕒', label:'ช่วงทำเงินสูงสุด', val:esc(topRev.label),
+                 sub:`${fmt(topRev.revenue)} · ${topRev.revenue_pct}% ของรายได้`, c:'#6366f1' });
+    const wGp = dayparts.filter(x=>x.est_gp_margin_pct!=null).sort((a,b)=>b.est_gp_margin_pct-a.est_gp_margin_pct)[0];
+    if (wGp) chips.push({ icon:'💰', label:'กำไร(margin)ดีสุด', val:esc(wGp.label),
+                 sub:`GP ${wGp.est_gp_margin_pct}% · ดื่ม ${wGp.drink_pct}%`, c:'#10b981' });
+  }
+  if (tbr.length) {
+    const fastest = tbr.filter(b=>b.avg_turn_min!=null).sort((a,b)=>a.avg_turn_min-b.avg_turn_min)[0];
+    if (fastest) chips.push({ icon:'⚡', label:'หมุนโต๊ะเร็วสุด', val:esc(fastest.branch),
+                 sub:`${fastest.avg_turn_min} นาที/รอบ`, c:'#0891b2' });
+  }
+  if (fc && fc.trend) {
+    const up = fc.trend.slope_per_month > 0;
+    chips.push({ icon: up?'📈':'📉', label:'เทรนด์รายได้', val: up?'ขาขึ้น':'ขาลง',
+                 sub:`${fmt(fc.trend.slope_per_month)}/เดือน · R²=${fc.trend.r_squared}`, c: up?'#10b981':'#ef4444' });
+  }
+  const hc = document.getElementById('more-highlights');
+  if (hc) hc.innerHTML = chips.map(c=>`
+    <div class="card p-3" style="border-left:4px solid ${c.c}">
+      <p class="text-[11px] text-slate-400">${c.icon} ${c.label}</p>
+      <p class="text-lg font-bold leading-tight" style="color:${c.c}">${c.val}</p>
+      <p class="text-[11px] text-slate-500 mt-0.5">${c.sub}</p>
+    </div>`).join('');
 }
 
 // ── Boot ───────────────────────────────────────────────────────

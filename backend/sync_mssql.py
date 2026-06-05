@@ -507,10 +507,35 @@ def stage_extra(sq, mc, since, bid_map, item_map):
          for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_cancel_bill: {len(rows)} groups")
 
+    # ── pos_discount_reason: discount-reason lookup (Sale.DiscountReasonId -> name) ──
+    #    e.g. "ส่วนลด 10%", "ส่วนลดด่วน". ReasonId 0 = no reason set on the bill.
+    sq.executescript("DROP TABLE IF EXISTS pos_discount_reason; CREATE TABLE pos_discount_reason("
+                     "reason_id INT PRIMARY KEY, reason_desc TEXT, amount_percent REAL);")
+    drrows = run("SELECT ReasonId rid, ReasonDesc rd, CAST(ISNULL(AmountPercent,0) AS float) pct FROM DiscountSaleReason", ())
+    sq.executemany("INSERT OR REPLACE INTO pos_discount_reason VALUES(?,?,?)",
+        [(r["rid"], _th(r["rd"]), r["pct"] or 0) for r in drrows])
+    print(f"        pos_discount_reason: {len(drrows)} rows")
+
+    # ── pos_discount_month: discounted BILLS per branch/month/reason (Sale.Discount>0).
+    #    Surfaces "why was it discounted" — reason_id 0 = untyped (no reason chosen). ──
+    sq.executescript("DROP TABLE IF EXISTS pos_discount_month; CREATE TABLE pos_discount_month("
+                     "branch_id INT, period_month TEXT, reason_id INT, bills INT, amount REAL);")
+    rows = run(f"""SELECT s.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, ISNULL(s.DiscountReasonId,0) rid,
+                 COUNT(*) n, SUM(CAST(s.Discount AS float)) amt
+                 FROM Sale s WHERE {SALE_FILTER} AND s.Discount>0 AND s.SaleDate >= %s
+                 GROUP BY s.BranchId, CONVERT(char(7),s.SaleDate,126), ISNULL(s.DiscountReasonId,0)""")
+    sq.executemany("INSERT INTO pos_discount_month VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["ym"], r["rid"], r["n"], round(r["amt"] or 0,2))
+         for r in rows if bid_map.get(r["bid"])])
+    print(f"        pos_discount_month: {len(rows)} groups")
+
     # ── pos_cancel_bill_detail: INDIVIDUAL voided bills (TOP 20000 most recent) so the
     #    UI can drill per-bill to inspect each error. Bounded for size. ──
     # Sale has no dedicated "delete user" column (only DeleteReasonId/Notes/Date), so the
     # best "who" for a voided bill is the login user who owned it: Sale.UserId -> Users.Username.
+    # NOTE: individual (per-person) attribution is NOT possible in this POS — the Staff
+    # master table is empty and SaleItemStaff.StaffName is blank for all rows, so cancel_user
+    # (a shared login/role account) is the only "who" available.
     sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
                      "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT);")
     drows = run("""SELECT TOP 20000 s.BranchId bid, CONVERT(char(19),s.SaleDate,126) dt, s.SaleNum num,
