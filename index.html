@@ -792,6 +792,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   .content-area canvas { max-width: 100%; }
   #clusterBar { flex-wrap: wrap; height: auto; }
   .cluster-tab, .gran-btn { font-size: 11px; }
+
+  /* Subtab button bars were the main cause of page-level horizontal scroll on
+     phones (a row of nowrap buttons wider than the viewport). Let them wrap to
+     multiple rows so every page fits within the screen width. */
+  .content-area .subtab-bar { flex-wrap: wrap; max-width: none !important; }
+  .content-area .subtab-bar > .subtab-btn { flex: 0 1 auto; padding-left: 11px; padding-right: 11px; }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -5710,6 +5716,41 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 // ── Config & globals ───────────────────────────────────────────
 // When opened as a local file (file://) point API calls at the running backend
 const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
+
+// ── Write-auth: attach the owner token to mutating /api/ calls ────────────────
+// Hosted deploys gate every data-writing endpoint behind X-Upload-Token (the
+// same token as upload/seed). Local dev leaves OSHINEI_SEED_TOKEN unset, so the
+// server allows writes without a token and this stays invisible. /api/upload
+// manages its own token (see handleUpload) and is excluded here. Read-only POSTs
+// like /api/bom-cost/simulate aren't gated server-side, so they never prompt.
+(function () {
+  const TOK_KEY = 'oshinei_upload_token';
+  const _origFetch = window.fetch.bind(window);
+  const isWrite = m => /^(POST|PUT|DELETE|PATCH)$/i.test(m || 'GET');
+  window.fetch = function (input, init) {
+    init = init || {};
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = init.method || (typeof input !== 'string' && input && input.method) || 'GET';
+    if (!isWrite(method) || !url.includes('/api/') || url.includes('/api/upload')) {
+      return _origFetch(input, init);
+    }
+    const send = (tok) => {
+      const h = new Headers(init.headers || (typeof input !== 'string' && input ? input.headers : null) || {});
+      if (tok) h.set('X-Upload-Token', tok);
+      return _origFetch(input, Object.assign({}, init, { headers: h }));
+    };
+    return send(localStorage.getItem(TOK_KEY) || '').then(res => {
+      if (res.status !== 403) return res;
+      const tok = (window.prompt('🔒 ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
+      if (!tok) return res;                       // cancelled → surface the 403
+      localStorage.setItem(TOK_KEY, tok);
+      return send(tok).then(res2 => {
+        if (res2.status === 403) localStorage.removeItem(TOK_KEY);  // wrong token
+        return res2;
+      });
+    });
+  };
+})();
 const PALETTE = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6','#a78bfa','#fb923c'];
 
 // ── World-class semantic color system ─────────────────────────
@@ -6584,7 +6625,7 @@ async function loadCashiers() {
   document.getElementById('cashierPodium').innerHTML = data.slice(0,3).map((c, i) => `
     <div class="card p-4 text-center" style="border-left:4px solid ${['#f59e0b','#94a3b8','#cd7f32'][i]}">
       <div class="text-2xl mb-1">${['🥇','🥈','🥉'][i]}</div>
-      <p class="font-semibold text-slate-700 text-sm truncate">${c.cashier}</p>
+      <p class="font-semibold text-slate-700 text-sm truncate">${esc(c.cashier)}</p>
       <p class="text-xl font-bold text-indigo-700 mt-1">${fmt(c.revenue)}</p>
       <p class="text-xs text-slate-500 mt-1">${fmtN(c.tx_count)} tx · ${fmtN(c.avg_ticket)} avg</p>
       <p class="text-xs mt-0.5 ${c.discount_rate > 10 ? 'text-red-500' : 'text-slate-400'}">${fmtP(c.discount_rate)} disc rate</p>
@@ -6594,7 +6635,7 @@ async function loadCashiers() {
   document.getElementById('cashierBody').innerHTML = data.map((r, i) => `
     <tr class="border-t border-slate-100">
       <td class="py-2 pr-3 text-slate-400">${i+1}</td>
-      <td class="py-2 pr-3 font-medium text-slate-700">${r.cashier}</td>
+      <td class="py-2 pr-3 font-medium text-slate-700">${esc(r.cashier)}</td>
       <td class="py-2 pr-3 text-right font-semibold">${fmtN(r.revenue)}</td>
       <td class="py-2 pr-3 text-right text-slate-500">${fmtN(r.tx_count)}</td>
       <td class="py-2 pr-3 text-right text-slate-500">${fmtN(r.avg_ticket)}</td>
@@ -6659,7 +6700,7 @@ async function loadDiscounts() {
   document.getElementById('discountCashierBody').innerHTML = data.top_cashiers.map((r, i) => `
     <tr class="border-t border-slate-100">
       <td class="py-2 pr-3 text-slate-400">${i+1}</td>
-      <td class="py-2 pr-3 font-medium text-slate-700">${r.cashier}</td>
+      <td class="py-2 pr-3 font-medium text-slate-700">${esc(r.cashier)}</td>
       <td class="py-2 pr-3 text-xs text-slate-500">${esc(r.branch||'—')}</td>
       <td class="py-2 pr-3 text-right font-semibold text-red-600">${fmtN(r.total_discount)}</td>
       <td class="py-2 pr-3 text-right ${r.rate > 12 ? 'text-red-500 font-bold' : 'text-amber-600'}">${fmtP(r.rate)}</td>
@@ -12450,7 +12491,7 @@ function renderComparison(data) {
                <td class="py-2 px-2 text-right">${badge(c.delta_b_pct)}</td>`
             : '';
           return `<tr class="border-t border-slate-100 hover:bg-slate-50">
-            <td class="py-2 px-3 font-semibold">${c.branch}</td>
+            <td class="py-2 px-3 font-semibold">${esc(c.branch)}</td>
             ${revCols}${shiftCols}
           </tr>`;
         }).join('')}

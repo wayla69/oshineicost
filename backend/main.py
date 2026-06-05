@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -248,6 +248,28 @@ if DOCS.exists():
 
 
 # ---------------------------------------------------------------------------
+# Write auth — gate data-mutating endpoints behind the owner token
+# ---------------------------------------------------------------------------
+# Mirrors /api/upload exactly: when OSHINEI_SEED_TOKEN is set (hosted deploys),
+# a matching token is required via the `X-Upload-Token` header or `?token=`.
+# When the env var is unset (local dev), writes are allowed without a token, so
+# the gate is invisible locally. Applied via `dependencies=[Depends(...)]` on
+# the route decorator so endpoint signatures stay untouched.
+# NOTE: read-only POSTs (e.g. /api/bom-cost/simulate) are intentionally NOT
+# gated — they compute but never write, so anonymous use is harmless.
+def require_write_token(
+    token: str = Query(""),
+    x_upload_token: str = Header(None),
+):
+    import hmac
+    expected = _os_db.environ.get("OSHINEI_SEED_TOKEN")
+    if expected:
+        provided = x_upload_token or token or ""
+        if not hmac.compare_digest(provided, expected):
+            raise HTTPException(status_code=403, detail="A valid write token is required.")
+
+
+# ---------------------------------------------------------------------------
 # DB helper
 # ---------------------------------------------------------------------------
 _PRAGMAS = (
@@ -417,7 +439,7 @@ class BranchTypeUpdate(BaseModel):
     branch_type: str   # 'master' | 'franchise'
 
 
-@app.put("/api/branches/{branch_id}/type")
+@app.put("/api/branches/{branch_id}/type", dependencies=[Depends(require_write_token)])
 def update_branch_type(branch_id: int, body: BranchTypeUpdate):
     if body.branch_type not in ("master", "franchise"):
         raise HTTPException(400, "branch_type must be 'master' or 'franchise'")
@@ -2962,7 +2984,7 @@ def get_cost():
     ]
 
 
-@app.post("/api/cost")
+@app.post("/api/cost", dependencies=[Depends(require_write_token)])
 def post_cost(entries: List[CostEntry]):
     """Upsert unit costs by sku_code. Returns count of rows updated.
 
@@ -3193,7 +3215,7 @@ def get_cost_monthly(
         ]
 
 
-@app.post("/api/cost/monthly")
+@app.post("/api/cost/monthly", dependencies=[Depends(require_write_token)])
 def post_cost_monthly(entries: List[MonthlyCostEntry]):
     """Upsert monthly per-SKU unit_cost overrides.
 
@@ -3237,7 +3259,7 @@ def post_cost_monthly(entries: List[MonthlyCostEntry]):
     }
 
 
-@app.delete("/api/cost/monthly")
+@app.delete("/api/cost/monthly", dependencies=[Depends(require_write_token)])
 def delete_cost_monthly(
     sku:   str = Query(..., description="sku_code"),
     month: str = Query(..., description="YYYY-MM"),
@@ -6856,7 +6878,7 @@ def get_closed_hours():
     return [dict(r) for r in rows]
 
 
-@app.put("/api/closed_hours")
+@app.put("/api/closed_hours", dependencies=[Depends(require_write_token)])
 def put_closed_hours(entries: List[ClosedHoursEntry]):
     with get_db() as con:
         cur = con.cursor()
@@ -7310,7 +7332,7 @@ class AIBody(BaseModel):
     extra:        Optional[str] = None
 
 
-@app.post("/api/ai/commentary")
+@app.post("/api/ai/commentary", dependencies=[Depends(require_write_token)])
 def ai_commentary(body: AIBody):
     """
     Generate a short narrative commentary about the period using Anthropic Claude
@@ -7461,7 +7483,7 @@ def get_settings():
     return {r["key"]: r["value"] for r in rows}
 
 
-@app.put("/api/settings")
+@app.put("/api/settings", dependencies=[Depends(require_write_token)])
 def put_settings(body: Dict[str, str]):
     with get_db() as con:
         cur = con.cursor()
@@ -7476,7 +7498,7 @@ def put_settings(body: Dict[str, str]):
 # ---------------------------------------------------------------------------
 # /api/branches/{id}   -  PUT: rename a branch
 # ---------------------------------------------------------------------------
-@app.put("/api/branches/{branch_id}")
+@app.put("/api/branches/{branch_id}", dependencies=[Depends(require_write_token)])
 def update_branch(branch_id: int, body: BranchUpdate):
     with get_db() as con:
         clash = con.execute(
@@ -7492,7 +7514,7 @@ def update_branch(branch_id: int, body: BranchUpdate):
     return {"ok": True}
 
 
-@app.put("/api/branches/{branch_id}/active")
+@app.put("/api/branches/{branch_id}/active", dependencies=[Depends(require_write_token)])
 def update_branch_active(branch_id: int, body: ActiveUpdate):
     with get_db() as con:
         con.execute(
@@ -7533,7 +7555,7 @@ def list_skus(include_inactive: bool = Query(False)):
     ]
 
 
-@app.put("/api/skus/{sku_code}/active")
+@app.put("/api/skus/{sku_code}/active", dependencies=[Depends(require_write_token)])
 def update_sku_active(sku_code: str, body: ActiveUpdate):
     with get_db() as con:
         updated = con.execute(
@@ -7574,7 +7596,7 @@ def get_targets(month: Optional[str] = Query(None)):
     return [dict(r) for r in rows]
 
 
-@app.put("/api/targets")
+@app.put("/api/targets", dependencies=[Depends(require_write_token)])
 def put_targets(entries: List[TargetEntry]):
     with get_db() as con:
         cur = con.cursor()
@@ -11803,7 +11825,7 @@ class BranchFixedCostBody(BaseModel):
     costs: Dict[str, float]   # {branch_name: monthly_fixed_cost}
 
 
-@app.post("/api/branches/fixed-costs")
+@app.post("/api/branches/fixed-costs", dependencies=[Depends(require_write_token)])
 def save_branch_fixed_costs(body: BranchFixedCostBody):
     """Save per-branch monthly fixed costs."""
     value = _json.dumps(body.costs)
@@ -11832,7 +11854,7 @@ class BranchLaborCostBody(BaseModel):
     costs: Dict[str, float]   # {branch_name: monthly_labor_cost}
 
 
-@app.post("/api/branches/labor-costs")
+@app.post("/api/branches/labor-costs", dependencies=[Depends(require_write_token)])
 def save_branch_labor_costs(body: BranchLaborCostBody):
     """Save per-branch monthly labor cost (the largest CONTROLLABLE cost)."""
     value = _json.dumps(body.costs)
@@ -13927,7 +13949,7 @@ class CostUpdate(BaseModel):
     unit_cost: float
 
 
-@app.post("/api/cost/bulk-update")
+@app.post("/api/cost/bulk-update", dependencies=[Depends(require_write_token)])
 def cost_bulk_update(updates: list[CostUpdate]):
     """Apply unit_cost updates to multiple SKUs. Returns rows updated + any errors.
     Used by the Phase 11 recalibration UI to apply user edits in one click."""
@@ -13986,7 +14008,7 @@ class BomAliasUpdate(BaseModel):
     notes: Optional[str] = None
 
 
-@app.put("/api/bom/aliases/{bom_code}")
+@app.put("/api/bom/aliases/{bom_code}", dependencies=[Depends(require_write_token)])
 def bom_alias_upsert(bom_code: str, body: BomAliasUpdate):
     """Manually map a BoM Excel code to a DB SKU code. Marks the row as 'manual'."""
     code = (bom_code or "").strip().upper()
@@ -14504,7 +14526,7 @@ def list_business_types():
     }
 
 
-@app.put("/api/skus/{sku_code}/business-type")
+@app.put("/api/skus/{sku_code}/business-type", dependencies=[Depends(require_write_token)])
 def update_sku_business_type(sku_code: str, body: BusinessTypeUpdate):
     bt = (body.business_type or "").strip().lower()
     if bt not in _VALID_BUSINESS_TYPES:
@@ -15264,7 +15286,7 @@ class SimulateBody(BaseModel):
     month_to: Optional[str] = None
 
 
-@app.post("/api/bom-cost/scenarios")
+@app.post("/api/bom-cost/scenarios", dependencies=[Depends(require_write_token)])
 def create_scenario(body: ScenarioCreate):
     nm = (body.name or "").strip()
     if not nm:
@@ -15334,7 +15356,7 @@ def get_scenario(scen_id: int):
     return {"scenario": dict(head), "items": [dict(r) for r in items]}
 
 
-@app.delete("/api/bom-cost/scenarios/{scen_id}")
+@app.delete("/api/bom-cost/scenarios/{scen_id}", dependencies=[Depends(require_write_token)])
 def delete_scenario(scen_id: int):
     with get_db() as con:
         cur = con.execute("UPDATE cost_scenario SET is_archived=1 WHERE id=?", (scen_id,))
