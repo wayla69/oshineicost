@@ -1073,9 +1073,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <button onclick="loadPresetRange('all')" class="preset-chip">All Time</button>
     <button onclick="toggleCustomRange()" id="customRangeChip" class="preset-chip">🗓 กำหนดเอง</button>
     <span id="customRangeBox" class="hidden items-center gap-1">
-      <select id="customFrom" class="border border-slate-300 rounded px-2 py-1 text-xs"></select>
+      <input type="date" id="customFrom" class="border border-slate-300 rounded px-2 py-1 text-xs" title="วันเริ่มต้น">
       <span class="text-xs text-slate-400">→</span>
-      <select id="customTo" class="border border-slate-300 rounded px-2 py-1 text-xs"></select>
+      <input type="date" id="customTo" class="border border-slate-300 rounded px-2 py-1 text-xs" title="วันสิ้นสุด">
       <button onclick="applyCustomRange()" class="preset-chip" style="background:#e0e7ff;color:#3730a3">ใช้ช่วงนี้</button>
       <span id="customRangeMsg" class="text-xs text-red-500"></span>
     </span>
@@ -5464,6 +5464,16 @@ function qp(extra = {}) {
   if (getGroup())     p.group      = getGroup();
   if (getMonthFrom()) p.month_from = getMonthFrom();
   if (getMonthTo())   p.month_to   = getMonthTo();
+  // Day-precise mode (daily/weekly granularity, incl. the custom day range): also
+  // pass exact date_from/date_to. Day-capable endpoints prefer these; month-grain
+  // endpoints ignore them and use the (enclosing) month range above.
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  if (g === 'daily' || g === 'weekly') {
+    const df = document.getElementById('selDateFrom')?.value;
+    const dt = document.getElementById('selDateTo')?.value;
+    if (df) p.date_from = df;
+    if (dt) p.date_to   = dt;
+  }
   if (getVariant())   p.variant    = getVariant();
   Object.assign(p, extra);
   const s = new URLSearchParams(p).toString();
@@ -12366,17 +12376,31 @@ function loadPresetRange(range) {
   }
 }
 
-// Custom month-range picker in the Quick-load bar
+// Custom DAY-range picker (full calendar) in the Quick-load bar.
+// Picks exact start/end dates. Day-precise pages (transaction-grain) honour the
+// exact dates; month-aggregate pages fall back to the enclosing month range.
+function _lastDayOfMonth(ym) {            // "YYYY-MM" → "YYYY-MM-DD" (last day)
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+}
 function toggleCustomRange() {
   const box = document.getElementById('customRangeBox');
   const open = box.classList.contains('hidden');
   if (open) {
-    // populate both selects from available months (newest first), prefill current range
-    const opts = allMonths.map(m => `<option value="${m}">${typeof fmtPeriod==='function'?fmtPeriod(m):m}</option>`).reverse().join('');
     const f = document.getElementById('customFrom'), t = document.getElementById('customTo');
-    f.innerHTML = opts; t.innerHTML = opts;
-    f.value = getMonthFrom() || allMonths[0] || '';
-    t.value = getMonthTo()   || allMonths[allMonths.length-1] || '';
+    // Data window bounds for the calendar
+    const dataMin = (allMonths[0] || '2025-01') + '-01';
+    const today = new Date().toISOString().slice(0, 10);
+    f.min = dataMin; f.max = today; t.min = dataMin; t.max = today;
+    // Prefill from the active range: day pickers if in day mode, else the month range
+    const dF = document.getElementById('selDateFrom')?.value;
+    const dT = document.getElementById('selDateTo')?.value;
+    if (dF || dT) { f.value = dF || ''; t.value = dT || ''; }
+    else {
+      const mf = getMonthFrom(), mt = getMonthTo();
+      f.value = mf ? mf + '-01' : dataMin;
+      t.value = mt ? _lastDayOfMonth(mt) : today;
+    }
     box.classList.remove('hidden'); box.classList.add('inline-flex');
     document.getElementById('customRangeChip').classList.add('active');
   } else {
@@ -12386,14 +12410,19 @@ function toggleCustomRange() {
 }
 
 function applyCustomRange() {
-  const from = document.getElementById('customFrom').value;
+  const from = document.getElementById('customFrom').value;   // YYYY-MM-DD
   const to   = document.getElementById('customTo').value;
   const msg  = document.getElementById('customRangeMsg');
-  if (from > to) { msg.textContent = 'เดือนเริ่มต้องไม่เกินเดือนสิ้นสุด'; return; }
+  if (!from || !to) { msg.textContent = 'เลือกวันเริ่มและวันสิ้นสุด'; return; }
+  if (from > to)    { msg.textContent = 'วันเริ่มต้องไม่เกินวันสิ้นสุด'; return; }
   msg.textContent = '';
-  setGranularity('monthly');
-  document.getElementById('selMonthFrom').value = from;
-  document.getElementById('selMonthTo').value   = to;
+  // Day-precise custom range → daily granularity + global date pickers.
+  setGranularity('daily');
+  document.getElementById('selDateFrom').value = from;
+  document.getElementById('selDateTo').value   = to;
+  // Derive enclosing month range so month-aggregate pages still filter correctly.
+  document.getElementById('selMonthFrom').value = from.slice(0, 7);
+  document.getElementById('selMonthTo').value   = to.slice(0, 7);
   onFilterChange();
 }
 
@@ -12963,6 +12992,17 @@ function _gpbInitFilters() {
 
 async function loadGpBranch() {
   _gpbInitFilters();
+  // Follow the GLOBAL month range when it changes (a manual local pick wins until
+  // the global range changes again).
+  (function () {
+    const gf = getMonthFrom(), gt = getMonthTo(), key = gf + '|' + gt;
+    if (key !== _extraLastGlobal['gpbranch_r']) {
+      const fS = document.getElementById('gpbMonthFrom'), tS = document.getElementById('gpbMonthTo');
+      if (fS && [...fS.options].some(o => o.value === gf)) fS.value = gf;
+      if (tS && [...tS.options].some(o => o.value === gt)) tS.value = gt;
+      _extraLastGlobal['gpbranch_r'] = key;
+    }
+  })();
   const status = document.getElementById('gpbStatus');
   if (status) status.textContent = 'กำลังโหลด…';
   const mf = document.getElementById('gpbMonthFrom')?.value || '';
@@ -14248,9 +14288,23 @@ async function _extraMonths(selId, valNow) {
 }
 const _extKpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${c}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub||''}</p></div>`;
 
+// Make a LOCAL Extra month-picker follow the GLOBAL period. These endpoints take a
+// single month, so we snap the local picker to the global END month whenever the
+// global range changes (a manual local pick still wins until the global changes
+// again). This is what makes the top period selector drive the Extra tabs too.
+const _extraLastGlobal = {};
+function _syncExtraMonth(selId, tabKey) {
+  const sel = document.getElementById(selId); if (!sel) return;
+  const gm = getMonthTo() || getMonthFrom() || '';
+  if (gm && gm !== _extraLastGlobal[tabKey] && [...sel.options].some(o => o.value === gm)) {
+    sel.value = gm;
+  }
+  _extraLastGlobal[tabKey] = gm;
+}
+
 // 💵 เงินสดขาด/เกิน
 async function loadCashCtl(force) {
-  await _extraMonths('ccMonth');
+  await _extraMonths('ccMonth'); _syncExtraMonth('ccMonth', 'cashctl');
   const mv = document.getElementById('ccMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
@@ -14282,7 +14336,7 @@ async function loadCashCtl(force) {
 
 // 👥 ประเภทลูกค้า
 async function loadCustType(force) {
-  await _extraMonths('ctMonth');
+  await _extraMonths('ctMonth'); _syncExtraMonth('ctMonth', 'custtype');
   const mv = document.getElementById('ctMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.custtype === _fk) return; _tabLastKey.custtype = _fk;
@@ -14337,7 +14391,7 @@ async function loadModifiers(force) {
 
 // 🏷️ ราคา & โซนโต๊ะ
 async function loadPriceZone(force) {
-  await _extraMonths('pzMonth');
+  await _extraMonths('pzMonth'); _syncExtraMonth('pzMonth', 'pricezone');
   const mv = document.getElementById('pzMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.pricezone === _fk) return; _tabLastKey.pricezone = _fk;
@@ -14369,7 +14423,7 @@ async function loadPriceZone(force) {
 
 // 🗑️ บิลยกเลิก/ลบ (whole-bill voids)
 async function loadCancelBill(force) {
-  await _extraMonths('cbMonth');
+  await _extraMonths('cbMonth'); _syncExtraMonth('cbMonth', 'cancelbill');
   const mv = document.getElementById('cbMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cancelbill === _fk) return; _tabLastKey.cancelbill = _fk;
