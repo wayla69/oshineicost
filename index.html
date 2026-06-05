@@ -1377,6 +1377,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">* "ลูกค้า" = จำนวนที่ POS นับตามประเภท (อาจไม่เท่า pax reconciled) — ใช้ดู<b>สัดส่วน/แนวโน้ม</b>เป็นหลัก</p>
     </div>
   </div>
+  <div class="card p-5 mt-5 overflow-x-auto">
+    <h2 class="section-title mb-3">แยกตามสาขา <span class="font-normal normal-case" style="color:var(--text-muted);font-size:11px">· เรียงตามจำนวนลูกค้า · %เดลิเวอรี = Grab/LINE/ส่ง</span></h2>
+    <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาขา</th>
+      <th class="py-1.5 pr-2 text-right">ลูกค้า</th>
+      <th class="py-1.5 pr-2 text-right">เดลิเวอรี</th>
+      <th class="py-1.5 pr-2 text-right">% เดลิเวอรี</th>
+      <th class="py-1.5 pr-2 text-right">ยอด (ex-VAT)</th>
+      <th class="py-1.5 text-right">ยอด/ราย</th>
+    </tr></thead><tbody id="ctByBranch"></tbody></table>
+  </div>
 </div>
 
 <!-- ══ 🧩 EXTRA: 🍽️ ความต้องการพิเศษ (Modifiers) ══ -->
@@ -14550,8 +14561,9 @@ async function loadCashCtl(force) {
     _extKpi('ยอดเกินรวม', fmt(s.over_total || 0), 'เงินเกินลิ้นชัก', '#10b981'),
     _extKpi('ระเบียบเงินสด', ((s.day_branch ? (1 - (s.short_days || 0) / s.day_branch) * 100 : 100)).toFixed(0) + '%', 'วัน-สาขาที่ไม่ขาด', '#0891b2'),
   ].join('');
-  document.getElementById('ccBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
-    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+  const ccMon = d.month || '';
+  document.getElementById('ccBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cashDayDrill('${jsAttr(r.branch)}','${ccMon}')" title="คลิกดูรายวันของ ${esc(r.branch)}">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.short_days || 0}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td>
@@ -14598,6 +14610,17 @@ async function loadCustType(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${t.cust_pct}%</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmt(t.net)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold">${t.net_per_head != null ? fmt(t.net_per_head) : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  document.getElementById('ctByBranch').innerHTML = (d.by_branch || []).map(r => {
+    const dCol = r.delivery_pct >= 25 ? '#f59e0b' : r.delivery_pct >= 10 ? '#0891b2' : '#94a3b8';
+    return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
+      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.customers)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.delivery_cust)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dCol}">${r.delivery_pct}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.net)}</td>
+      <td class="py-1.5 text-right tabular-nums">${r.net_per_head != null ? fmt(r.net_per_head) : '—'}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
 // 🍽️ ความต้องการพิเศษ (modifiers)
@@ -14675,10 +14698,75 @@ async function loadCancelBill(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${(r.bills / tb * 100).toFixed(1)}%</td>
     <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('cbBranches').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
-    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
+  const cbMon = d.month || '';
+  document.getElementById('cbBranches').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cancelBillDrill('${jsAttr(r.branch)}','${cbMon}')" title="คลิกดูบิลที่ถูกยกเลิกของ ${esc(r.branch)}">
+    <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
     <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+}
+
+// Drill: per-DAY cash over/short for one branch (from the cash by-branch table).
+async function cashDayDrill(branch, month) {
+  const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
+  if (!modal) return;
+  title.textContent = `🔍 เงินสดขาด/เกิน รายวัน · ${branch} · ${month}`;
+  body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
+  modal.classList.remove('hidden');
+  let d; try { d = await fetch(`${API}/api/extra/cash/detail?branch=${encodeURIComponent(branch)}&month=${encodeURIComponent(month)}`).then(r=>r.json()); }
+  catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
+  const days = d.days || [];
+  const net = days.reduce((a,x)=>a+(x.over_short||0),0);
+  const shortDays = days.filter(x=>x.over_short<0).length;
+  const rows = days.map(x => `<tr class="border-t border-slate-100">
+    <td class="py-1.5 pr-3 tabular-nums">${esc(x.day)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums font-semibold" style="color:${x.over_short<0?'#ef4444':x.over_short>0?'#10b981':'#94a3b8'}">${fmt(x.over_short)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(x.sales)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(x.pax)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(x.discount)}</td>
+    <td class="py-1.5 text-right tabular-nums text-slate-500">${fmt(x.cancel)}</td></tr>`).join('');
+  body.innerHTML = `<div style="padding:4px 8px">
+    <div class="flex gap-4 text-sm mb-3 flex-wrap">
+      <span>ขาด/เกินสุทธิ: <b style="color:${net<0?'#ef4444':'#10b981'}">${fmt(net)}</b></span>
+      <span class="text-slate-500">วันที่ขาด: <b>${shortDays}</b>/${days.length}</span>
+    </div>
+    <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-3">วันที่</th><th class="py-1.5 pr-3 text-right">ขาด/เกิน</th><th class="py-1.5 pr-3 text-right">ยอดขาย</th>
+      <th class="py-1.5 pr-3 text-right">ลูกค้า</th><th class="py-1.5 pr-3 text-right">ส่วนลด</th><th class="py-1.5 text-right">ยกเลิก</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'}</tbody></table></div>
+    <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
+}
+
+// Drill: INDIVIDUAL voided bills for one branch (check each error). Needs the
+// pos_cancel_bill_detail table (staged by sync_mssql) — shows a hint if not yet synced.
+async function cancelBillDrill(branch, month) {
+  const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
+  if (!modal) return;
+  title.textContent = `🔍 บิลที่ถูกยกเลิก/ลบ · ${branch}${month?' · '+month:''}`;
+  body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
+  modal.classList.remove('hidden');
+  let d; try { d = await fetch(`${API}/api/extra/cancel-bills/detail?branch=${encodeURIComponent(branch)}${month?'&month='+encodeURIComponent(month):''}`).then(r=>r.json()); }
+  catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
+  if (d.staged === false) {
+    body.innerHTML = `<div style="padding:24px"><p class="text-sm text-slate-600">ยังไม่มีข้อมูลบิลรายใบ — ตารางรายละเอียดจะถูกสร้างเมื่อ <b>ซิงก์ครั้งถัดไป</b> (Sync Live Data / งาน 9 โมง). หลังจากนั้นคลิกสาขาจะเห็นบิลแต่ละใบที่ถูกยกเลิกพร้อมเหตุผล</p>
+      <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
+    return;
+  }
+  const bills = d.bills || [];
+  const total = bills.reduce((a,x)=>a+(x.amount||0),0);
+  const rows = bills.map(x => `<tr class="border-t border-slate-100">
+    <td class="py-1.5 pr-3 tabular-nums text-[11px]">${esc((x.sale_date||'').replace('T',' '))}</td>
+    <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
+    <td class="py-1.5 pr-3">${esc(x.reason)}</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
+  body.innerHTML = `<div style="padding:4px 8px">
+    <div class="flex gap-4 text-sm mb-3 flex-wrap">
+      <span>บิลที่ยกเลิก: <b>${fmtN(bills.length)}</b>${d.capped?' (แสดงล่าสุด)':''}</span>
+      <span class="text-slate-500">มูลค่ารวม: <b style="color:#ef4444">${fmt(total)}</b></span>
+    </div>
+    <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 text-right">มูลค่า</th>
+    </tr></thead><tbody>${rows || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในช่วงนี้</td></tr>'}</tbody></table></div>
+    <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
 
 // ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)

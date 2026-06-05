@@ -482,6 +482,19 @@ def stage_extra(sq, mc, since, bid_map, item_map):
          for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_cancel_bill: {len(rows)} groups")
 
+    # ── pos_cancel_bill_detail: INDIVIDUAL voided bills (TOP 20000 most recent) so the
+    #    UI can drill per-bill to inspect each error. Bounded for size. ──
+    sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
+                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL);")
+    drows = run("""SELECT TOP 20000 BranchId bid, CONVERT(char(19),SaleDate,126) dt, SaleNum num,
+                 ISNULL(DeleteReasonId,0) rid, CAST(ISNULL(Total,0) AS float) amt
+                 FROM Sale WHERE ISNULL(Active,1)=0 AND SaleDate >= %s ORDER BY SaleDate DESC""")
+    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2))
+         for r in drows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS idx_cbd_branch ON pos_cancel_bill_detail(branch_id, period_month)")
+    print(f"        pos_cancel_bill_detail: {len(drows)} bills")
+
 
 def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row

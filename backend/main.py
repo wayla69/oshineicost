@@ -1864,7 +1864,28 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
             r["cust_pct"] = round((r["customers"] or 0) / tc * 100, 1)
             r["net_pct"] = round((r["net"] or 0) / tn * 100, 1)
             r["net_per_head"] = round((r["net"] or 0) / r["customers"]) if r["customers"] else None
-    return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn}
+        # Per-branch breakdown (แยกตามสาขา): total + delivery share per branch.
+        brows = con.execute(
+            f"""SELECT b.name branch, x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)) net
+                FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
+                WHERE {tw} AND x.period_month=:m GROUP BY b.name, x.type_name""",
+            {**p, "m": mon}).fetchall()
+    import re as _re
+    _DELIV = _re.compile(r'grab|line|food\s*panda|foodpanda|delivery|robinhood|shopee|เดลิเวอรี|แกร็บ|ไลน์|ส่ง', _re.I)
+    bmap: dict = {}
+    for r in brows:
+        e = bmap.setdefault(r["branch"], {"branch": r["branch"], "customers": 0, "net": 0, "delivery_cust": 0})
+        e["customers"] += r["customers"] or 0
+        e["net"] += r["net"] or 0
+        if _DELIV.search(r["type"] or ""):
+            e["delivery_cust"] += r["customers"] or 0
+    by_branch = []
+    for e in bmap.values():
+        cu = e["customers"]
+        by_branch.append({**e, "delivery_pct": round(e["delivery_cust"] / cu * 100, 1) if cu else 0,
+                          "net_per_head": round(e["net"] / cu) if cu else None})
+    by_branch.sort(key=lambda r: -(r["customers"] or 0))
+    return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn, "by_branch": by_branch}
 
 
 @app.get("/api/extra/modifiers")
@@ -1987,6 +2008,48 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         summary = {"bills": cbills, "amount": (s["amount"] or 0) if s else 0, "valid_bills": valid,
                    "cancel_rate": round(cbills / (valid + cbills) * 100, 2) if (valid + cbills) else None}
     return {"month": mon, "branches": branches, "reasons": reasons, "summary": summary}
+
+
+@app.get("/api/extra/cash/detail")
+def extra_cash_detail(branch: str = Query(...), month: str = Query(...)):
+    """Per-DAY cash over/short for one branch in a month (drill from the by-branch
+    table). Cash variance is a drawer-close metric — per-day is its finest grain
+    (there is no per-bill over/short)."""
+    with get_db() as con:
+        rows = [dict(r) for r in con.execute(
+            """SELECT x.day, ROUND(x.over_short,2) over_short, ROUND(x.total_sales) sales,
+                      x.pax, x.invoices, ROUND(x.discount) discount, ROUND(x.cancel) cancel
+               FROM pos_cashcount_day x JOIN branches b ON b.branch_id=x.branch_id
+               WHERE b.name=:branch AND substr(x.day,1,7)=:m ORDER BY x.day""",
+            {"branch": branch, "m": month}).fetchall()]
+    return {"branch": branch, "month": month, "days": rows}
+
+
+@app.get("/api/extra/cancel-bills/detail")
+def extra_cancel_bills_detail(branch: str = Query(...), month: Optional[str] = Query(None),
+                              limit: int = Query(400, ge=1, le=2000)):
+    """Individual voided/deleted bills for one branch (drill to check each error).
+    Reads pos_cancel_bill_detail, staged by sync_mssql from Sale.Active=0. Returns
+    staged=False if that table isn't present yet (run a sync to populate)."""
+    with get_db() as con:
+        try:
+            params = {"branch": branch, "lim": limit}
+            mfilt = ""
+            if month:
+                mfilt = " AND x.period_month=:m"; params["m"] = month
+            rows = [dict(r) for r in con.execute(
+                f"""SELECT x.sale_date, x.receipt_no, x.amount, x.reason_id,
+                       CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
+                            ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason
+                    FROM pos_cancel_bill_detail x JOIN branches b ON b.branch_id=x.branch_id
+                    LEFT JOIN pos_cancel_reason rr ON rr.reason_id=x.reason_id
+                    WHERE b.name=:branch{mfilt}
+                    ORDER BY x.sale_date DESC LIMIT :lim""", params).fetchall()]
+            return {"branch": branch, "month": month, "bills": rows, "staged": True,
+                    "capped": len(rows) >= limit}
+        except Exception:
+            # pos_cancel_bill_detail not yet staged (older DB) — drill gracefully empty.
+            return {"branch": branch, "month": month, "bills": [], "staged": False}
 
 
 @app.get("/api/extra/closing-time")
