@@ -1342,6 +1342,115 @@ def menu_compare_drill(
     return {"sku_code": sku_code, "branches": branches, "trend": trend}
 
 
+@app.get("/api/sales/heavy-eaters")
+def heavy_eaters(
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
+    min_covers: int           = Query(1, ge=1, le=50),
+    limit:      int           = Query(40, ge=1, le=200),
+):
+    """Per-cover economics & 'heavy-eater' distribution for the AYCE buffet.
+
+    Joins per-bill BoM COGS (sale_bill_cogs) with the bill header
+    (sales_transaction → covers + ex-VAT revenue) on receipt_no. For each
+    bill: revenue/head, COGS/head and margin/head. Then summarises the
+    distribution + the costly tail (heavy eaters = COGS/head ≥ p90) and the
+    loss-making bills (margin/head < 0). sale_bill_cogs is a rolling ~31-day
+    window, so the date range is bounded to whatever it currently holds."""
+    from collections import defaultdict
+    base = ["t.source='Easy'", "b.name!='ALL'", "t.customer_count>=:mc", "t.total_inc_vat>0"]
+    p: dict = {"mc": min_covers}
+    if branch:
+        base.append("b.name=:br"); p["br"] = branch
+    _group_filter(base, p, group)
+    if date_from: base.append("sbc.day>=:df"); p["df"] = date_from
+    if date_to:   base.append("sbc.day<=:dt"); p["dt"] = date_to
+    with get_db() as con:
+        win = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sale_bill_cogs").fetchone()
+        rows = con.execute(f"""
+            SELECT b.name br, sbc.day day, sbc.receipt_no rcpt, t.customer_count cov,
+                   t.total_inc_vat/1.07 rev, sbc.cogs_bom cogs
+            FROM sale_bill_cogs sbc
+            JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no
+            JOIN branches b ON b.branch_id = sbc.branch_id
+            WHERE {' AND '.join(base)}""", p).fetchall()
+    bills = []
+    for r in rows:
+        cov = r["cov"] or 0
+        if cov < 1:
+            continue
+        rev = r["rev"] or 0.0; cogs = r["cogs"] or 0.0
+        bills.append({"branch": r["br"], "day": r["day"], "receipt": r["rcpt"],
+                      "covers": cov, "rev_head": rev / cov, "cogs_head": cogs / cov,
+                      "margin_head": (rev - cogs) / cov, "rev": rev, "cogs": cogs})
+    n = len(bills)
+
+    def pctile(sv, q):
+        if not sv:
+            return 0.0
+        i = min(len(sv) - 1, max(0, int(round(q * (len(sv) - 1)))))
+        return sv[i]
+    ch_sorted = sorted(b["cogs_head"] for b in bills)
+    percentiles = {k: round(pctile(ch_sorted, q), 2) for k, q in
+                   (("p50", .5), ("p75", .75), ("p90", .9), ("p95", .95), ("p99", .99))}
+    p90 = pctile(ch_sorted, .9)
+    tot_cov = sum(b["covers"] for b in bills)
+    tot_cogs = sum(b["cogs"] for b in bills)
+    tot_rev = sum(b["rev"] for b in bills)
+
+    def agg(lst):
+        c = sum(x["covers"] for x in lst); cg = sum(x["cogs"] for x in lst); rv = sum(x["rev"] for x in lst)
+        return {"bills": len(lst), "covers": c, "cogs": round(cg, 2), "rev": round(rv, 2),
+                "avg_cogs_head": round(cg / c, 2) if c else 0, "avg_rev_head": round(rv / c, 2) if c else 0,
+                "avg_margin_head": round((rv - cg) / c, 2) if c else 0,
+                "pct_bills": round(100 * len(lst) / n, 1) if n else 0,
+                "pct_cogs": round(100 * cg / tot_cogs, 1) if tot_cogs else 0}
+    heavy = [b for b in bills if p90 > 0 and b["cogs_head"] >= p90]
+    loss = [b for b in bills if b["margin_head"] < 0]
+
+    hi = pctile(ch_sorted, .99) or (ch_sorted[-1] if ch_sorted else 0)
+    nb = 12; width = (hi / nb) if hi > 0 else 1
+    hcounts = [0] * (nb + 1)
+    for b in bills:
+        idx = min(nb, int(b["cogs_head"] // width)) if width > 0 else 0
+        hcounts[idx] += 1
+    histogram = [{"lo": round(i * width, 1), "hi": round((i + 1) * width, 1) if i < nb else None,
+                  "count": hcounts[i]} for i in range(nb + 1)]
+
+    bb = defaultdict(lambda: {"bills": 0, "heavy": 0, "covers": 0, "cogs": 0.0, "rev": 0.0})
+    for b in bills:
+        d = bb[b["branch"]]; d["bills"] += 1; d["covers"] += b["covers"]
+        d["cogs"] += b["cogs"]; d["rev"] += b["rev"]
+        if p90 > 0 and b["cogs_head"] >= p90:
+            d["heavy"] += 1
+    by_branch = []
+    for nm, d in bb.items():
+        c = d["covers"]
+        by_branch.append({"branch": nm, "bills": d["bills"], "heavy_bills": d["heavy"],
+                          "heavy_pct": round(100 * d["heavy"] / d["bills"], 1) if d["bills"] else 0,
+                          "cogs_head": round(d["cogs"] / c, 2) if c else 0,
+                          "rev_head": round(d["rev"] / c, 2) if c else 0,
+                          "margin_head": round((d["rev"] - d["cogs"]) / c, 2) if c else 0})
+    by_branch.sort(key=lambda x: -x["heavy_pct"])
+
+    worst = sorted(bills, key=lambda b: b["margin_head"])[:limit]
+    examples = [{"branch": b["branch"], "day": b["day"], "receipt": b["receipt"], "covers": b["covers"],
+                 "rev_head": round(b["rev_head"], 2), "cogs_head": round(b["cogs_head"], 2),
+                 "margin_head": round(b["margin_head"], 2)} for b in worst]
+
+    return {"window": {"lo": win["lo"] if win else None, "hi": win["hi"] if win else None},
+            "range": [date_from or (win["lo"] if win else None), date_to or (win["hi"] if win else None)],
+            "n_bills": n, "total_covers": tot_cov,
+            "avg_cogs_head": round(tot_cogs / tot_cov, 2) if tot_cov else 0,
+            "avg_rev_head": round(tot_rev / tot_cov, 2) if tot_cov else 0,
+            "avg_margin_head": round((tot_rev - tot_cogs) / tot_cov, 2) if tot_cov else 0,
+            "percentiles": percentiles, "heavy_threshold": round(p90, 2),
+            "heavy": agg(heavy), "loss": agg(loss),
+            "histogram": histogram, "by_branch": by_branch, "examples": examples}
+
+
 @app.get("/api/sales/daily")
 def sales_daily(
     date:   Optional[str] = Query(None),
