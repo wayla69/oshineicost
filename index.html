@@ -727,7 +727,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 @media print {
   .sidebar, .top-bar, #presetBar, #darkBtn, .dive-btn, .drill-modal, .no-print,
   button, select, input { display: none !important; }
-  .main-wrapper, .content-area { overflow: visible !important; height: auto !important; }
+  /* The on-screen app shell is a fixed 100vh frame (.app-layout/.main-wrapper
+     have overflow:hidden) so only .content-area scrolls. In print that frame
+     clipped the report to a single page — release the height/overflow on every
+     shell ancestor so the full document flows across pages. */
+  html, body, .app-layout, .main-wrapper, .content-area {
+    overflow: visible !important; height: auto !important; max-height: none !important;
+  }
   .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
   .anomaly-banner { background: #fef3c7 !important; }
   body { background: #fff !important; color: #000 !important; }
