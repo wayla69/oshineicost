@@ -2900,31 +2900,46 @@ body.dark .skeleton-kpi { border-color: var(--border); }
      TAB: MORE ANALYTICS  (daypart profit · menu-mix shift · turnover · forecast)
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-more" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#f0fdfa 100%);border-left:4px solid #6366f1">
+    <h2 class="text-base font-bold" style="color:#4338ca">📈 Insight เพิ่มเติม — จังหวะเวลา · พยากรณ์ · การหมุนโต๊ะ</h2>
+    <p class="text-xs text-slate-500 mt-1">ช่วงเวลาไหนทำเงิน/กำไรดีสุด · รายได้กำลังไปทางไหน · สาขาไหนหมุนโต๊ะเร็ว/ช้า — สรุปไฮไลต์อัตโนมัติด้านล่าง</p>
+  </div>
+
+  <!-- auto-generated highlight chips -->
+  <div id="more-highlights" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 mb-4"></div>
+
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
     <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700">เศรษฐศาสตร์ตามช่วงเวลา (Daypart)</div>
-      <div class="text-xs text-slate-400 mb-2">5 ช่วงเวลา · กำไรเป็นค่าประมาณ (drink 70% · food/other 45%)</div>
+      <div class="flex items-baseline justify-between">
+        <div class="text-sm font-semibold text-slate-700">🕒 เศรษฐศาสตร์ตามช่วงเวลา (Daypart)</div>
+        <span id="more-daypart-note" class="text-[11px] text-slate-400"></span>
+      </div>
+      <div class="text-xs text-slate-400 mb-2">5 ช่วงเวลา · แถบ = สัดส่วนรายได้ · กำไรเป็นค่าประมาณ (drink 70% · food/other 45%)</div>
       <table class="w-full text-xs">
         <thead><tr class="text-left text-slate-400 border-b">
           <th class="py-1.5 pr-2">ช่วง</th><th class="py-1.5 pr-2 text-right">รายได้</th>
-          <th class="py-1.5 pr-2 text-right">%</th><th class="py-1.5 pr-2 text-right">ลูกค้า</th>
+          <th class="py-1.5 pr-2">สัดส่วน</th><th class="py-1.5 pr-2 text-right">ลูกค้า</th>
           <th class="py-1.5 pr-2 text-right">/คน</th><th class="py-1.5 pr-2 text-right">/บิล</th>
           <th class="py-1.5 pr-2 text-right">ดื่ม%</th><th class="py-1.5 text-right">GP ปต.</th></tr></thead>
         <tbody id="more-daypart"></tbody>
       </table>
     </div>
     <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700 mb-1">พยากรณ์รายได้ (3 เดือน)</div>
+      <div class="flex items-baseline justify-between">
+        <div class="text-sm font-semibold text-slate-700">🔮 พยากรณ์รายได้ (3 เดือน)</div>
+        <span id="more-forecast-badge" class="text-[11px] font-semibold"></span>
+      </div>
       <div id="more-forecast-note" class="text-xs text-slate-400 mb-2"></div>
       <div style="position:relative;height:230px"><canvas id="more-forecast"></canvas></div>
     </div>
-    <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700 mb-1">อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
-      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · เร็ว = หมุนโต๊ะดี</div>
-      <div style="max-height:260px;overflow:auto">
+    <div class="card p-4 lg:col-span-2">
+      <div class="text-sm font-semibold text-slate-700 mb-1">🔄 อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
+      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · แถบสั้น/เขียว = หมุนเร็ว = ดี</div>
+      <div style="max-height:300px;overflow:auto">
         <table class="w-full text-sm">
           <thead><tr class="text-left text-slate-400 text-xs border-b">
             <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">นาที/รอบ</th>
+            <th class="py-1.5 pr-2" style="width:160px">เร็ว → ช้า</th>
             <th class="py-1.5 pr-2 text-right">รอบ</th><th class="py-1.5 text-right">คน/รอบ</th></tr></thead>
           <tbody id="more-turnover"></tbody>
         </table>
@@ -19514,21 +19529,46 @@ async function loadMoreAnalytics() {
   ]);
   if (gen !== loadGen) return;
 
-  if (dp) document.getElementById('more-daypart').innerHTML = dp.dayparts.map(x=>`
-    <tr class="border-b border-slate-50">
-      <td class="py-1.5 pr-2">${esc(x.label)}</td>
-      <td class="py-1.5 pr-2 text-right">${fmt(x.revenue)}</td>
-      <td class="py-1.5 pr-2 text-right text-slate-400">${x.revenue_pct}%</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(x.covers)}</td>
-      <td class="py-1.5 pr-2 text-right">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${x.avg_bill!=null?fmtN(x.avg_bill):'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${x.drink_pct}%</td>
-      <td class="py-1.5 text-right" style="color:#0891b2">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}</td>
-    </tr>`).join('');
+  const dayparts = (dp && dp.dayparts) || [];
+  if (dp) {
+    const maxPct = Math.max(1, ...dayparts.map(x=>x.revenue_pct||0));
+    const maxGp = Math.max(...dayparts.map(x=>x.est_gp_margin_pct||0));
+    const minGp = Math.min(...dayparts.map(x=>x.est_gp_margin_pct==null?999:x.est_gp_margin_pct));
+    const gpCol = m => m==null ? '#94a3b8' : m>=55 ? '#10b981' : m>=45 ? '#0891b2' : '#f59e0b';
+    document.getElementById('more-daypart').innerHTML = dayparts.map(x=>{
+      const w = Math.round(100*(x.revenue_pct||0)/maxPct);
+      const isTopGp = x.est_gp_margin_pct!=null && x.est_gp_margin_pct===maxGp;
+      return `<tr class="border-b border-slate-50">
+        <td class="py-1.5 pr-2 font-medium">${esc(x.label)}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(x.revenue)}</td>
+        <td class="py-1.5 pr-2" style="min-width:96px">
+          <div class="flex items-center gap-1.5">
+            <div class="flex-1" style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#6366f1"></div></div>
+            <span class="text-[10px] text-slate-400 tabular-nums" style="width:30px">${x.revenue_pct}%</span>
+          </div>
+        </td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.covers)}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums">${x.avg_bill!=null?fmtN(x.avg_bill):'—'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${x.drink_pct}%</td>
+        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${gpCol(x.est_gp_margin_pct)}">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}${isTopGp?' 👑':''}</td>
+      </tr>`;
+    }).join('');
+    const topRev = dayparts.slice().sort((a,b)=>(b.revenue||0)-(a.revenue||0))[0];
+    document.getElementById('more-daypart-note').textContent = topRev ? `ช่วงพีค: ${topRev.label}` : '';
+  }
 
   if (fc) {
     document.getElementById('more-forecast-note').textContent =
       fc.trend ? `เทรนด์ ${fmt(fc.trend.slope_per_month)}/เดือน · R²=${fc.trend.r_squared}` : (fc.note||'');
+    const slope = fc.trend ? fc.trend.slope_per_month : null;
+    const fb = document.getElementById('more-forecast-badge');
+    if (fb) {
+      if (slope == null) { fb.textContent = ''; }
+      else if (slope > 0) { fb.textContent = '▲ ขาขึ้น'; fb.style.color = '#10b981'; }
+      else if (slope < 0) { fb.textContent = '▼ ขาลง'; fb.style.color = '#ef4444'; }
+      else { fb.textContent = '→ ทรงตัว'; fb.style.color = '#64748b'; }
+    }
     const hist = fc.history||[], fore = fc.forecast||[];
     const labels = [...hist.map(h=>h.period), ...fore.map(f=>f.period)];
     const histData = [...hist.map(h=>h.revenue), ...fore.map(()=>null)];
@@ -19549,14 +19589,55 @@ async function loadMoreAnalytics() {
         scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } } });
   }
 
-  if (turn) document.getElementById('more-turnover').innerHTML = (turn.branches||[]).map((b,i)=>`
-    <tr class="border-b border-slate-50">
-      <td class="py-1.5 pr-2 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-2">${esc(b.branch)}</td>
-      <td class="py-1.5 pr-2 text-right font-medium">${b.avg_turn_min!=null?b.avg_turn_min:'—'}</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(b.turns)}</td>
-      <td class="py-1.5 text-right">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
-    </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">—</td></tr>';
+  const tbr = (turn && turn.branches) || [];
+  if (turn) {
+    const turns = tbr.filter(b=>b.avg_turn_min!=null).map(b=>b.avg_turn_min);
+    const maxT = Math.max(1, ...turns), minT = Math.min(...turns);
+    const med = turns.length ? turns.slice().sort((a,b)=>a-b)[Math.floor(turns.length/2)] : 0;
+    const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
+    document.getElementById('more-turnover').innerHTML = tbr.map((b,i)=>{
+      const t = b.avg_turn_min;
+      const w = t!=null ? Math.round(100*t/maxT) : 0;
+      const fast = t!=null && t<=med;
+      const col = t==null ? '#cbd5e1' : fast ? '#10b981' : '#f59e0b';
+      return `<tr class="border-b border-slate-50">
+        <td class="py-1.5 pr-2 text-slate-400">${medal(i)}</td>
+        <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
+        <td class="py-1.5 pr-2 text-right font-medium tabular-nums" style="color:${col}">${t!=null?t:'—'}</td>
+        <td class="py-1.5 pr-2"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div></td>
+        <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(b.turns)}</td>
+        <td class="py-1.5 text-right tabular-nums">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">—</td></tr>';
+  }
+
+  // ── auto-generated highlight chips (from the three datasets above) ──
+  const chips = [];
+  if (dayparts.length) {
+    const topRev = dayparts.slice().sort((a,b)=>(b.revenue||0)-(a.revenue||0))[0];
+    chips.push({ icon:'🕒', label:'ช่วงทำเงินสูงสุด', val:esc(topRev.label),
+                 sub:`${fmt(topRev.revenue)} · ${topRev.revenue_pct}% ของรายได้`, c:'#6366f1' });
+    const wGp = dayparts.filter(x=>x.est_gp_margin_pct!=null).sort((a,b)=>b.est_gp_margin_pct-a.est_gp_margin_pct)[0];
+    if (wGp) chips.push({ icon:'💰', label:'กำไร(margin)ดีสุด', val:esc(wGp.label),
+                 sub:`GP ${wGp.est_gp_margin_pct}% · ดื่ม ${wGp.drink_pct}%`, c:'#10b981' });
+  }
+  if (tbr.length) {
+    const fastest = tbr.filter(b=>b.avg_turn_min!=null).sort((a,b)=>a.avg_turn_min-b.avg_turn_min)[0];
+    if (fastest) chips.push({ icon:'⚡', label:'หมุนโต๊ะเร็วสุด', val:esc(fastest.branch),
+                 sub:`${fastest.avg_turn_min} นาที/รอบ`, c:'#0891b2' });
+  }
+  if (fc && fc.trend) {
+    const up = fc.trend.slope_per_month > 0;
+    chips.push({ icon: up?'📈':'📉', label:'เทรนด์รายได้', val: up?'ขาขึ้น':'ขาลง',
+                 sub:`${fmt(fc.trend.slope_per_month)}/เดือน · R²=${fc.trend.r_squared}`, c: up?'#10b981':'#ef4444' });
+  }
+  const hc = document.getElementById('more-highlights');
+  if (hc) hc.innerHTML = chips.map(c=>`
+    <div class="card p-3" style="border-left:4px solid ${c.c}">
+      <p class="text-[11px] text-slate-400">${c.icon} ${c.label}</p>
+      <p class="text-lg font-bold leading-tight" style="color:${c.c}">${c.val}</p>
+      <p class="text-[11px] text-slate-500 mt-0.5">${c.sub}</p>
+    </div>`).join('');
 }
 
 // ── Boot ───────────────────────────────────────────────────────
