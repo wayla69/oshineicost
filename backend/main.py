@@ -2990,16 +2990,21 @@ def sales_dish_movers(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    vs_month:   Optional[str] = Query(None, description="explicit comparison month (overrides auto-previous)"),
     branch:     Optional[str] = Query(None),
     metric:     str           = Query("qty", description="'qty' or 'revenue'"),
     limit:      int           = Query(8, ge=1, le=30),
 ):
-    """Which FOOD DISHES rose/fell most vs the previous equal-length period.
+    """Which FOOD DISHES rose/fell most vs a comparison period.
 
     Per-dish (not category) and food-only (uses _FOOD_CATEGORY_FILTER), so it
     surfaces actionable menu movement. Default metric = qty (orders), which is
     buffet-aware (buffet dishes have ~0 à-la-carte revenue). Set metric=revenue
     for à-la-carte revenue movement.
+
+    Comparison period: by default the previous equal-length period (MoM). Pass
+    ``vs_month`` to compare the current month against a SPECIFIC chosen month
+    instead (the month-vs-month picker on the Top Menu Movers card).
     """
     cur_to   = month_to or month
     cur_from = month_from or month
@@ -3014,8 +3019,12 @@ def sales_dish_movers(
 
     fy, fm = _ym_parts(cur_from); ty, tm = _ym_parts(cur_to)
     span = (ty * 12 + tm) - (fy * 12 + fm)
-    prev_to   = _month_add(cur_from, -1)
-    prev_from = _month_add(prev_to, -span)
+    if vs_month:
+        # Explicit month-vs-month: compare against the chosen month exactly.
+        prev_from = prev_to = vs_month
+    else:
+        prev_to   = _month_add(cur_from, -1)
+        prev_from = _month_add(prev_to, -span)
 
     val_col = "ssm.qty" if metric == "qty" else "ssm.subtotal_ex_vat"
 

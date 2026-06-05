@@ -2601,11 +2601,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div style="position:relative;height:230px"><canvas id="more-forecast"></canvas></div>
     </div>
     <div class="card p-4">
-      <div class="text-sm font-semibold text-slate-700 mb-1">สัดส่วนยอดขายตามหมวด (Category Mix)</div>
-      <div class="text-xs text-slate-400 mb-2">รายได้ (ก่อน VAT) แยกตามหมวดเมนู · เห็นว่ารายได้มาจากไหน</div>
-      <div style="position:relative;height:230px"><canvas id="more-catmix"></canvas></div>
-    </div>
-    <div class="card p-4">
       <div class="text-sm font-semibold text-slate-700 mb-1">อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
       <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · เร็ว = หมุนโต๊ะดี</div>
       <div style="max-height:260px;overflow:auto">
@@ -3077,8 +3072,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- Category movers — MoM revenue change (reliable, no cost data needed) -->
   <div id="moversCard" class="card hidden">
     <div class="px-5 py-4 border-b border-slate-100">
-      <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">🔥 เมนูมาแรง / ตก · Top Menu Movers (vs Previous Period)</h2>
+      <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">🔥 เมนูมาแรง / ตก · Top Menu Movers</h2>
       <p id="moversPeriod" class="text-xs text-slate-400 mt-1"></p>
+      <div class="flex items-center gap-2 mt-2 text-xs flex-wrap">
+        <span class="text-slate-400">เทียบเดือน:</span>
+        <select id="moversCurMonth" onchange="loadMovers()" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)"></select>
+        <span class="text-slate-400">vs</span>
+        <select id="moversVsMonth" onchange="loadMovers()" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)"></select>
+        <span class="text-[10px] text-slate-400">(ว่าง = MoM อัตโนมัติ)</span>
+      </div>
     </div>
     <div class="grid md:grid-cols-2 gap-0">
       <div class="p-5 md:border-r border-slate-100">
@@ -7262,11 +7264,45 @@ async function loadMarginTable() {   // now: Category Movers (MoM revenue change
     if (note) note.textContent = `ต้นทุน BoM ${fmtP(100-mp)} · ครอบคลุม ${s.cost_coverage_pct||0}%`;
   }).catch(()=>{});
 
+  loadMovers();
+}
+
+// Populate the Top Menu Movers month pickers once (blank = auto MoM).
+function _moversPopulateMonths() {
+  ['moversCurMonth', 'moversVsMonth'].forEach((id, idx) => {
+    const sel = document.getElementById(id);
+    if (!sel || sel.dataset.loaded) return;
+    const months = (Array.isArray(window.allMonths) ? window.allMonths : []).slice().reverse();
+    const ph = idx === 0 ? 'ล่าสุด (auto)' : 'ก่อนหน้า (auto)';
+    sel.innerHTML = `<option value="">${ph}</option>` +
+      months.map(m => `<option value="${m}">${fmtMonth(m)}</option>`).join('');
+    sel.dataset.loaded = '1';
+  });
+}
+
+// Top Menu Movers — MoM by default; pick a current month + a comparison month to
+// compare any two months. Empty pickers ⇒ the global range vs its previous period.
+async function loadMovers() {
   const card = document.getElementById('moversCard');
+  if (!card) return;
+  _moversPopulateMonths();
+  const curM = document.getElementById('moversCurMonth')?.value || '';
+  const vsM  = document.getElementById('moversVsMonth')?.value  || '';
+  let url;
+  if (curM || vsM) {
+    const p = new URLSearchParams();
+    if (getBranch()) p.set('branch', getBranch());
+    p.set('metric', 'qty'); p.set('limit', '30');
+    const cur = curM || getMonthTo() || (window.allMonths ? window.allMonths[window.allMonths.length - 1] : '');
+    if (cur) { p.set('month_from', cur); p.set('month_to', cur); }
+    if (vsM) p.set('vs_month', vsM);
+    url = `${API}/api/sales/dish-movers?${p}`;
+  } else {
+    url = `${API}/api/sales/dish-movers${qp({ metric: 'qty', limit: 30 })}`;
+  }
   let data;
-  try {
-    data = await fetch(`${API}/api/sales/dish-movers${qp({metric:'qty', limit:30})}`).then(r => r.json());
-  } catch (e) { card.classList.add('hidden'); return; }
+  try { data = await fetch(url).then(r => r.json()); }
+  catch (e) { card.classList.add('hidden'); return; }
   if (!data || (!data.gainers?.length && !data.decliners?.length)) {
     card.classList.add('hidden'); return;
   }
@@ -11789,7 +11825,7 @@ function diveInChart(chartId) {
     chartHourly: 'Hourly Revenue',         chartDowTime: 'DOW · Time Analysis',
     chartMenuScatter: 'Menu Engineering Scatter',
     chartCostCatMix: 'Cost · สัดส่วนหมวดสินค้า', cmpBranchChart: 'Branches — A vs B',
-    mceScatter: '🎯 เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน', 'more-catmix': 'สัดส่วนยอดขายตามหมวด',
+    mceScatter: '🎯 เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน',
     'cov-peak': 'ชั่วโมงขายดี', chartProfitBranch: 'กำไรรายสาขา',
     chartHomeForecast: 'Month-end Forecast',
   };
@@ -18321,13 +18357,12 @@ async function loadMoreAnalytics() {
   if (getMonthTo())   p.set('month_to', getMonthTo());
   const q = p.toString();
   const bq = getBranch() ? ('branch=' + encodeURIComponent(getBranch())) : '';
-  // Category mix respects branch+month; turnover is ALWAYS all-branches (comparison).
+  // Turnover is ALWAYS all-branches (comparison).
   const monthQ = new URLSearchParams();
   if (getMonthFrom()) monthQ.set('month_from', getMonthFrom());
   if (getMonthTo())   monthQ.set('month_to', getMonthTo());
-  const [dp, cat, turn, fc] = await Promise.all([
+  const [dp, turn, fc] = await Promise.all([
     getJSON('/api/analysis/daypart-economics?' + q, { gen }).catch(()=>null),
-    getJSON('/api/sales/category?' + q, { gen }).catch(()=>null),
     getJSON('/api/analysis/table-turnover?' + monthQ.toString(), { gen }).catch(()=>null),
     getJSON('/api/analysis/revenue-forecast?' + bq, { gen }).catch(()=>null),
   ]);
@@ -18366,25 +18401,6 @@ async function loadMoreAnalytics() {
       options:{ responsive:true, maintainAspectRatio:false,
         plugins:{ legend:{ display:true, labels:{ filter:li=>li.text==='จริง'||li.text==='พยากรณ์' } }, datalabels:{display:false} },
         scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } } });
-  }
-
-  if (cat) {
-    // Category revenue mix — top 10 + "อื่นๆ", colored by category palette.
-    const arr = (Array.isArray(cat) ? cat : (cat.categories||cat.rows||[]))
-      .map(r => ({ name: r.category||r.name||'—', rev: r.revenue||r.revenue_ex_vat||0 }))
-      .filter(r => r.rev > 0).sort((a,b)=>b.rev-a.rev);
-    const top = arr.slice(0,10);
-    const rest = arr.slice(10).reduce((a,r)=>a+r.rev,0);
-    if (rest>0) top.push({name:'อื่นๆ', rev:rest});
-    const tot = top.reduce((a,r)=>a+r.rev,0)||1;
-    mkChart('more-catmix', { type:'doughnut',
-      data:{ labels: top.map(r=>r.name.replace(/^Oshinei\s+/i,'')),
-        datasets:[{ data: top.map(r=>Math.round(r.rev)),
-          backgroundColor: top.map(r=>colorForCategory(r.name)), borderWidth:2, borderColor:'#fff' }] },
-      options:{ responsive:true, maintainAspectRatio:false, cutout:'55%',
-        plugins:{ legend:{position:'right', labels:{boxWidth:10, font:{size:10}}},
-          datalabels:{display:false},
-          tooltip:{callbacks:{label:ctx=>` ${ctx.label}: ${fmtN(ctx.raw)} (${(ctx.raw/tot*100).toFixed(1)}%)`}} } } });
   }
 
   if (turn) document.getElementById('more-turnover').innerHTML = (turn.branches||[]).map((b,i)=>`
