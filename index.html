@@ -19364,8 +19364,9 @@ function tfDiveIn() {
     showErrBanner(msg + (e.filename ? ' @ '+e.filename.split('/').pop()+':'+e.lineno : ''));
   });
   window.addEventListener('unhandledrejection', function(e) {
+    if (e.reason === STALE) return;                                   // expected — stale nav, already toasted
     const msg = (e.reason && e.reason.message) ? e.reason.message : String(e.reason);
-    if (_IGNORE_RE.test(msg)) { console.warn('[ignored promise]', msg); return; }
+    if (_IGNORE_RE.test(msg) || /abort/i.test(msg)) { console.warn('[ignored promise]', msg); return; }
     showErrBanner('Unhandled promise: ' + msg);
   });
   // Check vendor load failures

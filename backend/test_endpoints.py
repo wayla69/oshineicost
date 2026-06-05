@@ -35,7 +35,16 @@ SMOKE = [
     ("/api/extra/price-zone", {"limit": 200}),
     ("/api/extra/cancel-bills", {}),
     ("/api/buffet/child", {}),
+    # ── recently-added, previously-untested endpoints ──
+    ("/api/sales/menu-compare",
+     {"a_from": "2026-05", "a_to": "2026-05", "b_from": "2026-06", "b_to": "2026-06"}),
+    ("/api/sales/menu-compare/drill",
+     {"sku_code": "A0001", "a_from": "2026-05", "a_to": "2026-05", "b_from": "2026-06", "b_to": "2026-06"}),
+    ("/api/sales/heavy-eaters", {}),
 ]
+
+# Fixture periods: June (LATEST) sales are scaled 0.8 vs May (PREV).
+A_PER, B_PER = "2026-05", "2026-06"
 
 
 @pytest.mark.parametrize("path,params", SMOKE)
@@ -90,3 +99,47 @@ def test_scenario_roundtrip_qty_and_disabled(client):
     assert items["A0001"]["new_qty"] == 999
     assert items["B0001"]["disabled"] == 1
     client.delete(f"/api/bom-cost/scenarios/{sid}")   # cleanup
+
+
+def test_menu_compare_delta_direction_and_totals(client):
+    d = client.get("/api/sales/menu-compare", params={
+        "a_from": A_PER, "a_to": A_PER, "b_from": B_PER, "b_to": B_PER}).json()
+    assert d["items"], "no compare items"
+    # June (B) is scaled 0.8 vs May (A): every shown item should be down (or equal),
+    # never up — catches a flipped-sign / swapped-period bug.
+    movers = [i for i in d["items"] if (i["qty_a"] or 0) > 0]
+    assert movers, "no period-A volume to compare"
+    # delta_pct convention is _cmp_pct(A, B) = (A-B)/B*100 — A ("current") vs
+    # B ("baseline"). A higher than B → positive delta.
+    for i in movers:
+        assert i["qty_b"] <= i["qty_a"] + 1e-6, f"{i['sku_code']} rose in B unexpectedly"
+        if i["qty_b"] < i["qty_a"] and (i["qty_b"] or 0) > 0:
+            assert i["qty_delta_pct"] is not None and i["qty_delta_pct"] > 0
+    # totals row must equal the sum over the shown rows (consistency, not vibes)
+    assert abs(d["totals"]["qty_a"] - sum(i["qty_a"] for i in d["items"])) < 0.02
+    assert abs(d["totals"]["rev_b"] - sum(i["rev_b"] for i in d["items"])) < 0.02
+
+
+def test_menu_compare_drill_branches_and_chronological_trend(client):
+    d = client.get("/api/sales/menu-compare/drill", params={
+        "sku_code": "A0001", "a_from": A_PER, "a_to": A_PER,
+        "b_from": B_PER, "b_to": B_PER}).json()
+    assert d["sku_code"] == "A0001"
+    assert d["branches"], "no per-branch rows"
+    assert all({"qty_a", "qty_b", "covers_a", "covers_b"} <= set(r) for r in d["branches"])
+    months = [t["month"] for t in d["trend"]]
+    assert A_PER in months and B_PER in months
+    assert months == sorted(months), "trend not in chronological order"
+
+
+def test_heavy_eaters_margin_identity_and_monotone_percentiles(client):
+    d = client.get("/api/sales/heavy-eaters").json()
+    assert d["n_bills"] > 0 and d["total_covers"] > 0
+    # margin/head must reconcile to rev/head − cogs/head (a COGS-helper slip here
+    # is exactly the per-cover bug class this endpoint exists to expose).
+    assert abs(d["avg_margin_head"] - (d["avg_rev_head"] - d["avg_cogs_head"])) < 0.05
+    p = d["percentiles"]
+    assert p["p50"] <= p["p75"] <= p["p90"] <= p["p95"] <= p["p99"]
+    # heavy / loss buckets are subsets of all bills
+    assert d["heavy"]["bills"] <= d["n_bills"]
+    assert d["loss"]["bills"] <= d["n_bills"]
