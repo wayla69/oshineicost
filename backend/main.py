@@ -1853,8 +1853,12 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
         mon = month or _extra_months(con, "pos_customer_type_month")
         if not mon:
             return {"month": None, "types": []}
+        # net is INC-VAT in pos_customer_type_month → divide to ex-VAT (rule: revenue
+        # is always ex-VAT). The `customers` count is a POS channel-tag tally, ~10x
+        # real covers — usable only for CHANNEL MIX %, never as absolute pax, so we
+        # expose no per-head figure here (it would be meaningless).
         rows = [dict(r) for r in con.execute(
-            f"""SELECT x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)) net
+            f"""SELECT x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)/{VAT_DIVISOR}) net
                 FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
                 WHERE {tw} AND x.period_month=:m GROUP BY x.type_name ORDER BY customers DESC""",
             {**p, "m": mon}).fetchall()]
@@ -1863,10 +1867,9 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
         for r in rows:
             r["cust_pct"] = round((r["customers"] or 0) / tc * 100, 1)
             r["net_pct"] = round((r["net"] or 0) / tn * 100, 1)
-            r["net_per_head"] = round((r["net"] or 0) / r["customers"]) if r["customers"] else None
         # Per-branch breakdown (แยกตามสาขา): total + delivery share per branch.
         brows = con.execute(
-            f"""SELECT b.name branch, x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)) net
+            f"""SELECT b.name branch, x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)/{VAT_DIVISOR}) net
                 FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
                 WHERE {tw} AND x.period_month=:m GROUP BY b.name, x.type_name""",
             {**p, "m": mon}).fetchall()
@@ -1883,9 +1886,10 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
     for e in bmap.values():
         cu = e["customers"]
         by_branch.append({**e, "delivery_pct": round(e["delivery_cust"] / cu * 100, 1) if cu else 0,
-                          "net_per_head": round(e["net"] / cu) if cu else None})
-    by_branch.sort(key=lambda r: -(r["customers"] or 0))
-    return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn, "by_branch": by_branch}
+                          "net_pct": round(e["net"] / tn * 100, 1) if tn else 0})
+    by_branch.sort(key=lambda r: -(r["net"] or 0))
+    return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn,
+            "by_branch": by_branch, "count_caveat": True}
 
 
 @app.get("/api/extra/modifiers")
@@ -5359,7 +5363,8 @@ def analysis_discounts(
             SELECT COUNT(*) AS total_tx,
                    SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
                    ROUND(SUM(discount), 2)                        AS total_discount,
-                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount
+                   ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
+                   ROUND(SUM(food_subtotal+drink_subtotal+other_subtotal), 2) AS gross_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -5468,8 +5473,16 @@ def analysis_discounts(
     for c in cashiers:
         c["is_outlier"] = (c.get("disc_pct_of_sales") or 0) >= flag_at
 
+    # Enrich overall with the rate fields the by-branch rows already carry, so the
+    # summary KPIs have both: % of bills discounted, and discount as % of sales.
+    ov = dict(overall) if overall else {}
+    if ov:
+        _tt = ov.get("total_tx") or 0
+        _gs = ov.get("gross_sales") or 0
+        ov["discount_rate"] = round(100.0 * (ov.get("discount_tx") or 0) / _tt, 1) if _tt else 0
+        ov["disc_pct_of_sales"] = round(100.0 * (ov.get("total_discount") or 0) / _gs, 2) if _gs else 0
     return {
-        "overall":      dict(overall) if overall else {},
+        "overall":      ov,
         "by_branch":    [dict(r) for r in by_branch],
         "trend":        [dict(r) for r in trend],
         "top_cashiers": cashiers,
