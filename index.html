@@ -826,7 +826,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
     <span class="nav-label">📋 วิเคราะห์เมนู</span>
   </div>
-  <div class="nav-item" id="nav-engineering" onclick="switchTab('engineering')" title="เมนูทำเงิน (Menu Engineering) · Stars, Plowhorses, Puzzles, Dogs (per-dish; buffet tier aggregate excluded)">
+  <div class="nav-item" id="nav-engineering" style="display:none" onclick="switchTab('engineering')" title="เมนูทำเงิน (Menu Engineering) · ดูได้ในแท็บ วิเคราะห์เมนู → 🔬 Menu Engineering">
     <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
     <span class="nav-label">⭐ เมนูทำเงิน</span>
   </div>
@@ -834,7 +834,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
     <span class="nav-label">💰 ต้นทุน</span>
   </div>
-  <div class="nav-item" id="nav-bomcost" onclick="switchTab('bomcost')" title="🔬 BoM Cost Analysis · Chain overview, per-branch, compare, scenario simulator" style="background:linear-gradient(90deg,rgba(217,70,239,.10),transparent);border-left:2px solid #d946ef">
+  <div class="nav-item" id="nav-bomcost" onclick="switchTab('bomcost')" title="🔬 BoM Cost Analysis · เข้าถึงผ่านแถบ 💰 ต้นทุน" style="display:none">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
     <span class="nav-label">🎮 BoM + Simulator</span>
   </div>
@@ -843,7 +843,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
     <span class="nav-label">🔬 BoM รายสาขา</span>
   </div>
-  <div class="nav-item" id="nav-costhead" onclick="switchTab('costhead')" title="ต้นทุน/หัว รายสาขา (BoM) · วัน/สัปดาห์/เดือน + เทียบช่วงก่อน">
+  <div class="nav-item" id="nav-costhead" style="display:none" onclick="switchTab('costhead')" title="ต้นทุน/หัว รายสาขา (BoM) · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
     <span class="nav-label">💸 ต้นทุน/หัว</span>
   </div>
@@ -859,11 +859,11 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
     <span class="nav-label">📊 GP รายสาขา</span>
   </div>
-  <div class="nav-item" id="nav-pnlbranch" onclick="switchTab('pnlbranch')" title="P&amp;L รายสาขา · Revenue -> BoM COGS -> Gross Profit -> fixed costs -> Operating Profit + break-even">
+  <div class="nav-item" id="nav-pnlbranch" style="display:none" onclick="switchTab('pnlbranch')" title="P&amp;L รายสาขา · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>
     <span class="nav-label">💵 P&amp;L รายสาขา</span>
   </div>
-  <div class="nav-item" id="nav-pnlbill" onclick="switchTab('pnlbill')" title="P&amp;L ต่อบิล · กำไร/บิล, การกระจาย gross margin, บิลขาดทุน (COGS = BoM เท่านั้น)">
+  <div class="nav-item" id="nav-pnlbill" style="display:none" onclick="switchTab('pnlbill')" title="P&amp;L ต่อบิล · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 2h6l2 2v16l-2-1-2 1-2-1-2 1V4z"/><path d="M9 8h6M9 12h6"/></svg>
     <span class="nav-label">🧾 P&amp;L ต่อบิล</span>
   </div>
@@ -872,7 +872,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
     <span class="nav-label">📈 กำไร</span>
   </div>
-  <div class="nav-item" id="nav-benchmark" onclick="switchTab('benchmark')" title="Branch Benchmark · Cross-branch KPIs, health score">
+  <div class="nav-item" id="nav-benchmark" style="display:none" onclick="switchTab('benchmark')" title="Branch Benchmark · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span class="nav-label">🏆 Benchmark สาขา</span>
   </div>
@@ -1086,6 +1086,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
 
   <main class="content-area">
+
+  <!-- Cluster "related views" bar — groups the cost & profit tabs so the sidebar
+       stays short while every view is one click away. Populated by switchTab(). -->
+  <div id="clusterBar" class="hidden flex-wrap items-center gap-1.5 mb-4 px-1"></div>
 
 <!-- ══════════════════════════════════════════════════════════════════════════
      TAB: HOME — Daily Brief
@@ -2780,6 +2784,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
     <div id="discBillsSummary" class="px-5 pt-4"></div>
     <div id="discBillsBody" class="p-5 pt-3"></div>
+  </div>
+</div>
+
+<!-- Per-bill menu drill-down (loss bills): what the customer ordered -->
+<div id="billItemsModal" onclick="if(event.target.id==='billItemsModal')closeBillItems()"
+     style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg-card);border-radius:14px;max-width:900px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+      <h3 id="billItemsTitle" class="text-base font-bold text-slate-800">เมนูในบิล</h3>
+      <button onclick="closeBillItems()" class="topbar-icon-btn" title="ปิด (Esc)">✕</button>
+    </div>
+    <div id="billItemsSummary" class="px-5 pt-4"></div>
+    <div id="billItemsBody" class="p-5 pt-3"></div>
   </div>
 </div>
 
@@ -5651,12 +5668,34 @@ function switchTab(name) {
   const hideFilters = (name === 'settings' || name === 'compare');
   document.getElementById('selBranch').closest('div').classList.toggle('invisible', hideFilters);
   document.getElementById('pageTitle').textContent = PAGE_TITLES[name] || name;
+  _updateClusterBar(name);
   // Reset buffet subtab to overview whenever user navigates to/from buffetperf
   if (name === 'buffetperf') switchBperfTab('overview');
   showLoadingBar();
   // Re-size all chart instances so charts rendered while hidden get correct dimensions
   setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
   Promise.resolve(loadActiveTab()).finally(() => hideLoadingBar());
+}
+
+// Cost & Profit clusters: the secondary tabs are hidden from the sidebar and
+// reached via this in-page bar — fewer nav items, zero lost functionality.
+const TAB_CLUSTERS = [
+  { key: 'cost',   label: '💰 ต้นทุน',    tabs: [['cost','ภาพรวม'],['bomcost','BoM + Simulator'],['costhead','ต้นทุน/หัว'],['coverage','ความครอบคลุม']] },
+  { key: 'profit', label: '💵 กำไร & P&L', tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
+];
+function _updateClusterBar(name) {
+  const bar = document.getElementById('clusterBar');
+  if (!bar) return;
+  const cl = TAB_CLUSTERS.find(c => c.tabs.some(t => t[0] === name));
+  if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
+  bar.classList.remove('hidden'); bar.classList.add('flex');
+  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
+    cl.tabs.map(([t, lbl]) => {
+      const on = t === name;
+      return `<button onclick="switchTab('${t}')" class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+        ? 'background:var(--indigo);color:#fff;font-weight:600'
+        : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${lbl}</button>`;
+    }).join('');
 }
 
 function toggleSidebar() {
@@ -14513,9 +14552,9 @@ function renderPnlBill(d) {
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
     ? `ขาดทุน <b style="color:#ef4444">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:#ef4444">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
     : 'ไม่มีบิลขาดทุนในช่วงนี้ 🎉';
-  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
+  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
-    <td class="py-1.5 pr-2 font-mono text-[10.5px]">${esc(r.receipt)}</td>
+    <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)} 🔍</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
@@ -17400,6 +17439,63 @@ function closeDiscountBills() {
   if (m) m.style.display = 'none';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDiscountBills(); });
+
+// ── Per-bill menu drill-down (loss bills): what the customer actually ordered ──
+function closeBillItems() {
+  const m = document.getElementById('billItemsModal');
+  if (m) m.style.display = 'none';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeBillItems(); });
+
+async function openBillItems(row = {}) {
+  const modal = document.getElementById('billItemsModal');
+  const title = document.getElementById('billItemsTitle');
+  const sumEl = document.getElementById('billItemsSummary');
+  const body  = document.getElementById('billItemsBody');
+  title.textContent = '🧾 เมนูที่สั่ง · ' + (row.receipt || '');
+  const loss = Math.round((row.cogs || 0) - (row.rev || 0));
+  sumEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
+    ${[['สาขา', esc(row.branch || '—')], ['รายได้ (ex-VAT)', fmt(row.rev || 0)], ['COGS (BoM)', fmt(row.cogs || 0)],
+       ['ขาดทุน', `<span style="color:#ef4444">${fmt(loss)}</span>`], ['ลูกค้า', fmtN(row.cust || 0)]]
+      .map(([k, v]) => `<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-base font-bold text-slate-800">${v}</p></div>`).join('')}
+  </div>`;
+  body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
+  modal.style.display = 'flex';
+  let d;
+  try {
+    const r = await fetch(`${API}/api/reports/pnl-bill-items?receipt=${encodeURIComponent(row.receipt || '')}`);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    d = await r.json();
+  } catch (e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message || e))}</p>`; return; }
+  if (!d.synced) {
+    body.innerHTML = '<p class="text-sm text-amber-600 py-8 text-center">ยังไม่มีรายละเอียดเมนูต่อบิล — ตาราง <code>sale_bill_item</code> จะถูกสร้างหลังการ sync ข้อมูลครั้งถัดไป</p>';
+    return;
+  }
+  const items = d.items || [];
+  if (!items.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">ไม่พบรายการเมนูสำหรับบิลนี้</p>'; return; }
+  const rows = items.map(it => {
+    const mCol = it.margin < 0 ? '#ef4444' : it.margin === 0 ? '#94a3b8' : '#10b981';
+    return `<tr class="border-b border-slate-100 ${it.margin < 0 ? 'bg-rose-50/40' : ''}">
+      <td class="py-1.5 pr-3">${esc(it.menu || '—')}</td>
+      <td class="py-1.5 pr-3 text-slate-400 font-mono text-[10.5px]">${esc(it.sku_code || '')}</td>
+      <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(it.qty)}</td>
+      <td class="py-1.5 pr-3 text-right tabular-nums">${fmt(it.rev)}</td>
+      <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(it.cogs)}</td>
+      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${mCol}">${fmt(it.margin)}</td></tr>`;
+  }).join('');
+  const tot = items.reduce((a, it) => ({ rev: a.rev + it.rev, cogs: a.cogs + it.cogs, margin: a.margin + it.margin }), { rev: 0, cogs: 0, margin: 0 });
+  body.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
+      <th class="py-2 pr-3">เมนู</th><th class="py-2 pr-3">SKU</th>
+      <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">รายได้</th>
+      <th class="py-2 pr-3 text-right">COGS (BoM)</th><th class="py-2 text-right">กำไรขั้นต้น</th></tr></thead>
+    <tbody>${rows}</tbody>
+    <tfoot><tr class="border-t-2 border-slate-200 font-bold">
+      <td class="py-2 pr-3" colspan="3">รวม ${fmtN(items.length)} เมนู</td>
+      <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.rev)}</td>
+      <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.cogs)}</td>
+      <td class="py-2 text-right tabular-nums" style="color:${tot.margin < 0 ? '#ef4444' : '#10b981'}">${fmt(tot.margin)}</td></tr></tfoot></table>
+    <p class="text-[11px] text-slate-400 mt-3">รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. COGS = BoM เท่านั้น (buffet tier = 0).</p>`;
+}
 
 async function openDiscountBills(opts = {}) {
   const modal = document.getElementById('discBillsModal');
