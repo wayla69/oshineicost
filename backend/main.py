@@ -11253,6 +11253,61 @@ def buffet_heavy_eater_tail(branch: Optional[str] = Query(None), group: Optional
             "by_party_size": by_party, "by_branch": by_branch}
 
 
+@app.get("/api/buffet/turn-efficiency")
+def buffet_turn_efficiency(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """Table throughput efficiency — the OTHER half of buffet profit (a table tied up
+    long earns nothing for the next party). Joins real dwell (pos_table_turn_day.
+    avg_turn_min) + covers/table to real GP/cover, to rank branches by GP generated
+    per table-MINUTE occupied, and flag the worst combo: long dwell + low GP/cover.
+    Uses tables (real) — seats are not populated in pos_zone, so we report per-table."""
+    filt = ["b.name!='ALL'"]; p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    tw = " AND ".join(filt)
+    with get_db() as con:
+        mx = con.execute("SELECT MAX(day) FROM pos_table_turn_day").fetchone()[0]
+        if not mx:
+            return {"window": None, "branches": [], "chain": {}}
+        import datetime as _dt
+        y, m, d = (int(x) for x in mx.split("-")); since = (_dt.date(y, m, d) - _dt.timedelta(days=30)).isoformat()
+        rows = [dict(r) for r in con.execute(f"""
+            WITH tt AS (
+              SELECT x.branch_id,
+                     AVG(x.avg_turn_min) turn_min,
+                     ROUND(AVG(x.customers)) cov_day,
+                     ROUND(AVG(x.tabs)) tabs_day,
+                     AVG(CAST(x.customers AS float)/NULLIF(x.tabs,0)) cov_per_tab
+              FROM pos_table_turn_day x JOIN branches b ON b.branch_id=x.branch_id
+              WHERE {tw} AND x.day>=:since GROUP BY x.branch_id),
+            gp AS (
+              SELECT t.branch_id, SUM(t.total_inc_vat/1.07 - c.cogs_bom) gp, SUM(t.customer_count) cov
+              FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
+              JOIN branches b ON b.branch_id=t.branch_id WHERE {tw} AND t.customer_count>0 GROUP BY t.branch_id)
+            SELECT b.name branch, ROUND(tt.turn_min,1) turn_min, tt.cov_day, tt.tabs_day,
+                   ROUND(tt.cov_per_tab,2) cov_per_tab,
+                   ROUND(gp.gp/NULLIF(gp.cov,0)) gp_cover
+            FROM tt JOIN branches b ON b.branch_id=tt.branch_id LEFT JOIN gp ON gp.branch_id=tt.branch_id
+        """, {**p, "since": since}).fetchall()]
+        for r in rows:
+            gpc = r.get("gp_cover") or 0; cpt = r.get("cov_per_tab") or 0; tm = r.get("turn_min") or 0
+            r["gp_per_table_occasion"] = round(gpc * cpt) if (gpc and cpt) else None
+            r["gp_per_table_min"] = round(gpc * cpt / tm, 1) if (gpc and cpt and tm) else None
+        valid = [r for r in rows if r.get("gp_per_table_min")]
+        n = len(valid) or 1
+        chain = {
+            "turn_min": round(sum(r["turn_min"] for r in valid) / n, 1) if valid else None,
+            "gp_cover": round(sum((r["gp_cover"] or 0) for r in valid) / n) if valid else None,
+            "gp_per_table_min": round(sum(r["gp_per_table_min"] for r in valid) / n, 1) if valid else None,
+        }
+        # flag: dwell above chain avg AND gp/cover below chain avg = inefficient
+        for r in rows:
+            r["inefficient"] = bool(chain["turn_min"] and chain["gp_cover"]
+                                    and (r.get("turn_min") or 0) > chain["turn_min"]
+                                    and (r.get("gp_cover") or 0) < chain["gp_cover"])
+        rows.sort(key=lambda r: -(r.get("gp_per_table_min") or -1))
+    return {"window": [since, mx], "branches": rows, "chain": chain}
+
+
 # ---------------------------------------------------------------------------
 # GET /api/buffet/cost-sensitivity   🟡5
 # Top cost-driver SKUs for JS-side simulation

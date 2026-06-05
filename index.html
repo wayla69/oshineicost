@@ -2015,6 +2015,26 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
 
+    <!-- ⏱️ Turn-Time & Table Throughput Efficiency -->
+    <div class="card p-5 mt-5">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 class="section-title mb-0">⏱️ Turn-Time & Table Throughput · ประสิทธิภาพการหมุนโต๊ะ</h2>
+        <span id="turnChain" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">โต๊ะที่นั่งนาน = เสียโอกาสรอบถัดไป · <b>GP/นาที-โต๊ะ</b> = กำไรที่โต๊ะสร้างต่อ 1 นาทีที่ถูกใช้ · 🔴 = นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (เสียสองต่อ) · ที่นั่งไม่มีในข้อมูล จึงวัดต่อ "โต๊ะ"</p>
+      <div id="turnInsight" class="mb-3"></div>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">เวลานั่งเฉลี่ย (นาที)</th>
+          <th class="py-1.5 pr-2 text-right">คน/โต๊ะ</th>
+          <th class="py-1.5 pr-2 text-right">กำไร/หัว</th>
+          <th class="py-1.5 pr-2 text-right">กำไร/รอบโต๊ะ</th>
+          <th class="py-1.5 text-right">GP/นาที-โต๊ะ</th>
+        </tr></thead><tbody id="turnBody"></tbody></table>
+      </div>
+    </div>
+
   </div><!-- /bperftab-gppnl -->
 
   <!-- ══ SUBTAB 5: BOM DEEP-DIVE ══════════════════════════════════════════ -->
@@ -4459,6 +4479,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <p class="text-xs text-slate-500 mt-2">📌 Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร BoM ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
         <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
+        <p class="text-[11px] mt-1" style="color:#9d174d"><b>อัปเดต 2026-06-05:</b> ⭐ <b>🍖 Heavy-Eater Margin Tail</b> + <b>⏱️ Turn-Time & Table Throughput</b> (ใน Buffet Performance → กำไร & P&L) · <b>เมนูฝั่งซ้ายกระชับขึ้น</b> — แท็บ <b>ต้นทุน</b> และ <b>กำไร & P&L</b> รวมเป็นแถบ "มุมมองที่เกี่ยวข้อง" ด้านบนของหน้า (คลิกสลับได้) · <b>⏰ เวลาปิดร้าน/ความสดข้อมูล</b> (เลือกวันที่ได้) · <b>ต้นทุน/หัว รายสาขา</b> = เครื่องมือวัดประสิทธิภาพ (รายได้/หัว, ต้นทุน%, GP/หัว, เทียบเฉลี่ยเครือ) · <b>ต้นทุน → เปรียบเทียบ ต้นทุน/หัว รายสาขา</b> · <b>P&L ต่อบิล</b> เพิ่ม margin รายสาขา · <b>รายงาน §2/§3</b> เทียบเดือนเต็มจริง (กันเดือนไม่จบ) · Extra: <b>คลิกสาขาเพื่อเจาะลึกรายวัน/รายบิล</b> (เงินสด/บิลยกเลิก) + <b>ประเภทลูกค้าแยกสาขา</b> (ยอด ex-VAT แล้ว) + ธงเตือน<b>อัตรายกเลิก</b>สูง</p>
       </div>
     </div>
   </div>
@@ -4578,7 +4599,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="mb-3">
       <p class="text-sm font-bold text-amber-800 mb-1.5">🍱 บุฟเฟ่ต์ & ลูกค้า</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 ผลงานบุฟเฟ่ต์</b> — pax จริง (2.70/บิล), food cost จริง, ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×ต้นทุน</b></div>
+        <div class="border border-amber-300 rounded-lg p-2.5" style="background:#fffbeb"><b>🥘 ผลงานบุฟเฟ่ต์</b> — pax จริง (2.70/บิล), food cost จริง, ผู้ใหญ่/เด็ก, seat util + bills/table <b>ครบ 27 สาขา</b>, beverage · <b>🎯 เมนูเสิร์ฟเยอะ×ต้นทุน</b><br>กลุ่ม <b>💰 กำไร & P&L</b>: <b>🍖 Heavy-Eater Margin Tail ⭐ใหม่</b> = กำไรต่อหัว<b>จริง</b> (จ่าย−กินจริง จาก BoM ต่อบิล) → หาลูกค้าที่กินจนขาดทุน แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (พบ: โต๊ะ 1 คนขาดทุน 9.5%) · <b>⏱️ Turn-Time & Table Throughput ⭐ใหม่</b> = GP ต่อนาที-โต๊ะ, ธงสาขานั่งนาน+กำไรต่ำ</div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>🧒 บุฟเฟ่ต์เด็ก</b> — covers/รายได้/%/MoM/YTD รายสาขา <span style="color:#92400e">(ย้ายมาจากกลุ่มพนักงาน)</span></div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>👥 ลูกค้า & ยอด/หัว</b> — spend per head, party size, daypart <span style="color:#92400e">(ย้ายมาจากกลุ่มเมนู)</span></div>
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⏰ ช่วงเวลา & การไหล</b> — daypart heatmap, peak hours</div>
@@ -4656,8 +4677,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <li>กด "💾 Save scenario" ตั้งชื่อเก็บไว้ → เอาไปคุยกับซัพพลายเออร์</li>
         </ol>
       </div>
+      <div class="p-3 rounded-lg bg-rose-50 border-l-4 border-rose-500">
+        <p class="font-semibold text-rose-900 text-sm">D. หาลูกค้าที่ "กินจนขาดทุน" + คุมการหมุนโต๊ะ (ใหม่)</p>
+        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
+          <li><b>🍱 บุฟเฟ่ต์ → 🥘 ผลงานบุฟเฟ่ต์ → 💰 กำไร & P&L</b> เลื่อนลงหา <b>🍖 Heavy-Eater Margin Tail</b></li>
+          <li>ดู <b>% หัวที่ขาดทุน</b> และ <b>มูลค่าที่เสียไป</b> — ตารางขนาดโต๊ะบอกว่ากลุ่มไหนเสี่ยง (เช่น โต๊ะ 1 คน ขาดทุนสูงสุด)</li>
+          <li>เลือกสาขาที่ topbar เพื่อเจาะเฉพาะสาขา → ดูสาขาที่ % ขาดทุนสูง</li>
+          <li>ที่ <b>⏱️ Turn-Time & Table Throughput</b> หาสาขาธงแดง (นั่งนาน+กำไรต่ำ) → พิจารณาคุม portion วัตถุดิบแพง หรือกำหนดเวลานั่ง</li>
+        </ol>
+      </div>
       <div class="p-3 rounded-lg bg-amber-50 border-l-4 border-amber-500">
-        <p class="font-semibold text-amber-900 text-sm">D. Export รายงาน Monthly Pack ส่งผู้บริหาร</p>
+        <p class="font-semibold text-amber-900 text-sm">E. Export รายงาน Monthly Pack ส่งผู้บริหาร</p>
         <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
           <li>กด <b>📥 Export Monthly Pack</b> ที่ topbar (ข้าง 🖨️ Print)</li>
           <li>เลือกเดือน + รูปแบบ (Excel หรือ PDF)</li>
@@ -16632,8 +16662,37 @@ async function loadHeavyEaterTail() {
     <td class="py-1 text-right tabular-nums" style="color:#ef4444">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
 }
 
+// ⏱️ Turn-Time & Table Throughput Efficiency
+let _turnKey = null;
+async function loadTurnEfficiency() {
+  const _fk = (getBranch() || '') + '|' + (getGroup() || '');
+  if (_turnKey === _fk) return; _turnKey = _fk;
+  const p = new URLSearchParams();
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/buffet/turn-efficiency?${p}`).then(r => r.json()); } catch (e) { return; }
+  const ch = d.chain || {}; const rows = d.branches || [];
+  const cw = document.getElementById('turnChain');
+  if (cw) cw.textContent = ch.turn_min ? `เฉลี่ยเครือ: นั่ง ${ch.turn_min} นาที · กำไร/หัว ${fmt(ch.gp_cover)} · GP/นาที-โต๊ะ ${ch.gp_per_table_min}` : '';
+  const ineff = rows.filter(r => r.inefficient);
+  const ins = document.getElementById('turnInsight');
+  if (ins && ineff.length) {
+    const names = ineff.slice(0, 4).map(r => esc(r.branch)).join(', ');
+    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fef2f2;border-left:3px solid #ef4444">🔴 <b>${ineff.length} สาขา</b> นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (${names}${ineff.length > 4 ? ', …' : ''}) — โต๊ะถูกครองนานเพื่อกำไรที่น้อยกว่า เป็นเป้าหมายคุม dwell/portion อันดับแรก</div>`;
+  } else if (ins) { ins.innerHTML = ''; }
+  document.getElementById('turnBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-amber-50/40" style="${r.inefficient ? 'background:rgba(239,68,68,0.05)' : ''}">
+    <td class="py-1.5 pr-2 font-medium">${r.inefficient ? '🔴 ' : ''}${esc(r.branch)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.turn_min && r.turn_min > ch.turn_min) ? '#ef4444' : 'var(--text-secondary)'}">${r.turn_min != null ? r.turn_min : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.cov_per_tab != null ? r.cov_per_tab : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.gp_cover && r.gp_cover < ch.gp_cover) ? '#ef4444' : '#10b981'}">${r.gp_cover != null ? fmt(r.gp_cover) : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.gp_per_table_occasion != null ? fmt(r.gp_per_table_occasion) : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums font-bold" style="color:${r.gp_per_table_min == null ? '#94a3b8' : r.gp_per_table_min >= (ch.gp_per_table_min || 0) ? '#10b981' : '#f59e0b'}">${r.gp_per_table_min != null ? r.gp_per_table_min : '—'}</td>
+  </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูลการหมุนโต๊ะ</td></tr>';
+}
+
 async function loadBuffetGP() {
   loadHeavyEaterTail();
+  loadTurnEfficiency();
   const _fk = _filterKey() + '|' + _bgpGran;
   if (_lastGpKey === _fk) return;
   _lastGpKey = _fk;
