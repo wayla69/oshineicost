@@ -33,6 +33,9 @@ backend/.env
 __pycache__/
 *.pyc
 .pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
 .venv/
 venv/
 
