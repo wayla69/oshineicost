@@ -943,13 +943,15 @@ def top_ordered(
     _group_filter(base, params, group)
     _month_range_filter(base, params, month_from, month_to, month, col="sm.period_month")
     where = "WHERE " + " AND ".join(base)
-    order = "qty" if sort == "qty" else "revenue"
+    order = {"qty": "qty", "cogs": "cogs", "revenue": "revenue"}.get(sort, "revenue")
+    cogs_expr = _unified_cogs_expr("sm")   # per-row BoM COGS (qty × recipe cost; tier=0)
 
     with get_db() as con:
         rows = con.execute(f"""
             SELECT sk.sku_id, sk.sku_code, sk.description, c.name AS category,
                    ROUND(SUM(sm.qty), 2)             AS qty,
-                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue
+                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue,
+                   ROUND(SUM({cogs_expr}), 2)        AS cogs
             FROM sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
@@ -962,7 +964,8 @@ def top_ordered(
 
         total_row = con.execute(f"""
             SELECT ROUND(SUM(sm.qty), 2) AS total_qty,
-                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS total_rev
+                   ROUND(SUM(sm.subtotal_ex_vat), 2) AS total_rev,
+                   ROUND(SUM({cogs_expr}), 2) AS total_cogs
             FROM sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
@@ -1091,12 +1094,14 @@ def top_ordered(
                 for sid, mm in tmpS.items():
                     spark_map[sid] = [mm.get(m, 0) for m in spark_months]
 
-    total_qty = (total_row["total_qty"] or 0) if total_row else 0
-    total_rev = (total_row["total_rev"] or 0) if total_row else 0
+    total_qty  = (total_row["total_qty"]  or 0) if total_row else 0
+    total_rev  = (total_row["total_rev"]  or 0) if total_row else 0
+    total_cogs = (total_row["total_cogs"] or 0) if total_row else 0
     items = []
     for r in rows:
         q = r["qty"] or 0.0
         rev = r["revenue"] or 0.0
+        cogs = r["cogs"] or 0.0
         mom = mom_map.get(r["sku_id"])
         rmom = rev_mom_map.get(r["sku_id"])
         items.append({
@@ -1105,13 +1110,15 @@ def top_ordered(
             "category":      r["category"],
             "qty":           q,
             "revenue":       rev,
+            "cogs":          cogs,
             "qty_share_pct": round(q / total_qty * 100, 1) if total_qty else None,
             "qty_mom_pct":   round(mom, 1) if mom is not None else None,
             "rev_share_pct": round(rev / total_rev * 100, 1) if total_rev else None,
             "rev_mom_pct":   round(rmom, 1) if rmom is not None else None,
+            "cogs_share_pct": round(cogs / total_cogs * 100, 1) if total_cogs else None,
             "spark":         spark_map.get(r["sku_id"]) or [],
         })
-    return {"total_qty": total_qty, "total_rev": total_rev,
+    return {"total_qty": total_qty, "total_rev": total_rev, "total_cogs": total_cogs,
             "latest_month": latest, "prev_month": prev,
             "mom_basis": mom_basis, "mtd_cutoff_day": mtd_cut,
             "spark_months": spark_months, "items": items}
