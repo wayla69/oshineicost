@@ -47,6 +47,13 @@ SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
 
 def connect_mssql():
     import pymssql
+    # Fail loud + clear if creds are missing, instead of a cryptic KeyError deep
+    # in the sync (e.g. when backend/.env is absent on a fresh checkout).
+    required = ("OSH_SVR", "OSH_PORT", "OSH_USER", "OSH_PWD", "OSH_DB")
+    missing = [k for k in required if not os.environ.get(k)]
+    if missing:
+        sys.exit(f"MSSQL credentials missing: {', '.join(missing)}. "
+                 f"Set them in backend/.env (see .env.example) or the environment.")
     # NOTE: default charset (UTF-8) — required so nvarchar Thai (BranchName,
     # CategoryName) reads correctly. charset='CP874' empties nvarchar columns.
     return pymssql.connect(
