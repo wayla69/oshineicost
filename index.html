@@ -1910,7 +1910,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <div>
-          <h3 class="text-sm font-semibold text-slate-700 mb-2">🍽️ Top Cost-Driver SKUs (กินต้นทุนสูงสุด)</h3>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-700">🍽️ Top Cost-Driver SKUs (กินต้นทุนสูงสุด) <span class="text-[10px] font-normal text-slate-400">· คลิกแถวเพื่อดูส่วนผสม</span></h3>
+            <button onclick="gpbCostDriverDive()" class="dive-btn" title="Dive in (zoom + analysis)" style="position:static;opacity:.7">🔍</button>
+          </div>
           <div class="overflow-auto" style="max-height:340px">
             <table class="text-xs w-full" id="gpBomSkuTable">
               <thead class="sticky top-0 bg-white">
@@ -12012,6 +12015,104 @@ async function diveMostOrdered() {
   }, 50);
 }
 
+// Drill-down: click a Top Cost-Driver SKU → its BoM ingredient breakdown.
+async function gpbSkuDrill(code) {
+  const modal = document.getElementById('diveModal');
+  const title = document.getElementById('diveTitle');
+  const body  = document.getElementById('diveBody');
+  if (!modal || !title || !body) return;
+  title.textContent = `🔍 ส่วนผสม (BoM) · ${esc(code)}`;
+  body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
+  modal.classList.remove('hidden');
+  let d;
+  try {
+    const r = await fetch(`${API}/api/bom/composition?sku=${encodeURIComponent(code)}`);
+    if (r.status === 404) {
+      body.innerHTML = `<div style="padding:24px"><p class="text-sm text-slate-500">SKU <b>${esc(code)}</b> ไม่มีสูตร BoM (ใช้ต้นทุนแบบ flat จาก <code>sku_cost</code>) — จึงไม่มีรายละเอียดส่วนผสม</p>
+        <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
+      return;
+    }
+    d = await r.json();
+  } catch (e) {
+    body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`;
+    return;
+  }
+  const ings = d.ingredients || [];
+  const rowsHtml = ings.map(g => `<tr class="border-t border-slate-100">
+    <td class="py-1.5 pr-3">${esc(g.name)}</td>
+    <td class="py-1.5 pr-3 text-slate-400 text-[11px]">${esc(g.type)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(g.qty)} ${esc(g.unit)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums font-medium text-orange-700">${fmt(g.cost)}</td>
+    <td class="py-1.5 text-right tabular-nums text-slate-500">${g.pct}%</td></tr>`).join('');
+  const byType = Object.entries(d.by_type || {}).sort((a, b) => b[1] - a[1]);
+  const typeBars = byType.map(([t, p]) => _diveMetric(t, p + '%')).join('') || '<p class="text-xs text-slate-400">—</p>';
+  body.innerHTML = `<div class="dive-layout">
+    <div class="rounded-xl p-3" style="background:var(--bg-subtle);overflow:auto">
+      <p class="text-sm font-semibold mb-1">${esc(d.description || code)}</p>
+      <p class="text-xs text-slate-400 mb-2">ต้นทุนรวม/จาน <b class="text-orange-700">${fmt(d.total_cost)}</b> · ${ings.length} วัตถุดิบ</p>
+      <table class="text-xs w-full"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
+        <th class="py-1.5 pr-3">วัตถุดิบ</th><th class="py-1.5 pr-3">ประเภท</th>
+        <th class="py-1.5 pr-3 text-right">ปริมาณ</th><th class="py-1.5 pr-3 text-right">ต้นทุน</th><th class="py-1.5 text-right">%</th>
+      </tr></thead><tbody>${rowsHtml}</tbody></table>
+    </div>
+    <div class="dive-insight-bar dive-side">
+      ${_diveSection('สัดส่วนต้นทุนตามประเภท', '🧬', typeBars)}
+      <div class="dive-section"><div class="dive-section-title">🛠️ Actions</div>
+        <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
+    </div></div>`;
+}
+
+// Dive-in zoom: full bar chart of the Top Cost-Driver SKUs + analysis. Clicking a
+// bar drills into that SKU's BoM composition.
+function gpbCostDriverDive() {
+  const skus = window._gpbCostSkus || [];
+  const modal = document.getElementById('diveModal');
+  const title = document.getElementById('diveTitle');
+  const body  = document.getElementById('diveBody');
+  if (!modal || !title || !body) return;
+  if (!skus.length) return;
+  title.textContent = '🔍 Top Cost-Driver SKUs · กินต้นทุนสูงสุด';
+  const top = skus.slice(0, 30);
+  const nums = top.map(s => Math.round(s.bom_cost || 0));
+  const totalCost = skus.reduce((a, s) => a + (s.bom_cost || 0), 0);
+  const top5 = skus.slice(0, 5).reduce((a, s) => a + (s.bom_cost || 0), 0);
+  const conc = totalCost ? (top5 / totalCost * 100) : 0;
+  const analysis =
+    _diveSection('Overview', '📊',
+      _diveMetric('ต้นทุน BoM รวม', fmt(totalCost)) +
+      _diveMetric('อันดับ 1', `${esc(top[0].sku_code)} · ${fmt(top[0].bom_cost)}`, 'bad') +
+      _diveMetric('Top 5 รวม', `${fmt(top5)} (${conc.toFixed(0)}%)`) +
+      _diveMetric('จำนวน SKU', String(skus.length))) +
+    _diveSection('คำแนะนำ', '💡', _diveBullet('🎯',
+      `Top 5 SKU กินต้นทุน <b>${conc.toFixed(0)}%</b> ของทั้งหมด — โฟกัสต่อรองราคา/สูตรที่ SKU เหล่านี้ให้ผลมากสุด`, 'info'));
+  body.innerHTML = `<div class="dive-layout">
+    <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative"><canvas id="zoomChart"></canvas></div>
+    <div class="dive-insight-bar dive-side">${analysis}
+      <div class="dive-section"><div class="dive-section-title">🛠️ Actions <span class="text-[10px] font-normal text-slate-400">· คลิกแท่งเพื่อดูส่วนผสม</span></div>
+        <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
+    </div></div>`;
+  modal.classList.remove('hidden');
+  setTimeout(() => {
+    if (chartInstances['zoomChart']) chartInstances['zoomChart'].destroy();
+    const cv = document.getElementById('zoomChart');
+    if (!cv) return;
+    const mx = Math.max(...nums, 1);
+    chartInstances['zoomChart'] = new Chart(cv, {
+      type: 'bar',
+      data: { labels: top.map(s => s.sku_code),
+        datasets: [{ label: 'BoM Cost', data: nums,
+          backgroundColor: nums.map(v => v === mx ? '#ef4444' : '#f97316'), borderRadius: 4 }] },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, datalabels: { display: false },
+          tooltip: { callbacks: { label: ctx => ' ' + fmt(ctx.raw) } } },
+        scales: { x: { ticks: { callback: v => fmt(v) } }, y: { ticks: { font: { size: 10 }, autoSkip: false } } },
+        onClick: (e, els) => { if (els && els.length) gpbSkuDrill(top[els[0].index].sku_code); }
+      }
+    });
+  }, 60);
+}
+
 // ── World-class analysis builder (JC-inspired) ────────────────
 function _diveSection(title, icon, content) {
   return `<div class="dive-section">
@@ -16263,13 +16364,14 @@ async function loadBuffetGP() {
 
   // ── Top cost SKUs table ───────────────────────────────────────────────
   const skus = d.top_cost_skus || [];
+  window._gpbCostSkus = skus;   // for the dive-in / drill-down
   if (!skus.length) {
     document.getElementById('gpBomSkuBody').innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูลต้นทุน SKU</td></tr>';
   } else {
     const maxCost = skus[0].bom_cost || 1;
     document.getElementById('gpBomSkuBody').innerHTML = skus.map((s, i) => {
       const barW = Math.round(s.bom_cost / maxCost * 100);
-      return `<tr class="border-t border-slate-100 hover:bg-slate-50">
+      return `<tr class="border-t border-slate-100 hover:bg-orange-50/50 cursor-pointer" onclick="gpbSkuDrill('${s.sku_code}')" title="คลิกดูส่วนผสม BoM ของ ${s.sku_code}">
         <td class="py-1.5 pr-3 font-mono text-slate-700">${s.sku_code}</td>
         <td class="py-1.5 pr-3 text-slate-500 max-w-[80px] truncate" title="${s.category}">${s.category}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(Math.round(s.qty))}</td>
