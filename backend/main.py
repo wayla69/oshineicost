@@ -496,6 +496,35 @@ def data_coverage():
 # ---------------------------------------------------------------------------
 # /api/sales/monthly   -  monthly revenue trend
 # ---------------------------------------------------------------------------
+@app.get("/api/meta/data-window")
+@ttl_cache
+def data_window():
+    """Data coverage window + which month is still PARTIAL.
+
+    Reports must not compare a partial trailing month (e.g. data through Jun-03)
+    against a full prior month — that yields a misleading ~-90% MoM. This tells the
+    UI the last COMPLETE month (use it for headline/ranking comparisons) and the
+    partial month (label it MTD / exclude from like-for-like)."""
+    import calendar as _cal
+    with get_db() as con:
+        row = con.execute("SELECT MIN(sold_at) mn, MAX(sold_at) mx FROM sales_transaction").fetchone()
+    mx = (row["mx"] or "")[:10] if row else ""
+    mn = (row["mn"] or "")[:10] if row else ""
+    last_complete = partial = None
+    if mx:
+        y, m, d = (int(x) for x in mx.split("-"))
+        last_day = _cal.monthrange(y, m)[1]
+        if d >= last_day:                       # max date is the month-end → month is complete
+            last_complete = f"{y:04d}-{m:02d}"
+        else:                                   # trailing month is partial
+            partial = f"{y:04d}-{m:02d}"
+            pm = m - 1 or 12; py = y if m > 1 else y - 1
+            last_complete = f"{py:04d}-{pm:02d}"
+    return {"min_date": mn, "max_date": mx, "max_month": mx[:7] if mx else None,
+            "max_day": int(mx.split("-")[2]) if mx else None,
+            "last_complete_month": last_complete, "partial_month": partial}
+
+
 @app.get("/api/sales/monthly")
 @ttl_cache
 def sales_monthly(
@@ -7309,6 +7338,10 @@ def cost_analysis(
     # "Costed" means the COALESCE chain (monthly exact -> monthly prior -> default)
     # resolved a unit cost for at least one row — broader than sc.unit_cost alone.
     for r in items:
+        # Raw unified BoM COGS — kept even when has_cost (sku_cost-based) is False, so
+        # recipe-costed items (e.g. buffet-component SKUs with a BoM but no sku_cost
+        # row) still expose their true ingredient cost for cost-contribution views.
+        r["bom_cogs"] = r["cogs"]
         r["has_cost"] = bool(r.pop("has_cost", 0))
         if r["has_cost"]:
             rev_ex = r["revenue_ex_vat"] or 0

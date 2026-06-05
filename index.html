@@ -3541,6 +3541,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <th class="py-2 pr-4 text-right">Qty</th>
           <th class="py-2 pr-4 text-right">Revenue</th>
           <th class="py-2 pr-4 text-right">Margin %</th>
+          <th class="py-2 pr-4 text-right">ต้นทุน BoM</th>
+          <th class="py-2 pr-4 text-right">% ต้นทุนรวม</th>
           <th class="py-2 text-center">Quad</th>
         </tr></thead>
         <tbody id="rptSkuBody"></tbody>
@@ -8251,17 +8253,23 @@ async function loadReport() {
   // Per-branch monthly revenue (all branches, full history) → powers §3 ranking
   // movement, per-branch MoM, and YTD sparklines.
   const branchMonthlyRaw = await fetch(`${API}/api/gp/by-branch-month`).then(r=>r.json()).catch(()=>({rows:[]}));
+  // Data window → the report must NOT headline a PARTIAL trailing month (e.g. data
+  // through Jun-03) vs a full prior month (a misleading ~-90% MoM). Lead with the
+  // last COMPLETE month; surface the partial month separately as MTD.
+  const dataWin = await fetch(`${API}/api/meta/data-window`).then(r=>r.json()).catch(()=>({}));
+  const completeMonth = dataWin.last_complete_month || null;   // e.g. 2026-05
+  const partialMonth  = dataWin.partial_month || null;         // e.g. 2026-06 (3 days)
 
-  // ── Monthly-framing helpers (used across the whole report — avoid misleading
-  //    accumulated totals; lead with latest month + MoM/YoY/YTD movement).
-  const mLast = trend[trend.length-1] || {};
-  let mPrev = trend.length >= 2 ? trend[trend.length-2] : null;
-  // Backfill the previous month from full history when the filtered window can't
-  // supply it (single-month filter) — keeps MoM populated in every §1/§2 box.
-  if (!mPrev && mLast.period_month && Array.isArray(trendFull)) {
-    const _i = trendFull.findIndex(r => r.period_month === mLast.period_month);
-    if (_i > 0) mPrev = trendFull[_i - 1];
-  }
+  // ── Monthly-framing helpers — lead with the latest COMPLETE month + MoM/YoY/YTD.
+  const _rowFor = mm => (Array.isArray(trend) && trend.find(r => r.period_month === mm))
+                     || (Array.isArray(trendFull) && trendFull.find(r => r.period_month === mm)) || null;
+  const _prevMonthStr = mm => { if (!mm) return null; let [y,m]=mm.split('-').map(Number); m-=1; if(m<1){m=12;y-=1;} return `${y}-${String(m).padStart(2,'0')}`; };
+  // mLast = last complete month (fallback: last row in trend if window unknown).
+  let mLast = completeMonth ? (_rowFor(completeMonth) || {period_month: completeMonth}) : (trend[trend.length-1] || {});
+  let mPrev = _rowFor(_prevMonthStr(mLast.period_month));
+  if (!mPrev && trend.length >= 2 && !completeMonth) mPrev = trend[trend.length-2];
+  // Partial (MTD) month, for a separate note — never as the headline MoM base.
+  const mPartial = partialMonth ? _rowFor(partialMonth) : null;
   const mLastLabel = mLast.period_month ? fmtMonth(mLast.period_month) : '—';
   const pctDelta = (cur, prev) => (prev && prev > 0) ? ((cur - prev) / prev * 100) : null;
   const momChip = p => p == null ? '<span class="text-slate-300">—</span>'
@@ -8304,7 +8312,7 @@ async function loadReport() {
   // Alerts
   const alerts = [];
   const periodTotalRev = trend.reduce((a,r)=>a+(r.revenue||0),0);
-  alerts.push(`🗓️ <b>เดือนล่าสุด:</b> ${mLastLabel} · ตัวเลขสรุปด้านบนเป็น<b>รายเดือน</b> (ไม่ใช่ยอดสะสม) · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)} (ดูแยกเดือนใน §2)`);
+  alerts.push(`🗓️ <b>เดือนล่าสุดที่จบแล้ว:</b> ${mLastLabel} · สรุปด้านบนเป็น<b>รายเดือนเต็ม</b> (MoM/YoY เทียบเดือนเต็มต่อเดือนเต็ม)${(partialMonth && mPartial) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) แสดงเป็น MTD ใน §2 ไม่นำมาเทียบ` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
   const latestYoy = yoy[yoy.length-1];
   if (latestYoy && latestYoy.yoy_pct != null) {
     alerts.push(`📊 <b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
@@ -8344,11 +8352,17 @@ async function loadReport() {
   const yoyLast = yoyForMonth(mLast.period_month);
   document.getElementById('rptRevHeadline').innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
+      ${(partialMonth && mPartial) ? `
+      <div class="p-3 rounded-lg" style="background:#fffbeb;border:1px solid #fde68a">
+        <p class="text-xs text-slate-500">MTD ${fmtMonth(partialMonth)} <span class="text-amber-600">(${dataWin.max_day||'?'} วันแรก)</span></p>
+        <p class="text-lg font-bold text-amber-700">${fmt(mPartial.revenue||0)}</p>
+        <p class="text-[11px] text-slate-400">เดือนยังไม่จบ — ไม่นำมาเทียบ MoM</p>
+      </div>` : `
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">เดือนล่าสุด (${mLastLabel})</p>
         <p class="text-lg font-bold text-indigo-700">${fmt(mLast.revenue||0)}</p>
         <p class="text-[11px]">MoM ${momChip(momLast)} <span class="text-slate-400">vs ${mPrevLabel}</span></p>
-      </div>
+      </div>`}
       <div class="p-3 rounded-lg bg-slate-50">
         <p class="text-xs text-slate-500">YTD ${curYear} (${ytdMonths.length} เดือน)</p>
         <p class="text-lg font-bold text-emerald-700">${fmt(ytdRev)}</p>
@@ -8372,14 +8386,16 @@ async function loadReport() {
   };
   document.getElementById('rptTrendBody').innerHTML = trend.map((r,i) => {
     const prev = trend[i-1];
+    const isPartial = r.period_month === partialMonth;   // suppress its misleading MoM
+    const mom = (v, pv) => isPartial ? '' : _miniMoM(v, pv);
     const avgTicket = r.tx_count ? Math.round(r.revenue / r.tx_count) : 0;
     const prevAT = (prev && prev.tx_count) ? Math.round(prev.revenue / prev.tx_count) : 0;
-    return `<tr class="border-t border-slate-100">
-      <td class="py-2 pr-6">${fmtMonth(r.period_month)}</td>
-      <td class="py-2 pr-6 text-right font-semibold">${fmtN(r.revenue)}${_miniMoM(r.revenue, prev?.revenue)}</td>
-      <td class="py-2 pr-6 text-right">${r.tx_count!=null?fmtN(r.tx_count):'—'}${_miniMoM(r.tx_count, prev?.tx_count)}</td>
-      <td class="py-2 pr-6 text-right">${r.customer_count!=null?fmtN(r.customer_count):'—'}${_miniMoM(r.customer_count, prev?.customer_count)}</td>
-      <td class="py-2 text-right">${avgTicket?fmtN(avgTicket):'—'}${_miniMoM(avgTicket, prevAT)}</td>
+    return `<tr class="border-t border-slate-100" style="${isPartial?'background:#fffbeb':''}">
+      <td class="py-2 pr-6">${fmtMonth(r.period_month)}${isPartial?` <span class="text-[10px] text-amber-600">· บางส่วน ${dataWin.max_day||''} วัน</span>`:''}</td>
+      <td class="py-2 pr-6 text-right font-semibold">${fmtN(r.revenue)}${mom(r.revenue, prev?.revenue)}</td>
+      <td class="py-2 pr-6 text-right">${r.tx_count?fmtN(r.tx_count):'—'}${mom(r.tx_count, prev?.tx_count)}</td>
+      <td class="py-2 pr-6 text-right">${r.customer_count?fmtN(r.customer_count):'—'}${mom(r.customer_count, prev?.customer_count)}</td>
+      <td class="py-2 text-right">${avgTicket?fmtN(avgTicket):'—'}${isPartial?'':_miniMoM(avgTicket, prevAT)}</td>
     </tr>`;
   }).join('');
 
@@ -8390,8 +8406,12 @@ async function loadReport() {
     (r.monthly || []).forEach(m => { mm[m.month] = (mm[m.month] || 0) + (m.revenue || 0); });
   });
   const _allMonthsB = Array.from(new Set(Object.values(_bm).flatMap(o => Object.keys(o)))).sort();
-  const _lastMo = _allMonthsB[_allMonthsB.length - 1] || null;
-  const _prevMo = _allMonthsB.length >= 2 ? _allMonthsB[_allMonthsB.length - 2] : null;
+  // Rank by the last COMPLETE month (not the partial trailing one) so MoM is a
+  // like-for-like full-month vs full-month comparison, not 3-days-vs-full-month.
+  const _lastMo = (completeMonth && _allMonthsB.includes(completeMonth))
+    ? completeMonth : (_allMonthsB[_allMonthsB.length - 1] || null);
+  const _lastIdx = _allMonthsB.indexOf(_lastMo);
+  const _prevMo = _lastIdx > 0 ? _allMonthsB[_lastIdx - 1] : null;
   const revOf = (br, mo) => (mo && _bm[br]) ? (_bm[br][mo] || 0) : 0;
   const rankByMonth = mo => {
     const map = {};
@@ -8512,11 +8532,17 @@ async function loadReport() {
       <p class="text-xl font-bold" style="color:${quadColor[q]}">${n}</p>
     </div>`;
   }).join('');
-  // Top 20 by qty (most ordered food items) — shows what customers actually eat most
+  // Top 20 by qty (most ordered food items) — shows what customers actually eat most.
+  // % ต้นทุนรวม = this SKU's BoM COGS as a share of ALL menu BoM COGS in the period.
+  // Uses bom_cogs (raw unified recipe cost) so recipe-costed items are not dropped —
+  // the denominator is complete, so the percentages are accurate.
+  const totalCogs = items.reduce((a,r)=>a+(r.bom_cogs||0),0) || 0;
   const topFoodItems = [...items].sort((a,b)=>(b.qty||0)-(a.qty||0)).slice(0,20);
   document.getElementById('rptSkuBody').innerHTML = topFoodItems.length
     ? topFoodItems.map((r,i) => {
         const quad = r.quadrant || 'uncosted';
+        const bomCogs = r.bom_cogs;
+        const costPct = (bomCogs!=null && totalCogs) ? (bomCogs/totalCogs*100) : null;
         return `<tr class="border-t border-slate-100">
           <td class="py-2 pr-4 text-slate-400">${i+1}</td>
           <td class="py-2 pr-4 font-mono text-indigo-600 text-xs">${r.sku_code}</td>
@@ -8525,10 +8551,12 @@ async function loadReport() {
           <td class="py-2 pr-4 text-right">${fmtN(r.qty||0)}</td>
           <td class="py-2 pr-4 text-right font-semibold">${fmtN(r.revenue||0)}</td>
           <td class="py-2 pr-4 text-right">${r.margin_pct!=null?r.margin_pct.toFixed(1)+'%':'—'}</td>
+          <td class="py-2 pr-4 text-right text-orange-700">${bomCogs?fmtN(Math.round(bomCogs)):'—'}</td>
+          <td class="py-2 pr-4 text-right font-semibold">${costPct!=null?costPct.toFixed(1)+'%':'—'}</td>
           <td class="py-2 text-center text-xs">${quadEmoji[quad]||''}</td>
         </tr>`;
       }).join('')
-    : '<tr><td colspan="8" class="py-4 text-center text-xs text-slate-400">ไม่มีข้อมูลเมนู — ตรวจสอบ Cost Management หรือกำหนด SKU cost</td></tr>';
+    : '<tr><td colspan="10" class="py-4 text-center text-xs text-slate-400">ไม่มีข้อมูลเมนู — ตรวจสอบ Cost Management หรือกำหนด SKU cost</td></tr>';
 
   // ── §5 Customer Behavior
   const o = persona.overall;
