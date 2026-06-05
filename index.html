@@ -1258,7 +1258,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <span id="dbStatusText">Connecting…</span>
       </div>
       <button onclick="openMonthlyPackDialog()" class="topbar-icon-btn" aria-label="ส่งออกแพ็กรายงานรายเดือน (Excel/PDF)" title="📥 Export Monthly Review Pack (Excel/PDF)"><span aria-hidden="true">📥</span></button>
-      <button onclick="window.print()" class="topbar-icon-btn" aria-label="พิมพ์ หรือ บันทึก PDF" title="พิมพ์ / บันทึก PDF (Ctrl+P)"><span aria-hidden="true">🖨️</span></button>
+      <button onclick="printReport()" class="topbar-icon-btn" aria-label="พิมพ์ หรือ บันทึก PDF" title="พิมพ์ / บันทึก PDF (Ctrl+P)"><span aria-hidden="true">🖨️</span></button>
       <button onclick="toggleDarkMode()" id="darkBtn" class="topbar-icon-btn" aria-pressed="false" aria-label="สลับโหมดมืด" title="สลับโหมดมืด">🌙</button>
       <button onclick="openCostModal()" class="upload-btn whitespace-nowrap">
         ↑ อัพโหลดต้นทุน
@@ -3989,7 +3989,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3">Generated: <span id="rptDate">—</span></div>
-        <button onclick="window.print()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button onclick="printReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
       </div>
     </div>
   </div>
@@ -8913,6 +8913,21 @@ async function renderReportCost(branch) {
       <td class="py-2 text-right">${dTot(totCogsDelta,true)}</td>
     </tr>`;
   }
+}
+
+// Print / Export PDF. The Analysis Report fills its sections from ~15 async
+// fetches (~2 s); calling window.print() immediately captured a blank report.
+// When the report tab is active we force a full (re)load and await render before
+// opening the print dialog, so the printed/saved PDF always has data.
+async function printReport() {
+  if (typeof activeTab !== 'undefined' && activeTab === 'report') {
+    showLoadingBar();
+    try { _tabLastKey.report = null; await loadReport(); }
+    catch (e) { console.error('print preload failed', e); }
+    finally { hideLoadingBar(); }
+    await new Promise(r => setTimeout(r, 80));   // let layout settle before snapshot
+  }
+  window.print();
 }
 
 async function loadReport() {
@@ -14032,7 +14047,7 @@ function setupShortcuts() {
     if (e.key === '?')  { e.preventDefault(); showShortcutsHelp(); }
     else if (e.key === '/') { e.preventDefault(); document.getElementById('globalSearch')?.focus(); }
     else if (e.key === 'd') { toggleDarkMode(); }
-    else if (e.key === 'p') { window.print(); }
+    else if (e.key === 'p') { printReport(); }
     else if (e.key === 'f') { togglePresetMenu(); }
     else if (TAB_NUMS[e.key]) { switchTab(TAB_NUMS[e.key]); }
   });
