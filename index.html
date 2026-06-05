@@ -1986,6 +1986,35 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
 
+    <!-- 🍖 Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate) -->
+    <div class="card p-5 mt-5">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 class="section-title mb-0">🍖 Heavy-Eater Margin Tail · กำไรต่อหัวจริง (จ่าย − กินจริง)</h2>
+        <span id="hetWindow" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">ต้นทุน BoM ต่อบิลจริง (ไม่เฉลี่ยตามยอด) เทียบกับเงินที่จ่าย → หา <b>ลูกค้าที่กินจนขาดทุน</b> · แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (คำนวณจากบิลที่มีต้นทุน ~31 วัน)</p>
+      <div id="hetKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+      <div id="hetInsight" class="mb-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">การกระจายกำไร/หัว</h3>
+          <div id="hetDist"></div>
+        </div>
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">ตามขนาดโต๊ะ (ยิ่งคนน้อยยิ่งเสี่ยง)</h3>
+          <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+            <th class="py-1 pr-2">คน/โต๊ะ</th><th class="py-1 pr-2 text-right">% ขาดทุน</th><th class="py-1 text-right">กำไร/หัว</th>
+          </tr></thead><tbody id="hetParty"></tbody></table>
+        </div>
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">สาขาเสี่ยงสุด (% หัวที่ขาดทุน)</h3>
+          <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+            <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">% ขาดทุน</th><th class="py-1 text-right">เสียไป</th>
+          </tr></thead><tbody id="hetBranch"></tbody></table>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /bperftab-gppnl -->
 
   <!-- ══ SUBTAB 5: BOM DEEP-DIVE ══════════════════════════════════════════ -->
@@ -16556,7 +16585,55 @@ function setBgpGran(g) {
 }
 
 let _lastGpKey = null;
+// 🍖 Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate).
+let _hetKey = null;
+async function loadHeavyEaterTail() {
+  const _fk = (getBranch() || '') + '|' + (getGroup() || '');
+  if (_hetKey === _fk) return; _hetKey = _fk;
+  const p = new URLSearchParams();
+  if (getBranch()) p.set('branch', getBranch());
+  if (getGroup()) p.set('group', getGroup());
+  let d; try { d = await fetch(`${API}/api/buffet/heavy-eater-tail?${p}`).then(r => r.json()); } catch (e) { return; }
+  const s = d.summary || {};
+  const wEl = document.getElementById('hetWindow');
+  if (wEl) wEl.textContent = d.window ? `ช่วงข้อมูล ${d.window[0]} → ${d.window[1]}` : '';
+  document.getElementById('hetKpis').innerHTML = [
+    _extKpi('หัวที่ขาดทุน', (s.loss_cover_pct != null ? s.loss_cover_pct : 0) + '%', fmtN(s.loss_covers || 0) + ' หัว', s.loss_cover_pct > 2 ? '#ef4444' : '#f59e0b'),
+    _extKpi('มูลค่าที่เสียไป', fmt(s.loss_amount || 0), 'ต้นทุน > เงินที่จ่าย', '#ef4444'),
+    _extKpi('กำไร/หัว เฉลี่ย', fmt(s.gp_per_head || 0), 'ทั้งช่วง', '#10b981'),
+    _extKpi('บิลขาดทุน', fmtN(s.loss_bills || 0), (s.loss_bill_pct || 0) + '% ของบิล', '#7c3aed'),
+  ].join('');
+  // Auto insight: worst party-size band (the heavy-eater signal)
+  const parties = (d.by_party_size || []).filter(r => r.covers > 50).sort((a, b) => b.loss_cover_pct - a.loss_cover_pct);
+  const ins = document.getElementById('hetInsight');
+  if (ins && parties.length) {
+    const w = parties[0], best = parties[parties.length - 1];
+    ins.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border-left:3px solid #f59e0b">
+      🍽️ <b>โต๊ะ ${esc(w.k)} คน</b> ขาดทุนสูงสุด <b style="color:#ef4444">${w.loss_cover_pct}%</b> ของหัว (กำไร/หัว ${fmt(w.avg_margin_head)}) — เทียบกับโต๊ะ ${esc(best.k)} คนเพียง ${best.loss_cover_pct}%.
+      ยิ่งคนน้อย ความเสี่ยง "คนกินเยอะคนเดียว" ยิ่งสูง → จุดที่ควรคุม portion/ราคา tier</div>`;
+  } else if (ins) { ins.innerHTML = ''; }
+  // distribution bars
+  const dist = d.distribution || [];
+  const maxC = Math.max(1, ...dist.map(x => x.covers || 0));
+  const dcol = b => b.bkt <= 1 ? '#ef4444' : b.bkt === 2 ? '#f59e0b' : '#10b981';
+  document.getElementById('hetDist').innerHTML = dist.map(b => `
+    <div class="flex items-center gap-2 mb-1.5">
+      <span class="text-[10.5px] w-32 shrink-0" style="color:var(--text-secondary)">${esc(b.label)}</span>
+      <div class="flex-1 rounded-full h-3.5" style="background:var(--bg-subtle)"><div class="h-3.5 rounded-full" style="width:${(b.covers || 0) / maxC * 100}%;background:${dcol(b)}"></div></div>
+      <span class="text-[10.5px] tabular-nums w-12 text-right" style="color:var(--text-muted)">${fmtN(b.covers)}</span>
+    </div>`).join('') || '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>';
+  document.getElementById('hetParty').innerHTML = (d.by_party_size || []).map(r => `<tr class="border-t border-slate-100">
+    <td class="py-1 pr-2 font-medium">${esc(r.k)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 5 ? '#ef4444' : r.loss_cover_pct > 2 ? '#f59e0b' : '#10b981'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 text-right tabular-nums">${fmt(r.avg_margin_head)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
+  document.getElementById('hetBranch').innerHTML = (d.by_branch || []).slice(0, 8).map(r => `<tr class="border-t border-slate-100">
+    <td class="py-1 pr-2 font-medium">${esc(r.branch)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 3 ? '#ef4444' : '#f59e0b'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 text-right tabular-nums" style="color:#ef4444">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
+}
+
 async function loadBuffetGP() {
+  loadHeavyEaterTail();
   const _fk = _filterKey() + '|' + _bgpGran;
   if (_lastGpKey === _fk) return;
   _lastGpKey = _fk;

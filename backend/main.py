@@ -11189,6 +11189,70 @@ def buffet_plate_cost_dist(
     }
 
 
+@app.get("/api/buffet/heavy-eater-tail")
+def buffet_heavy_eater_tail(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
+    """The defining AYCE question — REAL per-cover margin (what they paid − what they
+    actually ate), not revenue pro-rata. Joins sale_bill_cogs (per-bill BoM COGS)
+    to the bill's ex-VAT revenue + pax to surface the net-negative 'heavy eater'
+    tail and segment it by daypart / day-of-week / party-size / branch.
+    Window = the costed sale_bill_cogs range (~31 days)."""
+    filt = ["t.source='Easy'", "b.name!='ALL'", "t.total_inc_vat>0", "t.customer_count>0"]
+    p: dict = {}
+    if branch: filt.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(filt, p, group)
+    JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+          "JOIN branches b ON b.branch_id=t.branch_id WHERE " + " AND ".join(filt))
+    rev = "t.total_inc_vat/1.07"                # ex-VAT paid
+    mh  = f"({rev} - c.cogs_bom)/t.customer_count"   # margin per head
+    with get_db() as con:
+        win = con.execute("SELECT MIN(day) mn, MAX(day) mx FROM sale_bill_cogs").fetchone()
+        s = con.execute(f"""SELECT COUNT(*) bills, SUM(t.customer_count) covers,
+            ROUND(SUM({rev})) rev, ROUND(SUM(c.cogs_bom)) cogs,
+            SUM(CASE WHEN c.cogs_bom>{rev} THEN 1 ELSE 0 END) loss_bills,
+            SUM(CASE WHEN c.cogs_bom>{rev} THEN t.customer_count ELSE 0 END) loss_covers,
+            ROUND(SUM(CASE WHEN c.cogs_bom>{rev} THEN c.cogs_bom-{rev} ELSE 0 END)) loss_amount
+            {JN}""", p).fetchone()
+        bills = s["bills"] or 0; covers = s["covers"] or 0
+        revv = s["rev"] or 0; cogs = s["cogs"] or 0
+        summary = {"bills": bills, "covers": covers, "rev": revv, "cogs": cogs,
+                   "gp": round(revv - cogs), "gp_per_head": round((revv - cogs)/covers, 1) if covers else None,
+                   "loss_bills": s["loss_bills"] or 0, "loss_covers": s["loss_covers"] or 0,
+                   "loss_amount": s["loss_amount"] or 0,
+                   "loss_bill_pct": round((s["loss_bills"] or 0)/bills*100, 1) if bills else 0,
+                   "loss_cover_pct": round((s["loss_covers"] or 0)/covers*100, 1) if covers else 0}
+        # margin-per-head distribution (the tail lives in the negative buckets)
+        dist = [dict(r) for r in con.execute(f"""
+            SELECT CASE WHEN {mh}<-100 THEN 0 WHEN {mh}<0 THEN 1 WHEN {mh}<100 THEN 2
+                        WHEN {mh}<300 THEN 3 WHEN {mh}<500 THEN 4 ELSE 5 END bkt,
+                   COUNT(*) bills, SUM(t.customer_count) covers {JN} GROUP BY bkt ORDER BY bkt""", p).fetchall()]
+        _DLBL = {0:"ขาดทุนหนัก (<-100)",1:"ขาดทุน (-100..0)",2:"บางมาก (0-100)",3:"100-300",4:"300-500",5:"สุขภาพดี (500+)"}
+        distribution = [{"bkt": d["bkt"], "label": _DLBL[d["bkt"]], "bills": d["bills"], "covers": d["covers"]} for d in dist]
+        def seg(expr, label_map=None):
+            rows = [dict(r) for r in con.execute(f"""
+                SELECT {expr} k, COUNT(*) bills, SUM(t.customer_count) covers,
+                    SUM(CASE WHEN c.cogs_bom>{rev} THEN 1 ELSE 0 END) loss_bills,
+                    SUM(CASE WHEN c.cogs_bom>{rev} THEN t.customer_count ELSE 0 END) loss_covers,
+                    ROUND(AVG({mh}),1) avg_margin_head,
+                    ROUND(SUM(CASE WHEN c.cogs_bom>{rev} THEN c.cogs_bom-{rev} ELSE 0 END)) loss_amount
+                {JN} GROUP BY k""", p).fetchall()]
+            for r in rows:
+                r["loss_cover_pct"] = round((r["loss_covers"] or 0)/r["covers"]*100, 1) if r["covers"] else 0
+                if label_map: r["label"] = label_map.get(r["k"], str(r["k"]))
+            return rows
+        by_daypart = seg("CASE WHEN CAST(substr(t.sold_at,12,2) AS INT)<16 THEN 'กลางวัน (lunch)' ELSE 'เย็น (dinner)' END")
+        by_dow = seg("CAST(strftime('%w', t.sold_at) AS INT)",
+                     {0:"อา",1:"จ",2:"อ",3:"พ",4:"พฤ",5:"ศ",6:"ส"})
+        by_party = seg("CASE WHEN t.customer_count=1 THEN '1' WHEN t.customer_count=2 THEN '2' "
+                       "WHEN t.customer_count<=4 THEN '3-4' WHEN t.customer_count<=6 THEN '5-6' ELSE '7+' END")
+        by_branch = seg("b.name")
+        for r in by_branch:
+            r["branch"] = r.pop("k")
+        by_branch.sort(key=lambda r: -(r["loss_cover_pct"] or 0))
+    return {"window": [win["mn"], win["mx"]] if win else [None, None], "summary": summary,
+            "distribution": distribution, "by_daypart": by_daypart, "by_dow": by_dow,
+            "by_party_size": by_party, "by_branch": by_branch}
+
+
 # ---------------------------------------------------------------------------
 # GET /api/buffet/cost-sensitivity   🟡5
 # Top cost-driver SKUs for JS-side simulation
