@@ -1742,6 +1742,40 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
             "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000}
 
 
+@app.get("/api/reports/pnl-bill-items")
+def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill to drill into")):
+    """Menu lines for a single (loss-making) bill: qty, ex-VAT revenue, BoM COGS and
+    per-line gross profit — so you can see exactly what the customer ordered that drove
+    COGS above revenue. Source: sale_bill_item, which the sync stages for LOSS bills
+    only (COGS > revenue). `synced` is False until the next sync builds that table."""
+    with get_db() as con:
+        synced = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_bill_item'").fetchone() is not None
+        header = None
+        hdr = con.execute(
+            """SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
+                      ROUND(t.total_inc_vat/1.07) rev, ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc
+               FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
+               JOIN branches b ON b.branch_id=t.branch_id WHERE t.receipt_no=:r""",
+            {"r": receipt}).fetchone()
+        if hdr:
+            header = {"receipt": hdr["receipt_no"], "branch": hdr["branch"], "sold_at": hdr["sold_at"],
+                      "cust": hdr["cust"] or 0, "rev": hdr["rev"] or 0, "cogs": hdr["cogs"] or 0,
+                      "disc": hdr["disc"] or 0}
+        items = []
+        if synced:
+            items = [{"menu": (x["description"] or x["sku_code"] or "—").replace("(B) ", "").replace("(A) ", ""),
+                      "sku_code": x["sku_code"], "qty": x["qty"] or 0, "rev": x["rev"] or 0,
+                      "cogs": x["cogs"] or 0, "margin": round((x["rev"] or 0) - (x["cogs"] or 0))}
+                     for x in con.execute(
+                        """SELECT s.description, s.sku_code, ROUND(SUM(i.qty),2) qty,
+                                  ROUND(SUM(i.rev)) rev, ROUND(SUM(i.bom_cost)) cogs
+                           FROM sale_bill_item i JOIN skus s ON s.sku_id=i.sku_id
+                           WHERE i.receipt_no=:r GROUP BY i.sku_id ORDER BY cogs DESC, rev DESC""",
+                        {"r": receipt}).fetchall()]
+    return {"receipt": receipt, "synced": synced, "header": header, "items": items}
+
+
 def _bom_unit_cost_sql(s: str = "s") -> str:
     """Per-serving BoM unit cost for a SKU (alias `s` = skus). recipe → alias →
     sku_cost → 0; BUFFET tier = 0 (iron rule: BoM only)."""

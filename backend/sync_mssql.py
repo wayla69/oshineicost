@@ -353,27 +353,50 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     mc.execute(f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty
+               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
         GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
     """, (bill_since,))
     bills = {}
+    lines = []   # (receipt_no, sku_id, qty, rev, bom_cost) — per-menu-line detail, kept for the loss-bill drill
     for r in mc.fetchall():
         bid = bid_map.get(r["bid"])
         if bid is None:
             continue
-        c = costmap.get(item_map.get(r["iid"]), 0.0)
+        sid_local = item_map.get(r["iid"])
+        c = costmap.get(sid_local, 0.0)
+        qty = r["qty"] or 0
         rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
         b = bills.get(rcpt)
         if b is None:
-            bills[rcpt] = [bid, r["d"], (r["qty"] or 0) * c]
+            bills[rcpt] = [bid, r["d"], qty * c]
         else:
-            b[2] += (r["qty"] or 0) * c
+            b[2] += qty * c
+        if sid_local is not None:
+            lines.append((rcpt, sid_local, round(qty, 2), round(r["rev"] or 0, 2), round(qty * c, 4)))
     sq.executemany("INSERT OR REPLACE INTO sale_bill_cogs VALUES(?,?,?,?)",
         [(rc, v[0], v[1], round(v[2], 2)) for rc, v in bills.items()])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
     print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
+
+    # ── sale_bill_item: per-receipt MENU LINES for LOSS bills only (COGS > revenue) ──
+    #    Powers the "บิลขาดทุน" menu drill-down. Scoped to loss bills (~3% of bills)
+    #    to keep the DB light — NOT a full per-bill line table. Loss test uses the
+    #    SAME revenue basis as the per-bill P&L endpoint (total_inc_vat/1.07 from the
+    #    sales_transaction just staged above) so the set matches the loss table exactly.
+    #    rev = SUM(ExtendedPrice) treated ex-VAT (consistent with sales_sku_daily);
+    #    bom_cost = qty × per-SKU BoM unit cost (BUFFET tier = 0; IRON RULE: BoM only).
+    revmap = {row["receipt_no"]: (row["t"] or 0) / 1.07 for row in
+              sq.execute("SELECT receipt_no, total_inc_vat t FROM sales_transaction WHERE total_inc_vat>0")}
+    loss_set = {rc for rc, v in bills.items() if v[2] > revmap.get(rc, float("inf"))}
+    sq.executescript("DROP TABLE IF EXISTS sale_bill_item; CREATE TABLE sale_bill_item("
+                     "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL);")
+    loss_lines = [ln for ln in lines if ln[0] in loss_set]
+    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", loss_lines)
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_sbi ON sale_bill_item(receipt_no)")
+    print(f"        sale_bill_item: {len(loss_lines)} lines across {len(loss_set)} loss bills")
 
     # ── Extra POS-deep-dive tables (separate "Extra" report group) ──
     stage_extra(sq, mc, since, bid_map, item_map)
