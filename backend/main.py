@@ -1194,14 +1194,18 @@ def sales_daily(
     _group_filter(base, params, group)
     where = " AND ".join(base)
 
+    mtd_cut_day = None   # set below when the latest month is partial → MTD-fair month compare
     def bounds(d):
         if gran == "day":
             return d, d
         if gran == "week":
             s = d - _dt.timedelta(days=d.weekday()); return s, s + _dt.timedelta(days=6)
         s = d.replace(day=1)
-        nxt = s.replace(year=s.year + 1, month=1) if s.month == 12 else s.replace(month=s.month + 1)
-        return s, nxt - _dt.timedelta(days=1)
+        last = _cal.monthrange(s.year, s.month)[1]
+        # When the latest month is still partial, clamp EVERY month period (current /
+        # prev / YoY) to the same elapsed days so month-vs-month is MTD-vs-MTD fair.
+        end_day = min(last, mtd_cut_day) if mtd_cut_day else last
+        return s, s.replace(day=end_day)
 
     def minus_month(d, n=1):
         idx = d.year * 12 + (d.month - 1) - n
@@ -1232,6 +1236,12 @@ def sales_daily(
         focus = (date or maxd)[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
+        # MTD-fair month compare: if the focus month is the latest, still-partial month,
+        # clamp every month period to the same elapsed days (set the closure's cutoff).
+        if gran == "month":
+            my, mm, mdd = (int(x) for x in maxd[:10].split("-"))
+            if (fy, fm) == (my, mm) and mdd < _cal.monthrange(my, mm)[1]:
+                mtd_cut_day = mdd
 
         def fetch(d):
             s, e = bounds(d)
@@ -1313,6 +1323,7 @@ def sales_daily(
             "cur_range": [cs.isoformat(), ce.isoformat()],
             "prev_range": [pms.isoformat(), pme.isoformat()],
             "yoy_range": [pys.isoformat(), pye.isoformat()],
+            "mtd": mtd_cut_day is not None, "mtd_cutoff_day": mtd_cut_day,
             "branches": out, "total": total, "trend": tr, "anomalies": anomalies}
 
 

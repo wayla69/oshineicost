@@ -1169,9 +1169,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
     <input type="date" id="dsDate" onchange="loadDailySales(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
     <div id="dsGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
-      <button class="gran-btn gran-active" data-g="day"   onclick="dsSetGran('day')">วัน</button>
+      <button class="gran-btn"             data-g="day"   onclick="dsSetGran('day')">วัน</button>
       <button class="gran-btn"             data-g="week"  onclick="dsSetGran('week')">สัปดาห์</button>
-      <button class="gran-btn"             data-g="month" onclick="dsSetGran('month')">เดือน</button>
+      <button class="gran-btn gran-active" data-g="month" onclick="dsSetGran('month')">เดือน</button>
     </div>
     <span id="dsRange" class="text-[11px]" style="color:var(--text-muted)"></span>
   </div>
@@ -14304,7 +14304,7 @@ async function renderHomeScorecard(focusDate) {
 }
 
 // ── 📅 ยอดขายรายวัน (Daily Sales) tab ──
-let _dsGran = 'day';
+let _dsGran = 'month';   // default to MTD (month view is MTD-fair when the month is partial)
 function dsSetGran(g) {
   _dsGran = g;
   document.querySelectorAll('#dsGranTrack .gran-btn').forEach(b => b.classList.toggle('gran-active', b.dataset.g === g));
@@ -14325,14 +14325,20 @@ async function loadDailySales(force) {
   if (d.focus && !dv) { const el = document.getElementById('dsDate'); if (el) el.value = d.focus; }
   const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_dsGran];
   const cr = d.cur_range || ['', ''];
-  document.getElementById('dsRange').textContent = `${lbl}: ${cr[0]}${cr[0] !== cr[1] ? ' – ' + cr[1] : ''}`;
-  document.getElementById('dsCmpNote').textContent = `· เทียบ${lbl}ก่อน (${(d.prev_range || [''])[0]}) · ปีก่อน (${(d.yoy_range || [''])[0]})`;
+  const isMtd = !!d.mtd;
+  const cutTxt = isMtd ? `MTD 1–${d.mtd_cutoff_day} (เดือนยังไม่จบ)` : lbl;
+  document.getElementById('dsRange').textContent = `${cutTxt}: ${cr[0]}${cr[0] !== cr[1] ? ' – ' + cr[1] : ''}`;
+  document.getElementById('dsCmpNote').textContent = isMtd
+    ? `· เทียบ MTD เดือนก่อน (${(d.prev_range || [''])[0]} – วันเท่ากัน) · ปีก่อน (${(d.yoy_range || [''])[0]}) · เทียบช่วงวันเท่ากัน ไม่เอาเดือนเต็มมาเทียบเดือนไม่จบ`
+    : `· เทียบ${lbl}ก่อน (${(d.prev_range || [''])[0]}) · ปีก่อน (${(d.yoy_range || [''])[0]})`;
   const t = d.total || {};
   const badge = (v, hb = true) => v == null ? '<span class="text-slate-300 text-xs">—</span>'
     : `<span class="text-xs font-semibold" style="color:${(v >= 0) === hb ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
+  const cmpLbl = isMtd ? 'MTD เดือนก่อน' : (lbl + 'ก่อน');
+  const curLbl = isMtd ? `MTD (1–${d.mtd_cutoff_day})` : (lbl + 'นี้');
   document.getElementById('dsKpis').innerHTML = [
-    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), s: 'vs ' + lbl + 'ก่อน ' + (t.mom_pct != null ? (t.mom_pct >= 0 ? '+' : '') + t.mom_pct + '%' : '—'), c: '#4f46e5' },
-    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: lbl + 'นี้', c: '#0891b2' },
+    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), s: 'vs ' + cmpLbl + ' ' + (t.mom_pct != null ? (t.mom_pct >= 0 ? '+' : '') + t.mom_pct + '%' : '—'), c: '#4f46e5' },
+    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: curLbl, c: '#0891b2' },
     { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), s: 'ต่อลูกค้า', c: '#7c3aed' },
     { l: 'เทียบปีก่อน (YoY)', v: t.yoy_pct != null ? (t.yoy_pct >= 0 ? '+' : '') + t.yoy_pct + '%' : '—', s: 'รายได้ vs ปีก่อน', c: t.yoy_pct == null ? '#94a3b8' : t.yoy_pct >= 0 ? '#059669' : '#ef4444' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
