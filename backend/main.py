@@ -1442,34 +1442,47 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                     WHERE {twhere} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
                     GROUP BY b.name""", {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()}
-            cogs = {r["branch"]: r["cogs"] or 0 for r in con.execute(
-                f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs
-                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM sales_sku_daily
-                          WHERE day BETWEEN :s AND :e) ssm
+            cogs, rev = {}, {}
+            for r in con.execute(
+                f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs,
+                           ROUND(SUM(ssm.subtotal_ex_vat),2) rev
+                    FROM (SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source
+                          FROM sales_sku_daily WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{dbf} GROUP BY b.name""",
-                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {})}).fetchall()}
-            return cust, cogs, (s, e)
+                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {})}).fetchall():
+                cogs[r["branch"]] = r["cogs"] or 0
+                rev[r["branch"]]  = r["rev"] or 0
+            return cust, cogs, rev, (s, e)
 
-        cust, cogs, (cs, ce) = fetch(fdate)
-        pcust, pcogs, (ps, pe) = fetch(prev_focus(fdate))
+        cust, cogs, rev, (cs, ce) = fetch(fdate)
+        pcust, pcogs, _prev_rev, (ps, pe) = fetch(prev_focus(fdate))
 
         def pct(c, p): return round((c - p) / p * 100, 1) if p else None
         out = []
         for nm in sorted(set(cust) | set(cogs)):
-            cu, co = cust.get(nm, 0), cogs.get(nm, 0)
+            cu, co, re = cust.get(nm, 0), cogs.get(nm, 0), rev.get(nm, 0)
             pcu, pco = pcust.get(nm, 0), pcogs.get(nm, 0)
-            ch = round(co / cu, 1) if cu else None
-            pch = round(pco / pcu, 1) if pcu else None
-            out.append({"branch": nm, "customers": cu, "cogs": round(co, 2), "cost_per_head": ch,
-                        "prev_cost_per_head": pch, "delta_pct": pct(ch or 0, pch or 0) if pch else None})
-        out.sort(key=lambda r: -(r["cost_per_head"] or 0))
-        tcu = sum(cust.values()); tco = sum(cogs.values())
+            ch  = round(co / cu, 1) if cu else None          # cost / head
+            pch = round(pco / pcu, 1) if pcu else None       # prev cost / head
+            rph = round(re / cu, 1) if cu else None          # revenue / head (spend)
+            cost_pct = round(co / re * 100, 1) if re else None   # food-cost ratio
+            gph = round((re - co) / cu, 1) if cu else None       # GP / head
+            out.append({"branch": nm, "customers": cu, "cogs": round(co, 2),
+                        "revenue": round(re, 2), "cost_per_head": ch, "prev_cost_per_head": pch,
+                        "delta_pct": pct(ch or 0, pch or 0) if pch else None,
+                        "rev_per_head": rph, "cost_pct": cost_pct, "gp_per_head": gph})
+        out.sort(key=lambda r: -(r["cost_pct"] if r["cost_pct"] is not None else -1))
+        tcu = sum(cust.values()); tco = sum(cogs.values()); tre = sum(rev.values())
         ptcu = sum(pcust.values()); ptco = sum(pcogs.values())
         tch = round(tco / tcu, 1) if tcu else None
         ptch = round(ptco / ptcu, 1) if ptcu else None
-        total = {"customers": tcu, "cogs": round(tco, 2), "cost_per_head": tch,
-                 "prev_cost_per_head": ptch, "delta_pct": pct(tch or 0, ptch or 0) if ptch else None}
+        total = {"customers": tcu, "cogs": round(tco, 2), "revenue": round(tre, 2),
+                 "cost_per_head": tch, "prev_cost_per_head": ptch,
+                 "delta_pct": pct(tch or 0, ptch or 0) if ptch else None,
+                 "rev_per_head": round(tre / tcu, 1) if tcu else None,
+                 "cost_pct": round(tco / tre * 100, 1) if tre else None,
+                 "gp_per_head": round((tre - tco) / tcu, 1) if tcu else None}
     return {"gran": gran, "focus": focus, "cur_range": [cs.isoformat(), ce.isoformat()],
             "prev_range": [ps.isoformat(), pe.isoformat()], "branches": out, "total": total}
 
