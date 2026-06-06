@@ -20,10 +20,13 @@ COPY recon/   /app/recon/
 COPY index.html /app/index.html
 COPY vendor/    /app/vendor/
 COPY docs/      /app/docs/
+COPY start.sh   /app/start.sh
+RUN chmod +x /app/start.sh
 
 ENV OSHINEI_DB=/data/oshinei.db
 ENV PORT=8080
 EXPOSE 8080 8001
 
-# Default CMD (overridden by fly.toml [processes] in production)
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8080"]
+# One machine runs both apps (dashboard :8080, recon :8001) so they share the
+# single oshinei_data volume. See start.sh.
+CMD ["/app/start.sh"]
