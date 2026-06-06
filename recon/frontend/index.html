@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei – Revenue Reconciliation</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  :root {
+    --brand: #e85d04;
+    --brand-light: #fff1e6;
+    --ok: #16a34a;
+    --warn: #d97706;
+    --danger: #dc2626;
+    --muted: #6b7280;
+  }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f8fafc; }
+  .tab-btn { border-bottom: 3px solid transparent; }
+  .tab-btn.active { border-color: var(--brand); color: var(--brand); font-weight:600; }
+  .badge-ok   { background:#dcfce7; color:#15803d; }
+  .badge-warn { background:#fef9c3; color:#854d0e; }
+  .badge-err  { background:#fee2e2; color:#b91c1c; }
+  .badge      { font-size:11px; padding:2px 8px; border-radius:999px; display:inline-block; }
+  .card { background:white; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:20px; }
+  .drop-zone { border:2px dashed #d1d5db; border-radius:10px; transition:.2s; cursor:pointer; }
+  .drop-zone:hover, .drop-zone.dragging { border-color:var(--brand); background:var(--brand-light); }
+  .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px;
+          border-radius:999px; font-size:12px; font-weight:600; }
+  .pill-draft    { background:#f1f5f9; color:#475569; }
+  .pill-review   { background:#fef9c3; color:#854d0e; }
+  .pill-approved { background:#dcfce7; color:#15803d; }
+  .pill-closed   { background:#e0e7ff; color:#3730a3; }
+  tr:hover td { background:#f8fafc; }
+  .var-pos { color:#16a34a; }
+  .var-neg { color:#dc2626; }
+  .progress-bar { height:6px; border-radius:3px; background:#e5e7eb; overflow:hidden; }
+  .progress-fill { height:100%; background:var(--brand); border-radius:3px; transition:.4s; }
+</style>
+</head>
+<body>
+
+<!-- ── TOP NAV ── -->
+<nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-6 sticky top-0 z-20">
+  <span class="font-bold text-lg" style="color:var(--brand)">🍜 Oshinei</span>
+  <span class="text-gray-400">|</span>
+  <span class="text-gray-700 font-semibold">Revenue Reconciliation</span>
+  <div class="ml-auto flex items-center gap-3">
+    <select id="sel-period" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400">
+      <!-- populated by JS -->
+    </select>
+    <select id="sel-branch" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400">
+      <option value="">All branches</option>
+    </select>
+    <button onclick="openUploadModal()" class="text-sm font-semibold text-white rounded-lg px-4 py-1.5" style="background:var(--brand)">
+      + Upload
+    </button>
+  </div>
+</nav>
+
+<!-- ── TAB BAR ── -->
+<div class="bg-white border-b border-gray-200 px-6 flex gap-6 text-sm text-gray-500">
+  <button class="tab-btn active py-3 px-1" data-tab="overview"       onclick="switchTab('overview')">Overview</button>
+  <button class="tab-btn py-3 px-1"         data-tab="uploads"        onclick="switchTab('uploads')">Uploads</button>
+  <button class="tab-btn py-3 px-1"         data-tab="matches"        onclick="switchTab('matches')">Matched</button>
+  <button class="tab-btn py-3 px-1"         data-tab="discrepancies"  onclick="switchTab('discrepancies')">Discrepancies <span id="disc-badge" class="badge badge-err hidden">0</span></button>
+  <button class="tab-btn py-3 px-1"         data-tab="sessions"       onclick="switchTab('sessions')">Sessions</button>
+</div>
+
+<!-- ── MAIN CONTENT ── -->
+<main class="p-6 max-w-7xl mx-auto space-y-6">
+
+  <!-- OVERVIEW TAB -->
+  <div id="tab-overview" class="tab-pane space-y-5">
+
+    <!-- KPI row -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="card text-center">
+        <div class="text-xs text-gray-400 mb-1">POS Net Sales</div>
+        <div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-xs text-gray-400 mb-1">External Total</div>
+        <div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-xs text-gray-400 mb-1">Variance</div>
+        <div id="kpi-var" class="text-2xl font-bold">—</div>
+      </div>
+      <div class="card text-center">
+        <div class="text-xs text-gray-400 mb-1">Pending Issues</div>
+        <div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div>
+      </div>
+    </div>
+
+    <!-- Source breakdown -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+      <!-- Match rate by source -->
+      <div class="card">
+        <div class="font-semibold text-gray-700 mb-4">Match Rate by Source</div>
+        <div id="match-rates" class="space-y-3">
+          <!-- filled by JS -->
+        </div>
+      </div>
+
+      <!-- Variance chart -->
+      <div class="card">
+        <div class="font-semibold text-gray-700 mb-3">Variance by Source (฿)</div>
+        <canvas id="chart-variance" height="160"></canvas>
+      </div>
+    </div>
+
+    <!-- Branch overview table -->
+    <div class="card overflow-x-auto">
+      <div class="font-semibold text-gray-700 mb-3">Branch Overview</div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Branch</th>
+            <th class="text-right pb-2">POS</th>
+            <th class="text-right pb-2">External</th>
+            <th class="text-right pb-2">Variance</th>
+            <th class="text-center pb-2">Status</th>
+            <th class="pb-2"></th>
+          </tr>
+        </thead>
+        <tbody id="branch-overview-body">
+          <tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- UPLOADS TAB -->
+  <div id="tab-uploads" class="tab-pane hidden space-y-4">
+    <div class="card">
+      <div class="font-semibold text-gray-700 mb-4">Upload Reports</div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="drop-zone p-6 text-center" id="dz-bank"        ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'bank')">
+          <div class="text-3xl mb-2">🏦</div>
+          <div class="font-semibold text-sm">Bank Statement</div>
+          <div class="text-xs text-gray-400 mt-1">KBank · SCB · BBL · KTB · TTB</div>
+          <div class="text-xs text-gray-400">.xlsx</div>
+        </div>
+        <div class="drop-zone p-6 text-center" id="dz-credit_card" ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'credit_card')">
+          <div class="text-3xl mb-2">💳</div>
+          <div class="font-semibold text-sm">Credit Card</div>
+          <div class="text-xs text-gray-400 mt-1">EDC Settlement Report</div>
+          <div class="text-xs text-gray-400">.xlsx</div>
+        </div>
+        <div class="drop-zone p-6 text-center" id="dz-grab"        ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'grab')">
+          <div class="text-3xl mb-2">🟢</div>
+          <div class="font-semibold text-sm">Grab Report</div>
+          <div class="text-xs text-gray-400 mt-1">Grab for Restaurants</div>
+          <div class="text-xs text-gray-400">.xlsx / .csv</div>
+        </div>
+        <div class="drop-zone p-6 text-center" id="dz-lineman"     ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'lineman')">
+          <div class="text-3xl mb-2">🟡</div>
+          <div class="font-semibold text-sm">Lineman Report</div>
+          <div class="text-xs text-gray-400 mt-1">LINE MAN Wongnai</div>
+          <div class="text-xs text-gray-400">.xlsx</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Uploads list -->
+    <div class="card overflow-x-auto">
+      <div class="font-semibold text-gray-700 mb-3">Recent Uploads</div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">File</th>
+            <th class="text-left pb-2">Source</th>
+            <th class="text-left pb-2">Provider</th>
+            <th class="text-left pb-2">Branch</th>
+            <th class="text-right pb-2">Rows</th>
+            <th class="text-center pb-2">Status</th>
+            <th class="pb-2"></th>
+          </tr>
+        </thead>
+        <tbody id="uploads-body">
+          <tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MATCHES TAB -->
+  <div id="tab-matches" class="tab-pane hidden">
+    <div class="card overflow-x-auto">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-gray-700">Matched Items</div>
+        <select id="match-source-filter" class="border border-gray-300 rounded-lg px-3 py-1 text-sm">
+          <option value="">All sources</option>
+          <option value="bank">Bank</option>
+          <option value="credit_card">Credit Card</option>
+          <option value="grab">Grab</option>
+          <option value="lineman">Lineman</option>
+        </select>
+      </div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Source</th>
+            <th class="text-left pb-2">Date</th>
+            <th class="text-right pb-2">External (฿)</th>
+            <th class="text-right pb-2">POS (฿)</th>
+            <th class="text-right pb-2">Variance</th>
+            <th class="text-center pb-2">Type</th>
+            <th class="text-center pb-2">Confidence</th>
+          </tr>
+        </thead>
+        <tbody id="matches-body">
+          <tr><td colspan="7" class="text-center text-gray-400 py-6">Run auto-match to see results</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- DISCREPANCIES TAB -->
+  <div id="tab-discrepancies" class="tab-pane hidden">
+    <div class="card overflow-x-auto">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-gray-700">Pending Discrepancies</div>
+        <div class="text-xs text-gray-400">Sorted by largest variance first</div>
+      </div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Type</th>
+            <th class="text-left pb-2">Source</th>
+            <th class="text-right pb-2">External (฿)</th>
+            <th class="text-right pb-2">POS (฿)</th>
+            <th class="text-right pb-2">Variance</th>
+            <th class="text-center pb-2">Action</th>
+          </tr>
+        </thead>
+        <tbody id="disc-body">
+          <tr><td colspan="6" class="text-center text-gray-400 py-6">No pending discrepancies</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SESSIONS TAB -->
+  <div id="tab-sessions" class="tab-pane hidden">
+    <div class="card">
+      <div class="flex items-center justify-between mb-4">
+        <div class="font-semibold text-gray-700">Reconciliation Sessions</div>
+        <button onclick="createSession()" class="text-sm font-semibold text-white rounded-lg px-4 py-1.5" style="background:var(--brand)">
+          + New Session
+        </button>
+      </div>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Branch</th>
+            <th class="text-left pb-2">Period</th>
+            <th class="text-center pb-2">Status</th>
+            <th class="text-left pb-2">Created</th>
+            <th class="pb-2"></th>
+          </tr>
+        </thead>
+        <tbody id="sessions-body">
+          <tr><td colspan="5" class="text-center text-gray-400 py-6">No sessions</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── UPLOAD MODAL ── -->
+<div id="upload-modal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
+    <div class="flex items-center justify-between mb-5">
+      <div class="font-bold text-lg text-gray-800">Upload Report</div>
+      <button onclick="closeUploadModal()" class="text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+    </div>
+
+    <div class="space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Source Type</label>
+        <select id="up-source" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+          <option value="bank">Bank Statement</option>
+          <option value="credit_card">Credit Card Settlement</option>
+          <option value="grab">Grab Report</option>
+          <option value="lineman">Lineman Report</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Branch</label>
+        <select id="up-branch" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Period (YYYY-MM)</label>
+        <input id="up-period" type="month" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Provider (optional)</label>
+        <input id="up-provider" type="text" placeholder="e.g. KBank, SCB…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">File</label>
+        <input id="up-file" type="file" accept=".xlsx,.xls,.csv" class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-600">
+      </div>
+    </div>
+
+    <!-- Preview area -->
+    <div id="preview-area" class="hidden mt-4">
+      <div class="bg-gray-50 rounded-lg p-3 text-xs font-mono overflow-x-auto max-h-48">
+        <div id="preview-content"></div>
+      </div>
+      <div id="preview-summary" class="text-xs text-gray-500 mt-2"></div>
+    </div>
+
+    <div class="flex justify-end gap-3 mt-6">
+      <button onclick="previewUpload()" class="text-sm font-semibold border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50">
+        Preview
+      </button>
+      <button id="confirm-btn" onclick="confirmUpload()" class="text-sm font-semibold text-white rounded-lg px-4 py-2 disabled:opacity-40" style="background:var(--brand)" disabled>
+        Confirm Upload
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── SCRIPTS ── -->
+<script>
+const API = '';  // same origin
+let currentSession = null;
+let varChart = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const fmt = n => n == null ? '—' : new Intl.NumberFormat('th-TH', {minimumFractionDigits:0}).format(Math.round(n));
+const fmtPct = n => n == null ? '—' : n.toFixed(1) + '%';
+
+function statusPill(s) {
+  const cls = {draft:'pill-draft', in_review:'pill-review', approved:'pill-approved', closed:'pill-closed', no_session:'pill-draft'}[s] || 'pill-draft';
+  const labels = {draft:'Draft', in_review:'In Review', approved:'Approved', closed:'Closed', no_session:'—'};
+  return `<span class="pill ${cls}">${labels[s] || s}</span>`;
+}
+
+function varCell(v) {
+  if (v == null) return '<td class="text-right text-gray-400">—</td>';
+  const cls = Math.abs(v) < 5 ? 'text-green-600' : v > 0 ? 'var-pos' : 'var-neg';
+  return `<td class="text-right font-mono ${cls}">${v >= 0 ? '+' : ''}${fmt(v)}</td>`;
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+async function init() {
+  // Period selector: last 12 months
+  const sel = document.getElementById('sel-period');
+  const now = new Date();
+  for (let i = 0; i < 12; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const opt = document.createElement('option');
+    opt.value = val; opt.textContent = val;
+    if (i === 0) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  sel.addEventListener('change', loadOverview);
+
+  // Branch selector
+  const branches = await fetch(`${API}/api/overview?period_month=${sel.value}`).then(r => r.json()).catch(() => []);
+  const bSel = document.getElementById('sel-branch');
+  const upBranch = document.getElementById('up-branch');
+  branches.forEach(b => {
+    [bSel, upBranch].forEach(el => {
+      const opt = document.createElement('option');
+      opt.value = b.branch_id; opt.textContent = b.branch_name;
+      el.appendChild(opt);
+    });
+  });
+
+  loadOverview();
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+  document.getElementById(`tab-${name}`).classList.remove('hidden');
+  if (name === 'uploads')       loadUploads();
+  if (name === 'matches')       loadMatches();
+  if (name === 'discrepancies') loadDiscrepancies();
+  if (name === 'sessions')      loadSessions();
+}
+
+// ── Overview ──────────────────────────────────────────────────────────────────
+
+async function loadOverview() {
+  const period = document.getElementById('sel-period').value;
+  const data = await fetch(`${API}/api/overview?period_month=${period}`).then(r => r.json()).catch(() => []);
+
+  let totalPos = 0, totalExt = 0, totalIssues = 0;
+  const tbody = document.getElementById('branch-overview-body');
+  tbody.innerHTML = '';
+
+  data.forEach(b => {
+    totalPos += b.pos_total || 0;
+    totalExt += b.ext_total || 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-2 font-medium">${b.branch_name}</td>
+      <td class="text-right font-mono">${fmt(b.pos_total)}</td>
+      <td class="text-right font-mono">${fmt(b.ext_total)}</td>
+      ${varCell(b.variance)}
+      <td class="text-center">${statusPill(b.status)}</td>
+      <td class="text-right">
+        ${b.session_id
+          ? `<button onclick="openSession(${b.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>`
+          : `<button onclick="createSessionFor(${b.branch_id},'${period}')" class="text-xs text-gray-400 hover:text-orange-600">Start</button>`
+        }
+      </td>`;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('kpi-pos').textContent = '฿' + fmt(totalPos);
+  document.getElementById('kpi-ext').textContent = '฿' + fmt(totalExt);
+  const v = totalExt - totalPos;
+  const kpiVar = document.getElementById('kpi-var');
+  kpiVar.textContent = (v >= 0 ? '+' : '') + '฿' + fmt(v);
+  kpiVar.className = 'text-2xl font-bold ' + (Math.abs(v) < 100 ? 'text-green-600' : v > 0 ? 'var-pos' : 'var-neg');
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────────
+
+async function loadSessions() {
+  const period = document.getElementById('sel-period').value;
+  const data = await fetch(`${API}/api/sessions?period_month=${period}`).then(r => r.json()).catch(() => []);
+  const tbody = document.getElementById('sessions-body');
+  tbody.innerHTML = data.length ? '' : '<tr><td colspan="5" class="text-center text-gray-400 py-6">No sessions</td></tr>';
+  data.forEach(s => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-2">${s.branch_name}</td>
+      <td>${s.period_month}</td>
+      <td class="text-center">${statusPill(s.status)}</td>
+      <td class="text-gray-400 text-xs">${s.created_at?.slice(0,10) || '—'}</td>
+      <td class="text-right">
+        <button onclick="runMatch(${s.session_id})" class="text-xs text-blue-600 hover:underline mr-3">Run Match</button>
+        <button onclick="openSession(${s.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function createSession() {
+  const branch_id = document.getElementById('sel-branch').value;
+  const period_month = document.getElementById('sel-period').value;
+  if (!branch_id) { alert('Select a branch first'); return; }
+  await fetch(`${API}/api/sessions`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({branch_id: +branch_id, period_month})
+  });
+  loadSessions();
+}
+
+async function createSessionFor(branch_id, period_month) {
+  await fetch(`${API}/api/sessions`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({branch_id, period_month})
+  });
+  loadOverview();
+}
+
+async function runMatch(session_id) {
+  const btn = event.target;
+  btn.textContent = 'Running…'; btn.disabled = true;
+  const res = await fetch(`${API}/api/sessions/${session_id}/run-match`, {method:'POST'}).then(r => r.json());
+  btn.textContent = 'Run Match'; btn.disabled = false;
+  alert(`Match complete!\nCredit Card: ${res.credit_card?.matched || 0} matched\nGrab: ${res.grab?.matched_days || 0} days\nLineman: ${res.lineman?.matched_days || 0} days\nBank: ${res.bank?.matched || 0} matched`);
+  loadSessions();
+}
+
+function openSession(session_id) {
+  currentSession = session_id;
+  switchTab('matches');
+  loadMatches();
+  loadDiscrepancies();
+}
+
+// ── Uploads ───────────────────────────────────────────────────────────────────
+
+async function loadUploads() {
+  // Would fetch /api/uploads – placeholder
+  const tbody = document.getElementById('uploads-body');
+  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads in current period</td></tr>';
+}
+
+function openUploadModal() {
+  document.getElementById('upload-modal').classList.remove('hidden');
+  document.getElementById('up-period').value = document.getElementById('sel-period').value;
+}
+function closeUploadModal() {
+  document.getElementById('upload-modal').classList.add('hidden');
+  document.getElementById('preview-area').classList.add('hidden');
+  document.getElementById('confirm-btn').disabled = true;
+}
+
+async function previewUpload() {
+  const form = new FormData();
+  form.append('file',         document.getElementById('up-file').files[0]);
+  form.append('branch_id',    document.getElementById('up-branch').value);
+  form.append('period_month', document.getElementById('up-period').value);
+  form.append('provider',     document.getElementById('up-provider').value);
+  const src = document.getElementById('up-source').value;
+
+  const res = await fetch(`${API}/api/uploads/${src}/preview`, {method:'POST', body: form}).then(r => r.json());
+  if (res.detail) { alert('Parse error: ' + res.detail); return; }
+
+  const area = document.getElementById('preview-area');
+  area.classList.remove('hidden');
+  document.getElementById('preview-summary').textContent = `${res.row_count} rows detected · provider: ${res.provider}`;
+  const table = res.preview.slice(0,5);
+  document.getElementById('preview-content').innerHTML = table.map(r =>
+    Object.entries(r).map(([k,v]) => `<span class="text-gray-500">${k}:</span> ${v}`).join('  ')
+  ).join('<br>');
+  document.getElementById('confirm-btn').disabled = false;
+}
+
+async function confirmUpload() {
+  const form = new FormData();
+  form.append('file',         document.getElementById('up-file').files[0]);
+  form.append('branch_id',    document.getElementById('up-branch').value);
+  form.append('period_month', document.getElementById('up-period').value);
+  form.append('provider',     document.getElementById('up-provider').value);
+  const src = document.getElementById('up-source').value;
+
+  const res = await fetch(`${API}/api/uploads/${src}/confirm`, {method:'POST', body: form}).then(r => r.json());
+  if (res.detail) { alert('Error: ' + res.detail); return; }
+  alert(`Saved ${res.rows_saved} rows (upload #${res.upload_id})`);
+  closeUploadModal();
+  loadUploads();
+}
+
+// ── Drag & drop zones ─────────────────────────────────────────────────────────
+
+function dzDrag(e) { e.preventDefault(); e.currentTarget.classList.add('dragging'); }
+function dzLeave(e) { e.currentTarget.classList.remove('dragging'); }
+function dzDrop(e, src) {
+  e.preventDefault(); e.currentTarget.classList.remove('dragging');
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  document.getElementById('up-source').value = src;
+  document.getElementById('up-file').files; // can't set programmatically – open modal
+  openUploadModal();
+  document.getElementById('up-source').value = src;
+}
+
+// ── Matches ───────────────────────────────────────────────────────────────────
+
+async function loadMatches() {
+  if (!currentSession) return;
+  const src = document.getElementById('match-source-filter')?.value || '';
+  const url = `${API}/api/sessions/${currentSession}/matches` + (src ? `?source_type=${src}` : '');
+  const data = await fetch(url).then(r => r.json()).catch(() => []);
+  const tbody = document.getElementById('matches-body');
+  tbody.innerHTML = '';
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-6">No matches yet — run auto-match first</td></tr>';
+    return;
+  }
+  data.forEach(m => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-1.5 capitalize">${m.source_type}</td>
+      <td class="text-gray-500">${m.pos_date || '—'}</td>
+      <td class="text-right font-mono">${fmt(m.external_amount)}</td>
+      <td class="text-right font-mono">${fmt(m.pos_amount)}</td>
+      ${varCell(m.variance)}
+      <td class="text-center text-xs text-gray-400">${m.match_type}</td>
+      <td class="text-center">
+        <div class="progress-bar w-16 mx-auto"><div class="progress-fill" style="width:${(m.confidence*100).toFixed(0)}%"></div></div>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ── Discrepancies ─────────────────────────────────────────────────────────────
+
+async function loadDiscrepancies() {
+  if (!currentSession) return;
+  const data = await fetch(`${API}/api/sessions/${currentSession}/discrepancies`).then(r => r.json()).catch(() => []);
+  const badge = document.getElementById('disc-badge');
+  badge.textContent = data.length;
+  badge.classList.toggle('hidden', data.length === 0);
+  document.getElementById('kpi-issues').textContent = data.length;
+
+  const tbody = document.getElementById('disc-body');
+  tbody.innerHTML = '';
+  if (!data.length) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-400 py-6">No pending discrepancies</td></tr>';
+    return;
+  }
+  data.forEach(d => {
+    const typeLabels = {
+      unmatched_external: 'Unmatched (external)',
+      unmatched_pos:      'Unmatched (POS)',
+      amount_mismatch:    'Amount mismatch',
+      timing_diff:        'Timing difference',
+    };
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="py-1.5 text-xs">${typeLabels[d.disc_type] || d.disc_type}</td>
+      <td class="capitalize text-xs">${d.source_type}</td>
+      <td class="text-right font-mono">${fmt(d.amount_external)}</td>
+      <td class="text-right font-mono">${fmt(d.amount_pos)}</td>
+      ${varCell(d.variance)}
+      <td class="text-center">
+        <select onchange="resolveDisc(${d.id}, this.value)" class="text-xs border border-gray-200 rounded px-2 py-0.5">
+          <option value="">Resolve…</option>
+          <option value="accepted">Accept</option>
+          <option value="adjusted">Adjusted</option>
+          <option value="rejected">Reject</option>
+        </select>
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+async function resolveDisc(id, resolution) {
+  if (!resolution) return;
+  await fetch(`${API}/api/discrepancies/${id}/resolve`, {
+    method: 'PATCH',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({resolution})
+  });
+  loadDiscrepancies();
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
