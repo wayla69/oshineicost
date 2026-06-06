@@ -28,42 +28,55 @@
 <nav class="bg-white border-b px-6 py-3 flex items-center gap-4 sticky top-0 z-20">
   <span class="font-bold text-lg" style="color:var(--brand)">🍜 Oshinei</span>
   <span class="text-gray-300">|</span>
-  <span class="text-gray-700 font-semibold">Revenue Reconciliation</span>
-  <span class="badge b-mut ml-1">master branches</span>
+  <span class="text-gray-700 font-semibold" data-i18n="subtitle">Revenue Reconciliation</span>
+  <span class="badge b-mut ml-1" data-i18n="master_branches">master branches</span>
   <div class="ml-auto flex items-center gap-2">
     <select id="sel-branch" class="inp" title="Pick a branch to open its session"><option value="">All branches</option></select>
     <select id="sel-period" class="inp" title="Month"></select>
     <input id="sel-date" type="date" class="inp" title="Focus a single day on the Daily tab">
     <button id="btn-clear-date" onclick="clearDate()" class="btn btn-sec hidden" title="Show whole month">✕ day</button>
-    <button onclick="openUploadModal()" class="btn btn-pri">+ Upload</button>
+    <button onclick="openUploadModal()" class="btn btn-pri" data-i18n="btn_upload">+ Upload</button>
+    <button id="lang-toggle" onclick="toggleLang()" class="btn btn-sec" title="ภาษา / Language">EN</button>
     <button onclick="setToken()" title="Set write token" class="btn btn-sec">🔑</button>
   </div>
 </nav>
 
 <div class="bg-white border-b px-6 flex gap-6 text-sm text-gray-500">
-  <button class="tab-btn active py-3" data-tab="overview"      onclick="switchTab('overview')">Overview</button>
-  <button class="tab-btn py-3"        data-tab="daily"         onclick="switchTab('daily')">Daily</button>
-  <button class="tab-btn py-3"        data-tab="reconcile"     onclick="switchTab('reconcile')">Monthly</button>
-  <button class="tab-btn py-3"        data-tab="uploads"       onclick="switchTab('uploads')">Uploads</button>
-  <button class="tab-btn py-3"        data-tab="discrepancies" onclick="switchTab('discrepancies')">Discrepancies <span id="disc-badge" class="badge b-err hidden">0</span></button>
-  <button class="tab-btn py-3"        data-tab="setup"         onclick="switchTab('setup')">Setup <span id="setup-badge" class="badge b-warn hidden">0</span></button>
+  <button class="tab-btn active py-3" data-tab="overview"      onclick="switchTab('overview')" data-i18n="tab_overview">Overview</button>
+  <button class="tab-btn py-3"        data-tab="daily"         onclick="switchTab('daily')" data-i18n="tab_daily">Daily</button>
+  <button class="tab-btn py-3"        data-tab="reconcile"     onclick="switchTab('reconcile')" data-i18n="tab_monthly">Monthly</button>
+  <button class="tab-btn py-3"        data-tab="uploads"       onclick="switchTab('uploads')" data-i18n="tab_uploads">Uploads</button>
+  <button class="tab-btn py-3"        data-tab="discrepancies" onclick="switchTab('discrepancies')"><span data-i18n="tab_discrepancies">Discrepancies</span> <span id="disc-badge" class="badge b-err hidden">0</span></button>
+  <button class="tab-btn py-3"        data-tab="setup"         onclick="switchTab('setup')"><span data-i18n="tab_setup">Setup</span> <span id="setup-badge" class="badge b-warn hidden">0</span></button>
 </div>
 
 <main class="p-6 max-w-7xl mx-auto space-y-6">
 
   <!-- OVERVIEW -->
   <div id="tab-overview" class="tab-pane space-y-5">
+    <div id="onboard" class="hidden card" style="background:var(--brand-light)">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-gray-800" data-i18n="step_title">Getting started</div>
+        <button onclick="dismissOnboard()" class="text-xs text-gray-500 hover:underline" data-i18n="step_dismiss">Dismiss</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+        <button onclick="switchTab('setup')"         class="card text-left hover:shadow-md" data-i18n="step1">① Setup — map tender codes to a bank</button>
+        <button onclick="switchTab('uploads')"       class="card text-left hover:shadow-md" data-i18n="step2">② Upload bank / card / Grab / Line Man docs</button>
+        <button onclick="switchTab('daily')"         class="card text-left hover:shadow-md" data-i18n="step3">③ Run Match — read the daily board</button>
+        <button onclick="switchTab('discrepancies')" class="card text-left hover:shadow-md" data-i18n="step4">④ Sign-off — every lane matched or explained</button>
+      </div>
+    </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">POS Tender (reconcilable)</div><div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div></div>
-      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">External Total</div><div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div></div>
-      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">Variance</div><div id="kpi-var" class="text-2xl font-bold">—</div></div>
-      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">Open Issues</div><div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_pos">POS Tender (reconcilable)</div><div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_ext">External Total</div><div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_var">Variance</div><div id="kpi-var" class="text-2xl font-bold">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_issues">Open Issues</div><div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div></div>
     </div>
     <div class="card overflow-x-auto">
-      <div class="font-semibold text-gray-700 mb-3">Branch Overview</div>
+      <div class="font-semibold text-gray-700 mb-3" data-i18n="branch_overview">Branch Overview</div>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
-          <th class="text-left pb-2">Branch</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th><th class="text-right pb-2">Variance</th><th class="text-center pb-2">Status</th><th class="text-center pb-2">Issues</th><th></th>
+          <th class="text-left pb-2" data-i18n="c_branch">Branch</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th><th class="text-right pb-2" data-i18n="kpi_var">Variance</th><th class="text-center pb-2" data-i18n="c_status">Status</th><th class="text-center pb-2" data-i18n="c_issues">Issues</th><th></th>
         </tr></thead>
         <tbody id="ov-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
       </table>
@@ -81,24 +94,24 @@
         <div><div class="text-xs text-gray-400">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
         <div id="rec-status"></div>
         <div class="ml-auto flex gap-2">
-          <button onclick="runMatch(event)" class="btn btn-pri">▶ Run Match</button>
-          <button onclick="downloadExport()" class="btn btn-sec" title="Download the month pack (Excel)">⬇ Excel</button>
-          <button onclick="setStatus('in_review')" class="btn btn-sec">Mark In-Review</button>
-          <button onclick="setStatus('approved')" class="btn btn-sec">Approve</button>
+          <button onclick="runMatch(event)" class="btn btn-pri" data-i18n="btn_run">▶ Run Match</button>
+          <button onclick="downloadExport()" class="btn btn-sec" title="Download the month pack (Excel)" data-i18n="btn_excel">⬇ Excel</button>
+          <button onclick="setStatus('in_review')" class="btn btn-sec" data-i18n="btn_inreview">Mark In-Review</button>
+          <button onclick="setStatus('approved')" class="btn btn-sec" data-i18n="btn_approve">Approve</button>
         </div>
       </div>
       <div id="rec-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
       <div>
-        <div class="font-semibold text-gray-700 mb-3">Reconciliation by category</div>
+        <div class="font-semibold text-gray-700 mb-3" data-i18n="recon_by_cat">Reconciliation by category</div>
         <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
       <div id="rec-payout-wrap" class="hidden">
-        <div class="font-semibold text-gray-700 mb-1">Payout chain <span class="font-normal text-gray-400 text-sm">— provider net should equal the bank payout credit</span></div>
+        <div class="font-semibold text-gray-700 mb-1"><span data-i18n="payout_chain">Payout chain</span> <span class="font-normal text-gray-400 text-sm" data-i18n="payout_hint">— provider net should equal the bank payout credit</span></div>
         <div id="rec-payouts" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
       </div>
       <div class="card">
         <div class="flex items-center justify-between mb-3">
-          <div class="font-semibold text-gray-700">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
+          <div class="font-semibold text-gray-700" data-i18n="feevat_title">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
           <select id="fv-source" class="inp" onchange="loadFeeVat()">
             <option value="grab">Grab</option><option value="lineman">Line Man</option><option value="credit_card">Credit Card</option>
           </select>
@@ -130,8 +143,8 @@
       </div>
       <div class="card overflow-x-auto">
         <div class="flex items-center justify-between mb-1">
-          <div class="font-semibold text-gray-700">Daily reconciliation — day × lane</div>
-          <div class="text-xs text-gray-400">✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines</div>
+          <div class="font-semibold text-gray-700" data-i18n="daily_recon">Daily reconciliation — day × lane</div>
+          <div class="text-xs text-gray-400" data-i18n="daily_legend">✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines</div>
         </div>
         <div id="daily-coverage" class="text-sm text-gray-600 mb-3"></div>
         <div id="daily-matrix"><div class="text-center text-gray-400 py-6">Loading…</div></div>
@@ -142,7 +155,7 @@
   <!-- UPLOADS -->
   <div id="tab-uploads" class="tab-pane hidden space-y-4">
     <div class="card">
-      <div class="font-semibold text-gray-700 mb-4">Upload Statements &amp; Reports</div>
+      <div class="font-semibold text-gray-700 mb-4" data-i18n="up_title">Upload Statements &amp; Reports</div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
         <button onclick="openUploadModal('bank')" class="card text-center hover:shadow-md"><div class="text-3xl">🏦</div><div class="font-semibold text-sm mt-1">Bank Statement</div><div class="text-xs text-gray-400">KTB · KBANK</div></button>
         <button onclick="openUploadModal('credit_card')" class="card text-center hover:shadow-md"><div class="text-3xl">💳</div><div class="font-semibold text-sm mt-1">Credit Card</div><div class="text-xs text-gray-400">KTB · KBANK · KTC</div></button>
@@ -165,8 +178,8 @@
   <div id="tab-discrepancies" class="tab-pane hidden">
     <div class="card overflow-x-auto">
       <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold text-gray-700">Discrepancies for accounting</div>
-        <div class="text-xs text-gray-400">largest variance first</div>
+        <div class="font-semibold text-gray-700" data-i18n="disc_hd">Discrepancies for accounting</div>
+        <div class="text-xs text-gray-400" data-i18n="disc_sub">largest variance first</div>
       </div>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
@@ -182,14 +195,14 @@
   <!-- SETUP -->
   <div id="tab-setup" class="tab-pane hidden space-y-6">
     <div class="card" style="background:var(--brand-light)">
-      <div class="font-semibold text-gray-800 mb-1">① Map your POS tender codes → ② add bank accounts &amp; card MIDs</div>
-      <p class="text-sm text-gray-600">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
+      <div class="font-semibold text-gray-800 mb-1" data-i18n="setup_hd">① Map your POS tender codes → ② add bank accounts &amp; card MIDs</div>
+      <p class="text-sm text-gray-600" data-i18n="setup_p">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
     </div>
     <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
     <div class="card overflow-x-auto">
       <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold text-gray-700">Payment-code map</div>
-        <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes">⟳ Re-seed from POS</button>
+        <div class="font-semibold text-gray-700" data-i18n="pmap_hd">Payment-code map</div>
+        <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes" data-i18n="reseed">⟳ Re-seed from POS</button>
       </div>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
@@ -204,7 +217,7 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700">Bank accounts</div>
+        <div class="font-semibold text-gray-700" data-i18n="accts_hd">Bank accounts</div>
         <p class="text-xs text-gray-500 mb-3">One KTB + one KBANK account per branch. Used to attribute statement lines to a branch.</p>
         <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Account</th><th></th></tr></thead>
@@ -218,7 +231,7 @@
         </div>
       </div>
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700">Credit-card acquirer MIDs</div>
+        <div class="font-semibold text-gray-700" data-i18n="mids_hd">Credit-card acquirer MIDs</div>
         <p class="text-xs text-gray-500 mb-3">Merchant IDs per acquirer (KTB / KBANK / KTC). Used to attribute card-settlement lines to a branch.</p>
         <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Acquirer</th><th class="text-left pb-2">MID</th><th class="text-left pb-2">Terminal</th><th></th></tr></thead>
@@ -312,6 +325,70 @@ async function withBusy(btn, label, fn){
   try { return await fn(); } finally { btn.disabled=wasDisabled; btn.textContent=old; }
 }
 
+// ── i18n (Thai default; toggle persists) ──────────────────────────────────────
+const I18N = {
+  th: {
+    subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
+    tab_overview:"ภาพรวม", tab_daily:"รายวัน", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
+    tab_discrepancies:"รายการต่าง", tab_setup:"ตั้งค่า",
+    kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
+    branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
+    btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
+    recon_by_cat:"กระทบยอดตามประเภท", payout_chain:"สายการโอนเงิน", payout_hint:"— ยอดสุทธิจากผู้ให้บริการต้องเท่ากับเงินที่เข้าบัญชี",
+    feevat_title:"ค่าธรรมเนียม & VAT — กรอกเอง (Grab / Line Man / บัตรเครดิต)",
+    daily_recon:"กระทบยอดรายวัน — วัน × ช่องทาง", daily_legend:"✓ ตรง · ≠ ต่าง · ✗ ขาด · … รอเอกสาร · ? ตั้งค่าธนาคาร · คลิกเพื่อดูรายการ",
+    coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
+    up_title:"อัปโหลดเอกสาร & รายงาน", uploads_hd:"อัปโหลด",
+    disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
+    setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
+    setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
+    pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
+    accts_hd:"บัญชีธนาคาร", mids_hd:"MID บัตรเครดิต",
+    step_title:"เริ่มต้นใช้งาน", step_dismiss:"ซ่อน",
+    step1:"① ตั้งค่า — จับคู่รหัสรับเงินกับธนาคาร", step2:"② อัปโหลดเอกสาร ธนาคาร/บัตร/Grab/Line Man",
+    step3:"③ ประมวลผล — อ่านบอร์ดรายวัน", step4:"④ ตรวจรับ — ทุกช่องทางตรงหรืออธิบายได้",
+    st_matched:"ตรงกัน", st_mismatch:"ไม่ตรง", st_pos_only:"ไม่มีเอกสาร", st_ext_only:"เกินในเอกสาร", st_no_source:"ไม่มีแหล่ง",
+    p_matched:"ตรงกัน", p_mismatch:"ไม่ตรง", p_awaiting:"รอเงินโอน", p_extra:"เงินโอนเกิน",
+  },
+  en: {
+    subtitle:"Revenue Reconciliation", master_branches:"master branches",
+    tab_overview:"Overview", tab_daily:"Daily", tab_monthly:"Monthly", tab_uploads:"Uploads",
+    tab_discrepancies:"Discrepancies", tab_setup:"Setup",
+    kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
+    branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
+    btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
+    recon_by_cat:"Reconciliation by category", payout_chain:"Payout chain", payout_hint:"— provider net should equal the bank payout credit",
+    feevat_title:"Fee & VAT — manual entry (Grab / Line Man / Credit Card)",
+    daily_recon:"Daily reconciliation — day × lane", daily_legend:"✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines",
+    coverage_hd:"Coverage — last day each source's document covers",
+    up_title:"Upload Statements & Reports", uploads_hd:"Uploads",
+    disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
+    setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
+    setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
+    pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
+    accts_hd:"Bank accounts", mids_hd:"Credit-card acquirer MIDs",
+    step_title:"Getting started", step_dismiss:"Dismiss",
+    step1:"① Setup — map tender codes to a bank", step2:"② Upload bank / card / Grab / Line Man docs",
+    step3:"③ Run Match — read the daily board", step4:"④ Sign-off — every lane matched or explained",
+    st_matched:"Matched", st_mismatch:"Mismatch", st_pos_only:"No statement", st_ext_only:"Extra in statement", st_no_source:"No source",
+    p_matched:"Matched", p_mismatch:"Mismatch", p_awaiting:"Awaiting payout", p_extra:"Extra payout",
+  },
+};
+let LANG = localStorage.getItem('recon_lang') || 'th';
+function t(k){ return (I18N[LANG] && I18N[LANG][k]) ?? I18N.en[k] ?? k; }
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPh); });
+  const tg=document.getElementById('lang-toggle'); if(tg) tg.textContent = LANG==='th'?'EN':'ไทย';
+  document.documentElement.lang = LANG;
+}
+function toggleLang(){ LANG = LANG==='th'?'en':'th'; localStorage.setItem('recon_lang',LANG); applyI18n();
+  // refresh whichever dynamic view is open so its labels switch too
+  const open=[...document.querySelectorAll('.tab-pane')].find(p=>!p.classList.contains('hidden'));
+  if(open) switchTab(open.id.replace('tab-',''));
+}
+function dismissOnboard(){ localStorage.setItem('recon_onboard_done','1'); document.getElementById('onboard').classList.add('hidden'); }
+
 const fmt = n => n==null ? '—' : new Intl.NumberFormat('th-TH',{maximumFractionDigits:0}).format(Math.round(n));
 const period = () => document.getElementById('sel-period').value;
 function varCls(v){ return Math.abs(v)<100 ? 'var-zero' : v>0?'var-pos':'var-neg'; }
@@ -341,6 +418,7 @@ async function init(){
     if(SESSION) switchTab('daily'); else loadOverview();
   };
   syncDateBounds();
+  applyI18n();
   loadOverview(); refreshSetupBadge();
 }
 function reloadActive(){
@@ -378,6 +456,7 @@ function coverageBar(pos, ext){
 
 // ── overview ─────────────────────────────────────────────────────────────────
 async function loadOverview(){
+  document.getElementById('onboard').classList.toggle('hidden', localStorage.getItem('recon_onboard_done')==='1');
   const data = await api('/api/overview?period_month='+period()).catch(()=>[]);
   const tb=document.getElementById('ov-body'); tb.innerHTML='';
   let tp=0, te=0, ti=0;
@@ -531,7 +610,7 @@ async function renderReconcile(){
     const div=document.createElement('div'); div.className='card';
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
-        <span class="badge ${STATUS_BADGE[c.status]}">${STATUS_LBL[c.status]}</span></div>
+        <span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div>
       <div class="grid grid-cols-2 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">POS tender</div><div class="font-mono">฿${fmt(c.pos_amount)}</div></div>
         <div><div class="text-xs text-gray-400">Statement</div><div class="font-mono">฿${fmt(c.ext_amount)}</div></div>
@@ -545,7 +624,8 @@ async function renderReconcile(){
 }
 
 const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};
-const PAYOUT_LBL   = {matched:'Matched', mismatch:'Mismatch', awaiting_payout:'Awaiting payout', ext_only:'Extra payout'};
+const PAYOUT_KEY   = {matched:'p_matched', mismatch:'p_mismatch', awaiting_payout:'p_awaiting', ext_only:'p_extra'};
+const payoutLbl = s => t(PAYOUT_KEY[s]||'p_matched');
 function renderPayouts(payouts){
   const wrap=document.getElementById('rec-payout-wrap'); const cont=document.getElementById('rec-payouts');
   if(!payouts.length){ wrap.classList.add('hidden'); cont.innerHTML=''; return; }
@@ -554,7 +634,7 @@ function renderPayouts(payouts){
     const div=document.createElement('div'); div.className='card';
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-gray-800">${p.category} payout</div>
-        <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${PAYOUT_LBL[p.status]||p.status}</span></div>
+        <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
       <div class="grid grid-cols-3 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">Report net</div><div class="font-mono">฿${fmt(p.report_net)}</div></div>
         <div><div class="text-xs text-gray-400">Bank payout</div><div class="font-mono">฿${fmt(p.bank_payout)}</div></div>
