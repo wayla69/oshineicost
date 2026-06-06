@@ -8921,6 +8921,23 @@ async function renderReportCost(branch) {
   }
 }
 
+// Run async thunks with bounded concurrency, preserving input order. Used by the
+// Analysis Report so it doesn't fire all ~16 queries at once (that put too many
+// heavy queries on the small host simultaneously and OOM-killed it). Rejects if
+// any thunk rejects — same failure semantics as Promise.all.
+async function _poolAll(thunks, limit = 4) {
+  const results = new Array(thunks.length);
+  let next = 0;
+  async function worker() {
+    while (next < thunks.length) {
+      const i = next++;
+      results[i] = await thunks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, thunks.length) }, worker));
+  return results;
+}
+
 // Print / Export PDF. The Analysis Report fills its sections from ~15 async
 // fetches (~2 s); calling window.print() immediately captured a blank report.
 // When the report tab is active we force a full (re)load and await render before
@@ -8979,24 +8996,27 @@ async function loadReport() {
     branches, yoy, costAnalysis, costPrior,
     timeHourly, timeDow, discounts, anomalies, forecast, forecastBranches,
     costHead,
-  ] = await Promise.all([
-    fetch(`${API}/api/summary${qpStr}`).then(r=>r.json()),
-    fetch(`${API}/api/sales/monthly${qpStr}`).then(r=>r.json()),
-    fetch(`${API}/api/sales/skus${qp({limit:15})}`).then(r=>r.json()),
-    fetch(`${API}/api/sales/category${qpStr}`).then(r=>r.json()),
-    fetch(`${API}/api/analysis/persona${qpStr}`).then(r=>r.json()),
-    fetch(`${API}/api/analysis/branches${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/analysis/yoy${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/cost/analysis${qpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
-    fetch(`${API}/api/cost/analysis${priorQpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
-    fetch(`${API}/api/analysis/hourly_open${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/analysis/dow${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/analysis/discounts${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/analysis/anomalies${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    fetch(`${API}/api/analysis/forecast${branch?'?branch='+encodeURIComponent(branch):''}`).then(r=>r.json()).catch(()=>({available:false})),
-    fetch(`${API}/api/analysis/forecast_branches${getGroup()?'?group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
-    fetch(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).then(r=>r.json()).catch(()=>null),
-  ]);
+    // Bounded concurrency (≤4): firing all 16 at once put ~6 heavy queries on
+    // the small host simultaneously and OOM-killed it. _poolAll keeps the order
+    // and rejects if a non-caught fetch fails (same as Promise.all did).
+  ] = await _poolAll([
+    () => fetch(`${API}/api/summary${qpStr}`).then(r=>r.json()),
+    () => fetch(`${API}/api/sales/monthly${qpStr}`).then(r=>r.json()),
+    () => fetch(`${API}/api/sales/skus${qp({limit:15})}`).then(r=>r.json()),
+    () => fetch(`${API}/api/sales/category${qpStr}`).then(r=>r.json()),
+    () => fetch(`${API}/api/analysis/persona${qpStr}`).then(r=>r.json()),
+    () => fetch(`${API}/api/analysis/branches${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/analysis/yoy${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/cost/analysis${qpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
+    () => fetch(`${API}/api/cost/analysis${priorQpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
+    () => fetch(`${API}/api/analysis/hourly_open${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/analysis/dow${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/analysis/discounts${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/analysis/anomalies${qpStr}`).then(r=>r.json()).catch(()=>[]),
+    () => fetch(`${API}/api/analysis/forecast${branch?'?branch='+encodeURIComponent(branch):''}`).then(r=>r.json()).catch(()=>({available:false})),
+    () => fetch(`${API}/api/analysis/forecast_branches${getGroup()?'?group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
+    () => fetch(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).then(r=>r.json()).catch(()=>null),
+  ], 4);
 
   // Full monthly history (branch/group only, no month-range) so MoM/YTD framing
   // works even when the user narrows the filter to a single month — otherwise

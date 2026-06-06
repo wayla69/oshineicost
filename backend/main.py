@@ -280,9 +280,14 @@ def require_write_token(
 _PRAGMAS = (
     "PRAGMA journal_mode=WAL;"
     "PRAGMA synchronous=NORMAL;"
-    "PRAGMA cache_size=-65536;"      # ~64 MiB page cache (negative = KiB)
-    "PRAGMA temp_store=MEMORY;"
-    "PRAGMA mmap_size=268435456;"    # 256 MiB memory-mapped I/O
+    # Page cache is PER-CONNECTION and each worker thread keeps its own
+    # connection. At 64 MiB this multiplied under the Analysis Report's
+    # concurrent query burst (~6 threads × 64 MiB ≈ 384 MiB) and OOM-killed the
+    # 512 MiB host. 12 MiB keeps the aggregate small; the 5-min response cache
+    # absorbs the slightly higher per-query cost.
+    "PRAGMA cache_size=-12288;"      # ~12 MiB page cache (negative = KiB)
+    "PRAGMA temp_store=FILE;"        # spill big sorts to disk, not RAM
+    "PRAGMA mmap_size=134217728;"    # 128 MiB memory-mapped I/O (file-backed)
     "PRAGMA foreign_keys=ON;"
     "PRAGMA busy_timeout=5000;"
 )
