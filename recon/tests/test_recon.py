@@ -182,10 +182,49 @@ def test_daily_pending_vs_missing(tmp_path):
             return next(l for l in days[day]["lanes"] if l["category"] == cat and l["bank"] == bank)
         assert lane("2026-06-01", "QR", "KTB")["status"] == "matched"
         assert lane("2026-06-02", "QR", "KTB")["status"] == "variance"   # 11000 vs 12000
-        assert lane("2026-06-02", "CASH", "NONE")["status"] == "missing" # covered day, no line
+        # cash deposits only reach Jun 1 (one CASH_DEP line) → Jun 2 cash is awaited, not a gap
+        assert lane("2026-06-02", "CASH", "NONE")["status"] == "pending"
         assert lane("2026-06-03", "QR", "KTB")["status"] == "pending"    # statement not arrived
         assert d["pending_summary"]["coverage"]["bank/KTB"] == "2026-06-02"
         assert days["2026-06-03"]["pending_count"] == 2
+
+
+def test_daily_cash_coverage_uses_cash_dep_only(tmp_path):
+    """A later QR line must not make an earlier cash day look 'missing'."""
+    db = _make_db(tmp_path, [("Cash", 9000)])
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?, 'Cash',?,0)",
+                  [("2026-06-01", 4000), ("2026-06-03", 5000)])
+    c.commit(); c.close()
+    main._DB_PATH = db
+    with TestClient(main.app) as cl:
+        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+        cc = sqlite3.connect(db)
+        up = cc.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                        " VALUES('bank',4,'KTB','f','2026-06',0,'confirmed')").lastrowid
+        cc.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-01','CASH_DEP',4000)", (up,))
+        cc.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-05','QR',1)", (up,))  # later, different channel
+        cc.commit(); cc.close()
+        days = {x["day"]: x for x in cl.get(f"/api/sessions/{sid}/daily").json()["days"]}
+        cash3 = next(l for l in days["2026-06-03"]["lanes"] if l["category"] == "CASH")
+        # cash deposits only cover Jun 1; Jun 3 cash is awaited, NOT a gap
+        assert cash3["status"] == "pending"
+
+
+def test_daily_unmapped_bank_status(tmp_path):
+    """A QR code left with a non-statement bank (UNKNOWN/PROMPTPAY) → unmapped_bank."""
+    db = _make_db(tmp_path, [("KNNQR", 5000)])     # seeds as QR/UNKNOWN
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','KNNQR',5000,0)")
+    c.commit(); c.close()
+    main._DB_PATH = db
+    with TestClient(main.app) as cl:
+        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+        days = {x["day"]: x for x in cl.get(f"/api/sessions/{sid}/daily").json()["days"]}
+        lane = days["2026-06-01"]["lanes"][0]
+        assert lane["status"] == "unmapped_bank"
 
 
 def test_daily_unavailable_without_sync(client):

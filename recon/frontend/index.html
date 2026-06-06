@@ -338,8 +338,8 @@ async function openSession(id){
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────
-const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut'};
-const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·'};
+const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut', unmapped_bank:'b-warn'};
+const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·', unmapped_bank:'?'};
 async function loadDaily(){
   if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
   document.getElementById('daily-empty').classList.add('hidden');
@@ -351,9 +351,10 @@ async function loadDaily(){
   document.getElementById('daily-pending').innerHTML =
     `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days} pending lane-days</span>
      <span class="text-gray-400 ml-2">${ps.days_with_pending} day(s) awaiting documents</span>`;
-  document.getElementById('daily-coverage').innerHTML = Object.keys(ps.coverage).length
+  document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage).length
     ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
-    : '<span class="text-gray-400">No documents uploaded yet.</span>';
+    : '<span class="text-gray-400">No documents uploaded yet.</span>')
+    + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ฿${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
   const tb=document.getElementById('daily-rows'); tb.innerHTML='';
   if(!d.days.length){ tb.innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6">No activity for this period</td></tr>'; return; }
   d.days.forEach(day=>{

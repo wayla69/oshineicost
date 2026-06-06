@@ -60,6 +60,31 @@ classification is **config-driven, not regex**:
 - **Deploy** recon as the 2nd Fly process (two-process `fly.toml` already on branch;
   not yet deployed). Auth activates automatically (`OSHINEI_SEED_TOKEN` already set).
 
+## Daily reconciliation (2026-06-06)
+Staff reconcile per day. `pos_payment_day` (new in `sync_mssql.py`, char(10) daily
+analog of `pos_payment_month`) is the daily per-tender POS source — **run the sync to
+populate it**. `GET /api/sessions/{id}/daily` returns a per-(day, category, bank) board
+plus per-day **pending** tracking for late documents:
+- **matched | variance** (both sides present), **missing** (statement covers the day but
+  the line is absent = real gap), **pending** (no statement covers that day yet = late doc),
+  **ext_only**, **no_source** (coupon), **unmapped_bank** (POS code's bank is UNKNOWN/PROMPTPAY
+  — map it in Setup).
+- `coverage` = last day each source's document reaches; `pending_summary` rolls up pending
+  lane-days. Daily tolerance ฿50 / 1%. UI: **Daily** tab (default on opening a session).
+
+Reviewed by an adversarial workflow (19 findings); fixed: cash coverage now filters to
+`CASH_DEP` only; UNKNOWN/PROMPTPAY lanes → `unmapped_bank` (not silently pending); negative
+(refund) POS no longer mis-flagged `ext_only`; daily response surfaces unmapped codes.
+
+### Known daily limitations (deferred)
+- **Date semantics differ by source** (bank txn_date / CC settlement_date / delivery order_date
+  vs POS SaleDate) — settlement lag is inherent; the missing-vs-pending split absorbs it, but a
+  same-day-vs-next-day post can shift a lane by one day (staff judgment).
+- **Bank-side refunds (debits)** are out of scope — engine reconciles money-in (`credit>0`);
+  CC refunds are netted via `refund_amount`.
+- **Cash is a global lane** (POS cash has no bank); coverage is per-bank for QR/Transfer/CC.
+- **Per-account coverage** not modelled (assumes one account per bank per branch).
+
 ## Notes
 - `pos_customer_type_month` (Grab/Line Man) only exists from 2026-01; delivery POS
   uses the `GB`/`LM` payment codes instead (back to 2025-05, all masters).

@@ -275,7 +275,8 @@ def _within_tol_day(ext: float, pos: float) -> bool:
 
 def pos_category_totals_daily(conn, branch_id, period_month):
     """{(day, category, bank): amount} from pos_payment_day via the payment map.
-    Returns ({}, available=False) if pos_payment_day isn't synced yet."""
+    Returns (totals, unmapped, available). available=False if pos_payment_day
+    isn't synced yet; unmapped = {code: amount} for codes with no map row."""
     try:
         pmap = {r["payment_code_norm"]: r for r in conn.execute(
             "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
@@ -283,15 +284,20 @@ def pos_category_totals_daily(conn, branch_id, period_month):
             "SELECT day, payment_code, amount FROM pos_payment_day WHERE branch_id=? AND substr(day,1,7)=?",
             (branch_id, period_month)).fetchall()
     except sqlite3.OperationalError:
-        return {}, False
-    totals = {}
+        return {}, {}, False
+    totals, unmapped = {}, {}
     for r in rows:
-        m = pmap.get(normalize(r["payment_code"]))
-        if m is None or not m["reconcile"]:
+        norm = normalize(r["payment_code"])
+        amt = float(r["amount"] or 0)
+        m = pmap.get(norm)
+        if m is None:
+            unmapped[norm] = unmapped.get(norm, 0.0) + amt
+            continue
+        if not m["reconcile"]:
             continue
         key = (r["day"], m["category"], m["bank"])
-        totals[key] = totals.get(key, 0.0) + float(r["amount"] or 0)
-    return totals, True
+        totals[key] = totals.get(key, 0.0) + amt
+    return totals, unmapped, True
 
 
 def _external_buckets_daily(conn, branch_id, period_month):
@@ -344,8 +350,11 @@ def _coverage(conn, branch_id, period_month):
         WHERE l.branch_id=? AND strftime('%Y-%m', l.txn_date)=? GROUP BY u.provider
     """, (branch_id, period_month)):
         cov[("bank", _provider_bank(r["provider"]))] = r["mx"]
+    # Cash coverage = latest CASH_DEP line only (not QR/TRANSFER), else a QR line
+    # on a later day would falsely mark cash days 'missing' instead of 'pending'.
     cash_mx = conn.execute(
-        "SELECT MAX(txn_date) FROM recon_bank_lines WHERE branch_id=? AND strftime('%Y-%m',txn_date)=?",
+        "SELECT MAX(txn_date) FROM recon_bank_lines "
+        "WHERE branch_id=? AND channel='CASH_DEP' AND strftime('%Y-%m',txn_date)=?",
         (branch_id, period_month)).fetchone()[0]
     if cash_mx:
         cov[("cash", None)] = cash_mx
@@ -373,9 +382,12 @@ def _lane_cov_key(category, bank):
     return (category.lower(), None)         # COUPON etc → no external source
 
 
+_REAL_BANKS = {"KTB", "KBANK"}              # banks we get statements from
+
+
 def daily_reconciliation(conn, branch_id, period_month):
     """Per-day, per-lane reconciliation with pending tracking for late documents."""
-    pos, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
+    pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
     ext = _external_buckets_daily(conn, branch_id, period_month)
     cov = _coverage(conn, branch_id, period_month)
 
@@ -386,13 +398,17 @@ def daily_reconciliation(conn, branch_id, period_month):
         ext_amt = eb["amount"] if eb else 0.0
         ext_net = eb["net"] if eb else 0.0
 
-        if eb and pos_amt > 0:
+        if eb and pos_amt != 0:                    # both sides present (pos may be a refund)
             status = "matched" if _within_tol_day(ext_amt, pos_amt) else "variance"
         elif eb:                                   # pos 0, ext present
             status = "ext_only"
         elif cat == "COUPON":
             status = "no_source"
-        else:                                      # pos > 0, no external line
+        elif cat in ("QR", "TRANSFER") and bank not in _REAL_BANKS:
+            status = "unmapped_bank"               # map this code's bank in Setup (e.g. PROMPTPAY/UNKNOWN)
+        elif cat == "CREDIT" and bank not in (_REAL_BANKS | {"KTC"}):
+            status = "unmapped_bank"
+        else:                                      # pos > 0, real bank, no external line
             cmax = cov.get(_lane_cov_key(cat, bank))
             status = "missing" if (cmax and day <= cmax) else "pending"
 
@@ -407,7 +423,7 @@ def daily_reconciliation(conn, branch_id, period_month):
     for day in sorted(by_day):
         lanes = sorted(by_day[day], key=lambda x: (x["category"], x["bank"]))
         pending = [l for l in lanes if l["status"] == "pending"]
-        issues  = [l for l in lanes if l["status"] in ("variance", "missing", "ext_only")]
+        issues  = [l for l in lanes if l["status"] in ("variance", "missing", "ext_only", "unmapped_bank")]
         for l in pending:
             src = _CATEGORY_SOURCE.get(l["category"], "pos")
             pending_by_source[src] = pending_by_source.get(src, 0) + 1
@@ -425,6 +441,7 @@ def daily_reconciliation(conn, branch_id, period_month):
     return {
         "pos_daily_available": pos_available,
         "days": days,
+        "unmapped": [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
         "pending_summary": {
             "pending_lane_days": sum(d["pending_count"] for d in days),
             "days_with_pending": sum(1 for d in days if d["pending_count"]),
