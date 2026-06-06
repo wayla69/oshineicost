@@ -30,9 +30,11 @@
   <span class="text-gray-300">|</span>
   <span class="text-gray-700 font-semibold">Revenue Reconciliation</span>
   <span class="badge b-mut ml-1">master branches</span>
-  <div class="ml-auto flex items-center gap-3">
-    <select id="sel-period" class="inp"></select>
-    <select id="sel-branch" class="inp"><option value="">All branches</option></select>
+  <div class="ml-auto flex items-center gap-2">
+    <select id="sel-branch" class="inp" title="Pick a branch to open its session"><option value="">All branches</option></select>
+    <select id="sel-period" class="inp" title="Month"></select>
+    <input id="sel-date" type="date" class="inp" title="Focus a single day on the Daily tab">
+    <button id="btn-clear-date" onclick="clearDate()" class="btn btn-sec hidden" title="Show whole month">✕ day</button>
     <button onclick="openUploadModal()" class="btn btn-pri">+ Upload</button>
     <button onclick="setToken()" title="Set write token" class="btn btn-sec">🔑</button>
   </div>
@@ -61,9 +63,9 @@
       <div class="font-semibold text-gray-700 mb-3">Branch Overview</div>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
-          <th class="text-left pb-2">Branch</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th><th class="text-right pb-2">Variance</th><th class="text-center pb-2">Status</th><th></th>
+          <th class="text-left pb-2">Branch</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th><th class="text-right pb-2">Variance</th><th class="text-center pb-2">Status</th><th class="text-center pb-2">Issues</th><th></th>
         </tr></thead>
-        <tbody id="ov-body"><tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+        <tbody id="ov-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -178,15 +180,22 @@
 
   <!-- SETUP -->
   <div id="tab-setup" class="tab-pane hidden space-y-6">
+    <div class="card" style="background:var(--brand-light)">
+      <div class="font-semibold text-gray-800 mb-1">① Map your POS tender codes → ② add bank accounts &amp; card MIDs</div>
+      <p class="text-sm text-gray-600">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
+    </div>
+    <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
     <div class="card overflow-x-auto">
       <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold text-gray-700">Payment-code map <span class="text-xs text-gray-400">(POS tender → category &amp; bank)</span></div>
-        <button onclick="reseed()" class="btn btn-sec">⟳ Re-seed from POS</button>
+        <div class="font-semibold text-gray-700">Payment-code map</div>
+        <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes">⟳ Re-seed from POS</button>
       </div>
-      <p class="text-xs text-gray-500 mb-3">Rows highlighted need a bank assigned before they can reconcile. Edit a row, then Save.</p>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
-          <th class="text-left pb-2">POS code</th><th class="text-left pb-2">Category</th><th class="text-left pb-2">Bank/Acquirer</th><th class="text-center pb-2">Reconcile</th><th></th>
+          <th class="text-left pb-2">POS code</th><th class="text-right pb-2">Volume (POS)</th>
+          <th class="text-left pb-2">Category <span class="normal-case text-gray-300">what it is</span></th>
+          <th class="text-left pb-2">Bank / Acquirer <span class="normal-case text-gray-300">where it lands</span></th>
+          <th class="text-center pb-2">Reconcile</th><th></th>
         </tr></thead>
         <tbody id="map-body"></tbody>
       </table>
@@ -194,7 +203,8 @@
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700 mb-3">Bank accounts</div>
+        <div class="font-semibold text-gray-700">Bank accounts</div>
+        <p class="text-xs text-gray-500 mb-3">One KTB + one KBANK account per branch. Used to attribute statement lines to a branch.</p>
         <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Account</th><th></th></tr></thead>
           <tbody id="acct-body"></tbody></table>
@@ -207,7 +217,8 @@
         </div>
       </div>
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700 mb-3">Credit-card acquirer MIDs</div>
+        <div class="font-semibold text-gray-700">Credit-card acquirer MIDs</div>
+        <p class="text-xs text-gray-500 mb-3">Merchant IDs per acquirer (KTB / KBANK / KTC). Used to attribute card-settlement lines to a branch.</p>
         <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Acquirer</th><th class="text-left pb-2">MID</th><th class="text-left pb-2">Terminal</th><th></th></tr></thead>
           <tbody id="mid-body"></tbody></table>
@@ -247,6 +258,7 @@
 const API = '';
 let SESSION = null;        // {session_id, branch_id, period_month, status, branch_name}
 let BRANCHES = [];
+let FOCUS_DATE = null;     // 'YYYY-MM-DD' to focus on the Daily board, or null
 
 // ── fetch with write-token + error surfacing ─────────────────────────────────
 async function api(path, opts={}) {
@@ -276,15 +288,35 @@ async function init(){
   for(let i=0;i<14;i++){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
     const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); }
   sel.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  sel.onchange = ()=>{ loadOverview(); if(!document.getElementById('tab-uploads').classList.contains('hidden')) loadUploads(); };
+  sel.onchange = ()=>{ syncDateBounds(); loadOverview(); reloadActive(); };
   BRANCHES = await api('/api/branches').catch(()=>[]);
   ['sel-branch','up-branch','na-branch','nm-branch'].forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
     BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.branch_id; o.textContent=b.name; el.appendChild(o); });
   });
-  document.getElementById('sel-branch').onchange = ()=>loadOverview();
+  // Branch picker opens that branch's session straight away (Daily board).
+  document.getElementById('sel-branch').onchange = (e)=>{ const bid=+e.target.value; if(bid) startSession(bid); else { SESSION=null; loadOverview(); } };
+  // Date picker: switch month to match the day, then focus it on the Daily board.
+  document.getElementById('sel-date').onchange = (e)=>{
+    FOCUS_DATE = e.target.value || null;
+    if(FOCUS_DATE){ const ym=FOCUS_DATE.slice(0,7); if([...sel.options].some(o=>o.value===ym)) sel.value=ym; }
+    document.getElementById('btn-clear-date').classList.toggle('hidden', !FOCUS_DATE);
+    if(SESSION) switchTab('daily'); else loadOverview();
+  };
+  syncDateBounds();
   loadOverview(); refreshSetupBadge();
 }
+function reloadActive(){
+  if(!document.getElementById('tab-uploads').classList.contains('hidden')) loadUploads();
+  if(!document.getElementById('tab-daily').classList.contains('hidden')) loadDaily();
+}
+function syncDateBounds(){
+  // constrain the day picker to the selected month
+  const ym=period(); const d=document.getElementById('sel-date');
+  d.min=ym+'-01'; const last=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+  d.max=`${ym}-${String(last).padStart(2,'0')}`;
+}
+function clearDate(){ FOCUS_DATE=null; document.getElementById('sel-date').value=''; document.getElementById('btn-clear-date').classList.add('hidden'); if(SESSION&&!document.getElementById('tab-daily').classList.contains('hidden')) loadDaily(); }
 
 function switchTab(name){
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
@@ -302,39 +334,55 @@ function switchTab(name){
 async function loadOverview(){
   const data = await api('/api/overview?period_month='+period()).catch(()=>[]);
   const tb=document.getElementById('ov-body'); tb.innerHTML='';
-  let tp=0, te=0;
-  data.forEach(b=>{ tp+=b.pos_total||0; te+=b.ext_total||0;
-    const tr=document.createElement('tr');
+  let tp=0, te=0, ti=0;
+  data.forEach(b=>{ tp+=b.pos_total||0; te+=b.ext_total||0; ti+=(b.open_issues||0)+(b.unmatched||0);
+    const issues=(b.open_issues||0)+(b.unmatched||0);
+    const issueCell = issues
+      ? `<button onclick="drillBranch(${b.branch_id})" class="badge b-err hover:opacity-80" title="Open ${b.branch_name} to follow up">${issues} ▸</button>`
+      : (b.status==='no_session' ? '<span class="text-gray-300">—</span>' : '<span class="badge b-ok">clear</span>');
+    const tr=document.createElement('tr'); tr.className='cursor-pointer';
+    // clicking the row opens the branch's session (Daily board) to follow up the work
+    tr.onclick=(e)=>{ if(e.target.tagName!=='BUTTON') drillBranch(b.branch_id, 'daily'); };
     tr.innerHTML=`<td class="py-2 font-medium">${b.branch_name}</td>
       <td class="text-right font-mono">${fmt(b.pos_total)}</td>
       <td class="text-right font-mono">${fmt(b.ext_total)}</td>
       <td class="text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
       <td class="text-center"><span class="pill pill-${b.status}">${b.status.replace('_',' ')}</span></td>
-      <td class="text-right">${b.session_id
-        ? `<button onclick="openSession(${b.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>`
-        : `<button onclick="startSession(${b.branch_id})" class="text-xs text-gray-400 hover:text-orange-600">Start</button>`}</td>`;
+      <td class="text-center">${issueCell}</td>
+      <td class="text-right text-xs text-orange-600">${b.session_id?'Open ▸':'Start ▸'}</td>`;
     tb.appendChild(tr);
   });
   document.getElementById('kpi-pos').textContent='฿'+fmt(tp);
   document.getElementById('kpi-ext').textContent='฿'+fmt(te);
   const v=te-tp; const k=document.getElementById('kpi-var');
   k.textContent=(v>=0?'+':'')+'฿'+fmt(v); k.className='text-2xl font-bold '+varCls(v);
+  const ki=document.getElementById('kpi-issues'); ki.textContent=ti;
+  ki.className='text-2xl font-bold '+(ti?'text-red-600 cursor-pointer hover:underline':'text-green-600');
+  ki.title = ti? 'Click a branch row below to follow up' : 'All clear';
+}
+// Drill-down: open a branch's session to follow up the work (issues → Discrepancies, else Daily)
+async function drillBranch(branch_id, tab){
+  const ov = await api('/api/overview?period_month='+period());
+  const row = ov.find(b=>b.branch_id===branch_id);
+  const target = tab || ((row && row.open_issues) ? 'discrepancies' : 'daily');
+  if(row && row.session_id) openSession(row.session_id, target); else startSession(branch_id, target);
 }
 
-async function startSession(branch_id){
+async function startSession(branch_id, tab){
   try{ await api('/api/sessions',{method:'POST',json:{branch_id,period_month:period()}}); }catch(e){}
   const ov = await api('/api/overview?period_month='+period());
   const row = ov.find(b=>b.branch_id===branch_id);
-  if(row&&row.session_id) openSession(row.session_id); else loadOverview();
+  if(row&&row.session_id) openSession(row.session_id, tab); else loadOverview();
 }
 async function ensureSession(){
   const bid = +document.getElementById('sel-branch').value;
   if(!bid){ alert('Pick a branch in the top bar first'); return; }
   startSession(bid);
 }
-async function openSession(id){
+async function openSession(id, tab){
   SESSION = await api('/api/sessions/'+id);
-  switchTab('daily');
+  document.getElementById('sel-branch').value = SESSION.branch_id;   // keep top bar in sync
+  switchTab(tab || 'daily');
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────
@@ -344,7 +392,8 @@ async function loadDaily(){
   if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
   document.getElementById('daily-empty').classList.add('hidden');
   document.getElementById('daily-body').classList.remove('hidden');
-  document.getElementById('daily-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
+  document.getElementById('daily-title').textContent =
+    `${SESSION.branch_name} · ${SESSION.period_month}` + (FOCUS_DATE? ` · focus ${FOCUS_DATE}` : '');
   const d = await api(`/api/sessions/${SESSION.session_id}/daily`);
   document.getElementById('daily-nopos').classList.toggle('hidden', d.pos_daily_available);
   const ps = d.pending_summary;
@@ -357,9 +406,11 @@ async function loadDaily(){
     + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ฿${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
   const tb=document.getElementById('daily-rows'); tb.innerHTML='';
   if(!d.days.length){ tb.innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6">No activity for this period</td></tr>'; return; }
+  let focusRow=null;
   d.days.forEach(day=>{
     const chips = day.lanes.map(l=>`<span class="badge ${LANE_CHIP[l.status]} mr-1" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}: POS ฿${fmt(l.pos)} / ext ฿${fmt(l.ext)} (${l.status})">${l.category.slice(0,4)}${l.bank!=='NONE'?'·'+l.bank:''} ${LANE_SYM[l.status]}</span>`).join('');
     const tr=document.createElement('tr');
+    if(FOCUS_DATE && day.day===FOCUS_DATE){ tr.style.background='#fff7ed'; tr.style.outline='2px solid var(--brand)'; focusRow=tr; }
     tr.innerHTML=`<td class="py-2 font-medium">${day.day}</td>
       <td class="text-right font-mono">${fmt(day.pos_total)}</td>
       <td class="text-right font-mono">${fmt(day.ext_total)}</td>
@@ -368,6 +419,8 @@ async function loadDaily(){
       <td class="text-center">${day.pending_count?`<span class="badge b-warn">${day.pending_count}</span>`:'<span class="text-gray-300">—</span>'}</td>`;
     tb.appendChild(tr);
   });
+  if(FOCUS_DATE && !focusRow){ tb.insertAdjacentHTML('afterbegin', `<tr><td colspan="6" class="text-center text-amber-600 py-3">No POS/document activity on ${FOCUS_DATE}.</td></tr>`); }
+  if(focusRow) focusRow.scrollIntoView({block:'center', behavior:'smooth'});
 }
 
 // ── reconcile ────────────────────────────────────────────────────────────────
@@ -511,12 +564,20 @@ async function refreshSetupBadge(){
 async function loadSetup(){
   refreshSetupBadge();
   const map=await api('/api/payment-map'); const tb=document.getElementById('map-body'); tb.innerHTML='';
-  map.forEach(m=>{ const tr=document.createElement('tr'); if(m.bank==='UNKNOWN') tr.style.background='#fff7ed';
-    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}</td>
-      <td><select class="inp" id="mc-${m.id}">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
-      <td><select class="inp" id="mb-${m.id}">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
-      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''}></td>
-      <td class="text-right"><button onclick="saveMap(${m.id})" class="text-xs text-orange-600 hover:underline">Save</button></td>`;
+  // needs-attention callout
+  const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+  const att=document.getElementById('map-attention');
+  if(need.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
+      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ฿${fmt(m.pos_amount)}</span>`).join('')}</div>`;
+  } else att.classList.add('hidden');
+  map.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY'); if(attn) tr.style.background='#fff7ed';
+    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}${attn?' <span class="text-amber-600">⚠</span>':''}</td>
+      <td class="text-right font-mono text-gray-600">฿${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
+      <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
+      <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
   });
   const accts=await api('/api/bank-accounts'); const ab=document.getElementById('acct-body'); ab.innerHTML='';
@@ -529,10 +590,25 @@ async function loadSetup(){
       <td class="text-right"><button onclick="delMid(${x.mid_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; mb.appendChild(tr); });
 }
 async function saveMap(id){
-  await api(`/api/payment-map/${id}`,{method:'PATCH',json:{
-    category:document.getElementById('mc-'+id).value, bank:document.getElementById('mb-'+id).value,
-    reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
-  loadSetup();
+  const ok=document.getElementById('mok-'+id);
+  try{
+    await api(`/api/payment-map/${id}`,{method:'PATCH',json:{
+      category:document.getElementById('mc-'+id).value, bank:document.getElementById('mb-'+id).value,
+      reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
+    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
+    const attn=['UNKNOWN','PROMPTPAY'].includes(document.getElementById('mb-'+id).value);
+    document.getElementById('mb-'+id).closest('tr').style.background = attn?'#fff7ed':'';
+    refreshSetupBadge(); refreshAttention();
+  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
+}
+async function refreshAttention(){
+  const map=await api('/api/payment-map').catch(()=>[]);
+  const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+  const att=document.getElementById('map-attention');
+  if(need.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
+      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ฿${fmt(m.pos_amount)}</span>`).join('')}</div>`;
+  } else att.classList.add('hidden');
 }
 async function reseed(){ const r=await api('/api/payment-map/seed',{method:'POST'}); alert(`Seeded ${r.inserted} new code(s).`); loadSetup(); }
 async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{

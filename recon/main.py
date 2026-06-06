@@ -179,12 +179,33 @@ def _validate_map(body: PaymentMapUpsert):
 
 @app.get("/api/payment-map")
 def list_payment_map(needs_attention: int = 0):
+    from .seed_payment_map import normalize
     with get_db() as conn:
         sql = "SELECT * FROM recon_payment_map"
         if needs_attention:
             sql += " WHERE bank='UNKNOWN'"
         sql += " ORDER BY (bank='UNKNOWN') DESC, category, bank, payment_code_norm"
-        return [dict(r) for r in conn.execute(sql)]
+        rows = [dict(r) for r in conn.execute(sql)]
+        # Attach POS volume per normalized code (master branches) so staff can see
+        # which codes actually matter — e.g. KNNQR is the single biggest tender.
+        amounts: dict = {}
+        try:
+            for r in conn.execute("""
+                SELECT p.payment_code, SUM(p.amount) amt, SUM(p.txn_count) n
+                FROM pos_payment_month p JOIN branches b ON b.branch_id = p.branch_id
+                WHERE COALESCE(b.branch_type,'master')='master' AND b.active=1
+                GROUP BY p.payment_code
+            """):
+                a = amounts.setdefault(normalize(r["payment_code"]), {"amount": 0.0, "txn": 0})
+                a["amount"] += float(r["amt"] or 0)
+                a["txn"]    += int(r["n"] or 0)
+        except sqlite3.OperationalError:
+            pass
+        for row in rows:
+            a = amounts.get(row["payment_code_norm"], {"amount": 0.0, "txn": 0})
+            row["pos_amount"] = round(a["amount"], 2)
+            row["pos_txn"]    = a["txn"]
+        return rows
 
 
 @app.post("/api/payment-map", dependencies=[Depends(require_write_token)])
@@ -783,6 +804,15 @@ def overview(period_month: str):
                 (bid, period_month)
             ).fetchone()
 
+            # Open issues to follow up: pending discrepancies (if a session exists)
+            # + lanes that aren't matched in the live reconciliation.
+            open_issues = 0
+            if session:
+                open_issues = conn.execute(
+                    "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
+                    (session["session_id"],)).fetchone()[0]
+            unmatched = sum(1 for r in rows if r["status"] != "matched")
+
             result.append({
                 "branch_id":   bid,
                 "branch_name": b["name"],
@@ -791,6 +821,8 @@ def overview(period_month: str):
                 "variance":    round(ext_total - pos_total, 2),
                 "session_id":  session["session_id"] if session else None,
                 "status":      session["status"] if session else "no_session",
+                "open_issues": open_issues,
+                "unmatched":   unmatched,
             })
 
     return result
