@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .matcher import run_auto_match
+from .matcher import get_pos_payment_breakdown, run_auto_match
 from .parsers import (
     parse_bank_statement,
     parse_cc_settlement,
@@ -282,17 +282,9 @@ def session_summary(session_id: int):
             raise HTTPException(404)
         bid, pm = session["branch_id"], session["period_month"]
 
-        # POS monthly totals (direct SQL — shared DB)
-        pos = conn.execute("""
-            SELECT
-                COALESCE(SUM(net_sales),0)   AS total,
-                COALESCE(SUM(cash),0)        AS cash,
-                COALESCE(SUM(credit_card),0) AS credit_card,
-                COALESCE(SUM(transfer),0)    AS transfer,
-                COALESCE(SUM(qr),0)          AS qr
-            FROM sales_month_summary
-            WHERE branch_id=? AND period_month=?
-        """, (bid, pm)).fetchone()
+        # POS breakdown — uses pos_payment_month + pos_customer_type_month (MSSQL)
+        # with fallback to sales_month_summary (Excel import)
+        pos = get_pos_payment_breakdown(conn, bid, pm)
 
         def ext_row(table, amount_col, date_col):
             return conn.execute(f"""
@@ -304,10 +296,10 @@ def session_summary(session_id: int):
                 WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
             """, (bid, pm)).fetchone()
 
-        bank  = ext_row("recon_bank_lines",    "credit",     "txn_date")
-        cc    = ext_row("recon_cc_lines",      "net_amount", "settlement_date")
-        grab  = ext_row("recon_grab_lines",    "net_payout", "order_date")
-        lm    = ext_row("recon_lineman_lines", "net_payout", "order_date")
+        bank = ext_row("recon_bank_lines",    "credit",     "txn_date")
+        cc   = ext_row("recon_cc_lines",      "net_amount", "settlement_date")
+        grab = ext_row("recon_grab_lines",    "net_payout", "order_date")
+        lm   = ext_row("recon_lineman_lines", "net_payout", "order_date")
 
         pending = conn.execute(
             "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
@@ -325,10 +317,10 @@ def session_summary(session_id: int):
                 "match_rate": round(matched / count * 100, 1) if count else 0,
             }
 
-        ext_sum = bank[0] + cc[0] + grab[0] + lm[0]
-        pos_total = pos["total"] if pos else 0
+        ext_sum   = bank[0] + cc[0] + grab[0] + lm[0]
+        pos_total = pos.get("pos_net", 0)
         return {
-            "pos":                   dict(pos) if pos else {},
+            "pos":                   pos,
             "bank":                  summarise(bank),
             "credit_card":           summarise(cc),
             "grab":                  summarise(grab),
@@ -336,7 +328,7 @@ def session_summary(session_id: int):
             "pending_discrepancies": pending,
             "ext_total":             ext_sum,
             "pos_total":             pos_total,
-            "variance":              ext_sum - pos_total,
+            "variance":              round(ext_sum - pos_total, 2),
         }
 
 
@@ -431,6 +423,83 @@ def overview(period_month: str):
             })
 
     return result
+
+
+# ── Diagnostic endpoints ──────────────────────────────────────────────────────
+# Use these to inspect what's actually in the database before tuning matchers.
+
+@app.get("/api/diagnostics/payment-codes")
+def diag_payment_codes(period_month: str, branch_id: int | None = None):
+    """
+    Show all PaymentCode values in pos_payment_month for a given month.
+    Use this to verify keyword patterns match your actual Easy POS codes.
+    Example: GET /api/diagnostics/payment-codes?period_month=2025-12
+    """
+    with get_db() as conn:
+        try:
+            filters = ["period_month=?"]
+            params: list = [period_month]
+            if branch_id:
+                filters.append("branch_id=?"); params.append(branch_id)
+            rows = conn.execute(f"""
+                SELECT payment_code, SUM(amount) amount, SUM(txn_count) txn_count,
+                       COUNT(DISTINCT branch_id) branches
+                FROM pos_payment_month
+                WHERE {' AND '.join(filters)}
+                GROUP BY payment_code
+                ORDER BY SUM(amount) DESC
+            """, params).fetchall()
+            return {"period_month": period_month, "codes": [dict(r) for r in rows]}
+        except Exception as exc:
+            return {"error": str(exc), "hint": "pos_payment_month not found — run sync_mssql.py first"}
+
+
+@app.get("/api/diagnostics/customer-types")
+def diag_customer_types(period_month: str, branch_id: int | None = None):
+    """
+    Show all CustomerTypeName values in pos_customer_type_month for a given month.
+    Use this to verify Grab/Lineman type names match your POS configuration.
+    Example: GET /api/diagnostics/customer-types?period_month=2025-12
+    """
+    with get_db() as conn:
+        try:
+            filters = ["period_month=?"]
+            params: list = [period_month]
+            if branch_id:
+                filters.append("branch_id=?"); params.append(branch_id)
+            rows = conn.execute(f"""
+                SELECT type_name, SUM(customers) customers, ROUND(SUM(net)/1.07) net_ex_vat,
+                       COUNT(DISTINCT branch_id) branches
+                FROM pos_customer_type_month
+                WHERE {' AND '.join(filters)}
+                GROUP BY type_name
+                ORDER BY SUM(net) DESC
+            """, params).fetchall()
+            return {"period_month": period_month, "types": [dict(r) for r in rows]}
+        except Exception as exc:
+            return {"error": str(exc), "hint": "pos_customer_type_month not found — run sync_mssql.py first"}
+
+
+@app.get("/api/diagnostics/excel-payment-cols")
+def diag_excel_payment_cols(period_month: str, branch_id: int | None = None):
+    """
+    Show Easy POS Excel payment column totals from sales_month_summary.
+    cash/credit_card/qr are only populated after re-importing with the fixed ingest.
+    Use to verify col 40 (qr field) actually contains QR/PromptPay data.
+    """
+    with get_db() as conn:
+        filters = ["period_month=?", "source='Easy'"]
+        params: list = [period_month]
+        if branch_id:
+            filters.append("branch_id=?"); params.append(branch_id)
+        rows = conn.execute(f"""
+            SELECT b.name branch, s.cash, s.credit_card, s.transfer, s.qr, s.coupon, s.net_sales
+            FROM sales_month_summary s
+            JOIN branches b ON b.branch_id = s.branch_id
+            WHERE {' AND '.join(filters)}
+            ORDER BY b.name
+        """, params).fetchall()
+        return {"period_month": period_month, "rows": [dict(r) for r in rows]}
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
