@@ -98,10 +98,20 @@ def invalidate_cache(*prefixes: str):
     with _cache_lock:
         if not prefixes:
             _resp_cache.clear()
-            return
-        drop = [k for k in _resp_cache if any(k.startswith(p) for p in prefixes)]
-        for k in drop:
-            del _resp_cache[k]
+        else:
+            drop = [k for k in _resp_cache if any(k.startswith(p) for p in prefixes)]
+            for k in drop:
+                del _resp_cache[k]
+    # A full clear (no prefixes) signals "cost / bom / sales data changed". Rebuild
+    # the per-SKU effective-cost lookup so _unified_cogs_expr reflects the new costs
+    # immediately (preserving the pre-materialisation live-subquery behaviour).
+    # Best-effort and resilient — never break the mutation response if it fails.
+    if not prefixes:
+        try:
+            with get_db() as con:
+                _build_sku_effective_cost(con, force=True)
+        except Exception as e:
+            print(f"[sku_effective_cost] rebuild after cache flush failed: {e}")
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -241,7 +251,9 @@ app.add_middleware(
 # that send Accept-Encoding: gzip get a ~5× smaller transfer; biggest win on the
 # Fly.io cold start. minimum_size skips tiny bodies where framing overhead dominates.
 from fastapi.middleware.gzip import GZipMiddleware
-app.add_middleware(GZipMiddleware, minimum_size=1000)
+# compresslevel=6: ~same ratio as the default 9 at a fraction of the CPU — matters
+# because every cached-response hit is re-compressed on the 1-CPU host.
+app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
 # Serve vendor JS/CSS
 if STATIC.exists():
@@ -520,7 +532,7 @@ def data_coverage():
     import calendar as _cal
     with get_db() as con:
         row = con.execute(
-            "SELECT MAX(substr(sold_at,1,10)) AS d FROM sales_transaction"
+            "SELECT MAX(date(sold_at)) AS d FROM sales_transaction"
         ).fetchone()
     last_day = row["d"] if row and row["d"] else None
     last_month = last_day[:7] if last_day else None
@@ -1055,9 +1067,9 @@ def top_ordered(
         _group_filter(cov_filt, cov_params, group)
         _cf = month_from or month; _ct = month_to or month
         if _cf:
-            cov_filt.append("substr(t.sold_at,1,7) >= :cmf"); cov_params["cmf"] = _cf
+            cov_filt.append("strftime('%Y-%m',t.sold_at) >= :cmf"); cov_params["cmf"] = _cf
         if _ct:
-            cov_filt.append("substr(t.sold_at,1,7) <= :cmt"); cov_params["cmt"] = _ct
+            cov_filt.append("strftime('%Y-%m',t.sold_at) <= :cmt"); cov_params["cmt"] = _ct
         cov_row = con.execute(
             f"""SELECT SUM(t.customer_count) AS covers
                 FROM sales_transaction t JOIN branches b ON b.branch_id = t.branch_id
@@ -1153,7 +1165,7 @@ def top_ordered(
         # month is partial) — lets the client show how each menu's cost-per-head changed,
         # reflecting BOTH the dish's volume change and the traffic (covers) change.
         def _covers_window(ds, de):
-            cf = ["b.name != 'ALL'", "t.source = 'Easy'", "substr(t.sold_at,1,10) BETWEEN :wf AND :wt"]
+            cf = ["b.name != 'ALL'", "t.source = 'Easy'", "date(t.sold_at) BETWEEN :wf AND :wt"]
             cp = {"wf": ds, "wt": de}
             if branch:
                 cf.append("b.name = :wbranch"); cp["wbranch"] = branch
@@ -1280,11 +1292,11 @@ def _covers_by_branch(con, mfrom, mto, dfrom, dto, group):
     base = ["b.name!='ALL'", "t.source='Easy'"]; p: dict = {}
     _group_filter(base, p, group)
     if dfrom or dto:
-        if dfrom: base.append("substr(t.sold_at,1,10)>=:cf"); p["cf"] = dfrom
-        if dto:   base.append("substr(t.sold_at,1,10)<=:ct"); p["ct"] = dto
+        if dfrom: base.append("date(t.sold_at)>=:cf"); p["cf"] = dfrom
+        if dto:   base.append("date(t.sold_at)<=:ct"); p["ct"] = dto
     else:
-        if mfrom: base.append("substr(t.sold_at,1,7)>=:cmf"); p["cmf"] = mfrom
-        if mto:   base.append("substr(t.sold_at,1,7)<=:cmt"); p["cmt"] = mto
+        if mfrom: base.append("strftime('%Y-%m',t.sold_at)>=:cmf"); p["cmf"] = mfrom
+        if mto:   base.append("strftime('%Y-%m',t.sold_at)<=:cmt"); p["cmt"] = mto
     rows = con.execute(f"SELECT b.name br, SUM(t.customer_count) c "
                        f"FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id "
                        f"WHERE {' AND '.join(base)} GROUP BY b.name", p).fetchall()
@@ -1539,7 +1551,7 @@ def sales_daily(
 
     with get_db() as con:
         maxd = con.execute(
-            f"SELECT MAX(substr(t.sold_at,1,10)) FROM sales_transaction t "
+            f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
             f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
         if not maxd:
             return {"gran": gran, "focus": None, "branches": [], "total": {}, "trend": [], "anomalies": []}
@@ -1563,7 +1575,7 @@ def sales_daily(
                        ROUND(SUM(t.total_inc_vat)/1.07,2) rev,
                        SUM(t.customer_count) cust, COUNT(*) bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                WHERE {where} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
+                WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
                 GROUP BY b.name""", {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
             return {r["branch"]: {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]} for r in rows}, (s, e)
 
@@ -1575,7 +1587,7 @@ def sales_daily(
         # begins, it's incomplete → drop it (avoids bogus deltas like YoY +472%
         # vs the partial first month). Same idea as the benchmark guard.
         mind = con.execute(
-            f"SELECT MIN(substr(t.sold_at,1,10)) FROM sales_transaction t "
+            f"SELECT MIN(date(t.sold_at)) FROM sales_transaction t "
             f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0] or "9999-99"
         if pms.isoformat() < mind:
             pm = {}
@@ -1654,7 +1666,7 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
     _group_filter(base, params, group)
     where = " AND ".join(base)
     with get_db() as con:
-        maxd = con.execute(f"SELECT MAX(substr(t.sold_at,1,10)) FROM sales_transaction t "
+        maxd = con.execute(f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
                            f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
         if not maxd:
             return {"date": None, "days": [], "branches": []}
@@ -1664,11 +1676,11 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
         start = fdate - _dt.timedelta(days=7)
         days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
         rows = con.execute(f"""
-            SELECT b.name branch, substr(t.sold_at,1,10) d,
+            SELECT b.name branch, date(t.sold_at) d,
                    ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust, COUNT(*) bills
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-            WHERE {where} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
-            GROUP BY b.name, substr(t.sold_at,1,10)""",
+            WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
+            GROUP BY b.name, date(t.sold_at)""",
             {**params, "s": start.isoformat(), "e": focus}).fetchall()
         bm: dict = {}
         for r in rows:
@@ -1797,7 +1809,7 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
             cust = {r["branch"]: r["cust"] or 0 for r in con.execute(
                 f"""SELECT b.name branch, SUM(t.customer_count) cust
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {twhere} AND substr(t.sold_at,1,10) BETWEEN :s AND :e
+                    WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e
                     GROUP BY b.name""", {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()}
             cogs, rev = {}, {}
             for r in con.execute(
@@ -1859,7 +1871,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
     dbp = {"branch": branch} if branch else {}
 
     with get_db() as con:
-        maxday = con.execute("SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        maxday = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
         if not maxday:
             return {"available": False}
         y, m, d = (int(x) for x in maxday.split("-"))
@@ -1875,7 +1887,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
                 f"""SELECT ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust,
                     ROUND(SUM(t.discount),2) disc, COUNT(*) bills
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {twhere} AND substr(t.sold_at,1,10) BETWEEN :s AND :e""",
+                    WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e""",
                 {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
             co = con.execute(
                 f"""SELECT ROUND(SUM({cogs_expr}),2) cogs
@@ -1948,7 +1960,7 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
         s, e = _pnl_bounds(_dt.date(fy, fm, fd), gran)
         JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
               "JOIN branches b ON b.branch_id=t.branch_id "
-              f"WHERE {tw} AND substr(t.sold_at,1,10) BETWEEN :s AND :e AND t.total_inc_vat>0")
+              f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
         gm = "(t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100"
         cond = f"{gm} < 0" if idx == -1 else f"{gm} >= {lo} AND {gm} < {hi}"
@@ -2003,7 +2015,7 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         s, e = bounds(fdate)
         JN = (f"FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
               f"JOIN branches b ON b.branch_id=t.branch_id "
-              f"WHERE {tw} AND substr(t.sold_at,1,10) BETWEEN :s AND :e AND t.total_inc_vat>0")
+              f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
         r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM(t.total_inc_vat/1.07),2) rev, "
                         f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
@@ -2368,7 +2380,7 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         # context: valid bills that month (to express cancel rate)
         vb = con.execute(
             f"""SELECT COUNT(*) n FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                WHERE {tw} AND t.source='Easy' AND substr(t.sold_at,1,7)=:m""", pm).fetchone()
+                WHERE {tw} AND t.source='Easy' AND strftime('%Y-%m',t.sold_at)=:m""", pm).fetchone()
         valid = (vb["n"] or 0) if vb else 0
         cbills = (s["bills"] or 0) if s else 0
         summary = {"bills": cbills, "amount": (s["amount"] or 0) if s else 0, "valid_bills": valid,
@@ -2504,7 +2516,7 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
             day_rows = {r["branch"]: r for r in con.execute(
                 f"""SELECT b.name branch, MAX(t.sold_at) day_last, COUNT(*) day_bills
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {tw} AND substr(t.sold_at,1,10)=:date
+                    WHERE {tw} AND date(t.sold_at)=:date
                     GROUP BY b.name""", {**p, "date": date}).fetchall()}
             out = []; reported = missing = 0; day_bill_total = 0
             for name, lr in last_rows.items():
@@ -2530,10 +2542,10 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
         # Trailing-30d typical close: average of each day's last-bill time-of-day.
         close_rows = {r["branch"]: r for r in con.execute(
             f"""WITH day_close AS (
-                  SELECT t.branch_id, substr(t.sold_at,1,10) d, MAX(t.sold_at) last_at
+                  SELECT t.branch_id, date(t.sold_at) d, MAX(t.sold_at) last_at
                   FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                   WHERE {tw} AND t.sold_at >= :since
-                  GROUP BY t.branch_id, substr(t.sold_at,1,10)
+                  GROUP BY t.branch_id, date(t.sold_at)
                 )
                 SELECT b.name branch, COUNT(*) days_open,
                   AVG( CAST(substr(dc.last_at,12,2) AS REAL)*60 + CAST(substr(dc.last_at,15,2) AS REAL)
@@ -5381,7 +5393,7 @@ def analysis_compare(
                        SUM(st.customer_count) customer_count, ROUND(AVG(st.total_inc_vat), 2) avg_ticket
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE b.name!='ALL' AND st.source='Easy'
-                  AND substr(st.sold_at,1,10) BETWEEN :s AND :e {branch_filter}""", p).fetchone()
+                  AND date(st.sold_at) BETWEEN :s AND :e {branch_filter}""", p).fetchone()
             _rev = (r["revenue"] or 0) if r else 0
             return {"period": period, "revenue": _rev, "revenue_ex": _rev,
                     "tx_count": (r["tx_count"] or 0) if r else 0,
@@ -5463,7 +5475,7 @@ def analysis_compare(
 
     with get_db() as con:
         # MTD-fair when the PRIMARY month is the latest, still-partial month.
-        maxd = con.execute("SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        maxd = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
         mtd_cut = None
         if maxd:
             my, mm, mdd = (int(x) for x in maxd.split("-"))
@@ -6420,7 +6432,7 @@ def analysis_anomalies(
     mtd_note = ""
     with get_db() as con:
         maxday = con.execute(
-            "SELECT MAX(substr(sold_at,1,10)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+            "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
         day_clause = ""
         if maxday:
             _y, _m, _d = (int(x) for x in maxday.split("-"))
@@ -8110,7 +8122,18 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
         f"  WHEN {ssm}.source = 'Easy' AND "
         f"       (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id) "
         f"       IN {_EASY_TIER_CODES_SQL} THEN 0 "
+        # Per-SKU effective unit cost is precomputed once into sku_effective_cost
+        # (built at startup + on every cost/bom edit via invalidate_cache), turning
+        # what used to be THREE correlated subqueries PER sales row — evaluated
+        # ~87k+ times per request — into ONE rowid lookup into a ~1,200-row hot
+        # table. The original three subqueries are KEPT as a COALESCE fallback so
+        # the expression stays self-contained and CORRECT even if the table is
+        # absent/empty (tests, offline scripts, or a SKU added since the last
+        # build): COALESCE short-circuits, so the subqueries never execute once the
+        # table has the SKU. recipe_cost stores RAW cost; uncosted SKUs are stored
+        # as 0 (non-NULL) so a hit short-circuits correctly. Verified identical.
         f"  ELSE {ssm}.qty * COALESCE("
+        f"    (SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id = {ssm}.sku_id), "
         f"    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id), "
         f"    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
         f"       JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id "
@@ -8119,6 +8142,50 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
         f"    0) "
         f"END"
     )
+
+
+def _build_sku_effective_cost(con, force: bool = True):
+    """(Re)build the per-SKU effective unit COGS lookup that backs _unified_cogs_expr.
+
+    recipe_cost = COALESCE(direct BoM recipe SUM, alias-path BoM SUM via
+    bom_sku_alias on sku_code, sku_cost.unit_cost, 0) — EXACTLY the chain the inline
+    expression used, but computed ONCE per SKU instead of as 3 correlated subqueries
+    per sales row. Pure function of skus / bom_ingredients / bom_sku_alias / sku_cost.
+    Rebuilt at startup and whenever cost/bom data changes (hooked into the full-clear
+    branch of invalidate_cache), so edits reflect immediately as before.
+
+    Compute-then-replace: a transient failure never wipes the table to all-zero COGS.
+    """
+    con.execute(
+        "CREATE TABLE IF NOT EXISTS sku_effective_cost("
+        "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0)"
+    )
+    if not force:
+        try:
+            if con.execute("SELECT 1 FROM sku_effective_cost LIMIT 1").fetchone():
+                return
+        except Exception:
+            pass
+    rows = con.execute(
+        """
+        SELECT s.sku_id, COALESCE(
+            (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = s.sku_id),
+            (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
+               JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id
+               WHERE a.bom_sku_code = s.sku_code),
+            (SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
+            0) AS rc
+        FROM skus s
+        """
+    ).fetchall()
+    if not rows:
+        return
+    con.execute("DELETE FROM sku_effective_cost")
+    con.executemany(
+        "INSERT INTO sku_effective_cost(sku_id, recipe_cost) VALUES (?, ?)",
+        [(r[0], r[1]) for r in rows],
+    )
+    con.commit()
 
 
 def _costed_rev_case(ssm: str = "ssm", sk: str = "sk", sc: str = "sc") -> str:
@@ -13530,6 +13597,49 @@ def _sku_cost_monthly_ensure():
 def _bom_startup():
     _bom_ensure_and_seed()
     _sku_cost_monthly_ensure()
+    _perf_startup()
+
+
+# Covering indexes that turn the heaviest Analysis-Report scans into index-only
+# seeks. Each uses the EXACT functional expression of an existing index family so
+# the planner matches them. Created idempotently at startup (one-time cost on the
+# first boot after deploy; IF NOT EXISTS makes later cold starts free).
+_PERF_INDEXES = (
+    "CREATE INDEX IF NOT EXISTS idx_tx_disc_cov ON sales_transaction"
+    "(branch_id, strftime('%Y-%m', sold_at), cashier, discount, food_subtotal, drink_subtotal, other_subtotal)",
+    "CREATE INDEX IF NOT EXISTS idx_tx_persona_cov ON sales_transaction"
+    "(branch_id, strftime('%Y-%m', sold_at), customer_count, total_inc_vat, food_subtotal, drink_subtotal, other_subtotal)",
+    # idx_tx_ym_dow_cov / idx_tx_ym_hour_cov deferred: only used together with the
+    # analysis_dow / analysis_hourly_open JOIN-drop rewrites, which ship separately.
+)
+
+
+def _perf_startup():
+    """One-time DB perf setup: build the per-SKU effective-cost lookup and ensure the
+    covering indexes exist. Resilient — a failure here must never block app startup."""
+    try:
+        with get_db() as con:
+            for ddl in _PERF_INDEXES:
+                try:
+                    con.execute(ddl)
+                except Exception as e:
+                    print(f"[perf idx] {ddl[:60]}... -> {e}")
+            con.commit()
+            # The planner only picks the new covering indexes once their stats exist.
+            # Run ANALYZE once (when sqlite_stat1 lacks an entry for idx_tx_disc_cov);
+            # the result persists in the DB file so later cold starts skip this.
+            try:
+                has_stats = con.execute(
+                    "SELECT 1 FROM sqlite_stat1 WHERE idx='idx_tx_disc_cov' LIMIT 1"
+                ).fetchone()
+            except sqlite3.OperationalError:
+                has_stats = None  # sqlite_stat1 not created yet
+            if not has_stats:
+                con.execute("ANALYZE sales_transaction")
+                con.commit()
+            _build_sku_effective_cost(con, force=True)
+    except Exception as e:
+        print(f"[perf startup] failed: {e}")
 
 
 # Benchmarks for ingredient-type mix (used by UI)
@@ -14564,16 +14674,16 @@ def _service_charge_map(con, month_from=None, month_to=None, branches=None):
     filt = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
     params: dict = {}
     if month_from:
-        filt.append("substr(st.sold_at,1,7) >= :sf"); params["sf"] = month_from
+        filt.append("strftime('%Y-%m',st.sold_at) >= :sf"); params["sf"] = month_from
     if month_to:
-        filt.append("substr(st.sold_at,1,7) <= :stt"); params["stt"] = month_to
+        filt.append("strftime('%Y-%m',st.sold_at) <= :stt"); params["stt"] = month_to
     if branches:
         ph = ",".join(f":sb{i}" for i in range(len(branches)))
         filt.append(f"b.name IN ({ph})")
         for i, br in enumerate(branches):
             params[f"sb{i}"] = br
     rows = con.execute(f"""
-        SELECT b.name AS branch, substr(st.sold_at,1,7) AS m,
+        SELECT b.name AS branch, strftime('%Y-%m',st.sold_at) AS m,
                COALESCE(SUM(st.service_charge), 0) AS svc
           FROM sales_transaction st
           JOIN branches b ON b.branch_id = st.branch_id

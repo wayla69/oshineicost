@@ -100,6 +100,13 @@ CREATE INDEX IF NOT EXISTS idx_tx_src_day       ON sales_transaction(source, dat
 CREATE INDEX IF NOT EXISTS idx_tx_src_week      ON sales_transaction(source, strftime('%Y-W%W', sold_at), branch_id, total_inc_vat, customer_count);
 CREATE INDEX IF NOT EXISTS idx_tx_src_dow       ON sales_transaction(source, strftime('%w', sold_at), branch_id, total_inc_vat, customer_count);
 CREATE INDEX IF NOT EXISTS idx_tx_src_hour      ON sales_transaction(source, strftime('%H', sold_at), branch_id, total_inc_vat, customer_count);
+-- Covering indexes for the Analysis-Report endpoints (discounts / persona / dow / hourly).
+-- Also created idempotently at startup (_perf_startup) so existing DBs pick them up.
+CREATE INDEX IF NOT EXISTS idx_tx_disc_cov      ON sales_transaction(branch_id, strftime('%Y-%m', sold_at), cashier, discount, food_subtotal, drink_subtotal, other_subtotal);
+CREATE INDEX IF NOT EXISTS idx_tx_persona_cov   ON sales_transaction(branch_id, strftime('%Y-%m', sold_at), customer_count, total_inc_vat, food_subtotal, drink_subtotal, other_subtotal);
+
+-- Per-SKU effective COGS lookup (backs _unified_cogs_expr; populated by _build_sku_effective_cost).
+CREATE TABLE IF NOT EXISTS sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);
 
 -- ── sales_sku_monthly indexes ──────────────────────────────────────────────
 CREATE INDEX IF NOT EXISTS idx_sku_period       ON sales_sku_monthly(period_month);
