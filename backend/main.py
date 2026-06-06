@@ -5300,14 +5300,20 @@ def analysis_dow(
     granularity: str           = Query("daily"),  # daily|weekly|monthly
 ):
     """Revenue and tx count grouped by day-of-week (0=Sun â€¦ 6=Sat)."""
-    filters = ["b.name != 'ALL'"]
+    # The no-branch case (the Analysis Report default) drops the branches JOIN and
+    # the b.name!='ALL' guard so the query is served index-only by idx_tx_ym_dow_cov.
+    # Safe: sales_transaction holds no 'ALL'-named branch, so the guard excludes
+    # nothing (verified). With a branch filter we keep the JOIN for b.name=:branch.
+    filters: list = []
     params: dict = {}
+    join = ""
     if branch:
+        join = "JOIN branches b ON b.branch_id = st.branch_id"
         filters.append("b.name = :branch")
         params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
 
-    where = "WHERE " + " AND ".join(filters)
+    where = ("WHERE " + " AND ".join(filters)) if filters else ""
 
     with get_db() as con:
         rows = con.execute(
@@ -5319,7 +5325,7 @@ def analysis_dow(
                    ROUND(AVG(st.total_inc_vat), 2)             AS avg_ticket,
                    COUNT(DISTINCT DATE(st.sold_at))             AS day_count
             FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
+            {join}
             {where}
             GROUP BY dow
             ORDER BY dow
@@ -5335,8 +5341,7 @@ def analysis_dow(
         with get_db() as con2:
             pr = con2.execute(
                 f"SELECT COUNT(DISTINCT {_pexpr}) AS cnt "
-                f"FROM sales_transaction st "
-                f"JOIN branches b ON b.branch_id = st.branch_id {where}",
+                f"FROM sales_transaction st {join} {where}",
                 params
             ).fetchone()
         total_periods = max(pr["cnt"] if pr else 1, 1)
@@ -9874,10 +9879,16 @@ def analysis_hourly_open(
     """Like /api/analysis/hourly but each hour is annotated with `is_open`,
     derived from the closed_hours table. Hours marked closed are still returned
     (count may be 0) so the chart can show them greyed out."""
-    # Inline the hourly query (can't call FastAPI endpoints as plain functions)
-    filters = ["b.name != 'ALL'", "st.source = 'Easy'"]
+    # Inline the hourly query (can't call FastAPI endpoints as plain functions).
+    # No-branch default drops the branches JOIN + b.name!='ALL' guard (keeping the
+    # source='Easy' filter) so the query uses the existing idx_tx_src_hour instead
+    # of full-scanning. JOIN kept only when a branch is selected. Safe: no
+    # 'ALL'-named branch rows exist (verified).
+    filters = ["st.source = 'Easy'"]
     params: dict = {}
+    join = ""
     if branch:
+        join = "JOIN branches b ON b.branch_id = st.branch_id"
         filters.append("b.name = :branch")
         params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, month,
@@ -9891,7 +9902,7 @@ def analysis_hourly_open(
                    ROUND(SUM(st.total_inc_vat) / 1.07, 2)             AS revenue,
                    ROUND(AVG(st.total_inc_vat), 2)             AS avg_ticket
             FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
+            {join}
             {where}
             GROUP BY hour ORDER BY hour
         """, params).fetchall()
@@ -9905,7 +9916,7 @@ def analysis_hourly_open(
         day_row = con.execute(f"""
             SELECT COUNT(DISTINCT {_period_expr}) AS cnt
             FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
+            {join}
             {where}
         """, params).fetchone()
         total_days = max(day_row["cnt"] if day_row else 1, 1)
@@ -13609,8 +13620,10 @@ _PERF_INDEXES = (
     "(branch_id, strftime('%Y-%m', sold_at), cashier, discount, food_subtotal, drink_subtotal, other_subtotal)",
     "CREATE INDEX IF NOT EXISTS idx_tx_persona_cov ON sales_transaction"
     "(branch_id, strftime('%Y-%m', sold_at), customer_count, total_inc_vat, food_subtotal, drink_subtotal, other_subtotal)",
-    # idx_tx_ym_dow_cov / idx_tx_ym_hour_cov deferred: only used together with the
-    # analysis_dow / analysis_hourly_open JOIN-drop rewrites, which ship separately.
+    # Day-of-week covering index, used by analysis_dow's no-branch JOIN-drop path.
+    # (Hourly reuses the existing idx_tx_src_hour, so no separate index is needed.)
+    "CREATE INDEX IF NOT EXISTS idx_tx_ym_dow_cov ON sales_transaction"
+    "(strftime('%Y-%m', sold_at), strftime('%w', sold_at), sold_at, total_inc_vat, customer_count)",
 )
 
 
@@ -13626,11 +13639,11 @@ def _perf_startup():
                     print(f"[perf idx] {ddl[:60]}... -> {e}")
             con.commit()
             # The planner only picks the new covering indexes once their stats exist.
-            # Run ANALYZE once (when sqlite_stat1 lacks an entry for idx_tx_disc_cov);
-            # the result persists in the DB file so later cold starts skip this.
+            # Keyed on the most-recently-added index so a deploy that introduces a new
+            # one re-runs ANALYZE once; the result persists so later cold starts skip it.
             try:
                 has_stats = con.execute(
-                    "SELECT 1 FROM sqlite_stat1 WHERE idx='idx_tx_disc_cov' LIMIT 1"
+                    "SELECT 1 FROM sqlite_stat1 WHERE idx='idx_tx_ym_dow_cov' LIMIT 1"
                 ).fetchone()
             except sqlite3.OperationalError:
                 has_stats = None  # sqlite_stat1 not created yet

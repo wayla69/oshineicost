@@ -104,6 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_tx_src_hour      ON sales_transaction(source, str
 -- Also created idempotently at startup (_perf_startup) so existing DBs pick them up.
 CREATE INDEX IF NOT EXISTS idx_tx_disc_cov      ON sales_transaction(branch_id, strftime('%Y-%m', sold_at), cashier, discount, food_subtotal, drink_subtotal, other_subtotal);
 CREATE INDEX IF NOT EXISTS idx_tx_persona_cov   ON sales_transaction(branch_id, strftime('%Y-%m', sold_at), customer_count, total_inc_vat, food_subtotal, drink_subtotal, other_subtotal);
+CREATE INDEX IF NOT EXISTS idx_tx_ym_dow_cov    ON sales_transaction(strftime('%Y-%m', sold_at), strftime('%w', sold_at), sold_at, total_inc_vat, customer_count);
 
 -- Per-SKU effective COGS lookup (backs _unified_cogs_expr; populated by _build_sku_effective_cost).
 CREATE TABLE IF NOT EXISTS sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);
