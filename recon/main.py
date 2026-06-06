@@ -22,12 +22,14 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .matcher import (
     category_reconciliation,
     daily_reconciliation,
+    lane_lines,
     payout_reconciliation,
     run_auto_match,
 )
@@ -702,6 +704,120 @@ def session_daily(session_id: int):
         if not s:
             raise HTTPException(404)
         return daily_reconciliation(conn, s["branch_id"], s["period_month"])
+
+
+@app.get("/api/sessions/{session_id}/lane")
+def session_lane(session_id: int, category: str, bank: str, day: str | None = None):
+    """Drill-down: the external lines that make up one (category, bank) lane,
+    optionally for a single day. POS side stays an aggregate (no per-receipt
+    tender split exists)."""
+    with get_db() as conn:
+        s = conn.execute(
+            "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        if not s:
+            raise HTTPException(404)
+        lines = lane_lines(conn, s["branch_id"], s["period_month"], category, bank, day)
+        return {"category": category, "bank": bank, "day": day,
+                "count": len(lines), "total": round(sum(l["amount"] for l in lines), 2),
+                "lines": lines}
+
+
+# ── Excel month-pack export ───────────────────────────────────────────────────
+
+def _build_export(conn, session) -> bytes:
+    """One workbook per session: Summary / Categories / Payout chain / Daily /
+    Discrepancies — the artifact an accountant signs off and files."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+
+    bid, pm = session["branch_id"], session["period_month"]
+    rows, unmapped = category_reconciliation(conn, bid, pm)
+    payouts = payout_reconciliation(conn, bid, pm)
+    daily = daily_reconciliation(conn, bid, pm)
+    discs = conn.execute(
+        "SELECT * FROM recon_discrepancies WHERE session_id=? ORDER BY resolution, ABS(COALESCE(variance,0)) DESC",
+        (session["session_id"],)).fetchall()
+
+    wb = openpyxl.Workbook()
+    bold = Font(bold=True)
+
+    def sheet(title, headers, data_rows, first=False):
+        ws = wb.active if first else wb.create_sheet(title)
+        if first:
+            ws.title = title
+        ws.append(headers)
+        for c in ws[1]:
+            c.font = bold
+        for r in data_rows:
+            ws.append(r)
+        for i, h in enumerate(headers, 1):
+            ws.column_dimensions[chr(64 + i)].width = max(12, len(str(h)) + 2)
+        return ws
+
+    pos_total = round(sum(r["pos_amount"] for r in rows), 2)
+    ext_total = round(sum(r["ext_amount"] for r in rows), 2)
+    pending = sum(1 for d in discs if d["resolution"] == "pending")
+    sheet("Summary",
+          ["Field", "Value"],
+          [["Branch", session["branch_name"]], ["Period", pm], ["Status", session["status"]],
+           ["POS tender (reconcilable)", pos_total], ["External total", ext_total],
+           ["Variance", round(ext_total - pos_total, 2)],
+           ["Matched lanes", sum(1 for r in rows if r["status"] == "matched")],
+           ["Open discrepancies", pending],
+           ["Unmapped POS codes", ", ".join(u["code"] for u in
+                                            [{"code": k} for k in sorted(unmapped)]) or "—"]],
+          first=True)
+
+    sheet("Categories",
+          ["Category", "Bank", "POS", "Statement", "Net (after fee/VAT)", "Variance", "Status"],
+          [[r["category"], r["bank"], r["pos_amount"], r["ext_amount"], r["ext_net"],
+            r["variance"], r["status"]] for r in rows])
+
+    sheet("Payout chain",
+          ["Category", "Report net", "Bank payout", "Variance", "Status"],
+          [[p["category"], p["report_net"], p["bank_payout"], p["variance"], p["status"]] for p in payouts])
+
+    daily_rows = []
+    for d in daily.get("days", []):
+        for l in d["lanes"]:
+            daily_rows.append([d["day"], l["category"], l["bank"], l["pos"], l["ext"],
+                               l["variance"], l["status"]])
+    sheet("Daily",
+          ["Day", "Category", "Bank", "POS", "External", "Variance", "Status"], daily_rows)
+
+    sheet("Discrepancies",
+          ["Type", "Category", "Bank", "External", "POS", "Variance", "Resolution", "Assignee", "Note"],
+          [[d["disc_type"], d["category"], d["bank"], d["amount_external"], d["amount_pos"],
+            d["variance"], d["resolution"], d["assigned_to"] or "", d["resolution_note"] or ""]
+           for d in discs])
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+@app.get("/api/sessions/{session_id}/export.xlsx")
+def export_session(session_id: int):
+    with get_db() as conn:
+        session = conn.execute("""
+            SELECT s.*, b.name AS branch_name
+            FROM recon_sessions s JOIN branches b ON b.branch_id = s.branch_id
+            WHERE s.session_id=?""", (session_id,)).fetchone()
+        if not session:
+            raise HTTPException(404)
+        data = _build_export(conn, session)
+    from urllib.parse import quote
+    fname = f"recon_{session['branch_name']}_{session['period_month']}.xlsx".replace(" ", "_")
+    # Branch names are Thai → not latin-1 safe for a raw header. RFC 5987: an ASCII
+    # fallback plus a UTF-8 filename* the browser prefers.
+    ascii_fallback = f"recon_{session['period_month']}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition":
+                 f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(fname)}"})
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────

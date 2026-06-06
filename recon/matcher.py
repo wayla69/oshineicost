@@ -250,6 +250,72 @@ def payout_reconciliation(conn, branch_id, period_month):
     return rows
 
 
+# ── Line-level drill-down ─────────────────────────────────────────────────────
+# The external lines that make up a (category, bank) lane, so staff can see what
+# drives a variance. (POS has no per-receipt tender split — the POS side stays an
+# aggregate — but the statement/report side is fully itemised.)
+
+def lane_lines(conn, branch_id, period_month, category, bank, day=None):
+    """List the external lines behind a lane. `day`='YYYY-MM-DD' narrows to one day."""
+    def _df(col):
+        return (f" AND {col}=?", [day]) if day else (f" AND strftime('%Y-%m',{col})=?", [period_month])
+
+    out = []
+    if bank == "PAYOUT":                                  # the bank payout credit behind a payout tie
+        chan = _PAYOUT_CHANNEL.get(category)
+        if not chan:
+            return out
+        df, p = _df("l.txn_date")
+        for r in conn.execute(f"""
+            SELECT l.txn_date d, l.description ref, l.credit amt, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0 AND l.channel=?{df} ORDER BY l.txn_date
+        """, [branch_id, chan] + p):
+            out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
+                        "detail": r["provider"] or ""})
+        return out
+
+    if category in ("CASH", "QR", "TRANSFER"):
+        chan = {"CASH": "CASH_DEP", "QR": "QR", "TRANSFER": "TRANSFER"}[category]
+        df, p = _df("l.txn_date")
+        for r in conn.execute(f"""
+            SELECT l.txn_date d, l.description ref, l.credit amt, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0 AND l.channel=?{df} ORDER BY l.txn_date
+        """, [branch_id, chan] + p):
+            rb = "NONE" if category == "CASH" else _provider_bank(r["provider"])
+            if rb != bank:
+                continue
+            out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
+                        "detail": r["provider"] or ""})
+        return out
+
+    if category == "CREDIT":
+        df, p = _df("l.settlement_date")
+        for r in conn.execute(f"""
+            SELECT l.settlement_date d, l.batch_no ref, l.gross_amount amt, l.acquirer, u.provider
+            FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=?{df} ORDER BY l.settlement_date
+        """, [branch_id] + p):
+            acq = r["acquirer"] or _provider_acquirer(r["provider"])
+            if acq != bank:
+                continue
+            out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
+                        "detail": acq})
+        return out
+
+    if category in ("GRAB", "LINEMAN"):
+        table = "recon_grab_lines" if category == "GRAB" else "recon_lineman_lines"
+        df, p = _df("order_date")
+        for r in conn.execute(f"""
+            SELECT order_date d, order_id ref, food_amount amt, order_status
+            FROM {table} WHERE branch_id=? AND order_status='Completed'{df} ORDER BY order_date
+        """, [branch_id] + p):
+            out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
+                        "detail": r["order_status"]})
+    return out
+
+
 # ── Run + persist ─────────────────────────────────────────────────────────────
 
 _LINE_TABLES = [

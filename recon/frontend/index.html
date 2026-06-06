@@ -82,6 +82,7 @@
         <div id="rec-status"></div>
         <div class="ml-auto flex gap-2">
           <button onclick="runMatch()" class="btn btn-pri">▶ Run Match</button>
+          <button onclick="downloadExport()" class="btn btn-sec" title="Download the month pack (Excel)">⬇ Excel</button>
           <button onclick="setStatus('in_review')" class="btn btn-sec">Mark In-Review</button>
           <button onclick="setStatus('approved')" class="btn btn-sec">Approve</button>
         </div>
@@ -258,6 +259,22 @@
   </div>
 </div>
 
+<!-- LANE DRILL-DOWN MODAL -->
+<div id="lanemodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div><div id="lane-title" class="font-bold text-lg"></div><div id="lane-sub" class="text-sm text-gray-400"></div></div>
+      <button onclick="closeLaneModal()" class="text-gray-400 text-xl">&times;</button>
+    </div>
+    <div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="w-full text-sm">
+      <thead><tr class="text-gray-400 text-xs uppercase border-b sticky top-0 bg-white">
+        <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th>
+        <th class="text-left pb-2">Detail</th><th class="text-right pb-2">Amount</th></tr></thead>
+      <tbody id="lane-body"><tr><td colspan="4" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+    </table></div>
+  </div>
+</div>
+
 <script>
 const API = '';
 let SESSION = null;        // {session_id, branch_id, period_month, status, branch_name}
@@ -412,7 +429,7 @@ async function loadDaily(){
   if(!d.days.length){ tb.innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6">No activity for this period</td></tr>'; return; }
   let focusRow=null;
   d.days.forEach(day=>{
-    const chips = day.lanes.map(l=>`<span class="badge ${LANE_CHIP[l.status]} mr-1" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}: POS ฿${fmt(l.pos)} / ext ฿${fmt(l.ext)} (${l.status})">${l.category.slice(0,4)}${l.bank!=='NONE'?'·'+l.bank:''} ${LANE_SYM[l.status]}</span>`).join('');
+    const chips = day.lanes.map(l=>`<span onclick="openLaneModal('${l.category}','${l.bank}','${day.day}')" class="badge ${LANE_CHIP[l.status]} mr-1 cursor-pointer hover:opacity-80" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}: POS ฿${fmt(l.pos)} / ext ฿${fmt(l.ext)} (${l.status}) — click for statement lines">${l.category.slice(0,4)}${l.bank!=='NONE'?'·'+l.bank:''} ${LANE_SYM[l.status]}</span>`).join('');
     const tr=document.createElement('tr');
     if(FOCUS_DATE && day.day===FOCUS_DATE){ tr.style.background='#fff7ed'; tr.style.outline='2px solid var(--brand)'; focusRow=tr; }
     tr.innerHTML=`<td class="py-2 font-medium">${day.day}</td>
@@ -482,6 +499,33 @@ function renderPayouts(payouts){
     cont.appendChild(div);
   });
 }
+
+function downloadExport(){
+  if(!SESSION){ alert('Open a session first'); return; }
+  window.open(API+`/api/sessions/${SESSION.session_id}/export.xlsx`, '_blank');
+}
+
+// ── lane drill-down ────────────────────────────────────────────────────────────
+async function openLaneModal(category, bank, day){
+  document.getElementById('lanemodal').classList.remove('hidden');
+  document.getElementById('lane-title').textContent = `${category}${bank&&bank!=='NONE'?' · '+bank:''}`;
+  document.getElementById('lane-sub').textContent = day ? day : (SESSION?SESSION.period_month:'');
+  const tb=document.getElementById('lane-body'); tb.innerHTML='<tr><td colspan="4" class="text-center text-gray-400 py-6">Loading…</td></tr>';
+  let q=`/api/sessions/${SESSION.session_id}/lane?category=${encodeURIComponent(category)}&bank=${encodeURIComponent(bank)}`+(day?`&day=${day}`:'');
+  try{
+    const d=await api(q);
+    if(!d.lines.length){ tb.innerHTML='<tr><td colspan="4" class="text-center text-gray-400 py-6">No statement lines for this lane (POS-only — awaiting the document).</td></tr>'; return; }
+    tb.innerHTML='';
+    d.lines.forEach(l=>{ const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
+        <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono">฿${fmt(l.amount)}</td>`;
+      tb.appendChild(tr); });
+    const tr=document.createElement('tr'); tr.className='border-t font-semibold';
+    tr.innerHTML=`<td class="py-1.5" colspan="3">${d.count} line(s)</td><td class="text-right font-mono">฿${fmt(d.total)}</td>`;
+    tb.appendChild(tr);
+  }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
+}
+function closeLaneModal(){ document.getElementById('lanemodal').classList.add('hidden'); }
 
 async function runMatch(){
   try{

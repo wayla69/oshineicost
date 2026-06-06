@@ -27,7 +27,8 @@ def _make_db(tmp_path, pos_rows):
     c = sqlite3.connect(db)
     c.execute("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY,name TEXT,branch_type TEXT,active INTEGER)")
     c.executemany("INSERT INTO branches VALUES(?,?,?,?)",
-                  [(4, "Korat1", "master", 1), (1, "Chonburi", "franchise", 1)])
+                  [(4, "Korat1", "master", 1), (1, "Chonburi", "franchise", 1),
+                   (5, "อุดรธานี", "master", 1)])      # Thai name → exercises header encoding
     c.execute("CREATE TABLE pos_payment_month(branch_id INT,period_month TEXT,payment_code TEXT,amount REAL,txn_count INT)")
     c.executemany("INSERT INTO pos_payment_month VALUES(4,'2026-06',?,?,0)", pos_rows)
     c.commit(); c.close()
@@ -295,6 +296,34 @@ def test_approval_gate_and_period_lock(client):
     assert client.post(f"/api/sessions/{sid}/run-match").status_code == 423        # locked
     assert client.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
     assert client.post(f"/api/sessions/{sid}/run-match").status_code == 200        # reopened
+
+
+# ── Batch 2: accountant export + drill-down ───────────────────────────────────
+
+def test_export_xlsx(client):
+    # Thai-named branch → the Content-Disposition header must be RFC-5987 encoded
+    sid = client.post("/api/sessions", json={"branch_id": 5, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    r = client.get(f"/api/sessions/{sid}/export.xlsx")
+    assert r.status_code == 200
+    assert "spreadsheet" in r.headers["content-type"]
+    assert r.content[:2] == b"PK"        # .xlsx is a zip
+    cd = r.headers.get("content-disposition", "")
+    assert "attachment" in cd and "filename*=UTF-8''" in cd
+
+
+def test_lane_drilldown(client):
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    _add_bank_line(db, "KTB", "QR", 60000, "2026-06-10")
+    _add_bank_line(db, "KTB", "QR", 40000, "2026-06-11")
+    _add_bank_line(db, "KBANK", "QR", 5000, "2026-06-10")    # different bank → excluded
+    d = client.get(f"/api/sessions/{sid}/lane?category=QR&bank=KTB").json()
+    assert d["count"] == 2 and abs(d["total"] - 100000) < 0.01
+    one = client.get(f"/api/sessions/{sid}/lane?category=QR&bank=KTB&day=2026-06-10").json()
+    assert one["count"] == 1 and one["total"] == 60000
 
 
 def test_write_token_gate(client):
