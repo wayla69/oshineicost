@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .matcher import get_pos_payment_breakdown, run_auto_match
+from .matcher import category_reconciliation, run_auto_match
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -570,10 +570,12 @@ def update_session_status(
     return {"session_id": session_id, "status": status}
 
 
-# ── Session summary ───────────────────────────────────────────────────────────
+# ── Session summary + category reconciliation ─────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/summary")
 def session_summary(session_id: int):
+    """Live per-category reconciliation (POS tender vs the right external source),
+    computed fresh so it reflects current uploads/fee-VAT edits."""
     with get_db() as conn:
         session = conn.execute(
             "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
@@ -583,55 +585,36 @@ def session_summary(session_id: int):
             raise HTTPException(404)
         bid, pm = session["branch_id"], session["period_month"]
 
-        # POS breakdown — uses pos_payment_month + pos_customer_type_month (MSSQL)
-        # with fallback to sales_month_summary (Excel import)
-        pos = get_pos_payment_breakdown(conn, bid, pm)
-
-        def ext_row(table, amount_col, date_col):
-            return conn.execute(f"""
-                SELECT
-                    COALESCE(SUM({amount_col}), 0),
-                    COUNT(*),
-                    SUM(CASE WHEN match_status='matched' THEN 1 ELSE 0 END)
-                FROM {table}
-                WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
-                  AND match_status != 'excluded'
-            """, (bid, pm)).fetchone()
-
-        bank = ext_row("recon_bank_lines",    "credit",     "txn_date")
-        cc   = ext_row("recon_cc_lines",      "net_amount", "settlement_date")
-        grab = ext_row("recon_grab_lines",    "net_payout", "order_date")
-        lm   = ext_row("recon_lineman_lines", "net_payout", "order_date")
+        rows, unmapped = category_reconciliation(conn, bid, pm)
+        categories = [{k: r[k] for k in
+                       ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
+                      for r in rows]
 
         pending = conn.execute(
             "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
             (session_id,)
         ).fetchone()[0]
 
-        def summarise(row):
-            total, count, matched = row
-            matched = matched or 0
-            return {
-                "total":      total,
-                "lines":      count,
-                "matched":    matched,
-                "unmatched":  count - matched,
-                "match_rate": round(matched / count * 100, 1) if count else 0,
-            }
-
-        ext_sum   = bank[0] + cc[0] + grab[0] + lm[0]
-        pos_total = pos.get("pos_net", 0)
+        pos_total = sum(r["pos_amount"] for r in rows)
+        ext_total = sum(r["ext_amount"] for r in rows)
         return {
-            "pos":                   pos,
-            "bank":                  summarise(bank),
-            "credit_card":           summarise(cc),
-            "grab":                  summarise(grab),
-            "lineman":               summarise(lm),
+            "categories":            categories,
+            "unmapped":              [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
+            "pos_total":             round(pos_total, 2),
+            "ext_total":             round(ext_total, 2),
+            "variance":              round(ext_total - pos_total, 2),
+            "matched":               sum(1 for r in rows if r["status"] == "matched"),
             "pending_discrepancies": pending,
-            "ext_total":             ext_sum,
-            "pos_total":             pos_total,
-            "variance":              round(ext_sum - pos_total, 2),
         }
+
+
+@app.get("/api/sessions/{session_id}/categories")
+def session_categories(session_id: int):
+    """Persisted per-category results from the last run-match."""
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM recon_category_result WHERE session_id=? ORDER BY category, bank",
+            (session_id,))]
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────
@@ -665,19 +648,58 @@ def resolve_discrepancy(disc_id: int, body: ResolveBody):
     return {"id": disc_id, "resolution": body.resolution}
 
 
-# ── Matches ───────────────────────────────────────────────────────────────────
+@app.patch("/api/discrepancies/{disc_id}/assign", dependencies=[Depends(require_write_token)])
+def assign_discrepancy(disc_id: int, assigned_to: str = Form(...)):
+    with get_db() as conn:
+        conn.execute("UPDATE recon_discrepancies SET assigned_to=? WHERE id=?", (assigned_to, disc_id))
+        conn.commit()
+    return {"id": disc_id, "assigned_to": assigned_to}
+
+
+# ── Manual fee / VAT per line (Grab / Line Man / Credit Card) ──────────────────
+
+_FEE_VAT_TABLE = {
+    "grab":        "recon_grab_lines",
+    "lineman":     "recon_lineman_lines",
+    "credit_card": "recon_cc_lines",
+}
+
+
+class FeeVat(BaseModel):
+    fee_manual: float | None = None
+    vat_manual: float | None = None
+    by:         str = ""
+
+
+@app.patch("/api/lines/{source}/{line_id}/fee-vat", dependencies=[Depends(require_write_token)])
+def set_fee_vat(source: str, line_id: int, body: FeeVat):
+    table = _FEE_VAT_TABLE.get(source)
+    if not table:
+        raise HTTPException(400, f"source must be one of {sorted(_FEE_VAT_TABLE)}")
+    with get_db() as conn:
+        conn.execute(f"""
+            UPDATE {table}
+            SET fee_manual=?, vat_manual=?, fee_vat_by=?, fee_vat_at=datetime('now')
+            WHERE id=?
+        """, (body.fee_manual, body.vat_manual, body.by or "staff", line_id))
+        conn.commit()
+    return {"source": source, "line_id": line_id,
+            "fee_manual": body.fee_manual, "vat_manual": body.vat_manual}
+
+
+# ── Matches (reconciled category buckets from the last run-match) ─────────────
 
 @app.get("/api/sessions/{session_id}/matches")
-def list_matches(session_id: int, source_type: str | None = None):
+def list_matches(session_id: int, category: str | None = None):
     with get_db() as conn:
-        filters = ["session_id=?"]
-        params  = [session_id]
-        if source_type:
-            filters.append("source_type=?"); params.append(source_type)
+        filters = ["session_id=?", "status='matched'"]
+        params: list = [session_id]
+        if category:
+            filters.append("category=?"); params.append(category)
         rows = conn.execute(f"""
-            SELECT * FROM recon_matches
+            SELECT * FROM recon_category_result
             WHERE {' AND '.join(filters)}
-            ORDER BY matched_at DESC
+            ORDER BY category, bank
         """, params).fetchall()
         return [dict(r) for r in rows]
 
@@ -695,19 +717,11 @@ def overview(period_month: str):
         for b in branches:
             bid = b["branch_id"]
 
-            pos_total = conn.execute("""
-                SELECT COALESCE(SUM(net_sales), 0)
-                FROM sales_month_summary
-                WHERE branch_id=? AND period_month=?
-            """, (bid, period_month)).fetchone()[0]
-
-            ext_total = conn.execute("""
-                SELECT
-                    (SELECT COALESCE(SUM(credit),0)     FROM recon_bank_lines    WHERE branch_id=? AND strftime('%Y-%m',txn_date)=?)
-                  + (SELECT COALESCE(SUM(net_amount),0) FROM recon_cc_lines      WHERE branch_id=? AND strftime('%Y-%m',settlement_date)=?)
-                  + (SELECT COALESCE(SUM(net_payout),0) FROM recon_grab_lines    WHERE branch_id=? AND strftime('%Y-%m',order_date)=?)
-                  + (SELECT COALESCE(SUM(net_payout),0) FROM recon_lineman_lines WHERE branch_id=? AND strftime('%Y-%m',order_date)=?)
-            """, (bid, period_month) * 4).fetchone()[0]
+            # Reconcilable POS tender total vs external statement total (same engine
+            # as the session view, so overview and detail agree).
+            rows, _ = category_reconciliation(conn, bid, period_month)
+            pos_total = round(sum(r["pos_amount"] for r in rows), 2)
+            ext_total = round(sum(r["ext_amount"] for r in rows), 2)
 
             session = conn.execute(
                 "SELECT session_id, status FROM recon_sessions WHERE branch_id=? AND period_month=?",
@@ -719,7 +733,7 @@ def overview(period_month: str):
                 "branch_name": b["name"],
                 "pos_total":   pos_total,
                 "ext_total":   ext_total,
-                "variance":    ext_total - pos_total,
+                "variance":    round(ext_total - pos_total, 2),
                 "session_id":  session["session_id"] if session else None,
                 "status":      session["status"] if session else "no_session",
             })

@@ -1,291 +1,190 @@
 """
-Auto-matching engine.
+Reconciliation engine — category/bank driven.
 
-Primary POS data source: pos_payment_month (from MSSQL sync)
-  - exact PaymentCode strings per branch per month
-  - covers all Easy POS payment types
-Fallback: sales_month_summary (populated from Excel re-import after ingest fix)
+POS side: pos_payment_month, classified into (category, bank) buckets via the
+editable recon_payment_map (seed_payment_map.py). Reconcile=0 codes (e.g.
+ENTERTAIN comps) are skipped.
 
-Reconciliation strategy:
-  credit_card  →  pos_payment_month WHERE payment_code LIKE credit keywords
-  bank         →  pos daily total from sales_transaction
-  grab         →  pos_customer_type_month WHERE type_name matches Grab
-  lineman      →  pos_customer_type_month WHERE type_name matches Lineman
+External side, per the owner's workflow:
+  CASH               → bank statement CASH_DEP lines (either bank)
+  QR(bank)           → bank statement QR lines for that bank
+  TRANSFER(bank)     → bank statement TRANSFER lines for that bank
+  CREDIT(acquirer)   → credit-card settlement gross for that acquirer
+  GRAB / LINEMAN     → their report's gross (Completed orders)
+  COUPON             → no external source yet → flagged for accounting
+
+Fee + VAT are entered manually per line (Grab/Line Man/CC); the effective net
+(gross − fee − VAT [− promo/refund]) is reported alongside.
+
+Anything outside tolerance becomes a discrepancy for accounting staff.
 """
 
 from __future__ import annotations
-import re
 import sqlite3
-from datetime import date, timedelta
 
-TOLERANCE_AMOUNT = 5.00   # THB — exact (daily) match threshold
-TOLERANCE_DAYS   = 3      # max day offset for bank deposit timing
-MONTHLY_TOL_PCT  = 1.0    # % — monthly aggregate (CC / delivery) tolerance
+from .seed_payment_map import normalize
 
-# ── PaymentCode keyword patterns (Easy POS codes vary by branch config) ────────
+TOL_ABS = 100.0    # THB
+TOL_PCT = 0.5      # %
 
-_CC_PAT      = re.compile(r'credit|card|บัตร|visa|master|amex|jcb|union', re.I)
-_QR_PAT      = re.compile(r'qr|prompt|k.?shop|kplus|พร้อมเพย์', re.I)
-_TRANSFER_PAT = re.compile(r'transfer|โอน|wire', re.I)
-_CASH_PAT    = re.compile(r'cash|เงินสด', re.I)
-_GRAB_PAT    = re.compile(r'grab|แกร็บ', re.I)
-_LINEMAN_PAT = re.compile(r'line.?man|lineman|ไลน์แมน|line man', re.I)
+# Bank-statement channels that map to a reconcilable POS category
+_CHANNEL_CATEGORY = {"QR": "QR", "TRANSFER": "TRANSFER", "CASH_DEP": "CASH"}
 
-
-def _date_range(d: str, window: int) -> list[str]:
-    base = date.fromisoformat(d)
-    return [(base + timedelta(days=i)).isoformat() for i in range(-window, window + 1)]
+# category → a representative source_type for the discrepancy row
+_CATEGORY_SOURCE = {
+    "CASH": "bank", "QR": "bank", "TRANSFER": "bank",
+    "CREDIT": "credit_card", "GRAB": "grab", "LINEMAN": "lineman", "COUPON": "pos",
+}
 
 
-# ── pos_payment_month helpers ─────────────────────────────────────────────────
+def _within_tol(ext: float, pos: float) -> bool:
+    if abs(ext - pos) <= TOL_ABS:
+        return True
+    return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= TOL_PCT
 
-def _payment_total(conn: sqlite3.Connection, branch_id: int, period_month: str, pattern: re.Pattern) -> float:
-    """
-    Sum all payment codes matching pattern from pos_payment_month.
-    Returns 0.0 if table doesn't exist (MSSQL sync not run yet).
-    """
+
+def _provider_bank(provider: str | None) -> str:
+    p = (provider or "").lower()
+    if "ktb" in p or "krungthai" in p or "กรุงไทย" in (provider or ""):       return "KTB"
+    if "kbank" in p or "kasikorn" in p or "กสิกร" in (provider or ""):        return "KBANK"
+    return "UNKNOWN"
+
+
+def _provider_acquirer(provider: str | None) -> str:
+    p = (provider or "").lower()
+    if "ktc" in p:                                  return "KTC"
+    if "ktb" in p or "krungthai" in p:              return "KTB"
+    if "kbank" in p or "kasikorn" in p:             return "KBANK"
+    return "UNKNOWN"
+
+
+# ── POS side ──────────────────────────────────────────────────────────────────
+
+def pos_category_totals(conn: sqlite3.Connection, branch_id: int, period_month: str):
+    """Bucket pos_payment_month amounts into {(category, bank): amount} using the
+    payment map. Returns (totals, unmapped) where unmapped is {norm_code: amount}
+    for codes with no map row (so the UI can prompt staff to map them)."""
     try:
+        pmap = {r["payment_code_norm"]: r for r in conn.execute(
+            "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
         rows = conn.execute(
             "SELECT payment_code, amount FROM pos_payment_month WHERE branch_id=? AND period_month=?",
-            (branch_id, period_month)
-        ).fetchall()
+            (branch_id, period_month)).fetchall()
     except sqlite3.OperationalError:
-        return 0.0
-    return sum(float(r["amount"] or 0) for r in rows if pattern.search(r["payment_code"] or ""))
+        return {}, {}
+
+    totals: dict = {}
+    unmapped: dict = {}
+    for r in rows:
+        norm = normalize(r["payment_code"])
+        amt = float(r["amount"] or 0)
+        m = pmap.get(norm)
+        if m is None:
+            unmapped[norm] = unmapped.get(norm, 0.0) + amt
+            continue
+        if not m["reconcile"]:
+            continue
+        key = (m["category"], m["bank"])
+        totals[key] = totals.get(key, 0.0) + amt
+    return totals, unmapped
 
 
-def _customer_type_total(conn: sqlite3.Connection, branch_id: int, period_month: str, pattern: re.Pattern) -> float:
-    """
-    Sum net revenue for customer types matching pattern from pos_customer_type_month.
-    net column is inc-VAT; divide by 1.07 to get ex-VAT.
-    Returns 0.0 if table doesn't exist.
-    """
-    try:
-        rows = conn.execute(
-            "SELECT type_name, net FROM pos_customer_type_month WHERE branch_id=? AND period_month=?",
-            (branch_id, period_month)
-        ).fetchall()
-    except sqlite3.OperationalError:
-        return 0.0
-    return sum(float(r["net"] or 0) / 1.07 for r in rows if pattern.search(r["type_name"] or ""))
+# ── External side ─────────────────────────────────────────────────────────────
+
+def _eff_fee_vat(row, fee_col, vat_col):
+    fee = row["fee_manual"] if row["fee_manual"] is not None else float(row[fee_col] or 0)
+    if row["vat_manual"] is not None:
+        vat = row["vat_manual"]
+    else:
+        vat = float(row[vat_col] or 0) if vat_col else 0.0
+    return float(fee), float(vat)
 
 
-def get_pos_payment_breakdown(conn: sqlite3.Connection, branch_id: int, period_month: str) -> dict:
-    """
-    Returns full payment breakdown for a branch+month.
-    Tries pos_payment_month first (MSSQL sync), falls back to sales_month_summary.
-    """
-    cc       = _payment_total(conn, branch_id, period_month, _CC_PAT)
-    qr       = _payment_total(conn, branch_id, period_month, _QR_PAT)
-    transfer = _payment_total(conn, branch_id, period_month, _TRANSFER_PAT)
-    cash     = _payment_total(conn, branch_id, period_month, _CASH_PAT)
-    grab_net = _customer_type_total(conn, branch_id, period_month, _GRAB_PAT)
-    lm_net   = _customer_type_total(conn, branch_id, period_month, _LINEMAN_PAT)
+def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str) -> dict:
+    """Aggregate external lines into {(category, bank): {amount, net, lines:[(table,id)]}}."""
+    buckets: dict = {}
 
-    # Fall back to sales_month_summary if pos_payment_month returned all zeros
-    if cc == 0 and qr == 0 and transfer == 0 and cash == 0:
-        row = conn.execute("""
-            SELECT COALESCE(SUM(cash),0) cash, COALESCE(SUM(credit_card),0) credit_card,
-                   COALESCE(SUM(transfer),0) transfer, COALESCE(SUM(qr),0) qr,
-                   COALESCE(SUM(net_sales),0) net_sales
-            FROM sales_month_summary
-            WHERE branch_id=? AND period_month=? AND source='Easy'
-        """, (branch_id, period_month)).fetchone()
-        if row:
-            cash     = row["cash"]
-            cc       = row["credit_card"]
-            transfer = row["transfer"]
-            qr       = row["qr"]
+    def add(key, table, line_id, amount, net):
+        b = buckets.setdefault(key, {"amount": 0.0, "net": 0.0, "lines": []})
+        b["amount"] += amount
+        b["net"]    += net
+        b["lines"].append((table, line_id))
 
-    pos_net = conn.execute("""
-        SELECT COALESCE(SUM(net_sales), 0)
-        FROM sales_month_summary
-        WHERE branch_id=? AND period_month=?
-    """, (branch_id, period_month)).fetchone()[0]
+    # Bank statement: QR / TRANSFER / CASH_DEP credits
+    for r in conn.execute("""
+        SELECT l.id, l.credit, l.channel, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+    """, (branch_id, period_month)):
+        cat = _CHANNEL_CATEGORY.get(r["channel"])
+        if not cat:
+            continue
+        bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
+        amt = float(r["credit"] or 0)
+        add((cat, bank), "recon_bank_lines", r["id"], amt, amt)
 
-    return {
-        "cash":        cash,
-        "credit_card": cc,
-        "transfer":    transfer,
-        "qr":          qr,
-        "grab":        grab_net,
-        "lineman":     lm_net,
-        "pos_net":     pos_net,
-        "source":      "pos_payment_month" if (cc or qr or transfer or cash) else "sales_month_summary",
-    }
+    # Credit-card settlement: gross vs net (after effective fee/VAT)
+    for r in conn.execute("""
+        SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        acq = r["acquirer"] or _provider_acquirer(r["provider"])
+        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        gross = float(r["gross_amount"] or 0)
+        net = gross - float(r["refund_amount"] or 0) - fee - vat
+        add(("CREDIT", acq), "recon_cc_lines", r["id"], gross, net)
 
+    # Delivery reports: gross (food) vs net (after effective fee/VAT/promo); Completed only
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+                                ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
+        for r in conn.execute(f"""
+            SELECT * FROM {table}
+            WHERE branch_id=? AND order_status='Completed' AND strftime('%Y-%m', order_date)=?
+        """, (branch_id, period_month)):
+            fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
+            gross = float(r["food_amount"] or 0)
+            net = gross - fee - vat - float(r["promo_deduct"] or 0)
+            add((cat, "NONE"), table, r["id"], gross, net)
 
-# ── Daily POS cache ───────────────────────────────────────────────────────────
-
-def refresh_pos_daily(conn: sqlite3.Connection, branch_id: int, period_month: str) -> None:
-    """Build recon_pos_daily from sales_transaction for fast day-level matching."""
-    conn.execute(
-        "DELETE FROM recon_pos_daily WHERE branch_id=? AND txn_date LIKE ?",
-        (branch_id, f"{period_month}%"),
-    )
-    conn.execute("""
-        INSERT INTO recon_pos_daily (branch_id, txn_date, total, txn_count)
-        SELECT branch_id, date(sold_at), SUM(total_inc_vat), COUNT(*)
-        FROM sales_transaction
-        WHERE branch_id=? AND strftime('%Y-%m', sold_at)=?
-        GROUP BY branch_id, date(sold_at)
-        ON CONFLICT(branch_id, txn_date) DO UPDATE SET
-            total        = excluded.total,
-            txn_count    = excluded.txn_count,
-            refreshed_at = datetime('now')
-    """, (branch_id, period_month))
-    conn.commit()
+    return buckets
 
 
-def get_pos_daily_total(conn: sqlite3.Connection, branch_id: int, txn_date: str) -> float:
-    row = conn.execute(
-        "SELECT total FROM recon_pos_daily WHERE branch_id=? AND txn_date=?",
-        (branch_id, txn_date)
-    ).fetchone()
-    return float(row["total"]) if row and row["total"] else 0.0
+# ── Reconciliation (pure compute) ─────────────────────────────────────────────
+
+def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_month: str):
+    """Compare POS buckets to external buckets. Returns (rows, unmapped)."""
+    pos, unmapped = pos_category_totals(conn, branch_id, period_month)
+    ext = external_buckets(conn, branch_id, period_month)
+
+    rows = []
+    for key in sorted(set(pos) | set(ext)):
+        category, bank = key
+        pos_amt = pos.get(key, 0.0)
+        eb = ext.get(key)
+        ext_amt = eb["amount"] if eb else 0.0
+        ext_net = eb["net"] if eb else 0.0
+
+        if pos_amt > 0 and ext_amt > 0:
+            status = "matched" if _within_tol(ext_amt, pos_amt) else "mismatch"
+        elif pos_amt > 0:
+            status = "no_source" if category == "COUPON" else "pos_only"
+        else:
+            status = "ext_only"
+
+        rows.append({
+            "category":  category,
+            "bank":      bank,
+            "pos_amount": round(pos_amt, 2),
+            "ext_amount": round(ext_amt, 2),
+            "ext_net":    round(ext_net, 2),
+            "variance":   round(ext_amt - pos_amt, 2),
+            "status":     status,
+            "ext_lines":  eb["lines"] if eb else [],
+        })
+    return rows, unmapped
 
 
-# ── Matchers ──────────────────────────────────────────────────────────────────
-
-def match_cc_lines(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
-    """
-    Reconcile credit-card settlements against POS card revenue at the MONTHLY level.
-
-    Daily matching is intentionally avoided: recon_pos_daily.total is the whole
-    day's revenue across all tenders, while a CC line is card-only after MDR fee,
-    so daily amounts almost never tie. We compare the month's CC settlement total
-    against the POS card total (pos_payment_month keyword match, fallback
-    sales_month_summary) and settle/flag once for the month.
-    """
-    pos_cc     = _payment_total(conn, branch_id, period_month, _CC_PAT)
-    pos_source = "pos_payment_month"
-    if pos_cc == 0:
-        row = conn.execute(
-            "SELECT COALESCE(SUM(credit_card),0) FROM sales_month_summary WHERE branch_id=? AND period_month=?",
-            (branch_id, period_month)
-        ).fetchone()
-        pos_cc = float(row[0]) if row else 0.0
-        pos_source = "sales_month_summary"
-
-    rows = conn.execute("""
-        SELECT id, net_amount FROM recon_cc_lines
-        WHERE branch_id=? AND strftime('%Y-%m', settlement_date)=?
-    """, (branch_id, period_month)).fetchall()
-    line_ids  = [r["id"] for r in rows]
-    ext_total = sum(float(r["net_amount"] or 0) for r in rows)
-
-    matched = _settle_monthly(conn, session_id, "credit_card", "recon_cc_lines",
-                              line_ids, ext_total, pos_cc, branch_id, period_month)
-    return {
-        "matched_lines": matched,
-        "total_lines":   len(line_ids),
-        "pos_cc_total":  pos_cc,
-        "ext_cc_total":  round(ext_total, 2),
-        "monthly_var":   round(ext_total - pos_cc, 2),
-        "pos_source":    pos_source,
-    }
-
-
-def match_delivery_lines(
-    conn: sqlite3.Connection,
-    session_id: int,
-    branch_id: int,
-    period_month: str,
-    source_type: str,   # 'grab' | 'lineman'
-) -> dict:
-    """
-    Reconcile Grab/Lineman payouts against pos_customer_type_month at the MONTHLY
-    level. Non-completed orders are marked 'excluded' (not revenue); the month's
-    Completed net_payout total is settled against POS delivery revenue.
-
-    NOTE: net_payout is after platform commission, while POS delivery revenue is
-    gross food (ex-VAT) — they diverge by ~commission. Tune the comparison basis
-    once a real report is inspected (see PROGRESS.md).
-    """
-    table   = "recon_grab_lines" if source_type == "grab" else "recon_lineman_lines"
-    pat     = _GRAB_PAT if source_type == "grab" else _LINEMAN_PAT
-    pos_net = _customer_type_total(conn, branch_id, period_month, pat)
-
-    conn.execute(f"""
-        UPDATE {table} SET match_status='excluded'
-        WHERE branch_id=? AND strftime('%Y-%m', order_date)=?
-          AND order_status!='Completed' AND match_status='unmatched'
-    """, (branch_id, period_month))
-
-    completed = conn.execute(f"""
-        SELECT id, net_payout FROM {table}
-        WHERE branch_id=? AND order_status='Completed'
-          AND strftime('%Y-%m', order_date)=?
-    """, (branch_id, period_month)).fetchall()
-    line_ids  = [r["id"] for r in completed]
-    ext_total = sum(float(r["net_payout"] or 0) for r in completed)
-
-    matched = _settle_monthly(conn, session_id, source_type, table,
-                              line_ids, ext_total, pos_net, branch_id, period_month)
-    return {
-        "ext_total":   round(ext_total, 2),
-        "pos_total":   round(pos_net, 2),
-        "lines":       len(line_ids),
-        "matched":     matched,
-        "variance":    round(ext_total - pos_net, 2),
-        "pos_source":  "pos_customer_type_month" if pos_net else "unavailable",
-    }
-
-
-def match_bank_lines(
-    conn: sqlite3.Connection,
-    session_id: int,
-    branch_id: int,
-    period_month: str,
-) -> dict:
-    """
-    Match bank statement credit entries against POS daily totals.
-    Grab/Lineman payout rows (channel='GRAB_PAYOUT'/'LINEMAN_PAYOUT') are
-    matched separately via match_delivery_lines and excluded here.
-    """
-    lines = conn.execute("""
-        SELECT id, txn_date, credit, channel
-        FROM recon_bank_lines
-        WHERE branch_id=? AND match_status='unmatched' AND credit > 0
-          AND channel NOT IN ('GRAB_PAYOUT','LINEMAN_PAYOUT','FEE')
-          AND strftime('%Y-%m', txn_date)=?
-    """, (branch_id, period_month)).fetchall()
-
-    matched = 0
-    for row in lines:
-        line_id, txn_date, credit = row["id"], row["txn_date"], row["credit"]
-        for candidate_date in _date_range(txn_date, TOLERANCE_DAYS):
-            pos_day = get_pos_daily_total(conn, branch_id, candidate_date)
-            if pos_day > 0 and abs(credit - pos_day) <= TOLERANCE_AMOUNT:
-                _create_match(conn, session_id, "bank", "recon_bank_lines",
-                              line_id, credit, "daily", candidate_date, branch_id, pos_day,
-                              "fuzzy_amount", 0.85)
-                matched += 1
-                break
-
-    return {"matched": matched, "total_lines": len(lines)}
-
-
-def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
-    """Run all matchers for a session. Idempotent — safe to re-run."""
-    _reset_session(conn, session_id, branch_id, period_month)
-    refresh_pos_daily(conn, branch_id, period_month)
-
-    cc_r   = match_cc_lines(conn, session_id, branch_id, period_month)
-    grab_r = match_delivery_lines(conn, session_id, branch_id, period_month, "grab")
-    lm_r   = match_delivery_lines(conn, session_id, branch_id, period_month, "lineman")
-    bank_r = match_bank_lines(conn, session_id, branch_id, period_month)
-
-    _flag_discrepancies(conn, session_id, branch_id, period_month)
-    conn.commit()
-
-    return {
-        "credit_card": cc_r,
-        "grab":        grab_r,
-        "lineman":     lm_r,
-        "bank":        bank_r,
-    }
-
+# ── Run + persist ─────────────────────────────────────────────────────────────
 
 _LINE_TABLES = [
     ("recon_bank_lines",    "txn_date"),
@@ -295,130 +194,66 @@ _LINE_TABLES = [
 ]
 
 
-def _reset_session(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> None:
-    """
-    Clear prior auto-match output so a re-run is idempotent. Manual matches and
-    manually-resolved discrepancies are preserved.
-    """
-    conn.execute(
-        "DELETE FROM recon_matches WHERE session_id=? AND matched_by='auto'",
-        (session_id,),
-    )
-    conn.execute(
-        "DELETE FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
-        (session_id,),
-    )
+def _reset_session(conn, session_id, branch_id, period_month):
+    """Clear prior auto output so a re-run is idempotent. Manual matches and
+    manually-resolved discrepancies are preserved."""
+    conn.execute("DELETE FROM recon_category_result WHERE session_id=?", (session_id,))
+    conn.execute("DELETE FROM recon_discrepancies WHERE session_id=? AND resolution='pending'", (session_id,))
     for table, date_col in _LINE_TABLES:
         conn.execute(f"""
             UPDATE {table} SET match_status='unmatched', match_id=NULL
-            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
-              AND match_status!='manual'
+            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=? AND match_status!='manual'
         """, (branch_id, period_month))
 
 
-def _within_tol(ext: float, pos: float) -> bool:
-    if abs(ext - pos) <= TOLERANCE_AMOUNT:
-        return True
-    return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= MONTHLY_TOL_PCT
+def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
+    """Reconcile a session and persist category results + discrepancies. Idempotent."""
+    _reset_session(conn, session_id, branch_id, period_month)
 
+    # Cancelled/refunded delivery orders aren't revenue — exclude from the universe
+    for table in ("recon_grab_lines", "recon_lineman_lines"):
+        conn.execute(f"""
+            UPDATE {table} SET match_status='excluded'
+            WHERE branch_id=? AND strftime('%Y-%m', order_date)=?
+              AND order_status!='Completed' AND match_status!='manual'
+        """, (branch_id, period_month))
 
-def _settle_monthly(
-    conn: sqlite3.Connection,
-    session_id: int,
-    source_type: str,
-    table: str,
-    line_ids: list[int],
-    ext_total: float,
-    pos_total: float,
-    branch_id: int,
-    period_month: str,
-) -> int:
-    """
-    Settle a source at the monthly level. Records one aggregate match; if the
-    month's external total ties to POS within tolerance, marks all its lines
-    matched and returns the count. Otherwise records a single monthly
-    amount_mismatch discrepancy and leaves the lines unmatched.
-    """
-    if ext_total == 0 and pos_total == 0:
-        return 0
+    rows, unmapped = category_reconciliation(conn, branch_id, period_month)
 
-    var_pct    = abs(ext_total - pos_total) / max(abs(pos_total), 1.0) * 100
-    confidence = 0.95 if var_pct < 2 else 0.8 if var_pct < 10 else 0.5
-    agg_id = _create_match(conn, session_id, source_type, table,
-                           -1, ext_total, "monthly", f"{period_month}-01",
-                           branch_id, pos_total, "aggregated", confidence)
-
-    if _within_tol(ext_total, pos_total):
-        for lid in line_ids:
-            conn.execute(f"UPDATE {table} SET match_status='matched', match_id=? WHERE id=?",
-                         (agg_id, lid))
-        return len(line_ids)
-
-    conn.execute("""
-        INSERT INTO recon_discrepancies
-            (session_id, disc_type, source_type, match_id, amount_external, amount_pos, variance)
-        VALUES (?, 'amount_mismatch', ?, ?, ?, ?, ?)
-    """, (session_id, source_type, agg_id, ext_total, pos_total, round(ext_total - pos_total, 2)))
-    return 0
-
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
-
-def _create_match(
-    conn: sqlite3.Connection,
-    session_id: int,
-    source_type: str,
-    table: str,
-    external_id: int,
-    external_amount: float,
-    pos_level: str,
-    pos_date: str | None,
-    pos_branch_id: int,
-    pos_amount: float,
-    match_type: str,
-    confidence: float,
-) -> int:
-    period = pos_date[:7] if pos_date and len(pos_date) >= 7 else None
-    cur = conn.execute("""
-        INSERT INTO recon_matches
-            (session_id, source_type, external_table, external_id,
-             external_amount, pos_level, pos_date, pos_period_month,
-             pos_branch_id, pos_amount, match_type, confidence)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
-    """, (session_id, source_type, table, external_id,
-          external_amount, pos_level, pos_date, period,
-          pos_branch_id, pos_amount, match_type, confidence))
-
-    if external_id and external_id > 0:
-        conn.execute(
-            f"UPDATE {table} SET match_status='matched', match_id=? WHERE id=?",
-            (cur.lastrowid, external_id),
-        )
-    return cur.lastrowid
-
-
-def _flag_discrepancies(
-    conn: sqlite3.Connection,
-    session_id: int,
-    branch_id: int,
-    period_month: str,
-) -> None:
-    """
-    Flag genuinely unmatched BANK credit lines as discrepancies. CC, Grab and
-    Lineman are reconciled at the monthly level by _settle_monthly, which records
-    its own amount_mismatch discrepancies — flagging their lines here too would
-    double-count.
-    """
-    rows = conn.execute("""
-        SELECT id, credit FROM recon_bank_lines
-        WHERE branch_id=? AND match_status='unmatched' AND credit > 0
-          AND channel NOT IN ('GRAB_PAYOUT','LINEMAN_PAYOUT','FEE')
-          AND strftime('%Y-%m', txn_date)=?
-    """, (branch_id, period_month)).fetchall()
-
-    for row in rows:
+    for r in rows:
         conn.execute("""
-            INSERT INTO recon_discrepancies
-                (session_id, disc_type, source_type, external_id, amount_external)
-            VALUES (?, 'unmatched_external', 'bank', ?, ?)
-        """, (session_id, row[0], row[1]))
+            INSERT INTO recon_category_result
+                (session_id, category, bank, pos_amount, ext_amount, ext_net, variance, status)
+            VALUES (?,?,?,?,?,?,?,?)
+        """, (session_id, r["category"], r["bank"], r["pos_amount"], r["ext_amount"],
+              r["ext_net"], r["variance"], r["status"]))
+
+        if r["status"] == "matched":
+            for table, line_id in r["ext_lines"]:
+                conn.execute(f"UPDATE {table} SET match_status='matched' WHERE id=?", (line_id,))
+        else:
+            disc_type = {
+                "mismatch":  "amount_mismatch",
+                "ext_only":  "unmatched_external",
+                "pos_only":  "unmatched_pos",
+                "no_source": "unmatched_pos",
+            }[r["status"]]
+            conn.execute("""
+                INSERT INTO recon_discrepancies
+                    (session_id, disc_type, source_type, category, bank,
+                     amount_external, amount_pos, variance)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
+                  r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"]))
+
+    conn.commit()
+
+    matched = sum(1 for r in rows if r["status"] == "matched")
+    return {
+        "categories":  [{k: r[k] for k in
+                         ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
+                        for r in rows],
+        "matched":     matched,
+        "discrepancies": len(rows) - matched,
+        "unmapped":    [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
+    }

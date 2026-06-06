@@ -250,3 +250,22 @@ CREATE TABLE IF NOT EXISTS recon_acquirer_mid (
     terminal_id TEXT,
     active      INTEGER NOT NULL DEFAULT 1
 );
+
+-- ─── Per-category reconciliation result (one row per session × category × bank) ─
+-- Written by the matcher on each run-match. This is what the UI "category cards"
+-- read: POS tender total vs the matching external statement total.
+CREATE TABLE IF NOT EXISTS recon_category_result (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id  INTEGER NOT NULL REFERENCES recon_sessions(session_id),
+    category    TEXT NOT NULL,    -- CASH|QR|TRANSFER|CREDIT|GRAB|LINEMAN|COUPON
+    bank        TEXT NOT NULL,    -- KTB|KBANK|KTC|PROMPTPAY|NONE|UNKNOWN
+    pos_amount  REAL DEFAULT 0,   -- POS tender (inc-VAT)
+    ext_amount  REAL DEFAULT 0,   -- external statement gross
+    ext_net     REAL DEFAULT 0,   -- external net after effective fee/VAT (delivery/CC)
+    variance    REAL DEFAULT 0,   -- ext_amount - pos_amount
+    status      TEXT NOT NULL,    -- matched|mismatch|pos_only|ext_only|no_source
+    computed_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(session_id, category, bank)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rcr_session ON recon_category_result(session_id);
