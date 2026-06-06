@@ -59,18 +59,16 @@ _Verified against the live app `/api/branches?branch_type=master` on 2026-06-06.
 
 ## Known issues (logic review 2026-06-06)
 
-🔴 Correctness — produce wrong reconciliation output:
-- **Grab/Lineman lines always flagged as discrepancies**, even on a perfect monthly match.
-  `match_delivery_lines` makes one aggregate match with `external_id=-1`, but `_create_match`
-  only sets `match_status='matched'` when `external_id>0` → every delivery line stays
-  `unmatched` → summary shows `matched=0` and all lines become pending discrepancies.
-  (matcher.py:229, :323)
-- **CC/bank daily matching compares wrong bases.** `recon_pos_daily.total` is the whole day's
-  inc-VAT revenue across all tenders; a CC line's `net_amount` is card-only after MDR fee.
-  They rarely fall within ฿5 — the monthly cross-check is the meaningful comparison; the daily
-  loop inflates discrepancies. (matcher.py:127, :177)
-- **`run-match` is not idempotent.** Re-running duplicates the Grab/Lineman aggregate match;
-  `recon_discrepancies` has no UNIQUE constraint so `INSERT OR IGNORE` doesn't dedup. (matcher.py:229, :353)
+✅ Correctness — FIXED 2026-06-06 (matcher.py + main.py summary):
+- **Grab/Lineman/CC now settle at the monthly level** via `_settle_monthly`: within tolerance →
+  all lines marked `matched`; otherwise one `amount_mismatch` discrepancy. No more per-line
+  discrepancy noise / `matched=0` on a clean month. Cancelled delivery orders → `excluded`.
+- **Daily CC matching removed** (wrong base: whole-day inc-VAT vs card-only-after-MDR). Bank
+  still uses daily fuzzy matching, which is appropriate for deposits.
+- **`run-match` is now idempotent** — `_reset_session` clears prior auto matches/pending
+  discrepancies and resets line status (preserving `manual`) before each run.
+- _Remaining caveat:_ delivery `net_payout` (post-commission) vs POS delivery revenue
+  (gross ex-VAT) diverge by ~commission — needs basis tuning once a real report is inspected.
 
 🟠 Production safety (recon is exposed on public Fly port 8443):
 - **No auth on mutating endpoints** — upload/confirm/delete/resolve/status are open. Mirror the

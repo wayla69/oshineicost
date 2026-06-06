@@ -300,6 +300,7 @@ def session_summary(session_id: int):
                     SUM(CASE WHEN match_status='matched' THEN 1 ELSE 0 END)
                 FROM {table}
                 WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
+                  AND match_status != 'excluded'
             """, (bid, pm)).fetchone()
 
         bank = ext_row("recon_bank_lines",    "credit",     "txn_date")

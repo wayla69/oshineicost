@@ -18,8 +18,9 @@ import re
 import sqlite3
 from datetime import date, timedelta
 
-TOLERANCE_AMOUNT = 5.00   # THB — exact match threshold
-TOLERANCE_DAYS   = 3      # max day offset for CC settlement timing
+TOLERANCE_AMOUNT = 5.00   # THB — exact (daily) match threshold
+TOLERANCE_DAYS   = 3      # max day offset for bank deposit timing
+MONTHLY_TOL_PCT  = 1.0    # % — monthly aggregate (CC / delivery) tolerance
 
 # ── PaymentCode keyword patterns (Easy POS codes vary by branch config) ────────
 
@@ -148,52 +149,40 @@ def get_pos_daily_total(conn: sqlite3.Connection, branch_id: int, txn_date: str)
 
 def match_cc_lines(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
     """
-    Match credit card settlement lines against POS credit card total.
-    Uses pos_payment_month (keyword match on payment_code) as primary source.
-    Monthly-level cross-check: sum of all CC settlements vs POS CC total.
+    Reconcile credit-card settlements against POS card revenue at the MONTHLY level.
+
+    Daily matching is intentionally avoided: recon_pos_daily.total is the whole
+    day's revenue across all tenders, while a CC line is card-only after MDR fee,
+    so daily amounts almost never tie. We compare the month's CC settlement total
+    against the POS card total (pos_payment_month keyword match, fallback
+    sales_month_summary) and settle/flag once for the month.
     """
-    pos_cc = _payment_total(conn, branch_id, period_month, _CC_PAT)
+    pos_cc     = _payment_total(conn, branch_id, period_month, _CC_PAT)
+    pos_source = "pos_payment_month"
     if pos_cc == 0:
-        # Fallback to sales_month_summary (from Excel re-import fix)
         row = conn.execute(
             "SELECT COALESCE(SUM(credit_card),0) FROM sales_month_summary WHERE branch_id=? AND period_month=?",
             (branch_id, period_month)
         ).fetchone()
         pos_cc = float(row[0]) if row else 0.0
+        pos_source = "sales_month_summary"
 
-    unmatched = conn.execute("""
-        SELECT id, settlement_date, net_amount
-        FROM recon_cc_lines
-        WHERE branch_id=? AND match_status='unmatched'
-          AND strftime('%Y-%m', settlement_date)=?
-    """, (branch_id, period_month)).fetchall()
-
-    matched = 0
-    for row in unmatched:
-        line_id, settle_date, net_amt = row["id"], row["settlement_date"], row["net_amount"]
-        # Try daily POS total within tolerance window
-        for candidate_date in _date_range(settle_date, TOLERANCE_DAYS):
-            pos_day = get_pos_daily_total(conn, branch_id, candidate_date)
-            if pos_day > 0 and abs(net_amt - pos_day) <= TOLERANCE_AMOUNT:
-                _create_match(conn, session_id, "credit_card", "recon_cc_lines",
-                              line_id, net_amt, "daily", candidate_date, branch_id, pos_day,
-                              "fuzzy_amount", 0.9)
-                matched += 1
-                break
-
-    ext_monthly = conn.execute("""
-        SELECT COALESCE(SUM(net_amount), 0)
-        FROM recon_cc_lines
+    rows = conn.execute("""
+        SELECT id, net_amount FROM recon_cc_lines
         WHERE branch_id=? AND strftime('%Y-%m', settlement_date)=?
-    """, (branch_id, period_month)).fetchone()[0]
+    """, (branch_id, period_month)).fetchall()
+    line_ids  = [r["id"] for r in rows]
+    ext_total = sum(float(r["net_amount"] or 0) for r in rows)
 
+    matched = _settle_monthly(conn, session_id, "credit_card", "recon_cc_lines",
+                              line_ids, ext_total, pos_cc, branch_id, period_month)
     return {
-        "matched":       matched,
-        "total_lines":   len(unmatched),
+        "matched_lines": matched,
+        "total_lines":   len(line_ids),
         "pos_cc_total":  pos_cc,
-        "ext_cc_total":  ext_monthly,
-        "monthly_var":   round(ext_monthly - pos_cc, 2),
-        "pos_source":    "pos_payment_month" if pos_cc else "sales_month_summary",
+        "ext_cc_total":  round(ext_total, 2),
+        "monthly_var":   round(ext_total - pos_cc, 2),
+        "pos_source":    pos_source,
     }
 
 
@@ -205,35 +194,39 @@ def match_delivery_lines(
     source_type: str,   # 'grab' | 'lineman'
 ) -> dict:
     """
-    Match Grab/Lineman payout lines against pos_customer_type_month.
-    Monthly total comparison: sum of net_payouts vs POS delivery revenue.
+    Reconcile Grab/Lineman payouts against pos_customer_type_month at the MONTHLY
+    level. Non-completed orders are marked 'excluded' (not revenue); the month's
+    Completed net_payout total is settled against POS delivery revenue.
+
+    NOTE: net_payout is after platform commission, while POS delivery revenue is
+    gross food (ex-VAT) — they diverge by ~commission. Tune the comparison basis
+    once a real report is inspected (see PROGRESS.md).
     """
     table   = "recon_grab_lines" if source_type == "grab" else "recon_lineman_lines"
     pat     = _GRAB_PAT if source_type == "grab" else _LINEMAN_PAT
     pos_net = _customer_type_total(conn, branch_id, period_month, pat)
 
-    ext_row = conn.execute(f"""
-        SELECT COALESCE(SUM(net_payout), 0) total, COUNT(*) lines
-        FROM {table}
+    conn.execute(f"""
+        UPDATE {table} SET match_status='excluded'
+        WHERE branch_id=? AND strftime('%Y-%m', order_date)=?
+          AND order_status!='Completed' AND match_status='unmatched'
+    """, (branch_id, period_month))
+
+    completed = conn.execute(f"""
+        SELECT id, net_payout FROM {table}
         WHERE branch_id=? AND order_status='Completed'
           AND strftime('%Y-%m', order_date)=?
-    """, (branch_id, period_month)).fetchone()
+    """, (branch_id, period_month)).fetchall()
+    line_ids  = [r["id"] for r in completed]
+    ext_total = sum(float(r["net_payout"] or 0) for r in completed)
 
-    ext_total = ext_row[0] if ext_row else 0.0
-    ext_lines = ext_row[1] if ext_row else 0
-
-    # Create one aggregate match for the whole month if totals are close
-    if ext_total > 0 and pos_net > 0:
-        variance_pct = abs(ext_total - pos_net) / max(pos_net, 1) * 100
-        confidence   = 0.95 if variance_pct < 2 else 0.8 if variance_pct < 10 else 0.5
-        _create_match(conn, session_id, source_type, table,
-                      -1, ext_total, "monthly", None, branch_id, pos_net,
-                      "aggregated", confidence)
-
+    matched = _settle_monthly(conn, session_id, source_type, table,
+                              line_ids, ext_total, pos_net, branch_id, period_month)
     return {
-        "ext_total":   ext_total,
-        "pos_total":   pos_net,
-        "lines":       ext_lines,
+        "ext_total":   round(ext_total, 2),
+        "pos_total":   round(pos_net, 2),
+        "lines":       len(line_ids),
+        "matched":     matched,
         "variance":    round(ext_total - pos_net, 2),
         "pos_source":  "pos_customer_type_month" if pos_net else "unavailable",
     }
@@ -274,7 +267,8 @@ def match_bank_lines(
 
 
 def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> dict:
-    """Run all matchers for a session. Call after all uploads are confirmed."""
+    """Run all matchers for a session. Idempotent — safe to re-run."""
+    _reset_session(conn, session_id, branch_id, period_month)
     refresh_pos_daily(conn, branch_id, period_month)
 
     cc_r   = match_cc_lines(conn, session_id, branch_id, period_month)
@@ -291,6 +285,81 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
         "lineman":     lm_r,
         "bank":        bank_r,
     }
+
+
+_LINE_TABLES = [
+    ("recon_bank_lines",    "txn_date"),
+    ("recon_cc_lines",      "settlement_date"),
+    ("recon_grab_lines",    "order_date"),
+    ("recon_lineman_lines", "order_date"),
+]
+
+
+def _reset_session(conn: sqlite3.Connection, session_id: int, branch_id: int, period_month: str) -> None:
+    """
+    Clear prior auto-match output so a re-run is idempotent. Manual matches and
+    manually-resolved discrepancies are preserved.
+    """
+    conn.execute(
+        "DELETE FROM recon_matches WHERE session_id=? AND matched_by='auto'",
+        (session_id,),
+    )
+    conn.execute(
+        "DELETE FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
+        (session_id,),
+    )
+    for table, date_col in _LINE_TABLES:
+        conn.execute(f"""
+            UPDATE {table} SET match_status='unmatched', match_id=NULL
+            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
+              AND match_status!='manual'
+        """, (branch_id, period_month))
+
+
+def _within_tol(ext: float, pos: float) -> bool:
+    if abs(ext - pos) <= TOLERANCE_AMOUNT:
+        return True
+    return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= MONTHLY_TOL_PCT
+
+
+def _settle_monthly(
+    conn: sqlite3.Connection,
+    session_id: int,
+    source_type: str,
+    table: str,
+    line_ids: list[int],
+    ext_total: float,
+    pos_total: float,
+    branch_id: int,
+    period_month: str,
+) -> int:
+    """
+    Settle a source at the monthly level. Records one aggregate match; if the
+    month's external total ties to POS within tolerance, marks all its lines
+    matched and returns the count. Otherwise records a single monthly
+    amount_mismatch discrepancy and leaves the lines unmatched.
+    """
+    if ext_total == 0 and pos_total == 0:
+        return 0
+
+    var_pct    = abs(ext_total - pos_total) / max(abs(pos_total), 1.0) * 100
+    confidence = 0.95 if var_pct < 2 else 0.8 if var_pct < 10 else 0.5
+    agg_id = _create_match(conn, session_id, source_type, table,
+                           -1, ext_total, "monthly", f"{period_month}-01",
+                           branch_id, pos_total, "aggregated", confidence)
+
+    if _within_tol(ext_total, pos_total):
+        for lid in line_ids:
+            conn.execute(f"UPDATE {table} SET match_status='matched', match_id=? WHERE id=?",
+                         (agg_id, lid))
+        return len(line_ids)
+
+    conn.execute("""
+        INSERT INTO recon_discrepancies
+            (session_id, disc_type, source_type, match_id, amount_external, amount_pos, variance)
+        VALUES (?, 'amount_mismatch', ?, ?, ?, ?, ?)
+    """, (session_id, source_type, agg_id, ext_total, pos_total, round(ext_total - pos_total, 2)))
+    return 0
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
@@ -334,23 +403,22 @@ def _flag_discrepancies(
     branch_id: int,
     period_month: str,
 ) -> None:
-    """Create discrepancy records for unmatched lines in this session."""
-    for table, src, amt_col, date_col in [
-        ("recon_bank_lines",    "bank",        "credit",     "txn_date"),
-        ("recon_cc_lines",      "credit_card", "net_amount", "settlement_date"),
-        ("recon_grab_lines",    "grab",        "net_payout", "order_date"),
-        ("recon_lineman_lines", "lineman",     "net_payout", "order_date"),
-    ]:
-        rows = conn.execute(f"""
-            SELECT id, {amt_col}
-            FROM {table}
-            WHERE branch_id=? AND match_status='unmatched'
-              AND strftime('%Y-%m', {date_col})=?
-        """, (branch_id, period_month)).fetchall()
+    """
+    Flag genuinely unmatched BANK credit lines as discrepancies. CC, Grab and
+    Lineman are reconciled at the monthly level by _settle_monthly, which records
+    its own amount_mismatch discrepancies — flagging their lines here too would
+    double-count.
+    """
+    rows = conn.execute("""
+        SELECT id, credit FROM recon_bank_lines
+        WHERE branch_id=? AND match_status='unmatched' AND credit > 0
+          AND channel NOT IN ('GRAB_PAYOUT','LINEMAN_PAYOUT','FEE')
+          AND strftime('%Y-%m', txn_date)=?
+    """, (branch_id, period_month)).fetchall()
 
-        for row in rows:
-            conn.execute("""
-                INSERT OR IGNORE INTO recon_discrepancies
-                    (session_id, disc_type, source_type, external_id, amount_external)
-                VALUES (?, 'unmatched_external', ?, ?, ?)
-            """, (session_id, src, row[0], row[1]))
+    for row in rows:
+        conn.execute("""
+            INSERT INTO recon_discrepancies
+                (session_id, disc_type, source_type, external_id, amount_external)
+            VALUES (?, 'unmatched_external', 'bank', ?, ?)
+        """, (session_id, row[0], row[1]))
