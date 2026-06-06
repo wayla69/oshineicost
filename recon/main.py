@@ -66,12 +66,18 @@ if _FRONTEND.exists():
 
 
 # ── Branches (read from shared branches table) ────────────────────────────────
+# Reconciliation is scoped to MASTER (company-owned) branches only; franchises
+# are out of scope. COALESCE keeps legacy NULL rows (default 'master') in scope.
+
+_MASTER_ONLY = "COALESCE(branch_type,'master')='master' AND active=1"
+
 
 @app.get("/api/branches")
 def list_branches():
     with get_db() as conn:
         rows = conn.execute(
-            "SELECT branch_id, name, branch_type FROM branches WHERE active=1 ORDER BY name"
+            f"SELECT branch_id, name, branch_type FROM branches "
+            f"WHERE {_MASTER_ONLY} ORDER BY name"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -386,7 +392,7 @@ def list_matches(session_id: int, source_type: str | None = None):
 def overview(period_month: str):
     with get_db() as conn:
         branches = conn.execute(
-            "SELECT branch_id, name FROM branches WHERE active=1 ORDER BY name"
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name"
         ).fetchall()
 
         result = []
