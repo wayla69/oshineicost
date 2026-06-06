@@ -91,6 +91,10 @@
         <div class="font-semibold text-gray-700 mb-3">Reconciliation by category</div>
         <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
       </div>
+      <div id="rec-payout-wrap" class="hidden">
+        <div class="font-semibold text-gray-700 mb-1">Payout chain <span class="font-normal text-gray-400 text-sm">— provider net should equal the bank payout credit</span></div>
+        <div id="rec-payouts" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+      </div>
       <div class="card">
         <div class="flex items-center justify-between mb-3">
           <div class="font-semibold text-gray-700">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
@@ -455,7 +459,28 @@ async function renderReconcile(){
       </div>`;
     cont.appendChild(div);
   });
+  renderPayouts(s.payouts||[]);
   loadFeeVat();
+}
+
+const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};
+const PAYOUT_LBL   = {matched:'Matched', mismatch:'Mismatch', awaiting_payout:'Awaiting payout', ext_only:'Extra payout'};
+function renderPayouts(payouts){
+  const wrap=document.getElementById('rec-payout-wrap'); const cont=document.getElementById('rec-payouts');
+  if(!payouts.length){ wrap.classList.add('hidden'); cont.innerHTML=''; return; }
+  wrap.classList.remove('hidden'); cont.innerHTML='';
+  payouts.forEach(p=>{
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-gray-800">${p.category} payout</div>
+        <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${PAYOUT_LBL[p.status]||p.status}</span></div>
+      <div class="grid grid-cols-3 gap-2 text-sm">
+        <div><div class="text-xs text-gray-400">Report net</div><div class="font-mono">฿${fmt(p.report_net)}</div></div>
+        <div><div class="text-xs text-gray-400">Bank payout</div><div class="font-mono">฿${fmt(p.bank_payout)}</div></div>
+        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
+      </div>`;
+    cont.appendChild(div);
+  });
 }
 
 async function runMatch(){

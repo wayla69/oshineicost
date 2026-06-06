@@ -11,6 +11,7 @@ Environment:
 """
 
 from __future__ import annotations
+import hashlib
 import hmac
 import os
 import re
@@ -24,7 +25,12 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .matcher import category_reconciliation, daily_reconciliation, run_auto_match
+from .matcher import (
+    category_reconciliation,
+    daily_reconciliation,
+    payout_reconciliation,
+    run_auto_match,
+)
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -65,6 +71,7 @@ _MIGRATIONS = {
     "recon_lineman_lines": [("fee_manual", "REAL"), ("vat_manual", "REAL"),
                             ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
     "recon_discrepancies": [("category", "TEXT"), ("bank", "TEXT"), ("assigned_to", "TEXT")],
+    "recon_uploads":       [("file_hash", "TEXT")],
 }
 
 
@@ -143,6 +150,18 @@ def _validate_master_branch(conn, branch_id: int):
         f"SELECT 1 FROM branches WHERE branch_id=? AND {_MASTER_ONLY}", (branch_id,)
     ).fetchone():
         raise HTTPException(400, f"branch_id {branch_id} is not an active master branch.")
+
+
+def _assert_period_open(conn, branch_id: int, period_month: str):
+    """Reject mutations to an approved/closed period. Reopen by setting the
+    session status back to In-Review (or Draft). 423 = Locked."""
+    row = conn.execute(
+        "SELECT status FROM recon_sessions WHERE branch_id=? AND period_month=?",
+        (branch_id, period_month)).fetchone()
+    if row and row["status"] in ("approved", "closed"):
+        raise HTTPException(
+            423, f"{period_month} is {row['status']} for this branch — set the "
+                 "session back to In-Review to make changes.")
 
 
 @app.get("/api/branches")
@@ -441,16 +460,32 @@ async def confirm_upload(
 ):
     _validate_period(period_month)
     raw = await _read_upload(file)
+    file_hash = hashlib.sha256(raw).hexdigest()
 
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
+        _assert_period_open(conn, branch_id, period_month)
+
+        # Double-count guard: refuse an identical file already confirmed for the
+        # same branch / month / source. Delete the old one to legitimately replace.
+        dup = conn.execute("""
+            SELECT upload_id, file_name, uploaded_at FROM recon_uploads
+            WHERE branch_id=? AND period_month=? AND source_type=?
+              AND file_hash=? AND status='confirmed'
+        """, (branch_id, period_month, source_type, file_hash)).fetchone()
+        if dup:
+            raise HTTPException(
+                409, f"Identical file already uploaded for this branch/month: "
+                     f"'{dup['file_name']}' on {dup['uploaded_at']}. "
+                     "Delete that upload first if you mean to replace it.")
+
         prov, rows, skipped = _parse_or_422(source_type, raw, provider)
 
         cur = conn.execute("""
             INSERT INTO recon_uploads
-                (source_type, branch_id, provider, file_name, period_month, row_count, status)
-            VALUES (?,?,?,?,?,?,'confirmed')
-        """, (source_type, branch_id, prov, file.filename, period_month, len(rows)))
+                (source_type, branch_id, provider, file_name, period_month, row_count, file_hash, status)
+            VALUES (?,?,?,?,?,?,?,'confirmed')
+        """, (source_type, branch_id, prov, file.filename, period_month, len(rows), file_hash))
         upload_id = cur.lastrowid
 
         table = _LINE_TABLE[source_type]
@@ -488,6 +523,11 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
 @app.delete("/api/uploads/{upload_id}", dependencies=[Depends(require_write_token)])
 def delete_upload(upload_id: int):
     with get_db() as conn:
+        up = conn.execute(
+            "SELECT branch_id, period_month FROM recon_uploads WHERE upload_id=?",
+            (upload_id,)).fetchone()
+        if up:
+            _assert_period_open(conn, up["branch_id"], up["period_month"])
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
         conn.commit()
     return {"deleted": upload_id}
@@ -560,6 +600,7 @@ def run_match(session_id: int):
         ).fetchone()
         if not session:
             raise HTTPException(404)
+        _assert_period_open(conn, session["branch_id"], session["period_month"])
         result = run_auto_match(conn, session_id, session["branch_id"], session["period_month"])
     return result
 
@@ -574,6 +615,16 @@ def update_session_status(
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
     with get_db() as conn:
+        # Approval gate: don't let a month be signed off while issues are open.
+        if status in ("approved", "closed"):
+            pending = conn.execute(
+                "SELECT COUNT(*) FROM recon_discrepancies "
+                "WHERE session_id=? AND resolution='pending'",
+                (session_id,)).fetchone()[0]
+            if pending:
+                raise HTTPException(
+                    409, f"Cannot {status} — {pending} open discrepancy(ies) remain. "
+                         "Resolve or accept them first.")
         # Only stamp approval metadata when the session is actually approved;
         # moving back to draft/in_review must not record a (false) approval.
         if status == "approved":
@@ -610,6 +661,7 @@ def session_summary(session_id: int):
         categories = [{k: r[k] for k in
                        ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
                       for r in rows]
+        payouts = payout_reconciliation(conn, bid, pm)
 
         pending = conn.execute(
             "SELECT COUNT(*) FROM recon_discrepancies WHERE session_id=? AND resolution='pending'",
@@ -620,6 +672,7 @@ def session_summary(session_id: int):
         ext_total = sum(r["ext_amount"] for r in rows)
         return {
             "categories":            categories,
+            "payouts":               payouts,
             "unmapped":              [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
             "pos_total":             round(pos_total, 2),
             "ext_total":             round(ext_total, 2),
@@ -670,9 +723,19 @@ class ResolveBody(BaseModel):
     resolved_by:     str = ""
 
 
+def _assert_disc_period_open(conn, disc_id: int):
+    row = conn.execute("""
+        SELECT s.branch_id, s.period_month
+        FROM recon_discrepancies d JOIN recon_sessions s ON s.session_id = d.session_id
+        WHERE d.id=?""", (disc_id,)).fetchone()
+    if row:
+        _assert_period_open(conn, row["branch_id"], row["period_month"])
+
+
 @app.patch("/api/discrepancies/{disc_id}/resolve", dependencies=[Depends(require_write_token)])
 def resolve_discrepancy(disc_id: int, body: ResolveBody):
     with get_db() as conn:
+        _assert_disc_period_open(conn, disc_id)
         conn.execute("""
             UPDATE recon_discrepancies
             SET resolution=?, resolution_note=?, resolved_by=?, resolved_at=datetime('now')
@@ -685,6 +748,7 @@ def resolve_discrepancy(disc_id: int, body: ResolveBody):
 @app.patch("/api/discrepancies/{disc_id}/assign", dependencies=[Depends(require_write_token)])
 def assign_discrepancy(disc_id: int, assigned_to: str = Form(...)):
     with get_db() as conn:
+        _assert_disc_period_open(conn, disc_id)
         conn.execute("UPDATE recon_discrepancies SET assigned_to=? WHERE id=?", (assigned_to, disc_id))
         conn.commit()
     return {"id": disc_id, "assigned_to": assigned_to}
@@ -752,7 +816,12 @@ def set_fee_vat(source: str, line_id: int, body: FeeVat):
     table = _FEE_VAT_TABLE.get(source)
     if not table:
         raise HTTPException(400, f"source must be one of {sorted(_FEE_VAT_TABLE)}")
+    date_col = "settlement_date" if source == "credit_card" else "order_date"
     with get_db() as conn:
+        line = conn.execute(
+            f"SELECT branch_id, {date_col} AS d FROM {table} WHERE id=?", (line_id,)).fetchone()
+        if line and line["d"]:
+            _assert_period_open(conn, line["branch_id"], str(line["d"])[:7])
         conn.execute(f"""
             UPDATE {table}
             SET fee_manual=?, vat_manual=?, fee_vat_by=?, fee_vat_at=datetime('now')

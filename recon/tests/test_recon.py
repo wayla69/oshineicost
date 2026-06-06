@@ -234,6 +234,69 @@ def test_daily_unavailable_without_sync(client):
     assert d["pos_daily_available"] is False
 
 
+# ── Batch 1: go-live correctness ──────────────────────────────────────────────
+
+def _grab_xlsx(rows):
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["Order Date", "Order ID", "Order Status", "Food Amount", "Commission Amount", "Net Payout"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+
+
+def test_upload_dedup_blocks_identical_file(client):
+    """Re-uploading the exact same file for a branch/month is refused (409) so a
+    statement can't be double-counted."""
+    data = _grab_xlsx([["05/06/2026", "G1", "Completed", 5000, 1000, 4000]])
+    form = {"branch_id": "4", "period_month": "2026-06"}
+    r1 = client.post("/api/uploads/grab/confirm", files={"file": ("g.xlsx", data)}, data=form)
+    assert r1.status_code == 200 and r1.json()["rows_saved"] == 1
+    r2 = client.post("/api/uploads/grab/confirm", files={"file": ("g.xlsx", data)}, data=form)
+    assert r2.status_code == 409
+    assert len(client.get("/api/uploads?branch_id=4&period_month=2026-06").json()) == 1
+    # deleting the first lets an identical file in again
+    up_id = client.get("/api/uploads?branch_id=4&period_month=2026-06").json()[0]["upload_id"]
+    client.delete(f"/api/uploads/{up_id}")
+    assert client.post("/api/uploads/grab/confirm", files={"file": ("g.xlsx", data)}, data=form).status_code == 200
+
+
+def test_payout_chain_ties_net_to_bank(client):
+    """3-way tie: provider NET → bank payout credit. No bank line → awaiting_payout;
+    a short payout → mismatch + a PAYOUT discrepancy."""
+    db = main._DB_PATH
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('grab',4,'Grab','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,food_amount,commission_amt,net_payout)"
+              " VALUES(?,4,'2026-06-05','Completed',5000,1000,4000)", (up,))
+    c.commit(); c.close()
+    pay = {p["category"]: p for p in client.post(f"/api/sessions/{sid}/run-match").json()["payouts"]}
+    assert pay["GRAB"]["status"] == "awaiting_payout" and pay["GRAB"]["report_net"] == 4000
+
+    _add_bank_line(db, "KTB", "GRAB_PAYOUT", 3000)     # short vs 4000 net → mismatch
+    pay2 = {p["category"]: p for p in client.post(f"/api/sessions/{sid}/run-match").json()["payouts"]}
+    assert pay2["GRAB"]["status"] == "mismatch"
+    discs = client.get(f"/api/sessions/{sid}/discrepancies").json()
+    assert any(d["category"] == "GRAB" and d["bank"] == "PAYOUT" for d in discs)
+
+
+def test_approval_gate_and_period_lock(client):
+    """Can't approve with open discrepancies; an approved month is locked until reopened."""
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")      # POS tender, no statements → discrepancies
+    open_discs = client.get(f"/api/sessions/{sid}/discrepancies").json()
+    assert open_discs
+    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 409
+
+    for d in open_discs:
+        client.patch(f"/api/discrepancies/{d['id']}/resolve", json={"resolution": "accepted", "resolved_by": "t"})
+    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 200
+    assert client.post(f"/api/sessions/{sid}/run-match").status_code == 423        # locked
+    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
+    assert client.post(f"/api/sessions/{sid}/run-match").status_code == 200        # reopened
+
+
 def test_write_token_gate(client):
     main.os.environ["OSHINEI_SEED_TOKEN"] = "tok"
     try:

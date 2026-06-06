@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS recon_uploads (
     file_name    TEXT NOT NULL,
     period_month TEXT,            -- 'YYYY-MM'
     row_count    INTEGER,
+    file_hash    TEXT,            -- sha256 of the raw upload → blocks identical re-uploads (double-count guard)
     status       TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','parsed','confirmed','error')),
     error_msg    TEXT,
     uploaded_at  TEXT NOT NULL DEFAULT (datetime('now')),

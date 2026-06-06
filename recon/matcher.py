@@ -186,6 +186,70 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
     return rows, unmapped
 
 
+# ── Payout chain (3-way tie): provider NET → bank payout credit ───────────────
+# category_reconciliation ties POS gross ↔ provider/statement gross. This closes
+# the loop: the NET a provider should remit (gross − fee − VAT − promo, or CC
+# gross − refund − fee − VAT) must equal what actually credited the bank
+# (GRAB_PAYOUT / LINEMAN_PAYOUT / CC_SETTLE lines, already classified by the bank
+# parser). A gap here is a fee/skim/short-payment, not a sales discrepancy.
+
+_PAYOUT_CHANNEL = {"GRAB": "GRAB_PAYOUT", "LINEMAN": "LINEMAN_PAYOUT", "CREDIT": "CC_SETTLE"}
+
+
+def _report_net_by_category(conn, branch_id, period_month):
+    """{category: net} for GRAB/LINEMAN/CREDIT from external_buckets (sum over banks)."""
+    nets: dict = {}
+    for (cat, _bank), b in external_buckets(conn, branch_id, period_month).items():
+        if cat in _PAYOUT_CHANNEL:
+            nets[cat] = nets.get(cat, 0.0) + b["net"]
+    return nets
+
+
+def _bank_payout_totals(conn, branch_id, period_month):
+    """{category: bank-credit total} from recon_bank_lines payout channels."""
+    out: dict = {}
+    inv = {v: k for k, v in _PAYOUT_CHANNEL.items()}
+    try:
+        rows = conn.execute("""
+            SELECT channel, SUM(credit) tot FROM recon_bank_lines
+            WHERE branch_id=? AND credit>0 AND strftime('%Y-%m', txn_date)=?
+              AND channel IN ('GRAB_PAYOUT','LINEMAN_PAYOUT','CC_SETTLE')
+            GROUP BY channel
+        """, (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        cat = inv.get(r["channel"])
+        if cat:
+            out[cat] = out.get(cat, 0.0) + float(r["tot"] or 0)
+    return out
+
+
+def payout_reconciliation(conn, branch_id, period_month):
+    """Tie provider NET (should-remit) to the bank payout credit. Returns rows
+    [{category, report_net, bank_payout, variance, status}]. status:
+      matched           — both present, within tolerance
+      mismatch          — both present, beyond tolerance (a real discrepancy)
+      awaiting_payout   — net>0 but no bank payout line yet (informational: the
+                          provider settles a few days later — not yet a gap)
+      ext_only          — a bank payout line with no provider report behind it."""
+    nets = _report_net_by_category(conn, branch_id, period_month)
+    pays = _bank_payout_totals(conn, branch_id, period_month)
+    rows = []
+    for cat in sorted(set(nets) | set(pays)):
+        net = round(nets.get(cat, 0.0), 2)
+        pay = round(pays.get(cat, 0.0), 2)
+        if net > 0 and pay > 0:
+            status = "matched" if _within_tol(pay, net) else "mismatch"
+        elif net > 0:
+            status = "awaiting_payout"
+        else:
+            status = "ext_only"
+        rows.append({"category": cat, "report_net": net, "bank_payout": pay,
+                     "variance": round(pay - net, 2), "status": status})
+    return rows
+
+
 # ── Run + persist ─────────────────────────────────────────────────────────────
 
 _LINE_TABLES = [
@@ -248,15 +312,30 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
             """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
                   r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"]))
 
+    # Payout chain: provider NET ↔ bank payout credit. Only a real mismatch is a
+    # discrepancy; awaiting_payout/ext_only are informational (shown, not queued).
+    payouts = payout_reconciliation(conn, branch_id, period_month)
+    for p in payouts:
+        if p["status"] == "mismatch":
+            conn.execute("""
+                INSERT INTO recon_discrepancies
+                    (session_id, disc_type, source_type, category, bank,
+                     amount_external, amount_pos, variance)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (session_id, "amount_mismatch", _CATEGORY_SOURCE.get(p["category"], "bank"),
+                  p["category"], "PAYOUT", p["bank_payout"], p["report_net"], p["variance"]))
+
     conn.commit()
 
     matched = sum(1 for r in rows if r["status"] == "matched")
+    payout_mismatch = sum(1 for p in payouts if p["status"] == "mismatch")
     return {
         "categories":  [{k: r[k] for k in
                          ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
                         for r in rows],
         "matched":     matched,
-        "discrepancies": len(rows) - matched,
+        "discrepancies": (len(rows) - matched) + payout_mismatch,
+        "payouts":     payouts,
         "unmapped":    [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
     }
 
