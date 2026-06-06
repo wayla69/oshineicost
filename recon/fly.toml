@@ -1,0 +1,31 @@
+# fly.toml — Oshinei Revenue Reconciliation App
+# Deploy with: fly launch --config recon/fly.toml  (from repo root)
+# Or:          cd recon && fly launch
+app = "oshinei-recon"
+primary_region = "sin"   # Singapore — same region as oshinei-dashboard
+
+[build]
+  dockerfile = "recon/Dockerfile"
+
+[env]
+  RECON_DB     = "/data/recon.db"
+  # Internal Fly private network address of the main dashboard app.
+  # Both apps must be in the same Fly org for .internal DNS to resolve.
+  MAIN_API_URL = "http://oshinei-dashboard.internal:8080"
+  PORT         = "8080"
+
+# Persistent volume for the reconciliation SQLite database
+[[mounts]]
+  source      = "recon_data"
+  destination = "/data"
+
+[http_service]
+  internal_port       = 8080
+  force_https         = true
+  auto_stop_machines  = "stop"   # scale to zero when idle
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "512mb"

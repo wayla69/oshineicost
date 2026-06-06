@@ -1,13 +1,24 @@
 -- Revenue Reconciliation Schema
--- Extends the existing oshinei.db (same SQLite file, new tables only)
--- All tables prefixed with recon_ to avoid conflicts
+-- Standalone SQLite database: /data/recon.db
+-- Branch/POS data is fetched from the main app via Fly private network API.
+-- All tables prefixed with recon_ for clarity.
+
+-- ─── Local branch cache (synced from main app on demand) ─────────────────────
+
+CREATE TABLE IF NOT EXISTS recon_branches (
+    branch_id   INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    branch_type TEXT DEFAULT 'master',
+    active      INTEGER DEFAULT 1,
+    synced_at   TEXT DEFAULT (datetime('now'))
+);
 
 -- ─── Upload Tracking ──────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS recon_uploads (
     upload_id    INTEGER PRIMARY KEY AUTOINCREMENT,
     source_type  TEXT NOT NULL CHECK(source_type IN ('bank','credit_card','grab','lineman')),
-    branch_id    INTEGER REFERENCES branches(branch_id),
+    branch_id    INTEGER,   -- references recon_branches(branch_id)
     provider     TEXT,            -- 'KBank','SCB','BBL','KTB','TTB' / 'Visa','Mastercard','AMEX','JCB' / 'Grab' / 'Lineman'
     file_name    TEXT NOT NULL,
     period_month TEXT,            -- 'YYYY-MM'
@@ -24,7 +35,7 @@ CREATE TABLE IF NOT EXISTS recon_uploads (
 CREATE TABLE IF NOT EXISTS recon_bank_lines (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     upload_id        INTEGER NOT NULL REFERENCES recon_uploads(upload_id) ON DELETE CASCADE,
-    branch_id        INTEGER REFERENCES branches(branch_id),
+    branch_id        INTEGER,
     txn_date         TEXT NOT NULL,    -- 'YYYY-MM-DD'
     value_date       TEXT,             -- 'YYYY-MM-DD' settlement date (may differ)
     description      TEXT,             -- raw description from bank
@@ -45,7 +56,7 @@ CREATE INDEX IF NOT EXISTS idx_rbl_branch_date ON recon_bank_lines(branch_id, tx
 CREATE TABLE IF NOT EXISTS recon_cc_lines (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     upload_id        INTEGER NOT NULL REFERENCES recon_uploads(upload_id) ON DELETE CASCADE,
-    branch_id        INTEGER REFERENCES branches(branch_id),
+    branch_id        INTEGER,
     settlement_date  TEXT NOT NULL,    -- 'YYYY-MM-DD'
     card_type        TEXT,             -- 'VISA','MASTERCARD','AMEX','JCB','UNIONPAY'
     txn_count        INTEGER DEFAULT 0,
@@ -68,7 +79,7 @@ CREATE INDEX IF NOT EXISTS idx_rccl_branch_date ON recon_cc_lines(branch_id, set
 CREATE TABLE IF NOT EXISTS recon_grab_lines (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     upload_id        INTEGER NOT NULL REFERENCES recon_uploads(upload_id) ON DELETE CASCADE,
-    branch_id        INTEGER REFERENCES branches(branch_id),
+    branch_id        INTEGER,
     order_date       TEXT NOT NULL,    -- 'YYYY-MM-DD'
     order_id         TEXT,             -- Grab order ID
     merchant_name    TEXT,             -- outlet name from Grab
@@ -93,7 +104,7 @@ CREATE INDEX IF NOT EXISTS idx_rgl_payout_date   ON recon_grab_lines(branch_id, 
 CREATE TABLE IF NOT EXISTS recon_lineman_lines (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     upload_id        INTEGER NOT NULL REFERENCES recon_uploads(upload_id) ON DELETE CASCADE,
-    branch_id        INTEGER REFERENCES branches(branch_id),
+    branch_id        INTEGER,
     order_date       TEXT NOT NULL,    -- 'YYYY-MM-DD'
     order_id         TEXT,             -- LINE MAN order number
     merchant_name    TEXT,
@@ -119,7 +130,7 @@ CREATE INDEX IF NOT EXISTS idx_rll_payout_date   ON recon_lineman_lines(branch_i
 
 CREATE TABLE IF NOT EXISTS recon_sessions (
     session_id   INTEGER PRIMARY KEY AUTOINCREMENT,
-    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    branch_id    INTEGER NOT NULL,
     period_month TEXT NOT NULL,        -- 'YYYY-MM'
     status       TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','in_review','approved','closed')),
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
@@ -144,7 +155,7 @@ CREATE TABLE IF NOT EXISTS recon_matches (
     -- POS side (nullable for unmatched external items)
     pos_level        TEXT CHECK(pos_level IN ('transaction','daily','monthly')),
     pos_receipt_no   TEXT,             -- NULL for aggregate matches
-    pos_branch_id    INTEGER REFERENCES branches(branch_id),
+    pos_branch_id    INTEGER,
     pos_date         TEXT,             -- 'YYYY-MM-DD' for daily aggregates
     pos_period_month TEXT,             -- 'YYYY-MM' for monthly aggregates
     pos_amount       REAL,
@@ -186,21 +197,33 @@ CREATE TABLE IF NOT EXISTS recon_discrepancies (
 
 CREATE INDEX IF NOT EXISTS idx_rd_session   ON recon_discrepancies(session_id, resolution);
 
--- ─── Daily POS Aggregate Cache ────────────────────────────────────────────────
--- Pre-computed from sales_transaction + sales_month_summary for fast matching
--- Refreshed whenever recon session is opened
+-- ─── POS Caches (populated by /api/sync-pos from main app API) ───────────────
 
 CREATE TABLE IF NOT EXISTS recon_pos_daily (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    branch_id    INTEGER NOT NULL,
     txn_date     TEXT NOT NULL,        -- 'YYYY-MM-DD'
     cash         REAL DEFAULT 0,
     credit_card  REAL DEFAULT 0,
     transfer     REAL DEFAULT 0,
     qr           REAL DEFAULT 0,
-    delivery     REAL DEFAULT 0,       -- Grab + Lineman combined if POS tracks separately
+    delivery     REAL DEFAULT 0,
     total        REAL DEFAULT 0,
     txn_count    INTEGER DEFAULT 0,
     refreshed_at TEXT DEFAULT (datetime('now')),
     UNIQUE(branch_id, txn_date)
+);
+
+CREATE TABLE IF NOT EXISTS recon_pos_monthly (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id    INTEGER NOT NULL,
+    period_month TEXT NOT NULL,        -- 'YYYY-MM'
+    cash         REAL DEFAULT 0,
+    credit_card  REAL DEFAULT 0,
+    transfer     REAL DEFAULT 0,
+    qr           REAL DEFAULT 0,
+    net_sales    REAL DEFAULT 0,
+    txn_count    INTEGER DEFAULT 0,
+    refreshed_at TEXT DEFAULT (datetime('now')),
+    UNIQUE(branch_id, period_month)
 );
