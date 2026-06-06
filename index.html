@@ -8942,15 +8942,35 @@ async function _poolAll(thunks, limit = 4) {
 // fetches (~2 s); calling window.print() immediately captured a blank report.
 // When the report tab is active we force a full (re)load and await render before
 // opening the print dialog, so the printed/saved PDF always has data.
+//
+// Two guards keep this robust on the small (512 MB) host:
+//   • _printing re-entrancy lock — when the host is slow the dialog doesn't open
+//     instantly, so users click 🖨️ repeatedly; without this each click re-fired
+//     the whole ~17-query report load and the stacked batches thrashed/OOM'd the
+//     host (a request storm seen in the logs). The lock collapses repeat clicks.
+//   • Promise.race timeout — fetches have no per-request timeout, so one hung
+//     request would block window.print() forever ("nothing happens"). After the
+//     deadline we print whatever has rendered instead of hanging.
+let _printing = false;
 async function printReport() {
-  if (typeof activeTab !== 'undefined' && activeTab === 'report') {
-    showLoadingBar();
-    try { _tabLastKey.report = null; await loadReport(); }
-    catch (e) { console.error('print preload failed', e); }
-    finally { hideLoadingBar(); }
-    await new Promise(r => setTimeout(r, 80));   // let layout settle before snapshot
-  }
-  window.print();
+  if (_printing) return;                 // ignore repeat clicks while preparing
+  _printing = true;
+  try {
+    if (typeof activeTab !== 'undefined' && activeTab === 'report') {
+      showLoadingBar();
+      try {
+        _tabLastKey.report = null;
+        await Promise.race([
+          loadReport(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('preload timeout')), 15000)),
+        ]);
+      }
+      catch (e) { console.error('print preload failed/timed out — printing current view', e); }
+      finally { hideLoadingBar(); }
+      await new Promise(r => setTimeout(r, 80));   // let layout settle before snapshot
+    }
+    window.print();
+  } finally { _printing = false; }
 }
 
 async function loadReport() {
