@@ -671,6 +671,48 @@ class FeeVat(BaseModel):
     by:         str = ""
 
 
+@app.get("/api/lines/{source}")
+def list_lines(source: str, branch_id: int, period_month: str):
+    """Lines for the fee/VAT editor, with effective fee/VAT and computed net."""
+    if source not in _FEE_VAT_TABLE:
+        raise HTTPException(400, f"source must be one of {sorted(_FEE_VAT_TABLE)}")
+    table = _FEE_VAT_TABLE[source]
+    spec = {
+        "grab":        ("order_date",      "order_id",  "food_amount",  "commission_amt", None,               "promo_deduct"),
+        "lineman":     ("order_date",      "order_id",  "food_amount",  "commission_amt", "vat_on_commission","promo_deduct"),
+        "credit_card": ("settlement_date", "batch_no",  "gross_amount", "mdr_fee",        None,               None),
+    }[source]
+    date_col, ref_col, gross_col, fee_col, vat_col, promo_col = spec
+    out = []
+    with get_db() as conn:
+        extra = " AND order_status='Completed'" if source in ("grab", "lineman") else ""
+        rows = conn.execute(f"""
+            SELECT * FROM {table}
+            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?{extra}
+            ORDER BY {date_col}
+        """, (branch_id, period_month)).fetchall()
+        for r in rows:
+            gross  = float(r[gross_col] or 0)
+            fee    = r["fee_manual"] if r["fee_manual"] is not None else float(r[fee_col] or 0)
+            if r["vat_manual"] is not None:
+                vat = r["vat_manual"]
+            else:
+                vat = float(r[vat_col] or 0) if vat_col else 0.0
+            promo  = float(r[promo_col] or 0) if promo_col else 0.0
+            refund = float(r["refund_amount"] or 0) if source == "credit_card" else 0.0
+            out.append({
+                "id":         r["id"],
+                "date":       r[date_col],
+                "ref":        r[ref_col] or "",
+                "gross":      round(gross, 2),
+                "fee":        r["fee_manual"],
+                "vat":        r["vat_manual"],
+                "fee_parsed": round(float(r[fee_col] or 0), 2),
+                "net":        round(gross - refund - fee - vat - promo, 2),
+            })
+    return out
+
+
 @app.patch("/api/lines/{source}/{line_id}/fee-vat", dependencies=[Depends(require_write_token)])
 def set_fee_vat(source: str, line_id: int, body: FeeVat):
     table = _FEE_VAT_TABLE.get(source)

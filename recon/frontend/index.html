@@ -5,639 +5,481 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei – Revenue Reconciliation</title>
 <script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <style>
-  :root {
-    --brand: #e85d04;
-    --brand-light: #fff1e6;
-    --ok: #16a34a;
-    --warn: #d97706;
-    --danger: #dc2626;
-    --muted: #6b7280;
-  }
-  body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f8fafc; }
-  .tab-btn { border-bottom: 3px solid transparent; }
-  .tab-btn.active { border-color: var(--brand); color: var(--brand); font-weight:600; }
-  .badge-ok   { background:#dcfce7; color:#15803d; }
-  .badge-warn { background:#fef9c3; color:#854d0e; }
-  .badge-err  { background:#fee2e2; color:#b91c1c; }
-  .badge      { font-size:11px; padding:2px 8px; border-radius:999px; display:inline-block; }
-  .card { background:white; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:20px; }
-  .drop-zone { border:2px dashed #d1d5db; border-radius:10px; transition:.2s; cursor:pointer; }
-  .drop-zone:hover, .drop-zone.dragging { border-color:var(--brand); background:var(--brand-light); }
-  .pill { display:inline-flex; align-items:center; gap:4px; padding:3px 10px;
-          border-radius:999px; font-size:12px; font-weight:600; }
-  .pill-draft    { background:#f1f5f9; color:#475569; }
-  .pill-review   { background:#fef9c3; color:#854d0e; }
-  .pill-approved { background:#dcfce7; color:#15803d; }
-  .pill-closed   { background:#e0e7ff; color:#3730a3; }
-  tr:hover td { background:#f8fafc; }
-  .var-pos { color:#16a34a; }
-  .var-neg { color:#dc2626; }
-  .progress-bar { height:6px; border-radius:3px; background:#e5e7eb; overflow:hidden; }
-  .progress-fill { height:100%; background:var(--brand); border-radius:3px; transition:.4s; }
+  :root { --brand:#e85d04; --brand-light:#fff1e6; --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --muted:#6b7280; }
+  body { font-family:'Segoe UI', system-ui, sans-serif; background:#f8fafc; }
+  .tab-btn { border-bottom:3px solid transparent; }
+  .tab-btn.active { border-color:var(--brand); color:var(--brand); font-weight:600; }
+  .card { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:20px; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; display:inline-block; font-weight:600; }
+  .b-ok{background:#dcfce7;color:#15803d}.b-warn{background:#fef9c3;color:#854d0e}.b-err{background:#fee2e2;color:#b91c1c}.b-mut{background:#f1f5f9;color:#475569}
+  .pill { display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600; }
+  .pill-draft{background:#f1f5f9;color:#475569}.pill-in_review{background:#fef9c3;color:#854d0e}.pill-approved{background:#dcfce7;color:#15803d}.pill-closed{background:#e0e7ff;color:#3730a3}.pill-no_session{background:#f1f5f9;color:#94a3b8}
+  tr:hover td{background:#f8fafc}
+  .var-pos{color:#16a34a}.var-neg{color:#dc2626}.var-zero{color:#16a34a}
+  input,select{outline:none}
+  .inp{border:1px solid #d1d5db;border-radius:8px;padding:6px 10px;font-size:13px}
+  .btn{font-size:13px;font-weight:600;border-radius:8px;padding:7px 14px}
+  .btn-pri{color:#fff;background:var(--brand)}.btn-sec{border:1px solid #d1d5db}.btn-pri:disabled{opacity:.4}
 </style>
 </head>
 <body>
 
-<!-- ── TOP NAV ── -->
-<nav class="bg-white border-b border-gray-200 px-6 py-3 flex items-center gap-6 sticky top-0 z-20">
+<nav class="bg-white border-b px-6 py-3 flex items-center gap-4 sticky top-0 z-20">
   <span class="font-bold text-lg" style="color:var(--brand)">🍜 Oshinei</span>
-  <span class="text-gray-400">|</span>
+  <span class="text-gray-300">|</span>
   <span class="text-gray-700 font-semibold">Revenue Reconciliation</span>
+  <span class="badge b-mut ml-1">master branches</span>
   <div class="ml-auto flex items-center gap-3">
-    <select id="sel-period" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400">
-      <!-- populated by JS -->
-    </select>
-    <select id="sel-branch" class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-orange-400">
-      <option value="">All branches</option>
-    </select>
-    <button onclick="openUploadModal()" class="text-sm font-semibold text-white rounded-lg px-4 py-1.5" style="background:var(--brand)">
-      + Upload
-    </button>
+    <select id="sel-period" class="inp"></select>
+    <select id="sel-branch" class="inp"><option value="">All branches</option></select>
+    <button onclick="openUploadModal()" class="btn btn-pri">+ Upload</button>
+    <button onclick="setToken()" title="Set write token" class="btn btn-sec">🔑</button>
   </div>
 </nav>
 
-<!-- ── TAB BAR ── -->
-<div class="bg-white border-b border-gray-200 px-6 flex gap-6 text-sm text-gray-500">
-  <button class="tab-btn active py-3 px-1" data-tab="overview"       onclick="switchTab('overview')">Overview</button>
-  <button class="tab-btn py-3 px-1"         data-tab="uploads"        onclick="switchTab('uploads')">Uploads</button>
-  <button class="tab-btn py-3 px-1"         data-tab="matches"        onclick="switchTab('matches')">Matched</button>
-  <button class="tab-btn py-3 px-1"         data-tab="discrepancies"  onclick="switchTab('discrepancies')">Discrepancies <span id="disc-badge" class="badge badge-err hidden">0</span></button>
-  <button class="tab-btn py-3 px-1"         data-tab="sessions"       onclick="switchTab('sessions')">Sessions</button>
+<div class="bg-white border-b px-6 flex gap-6 text-sm text-gray-500">
+  <button class="tab-btn active py-3" data-tab="overview"      onclick="switchTab('overview')">Overview</button>
+  <button class="tab-btn py-3"        data-tab="reconcile"     onclick="switchTab('reconcile')">Reconcile</button>
+  <button class="tab-btn py-3"        data-tab="uploads"       onclick="switchTab('uploads')">Uploads</button>
+  <button class="tab-btn py-3"        data-tab="discrepancies" onclick="switchTab('discrepancies')">Discrepancies <span id="disc-badge" class="badge b-err hidden">0</span></button>
+  <button class="tab-btn py-3"        data-tab="setup"         onclick="switchTab('setup')">Setup <span id="setup-badge" class="badge b-warn hidden">0</span></button>
 </div>
 
-<!-- ── MAIN CONTENT ── -->
 <main class="p-6 max-w-7xl mx-auto space-y-6">
 
-  <!-- OVERVIEW TAB -->
+  <!-- OVERVIEW -->
   <div id="tab-overview" class="tab-pane space-y-5">
-
-    <!-- KPI row -->
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-      <div class="card text-center">
-        <div class="text-xs text-gray-400 mb-1">POS Net Sales</div>
-        <div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div>
-      </div>
-      <div class="card text-center">
-        <div class="text-xs text-gray-400 mb-1">External Total</div>
-        <div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div>
-      </div>
-      <div class="card text-center">
-        <div class="text-xs text-gray-400 mb-1">Variance</div>
-        <div id="kpi-var" class="text-2xl font-bold">—</div>
-      </div>
-      <div class="card text-center">
-        <div class="text-xs text-gray-400 mb-1">Pending Issues</div>
-        <div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div>
-      </div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">POS Tender (reconcilable)</div><div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">External Total</div><div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">Variance</div><div id="kpi-var" class="text-2xl font-bold">—</div></div>
+      <div class="card text-center"><div class="text-xs text-gray-400 mb-1">Open Issues</div><div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div></div>
     </div>
-
-    <!-- Source breakdown -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-      <!-- Match rate by source -->
-      <div class="card">
-        <div class="font-semibold text-gray-700 mb-4">Match Rate by Source</div>
-        <div id="match-rates" class="space-y-3">
-          <!-- filled by JS -->
-        </div>
-      </div>
-
-      <!-- Variance chart -->
-      <div class="card">
-        <div class="font-semibold text-gray-700 mb-3">Variance by Source (฿)</div>
-        <canvas id="chart-variance" height="160"></canvas>
-      </div>
-    </div>
-
-    <!-- Branch overview table -->
     <div class="card overflow-x-auto">
       <div class="font-semibold text-gray-700 mb-3">Branch Overview</div>
       <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Branch</th>
-            <th class="text-right pb-2">POS</th>
-            <th class="text-right pb-2">External</th>
-            <th class="text-right pb-2">Variance</th>
-            <th class="text-center pb-2">Status</th>
-            <th class="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody id="branch-overview-body">
-          <tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr>
-        </tbody>
+        <thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">Branch</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th><th class="text-right pb-2">Variance</th><th class="text-center pb-2">Status</th><th></th>
+        </tr></thead>
+        <tbody id="ov-body"><tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
       </table>
     </div>
   </div>
 
-  <!-- UPLOADS TAB -->
+  <!-- RECONCILE -->
+  <div id="tab-reconcile" class="tab-pane hidden space-y-5">
+    <div id="rec-empty" class="card text-center text-gray-400 py-10">
+      Select a branch above and open its session from the Overview tab, or
+      <button onclick="ensureSession()" class="text-orange-600 underline">start one</button>.
+    </div>
+    <div id="rec-body" class="hidden space-y-5">
+      <div class="card flex items-center gap-4 flex-wrap">
+        <div><div class="text-xs text-gray-400">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
+        <div id="rec-status"></div>
+        <div class="ml-auto flex gap-2">
+          <button onclick="runMatch()" class="btn btn-pri">▶ Run Match</button>
+          <button onclick="setStatus('in_review')" class="btn btn-sec">Mark In-Review</button>
+          <button onclick="setStatus('approved')" class="btn btn-sec">Approve</button>
+        </div>
+      </div>
+      <div id="rec-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+      <div>
+        <div class="font-semibold text-gray-700 mb-3">Reconciliation by category</div>
+        <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold text-gray-700">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
+          <select id="fv-source" class="inp" onchange="loadFeeVat()">
+            <option value="grab">Grab</option><option value="lineman">Line Man</option><option value="credit_card">Credit Card</option>
+          </select>
+        </div>
+        <div class="overflow-x-auto"><table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th><th class="text-right pb-2">Gross</th>
+            <th class="text-right pb-2">Fee</th><th class="text-right pb-2">VAT</th><th class="text-right pb-2">Net</th><th></th>
+          </tr></thead>
+          <tbody id="fv-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No lines</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- UPLOADS -->
   <div id="tab-uploads" class="tab-pane hidden space-y-4">
     <div class="card">
-      <div class="font-semibold text-gray-700 mb-4">Upload Reports</div>
+      <div class="font-semibold text-gray-700 mb-4">Upload Statements &amp; Reports</div>
       <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div class="drop-zone p-6 text-center" id="dz-bank"        ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'bank')">
-          <div class="text-3xl mb-2">🏦</div>
-          <div class="font-semibold text-sm">Bank Statement</div>
-          <div class="text-xs text-gray-400 mt-1">KBank · SCB · BBL · KTB · TTB</div>
-          <div class="text-xs text-gray-400">.xlsx</div>
-        </div>
-        <div class="drop-zone p-6 text-center" id="dz-credit_card" ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'credit_card')">
-          <div class="text-3xl mb-2">💳</div>
-          <div class="font-semibold text-sm">Credit Card</div>
-          <div class="text-xs text-gray-400 mt-1">EDC Settlement Report</div>
-          <div class="text-xs text-gray-400">.xlsx</div>
-        </div>
-        <div class="drop-zone p-6 text-center" id="dz-grab"        ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'grab')">
-          <div class="text-3xl mb-2">🟢</div>
-          <div class="font-semibold text-sm">Grab Report</div>
-          <div class="text-xs text-gray-400 mt-1">Grab for Restaurants</div>
-          <div class="text-xs text-gray-400">.xlsx / .csv</div>
-        </div>
-        <div class="drop-zone p-6 text-center" id="dz-lineman"     ondragover="dzDrag(event)" ondragleave="dzLeave(event)" ondrop="dzDrop(event,'lineman')">
-          <div class="text-3xl mb-2">🟡</div>
-          <div class="font-semibold text-sm">Lineman Report</div>
-          <div class="text-xs text-gray-400 mt-1">LINE MAN Wongnai</div>
-          <div class="text-xs text-gray-400">.xlsx</div>
-        </div>
+        <button onclick="openUploadModal('bank')" class="card text-center hover:shadow-md"><div class="text-3xl">🏦</div><div class="font-semibold text-sm mt-1">Bank Statement</div><div class="text-xs text-gray-400">KTB · KBANK</div></button>
+        <button onclick="openUploadModal('credit_card')" class="card text-center hover:shadow-md"><div class="text-3xl">💳</div><div class="font-semibold text-sm mt-1">Credit Card</div><div class="text-xs text-gray-400">KTB · KBANK · KTC</div></button>
+        <button onclick="openUploadModal('grab')" class="card text-center hover:shadow-md"><div class="text-3xl">🟢</div><div class="font-semibold text-sm mt-1">Grab Report</div><div class="text-xs text-gray-400">Grab for Restaurants</div></button>
+        <button onclick="openUploadModal('lineman')" class="card text-center hover:shadow-md"><div class="text-3xl">🟡</div><div class="font-semibold text-sm mt-1">Line Man Report</div><div class="text-xs text-gray-400">LINE MAN Wongnai</div></button>
       </div>
     </div>
-
-    <!-- Uploads list -->
     <div class="card overflow-x-auto">
-      <div class="font-semibold text-gray-700 mb-3">Recent Uploads</div>
+      <div class="font-semibold text-gray-700 mb-3">Uploads — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
       <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">File</th>
-            <th class="text-left pb-2">Source</th>
-            <th class="text-left pb-2">Provider</th>
-            <th class="text-left pb-2">Branch</th>
-            <th class="text-right pb-2">Rows</th>
-            <th class="text-center pb-2">Status</th>
-            <th class="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody id="uploads-body">
-          <tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads yet</td></tr>
-        </tbody>
+        <thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">File</th><th class="text-left pb-2">Source</th><th class="text-left pb-2">Provider</th><th class="text-left pb-2">Branch</th><th class="text-right pb-2">Rows</th><th class="text-center pb-2">Status</th><th></th>
+        </tr></thead>
+        <tbody id="up-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr></tbody>
       </table>
     </div>
   </div>
 
-  <!-- MATCHES TAB -->
-  <div id="tab-matches" class="tab-pane hidden">
-    <div class="card overflow-x-auto">
-      <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold text-gray-700">Matched Items</div>
-        <select id="match-source-filter" class="border border-gray-300 rounded-lg px-3 py-1 text-sm">
-          <option value="">All sources</option>
-          <option value="bank">Bank</option>
-          <option value="credit_card">Credit Card</option>
-          <option value="grab">Grab</option>
-          <option value="lineman">Lineman</option>
-        </select>
-      </div>
-      <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Source</th>
-            <th class="text-left pb-2">Date</th>
-            <th class="text-right pb-2">External (฿)</th>
-            <th class="text-right pb-2">POS (฿)</th>
-            <th class="text-right pb-2">Variance</th>
-            <th class="text-center pb-2">Type</th>
-            <th class="text-center pb-2">Confidence</th>
-          </tr>
-        </thead>
-        <tbody id="matches-body">
-          <tr><td colspan="7" class="text-center text-gray-400 py-6">Run auto-match to see results</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- DISCREPANCIES TAB -->
+  <!-- DISCREPANCIES -->
   <div id="tab-discrepancies" class="tab-pane hidden">
     <div class="card overflow-x-auto">
       <div class="flex items-center justify-between mb-3">
-        <div class="font-semibold text-gray-700">Pending Discrepancies</div>
-        <div class="text-xs text-gray-400">Sorted by largest variance first</div>
+        <div class="font-semibold text-gray-700">Discrepancies for accounting</div>
+        <div class="text-xs text-gray-400">largest variance first</div>
       </div>
       <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Type</th>
-            <th class="text-left pb-2">Source</th>
-            <th class="text-right pb-2">External (฿)</th>
-            <th class="text-right pb-2">POS (฿)</th>
-            <th class="text-right pb-2">Variance</th>
-            <th class="text-center pb-2">Action</th>
-          </tr>
-        </thead>
-        <tbody id="disc-body">
-          <tr><td colspan="6" class="text-center text-gray-400 py-6">No pending discrepancies</td></tr>
-        </tbody>
+        <thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">Category</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Type</th>
+          <th class="text-right pb-2">External</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">Variance</th>
+          <th class="text-left pb-2">Assignee</th><th class="text-center pb-2">Resolve</th>
+        </tr></thead>
+        <tbody id="disc-body"><tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session to see its discrepancies</td></tr></tbody>
       </table>
     </div>
   </div>
 
-  <!-- SESSIONS TAB -->
-  <div id="tab-sessions" class="tab-pane hidden">
-    <div class="card">
-      <div class="flex items-center justify-between mb-4">
-        <div class="font-semibold text-gray-700">Reconciliation Sessions</div>
-        <button onclick="createSession()" class="text-sm font-semibold text-white rounded-lg px-4 py-1.5" style="background:var(--brand)">
-          + New Session
-        </button>
+  <!-- SETUP -->
+  <div id="tab-setup" class="tab-pane hidden space-y-6">
+    <div class="card overflow-x-auto">
+      <div class="flex items-center justify-between mb-3">
+        <div class="font-semibold text-gray-700">Payment-code map <span class="text-xs text-gray-400">(POS tender → category &amp; bank)</span></div>
+        <button onclick="reseed()" class="btn btn-sec">⟳ Re-seed from POS</button>
       </div>
+      <p class="text-xs text-gray-500 mb-3">Rows highlighted need a bank assigned before they can reconcile. Edit a row, then Save.</p>
       <table class="w-full text-sm">
-        <thead>
-          <tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Branch</th>
-            <th class="text-left pb-2">Period</th>
-            <th class="text-center pb-2">Status</th>
-            <th class="text-left pb-2">Created</th>
-            <th class="pb-2"></th>
-          </tr>
-        </thead>
-        <tbody id="sessions-body">
-          <tr><td colspan="5" class="text-center text-gray-400 py-6">No sessions</td></tr>
-        </tbody>
+        <thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">POS code</th><th class="text-left pb-2">Category</th><th class="text-left pb-2">Bank/Acquirer</th><th class="text-center pb-2">Reconcile</th><th></th>
+        </tr></thead>
+        <tbody id="map-body"></tbody>
       </table>
     </div>
-  </div>
 
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="card overflow-x-auto">
+        <div class="font-semibold text-gray-700 mb-3">Bank accounts</div>
+        <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Account</th><th></th></tr></thead>
+          <tbody id="acct-body"></tbody></table>
+        <div class="flex gap-2 flex-wrap items-end">
+          <select id="na-branch" class="inp"></select>
+          <select id="na-bank" class="inp"><option>KTB</option><option>KBANK</option></select>
+          <input id="na-acct" class="inp" placeholder="account no">
+          <input id="na-name" class="inp" placeholder="name (opt)">
+          <button onclick="addAccount()" class="btn btn-pri">Add</button>
+        </div>
+      </div>
+      <div class="card overflow-x-auto">
+        <div class="font-semibold text-gray-700 mb-3">Credit-card acquirer MIDs</div>
+        <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Acquirer</th><th class="text-left pb-2">MID</th><th class="text-left pb-2">Terminal</th><th></th></tr></thead>
+          <tbody id="mid-body"></tbody></table>
+        <div class="flex gap-2 flex-wrap items-end">
+          <select id="nm-branch" class="inp"></select>
+          <select id="nm-acq" class="inp"><option>KTB</option><option>KBANK</option><option>KTC</option></select>
+          <input id="nm-mid" class="inp" placeholder="merchant id">
+          <input id="nm-term" class="inp" placeholder="terminal (opt)">
+          <button onclick="addMid()" class="btn btn-pri">Add</button>
+        </div>
+      </div>
+    </div>
+  </div>
 </main>
 
-<!-- ── UPLOAD MODAL ── -->
-<div id="upload-modal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+<!-- UPLOAD MODAL -->
+<div id="upmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
-    <div class="flex items-center justify-between mb-5">
-      <div class="font-bold text-lg text-gray-800">Upload Report</div>
-      <button onclick="closeUploadModal()" class="text-gray-400 hover:text-gray-600 text-xl font-bold">&times;</button>
+    <div class="flex items-center justify-between mb-5"><div class="font-bold text-lg">Upload</div><button onclick="closeUploadModal()" class="text-gray-400 text-xl">&times;</button></div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Source</label>
+        <select id="up-source" class="inp w-full mt-1"><option value="bank">Bank Statement</option><option value="credit_card">Credit Card Settlement</option><option value="grab">Grab Report</option><option value="lineman">Line Man Report</option></select></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">File (.xlsx)</label><input id="up-file" type="file" accept=".xlsx,.xls" class="w-full text-sm mt-1"></div>
     </div>
-
-    <div class="space-y-4">
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Source Type</label>
-        <select id="up-source" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          <option value="bank">Bank Statement</option>
-          <option value="credit_card">Credit Card Settlement</option>
-          <option value="grab">Grab Report</option>
-          <option value="lineman">Lineman Report</option>
-        </select>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Branch</label>
-        <select id="up-branch" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"></select>
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Period (YYYY-MM)</label>
-        <input id="up-period" type="month" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">Provider (optional)</label>
-        <input id="up-provider" type="text" placeholder="e.g. KBank, SCB…" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-      </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block">File</label>
-        <input id="up-file" type="file" accept=".xlsx,.xls,.csv" class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-50 file:text-orange-600">
-      </div>
-    </div>
-
-    <!-- Preview area -->
-    <div id="preview-area" class="hidden mt-4">
-      <div class="bg-gray-50 rounded-lg p-3 text-xs font-mono overflow-x-auto max-h-48">
-        <div id="preview-content"></div>
-      </div>
-      <div id="preview-summary" class="text-xs text-gray-500 mt-2"></div>
-    </div>
-
+    <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
     <div class="flex justify-end gap-3 mt-6">
-      <button onclick="previewUpload()" class="text-sm font-semibold border border-gray-300 rounded-lg px-4 py-2 hover:bg-gray-50">
-        Preview
-      </button>
-      <button id="confirm-btn" onclick="confirmUpload()" class="text-sm font-semibold text-white rounded-lg px-4 py-2 disabled:opacity-40" style="background:var(--brand)" disabled>
-        Confirm Upload
-      </button>
+      <button onclick="previewUpload()" class="btn btn-sec">Preview</button>
+      <button id="up-confirm" onclick="confirmUpload()" class="btn btn-pri" disabled>Confirm</button>
     </div>
   </div>
 </div>
 
-<!-- ── SCRIPTS ── -->
 <script>
-const API = '';  // same origin
-let currentSession = null;
-let varChart = null;
+const API = '';
+let SESSION = null;        // {session_id, branch_id, period_month, status, branch_name}
+let BRANCHES = [];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-const fmt = n => n == null ? '—' : new Intl.NumberFormat('th-TH', {minimumFractionDigits:0}).format(Math.round(n));
-const fmtPct = n => n == null ? '—' : n.toFixed(1) + '%';
-
-function statusPill(s) {
-  const cls = {draft:'pill-draft', in_review:'pill-review', approved:'pill-approved', closed:'pill-closed', no_session:'pill-draft'}[s] || 'pill-draft';
-  const labels = {draft:'Draft', in_review:'In Review', approved:'Approved', closed:'Closed', no_session:'—'};
-  return `<span class="pill ${cls}">${labels[s] || s}</span>`;
+// ── fetch with write-token + error surfacing ─────────────────────────────────
+async function api(path, opts={}) {
+  opts.headers = opts.headers || {};
+  const tok = localStorage.getItem('oshinei_token');
+  if (tok) opts.headers['X-Upload-Token'] = tok;
+  if (opts.json !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.json); delete opts.json; }
+  const r = await fetch(API+path, opts);
+  if (r.status===403) { alert('Write token required or invalid. Click 🔑 to set it.'); throw new Error('403'); }
+  const ct = r.headers.get('content-type')||'';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) { throw new Error(data.detail || r.status); }
+  return data;
 }
+function setToken(){ const t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); }
 
-function varCell(v) {
-  if (v == null) return '<td class="text-right text-gray-400">—</td>';
-  const cls = Math.abs(v) < 5 ? 'text-green-600' : v > 0 ? 'var-pos' : 'var-neg';
-  return `<td class="text-right font-mono ${cls}">${v >= 0 ? '+' : ''}${fmt(v)}</td>`;
-}
+const fmt = n => n==null ? '—' : new Intl.NumberFormat('th-TH',{maximumFractionDigits:0}).format(Math.round(n));
+const period = () => document.getElementById('sel-period').value;
+function varCls(v){ return Math.abs(v)<100 ? 'var-zero' : v>0?'var-pos':'var-neg'; }
+function varTxt(v){ return (v>=0?'+':'')+fmt(v); }
+const STATUS_BADGE = {matched:'b-ok', mismatch:'b-err', pos_only:'b-warn', ext_only:'b-warn', no_source:'b-mut'};
+const STATUS_LBL = {matched:'Matched', mismatch:'Mismatch', pos_only:'No statement', ext_only:'Extra in statement', no_source:'No source'};
 
-// ── Init ──────────────────────────────────────────────────────────────────────
-
-async function init() {
-  // Period selector: last 12 months
-  const sel = document.getElementById('sel-period');
-  const now = new Date();
-  for (let i = 0; i < 12; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const val = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
-    const opt = document.createElement('option');
-    opt.value = val; opt.textContent = val;
-    if (i === 0) opt.selected = true;
-    sel.appendChild(opt);
-  }
-  sel.addEventListener('change', loadOverview);
-
-  // Branch selector
-  const branches = await fetch(`${API}/api/overview?period_month=${sel.value}`).then(r => r.json()).catch(() => []);
-  const bSel = document.getElementById('sel-branch');
-  const upBranch = document.getElementById('up-branch');
-  branches.forEach(b => {
-    [bSel, upBranch].forEach(el => {
-      const opt = document.createElement('option');
-      opt.value = b.branch_id; opt.textContent = b.branch_name;
-      el.appendChild(opt);
-    });
+// ── init ─────────────────────────────────────────────────────────────────────
+async function init(){
+  const sel=document.getElementById('sel-period'); const now=new Date();
+  for(let i=0;i<14;i++){ const d=new Date(now.getFullYear(),now.getMonth()-i,1); const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o); }
+  sel.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  sel.onchange = ()=>{ loadOverview(); if(!document.getElementById('tab-uploads').classList.contains('hidden')) loadUploads(); };
+  BRANCHES = await api('/api/branches').catch(()=>[]);
+  ['sel-branch','up-branch','na-branch','nm-branch'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.branch_id; o.textContent=b.name; el.appendChild(o); });
   });
-
-  loadOverview();
+  document.getElementById('sel-branch').onchange = ()=>loadOverview();
+  loadOverview(); refreshSetupBadge();
 }
 
-// ── Tabs ──────────────────────────────────────────────────────────────────────
-
-function switchTab(name) {
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-  document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
-  document.getElementById(`tab-${name}`).classList.remove('hidden');
-  if (name === 'uploads')       loadUploads();
-  if (name === 'matches')       loadMatches();
-  if (name === 'discrepancies') loadDiscrepancies();
-  if (name === 'sessions')      loadSessions();
+function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  if(name==='overview') loadOverview();
+  if(name==='reconcile') renderReconcile();
+  if(name==='uploads') loadUploads();
+  if(name==='discrepancies') loadDiscrepancies();
+  if(name==='setup') loadSetup();
 }
 
-// ── Overview ──────────────────────────────────────────────────────────────────
-
-async function loadOverview() {
-  const period = document.getElementById('sel-period').value;
-  const data = await fetch(`${API}/api/overview?period_month=${period}`).then(r => r.json()).catch(() => []);
-
-  let totalPos = 0, totalExt = 0, totalIssues = 0;
-  const tbody = document.getElementById('branch-overview-body');
-  tbody.innerHTML = '';
-
-  data.forEach(b => {
-    totalPos += b.pos_total || 0;
-    totalExt += b.ext_total || 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="py-2 font-medium">${b.branch_name}</td>
+// ── overview ─────────────────────────────────────────────────────────────────
+async function loadOverview(){
+  const data = await api('/api/overview?period_month='+period()).catch(()=>[]);
+  const tb=document.getElementById('ov-body'); tb.innerHTML='';
+  let tp=0, te=0;
+  data.forEach(b=>{ tp+=b.pos_total||0; te+=b.ext_total||0;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2 font-medium">${b.branch_name}</td>
       <td class="text-right font-mono">${fmt(b.pos_total)}</td>
       <td class="text-right font-mono">${fmt(b.ext_total)}</td>
-      ${varCell(b.variance)}
-      <td class="text-center">${statusPill(b.status)}</td>
-      <td class="text-right">
-        ${b.session_id
-          ? `<button onclick="openSession(${b.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>`
-          : `<button onclick="createSessionFor(${b.branch_id},'${period}')" class="text-xs text-gray-400 hover:text-orange-600">Start</button>`
-        }
-      </td>`;
-    tbody.appendChild(tr);
+      <td class="text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
+      <td class="text-center"><span class="pill pill-${b.status}">${b.status.replace('_',' ')}</span></td>
+      <td class="text-right">${b.session_id
+        ? `<button onclick="openSession(${b.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>`
+        : `<button onclick="startSession(${b.branch_id})" class="text-xs text-gray-400 hover:text-orange-600">Start</button>`}</td>`;
+    tb.appendChild(tr);
   });
-
-  document.getElementById('kpi-pos').textContent = '฿' + fmt(totalPos);
-  document.getElementById('kpi-ext').textContent = '฿' + fmt(totalExt);
-  const v = totalExt - totalPos;
-  const kpiVar = document.getElementById('kpi-var');
-  kpiVar.textContent = (v >= 0 ? '+' : '') + '฿' + fmt(v);
-  kpiVar.className = 'text-2xl font-bold ' + (Math.abs(v) < 100 ? 'text-green-600' : v > 0 ? 'var-pos' : 'var-neg');
+  document.getElementById('kpi-pos').textContent='฿'+fmt(tp);
+  document.getElementById('kpi-ext').textContent='฿'+fmt(te);
+  const v=te-tp; const k=document.getElementById('kpi-var');
+  k.textContent=(v>=0?'+':'')+'฿'+fmt(v); k.className='text-2xl font-bold '+varCls(v);
 }
 
-// ── Sessions ──────────────────────────────────────────────────────────────────
+async function startSession(branch_id){
+  try{ await api('/api/sessions',{method:'POST',json:{branch_id,period_month:period()}}); }catch(e){}
+  const ov = await api('/api/overview?period_month='+period());
+  const row = ov.find(b=>b.branch_id===branch_id);
+  if(row&&row.session_id) openSession(row.session_id); else loadOverview();
+}
+async function ensureSession(){
+  const bid = +document.getElementById('sel-branch').value;
+  if(!bid){ alert('Pick a branch in the top bar first'); return; }
+  startSession(bid);
+}
+async function openSession(id){
+  SESSION = await api('/api/sessions/'+id);
+  switchTab('reconcile');
+}
 
-async function loadSessions() {
-  const period = document.getElementById('sel-period').value;
-  const data = await fetch(`${API}/api/sessions?period_month=${period}`).then(r => r.json()).catch(() => []);
-  const tbody = document.getElementById('sessions-body');
-  tbody.innerHTML = data.length ? '' : '<tr><td colspan="5" class="text-center text-gray-400 py-6">No sessions</td></tr>';
-  data.forEach(s => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="py-2">${s.branch_name}</td>
-      <td>${s.period_month}</td>
-      <td class="text-center">${statusPill(s.status)}</td>
-      <td class="text-gray-400 text-xs">${s.created_at?.slice(0,10) || '—'}</td>
-      <td class="text-right">
-        <button onclick="runMatch(${s.session_id})" class="text-xs text-blue-600 hover:underline mr-3">Run Match</button>
-        <button onclick="openSession(${s.session_id})" class="text-xs text-orange-600 hover:underline">Open</button>
-      </td>`;
-    tbody.appendChild(tr);
+// ── reconcile ────────────────────────────────────────────────────────────────
+async function renderReconcile(){
+  if(!SESSION){ document.getElementById('rec-empty').classList.remove('hidden'); document.getElementById('rec-body').classList.add('hidden'); return; }
+  document.getElementById('rec-empty').classList.add('hidden');
+  document.getElementById('rec-body').classList.remove('hidden');
+  document.getElementById('rec-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
+  document.getElementById('rec-status').innerHTML = `<span class="pill pill-${SESSION.status}">${SESSION.status.replace('_',' ')}</span>`;
+  const s = await api(`/api/sessions/${SESSION.session_id}/summary`);
+  // unmapped warning
+  const un=document.getElementById('rec-unmapped');
+  if(s.unmapped && s.unmapped.length){ un.classList.remove('hidden');
+    un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes</div>
+      <div class="text-sm text-gray-600">These tender codes have no mapping and are excluded. Add them in Setup → Payment-code map:</div>
+      <div class="text-sm mt-1">${s.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ฿${fmt(u.amount)}</span>`).join('')}</div>`;
+  } else un.classList.add('hidden');
+  // cards
+  const cont=document.getElementById('rec-cards'); cont.innerHTML='';
+  if(!s.categories.length){ cont.innerHTML='<div class="text-gray-400">No reconcilable POS tender for this period.</div>'; }
+  s.categories.forEach(c=>{
+    const showNet = (c.category==='CREDIT'||c.category==='GRAB'||c.category==='LINEMAN');
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
+        <span class="badge ${STATUS_BADGE[c.status]}">${STATUS_LBL[c.status]}</span></div>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div><div class="text-xs text-gray-400">POS tender</div><div class="font-mono">฿${fmt(c.pos_amount)}</div></div>
+        <div><div class="text-xs text-gray-400">Statement</div><div class="font-mono">฿${fmt(c.ext_amount)}</div></div>
+        ${showNet?`<div><div class="text-xs text-gray-400">Net (after fee/VAT)</div><div class="font-mono">฿${fmt(c.ext_net)}</div></div>`:''}
+        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(c.variance)}">${varTxt(c.variance)}</div></div>
+      </div>`;
+    cont.appendChild(div);
   });
+  loadFeeVat();
 }
 
-async function createSession() {
-  const branch_id = document.getElementById('sel-branch').value;
-  const period_month = document.getElementById('sel-period').value;
-  if (!branch_id) { alert('Select a branch first'); return; }
-  await fetch(`${API}/api/sessions`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({branch_id: +branch_id, period_month})
-  });
-  loadSessions();
+async function runMatch(){
+  try{
+    const r = await api(`/api/sessions/${SESSION.session_id}/run-match`,{method:'POST'});
+    alert(`Run complete — ${r.matched} matched, ${r.discrepancies} to review.` + (r.unmapped.length?`\n${r.unmapped.length} unmapped code(s).`:''));
+    renderReconcile(); loadDiscrepancies();
+  }catch(e){ alert('Run failed: '+e.message); }
+}
+async function setStatus(status){
+  const fd=new FormData(); fd.append('status',status);
+  try{ await api(`/api/sessions/${SESSION.session_id}/status`,{method:'PATCH',body:fd}); SESSION.status=status; renderReconcile(); }catch(e){ alert(e.message); }
 }
 
-async function createSessionFor(branch_id, period_month) {
-  await fetch(`${API}/api/sessions`, {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({branch_id, period_month})
-  });
-  loadOverview();
-}
-
-async function runMatch(session_id) {
-  const btn = event.target;
-  btn.textContent = 'Running…'; btn.disabled = true;
-  const res = await fetch(`${API}/api/sessions/${session_id}/run-match`, {method:'POST'}).then(r => r.json());
-  btn.textContent = 'Run Match'; btn.disabled = false;
-  alert(`Match complete!\nCredit Card: ${res.credit_card?.matched || 0} matched\nGrab: ${res.grab?.matched_days || 0} days\nLineman: ${res.lineman?.matched_days || 0} days\nBank: ${res.bank?.matched || 0} matched`);
-  loadSessions();
-}
-
-function openSession(session_id) {
-  currentSession = session_id;
-  switchTab('matches');
-  loadMatches();
-  loadDiscrepancies();
-}
-
-// ── Uploads ───────────────────────────────────────────────────────────────────
-
-async function loadUploads() {
-  // Would fetch /api/uploads – placeholder
-  const tbody = document.getElementById('uploads-body');
-  tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads in current period</td></tr>';
-}
-
-function openUploadModal() {
-  document.getElementById('upload-modal').classList.remove('hidden');
-  document.getElementById('up-period').value = document.getElementById('sel-period').value;
-}
-function closeUploadModal() {
-  document.getElementById('upload-modal').classList.add('hidden');
-  document.getElementById('preview-area').classList.add('hidden');
-  document.getElementById('confirm-btn').disabled = true;
-}
-
-async function previewUpload() {
-  const form = new FormData();
-  form.append('file',         document.getElementById('up-file').files[0]);
-  form.append('branch_id',    document.getElementById('up-branch').value);
-  form.append('period_month', document.getElementById('up-period').value);
-  form.append('provider',     document.getElementById('up-provider').value);
-  const src = document.getElementById('up-source').value;
-
-  const res = await fetch(`${API}/api/uploads/${src}/preview`, {method:'POST', body: form}).then(r => r.json());
-  if (res.detail) { alert('Parse error: ' + res.detail); return; }
-
-  const area = document.getElementById('preview-area');
-  area.classList.remove('hidden');
-  document.getElementById('preview-summary').textContent = `${res.row_count} rows detected · provider: ${res.provider}`;
-  const table = res.preview.slice(0,5);
-  document.getElementById('preview-content').innerHTML = table.map(r =>
-    Object.entries(r).map(([k,v]) => `<span class="text-gray-500">${k}:</span> ${v}`).join('  ')
-  ).join('<br>');
-  document.getElementById('confirm-btn').disabled = false;
-}
-
-async function confirmUpload() {
-  const form = new FormData();
-  form.append('file',         document.getElementById('up-file').files[0]);
-  form.append('branch_id',    document.getElementById('up-branch').value);
-  form.append('period_month', document.getElementById('up-period').value);
-  form.append('provider',     document.getElementById('up-provider').value);
-  const src = document.getElementById('up-source').value;
-
-  const res = await fetch(`${API}/api/uploads/${src}/confirm`, {method:'POST', body: form}).then(r => r.json());
-  if (res.detail) { alert('Error: ' + res.detail); return; }
-  alert(`Saved ${res.rows_saved} rows (upload #${res.upload_id})`);
-  closeUploadModal();
-  loadUploads();
-}
-
-// ── Drag & drop zones ─────────────────────────────────────────────────────────
-
-function dzDrag(e) { e.preventDefault(); e.currentTarget.classList.add('dragging'); }
-function dzLeave(e) { e.currentTarget.classList.remove('dragging'); }
-function dzDrop(e, src) {
-  e.preventDefault(); e.currentTarget.classList.remove('dragging');
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
-  document.getElementById('up-source').value = src;
-  document.getElementById('up-file').files; // can't set programmatically – open modal
-  openUploadModal();
-  document.getElementById('up-source').value = src;
-}
-
-// ── Matches ───────────────────────────────────────────────────────────────────
-
-async function loadMatches() {
-  if (!currentSession) return;
-  const src = document.getElementById('match-source-filter')?.value || '';
-  const url = `${API}/api/sessions/${currentSession}/matches` + (src ? `?source_type=${src}` : '');
-  const data = await fetch(url).then(r => r.json()).catch(() => []);
-  const tbody = document.getElementById('matches-body');
-  tbody.innerHTML = '';
-  if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-gray-400 py-6">No matches yet — run auto-match first</td></tr>';
-    return;
-  }
-  data.forEach(m => {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="py-1.5 capitalize">${m.source_type}</td>
-      <td class="text-gray-500">${m.pos_date || '—'}</td>
-      <td class="text-right font-mono">${fmt(m.external_amount)}</td>
-      <td class="text-right font-mono">${fmt(m.pos_amount)}</td>
-      ${varCell(m.variance)}
-      <td class="text-center text-xs text-gray-400">${m.match_type}</td>
-      <td class="text-center">
-        <div class="progress-bar w-16 mx-auto"><div class="progress-fill" style="width:${(m.confidence*100).toFixed(0)}%"></div></div>
-      </td>`;
-    tbody.appendChild(tr);
+// ── fee / vat editor ─────────────────────────────────────────────────────────
+async function loadFeeVat(){
+  if(!SESSION) return;
+  const src=document.getElementById('fv-source').value;
+  const lines = await api(`/api/lines/${src}?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`).catch(()=>[]);
+  const tb=document.getElementById('fv-body'); tb.innerHTML='';
+  if(!lines.length){ tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-6">No lines uploaded for this source</td></tr>'; return; }
+  lines.forEach(l=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
+      <td class="text-right font-mono">${fmt(l.gross)}</td>
+      <td class="text-right"><input class="inp w-24 text-right" id="fee-${l.id}" value="${l.fee??''}" placeholder="${fmt(l.fee_parsed)}"></td>
+      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="0"></td>
+      <td class="text-right font-mono text-gray-500">${fmt(l.net)}</td>
+      <td class="text-right"><button onclick="saveFeeVat('${src}',${l.id})" class="text-xs text-orange-600 hover:underline">Save</button></td>`;
+    tb.appendChild(tr);
   });
 }
-
-// ── Discrepancies ─────────────────────────────────────────────────────────────
-
-async function loadDiscrepancies() {
-  if (!currentSession) return;
-  const data = await fetch(`${API}/api/sessions/${currentSession}/discrepancies`).then(r => r.json()).catch(() => []);
-  const badge = document.getElementById('disc-badge');
-  badge.textContent = data.length;
-  badge.classList.toggle('hidden', data.length === 0);
-  document.getElementById('kpi-issues').textContent = data.length;
-
-  const tbody = document.getElementById('disc-body');
-  tbody.innerHTML = '';
-  if (!data.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-gray-400 py-6">No pending discrepancies</td></tr>';
-    return;
-  }
-  data.forEach(d => {
-    const typeLabels = {
-      unmatched_external: 'Unmatched (external)',
-      unmatched_pos:      'Unmatched (POS)',
-      amount_mismatch:    'Amount mismatch',
-      timing_diff:        'Timing difference',
-    };
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="py-1.5 text-xs">${typeLabels[d.disc_type] || d.disc_type}</td>
-      <td class="capitalize text-xs">${d.source_type}</td>
-      <td class="text-right font-mono">${fmt(d.amount_external)}</td>
-      <td class="text-right font-mono">${fmt(d.amount_pos)}</td>
-      ${varCell(d.variance)}
-      <td class="text-center">
-        <select onchange="resolveDisc(${d.id}, this.value)" class="text-xs border border-gray-200 rounded px-2 py-0.5">
-          <option value="">Resolve…</option>
-          <option value="accepted">Accept</option>
-          <option value="adjusted">Adjusted</option>
-          <option value="rejected">Reject</option>
-        </select>
-      </td>`;
-    tbody.appendChild(tr);
-  });
+async function saveFeeVat(src,id){
+  const fee=document.getElementById('fee-'+id).value, vat=document.getElementById('vat-'+id).value;
+  await api(`/api/lines/${src}/${id}/fee-vat`,{method:'PATCH',json:{fee_manual:fee===''?null:+fee, vat_manual:vat===''?null:+vat, by:'staff'}});
+  renderReconcile();
 }
 
-async function resolveDisc(id, resolution) {
-  if (!resolution) return;
-  await fetch(`${API}/api/discrepancies/${id}/resolve`, {
-    method: 'PATCH',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({resolution})
+// ── uploads ──────────────────────────────────────────────────────────────────
+async function loadUploads(){
+  const bid=document.getElementById('sel-branch').value;
+  document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:' · all branches');
+  let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
+  const data = await api(q).catch(()=>[]);
+  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':'<tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr>';
+  data.forEach(u=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
+      <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${u.row_count}</td>
+      <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
+      <td class="text-right"><button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline">Delete</button></td>`;
+    tb.appendChild(tr);
   });
-  loadDiscrepancies();
+}
+async function delUpload(id){ if(!confirm('Delete this upload and its lines?'))return; await api('/api/uploads/'+id,{method:'DELETE'}); loadUploads(); }
+
+function openUploadModal(src){ document.getElementById('upmodal').classList.remove('hidden');
+  document.getElementById('up-period').value=period(); if(src) document.getElementById('up-source').value=src;
+  const bid=document.getElementById('sel-branch').value; if(bid) document.getElementById('up-branch').value=bid; }
+function closeUploadModal(){ document.getElementById('upmodal').classList.add('hidden'); document.getElementById('up-preview').classList.add('hidden'); document.getElementById('up-confirm').disabled=true; }
+function upForm(){ const f=new FormData();
+  f.append('file',document.getElementById('up-file').files[0]); f.append('branch_id',document.getElementById('up-branch').value);
+  f.append('period_month',document.getElementById('up-period').value); f.append('provider',document.getElementById('up-provider').value); return f; }
+async function previewUpload(){ const src=document.getElementById('up-source').value;
+  try{ const r=await api(`/api/uploads/${src}/preview`,{method:'POST',body:upForm()});
+    const p=document.getElementById('up-preview'); p.classList.remove('hidden');
+    p.innerHTML=`<div class="font-semibold mb-1">${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+
+      r.preview.slice(0,4).map(row=>Object.entries(row).slice(0,6).map(([k,v])=>`<span class="text-gray-400">${k}:</span>${v}`).join('  ')).join('<br>');
+    document.getElementById('up-confirm').disabled=false;
+  }catch(e){ alert('Parse error: '+e.message); }
+}
+async function confirmUpload(){ const src=document.getElementById('up-source').value;
+  try{ const r=await api(`/api/uploads/${src}/confirm`,{method:'POST',body:upForm()});
+    alert(`Saved ${r.rows_saved} rows`+(r.skipped_rows?` (${r.skipped_rows} skipped)`:'')); closeUploadModal(); loadUploads();
+  }catch(e){ alert('Error: '+e.message); }
 }
 
-// ── Boot ──────────────────────────────────────────────────────────────────────
+// ── discrepancies ────────────────────────────────────────────────────────────
+async function loadDiscrepancies(){
+  const tb=document.getElementById('disc-body');
+  if(!SESSION){ tb.innerHTML='<tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session first</td></tr>'; return; }
+  const data=await api(`/api/sessions/${SESSION.session_id}/discrepancies`).catch(()=>[]);
+  const badge=document.getElementById('disc-badge'); badge.textContent=data.length; badge.classList.toggle('hidden',!data.length);
+  document.getElementById('kpi-issues').textContent=data.length;
+  tb.innerHTML = data.length?'':'<tr><td colspan="8" class="text-center text-gray-400 py-6">No open discrepancies 🎉</td></tr>';
+  data.forEach(d=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5 font-medium">${d.category||'—'}</td><td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
+      <td class="text-xs text-gray-500">${(d.disc_type||'').replace(/_/g,' ')}</td>
+      <td class="text-right font-mono">${fmt(d.amount_external)}</td><td class="text-right font-mono">${fmt(d.amount_pos)}</td>
+      <td class="text-right font-mono ${varCls(d.variance)}">${varTxt(d.variance)}</td>
+      <td><input class="inp w-28" placeholder="assign…" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
+      <td class="text-center"><select class="inp" onchange="resolveDisc(${d.id},this.value)">
+        <option value="">Resolve…</option><option value="accepted">Accept</option><option value="adjusted">Adjusted</option><option value="rejected">Reject</option></select></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function resolveDisc(id,res){ if(!res)return; await api(`/api/discrepancies/${id}/resolve`,{method:'PATCH',json:{resolution:res,resolved_by:'staff'}}); loadDiscrepancies(); }
+async function assignDisc(id,to){ const fd=new FormData(); fd.append('assigned_to',to); await api(`/api/discrepancies/${id}/assign`,{method:'PATCH',body:fd}); }
+
+// ── setup ────────────────────────────────────────────────────────────────────
+const CATS=['CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'];
+const BANKS=['KTB','KBANK','KTC','PROMPTPAY','NONE','UNKNOWN'];
+async function refreshSetupBadge(){
+  const m=await api('/api/payment-map?needs_attention=1').catch(()=>[]);
+  const b=document.getElementById('setup-badge'); b.textContent=m.length; b.classList.toggle('hidden',!m.length);
+}
+async function loadSetup(){
+  refreshSetupBadge();
+  const map=await api('/api/payment-map'); const tb=document.getElementById('map-body'); tb.innerHTML='';
+  map.forEach(m=>{ const tr=document.createElement('tr'); if(m.bank==='UNKNOWN') tr.style.background='#fff7ed';
+    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}</td>
+      <td><select class="inp" id="mc-${m.id}">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td><select class="inp" id="mb-${m.id}">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''}></td>
+      <td class="text-right"><button onclick="saveMap(${m.id})" class="text-xs text-orange-600 hover:underline">Save</button></td>`;
+    tb.appendChild(tr);
+  });
+  const accts=await api('/api/bank-accounts'); const ab=document.getElementById('acct-body'); ab.innerHTML='';
+  accts.forEach(a=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${a.branch_name}</td><td>${a.bank}</td><td class="font-mono">${a.account_no}</td>
+      <td class="text-right"><button onclick="delAccount(${a.account_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; ab.appendChild(tr); });
+  const mids=await api('/api/acquirer-mids'); const mb=document.getElementById('mid-body'); mb.innerHTML='';
+  mids.forEach(x=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${x.branch_name}</td><td>${x.acquirer}</td><td class="font-mono">${x.merchant_id||'—'}</td><td>${x.terminal_id||'—'}</td>
+      <td class="text-right"><button onclick="delMid(${x.mid_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; mb.appendChild(tr); });
+}
+async function saveMap(id){
+  await api(`/api/payment-map/${id}`,{method:'PATCH',json:{
+    category:document.getElementById('mc-'+id).value, bank:document.getElementById('mb-'+id).value,
+    reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
+  loadSetup();
+}
+async function reseed(){ const r=await api('/api/payment-map/seed',{method:'POST'}); alert(`Seeded ${r.inserted} new code(s).`); loadSetup(); }
+async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{
+  branch_id:+document.getElementById('na-branch').value, bank:document.getElementById('na-bank').value,
+  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(loadSetup).catch(e=>alert(e.message)); }
+async function delAccount(id){ await api('/api/bank-accounts/'+id,{method:'DELETE'}); loadSetup(); }
+async function addMid(){ await api('/api/acquirer-mids',{method:'POST',json:{
+  branch_id:+document.getElementById('nm-branch').value, acquirer:document.getElementById('nm-acq').value,
+  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(loadSetup).catch(e=>alert(e.message)); }
+async function delMid(id){ await api('/api/acquirer-mids/'+id,{method:'DELETE'}); loadSetup(); }
+
 init();
 </script>
 </body>
