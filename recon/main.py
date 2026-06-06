@@ -922,6 +922,7 @@ def list_lines(source: str, branch_id: int, period_month: str):
                 "fee":        r["fee_manual"],
                 "vat":        r["vat_manual"],
                 "fee_parsed": round(float(r[fee_col] or 0), 2),
+                "other":      round(refund + promo, 2),   # non-fee deductions → client live-recompute
                 "net":        round(gross - refund - fee - vat - promo, 2),
             })
     return out

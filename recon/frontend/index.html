@@ -81,7 +81,7 @@
         <div><div class="text-xs text-gray-400">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
         <div id="rec-status"></div>
         <div class="ml-auto flex gap-2">
-          <button onclick="runMatch()" class="btn btn-pri">▶ Run Match</button>
+          <button onclick="runMatch(event)" class="btn btn-pri">▶ Run Match</button>
           <button onclick="downloadExport()" class="btn btn-sec" title="Download the month pack (Excel)">⬇ Excel</button>
           <button onclick="setStatus('in_review')" class="btn btn-sec">Mark In-Review</button>
           <button onclick="setStatus('approved')" class="btn btn-sec">Approve</button>
@@ -129,16 +129,12 @@
         <div class="text-sm text-gray-600">Run <code>python backend/sync_mssql.py</code> (it now builds <code>pos_payment_day</code>) to populate per-day POS tender. External documents are shown below in the meantime.</div>
       </div>
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700 mb-1">Coverage — last day each source's document covers</div>
+        <div class="flex items-center justify-between mb-1">
+          <div class="font-semibold text-gray-700">Daily reconciliation — day × lane</div>
+          <div class="text-xs text-gray-400">✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines</div>
+        </div>
         <div id="daily-coverage" class="text-sm text-gray-600 mb-3"></div>
-        <table class="w-full text-sm">
-          <thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Day</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th>
-            <th class="text-right pb-2">Variance</th><th class="text-left pb-2 pl-4">Lanes</th>
-            <th class="text-center pb-2">Pending</th>
-          </tr></thead>
-          <tbody id="daily-rows"><tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
-        </table>
+        <div id="daily-matrix"><div class="text-center text-gray-400 py-6">Loading…</div></div>
       </div>
     </div>
   </div>
@@ -254,7 +250,7 @@
     <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
     <div class="flex justify-end gap-3 mt-6">
       <button onclick="previewUpload()" class="btn btn-sec">Preview</button>
-      <button id="up-confirm" onclick="confirmUpload()" class="btn btn-pri" disabled>Confirm</button>
+      <button id="up-confirm" onclick="confirmUpload(event)" class="btn btn-pri" disabled>Confirm</button>
     </div>
   </div>
 </div>
@@ -288,13 +284,33 @@ async function api(path, opts={}) {
   if (tok) opts.headers['X-Upload-Token'] = tok;
   if (opts.json !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.json); delete opts.json; }
   const r = await fetch(API+path, opts);
-  if (r.status===403) { alert('Write token required or invalid. Click 🔑 to set it.'); throw new Error('403'); }
+  if (r.status===403) { toast('Write token required or invalid. Click 🔑 to set it.','err'); throw new Error('403'); }
   const ct = r.headers.get('content-type')||'';
   const data = ct.includes('json') ? await r.json() : await r.text();
   if (!r.ok) { throw new Error(data.detail || r.status); }
   return data;
 }
-function setToken(){ const t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); }
+function setToken(){ const t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); toast('Token saved','ok'); }
+
+// ── toast notifications (replace blocking alert()) ────────────────────────────
+const TOAST_CLS = {ok:'#16a34a', err:'#dc2626', warn:'#d97706', info:'#334155'};
+function toast(msg, type='info', ms=3200){
+  let host=document.getElementById('toast-host');
+  if(!host){ host=document.createElement('div'); host.id='toast-host';
+    host.style.cssText='position:fixed;top:16px;right:16px;z-index:100;display:flex;flex-direction:column;gap:8px;max-width:380px'; document.body.appendChild(host); }
+  const el=document.createElement('div');
+  el.style.cssText=`background:#fff;border-left:4px solid ${TOAST_CLS[type]||TOAST_CLS.info};box-shadow:0 4px 14px rgba(0,0,0,.15);border-radius:8px;padding:10px 14px;font-size:13px;color:#1f2937;opacity:0;transform:translateY(-6px);transition:all .2s`;
+  el.textContent=msg; host.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='none'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-6px)'; setTimeout(()=>el.remove(),250); }, ms);
+}
+// disable a button while an async action runs (prevents double-submit)
+async function withBusy(btn, label, fn){
+  if(!btn) return fn();
+  const old=btn.textContent, wasDisabled=btn.disabled;
+  btn.disabled=true; if(label) btn.textContent=label;
+  try { return await fn(); } finally { btn.disabled=wasDisabled; btn.textContent=old; }
+}
 
 const fmt = n => n==null ? '—' : new Intl.NumberFormat('th-TH',{maximumFractionDigits:0}).format(Math.round(n));
 const period = () => document.getElementById('sel-period').value;
@@ -351,6 +367,15 @@ function switchTab(name){
   if(name==='setup') loadSetup();
 }
 
+// a thin "how much of POS tender is backed by a statement" bar (0–100%)
+function coverageBar(pos, ext){
+  if(!pos){ return ''; }
+  const pct = Math.max(0, Math.min(100, Math.round((ext/pos)*100)));
+  const col = pct>=99 ? 'var(--ok)' : pct>=70 ? 'var(--warn)' : 'var(--danger)';
+  return `<div title="${pct}% of POS tender covered by statements" style="margin-top:4px;height:5px;width:120px;background:#eef2f7;border-radius:3px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:${col}"></div></div>`;
+}
+
 // ── overview ─────────────────────────────────────────────────────────────────
 async function loadOverview(){
   const data = await api('/api/overview?period_month='+period()).catch(()=>[]);
@@ -364,7 +389,7 @@ async function loadOverview(){
     const tr=document.createElement('tr'); tr.className='cursor-pointer';
     // clicking the row opens the branch's session (Daily board) to follow up the work
     tr.onclick=(e)=>{ if(e.target.tagName!=='BUTTON') drillBranch(b.branch_id, 'daily'); };
-    tr.innerHTML=`<td class="py-2 font-medium">${b.branch_name}</td>
+    tr.innerHTML=`<td class="py-2 font-medium">${b.branch_name}${coverageBar(b.pos_total,b.ext_total)}</td>
       <td class="text-right font-mono">${fmt(b.pos_total)}</td>
       <td class="text-right font-mono">${fmt(b.ext_total)}</td>
       <td class="text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
@@ -397,7 +422,7 @@ async function startSession(branch_id, tab){
 }
 async function ensureSession(){
   const bid = +document.getElementById('sel-branch').value;
-  if(!bid){ alert('Pick a branch in the top bar first'); return; }
+  if(!bid){ toast('Pick a branch in the top bar first','warn'); return; }
   startSession(bid);
 }
 async function openSession(id, tab){
@@ -416,32 +441,71 @@ async function loadDaily(){
   document.getElementById('daily-title').textContent =
     `${SESSION.branch_name} · ${SESSION.period_month}` + (FOCUS_DATE? ` · focus ${FOCUS_DATE}` : '');
   const d = await api(`/api/sessions/${SESSION.session_id}/daily`);
+  renderDailyBoard(d);
+}
+
+// lane chip colours → cell background tints (kept readable, status symbol on top)
+const LANE_CELL = {matched:'#dcfce7', variance:'#fee2e2', missing:'#fee2e2', pending:'#fef9c3',
+                   ext_only:'#fef9c3', no_source:'#f1f5f9', unmapped_bank:'#fef9c3'};
+const LANE_FG   = {matched:'#15803d', variance:'#b91c1c', missing:'#b91c1c', pending:'#854d0e',
+                   ext_only:'#854d0e', no_source:'#64748b', unmapped_bank:'#854d0e'};
+const _CAT_ORDER = {CASH:0,QR:1,TRANSFER:2,CREDIT:3,GRAB:4,LINEMAN:5,COUPON:6};
+function _laneLabel(cat,bank){ return cat.slice(0,4)+(bank&&bank!=='NONE'?'·'+bank:''); }
+
+function renderDailyBoard(d){
   document.getElementById('daily-nopos').classList.toggle('hidden', d.pos_daily_available);
-  const ps = d.pending_summary;
+  const ps = d.pending_summary || {coverage:{}};
   document.getElementById('daily-pending').innerHTML =
-    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days} pending lane-days</span>
-     <span class="text-gray-400 ml-2">${ps.days_with_pending} day(s) awaiting documents</span>`;
-  document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage).length
+    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} pending lane-days</span>
+     <span class="text-gray-400 ml-2">${ps.days_with_pending||0} day(s) awaiting documents</span>`;
+  document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage||{}).length
     ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
     : '<span class="text-gray-400">No documents uploaded yet.</span>')
     + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ฿${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
-  const tb=document.getElementById('daily-rows'); tb.innerHTML='';
-  if(!d.days.length){ tb.innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6">No activity for this period</td></tr>'; return; }
-  let focusRow=null;
-  d.days.forEach(day=>{
-    const chips = day.lanes.map(l=>`<span onclick="openLaneModal('${l.category}','${l.bank}','${day.day}')" class="badge ${LANE_CHIP[l.status]} mr-1 cursor-pointer hover:opacity-80" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}: POS ฿${fmt(l.pos)} / ext ฿${fmt(l.ext)} (${l.status}) — click for statement lines">${l.category.slice(0,4)}${l.bank!=='NONE'?'·'+l.bank:''} ${LANE_SYM[l.status]}</span>`).join('');
-    const tr=document.createElement('tr');
-    if(FOCUS_DATE && day.day===FOCUS_DATE){ tr.style.background='#fff7ed'; tr.style.outline='2px solid var(--brand)'; focusRow=tr; }
-    tr.innerHTML=`<td class="py-2 font-medium">${day.day}</td>
-      <td class="text-right font-mono">${fmt(day.pos_total)}</td>
-      <td class="text-right font-mono">${fmt(day.ext_total)}</td>
-      <td class="text-right font-mono ${varCls(day.ext_total-day.pos_total)}">${varTxt(day.ext_total-day.pos_total)}</td>
-      <td class="pl-4">${chips}</td>
-      <td class="text-center">${day.pending_count?`<span class="badge b-warn">${day.pending_count}</span>`:'<span class="text-gray-300">—</span>'}</td>`;
-    tb.appendChild(tr);
-  });
-  if(FOCUS_DATE && !focusRow){ tb.insertAdjacentHTML('afterbegin', `<tr><td colspan="6" class="text-center text-amber-600 py-3">No POS/document activity on ${FOCUS_DATE}.</td></tr>`); }
-  if(focusRow) focusRow.scrollIntoView({block:'center', behavior:'smooth'});
+
+  const host=document.getElementById('daily-matrix');
+  if(!d.days||!d.days.length){ host.innerHTML='<div class="text-center text-gray-400 py-6">No activity for this period</div>'; return; }
+
+  // collect the distinct lanes (columns) across the whole month, in a stable order
+  const laneKeys=new Map();
+  d.days.forEach(day=>day.lanes.forEach(l=>laneKeys.set(`${l.category}|${l.bank}`, {category:l.category, bank:l.bank})));
+  const lanes=[...laneKeys.values()].sort((a,b)=>
+    (_CAT_ORDER[a.category]??9)-(_CAT_ORDER[b.category]??9) || a.bank.localeCompare(b.bank));
+
+  const head=`<tr class="text-gray-400 text-xs uppercase border-b">
+      <th class="text-left pb-2 pr-3 sticky left-0 bg-white">Day</th>
+      <th class="text-left pb-2 pr-3">Match</th>
+      <th class="text-right pb-2 pr-3">POS</th><th class="text-right pb-2 pr-3">Ext</th><th class="text-right pb-2 pr-4">Var</th>
+      ${lanes.map(l=>`<th class="text-center pb-2 px-1" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}">${_laneLabel(l.category,l.bank)}</th>`).join('')}
+    </tr>`;
+
+  const body=d.days.map(day=>{
+    const byKey={}; day.lanes.forEach(l=>byKey[`${l.category}|${l.bank}`]=l);
+    const total=day.lanes.length, matched=day.matched||0;
+    const pct=total?Math.round(matched/total*100):0;
+    const barCol = pct>=99?'var(--ok)':pct>=60?'var(--warn)':'var(--danger)';
+    const focus = (FOCUS_DATE && day.day===FOCUS_DATE);
+    const cells=lanes.map(l=>{
+      const o=byKey[`${l.category}|${l.bank}`];
+      if(!o) return '<td class="px-1"></td>';
+      return `<td class="px-1 text-center">
+        <span onclick="openLaneModal('${o.category}','${o.bank}','${day.day}')"
+          title="${o.category}${o.bank!=='NONE'?'·'+o.bank:''}: POS ฿${fmt(o.pos)} / ext ฿${fmt(o.ext)} (${o.status}) — click for lines"
+          style="display:inline-block;min-width:30px;padding:2px 4px;border-radius:5px;cursor:pointer;font-weight:600;background:${LANE_CELL[o.status]||'#f1f5f9'};color:${LANE_FG[o.status]||'#475569'}">${LANE_SYM[o.status]||'·'}</span></td>`;
+    }).join('');
+    return `<tr data-day="${day.day}" style="${focus?'background:#fff7ed;outline:2px solid var(--brand)':''}">
+      <td class="py-1.5 font-medium pr-3 sticky left-0 bg-white">${day.day.slice(8)}</td>
+      <td class="pr-3"><div title="${matched}/${total} lanes matched" style="height:5px;width:54px;background:#eef2f7;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle"><div style="height:100%;width:${pct}%;background:${barCol}"></div></div></td>
+      <td class="text-right font-mono pr-3">${fmt(day.pos_total)}</td>
+      <td class="text-right font-mono pr-3">${fmt(day.ext_total)}</td>
+      <td class="text-right font-mono pr-4 ${varCls(day.ext_total-day.pos_total)}">${varTxt(day.ext_total-day.pos_total)}</td>
+      ${cells}</tr>`;
+  }).join('');
+
+  host.innerHTML=`<table class="text-sm" style="border-collapse:collapse">${head}${body}</table>`;
+  if(FOCUS_DATE){ const fr=host.querySelector(`tr[data-day="${FOCUS_DATE}"]`);
+    if(fr) fr.scrollIntoView({block:'center',behavior:'smooth'});
+    else host.insertAdjacentHTML('afterbegin', `<div class="text-center text-amber-600 py-3">No POS/document activity on ${FOCUS_DATE}.</div>`); }
 }
 
 // ── reconcile ────────────────────────────────────────────────────────────────
@@ -501,7 +565,8 @@ function renderPayouts(payouts){
 }
 
 function downloadExport(){
-  if(!SESSION){ alert('Open a session first'); return; }
+  if(!SESSION){ toast('Open a session first','warn'); return; }
+  toast('Preparing Excel…','info',1500);
   window.open(API+`/api/sessions/${SESSION.session_id}/export.xlsx`, '_blank');
 }
 
@@ -527,16 +592,21 @@ async function openLaneModal(category, bank, day){
 }
 function closeLaneModal(){ document.getElementById('lanemodal').classList.add('hidden'); }
 
-async function runMatch(){
-  try{
-    const r = await api(`/api/sessions/${SESSION.session_id}/run-match`,{method:'POST'});
-    alert(`Run complete — ${r.matched} matched, ${r.discrepancies} to review.` + (r.unmapped.length?`\n${r.unmapped.length} unmapped code(s).`:''));
-    renderReconcile(); loadDiscrepancies();
-  }catch(e){ alert('Run failed: '+e.message); }
+async function runMatch(ev){
+  await withBusy(ev&&ev.target, 'Running…', async ()=>{
+    try{
+      const r = await api(`/api/sessions/${SESSION.session_id}/run-match`,{method:'POST'});
+      toast(`Run complete — ${r.matched} matched, ${r.discrepancies} to review`
+            + (r.unmapped.length?` · ${r.unmapped.length} unmapped code(s)`:''), r.discrepancies?'warn':'ok');
+      renderReconcile(); loadDiscrepancies();
+    }catch(e){ toast('Run failed: '+e.message,'err'); }
+  });
 }
 async function setStatus(status){
   const fd=new FormData(); fd.append('status',status);
-  try{ await api(`/api/sessions/${SESSION.session_id}/status`,{method:'PATCH',body:fd}); SESSION.status=status; renderReconcile(); }catch(e){ alert(e.message); }
+  try{ await api(`/api/sessions/${SESSION.session_id}/status`,{method:'PATCH',body:fd}); SESSION.status=status; renderReconcile();
+    toast(`Session marked ${status.replace('_',' ')}`,'ok'); }
+  catch(e){ toast(e.message,'err'); }
 }
 
 // ── fee / vat editor ─────────────────────────────────────────────────────────
@@ -547,20 +617,45 @@ async function loadFeeVat(){
   const tb=document.getElementById('fv-body'); tb.innerHTML='';
   if(!lines.length){ tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-6">No lines uploaded for this source</td></tr>'; return; }
   lines.forEach(l=>{
+    // stash what's needed for live net recompute: net = gross - other - fee - vat
+    FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed};
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
       <td class="text-right font-mono">${fmt(l.gross)}</td>
-      <td class="text-right"><input class="inp w-24 text-right" id="fee-${l.id}" value="${l.fee??''}" placeholder="${fmt(l.fee_parsed)}"></td>
-      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="0"></td>
-      <td class="text-right font-mono text-gray-500">${fmt(l.net)}</td>
-      <td class="text-right"><button onclick="saveFeeVat('${src}',${l.id})" class="text-xs text-orange-600 hover:underline">Save</button></td>`;
+      <td class="text-right"><input class="inp w-24 text-right" id="fee-${l.id}" value="${l.fee??''}" placeholder="${fmt(l.fee_parsed)}"
+            oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
+      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="0"
+            oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
+      <td class="text-right font-mono text-gray-600" id="net-${l.id}">฿${fmt(l.net)}</td>
+      <td class="text-right"><span id="fvok-${l.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
   });
 }
+const FV_LINE = {};
+function recalcNet(src,id){
+  const m=FV_LINE[id]; if(!m) return;
+  const feeIn=document.getElementById('fee-'+id).value, vatIn=document.getElementById('vat-'+id).value;
+  const fee = feeIn===''? m.fee_parsed : +feeIn;
+  const vat = vatIn===''? 0 : +vatIn;
+  document.getElementById('net-'+id).textContent = '฿'+fmt(m.gross - m.other - fee - vat);
+}
 async function saveFeeVat(src,id){
   const fee=document.getElementById('fee-'+id).value, vat=document.getElementById('vat-'+id).value;
-  await api(`/api/lines/${src}/${id}/fee-vat`,{method:'PATCH',json:{fee_manual:fee===''?null:+fee, vat_manual:vat===''?null:+vat, by:'staff'}});
-  renderReconcile();
+  const ok=document.getElementById('fvok-'+id);
+  try{
+    await api(`/api/lines/${src}/${id}/fee-vat`,{method:'PATCH',json:{fee_manual:fee===''?null:+fee, vat_manual:vat===''?null:+vat, by:'staff'}});
+    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓'; setTimeout(()=>ok.textContent='',1200); }
+    renderPayoutsFromSummary();      // payout/category cards depend on net → refresh quietly
+  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗'; } toast(e.message,'err'); }
+}
+// refresh the category + payout cards without re-fetching the fee/VAT table (avoids
+// yanking focus from the next input while the accountant tabs through rows)
+async function renderPayoutsFromSummary(){
+  if(!SESSION) return;
+  try{
+    const s=await api(`/api/sessions/${SESSION.session_id}/summary`);
+    renderPayouts(s.payouts||[]);
+  }catch(e){}
 }
 
 // ── uploads ──────────────────────────────────────────────────────────────────
@@ -578,7 +673,7 @@ async function loadUploads(){
     tb.appendChild(tr);
   });
 }
-async function delUpload(id){ if(!confirm('Delete this upload and its lines?'))return; await api('/api/uploads/'+id,{method:'DELETE'}); loadUploads(); }
+async function delUpload(id){ if(!confirm('Delete this upload and its lines?'))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast('Upload deleted','ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
 
 function openUploadModal(src){ document.getElementById('upmodal').classList.remove('hidden');
   document.getElementById('up-period').value=period(); if(src) document.getElementById('up-source').value=src;
@@ -593,12 +688,14 @@ async function previewUpload(){ const src=document.getElementById('up-source').v
     p.innerHTML=`<div class="font-semibold mb-1">${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+
       r.preview.slice(0,4).map(row=>Object.entries(row).slice(0,6).map(([k,v])=>`<span class="text-gray-400">${k}:</span>${v}`).join('  ')).join('<br>');
     document.getElementById('up-confirm').disabled=false;
-  }catch(e){ alert('Parse error: '+e.message); }
+  }catch(e){ toast('Parse error: '+e.message,'err'); }
 }
-async function confirmUpload(){ const src=document.getElementById('up-source').value;
-  try{ const r=await api(`/api/uploads/${src}/confirm`,{method:'POST',body:upForm()});
-    alert(`Saved ${r.rows_saved} rows`+(r.skipped_rows?` (${r.skipped_rows} skipped)`:'')); closeUploadModal(); loadUploads();
-  }catch(e){ alert('Error: '+e.message); }
+async function confirmUpload(ev){ const src=document.getElementById('up-source').value;
+  await withBusy(ev&&ev.target, 'Saving…', async ()=>{
+    try{ const r=await api(`/api/uploads/${src}/confirm`,{method:'POST',body:upForm()});
+      toast(`Saved ${r.rows_saved} rows`+(r.skipped_rows?` (${r.skipped_rows} skipped)`:''),'ok'); closeUploadModal(); loadUploads();
+    }catch(e){ toast('Upload failed: '+e.message,'err'); }
+  });
 }
 
 // ── discrepancies ────────────────────────────────────────────────────────────
@@ -679,14 +776,14 @@ async function refreshAttention(){
       <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ฿${fmt(m.pos_amount)}</span>`).join('')}</div>`;
   } else att.classList.add('hidden');
 }
-async function reseed(){ const r=await api('/api/payment-map/seed',{method:'POST'}); alert(`Seeded ${r.inserted} new code(s).`); loadSetup(); }
+async function reseed(){ try{ const r=await api('/api/payment-map/seed',{method:'POST'}); toast(`Seeded ${r.inserted} new code(s)`,'ok'); loadSetup(); }catch(e){ toast(e.message,'err'); } }
 async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{
   branch_id:+document.getElementById('na-branch').value, bank:document.getElementById('na-bank').value,
-  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(loadSetup).catch(e=>alert(e.message)); }
+  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(()=>{toast('Account added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
 async function delAccount(id){ await api('/api/bank-accounts/'+id,{method:'DELETE'}); loadSetup(); }
 async function addMid(){ await api('/api/acquirer-mids',{method:'POST',json:{
   branch_id:+document.getElementById('nm-branch').value, acquirer:document.getElementById('nm-acq').value,
-  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(loadSetup).catch(e=>alert(e.message)); }
+  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(()=>{toast('MID added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
 async function delMid(id){ await api('/api/acquirer-mids/'+id,{method:'DELETE'}); loadSetup(); }
 
 init();
