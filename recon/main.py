@@ -11,13 +11,15 @@ Environment:
 """
 
 from __future__ import annotations
+import hmac
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -72,6 +74,47 @@ if _FRONTEND.exists():
 _MASTER_ONLY = "COALESCE(branch_type,'master')='master' AND active=1"
 
 
+# ── Write auth + upload validation ────────────────────────────────────────────
+# Mirrors the dashboard's gate: when OSHINEI_SEED_TOKEN is set (hosted deploys) a
+# matching token is required via the `X-Upload-Token` header or `?token=`. Unset
+# locally → writes are open, so the gate is invisible in dev.
+
+MAX_UPLOAD_BYTES = 15 * 1024 * 1024          # 15 MB
+_ALLOWED_EXT     = (".xlsx", ".xls")
+_PERIOD_RE       = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+def require_write_token(token: str = Query(""), x_upload_token: str = Header(None)):
+    expected = os.getenv("OSHINEI_SEED_TOKEN")
+    if expected:
+        provided = x_upload_token or token or ""
+        if not hmac.compare_digest(provided, expected):
+            raise HTTPException(403, "A valid write token is required.")
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    if not (file.filename or "").lower().endswith(_ALLOWED_EXT):
+        raise HTTPException(415, "Only .xlsx/.xls files are accepted.")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(422, "Empty file.")
+    if len(raw) > MAX_UPLOAD_BYTES:
+        raise HTTPException(413, f"File exceeds the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB limit.")
+    return raw
+
+
+def _validate_period(period_month: str):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+
+
+def _validate_master_branch(conn, branch_id: int):
+    if not conn.execute(
+        f"SELECT 1 FROM branches WHERE branch_id=? AND {_MASTER_ONLY}", (branch_id,)
+    ).fetchone():
+        raise HTTPException(400, f"branch_id {branch_id} is not an active master branch.")
+
+
 @app.get("/api/branches")
 def list_branches():
     with get_db() as conn:
@@ -95,13 +138,27 @@ _LINE_TABLE = {
 
 
 def _parse(source_type: SourceType, raw: bytes, provider: str):
+    """Returns (provider, rows, skipped_rows)."""
     if source_type == "bank":
-        return parse_bank_statement(raw, provider or None)
-    if source_type == "credit_card":
-        return parse_cc_settlement(raw, provider or None)
-    if source_type == "grab":
-        return "Grab", parse_grab_report(raw)
-    return "Lineman", parse_lineman_report(raw)
+        prov, rows, skipped = parse_bank_statement(raw, provider or None)
+    elif source_type == "credit_card":
+        prov, rows, skipped = parse_cc_settlement(raw, provider or None)
+    elif source_type == "grab":
+        rows, skipped = parse_grab_report(raw)
+        prov = "Grab"
+    else:
+        rows, skipped = parse_lineman_report(raw)
+        prov = "Lineman"
+    return prov, rows, skipped
+
+
+def _parse_or_422(source_type: SourceType, raw: bytes, provider: str):
+    try:
+        return _parse(source_type, raw, provider)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, f"Parse error: {exc}")
 
 
 @app.post("/api/uploads/{source_type}/preview")
@@ -112,20 +169,21 @@ async def preview_upload(
     period_month: str = Form(...),
     provider: str    = Form(""),
 ):
-    raw = await file.read()
-    try:
-        prov, rows = _parse(source_type, raw, provider)
-    except Exception as exc:
-        raise HTTPException(422, f"Parse error: {exc}")
+    _validate_period(period_month)
+    raw = await _read_upload(file)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+    prov, rows, skipped = _parse_or_422(source_type, raw, provider)
     return {
-        "provider":  prov,
-        "row_count": len(rows),
-        "preview":   rows[:50],
-        "columns":   list(rows[0].keys()) if rows else [],
+        "provider":     prov,
+        "row_count":    len(rows),
+        "skipped_rows": skipped,   # data rows dropped for an unparseable date
+        "preview":      rows[:50],
+        "columns":      list(rows[0].keys()) if rows else [],
     }
 
 
-@app.post("/api/uploads/{source_type}/confirm")
+@app.post("/api/uploads/{source_type}/confirm", dependencies=[Depends(require_write_token)])
 async def confirm_upload(
     source_type: SourceType,
     file: UploadFile = File(...),
@@ -133,13 +191,13 @@ async def confirm_upload(
     period_month: str = Form(...),
     provider: str    = Form(""),
 ):
-    raw = await file.read()
-    try:
-        prov, rows = _parse(source_type, raw, provider)
-    except Exception as exc:
-        raise HTTPException(422, f"Parse error: {exc}")
+    _validate_period(period_month)
+    raw = await _read_upload(file)
 
     with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        prov, rows, skipped = _parse_or_422(source_type, raw, provider)
+
         cur = conn.execute("""
             INSERT INTO recon_uploads
                 (source_type, branch_id, provider, file_name, period_month, row_count, status)
@@ -157,7 +215,7 @@ async def confirm_upload(
                          list(row.values()))
         conn.commit()
 
-    return {"upload_id": upload_id, "rows_saved": len(rows), "provider": prov}
+    return {"upload_id": upload_id, "rows_saved": len(rows), "skipped_rows": skipped, "provider": prov}
 
 
 @app.get("/api/uploads")
@@ -179,7 +237,7 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
         return [dict(r) for r in rows]
 
 
-@app.delete("/api/uploads/{upload_id}")
+@app.delete("/api/uploads/{upload_id}", dependencies=[Depends(require_write_token)])
 def delete_upload(upload_id: int):
     with get_db() as conn:
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
@@ -196,9 +254,11 @@ class SessionCreate(BaseModel):
     created_by:   str = ""
 
 
-@app.post("/api/sessions")
+@app.post("/api/sessions", dependencies=[Depends(require_write_token)])
 def create_session(body: SessionCreate):
+    _validate_period(body.period_month)
     with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
         try:
             cur = conn.execute("""
                 INSERT INTO recon_sessions (branch_id, period_month, notes, created_by)
@@ -243,7 +303,7 @@ def get_session(session_id: int):
         return dict(row)
 
 
-@app.post("/api/sessions/{session_id}/run-match")
+@app.post("/api/sessions/{session_id}/run-match", dependencies=[Depends(require_write_token)])
 def run_match(session_id: int):
     with get_db() as conn:
         session = conn.execute(
@@ -256,7 +316,7 @@ def run_match(session_id: int):
     return result
 
 
-@app.patch("/api/sessions/{session_id}/status")
+@app.patch("/api/sessions/{session_id}/status", dependencies=[Depends(require_write_token)])
 def update_session_status(
     session_id:  int,
     status:      str = Form(...),
@@ -266,11 +326,19 @@ def update_session_status(
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
     with get_db() as conn:
-        conn.execute("""
-            UPDATE recon_sessions
-            SET status=?, approved_by=?, approved_at=datetime('now')
-            WHERE session_id=?
-        """, (status, approved_by, session_id))
+        # Only stamp approval metadata when the session is actually approved;
+        # moving back to draft/in_review must not record a (false) approval.
+        if status == "approved":
+            conn.execute("""
+                UPDATE recon_sessions
+                SET status=?, approved_by=?, approved_at=datetime('now')
+                WHERE session_id=?
+            """, (status, approved_by, session_id))
+        else:
+            conn.execute(
+                "UPDATE recon_sessions SET status=? WHERE session_id=?",
+                (status, session_id),
+            )
         conn.commit()
     return {"session_id": session_id, "status": status}
 
@@ -358,7 +426,7 @@ class ResolveBody(BaseModel):
     resolved_by:     str = ""
 
 
-@app.patch("/api/discrepancies/{disc_id}/resolve")
+@app.patch("/api/discrepancies/{disc_id}/resolve", dependencies=[Depends(require_write_token)])
 def resolve_discrepancy(disc_id: int, body: ResolveBody):
     with get_db() as conn:
         conn.execute("""

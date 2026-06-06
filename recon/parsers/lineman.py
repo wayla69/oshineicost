@@ -13,7 +13,7 @@ Expected columns (Thai headers common):
 
 from __future__ import annotations
 import io
-from .bank import _to_float, _parse_thai_date
+from .bank import _to_float, _parse_thai_date, _blank
 import openpyxl
 
 
@@ -31,10 +31,11 @@ _NET_COLS      = ["ยอดเงินสุทธิ", "net payout", "net amo
 _PAYOUT_COLS   = ["วันที่ชำระเงิน", "payout date", "payment date", "วันที่โอน"]
 
 
-def parse_lineman_report(file_bytes: bytes) -> list[dict]:
+def parse_lineman_report(file_bytes: bytes) -> tuple[list[dict], int]:
     """
     Parse LINE MAN Wongnai financial/order report Excel.
-    Returns list of dicts matching recon_lineman_lines columns.
+    Returns (rows, skipped) — rows match recon_lineman_lines columns; skipped
+    counts data rows dropped for an unparseable order date.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     ws = wb.active
@@ -65,10 +66,13 @@ def parse_lineman_report(file_bytes: bytes) -> list[dict]:
     if header_row is None:
         raise ValueError("Lineman parser: could not find header row (date column missing)")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1:]:
-        order_date = _parse_thai_date(row[col.get("date", 0)])
+        raw_date = row[col.get("date", 0)]
+        order_date = _parse_thai_date(raw_date)
         if not order_date:
+            if not _blank(raw_date):
+                skipped += 1
             continue
 
         food_amt = _to_float(row[col.get("food", 0)])
@@ -98,4 +102,4 @@ def parse_lineman_report(file_bytes: bytes) -> list[dict]:
             "payout_date":       _parse_thai_date(row[col.get("payout_date", 0)]),
         })
 
-    return results
+    return results, skipped

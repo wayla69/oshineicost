@@ -11,7 +11,7 @@ Expected Excel columns (may vary by report version):
 
 from __future__ import annotations
 import io
-from .bank import _to_float, _parse_thai_date
+from .bank import _to_float, _parse_thai_date, _blank
 import openpyxl
 
 
@@ -28,10 +28,11 @@ _PAYOUT_COLS  = ["estimated payout", "วันที่โอนเงิน", 
 _MERCHANT_COLS = ["merchant id", "outlet name", "merchant name", "ชื่อร้าน"]
 
 
-def parse_grab_report(file_bytes: bytes) -> list[dict]:
+def parse_grab_report(file_bytes: bytes) -> tuple[list[dict], int]:
     """
     Parse Grab financial report Excel.
-    Returns list of dicts matching recon_grab_lines columns.
+    Returns (rows, skipped) — rows match recon_grab_lines columns; skipped counts
+    data rows dropped for an unparseable order date.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     ws = wb.active
@@ -61,11 +62,13 @@ def parse_grab_report(file_bytes: bytes) -> list[dict]:
     if header_row is None:
         raise ValueError("Grab parser: could not find header row (order date column missing)")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1:]:
         raw_date = row[col["date"]] if "date" in col else None
         order_date = _parse_thai_date(raw_date)
         if not order_date:
+            if not _blank(raw_date):
+                skipped += 1
             continue
 
         food_amt = _to_float(row[col.get("food", 0)])
@@ -95,4 +98,4 @@ def parse_grab_report(file_bytes: bytes) -> list[dict]:
             "payout_date":     _parse_thai_date(row[col.get("payout_date", 0)]),
         })
 
-    return results
+    return results, skipped

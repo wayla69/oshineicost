@@ -49,8 +49,8 @@ _Verified against the live app `/api/branches?branch_type=master` on 2026-06-06.
 - All amounts reconciled ex-VAT (POS `net` ÷ 1.07).
 
 ## Open items
-1. **Mark Korat2 (id 27) `active=0`** — permanently closed; closes it everywhere via the
-   `active=1` filter (no name hardcoding).
+1. ✅ **Korat2 (id 27) `active=0`** — done 2026-06-06 on the live Fly DB; dropped from the
+   master set (now 5) via the `active=1` filter.
 2. **VERIFY col-40 mapping** — `ingest_easy.py` maps Easy col 40 → `qr`; may be transfer/mixed.
 3. **Confirm parser column maps** — run one real export of each source through `/preview`.
 4. **Tune matcher patterns** — check CC/QR/Grab/Lineman regexes via `/api/diagnostics/*`
@@ -70,19 +70,24 @@ _Verified against the live app `/api/branches?branch_type=master` on 2026-06-06.
 - _Remaining caveat:_ delivery `net_payout` (post-commission) vs POS delivery revenue
   (gross ex-VAT) diverge by ~commission — needs basis tuning once a real report is inspected.
 
-🟠 Production safety (recon is exposed on public Fly port 8443):
-- **No auth on mutating endpoints** — upload/confirm/delete/resolve/status are open. Mirror the
-  main app's `require_write_token` gate.
-- **No file-size cap / content-type check** on uploads.
-- **`branch_id` / `period_month` from form are trusted** — no master-branch check, no `YYYY-MM` validation.
+✅ Production safety — FIXED 2026-06-06 (main.py):
+- **Write auth** — `require_write_token` (mirrors the dashboard: `OSHINEI_SEED_TOKEN` +
+  `X-Upload-Token`/`?token=`, open locally) now gates confirm-upload, delete-upload,
+  create-session, run-match, status, and resolve. Read/preview stay open.
+- **Upload guards** — `_read_upload` enforces `.xlsx/.xls` extension, rejects empty files,
+  and caps size at 15 MB.
+- **Input validation** — `period_month` must be `YYYY-MM`; `branch_id` must be an active
+  master branch (else 400) on preview/confirm/create-session.
 
-🟡 Minor:
-- `update_session_status` stamps `approved_at=now()` for any status, incl. draft/in_review. (main.py:263)
-- Rows with unparseable dates are dropped silently; `preview.row_count` then understates the file.
-- `recon_pos_daily` cash/cc/qr/transfer columns are never populated by `refresh_pos_daily`.
+✅ Minor — FIXED 2026-06-06:
+- `update_session_status` only stamps `approved_at`/`approved_by` when status is `approved`.
+- Parsers now return a `skipped` count (data rows dropped for an unparseable date); surfaced
+  as `skipped_rows` in the preview/confirm responses so silent data loss is visible.
+- Dead per-tender columns removed from `recon_pos_daily` (sales_transaction has no per-tender
+  breakdown; per-tender reconciliation is monthly via `pos_payment_month`).
 
 ## Next steps
-- [ ] Mark Korat2 `active=0` (open item #1).
+- [x] Mark Korat2 `active=0` (done 2026-06-06).
 - [ ] Resolve col-40 (qr vs transfer); re-ingest.
 - [ ] Run each source through `/preview`; fix column maps.
 - [ ] Tune regexes via diagnostics on a recent month.

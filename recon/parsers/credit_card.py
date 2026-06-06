@@ -15,7 +15,7 @@ import io
 import re
 from typing import Any
 import openpyxl
-from .bank import _to_float, _parse_thai_date
+from .bank import _to_float, _parse_thai_date, _blank
 
 
 def _detect_card_type(raw: str) -> str:
@@ -59,10 +59,13 @@ def _parse_kbank_merchant(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[di
     if header_row is None:
         raise ValueError("KBank Merchant: header row not found")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1:]:
-        d = _parse_thai_date(row[col["date"]])
+        raw_date = row[col["date"]]
+        d = _parse_thai_date(raw_date)
         if not d:
+            if not _blank(raw_date):
+                skipped += 1
             continue
         results.append({
             "settlement_date": d,
@@ -76,7 +79,7 @@ def _parse_kbank_merchant(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[di
             "merchant_id":     str(row[col.get("merchant", 0)] or "").strip(),
             "batch_no":        str(row[col.get("batch", 0)] or "").strip(),
         })
-    return results
+    return results, skipped
 
 
 def _parse_generic_cc(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
@@ -109,10 +112,13 @@ def _parse_generic_cc(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
     if header_row is None:
         raise ValueError("CC generic: header row not found")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1:]:
-        d = _parse_thai_date(row[col["date"]])
+        raw_date = row[col["date"]]
+        d = _parse_thai_date(raw_date)
         if not d:
+            if not _blank(raw_date):
+                skipped += 1
             continue
         gross  = _to_float(row[col.get("gross", 0)])
         refund = _to_float(row[col.get("refund", 0)])
@@ -130,16 +136,16 @@ def _parse_generic_cc(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
             "merchant_id":   "",
             "batch_no":      "",
         })
-    return results
+    return results, skipped
 
 
 def parse_cc_settlement(
     file_bytes: bytes,
     provider: str | None = None,
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], int]:
     """
     Parse a credit card settlement Excel file.
-    Returns (provider, rows).
+    Returns (provider, rows, skipped).
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     ws = wb.active
@@ -159,10 +165,10 @@ def parse_cc_settlement(
 
     try:
         if detected == "kbank":
-            rows = _parse_kbank_merchant(ws)
+            rows, skipped = _parse_kbank_merchant(ws)
         else:
-            rows = _parse_generic_cc(ws)
+            rows, skipped = _parse_generic_cc(ws)
     except ValueError:
-        rows = _parse_generic_cc(ws)
+        rows, skipped = _parse_generic_cc(ws)
 
-    return detected, rows
+    return detected, rows, skipped

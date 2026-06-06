@@ -183,14 +183,13 @@ CREATE INDEX IF NOT EXISTS idx_rd_session ON recon_discrepancies(session_id, res
 -- Built from sales_transaction by the matcher on each run-match call.
 -- Avoids rescanning millions of rows for every matching operation.
 
+-- sales_transaction has no per-tender breakdown, so daily totals are whole-day
+-- only. Per-tender reconciliation is done at the monthly level (pos_payment_month)
+-- in the matcher, not here.
 CREATE TABLE IF NOT EXISTS recon_pos_daily (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
     txn_date     TEXT NOT NULL,
-    cash         REAL DEFAULT 0,
-    credit_card  REAL DEFAULT 0,
-    transfer     REAL DEFAULT 0,
-    qr           REAL DEFAULT 0,
     total        REAL DEFAULT 0,
     txn_count    INTEGER DEFAULT 0,
     refreshed_at TEXT DEFAULT (datetime('now')),

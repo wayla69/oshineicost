@@ -69,6 +69,12 @@ def _to_float(val: Any) -> float:
         return 0.0
 
 
+def _blank(val: Any) -> bool:
+    """True for cells that carry no data (so a failed date parse on them is not
+    a 'skipped' row, just an empty/spacer line)."""
+    return val is None or (isinstance(val, str) and not val.strip()) or val == ""
+
+
 # ── KBank ──────────────────────────────────────────────────────────────────────
 
 def _parse_kbank(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
@@ -99,11 +105,13 @@ def _parse_kbank(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
     if header_row is None:
         raise ValueError("KBank: could not find header row (วันที่ column missing)")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1 :]:
         raw_date = row[col.get("date", 0)] if col.get("date") is not None else None
         txn_date = _parse_thai_date(raw_date)
         if not txn_date:
+            if not _blank(raw_date):
+                skipped += 1
             continue
         debit  = _to_float(row[col["debit"]])  if "debit"  in col else 0.0
         credit = _to_float(row[col["credit"]]) if "credit" in col else 0.0
@@ -119,7 +127,7 @@ def _parse_kbank(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
             "balance":     _to_float(row[col["balance"]]) if "balance" in col else None,
             "ref_no":      ref,
         })
-    return results
+    return results, skipped
 
 
 # ── SCB ───────────────────────────────────────────────────────────────────────
@@ -177,10 +185,13 @@ def _parse_generic(
     if header_row is None or "date" not in col:
         raise ValueError("Generic bank parser: could not find date column")
 
-    results = []
+    results, skipped = [], 0
     for row in rows[header_row + 1 :]:
-        txn_date = _parse_thai_date(row[col["date"]])
+        raw_date = row[col["date"]]
+        txn_date = _parse_thai_date(raw_date)
         if not txn_date:
+            if not _blank(raw_date):
+                skipped += 1
             continue
         desc = str(row[col["desc"]]).strip() if "desc" in col else ""
         results.append({
@@ -193,7 +204,7 @@ def _parse_generic(
             "balance":     _to_float(row[col["balance"]]) if "balance" in col else None,
             "ref_no":      str(row[col["ref"]]).strip() if "ref" in col else "",
         })
-    return results
+    return results, skipped
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -230,12 +241,13 @@ def _detect_provider(wb: openpyxl.Workbook) -> str:
 def parse_bank_statement(
     file_bytes: bytes,
     provider: str | None = None,
-) -> tuple[str, list[dict]]:
+) -> tuple[str, list[dict], int]:
     """
     Parse a bank statement Excel file.
 
-    Returns (detected_provider, rows) where each row is a dict
-    matching recon_bank_lines columns (excluding upload_id / match fields).
+    Returns (detected_provider, rows, skipped) where each row is a dict matching
+    recon_bank_lines columns (excluding upload_id / match fields) and skipped is
+    the count of data rows dropped for an unparseable date.
     """
     import io
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
@@ -245,7 +257,7 @@ def parse_bank_statement(
     parser = _PROVIDER_PARSERS.get(detected)
     if parser is None:
         # generic fallback with sensible defaults
-        rows = _parse_generic(ws, {
+        rows, skipped = _parse_generic(ws, {
             "date":    ["date", "วันที่"],
             "desc":    ["description", "รายการ"],
             "debit":   ["debit", "withdrawal", "ถอน"],
@@ -254,6 +266,6 @@ def parse_bank_statement(
             "ref":     ["ref", "reference"],
         })
     else:
-        rows = parser(ws)
+        rows, skipped = parser(ws)
 
-    return detected, rows
+    return detected, rows, skipped
