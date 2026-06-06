@@ -1,10 +1,10 @@
 # fly.toml — Oshinei Dashboard + Revenue Reconciliation
-# ONE machine runs both apps (Dockerfile start.sh) so they share the single
-# oshinei_data volume and oshinei.db file — a Fly volume attaches to only one
-# machine, so the two apps cannot be split into separate process groups.
+# One machine, one process. The reconciliation app is mounted at /recon inside
+# the dashboard (backend/main.py), so both are served on the standard 443 port
+# and share the single oshinei_data volume / oshinei.db.
 #
-# Dashboard  →  https://oshinei-dashboard.fly.dev        (port 443  → :8080)
-# Recon app  →  https://oshinei-dashboard.fly.dev:8443   (port 8443 → :8001)
+# Dashboard  →  https://oshinei-dashboard.fly.dev/
+# Recon app  →  https://oshinei-dashboard.fly.dev/recon/app/
 
 app            = "oshinei-dashboard"
 primary_region = "sin"
@@ -34,18 +34,6 @@ primary_region = "sin"
   [[services.ports]]
     handlers = ["tls", "http"]
     port     = 443
-
-# ── Reconciliation service (same machine, port 8001) ──────────────────────────
-[[services]]
-  internal_port        = 8001
-  protocol             = "tcp"
-  auto_stop_machines   = "stop"
-  auto_start_machines  = true
-  min_machines_running = 0
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port     = 8443
 
 [[vm]]
   size   = "shared-cpu-1x"

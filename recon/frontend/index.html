@@ -255,7 +255,9 @@
 </div>
 
 <script>
-const API = '';
+// API base = everything before '/app/' in the path, so it works whether the UI is
+// served standalone at /app/ or mounted in the dashboard at /recon/app/.
+const API = location.pathname.split('/app/')[0];
 let SESSION = null;        // {session_id, branch_id, period_month, status, branch_name}
 let BRANCHES = [];
 let FOCUS_DATE = null;     // 'YYYY-MM-DD' to focus on the Daily board, or null

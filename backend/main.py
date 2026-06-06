@@ -312,6 +312,16 @@ if STATIC.exists():
 if DOCS.exists():
     app.mount("/docs", StaticFiles(directory=str(DOCS), html=True), name="docs")
 
+# Mount the reconciliation app under /recon so the team can reach it on the
+# standard 443 port (port 8443 is blocked by many office firewalls): UI at
+# /recon/app/, API under /recon/api/. It shares this process and the same
+# oshinei.db. Wrapped so a recon import error can never take down the dashboard.
+try:
+    import recon.main as _recon_mod
+    app.mount("/recon", _recon_mod.app)
+except Exception:
+    _recon_mod = None
+
 
 # ---------------------------------------------------------------------------
 # Write auth — gate data-mutating endpoints behind the owner token
@@ -13658,6 +13668,13 @@ def _bom_startup():
     _bom_ensure_and_seed()
     _sku_cost_monthly_ensure()
     _perf_startup()
+    # Mounted sub-apps don't get their own startup event, so initialise recon's
+    # schema/seed here (idempotent).
+    if _recon_mod is not None:
+        try:
+            _recon_mod.startup()
+        except Exception:
+            pass
 
 
 # Covering indexes that turn the heaviest Analysis-Report scans into index-only
