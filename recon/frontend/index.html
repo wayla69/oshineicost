@@ -21,6 +21,12 @@
   .inp{border:1px solid #d1d5db;border-radius:8px;padding:6px 10px;font-size:13px}
   .btn{font-size:13px;font-weight:600;border-radius:8px;padding:7px 14px}
   .btn-pri{color:#fff;background:var(--brand)}.btn-sec{border:1px solid #d1d5db}.btn-pri:disabled{opacity:.4}
+  /* payment-map volume bar — width ∝ share of the largest tender */
+  .volbar-track{height:4px;border-radius:9999px;background:#f1f5f9;margin-top:4px}
+  .volbar{height:4px;border-radius:9999px;background:#94a3b8}
+  tr.attn-row td{background:#fff7ed}
+  tr.attn-row td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+  tr.attn-row .volbar{background:var(--warn)}
 </style>
 </head>
 <body>
@@ -186,14 +192,16 @@
     </div>
     <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
     <div class="card overflow-x-auto">
-      <div class="flex items-center justify-between mb-3">
+      <div class="flex items-center justify-between mb-1">
         <div class="font-semibold text-gray-700">Payment-code map</div>
         <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes">⟳ Re-seed from POS</button>
       </div>
+      <div id="map-summary" class="text-sm text-gray-500 mb-3"></div>
       <table class="w-full text-sm">
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
-          <th class="text-left pb-2">POS code</th><th class="text-right pb-2">Volume (POS)</th>
-          <th class="text-left pb-2">Category <span class="normal-case text-gray-300">what it is</span></th>
+          <th class="text-left pb-2">POS code</th>
+          <th class="text-right pb-2">Volume (POS) <span class="normal-case text-gray-300">↓ biggest first</span></th>
+          <th class="text-left pb-2 pl-3">Category <span class="normal-case text-gray-300">what it is</span></th>
           <th class="text-left pb-2">Bank / Acquirer <span class="normal-case text-gray-300">where it lands</span></th>
           <th class="text-center pb-2">Reconcile</th><th></th>
         </tr></thead>
@@ -573,13 +581,34 @@ async function loadSetup(){
     att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
       <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ฿${fmt(m.pos_amount)}</span>`).join('')}</div>`;
   } else att.classList.add('hidden');
-  map.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY'); if(attn) tr.style.background='#fff7ed';
-    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}${attn?' <span class="text-amber-600">⚠</span>':''}</td>
-      <td class="text-right font-mono text-gray-600">฿${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
-      <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
-      <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
-      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
-      <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
+  // summary header: completeness + reconcilable money
+  const mappedN=map.filter(m=>m.bank!=='UNKNOWN'&&m.bank!=='PROMPTPAY').length;
+  const reconcilable=map.filter(m=>m.reconcile).reduce((s,m)=>s+(m.pos_amount||0),0);
+  document.getElementById('map-summary').innerHTML =
+    `<b class="text-gray-700">${mappedN}</b> of <b class="text-gray-700">${map.length}</b> codes mapped`
+    + ` · <b class="text-gray-700">฿${fmt(reconcilable)}</b> reconcilable`
+    + (map.length-mappedN ? ` · <span class="text-amber-600 font-semibold">${map.length-mappedN} need a bank</span>` : ` · <span class="text-green-600 font-semibold">all set ✓</span>`);
+  // attention-first, then biggest money first; bar width ∝ share of the largest tender
+  const rows=[...map].sort((a,b)=>{
+    const aa=(a.bank==='UNKNOWN'||a.bank==='PROMPTPAY'), ba=(b.bank==='UNKNOWN'||b.bank==='PROMPTPAY');
+    return (ba-aa) || (b.pos_amount-a.pos_amount);
+  });
+  const maxAmt=rows.reduce((x,m)=>Math.max(x,m.pos_amount||0),1);
+  rows.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+    if(attn) tr.classList.add('attn-row');
+    const w=Math.max(2, Math.round((m.pos_amount||0)/maxAmt*100));
+    tr.innerHTML=`<td class="py-2 align-top">
+        <div class="font-mono text-gray-800">${m.payment_code_norm}${attn?' <span class="text-amber-600" title="needs a bank">⚠</span>':''}</div>
+        <div class="mt-1"><span class="badge b-mut">${m.category}</span></div></td>
+      <td class="text-right align-top" style="min-width:150px">
+        <div class="font-mono text-gray-700">฿${fmt(m.pos_amount)}</div>
+        <div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div>
+        <div class="volbar-track"><div class="volbar" style="width:${w}%"></div></div></td>
+      <td class="align-top pl-3"><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td class="align-top"><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select>
+        ${attn?'<div class="mt-1"><span class="badge b-warn">needs bank</span></div>':''}</td>
+      <td class="text-center align-top pt-2"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
+      <td class="text-right align-top pt-2"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
   });
   const accts=await api('/api/bank-accounts'); const ab=document.getElementById('acct-body'); ab.innerHTML='';
@@ -599,7 +628,7 @@ async function saveMap(id){
       reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
     if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
     const attn=['UNKNOWN','PROMPTPAY'].includes(document.getElementById('mb-'+id).value);
-    document.getElementById('mb-'+id).closest('tr').style.background = attn?'#fff7ed':'';
+    document.getElementById('mb-'+id).closest('tr').classList.toggle('attn-row', attn);
     refreshSetupBadge(); refreshAttention();
   }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
 }
