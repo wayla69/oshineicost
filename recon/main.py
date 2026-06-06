@@ -25,6 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .matcher import get_pos_payment_breakdown, run_auto_match
+from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
     parse_cc_settlement,
@@ -53,10 +54,39 @@ def get_db():
         conn.close()
 
 
+# Idempotent column adds for DBs created before a schema column existed
+# (CREATE TABLE IF NOT EXISTS never alters an existing table).
+_MIGRATIONS = {
+    "recon_bank_lines":    [("account_no", "TEXT")],
+    "recon_cc_lines":      [("acquirer", "TEXT"), ("fee_manual", "REAL"), ("vat_manual", "REAL"),
+                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
+    "recon_grab_lines":    [("fee_manual", "REAL"), ("vat_manual", "REAL"),
+                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
+    "recon_lineman_lines": [("fee_manual", "REAL"), ("vat_manual", "REAL"),
+                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
+    "recon_discrepancies": [("category", "TEXT"), ("bank", "TEXT"), ("assigned_to", "TEXT")],
+}
+
+
+def _migrate(conn):
+    for table, cols in _MIGRATIONS.items():
+        try:
+            existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        except sqlite3.OperationalError:
+            continue
+        if not existing:
+            continue
+        for name, decl in cols:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
 @app.on_event("startup")
 def startup():
     with get_db() as conn:
         conn.executescript(_SCHEMA.read_text())
+        _migrate(conn)
+        seed_payment_map(conn)   # idempotent; never overwrites staff edits
         conn.commit()
 
 
@@ -123,6 +153,203 @@ def list_branches():
             f"WHERE {_MASTER_ONLY} ORDER BY name"
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Config: payment-code map ──────────────────────────────────────────────────
+
+_CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
+_BANKS      = {"KTB", "KBANK", "KTC", "PROMPTPAY", "NONE", "UNKNOWN"}
+
+
+class PaymentMapUpsert(BaseModel):
+    payment_code_norm: str | None = None   # required on create, ignored on update
+    category:          str
+    bank:              str = "NONE"
+    reconcile:         int = 1
+    notes:             str = ""
+    updated_by:        str = ""
+
+
+def _validate_map(body: PaymentMapUpsert):
+    if body.category not in _CATEGORIES:
+        raise HTTPException(400, f"category must be one of {sorted(_CATEGORIES)}")
+    if body.bank not in _BANKS:
+        raise HTTPException(400, f"bank must be one of {sorted(_BANKS)}")
+
+
+@app.get("/api/payment-map")
+def list_payment_map(needs_attention: int = 0):
+    with get_db() as conn:
+        sql = "SELECT * FROM recon_payment_map"
+        if needs_attention:
+            sql += " WHERE bank='UNKNOWN'"
+        sql += " ORDER BY (bank='UNKNOWN') DESC, category, bank, payment_code_norm"
+        return [dict(r) for r in conn.execute(sql)]
+
+
+@app.post("/api/payment-map", dependencies=[Depends(require_write_token)])
+def create_payment_map(body: PaymentMapUpsert):
+    _validate_map(body)
+    code = (body.payment_code_norm or "").strip()
+    if not code:
+        raise HTTPException(400, "payment_code_norm is required")
+    with get_db() as conn:
+        try:
+            cur = conn.execute("""
+                INSERT INTO recon_payment_map (payment_code_norm, category, bank, reconcile, notes, updated_by)
+                VALUES (?,?,?,?,?,?)
+            """, (code, body.category, body.bank, body.reconcile, body.notes, body.updated_by or "manual"))
+            conn.commit()
+            return {"id": cur.lastrowid}
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, f"payment_code_norm {code!r} already mapped")
+
+
+@app.patch("/api/payment-map/{map_id}", dependencies=[Depends(require_write_token)])
+def update_payment_map(map_id: int, body: PaymentMapUpsert):
+    _validate_map(body)
+    with get_db() as conn:
+        conn.execute("""
+            UPDATE recon_payment_map
+            SET category=?, bank=?, reconcile=?, notes=?, updated_by=?, updated_at=datetime('now')
+            WHERE id=?
+        """, (body.category, body.bank, body.reconcile, body.notes, body.updated_by or "manual", map_id))
+        conn.commit()
+    return {"id": map_id}
+
+
+@app.delete("/api/payment-map/{map_id}", dependencies=[Depends(require_write_token)])
+def delete_payment_map(map_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM recon_payment_map WHERE id=?", (map_id,))
+        conn.commit()
+    return {"deleted": map_id}
+
+
+@app.post("/api/payment-map/seed", dependencies=[Depends(require_write_token)])
+def reseed_payment_map():
+    with get_db() as conn:
+        result = seed_payment_map(conn)
+    return result
+
+
+# ── Config: bank accounts ─────────────────────────────────────────────────────
+
+class BankAccount(BaseModel):
+    branch_id:    int
+    bank:         str
+    account_no:   str
+    account_name: str = ""
+    active:       int = 1
+
+
+@app.get("/api/bank-accounts")
+def list_bank_accounts(branch_id: int | None = None):
+    with get_db() as conn:
+        sql = """SELECT a.*, b.name AS branch_name FROM recon_bank_account a
+                 JOIN branches b ON b.branch_id = a.branch_id"""
+        params: list = []
+        if branch_id:
+            sql += " WHERE a.branch_id=?"; params.append(branch_id)
+        sql += " ORDER BY b.name, a.bank"
+        return [dict(r) for r in conn.execute(sql, params)]
+
+
+@app.post("/api/bank-accounts", dependencies=[Depends(require_write_token)])
+def create_bank_account(body: BankAccount):
+    if body.bank not in ("KTB", "KBANK"):
+        raise HTTPException(400, "bank must be KTB or KBANK")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        try:
+            cur = conn.execute("""
+                INSERT INTO recon_bank_account (branch_id, bank, account_no, account_name, active)
+                VALUES (?,?,?,?,?)
+            """, (body.branch_id, body.bank, body.account_no, body.account_name, body.active))
+            conn.commit()
+            return {"account_id": cur.lastrowid}
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, f"account {body.bank}/{body.account_no} already exists")
+
+
+@app.patch("/api/bank-accounts/{account_id}", dependencies=[Depends(require_write_token)])
+def update_bank_account(account_id: int, body: BankAccount):
+    if body.bank not in ("KTB", "KBANK"):
+        raise HTTPException(400, "bank must be KTB or KBANK")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        conn.execute("""
+            UPDATE recon_bank_account SET branch_id=?, bank=?, account_no=?, account_name=?, active=?
+            WHERE account_id=?
+        """, (body.branch_id, body.bank, body.account_no, body.account_name, body.active, account_id))
+        conn.commit()
+    return {"account_id": account_id}
+
+
+@app.delete("/api/bank-accounts/{account_id}", dependencies=[Depends(require_write_token)])
+def delete_bank_account(account_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM recon_bank_account WHERE account_id=?", (account_id,))
+        conn.commit()
+    return {"deleted": account_id}
+
+
+# ── Config: credit-card acquirer MIDs ─────────────────────────────────────────
+
+class AcquirerMid(BaseModel):
+    branch_id:   int
+    acquirer:    str
+    merchant_id: str = ""
+    terminal_id: str = ""
+    active:      int = 1
+
+
+@app.get("/api/acquirer-mids")
+def list_acquirer_mids(branch_id: int | None = None):
+    with get_db() as conn:
+        sql = """SELECT m.*, b.name AS branch_name FROM recon_acquirer_mid m
+                 JOIN branches b ON b.branch_id = m.branch_id"""
+        params: list = []
+        if branch_id:
+            sql += " WHERE m.branch_id=?"; params.append(branch_id)
+        sql += " ORDER BY b.name, m.acquirer"
+        return [dict(r) for r in conn.execute(sql, params)]
+
+
+@app.post("/api/acquirer-mids", dependencies=[Depends(require_write_token)])
+def create_acquirer_mid(body: AcquirerMid):
+    if body.acquirer not in ("KTB", "KBANK", "KTC"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK or KTC")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        cur = conn.execute("""
+            INSERT INTO recon_acquirer_mid (branch_id, acquirer, merchant_id, terminal_id, active)
+            VALUES (?,?,?,?,?)
+        """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active))
+        conn.commit()
+        return {"mid_id": cur.lastrowid}
+
+
+@app.patch("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
+def update_acquirer_mid(mid_id: int, body: AcquirerMid):
+    if body.acquirer not in ("KTB", "KBANK", "KTC"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK or KTC")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        conn.execute("""
+            UPDATE recon_acquirer_mid SET branch_id=?, acquirer=?, merchant_id=?, terminal_id=?, active=?
+            WHERE mid_id=?
+        """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active, mid_id))
+        conn.commit()
+    return {"mid_id": mid_id}
+
+
+@app.delete("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
+def delete_acquirer_mid(mid_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
+        conn.commit()
+    return {"deleted": mid_id}
 
 
 # ── Uploads ───────────────────────────────────────────────────────────────────

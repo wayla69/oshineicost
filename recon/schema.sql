@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS recon_bank_lines (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     upload_id    INTEGER NOT NULL REFERENCES recon_uploads(upload_id) ON DELETE CASCADE,
     branch_id    INTEGER REFERENCES branches(branch_id),
+    account_no   TEXT,             -- bank account the line belongs to (→ branch via recon_bank_account)
     txn_date     TEXT NOT NULL,    -- 'YYYY-MM-DD'
     value_date   TEXT,             -- settlement date (may differ from txn_date)
     description  TEXT,
@@ -53,6 +54,11 @@ CREATE TABLE IF NOT EXISTS recon_cc_lines (
     refund_amount   REAL DEFAULT 0,
     mdr_fee         REAL DEFAULT 0,   -- Merchant Discount Rate fee
     net_amount      REAL DEFAULT 0,   -- gross - refund - mdr_fee
+    acquirer        TEXT,             -- 'KTB','KBANK','KTC' (→ POS credit-by-acquirer)
+    fee_manual      REAL,             -- staff-entered fee (overrides mdr_fee when set)
+    vat_manual      REAL,             -- staff-entered VAT on fee
+    fee_vat_by      TEXT,
+    fee_vat_at      TEXT,
     terminal_id     TEXT,
     merchant_id     TEXT,
     batch_no        TEXT,
@@ -79,6 +85,10 @@ CREATE TABLE IF NOT EXISTS recon_grab_lines (
     commission_amt  REAL DEFAULT 0,
     promo_deduct    REAL DEFAULT 0,
     net_payout      REAL DEFAULT 0,   -- food_amount - commission - promo
+    fee_manual      REAL,             -- staff-entered fee (overrides commission_amt when set)
+    vat_manual      REAL,             -- staff-entered VAT on commission
+    fee_vat_by      TEXT,
+    fee_vat_at      TEXT,
     payout_date     TEXT,             -- 'YYYY-MM-DD' when Grab transfers to bank
     match_status    TEXT NOT NULL DEFAULT 'unmatched' CHECK(match_status IN ('matched','unmatched','excluded','manual')),
     match_id        INTEGER REFERENCES recon_matches(match_id),
@@ -105,6 +115,10 @@ CREATE TABLE IF NOT EXISTS recon_lineman_lines (
     vat_on_commission REAL DEFAULT 0,
     promo_deduct      REAL DEFAULT 0,
     net_payout        REAL DEFAULT 0,
+    fee_manual        REAL,           -- staff-entered fee (overrides commission_amt when set)
+    vat_manual        REAL,           -- staff-entered VAT on commission
+    fee_vat_by        TEXT,
+    fee_vat_at        TEXT,
     payout_date       TEXT,
     match_status      TEXT NOT NULL DEFAULT 'unmatched' CHECK(match_status IN ('matched','unmatched','excluded','manual')),
     match_id          INTEGER REFERENCES recon_matches(match_id),
@@ -166,6 +180,8 @@ CREATE TABLE IF NOT EXISTS recon_discrepancies (
                         'timing_diff'
                     )),
     source_type     TEXT NOT NULL,
+    category        TEXT,             -- CASH|QR|TRANSFER|CREDIT|GRAB|LINEMAN|COUPON
+    bank            TEXT,             -- KTB|KBANK|KTC|PROMPTPAY|NONE for the affected bucket
     external_id     INTEGER,
     match_id        INTEGER REFERENCES recon_matches(match_id),
     amount_external REAL,
@@ -173,6 +189,7 @@ CREATE TABLE IF NOT EXISTS recon_discrepancies (
     variance        REAL,
     resolution      TEXT NOT NULL DEFAULT 'pending' CHECK(resolution IN ('pending','accepted','adjusted','rejected')),
     resolution_note TEXT,
+    assigned_to     TEXT,             -- accounting staff this is assigned to
     resolved_at     TEXT,
     resolved_by     TEXT
 );
@@ -194,4 +211,42 @@ CREATE TABLE IF NOT EXISTS recon_pos_daily (
     txn_count    INTEGER DEFAULT 0,
     refreshed_at TEXT DEFAULT (datetime('now')),
     UNIQUE(branch_id, txn_date)
+);
+
+-- ─── Config: POS payment-code → canonical category + bank ─────────────────────
+-- Replaces regex classification. Seeded from pos_payment_month (seed_payment_map.py),
+-- then confirmed/edited by staff in the Setup UI. payment_code_norm is the raw Easy
+-- code trimmed + internal-space-collapsed so 'Cash'/'CASH' and ' KNNQR'/'KNNQR' unify.
+CREATE TABLE IF NOT EXISTS recon_payment_map (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    payment_code_norm TEXT NOT NULL UNIQUE,
+    category          TEXT NOT NULL CHECK(category IN
+                        ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
+    bank              TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
+                        ('KTB','KBANK','KTC','PROMPTPAY','NONE','UNKNOWN')),
+    reconcile         INTEGER NOT NULL DEFAULT 1,   -- 0 = informational only (e.g. ENTERTAIN)
+    notes             TEXT,
+    updated_at        TEXT DEFAULT (datetime('now')),
+    updated_by        TEXT
+);
+
+-- ─── Config: per-branch bank accounts (attribute bank lines → branch) ─────────
+CREATE TABLE IF NOT EXISTS recon_bank_account (
+    account_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    bank         TEXT NOT NULL CHECK(bank IN ('KTB','KBANK')),
+    account_no   TEXT NOT NULL,
+    account_name TEXT,
+    active       INTEGER NOT NULL DEFAULT 1,
+    UNIQUE(bank, account_no)
+);
+
+-- ─── Config: per-branch credit-card acquirer MIDs (attribute CC lines → branch) ─
+CREATE TABLE IF NOT EXISTS recon_acquirer_mid (
+    mid_id      INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id   INTEGER NOT NULL REFERENCES branches(branch_id),
+    acquirer    TEXT NOT NULL CHECK(acquirer IN ('KTB','KBANK','KTC')),
+    merchant_id TEXT,
+    terminal_id TEXT,
+    active      INTEGER NOT NULL DEFAULT 1
 );
