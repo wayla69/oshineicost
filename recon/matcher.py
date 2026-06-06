@@ -24,8 +24,10 @@ import sqlite3
 
 from .seed_payment_map import normalize
 
-TOL_ABS = 100.0    # THB
+TOL_ABS = 100.0    # THB  — monthly tolerance
 TOL_PCT = 0.5      # %
+TOL_ABS_DAY = 50.0 # THB  — daily tolerance (smaller amounts per day)
+TOL_PCT_DAY = 1.0  # %
 
 # Bank-statement channels that map to a reconcilable POS category
 _CHANNEL_CATEGORY = {"QR": "QR", "TRANSFER": "TRANSFER", "CASH_DEP": "CASH"}
@@ -256,4 +258,177 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
         "matched":     matched,
         "discrepancies": len(rows) - matched,
         "unmapped":    [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
+    }
+
+
+# ── Daily reconciliation ──────────────────────────────────────────────────────
+# Staff reconcile per day. Some statements arrive late, so each day/lane carries a
+# status that distinguishes a genuine gap ('missing' — the statement covers that
+# day but the line isn't there) from an awaited document ('pending' — no statement
+# yet covers that day).
+
+def _within_tol_day(ext: float, pos: float) -> bool:
+    if abs(ext - pos) <= TOL_ABS_DAY:
+        return True
+    return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= TOL_PCT_DAY
+
+
+def pos_category_totals_daily(conn, branch_id, period_month):
+    """{(day, category, bank): amount} from pos_payment_day via the payment map.
+    Returns ({}, available=False) if pos_payment_day isn't synced yet."""
+    try:
+        pmap = {r["payment_code_norm"]: r for r in conn.execute(
+            "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+        rows = conn.execute(
+            "SELECT day, payment_code, amount FROM pos_payment_day WHERE branch_id=? AND substr(day,1,7)=?",
+            (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return {}, False
+    totals = {}
+    for r in rows:
+        m = pmap.get(normalize(r["payment_code"]))
+        if m is None or not m["reconcile"]:
+            continue
+        key = (r["day"], m["category"], m["bank"])
+        totals[key] = totals.get(key, 0.0) + float(r["amount"] or 0)
+    return totals, True
+
+
+def _external_buckets_daily(conn, branch_id, period_month):
+    """{(day, category, bank): {amount, net}} from external lines, keyed by line date."""
+    buckets = {}
+    def add(day, cat, bank, amount, net):
+        b = buckets.setdefault((day, cat, bank), {"amount": 0.0, "net": 0.0})
+        b["amount"] += amount; b["net"] += net
+
+    for r in conn.execute("""
+        SELECT l.txn_date d, l.credit, l.channel, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+    """, (branch_id, period_month)):
+        cat = _CHANNEL_CATEGORY.get(r["channel"])
+        if not cat:
+            continue
+        bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
+        add(r["d"], cat, bank, float(r["credit"] or 0), float(r["credit"] or 0))
+
+    for r in conn.execute("""
+        SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        acq = r["acquirer"] or _provider_acquirer(r["provider"])
+        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        gross = float(r["gross_amount"] or 0)
+        add(r["settlement_date"], "CREDIT", acq, gross,
+            gross - float(r["refund_amount"] or 0) - fee - vat)
+
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+                                ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
+        for r in conn.execute(f"""
+            SELECT * FROM {table}
+            WHERE branch_id=? AND order_status='Completed' AND strftime('%Y-%m', order_date)=?
+        """, (branch_id, period_month)):
+            fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
+            gross = float(r["food_amount"] or 0)
+            add(r["order_date"], cat, "NONE", gross, gross - fee - vat - float(r["promo_deduct"] or 0))
+    return buckets
+
+
+def _coverage(conn, branch_id, period_month):
+    """Latest date each external source has data for. Days after this (with POS
+    activity but no line) are 'pending' (document not yet arrived), not 'missing'."""
+    cov = {}
+    for r in conn.execute("""
+        SELECT u.provider, MAX(l.txn_date) mx
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.txn_date)=? GROUP BY u.provider
+    """, (branch_id, period_month)):
+        cov[("bank", _provider_bank(r["provider"]))] = r["mx"]
+    cash_mx = conn.execute(
+        "SELECT MAX(txn_date) FROM recon_bank_lines WHERE branch_id=? AND strftime('%Y-%m',txn_date)=?",
+        (branch_id, period_month)).fetchone()[0]
+    if cash_mx:
+        cov[("cash", None)] = cash_mx
+    for r in conn.execute("""
+        SELECT u.provider, MAX(l.settlement_date) mx
+        FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=? GROUP BY u.provider
+    """, (branch_id, period_month)):
+        cov[("cc", _provider_acquirer(r["provider"]))] = r["mx"]
+    for src, table in (("grab", "recon_grab_lines"), ("lineman", "recon_lineman_lines")):
+        mx = conn.execute(
+            f"SELECT MAX(order_date) FROM {table} WHERE branch_id=? AND strftime('%Y-%m',order_date)=?",
+            (branch_id, period_month)).fetchone()[0]
+        if mx:
+            cov[(src, None)] = mx
+    return cov
+
+
+def _lane_cov_key(category, bank):
+    if category == "CASH":                  return ("cash", None)
+    if category in ("QR", "TRANSFER"):      return ("bank", bank)
+    if category == "CREDIT":                return ("cc", bank)
+    if category == "GRAB":                  return ("grab", None)
+    if category == "LINEMAN":               return ("lineman", None)
+    return (category.lower(), None)         # COUPON etc → no external source
+
+
+def daily_reconciliation(conn, branch_id, period_month):
+    """Per-day, per-lane reconciliation with pending tracking for late documents."""
+    pos, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
+    ext = _external_buckets_daily(conn, branch_id, period_month)
+    cov = _coverage(conn, branch_id, period_month)
+
+    by_day = {}
+    for (day, cat, bank) in set(pos) | set(ext):
+        pos_amt = pos.get((day, cat, bank), 0.0)
+        eb = ext.get((day, cat, bank))
+        ext_amt = eb["amount"] if eb else 0.0
+        ext_net = eb["net"] if eb else 0.0
+
+        if eb and pos_amt > 0:
+            status = "matched" if _within_tol_day(ext_amt, pos_amt) else "variance"
+        elif eb:                                   # pos 0, ext present
+            status = "ext_only"
+        elif cat == "COUPON":
+            status = "no_source"
+        else:                                      # pos > 0, no external line
+            cmax = cov.get(_lane_cov_key(cat, bank))
+            status = "missing" if (cmax and day <= cmax) else "pending"
+
+        by_day.setdefault(day, []).append({
+            "category": cat, "bank": bank,
+            "pos": round(pos_amt, 2), "ext": round(ext_amt, 2), "ext_net": round(ext_net, 2),
+            "variance": round(ext_amt - pos_amt, 2), "status": status,
+        })
+
+    days = []
+    pending_by_source = {}
+    for day in sorted(by_day):
+        lanes = sorted(by_day[day], key=lambda x: (x["category"], x["bank"]))
+        pending = [l for l in lanes if l["status"] == "pending"]
+        issues  = [l for l in lanes if l["status"] in ("variance", "missing", "ext_only")]
+        for l in pending:
+            src = _CATEGORY_SOURCE.get(l["category"], "pos")
+            pending_by_source[src] = pending_by_source.get(src, 0) + 1
+        days.append({
+            "day": day,
+            "pos_total": round(sum(l["pos"] for l in lanes), 2),
+            "ext_total": round(sum(l["ext"] for l in lanes), 2),
+            "lanes": lanes,
+            "pending": [{"category": l["category"], "bank": l["bank"]} for l in pending],
+            "matched": sum(1 for l in lanes if l["status"] == "matched"),
+            "pending_count": len(pending),
+            "issue_count": len(issues),
+        })
+
+    return {
+        "pos_daily_available": pos_available,
+        "days": days,
+        "pending_summary": {
+            "pending_lane_days": sum(d["pending_count"] for d in days),
+            "days_with_pending": sum(1 for d in days if d["pending_count"]),
+            "by_source": pending_by_source,
+            "coverage": {f"{k[0]}/{k[1] or '-'}": v for k, v in cov.items()},
+        },
     }

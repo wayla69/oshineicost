@@ -149,6 +149,52 @@ def test_master_only_and_period_validation(client):
     assert client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).status_code == 200
 
 
+def test_daily_pending_vs_missing(tmp_path):
+    """Daily board distinguishes a genuine gap (statement covers the day, line
+    absent → 'missing') from an awaited late document ('pending')."""
+    db = _make_db(tmp_path, [("KNNQR", 31000), ("Cash", 15000)])
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,?,?,0)", [
+        ("2026-06-01", "KNNQR", 10000), ("2026-06-01", "Cash", 5000),
+        ("2026-06-02", "KNNQR", 12000), ("2026-06-02", "Cash", 4000),
+        ("2026-06-03", "KNNQR", 9000),  ("2026-06-03", "Cash", 6000)])
+    c.commit(); c.close()
+    main._DB_PATH = db
+    os.environ.pop("OSHINEI_SEED_TOKEN", None)
+    with TestClient(main.app) as cl:
+        pm = {x["payment_code_norm"]: x for x in cl.get("/api/payment-map").json()}
+        cl.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+        cc = sqlite3.connect(db)
+        up = cc.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                        " VALUES('bank',4,'KTB','f','2026-06',0,'confirmed')").lastrowid
+        # bank statement covers only Jun 1-2; Jun 3 is a late document
+        cc.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-01','QR',10000)", (up,))
+        cc.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-02','QR',11000)", (up,))
+        cc.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-01','CASH_DEP',5000)", (up,))
+        cc.commit(); cc.close()
+
+        d = cl.get(f"/api/sessions/{sid}/daily").json()
+        assert d["pos_daily_available"] is True
+        days = {x["day"]: x for x in d["days"]}
+        def lane(day, cat, bank):
+            return next(l for l in days[day]["lanes"] if l["category"] == cat and l["bank"] == bank)
+        assert lane("2026-06-01", "QR", "KTB")["status"] == "matched"
+        assert lane("2026-06-02", "QR", "KTB")["status"] == "variance"   # 11000 vs 12000
+        assert lane("2026-06-02", "CASH", "NONE")["status"] == "missing" # covered day, no line
+        assert lane("2026-06-03", "QR", "KTB")["status"] == "pending"    # statement not arrived
+        assert d["pending_summary"]["coverage"]["bank/KTB"] == "2026-06-02"
+        assert days["2026-06-03"]["pending_count"] == 2
+
+
+def test_daily_unavailable_without_sync(client):
+    """No pos_payment_day table → graceful flag, not a crash."""
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    d = client.get(f"/api/sessions/{sid}/daily").json()
+    assert d["pos_daily_available"] is False
+
+
 def test_write_token_gate(client):
     main.os.environ["OSHINEI_SEED_TOKEN"] = "tok"
     try:

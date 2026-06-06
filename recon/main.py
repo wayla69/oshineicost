@@ -24,7 +24,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .matcher import category_reconciliation, run_auto_match
+from .matcher import category_reconciliation, daily_reconciliation, run_auto_match
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -615,6 +615,19 @@ def session_categories(session_id: int):
         return [dict(r) for r in conn.execute(
             "SELECT * FROM recon_category_result WHERE session_id=? ORDER BY category, bank",
             (session_id,))]
+
+
+@app.get("/api/sessions/{session_id}/daily")
+def session_daily(session_id: int):
+    """Day-by-day reconciliation board with per-day pending tracking for late
+    documents. Computed live so it reflects current uploads + fee/VAT edits."""
+    with get_db() as conn:
+        s = conn.execute(
+            "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        if not s:
+            raise HTTPException(404)
+        return daily_reconciliation(conn, s["branch_id"], s["period_month"])
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────

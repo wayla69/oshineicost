@@ -40,7 +40,8 @@
 
 <div class="bg-white border-b px-6 flex gap-6 text-sm text-gray-500">
   <button class="tab-btn active py-3" data-tab="overview"      onclick="switchTab('overview')">Overview</button>
-  <button class="tab-btn py-3"        data-tab="reconcile"     onclick="switchTab('reconcile')">Reconcile</button>
+  <button class="tab-btn py-3"        data-tab="daily"         onclick="switchTab('daily')">Daily</button>
+  <button class="tab-btn py-3"        data-tab="reconcile"     onclick="switchTab('reconcile')">Monthly</button>
   <button class="tab-btn py-3"        data-tab="uploads"       onclick="switchTab('uploads')">Uploads</button>
   <button class="tab-btn py-3"        data-tab="discrepancies" onclick="switchTab('discrepancies')">Discrepancies <span id="disc-badge" class="badge b-err hidden">0</span></button>
   <button class="tab-btn py-3"        data-tab="setup"         onclick="switchTab('setup')">Setup <span id="setup-badge" class="badge b-warn hidden">0</span></button>
@@ -102,6 +103,35 @@
           </tr></thead>
           <tbody id="fv-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No lines</td></tr></tbody>
         </table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY -->
+  <div id="tab-daily" class="tab-pane hidden space-y-5">
+    <div id="daily-empty" class="card text-center text-gray-400 py-10">
+      Open a branch session from Overview to see its daily board.
+    </div>
+    <div id="daily-body" class="hidden space-y-5">
+      <div class="card flex items-center gap-4 flex-wrap">
+        <div><div class="text-xs text-gray-400">Daily reconciliation</div><div id="daily-title" class="font-semibold text-gray-800"></div></div>
+        <div id="daily-pending" class="ml-auto text-sm"></div>
+      </div>
+      <div id="daily-nopos" class="hidden card" style="border-left:4px solid var(--warn)">
+        <div class="font-semibold text-amber-700">Daily POS not synced yet</div>
+        <div class="text-sm text-gray-600">Run <code>python backend/sync_mssql.py</code> (it now builds <code>pos_payment_day</code>) to populate per-day POS tender. External documents are shown below in the meantime.</div>
+      </div>
+      <div class="card overflow-x-auto">
+        <div class="font-semibold text-gray-700 mb-1">Coverage — last day each source's document covers</div>
+        <div id="daily-coverage" class="text-sm text-gray-600 mb-3"></div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Day</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th>
+            <th class="text-right pb-2">Variance</th><th class="text-left pb-2 pl-4">Lanes</th>
+            <th class="text-center pb-2">Pending</th>
+          </tr></thead>
+          <tbody id="daily-rows"><tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -261,6 +291,7 @@ function switchTab(name){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.add('hidden'));
   document.getElementById('tab-'+name).classList.remove('hidden');
   if(name==='overview') loadOverview();
+  if(name==='daily') loadDaily();
   if(name==='reconcile') renderReconcile();
   if(name==='uploads') loadUploads();
   if(name==='discrepancies') loadDiscrepancies();
@@ -303,7 +334,39 @@ async function ensureSession(){
 }
 async function openSession(id){
   SESSION = await api('/api/sessions/'+id);
-  switchTab('reconcile');
+  switchTab('daily');
+}
+
+// ── daily board ──────────────────────────────────────────────────────────────
+const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut'};
+const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·'};
+async function loadDaily(){
+  if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
+  document.getElementById('daily-empty').classList.add('hidden');
+  document.getElementById('daily-body').classList.remove('hidden');
+  document.getElementById('daily-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
+  const d = await api(`/api/sessions/${SESSION.session_id}/daily`);
+  document.getElementById('daily-nopos').classList.toggle('hidden', d.pos_daily_available);
+  const ps = d.pending_summary;
+  document.getElementById('daily-pending').innerHTML =
+    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days} pending lane-days</span>
+     <span class="text-gray-400 ml-2">${ps.days_with_pending} day(s) awaiting documents</span>`;
+  document.getElementById('daily-coverage').innerHTML = Object.keys(ps.coverage).length
+    ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
+    : '<span class="text-gray-400">No documents uploaded yet.</span>';
+  const tb=document.getElementById('daily-rows'); tb.innerHTML='';
+  if(!d.days.length){ tb.innerHTML='<tr><td colspan="6" class="text-center text-gray-400 py-6">No activity for this period</td></tr>'; return; }
+  d.days.forEach(day=>{
+    const chips = day.lanes.map(l=>`<span class="badge ${LANE_CHIP[l.status]} mr-1" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}: POS ฿${fmt(l.pos)} / ext ฿${fmt(l.ext)} (${l.status})">${l.category.slice(0,4)}${l.bank!=='NONE'?'·'+l.bank:''} ${LANE_SYM[l.status]}</span>`).join('');
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-2 font-medium">${day.day}</td>
+      <td class="text-right font-mono">${fmt(day.pos_total)}</td>
+      <td class="text-right font-mono">${fmt(day.ext_total)}</td>
+      <td class="text-right font-mono ${varCls(day.ext_total-day.pos_total)}">${varTxt(day.ext_total-day.pos_total)}</td>
+      <td class="pl-4">${chips}</td>
+      <td class="text-center">${day.pending_count?`<span class="badge b-warn">${day.pending_count}</span>`:'<span class="text-gray-300">—</span>'}</td>`;
+    tb.appendChild(tr);
+  });
 }
 
 // ── reconcile ────────────────────────────────────────────────────────────────
