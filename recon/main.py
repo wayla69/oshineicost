@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from .matcher import (
     category_reconciliation,
+    daily_board,
     daily_reconciliation,
     lane_lines,
     payout_reconciliation,
@@ -1086,6 +1087,30 @@ def list_matches(session_id: int, category: str | None = None):
             ORDER BY category, bank
         """, params).fetchall()
         return [dict(r) for r in rows]
+
+
+# ── Cross-branch daily board ──────────────────────────────────────────────────
+
+_DAY_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
+
+
+@app.get("/api/daily-board/dates")
+def daily_board_dates():
+    """Min / max day with POS daily data — drives the date picker bounds + default."""
+    with get_db() as conn:
+        try:
+            row = conn.execute("SELECT MIN(day) mn, MAX(day) mx FROM pos_payment_day").fetchone()
+            return {"min_day": row["mn"], "max_day": row["mx"]}
+        except sqlite3.OperationalError:
+            return {"min_day": None, "max_day": None}
+
+
+@app.get("/api/daily-board")
+def daily_board_endpoint(day: str):
+    if not _DAY_RE.match(day or ""):
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    with get_db() as conn:
+        return daily_board(conn, day)
 
 
 # ── Cross-branch overview ─────────────────────────────────────────────────────

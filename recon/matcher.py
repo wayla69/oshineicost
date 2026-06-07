@@ -594,3 +594,126 @@ def daily_reconciliation(conn, branch_id, period_month):
             "coverage": {f"{k[0]}/{k[1] or '-'}": v for k, v in cov.items()},
         },
     }
+
+
+# ── Cross-branch daily board ───────────────────────────────────────────────────
+# One chosen day, every branch at once, broken down by payment category. This is
+# the company-wide "did today's money land?" view. POS revenue per channel comes
+# from pos_payment_day (mapped via recon_payment_map); the external side is the
+# same uploaded documents, summed on their own line date. Categories collapse over
+# bank here (a branch row is wide enough already) — the per-branch Daily tab keeps
+# the bank-level split.
+
+_BOARD_CAT_ORDER = ["CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"]
+
+
+def daily_board(conn: sqlite3.Connection, day: str) -> dict:
+    """Reconciliation matrix for a single day across all master branches.
+    Returns {day, categories, branches:[{branch_id, branch_name, cells, totals}],
+    totals, unmapped}. cells[cat] = {pos, ext, variance, status}."""
+    pmap = {r["payment_code_norm"]: r for r in conn.execute(
+        "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+
+    branches = {r["branch_id"]: r["name"] for r in conn.execute(
+        "SELECT branch_id, name FROM branches "
+        "WHERE COALESCE(branch_type,'master')='master' AND active=1")}
+
+    # POS revenue per (branch, category)
+    pos: dict = {}
+    unmapped: dict = {}
+    for r in conn.execute(
+        "SELECT branch_id, payment_code, SUM(amount) amt "
+        "FROM pos_payment_day WHERE day=? GROUP BY branch_id, payment_code", (day,)):
+        if r["branch_id"] not in branches:
+            continue
+        norm = normalize(r["payment_code"])
+        amt = float(r["amt"] or 0)
+        m = pmap.get(norm)
+        if m is None:
+            unmapped[norm] = unmapped.get(norm, 0.0) + amt
+            continue
+        if not m["reconcile"]:
+            continue
+        pos[(r["branch_id"], m["category"])] = pos.get((r["branch_id"], m["category"]), 0.0) + amt
+
+    # External documents per (branch, category), summed on their own line date
+    ext: dict = {}
+    def add(bid, cat, amount, net):
+        if bid not in branches:
+            return
+        b = ext.setdefault((bid, cat), {"amount": 0.0, "net": 0.0})
+        b["amount"] += amount
+        b["net"]    += net
+
+    for r in conn.execute(
+        "SELECT branch_id, credit, channel FROM recon_bank_lines "
+        "WHERE credit>0 AND txn_date=?", (day,)):
+        cat = _CHANNEL_CATEGORY.get(r["channel"])
+        if cat:
+            add(r["branch_id"], cat, float(r["credit"] or 0), float(r["credit"] or 0))
+
+    for r in conn.execute("SELECT * FROM recon_cc_lines WHERE settlement_date=?", (day,)):
+        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        gross = float(r["gross_amount"] or 0)
+        add(r["branch_id"], "CREDIT", gross, gross - float(r["refund_amount"] or 0) - fee - vat)
+
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+                                ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
+        for r in conn.execute(
+            f"SELECT * FROM {table} WHERE order_status='Completed' AND order_date=?", (day,)):
+            fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
+            gross = float(r["food_amount"] or 0)
+            add(r["branch_id"], cat, gross, gross - fee - vat - float(r["promo_deduct"] or 0))
+
+    cats_present = {c for (_, c) in pos} | {c for (_, c) in ext}
+    categories = [c for c in _BOARD_CAT_ORDER if c in cats_present] \
+        + sorted(cats_present - set(_BOARD_CAT_ORDER))
+
+    rows = []
+    tot_pos = tot_ext = 0.0
+    cat_tot = {c: {"pos": 0.0, "ext": 0.0} for c in categories}
+    for bid, name in branches.items():
+        cells = {}
+        bp = be = 0.0
+        issues = 0
+        for c in categories:
+            p = pos.get((bid, c), 0.0)
+            eb = ext.get((bid, c))
+            e = eb["amount"] if eb else 0.0
+            if p == 0 and e == 0:
+                continue
+            if p > 0 and e > 0:
+                status = "matched" if _within_tol_day(e, p) else "variance"
+            elif p > 0:
+                status = "no_source" if c == "COUPON" else "pos_only"
+            else:
+                status = "ext_only"
+            if status in ("variance", "ext_only"):
+                issues += 1
+            cells[c] = {"pos": round(p, 2), "ext": round(e, 2),
+                        "variance": round(e - p, 2), "status": status}
+            bp += p; be += e
+            cat_tot[c]["pos"] += p; cat_tot[c]["ext"] += e
+        if not cells:
+            continue
+        rows.append({"branch_id": bid, "branch_name": name, "cells": cells,
+                     "pos_total": round(bp, 2), "ext_total": round(be, 2),
+                     "variance": round(be - bp, 2), "issues": issues})
+        tot_pos += bp; tot_ext += be
+
+    rows.sort(key=lambda x: -x["pos_total"])
+    return {
+        "day": day,
+        "categories": categories,
+        "branches": rows,
+        "totals": {
+            "pos": round(tot_pos, 2),
+            "ext": round(tot_ext, 2),
+            "variance": round(tot_ext - tot_pos, 2),
+            "by_category": {c: {"pos": round(v["pos"], 2), "ext": round(v["ext"], 2)}
+                            for c, v in cat_tot.items()},
+            "branches_reporting": len(rows),
+            "branches_with_issues": sum(1 for r in rows if r["issues"]),
+        },
+        "unmapped": [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
+    }

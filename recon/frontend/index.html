@@ -92,8 +92,11 @@
     <button class="side-btn active" data-tab="overview" onclick="switchTab('overview')">
       <span class="icon">📊</span><span data-i18n="tab_overview">Overview</span>
     </button>
+    <button class="side-btn" data-tab="board" onclick="switchTab('board')">
+      <span class="icon">🗓️</span><span data-i18n="tab_board">Daily · All Branches</span>
+    </button>
     <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
-      <span class="icon">📅</span><span data-i18n="tab_daily">Daily</span>
+      <span class="icon">📅</span><span data-i18n="tab_daily">Daily · One Branch</span>
     </button>
     <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
       <span class="icon">⚖️</span><span data-i18n="tab_monthly">Monthly</span>
@@ -175,6 +178,43 @@
           </tr></thead>
           <tbody id="ov-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
         </table>
+      </div>
+    </div>
+
+    <!-- DAILY · ALL BRANCHES (cross-branch board) -->
+    <div id="tab-board" class="tab-pane hidden space-y-4">
+      <div class="card" style="padding:12px 16px">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="font-semibold text-gray-700 text-sm" data-i18n="board_hd">Daily revenue — all branches</span>
+          <input id="board-date" type="date" class="inp" style="width:165px" onchange="loadDailyBoard()">
+          <button onclick="boardStep(-1)" class="btn btn-sec" style="padding:6px 10px" title="Previous day">‹</button>
+          <button onclick="boardStep(1)"  class="btn btn-sec" style="padding:6px 10px" title="Next day">›</button>
+          <span class="text-xs text-gray-400" data-i18n="board_hint">click a cell to reconcile that branch · numbers are POS revenue per channel</span>
+        </div>
+      </div>
+
+      <!-- summary strip -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_pos">POS Revenue</div><div id="bd-pos" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_ext">Documents</div><div id="bd-ext" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_var">Variance</div><div id="bd-var" class="text-2xl font-bold">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="board_reporting">Branches reporting</div><div id="bd-rep" class="text-2xl font-bold text-gray-800">—</div></div>
+      </div>
+
+      <div id="bd-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+
+      <div class="card overflow-x-auto" style="padding:0">
+        <table class="w-full text-sm" style="border-collapse:collapse">
+          <thead><tr id="bd-head" class="text-gray-400 text-xs uppercase border-b" style="position:sticky;top:0;background:#fff;z-index:5"></tr></thead>
+          <tbody id="bd-body"><tr><td class="text-center text-gray-400 py-8">Pick a date</td></tr></tbody>
+          <tfoot id="bd-foot" class="border-t-2"></tfoot>
+        </table>
+      </div>
+      <div class="flex gap-4 text-xs text-gray-400 px-1">
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dcfce7;display:inline-block"></span><span data-i18n="bd_lg_matched">matched to documents</span></span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fee2e2;display:inline-block"></span><span data-i18n="bd_lg_var">variance</span></span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fef9c3;display:inline-block"></span><span data-i18n="bd_lg_await">awaiting document</span></span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#f1f5f9;border:1px solid #e2e8f0;display:inline-block"></span><span data-i18n="bd_lg_none">no source</span></span>
       </div>
     </div>
 
@@ -530,7 +570,10 @@ async function withBusy(btn, label, fn){
 const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
-    tab_overview:"ภาพรวม", tab_daily:"รายวัน", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
+    tab_overview:"ภาพรวม", tab_board:"รายวัน·ทุกสาขา", tab_daily:"รายวัน·รายสาขา", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
+    board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือยอด POS แยกตามช่องทาง",
+    board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
+    bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_none:"ไม่มีแหล่ง",
     tab_discrepancies:"รายการต่าง", tab_trend:"แนวโน้ม", tab_audit:"ประวัติ", tab_setup:"ตั้งค่า",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
@@ -553,7 +596,10 @@ const I18N = {
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
-    tab_overview:"Overview", tab_daily:"Daily", tab_monthly:"Monthly", tab_uploads:"Uploads",
+    tab_overview:"Overview", tab_board:"Daily · All Branches", tab_daily:"Daily · One Branch", tab_monthly:"Monthly", tab_uploads:"Uploads",
+    board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · numbers are POS revenue per channel",
+    board_reporting:"Branches reporting", board_total:"All branches",
+    bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_none:"no source",
     tab_discrepancies:"Discrepancies", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
@@ -642,6 +688,7 @@ function switchTab(name){
   document.getElementById('sel-date').classList.toggle('hidden', !onDaily);
   if(!onDaily){ document.getElementById('btn-clear-date').classList.add('hidden'); }
   if(name==='overview')      loadOverview();
+  if(name==='board')         loadDailyBoard();
   if(name==='daily')         loadDaily();
   if(name==='reconcile')     renderReconcile();
   if(name==='uploads')       loadUploads();
@@ -711,6 +758,109 @@ async function openSession(id, tab){
   SESSION = await api('/api/sessions/'+id);
   document.getElementById('sel-branch').value = SESSION.branch_id;
   switchTab(tab || 'daily');
+}
+
+// ── daily board (cross-branch, single day) ─────────────────────────────────────
+let BOARD_DATE = null;
+const BOARD_CELL = {matched:'#dcfce7', variance:'#fee2e2', pos_only:'#fef9c3', ext_only:'#fef9c3', no_source:'#f1f5f9'};
+const BOARD_FG   = {matched:'#15803d', variance:'#b91c1c', pos_only:'#854d0e', ext_only:'#854d0e', no_source:'#94a3b8'};
+
+async function loadDailyBoard(){
+  const di=document.getElementById('board-date');
+  if(!BOARD_DATE){
+    const dates=await api('/api/daily-board/dates').catch(()=>({}));
+    BOARD_DATE = di.value || dates.max_day || period()+'-01';
+    if(dates.min_day) di.min=dates.min_day;
+    if(dates.max_day) di.max=dates.max_day;
+  }
+  di.value = BOARD_DATE;
+  const data = await api('/api/daily-board?day='+BOARD_DATE).catch(()=>null);
+  if(!data){ document.getElementById('bd-body').innerHTML='<tr><td class="text-center text-red-500 py-8">Failed to load</td></tr>'; return; }
+  renderBoard(data);
+}
+function boardStep(delta){
+  const d=new Date(BOARD_DATE+'T00:00:00'); d.setDate(d.getDate()+delta);
+  BOARD_DATE=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  loadDailyBoard();
+}
+
+function renderBoard(d){
+  const cats=d.categories||[];
+  // summary strip
+  document.getElementById('bd-pos').textContent = fmt(d.totals.pos);
+  document.getElementById('bd-ext').textContent = fmt(d.totals.ext);
+  const v=d.totals.variance, kv=document.getElementById('bd-var');
+  kv.textContent=varTxt(v); kv.className='text-2xl font-bold '+varCls(v);
+  document.getElementById('bd-rep').textContent =
+    `${d.totals.branches_reporting}${d.totals.branches_with_issues?` · ${d.totals.branches_with_issues}⚠`:''}`;
+
+  // unmapped notice
+  const un=document.getElementById('bd-unmapped');
+  if(d.unmapped&&d.unmapped.length){ un.classList.remove('hidden');
+    un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes (excluded from this board)</div>
+      <div class="text-sm">${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')} — map them in Setup.</div>`;
+  } else un.classList.add('hidden');
+
+  // header
+  document.getElementById('bd-head').innerHTML =
+    `<th class="text-left py-3 pl-4 pr-3 sticky left-0 bg-white" data-i18n="c_branch">Branch</th>`+
+    cats.map(c=>`<th class="text-right py-3 px-3">${c}</th>`).join('')+
+    `<th class="text-right py-3 px-3" data-i18n="kpi_pos">POS</th>`+
+    `<th class="text-right py-3 px-3" data-i18n="kpi_ext">Docs</th>`+
+    `<th class="text-right py-3 px-3" data-i18n="kpi_var">Var</th>`+
+    `<th class="py-3 px-3"></th>`;
+
+  // body
+  const tb=document.getElementById('bd-body');
+  if(!d.branches.length){ tb.innerHTML=`<tr><td colspan="${cats.length+5}" class="text-center text-gray-400 py-8">No POS revenue recorded for ${d.day}.</td></tr>`; applyI18n(); return; }
+  tb.innerHTML='';
+  d.branches.forEach(b=>{
+    const tr=document.createElement('tr');
+    const cells=cats.map(c=>{
+      const cell=b.cells[c];
+      if(!cell) return '<td class="px-3 py-2 text-right text-gray-200">·</td>';
+      const tip=`${b.branch_name} · ${c}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\nclick to reconcile`;
+      return `<td class="px-2 py-1.5 text-right">
+        <span onclick="boardDrill(${b.branch_id},'${c}')" title="${tip}"
+          style="display:inline-block;min-width:64px;padding:3px 8px;border-radius:6px;cursor:pointer;font-family:monospace;font-weight:600;background:${BOARD_CELL[cell.status]||'#f1f5f9'};color:${BOARD_FG[cell.status]||'#475569'}">${fmt(cell.pos)}</span></td>`;
+    }).join('');
+    tr.innerHTML=`<td class="py-1.5 pl-4 pr-3 font-medium sticky left-0 bg-white cursor-pointer hover:text-orange-600" onclick="boardDrill(${b.branch_id})">${b.branch_name}${b.issues?` <span class="badge b-err">${b.issues}</span>`:''}</td>
+      ${cells}
+      <td class="px-3 text-right font-mono">${fmt(b.pos_total)}</td>
+      <td class="px-3 text-right font-mono text-gray-500">${fmt(b.ext_total)}</td>
+      <td class="px-3 text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
+      <td class="px-3 text-right"><button onclick="boardUpload(${b.branch_id})" class="text-xs text-orange-600 hover:underline" title="Upload documents for this branch">+ docs</button></td>`;
+    tb.appendChild(tr);
+  });
+
+  // footer grand totals
+  const bc=d.totals.by_category||{};
+  document.getElementById('bd-foot').innerHTML =
+    `<tr class="font-semibold" style="background:#f8fafc">
+      <td class="py-2.5 pl-4 pr-3 sticky left-0" style="background:#f8fafc" data-i18n="board_total">All branches</td>
+      ${cats.map(c=>`<td class="px-3 text-right font-mono">${fmt((bc[c]||{}).pos)}</td>`).join('')}
+      <td class="px-3 text-right font-mono">${fmt(d.totals.pos)}</td>
+      <td class="px-3 text-right font-mono text-gray-500">${fmt(d.totals.ext)}</td>
+      <td class="px-3 text-right font-mono ${varCls(d.totals.variance)}">${varTxt(d.totals.variance)}</td>
+      <td></td></tr>`;
+  applyI18n();
+}
+
+// click a board cell/branch → open that branch's single-branch Daily, focused on the day
+async function boardDrill(branch_id, category){
+  const ym=BOARD_DATE.slice(0,7);
+  const sel=document.getElementById('sel-period');
+  if([...sel.options].some(o=>o.value===ym)) sel.value=ym;
+  syncDateBounds();
+  FOCUS_DATE=BOARD_DATE;
+  const sd=document.getElementById('sel-date'); sd.value=BOARD_DATE;
+  document.getElementById('btn-clear-date').classList.remove('hidden');
+  await startSession(branch_id, 'daily');
+}
+function boardUpload(branch_id){
+  openUploadModal();
+  document.getElementById('up-branch').value=branch_id;
+  document.getElementById('up-period').value=BOARD_DATE.slice(0,7);
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────
