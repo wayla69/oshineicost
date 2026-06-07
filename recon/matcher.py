@@ -607,6 +607,41 @@ def daily_reconciliation(conn, branch_id, period_month):
 _BOARD_CAT_ORDER = ["CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"]
 
 
+def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
+                    day: str | None = None, period_month: str | None = None):
+    """POS payment codes for a branch on one day (or month), each tagged with its
+    mapping status from recon_payment_map. This is the finest POS grain available
+    (no per-receipt tender split exists), so 'transaction-level' = code-level.
+    Returns a list sorted by amount desc."""
+    pmap = {r["payment_code_norm"]: r for r in conn.execute(
+        "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+    if day:
+        sql = ("SELECT payment_code, SUM(amount) amt, SUM(txn_count) n "
+               "FROM pos_payment_day WHERE branch_id=? AND day=? GROUP BY payment_code")
+        params = (branch_id, day)
+    else:
+        sql = ("SELECT payment_code, SUM(amount) amt, SUM(txn_count) n "
+               "FROM pos_payment_day WHERE branch_id=? AND substr(day,1,7)=? GROUP BY payment_code")
+        params = (branch_id, period_month)
+    out = []
+    for r in conn.execute(sql, params):
+        nm = normalize(r["payment_code"])
+        m = pmap.get(nm)
+        bank = m["bank"] if m else None
+        out.append({
+            "code": r["payment_code"], "norm": nm,
+            "amount": round(float(r["amt"] or 0), 2), "txn_count": int(r["n"] or 0),
+            "mapped": m is not None,
+            "category": m["category"] if m else None,
+            "bank": bank,
+            "reconcile": int(m["reconcile"]) if m else 0,
+            # action item if no map row, or mapped to a bank we can't reconcile against
+            "needs_map": (m is None) or (bank in ("UNKNOWN", "PROMPTPAY")),
+        })
+    out.sort(key=lambda x: -x["amount"])
+    return out
+
+
 def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     """Reconciliation matrix for a single day across all master branches.
     Returns {day, categories, branches:[{branch_id, branch_name, cells, totals}],

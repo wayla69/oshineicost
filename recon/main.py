@@ -33,6 +33,7 @@ from .matcher import (
     daily_reconciliation,
     lane_lines,
     payout_reconciliation,
+    pos_codes_scope,
     run_auto_match,
 )
 from .seed_payment_map import seed_payment_map
@@ -1111,6 +1112,47 @@ def daily_board_endpoint(day: str):
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
     with get_db() as conn:
         return daily_board(conn, day)
+
+
+# ── Transaction-level drill-down (mapped / unmapped codes + statement lines) ───
+
+@app.get("/api/drill")
+def drill(branch_id: int, category: str | None = None, bank: str | None = None,
+          day: str | None = None, period_month: str | None = None):
+    """Day-scoped (or month-scoped) drill into one branch's payment codes and the
+    matching statement lines, so staff can see which codes are mapped vs unmapped
+    and act on the unmapped. `category`/`bank` narrow to a single lane."""
+    if day and not _DAY_RE.match(day):
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    if not day and not (period_month and _PERIOD_RE.match(period_month)):
+        raise HTTPException(400, "pass a valid day (YYYY-MM-DD) or period_month (YYYY-MM).")
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        codes = pos_codes_scope(conn, branch_id, day=day, period_month=period_month)
+        for c in codes:
+            c["in_lane"] = bool(category) and c["category"] == category \
+                and (not bank or bank in ("*", "") or c["bank"] == bank)
+        lane_codes = [c for c in codes if c["in_lane"]] if category else codes
+        attention  = [c for c in codes if c["needs_map"]]
+
+        ext_lines = []
+        if category:
+            ext_lines = lane_lines(conn, branch_id, (day or period_month)[:7],
+                                   category, bank or "NONE", day)
+
+        pos_total = round(sum(c["amount"] for c in lane_codes if c["reconcile"]), 2)
+        ext_total = round(sum(l["amount"] for l in ext_lines), 2)
+        bname = conn.execute("SELECT name FROM branches WHERE branch_id=?",
+                             (branch_id,)).fetchone()["name"]
+        return {
+            "branch_id": branch_id, "branch_name": bname,
+            "day": day, "period_month": period_month,
+            "category": category, "bank": bank,
+            "codes": codes, "lane_codes": lane_codes, "attention": attention,
+            "ext_lines": ext_lines,
+            "pos_total": pos_total, "ext_total": ext_total,
+            "variance": round(ext_total - pos_total, 2),
+        }
 
 
 # ── Cross-branch overview ─────────────────────────────────────────────────────

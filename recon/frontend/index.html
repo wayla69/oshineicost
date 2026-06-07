@@ -165,29 +165,33 @@
   </div>
 
   <nav id="sidebar-nav">
-    <div class="side-section">Menu</div>
+    <div class="side-section" data-i18n="sec_daily">Daily work</div>
     <button class="side-btn active" data-tab="overview" onclick="switchTab('overview')">
       <span class="icon">📊</span><span data-i18n="tab_overview">Overview</span>
     </button>
     <button class="side-btn" data-tab="board" onclick="switchTab('board')">
-      <span class="icon">🗓️</span><span data-i18n="tab_board">Daily · All Branches</span>
+      <span class="icon">🗓️</span><span data-i18n="tab_board">Daily Board (all)</span>
     </button>
     <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
-      <span class="icon">📅</span><span data-i18n="tab_daily">Daily · One Branch</span>
+      <span class="icon">📅</span><span data-i18n="tab_daily">Daily Reconcile</span>
     </button>
-    <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
-      <span class="icon">⚖️</span><span data-i18n="tab_monthly">Monthly</span>
-    </button>
+
+    <div class="side-section" data-i18n="sec_docs">Documents &amp; review</div>
     <button class="side-btn" data-tab="uploads" onclick="switchTab('uploads')">
-      <span class="icon">📤</span><span data-i18n="tab_uploads">Uploads</span>
+      <span class="icon">📤</span><span data-i18n="tab_uploads">Documents</span>
     </button>
     <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
-      <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">Discrepancies</span>
+      <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">To Review</span>
       <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
+    </button>
+    <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
+      <span class="icon">⚖️</span><span data-i18n="tab_monthly">By Category</span>
     </button>
     <button class="side-btn" data-tab="trend" onclick="switchTab('trend')">
       <span class="icon">📈</span><span data-i18n="tab_trend">Trend</span>
     </button>
+
+    <div class="side-section" data-i18n="sec_system">System</div>
     <button class="side-btn" data-tab="audit" onclick="switchTab('audit')">
       <span class="icon">🕒</span><span data-i18n="tab_audit">Audit Log</span>
     </button>
@@ -510,6 +514,57 @@
       </div>
     </div>
 
+    <!-- DRILL-DOWN (transaction/code level — opened from a channel cell) -->
+    <div id="tab-drill" class="tab-pane hidden space-y-4">
+      <div class="card" style="padding:14px 18px">
+        <div class="flex items-center gap-4 flex-wrap">
+          <button onclick="drillBack()" class="btn btn-sec" style="padding:6px 12px" data-i18n="drill_back">← Back</button>
+          <div>
+            <div class="text-xs text-gray-400" data-i18n="drill_title">Transaction detail</div>
+            <div id="drill-scope" class="font-semibold text-gray-800"></div>
+          </div>
+          <div class="ml-auto flex gap-5 text-right">
+            <div><div class="text-xs text-gray-400" data-i18n="l_pos_tender">POS tender</div><div id="drill-pos" class="font-mono font-bold text-gray-800">—</div></div>
+            <div><div class="text-xs text-gray-400" data-i18n="l_statement">Statement</div><div id="drill-ext" class="font-mono font-bold text-gray-800">—</div></div>
+            <div><div class="text-xs text-gray-400" data-i18n="kpi_var">Variance</div><div id="drill-var" class="font-mono font-bold">—</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- action items: unmapped / needs-bank codes -->
+      <div id="drill-attention" class="hidden card" style="border-left:4px solid var(--warn);padding:14px 18px"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- POS codes -->
+        <div class="card overflow-x-auto" style="padding:0">
+          <div class="font-semibold text-gray-700" style="padding:14px 16px 0" data-i18n="drill_pos_codes">POS payment codes</div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="text-left" data-i18n="col_code">Code</th>
+              <th class="text-right" data-i18n="col_amount">Amount</th>
+              <th class="text-right" data-i18n="col_txns">Txns</th>
+              <th class="text-left" data-i18n="col_mapping">Mapping</th>
+            </tr></thead>
+            <tbody id="drill-codes"></tbody>
+          </table>
+        </div>
+        <!-- Statement lines -->
+        <div class="card overflow-x-auto" style="padding:0">
+          <div class="font-semibold text-gray-700" style="padding:14px 16px 0" data-i18n="drill_ext_lines">Statement lines</div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="text-left" data-i18n="th_date">Date</th>
+              <th class="text-left" data-i18n="th_ref">Ref</th>
+              <th class="text-left" data-i18n="lane_detail">Detail</th>
+              <th class="text-right" data-i18n="lane_amount">Amount</th>
+            </tr></thead>
+            <tbody id="drill-lines"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="text-xs text-gray-400 px-1" data-i18n="drill_manual_hint">Manual reconciliation (for lump-sum amounts) is coming in the next step</div>
+    </div>
+
     <!-- SETUP -->
     <div id="tab-setup" class="tab-pane hidden space-y-6">
       <div class="card" style="background:var(--brand-light)">
@@ -652,11 +707,12 @@ async function withBusy(btn, label, fn){
 const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
-    tab_overview:"ภาพรวม", tab_board:"รายวัน·ทุกสาขา", tab_daily:"รายวัน·รายสาขา", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
+    tab_overview:"ภาพรวม", tab_board:"บอร์ดรายวันทุกสาขา", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
+    sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_system:"ระบบ",
     board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
     bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_none:"ไม่มีแหล่ง",
-    tab_discrepancies:"รายการต่าง", tab_trend:"แนวโน้ม", tab_audit:"ประวัติ", tab_setup:"ตั้งค่า",
+    tab_discrepancies:"รายการต้องตรวจ", tab_trend:"แนวโน้ม", tab_audit:"ประวัติการแก้ไข", tab_setup:"ตั้งค่า",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
     btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
@@ -730,14 +786,25 @@ const I18N = {
     empty_pick_branch:"เลือกสาขาด้านบนแล้วเปิดเซสชัน หรือ", empty_start_one:"เริ่มเซสชันใหม่",
     empty_daily:"เปิดเซสชันของสาขาจากหน้าภาพรวม เพื่อดูบอร์ดรายวัน",
     empty_go_overview:"ไปหน้าภาพรวม",
+    // drill-down page
+    drill_title:"รายละเอียดรายการ", drill_back:"← กลับ",
+    drill_pos_codes:"รหัสรับเงิน POS", drill_ext_lines:"รายการในเอกสาร",
+    drill_attention:"รหัสที่ต้องตั้งค่า (กดเพื่อไปตั้งค่า)",
+    drill_mapped:"จับคู่แล้ว", drill_unmapped:"ยังไม่จับคู่", drill_needs_bank:"ต้องตั้งธนาคาร",
+    drill_map_now:"ตั้งค่า", drill_no_codes:"ไม่มีรหัสรับเงินสำหรับช่องนี้",
+    drill_no_lines:"ยังไม่มีรายการในเอกสาร (รอเอกสาร)",
+    col_code:"รหัส", col_amount:"จำนวนเงิน", col_txns:"จำนวนรายการ", col_mapping:"การจับคู่",
+    drill_manual_hint:"การกระทบยอดเอง (สำหรับยอดรวมก้อนเดียว) จะเพิ่มในขั้นต่อไป",
+    drill_recon_off:"ไม่นำมากระทบยอด",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
-    tab_overview:"Overview", tab_board:"Daily · All Branches", tab_daily:"Daily · One Branch", tab_monthly:"Monthly", tab_uploads:"Uploads",
+    tab_overview:"Overview", tab_board:"Daily Board (all)", tab_daily:"Daily Reconcile", tab_monthly:"By Category", tab_uploads:"Documents",
+    sec_daily:"Daily work", sec_docs:"Documents & review", sec_system:"System",
     board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)",
     board_reporting:"Branches reporting", board_total:"All branches",
     bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_none:"no source",
-    tab_discrepancies:"Discrepancies", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
+    tab_discrepancies:"To Review", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
     btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
@@ -811,6 +878,16 @@ const I18N = {
     empty_pick_branch:"Select a branch above and open its session, or", empty_start_one:"start one",
     empty_daily:"Open a branch session from Overview to see its daily board.",
     empty_go_overview:"Go to Overview",
+    // drill-down page
+    drill_title:"Transaction detail", drill_back:"← Back",
+    drill_pos_codes:"POS payment codes", drill_ext_lines:"Statement lines",
+    drill_attention:"Codes needing setup (click to map)",
+    drill_mapped:"Mapped", drill_unmapped:"Unmapped", drill_needs_bank:"Needs bank",
+    drill_map_now:"Map", drill_no_codes:"No payment codes for this lane",
+    drill_no_lines:"No statement lines yet (awaiting document)",
+    col_code:"Code", col_amount:"Amount", col_txns:"Txns", col_mapping:"Mapping",
+    drill_manual_hint:"Manual reconciliation (for lump-sum amounts) is coming in the next step",
+    drill_recon_off:"not reconciled",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -1013,7 +1090,7 @@ function renderBoard(d){
       if(!cell) return '<td class="px-3 py-2 text-right text-gray-200">·</td>';
       const tip=`${b.branch_name} · ${c}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\nclick to reconcile`;
       return `<td class="px-2 py-1.5 text-right">
-        <span onclick="boardDrill(${b.branch_id},'${c}')" title="${tip}"
+        <span onclick="openDrill(${b.branch_id},{day:BOARD_DATE,category:'${c}'},'board')" title="${tip}"
           style="display:inline-block;min-width:64px;padding:3px 8px;border-radius:6px;cursor:pointer;font-family:monospace;font-weight:600;background:${BOARD_CELL[cell.status]||'#f1f5f9'};color:${BOARD_FG[cell.status]||'#475569'}">${fmt(cell.pos)}</span></td>`;
     }).join('');
     tr.innerHTML=`<td class="py-1.5 pl-4 pr-3 font-medium sticky left-0 bg-white cursor-pointer hover:text-orange-600" onclick="boardDrill(${b.branch_id})">${b.branch_name}${b.issues?` <span class="badge b-err">${b.issues}</span>`:''}</td>
@@ -1053,6 +1130,72 @@ function boardUpload(branch_id){
   openUploadModal();
   document.getElementById('up-branch').value=branch_id;
   document.getElementById('up-period').value=BOARD_DATE.slice(0,7);
+}
+
+// ── transaction-level drill-down (mapped/unmapped codes + statement lines) ─────
+let DRILL_BACK = 'board';
+const MAP_BADGE = {CASH:'b-mut', QR:'b-ok', TRANSFER:'b-ok', CREDIT:'b-ok', GRAB:'b-ok', LINEMAN:'b-ok', COUPON:'b-mut'};
+
+async function openDrill(branch_id, scope, back){
+  DRILL_BACK = back || 'board';
+  switchTab('drill');
+  const host=document.getElementById('drill-codes');
+  host.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
+  let q=`/api/drill?branch_id=${branch_id}`;
+  if(scope.day) q+=`&day=${scope.day}`; else if(scope.period_month) q+=`&period_month=${scope.period_month}`;
+  if(scope.category) q+=`&category=${encodeURIComponent(scope.category)}`;
+  if(scope.bank)     q+=`&bank=${encodeURIComponent(scope.bank)}`;
+  try{ const d=await api(q); renderDrill(d, scope); }
+  catch(e){ host.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
+}
+function drillBack(){ switchTab(DRILL_BACK); }
+
+function mapStatusHtml(c){
+  if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>
+    <button onclick="event.stopPropagation();switchTab('setup')" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
+  if(c.bank==='UNKNOWN'||c.bank==='PROMPTPAY') return `<span class="badge b-warn">${t('drill_needs_bank')}</span>
+    <span class="text-xs text-gray-500 ml-1">${c.category}·${c.bank}</span>
+    <button onclick="event.stopPropagation();switchTab('setup')" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
+  const off = c.reconcile? '' : ` <span class="text-xs text-gray-400">(${t('drill_recon_off')})</span>`;
+  return `<span class="badge ${MAP_BADGE[c.category]||'b-mut'}">${c.category}${c.bank!=='NONE'?'·'+c.bank:''}</span>${off}`;
+}
+
+function renderDrill(d, scope){
+  const when = d.day || d.period_month;
+  const lane = d.category ? ` · ${d.category}${(d.bank&&d.bank!=='NONE'&&d.bank!=='*')?'·'+d.bank:''}` : '';
+  document.getElementById('drill-scope').textContent = `${d.branch_name} · ${when}${lane}`;
+  document.getElementById('drill-pos').textContent = fmt(d.pos_total);
+  document.getElementById('drill-ext').textContent = fmt(d.ext_total);
+  const v=document.getElementById('drill-var'); v.textContent=varTxt(d.variance); v.className='font-mono font-bold '+varCls(d.variance);
+
+  // action-item banner: unmapped / needs-bank codes in scope
+  const att=document.getElementById('drill-attention');
+  if(d.attention && d.attention.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${t('drill_attention')}</div>
+      <div class="flex flex-wrap gap-2 mt-1">${d.attention.map(c=>
+        `<button onclick="switchTab('setup')" class="badge b-warn" style="cursor:pointer">${c.code} · ${fmt(c.amount)}${c.txn_count?` · ${c.txn_count}`:''}</button>`).join('')}</div>`;
+  } else att.classList.add('hidden');
+
+  // POS codes (lane-scoped if a category was given, else all codes for the day)
+  const codes = d.category ? d.lane_codes : d.codes;
+  const ct=document.getElementById('drill-codes');
+  if(!codes.length){ ct.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('drill_no_codes')}</td></tr>`; }
+  else ct.innerHTML = codes.map(c=>`<tr>
+      <td class="font-medium">${c.code}</td>
+      <td class="text-right font-mono">${fmt(c.amount)}</td>
+      <td class="text-right font-mono text-gray-500">${c.txn_count||'—'}</td>
+      <td>${mapStatusHtml(c)}</td></tr>`).join('');
+
+  // statement lines
+  const lt=document.getElementById('drill-lines');
+  if(!d.ext_lines || !d.ext_lines.length){ lt.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('drill_no_lines')}</td></tr>`; }
+  else { lt.innerHTML = d.ext_lines.map(l=>`<tr>
+      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
+      <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono">${fmt(l.amount)}</td></tr>`).join('');
+    const tot=d.ext_lines.reduce((s,l)=>s+(l.amount||0),0);
+    lt.innerHTML+=`<tr class="font-semibold" style="background:#f8fafc"><td colspan="3">${d.ext_lines.length}</td><td class="text-right font-mono">${fmt(tot)}</td></tr>`;
+  }
+  applyI18n();
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────
@@ -1110,7 +1253,7 @@ function renderDailyBoard(d){
       const o=byKey[`${l.category}|${l.bank}`];
       if(!o) return '<td class="px-1"></td>';
       return `<td class="px-1 text-center">
-        <span onclick="openLaneModal('${o.category}','${o.bank}','${day.day}')"
+        <span onclick="openDrill(SESSION.branch_id,{day:'${day.day}',category:'${o.category}',bank:'${o.bank}'},'daily')"
           title="${o.category}${o.bank!=='NONE'?'·'+o.bank:''}: POS ${fmt(o.pos)} / ext ${fmt(o.ext)} (${o.status}) — click for lines"
           style="display:inline-block;min-width:30px;padding:2px 4px;border-radius:5px;cursor:pointer;font-weight:600;background:${LANE_CELL[o.status]||'#f1f5f9'};color:${LANE_FG[o.status]||'#475569'}">${LANE_SYM[o.status]||'·'}</span></td>`;
     }).join('');
@@ -1147,7 +1290,9 @@ async function renderReconcile(){
   if(!s.categories.length){ cont.innerHTML='<div class="text-gray-400">No reconcilable POS tender for this period.</div>'; }
   s.categories.forEach(c=>{
     const showNet = (c.category==='CREDIT'||c.category==='GRAB'||c.category==='LINEMAN');
-    const div=document.createElement('div'); div.className='card';
+    const div=document.createElement('div'); div.className='card cursor-pointer hover:shadow-md';
+    div.title='คลิกเพื่อดูรายละเอียด / click for detail';
+    div.onclick=()=>openDrill(SESSION.branch_id,{period_month:SESSION.period_month,category:c.category,bank:c.bank},'reconcile');
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
         <span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div>
