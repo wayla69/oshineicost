@@ -355,28 +355,150 @@ _PRAGMAS = (
 
 _tls = threading.local()
 
+# ── Hot-swap support ────────────────────────────────────────────────────────
+# Per-thread connections stay open for the worker's life (perf), so on Windows
+# the DB file is locked against os.replace — that's why the startup swap only
+# runs while nothing holds the file. To apply a fresh `.incoming` WITHOUT a
+# restart, a background poller takes an exclusive lock, closes every live
+# connection (releasing all file handles + mmap), swaps the file, then bumps a
+# generation counter so each thread lazily reconnects to the new file.
+#   • readers (get_db) take a shared lock → many run concurrently
+#   • the swapper takes the exclusive lock → waits for readers to drain
+class _RWLock:
+    def __init__(self):
+        self._cv = threading.Condition()
+        self._readers = 0
+        self._writer = False
+    def acquire_read(self):
+        with self._cv:
+            while self._writer:
+                self._cv.wait()
+            self._readers += 1
+    def release_read(self):
+        with self._cv:
+            self._readers -= 1
+            if self._readers == 0:
+                self._cv.notify_all()
+    def acquire_write(self):
+        with self._cv:
+            while self._writer:
+                self._cv.wait()
+            self._writer = True
+            while self._readers > 0:
+                self._cv.wait()
+    def release_write(self):
+        with self._cv:
+            self._writer = False
+            self._cv.notify_all()
+
+_db_rw      = _RWLock()
+_db_gen     = 0                     # bumped on every hot-swap
+_conn_reg   = []                   # all live connections (so the swapper can close them)
+_conn_reg_lock = threading.Lock()
+
 def _new_conn() -> sqlite3.Connection:
     con = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     con.row_factory = sqlite3.Row
     con.executescript(_PRAGMAS)
+    with _conn_reg_lock:
+        _conn_reg.append(con)
     return con
 
 @contextmanager
 def get_db():
-    """Per-thread persistent connection — avoids reconnect + PRAGMA cost per request."""
-    con = getattr(_tls, "con", None)
-    if con is None:
-        con = _new_conn()
-        _tls.con = con
+    """Per-thread persistent connection — avoids reconnect + PRAGMA cost per request.
+
+    Wrapped in a shared (read) lock + generation check so a background hot-swap
+    can atomically replace the DB file underneath us between requests.
+    """
+    depth = getattr(_tls, "rw_depth", 0)
+    if depth == 0:
+        _db_rw.acquire_read()
+    _tls.rw_depth = depth + 1
     try:
-        yield con
-    except sqlite3.Error:
+        con = getattr(_tls, "con", None)
+        if con is None or getattr(_tls, "con_gen", -1) != _db_gen:
+            if con is not None:
+                try: con.close()
+                except Exception: pass
+            con = _new_conn()
+            _tls.con = con
+            _tls.con_gen = _db_gen
         try:
-            con.close()
-        except Exception:
-            pass
-        _tls.con = None
-        raise
+            yield con
+        except sqlite3.Error:
+            try: con.close()
+            except Exception: pass
+            with _conn_reg_lock:
+                try: _conn_reg.remove(con)
+                except ValueError: pass
+            _tls.con = None
+            raise
+    finally:
+        _tls.rw_depth -= 1
+        if _tls.rw_depth == 0:
+            _db_rw.release_read()
+
+def _apply_incoming_live() -> bool:
+    """Swap a staged `.incoming` into the live DB while the app is running.
+
+    Mirrors _maybe_swap_incoming_db() but does it under the exclusive lock with
+    all connections closed first. Returns True if a swap happened.
+    """
+    global _db_gen
+    inc = Path(str(DB_PATH) + ".incoming")
+    if not inc.exists():
+        return False
+    # Validate the staged file before disturbing anything (cheap quick_check).
+    try:
+        chk = sqlite3.connect(str(inc))
+        ok = chk.execute("PRAGMA quick_check").fetchone()[0]
+        n  = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
+        chk.close()
+    except Exception:
+        ok, n = "bad", 0
+    if ok != "ok" or not n:
+        try: inc.unlink()
+        except OSError: pass
+        return False
+    # Carry forward reconciliation tables so a refresh never wipes them.
+    try:
+        _carry_forward_recon(str(DB_PATH), str(inc))
+    except Exception:
+        pass
+    _db_rw.acquire_write()
+    try:
+        with _conn_reg_lock:
+            for c in _conn_reg:
+                try: c.close()
+                except Exception: pass
+            _conn_reg.clear()
+        _tls.con = None      # force this thread to reconnect too
+        for suf in ("-wal", "-shm"):
+            try: _os_db.remove(str(DB_PATH) + suf)
+            except OSError: pass
+        try:
+            _os_db.replace(str(inc), str(DB_PATH))   # atomic; all handles now closed
+        except OSError as e:
+            print(f"[hot-swap] replace failed: {e}")
+            return False
+        _db_gen += 1
+        print(f"[hot-swap] ✓ applied {inc.name} → {DB_PATH.name} (gen {_db_gen}, {n:,} bills)")
+        return True
+    finally:
+        _db_rw.release_write()
+
+def _autoswap_poller():
+    """Background daemon: apply a fresh `.incoming` to the running app, no restart."""
+    import time as _t
+    interval = int(_os_db.environ.get("OSHINEI_AUTOSWAP_SECS", "60"))
+    while True:
+        _t.sleep(interval)
+        try:
+            if Path(str(DB_PATH) + ".incoming").exists():
+                _apply_incoming_live()
+        except Exception as e:
+            print(f"[hot-swap] poller error: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -13658,6 +13780,16 @@ def _bom_startup():
     _bom_ensure_and_seed()
     _sku_cost_monthly_ensure()
     _perf_startup()
+    # Background hot-swap: pick up a freshly-synced .incoming without a restart.
+    # Disable with OSHINEI_NO_AUTOSWAP=1 (e.g. tests). On Fly the daily refresh
+    # restarts the machine anyway, but the poller is harmless there too.
+    if _os_db.environ.get("OSHINEI_NO_AUTOSWAP") != "1":
+        try:
+            threading.Thread(target=_autoswap_poller, name="db-autoswap",
+                             daemon=True).start()
+            print("[hot-swap] auto-swap poller started")
+        except Exception as e:
+            print(f"[hot-swap] could not start poller: {e}")
 
 
 # Covering indexes that turn the heaviest Analysis-Report scans into index-only

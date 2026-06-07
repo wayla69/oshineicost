@@ -76,9 +76,34 @@ def bucket_for_cat(name: str) -> str:
         return "other"
     return "food"
 
+def apply_local_swap():
+    """Swap the reconciled .incoming into the live local oshinei.db.
+
+    Mirrors _maybe_swap_incoming_db() in main.py: drop stale WAL/SHM, then
+    atomically replace. If the running app still holds oshinei.db open (Windows
+    file lock), the replace fails — we leave .incoming in place so the app's
+    own startup swap picks it up on the next restart. Returns True if swapped.
+    """
+    if not INCOMING.exists():
+        print("      [apply-local] no .incoming to apply"); return False
+    for suf in ("-wal", "-shm"):
+        try: os.remove(str(DB) + suf)
+        except OSError: pass
+    try:
+        os.replace(str(INCOMING), str(DB))   # atomic on same filesystem
+        print(f"      [apply-local] ✓ swapped → {DB.name} (local app now serves fresh data after reconnect)")
+        return True
+    except OSError as e:
+        print(f"      [apply-local] ⚠ could not swap now ({e}); .incoming kept — "
+              "restart the local app to apply (startup swap will pick it up).")
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="2025-01-01", help="sync sales on/after this date")
+    ap.add_argument("--apply-local", action="store_true",
+                    help="after reconcile, swap .incoming into the live local oshinei.db")
     args = ap.parse_args()
 
     if not DB.exists():
@@ -221,8 +246,12 @@ def main():
     if not ok:
         print("[6/6] ⚠ RECONCILE FAILED — .incoming built but NOT safe to push. Investigate.")
         sys.exit(3)
-    print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
-    print("       python refresh_fly_db.py --db oshinei.db.incoming")
+    if args.apply_local:
+        print("[6/6] reconciled → applying to local oshinei.db")
+        apply_local_swap()
+    else:
+        print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
+        print("       python refresh_fly_db.py --db oshinei.db.incoming")
 
 def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     """Stage POS report data into pos_* tables — server-side aggregates only.
@@ -577,40 +606,62 @@ def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
     def one(con, q, p=()):
         return con.execute(q, p).fetchone()[0]
-    checks = []
-    # Compare on the latest month the CURRENT db has (a month both share) — the
-    # synced db also has the live current month which current lacks (that's the point).
-    lm = cur.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+    checks = []   # (name, old, new, mode) — mode: 'strict' = |Δ|<2%; 'nodrop' = Δ ≥ -2% (growth OK)
+    # The synced db's latest month is the LIVE current month, which legitimately
+    # GROWS between syncs as new days finalize. So we can't strict-compare it —
+    # an incremental daily sync would always trip a 2% drift gate mid-month.
+    # Strategy:
+    #   • SETTLED months (anything before the live month): must match within 2%
+    #     in both DBs → catches corruption / history loss.
+    #   • LIVE month: only guard against a DROP (data loss); growth is expected.
     syn_max = sq.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
-    print(f"    (current latest={lm} · synced latest={syn_max} — comparing common month {lm})")
-    new_rev = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (lm,)) or 0
-    old_rev = one(cur, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (lm,)) or 0
-    checks.append((f"chain rev {lm} (ex-VAT)", old_rev, new_rev))
-    # bills latest month
-    new_b = one(sq, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (lm,))
-    old_b = one(cur, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (lm,))
-    checks.append((f"bills {lm}", old_b, new_b))
-    # Ubon Apr 2026 receipts ex-VAT
-    for con, tag in ((cur, "old"), (sq, "new")):
-        pass
+    cur_max = cur.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+    # latest SETTLED month = newest month, in the current DB, strictly before the live month
+    anchor = cur.execute(
+        "SELECT MAX(period_month) m FROM sales_sku_monthly WHERE period_month < ?", (syn_max,)
+    ).fetchone()["m"]
+    print(f"    (current latest={cur_max} · synced latest={syn_max} · settled-anchor={anchor})")
+
+    # LIVE month — growth expected, only block a drop
+    lv_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (syn_max,)) or 0
+    lv_old = one(cur, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (syn_max,)) or 0
+    checks.append((f"LIVE rev {syn_max} (ex-VAT, growth OK)", lv_old, lv_new, 'nodrop'))
+    lvb_new = one(sq, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (syn_max,))
+    lvb_old = one(cur, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (syn_max,))
+    checks.append((f"LIVE bills {syn_max} (growth OK)", lvb_old, lvb_new, 'nodrop'))
+
+    # SETTLED month anchor — strict integrity check (should be identical run-to-run)
+    if anchor:
+        a_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (anchor,)) or 0
+        a_old = one(cur, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (anchor,)) or 0
+        checks.append((f"SETTLED rev {anchor} (ex-VAT)", a_old, a_new, 'strict'))
+        ab_new = one(sq, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (anchor,))
+        ab_old = one(cur, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (anchor,))
+        checks.append((f"SETTLED bills {anchor}", ab_old, ab_new, 'strict'))
+
+    # Ubon Apr 2026 receipts ex-VAT — fixed historical anchor (must never move)
     ub_new = one(sq, "SELECT ROUND(SUM(total_inc_vat)/1.07,0) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE b.name='อุบลราชธานี' AND substr(t.sold_at,1,7)='2026-04'") or 0
     ub_old = one(cur, "SELECT ROUND(SUM(total_inc_vat)/1.07,0) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE b.name='อุบลราชธานี' AND substr(t.sold_at,1,7)='2026-04'") or 0
-    checks.append(("Ubon Apr2026 ex-VAT (receipts)", ub_old, ub_new))
-    # buffet (B) revenue should be ~0
-    buf_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id WHERE s.description LIKE '(B)%' AND m.period_month=?", (lm,)) or 0
-    checks.append(("buffet (B) rev (should ≈0)", 0, buf_new))
-    # critical anchors that gate a prod push (must be within 2%)
-    critical = {f"chain rev {lm} (ex-VAT)", "Ubon Apr2026 ex-VAT (receipts)", f"bills {lm}"}
+    checks.append(("Ubon Apr2026 ex-VAT (receipts)", ub_old, ub_new, 'strict'))
+    # buffet (B) revenue should be ~0 (informational)
+    buf_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id WHERE s.description LIKE '(B)%' AND m.period_month=?", (syn_max,)) or 0
+    checks.append(("buffet (B) rev (should ≈0)", 0, buf_new, 'info'))
+
     ok = True
-    print("    " + "-"*78)
-    print(f"    {'check':38} {'current':>16} {'synced':>16}  Δ%")
-    for name, old, new in checks:
+    print("    " + "-"*82)
+    print(f"    {'check':42} {'current':>15} {'synced':>15}  Δ%")
+    for name, old, new, mode in checks:
         d = (new-old)/old*100 if old else (0 if not new else 999)
-        passed = abs(d) < 2.0 or (old == 0 and abs(new) < old_rev*0.002)
-        if name in critical and not passed:
+        if mode == 'strict':
+            passed = abs(d) < 2.0
+        elif mode == 'nodrop':
+            passed = d >= -2.0          # growth is fine; only a real drop fails
+        else:  # info — buffet near-zero, never gates
+            passed = (abs(new) < (lv_old or 1) * 0.002)
+        if mode in ('strict', 'nodrop') and not passed:
             ok = False
-        print(f"    {name:38} {old:>16,.0f} {new:>16,.0f}  {d:+6.2f}%{'  ✓' if passed else '  ⚠'}")
-    print("    " + "-"*78)
+        print(f"    {name:42} {old:>15,.0f} {new:>15,.0f}  {d:+6.2f}%{'  ✓' if passed else '  ⚠'}")
+    print("    " + "-"*82)
     cur.close()
     return ok
 
