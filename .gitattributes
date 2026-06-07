@@ -1,0 +1,3 @@
+# Force LF for files that must be LF on the server
+*.sh    text eol=lf
+*.py    text eol=lf
