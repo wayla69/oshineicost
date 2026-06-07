@@ -125,6 +125,33 @@
   .btn { font-size:13.5px; }
   /* sidebar nav: lift inactive contrast slightly */
   .side-btn { font-size:13.5px; }
+
+  /* ── Responsive: sidebar → horizontal top bar on narrow screens ──────────── */
+  @media (max-width:820px) {
+    body { flex-direction:column; }
+    #sidebar {
+      width:100%; min-height:auto; max-height:none; position:sticky; top:0; z-index:30;
+      flex-direction:row; align-items:center; gap:2px; padding:0 6px; overflow:visible;
+      box-shadow:0 2px 8px rgba(0,0,0,.15);
+    }
+    #sidebar-logo { padding:8px 10px; border-bottom:none; flex-shrink:0; }
+    #sidebar-logo .app-sub { display:none; }
+    #sidebar-logo .app-name { font-size:13px; margin-top:0; }
+    #sidebar-logo .app-icon { font-size:18px; }
+    #sidebar-nav { display:flex; flex-direction:row; flex:1; padding:6px 2px; gap:3px; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+    #sidebar-nav::-webkit-scrollbar { height:0; }
+    .side-section { display:none; }
+    .side-btn { width:auto; white-space:nowrap; padding:7px 11px; }
+    .side-btn.active { border-left:none; border-bottom:3px solid var(--brand); border-radius:7px 7px 0 0; padding-left:11px; }
+    .side-badge { margin-left:5px; }
+    #sidebar-footer { border-top:none; padding:5px; flex-shrink:0; gap:4px; }
+    main { padding:14px !important; }
+    #ctxbar { padding:8px 12px; top:0; }
+  }
+  @media (max-width:480px) {
+    #sidebar-logo .app-name { display:none; }     /* icon-only logo on phones */
+    main { padding:10px !important; }
+  }
 </style>
 </head>
 <body>
@@ -270,9 +297,10 @@
 
     <!-- RECONCILE (Monthly) -->
     <div id="tab-reconcile" class="tab-pane hidden space-y-5">
-      <div id="rec-empty" class="card text-center text-gray-400 py-10">
-        Select a branch above and open its session from the Overview tab, or
-        <button onclick="ensureSession()" class="text-orange-600 underline">start one</button>.
+      <div id="rec-empty" class="card text-center py-12">
+        <div class="text-5xl mb-3">⚖️</div>
+        <div class="text-gray-500 mb-4"><span data-i18n="empty_pick_branch">Select a branch above and open its session, or</span></div>
+        <button onclick="ensureSession()" class="btn btn-pri" data-i18n="empty_start_one">start one</button>
       </div>
       <div id="rec-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
@@ -317,8 +345,10 @@
 
     <!-- DAILY -->
     <div id="tab-daily" class="tab-pane hidden space-y-5">
-      <div id="daily-empty" class="card text-center text-gray-400 py-10">
-        Open a branch session from Overview to see its daily board.
+      <div id="daily-empty" class="card text-center py-12">
+        <div class="text-5xl mb-3">📅</div>
+        <div class="text-gray-500 mb-4" data-i18n="empty_daily">Open a branch session from Overview to see its daily board.</div>
+        <button onclick="switchTab('overview')" class="btn btn-sec" data-i18n="empty_go_overview">Go to Overview</button>
       </div>
       <div id="daily-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
@@ -341,14 +371,14 @@
       <div class="card">
         <div class="font-semibold text-gray-700 mb-4" data-i18n="up_title">Upload Statements &amp; Reports</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <button onclick="openUploadModal('bank')"        class="card text-center hover:shadow-md"><div class="text-3xl">🏦</div><div class="font-semibold text-sm mt-1">Bank Statement</div><div class="text-xs text-gray-400">KTB · KBANK</div></button>
-          <button onclick="openUploadModal('credit_card')" class="card text-center hover:shadow-md"><div class="text-3xl">💳</div><div class="font-semibold text-sm mt-1">Credit Card</div><div class="text-xs text-gray-400">KTB · KBANK · KTC</div></button>
-          <button onclick="openUploadModal('grab')"        class="card text-center hover:shadow-md"><div class="text-3xl">🟢</div><div class="font-semibold text-sm mt-1">Grab Report</div><div class="text-xs text-gray-400">Grab for Restaurants</div></button>
-          <button onclick="openUploadModal('lineman')"     class="card text-center hover:shadow-md"><div class="text-3xl">🟡</div><div class="font-semibold text-sm mt-1">Line Man Report</div><div class="text-xs text-gray-400">LINE MAN Wongnai</div></button>
+          <button onclick="openUploadModal('bank')"        class="card text-center hover:shadow-md"><div class="text-3xl">🏦</div><div class="font-semibold text-sm mt-1" data-i18n="uc_bank">Bank Statement</div><div class="text-xs text-gray-400">KTB · KBANK</div></button>
+          <button onclick="openUploadModal('credit_card')" class="card text-center hover:shadow-md"><div class="text-3xl">💳</div><div class="font-semibold text-sm mt-1" data-i18n="uc_cc">Credit Card</div><div class="text-xs text-gray-400">KTB · KBANK · KTC</div></button>
+          <button onclick="openUploadModal('grab')"        class="card text-center hover:shadow-md"><div class="text-3xl">🟢</div><div class="font-semibold text-sm mt-1" data-i18n="uc_grab">Grab Report</div><div class="text-xs text-gray-400">Grab for Restaurants</div></button>
+          <button onclick="openUploadModal('lineman')"     class="card text-center hover:shadow-md"><div class="text-3xl">🟡</div><div class="font-semibold text-sm mt-1" data-i18n="uc_lineman">Line Man Report</div><div class="text-xs text-gray-400">LINE MAN Wongnai</div></button>
         </div>
       </div>
       <div class="card overflow-x-auto">
-        <div class="font-semibold text-gray-700 mb-3">Uploads — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
+        <div class="font-semibold text-gray-700 mb-3"><span data-i18n="up_uploads">Uploads</span> — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b">
             <th class="text-left pb-2" data-i18n="u_file">File</th><th class="text-left pb-2" data-i18n="u_source">Source</th><th class="text-left pb-2" data-i18n="u_provider">Provider</th>
@@ -417,8 +447,10 @@
 
     <!-- TREND -->
     <div id="tab-trend" class="tab-pane hidden space-y-5">
-      <div id="trend-empty" class="card text-center text-gray-400 py-10" data-i18n="trend_empty">
-        Open a branch session to view its reconciliation health trend.
+      <div id="trend-empty" class="card text-center py-12">
+        <div class="text-5xl mb-3">📈</div>
+        <div class="text-gray-500 mb-4" data-i18n="trend_empty">Open a branch session to view its reconciliation health trend.</div>
+        <button onclick="switchTab('overview')" class="btn btn-sec" data-i18n="empty_go_overview">Go to Overview</button>
       </div>
       <div id="trend-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
@@ -538,24 +570,24 @@
 <div id="upmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
     <div class="flex items-center justify-between mb-5">
-      <div class="font-bold text-lg">Upload</div>
+      <div class="font-bold text-lg" data-i18n="m_upload">Upload</div>
       <button onclick="closeUploadModal()" class="text-gray-400 text-xl">&times;</button>
     </div>
     <div class="space-y-3">
-      <div><label class="text-xs font-semibold text-gray-500 uppercase">Source</label>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_source">Source</label>
         <select id="up-source" class="inp w-full mt-1">
-          <option value="bank">Bank Statement</option><option value="credit_card">Credit Card Settlement</option>
-          <option value="grab">Grab Report</option><option value="lineman">Line Man Report</option>
+          <option value="bank" data-i18n="src_bank">Bank Statement</option><option value="credit_card" data-i18n="src_cc">Credit Card Settlement</option>
+          <option value="grab" data-i18n="src_grab">Grab Report</option><option value="lineman" data-i18n="src_lineman">Line Man Report</option>
         </select></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank"></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase">File (.xlsx)</label><input id="up-file" type="file" accept=".xlsx,.xls" class="w-full text-sm mt-1"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="c_branch">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_period">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_provider">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank" data-i18n-ph="m_provider_ph"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_file">File (.xlsx)</label><input id="up-file" type="file" accept=".xlsx,.xls" class="w-full text-sm mt-1"></div>
     </div>
     <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
     <div class="flex justify-end gap-3 mt-6">
-      <button onclick="previewUpload()" class="btn btn-sec">Preview</button>
-      <button id="up-confirm" onclick="confirmUpload(event)" class="btn btn-pri" disabled>Confirm</button>
+      <button onclick="previewUpload()" class="btn btn-sec" data-i18n="btn_preview">Preview</button>
+      <button id="up-confirm" onclick="confirmUpload(event)" class="btn btn-pri" disabled data-i18n="btn_confirm">Confirm</button>
     </div>
   </div>
 </div>
@@ -569,9 +601,9 @@
     </div>
     <div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="w-full text-sm">
       <thead><tr class="text-gray-400 text-xs uppercase border-b sticky top-0 bg-white">
-        <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th>
-        <th class="text-left pb-2">Detail</th><th class="text-right pb-2">Amount</th></tr></thead>
-      <tbody id="lane-body"><tr><td colspan="4" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+        <th class="text-left pb-2" data-i18n="th_date">Date</th><th class="text-left pb-2" data-i18n="th_ref">Ref</th>
+        <th class="text-left pb-2" data-i18n="lane_detail">Detail</th><th class="text-right pb-2" data-i18n="lane_amount">Amount</th></tr></thead>
+      <tbody id="lane-body"><tr><td colspan="4" class="text-center text-gray-400 py-6" data-i18n="loading">Loading…</td></tr></tbody>
     </table></div>
   </div>
 </div>
@@ -589,7 +621,7 @@ async function api(path, opts={}) {
   if (tok) opts.headers['X-Upload-Token'] = tok;
   if (opts.json !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.json); delete opts.json; }
   const r = await fetch(API+path, opts);
-  if (r.status===403) { toast('Write token required or invalid. Click 🔑 to set it.','err'); throw new Error('403'); }
+  if (r.status===403) { toast(t('toast_token'),'err'); throw new Error('403'); }
   const ct = r.headers.get('content-type')||'';
   const data = ct.includes('json') ? await r.json() : await r.text();
   if (!r.ok) { throw new Error(data.detail || r.status); }
@@ -679,6 +711,25 @@ const I18N = {
     d_lane_days:"ช่องทาง-วันที่รอเอกสาร", d_awaiting:"วันที่รอเอกสาร",
     l_session:"เซสชัน", l_daily_hdr:"กระทบยอดรายวัน",
     dt_unmatched_external:"เกินในเอกสาร", dt_unmatched_pos:"ไม่มีเอกสารรองรับ", dt_amount_mismatch:"ยอดไม่ตรง", dt_timing_diff:"ต่างช่วงเวลา",
+    // upload + lane modals
+    m_upload:"อัปโหลดเอกสาร", m_source:"ประเภทเอกสาร", m_period:"เดือน",
+    m_provider:"ผู้ให้บริการ (ธนาคาร/ผู้รับบัตร เช่น KTB, KBANK, KTC)", m_provider_ph:"เว้นว่างเพื่อตรวจอัตโนมัติ",
+    m_file:"ไฟล์ (.xlsx)", btn_preview:"ดูตัวอย่าง", btn_confirm:"ยืนยัน", btn_add:"เพิ่ม",
+    src_bank:"รายการเดินบัญชีธนาคาร", src_cc:"สรุปยอดบัตรเครดิต", src_grab:"รายงาน Grab", src_lineman:"รายงาน Line Man",
+    lane_detail:"รายละเอียด", lane_amount:"จำนวนเงิน", loading:"กำลังโหลด…",
+    up_uploads:"เอกสารที่อัปโหลด", up_allbranch:"ทุกสาขา",
+    // upload type cards
+    uc_bank:"รายการเดินบัญชี", uc_cc:"บัตรเครดิต", uc_grab:"รายงาน Grab", uc_lineman:"รายงาน Line Man",
+    // toasts
+    toast_token:"ต้องใช้โทเคนสำหรับเขียนข้อมูล หรือโทเคนไม่ถูกต้อง — คลิก 🔑 เพื่อตั้งค่า",
+    toast_pickbranch:"เลือกสาขาก่อน", toast_opensession:"เปิดเซสชันก่อน",
+    toast_excel:"กำลังเตรียมไฟล์ Excel…", toast_runfail:"ประมวลผลไม่สำเร็จ: ",
+    toast_updeleted:"ลบเอกสารแล้ว", toast_acct_added:"เพิ่มบัญชีแล้ว", toast_mid_added:"เพิ่ม MID แล้ว",
+    toast_del_confirm:"ลบเอกสารนี้และรายการทั้งหมดหรือไม่?",
+    // empty states (with action)
+    empty_pick_branch:"เลือกสาขาด้านบนแล้วเปิดเซสชัน หรือ", empty_start_one:"เริ่มเซสชันใหม่",
+    empty_daily:"เปิดเซสชันของสาขาจากหน้าภาพรวม เพื่อดูบอร์ดรายวัน",
+    empty_go_overview:"ไปหน้าภาพรวม",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
@@ -741,6 +792,25 @@ const I18N = {
     d_lane_days:"pending lane-days", d_awaiting:"day(s) awaiting documents",
     l_session:"Session", l_daily_hdr:"Daily reconciliation",
     dt_unmatched_external:"unmatched external", dt_unmatched_pos:"unmatched POS", dt_amount_mismatch:"amount mismatch", dt_timing_diff:"timing diff",
+    // upload + lane modals
+    m_upload:"Upload", m_source:"Source", m_period:"Period",
+    m_provider:"Provider (bank/acquirer, e.g. KTB, KBANK, KTC)", m_provider_ph:"auto-detect if blank",
+    m_file:"File (.xlsx)", btn_preview:"Preview", btn_confirm:"Confirm", btn_add:"Add",
+    src_bank:"Bank Statement", src_cc:"Credit Card Settlement", src_grab:"Grab Report", src_lineman:"Line Man Report",
+    lane_detail:"Detail", lane_amount:"Amount", loading:"Loading…",
+    up_uploads:"Uploads", up_allbranch:"all branches",
+    // upload type cards
+    uc_bank:"Bank Statement", uc_cc:"Credit Card", uc_grab:"Grab Report", uc_lineman:"Line Man Report",
+    // toasts
+    toast_token:"Write token required or invalid — click 🔑 to set it.",
+    toast_pickbranch:"Pick a branch first", toast_opensession:"Open a session first",
+    toast_excel:"Preparing Excel…", toast_runfail:"Run failed: ",
+    toast_updeleted:"Upload deleted", toast_acct_added:"Account added", toast_mid_added:"MID added",
+    toast_del_confirm:"Delete this upload and its lines?",
+    // empty states (with action)
+    empty_pick_branch:"Select a branch above and open its session, or", empty_start_one:"start one",
+    empty_daily:"Open a branch session from Overview to see its daily board.",
+    empty_go_overview:"Go to Overview",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -873,7 +943,7 @@ async function startSession(branch_id, tab){
 }
 async function ensureSession(){
   const bid = +document.getElementById('sel-branch').value;
-  if(!bid){ toast('Pick a branch first','warn'); return; }
+  if(!bid){ toast(t('toast_pickbranch'),'warn'); return; }
   startSession(bid);
 }
 async function openSession(id, tab){
@@ -1115,8 +1185,8 @@ function renderPayouts(payouts){
 }
 
 function downloadExport(){
-  if(!SESSION){ toast('Open a session first','warn'); return; }
-  toast('Preparing Excel…','info',1500);
+  if(!SESSION){ toast(t('toast_opensession'),'warn'); return; }
+  toast(t('toast_excel'),'info',1500);
   window.open(API+`/api/sessions/${SESSION.session_id}/export.xlsx`, '_blank');
 }
 
@@ -1205,7 +1275,7 @@ async function renderPayoutsFromSummary(){
 // ── uploads ──────────────────────────────────────────────────────────────────
 async function loadUploads(){
   const bid=document.getElementById('sel-branch').value;
-  document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:' · all branches');
+  document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:` · ${t('up_allbranch')}`);
   let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
   const data = await api(q).catch(()=>[]);
   const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
@@ -1217,7 +1287,7 @@ async function loadUploads(){
     tb.appendChild(tr);
   });
 }
-async function delUpload(id){ if(!confirm('Delete this upload and its lines?'))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast('Upload deleted','ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
+async function delUpload(id){ if(!confirm(t('toast_del_confirm')))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast(t('toast_updeleted'),'ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
 
 function openUploadModal(src){
   document.getElementById('upmodal').classList.remove('hidden');
@@ -1557,11 +1627,11 @@ async function refreshAttention(){
 async function reseed(){ try{ const r=await api('/api/payment-map/seed',{method:'POST'}); toast(`Seeded ${r.inserted} new code(s)`,'ok'); loadSetup(); }catch(e){ toast(e.message,'err'); } }
 async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{
   branch_id:+document.getElementById('na-branch').value, bank:document.getElementById('na-bank').value,
-  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(()=>{toast('Account added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
+  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(()=>{toast(t('toast_acct_added'),'ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
 async function delAccount(id){ await api('/api/bank-accounts/'+id,{method:'DELETE'}); loadSetup(); }
 async function addMid(){ await api('/api/acquirer-mids',{method:'POST',json:{
   branch_id:+document.getElementById('nm-branch').value, acquirer:document.getElementById('nm-acq').value,
-  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(()=>{toast('MID added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
+  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(()=>{toast(t('toast_mid_added'),'ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
 async function delMid(id){ await api('/api/acquirer-mids/'+id,{method:'DELETE'}); loadSetup(); }
 
 init();
