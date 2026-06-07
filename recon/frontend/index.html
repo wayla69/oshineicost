@@ -617,6 +617,29 @@
           </div>
         </div>
       </div>
+
+      <!-- Reference: all categories + banks/acquirers -->
+      <div class="card">
+        <div class="font-semibold text-gray-700 mb-3" data-i18n="ref_hd">Reference — all categories and banks/acquirers</div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="text-gray-400 text-xs uppercase border-b">
+                <th class="text-left" data-i18n="ref_cat_hd">Category</th><th class="text-left" data-i18n="ref_desc">Meaning</th>
+              </tr></thead>
+              <tbody id="ref-cat-body"></tbody>
+            </table>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead><tr class="text-gray-400 text-xs uppercase border-b">
+                <th class="text-left" data-i18n="ref_bank_hd">Bank / Acquirer</th><th class="text-left" data-i18n="ref_desc">Meaning</th>
+              </tr></thead>
+              <tbody id="ref-bank-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   </main>
 </div><!-- /#main-wrap -->
@@ -796,6 +819,16 @@ const I18N = {
     col_code:"รหัส", col_amount:"จำนวนเงิน", col_txns:"จำนวนรายการ", col_mapping:"การจับคู่",
     drill_manual_hint:"การกระทบยอดเอง (สำหรับยอดรวมก้อนเดียว) จะเพิ่มในขั้นต่อไป",
     drill_recon_off:"ไม่นำมากระทบยอด",
+    // Setup reference box
+    ref_hd:"อ้างอิง — ประเภทและธนาคาร/ผู้รับบัตรทั้งหมด",
+    ref_cat_hd:"ประเภท (Category)", ref_bank_hd:"ธนาคาร / ผู้รับบัตร (Bank / Acquirer)",
+    ref_code:"รหัส", ref_desc:"ความหมาย",
+    catd_CASH:"เงินสด", catd_QR:"คิวอาร์ (พร้อมเพย์/ธนาคาร)", catd_TRANSFER:"เงินโอนเข้าบัญชี",
+    catd_CREDIT:"บัตรเครดิต/เดบิต", catd_GRAB:"เดลิเวอรี Grab", catd_LINEMAN:"เดลิเวอรี Line Man",
+    catd_COUPON:"คูปอง/ส่วนลด", catd_ENTERTAIN:"รับรอง (ไม่นำมากระทบยอด)", catd_OTHER:"อื่น ๆ",
+    bankd_KTB:"ธนาคารกรุงไทย", bankd_KBANK:"ธนาคารกสิกรไทย", bankd_KTC:"เคทีซี (ผู้รับบัตรเครดิต)",
+    bankd_PROMPTPAY:"พร้อมเพย์", bankd_NONE:"ไม่เกี่ยวกับธนาคาร (เช่น เงินสด/คูปอง)",
+    bankd_UNKNOWN:"ยังไม่ระบุ — ต้องตั้งค่าก่อนกระทบยอด",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
@@ -888,6 +921,16 @@ const I18N = {
     col_code:"Code", col_amount:"Amount", col_txns:"Txns", col_mapping:"Mapping",
     drill_manual_hint:"Manual reconciliation (for lump-sum amounts) is coming in the next step",
     drill_recon_off:"not reconciled",
+    // Setup reference box
+    ref_hd:"Reference — all categories and banks/acquirers",
+    ref_cat_hd:"Category", ref_bank_hd:"Bank / Acquirer",
+    ref_code:"Code", ref_desc:"Meaning",
+    catd_CASH:"Cash", catd_QR:"QR (PromptPay/bank)", catd_TRANSFER:"Bank transfer",
+    catd_CREDIT:"Credit/debit card", catd_GRAB:"Grab delivery", catd_LINEMAN:"Line Man delivery",
+    catd_COUPON:"Coupon / voucher", catd_ENTERTAIN:"Complimentary (not reconciled)", catd_OTHER:"Other",
+    bankd_KTB:"Krungthai Bank", bankd_KBANK:"Kasikornbank", bankd_KTC:"KTC (card acquirer)",
+    bankd_PROMPTPAY:"PromptPay", bankd_NONE:"Not bank-related (e.g. cash/coupon)",
+    bankd_UNKNOWN:"Not set — map before it can reconcile",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -1721,8 +1764,21 @@ async function refreshSetupBadge(){
   const m=await api('/api/payment-map?needs_attention=1').catch(()=>[]);
   const b=document.getElementById('setup-badge'); b.textContent=m.length; b.classList.toggle('hidden',!m.length);
 }
+function renderReference(){
+  const cb=document.getElementById('ref-cat-body');
+  if(cb) cb.innerHTML=CATS.map(c=>`<tr>
+    <td><span class="badge ${MAP_BADGE[c]||'b-mut'}">${c}</span></td>
+    <td class="text-gray-600">${t('catd_'+c)}</td></tr>`).join('');
+  const bb=document.getElementById('ref-bank-body');
+  if(bb) bb.innerHTML=BANKS.map(b=>{
+    const warn=(b==='UNKNOWN'||b==='PROMPTPAY');
+    return `<tr><td><span class="badge ${warn?'b-warn':'b-mut'}">${b}</span></td>
+      <td class="text-gray-600">${t('bankd_'+b)}</td></tr>`;}).join('');
+}
+
 async function loadSetup(){
   refreshSetupBadge();
+  renderReference();
   const map=await api('/api/payment-map'); const tb=document.getElementById('map-body'); tb.innerHTML='';
   const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
   const att=document.getElementById('map-attention');
