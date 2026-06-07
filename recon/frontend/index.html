@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei – Revenue Reconciliation</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root {
     --brand:#e85d04; --brand-light:#fff1e6;
@@ -12,7 +15,15 @@
     --sidebar:#1e293b; --sidebar-hover:rgba(255,255,255,.06); --sidebar-active:rgba(232,93,4,.12);
   }
   *, *::before, *::after { box-sizing: border-box; }
-  body { font-family:'Segoe UI', system-ui, sans-serif; background:#f8fafc; display:flex; min-height:100vh; margin:0; }
+  body {
+    font-family:'Inter','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
+    background:#f8fafc; display:flex; min-height:100vh; margin:0;
+    color:#1f2937; line-height:1.55; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  }
+  /* Thai needs a touch more leading + larger glyphs to read comfortably */
+  :lang(th), html[lang="th"] body { line-height:1.7; }
+  /* tabular figures everywhere numbers matter */
+  .font-mono, td.font-mono, .tabular { font-family:'Inter','Noto Sans Thai',ui-monospace,monospace; font-variant-numeric:tabular-nums; letter-spacing:0; }
 
   /* ── sidebar ─────────────────────────── */
   #sidebar { width:220px; background:var(--sidebar); min-height:100vh; display:flex; flex-direction:column; flex-shrink:0; position:sticky; top:0; max-height:100vh; overflow-y:auto; }
@@ -83,9 +94,10 @@
   table:not(.matrix) { border-collapse:collapse; width:100%; }
   table:not(.matrix) thead th {
     white-space:nowrap; padding:11px 14px; border-bottom:1px solid #e5e7eb;
-    vertical-align:bottom; color:#94a3b8; font-size:11px; font-weight:600;
-    letter-spacing:.4px;
+    vertical-align:bottom; color:#64748b; font-size:11.5px; font-weight:600;
+    letter-spacing:.3px;
   }
+  table:not(.matrix) tbody td { font-size:13.5px; }
   table:not(.matrix) tbody td,
   table:not(.matrix) tfoot td { padding:9px 14px; vertical-align:middle; }
   table:not(.matrix) tbody tr { border-bottom:1px solid #f1f5f9; }
@@ -96,6 +108,23 @@
   .card.table-card { padding:0; overflow:hidden; }
   .card.table-card > .table-head { padding:14px 16px; border-bottom:1px solid #eef2f7; }
   .card.table-card .table-scroll { overflow-x:auto; }
+
+  /* ── Readability pass ─────────────────────────────────────────────────────
+     Lift muted-text contrast, enlarge the smallest captions, keep status
+     chips on one line, and give cards a bit more breathing room. */
+  .text-gray-400 { color:#6b7280 !important; }   /* low-contrast → readable */
+  .text-gray-300 { color:#9ca3af !important; }
+  .card .text-xs { font-size:.8rem; line-height:1.5; }     /* KPI captions, sub-labels */
+  .pill, .badge, .side-badge { white-space:nowrap; }
+  /* KPI numbers: clear + tabular, sized so 7-digit baht still fit the card */
+  .card .text-2xl { font-size:1.375rem; line-height:1.25; letter-spacing:-.2px; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  /* section / card titles a touch larger for hierarchy */
+  .card > .font-semibold:first-child, .card .font-semibold.text-gray-700 { font-size:.95rem; }
+  /* form controls easier to hit + read */
+  .inp { font-size:13.5px; padding:7px 11px; }
+  .btn { font-size:13.5px; }
+  /* sidebar nav: lift inactive contrast slightly */
+  .side-btn { font-size:13.5px; }
 </style>
 </head>
 <body>
@@ -181,7 +210,7 @@
           <button onclick="switchTab('discrepancies')" class="card text-left hover:shadow-md" data-i18n="step4">④ Sign-off — every lane matched or explained</button>
         </div>
       </div>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_pos">POS Tender</div><div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div></div>
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_ext">External Total</div><div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div></div>
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_var">Variance</div><div id="kpi-var" class="text-2xl font-bold">—</div></div>
@@ -215,7 +244,7 @@
       </div>
 
       <!-- summary strip -->
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_pos">POS Revenue</div><div id="bd-pos" class="text-2xl font-bold text-gray-800">—</div></div>
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_ext">Documents</div><div id="bd-ext" class="text-2xl font-bold text-gray-800">—</div></div>
         <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_var">Variance</div><div id="bd-var" class="text-2xl font-bold">—</div></div>
