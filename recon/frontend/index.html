@@ -295,6 +295,7 @@
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dcfce7;display:inline-block"></span><span data-i18n="bd_lg_matched">matched to documents</span></span>
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fee2e2;display:inline-block"></span><span data-i18n="bd_lg_var">variance</span></span>
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fef9c3;display:inline-block"></span><span data-i18n="bd_lg_await">awaiting document</span></span>
+        <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dbeafe;display:inline-block"></span><span data-i18n="bd_lg_manual">manual match</span></span>
         <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#f1f5f9;border:1px solid #e2e8f0;display:inline-block"></span><span data-i18n="bd_lg_none">no source</span></span>
       </div>
     </div>
@@ -797,14 +798,14 @@ const I18N = {
     sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_system:"ระบบ",
     board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
-    bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_none:"ไม่มีแหล่ง",
+    bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_manual:"จับคู่เอง", bd_lg_none:"ไม่มีแหล่ง",
     tab_discrepancies:"รายการต้องตรวจ", tab_trend:"แนวโน้ม", tab_audit:"ประวัติการแก้ไข", tab_setup:"ตั้งค่า",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
     btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
     recon_by_cat:"กระทบยอดตามประเภท", payout_chain:"สายการโอนเงิน", payout_hint:"— ยอดสุทธิจากผู้ให้บริการต้องเท่ากับเงินที่เข้าบัญชี",
     feevat_title:"ค่าธรรมเนียม & VAT — กรอกเอง (Grab / Line Man / บัตรเครดิต)",
-    daily_recon:"กระทบยอดรายวัน — วัน × ช่องทาง", daily_legend:"✓ ตรง · ≠ ต่าง · ✗ ขาด · … รอเอกสาร · ? ตั้งค่าธนาคาร · คลิกเพื่อดูรายการ",
+    daily_recon:"กระทบยอดรายวัน — วัน × ช่องทาง", daily_legend:"✓ ตรง · ≠ ต่าง · ✗ ขาด · … รอเอกสาร · 🔗 จับคู่เอง · ? ตั้งค่าธนาคาร · คลิกเพื่อดูรายการ",
     coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
     up_title:"อัปโหลดเอกสาร & รายงาน",
     disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
@@ -909,14 +910,14 @@ const I18N = {
     sec_daily:"Daily work", sec_docs:"Documents & review", sec_system:"System",
     board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)",
     board_reporting:"Branches reporting", board_total:"All branches",
-    bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_none:"no source",
+    bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_manual:"manual match", bd_lg_none:"no source",
     tab_discrepancies:"To Review", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
     btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
     recon_by_cat:"Reconciliation by category", payout_chain:"Payout chain", payout_hint:"— provider net should equal the bank payout credit",
     feevat_title:"Fee & VAT — manual entry (Grab / Line Man / Credit Card)",
-    daily_recon:"Daily reconciliation — day × lane", daily_legend:"✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines",
+    daily_recon:"Daily reconciliation — day × lane", daily_legend:"✓ matched · ≠ variance · ✗ missing · … awaiting · 🔗 manual · ? map bank · click a cell for lines",
     coverage_hd:"Coverage — last day each source's document covers",
     up_title:"Upload Statements & Reports",
     disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
@@ -1157,8 +1158,8 @@ async function openSession(id, tab){
 
 // ── daily board (cross-branch, single day) ─────────────────────────────────────
 let BOARD_DATE = null;
-const BOARD_CELL = {matched:'#dcfce7', variance:'#fee2e2', pos_only:'#fef9c3', ext_only:'#fef9c3', no_source:'#f1f5f9'};
-const BOARD_FG   = {matched:'#15803d', variance:'#b91c1c', pos_only:'#854d0e', ext_only:'#854d0e', no_source:'#94a3b8'};
+const BOARD_CELL = {matched:'#dcfce7', variance:'#fee2e2', pos_only:'#fef9c3', ext_only:'#fef9c3', no_source:'#f1f5f9', manual:'#dbeafe'};
+const BOARD_FG   = {matched:'#15803d', variance:'#b91c1c', pos_only:'#854d0e', ext_only:'#854d0e', no_source:'#94a3b8', manual:'#1d4ed8'};
 
 async function loadDailyBoard(){
   const di=document.getElementById('board-date');
@@ -1358,15 +1359,17 @@ async function loadManual(){
   const laneTxt=`${c.category}${c.bank&&c.bank!=='NONE'?'·'+c.bank:''}`;
   document.getElementById('manual-scope').textContent=`${BRANCHES.find(b=>b.branch_id==c.branch_id)?.name||''} · ${c.period_month} · ${laneTxt}`;
 
-  // POS days (remaining > 0 are tickable; fully-consumed are shown muted)
+  // POS days — tick to take the full remaining, or edit the amount for a partial split
   const pt=document.getElementById('manual-pos');
   if(!d.pos_days.length){ pt.innerHTML=`<tr><td colspan="3" class="text-center text-gray-400 py-6">${t('manual_none_pos')}</td></tr>`; }
   else pt.innerHTML=d.pos_days.map(p=>{
     const done=p.remaining<1;
     return `<tr style="${done?'opacity:.5':''}">
-      <td class="pl-4 pr-2"><input type="checkbox" ${done?'disabled':''} onchange="manualTogglePos('${p.day}',${p.remaining},this.checked)"></td>
+      <td class="pl-4 pr-2"><input type="checkbox" ${done?'disabled':''} onchange="manualTogglePos('${p.day}',this.checked)"></td>
       <td>${p.day}${p.consumed>0?` <span class="text-xs text-gray-400">(−${fmt(p.consumed)})</span>`:''}</td>
-      <td class="text-right font-mono">${fmt(p.remaining)}</td></tr>`;
+      <td class="text-right"><input id="mpos-amt-${p.day}" class="inp text-right font-mono" style="width:120px"
+            value="${p.remaining>0?p.remaining:0}" data-rem="${p.remaining}" ${done?'disabled':''}
+            oninput="manualPosAmt('${p.day}')"></td></tr>`;
   }).join('');
 
   // statement lines (already-manual ones shown as matched, not tickable)
@@ -1402,7 +1405,14 @@ async function loadManual(){
   applyI18n();
 }
 
-function manualTogglePos(day, amount, on){ if(on) MANUAL_POS.set(day,amount); else MANUAL_POS.delete(day); updateManualBar(); }
+function manualPosVal(day){
+  const el=document.getElementById('mpos-amt-'+day); if(!el) return 0;
+  let v=+el.value||0; const rem=+el.dataset.rem||0;
+  if(v<0) v=0; if(v>rem){ v=rem; el.value=rem; }   // can't allocate more than remains
+  return v;
+}
+function manualTogglePos(day, on){ if(on) MANUAL_POS.set(day, manualPosVal(day)); else MANUAL_POS.delete(day); updateManualBar(); }
+function manualPosAmt(day){ if(MANUAL_POS.has(day)) MANUAL_POS.set(day, manualPosVal(day)); updateManualBar(); }
 function manualToggleExt(table, id, amount, on){ const k=`${table}:${id}`; if(on) MANUAL_EXT.set(k,amount); else MANUAL_EXT.delete(k); updateManualBar(); }
 
 function updateManualBar(){
@@ -1437,8 +1447,8 @@ async function unmatchManual(id){
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────
-const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut', unmapped_bank:'b-warn'};
-const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·', unmapped_bank:'?'};
+const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut', unmapped_bank:'b-warn', manual:'b-ok'};
+const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·', unmapped_bank:'?', manual:'🔗'};
 async function loadDaily(){
   if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
   document.getElementById('daily-empty').classList.add('hidden');
@@ -1450,9 +1460,9 @@ async function loadDaily(){
 }
 
 const LANE_CELL = {matched:'#dcfce7', variance:'#fee2e2', missing:'#fee2e2', pending:'#fef9c3',
-                   ext_only:'#fef9c3', no_source:'#f1f5f9', unmapped_bank:'#fef9c3'};
+                   ext_only:'#fef9c3', no_source:'#f1f5f9', unmapped_bank:'#fef9c3', manual:'#dbeafe'};
 const LANE_FG   = {matched:'#15803d', variance:'#b91c1c', missing:'#b91c1c', pending:'#854d0e',
-                   ext_only:'#854d0e', no_source:'#64748b', unmapped_bank:'#854d0e'};
+                   ext_only:'#854d0e', no_source:'#64748b', unmapped_bank:'#854d0e', manual:'#1d4ed8'};
 const _CAT_ORDER = {CASH:0,QR:1,TRANSFER:2,CREDIT:3,GRAB:4,LINEMAN:5,COUPON:6};
 function _laneLabel(cat,bank){ return cat.slice(0,4)+(bank&&bank!=='NONE'?'·'+bank:''); }
 
@@ -1531,9 +1541,10 @@ async function renderReconcile(){
     const div=document.createElement('div'); div.className='card cursor-pointer hover:shadow-md';
     div.title='คลิกเพื่อดูรายละเอียด / click for detail';
     div.onclick=()=>openDrill(SESSION.branch_id,{period_month:SESSION.period_month,category:c.category,bank:c.bank},'reconcile');
+    const manualBadge = c.manual ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8">🔗 ${c.manual.count}</span>` : '';
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
-        <span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div>
+        <div class="flex items-center gap-1">${manualBadge}<span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div></div>
       <div class="grid grid-cols-2 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">${t('l_pos_tender')}</div><div class="font-mono">${fmt(c.pos_amount)}</div></div>
         <div><div class="text-xs text-gray-400">${t('l_statement')}</div><div class="font-mono">${fmt(c.ext_amount)}</div></div>

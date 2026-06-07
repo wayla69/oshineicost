@@ -20,6 +20,7 @@ Anything outside tolerance becomes a discrepancy for accounting staff.
 """
 
 from __future__ import annotations
+import json
 import sqlite3
 
 from .seed_payment_map import normalize
@@ -445,8 +446,29 @@ def pos_category_totals_daily(conn, branch_id, period_month):
     return totals, unmapped, True
 
 
+def _manual_consumed(conn, branch_id, period_month):
+    """{(day, category, bank): amount} reconciled manually (tick-to-match).
+    These POS day amounts are considered cleared, so the daily views subtract
+    them and mark fully-cleared lane-days as 'manual'."""
+    out: dict = {}
+    try:
+        rows = conn.execute(
+            "SELECT category, bank, pos_days FROM recon_manual_match "
+            "WHERE branch_id=? AND period_month=?", (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        for x in json.loads(r["pos_days"] or "[]"):
+            k = (x["day"], r["category"], r["bank"])
+            out[k] = out.get(k, 0.0) + float(x.get("amount") or 0)
+    return out
+
+
 def _external_buckets_daily(conn, branch_id, period_month):
-    """{(day, category, bank): {amount, net}} from external lines, keyed by line date."""
+    """{(day, category, bank): {amount, net}} from external lines, keyed by line date.
+    Manually-matched lines (match_status='manual') are excluded — they're accounted
+    for in the manual layer, so they don't double-count or show a false variance on
+    the lump-sum's own date."""
     buckets = {}
     def add(day, cat, bank, amount, net):
         b = buckets.setdefault((day, cat, bank), {"amount": 0.0, "net": 0.0})
@@ -455,7 +477,8 @@ def _external_buckets_daily(conn, branch_id, period_month):
     for r in conn.execute("""
         SELECT l.txn_date d, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
-        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+        WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='manual'
+          AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if not cat:
@@ -465,7 +488,7 @@ def _external_buckets_daily(conn, branch_id, period_month):
 
     for r in conn.execute("""
         SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
-        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+        WHERE l.branch_id=? AND l.match_status!='manual' AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
         acq = r["acquirer"] or _provider_acquirer(r["provider"])
         fee, vat = _eff_fee_vat(r, "mdr_fee", None)
@@ -477,7 +500,8 @@ def _external_buckets_daily(conn, branch_id, period_month):
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
         for r in conn.execute(f"""
             SELECT * FROM {table}
-            WHERE branch_id=? AND order_status='Completed' AND strftime('%Y-%m', order_date)=?
+            WHERE branch_id=? AND order_status='Completed' AND match_status!='manual'
+              AND strftime('%Y-%m', order_date)=?
         """, (branch_id, period_month)):
             fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
             gross = float(r["food_amount"] or 0)
@@ -535,17 +559,22 @@ def daily_reconciliation(conn, branch_id, period_month):
     pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
     ext = _external_buckets_daily(conn, branch_id, period_month)
     cov = _coverage(conn, branch_id, period_month)
+    consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
 
     by_day = {}
     for (day, cat, bank) in set(pos) | set(ext):
         pos_amt = pos.get((day, cat, bank), 0.0)
+        cons    = consumed.get((day, cat, bank), 0.0)     # manually cleared
+        pos_eff = pos_amt - cons                          # POS still needing a match
         eb = ext.get((day, cat, bank))
         ext_amt = eb["amount"] if eb else 0.0
         ext_net = eb["net"] if eb else 0.0
 
-        if eb and pos_amt != 0:                    # both sides present (pos may be a refund)
-            status = "matched" if _within_tol_day(ext_amt, pos_amt) else "variance"
-        elif eb:                                   # pos 0, ext present
+        if cons > 0 and abs(pos_eff) <= TOL_ABS_DAY and ext_amt <= TOL_ABS_DAY:
+            status = "manual"                      # fully reconciled by hand
+        elif eb and pos_eff != 0:                  # both sides present (pos may be a refund)
+            status = "matched" if _within_tol_day(ext_amt, pos_eff) else "variance"
+        elif eb:                                   # pos cleared/0, ext present
             status = "ext_only"
         elif cat == "COUPON":
             status = "no_source"
@@ -560,7 +589,9 @@ def daily_reconciliation(conn, branch_id, period_month):
         by_day.setdefault(day, []).append({
             "category": cat, "bank": bank,
             "pos": round(pos_amt, 2), "ext": round(ext_amt, 2), "ext_net": round(ext_net, 2),
-            "variance": round(ext_amt - pos_amt, 2), "status": status,
+            "manual": round(cons, 2),
+            "variance": 0.0 if status == "manual" else round(ext_amt - pos_eff, 2),
+            "status": status,
         })
 
     days = []
@@ -578,7 +609,7 @@ def daily_reconciliation(conn, branch_id, period_month):
             "ext_total": round(sum(l["ext"] for l in lanes), 2),
             "lanes": lanes,
             "pending": [{"category": l["category"], "bank": l["bank"]} for l in pending],
-            "matched": sum(1 for l in lanes if l["status"] == "matched"),
+            "matched": sum(1 for l in lanes if l["status"] in ("matched", "manual")),
             "pending_count": len(pending),
             "issue_count": len(issues),
         })
@@ -743,12 +774,12 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
 
     for r in conn.execute(
         "SELECT branch_id, credit, channel FROM recon_bank_lines "
-        "WHERE credit>0 AND txn_date=?", (day,)):
+        "WHERE credit>0 AND match_status!='manual' AND txn_date=?", (day,)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if cat:
             add(r["branch_id"], cat, float(r["credit"] or 0), float(r["credit"] or 0))
 
-    for r in conn.execute("SELECT * FROM recon_cc_lines WHERE settlement_date=?", (day,)):
+    for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
         fee, vat = _eff_fee_vat(r, "mdr_fee", None)
         gross = float(r["gross_amount"] or 0)
         add(r["branch_id"], "CREDIT", gross, gross - float(r["refund_amount"] or 0) - fee - vat)
@@ -756,46 +787,69 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
         for r in conn.execute(
-            f"SELECT * FROM {table} WHERE order_status='Completed' AND order_date=?", (day,)):
+            f"SELECT * FROM {table} WHERE order_status='Completed' AND match_status!='manual' AND order_date=?", (day,)):
             fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
             gross = float(r["food_amount"] or 0)
             add(r["branch_id"], cat, gross, gross - fee - vat - float(r["promo_deduct"] or 0))
+
+    # manually-cleared POS per (branch, category) for this day (bank collapsed)
+    consumed: dict = {}
+    try:
+        for r in conn.execute(
+            "SELECT branch_id, category, pos_days FROM recon_manual_match WHERE period_month=?",
+            (day[:7],)):
+            if r["branch_id"] not in branches:
+                continue
+            for x in json.loads(r["pos_days"] or "[]"):
+                if x["day"] == day:
+                    k = (r["branch_id"], r["category"])
+                    consumed[k] = consumed.get(k, 0.0) + float(x.get("amount") or 0)
+    except sqlite3.OperationalError:
+        pass
 
     cats_present = {c for (_, c) in pos} | {c for (_, c) in ext}
     categories = [c for c in _BOARD_CAT_ORDER if c in cats_present] \
         + sorted(cats_present - set(_BOARD_CAT_ORDER))
 
     rows = []
-    tot_pos = tot_ext = 0.0
+    tot_pos = tot_ext = tot_var = 0.0
     cat_tot = {c: {"pos": 0.0, "ext": 0.0} for c in categories}
     for bid, name in branches.items():
         cells = {}
         bp = be = 0.0
         issues = 0
+        bvar = 0.0
         for c in categories:
             p = pos.get((bid, c), 0.0)
+            cons = consumed.get((bid, c), 0.0)        # manually cleared this day
+            p_eff = p - cons
             eb = ext.get((bid, c))
             e = eb["amount"] if eb else 0.0
             if p == 0 and e == 0:
                 continue
-            if p > 0 and e > 0:
-                status = "matched" if _within_tol_day(e, p) else "variance"
-            elif p > 0:
+            if cons > 0 and abs(p_eff) <= TOL_ABS_DAY and e <= TOL_ABS_DAY:
+                status = "manual"
+            elif p_eff > 0 and e > 0:
+                status = "matched" if _within_tol_day(e, p_eff) else "variance"
+            elif p_eff > 0:
                 status = "no_source" if c == "COUPON" else "pos_only"
-            else:
+            elif e > 0:
                 status = "ext_only"
+            else:
+                status = "manual" if cons > 0 else "pos_only"
             if status in ("variance", "ext_only"):
                 issues += 1
-            cells[c] = {"pos": round(p, 2), "ext": round(e, 2),
-                        "variance": round(e - p, 2), "status": status}
-            bp += p; be += e
+            cell_var = 0.0 if status == "manual" else (e - p_eff)
+            cells[c] = {"pos": round(p, 2), "ext": round(e, 2), "manual": round(cons, 2),
+                        "variance": round(cell_var, 2), "status": status}
+            bp += p; be += e; bvar += cell_var
             cat_tot[c]["pos"] += p; cat_tot[c]["ext"] += e
         if not cells:
             continue
         rows.append({"branch_id": bid, "branch_name": name, "cells": cells,
                      "pos_total": round(bp, 2), "ext_total": round(be, 2),
-                     "variance": round(be - bp, 2), "issues": issues})
-        tot_pos += bp; tot_ext += be
+                     "variance": round(bvar, 2), "issues": issues})
+        tot_pos += bp; tot_ext += be; tot_var += bvar
 
     rows.sort(key=lambda x: -x["pos_total"])
     return {
@@ -805,7 +859,7 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         "totals": {
             "pos": round(tot_pos, 2),
             "ext": round(tot_ext, 2),
-            "variance": round(tot_ext - tot_pos, 2),
+            "variance": round(tot_var, 2),
             "by_category": {c: {"pos": round(v["pos"], 2), "ext": round(v["ext"], 2)}
                             for c, v in cat_tot.items()},
             "branches_reporting": len(rows),

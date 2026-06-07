@@ -689,9 +689,19 @@ def session_summary(session_id: int):
         bid, pm = session["branch_id"], session["period_month"]
 
         rows, unmapped = category_reconciliation(conn, bid, pm)
-        categories = [{k: r[k] for k in
-                       ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
-                      for r in rows]
+        # per-lane manual-match tally (so the cards can flag manually-cleared lanes)
+        manual: dict = {}
+        for mr in conn.execute(
+            "SELECT category, bank, COUNT(*) n, COALESCE(SUM(pos_amount),0) amt "
+            "FROM recon_manual_match WHERE branch_id=? AND period_month=? GROUP BY category, bank",
+            (bid, pm)):
+            manual[f"{mr['category']}|{mr['bank']}"] = {"count": mr["n"], "amount": round(mr["amt"], 2)}
+        categories = []
+        for r in rows:
+            c = {k: r[k] for k in
+                 ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
+            c["manual"] = manual.get(f"{r['category']}|{r['bank']}")
+            categories.append(c)
         payouts = payout_reconciliation(conn, bid, pm)
 
         pending = conn.execute(
@@ -1214,6 +1224,25 @@ def manual_create(body: ManualMatch):
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)
+
+        # Partial allocation guard: a day can't be allocated beyond what's left.
+        totals = {d["day"]: d["total"] for d in
+                  lane_pos_days(conn, body.branch_id, body.period_month, body.category, body.bank)}
+        already: dict = {}
+        for m in conn.execute(
+            "SELECT pos_days FROM recon_manual_match WHERE branch_id=? AND period_month=? "
+            "AND category=? AND bank=?",
+            (body.branch_id, body.period_month, body.category, body.bank)):
+            for x in json.loads(m["pos_days"] or "[]"):
+                already[x["day"]] = already.get(x["day"], 0.0) + float(x.get("amount") or 0)
+        for x in body.pos_days:
+            day, amt = x.get("day"), float(x.get("amount") or 0)
+            if amt <= 0:
+                raise HTTPException(400, f"amount for {day} must be positive.")
+            remaining = round(totals.get(day, 0.0) - already.get(day, 0.0), 2)
+            if amt > remaining + 0.5:
+                raise HTTPException(
+                    409, f"{day}: amount {amt:.0f} exceeds remaining {remaining:.0f}.")
         cur = conn.execute("""
             INSERT INTO recon_manual_match
                 (branch_id, category, bank, period_month, pos_amount, ext_amount,
