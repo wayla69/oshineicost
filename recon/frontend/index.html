@@ -1367,8 +1367,8 @@ async function loadManual(){
     return `<tr style="${done?'opacity:.5':''}">
       <td class="pl-4 pr-2"><input type="checkbox" ${done?'disabled':''} onchange="manualTogglePos('${p.day}',this.checked)"></td>
       <td>${p.day}${p.consumed>0?` <span class="text-xs text-gray-400">(−${fmt(p.consumed)})</span>`:''}</td>
-      <td class="text-right"><input id="mpos-amt-${p.day}" class="inp text-right font-mono" style="width:120px"
-            value="${p.remaining>0?p.remaining:0}" data-rem="${p.remaining}" ${done?'disabled':''}
+      <td class="text-right"><input id="mpos-amt-${p.day}" type="number" min="0" class="inp text-right font-mono" style="width:120px"
+            value="${p.remaining>0?Math.round(p.remaining):0}" data-rem="${Math.round(p.remaining)}" ${done?'disabled':''}
             oninput="manualPosAmt('${p.day}')"></td></tr>`;
   }).join('');
 
