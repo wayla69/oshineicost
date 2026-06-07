@@ -276,7 +276,7 @@
       </div>
       <div id="rec-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
-          <div><div class="text-xs text-gray-400">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
+          <div><div class="text-xs text-gray-400" data-i18n="l_session">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
           <div id="rec-status"></div>
           <div class="ml-auto flex gap-2">
             <button onclick="runMatch(event)" class="btn btn-pri" data-i18n="btn_run">▶ Run Match</button>
@@ -306,8 +306,8 @@
           </div>
           <div class="overflow-x-auto"><table class="w-full text-sm">
             <thead><tr class="text-gray-400 text-xs uppercase border-b">
-              <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th><th class="text-right pb-2">Gross</th>
-              <th class="text-right pb-2">Fee</th><th class="text-right pb-2">VAT</th><th class="text-right pb-2">Net</th><th></th>
+              <th class="text-left pb-2" data-i18n="th_date">Date</th><th class="text-left pb-2" data-i18n="th_ref">Ref</th><th class="text-right pb-2" data-i18n="th_gross">Gross</th>
+              <th class="text-right pb-2" data-i18n="th_fee">Fee</th><th class="text-right pb-2" data-i18n="th_vat">VAT</th><th class="text-right pb-2" data-i18n="th_net">Net</th><th></th>
             </tr></thead>
             <tbody id="fv-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No lines</td></tr></tbody>
           </table></div>
@@ -322,7 +322,7 @@
       </div>
       <div id="daily-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
-          <div><div class="text-xs text-gray-400">Daily reconciliation</div><div id="daily-title" class="font-semibold text-gray-800"></div></div>
+          <div><div class="text-xs text-gray-400" data-i18n="l_daily_hdr">Daily reconciliation</div><div id="daily-title" class="font-semibold text-gray-800"></div></div>
           <div id="daily-pending" class="ml-auto text-sm"></div>
         </div>
         <div class="card overflow-x-auto">
@@ -351,10 +351,10 @@
         <div class="font-semibold text-gray-700 mb-3">Uploads — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">File</th><th class="text-left pb-2">Source</th><th class="text-left pb-2">Provider</th>
-            <th class="text-left pb-2">Branch</th><th class="text-right pb-2">Rows</th><th class="text-center pb-2">Status</th><th></th>
+            <th class="text-left pb-2" data-i18n="u_file">File</th><th class="text-left pb-2" data-i18n="u_source">Source</th><th class="text-left pb-2" data-i18n="u_provider">Provider</th>
+            <th class="text-left pb-2" data-i18n="c_branch">Branch</th><th class="text-right pb-2" data-i18n="u_rows">Rows</th><th class="text-center pb-2" data-i18n="c_status">Status</th><th></th>
           </tr></thead>
-          <tbody id="up-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr></tbody>
+          <tbody id="up-body"><tr><td colspan="7" class="text-center text-gray-400 py-6" data-i18n="e_no_uploads">No uploads</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -366,22 +366,22 @@
         <div class="flex items-center gap-3 flex-wrap">
           <span class="font-semibold text-gray-700 text-sm" data-i18n="disc_hd">Discrepancies</span>
           <select id="df-res" class="inp text-xs" onchange="DISC_FILTER.resolution=this.value;loadDiscrepancies()">
-            <option value="pending">Pending</option>
-            <option value="all">All statuses</option>
-            <option value="accepted">Accepted</option>
-            <option value="adjusted">Adjusted</option>
-            <option value="rejected">Rejected</option>
+            <option value="pending"  data-i18n="df_pending">Pending</option>
+            <option value="all"      data-i18n="df_all">All statuses</option>
+            <option value="accepted" data-i18n="df_accepted">Accepted</option>
+            <option value="adjusted" data-i18n="df_adjusted">Adjusted</option>
+            <option value="rejected" data-i18n="df_rejected">Rejected</option>
           </select>
           <select id="df-cat" class="inp text-xs" onchange="DISC_FILTER.category=this.value;loadDiscrepancies()">
-            <option value="">All categories</option>
+            <option value="" data-i18n="df_allcat">All categories</option>
             <option>CASH</option><option>QR</option><option>TRANSFER</option>
             <option>CREDIT</option><option>GRAB</option><option>LINEMAN</option>
           </select>
           <select id="df-bank" class="inp text-xs" onchange="DISC_FILTER.bank=this.value;loadDiscrepancies()">
-            <option value="">All banks</option>
+            <option value="" data-i18n="df_allbank">All banks</option>
             <option>KTB</option><option>KBANK</option><option>KTC</option><option>PROMPTPAY</option>
           </select>
-          <button onclick="loadDiscrepancies()" class="btn btn-sec text-xs" style="padding:5px 10px">⟳ Refresh</button>
+          <button onclick="loadDiscrepancies()" class="btn btn-sec text-xs" style="padding:5px 10px" data-i18n="btn_refresh">⟳ Refresh</button>
         </div>
       </div>
       <!-- Table -->
@@ -389,55 +389,55 @@
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b" style="position:sticky;top:0;background:#fff;z-index:5">
             <th class="pl-4 pr-2 py-3"><input type="checkbox" id="disc-chk-all" onchange="toggleAllDisc(this.checked)" title="Select all visible"></th>
-            <th class="text-left py-3 sortable" onclick="sortDisc('category')">Category</th>
-            <th class="text-left py-3 sortable" onclick="sortDisc('bank')">Bank</th>
-            <th class="text-left py-3">Type</th>
-            <th class="text-right py-3 sortable sort-desc" id="sort-variance" onclick="sortDisc('variance')">Variance</th>
-            <th class="text-right py-3 sortable" onclick="sortDisc('amount_external')">External</th>
-            <th class="text-right py-3 sortable" onclick="sortDisc('amount_pos')">POS</th>
-            <th class="text-left py-3">Assignee</th>
-            <th class="text-center py-3">Status / Resolve</th>
+            <th class="text-left py-3 sortable" onclick="sortDisc('category')" data-i18n="c_category">Category</th>
+            <th class="text-left py-3 sortable" onclick="sortDisc('bank')" data-i18n="c_bank">Bank</th>
+            <th class="text-left py-3" data-i18n="c_type">Type</th>
+            <th class="text-right py-3 sortable sort-desc" id="sort-variance" onclick="sortDisc('variance')" data-i18n="kpi_var">Variance</th>
+            <th class="text-right py-3 sortable" onclick="sortDisc('amount_external')" data-i18n="c_external">External</th>
+            <th class="text-right py-3 sortable" onclick="sortDisc('amount_pos')" data-i18n="c_pos">POS</th>
+            <th class="text-left py-3" data-i18n="c_assignee">Assignee</th>
+            <th class="text-center py-3" data-i18n="c_resolve">Status / Resolve</th>
           </tr></thead>
           <tbody id="disc-body">
-            <tr><td colspan="9" class="text-center text-gray-400 py-6">Open a session to see its discrepancies</td></tr>
+            <tr><td colspan="9" class="text-center text-gray-400 py-6" data-i18n="e_open_session">Open a session first</td></tr>
           </tbody>
         </table>
         <!-- Bulk action bar (sticks to bottom) -->
         <div id="disc-bulk-bar">
-          <span id="disc-bulk-count" class="text-sm font-semibold text-gray-700">0 selected</span>
+          <span id="disc-bulk-count" class="text-sm font-semibold text-gray-700">0</span>
           <span class="text-gray-300">|</span>
-          <span class="text-xs text-gray-500">Bulk resolve as:</span>
-          <button onclick="bulkResolve('accepted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px">Accept all</button>
-          <button onclick="bulkResolve('adjusted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px">Adjusted</button>
-          <button onclick="bulkResolve('rejected')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px;color:#dc2626">Reject all</button>
-          <button onclick="clearDiscSel()" class="text-xs text-gray-400 hover:underline ml-auto">Clear selection</button>
+          <span class="text-xs text-gray-500" data-i18n="bulk_as">Bulk resolve as:</span>
+          <button onclick="bulkResolve('accepted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px" data-i18n="bulk_accept">Accept all</button>
+          <button onclick="bulkResolve('adjusted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px" data-i18n="bulk_adjusted">Adjusted</button>
+          <button onclick="bulkResolve('rejected')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px;color:#dc2626" data-i18n="bulk_reject">Reject all</button>
+          <button onclick="clearDiscSel()" class="text-xs text-gray-400 hover:underline ml-auto" data-i18n="bulk_clear">Clear selection</button>
         </div>
       </div>
     </div>
 
     <!-- TREND -->
     <div id="tab-trend" class="tab-pane hidden space-y-5">
-      <div id="trend-empty" class="card text-center text-gray-400 py-10">
+      <div id="trend-empty" class="card text-center text-gray-400 py-10" data-i18n="trend_empty">
         Open a branch session to view its reconciliation health trend.
       </div>
       <div id="trend-body" class="hidden space-y-5">
         <div class="card flex items-center gap-4 flex-wrap">
-          <div><div class="text-xs text-gray-400">Recon health trend</div><div id="trend-title" class="font-semibold text-gray-800"></div></div>
-          <div class="text-xs text-gray-400 ml-auto">W1=days 1–7 · W2=8–14 · W3=15–21 · W4=22+</div>
+          <div><div class="text-xs text-gray-400" data-i18n="trend_title">Recon health trend</div><div id="trend-title" class="font-semibold text-gray-800"></div></div>
+          <div class="text-xs text-gray-400 ml-auto">W1=1–7 · W2=8–14 · W3=15–21 · W4=22+</div>
         </div>
         <div class="card">
-          <div class="font-semibold text-gray-700 mb-4">Weekly summary</div>
-          <div id="trend-weekly"><div class="text-gray-400 text-sm">Loading…</div></div>
+          <div class="font-semibold text-gray-700 mb-4" data-i18n="trend_weekly">Weekly summary</div>
+          <div id="trend-weekly"><div class="text-gray-400 text-sm">…</div></div>
         </div>
         <div class="card">
-          <div class="font-semibold text-gray-700 mb-1">Daily grid</div>
-          <div class="text-xs text-gray-400 mb-3">Cell colour = lane-match %. Click a day to open the Daily board at that date.</div>
+          <div class="font-semibold text-gray-700 mb-1" data-i18n="trend_daily">Daily grid</div>
+          <div class="text-xs text-gray-400 mb-3" data-i18n="trend_daily_hint">Cell colour = lane-match %. Click a day to open the Daily board at that date.</div>
           <div id="trend-daily" class="flex flex-wrap gap-1.5"></div>
           <div class="flex gap-4 mt-4 text-xs text-gray-400">
-            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dcfce7;display:inline-block"></span>≥ 99% matched</span>
-            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fef9c3;display:inline-block"></span>60–98%</span>
-            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fee2e2;display:inline-block"></span>&lt; 60%</span>
-            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#f1f5f9;border:1px solid #e2e8f0;display:inline-block"></span>No data</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dcfce7;display:inline-block"></span><span data-i18n="tg_matched">≥ 99% matched</span></span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fef9c3;display:inline-block"></span><span data-i18n="tg_partial">60–98%</span></span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fee2e2;display:inline-block"></span><span data-i18n="tg_low">&lt; 60%</span></span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#f1f5f9;border:1px solid #e2e8f0;display:inline-block"></span><span data-i18n="tg_nodata">No data</span></span>
           </div>
         </div>
       </div>
@@ -447,32 +447,32 @@
     <div id="tab-audit" class="tab-pane hidden space-y-4">
       <div class="card" style="padding:12px 16px">
         <div class="flex items-center gap-3 flex-wrap">
-          <span class="font-semibold text-gray-700 text-sm">Audit Log</span>
+          <span class="font-semibold text-gray-700 text-sm" data-i18n="audit_hd">Audit Log</span>
           <select id="audit-entity" class="inp text-xs" onchange="AUDIT_ENTITY=this.value;loadAudit()">
-            <option value="">All entities</option>
-            <option value="session">Session</option>
-            <option value="discrepancy">Discrepancy</option>
-            <option value="payment_map">Payment map</option>
-            <option value="line">Line (fee/VAT)</option>
-            <option value="upload">Upload</option>
+            <option value="" data-i18n="au_all">All entities</option>
+            <option value="session" data-i18n="au_session">Session</option>
+            <option value="discrepancy" data-i18n="au_disc">Discrepancy</option>
+            <option value="payment_map" data-i18n="au_pmap">Payment map</option>
+            <option value="line" data-i18n="au_line">Line (fee/VAT)</option>
+            <option value="upload" data-i18n="au_upload">Upload</option>
           </select>
           <span class="text-xs text-gray-400" id="audit-scope-hint"></span>
-          <button onclick="loadAudit()" class="btn btn-sec text-xs ml-auto" style="padding:5px 10px">⟳ Refresh</button>
+          <button onclick="loadAudit()" class="btn btn-sec text-xs ml-auto" style="padding:5px 10px" data-i18n="btn_refresh">⟳ Refresh</button>
         </div>
       </div>
       <div class="card overflow-x-auto" style="padding:0">
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b" style="background:#f8fafc">
-            <th class="text-left px-4 py-3">Time (UTC)</th>
-            <th class="text-left px-2 py-3">Entity</th>
-            <th class="text-left px-2 py-3">ID</th>
-            <th class="text-left px-2 py-3">Action</th>
-            <th class="text-left px-2 py-3">Field</th>
-            <th class="text-left px-2 py-3">Change</th>
-            <th class="text-left px-2 py-3">By</th>
+            <th class="text-left px-4 py-3" data-i18n="au_time">Time (UTC)</th>
+            <th class="text-left px-2 py-3" data-i18n="au_entity">Entity</th>
+            <th class="text-left px-2 py-3" data-i18n="au_id">ID</th>
+            <th class="text-left px-2 py-3" data-i18n="au_action">Action</th>
+            <th class="text-left px-2 py-3" data-i18n="au_field">Field</th>
+            <th class="text-left px-2 py-3" data-i18n="au_change">Change</th>
+            <th class="text-left px-2 py-3" data-i18n="au_by">By</th>
           </tr></thead>
           <tbody id="audit-body">
-            <tr><td colspan="7" class="text-center text-gray-400 py-8">Open a session or pick an entity filter above.</td></tr>
+            <tr><td colspan="7" class="text-center text-gray-400 py-8" data-i18n="audit_empty">No audit events yet.</td></tr>
           </tbody>
         </table>
       </div>
@@ -492,10 +492,10 @@
         </div>
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">POS code</th><th class="text-right pb-2">Volume (POS)</th>
-            <th class="text-left pb-2">Category <span class="normal-case text-gray-300">what it is</span></th>
-            <th class="text-left pb-2">Bank / Acquirer <span class="normal-case text-gray-300">where it lands</span></th>
-            <th class="text-center pb-2">Reconcile</th><th></th>
+            <th class="text-left pb-2" data-i18n="s_poscode">POS code</th><th class="text-right pb-2" data-i18n="s_volume">Volume (POS)</th>
+            <th class="text-left pb-2" data-i18n="s_category">Category</th>
+            <th class="text-left pb-2" data-i18n="s_bank">Bank / Acquirer</th>
+            <th class="text-center pb-2" data-i18n="s_reconcile">Reconcile</th><th></th>
           </tr></thead>
           <tbody id="map-body"></tbody>
         </table>
@@ -643,6 +643,42 @@ const I18N = {
     step3:"③ ประมวลผล — อ่านบอร์ดรายวัน", step4:"④ ตรวจรับ — ทุกช่องทางตรงหรืออธิบายได้",
     st_matched:"ตรงกัน", st_mismatch:"ไม่ตรง", st_pos_only:"ไม่มีเอกสาร", st_ext_only:"เกินในเอกสาร", st_no_source:"ไม่มีแหล่ง",
     p_matched:"ตรงกัน", p_mismatch:"ไม่ตรง", p_awaiting:"รอเงินโอน", p_extra:"เงินโอนเกิน",
+    // category / payout cards
+    l_pos_tender:"ยอด POS", l_statement:"ยอดเอกสาร", l_net_fee:"สุทธิ (หักค่าธรรมเนียม/VAT)",
+    l_report_net:"สุทธิตามรายงาน", l_bank_payout:"เงินเข้าบัญชีจริง", payout_word:"การโอน",
+    // fee / VAT table
+    th_date:"วันที่", th_ref:"อ้างอิง", th_gross:"ยอดรวม", th_fee:"ค่าธรรมเนียม", th_vat:"VAT", th_net:"สุทธิ",
+    fv_empty:"ยังไม่มีรายการของช่องทางนี้",
+    // empty states
+    e_open_session:"เปิดเซสชันของสาขาก่อน", e_no_disc:"ไม่มีรายการต่างค้าง 🎉",
+    e_no_uploads:"ยังไม่มีการอัปโหลด", e_no_daily:"ยังไม่มีข้อมูลรายวัน",
+    e_no_docs:"ยังไม่ได้อัปโหลดเอกสาร", e_no_revenue:"ไม่มียอดขาย POS ของวันนี้",
+    // discrepancies table + filters
+    df_pending:"ที่ค้าง", df_all:"ทุกสถานะ", df_accepted:"ยอมรับแล้ว", df_adjusted:"ปรับปรุงแล้ว", df_rejected:"ปฏิเสธแล้ว",
+    df_allcat:"ทุกประเภท", df_allbank:"ทุกธนาคาร", btn_refresh:"⟳ รีเฟรช",
+    c_category:"ประเภท", c_bank:"ธนาคาร", c_type:"ลักษณะ", c_external:"ยอดเอกสาร", c_pos:"ยอด POS",
+    c_assignee:"ผู้รับผิดชอบ", c_resolve:"สถานะ / จัดการ",
+    r_resolve:"จัดการ…", r_accept:"ยอมรับ", r_adjusted:"ปรับปรุง", r_reject:"ปฏิเสธ", assign_ph:"มอบหมาย…",
+    bulk_selected:"เลือกแล้ว", bulk_as:"จัดการที่เลือกเป็น:", bulk_accept:"ยอมรับทั้งหมด", bulk_adjusted:"ปรับปรุง", bulk_reject:"ปฏิเสธทั้งหมด", bulk_clear:"ล้างการเลือก",
+    // trend
+    trend_title:"แนวโน้มการกระทบยอด", trend_weekly:"สรุปรายสัปดาห์", trend_daily:"ตารางรายวัน",
+    trend_daily_hint:"สีของช่อง = % การจับคู่ช่องทาง · คลิกวันเพื่อเปิดบอร์ดรายวันของวันนั้น",
+    trend_empty:"เปิดเซสชันของสาขาเพื่อดูแนวโน้มการกระทบยอด",
+    tr_week:"สัปดาห์", tr_pos:"ยอด POS", tr_ext:"เอกสาร", tr_lane:"จับคู่ช่องทาง", tr_cov:"ครอบคลุมยอด",
+    tg_matched:"ตรง ≥ 99%", tg_partial:"60–98%", tg_low:"< 60%", tg_nodata:"ไม่มีข้อมูล",
+    // audit
+    audit_hd:"ประวัติการแก้ไข", au_all:"ทุกประเภท", au_session:"เซสชัน", au_disc:"รายการต่าง",
+    au_pmap:"ผังรหัสรับเงิน", au_line:"รายการ (ค่าธรรมเนียม/VAT)", au_upload:"การอัปโหลด",
+    au_time:"เวลา (UTC)", au_entity:"ประเภท", au_id:"รหัส", au_action:"การกระทำ", au_field:"ฟิลด์", au_change:"การเปลี่ยนแปลง", au_by:"โดย",
+    audit_empty:"ยังไม่มีประวัติการแก้ไข",
+    // uploads
+    u_file:"ไฟล์", u_source:"แหล่ง", u_provider:"ผู้ให้บริการ", u_branch:"สาขา", u_rows:"แถว", u_delete:"ลบ",
+    // setup table
+    s_poscode:"รหัส POS", s_volume:"ปริมาณ (POS)", s_category:"ประเภท", s_bank:"ธนาคาร / ผู้รับบัตร", s_reconcile:"กระทบยอด",
+    // daily recon dynamics
+    d_lane_days:"ช่องทาง-วันที่รอเอกสาร", d_awaiting:"วันที่รอเอกสาร",
+    l_session:"เซสชัน", l_daily_hdr:"กระทบยอดรายวัน",
+    dt_unmatched_external:"เกินในเอกสาร", dt_unmatched_pos:"ไม่มีเอกสารรองรับ", dt_amount_mismatch:"ยอดไม่ตรง", dt_timing_diff:"ต่างช่วงเวลา",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
@@ -669,6 +705,42 @@ const I18N = {
     step3:"③ Run Match — read the daily board", step4:"④ Sign-off — every lane matched or explained",
     st_matched:"Matched", st_mismatch:"Mismatch", st_pos_only:"No statement", st_ext_only:"Extra in statement", st_no_source:"No source",
     p_matched:"Matched", p_mismatch:"Mismatch", p_awaiting:"Awaiting payout", p_extra:"Extra payout",
+    // category / payout cards
+    l_pos_tender:"POS tender", l_statement:"Statement", l_net_fee:"Net (after fee/VAT)",
+    l_report_net:"Report net", l_bank_payout:"Bank payout", payout_word:"payout",
+    // fee / VAT table
+    th_date:"Date", th_ref:"Ref", th_gross:"Gross", th_fee:"Fee", th_vat:"VAT", th_net:"Net",
+    fv_empty:"No lines uploaded for this source",
+    // empty states
+    e_open_session:"Open a session first", e_no_disc:"No open discrepancies 🎉",
+    e_no_uploads:"No uploads", e_no_daily:"No daily data yet.",
+    e_no_docs:"No documents uploaded yet.", e_no_revenue:"No POS revenue recorded",
+    // discrepancies table + filters
+    df_pending:"Pending", df_all:"All statuses", df_accepted:"Accepted", df_adjusted:"Adjusted", df_rejected:"Rejected",
+    df_allcat:"All categories", df_allbank:"All banks", btn_refresh:"⟳ Refresh",
+    c_category:"Category", c_bank:"Bank", c_type:"Type", c_external:"External", c_pos:"POS",
+    c_assignee:"Assignee", c_resolve:"Status / Resolve",
+    r_resolve:"Resolve…", r_accept:"Accept", r_adjusted:"Adjusted", r_reject:"Reject", assign_ph:"assign…",
+    bulk_selected:"selected", bulk_as:"Bulk resolve as:", bulk_accept:"Accept all", bulk_adjusted:"Adjusted", bulk_reject:"Reject all", bulk_clear:"Clear selection",
+    // trend
+    trend_title:"Recon health trend", trend_weekly:"Weekly summary", trend_daily:"Daily grid",
+    trend_daily_hint:"Cell colour = lane-match %. Click a day to open the Daily board at that date.",
+    trend_empty:"Open a branch session to view its reconciliation health trend.",
+    tr_week:"Week", tr_pos:"POS", tr_ext:"External", tr_lane:"Lane match", tr_cov:"Amt coverage",
+    tg_matched:"≥ 99% matched", tg_partial:"60–98%", tg_low:"< 60%", tg_nodata:"No data",
+    // audit
+    audit_hd:"Audit Log", au_all:"All entities", au_session:"Session", au_disc:"Discrepancy",
+    au_pmap:"Payment map", au_line:"Line (fee/VAT)", au_upload:"Upload",
+    au_time:"Time (UTC)", au_entity:"Entity", au_id:"ID", au_action:"Action", au_field:"Field", au_change:"Change", au_by:"By",
+    audit_empty:"No audit events yet.",
+    // uploads
+    u_file:"File", u_source:"Source", u_provider:"Provider", u_branch:"Branch", u_rows:"Rows", u_delete:"Delete",
+    // setup table
+    s_poscode:"POS code", s_volume:"Volume (POS)", s_category:"Category", s_bank:"Bank / Acquirer", s_reconcile:"Reconcile",
+    // daily recon dynamics
+    d_lane_days:"pending lane-days", d_awaiting:"day(s) awaiting documents",
+    l_session:"Session", l_daily_hdr:"Daily reconciliation",
+    dt_unmatched_external:"unmatched external", dt_unmatched_pos:"unmatched POS", dt_amount_mismatch:"amount mismatch", dt_timing_diff:"timing diff",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -862,7 +934,7 @@ function renderBoard(d){
 
   // body
   const tb=document.getElementById('bd-body');
-  if(!d.branches.length){ tb.innerHTML=`<tr><td colspan="${cats.length+5}" class="text-center text-gray-400 py-8">No POS revenue recorded for ${d.day}.</td></tr>`; applyI18n(); return; }
+  if(!d.branches.length){ tb.innerHTML=`<tr><td colspan="${cats.length+5}" class="text-center text-gray-400 py-8">${t('e_no_revenue')} · ${d.day}</td></tr>`; applyI18n(); return; }
   tb.innerHTML='';
   d.branches.forEach(b=>{
     const tr=document.createElement('tr');
@@ -936,11 +1008,11 @@ function _laneLabel(cat,bank){ return cat.slice(0,4)+(bank&&bank!=='NONE'?'·'+b
 function renderDailyBoard(d){
   const ps = d.pending_summary || {coverage:{}};
   document.getElementById('daily-pending').innerHTML =
-    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} pending lane-days</span>
-     <span class="text-gray-400 ml-2">${ps.days_with_pending||0} day(s) awaiting documents</span>`;
+    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} ${t('d_lane_days')}</span>
+     <span class="text-gray-400 ml-2">${ps.days_with_pending||0} ${t('d_awaiting')}</span>`;
   document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage||{}).length
     ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
-    : '<span class="text-gray-400">No documents uploaded yet.</span>')
+    : `<span class="text-gray-400">${t('e_no_docs')}</span>`)
     + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
 
   const host=document.getElementById('daily-matrix');
@@ -1010,10 +1082,10 @@ async function renderReconcile(){
         <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
         <span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div>
       <div class="grid grid-cols-2 gap-2 text-sm">
-        <div><div class="text-xs text-gray-400">POS tender</div><div class="font-mono">${fmt(c.pos_amount)}</div></div>
-        <div><div class="text-xs text-gray-400">Statement</div><div class="font-mono">${fmt(c.ext_amount)}</div></div>
-        ${showNet?`<div><div class="text-xs text-gray-400">Net (after fee/VAT)</div><div class="font-mono">${fmt(c.ext_net)}</div></div>`:''}
-        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(c.variance)}">${varTxt(c.variance)}</div></div>
+        <div><div class="text-xs text-gray-400">${t('l_pos_tender')}</div><div class="font-mono">${fmt(c.pos_amount)}</div></div>
+        <div><div class="text-xs text-gray-400">${t('l_statement')}</div><div class="font-mono">${fmt(c.ext_amount)}</div></div>
+        ${showNet?`<div><div class="text-xs text-gray-400">${t('l_net_fee')}</div><div class="font-mono">${fmt(c.ext_net)}</div></div>`:''}
+        <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(c.variance)}">${varTxt(c.variance)}</div></div>
       </div>`;
     cont.appendChild(div);
   });
@@ -1031,12 +1103,12 @@ function renderPayouts(payouts){
   payouts.forEach(p=>{
     const div=document.createElement('div'); div.className='card';
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
-        <div class="font-semibold text-gray-800">${p.category} payout</div>
+        <div class="font-semibold text-gray-800">${p.category} ${t('payout_word')}</div>
         <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
       <div class="grid grid-cols-3 gap-2 text-sm">
-        <div><div class="text-xs text-gray-400">Report net</div><div class="font-mono">${fmt(p.report_net)}</div></div>
-        <div><div class="text-xs text-gray-400">Bank payout</div><div class="font-mono">${fmt(p.bank_payout)}</div></div>
-        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
+        <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
+        <div><div class="text-xs text-gray-400">${t('l_bank_payout')}</div><div class="font-mono">${fmt(p.bank_payout)}</div></div>
+        <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
       </div>`;
     cont.appendChild(div);
   });
@@ -1093,7 +1165,7 @@ async function loadFeeVat(){
   const src=document.getElementById('fv-source').value;
   const lines = await api(`/api/lines/${src}?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`).catch(()=>[]);
   const tb=document.getElementById('fv-body'); tb.innerHTML='';
-  if(!lines.length){ tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-6">No lines uploaded for this source</td></tr>'; return; }
+  if(!lines.length){ tb.innerHTML=`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('fv_empty')}</td></tr>`; return; }
   lines.forEach(l=>{
     FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed};
     const tr=document.createElement('tr');
@@ -1136,12 +1208,12 @@ async function loadUploads(){
   document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:' · all branches');
   let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
   const data = await api(q).catch(()=>[]);
-  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':'<tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr>';
+  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
   data.forEach(u=>{ const tr=document.createElement('tr');
     tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
       <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${u.row_count}</td>
       <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
-      <td class="text-right"><button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline">Delete</button></td>`;
+      <td class="text-right"><button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline">${t('u_delete')}</button></td>`;
     tb.appendChild(tr);
   });
 }
@@ -1184,7 +1256,7 @@ let DISC_SEL    = new Set();
 async function loadDiscrepancies(){
   const tb = document.getElementById('disc-body');
   if(!SESSION){
-    tb.innerHTML='<tr><td colspan="9" class="text-center text-gray-400 py-6">Open a session first</td></tr>';
+    tb.innerHTML=`<tr><td colspan="9" class="text-center text-gray-400 py-6">${t('e_open_session')}</td></tr>`;
     return;
   }
   // sync filter controls to DISC_FILTER state
@@ -1225,7 +1297,7 @@ function renderDiscTable(){
   // Note: we can't easily target by field with generic headers, just keep visual clean
 
   if(!sorted.length){
-    tb.innerHTML=`<tr><td colspan="9" class="text-center text-gray-400 py-6">No discrepancies${DISC_FILTER.resolution!=='all'?' with status "'+DISC_FILTER.resolution+'"':''} 🎉</td></tr>`;
+    tb.innerHTML=`<tr><td colspan="9" class="text-center text-gray-400 py-6">${t('e_no_disc')}</td></tr>`;
     return;
   }
 
@@ -1237,18 +1309,18 @@ function renderDiscTable(){
       <td class="pl-4 pr-2 py-2"><input type="checkbox" class="disc-chk" value="${d.id}" onchange="toggleDiscSel(${d.id},this.checked)"></td>
       <td class="py-1.5 font-medium">${d.category||'—'}</td>
       <td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
-      <td class="text-xs text-gray-500">${(d.disc_type||'').replace(/_/g,' ')}</td>
+      <td class="text-xs text-gray-500">${d.disc_type?t('dt_'+d.disc_type):'—'}</td>
       <td class="text-right font-mono ${varCls(d.variance)}">${varTxt(d.variance)}</td>
       <td class="text-right font-mono">${fmt(d.amount_external)}</td>
       <td class="text-right font-mono">${fmt(d.amount_pos)}</td>
-      <td><input class="inp w-28" style="font-size:12px" placeholder="assign…" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
+      <td><input class="inp w-28" style="font-size:12px" placeholder="${t('assign_ph')}" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
       <td class="text-center pr-3">
         <span class="badge ${resClass} mr-1">${d.resolution}</span>
         ${isPending?`<select class="inp" style="font-size:12px" onchange="resolveDisc(${d.id},this.value)">
-          <option value="">Resolve…</option>
-          <option value="accepted">Accept</option>
-          <option value="adjusted">Adjusted</option>
-          <option value="rejected">Reject</option>
+          <option value="">${t('r_resolve')}</option>
+          <option value="accepted">${t('r_accept')}</option>
+          <option value="adjusted">${t('r_adjusted')}</option>
+          <option value="rejected">${t('r_reject')}</option>
         </select>`:''}
       </td>`;
     tb.appendChild(tr);
@@ -1287,7 +1359,7 @@ function updateBulkBar(){
   const cnt=document.getElementById('disc-bulk-count');
   if(DISC_SEL.size){
     bar.classList.add('show');
-    if(cnt) cnt.textContent=`${DISC_SEL.size} selected`;
+    if(cnt) cnt.textContent=`${DISC_SEL.size} ${t('bulk_selected')}`;
   } else {
     bar.classList.remove('show');
   }
@@ -1327,7 +1399,7 @@ async function loadTrend(){
     `${SESSION.branch_name} · ${SESSION.period_month}`;
 
   const data = await api(`/api/sessions/${SESSION.session_id}/trend`).catch(()=>null);
-  if(!data){ document.getElementById('trend-weekly').innerHTML='<p class="text-gray-400 text-sm">No match data — run match first.</p>'; return; }
+  if(!data){ document.getElementById('trend-weekly').innerHTML=`<p class="text-gray-400 text-sm">${t('e_no_daily')}</p>`; return; }
   renderTrendWeekly(data.weekly||[]);
   renderTrendDaily(data.daily||[]);
 }
@@ -1343,12 +1415,12 @@ function pctBar(pct){
 
 function renderTrendWeekly(weekly){
   const el=document.getElementById('trend-weekly');
-  if(!weekly.length){ el.innerHTML='<p class="text-gray-400 text-sm">No data yet — run match first.</p>'; return; }
+  if(!weekly.length){ el.innerHTML=`<p class="text-gray-400 text-sm">${t('e_no_daily')}</p>`; return; }
   let html=`<table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
-    <th class="text-left pb-2">Week</th>
-    <th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th>
-    <th class="pb-2 pl-4" style="min-width:180px">Lane match</th>
-    <th class="pb-2 pl-4" style="min-width:180px">Amt coverage</th>
+    <th class="text-left pb-2">${t('tr_week')}</th>
+    <th class="text-right pb-2">${t('tr_pos')}</th><th class="text-right pb-2">${t('tr_ext')}</th>
+    <th class="pb-2 pl-4" style="min-width:180px">${t('tr_lane')}</th>
+    <th class="pb-2 pl-4" style="min-width:180px">${t('tr_cov')}</th>
   </tr></thead><tbody>`;
   weekly.forEach(w=>{
     html+=`<tr>
@@ -1366,7 +1438,7 @@ function renderTrendWeekly(weekly){
 function renderTrendDaily(daily){
   const el=document.getElementById('trend-daily');
   el.innerHTML='';
-  if(!daily.length){ el.textContent='No daily data yet.'; return; }
+  if(!daily.length){ el.textContent=t('e_no_daily'); return; }
   daily.forEach(d=>{
     const pct=d.lane_pct;
     const bg  = pct>=99?'#dcfce7':pct>=60?'#fef9c3':d.total_lanes?'#fee2e2':'#f1f5f9';
@@ -1398,16 +1470,16 @@ async function loadAudit(){
   let q=`/api/audit?limit=200`;
   if(SESSION && !AUDIT_ENTITY){
     q+=`&session_id=${SESSION.session_id}`;
-    if(scopeHint) scopeHint.textContent=`Showing events for ${SESSION.branch_name} · ${SESSION.period_month}`;
+    if(scopeHint) scopeHint.textContent=`${SESSION.branch_name} · ${SESSION.period_month}`;
   } else {
     if(AUDIT_ENTITY) q+=`&entity=${AUDIT_ENTITY}`;
-    if(scopeHint) scopeHint.textContent=AUDIT_ENTITY?`Filtered to entity: ${AUDIT_ENTITY}`:'Showing all events (no session selected)';
+    if(scopeHint) scopeHint.textContent='';
   }
 
   const data=await api(q).catch(()=>[]);
   tb.innerHTML='';
   if(!data.length){
-    tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-8">No audit events yet.</td></tr>';
+    tb.innerHTML=`<tr><td colspan="7" class="text-center text-gray-400 py-8">${t('audit_empty')}</td></tr>`;
     return;
   }
   data.forEach(row=>{
