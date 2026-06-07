@@ -287,3 +287,34 @@ CREATE TABLE IF NOT EXISTS recon_audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts     ON recon_audit_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON recon_audit_log(entity, entity_id, ts DESC);
+
+-- ─── Manual reconciliation (tick-to-match, reversible) ──────────────────────────
+-- Staff tick one-or-more POS day amounts + one-or-more statement lines that
+-- together reconcile (e.g. a lump-sum bank credit covering several days), then
+-- Match. Fully reversible: Unmatch deletes the record and frees the lines.
+CREATE TABLE IF NOT EXISTS recon_manual_match (
+    match_id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    category     TEXT NOT NULL,
+    bank         TEXT NOT NULL,
+    period_month TEXT NOT NULL,        -- 'YYYY-MM'
+    pos_amount   REAL DEFAULT 0,       -- sum of ticked POS day amounts
+    ext_amount   REAL DEFAULT 0,       -- sum of ticked statement lines
+    variance     REAL DEFAULT 0,       -- ext - pos
+    pos_days     TEXT,                 -- JSON [{"day":"YYYY-MM-DD","amount":n}]
+    note         TEXT,
+    matched_by   TEXT,
+    matched_at   TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rmm_scope
+    ON recon_manual_match(branch_id, period_month, category, bank);
+
+-- Statement lines that belong to a manual match (so it can be reversed).
+CREATE TABLE IF NOT EXISTS recon_manual_match_line (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    match_id  INTEGER NOT NULL REFERENCES recon_manual_match(match_id) ON DELETE CASCADE,
+    ext_table TEXT NOT NULL,           -- recon_bank_lines | recon_cc_lines | recon_grab_lines | recon_lineman_lines
+    ext_id    INTEGER NOT NULL,
+    amount    REAL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_rmml_match ON recon_manual_match_line(match_id);

@@ -13,6 +13,7 @@ Environment:
 from __future__ import annotations
 import hashlib
 import hmac
+import json
 import os
 import re
 import sqlite3
@@ -31,7 +32,9 @@ from .matcher import (
     category_reconciliation,
     daily_board,
     daily_reconciliation,
+    lane_ext_lines,
     lane_lines,
+    lane_pos_days,
     payout_reconciliation,
     pos_codes_scope,
     run_auto_match,
@@ -1153,6 +1156,108 @@ def drill(branch_id: int, category: str | None = None, bank: str | None = None,
             "pos_total": pos_total, "ext_total": ext_total,
             "variance": round(ext_total - pos_total, 2),
         }
+
+
+# ── Manual reconciliation (tick-to-match, reversible) ──────────────────────────
+
+_EXT_TABLES = {"recon_bank_lines", "recon_cc_lines", "recon_grab_lines", "recon_lineman_lines"}
+
+
+class ManualMatch(BaseModel):
+    branch_id:    int
+    category:     str
+    bank:         str
+    period_month: str
+    pos_days:     list[dict] = []   # [{day, amount}]
+    ext:          list[dict] = []   # [{table, id, amount}]
+    note:         str = ""
+    matched_by:   str = ""
+
+
+@app.get("/api/manual")
+def manual_list(branch_id: int, category: str, bank: str, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        pos = lane_pos_days(conn, branch_id, period_month, category, bank)
+        ext = lane_ext_lines(conn, branch_id, period_month, category, bank)
+
+        matches, consumed = [], {}
+        for m in conn.execute(
+            "SELECT * FROM recon_manual_match WHERE branch_id=? AND period_month=? "
+            "AND category=? AND bank=? ORDER BY matched_at DESC",
+            (branch_id, period_month, category, bank)):
+            pd = json.loads(m["pos_days"] or "[]")
+            for x in pd:
+                consumed[x["day"]] = consumed.get(x["day"], 0.0) + float(x.get("amount") or 0)
+            lines = [dict(r) for r in conn.execute(
+                "SELECT ext_table, ext_id, amount FROM recon_manual_match_line WHERE match_id=?",
+                (m["match_id"],))]
+            matches.append({**dict(m), "pos_days": pd, "lines": lines})
+
+        for d in pos:
+            d["consumed"]  = round(consumed.get(d["day"], 0.0), 2)
+            d["remaining"] = round(d["total"] - d["consumed"], 2)
+
+        return {"branch_id": branch_id, "category": category, "bank": bank,
+                "period_month": period_month, "pos_days": pos, "ext_lines": ext,
+                "matches": matches}
+
+
+@app.post("/api/manual", dependencies=[Depends(require_write_token)])
+def manual_create(body: ManualMatch):
+    _validate_period(body.period_month)
+    if not body.pos_days or not body.ext:
+        raise HTTPException(400, "Tick at least one POS day and one statement line.")
+    pos_amount = round(sum(float(x.get("amount") or 0) for x in body.pos_days), 2)
+    ext_amount = round(sum(float(x.get("amount") or 0) for x in body.ext), 2)
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.period_month)
+        cur = conn.execute("""
+            INSERT INTO recon_manual_match
+                (branch_id, category, bank, period_month, pos_amount, ext_amount,
+                 variance, pos_days, note, matched_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+        """, (body.branch_id, body.category, body.bank, body.period_month,
+              pos_amount, ext_amount, round(ext_amount - pos_amount, 2),
+              json.dumps(body.pos_days), body.note, body.matched_by or "staff"))
+        mid = cur.lastrowid
+        for e in body.ext:
+            tbl = e.get("table")
+            if tbl not in _EXT_TABLES:
+                raise HTTPException(400, f"bad ext table {tbl!r}")
+            eid = int(e.get("id"))
+            conn.execute("INSERT INTO recon_manual_match_line (match_id, ext_table, ext_id, amount) "
+                         "VALUES (?,?,?,?)", (mid, tbl, eid, float(e.get("amount") or 0)))
+            conn.execute(f"UPDATE {tbl} SET match_status='manual' WHERE id=?", (eid,))
+        _audit(conn, "manual_match", mid, "create", body.matched_by or "staff",
+               [{"field": "match", "old": None,
+                 "new": f"POS {pos_amount:.0f} ↔ EXT {ext_amount:.0f} (var {ext_amount-pos_amount:.0f})"}])
+        conn.commit()
+    return {"match_id": mid, "pos_amount": pos_amount, "ext_amount": ext_amount,
+            "variance": round(ext_amount - pos_amount, 2)}
+
+
+@app.delete("/api/manual/{match_id}", dependencies=[Depends(require_write_token)])
+def manual_delete(match_id: int):
+    with get_db() as conn:
+        m = conn.execute("SELECT branch_id, period_month FROM recon_manual_match WHERE match_id=?",
+                         (match_id,)).fetchone()
+        if not m:
+            raise HTTPException(404)
+        _assert_period_open(conn, m["branch_id"], m["period_month"])
+        for ln in conn.execute("SELECT ext_table, ext_id FROM recon_manual_match_line WHERE match_id=?",
+                               (match_id,)):
+            if ln["ext_table"] in _EXT_TABLES:
+                conn.execute(f"UPDATE {ln['ext_table']} SET match_status='unmatched' "
+                             f"WHERE id=? AND match_status='manual'", (ln["ext_id"],))
+        conn.execute("DELETE FROM recon_manual_match_line WHERE match_id=?", (match_id,))
+        conn.execute("DELETE FROM recon_manual_match WHERE match_id=?", (match_id,))
+        _audit(conn, "manual_match", match_id, "delete", "staff",
+               [{"field": "match", "old": "matched", "new": None}])
+        conn.commit()
+    return {"deleted": match_id}
 
 
 # ── Cross-branch overview ─────────────────────────────────────────────────────

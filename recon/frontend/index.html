@@ -562,7 +562,70 @@
           </table>
         </div>
       </div>
-      <div class="text-xs text-gray-400 px-1" data-i18n="drill_manual_hint">Manual reconciliation (for lump-sum amounts) is coming in the next step</div>
+      <div class="px-1">
+        <button id="drill-manual-btn" onclick="openManualFromDrill()" class="btn btn-sec" style="display:none">
+          🔗 <span data-i18n="manual_match_btn">Manual match (lump sum)</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- MANUAL RECONCILIATION (tick-to-match, opened from the drill page) -->
+    <div id="tab-manual" class="tab-pane hidden space-y-4">
+      <div class="card" style="padding:14px 18px">
+        <div class="flex items-center gap-4 flex-wrap">
+          <button onclick="manualBack()" class="btn btn-sec" style="padding:6px 12px" data-i18n="drill_back">← Back</button>
+          <div>
+            <div class="text-xs text-gray-400" data-i18n="manual_title">Manual reconciliation</div>
+            <div id="manual-scope" class="font-semibold text-gray-800"></div>
+          </div>
+        </div>
+        <div class="text-xs text-gray-500 mt-2" data-i18n="manual_hint">Tick POS days and statement lines that add up to each other, then Match (reversible)</div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <!-- POS by day -->
+        <div class="card overflow-x-auto" style="padding:0">
+          <div class="font-semibold text-gray-700" style="padding:14px 16px 0" data-i18n="manual_pos_hd">POS by day</div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="pl-4 pr-2" style="width:34px"></th>
+              <th class="text-left" data-i18n="th_date">Date</th>
+              <th class="text-right" data-i18n="manual_remaining">Remaining</th>
+            </tr></thead>
+            <tbody id="manual-pos"></tbody>
+          </table>
+        </div>
+        <!-- Statement lines -->
+        <div class="card overflow-x-auto" style="padding:0">
+          <div class="font-semibold text-gray-700" style="padding:14px 16px 0" data-i18n="manual_ext_hd">Statement lines</div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="pl-4 pr-2" style="width:34px"></th>
+              <th class="text-left" data-i18n="th_date">Date</th>
+              <th class="text-left" data-i18n="th_ref">Ref</th>
+              <th class="text-right" data-i18n="lane_amount">Amount</th>
+            </tr></thead>
+            <tbody id="manual-ext"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- existing manual matches -->
+      <div class="card overflow-x-auto" style="padding:0">
+        <div class="font-semibold text-gray-700" style="padding:14px 16px 0" data-i18n="manual_existing">Matched records</div>
+        <table class="w-full text-sm">
+          <tbody id="manual-matches"></tbody>
+        </table>
+      </div>
+
+      <!-- sticky tick-to-match action bar -->
+      <div id="manual-bar" style="display:none;position:sticky;bottom:0;background:#fff;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 -2px 10px rgba(0,0,0,.08);padding:10px 16px;align-items:center;gap:16px;flex-wrap:wrap;z-index:10">
+        <span class="text-sm"><span data-i18n="manual_pos_sel">POS ticked</span>: <b id="manual-pos-sum" class="font-mono">0</b></span>
+        <span class="text-sm"><span data-i18n="manual_ext_sel">Statement ticked</span>: <b id="manual-ext-sum" class="font-mono">0</b></span>
+        <span class="text-sm"><span data-i18n="manual_diff">Difference</span>: <b id="manual-diff" class="font-mono">0</b></span>
+        <input id="manual-note" class="inp" style="flex:1;min-width:140px" placeholder="note (optional)" data-i18n-ph="manual_note_ph">
+        <button id="manual-do" onclick="doManualMatch(event)" class="btn btn-pri" data-i18n="manual_do">Match</button>
+      </div>
     </div>
 
     <!-- SETUP -->
@@ -829,6 +892,16 @@ const I18N = {
     bankd_KTB:"ธนาคารกรุงไทย", bankd_KBANK:"ธนาคารกสิกรไทย", bankd_KTC:"เคทีซี (ผู้รับบัตรเครดิต)",
     bankd_PROMPTPAY:"พร้อมเพย์", bankd_NONE:"ไม่เกี่ยวกับธนาคาร (เช่น เงินสด/คูปอง)",
     bankd_UNKNOWN:"ยังไม่ระบุ — ต้องตั้งค่าก่อนกระทบยอด",
+    // manual reconciliation (tick-to-match)
+    manual_title:"กระทบยอดเอง", manual_match_btn:"จับคู่เอง (Lump sum)",
+    manual_hint:"เลือกยอด POS รายวัน และรายการในเอกสารที่รวมกันแล้วตรงกัน แล้วกด “จับคู่” (ย้อนกลับได้)",
+    manual_pos_hd:"ยอด POS รายวัน", manual_ext_hd:"รายการในเอกสาร",
+    manual_remaining:"คงเหลือ", manual_pos_sel:"POS ที่เลือก", manual_ext_sel:"เอกสารที่เลือก",
+    manual_diff:"ส่วนต่าง", manual_do:"จับคู่", manual_unmatch:"ยกเลิก",
+    manual_existing:"รายการที่จับคู่แล้ว", manual_none_pos:"ไม่มียอด POS รายวัน",
+    manual_none_ext:"ไม่มีรายการในเอกสาร (รอเอกสาร)", manual_none_matches:"ยังไม่มีการจับคู่เอง",
+    manual_done:"จับคู่แล้ว", manual_undone:"ยกเลิกการจับคู่แล้ว", manual_note_ph:"หมายเหตุ (ไม่บังคับ)",
+    manual_matched_badge:"จับคู่แล้ว",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
@@ -931,6 +1004,16 @@ const I18N = {
     bankd_KTB:"Krungthai Bank", bankd_KBANK:"Kasikornbank", bankd_KTC:"KTC (card acquirer)",
     bankd_PROMPTPAY:"PromptPay", bankd_NONE:"Not bank-related (e.g. cash/coupon)",
     bankd_UNKNOWN:"Not set — map before it can reconcile",
+    // manual reconciliation (tick-to-match)
+    manual_title:"Manual reconciliation", manual_match_btn:"Manual match (lump sum)",
+    manual_hint:"Tick POS days and statement lines that add up to each other, then “Match” (reversible)",
+    manual_pos_hd:"POS by day", manual_ext_hd:"Statement lines",
+    manual_remaining:"Remaining", manual_pos_sel:"POS ticked", manual_ext_sel:"Statement ticked",
+    manual_diff:"Difference", manual_do:"Match", manual_unmatch:"Unmatch",
+    manual_existing:"Matched records", manual_none_pos:"No POS day amounts",
+    manual_none_ext:"No statement lines (awaiting document)", manual_none_matches:"No manual matches yet",
+    manual_done:"Matched", manual_undone:"Unmatched", manual_note_ph:"note (optional)",
+    manual_matched_badge:"matched",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -1179,8 +1262,10 @@ function boardUpload(branch_id){
 let DRILL_BACK = 'board';
 const MAP_BADGE = {CASH:'b-mut', QR:'b-ok', TRANSFER:'b-ok', CREDIT:'b-ok', GRAB:'b-ok', LINEMAN:'b-ok', COUPON:'b-mut'};
 
+let DRILL_CTX = null;
 async function openDrill(branch_id, scope, back){
   DRILL_BACK = back || 'board';
+  DRILL_CTX = {branch_id, scope, back:DRILL_BACK};
   switchTab('drill');
   const host=document.getElementById('drill-codes');
   host.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
@@ -1238,7 +1323,117 @@ function renderDrill(d, scope){
     const tot=d.ext_lines.reduce((s,l)=>s+(l.amount||0),0);
     lt.innerHTML+=`<tr class="font-semibold" style="background:#f8fafc"><td colspan="3">${d.ext_lines.length}</td><td class="text-right font-mono">${fmt(tot)}</td></tr>`;
   }
+  // manual-match button: only meaningful for a real lane that has an external source
+  const mb=document.getElementById('drill-manual-btn');
+  mb.style.display = (d.category && d.category!=='COUPON') ? '' : 'none';
   applyI18n();
+}
+
+// ── manual reconciliation (tick-to-match, reversible) ──────────────────────────
+let MANUAL_BACK = 'drill';
+let MANUAL_CTX = null;            // {branch_id, category, bank, period_month}
+let MANUAL_POS = new Map();       // day -> amount (ticked)
+let MANUAL_EXT = new Map();       // "table:id" -> amount (ticked)
+
+function openManualFromDrill(){
+  if(!DRILL_CTX) return;
+  const s=DRILL_CTX.scope;
+  const pm = s.period_month || (s.day ? s.day.slice(0,7) : null);
+  openManual(DRILL_CTX.branch_id, s.category, s.bank || 'NONE', pm, 'drill');
+}
+async function openManual(branch_id, category, bank, period_month, back){
+  MANUAL_BACK = back || 'drill';
+  MANUAL_CTX = {branch_id, category, bank, period_month};
+  MANUAL_POS.clear(); MANUAL_EXT.clear();
+  switchTab('manual');
+  document.getElementById('manual-pos').innerHTML=`<tr><td colspan="3" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
+  await loadManual();
+}
+function manualBack(){ switchTab(MANUAL_BACK); }
+
+async function loadManual(){
+  const c=MANUAL_CTX; if(!c) return;
+  const q=`/api/manual?branch_id=${c.branch_id}&category=${encodeURIComponent(c.category)}&bank=${encodeURIComponent(c.bank)}&period_month=${c.period_month}`;
+  let d; try{ d=await api(q); }catch(e){ toast(e.message,'err'); return; }
+  const laneTxt=`${c.category}${c.bank&&c.bank!=='NONE'?'·'+c.bank:''}`;
+  document.getElementById('manual-scope').textContent=`${BRANCHES.find(b=>b.branch_id==c.branch_id)?.name||''} · ${c.period_month} · ${laneTxt}`;
+
+  // POS days (remaining > 0 are tickable; fully-consumed are shown muted)
+  const pt=document.getElementById('manual-pos');
+  if(!d.pos_days.length){ pt.innerHTML=`<tr><td colspan="3" class="text-center text-gray-400 py-6">${t('manual_none_pos')}</td></tr>`; }
+  else pt.innerHTML=d.pos_days.map(p=>{
+    const done=p.remaining<1;
+    return `<tr style="${done?'opacity:.5':''}">
+      <td class="pl-4 pr-2"><input type="checkbox" ${done?'disabled':''} onchange="manualTogglePos('${p.day}',${p.remaining},this.checked)"></td>
+      <td>${p.day}${p.consumed>0?` <span class="text-xs text-gray-400">(−${fmt(p.consumed)})</span>`:''}</td>
+      <td class="text-right font-mono">${fmt(p.remaining)}</td></tr>`;
+  }).join('');
+
+  // statement lines (already-manual ones shown as matched, not tickable)
+  const et=document.getElementById('manual-ext');
+  if(!d.ext_lines.length){ et.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('manual_none_ext')}</td></tr>`; }
+  else et.innerHTML=d.ext_lines.map(l=>{
+    const used=l.match_status==='manual';
+    const key=`${l.table}:${l.id}`;
+    return `<tr style="${used?'opacity:.5':''}">
+      <td class="pl-4 pr-2"><input type="checkbox" ${used?'disabled':''} onchange="manualToggleExt('${l.table}',${l.id},${l.amount},this.checked)"></td>
+      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}${used?` <span class="badge b-ok">${t('manual_matched_badge')}</span>`:''}</td>
+      <td class="text-right font-mono">${fmt(l.amount)}</td></tr>`;
+  }).join('');
+
+  // existing manual matches
+  const mt=document.getElementById('manual-matches');
+  if(!d.matches.length){ mt.innerHTML=`<tr><td class="text-center text-gray-400 py-6">${t('manual_none_matches')}</td></tr>`; }
+  else mt.innerHTML=d.matches.map(m=>{
+    const days=(m.pos_days||[]).map(x=>x.day.slice(8)).join(', ');
+    return `<tr class="border-b">
+      <td class="pl-4 py-2 text-sm">
+        <div><span class="text-gray-400">POS</span> <span class="font-mono">${fmt(m.pos_amount)}</span>
+          <span class="text-gray-400 mx-1">↔</span>
+          <span class="text-gray-400">EXT</span> <span class="font-mono">${fmt(m.ext_amount)}</span>
+          <span class="font-mono ${varCls(m.variance)} ml-2">(${varTxt(m.variance)})</span></div>
+        <div class="text-xs text-gray-400">วัน/days: ${days||'—'} · ${m.lines.length} line(s)${m.note?` · ${m.note}`:''} · ${m.matched_by||''}</div>
+      </td>
+      <td class="text-right pr-4"><button onclick="unmatchManual(${m.match_id})" class="text-xs text-red-500 hover:underline">${t('manual_unmatch')}</button></td>
+    </tr>`;
+  }).join('');
+
+  updateManualBar();
+  applyI18n();
+}
+
+function manualTogglePos(day, amount, on){ if(on) MANUAL_POS.set(day,amount); else MANUAL_POS.delete(day); updateManualBar(); }
+function manualToggleExt(table, id, amount, on){ const k=`${table}:${id}`; if(on) MANUAL_EXT.set(k,amount); else MANUAL_EXT.delete(k); updateManualBar(); }
+
+function updateManualBar(){
+  const bar=document.getElementById('manual-bar');
+  const ps=[...MANUAL_POS.values()].reduce((s,v)=>s+v,0);
+  const es=[...MANUAL_EXT.values()].reduce((s,v)=>s+v,0);
+  document.getElementById('manual-pos-sum').textContent=fmt(ps);
+  document.getElementById('manual-ext-sum').textContent=fmt(es);
+  const diff=es-ps; const dEl=document.getElementById('manual-diff');
+  dEl.textContent=varTxt(diff); dEl.className='font-mono '+varCls(diff);
+  document.getElementById('manual-do').disabled = !(MANUAL_POS.size && MANUAL_EXT.size);
+  bar.style.display = (MANUAL_POS.size || MANUAL_EXT.size) ? 'flex' : 'none';
+}
+
+async function doManualMatch(ev){
+  const c=MANUAL_CTX; if(!c || !MANUAL_POS.size || !MANUAL_EXT.size) return;
+  const pos_days=[...MANUAL_POS.entries()].map(([day,amount])=>({day,amount}));
+  const ext=[...MANUAL_EXT.entries()].map(([k,amount])=>{ const [table,id]=k.split(':'); return {table,id:+id,amount}; });
+  await withBusy(ev&&ev.target, '…', async ()=>{
+    try{
+      const note=document.getElementById('manual-note').value;
+      await api('/api/manual',{method:'POST',json:{...c, pos_days, ext, note, matched_by:'staff'}});
+      toast(t('manual_done'),'ok');
+      MANUAL_POS.clear(); MANUAL_EXT.clear(); document.getElementById('manual-note').value='';
+      await loadManual();
+    }catch(e){ toast(e.message,'err'); }
+  });
+}
+async function unmatchManual(id){
+  try{ await api('/api/manual/'+id,{method:'DELETE'}); toast(t('manual_undone'),'ok'); await loadManual(); }
+  catch(e){ toast(e.message,'err'); }
 }
 
 // ── daily board ──────────────────────────────────────────────────────────────

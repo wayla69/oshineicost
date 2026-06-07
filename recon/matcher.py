@@ -607,6 +607,67 @@ def daily_reconciliation(conn, branch_id, period_month):
 _BOARD_CAT_ORDER = ["CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"]
 
 
+def lane_pos_days(conn, branch_id, period_month, category, bank):
+    """Per-day POS totals for one (category, bank) lane in a month — the POS side
+    of the manual tick-to-match screen."""
+    pmap = {r["payment_code_norm"]: r for r in conn.execute(
+        "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+    days: dict = {}
+    for r in conn.execute(
+        "SELECT day, payment_code, SUM(amount) amt FROM pos_payment_day "
+        "WHERE branch_id=? AND substr(day,1,7)=? GROUP BY day, payment_code",
+        (branch_id, period_month)):
+        m = pmap.get(normalize(r["payment_code"]))
+        if not m or not m["reconcile"]:
+            continue
+        if m["category"] != category or m["bank"] != bank:
+            continue
+        days[r["day"]] = days.get(r["day"], 0.0) + float(r["amt"] or 0)
+    return [{"day": d, "total": round(v, 2)} for d, v in sorted(days.items())]
+
+
+def lane_ext_lines(conn, branch_id, period_month, category, bank):
+    """Statement lines for one (category, bank) lane in a month, WITH table+id+
+    match_status so the manual matcher can tick and reverse them."""
+    out = []
+    def add(table, lid, date, ref, detail, amount, ms):
+        out.append({"table": table, "id": lid, "date": date, "ref": ref or "",
+                    "detail": detail or "", "amount": round(float(amount or 0), 2),
+                    "match_status": ms})
+
+    if category in ("CASH", "QR", "TRANSFER"):
+        chan = {"CASH": "CASH_DEP", "QR": "QR", "TRANSFER": "TRANSFER"}[category]
+        for r in conn.execute("""
+            SELECT l.id, l.txn_date d, l.description ref, l.credit amt, l.match_status ms, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0 AND l.channel=? AND strftime('%Y-%m',l.txn_date)=?
+            ORDER BY l.txn_date""", (branch_id, chan, period_month)):
+            rb = "NONE" if category == "CASH" else _provider_bank(r["provider"])
+            if rb != bank:
+                continue
+            add("recon_bank_lines", r["id"], r["d"], r["ref"], r["provider"], r["amt"], r["ms"])
+    elif category == "CREDIT":
+        for r in conn.execute("""
+            SELECT l.id, l.settlement_date d, l.batch_no ref, l.gross_amount amt,
+                   l.acquirer, l.match_status ms, u.provider
+            FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND strftime('%Y-%m',l.settlement_date)=?
+            ORDER BY l.settlement_date""", (branch_id, period_month)):
+            acq = r["acquirer"] or _provider_acquirer(r["provider"])
+            if acq != bank:
+                continue
+            add("recon_cc_lines", r["id"], r["d"], r["ref"], acq, r["amt"], r["ms"])
+    elif category in ("GRAB", "LINEMAN"):
+        table = "recon_grab_lines" if category == "GRAB" else "recon_lineman_lines"
+        for r in conn.execute(f"""
+            SELECT id, order_date d, order_id ref, food_amount amt, order_status, match_status ms
+            FROM {table} WHERE branch_id=? AND order_status='Completed'
+              AND strftime('%Y-%m',order_date)=? ORDER BY order_date""",
+            (branch_id, period_month)):
+            add(table, r["id"], r["d"], r["ref"], r["order_status"], r["amt"], r["ms"])
+    return out
+
+
 def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
                     day: str | None = None, period_month: str | None = None):
     """POS payment codes for a branch on one day (or month), each tagged with its
