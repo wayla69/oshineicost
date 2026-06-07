@@ -1,26 +1,52 @@
-# fly.toml — Oshinei Dashboard
-# App name is set on first `fly launch`; adjust if it clashes.
-app = "oshinei-dashboard"
-primary_region = "sin"   # Singapore — closest to Thailand
+# fly.toml — Oshinei Dashboard + Revenue Reconciliation
+# ONE machine runs both apps (Dockerfile start.sh) so they share the single
+# oshinei_data volume and oshinei.db file — a Fly volume attaches to only one
+# machine, so the two apps cannot be split into separate process groups.
+#
+# Dashboard  →  https://oshinei-dashboard.fly.dev        (port 443  → :8080)
+# Recon app  →  https://oshinei-dashboard.fly.dev:8443   (port 8443 → :8001)
+
+app            = "oshinei-dashboard"
+primary_region = "sin"
 
 [build]
 
 [env]
   OSHINEI_DB = "/data/oshinei.db"
-  PORT = "8080"
+  PORT       = "8080"
 
-# Persistent disk for the SQLite database (survives redeploys/restarts)
+# Single persistent volume, single machine
 [[mounts]]
-  source = "oshinei_data"
+  source      = "oshinei_data"
   destination = "/data"
 
-[http_service]
-  internal_port = 8080
-  force_https = true
-  auto_stop_machines = "stop"     # scale to zero when idle → keeps cost ~$0
-  auto_start_machines = true
+# ── Dashboard service (default process group) ──────────────────────────────────
+[[services]]
+  internal_port        = 8080
+  protocol             = "tcp"
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
   min_machines_running = 0
 
+  [[services.ports]]
+    handlers = ["http"]
+    port     = 80
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port     = 443
+
+# ── Reconciliation service (same machine, port 8001) ──────────────────────────
+[[services]]
+  internal_port        = 8001
+  protocol             = "tcp"
+  auto_stop_machines   = "stop"
+  auto_start_machines  = true
+  min_machines_running = 0
+
+  [[services.ports]]
+    handlers = ["tls", "http"]
+    port     = 8443
+
 [[vm]]
-  size = "shared-cpu-1x"
-  memory = "512mb"                 # matplotlib/reportlab + 256MiB mmap headroom
+  size   = "shared-cpu-1x"
+  memory = "1024mb"   # two apps share one machine (dashboard matplotlib + recon openpyxl)

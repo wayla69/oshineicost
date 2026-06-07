@@ -538,20 +538,24 @@ def parse_es_typeb_xlsx(path: Path, period_hint: str) -> dict:
             sold_iso = str(sold_at).strip()
 
         current_txns.append((
-            label0,                                            # receipt_no
-            sold_iso,
-            cell_str(r, 6),                                    # cashier
-            cell_str(r, 11),                                   # table_no
-            cell_int(r, 14),                                   # customer_count
-            cell_num(r, 15),                                   # food
-            cell_num(r, 17),                                   # drink
-            cell_num(r, 19),                                   # other
-            cell_num(r, 23),                                   # tip
-            cell_num(r, 24),                                   # sp_discount
-            cell_num(r, 26),                                   # discount
-            cell_num(r, 27),                                   # service_charge
-            cell_num(r, 33),                                   # total_inc_vat  (t[12])
-            cell_num(r, 29),                                   # total_exc_tax (ex-VAT net, t[13])
+            label0,                                            # receipt_no        t[0]
+            sold_iso,                                          #                   t[1]
+            cell_str(r, 6),                                    # cashier           t[2]
+            cell_str(r, 11),                                   # table_no          t[3]
+            cell_int(r, 14),                                   # customer_count    t[4]
+            cell_num(r, 15),                                   # food              t[5]
+            cell_num(r, 17),                                   # drink             t[6]
+            cell_num(r, 19),                                   # other             t[7]
+            cell_num(r, 23),                                   # tip               t[8]
+            cell_num(r, 24),                                   # sp_discount       t[9]
+            cell_num(r, 26),                                   # discount          t[10]
+            cell_num(r, 27),                                   # service_charge    t[11]
+            cell_num(r, 33),                                   # total_inc_vat     t[12]
+            cell_num(r, 29),                                   # total_exc_tax     t[13]
+            cell_num(r, 34),                                   # pay_cash (เงินสด) t[14]
+            cell_num(r, 36),                                   # pay_credit_card   t[15]
+            cell_num(r, 39),                                   # pay_entertain     t[16]
+            cell_num(r, 40),                                   # pay_other         t[17] — verify: QR/transfer?
         ))
 
     flush()
@@ -591,11 +595,14 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
         agg_svc   = 0.0
         agg_cust  = 0
         n_tx      = 0
+        agg_cash  = 0.0
+        agg_cc    = 0.0
+        agg_other = 0.0   # col 40 — see VERIFY note below
 
         for t in txns:
             (receipt_no, sold_at, cashier, table_no, cust,
              food, drink, other, tip, sp_disc, discount, svc, total_iv,
-             total_ex) = t
+             total_ex, pay_cash, pay_cc, pay_entertain, pay_other) = t
 
             cur.execute(
                 """INSERT OR REPLACE INTO sales_transaction
@@ -613,6 +620,9 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
             agg_svc   += svc
             agg_cust  += cust
             n_tx      += 1
+            agg_cash  += pay_cash
+            agg_cc    += pay_cc
+            agg_other += pay_other
 
         # Upsert sales_month_summary
         cur.execute(
@@ -623,6 +633,8 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
         # Use total_exc_tax (col 29, t[13]); fall back to inc-VAT/1.07 only if
         # the ex-VAT column is missing/zero for a row.
         net_sales = sum((t[13] if t[13] else t[12] / 1.07) for t in txns)
+        # VERIFY: col 40 (pay_other / other_pay) is mapped to qr below.
+        # If it contains bank transfer or a mix, split accordingly after inspection.
         cur.execute(
             """INSERT INTO sales_month_summary
                (branch_id, period_month, gross_sales, refunds, discounts,
@@ -633,12 +645,13 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
              round(agg_gross, 2), 0.0,
              round(agg_disc, 2), 0.0,
              round(net_sales, 2),
-             0.0, 0.0, 0.0, 0.0, 0.0,
+             round(agg_cash, 2), round(agg_cc, 2), 0.0, round(agg_other, 2), 0.0,
              agg_cust, n_tx, SOURCE),
         )
         summ_rows += 1
 
-        print(f"  [ES-B] {filename} | {branch:<24} {period} | tx={n_tx:>6} cust={agg_cust:>7} gross={agg_gross:>14,.0f}")
+        print(f"  [ES-B] {filename} | {branch:<24} {period} | tx={n_tx:>6} cust={agg_cust:>7} gross={agg_gross:>14,.0f} "
+              f"cash={agg_cash:>12,.0f} cc={agg_cc:>12,.0f} other(col40)={agg_other:>12,.0f}")
 
     con.commit()
     return tx_rows, summ_rows

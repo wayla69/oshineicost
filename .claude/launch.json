@@ -24,6 +24,22 @@
       ],
       "cwd": "${workspaceFolder}/docs",
       "port": 8011
+    },
+    {
+      "name": "recon",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "recon.main:app",
+        "--port",
+        "8014"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OSHINEI_DB": "backend/oshinei.db"
+      },
+      "port": 8014
     }
   ]
 }

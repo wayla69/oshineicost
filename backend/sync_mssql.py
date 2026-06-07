@@ -266,6 +266,21 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
         [(bid_map.get(r["bid"]), r["ym"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_payment_month: {len(rows)} groups")
 
+    # ── pos_payment_day: daily payment mix (powers daily reconciliation) ──
+    # Same query as pos_payment_month but grouped by day (char(10)) instead of
+    # month (char(7)). Lets the recon app reconcile POS tender vs bank/CC/Grab/
+    # Lineman per day. Volume ~ branches × days × codes (small).
+    sq.executescript("DROP TABLE IF EXISTS pos_payment_day; CREATE TABLE pos_payment_day("
+                     "branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT);")
+    rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, p.PaymentCode pc,
+                 SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
+                 FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
+                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), p.PaymentCode""")
+    sq.executemany("INSERT INTO pos_payment_day VALUES(?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_ppd ON pos_payment_day(branch_id, day)")
+    print(f"        pos_payment_day: {len(rows)} groups")
+
     # ── pos_table_turn_day: turnover / dwell ──
     sq.executescript("DROP TABLE IF EXISTS pos_table_turn_day; CREATE TABLE pos_table_turn_day("
                      "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")

@@ -124,6 +124,50 @@ import os as _os_db
 DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 
 
+def _carry_forward_recon(live_path: str, inc_path: str) -> None:
+    """Copy reconciliation tables (recon_*) from the live DB into a staged
+    refresh before it replaces the live DB.
+
+    recon_* tables live in the shared oshinei.db but are NOT produced by the
+    MSSQL sync, so a wholesale swap would wipe all staff reconciliation work
+    (uploads, payment-code maps, bank/acquirer registries, sessions,
+    discrepancies). We recreate each table with its full DDL (preserving PK /
+    UNIQUE / CHECK / FK and explicit indexes) and copy its rows.
+    """
+    if not _os_db.path.exists(live_path):
+        return
+    live = sqlite3.connect(live_path)
+    try:
+        objs = live.execute(
+            "SELECT type, name, sql FROM sqlite_master "
+            "WHERE sql IS NOT NULL AND ("
+            "  (type='table' AND name     LIKE 'recon\\_%' ESCAPE '\\') OR "
+            "  (type='index' AND tbl_name LIKE 'recon\\_%' ESCAPE '\\'))"
+            "ORDER BY (type='index')"            # tables first, then their indexes
+        ).fetchall()
+        if not any(o[0] == "table" for o in objs):
+            return
+        dest = sqlite3.connect(inc_path)
+        try:
+            dest.execute("PRAGMA foreign_keys=OFF")
+            for typ, name, sql in objs:
+                if typ == "table":
+                    dest.execute(f'DROP TABLE IF EXISTS "{name}"')
+                    dest.execute(sql)
+                    rows = live.execute(f'SELECT * FROM "{name}"').fetchall()
+                    if rows:
+                        ph = ",".join("?" * len(rows[0]))
+                        dest.executemany(f'INSERT INTO "{name}" VALUES ({ph})', rows)
+                else:
+                    dest.execute(f'DROP INDEX IF EXISTS "{name}"')
+                    dest.execute(sql)
+            dest.commit()
+        finally:
+            dest.close()
+    finally:
+        live.close()
+
+
 def _maybe_swap_incoming_db():
     """Apply a staged DB refresh at startup, before any connection is opened.
 
@@ -151,6 +195,11 @@ def _maybe_swap_incoming_db():
         try: inc.unlink()
         except OSError: pass
         return
+    # Carry forward reconciliation tables so a data refresh never wipes them.
+    try:
+        _carry_forward_recon(str(DB_PATH), str(inc))
+    except Exception:
+        pass
     # Discard stale WAL/SHM of the OLD db, then atomically replace it.
     for suf in ("-wal", "-shm"):
         try: _os_db.remove(str(DB_PATH) + suf)

@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei – Revenue Reconciliation</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root {
+    --brand:#e85d04; --brand-light:#fff1e6;
+    --ok:#16a34a; --warn:#d97706; --danger:#dc2626; --muted:#6b7280;
+    --sidebar:#1e293b; --sidebar-hover:rgba(255,255,255,.06); --sidebar-active:rgba(232,93,4,.12);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family:'Segoe UI', system-ui, sans-serif; background:#f8fafc; display:flex; min-height:100vh; margin:0; }
+
+  /* ── sidebar ─────────────────────────── */
+  #sidebar { width:220px; background:var(--sidebar); min-height:100vh; display:flex; flex-direction:column; flex-shrink:0; position:sticky; top:0; max-height:100vh; overflow-y:auto; }
+  #sidebar-logo { padding:20px 18px 16px; border-bottom:1px solid rgba(255,255,255,.07); }
+  #sidebar-logo .app-icon { font-size:24px; line-height:1; }
+  #sidebar-logo .app-name { color:#f1f5f9; font-weight:700; font-size:15px; margin-top:8px; }
+  #sidebar-logo .app-sub  { color:#475569; font-size:11px; margin-top:3px; line-height:1.4; }
+  #sidebar-nav { flex:1; padding:10px 8px; }
+  .side-section { font-size:10px; text-transform:uppercase; letter-spacing:.8px; color:#334155; padding:10px 10px 4px; }
+  .side-btn {
+    display:flex; align-items:center; gap:10px; width:100%; padding:9px 10px;
+    border-radius:7px; font-size:13px; color:#94a3b8; text-align:left;
+    transition:all .15s; border:none; background:none; cursor:pointer; position:relative;
+  }
+  .side-btn:hover { background:var(--sidebar-hover); color:#cbd5e1; }
+  .side-btn.active { background:var(--sidebar-active); color:#fff; font-weight:600; border-left:3px solid var(--brand); padding-left:7px; }
+  .side-btn .icon { font-size:14px; width:18px; flex-shrink:0; text-align:center; }
+  .side-badge { margin-left:auto; font-size:10px; font-weight:700; padding:1px 7px; border-radius:999px; }
+  #sidebar-footer { padding:12px 14px; border-top:1px solid rgba(255,255,255,.07); display:flex; gap:6px; }
+
+  /* ── main area ────────────────────────── */
+  #main-wrap { flex:1; display:flex; flex-direction:column; min-width:0; }
+  #ctxbar { background:#fff; border-bottom:1px solid #e2e8f0; padding:10px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; position:sticky; top:0; z-index:20; }
+
+  /* ── shared components ────────────────── */
+  .card { background:#fff; border-radius:12px; box-shadow:0 1px 4px rgba(0,0,0,.08); padding:20px; }
+  .badge { font-size:11px; padding:2px 8px; border-radius:999px; display:inline-block; font-weight:600; }
+  .b-ok{background:#dcfce7;color:#15803d} .b-warn{background:#fef9c3;color:#854d0e}
+  .b-err{background:#fee2e2;color:#b91c1c} .b-mut{background:#f1f5f9;color:#475569}
+  .pill { display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:600; }
+  .pill-draft{background:#f1f5f9;color:#475569} .pill-in_review{background:#fef9c3;color:#854d0e}
+  .pill-approved{background:#dcfce7;color:#15803d} .pill-closed{background:#e0e7ff;color:#3730a3} .pill-no_session{background:#f1f5f9;color:#94a3b8}
+  tr:hover td { background:#f8fafc; }
+  .var-pos{color:#16a34a} .var-neg{color:#dc2626} .var-zero{color:#16a34a}
+  input,select { outline:none; }
+  .inp { border:1px solid #d1d5db; border-radius:8px; padding:6px 10px; font-size:13px; background:#fff; }
+  .btn { font-size:13px; font-weight:600; border-radius:8px; padding:7px 14px; cursor:pointer; border:none; }
+  .btn-pri { color:#fff; background:var(--brand); }
+  .btn-sec { border:1px solid #d1d5db; background:#fff; color:#374151; }
+  .btn-pri:disabled { opacity:.4; cursor:default; }
+  .btn:hover:not(:disabled) { opacity:.88; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ SIDEBAR ═══════════════ -->
+<aside id="sidebar">
+  <div id="sidebar-logo">
+    <div class="app-icon">🍜</div>
+    <div class="app-name">Oshinei</div>
+    <div class="app-sub" data-i18n="subtitle">Revenue Reconciliation</div>
+  </div>
+
+  <nav id="sidebar-nav">
+    <div class="side-section">Menu</div>
+    <button class="side-btn active" data-tab="overview" onclick="switchTab('overview')">
+      <span class="icon">📊</span><span data-i18n="tab_overview">Overview</span>
+    </button>
+    <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
+      <span class="icon">📅</span><span data-i18n="tab_daily">Daily</span>
+    </button>
+    <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
+      <span class="icon">⚖️</span><span data-i18n="tab_monthly">Monthly</span>
+    </button>
+    <button class="side-btn" data-tab="uploads" onclick="switchTab('uploads')">
+      <span class="icon">📤</span><span data-i18n="tab_uploads">Uploads</span>
+    </button>
+    <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
+      <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">Discrepancies</span>
+      <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
+    </button>
+    <button class="side-btn" data-tab="setup" onclick="switchTab('setup')">
+      <span class="icon">⚙️</span><span data-i18n="tab_setup">Setup</span>
+      <span id="setup-badge" class="side-badge hidden" style="background:#fef9c3;color:#854d0e">0</span>
+    </button>
+  </nav>
+
+  <div id="sidebar-footer">
+    <button id="lang-toggle" onclick="toggleLang()" class="btn btn-sec" style="flex:1;font-size:12px;padding:5px 8px">EN</button>
+    <button onclick="setToken()" class="btn btn-sec" style="padding:5px 8px;font-size:12px" title="Set write token">🔑</button>
+  </div>
+</aside>
+
+<!-- ═══════════════ MAIN ═══════════════ -->
+<div id="main-wrap">
+
+  <!-- Context / controls bar -->
+  <div id="ctxbar">
+    <span class="badge b-mut" data-i18n="master_branches" style="flex-shrink:0">master branches</span>
+    <select id="sel-branch" class="inp" title="Pick a branch to open its session">
+      <option value="">All branches</option>
+    </select>
+    <select id="sel-period" class="inp" title="Month"></select>
+    <input id="sel-date" type="date" class="inp hidden" title="Focus a single day on the Daily tab" style="width:165px">
+    <button id="btn-clear-date" onclick="clearDate()" class="btn btn-sec hidden" title="Show whole month">✕ day</button>
+    <div style="margin-left:auto">
+      <button onclick="openUploadModal()" class="btn btn-pri" data-i18n="btn_upload">+ Upload</button>
+    </div>
+  </div>
+
+  <!-- Tab panes -->
+  <main class="p-6 space-y-6" style="max-width:1200px;width:100%">
+
+    <!-- OVERVIEW -->
+    <div id="tab-overview" class="tab-pane space-y-5">
+      <div id="onboard" class="hidden card" style="background:var(--brand-light)">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold text-gray-800" data-i18n="step_title">Getting started</div>
+          <button onclick="dismissOnboard()" class="text-xs text-gray-500 hover:underline" data-i18n="step_dismiss">Dismiss</button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+          <button onclick="switchTab('setup')"         class="card text-left hover:shadow-md" data-i18n="step1">① Setup — map tender codes to a bank</button>
+          <button onclick="switchTab('uploads')"       class="card text-left hover:shadow-md" data-i18n="step2">② Upload bank / card / Grab / Line Man docs</button>
+          <button onclick="switchTab('daily')"         class="card text-left hover:shadow-md" data-i18n="step3">③ Run Match — read the daily board</button>
+          <button onclick="switchTab('discrepancies')" class="card text-left hover:shadow-md" data-i18n="step4">④ Sign-off — every lane matched or explained</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_pos">POS Tender</div><div id="kpi-pos" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_ext">External Total</div><div id="kpi-ext" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_var">Variance</div><div id="kpi-var" class="text-2xl font-bold">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="kpi_issues">Open Issues</div><div id="kpi-issues" class="text-2xl font-bold text-red-600">—</div></div>
+      </div>
+      <div class="card overflow-x-auto">
+        <div class="font-semibold text-gray-700 mb-3" data-i18n="branch_overview">Branch Overview</div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2" data-i18n="c_branch">Branch</th>
+            <th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th>
+            <th class="text-right pb-2" data-i18n="kpi_var">Variance</th>
+            <th class="text-center pb-2" data-i18n="c_status">Status</th>
+            <th class="text-center pb-2" data-i18n="c_issues">Issues</th><th></th>
+          </tr></thead>
+          <tbody id="ov-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RECONCILE (Monthly) -->
+    <div id="tab-reconcile" class="tab-pane hidden space-y-5">
+      <div id="rec-empty" class="card text-center text-gray-400 py-10">
+        Select a branch above and open its session from the Overview tab, or
+        <button onclick="ensureSession()" class="text-orange-600 underline">start one</button>.
+      </div>
+      <div id="rec-body" class="hidden space-y-5">
+        <div class="card flex items-center gap-4 flex-wrap">
+          <div><div class="text-xs text-gray-400">Session</div><div id="rec-title" class="font-semibold text-gray-800"></div></div>
+          <div id="rec-status"></div>
+          <div class="ml-auto flex gap-2">
+            <button onclick="runMatch(event)" class="btn btn-pri" data-i18n="btn_run">▶ Run Match</button>
+            <button onclick="downloadExport()" class="btn btn-sec" title="Download the month pack (Excel)" data-i18n="btn_excel">⬇ Excel</button>
+            <button onclick="setStatus('in_review')" class="btn btn-sec" data-i18n="btn_inreview">Mark In-Review</button>
+            <button onclick="setStatus('approved')" class="btn btn-sec" data-i18n="btn_approve">Approve</button>
+          </div>
+        </div>
+        <div id="rec-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+        <div>
+          <div class="font-semibold text-gray-700 mb-3" data-i18n="recon_by_cat">Reconciliation by category</div>
+          <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        </div>
+        <div id="rec-payout-wrap" class="hidden">
+          <div class="font-semibold text-gray-700 mb-1">
+            <span data-i18n="payout_chain">Payout chain</span>
+            <span class="font-normal text-gray-400 text-sm" data-i18n="payout_hint">— provider net should equal the bank payout credit</span>
+          </div>
+          <div id="rec-payouts" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
+        </div>
+        <div class="card">
+          <div class="flex items-center justify-between mb-3">
+            <div class="font-semibold text-gray-700" data-i18n="feevat_title">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
+            <select id="fv-source" class="inp" onchange="loadFeeVat()">
+              <option value="grab">Grab</option><option value="lineman">Line Man</option><option value="credit_card">Credit Card</option>
+            </select>
+          </div>
+          <div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th><th class="text-right pb-2">Gross</th>
+              <th class="text-right pb-2">Fee</th><th class="text-right pb-2">VAT</th><th class="text-right pb-2">Net</th><th></th>
+            </tr></thead>
+            <tbody id="fv-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No lines</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DAILY -->
+    <div id="tab-daily" class="tab-pane hidden space-y-5">
+      <div id="daily-empty" class="card text-center text-gray-400 py-10">
+        Open a branch session from Overview to see its daily board.
+      </div>
+      <div id="daily-body" class="hidden space-y-5">
+        <div class="card flex items-center gap-4 flex-wrap">
+          <div><div class="text-xs text-gray-400">Daily reconciliation</div><div id="daily-title" class="font-semibold text-gray-800"></div></div>
+          <div id="daily-pending" class="ml-auto text-sm"></div>
+        </div>
+        <div class="card overflow-x-auto">
+          <div class="flex items-center justify-between mb-1">
+            <div class="font-semibold text-gray-700" data-i18n="daily_recon">Daily reconciliation — day × lane</div>
+            <div class="text-xs text-gray-400" data-i18n="daily_legend">✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines</div>
+          </div>
+          <div id="daily-coverage" class="text-sm text-gray-600 mb-3"></div>
+          <div id="daily-matrix"><div class="text-center text-gray-400 py-6">Loading…</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPLOADS -->
+    <div id="tab-uploads" class="tab-pane hidden space-y-4">
+      <div class="card">
+        <div class="font-semibold text-gray-700 mb-4" data-i18n="up_title">Upload Statements &amp; Reports</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <button onclick="openUploadModal('bank')"        class="card text-center hover:shadow-md"><div class="text-3xl">🏦</div><div class="font-semibold text-sm mt-1">Bank Statement</div><div class="text-xs text-gray-400">KTB · KBANK</div></button>
+          <button onclick="openUploadModal('credit_card')" class="card text-center hover:shadow-md"><div class="text-3xl">💳</div><div class="font-semibold text-sm mt-1">Credit Card</div><div class="text-xs text-gray-400">KTB · KBANK · KTC</div></button>
+          <button onclick="openUploadModal('grab')"        class="card text-center hover:shadow-md"><div class="text-3xl">🟢</div><div class="font-semibold text-sm mt-1">Grab Report</div><div class="text-xs text-gray-400">Grab for Restaurants</div></button>
+          <button onclick="openUploadModal('lineman')"     class="card text-center hover:shadow-md"><div class="text-3xl">🟡</div><div class="font-semibold text-sm mt-1">Line Man Report</div><div class="text-xs text-gray-400">LINE MAN Wongnai</div></button>
+        </div>
+      </div>
+      <div class="card overflow-x-auto">
+        <div class="font-semibold text-gray-700 mb-3">Uploads — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">File</th><th class="text-left pb-2">Source</th><th class="text-left pb-2">Provider</th>
+            <th class="text-left pb-2">Branch</th><th class="text-right pb-2">Rows</th><th class="text-center pb-2">Status</th><th></th>
+          </tr></thead>
+          <tbody id="up-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DISCREPANCIES -->
+    <div id="tab-discrepancies" class="tab-pane hidden">
+      <div class="card overflow-x-auto">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold text-gray-700" data-i18n="disc_hd">Discrepancies for accounting</div>
+          <div class="text-xs text-gray-400" data-i18n="disc_sub">largest variance first</div>
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Category</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Type</th>
+            <th class="text-right pb-2">External</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">Variance</th>
+            <th class="text-left pb-2">Assignee</th><th class="text-center pb-2">Resolve</th>
+          </tr></thead>
+          <tbody id="disc-body"><tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session to see its discrepancies</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SETUP -->
+    <div id="tab-setup" class="tab-pane hidden space-y-6">
+      <div class="card" style="background:var(--brand-light)">
+        <div class="font-semibold text-gray-800 mb-1" data-i18n="setup_hd">① Map your POS tender codes → ② add bank accounts &amp; card MIDs</div>
+        <p class="text-sm text-gray-600" data-i18n="setup_p">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
+      </div>
+      <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+      <div class="card overflow-x-auto">
+        <div class="flex items-center justify-between mb-3">
+          <div class="font-semibold text-gray-700" data-i18n="pmap_hd">Payment-code map</div>
+          <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes" data-i18n="reseed">⟳ Re-seed from POS</button>
+        </div>
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">POS code</th><th class="text-right pb-2">Volume (POS)</th>
+            <th class="text-left pb-2">Category <span class="normal-case text-gray-300">what it is</span></th>
+            <th class="text-left pb-2">Bank / Acquirer <span class="normal-case text-gray-300">where it lands</span></th>
+            <th class="text-center pb-2">Reconcile</th><th></th>
+          </tr></thead>
+          <tbody id="map-body"></tbody>
+        </table>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card overflow-x-auto">
+          <div class="font-semibold text-gray-700" data-i18n="accts_hd">Bank accounts</div>
+          <p class="text-xs text-gray-500 mb-3">One KTB + one KBANK account per branch.</p>
+          <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Account</th><th></th></tr></thead>
+            <tbody id="acct-body"></tbody></table>
+          <div class="flex gap-2 flex-wrap items-end">
+            <select id="na-branch" class="inp"></select>
+            <select id="na-bank" class="inp"><option>KTB</option><option>KBANK</option></select>
+            <input id="na-acct" class="inp" placeholder="account no">
+            <input id="na-name" class="inp" placeholder="name (opt)">
+            <button onclick="addAccount()" class="btn btn-pri">Add</button>
+          </div>
+        </div>
+        <div class="card overflow-x-auto">
+          <div class="font-semibold text-gray-700" data-i18n="mids_hd">Credit-card acquirer MIDs</div>
+          <p class="text-xs text-gray-500 mb-3">Merchant IDs per acquirer (KTB / KBANK / KTC).</p>
+          <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Acquirer</th><th class="text-left pb-2">MID</th><th class="text-left pb-2">Terminal</th><th></th></tr></thead>
+            <tbody id="mid-body"></tbody></table>
+          <div class="flex gap-2 flex-wrap items-end">
+            <select id="nm-branch" class="inp"></select>
+            <select id="nm-acq" class="inp"><option>KTB</option><option>KBANK</option><option>KTC</option></select>
+            <input id="nm-mid" class="inp" placeholder="merchant id">
+            <input id="nm-term" class="inp" placeholder="terminal (opt)">
+            <button onclick="addMid()" class="btn btn-pri">Add</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</div><!-- /#main-wrap -->
+
+<!-- ═══════════════ UPLOAD MODAL ═══════════════ -->
+<div id="upmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
+    <div class="flex items-center justify-between mb-5">
+      <div class="font-bold text-lg">Upload</div>
+      <button onclick="closeUploadModal()" class="text-gray-400 text-xl">&times;</button>
+    </div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Source</label>
+        <select id="up-source" class="inp w-full mt-1">
+          <option value="bank">Bank Statement</option><option value="credit_card">Credit Card Settlement</option>
+          <option value="grab">Grab Report</option><option value="lineman">Line Man Report</option>
+        </select></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">File (.xlsx)</label><input id="up-file" type="file" accept=".xlsx,.xls" class="w-full text-sm mt-1"></div>
+    </div>
+    <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
+    <div class="flex justify-end gap-3 mt-6">
+      <button onclick="previewUpload()" class="btn btn-sec">Preview</button>
+      <button id="up-confirm" onclick="confirmUpload(event)" class="btn btn-pri" disabled>Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ LANE DRILL-DOWN MODAL ═══════════════ -->
+<div id="lanemodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div><div id="lane-title" class="font-bold text-lg"></div><div id="lane-sub" class="text-sm text-gray-400"></div></div>
+      <button onclick="closeLaneModal()" class="text-gray-400 text-xl">&times;</button>
+    </div>
+    <div class="overflow-x-auto max-h-96 overflow-y-auto"><table class="w-full text-sm">
+      <thead><tr class="text-gray-400 text-xs uppercase border-b sticky top-0 bg-white">
+        <th class="text-left pb-2">Date</th><th class="text-left pb-2">Ref</th>
+        <th class="text-left pb-2">Detail</th><th class="text-right pb-2">Amount</th></tr></thead>
+      <tbody id="lane-body"><tr><td colspan="4" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
+    </table></div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let SESSION = null;
+let BRANCHES = [];
+let FOCUS_DATE = null;
+
+// ── fetch with write-token + error surfacing ─────────────────────────────────
+async function api(path, opts={}) {
+  opts.headers = opts.headers || {};
+  const tok = localStorage.getItem('oshinei_token');
+  if (tok) opts.headers['X-Upload-Token'] = tok;
+  if (opts.json !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.json); delete opts.json; }
+  const r = await fetch(API+path, opts);
+  if (r.status===403) { toast('Write token required or invalid. Click 🔑 to set it.','err'); throw new Error('403'); }
+  const ct = r.headers.get('content-type')||'';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) { throw new Error(data.detail || r.status); }
+  return data;
+}
+function setToken(){ const t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); toast('Token saved','ok'); }
+
+// ── toasts ────────────────────────────────────────────────────────────────────
+const TOAST_CLS = {ok:'#16a34a', err:'#dc2626', warn:'#d97706', info:'#334155'};
+function toast(msg, type='info', ms=3200){
+  let host=document.getElementById('toast-host');
+  if(!host){ host=document.createElement('div'); host.id='toast-host';
+    host.style.cssText='position:fixed;top:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;max-width:380px'; document.body.appendChild(host); }
+  const el=document.createElement('div');
+  el.style.cssText=`background:#fff;border-left:4px solid ${TOAST_CLS[type]||TOAST_CLS.info};box-shadow:0 4px 14px rgba(0,0,0,.15);border-radius:8px;padding:10px 14px;font-size:13px;color:#1f2937;opacity:0;transform:translateY(-6px);transition:all .2s`;
+  el.textContent=msg; host.appendChild(el);
+  requestAnimationFrame(()=>{ el.style.opacity='1'; el.style.transform='none'; });
+  setTimeout(()=>{ el.style.opacity='0'; el.style.transform='translateY(-6px)'; setTimeout(()=>el.remove(),250); }, ms);
+}
+async function withBusy(btn, label, fn){
+  if(!btn) return fn();
+  const old=btn.textContent, wasDisabled=btn.disabled;
+  btn.disabled=true; if(label) btn.textContent=label;
+  try { return await fn(); } finally { btn.disabled=wasDisabled; btn.textContent=old; }
+}
+
+// ── i18n ──────────────────────────────────────────────────────────────────────
+const I18N = {
+  th: {
+    subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
+    tab_overview:"ภาพรวม", tab_daily:"รายวัน", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
+    tab_discrepancies:"รายการต่าง", tab_setup:"ตั้งค่า",
+    kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
+    branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
+    btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
+    recon_by_cat:"กระทบยอดตามประเภท", payout_chain:"สายการโอนเงิน", payout_hint:"— ยอดสุทธิจากผู้ให้บริการต้องเท่ากับเงินที่เข้าบัญชี",
+    feevat_title:"ค่าธรรมเนียม & VAT — กรอกเอง (Grab / Line Man / บัตรเครดิต)",
+    daily_recon:"กระทบยอดรายวัน — วัน × ช่องทาง", daily_legend:"✓ ตรง · ≠ ต่าง · ✗ ขาด · … รอเอกสาร · ? ตั้งค่าธนาคาร · คลิกเพื่อดูรายการ",
+    coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
+    up_title:"อัปโหลดเอกสาร & รายงาน",
+    disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
+    setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
+    setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
+    pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
+    accts_hd:"บัญชีธนาคาร", mids_hd:"MID บัตรเครดิต",
+    step_title:"เริ่มต้นใช้งาน", step_dismiss:"ซ่อน",
+    step1:"① ตั้งค่า — จับคู่รหัสรับเงินกับธนาคาร", step2:"② อัปโหลดเอกสาร ธนาคาร/บัตร/Grab/Line Man",
+    step3:"③ ประมวลผล — อ่านบอร์ดรายวัน", step4:"④ ตรวจรับ — ทุกช่องทางตรงหรืออธิบายได้",
+    st_matched:"ตรงกัน", st_mismatch:"ไม่ตรง", st_pos_only:"ไม่มีเอกสาร", st_ext_only:"เกินในเอกสาร", st_no_source:"ไม่มีแหล่ง",
+    p_matched:"ตรงกัน", p_mismatch:"ไม่ตรง", p_awaiting:"รอเงินโอน", p_extra:"เงินโอนเกิน",
+  },
+  en: {
+    subtitle:"Revenue Reconciliation", master_branches:"master branches",
+    tab_overview:"Overview", tab_daily:"Daily", tab_monthly:"Monthly", tab_uploads:"Uploads",
+    tab_discrepancies:"Discrepancies", tab_setup:"Setup",
+    kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
+    branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
+    btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
+    recon_by_cat:"Reconciliation by category", payout_chain:"Payout chain", payout_hint:"— provider net should equal the bank payout credit",
+    feevat_title:"Fee & VAT — manual entry (Grab / Line Man / Credit Card)",
+    daily_recon:"Daily reconciliation — day × lane", daily_legend:"✓ matched · ≠ variance · ✗ missing · … awaiting · ? map bank · click a cell for lines",
+    coverage_hd:"Coverage — last day each source's document covers",
+    up_title:"Upload Statements & Reports",
+    disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
+    setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
+    setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
+    pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
+    accts_hd:"Bank accounts", mids_hd:"Credit-card acquirer MIDs",
+    step_title:"Getting started", step_dismiss:"Dismiss",
+    step1:"① Setup — map tender codes to a bank", step2:"② Upload bank / card / Grab / Line Man docs",
+    step3:"③ Run Match — read the daily board", step4:"④ Sign-off — every lane matched or explained",
+    st_matched:"Matched", st_mismatch:"Mismatch", st_pos_only:"No statement", st_ext_only:"Extra in statement", st_no_source:"No source",
+    p_matched:"Matched", p_mismatch:"Mismatch", p_awaiting:"Awaiting payout", p_extra:"Extra payout",
+  },
+};
+let LANG = localStorage.getItem('recon_lang') || 'th';
+function t(k){ return (I18N[LANG] && I18N[LANG][k]) ?? I18N.en[k] ?? k; }
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{ el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-ph]').forEach(el=>{ el.placeholder = t(el.dataset.i18nPh); });
+  const tg=document.getElementById('lang-toggle'); if(tg) tg.textContent = LANG==='th'?'EN':'ไทย';
+  document.documentElement.lang = LANG;
+}
+function toggleLang(){
+  LANG = LANG==='th'?'en':'th'; localStorage.setItem('recon_lang',LANG); applyI18n();
+  const open=[...document.querySelectorAll('.tab-pane')].find(p=>!p.classList.contains('hidden'));
+  if(open) switchTab(open.id.replace('tab-',''));
+}
+function dismissOnboard(){ localStorage.setItem('recon_onboard_done','1'); document.getElementById('onboard').classList.add('hidden'); }
+
+const fmt = n => n==null ? '—' : new Intl.NumberFormat('th-TH',{maximumFractionDigits:0}).format(Math.round(n));
+const period = () => document.getElementById('sel-period').value;
+function varCls(v){ return Math.abs(v)<100 ? 'var-zero' : v>0?'var-pos':'var-neg'; }
+function varTxt(v){ return (v>=0?'+':'')+fmt(v); }
+const STATUS_BADGE = {matched:'b-ok', mismatch:'b-err', pos_only:'b-warn', ext_only:'b-warn', no_source:'b-mut'};
+
+// ── init ─────────────────────────────────────────────────────────────────────
+async function init(){
+  const sel=document.getElementById('sel-period'); const now=new Date();
+  for(let i=0;i<14;i++){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o);
+  }
+  sel.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  sel.onchange = ()=>{ syncDateBounds(); loadOverview(); reloadActive(); };
+  BRANCHES = await api('/api/branches').catch(()=>[]);
+  ['sel-branch','up-branch','na-branch','nm-branch'].forEach(id=>{
+    const el=document.getElementById(id); if(!el) return;
+    BRANCHES.forEach(b=>{ const o=document.createElement('option'); o.value=b.branch_id; o.textContent=b.name; el.appendChild(o); });
+  });
+  document.getElementById('sel-branch').onchange = (e)=>{ const bid=+e.target.value; if(bid) startSession(bid); else { SESSION=null; loadOverview(); } };
+  document.getElementById('sel-date').onchange = (e)=>{
+    FOCUS_DATE = e.target.value || null;
+    if(FOCUS_DATE){ const ym=FOCUS_DATE.slice(0,7); if([...sel.options].some(o=>o.value===ym)) sel.value=ym; }
+    document.getElementById('btn-clear-date').classList.toggle('hidden', !FOCUS_DATE);
+    if(SESSION) switchTab('daily'); else loadOverview();
+  };
+  syncDateBounds();
+  applyI18n();
+  loadOverview(); refreshSetupBadge();
+}
+function reloadActive(){
+  if(!document.getElementById('tab-uploads').classList.contains('hidden')) loadUploads();
+  if(!document.getElementById('tab-daily').classList.contains('hidden')) loadDaily();
+}
+function syncDateBounds(){
+  const ym=period(); const d=document.getElementById('sel-date');
+  d.min=ym+'-01'; const last=new Date(+ym.slice(0,4), +ym.slice(5,7), 0).getDate();
+  d.max=`${ym}-${String(last).padStart(2,'0')}`;
+}
+function clearDate(){ FOCUS_DATE=null; document.getElementById('sel-date').value=''; document.getElementById('btn-clear-date').classList.add('hidden'); if(SESSION&&!document.getElementById('tab-daily').classList.contains('hidden')) loadDaily(); }
+
+function switchTab(name){
+  document.querySelectorAll('.side-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.add('hidden'));
+  document.getElementById('tab-'+name).classList.remove('hidden');
+  // show date picker only on Daily tab
+  const onDaily = name==='daily';
+  document.getElementById('sel-date').classList.toggle('hidden', !onDaily);
+  if(!onDaily){ document.getElementById('btn-clear-date').classList.add('hidden'); }
+  if(name==='overview')      loadOverview();
+  if(name==='daily')         loadDaily();
+  if(name==='reconcile')     renderReconcile();
+  if(name==='uploads')       loadUploads();
+  if(name==='discrepancies') loadDiscrepancies();
+  if(name==='setup')         loadSetup();
+}
+
+function coverageBar(pos, ext){
+  if(!pos){ return ''; }
+  const pct = Math.max(0, Math.min(100, Math.round((ext/pos)*100)));
+  const col = pct>=99 ? 'var(--ok)' : pct>=70 ? 'var(--warn)' : 'var(--danger)';
+  return `<div title="${pct}% of POS tender covered by statements" style="margin-top:4px;height:5px;width:120px;background:#eef2f7;border-radius:3px;overflow:hidden">
+    <div style="height:100%;width:${pct}%;background:${col}"></div></div>`;
+}
+
+// ── overview ─────────────────────────────────────────────────────────────────
+async function loadOverview(){
+  document.getElementById('onboard').classList.toggle('hidden', localStorage.getItem('recon_onboard_done')==='1');
+  const data = await api('/api/overview?period_month='+period()).catch(()=>[]);
+  const tb=document.getElementById('ov-body'); tb.innerHTML='';
+  let tp=0, te=0, ti=0;
+  data.forEach(b=>{ tp+=b.pos_total||0; te+=b.ext_total||0; ti+=(b.open_issues||0)+(b.unmatched||0);
+    const issues=(b.open_issues||0)+(b.unmatched||0);
+    const issueCell = issues
+      ? `<button onclick="drillBranch(${b.branch_id})" class="badge b-err hover:opacity-80" title="Open ${b.branch_name} to follow up">${issues} ▸</button>`
+      : (b.status==='no_session' ? '<span class="text-gray-300">—</span>' : '<span class="badge b-ok">clear</span>');
+    const tr=document.createElement('tr'); tr.className='cursor-pointer';
+    tr.onclick=(e)=>{ if(e.target.tagName!=='BUTTON') drillBranch(b.branch_id, 'daily'); };
+    tr.innerHTML=`<td class="py-2 font-medium">${b.branch_name}${coverageBar(b.pos_total,b.ext_total)}</td>
+      <td class="text-right font-mono">${fmt(b.pos_total)}</td>
+      <td class="text-right font-mono">${fmt(b.ext_total)}</td>
+      <td class="text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
+      <td class="text-center"><span class="pill pill-${b.status}">${b.status.replace('_',' ')}</span></td>
+      <td class="text-center">${issueCell}</td>
+      <td class="text-right text-xs text-orange-600">${b.session_id?'Open ▸':'Start ▸'}</td>`;
+    tb.appendChild(tr);
+  });
+  document.getElementById('kpi-pos').textContent = fmt(tp);
+  document.getElementById('kpi-ext').textContent = fmt(te);
+  const v=te-tp; const k=document.getElementById('kpi-var');
+  k.textContent=(v>=0?'+':'')+fmt(v); k.className='text-2xl font-bold '+varCls(v);
+  const ki=document.getElementById('kpi-issues'); ki.textContent=ti;
+  ki.className='text-2xl font-bold '+(ti?'text-red-600 cursor-pointer hover:underline':'text-green-600');
+  ki.title = ti? 'Click a branch row below to follow up' : 'All clear';
+}
+
+async function drillBranch(branch_id, tab){
+  const ov = await api('/api/overview?period_month='+period());
+  const row = ov.find(b=>b.branch_id===branch_id);
+  const target = tab || ((row && row.open_issues) ? 'discrepancies' : 'daily');
+  if(row && row.session_id) openSession(row.session_id, target); else startSession(branch_id, target);
+}
+async function startSession(branch_id, tab){
+  try{ await api('/api/sessions',{method:'POST',json:{branch_id,period_month:period()}}); }catch(e){}
+  const ov = await api('/api/overview?period_month='+period());
+  const row = ov.find(b=>b.branch_id===branch_id);
+  if(row&&row.session_id) openSession(row.session_id, tab); else loadOverview();
+}
+async function ensureSession(){
+  const bid = +document.getElementById('sel-branch').value;
+  if(!bid){ toast('Pick a branch first','warn'); return; }
+  startSession(bid);
+}
+async function openSession(id, tab){
+  SESSION = await api('/api/sessions/'+id);
+  document.getElementById('sel-branch').value = SESSION.branch_id;
+  switchTab(tab || 'daily');
+}
+
+// ── daily board ──────────────────────────────────────────────────────────────
+const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut', unmapped_bank:'b-warn'};
+const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·', unmapped_bank:'?'};
+async function loadDaily(){
+  if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
+  document.getElementById('daily-empty').classList.add('hidden');
+  document.getElementById('daily-body').classList.remove('hidden');
+  document.getElementById('daily-title').textContent =
+    `${SESSION.branch_name} · ${SESSION.period_month}` + (FOCUS_DATE? ` · focus ${FOCUS_DATE}` : '');
+  const d = await api(`/api/sessions/${SESSION.session_id}/daily`);
+  renderDailyBoard(d);
+}
+
+const LANE_CELL = {matched:'#dcfce7', variance:'#fee2e2', missing:'#fee2e2', pending:'#fef9c3',
+                   ext_only:'#fef9c3', no_source:'#f1f5f9', unmapped_bank:'#fef9c3'};
+const LANE_FG   = {matched:'#15803d', variance:'#b91c1c', missing:'#b91c1c', pending:'#854d0e',
+                   ext_only:'#854d0e', no_source:'#64748b', unmapped_bank:'#854d0e'};
+const _CAT_ORDER = {CASH:0,QR:1,TRANSFER:2,CREDIT:3,GRAB:4,LINEMAN:5,COUPON:6};
+function _laneLabel(cat,bank){ return cat.slice(0,4)+(bank&&bank!=='NONE'?'·'+bank:''); }
+
+function renderDailyBoard(d){
+  const ps = d.pending_summary || {coverage:{}};
+  document.getElementById('daily-pending').innerHTML =
+    `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} pending lane-days</span>
+     <span class="text-gray-400 ml-2">${ps.days_with_pending||0} day(s) awaiting documents</span>`;
+  document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage||{}).length
+    ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
+    : '<span class="text-gray-400">No documents uploaded yet.</span>')
+    + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
+
+  const host=document.getElementById('daily-matrix');
+  if(!d.days||!d.days.length){ host.innerHTML='<div class="text-center text-gray-400 py-6">No activity for this period</div>'; return; }
+
+  const laneKeys=new Map();
+  d.days.forEach(day=>day.lanes.forEach(l=>laneKeys.set(`${l.category}|${l.bank}`, {category:l.category, bank:l.bank})));
+  const lanes=[...laneKeys.values()].sort((a,b)=>
+    (_CAT_ORDER[a.category]??9)-(_CAT_ORDER[b.category]??9) || a.bank.localeCompare(b.bank));
+
+  const head=`<tr class="text-gray-400 text-xs uppercase border-b">
+      <th class="text-left pb-2 pr-3 sticky left-0 bg-white">Day</th>
+      <th class="text-left pb-2 pr-3">Match</th>
+      <th class="text-right pb-2 pr-3">POS</th><th class="text-right pb-2 pr-3">Ext</th><th class="text-right pb-2 pr-4">Var</th>
+      ${lanes.map(l=>`<th class="text-center pb-2 px-1" title="${l.category}${l.bank!=='NONE'?'·'+l.bank:''}">${_laneLabel(l.category,l.bank)}</th>`).join('')}
+    </tr>`;
+
+  const body=d.days.map(day=>{
+    const byKey={}; day.lanes.forEach(l=>byKey[`${l.category}|${l.bank}`]=l);
+    const total=day.lanes.length, matched=day.matched||0;
+    const pct=total?Math.round(matched/total*100):0;
+    const barCol = pct>=99?'var(--ok)':pct>=60?'var(--warn)':'var(--danger)';
+    const focus = (FOCUS_DATE && day.day===FOCUS_DATE);
+    const cells=lanes.map(l=>{
+      const o=byKey[`${l.category}|${l.bank}`];
+      if(!o) return '<td class="px-1"></td>';
+      return `<td class="px-1 text-center">
+        <span onclick="openLaneModal('${o.category}','${o.bank}','${day.day}')"
+          title="${o.category}${o.bank!=='NONE'?'·'+o.bank:''}: POS ${fmt(o.pos)} / ext ${fmt(o.ext)} (${o.status}) — click for lines"
+          style="display:inline-block;min-width:30px;padding:2px 4px;border-radius:5px;cursor:pointer;font-weight:600;background:${LANE_CELL[o.status]||'#f1f5f9'};color:${LANE_FG[o.status]||'#475569'}">${LANE_SYM[o.status]||'·'}</span></td>`;
+    }).join('');
+    return `<tr data-day="${day.day}" style="${focus?'background:#fff7ed;outline:2px solid var(--brand)':''}">
+      <td class="py-1.5 font-medium pr-3 sticky left-0 bg-white">${day.day.slice(8)}</td>
+      <td class="pr-3"><div title="${matched}/${total} lanes matched" style="height:5px;width:54px;background:#eef2f7;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle"><div style="height:100%;width:${pct}%;background:${barCol}"></div></div></td>
+      <td class="text-right font-mono pr-3">${fmt(day.pos_total)}</td>
+      <td class="text-right font-mono pr-3">${fmt(day.ext_total)}</td>
+      <td class="text-right font-mono pr-4 ${varCls(day.ext_total-day.pos_total)}">${varTxt(day.ext_total-day.pos_total)}</td>
+      ${cells}</tr>`;
+  }).join('');
+
+  host.innerHTML=`<table class="text-sm" style="border-collapse:collapse">${head}${body}</table>`;
+  if(FOCUS_DATE){ const fr=host.querySelector(`tr[data-day="${FOCUS_DATE}"]`);
+    if(fr) fr.scrollIntoView({block:'center',behavior:'smooth'});
+    else host.insertAdjacentHTML('afterbegin', `<div class="text-center text-amber-600 py-3">No activity on ${FOCUS_DATE}.</div>`); }
+}
+
+// ── reconcile ────────────────────────────────────────────────────────────────
+async function renderReconcile(){
+  if(!SESSION){ document.getElementById('rec-empty').classList.remove('hidden'); document.getElementById('rec-body').classList.add('hidden'); return; }
+  document.getElementById('rec-empty').classList.add('hidden');
+  document.getElementById('rec-body').classList.remove('hidden');
+  document.getElementById('rec-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
+  document.getElementById('rec-status').innerHTML = `<span class="pill pill-${SESSION.status}">${SESSION.status.replace('_',' ')}</span>`;
+  const s = await api(`/api/sessions/${SESSION.session_id}/summary`);
+  const un=document.getElementById('rec-unmapped');
+  if(s.unmapped && s.unmapped.length){ un.classList.remove('hidden');
+    un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes</div>
+      <div class="text-sm text-gray-600">These tender codes have no mapping and are excluded. Add them in Setup → Payment-code map:</div>
+      <div class="text-sm mt-1">${s.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')}</div>`;
+  } else un.classList.add('hidden');
+  const cont=document.getElementById('rec-cards'); cont.innerHTML='';
+  if(!s.categories.length){ cont.innerHTML='<div class="text-gray-400">No reconcilable POS tender for this period.</div>'; }
+  s.categories.forEach(c=>{
+    const showNet = (c.category==='CREDIT'||c.category==='GRAB'||c.category==='LINEMAN');
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
+        <span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div>
+      <div class="grid grid-cols-2 gap-2 text-sm">
+        <div><div class="text-xs text-gray-400">POS tender</div><div class="font-mono">${fmt(c.pos_amount)}</div></div>
+        <div><div class="text-xs text-gray-400">Statement</div><div class="font-mono">${fmt(c.ext_amount)}</div></div>
+        ${showNet?`<div><div class="text-xs text-gray-400">Net (after fee/VAT)</div><div class="font-mono">${fmt(c.ext_net)}</div></div>`:''}
+        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(c.variance)}">${varTxt(c.variance)}</div></div>
+      </div>`;
+    cont.appendChild(div);
+  });
+  renderPayouts(s.payouts||[]);
+  loadFeeVat();
+}
+
+const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};
+const PAYOUT_KEY   = {matched:'p_matched', mismatch:'p_mismatch', awaiting_payout:'p_awaiting', ext_only:'p_extra'};
+const payoutLbl = s => t(PAYOUT_KEY[s]||'p_matched');
+function renderPayouts(payouts){
+  const wrap=document.getElementById('rec-payout-wrap'); const cont=document.getElementById('rec-payouts');
+  if(!payouts.length){ wrap.classList.add('hidden'); cont.innerHTML=''; return; }
+  wrap.classList.remove('hidden'); cont.innerHTML='';
+  payouts.forEach(p=>{
+    const div=document.createElement('div'); div.className='card';
+    div.innerHTML=`<div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-gray-800">${p.category} payout</div>
+        <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
+      <div class="grid grid-cols-3 gap-2 text-sm">
+        <div><div class="text-xs text-gray-400">Report net</div><div class="font-mono">${fmt(p.report_net)}</div></div>
+        <div><div class="text-xs text-gray-400">Bank payout</div><div class="font-mono">${fmt(p.bank_payout)}</div></div>
+        <div><div class="text-xs text-gray-400">Variance</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
+      </div>`;
+    cont.appendChild(div);
+  });
+}
+
+function downloadExport(){
+  if(!SESSION){ toast('Open a session first','warn'); return; }
+  toast('Preparing Excel…','info',1500);
+  window.open(API+`/api/sessions/${SESSION.session_id}/export.xlsx`, '_blank');
+}
+
+// ── lane drill-down ────────────────────────────────────────────────────────────
+async function openLaneModal(category, bank, day){
+  document.getElementById('lanemodal').classList.remove('hidden');
+  document.getElementById('lane-title').textContent = `${category}${bank&&bank!=='NONE'?' · '+bank:''}`;
+  document.getElementById('lane-sub').textContent = day ? day : (SESSION?SESSION.period_month:'');
+  const tb=document.getElementById('lane-body'); tb.innerHTML='<tr><td colspan="4" class="text-center text-gray-400 py-6">Loading…</td></tr>';
+  let q=`/api/sessions/${SESSION.session_id}/lane?category=${encodeURIComponent(category)}&bank=${encodeURIComponent(bank)}`+(day?`&day=${day}`:'');
+  try{
+    const d=await api(q);
+    if(!d.lines.length){ tb.innerHTML='<tr><td colspan="4" class="text-center text-gray-400 py-6">No statement lines for this lane (POS-only — awaiting the document).</td></tr>'; return; }
+    tb.innerHTML='';
+    d.lines.forEach(l=>{ const tr=document.createElement('tr');
+      tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
+        <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono">${fmt(l.amount)}</td>`;
+      tb.appendChild(tr); });
+    const tr=document.createElement('tr'); tr.className='border-t font-semibold';
+    tr.innerHTML=`<td class="py-1.5" colspan="3">${d.count} line(s)</td><td class="text-right font-mono">${fmt(d.total)}</td>`;
+    tb.appendChild(tr);
+  }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
+}
+function closeLaneModal(){ document.getElementById('lanemodal').classList.add('hidden'); }
+
+async function runMatch(ev){
+  await withBusy(ev&&ev.target, 'Running…', async ()=>{
+    try{
+      const r = await api(`/api/sessions/${SESSION.session_id}/run-match`,{method:'POST'});
+      toast(`Run complete — ${r.matched} matched, ${r.discrepancies} to review`
+            + (r.unmapped.length?` · ${r.unmapped.length} unmapped code(s)`:''), r.discrepancies?'warn':'ok');
+      renderReconcile(); loadDiscrepancies();
+    }catch(e){ toast('Run failed: '+e.message,'err'); }
+  });
+}
+async function setStatus(status){
+  const fd=new FormData(); fd.append('status',status);
+  try{ await api(`/api/sessions/${SESSION.session_id}/status`,{method:'PATCH',body:fd}); SESSION.status=status; renderReconcile();
+    toast(`Session marked ${status.replace('_',' ')}`,'ok'); }
+  catch(e){ toast(e.message,'err'); }
+}
+
+// ── fee / vat editor ─────────────────────────────────────────────────────────
+async function loadFeeVat(){
+  if(!SESSION) return;
+  const src=document.getElementById('fv-source').value;
+  const lines = await api(`/api/lines/${src}?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`).catch(()=>[]);
+  const tb=document.getElementById('fv-body'); tb.innerHTML='';
+  if(!lines.length){ tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-6">No lines uploaded for this source</td></tr>'; return; }
+  lines.forEach(l=>{
+    FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed};
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
+      <td class="text-right font-mono">${fmt(l.gross)}</td>
+      <td class="text-right"><input class="inp w-24 text-right" id="fee-${l.id}" value="${l.fee??''}" placeholder="${fmt(l.fee_parsed)}"
+            oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
+      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="0"
+            oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
+      <td class="text-right font-mono text-gray-600" id="net-${l.id}">${fmt(l.net)}</td>
+      <td class="text-right"><span id="fvok-${l.id}" class="text-xs text-green-600"></span></td>`;
+    tb.appendChild(tr);
+  });
+}
+const FV_LINE = {};
+function recalcNet(src,id){
+  const m=FV_LINE[id]; if(!m) return;
+  const feeIn=document.getElementById('fee-'+id).value, vatIn=document.getElementById('vat-'+id).value;
+  const fee = feeIn===''? m.fee_parsed : +feeIn;
+  const vat = vatIn===''? 0 : +vatIn;
+  document.getElementById('net-'+id).textContent = fmt(m.gross - m.other - fee - vat);
+}
+async function saveFeeVat(src,id){
+  const fee=document.getElementById('fee-'+id).value, vat=document.getElementById('vat-'+id).value;
+  const ok=document.getElementById('fvok-'+id);
+  try{
+    await api(`/api/lines/${src}/${id}/fee-vat`,{method:'PATCH',json:{fee_manual:fee===''?null:+fee, vat_manual:vat===''?null:+vat, by:'staff'}});
+    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓'; setTimeout(()=>ok.textContent='',1200); }
+    renderPayoutsFromSummary();
+  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗'; } toast(e.message,'err'); }
+}
+async function renderPayoutsFromSummary(){
+  if(!SESSION) return;
+  try{ const s=await api(`/api/sessions/${SESSION.session_id}/summary`); renderPayouts(s.payouts||[]); }catch(e){}
+}
+
+// ── uploads ──────────────────────────────────────────────────────────────────
+async function loadUploads(){
+  const bid=document.getElementById('sel-branch').value;
+  document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:' · all branches');
+  let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
+  const data = await api(q).catch(()=>[]);
+  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':'<tr><td colspan="7" class="text-center text-gray-400 py-6">No uploads</td></tr>';
+  data.forEach(u=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
+      <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${u.row_count}</td>
+      <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
+      <td class="text-right"><button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline">Delete</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function delUpload(id){ if(!confirm('Delete this upload and its lines?'))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast('Upload deleted','ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
+
+function openUploadModal(src){
+  document.getElementById('upmodal').classList.remove('hidden');
+  document.getElementById('up-period').value=period();
+  if(src) document.getElementById('up-source').value=src;
+  const bid=document.getElementById('sel-branch').value; if(bid) document.getElementById('up-branch').value=bid;
+}
+function closeUploadModal(){ document.getElementById('upmodal').classList.add('hidden'); document.getElementById('up-preview').classList.add('hidden'); document.getElementById('up-confirm').disabled=true; }
+function upForm(){ const f=new FormData();
+  f.append('file',document.getElementById('up-file').files[0]);
+  f.append('branch_id',document.getElementById('up-branch').value);
+  f.append('period_month',document.getElementById('up-period').value);
+  f.append('provider',document.getElementById('up-provider').value); return f; }
+async function previewUpload(){ const src=document.getElementById('up-source').value;
+  try{ const r=await api(`/api/uploads/${src}/preview`,{method:'POST',body:upForm()});
+    const p=document.getElementById('up-preview'); p.classList.remove('hidden');
+    p.innerHTML=`<div class="font-semibold mb-1">${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+
+      r.preview.slice(0,4).map(row=>Object.entries(row).slice(0,6).map(([k,v])=>`<span class="text-gray-400">${k}:</span>${v}`).join('  ')).join('<br>');
+    document.getElementById('up-confirm').disabled=false;
+  }catch(e){ toast('Parse error: '+e.message,'err'); }
+}
+async function confirmUpload(ev){ const src=document.getElementById('up-source').value;
+  await withBusy(ev&&ev.target, 'Saving…', async ()=>{
+    try{ const r=await api(`/api/uploads/${src}/confirm`,{method:'POST',body:upForm()});
+      toast(`Saved ${r.rows_saved} rows`+(r.skipped_rows?` (${r.skipped_rows} skipped)`:''),'ok'); closeUploadModal(); loadUploads();
+    }catch(e){ toast('Upload failed: '+e.message,'err'); }
+  });
+}
+
+// ── discrepancies ────────────────────────────────────────────────────────────
+async function loadDiscrepancies(){
+  const tb=document.getElementById('disc-body');
+  if(!SESSION){ tb.innerHTML='<tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session first</td></tr>'; return; }
+  const data=await api(`/api/sessions/${SESSION.session_id}/discrepancies`).catch(()=>[]);
+  const badge=document.getElementById('disc-badge'); badge.textContent=data.length; badge.classList.toggle('hidden',!data.length);
+  document.getElementById('kpi-issues').textContent=data.length;
+  tb.innerHTML = data.length?'':'<tr><td colspan="8" class="text-center text-gray-400 py-6">No open discrepancies 🎉</td></tr>';
+  data.forEach(d=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5 font-medium">${d.category||'—'}</td><td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
+      <td class="text-xs text-gray-500">${(d.disc_type||'').replace(/_/g,' ')}</td>
+      <td class="text-right font-mono">${fmt(d.amount_external)}</td><td class="text-right font-mono">${fmt(d.amount_pos)}</td>
+      <td class="text-right font-mono ${varCls(d.variance)}">${varTxt(d.variance)}</td>
+      <td><input class="inp w-28" placeholder="assign…" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
+      <td class="text-center"><select class="inp" onchange="resolveDisc(${d.id},this.value)">
+        <option value="">Resolve…</option><option value="accepted">Accept</option><option value="adjusted">Adjusted</option><option value="rejected">Reject</option></select></td>`;
+    tb.appendChild(tr);
+  });
+}
+async function resolveDisc(id,res){ if(!res)return; await api(`/api/discrepancies/${id}/resolve`,{method:'PATCH',json:{resolution:res,resolved_by:'staff'}}); loadDiscrepancies(); }
+async function assignDisc(id,to){ const fd=new FormData(); fd.append('assigned_to',to); await api(`/api/discrepancies/${id}/assign`,{method:'PATCH',body:fd}); }
+
+// ── setup ────────────────────────────────────────────────────────────────────
+const CATS=['CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'];
+const BANKS=['KTB','KBANK','KTC','PROMPTPAY','NONE','UNKNOWN'];
+async function refreshSetupBadge(){
+  const m=await api('/api/payment-map?needs_attention=1').catch(()=>[]);
+  const b=document.getElementById('setup-badge'); b.textContent=m.length; b.classList.toggle('hidden',!m.length);
+}
+async function loadSetup(){
+  refreshSetupBadge();
+  const map=await api('/api/payment-map'); const tb=document.getElementById('map-body'); tb.innerHTML='';
+  const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+  const att=document.getElementById('map-attention');
+  if(need.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
+      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ${fmt(m.pos_amount)}</span>`).join('')}</div>`;
+  } else att.classList.add('hidden');
+  map.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY'); if(attn) tr.style.background='#fff7ed';
+    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}${attn?' <span class="text-amber-600">⚠</span>':''}</td>
+      <td class="text-right font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
+      <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
+      <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
+    tb.appendChild(tr);
+  });
+  const accts=await api('/api/bank-accounts'); const ab=document.getElementById('acct-body'); ab.innerHTML='';
+  accts.forEach(a=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${a.branch_name}</td><td>${a.bank}</td><td class="font-mono">${a.account_no}</td>
+      <td class="text-right"><button onclick="delAccount(${a.account_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; ab.appendChild(tr); });
+  const mids=await api('/api/acquirer-mids'); const mb=document.getElementById('mid-body'); mb.innerHTML='';
+  mids.forEach(x=>{ const tr=document.createElement('tr');
+    tr.innerHTML=`<td class="py-1.5">${x.branch_name}</td><td>${x.acquirer}</td><td class="font-mono">${x.merchant_id||'—'}</td><td>${x.terminal_id||'—'}</td>
+      <td class="text-right"><button onclick="delMid(${x.mid_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; mb.appendChild(tr); });
+}
+async function saveMap(id){
+  const ok=document.getElementById('mok-'+id);
+  try{
+    await api(`/api/payment-map/${id}`,{method:'PATCH',json:{
+      category:document.getElementById('mc-'+id).value, bank:document.getElementById('mb-'+id).value,
+      reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
+    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
+    const attn=['UNKNOWN','PROMPTPAY'].includes(document.getElementById('mb-'+id).value);
+    document.getElementById('mb-'+id).closest('tr').style.background = attn?'#fff7ed':'';
+    refreshSetupBadge(); refreshAttention();
+  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
+}
+async function refreshAttention(){
+  const map=await api('/api/payment-map').catch(()=>[]);
+  const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+  const att=document.getElementById('map-attention');
+  if(need.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
+      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ${fmt(m.pos_amount)}</span>`).join('')}</div>`;
+  } else att.classList.add('hidden');
+}
+async function reseed(){ try{ const r=await api('/api/payment-map/seed',{method:'POST'}); toast(`Seeded ${r.inserted} new code(s)`,'ok'); loadSetup(); }catch(e){ toast(e.message,'err'); } }
+async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{
+  branch_id:+document.getElementById('na-branch').value, bank:document.getElementById('na-bank').value,
+  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(()=>{toast('Account added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
+async function delAccount(id){ await api('/api/bank-accounts/'+id,{method:'DELETE'}); loadSetup(); }
+async function addMid(){ await api('/api/acquirer-mids',{method:'POST',json:{
+  branch_id:+document.getElementById('nm-branch').value, acquirer:document.getElementById('nm-acq').value,
+  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(()=>{toast('MID added','ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
+async function delMid(id){ await api('/api/acquirer-mids/'+id,{method:'DELETE'}); loadSetup(); }
+
+init();
+</script>
+</body>
+</html>
