@@ -448,6 +448,9 @@ body.dark .subtab-bar { background: rgba(11,18,34,0.8); border-color: var(--bord
   box-shadow: 0 1px 4px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
 }
 body.dark .subtab-btn.active { background: rgba(20,32,56,0.95); }
+.revsort-btn { cursor: pointer; color: var(--text-secondary); background: none; transition: all 0.15s ease; white-space: nowrap; }
+.revsort-btn:hover:not(.active) { color: var(--indigo); background: rgba(79,70,229,0.06); }
+.revsort-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo) !important; font-weight: 600; }
 
 /* ════════════════════════════════════════════════════════════
    CARDS
@@ -3633,6 +3636,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <!-- 🔍 Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
   <div class="card p-4 mb-4">
+    <h2 class="section-title mb-3">ค้นหาเมนูรายตัว</h2>
     <div class="flex items-center gap-2 flex-wrap mb-3">
       <div class="flex-1 min-w-[220px]">
         <input id="menuFindSearch" oninput="renderMenuFinder()" autocomplete="off"
@@ -3704,6 +3708,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <table class="tbl-top60 w-full" id="costHeadTable">
           <thead><tr>
             <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">จำนวนเสิร์ฟ<span class="sub">จาน/ที่</span></th>
+            <th class="num">จำนวน %<span class="sub">เทียบเดือนก่อน</span></th>
             <th class="num">ต้นทุน/หัว</th>
             <th class="num">% ของต้นทุนรวม</th>
             <th class="num">% สะสม<span class="sub">Pareto</span></th>
@@ -3717,24 +3723,39 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
-  <!-- Sub: Most Revenue -->
+  <!-- Sub: Most Revenue (à la carte only) -->
   <div id="sub-mostCost" class="hidden">
+    <div class="card p-4 mb-4" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
+      <h2 class="text-base font-bold text-slate-800 mb-1">🍣 à la carte · รายได้ & กำไรขั้นต้น</h2>
+      <p class="text-xs text-slate-600">เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p>
+    </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div class="card p-5">
-        <h2 class="section-title">Top 15 by Revenue</h2>
+        <h2 class="section-title" id="mostRevChartTitle">Top 15 รายได้สูงสุด</h2>
         <div style="height:360px"><canvas id="chartMostRev"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title" style="margin-bottom:12px">รายได้ & กำไรขั้นต้น</h2>
-        <div class="overflow-auto" style="max-height:360px">
-          <table class="text-xs text-slate-700">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h2 class="section-title mb-0">รายได้ & กำไรขั้นต้น</h2>
+          <div class="flex items-center gap-1 text-xs">
+            <span class="text-slate-400 mr-1">เรียง:</span>
+            <button class="revsort-btn active px-2 py-0.5 rounded border border-slate-200" data-sort="revenue" onclick="setMostRevSort('revenue')">รายได้</button>
+            <button class="revsort-btn px-2 py-0.5 rounded border border-slate-200" data-sort="margin" onclick="setMostRevSort('margin')">กำไร%</button>
+            <button class="revsort-btn px-2 py-0.5 rounded border border-slate-200" data-sort="qty" onclick="setMostRevSort('qty')">จำนวนขาย</button>
+          </div>
+        </div>
+        <p id="mostRevCoverage" class="text-[11px] text-slate-400 mb-2"></p>
+        <div class="overflow-auto" style="max-height:520px">
+          <table class="text-xs text-slate-700 w-full">
             <thead><tr class="text-left text-slate-500">
-              <th class="py-2 pr-4">#</th>
-              <th class="py-2 pr-4">SKU</th>
-              <th class="py-2 pr-4">Description</th>
-              <th class="py-2 pr-4 text-right">Revenue</th>
-              <th class="py-2 pr-4 text-right">Unit Cost</th>
-              <th class="py-2 text-right">Margin %</th>
+              <th class="py-2 pr-3">#</th>
+              <th class="py-2 pr-3">SKU</th>
+              <th class="py-2 pr-3">เมนู</th>
+              <th class="py-2 pr-3">หมวด</th>
+              <th class="py-2 pr-3 text-right">จำนวนขาย</th>
+              <th class="py-2 pr-3 text-right">รายได้</th>
+              <th class="py-2 pr-3 text-right">ต้นทุน/จาน</th>
+              <th class="py-2 text-right">กำไร %</th>
             </tr></thead>
             <tbody id="revBody"></tbody>
           </table>
@@ -4070,6 +4091,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <table class="tbl-top60 w-full" id="rpt4Table">
           <thead><tr>
             <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">จำนวนเสิร์ฟ<span class="sub">จาน/ที่</span></th>
+            <th class="num">จำนวน %<span class="sub">เทียบเดือนก่อน</span></th>
             <th class="num">ต้นทุน/หัว</th>
             <th class="num">% ของต้นทุนรวม</th>
             <th class="num">% สะสม<span class="sub">Pareto</span></th>
@@ -8388,12 +8411,12 @@ function _renderTop60CostHead(d, ids) {
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'เทียบ ');
   const cn = document.getElementById(ids.note);
   if (cn) cn.textContent = covers
-    ? `ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)`
+    ? `จำนวนเสิร์ฟ = จำนวนจาน/ที่ขายในช่วงนี้ (จำนวน % = เทียบเดือนก่อน · ขึ้น = ขายดีขึ้น) · ต้นทุน/หัว = ต้นทุน BoM ÷ ลูกค้าทั้งหมด ${fmtN(covers)} หัว (บาท/หัว · ทศนิยม 2) · % ของต้นทุนรวม = สัดส่วน COGS ของเมนู · % สะสม = Pareto ต้นทุน · เปลี่ยนแปลง % รวมผลต้นทุน+จำนวนลูกค้า (ขึ้น = แย่)`
     : 'ต้นทุน/หัว: ไม่มีข้อมูลจำนวนลูกค้าในช่วงนี้';
   const body = document.getElementById(ids.body), foot = document.getElementById(ids.foot);
-  if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
+  if (!items.length || !covers) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
   const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-  let sumCur = 0, sumPrev = 0, sumShare = 0, cum = 0;
+  let sumCur = 0, sumPrev = 0, sumShare = 0, cum = 0, sumQty = 0, sumQtyPrev = 0;
   body.innerHTML = items.map((r, i) => {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const chCur = (r.cogs || 0) / covers;
@@ -8402,11 +8425,17 @@ function _renderTop60CostHead(d, ids) {
     const chPrev = (chMomFrac != null && chMomFrac > -1) ? chCur / (1 + chMomFrac) : null;
     cum += r.cogs_share_pct || 0;
     sumCur += chCur; if (chPrev != null) sumPrev += chPrev; sumShare += r.cogs_share_pct || 0;
+    sumQty += r.qty || 0;
+    const qtyPrev = (qm != null && qm != -100) ? (r.qty || 0) / (1 + qm / 100) : null;
+    if (qtyPrev != null) sumQtyPrev += qtyPrev;
+    const qtyMomCell = qm == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(qm, true);
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
       <td class="num">${_abcBadge(cum)}</td>
       <td class="font-mono text-slate-400 text-[10px]">${esc(r.sku_code)}</td>
       <td class="max-w-xs truncate" title="${esc(r.description || '')}">${name}</td>
+      <td class="num tabular font-semibold">${fmtN(r.qty)}</td>
+      <td class="num tabular">${qtyMomCell}</td>
       <td class="num tabular font-medium text-orange-700">${f2(chCur)}</td>
       <td class="num tabular text-slate-600">${r.cogs_share_pct != null ? r.cogs_share_pct.toFixed(1) + '%' : '—'}</td>
       <td class="num tabular text-slate-400">${cum.toFixed(1)}%</td>
@@ -8416,8 +8445,11 @@ function _renderTop60CostHead(d, ids) {
   }).join('');
   if (foot) {
     const totMom = (sumPrev > 0) ? (sumCur - sumPrev) / sumPrev * 100 : null;
+    const totQtyMom = (sumQtyPrev > 0) ? (sumQty - sumQtyPrev) / sumQtyPrev * 100 : null;
     foot.innerHTML = `<tr>
       <td></td><td></td><td></td><td>รวม Top 60</td>
+      <td class="num tabular">${fmtN(sumQty)}</td>
+      <td class="num tabular">${_momSpan(totQtyMom, true)}</td>
       <td class="num tabular">${f2(sumCur)}</td>
       <td class="num tabular">${sumShare.toFixed(1)}%</td>
       <td class="num tabular">${cum.toFixed(1)}%</td>
@@ -8427,43 +8459,79 @@ function _renderTop60CostHead(d, ids) {
   }
 }
 
+let _mostRevData = [];
+let _mostRevSort = 'revenue';
 async function loadMostRev() {
-  const data = await fetch(`${API}/api/sales/skus${qp({limit:15})}`).then(r => r.json()).catch(() => []);
-  if (!Array.isArray(data) || !data.length) {
-    const rb = document.getElementById('revBody');
-    if (rb) rb.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-    return;
-  }
+  // Fetch the full à la carte set once (buffet/drinks already excluded server-side)
+  // so coverage and client-side re-sorting work without refetching.
+  const data = await fetch(`${API}/api/sales/skus${qp({limit:200,sort:'revenue'})}`).then(r => r.json()).catch(() => []);
+  _mostRevData = Array.isArray(data) ? data : [];
+  _renderMostRev();
+}
+function setMostRevSort(s) {
+  _mostRevSort = s;
+  document.querySelectorAll('.revsort-btn').forEach(b => b.classList.toggle('active', b.dataset.sort === s));
+  _renderMostRev();
+}
+function _renderMostRev() {
+  const body = document.getElementById('revBody');
+  if (!body) return;
+  const all = _mostRevData;
+  if (!all.length) { body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
+  // Coverage: how many menus actually have a cost (the rest can't show margin)
+  const costed = all.filter(r => r.unit_cost != null).length;
+  const neg = all.filter(r => r.margin_pct != null && r.margin_pct < 0).length;
+  const cov = document.getElementById('mostRevCoverage');
+  if (cov) cov.innerHTML = `มีข้อมูลต้นทุน <b>${costed}/${all.length}</b> เมนู (${(costed/all.length*100).toFixed(0)}%) · ${all.length - costed} เมนูยังไม่มีต้นทุน → กำไร% แสดง —`
+    + (neg ? ` · <span style="color:#ef4444">⚠ ${neg} เมนูต้นทุน > ราคาขาย (ข้อมูลต้นทุนน่าจะผิด)</span>` : '');
+  // Sort a copy by the chosen key (nulls sink to the bottom)
+  const sorted = [...all].sort((a, b) => {
+    if (_mostRevSort === 'margin') return (b.margin_pct ?? -1e9) - (a.margin_pct ?? -1e9);
+    if (_mostRevSort === 'qty')    return (b.qty ?? 0) - (a.qty ?? 0);
+    return (b.revenue ?? 0) - (a.revenue ?? 0);
+  });
+  const rows = sorted.slice(0, 30);
+  // Chart: top 15 of the current sort
+  const ct = document.getElementById('mostRevChartTitle');
+  if (ct) ct.textContent = _mostRevSort === 'margin' ? 'Top 15 กำไร% สูงสุด' : _mostRevSort === 'qty' ? 'Top 15 ขายดีสุด' : 'Top 15 รายได้สูงสุด';
+  const top = sorted.slice(0, 15);
+  const metric = _mostRevSort === 'margin' ? (r => r.margin_pct) : _mostRevSort === 'qty' ? (r => r.qty) : (r => r.revenue);
+  const isPct = _mostRevSort === 'margin';
   mkChart('chartMostRev', {
     type: 'bar',
     data: {
-      labels: data.map(r => (r.description || r.sku_code).slice(0, 24)),
-      datasets: [{ label:'รายได้', data: data.map(r=>r.revenue), backgroundColor:'#4f46e5', borderRadius:4 }]
+      labels: top.map(r => (r.description || r.sku_code).replace(/^\((?:A|B|T)\)\s*/, '').slice(0, 18)),
+      datasets: [{ label:'', data: top.map(metric), backgroundColor:'#4f46e5', borderRadius:4 }]
     },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-      plugins: { legend:{display:false}, datalabels:{display:false}, tooltip:{callbacks:{label: ctx=>' '+fmtN(ctx.raw)}} },
+      plugins: { legend:{display:false}, datalabels:{display:false}, tooltip:{callbacks:{
+        title: items => top[items[0].dataIndex]?.description || '',
+        label: ctx => ' ' + (isPct ? (ctx.raw==null?'—':ctx.raw.toFixed(1)+'%') : fmtN(ctx.raw))
+      }} },
       scales: {
-        x: { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10},callback:v=>fmt(v)} },
+        x: { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10},callback:v=>isPct?v+'%':fmt(v)} },
         y: { grid:{display:false}, ticks:{color:'#64748b',font:{size:11}} }
       }
     }
   });
-  const body = document.getElementById('revBody');
-  body.innerHTML = '';
-  data.forEach((r,i) => {
+  body.innerHTML = rows.map((r,i) => {
     const mpct = r.margin_pct;
-    const mc = mpct==null ? '#94a3b8' : mpct>=60?'#10b981':mpct>=40?'#f59e0b':'#ef4444';
+    const isNeg = mpct != null && mpct < 0;
+    const mc = mpct==null ? '#94a3b8' : isNeg ? '#dc2626' : mpct>=60?'#10b981':mpct>=40?'#f59e0b':'#ef4444';
     const name = esc((r.description||'—').replace(/^\((?:A|B|T)\)\s*/,''));
-    body.innerHTML += `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
-      <td class="py-1.5 pr-4 text-slate-400">${i+1}</td>
-      <td class="py-1.5 pr-4 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
-      <td class="py-1.5 pr-4 text-xs truncate max-w-xs" title="${esc(r.description||'')}">${name}</td>
-      <td class="py-1.5 pr-4 text-right font-semibold">${fmtN(r.revenue)}</td>
-      <td class="py-1.5 pr-4 text-right text-slate-500">${r.unit_cost!=null?fmtN(r.unit_cost):'—'}</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${fmtP(mpct)}</td>
+    const cat = esc((r.category||'').replace(/^Oshinei\s*/i,''));
+    return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40${isNeg?' bg-red-50/60':''}">
+      <td class="py-1.5 pr-3 text-slate-400">${i+1}</td>
+      <td class="py-1.5 pr-3 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
+      <td class="py-1.5 pr-3 text-xs truncate max-w-[180px]" title="${esc(r.description||'')}">${name}</td>
+      <td class="py-1.5 pr-3 text-[10px] text-slate-400">${cat}</td>
+      <td class="py-1.5 pr-3 text-right tabular text-slate-600">${fmtN(r.qty)}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold">${fmtN(r.revenue)}</td>
+      <td class="py-1.5 pr-3 text-right text-slate-500">${r.unit_cost!=null?fmtN(r.unit_cost):'—'}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${isNeg?'⚠ ':''}${fmtP(mpct)}</td>
     </tr>`;
-  });
+  }).join('');
 }
 
 // SPH Distribution — better viz: stacked bar showing tier % + percentile markers + KPI strip
