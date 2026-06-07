@@ -54,6 +54,27 @@
   .btn-sec { border:1px solid #d1d5db; background:#fff; color:#374151; }
   .btn-pri:disabled { opacity:.4; cursor:default; }
   .btn:hover:not(:disabled) { opacity:.88; }
+
+  /* ── disc bulk bar ──── */
+  #disc-bulk-bar { display:none; position:sticky; bottom:0; background:#fff; border-top:2px solid var(--brand); padding:10px 16px; align-items:center; gap:10px; flex-wrap:wrap; z-index:10; }
+  #disc-bulk-bar.show { display:flex; }
+
+  /* ── sort header ──── */
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { color:#374151; }
+  th.sortable::after { content:' ↕'; opacity:.4; font-size:10px; }
+  th.sort-asc::after  { content:' ↑'; opacity:1; }
+  th.sort-desc::after { content:' ↓'; opacity:1; }
+
+  /* ── trend grid ──── */
+  .trend-day { width:34px;height:34px;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;cursor:pointer;font-size:11px;font-weight:600;transition:transform .1s; }
+  .trend-day:hover { transform:scale(1.15); }
+
+  /* ── audit log ──── */
+  #tab-audit .mono { font-family:monospace; font-size:12px; }
+  .audit-old { color:#6b7280; }
+  .audit-arr { color:#94a3b8; margin:0 4px; }
+  .audit-new { font-weight:600; }
 </style>
 </head>
 <body>
@@ -83,6 +104,12 @@
     <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
       <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">Discrepancies</span>
       <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
+    </button>
+    <button class="side-btn" data-tab="trend" onclick="switchTab('trend')">
+      <span class="icon">📈</span><span data-i18n="tab_trend">Trend</span>
+    </button>
+    <button class="side-btn" data-tab="audit" onclick="switchTab('audit')">
+      <span class="icon">🕒</span><span data-i18n="tab_audit">Audit Log</span>
     </button>
     <button class="side-btn" data-tab="setup" onclick="switchTab('setup')">
       <span class="icon">⚙️</span><span data-i18n="tab_setup">Setup</span>
@@ -243,19 +270,120 @@
     </div>
 
     <!-- DISCREPANCIES -->
-    <div id="tab-discrepancies" class="tab-pane hidden">
-      <div class="card overflow-x-auto">
-        <div class="flex items-center justify-between mb-3">
-          <div class="font-semibold text-gray-700" data-i18n="disc_hd">Discrepancies for accounting</div>
-          <div class="text-xs text-gray-400" data-i18n="disc_sub">largest variance first</div>
+    <div id="tab-discrepancies" class="tab-pane hidden space-y-3">
+      <!-- Filter bar -->
+      <div class="card" style="padding:12px 16px">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="font-semibold text-gray-700 text-sm" data-i18n="disc_hd">Discrepancies</span>
+          <select id="df-res" class="inp text-xs" onchange="DISC_FILTER.resolution=this.value;loadDiscrepancies()">
+            <option value="pending">Pending</option>
+            <option value="all">All statuses</option>
+            <option value="accepted">Accepted</option>
+            <option value="adjusted">Adjusted</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <select id="df-cat" class="inp text-xs" onchange="DISC_FILTER.category=this.value;loadDiscrepancies()">
+            <option value="">All categories</option>
+            <option>CASH</option><option>QR</option><option>TRANSFER</option>
+            <option>CREDIT</option><option>GRAB</option><option>LINEMAN</option>
+          </select>
+          <select id="df-bank" class="inp text-xs" onchange="DISC_FILTER.bank=this.value;loadDiscrepancies()">
+            <option value="">All banks</option>
+            <option>KTB</option><option>KBANK</option><option>KTC</option><option>PROMPTPAY</option>
+          </select>
+          <button onclick="loadDiscrepancies()" class="btn btn-sec text-xs" style="padding:5px 10px">⟳ Refresh</button>
         </div>
+      </div>
+      <!-- Table -->
+      <div class="card overflow-x-auto" style="padding:0;position:relative">
         <table class="w-full text-sm">
-          <thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Category</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Type</th>
-            <th class="text-right pb-2">External</th><th class="text-right pb-2">POS</th><th class="text-right pb-2">Variance</th>
-            <th class="text-left pb-2">Assignee</th><th class="text-center pb-2">Resolve</th>
+          <thead><tr class="text-gray-400 text-xs uppercase border-b" style="position:sticky;top:0;background:#fff;z-index:5">
+            <th class="pl-4 pr-2 py-3"><input type="checkbox" id="disc-chk-all" onchange="toggleAllDisc(this.checked)" title="Select all visible"></th>
+            <th class="text-left py-3 sortable" onclick="sortDisc('category')">Category</th>
+            <th class="text-left py-3 sortable" onclick="sortDisc('bank')">Bank</th>
+            <th class="text-left py-3">Type</th>
+            <th class="text-right py-3 sortable sort-desc" id="sort-variance" onclick="sortDisc('variance')">Variance</th>
+            <th class="text-right py-3 sortable" onclick="sortDisc('amount_external')">External</th>
+            <th class="text-right py-3 sortable" onclick="sortDisc('amount_pos')">POS</th>
+            <th class="text-left py-3">Assignee</th>
+            <th class="text-center py-3">Status / Resolve</th>
           </tr></thead>
-          <tbody id="disc-body"><tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session to see its discrepancies</td></tr></tbody>
+          <tbody id="disc-body">
+            <tr><td colspan="9" class="text-center text-gray-400 py-6">Open a session to see its discrepancies</td></tr>
+          </tbody>
+        </table>
+        <!-- Bulk action bar (sticks to bottom) -->
+        <div id="disc-bulk-bar">
+          <span id="disc-bulk-count" class="text-sm font-semibold text-gray-700">0 selected</span>
+          <span class="text-gray-300">|</span>
+          <span class="text-xs text-gray-500">Bulk resolve as:</span>
+          <button onclick="bulkResolve('accepted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px">Accept all</button>
+          <button onclick="bulkResolve('adjusted')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px">Adjusted</button>
+          <button onclick="bulkResolve('rejected')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px;color:#dc2626">Reject all</button>
+          <button onclick="clearDiscSel()" class="text-xs text-gray-400 hover:underline ml-auto">Clear selection</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- TREND -->
+    <div id="tab-trend" class="tab-pane hidden space-y-5">
+      <div id="trend-empty" class="card text-center text-gray-400 py-10">
+        Open a branch session to view its reconciliation health trend.
+      </div>
+      <div id="trend-body" class="hidden space-y-5">
+        <div class="card flex items-center gap-4 flex-wrap">
+          <div><div class="text-xs text-gray-400">Recon health trend</div><div id="trend-title" class="font-semibold text-gray-800"></div></div>
+          <div class="text-xs text-gray-400 ml-auto">W1=days 1–7 · W2=8–14 · W3=15–21 · W4=22+</div>
+        </div>
+        <div class="card">
+          <div class="font-semibold text-gray-700 mb-4">Weekly summary</div>
+          <div id="trend-weekly"><div class="text-gray-400 text-sm">Loading…</div></div>
+        </div>
+        <div class="card">
+          <div class="font-semibold text-gray-700 mb-1">Daily grid</div>
+          <div class="text-xs text-gray-400 mb-3">Cell colour = lane-match %. Click a day to open the Daily board at that date.</div>
+          <div id="trend-daily" class="flex flex-wrap gap-1.5"></div>
+          <div class="flex gap-4 mt-4 text-xs text-gray-400">
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#dcfce7;display:inline-block"></span>≥ 99% matched</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fef9c3;display:inline-block"></span>60–98%</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#fee2e2;display:inline-block"></span>&lt; 60%</span>
+            <span style="display:inline-flex;align-items:center;gap:5px"><span style="width:14px;height:14px;border-radius:3px;background:#f1f5f9;border:1px solid #e2e8f0;display:inline-block"></span>No data</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AUDIT LOG -->
+    <div id="tab-audit" class="tab-pane hidden space-y-4">
+      <div class="card" style="padding:12px 16px">
+        <div class="flex items-center gap-3 flex-wrap">
+          <span class="font-semibold text-gray-700 text-sm">Audit Log</span>
+          <select id="audit-entity" class="inp text-xs" onchange="AUDIT_ENTITY=this.value;loadAudit()">
+            <option value="">All entities</option>
+            <option value="session">Session</option>
+            <option value="discrepancy">Discrepancy</option>
+            <option value="payment_map">Payment map</option>
+            <option value="line">Line (fee/VAT)</option>
+            <option value="upload">Upload</option>
+          </select>
+          <span class="text-xs text-gray-400" id="audit-scope-hint"></span>
+          <button onclick="loadAudit()" class="btn btn-sec text-xs ml-auto" style="padding:5px 10px">⟳ Refresh</button>
+        </div>
+      </div>
+      <div class="card overflow-x-auto" style="padding:0">
+        <table class="w-full text-sm">
+          <thead><tr class="text-gray-400 text-xs uppercase border-b" style="background:#f8fafc">
+            <th class="text-left px-4 py-3">Time (UTC)</th>
+            <th class="text-left px-2 py-3">Entity</th>
+            <th class="text-left px-2 py-3">ID</th>
+            <th class="text-left px-2 py-3">Action</th>
+            <th class="text-left px-2 py-3">Field</th>
+            <th class="text-left px-2 py-3">Change</th>
+            <th class="text-left px-2 py-3">By</th>
+          </tr></thead>
+          <tbody id="audit-body">
+            <tr><td colspan="7" class="text-center text-gray-400 py-8">Open a session or pick an entity filter above.</td></tr>
+          </tbody>
         </table>
       </div>
     </div>
@@ -403,7 +531,7 @@ const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
     tab_overview:"ภาพรวม", tab_daily:"รายวัน", tab_monthly:"รายเดือน", tab_uploads:"อัปโหลด",
-    tab_discrepancies:"รายการต่าง", tab_setup:"ตั้งค่า",
+    tab_discrepancies:"รายการต่าง", tab_trend:"แนวโน้ม", tab_audit:"ประวัติ", tab_setup:"ตั้งค่า",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
     btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
@@ -426,7 +554,7 @@ const I18N = {
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
     tab_overview:"Overview", tab_daily:"Daily", tab_monthly:"Monthly", tab_uploads:"Uploads",
-    tab_discrepancies:"Discrepancies", tab_setup:"Setup",
+    tab_discrepancies:"Discrepancies", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
     btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
@@ -518,6 +646,8 @@ function switchTab(name){
   if(name==='reconcile')     renderReconcile();
   if(name==='uploads')       loadUploads();
   if(name==='discrepancies') loadDiscrepancies();
+  if(name==='trend')         loadTrend();
+  if(name==='audit')         loadAudit();
   if(name==='setup')         loadSetup();
 }
 
@@ -846,26 +976,256 @@ async function confirmUpload(ev){ const src=document.getElementById('up-source')
 }
 
 // ── discrepancies ────────────────────────────────────────────────────────────
+let DISC_FILTER = { resolution:'pending', category:'', bank:'' };
+let DISC_SORT   = { field:'variance', dir:-1 };
+let DISC_DATA   = [];
+let DISC_SEL    = new Set();
+
 async function loadDiscrepancies(){
-  const tb=document.getElementById('disc-body');
-  if(!SESSION){ tb.innerHTML='<tr><td colspan="8" class="text-center text-gray-400 py-6">Open a session first</td></tr>'; return; }
-  const data=await api(`/api/sessions/${SESSION.session_id}/discrepancies`).catch(()=>[]);
-  const badge=document.getElementById('disc-badge'); badge.textContent=data.length; badge.classList.toggle('hidden',!data.length);
-  document.getElementById('kpi-issues').textContent=data.length;
-  tb.innerHTML = data.length?'':'<tr><td colspan="8" class="text-center text-gray-400 py-6">No open discrepancies 🎉</td></tr>';
-  data.forEach(d=>{ const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="py-1.5 font-medium">${d.category||'—'}</td><td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
+  const tb = document.getElementById('disc-body');
+  if(!SESSION){
+    tb.innerHTML='<tr><td colspan="9" class="text-center text-gray-400 py-6">Open a session first</td></tr>';
+    return;
+  }
+  // sync filter controls to DISC_FILTER state
+  const dfr=document.getElementById('df-res'); if(dfr) dfr.value=DISC_FILTER.resolution||'pending';
+
+  let q = `/api/sessions/${SESSION.session_id}/discrepancies?resolution=${DISC_FILTER.resolution||'all'}`;
+  if(DISC_FILTER.category) q += `&category=${DISC_FILTER.category}`;
+  if(DISC_FILTER.bank)     q += `&bank=${DISC_FILTER.bank}`;
+  DISC_DATA = await api(q).catch(()=>[]);
+  DISC_SEL.clear();
+
+  // Update badge with pending count
+  const pendingN = DISC_FILTER.resolution==='pending' ? DISC_DATA.length
+    : (await api(`/api/sessions/${SESSION.session_id}/discrepancies?resolution=pending`).catch(()=>[])).length;
+  const badge=document.getElementById('disc-badge');
+  badge.textContent=pendingN; badge.classList.toggle('hidden',!pendingN);
+  document.getElementById('kpi-issues').textContent=pendingN;
+
+  renderDiscTable();
+  updateBulkBar();
+}
+
+function renderDiscTable(){
+  const tb = document.getElementById('disc-body');
+  tb.innerHTML = '';
+  DISC_SEL.clear();
+  updateBulkBar();
+
+  // Sort
+  const {field, dir} = DISC_SORT;
+  const sorted = [...DISC_DATA].sort((a,b)=>{
+    const fa = Math.abs(a[field]??0), fb = Math.abs(b[field]??0);
+    return dir * (fa < fb ? -1 : fa > fb ? 1 : 0);
+  });
+
+  // Update sort indicator
+  document.querySelectorAll('th.sortable').forEach(th=>th.classList.remove('sort-asc','sort-desc'));
+  // Note: we can't easily target by field with generic headers, just keep visual clean
+
+  if(!sorted.length){
+    tb.innerHTML=`<tr><td colspan="9" class="text-center text-gray-400 py-6">No discrepancies${DISC_FILTER.resolution!=='all'?' with status "'+DISC_FILTER.resolution+'"':''} 🎉</td></tr>`;
+    return;
+  }
+
+  sorted.forEach(d=>{
+    const resClass = d.resolution==='pending' ? 'b-warn' : d.resolution==='accepted' ? 'b-ok' : 'b-mut';
+    const isPending = d.resolution==='pending';
+    const tr=document.createElement('tr'); tr.dataset.id=d.id;
+    tr.innerHTML=`
+      <td class="pl-4 pr-2 py-2"><input type="checkbox" class="disc-chk" value="${d.id}" onchange="toggleDiscSel(${d.id},this.checked)"></td>
+      <td class="py-1.5 font-medium">${d.category||'—'}</td>
+      <td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
       <td class="text-xs text-gray-500">${(d.disc_type||'').replace(/_/g,' ')}</td>
-      <td class="text-right font-mono">${fmt(d.amount_external)}</td><td class="text-right font-mono">${fmt(d.amount_pos)}</td>
       <td class="text-right font-mono ${varCls(d.variance)}">${varTxt(d.variance)}</td>
-      <td><input class="inp w-28" placeholder="assign…" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
-      <td class="text-center"><select class="inp" onchange="resolveDisc(${d.id},this.value)">
-        <option value="">Resolve…</option><option value="accepted">Accept</option><option value="adjusted">Adjusted</option><option value="rejected">Reject</option></select></td>`;
+      <td class="text-right font-mono">${fmt(d.amount_external)}</td>
+      <td class="text-right font-mono">${fmt(d.amount_pos)}</td>
+      <td><input class="inp w-28" style="font-size:12px" placeholder="assign…" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
+      <td class="text-center pr-3">
+        <span class="badge ${resClass} mr-1">${d.resolution}</span>
+        ${isPending?`<select class="inp" style="font-size:12px" onchange="resolveDisc(${d.id},this.value)">
+          <option value="">Resolve…</option>
+          <option value="accepted">Accept</option>
+          <option value="adjusted">Adjusted</option>
+          <option value="rejected">Reject</option>
+        </select>`:''}
+      </td>`;
     tb.appendChild(tr);
   });
 }
-async function resolveDisc(id,res){ if(!res)return; await api(`/api/discrepancies/${id}/resolve`,{method:'PATCH',json:{resolution:res,resolved_by:'staff'}}); loadDiscrepancies(); }
-async function assignDisc(id,to){ const fd=new FormData(); fd.append('assigned_to',to); await api(`/api/discrepancies/${id}/assign`,{method:'PATCH',body:fd}); }
+
+function sortDisc(field){
+  if(DISC_SORT.field===field) DISC_SORT.dir*=-1;
+  else { DISC_SORT.field=field; DISC_SORT.dir=-1; }
+  renderDiscTable();
+}
+
+function toggleDiscSel(id, checked){
+  if(checked) DISC_SEL.add(id); else DISC_SEL.delete(id);
+  updateBulkBar();
+}
+
+function toggleAllDisc(checked){
+  document.querySelectorAll('.disc-chk').forEach(cb=>{
+    cb.checked=checked;
+    const id=+cb.value;
+    if(checked) DISC_SEL.add(id); else DISC_SEL.delete(id);
+  });
+  updateBulkBar();
+}
+
+function clearDiscSel(){
+  DISC_SEL.clear();
+  document.querySelectorAll('.disc-chk').forEach(cb=>cb.checked=false);
+  const all=document.getElementById('disc-chk-all'); if(all) all.checked=false;
+  updateBulkBar();
+}
+
+function updateBulkBar(){
+  const bar=document.getElementById('disc-bulk-bar');
+  const cnt=document.getElementById('disc-bulk-count');
+  if(DISC_SEL.size){
+    bar.classList.add('show');
+    if(cnt) cnt.textContent=`${DISC_SEL.size} selected`;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+
+async function bulkResolve(resolution){
+  if(!DISC_SEL.size||!SESSION) return;
+  const ids=[...DISC_SEL];
+  try{
+    const r=await api(`/api/sessions/${SESSION.session_id}/discrepancies/bulk-resolve`,{
+      method:'POST', json:{ids, resolution, resolved_by:'staff'}
+    });
+    toast(`${r.updated} discrepancies marked "${resolution}"`, 'ok');
+    loadDiscrepancies();
+  }catch(e){ toast(e.message,'err'); }
+}
+
+async function resolveDisc(id,res){
+  if(!res) return;
+  try{
+    await api(`/api/discrepancies/${id}/resolve`,{method:'PATCH',json:{resolution:res,resolved_by:'staff'}});
+    loadDiscrepancies();
+  }catch(e){ toast(e.message,'err'); }
+}
+async function assignDisc(id,to){
+  const fd=new FormData(); fd.append('assigned_to',to);
+  try{ await api(`/api/discrepancies/${id}/assign`,{method:'PATCH',body:fd}); }catch(e){ toast(e.message,'err'); }
+}
+
+// ── trend ─────────────────────────────────────────────────────────────────────
+async function loadTrend(){
+  const empty=document.getElementById('trend-empty');
+  const body=document.getElementById('trend-body');
+  if(!SESSION){ empty.classList.remove('hidden'); body.classList.add('hidden'); return; }
+  empty.classList.add('hidden'); body.classList.remove('hidden');
+  document.getElementById('trend-title').textContent =
+    `${SESSION.branch_name} · ${SESSION.period_month}`;
+
+  const data = await api(`/api/sessions/${SESSION.session_id}/trend`).catch(()=>null);
+  if(!data){ document.getElementById('trend-weekly').innerHTML='<p class="text-gray-400 text-sm">No match data — run match first.</p>'; return; }
+  renderTrendWeekly(data.weekly||[]);
+  renderTrendDaily(data.daily||[]);
+}
+
+function pctBar(pct){
+  const col = pct>=99?'var(--ok)':pct>=60?'var(--warn)':'var(--danger)';
+  return `<div style="display:flex;align-items:center;gap:8px">
+    <div style="flex:1;height:8px;background:#eef2f7;border-radius:4px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${col};border-radius:4px"></div></div>
+    <span style="color:${col};font-weight:700;min-width:36px;font-size:13px">${pct}%</span>
+  </div>`;
+}
+
+function renderTrendWeekly(weekly){
+  const el=document.getElementById('trend-weekly');
+  if(!weekly.length){ el.innerHTML='<p class="text-gray-400 text-sm">No data yet — run match first.</p>'; return; }
+  let html=`<table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+    <th class="text-left pb-2">Week</th>
+    <th class="text-right pb-2">POS</th><th class="text-right pb-2">External</th>
+    <th class="pb-2 pl-4" style="min-width:180px">Lane match</th>
+    <th class="pb-2 pl-4" style="min-width:180px">Amt coverage</th>
+  </tr></thead><tbody>`;
+  weekly.forEach(w=>{
+    html+=`<tr>
+      <td class="py-2 font-semibold">${w.week}</td>
+      <td class="text-right font-mono">${fmt(w.pos)}</td>
+      <td class="text-right font-mono">${fmt(w.ext)}</td>
+      <td class="pl-4">${pctBar(w.lane_pct)}</td>
+      <td class="pl-4">${pctBar(w.cov_pct)}</td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function renderTrendDaily(daily){
+  const el=document.getElementById('trend-daily');
+  el.innerHTML='';
+  if(!daily.length){ el.textContent='No daily data yet.'; return; }
+  daily.forEach(d=>{
+    const pct=d.lane_pct;
+    const bg  = pct>=99?'#dcfce7':pct>=60?'#fef9c3':d.total_lanes?'#fee2e2':'#f1f5f9';
+    const col = pct>=99?'#15803d':pct>=60?'#854d0e':d.total_lanes?'#b91c1c':'#94a3b8';
+    const dayN=d.day.slice(8);
+    const tip=`${d.day}\nLane match: ${pct}% (${d.matched}/${d.total_lanes})\nCoverage: ${d.cov_pct}%\nPOS: ${fmt(d.pos)} | Ext: ${fmt(d.ext)}`;
+    const div=document.createElement('div');
+    div.className='trend-day';
+    div.style.cssText=`background:${bg};color:${col}`;
+    div.title=tip;
+    div.textContent=dayN;
+    div.onclick=()=>{ FOCUS_DATE=d.day; const ym=d.day.slice(0,7);
+      const sel=document.getElementById('sel-period');
+      if([...sel.options].some(o=>o.value===ym)) sel.value=ym;
+      switchTab('daily'); loadDaily(); };
+    el.appendChild(div);
+  });
+}
+
+// ── audit log ─────────────────────────────────────────────────────────────────
+let AUDIT_ENTITY = '';
+const ACTION_CLS = {create:'b-ok', update:'b-mut', delete:'b-err'};
+
+async function loadAudit(){
+  const tb=document.getElementById('audit-body');
+  tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-6">Loading…</td></tr>';
+
+  const scopeHint=document.getElementById('audit-scope-hint');
+  let q=`/api/audit?limit=200`;
+  if(SESSION && !AUDIT_ENTITY){
+    q+=`&session_id=${SESSION.session_id}`;
+    if(scopeHint) scopeHint.textContent=`Showing events for ${SESSION.branch_name} · ${SESSION.period_month}`;
+  } else {
+    if(AUDIT_ENTITY) q+=`&entity=${AUDIT_ENTITY}`;
+    if(scopeHint) scopeHint.textContent=AUDIT_ENTITY?`Filtered to entity: ${AUDIT_ENTITY}`:'Showing all events (no session selected)';
+  }
+
+  const data=await api(q).catch(()=>[]);
+  tb.innerHTML='';
+  if(!data.length){
+    tb.innerHTML='<tr><td colspan="7" class="text-center text-gray-400 py-8">No audit events yet.</td></tr>';
+    return;
+  }
+  data.forEach(row=>{
+    const tr=document.createElement('tr');
+    const changeHtml = row.field
+      ? `<span class="audit-old">${row.old_val??'—'}</span><span class="audit-arr">→</span><span class="audit-new">${row.new_val??'—'}</span>`
+      : (row.old_val||row.new_val ? `${row.old_val??''}${row.new_val??' '}` : '—');
+    tr.innerHTML=`
+      <td class="px-4 py-1.5 text-xs text-gray-400 whitespace-nowrap">${row.ts}</td>
+      <td class="px-2"><span class="badge b-mut">${row.entity}</span></td>
+      <td class="px-2 text-xs text-gray-500">${row.entity_id}</td>
+      <td class="px-2"><span class="badge ${ACTION_CLS[row.action]||'b-mut'}">${row.action}</span></td>
+      <td class="px-2 mono text-gray-600">${row.field??'—'}</td>
+      <td class="px-2 text-sm">${changeHtml}</td>
+      <td class="px-2 text-xs text-gray-400">${row.by}</td>`;
+    tb.appendChild(tr);
+  });
+}
 
 // ── setup ────────────────────────────────────────────────────────────────────
 const CATS=['CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'];

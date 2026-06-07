@@ -18,6 +18,7 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from datetime import datetime as _dt
 from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
@@ -251,11 +252,24 @@ def create_payment_map(body: PaymentMapUpsert):
 def update_payment_map(map_id: int, body: PaymentMapUpsert):
     _validate_map(body)
     with get_db() as conn:
+        old = conn.execute(
+            "SELECT category, bank, reconcile FROM recon_payment_map WHERE id=?",
+            (map_id,)).fetchone()
         conn.execute("""
             UPDATE recon_payment_map
             SET category=?, bank=?, reconcile=?, notes=?, updated_by=?, updated_at=datetime('now')
             WHERE id=?
         """, (body.category, body.bank, body.reconcile, body.notes, body.updated_by or "manual", map_id))
+        if old:
+            diffs = []
+            if old["category"] != body.category:
+                diffs.append({"field": "category", "old": old["category"], "new": body.category})
+            if old["bank"] != body.bank:
+                diffs.append({"field": "bank", "old": old["bank"], "new": body.bank})
+            if old["reconcile"] != body.reconcile:
+                diffs.append({"field": "reconcile", "old": old["reconcile"], "new": body.reconcile})
+            if diffs:
+                _audit(conn, "payment_map", map_id, "update", body.updated_by or "staff", diffs)
         conn.commit()
     return {"id": map_id}
 
@@ -498,6 +512,8 @@ async def confirm_upload(
             placeholders = ", ".join("?" * len(row))
             conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
                          list(row.values()))
+        _audit(conn, "upload", upload_id, "create", "staff",
+               [{"field": "file_name", "old": None, "new": file.filename}])
         conn.commit()
 
     return {"upload_id": upload_id, "rows_saved": len(rows), "skipped_rows": skipped, "provider": prov}
@@ -526,11 +542,13 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
 def delete_upload(upload_id: int):
     with get_db() as conn:
         up = conn.execute(
-            "SELECT branch_id, period_month FROM recon_uploads WHERE upload_id=?",
+            "SELECT branch_id, period_month, file_name FROM recon_uploads WHERE upload_id=?",
             (upload_id,)).fetchone()
         if up:
             _assert_period_open(conn, up["branch_id"], up["period_month"])
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
+        _audit(conn, "upload", upload_id, "delete", "staff",
+               [{"field": "file_name", "old": up["file_name"] if up else None, "new": None}])
         conn.commit()
     return {"deleted": upload_id}
 
@@ -617,6 +635,9 @@ def update_session_status(
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
     with get_db() as conn:
+        old_row = conn.execute(
+            "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()
+        old_status = old_row["status"] if old_row else None
         # Approval gate: don't let a month be signed off while issues are open.
         if status in ("approved", "closed"):
             pending = conn.execute(
@@ -640,6 +661,9 @@ def update_session_status(
                 "UPDATE recon_sessions SET status=? WHERE session_id=?",
                 (status, session_id),
             )
+        if old_status != status:
+            _audit(conn, "session", session_id, "update", approved_by or "staff",
+                   [{"field": "status", "old": old_status, "new": status}])
         conn.commit()
     return {"session_id": session_id, "status": status}
 
@@ -823,13 +847,26 @@ def export_session(session_id: int):
 # ── Discrepancies ─────────────────────────────────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/discrepancies")
-def list_discrepancies(session_id: int, resolution: str = "pending"):
+def list_discrepancies(
+    session_id: int,
+    resolution: str | None = "pending",
+    category:   str | None = None,
+    bank:       str | None = None,
+):
     with get_db() as conn:
-        rows = conn.execute("""
+        filters: list[str] = ["session_id=?"]
+        params:  list      = [session_id]
+        if resolution and resolution != "all":
+            filters.append("resolution=?"); params.append(resolution)
+        if category:
+            filters.append("category=?"); params.append(category)
+        if bank:
+            filters.append("bank=?"); params.append(bank)
+        rows = conn.execute(f"""
             SELECT * FROM recon_discrepancies
-            WHERE session_id=? AND resolution=?
+            WHERE {' AND '.join(filters)}
             ORDER BY ABS(COALESCE(variance, amount_external)) DESC
-        """, (session_id, resolution)).fetchall()
+        """, params).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -848,15 +885,49 @@ def _assert_disc_period_open(conn, disc_id: int):
         _assert_period_open(conn, row["branch_id"], row["period_month"])
 
 
+def _audit(conn, entity: str, entity_id: int, action: str, by: str,
+           diffs: list[dict] | None = None):
+    """Record create/update/delete with optional per-field diffs.
+    diffs = [{"field": "status", "old": "draft", "new": "approved"}, ...]
+    """
+    ts = _dt.utcnow().isoformat(timespec="seconds")
+    if not diffs:
+        conn.execute(
+            "INSERT INTO recon_audit_log(ts,entity,entity_id,action,field,old_val,new_val,by)"
+            " VALUES(?,?,?,?,?,?,?,?)",
+            (ts, entity, entity_id, action, None, None, None, by or "staff"),
+        )
+    else:
+        for d in diffs:
+            old = None if d.get("old") is None else str(d["old"])
+            new = None if d.get("new") is None else str(d["new"])
+            conn.execute(
+                "INSERT INTO recon_audit_log(ts,entity,entity_id,action,field,old_val,new_val,by)"
+                " VALUES(?,?,?,?,?,?,?,?)",
+                (ts, entity, entity_id, action, d["field"], old, new, by or "staff"),
+            )
+
+
 @app.patch("/api/discrepancies/{disc_id}/resolve", dependencies=[Depends(require_write_token)])
 def resolve_discrepancy(disc_id: int, body: ResolveBody):
     with get_db() as conn:
         _assert_disc_period_open(conn, disc_id)
+        old = conn.execute(
+            "SELECT resolution, resolution_note FROM recon_discrepancies WHERE id=?",
+            (disc_id,)).fetchone()
         conn.execute("""
             UPDATE recon_discrepancies
             SET resolution=?, resolution_note=?, resolved_by=?, resolved_at=datetime('now')
             WHERE id=?
         """, (body.resolution, body.resolution_note, body.resolved_by, disc_id))
+        diffs = []
+        if old:
+            if old["resolution"] != body.resolution:
+                diffs.append({"field": "resolution", "old": old["resolution"], "new": body.resolution})
+            if (old["resolution_note"] or "") != (body.resolution_note or ""):
+                diffs.append({"field": "resolution_note",
+                               "old": old["resolution_note"], "new": body.resolution_note})
+        _audit(conn, "discrepancy", disc_id, "update", body.resolved_by or "staff", diffs or None)
         conn.commit()
     return {"id": disc_id, "resolution": body.resolution}
 
@@ -865,9 +936,51 @@ def resolve_discrepancy(disc_id: int, body: ResolveBody):
 def assign_discrepancy(disc_id: int, assigned_to: str = Form(...)):
     with get_db() as conn:
         _assert_disc_period_open(conn, disc_id)
+        old = conn.execute(
+            "SELECT assigned_to FROM recon_discrepancies WHERE id=?", (disc_id,)).fetchone()
         conn.execute("UPDATE recon_discrepancies SET assigned_to=? WHERE id=?", (assigned_to, disc_id))
+        _audit(conn, "discrepancy", disc_id, "update", "staff",
+               [{"field": "assigned_to",
+                 "old": old["assigned_to"] if old else None, "new": assigned_to}])
         conn.commit()
     return {"id": disc_id, "assigned_to": assigned_to}
+
+
+class BulkResolveBody(BaseModel):
+    ids:             list[int]
+    resolution:      Literal["accepted", "adjusted", "rejected"]
+    resolution_note: str = ""
+    resolved_by:     str = ""
+
+
+@app.post("/api/sessions/{session_id}/discrepancies/bulk-resolve",
+          dependencies=[Depends(require_write_token)])
+def bulk_resolve_discrepancies(session_id: int, body: BulkResolveBody):
+    if not body.ids:
+        raise HTTPException(400, "ids list must not be empty")
+    with get_db() as conn:
+        s = conn.execute(
+            "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        if not s:
+            raise HTTPException(404)
+        _assert_period_open(conn, s["branch_id"], s["period_month"])
+        ph = ",".join("?" * len(body.ids))
+        conn.execute(f"""
+            UPDATE recon_discrepancies
+            SET resolution=?, resolution_note=?, resolved_by=?, resolved_at=datetime('now')
+            WHERE session_id=? AND id IN ({ph}) AND resolution='pending'
+        """, [body.resolution, body.resolution_note, body.resolved_by or "staff", session_id]
+             + list(body.ids))
+        _audit(conn, "session", session_id, "update", body.resolved_by or "staff",
+               [{"field": "bulk_resolve",
+                 "old": "pending",
+                 "new": f"{body.resolution} × {len(body.ids)} items"}])
+        conn.commit()
+        updated = conn.execute(
+            f"SELECT COUNT(*) FROM recon_discrepancies WHERE id IN ({ph}) AND resolution=?",
+            list(body.ids) + [body.resolution]).fetchone()[0]
+    return {"updated": updated, "resolution": body.resolution}
 
 
 # ── Manual fee / VAT per line (Grab / Line Man / Credit Card) ──────────────────
@@ -936,7 +1049,8 @@ def set_fee_vat(source: str, line_id: int, body: FeeVat):
     date_col = "settlement_date" if source == "credit_card" else "order_date"
     with get_db() as conn:
         line = conn.execute(
-            f"SELECT branch_id, {date_col} AS d FROM {table} WHERE id=?", (line_id,)).fetchone()
+            f"SELECT branch_id, {date_col} AS d, fee_manual, vat_manual FROM {table} WHERE id=?",
+            (line_id,)).fetchone()
         if line and line["d"]:
             _assert_period_open(conn, line["branch_id"], str(line["d"])[:7])
         conn.execute(f"""
@@ -944,6 +1058,14 @@ def set_fee_vat(source: str, line_id: int, body: FeeVat):
             SET fee_manual=?, vat_manual=?, fee_vat_by=?, fee_vat_at=datetime('now')
             WHERE id=?
         """, (body.fee_manual, body.vat_manual, body.by or "staff", line_id))
+        if line:
+            diffs = []
+            if line["fee_manual"] != body.fee_manual:
+                diffs.append({"field": "fee_manual", "old": line["fee_manual"], "new": body.fee_manual})
+            if line["vat_manual"] != body.vat_manual:
+                diffs.append({"field": "vat_manual", "old": line["vat_manual"], "new": body.vat_manual})
+            if diffs:
+                _audit(conn, "line", line_id, "update", body.by or "staff", diffs)
         conn.commit()
     return {"source": source, "line_id": line_id,
             "fee_manual": body.fee_manual, "vat_manual": body.vat_manual}
@@ -1012,6 +1134,102 @@ def overview(period_month: str):
             })
 
     return result
+
+
+# ── Session trend (per-day + weekly rollup) ───────────────────────────────────
+
+@app.get("/api/sessions/{session_id}/trend")
+def session_trend(session_id: int):
+    """Per-day and per-week recon health for one session.
+    Reuses the daily_reconciliation engine so numbers agree with the Daily tab."""
+    with get_db() as conn:
+        s = conn.execute(
+            "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        if not s:
+            raise HTTPException(404)
+        data = daily_reconciliation(conn, s["branch_id"], s["period_month"])
+
+    daily_out: list[dict] = []
+    for dr in data.get("days", []):
+        lanes       = dr.get("lanes", [])
+        matched     = dr.get("matched", 0)
+        total_lanes = len(lanes)
+        pos         = float(dr.get("pos_total") or 0)
+        ext         = float(dr.get("ext_total") or 0)
+        lane_pct    = round(matched / total_lanes * 100) if total_lanes else 0
+        cov_pct     = min(100, round(ext / pos * 100)) if pos else 0
+        daily_out.append({
+            "day":         dr["day"],
+            "pos":         round(pos, 2),
+            "ext":         round(ext, 2),
+            "matched":     matched,
+            "total_lanes": total_lanes,
+            "lane_pct":    lane_pct,
+            "cov_pct":     cov_pct,
+        })
+
+    # Weekly rollup: W1=days 1-7, W2=8-14, W3=15-21, W4=22+
+    week_data: dict = {}
+    for d in daily_out:
+        day_num = int(d["day"][8:10])
+        week_n  = min((day_num - 1) // 7 + 1, 4)
+        wk      = f"W{week_n}"
+        if wk not in week_data:
+            week_data[wk] = {"week": wk, "week_n": week_n,
+                              "pos": 0.0, "ext": 0.0, "matched": 0, "lanes": 0}
+        w = week_data[wk]
+        w["pos"]     += d["pos"]
+        w["ext"]     += d["ext"]
+        w["matched"] += d["matched"]
+        w["lanes"]   += d["total_lanes"]
+
+    weekly_out = []
+    for w in sorted(week_data.values(), key=lambda x: x["week_n"]):
+        w["pos"]      = round(w["pos"], 2)
+        w["ext"]      = round(w["ext"], 2)
+        w["lane_pct"] = round(w["matched"] / w["lanes"] * 100) if w["lanes"] else 0
+        w["cov_pct"]  = min(100, round(w["ext"] / w["pos"] * 100)) if w["pos"] else 0
+        weekly_out.append(w)
+
+    return {"session_id": session_id, "daily": daily_out, "weekly": weekly_out}
+
+
+# ── Audit log ─────────────────────────────────────────────────────────────────
+
+@app.get("/api/audit")
+def get_audit_log(
+    entity:     str | None = None,
+    entity_id:  int | None = None,
+    session_id: int | None = None,
+    limit:      int        = 100,
+):
+    """Field-level change log.
+    Pass session_id to get all events scoped to one session (session-level + its discrepancies).
+    Pass entity + entity_id for a specific record's history."""
+    cap = min(limit, 500)
+    with get_db() as conn:
+        if session_id and not entity and not entity_id:
+            rows = conn.execute("""
+                SELECT * FROM recon_audit_log
+                WHERE (entity='session' AND entity_id=?)
+                   OR (entity='discrepancy'
+                       AND entity_id IN (SELECT id FROM recon_discrepancies WHERE session_id=?))
+                ORDER BY ts DESC, id DESC LIMIT ?
+            """, (session_id, session_id, cap)).fetchall()
+        else:
+            filters: list[str] = []
+            params:  list      = []
+            if entity:
+                filters.append("entity=?");    params.append(entity)
+            if entity_id:
+                filters.append("entity_id=?"); params.append(entity_id)
+            where = ("WHERE " + " AND ".join(filters)) if filters else ""
+            rows = conn.execute(f"""
+                SELECT * FROM recon_audit_log {where}
+                ORDER BY ts DESC, id DESC LIMIT ?
+            """, params + [cap]).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ── Diagnostic endpoints ──────────────────────────────────────────────────────

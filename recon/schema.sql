@@ -270,3 +270,20 @@ CREATE TABLE IF NOT EXISTS recon_category_result (
 );
 
 CREATE INDEX IF NOT EXISTS idx_rcr_session ON recon_category_result(session_id);
+
+-- ─── Audit Log ────────────────────────────────────────────────────────────────
+-- Full field-level change log for every reconciliation mutation.
+-- One row per changed field; create/delete events get a single row with field=NULL.
+CREATE TABLE IF NOT EXISTS recon_audit_log (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        TEXT NOT NULL DEFAULT (datetime('now')),
+    entity    TEXT NOT NULL,   -- 'session' | 'discrepancy' | 'payment_map' | 'line' | 'upload'
+    entity_id INTEGER NOT NULL,
+    action    TEXT NOT NULL,   -- 'create' | 'update' | 'delete'
+    field     TEXT,            -- NULL for create/delete (no field-level diff)
+    old_val   TEXT,
+    new_val   TEXT,
+    by        TEXT NOT NULL DEFAULT 'staff'
+);
+CREATE INDEX IF NOT EXISTS idx_audit_ts     ON recon_audit_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_entity ON recon_audit_log(entity, entity_id, ts DESC);
