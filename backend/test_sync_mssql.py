@@ -67,11 +67,21 @@ def test_reconcile_passes_when_within_tolerance(tmp_path, monkeypatch):
     sq.close()
 
 
-def test_reconcile_fails_on_big_drift(tmp_path, monkeypatch):
+def test_reconcile_fails_on_big_drop(tmp_path, monkeypatch):
     cur = tmp_path / "current.db"; inc = tmp_path / "incoming.db"
     _mini_db(str(cur), chain_rev=1_000_000, ub_apr=500_000, bills=100)
-    _mini_db(str(inc), chain_rev=1_200_000, ub_apr=500_000, bills=100)   # +20% chain rev → must FAIL
+    _mini_db(str(inc), chain_rev=800_000, ub_apr=500_000, bills=100)    # -20% chain rev → must FAIL
     monkeypatch.setattr(sync, "DB", cur)
     sq = sqlite3.connect(str(inc)); sq.row_factory = sqlite3.Row
-    assert sync.reconcile(sq) is False, "reconcile must block a >2% chain-revenue drift"
+    assert sync.reconcile(sq) is False, "reconcile must block a >2% chain-revenue drop"
+    sq.close()
+
+
+def test_reconcile_allows_big_growth(tmp_path, monkeypatch):
+    cur = tmp_path / "current.db"; inc = tmp_path / "incoming.db"
+    _mini_db(str(cur), chain_rev=1_000_000, ub_apr=500_000, bills=100)
+    _mini_db(str(inc), chain_rev=1_200_000, ub_apr=500_000, bills=100)  # +20% growth → must PASS (live month grows)
+    monkeypatch.setattr(sync, "DB", cur)
+    sq = sqlite3.connect(str(inc)); sq.row_factory = sqlite3.Row
+    assert sync.reconcile(sq) is True, "reconcile must allow revenue growth on live month"
     sq.close()

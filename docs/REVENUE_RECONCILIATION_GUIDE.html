@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Oshinei — คู่มือ Revenue Reconciliation ฉบับสมบูรณ์</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#1e293b; --muted:#64748b; --line:#e2e8f0;
+    --accent:#4f46e5; --accent2:#7c3aed; --code-bg:#f1f5f9; --code-ink:#9333ea;
+    --ok:#15803d; --ok-bg:#dcfce7; --warn:#b45309; --warn-bg:#fef3c7;
+    --err:#b91c1c; --err-bg:#fee2e2; --info:#1d4ed8; --info-bg:#dbeafe;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+    line-height:1.7;font-size:15px}
+  .wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+
+  /* Header */
+  header.doc{border-bottom:3px solid var(--accent);padding-bottom:20px;margin-bottom:8px}
+  header.doc h1{font-size:27px;margin:0 0 6px;letter-spacing:-.3px}
+  header.doc .subtitle{font-size:16px;color:var(--muted);margin:4px 0 8px}
+  .meta{color:var(--muted);font-size:13px}
+  .badge{display:inline-block;background:var(--ok-bg);color:var(--ok);
+    font-size:11.5px;font-weight:600;padding:2px 9px;border-radius:20px;margin-left:8px}
+
+  /* TOC */
+  .toc{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:20px 24px;margin:24px 0;font-size:14px}
+  .toc h3{margin:0 0 12px;font-size:15px;color:var(--accent)}
+  .toc ol{margin:0;padding-left:20px;column-count:2;column-gap:24px}
+  .toc li{margin:5px 0}
+  .toc a{color:var(--ink);text-decoration:none}
+  .toc a:hover{color:var(--accent);text-decoration:underline}
+
+  /* Sections */
+  h2{font-size:21px;margin:40px 0 14px;padding-top:16px;border-top:2px solid var(--line)}
+  h2 .n{color:var(--accent);font-weight:700}
+  h3{font-size:16.5px;margin:24px 0 10px;color:#334155}
+  h4{font-size:15px;margin:18px 0 8px;color:var(--accent2)}
+  p{margin:10px 0}
+  code{background:var(--code-bg);color:var(--code-ink);padding:2px 7px;border-radius:5px;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;font-size:.85em}
+  strong{font-weight:650}
+  ol,ul{margin:10px 0;padding-left:24px}
+  li{margin:7px 0}
+
+  /* Tables */
+  table{border-collapse:collapse;width:100%;margin:16px 0;font-size:13.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:#f8fafc;font-weight:600;font-size:12px;text-transform:uppercase;
+    letter-spacing:.4px;color:var(--muted)}
+  tr:last-child td{border-bottom:none}
+  tr:hover td{background:#fafbff}
+  td code{font-size:.82em}
+
+  /* Status badges in tables */
+  .s-ok{background:var(--ok-bg);color:var(--ok);padding:2px 8px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+  .s-warn{background:var(--warn-bg);color:var(--warn);padding:2px 8px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+  .s-err{background:var(--err-bg);color:var(--err);padding:2px 8px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+  .s-info{background:var(--info-bg);color:var(--info);padding:2px 8px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+  .s-gray{background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:20px;
+    font-size:12px;font-weight:600;white-space:nowrap}
+
+  /* Callouts */
+  .callout{padding:12px 16px;margin:16px 0;border-radius:0 9px 9px 0;font-size:14px;line-height:1.6}
+  .callout.info{background:var(--info-bg);border-left:4px solid #3b82f6}
+  .callout.warn{background:var(--warn-bg);border-left:4px solid #f59e0b}
+  .callout.ok{background:var(--ok-bg);border-left:4px solid #22c55e}
+  .callout.err{background:var(--err-bg);border-left:4px solid #ef4444}
+  .callout strong{display:block;margin-bottom:4px}
+
+  /* Steps */
+  .steps{counter-reset:step;margin:14px 0}
+  .step{display:flex;gap:14px;margin:12px 0;align-items:flex-start}
+  .step-num{counter-increment:step;background:var(--accent);color:#fff;
+    border-radius:50%;width:28px;height:28px;flex-shrink:0;display:flex;
+    align-items:center;justify-content:center;font-weight:700;font-size:13px;margin-top:2px}
+  .step-body{flex:1}
+
+  /* Checklist */
+  .checklist{list-style:none;padding:0;margin:12px 0}
+  .checklist li{display:flex;gap:10px;margin:8px 0;align-items:flex-start}
+  .checklist li::before{content:"☐";font-size:16px;line-height:1.3;color:var(--accent);flex-shrink:0}
+
+  /* Flow diagram (text-art) */
+  pre.flow{background:var(--card);border:1px solid var(--line);color:#334155;
+    padding:16px 20px;border-radius:9px;overflow-x:auto;
+    font-family:"SF Mono",Consolas,"Roboto Mono",monospace;
+    font-size:12.5px;line-height:1.7;margin:12px 0}
+
+  /* Code block */
+  pre.code{background:#0f172a;color:#e2e8f0;padding:14px 16px;border-radius:9px;
+    overflow-x:auto;font-family:"SF Mono",Consolas,"Roboto Mono",monospace;
+    font-size:12.5px;line-height:1.55;margin:12px 0}
+
+  /* Section anchor */
+  a.anchor{color:inherit;text-decoration:none}
+  a.anchor:hover{text-decoration:underline}
+
+  /* Card grid */
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin:16px 0}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 16px}
+  .card h4{margin:0 0 6px;font-size:14px;color:var(--accent2)}
+  .card p{margin:0;font-size:13px;color:var(--muted)}
+
+  /* Divider */
+  hr{border:none;border-top:1px solid var(--line);margin:32px 0}
+
+  footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);
+    color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>Oshinei — คู่มือ Revenue Reconciliation <span class="badge">ฉบับสมบูรณ์</span></h1>
+  <div class="subtitle">การกระทบยอดรายได้ POS กับเอกสารภายนอก (ธนาคาร · บัตรเครดิต · Grab · Line Man)</div>
+  <div class="meta">ปรับปรุง: มิถุนายน 2569 &nbsp;·&nbsp; ขอบเขต: 5 สาขา Master &nbsp;·&nbsp; ระดับการเข้าถึง: บัญชี (Master Branch เท่านั้น)</div>
+</header>
+
+<!-- TOC -->
+<div class="toc">
+  <h3>สารบัญ</h3>
+  <ol>
+    <li><a href="#overview">ภาพรวมและวัตถุประสงค์</a></li>
+    <li><a href="#access">การเข้าใช้งานและสิทธิ์</a></li>
+    <li><a href="#concepts">แนวคิดหลักก่อนเริ่ม</a></li>
+    <li><a href="#setup">การตั้งค่าระบบ (Setup)</a></li>
+    <li><a href="#upload">การอัพโหลดเอกสาร</a></li>
+    <li><a href="#reconcile">การกระทบยอด (Reconcile)</a></li>
+    <li><a href="#daily">Daily Board — อ่านผลรายวัน</a></li>
+    <li><a href="#monthly">Monthly Board — ผลลัพธ์รายเดือน</a></li>
+    <li><a href="#discrepancies">การจัดการ Discrepancies</a></li>
+    <li><a href="#manual">Manual Matching</a></li>
+    <li><a href="#overview-tab">ภาพรวม Overview</a></li>
+    <li><a href="#export">การ Export รายงาน</a></li>
+    <li><a href="#monthly-workflow">ขั้นตอนทำงานประจำเดือน</a></li>
+    <li><a href="#troubleshooting">การแก้ไขปัญหา</a></li>
+    <li><a href="#limits">ข้อจำกัดที่รู้จัก</a></li>
+    <li><a href="#faq">คำถามที่พบบ่อย (FAQ)</a></li>
+  </ol>
+</div>
+
+<!-- ═══════════════════════════════════════ 1. OVERVIEW -->
+<h2 id="overview"><span class="n">1.</span> <a class="anchor" href="#overview">ภาพรวมและวัตถุประสงค์</a></h2>
+
+<p>ระบบ Revenue Reconciliation ทำหน้าที่ <strong>กระทบยอดรายได้ที่รับเข้าจากภายนอก</strong> (ธนาคาร, บัตรเครดิต, Grab, Line Man) กับ <strong>ยอดขายใน POS</strong> ของแต่ละสาขา Master ทีละเดือน เพื่อให้ทีมบัญชีสามารถ:</p>
+<ul>
+  <li>ยืนยันว่าเงินที่เข้าบัญชีธนาคารตรงกับยอดขายที่บันทึกใน POS</li>
+  <li>ตรวจจับความคลาดเคลื่อน (variance) ที่ต้องติดตาม ก่อนที่จะปิดบัญชีรายเดือน</li>
+  <li>ติดตามสถานะรายวัน (matched / variance / missing / pending) ในหน้า Daily Board</li>
+  <li>บริหารคิว discrepancy — assign / accept / adjust / reject พร้อม audit trail</li>
+</ul>
+
+<div class="callout info">
+  <strong>ขอบเขตของระบบ</strong>
+  ระบบนี้รองรับ <strong>5 สาขา Master</strong> เท่านั้น ได้แก่ โคราช1, เชียงใหม่, สุรินทร์, อุดรธานี, อุบลราชธานี
+  สาขาอื่นๆ ไม่ปรากฏในระบบ Reconciliation นี้
+</div>
+
+<h3>ประเภทรายได้ที่ระบบ Reconcile</h3>
+<table>
+  <thead><tr><th>ประเภท (Lane)</th><th>แหล่งข้อมูล POS</th><th>เอกสารภายนอก</th><th>แยกตาม</th></tr></thead>
+  <tbody>
+    <tr><td><strong>QR Code</strong></td><td>รหัส QR ใน POS</td><td>Statement ธนาคาร — รายการ QR/PromptPay</td><td>ธนาคาร (KTB / KBANK)</td></tr>
+    <tr><td><strong>Bank Transfer</strong></td><td>รหัส Transfer ใน POS</td><td>Statement ธนาคาร — รายการโอน</td><td>ธนาคาร (KTB / KBANK)</td></tr>
+    <tr><td><strong>Cash</strong></td><td>รหัส Cash ใน POS</td><td>Statement ธนาคาร — รายการฝากเงินสด (CASH_DEP)</td><td>ไม่แยกธนาคาร (global)</td></tr>
+    <tr><td><strong>Credit Card</strong></td><td>รหัส CC ใน POS</td><td>Statement รับชำระ EDC / บัตรเครดิต</td><td>Acquirer (KTB / KBANK / KTC)</td></tr>
+    <tr><td><strong>Grab</strong></td><td>รหัส GB ใน POS</td><td>รายงาน Grab (Completed orders)</td><td>ไม่แยก</td></tr>
+    <tr><td><strong>Line Man</strong></td><td>รหัส LM ใน POS</td><td>รายงาน Line Man</td><td>ไม่แยก</td></tr>
+    <tr><td><strong>Coupon</strong></td><td>รหัส Coupon ใน POS</td><td><em>ยังไม่มีเอกสารภายนอก</em></td><td>— แสดงสถานะ <code>no_source</code></td></tr>
+    <tr><td><strong>Entertain (ENT)</strong></td><td>รหัส ENT ใน POS</td><td>ยกเว้นออก</td><td>ไม่ Reconcile (internal comps)</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════ 2. ACCESS -->
+<h2 id="access"><span class="n">2.</span> <a class="anchor" href="#access">การเข้าใช้งานและสิทธิ์</a></h2>
+
+<h3>URL และการเข้าถึง</h3>
+<table>
+  <thead><tr><th>รายการ</th><th>รายละเอียด</th></tr></thead>
+  <tbody>
+    <tr><td>URL หลัก</td><td><code>https://oshinei-dashboard.fly.dev:8443/app/</code></td></tr>
+    <tr><td>สิทธิ์อ่าน</td><td>เปิดให้ทุกคนที่มี URL (อ่านอย่างเดียว)</td></tr>
+    <tr><td>สิทธิ์เขียน</td><td>ต้องใช้ <strong>Write Token</strong> — คลิก 🔑 (มุมขวาบน) แล้ว paste token</td></tr>
+    <tr><td>สาขาที่เห็น</td><td>เฉพาะ 5 Master Branches (ไม่แสดงสาขาย่อย)</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <strong>Write Token จำเป็นสำหรับทุกการแก้ไข</strong>
+  การอัพโหลดเอกสาร, แมปรหัสชำระเงิน, เพิ่มบัญชีธนาคาร, และการรัน Match — ทั้งหมดต้องมี Token ก่อน
+  Token จะถูกเก็บไว้ใน browser session จนกว่าจะปิดหน้าต่าง
+</div>
+
+<h3>แผงควบคุมหลัก (Navigation)</h3>
+<div class="card-grid">
+  <div class="card"><h4>Setup</h4><p>ตั้งค่ารหัสชำระเงิน, บัญชีธนาคาร, Acquirer MIDs — ทำครั้งแรกครั้งเดียว</p></div>
+  <div class="card"><h4>Uploads</h4><p>อัพโหลดและจัดการเอกสาร Statement ทุกประเภท</p></div>
+  <div class="card"><h4>Reconcile</h4><p>เปิด Session กระทบยอดรายวัน (Daily) และรายเดือน (Monthly)</p></div>
+  <div class="card"><h4>Discrepancies</h4><p>คิวรายการที่ไม่ตรง — assign / resolve / audit trail</p></div>
+  <div class="card"><h4>Overview</h4><p>สรุปสถานะทุกสาขา ทุกเดือน — นับปัญหาที่รอดำเนินการ</p></div>
+  <div class="card"><h4>Reports / Export</h4><p>ดาวน์โหลดรายงาน Excel สรุปผลการ Reconcile</p></div>
+</div>
+
+<!-- ═══════════════════════════════════════ 3. CONCEPTS -->
+<h2 id="concepts"><span class="n">3.</span> <a class="anchor" href="#concepts">แนวคิดหลักก่อนเริ่ม</a></h2>
+
+<h3>3.1 Payment Map คืออะไร?</h3>
+<p>POS ของแต่ละสาขามีรหัสชำระเงิน (Payment Code) ที่ตั้งชื่อต่างกัน เช่น <code>KNNQR</code>, <code>QR Code on EDC</code>, <code>Credit</code> ฯลฯ ระบบไม่รู้ว่ารหัสเหล่านั้นเป็นประเภทอะไร และเข้าธนาคารไหน</p>
+<p><strong>Payment Map</strong> คือตารางที่ผู้ใช้กำหนดเองว่า: <em>รหัส X = ประเภท QR + ธนาคาร KTB</em> เป็นต้น โดยระบบจะ Seed รายการเริ่มต้นจากข้อมูล POS แต่ต้อง <strong>เติม Bank ให้ครบทุกรหัสที่มียอด</strong> ก่อนกระทบยอดถึงจะตรงได้</p>
+
+<h3>3.2 Session คืออะไร?</h3>
+<p>การ Reconcile แต่ละครั้งจะสร้าง <strong>Session</strong> หนึ่งชุด ซึ่งผูกกับ (สาขา + เดือน) Session เก็บผลการ Match ทั้งหมดไว้ และสามารถรัน Match ซ้ำ (Idempotent) ได้โดยไม่สูญเสียข้อมูลเดิม</p>
+
+<h3>3.3 Tolerance (ค่าความคลาดเคลื่อนที่ยอมรับได้)</h3>
+<table>
+  <thead><tr><th>ระดับ</th><th>ค่าสูงสุดแบบ Absolute</th><th>ค่าสูงสุดแบบ % </th><th>หมายเหตุ</th></tr></thead>
+  <tbody>
+    <tr><td>รายวัน (Daily)</td><td>฿50</td><td>1.0%</td><td>ยอดต่อวันต่อ lane เล็กกว่า ให้ tolerance แคบกว่า</td></tr>
+    <tr><td>รายเดือน (Monthly)</td><td>฿100</td><td>0.5%</td><td>ยอดรวมทั้งเดือน ใช้ % เป็นหลัก</td></tr>
+  </tbody>
+</table>
+<p>ถ้า <code>|ext − pos| ≤ ฿50</code> <strong>หรือ</strong> <code>|ext − pos| / pos ≤ 1%</code> → ถือว่า <span class="s-ok">matched</span></p>
+
+<h3>3.4 ประเภทช่องทาง (Lane) ในระบบ</h3>
+<table>
+  <thead><tr><th>Lane</th><th>ความหมาย</th><th>แยกโดย</th></tr></thead>
+  <tbody>
+    <tr><td><code>CASH</code></td><td>เงินสด</td><td>ไม่แยกธนาคาร — นับรวมทุกธนาคาร</td></tr>
+    <tr><td><code>QR · KTB</code>, <code>QR · KBANK</code></td><td>QR / PromptPay</td><td>แยกตามธนาคารที่รับโอน</td></tr>
+    <tr><td><code>TRANSFER · KTB</code>, <code>TRANSFER · KBANK</code></td><td>โอนเงิน</td><td>แยกตามธนาคาร</td></tr>
+    <tr><td><code>CREDIT · KTB</code>, <code>CREDIT · KBANK</code>, <code>CREDIT · KTC</code></td><td>บัตรเครดิต</td><td>แยกตาม Acquirer</td></tr>
+    <tr><td><code>GRAB</code></td><td>Grab Food</td><td>ไม่แยก</td></tr>
+    <tr><td><code>LINEMAN</code></td><td>Line Man</td><td>ไม่แยก</td></tr>
+    <tr><td><code>COUPON</code></td><td>คูปอง / Voucher</td><td>ไม่แยก — ยังไม่มีเอกสารภายนอก</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════ 4. SETUP -->
+<h2 id="setup"><span class="n">4.</span> <a class="anchor" href="#setup">การตั้งค่าระบบ (Setup)</a></h2>
+
+<p>ทำ <strong>ครั้งแรกครั้งเดียว</strong> ใช้เวลาประมาณ 15–30 นาที ต้องมี Write Token ก่อน</p>
+
+<div class="callout warn">
+  <strong>สำคัญมาก:</strong> ถ้าตั้งค่า Payment Map ผิด (เช่น รหัส QR KTB แต่ระบุว่าเป็น KBANK) ผลการ Reconcile จะผิดทั้งหมด — ตรวจสอบให้ถูกต้องก่อน
+</div>
+
+<h3>4.1 Payment Code Map (แมปรหัสชำระเงิน)</h3>
+<p>เปิดแท็บ <strong>Setup → Payment Code Map</strong></p>
+
+<h4>ขั้นตอน</h4>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">
+    ดูรายการรหัสที่มีสัญลักษณ์ <strong>⚠ amber</strong> หรือแสดง <strong>"needs a bank"</strong> — รหัสเหล่านี้มียอดเงินแต่ยังไม่รู้ว่าเข้าธนาคารไหน
+  </div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">
+    เริ่มจากรหัสที่มียอดสูงสุดก่อน (แสดงยอดกำกับแต่ละรหัส):
+    <ul>
+      <li><code>KNNQR</code> (ยอดสูงมาก ~฿80M) — QR PromptPay เข้าธนาคารไหน? ตั้งเป็น <strong>QR + KTB</strong> หรือ <strong>QR + KBANK</strong></li>
+      <li><code>Bank Transfer</code> — โอนเงินเข้าธนาคารไหน?</li>
+      <li><code>Credit</code> / <code>CC</code> / <code>QR Code on EDC</code> — บัตรเครดิต acquirer ไหน?</li>
+      <li><code>QR PromptPay</code> → ตั้งธนาคารที่รับเงินจริงๆ (ไม่ใช่ตั้งเป็น PROMPTPAY)</li>
+    </ul>
+  </div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">
+    สำหรับแต่ละรหัส เลือก: <strong>Category</strong> (CASH / QR / TRANSFER / CREDIT / GRAB / LINEMAN / COUPON) และ <strong>Bank</strong> (KTB / KBANK / KTC)
+  </div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">
+    การเปลี่ยนแปลง <strong>บันทึกอัตโนมัติ</strong> (เห็น ✓ หลังแก้ไข) — ไม่ต้องกด Save
+  </div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body">
+    รายการ amber ที่ด้านบนต้องลดเหลือ <strong>0</strong> ทั้งหมดก่อนที่ผลการ Reconcile จะสมบูรณ์
+  </div></div>
+</div>
+
+<h4>ตัวอย่าง Payment Code Map ที่ถูกต้อง</h4>
+<table>
+  <thead><tr><th>รหัสใน POS</th><th>Category</th><th>Bank / Acquirer</th><th>Reconcile?</th></tr></thead>
+  <tbody>
+    <tr><td><code>KNNQR</code></td><td>QR</td><td>KTB</td><td>✓ ใช่</td></tr>
+    <tr><td><code>QR PromptPay</code></td><td>QR</td><td>KBANK</td><td>✓ ใช่</td></tr>
+    <tr><td><code>Bank Transfer</code></td><td>TRANSFER</td><td>KTB</td><td>✓ ใช่</td></tr>
+    <tr><td><code>Credit</code></td><td>CREDIT</td><td>KBANK</td><td>✓ ใช่</td></tr>
+    <tr><td><code>CC</code></td><td>CREDIT</td><td>KTC</td><td>✓ ใช่</td></tr>
+    <tr><td><code>Cash</code></td><td>CASH</td><td>—</td><td>✓ ใช่</td></tr>
+    <tr><td><code>GRAB</code></td><td>GRAB</td><td>—</td><td>✓ ใช่</td></tr>
+    <tr><td><code>LINEMAN</code></td><td>LINEMAN</td><td>—</td><td>✓ ใช่</td></tr>
+    <tr><td><code>ENT</code> / <code>ENTERTAIN</code></td><td>OTHER</td><td>—</td><td>✗ ยกเว้น</td></tr>
+    <tr><td><code>Coupon</code></td><td>COUPON</td><td>—</td><td>✓ ใช่ (แต่ no_source)</td></tr>
+  </tbody>
+</table>
+
+<h3>4.2 Bank Accounts (บัญชีธนาคาร)</h3>
+<p>เปิดแท็บ <strong>Setup → Bank Accounts</strong></p>
+<p>เพิ่มบัญชีธนาคารของแต่ละสาขา Master เพื่อให้ระบบจับคู่ statement line กับสาขาและธนาคารได้ถูกต้อง</p>
+
+<h4>ข้อมูลที่ต้องกรอกสำหรับแต่ละบัญชี</h4>
+<table>
+  <thead><tr><th>Field</th><th>คำอธิบาย</th><th>ตัวอย่าง</th></tr></thead>
+  <tbody>
+    <tr><td>สาขา (Branch)</td><td>เลือกจากรายการ 5 สาขา Master</td><td>โคราช1</td></tr>
+    <tr><td>ธนาคาร (Bank)</td><td>KTB หรือ KBANK</td><td>KTB</td></tr>
+    <tr><td>เลขบัญชี (Account No.)</td><td>เลขบัญชีที่รับเงิน QR/Transfer</td><td>123-4-56789-0</td></tr>
+    <tr><td>ชื่อบัญชี (Account Name)</td><td>ชื่อบัญชีตามสมุดบัญชี (ไม่บังคับ)</td><td>บริษัท โอชิเนย์ฯ สาขาโคราช</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  <strong>เพิ่มทั้ง KTB และ KBANK ให้ทุกสาขา</strong>
+  แม้สาขานั้นจะใช้แค่ธนาคารเดียวก็ควรเพิ่มทั้งคู่ เพราะอาจมีรายการ fee หรือ settlement เข้าผิดธนาคารได้
+</div>
+
+<h3>4.3 Acquirer MIDs (หมายเลขร้านค้าบัตรเครดิต)</h3>
+<p>เปิดแท็บ <strong>Setup → Acquirer MIDs</strong></p>
+<p>เพิ่ม Merchant ID ของ EDC แต่ละเครื่องเพื่อให้ระบบจับคู่ Settlement Statement กับสาขาได้ถูกต้อง</p>
+
+<h4>ข้อมูลที่ต้องกรอก</h4>
+<table>
+  <thead><tr><th>Field</th><th>คำอธิบาย</th><th>ตัวอย่าย</th></tr></thead>
+  <tbody>
+    <tr><td>สาขา (Branch)</td><td>เลือกสาขา Master</td><td>สุรินทร์</td></tr>
+    <tr><td>Acquirer</td><td>KTB / KBANK / KTC</td><td>KBANK</td></tr>
+    <tr><td>MID</td><td>หมายเลข Merchant ID บน EDC</td><td>123456789</td></tr>
+    <tr><td>TID (ไม่บังคับ)</td><td>Terminal ID ถ้ามีหลายเครื่อง</td><td>TID-001</td></tr>
+  </tbody>
+</table>
+
+<div class="callout info">
+  หา MID ได้จาก: สมัครครั้งแรกกับธนาคาร หรือดูจาก Statement ของ Acquirer (ขึ้นต้นด้วย MID xxxxxxxx)
+</div>
+
+<!-- ═══════════════════════════════════════ 5. UPLOAD -->
+<h2 id="upload"><span class="n">5.</span> <a class="anchor" href="#upload">การอัพโหลดเอกสาร</a></h2>
+
+<p>เปิดแท็บ <strong>Uploads</strong> → เลือกสาขา (top bar) → คลิก <strong>+ Upload</strong></p>
+<p>อัพโหลดทีละ 1 ไฟล์ต่อธนาคาร/เดือน (สำหรับบัญชีที่มีหลาย Statement ต่อเดือน ให้ upload แยกไฟล์)</p>
+
+<div class="callout warn">
+  <strong>ทุกครั้ง: Preview ก่อนเสมอ — อย่า Confirm ทันที</strong>
+  ถ้า Preview แสดงวันที่ผิด, ยอดเพี้ยน, หรือ "skipped rows" สูง → หยุดแล้วแจ้งทีม IT ก่อน Parser อาจต้องปรับ
+</div>
+
+<h3>5.1 Bank Statement (Statement ธนาคาร)</h3>
+<h4>ขั้นตอน</h4>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">คลิก <strong>+ Upload</strong> → เลือก <code>Bank Statement</code></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">
+    เลือก <strong>Provider</strong>: KTB หรือ KBANK (ต้องตรงกับธนาคารที่ส่ง statement ไฟล์นี้)
+  </div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">
+    เลือกไฟล์ Excel (.xlsx) ที่ Export มาจากระบบธนาคาร
+  </div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">
+    คลิก <strong>Preview</strong> — ตรวจสอบ:
+    <ul>
+      <li>วันที่แรก / วันที่สุดท้ายตรงกับเดือนที่ต้องการ</li>
+      <li>จำนวนแถวสมเหตุสมผล</li>
+      <li>"skipped rows" ≈ 0 (ถ้าสูงผิดปกติ แสดงว่า format เปลี่ยน)</li>
+      <li>ยอดรวม Credit ใกล้เคียงกับที่รู้</li>
+    </ul>
+  </div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body">ถ้า Preview ถูกต้อง → คลิก <strong>Confirm</strong></div></div>
+</div>
+
+<h4>Channel ที่ระบบจำแนกจาก Statement</h4>
+<table>
+  <thead><tr><th>Channel</th><th>รายการที่จับได้</th><th>Reconcile กับ POS ประเภท</th></tr></thead>
+  <tbody>
+    <tr><td><code>QR</code></td><td>PromptPay, QR Code, พร้อมเพย์</td><td>QR</td></tr>
+    <tr><td><code>TRANSFER</code></td><td>โอนเงิน, Transfer, TRF</td><td>TRANSFER</td></tr>
+    <tr><td><code>CASH_DEP</code></td><td>ฝากเงิน, Deposit, Cash Dep</td><td>CASH</td></tr>
+    <tr><td><code>FEE</code></td><td>ค่าธรรมเนียม, Fee</td><td>ข้ามไป (ไม่ Reconcile)</td></tr>
+    <tr><td><code>CC_SETTLE</code></td><td>EDC Settle, Credit Card Settlement</td><td>ข้ามไป (ใช้ CC Statement แทน)</td></tr>
+    <tr><td><code>GRAB_PAYOUT</code></td><td>Grab, แกร็บ</td><td>ข้ามไป (ใช้ Grab Report แทน)</td></tr>
+    <tr><td><code>LINEMAN_PAYOUT</code></td><td>Line Man, ไลน์แมน</td><td>ข้ามไป (ใช้ Line Man Report แทน)</td></tr>
+  </tbody>
+</table>
+
+<h4>Format ที่รองรับ (Thai Banks)</h4>
+<table>
+  <thead><tr><th>ธนาคาร</th><th>ชื่อ Parser</th><th>วิธี Export</th></tr></thead>
+  <tbody>
+    <tr><td>KTB (กรุงไทย)</td><td><code>ktb</code></td><td>Export จากระบบ KTB Business / KTB netbank</td></tr>
+    <tr><td>KBANK (กสิกร)</td><td><code>kbank</code></td><td>Export จาก K PLUS Business / K-BIZ</td></tr>
+    <tr><td>SCB (ไทยพาณิชย์)</td><td><code>scb</code></td><td>Export จาก SCB Easy Biz</td></tr>
+    <tr><td>BBL (กรุงเทพ)</td><td><code>bbl</code></td><td>Export จาก BBL iBanking</td></tr>
+    <tr><td>TTB (ทหารไทยธนชาต)</td><td><code>ttb</code></td><td>Export จาก ttb smart port</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 Credit Card Settlement</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">คลิก <strong>+ Upload</strong> → เลือก <code>Credit Card Settlement</code></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">เลือก <strong>Acquirer</strong>: KTB / KBANK / KTC (ต้องตรงกับ statement ที่อัพ)</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">เลือกไฟล์ → Preview → ตรวจสอบ → Confirm</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">
+    <strong>ตั้ง Fee และ VAT</strong> หลัง Confirm: ไปที่ Daily Board → คลิกที่แต่ละ line → แก้ไข Fee % และ VAT %
+    <ul>
+      <li><strong>Fee</strong> = ค่า MDR ที่ตกลงกับ Acquirer (เช่น 1.5%, 2.0%)</li>
+      <li><strong>VAT</strong> = VAT ของค่า fee (ปกติ 7%)</li>
+      <li>ระบบจะคำนวณ Net = Gross − Fee − VAT ให้อัตโนมัติ</li>
+    </ul>
+  </div></div>
+</div>
+
+<div class="callout info">
+  <strong>Gross vs Net สำหรับบัตรเครดิต</strong>
+  POS บันทึกยอด Gross (ยอดขายทั้งหมด) แต่ที่โอนเข้าบัญชีจริงคือยอด Net (หักค่า MDR แล้ว)
+  ระบบจะ Reconcile ยอด <strong>Gross</strong> กับ POS, และแสดงยอด Net ไว้เปรียบเทียบกับที่เข้าบัญชีธนาคาร
+</div>
+
+<h3>5.3 Grab Report</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">คลิก <strong>+ Upload</strong> → เลือก <code>Grab</code></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">Download Grab Report จาก Grab Merchant Portal → Export รายงาน Settlement</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">เลือกไฟล์ (.xlsx) → Preview → ตรวจ "Completed orders" → Confirm</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">ตั้ง Fee % และ VAT % ต่อ line (เหมือน Credit Card)</div></div>
+</div>
+
+<div class="callout info">
+  <strong>Grab: Gross คือยอด GMV ก่อนหัก</strong>
+  Grab จ่ายให้ร้านเป็น Net หลังหักค่า GP %, โปรโมชัน, และ refund
+  ระบบ Reconcile ยอด <strong>Gross</strong> (Completed orders amount) กับ POS รหัส GRAB
+</div>
+
+<h3>5.4 Line Man Report</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">คลิก <strong>+ Upload</strong> → เลือก <code>Line Man</code></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">Download รายงาน Settlement จาก LINE MAN Merchant Portal</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">เลือกไฟล์ → Preview → ตรวจ → Confirm</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">ตั้ง Fee % และ VAT %</div></div>
+</div>
+
+<h3>5.5 การจัดการ Uploads</h3>
+<table>
+  <thead><tr><th>Action</th><th>วิธีทำ</th><th>หมายเหตุ</th></tr></thead>
+  <tbody>
+    <tr><td>ดู Upload ที่มีอยู่</td><td>Uploads tab → รายการจะแสดง source, สาขา, วันที่, แถว</td><td>—</td></tr>
+    <tr><td>ลบ Upload ที่ผิด</td><td>คลิก 🗑 ข้างๆ รายการ → ยืนยัน</td><td>ลบแล้วต้อง Run Match ใหม่</td></tr>
+    <tr><td>Upload ซ้ำ (ไฟล์เดิม)</td><td>ระบบตรวจ file hash อัตโนมัติ → แจ้ง duplicate</td><td>ป้องกัน double-count</td></tr>
+    <tr><td>Upload ไฟล์ใหม่แทน</td><td>ลบเก่าก่อน → อัพใหม่</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════ 6. RECONCILE -->
+<h2 id="reconcile"><span class="n">6.</span> <a class="anchor" href="#reconcile">การกระทบยอด (Reconcile)</a></h2>
+
+<h3>6.1 สร้าง Session</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">เปิดแท็บ <strong>Reconcile</strong></div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">เลือก <strong>สาขา</strong> จาก top bar dropdown</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">เลือก <strong>เดือน</strong> (เช่น 2026-05)</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">ถ้ายังไม่มี Session → คลิก <strong>+ New Session</strong> เพื่อสร้างใหม่</div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body">ระบบเปิด <strong>Daily Board</strong> อัตโนมัติ (tab หลัก)</div></div>
+</div>
+
+<h3>6.2 การรัน Match</h3>
+<p>การ Run Match คือการให้ระบบเปรียบเทียบ POS กับเอกสารภายนอกทั้งหมด</p>
+<ul>
+  <li>ไปที่แท็บ <strong>Monthly</strong> → คลิก <strong>▶ Run Match</strong></li>
+  <li>รันได้กี่ครั้งก็ได้ — <strong>Idempotent</strong> (รันซ้ำ ผลลัพธ์เดิม)</li>
+  <li>ควรรัน Match ใหม่ทุกครั้งที่: อัพโหลดเอกสารใหม่, แก้ไข Payment Map, แก้ไข Fee/VAT</li>
+</ul>
+
+<div class="callout ok">
+  <strong>เมื่อไหร่ที่ควร Run Match</strong>
+  หลังอัพโหลดเอกสารครบ → Run Match ครั้งแรก → ดูผล → แก้ Payment Map หรือ Fee/VAT → Run Match อีกครั้ง ทำซ้ำจนกว่าจะพอใจกับผล
+</div>
+
+<!-- ═══════════════════════════════════════ 7. DAILY BOARD -->
+<h2 id="daily"><span class="n">7.</span> <a class="anchor" href="#daily">Daily Board — อ่านผลรายวัน</a></h2>
+
+<p>Daily Board คือหน้าหลักที่แสดงสถานะการกระทบยอดแต่ละวัน แต่ละ Lane</p>
+
+<h3>7.1 โครงสร้าง Daily Board</h3>
+<pre class="flow">
+  วันที่     │ CASH  │ QR·KTB │ QR·KBANK │ TRANSFER·KTB │ CREDIT·KBANK │ GRAB │ LINEMAN
+  ──────────────────────────────────────────────────────────────────────────────────────
+  1 พ.ค.    │  ✓    │   ✓    │    ✓     │      ✓       │      ✓      │  ✓   │   ✓
+  2 พ.ค.    │  ✓    │   ✓    │    ≠     │      ✓       │      …      │  ✓   │   ✓
+  3 พ.ค.    │  ✓    │   ✗    │    ✓     │      ✓       │      ✓      │  ✓   │   …
+  4 พ.ค.    │  ✓    │   ✓    │    ✓     │      ?       │      ✓      │  ✓   │   ✓
+</pre>
+
+<h3>7.2 ความหมายของแต่ละสถานะ</h3>
+<table>
+  <thead><tr><th>สัญลักษณ์</th><th>สถานะ</th><th>ความหมาย</th><th>สิ่งที่ต้องทำ</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="s-ok">✓ matched</span></td>
+      <td>Matched</td>
+      <td>POS = Statement (ภายใน tolerance ฿50/1%)</td>
+      <td>ไม่ต้องทำอะไร ✓</td>
+    </tr>
+    <tr>
+      <td><span class="s-warn">≠ variance</span></td>
+      <td>Variance</td>
+      <td>มีทั้งสองฝั่ง แต่ยอดต่างกันเกิน tolerance</td>
+      <td>ตรวจสอบ — อาจเป็น fee ขาด, รายการซ้ำ, หรือข้อผิดพลาด</td>
+    </tr>
+    <tr>
+      <td><span class="s-err">✗ missing</span></td>
+      <td>Missing</td>
+      <td>Statement มีวันนั้น แต่ POS ไม่มี (หรือกลับกัน)</td>
+      <td>ช่องว่างจริง — ต้องติดตามทันที</td>
+    </tr>
+    <tr>
+      <td><span class="s-gray">… pending</span></td>
+      <td>Pending</td>
+      <td>ยังไม่มี Statement ที่ Cover วันนั้น (เอกสารมาช้า)</td>
+      <td>รอเอกสาร → อัพโหลดเมื่อได้</td>
+    </tr>
+    <tr>
+      <td><span class="s-warn">? unmapped_bank</span></td>
+      <td>Unmapped Bank</td>
+      <td>รหัสชำระเงินมี Bank = UNKNOWN หรือ PROMPTPAY</td>
+      <td>ไปแก้ใน Setup → Payment Map</td>
+    </tr>
+    <tr>
+      <td><span class="s-info">+ ext_only</span></td>
+      <td>Ext Only</td>
+      <td>มีรายการใน Statement แต่ไม่มีใน POS</td>
+      <td>ตรวจสอบ — อาจเป็นรายการ settle ของวันก่อน</td>
+    </tr>
+    <tr>
+      <td><span class="s-gray">· no_source</span></td>
+      <td>No Source</td>
+      <td>ประเภทนี้ไม่มีเอกสารภายนอก (เช่น COUPON)</td>
+      <td>บันทึกเป็น remark — ไม่ต้องแก้</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>7.3 Coverage Strip</h3>
+<p>ด้านบน Daily Board จะมีแถบ <strong>Coverage</strong> แสดงวันสุดท้ายที่เอกสารแต่ละ source ครอบคลุมถึง:</p>
+<ul>
+  <li>ถ้า Coverage ของ KTB Bank Statement = 31 พ.ค. → statement ครอบคลุมถึง 31 พ.ค.</li>
+  <li>วันหลัง Coverage = <span class="s-gray">pending</span> (เอกสารยังไม่มา)</li>
+  <li>วันก่อน Coverage แต่ไม่มีรายการ = <span class="s-err">missing</span> (ช่องว่างจริง)</li>
+</ul>
+
+<h3>7.4 Date Picker</h3>
+<p>ใช้ Date Picker บน Daily Board เพื่อ Focus เฉพาะวันที่ต้องการ ดูรายละเอียด lane นั้นวันนั้น</p>
+
+<h3>7.5 Fee &amp; VAT Panel (สำหรับ Grab / Line Man / Credit Card)</h3>
+<p>คลิกที่แต่ละ Lane บน Daily Board → จะแสดงแผง Fee & VAT:</p>
+<ul>
+  <li>ใส่ <strong>Fee %</strong> = อัตราค่าบริการ (เช่น Grab 30%, KTB Credit 1.5%)</li>
+  <li>ใส่ <strong>VAT %</strong> = VAT ของค่า fee (ปกติ 7%)</li>
+  <li>ระบบคำนวณ <code>Net = Gross − (Gross × Fee%) − (Fee × VAT%)</code></li>
+  <li>แก้แล้ว → <strong>Run Match ใหม่</strong> เพื่ออัพเดทผล</li>
+</ul>
+
+<!-- ═══════════════════════════════════════ 8. MONTHLY BOARD -->
+<h2 id="monthly"><span class="n">8.</span> <a class="anchor" href="#monthly">Monthly Board — ผลลัพธ์รายเดือน</a></h2>
+
+<p>Monthly Board รวมผลทั้งเดือนเป็น Cards แต่ละ Lane</p>
+
+<h3>8.1 โครงสร้าง Monthly Board</h3>
+<p>แต่ละ Card แสดง:</p>
+<ul>
+  <li><strong>ชื่อ Lane</strong> เช่น QR · KTB</li>
+  <li><strong>POS Amount</strong> — ยอดรวมจาก POS ทั้งเดือน</li>
+  <li><strong>External Amount</strong> — ยอดรวมจาก Statement ทั้งเดือน</li>
+  <li><strong>Difference</strong> — ส่วนต่าง (Ext − POS)</li>
+  <li><strong>Status badge</strong> — matched / mismatch / pos_only / ext_only / no_source</li>
+</ul>
+
+<h3>8.2 สถานะใน Monthly Board</h3>
+<table>
+  <thead><tr><th>สถานะ</th><th>ความหมาย</th></tr></thead>
+  <tbody>
+    <tr><td><span class="s-ok">matched</span></td><td>ยอดรวมทั้งเดือนตรงกัน (ภายใน tolerance ฿100/0.5%)</td></tr>
+    <tr><td><span class="s-warn">mismatch</span></td><td>มีทั้งสองฝั่ง แต่ยอดรวมเดือนต่างกันเกิน tolerance</td></tr>
+    <tr><td><span class="s-info">pos_only</span></td><td>มีแต่ POS — ไม่มี Statement (ลืมอัพโหลดหรือ Channel ไม่ตรง)</td></tr>
+    <tr><td><span class="s-info">ext_only</span></td><td>มีแต่ Statement — ไม่มี POS (รหัสไม่ได้ map ถูกต้อง)</td></tr>
+    <tr><td><span class="s-gray">no_source</span></td><td>COUPON หรือ lane ที่ไม่มีเอกสารภายนอก</td></tr>
+  </tbody>
+</table>
+
+<h3>8.3 หลังจาก Run Match ผ่านหมด</h3>
+<ul>
+  <li>ทุก Lane เป็น <span class="s-ok">matched</span> → เดือนนี้ Reconcile สำเร็จ ✓</li>
+  <li>มี <span class="s-warn">mismatch</span> → ดู Discrepancies tab เพื่อติดตาม</li>
+  <li>มี <span class="s-info">pos_only</span> → ตรวจสอบ Payment Map หรืออัพโหลด Statement</li>
+  <li>มี <span class="s-info">ext_only</span> → ตรวจสอบว่า Statement มี MID / Account ที่ตรงกับสาขานี้หรือไม่</li>
+</ul>
+
+<!-- ═══════════════════════════════════════ 9. DISCREPANCIES -->
+<h2 id="discrepancies"><span class="n">9.</span> <a class="anchor" href="#discrepancies">การจัดการ Discrepancies</a></h2>
+
+<p>รายการที่ยอดต่างกันเกิน tolerance จะถูกส่งมายังคิว <strong>Discrepancies</strong> โดยอัตโนมัติเมื่อ Run Match</p>
+
+<h3>9.1 การเปิดดู Discrepancies</h3>
+<ul>
+  <li>เปิดแท็บ <strong>Discrepancies</strong> (ใน Session ที่เลือก)</li>
+  <li>หรือจาก Overview → คลิกที่ <strong>Issues badge</strong> ของสาขา/เดือน</li>
+</ul>
+
+<h3>9.2 ข้อมูลใน Discrepancy แต่ละรายการ</h3>
+<table>
+  <thead><tr><th>Field</th><th>คำอธิบาย</th></tr></thead>
+  <tbody>
+    <tr><td>Lane</td><td>เช่น QR · KTB, CREDIT · KBANK</td></tr>
+    <tr><td>Period</td><td>เดือน/วันที่เกิด discrepancy</td></tr>
+    <tr><td>POS Amount</td><td>ยอดจาก POS</td></tr>
+    <tr><td>External Amount</td><td>ยอดจาก Statement</td></tr>
+    <tr><td>Difference</td><td>Ext − POS (ลบแปลว่า POS สูงกว่า)</td></tr>
+    <tr><td>Status</td><td>pending → accepted / adjusted / rejected</td></tr>
+    <tr><td>Assigned To</td><td>ชื่อผู้รับผิดชอบ</td></tr>
+  </tbody>
+</table>
+
+<h3>9.3 การ Assign Discrepancy</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">เลือกรายการ discrepancy</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">คลิก <strong>Assign</strong> → ใส่ชื่อผู้รับผิดชอบ</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">ระบบบันทึกใน audit trail พร้อม timestamp</div></div>
+</div>
+
+<h3>9.4 การ Resolve Discrepancy</h3>
+<p>ผู้รับผิดชอบตรวจสอบแล้วเลือก action:</p>
+<table>
+  <thead><tr><th>Action</th><th>ความหมาย</th><th>ใช้เมื่อ</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><span class="s-ok">accepted</span></td>
+      <td>ยอมรับว่าตรงกันแล้ว</td>
+      <td>ตรวจสอบแล้วพบว่าเป็น timing difference หรือภายใน tolerance</td>
+    </tr>
+    <tr>
+      <td><span class="s-warn">adjusted</span></td>
+      <td>ปรับ/แก้ไขแล้ว</td>
+      <td>พบข้อผิดพลาดและได้แก้ไขแล้ว (เช่น แก้ fee/vat, แก้ mapping)</td>
+    </tr>
+    <tr>
+      <td><span class="s-err">rejected</span></td>
+      <td>ปฏิเสธ/ยังไม่ยอมรับ</td>
+      <td>ยังไม่ได้รับการแก้ไข — ต้องส่งต่อหรือรอข้อมูลเพิ่ม</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>9.5 Bulk Resolve</h3>
+<p>เลือกหลาย Discrepancy พร้อมกัน → คลิก <strong>Bulk Resolve</strong> → เลือก action เดียวกันทั้งหมด (ประหยัดเวลาสำหรับ timing differences ที่รู้อยู่แล้ว)</p>
+
+<h3>9.6 Audit Trail</h3>
+<p>ทุก action (assign, resolve, comment) ถูกบันทึกใน <code>recon_audit_log</code> พร้อม:</p>
+<ul>
+  <li>เวลา (timestamp)</li>
+  <li>ผู้กระทำ (actor)</li>
+  <li>action ที่ทำ</li>
+  <li>ค่าก่อน/หลัง</li>
+</ul>
+
+<!-- ═══════════════════════════════════════ 10. MANUAL MATCHING -->
+<h2 id="manual"><span class="n">10.</span> <a class="anchor" href="#manual">Manual Matching</a></h2>
+
+<p>สำหรับกรณีที่ต้องการจับคู่ POS กับ Statement รายการด้วยตนเอง เช่น ยอดที่กระจายอยู่หลายวันแต่ควรนับรวมกัน</p>
+
+<h3>10.1 ขั้นตอน Manual Match</h3>
+<div class="steps">
+  <div class="step"><div class="step-num">1</div><div class="step-body">บน Daily Board คลิก Lane ที่ต้องการ</div></div>
+  <div class="step"><div class="step-num">2</div><div class="step-body">เลือก POS line วันที่ต้องการ (tick checkbox)</div></div>
+  <div class="step"><div class="step-num">3</div><div class="step-body">เลือก Statement line ที่ต้องการจับคู่ (tick checkbox)</div></div>
+  <div class="step"><div class="step-num">4</div><div class="step-body">คลิก <strong>Create Manual Match</strong></div></div>
+  <div class="step"><div class="step-num">5</div><div class="step-body">ระบบสร้าง match record — Reversible (ลบได้)</div></div>
+</div>
+
+<h3>10.2 การลบ Manual Match</h3>
+<ul>
+  <li>ไปที่ Matches tab ใน Session</li>
+  <li>ค้นหา manual match ที่ต้องการลบ</li>
+  <li>คลิก <strong>🗑 Delete</strong> — match ถูกลบ, POS/Statement กลับสู่สถานะ unmatched</li>
+</ul>
+
+<!-- ═══════════════════════════════════════ 11. OVERVIEW TAB -->
+<h2 id="overview-tab"><span class="n">11.</span> <a class="anchor" href="#overview-tab">ภาพรวม Overview</a></h2>
+
+<p>Overview Tab แสดงสถานะของทุกสาขา ทุกเดือน ในหน้าเดียว — เหมาะสำหรับหัวหน้าบัญชีตรวจสอบ Progress</p>
+
+<h3>11.1 สิ่งที่เห็นใน Overview</h3>
+<table>
+  <thead><tr><th>ส่วน</th><th>ข้อมูล</th></tr></thead>
+  <tbody>
+    <tr><td>สรุปสาขา</td><td>แต่ละสาขา: สถานะเดือนล่าสุด, จำนวน discrepancy ที่รอ, % matched</td></tr>
+    <tr><td>Issues Badge</td><td>ตัวเลขสีแดง = discrepancy ที่ยังไม่ resolve — คลิกเพื่อกระโดดไปที่คิว</td></tr>
+    <tr><td>Coverage Status</td><td>ว่าแต่ละสาขา อัพโหลดเอกสารครบถึงวันไหน</td></tr>
+    <tr><td>Unmapped Codes</td><td>แจ้งเตือนถ้ายังมีรหัสที่ไม่ได้ map</td></tr>
+    <tr><td>Trend</td><td>กราฟ variance รายเดือน</td></tr>
+  </tbody>
+</table>
+
+<h3>11.2 Drill Down จาก Overview</h3>
+<ul>
+  <li>คลิกชื่อสาขา → เปิด Session รายเดือนของสาขานั้น</li>
+  <li>คลิก Issues Badge → เปิด Discrepancies queue ทันที</li>
+  <li>คลิกเดือนใน timeline → เปิด Session นั้น</li>
+</ul>
+
+<!-- ═══════════════════════════════════════ 12. EXPORT -->
+<h2 id="export"><span class="n">12.</span> <a class="anchor" href="#export">การ Export รายงาน</a></h2>
+
+<h3>12.1 Export Excel (รายงาน Reconciliation)</h3>
+<p>ใน Session → คลิก <strong>Export .xlsx</strong></p>
+
+<p>ไฟล์ที่ได้ประกอบด้วย Sheets:</p>
+<table>
+  <thead><tr><th>Sheet</th><th>เนื้อหา</th></tr></thead>
+  <tbody>
+    <tr><td>Summary</td><td>สรุปผล matched/mismatch ต่อ Lane ทั้งเดือน</td></tr>
+    <tr><td>Daily Board</td><td>ตาราง status รายวัน ทุก Lane</td></tr>
+    <tr><td>Discrepancies</td><td>รายการ discrepancy ทั้งหมด พร้อม status</td></tr>
+    <tr><td>Bank Lines</td><td>รายการ statement ธนาคาร ที่อัพโหลด</td></tr>
+    <tr><td>CC Lines</td><td>รายการ CC settlement lines</td></tr>
+    <tr><td>Grab Lines</td><td>รายการ Grab report</td></tr>
+    <tr><td>Line Man Lines</td><td>รายการ Line Man report</td></tr>
+  </tbody>
+</table>
+
+<h3>12.2 Export PDF (สรุปผล Sign-off)</h3>
+<p>ยังไม่รองรับในเวอร์ชันนี้ — ใช้ Excel Export แทน และพิมพ์ออกมา</p>
+
+<!-- ═══════════════════════════════════════ 13. MONTHLY WORKFLOW -->
+<h2 id="monthly-workflow"><span class="n">13.</span> <a class="anchor" href="#monthly-workflow">ขั้นตอนทำงานประจำเดือน</a></h2>
+
+<p>ทำตาม checklist นี้ทีละสาขา ทีละเดือน</p>
+
+<h3>ก่อนเริ่มเดือนใหม่ (ทำครั้งแรกครั้งเดียว)</h3>
+<ul class="checklist">
+  <li>ตรวจสอบว่า Payment Map ครบ — รายการ amber = 0</li>
+  <li>เพิ่ม Bank Accounts ของทุกสาขา Master ครบ (KTB + KBANK)</li>
+  <li>เพิ่ม Acquirer MIDs ครบ (KTB / KBANK / KTC)</li>
+</ul>
+
+<h3>ต้นเดือน (หรือสิ้นเดือนที่ผ่านมา)</h3>
+<ul class="checklist">
+  <li>รอให้ POS ซิงค์ข้อมูลเดือนที่แล้วครบ (ตรวจสอบว่า Data Coverage ครอบคลุมถึงวันสุดท้ายของเดือน)</li>
+  <li>Download เอกสารทุกประเภทจากแต่ละแหล่ง:
+    <ul>
+      <li>Bank Statement KTB ทุกสาขา</li>
+      <li>Bank Statement KBANK ทุกสาขา</li>
+      <li>CC Settlement KTB / KBANK / KTC ทุกสาขา</li>
+      <li>Grab Settlement Report ทุกสาขา</li>
+      <li>Line Man Settlement Report ทุกสาขา</li>
+    </ul>
+  </li>
+</ul>
+
+<h3>อัพโหลดและกระทบยอด (ทำแต่ละสาขา)</h3>
+<ul class="checklist">
+  <li>เปิดแท็บ Uploads → เลือกสาขา</li>
+  <li>Upload Bank Statement KTB → Preview → Confirm</li>
+  <li>Upload Bank Statement KBANK → Preview → Confirm</li>
+  <li>Upload CC Settlement (KTB / KBANK / KTC แยกไฟล์) → Preview → Confirm</li>
+  <li>ตั้ง Fee % + VAT % สำหรับ CC แต่ละ Acquirer</li>
+  <li>Upload Grab Report → Preview → Confirm → ตั้ง Fee/VAT</li>
+  <li>Upload Line Man Report → Preview → Confirm → ตั้ง Fee/VAT</li>
+  <li>ไปที่ Reconcile → Monthly tab → คลิก <strong>▶ Run Match</strong></li>
+  <li>ดูผล Monthly Board — มี pos_only / ext_only ให้แก้ไขก่อน</li>
+  <li>ดู Daily Board — ตรวจ variance และ missing ทุกวัน</li>
+  <li>Discrepancies ที่เกิน tolerance → Assign และ Resolve</li>
+  <li>Run Match อีกครั้งหลังแก้ไข</li>
+  <li>Sign-off: ทุก Lane เป็น matched หรือมี explained variance</li>
+</ul>
+
+<h3>Sign-off Criteria</h3>
+<div class="callout ok">
+  <strong>เกณฑ์การ Sign-off</strong>
+  <ul style="margin:6px 0">
+    <li>ทุก Lane ที่มีเอกสารแสดงสถานะ <span class="s-ok">matched</span></li>
+    <li>หรือมี variance/missing พร้อม <strong>คำอธิบาย</strong> ที่ยอมรับได้ (ระบุใน Discrepancy note)</li>
+    <li>รายการ Coupon / no_source บันทึกไว้ใน remark</li>
+    <li>ไม่มี unmapped_bank เหลืออยู่</li>
+  </ul>
+</div>
+
+<!-- ═══════════════════════════════════════ 14. TROUBLESHOOTING -->
+<h2 id="troubleshooting"><span class="n">14.</span> <a class="anchor" href="#troubleshooting">การแก้ไขปัญหา</a></h2>
+
+<table>
+  <thead><tr><th>ปัญหา</th><th>สาเหตุที่เป็นไปได้</th><th>วิธีแก้</th></tr></thead>
+  <tbody>
+    <tr>
+      <td>Preview ว่างเปล่าหรือ skipped rows สูง</td>
+      <td>ธนาคารเปลี่ยน format Excel; ไฟล์ผิดประเภท</td>
+      <td>ตรวจสอบว่าเลือก Provider ถูก; ส่งไฟล์ให้ทีม IT ตรวจ Parser</td>
+    </tr>
+    <tr>
+      <td>ทุก Lane แสดง <code>pos_only</code></td>
+      <td>อัพโหลด Statement แล้วแต่ Bank Account / MID ยังไม่ได้ตั้ง</td>
+      <td>Setup → เพิ่ม Bank Account หรือ Acquirer MID ให้ตรงกับสาขา</td>
+    </tr>
+    <tr>
+      <td>Lane QR·KTB แสดง <code>ext_only</code> แต่ QR·KBANK เป็น <code>pos_only</code></td>
+      <td>Payment Map ระบุธนาคาร QR ผิด</td>
+      <td>Setup → แก้ Bank ของรหัส QR ให้ถูกต้อง → Run Match ใหม่</td>
+    </tr>
+    <tr>
+      <td>Variance ทุกวัน มีค่าคงที่ เช่น ±50 บาท</td>
+      <td>Fee/VAT ของ CC หรือ Grab ยังไม่ได้ตั้ง หรือตั้งผิด</td>
+      <td>Daily Board → Fee & VAT Panel → แก้ไข → Run Match ใหม่</td>
+    </tr>
+    <tr>
+      <td>Missing แทบทุกวัน (ทั้ง lane)</td>
+      <td>Statement ที่อัพโหลดไม่ครอบคลุมวันนั้น หรือ format วันที่ parse ผิด</td>
+      <td>ตรวจ Coverage Strip — ดูว่า Statement ครอบคลุมถึงวันไหน; ตรวจวันที่ใน Preview</td>
+    </tr>
+    <tr>
+      <td>unmapped_bank ไม่หายไป</td>
+      <td>รหัสในตาราง payment map ยังมี Bank = UNKNOWN หรือ PROMPTPAY</td>
+      <td>Setup → Payment Map → หารหัสที่มี amber → เปลี่ยน Bank ให้ถูก</td>
+    </tr>
+    <tr>
+      <td>ไม่สามารถอัพโหลดได้ (403 Forbidden)</td>
+      <td>Write Token หมดอายุหรือยังไม่ได้ใส่</td>
+      <td>คลิก 🔑 มุมขวาบน → paste Token ใหม่</td>
+    </tr>
+    <tr>
+      <td>Run Match แต่ผลไม่เปลี่ยน</td>
+      <td>ยังไม่ได้อัพโหลดเอกสาร หรือ Payment Map ยังมี unmapped</td>
+      <td>ตรวจ Uploads tab → ตรวจ Setup → Run Match อีกครั้ง</td>
+    </tr>
+    <tr>
+      <td>ข้อมูล POS ไม่ครบถึงวันที่ต้องการ</td>
+      <td>Sync ยังไม่ทำ หรือทำแล้วแต่ POS lag 1–2 วัน</td>
+      <td>รัน Refresh Online Data.bat → รอ sync เสร็จ → กลับมา Reconcile</td>
+    </tr>
+    <tr>
+      <td>ไฟล์ Upload ซ้ำ (Duplicate detected)</td>
+      <td>ไฟล์เดิมถูกอัพแล้ว (ระบบเช็ค file hash)</td>
+      <td>ถ้าต้องการอัพใหม่จริง → ลบเก่าก่อน → อัพใหม่</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════ 15. LIMITS -->
+<h2 id="limits"><span class="n">15.</span> <a class="anchor" href="#limits">ข้อจำกัดที่รู้จัก</a></h2>
+
+<div class="callout info">
+  <strong>ข้อจำกัดเหล่านี้เป็น "by design" ไม่ใช่ bugs</strong> ทีมออกแบบรับทราบแล้วและอยู่ในแผนพัฒนา
+</div>
+
+<table>
+  <thead><tr><th>ข้อจำกัด</th><th>ผลกระทบ</th><th>วิธีรับมือ</th></tr></thead>
+  <tbody>
+    <tr>
+      <td><strong>Timing Lag ของ CC, Grab, Line Man</strong><br>Settlement ล่าช้า T+1 ถึง T+2 วัน (หรือมากกว่า)</td>
+      <td>รายการขายวัน X อาจปรากฏใน Statement วัน X+1 หรือ X+2</td>
+      <td>ใช้สถานะ <code>missing</code> vs <code>pending</code> เป็นตัวบอก — ถ้า pending คือรอเอกสาร ถ้า missing คือต้องตามจริง</td>
+    </tr>
+    <tr>
+      <td><strong>Cash เป็น Global Lane</strong><br>POS ไม่บันทึกว่าเงินสดฝากธนาคารไหน</td>
+      <td>Reconcile Cash ได้แค่ยอดรวม ไม่แยกว่าฝาก KTB กี่บาท, KBANK กี่บาท</td>
+      <td>ตรวจสอบรวม Cash deposit ทั้งหมดว่าตรงกับ POS — ไม่แยก bank</td>
+    </tr>
+    <tr>
+      <td><strong>Bank Refunds (Debit) ไม่รองรับ</strong><br>Engine นับเฉพาะ Credit > 0</td>
+      <td>รายการ refund/charge-back ในบัญชีธนาคารจะไม่ถูก Match</td>
+      <td>ปรับ Net ด้วยตนเองในส่วน Fee & VAT หรือบันทึกใน Discrepancy note</td>
+    </tr>
+    <tr>
+      <td><strong>Coupon ไม่มีเอกสารภายนอก</strong></td>
+      <td>Lane COUPON จะแสดงสถานะ <code>no_source</code> ตลอด</td>
+      <td>บันทึกเป็น known limitation ใน note — ไม่ถือว่า error</td>
+    </tr>
+    <tr>
+      <td><strong>1 Account ต่อ 1 ธนาคาร ต่อ 1 สาขา</strong><br>ยังไม่รองรับหลาย account ต่อ bank ต่อสาขา</td>
+      <td>ถ้าสาขามี 2 บัญชี KBANK จะ map ไม่ได้</td>
+      <td>ชั่วคราว: ใช้บัญชีหลัก — จะพัฒนาใน version ถัดไป</td>
+    </tr>
+    <tr>
+      <td><strong>POS Data Lag 1–2 วัน</strong><br>ข้อมูล POS ล่าสุดอาจช้า 1–2 วัน</td>
+      <td>วันที่ใกล้ปัจจุบันจะแสดง <code>pending</code> ฝั่ง POS</td>
+      <td>รัน Refresh ก่อน Reconcile; หรือรอข้อมูล sync ครบก่อน</td>
+    </tr>
+    <tr>
+      <td><strong>ข้อมูล POS ปิดที่ 5 มิ.ย. (ช่วง Pilot)</strong></td>
+      <td>วัน 6 มิ.ย. เป็นต้นไปจะแสดง <code>pending</code> จนกว่า Sync จะทำงาน</td>
+      <td>รัน Refresh Online Data.bat เพื่อดึงข้อมูลล่าสุด</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ═══════════════════════════════════════ 16. FAQ -->
+<h2 id="faq"><span class="n">16.</span> <a class="anchor" href="#faq">คำถามที่พบบ่อย (FAQ)</a></h2>
+
+<h4>Q: ต้องทำ Setup ใหม่ทุกเดือนไหม?</h4>
+<p>A: ไม่ต้อง — Setup ทำครั้งเดียว ข้อมูลอยู่ถาวร เว้นแต่มีบัญชีธนาคารใหม่, EDC ใหม่, หรือรหัสชำระเงินใหม่ใน POS</p>
+
+<h4>Q: ถ้าอัพโหลด Statement ผิดเดือน จะแก้ยังไง?</h4>
+<p>A: ไปที่ Uploads tab → ลบ upload นั้น → อัพโหลดไฟล์ที่ถูกต้อง → Run Match ใหม่</p>
+
+<h4>Q: Run Match ซ้ำๆ ได้ไหม ข้อมูลจะหายไหม?</h4>
+<p>A: ได้ — Run Match เป็น Idempotent ผลลัพธ์เดิมเสมอสำหรับข้อมูลเดิม ไม่ทำให้ข้อมูล Upload หรือ Manual Match หาย</p>
+
+<h4>Q: ถ้า Grab จ่ายเงินสัปดาห์ละครั้ง จะ Reconcile รายวันได้ไหม?</h4>
+<p>A: ยังไม่รองรับ automatic — วันที่ไม่มี payout จะแสดง <code>pending</code> วันที่มี payout จะ Match กับยอด POS ของช่วงนั้นแทน ใช้ Manual Match ช่วยได้</p>
+
+<h4>Q: Coupon ที่แสดง no_source ต้องทำอะไร?</h4>
+<p>A: ไม่ต้องทำอะไร — COUPON ไม่มีเอกสารภายนอก ระบบแสดง no_source เป็น known limitation ให้บันทึกยอดรวมไว้ใน note</p>
+
+<h4>Q: ยอด CC ใน POS กับ Statement ต่างกันเล็กน้อยทุกวัน เป็นปกติไหม?</h4>
+<p>A: อาจเกิดจาก Fee/VAT ที่ยังไม่ได้ตั้ง — ตรวจ Fee & VAT Panel ก่อน ถ้าตั้งแล้วยังต่างกัน อาจเป็น timing ของ settlement</p>
+
+<h4>Q: ถ้าสาขาใช้ KTB QR แต่บางวันลูกค้าโอนเข้า KBANK ผิด จะเกิดอะไร?</h4>
+<p>A: จะแสดงเป็น <code>ext_only</code> ฝั่ง KBANK และ <code>mismatch</code> ฝั่ง KTB — ควรบันทึกเป็น Discrepancy note และแจ้งทีมจัดการเงิน</p>
+
+<h4>Q: Token หมดอายุเมื่อไหร่?</h4>
+<p>A: Token ไม่มีวันหมดอายุ แต่จะหายไปเมื่อปิด browser หรือเคลียร์ session — ต้อง paste ใหม่ทุกครั้ง</p>
+
+<h4>Q: ทดสอบกับข้อมูลจริงได้เลยไหม?</h4>
+<p>A: ได้ — แนะนำให้ทดสอบกับข้อมูลเดือน พ.ค. และ มิ.ย. 2569 ก่อน เมื่อมั่นใจผลแล้วค่อย go-live กับเดือนถัดไป (ดูคู่มือ Pilot Guide ประกอบ)</p>
+
+<hr>
+
+<h2>สรุป: Flow การทำงานทั้งหมด</h2>
+<pre class="flow">
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │                   Revenue Reconciliation Flow                       │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  [ทำครั้งแรกครั้งเดียว]
+       Setup Tab
+         ├── Payment Map: แมปรหัส POS → Category + Bank
+         ├── Bank Accounts: เพิ่มเลขบัญชี KTB/KBANK ทุกสาขา
+         └── Acquirer MIDs: เพิ่ม MID บัตรเครดิต KTB/KBANK/KTC
+
+
+  [ทุกเดือน — ทีละสาขา]
+       Download เอกสาร
+         ├── Bank Statement (KTB, KBANK)
+         ├── CC Settlement (KTB/KBANK/KTC)
+         ├── Grab Report
+         └── Line Man Report
+
+          ↓
+
+       Uploads Tab → อัพโหลดทีละไฟล์
+         ├── Preview ก่อนทุกครั้ง ✓
+         ├── Confirm เมื่อ Preview ถูกต้อง
+         └── ตั้ง Fee/VAT (CC, Grab, Line Man)
+
+          ↓
+
+       Reconcile Tab → Monthly → ▶ Run Match
+
+          ↓
+
+       Daily Board → ตรวจสถานะรายวัน
+         ├── ✓ matched   → ผ่าน ✓
+         ├── ≠ variance  → ตรวจ Fee/VAT หรือหาสาเหตุ
+         ├── ✗ missing   → ตามหาเอกสาร หรือบันทึกเหตุผล
+         ├── … pending   → รอเอกสาร (อัพโหลดเมื่อได้)
+         └── ? unmapped  → แก้ใน Setup → Run Match ใหม่
+
+          ↓
+
+       Discrepancies Tab → Assign + Resolve
+         ├── accepted (timing / known diff)
+         ├── adjusted  (พบและแก้ไขแล้ว)
+         └── rejected  (ยังต้องติดตาม)
+
+          ↓
+
+       Sign-off: ทุก Lane matched หรือ explained variance ✓
+
+          ↓
+
+       Export .xlsx → เก็บไว้เป็นหลักฐาน
+</pre>
+
+<footer>
+  <p>Oshinei Revenue Reconciliation — User Guide (ฉบับสมบูรณ์) · อัพเดท มิถุนายน 2569</p>
+  <p>สอบถามเพิ่มเติม: แจ้งทีม IT พร้อมระบุ สาขา, เดือน, source type, และ error message ที่พบ</p>
+</footer>
+
+</div>
+</body>
+</html>
