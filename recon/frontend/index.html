@@ -75,6 +75,27 @@
   .audit-old { color:#6b7280; }
   .audit-arr { color:#94a3b8; margin:0 4px; }
   .audit-new { font-weight:600; }
+
+  /* ── Unified data-table cosmetics ─────────────────────────────────────────
+     Every data table gets consistent cell padding, non-colliding (nowrap)
+     headers, and light row separators. The custom colour-grid tables (cross-
+     branch board, single-branch daily matrix) opt out with class="matrix". */
+  table:not(.matrix) { border-collapse:collapse; width:100%; }
+  table:not(.matrix) thead th {
+    white-space:nowrap; padding:11px 14px; border-bottom:1px solid #e5e7eb;
+    vertical-align:bottom; color:#94a3b8; font-size:11px; font-weight:600;
+    letter-spacing:.4px;
+  }
+  table:not(.matrix) tbody td,
+  table:not(.matrix) tfoot td { padding:9px 14px; vertical-align:middle; }
+  table:not(.matrix) tbody tr { border-bottom:1px solid #f1f5f9; }
+  table:not(.matrix) tbody tr:last-child { border-bottom:none; }
+  /* numeric columns read better tabular */
+  table:not(.matrix) td.font-mono, table:not(.matrix) td .font-mono { font-variant-numeric:tabular-nums; }
+  /* cards that hold a full-bleed table shouldn't add their own padding twice */
+  .card.table-card { padding:0; overflow:hidden; }
+  .card.table-card > .table-head { padding:14px 16px; border-bottom:1px solid #eef2f7; }
+  .card.table-card .table-scroll { overflow-x:auto; }
 </style>
 </head>
 <body>
@@ -204,7 +225,7 @@
       <div id="bd-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
 
       <div class="card overflow-x-auto" style="padding:0">
-        <table class="w-full text-sm" style="border-collapse:collapse">
+        <table class="w-full text-sm matrix" style="border-collapse:collapse">
           <thead><tr id="bd-head" class="text-gray-400 text-xs uppercase border-b" style="position:sticky;top:0;background:#fff;z-index:5"></tr></thead>
           <tbody id="bd-body"><tr><td class="text-center text-gray-400 py-8">Pick a date</td></tr></tbody>
           <tfoot id="bd-foot" class="border-t-2"></tfoot>
@@ -931,7 +952,7 @@ function renderDailyBoard(d){
       ${cells}</tr>`;
   }).join('');
 
-  host.innerHTML=`<table class="text-sm" style="border-collapse:collapse">${head}${body}</table>`;
+  host.innerHTML=`<table class="text-sm matrix" style="border-collapse:collapse">${head}${body}</table>`;
   if(FOCUS_DATE){ const fr=host.querySelector(`tr[data-day="${FOCUS_DATE}"]`);
     if(fr) fr.scrollIntoView({block:'center',behavior:'smooth'});
     else host.insertAdjacentHTML('afterbegin', `<div class="text-center text-amber-600 py-3">No activity on ${FOCUS_DATE}.</div>`); }
