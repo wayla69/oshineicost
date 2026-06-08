@@ -3424,8 +3424,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <h2 class="section-title mb-0">แคชเชียร์ส่วนลดสูงสุด</h2>
       <div class="flex items-center gap-1 text-xs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px">
-        <button id="discGrpFlat"   onclick="setDiscGroup(false)" class="subtab-btn active px-3 py-1">รวม</button>
-        <button id="discGrpBranch" onclick="setDiscGroup(true)"  class="subtab-btn px-3 py-1">จัดกลุ่มรายสาขา</button>
+        <button id="discGrpFlat"   onclick="setDiscGroup(false)" class="subtab-btn px-3 py-1">รวม</button>
+        <button id="discGrpBranch" onclick="setDiscGroup(true)"  class="subtab-btn active px-3 py-1">จัดกลุ่มรายสาขา</button>
       </div>
     </div>
     <div id="disc-outlier-note" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b"></div>
@@ -15639,8 +15639,8 @@ async function loadCashCtl(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td>
     <td class="py-1.5 text-right tabular-nums">${r.sales ? (r.over_short / r.sales * 100).toFixed(2) + '%' : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
-  document.getElementById('ccWorst').innerHTML = (d.worst_days || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
-    <td class="py-1.5 pr-2 tabular-nums">${esc(r.day)}</td><td class="py-1.5 pr-2">${esc(r.branch)}</td>
+  document.getElementById('ccWorst').innerHTML = (d.worst_days || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cashWorstDayDrill('${jsAttr(r.branch)}','${jsAttr(r.day)}')" title="คลิกดูรายละเอียดของ ${esc(r.branch)} วันที่ ${esc(r.day)}">
+    <td class="py-1.5 pr-2 tabular-nums">${esc(r.day)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td><td class="py-1.5 text-right tabular-nums">${fmtN(r.pax)}</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีวันที่ขาด/เกิน 🎉</td></tr>';
@@ -15812,6 +15812,50 @@ async function cashDayDrill(branch, month) {
       <th class="py-1.5 pr-3">วันที่</th><th class="py-1.5 pr-3 text-right">ขาด/เกิน</th><th class="py-1.5 pr-3 text-right">ยอดขาย</th>
       <th class="py-1.5 pr-3 text-right">ลูกค้า</th><th class="py-1.5 pr-3 text-right">ส่วนลด</th><th class="py-1.5 text-right">ยกเลิก</th>
     </tr></thead><tbody>${rows || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'}</tbody></table></div>
+    <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
+}
+
+// Drill from a "วันที่ขาดหนักสุด" row → one branch + one day. Cash variance has no
+// per-bill grain, so we show the day's headline + the voided bills on that exact day
+// (the usual cause of a drawer short) so the owner can investigate the specific day.
+async function cashWorstDayDrill(branch, day) {
+  const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
+  if (!modal) return;
+  title.textContent = `🔍 เงินสดขาด/เกิน · ${branch} · ${day}`;
+  body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
+  modal.classList.remove('hidden');
+  let d; try { d = await fetch(`${API}/api/extra/cash/day?branch=${encodeURIComponent(branch)}&day=${encodeURIComponent(day)}`).then(r=>r.json()); }
+  catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
+  const h = d.head || {};
+  const kpi = (label, val, col) => `<div class="card p-3" style="background:var(--bg-subtle)">
+    <div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
+    <div class="text-base font-semibold tabular-nums"${col?` style="color:${col}"`:''}>${val}</div></div>`;
+  const os = h.over_short || 0;
+  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+    ${kpi('ขาด/เกิน', fmt(os), os<0?'#ef4444':os>0?'#10b981':'#94a3b8')}
+    ${kpi('ยอดขาย', fmt(h.sales||0))}
+    ${kpi('ลูกค้า', fmtN(h.pax||0))}
+    ${kpi('ส่วนลด', fmt(h.discount||0), '#f59e0b')}
+    ${kpi('ยกเลิก', fmt(h.cancel||0), '#ef4444')}
+    ${kpi('จำนวนบิล', fmtN(h.invoices||0))}</div>`;
+  const bills = d.cancel_bills || [];
+  let billsHtml;
+  if (d.cancel_staged === false) {
+    billsHtml = '<p class="text-xs" style="color:#92400e">บิลรายใบจะแสดงหลังการซิงก์ครั้งถัดไป</p>';
+  } else {
+    const total = bills.reduce((a,x)=>a+(x.amount||0),0);
+    const rows = bills.map(x => `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-3 tabular-nums text-[11px]">${esc((x.sale_date||'').replace('T',' ').slice(11,19)||'—')}</td>
+      <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
+      <td class="py-1.5 pr-3">${esc(x.reason)}</td>
+      <td class="py-1.5 pr-3">${x.cancel_user ? esc(x.cancel_user) : '<span class="text-slate-300">—</span>'}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
+    billsHtml = `<h3 class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">บิลที่ถูกยกเลิก/ลบ ในวันนี้ · ${fmtN(bills.length)} ใบ · รวม <span style="color:#ef4444">${fmt(total)}</span></h3>
+      <div style="max-height:48vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-3">เวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล</th><th class="py-1.5 text-right">มูลค่า</th>
+      </tr></thead><tbody>${rows || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในวันนี้</td></tr>'}</tbody></table></div>`;
+  }
+  body.innerHTML = `<div style="padding:4px 8px">${kpis}${billsHtml}
     <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
 
@@ -19102,7 +19146,7 @@ async function loadDiscountsTab() {
 }
 
 let _discData = null;
-let _discGroupByBranch = false;
+let _discGroupByBranch = true;   // default: split by branch (don't merge cashiers)
 
 function setDiscGroup(on) {
   _discGroupByBranch = on;
