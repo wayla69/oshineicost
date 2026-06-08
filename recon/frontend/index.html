@@ -701,7 +701,14 @@
           <tbody id="map-body"></tbody>
         </table>
       </div>
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="flex items-center gap-2 flex-wrap mb-2">
+        <span class="text-sm font-semibold text-gray-600">บัญชี & MID ทุกสาขา</span>
+        <button onclick="exportSetupTemplate()" class="btn btn-sec text-xs" style="padding:5px 10px">⬇ Export template (CSV)</button>
+        <label class="btn btn-sec text-xs cursor-pointer" style="padding:5px 10px">⬆ Import CSV
+          <input type="file" accept=".csv" class="hidden" onchange="importSetupTemplate(this.files[0]); this.value=''"></label>
+        <span class="text-xs text-gray-400">กรอกใน Excel → import กลับ (เร็วกว่าพิมพ์ทีละช่อง)</span>
+      </div>
+      <div class="grid grid-cols-1 gap-6">
         <div class="card overflow-x-auto">
           <div class="font-semibold text-gray-700" data-i18n="accts_hd">Bank accounts</div>
           <p class="text-xs text-gray-500 mb-3" data-i18n="accts_hint">ทุกสาขาเป็นแถว — กรอกเลขบัญชี KTB / KBANK ในช่อง บันทึกอัตโนมัติ (เว้นว่าง = ลบ)</p>
@@ -2327,6 +2334,69 @@ async function saveMid(branchId, acq, el){
     else return;
     _flag(ok,'✓','text-green-600');
   }catch(e){ _flag(ok,'✗','text-red-600'); toast(e.message,'err'); }
+}
+
+// ── Export / Import the bank-account + MID grid as one CSV (one row per branch) ──
+const _SETUP_COLS = ['สาขา','branch_id','KTB บัญชี','KBANK บัญชี','KTB MID','KBANK MID','KTC MID'];
+function _csvCell(s){ s=String(s==null?'':s); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
+async function exportSetupTemplate(){
+  try{
+    const [accts, mids] = await Promise.all([api('/api/bank-accounts'), api('/api/acquirer-mids')]);
+    const aMap={}; (accts||[]).forEach(a=>aMap[a.branch_id+'|'+a.bank]=a.account_no||'');
+    const mMap={}; (mids||[]).forEach(m=>mMap[m.branch_id+'|'+m.acquirer]=m.merchant_id||'');
+    const rows=[_SETUP_COLS.join(',')];
+    (BRANCHES||[]).forEach(b=>{ rows.push([b.name,b.branch_id,
+      aMap[b.branch_id+'|KTB']||'', aMap[b.branch_id+'|KBANK']||'',
+      mMap[b.branch_id+'|KTB']||'', mMap[b.branch_id+'|KBANK']||'', mMap[b.branch_id+'|KTC']||''
+    ].map(_csvCell).join(',')); });
+    const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+    a.download='recon_accounts_mids_template.csv'; a.click(); URL.revokeObjectURL(a.href);
+  }catch(e){ toast('export ไม่ได้: '+e.message,'err'); }
+}
+function _parseCsv(text){
+  const out=[]; let row=[], cur='', q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(cur); cur=''; }
+    else if(c==='\n'){ row.push(cur); out.push(row); row=[]; cur=''; }
+    else if(c!=='\r') cur+=c;
+  }
+  if(cur!==''||row.length){ row.push(cur); out.push(row); }
+  return out.filter(r=>r.some(x=>x.trim()!==''));
+}
+async function importSetupTemplate(file){
+  if(!file) return;
+  const text=(await file.text()).replace(/^﻿/,'');
+  const rows=_parseCsv(text); if(rows.length<2){ toast('ไฟล์ว่าง','err'); return; }
+  const hdr=rows[0].map(h=>h.trim()); const idx=k=>hdr.indexOf(k);
+  const ci={bid:idx('branch_id'), ka:idx('KTB บัญชี'), kba:idx('KBANK บัญชี'),
+            km:idx('KTB MID'), kbm:idx('KBANK MID'), ktc:idx('KTC MID')};
+  if(ci.bid<0){ toast('ไม่พบคอลัมน์ branch_id — ใช้ template จากปุ่ม Export','err'); return; }
+  const [accts, mids] = await Promise.all([api('/api/bank-accounts'), api('/api/acquirer-mids')]);
+  const aId={}; (accts||[]).forEach(a=>aId[a.branch_id+'|'+a.bank]=a);
+  const mId={}; (mids||[]).forEach(m=>mId[m.branch_id+'|'+m.acquirer]=m);
+  const valid=new Set((BRANCHES||[]).map(b=>String(b.branch_id)));
+  let n=0, err=0;
+  const upAcct=async(bid,bank,val)=>{ const k=bid+'|'+bank, ex=aId[k]; val=(val||'').trim();
+    try{ if(val && ex && ex.account_no!==val){ await api('/api/bank-accounts/'+ex.account_id,{method:'PATCH',json:{branch_id:+bid,bank,account_no:val,account_name:ex.account_name||''}}); n++; }
+         else if(val && !ex){ await api('/api/bank-accounts',{method:'POST',json:{branch_id:+bid,bank,account_no:val}}); n++; }
+         else if(!val && ex){ await api('/api/bank-accounts/'+ex.account_id,{method:'DELETE'}); n++; } }catch(e){ err++; } };
+  const upMid=async(bid,acq,val)=>{ const k=bid+'|'+acq, ex=mId[k]; val=(val||'').trim();
+    try{ if(val && ex && ex.merchant_id!==val){ await api('/api/acquirer-mids/'+ex.mid_id,{method:'PATCH',json:{branch_id:+bid,acquirer:acq,merchant_id:val,terminal_id:ex.terminal_id||''}}); n++; }
+         else if(val && !ex){ await api('/api/acquirer-mids',{method:'POST',json:{branch_id:+bid,acquirer:acq,merchant_id:val}}); n++; }
+         else if(!val && ex){ await api('/api/acquirer-mids/'+ex.mid_id,{method:'DELETE'}); n++; } }catch(e){ err++; } };
+  for(const r of rows.slice(1)){
+    const bid=(r[ci.bid]||'').trim(); if(!valid.has(bid)) continue;
+    if(ci.ka>=0)  await upAcct(bid,'KTB',  r[ci.ka]);
+    if(ci.kba>=0) await upAcct(bid,'KBANK',r[ci.kba]);
+    if(ci.km>=0)  await upMid(bid,'KTB',  r[ci.km]);
+    if(ci.kbm>=0) await upMid(bid,'KBANK',r[ci.kbm]);
+    if(ci.ktc>=0) await upMid(bid,'KTC',  r[ci.ktc]);
+  }
+  toast(`import: อัปเดต ${n} ช่อง${err?` · ผิด ${err}`:''}`, err?'err':'ok');
+  loadSetup();
 }
 
 init();
