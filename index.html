@@ -3381,9 +3381,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
       <h2 class="section-title mb-0">🏷️ ประเภทส่วนลด (เหตุผลที่เลือกใน POS)</h2>
-      <span id="disc-reason-note" class="text-xs text-slate-400"></span>
+      <div class="flex items-center gap-2">
+        <span id="disc-reason-note" class="text-xs text-slate-400"></span>
+        <button onclick="exportDiscountReasons()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
     </div>
     <p class="text-xs text-slate-400 mb-3">เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p>
+    <div id="disc-reason-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e"></div>
     <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
     <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
       <thead><tr>
@@ -3397,9 +3401,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
       <h2 class="section-title mb-0">🎟️ คูปอง/โปรโมชัน (แยกตามชุด series)</h2>
-      <span id="coupon-series-note" class="text-xs text-slate-400"></span>
+      <div class="flex items-center gap-2">
+        <span id="coupon-series-note" class="text-xs text-slate-400"></span>
+        <button onclick="exportCouponSeries()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
     </div>
     <p class="text-xs text-slate-400 mb-3">ส่วนลดจากคูปอง/โปรแยกตาม "ชื่อชุด" (เด็กสูง · ผู้สูงอายุ · วันเกิด · VIP · ผู้ถือหุ้น …) — ดูว่าชุดไหนใช้เงินลดมากสุด · เฉลี่ย/ครั้ง สูงผิดปกติ = ตรวจสอบ</p>
+    <div id="coupon-series-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b"></div>
     <div id="coupon-series-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
     <div style="max-height:380px;overflow:auto"><table class="tbl-top60 w-full text-xs">
       <thead><tr>
@@ -18819,6 +18827,18 @@ async function loadChildBuffet() {
   }).join('');
 }
 
+let DISC_REASON_DATA = [];
+function exportDiscountReasons() {
+  const s = DISC_REASON_DATA || [];
+  if (!s.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  const rows = [['เหตุผล', 'บิล', 'มูลค่าลด', '%ของเงินลด'].join(',')];
+  s.forEach(r => {
+    const cells = [r.reason, r.bills, r.amount, r.pct];
+    rows.push(cells.map(v => { v = String(v ?? '').replace(/"/g, '""'); return /[,"\n]/.test(v) ? `"${v}"` : v; }).join(','));
+  });
+  downloadCSV(rows.join('\n'), 'discount_reasons.csv');
+}
+
 async function loadDiscountReasons(params) {
   const body = document.getElementById('disc-reason-body');
   const cards = document.getElementById('disc-reason-cards');
@@ -18834,7 +18854,18 @@ async function loadDiscountReasons(params) {
     return;
   }
   const reasons = d.reasons || [];
+  DISC_REASON_DATA = reasons;
   if (note) note.textContent = `${fmtN(d.total_bills || 0)} บิลมีส่วนลด · รวม ${fmt(d.total_amount || 0)}`;
+  // leakage banner: high "ไม่ระบุเหตุผล" share = cashiers discounting off-policy
+  const ra = document.getElementById('disc-reason-alert');
+  if (ra) {
+    const up = d.untyped_pct;
+    const u = reasons.find(r => r.reason_id === 0);
+    if (up != null && up >= 15 && u) {
+      ra.classList.remove('hidden');
+      ra.innerHTML = `⚠ <b>ส่วนลด "ไม่ระบุเหตุผล" สูง ${up}%</b> (${fmt(u.amount)} · ${fmtN(u.bills)} บิล) — จุดรั่วที่ควรกำหนดนโยบายให้พนักงานเลือกเหตุผลทุกครั้ง`;
+    } else ra.classList.add('hidden');
+  }
   const untyped = reasons.find(r => r.reason_id === 0);
   const typedAmt = (d.total_amount || 0) - ((untyped && untyped.amount) || 0);
   cards.innerHTML = [
@@ -18871,7 +18902,19 @@ async function loadCouponSeries(params) {
     return;
   }
   const s = d.series || [];
+  COUPON_SERIES_DATA = s; COUPON_SERIES_MOM = d.mom || null;
   COUPON_DRILL_PARAMS = params.toString();   // remember filter for the drill modal
+  // ── leakage alert: coupon series whose discount spiked MoM (≥+50%, material) ──
+  const alertEl = document.getElementById('coupon-series-alert');
+  const spikes = s.filter(r => r.mom_pct != null && r.mom_pct >= 50 && (r.pct || 0) >= 1)
+                  .sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 4);
+  if (alertEl) {
+    if (spikes.length) {
+      alertEl.classList.remove('hidden');
+      alertEl.innerHTML = `⚠ <b>คูปองที่พุ่งผิดปกติ (MoM ≥ +50%)</b> — ควรตรวจสอบการใช้: `
+        + spikes.map(r => `${esc(r.name)} <b>▲${r.mom_pct.toFixed(0)}%</b> (${fmt(r.amount)})`).join(' · ');
+    } else alertEl.classList.add('hidden');
+  }
   const momNote = d.mom ? ` · MoM ${d.mom.cur} vs ${d.mom.prev}` : '';
   if (note) note.textContent = `${fmtN(d.series_count || 0)} ชุด · ใช้ ${fmtN(d.total_uses || 0)} ครั้ง · รวม ${fmt(d.total_amount || 0)}${momNote}`;
   const top = s[0];
@@ -18899,6 +18942,20 @@ async function loadCouponSeries(params) {
       <td class="text-slate-300">›</td>
     </tr>`;
   }).join('') || '<tr><td colspan="9" class="py-3 text-center text-slate-400">ไม่มีคูปองในช่วงนี้</td></tr>';
+}
+
+// ── coupon series export ──
+let COUPON_SERIES_DATA = [], COUPON_SERIES_MOM = null;
+function exportCouponSeries() {
+  const s = COUPON_SERIES_DATA || [];
+  if (!s.length) return alert('ไม่มีข้อมูลให้ส่งออก');
+  const momLbl = COUPON_SERIES_MOM ? `MoM%_${COUPON_SERIES_MOM.cur}_vs_${COUPON_SERIES_MOM.prev}` : 'MoM%';
+  const rows = [['อันดับ', 'ชุดคูปอง', 'รหัส', 'ใช้งานอยู่', 'ครั้งที่ใช้', 'มูลค่าลด', 'เฉลี่ย/ครั้ง', '%ของคูปอง', momLbl].join(',')];
+  s.forEach((r, i) => {
+    const cells = [i + 1, r.name, r.code || '', r.active ? 'ใช้' : 'ปิด', r.uses, r.amount, r.avg, r.pct, (r.mom_pct == null ? '' : r.mom_pct)];
+    rows.push(cells.map(v => { v = String(v ?? '').replace(/"/g, '""'); return /[,"\n]/.test(v) ? `"${v}"` : v; }).join(','));
+  });
+  downloadCSV(rows.join('\n'), 'coupon_series.csv');
 }
 
 // ── coupon series drill (by branch / by day) ──
