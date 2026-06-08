@@ -3275,6 +3275,35 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
 </div>
 
+<!-- ══ Coupon series drill (by branch / by day) ══ -->
+<div id="couponDrillModal" onclick="if(event.target.id==='couponDrillModal')closeCouponDrill()"
+     style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg-card);border-radius:14px;max-width:760px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+      <h3 class="text-base font-bold text-slate-800">🎟️ <span id="couponDrillTitle">คูปอง</span></h3>
+      <button onclick="closeCouponDrill()" class="topbar-icon-btn" title="ปิด (Esc)">✕</button>
+    </div>
+    <div class="px-5 pt-4">
+      <div class="flex items-center gap-1 text-xs mb-3" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">
+        <button id="cdTabBranch" onclick="setCouponDrillBy('branch')" class="subtab-btn active px-3 py-1">รายสาขา</button>
+        <button id="cdTabDay"    onclick="setCouponDrillBy('day')"    class="subtab-btn px-3 py-1">รายวัน</button>
+      </div>
+      <p id="couponDrillSum" class="text-xs text-slate-400 mb-2"></p>
+    </div>
+    <div class="px-5 pb-5">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-slate-400 text-xs border-b">
+          <th id="couponDrillHead" class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">ครั้งที่ใช้</th>
+          <th class="py-1.5 pr-2 text-right">มูลค่าลด</th>
+          <th class="py-1.5">สัดส่วน</th>
+        </tr></thead>
+        <tbody id="couponDrillBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════════════════════════════════
      TAB: DISCOUNTS & LEAKAGE
 ══════════════════════════════════════════════════════════════════════════ -->
@@ -3375,10 +3404,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div style="max-height:380px;overflow:auto"><table class="tbl-top60 w-full text-xs">
       <thead><tr>
         <th class="num">#</th><th>ชุดคูปอง (series)</th><th class="num">ครั้งที่ใช้</th>
-        <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th><th>สัดส่วน</th>
+        <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th>
+        <th class="num">MoM</th><th>สัดส่วน</th><th></th>
       </tr></thead>
       <tbody id="coupon-series-body"></tbody>
     </table></div>
+    <p class="text-[11px] text-slate-400 mt-2">คลิกแถวเพื่อดูแยก รายสาขา / รายวัน · MoM = เดือนล่าสุดเทียบเดือนก่อน (สีแดง = ลดมากขึ้น)</p>
   </div>
 
   <div class="card p-5 mb-5 overflow-x-auto">
@@ -18557,6 +18588,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3">ใบเสร็จ</th><th class="py-2 pr-3">วันเวลา</th>
     ${showBranch?'<th class="py-2 pr-3">สาขา</th>':''}${showCashier?'<th class="py-2 pr-3">แคชเชียร์</th>':''}
     <th class="py-2 pr-3">โต๊ะ</th>
+    <th class="py-2 pr-3">ประเภทส่วนลด/คูปอง</th>
     <th class="py-2 pr-3 text-right">ยอดก่อนลด</th>
     <th class="py-2 pr-3 text-right">ส่วนลด</th>
     <th class="py-2 pr-3 text-right">จ่ายจริง</th>
@@ -18565,12 +18597,18 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     const hot = (b.discount||0) >= p95 && p95 > 0;
     // pre-discount base: prefer reconstructed bill_base; fall back to paid+discount
     const base = b.bill_base != null ? b.bill_base : (b.total_inc_vat||0) + (b.discount||0);
+    // discount type: coupon name wins (🎟️), else discount reason, else unknown
+    const dtype = b.coupon_name
+      ? `<span class="text-indigo-600">🎟️ ${esc(b.coupon_name)}</span>`
+      : (b.reason_desc ? esc(b.reason_desc)
+        : '<span class="text-slate-400">ไม่ระบุประเภท</span>');
     return `<tr class="border-b border-slate-100 ${hot?'bg-red-50':''}">
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-500">${esc((b.sold_at||'').replace('T',' ').slice(0,16))}</td>
       ${showBranch?`<td class="py-1.5 pr-3">${esc(b.branch||'—')}</td>`:''}
       ${showCashier?`<td class="py-1.5 pr-3">${esc(b.cashier||'—')}</td>`:''}
       <td class="py-1.5 pr-3 text-slate-500">${esc(b.table_no||'—')}</td>
+      <td class="py-1.5 pr-3">${dtype}</td>
       <td class="py-1.5 pr-3 text-right text-slate-600">${fmtN(base)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
@@ -18823,17 +18861,19 @@ async function loadCouponSeries(params) {
   const cards = document.getElementById('coupon-series-cards');
   const note = document.getElementById('coupon-series-note');
   if (!body) return;
-  body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
+  body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   let d; try { d = await fetch(`${API}/api/analysis/coupon-series?${params}`).then(r => r.json()); }
-  catch (e) { body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
   if (d.staged === false) {
     if (note) note.textContent = '';
     cards.innerHTML = '';
-    body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">ยังไม่มีข้อมูล — รัน sync รอบใหม่เพื่อเก็บชื่อชุดคูปอง</td></tr>';
+    body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">ยังไม่มีข้อมูล — รัน sync รอบใหม่เพื่อเก็บชื่อชุดคูปอง</td></tr>';
     return;
   }
   const s = d.series || [];
-  if (note) note.textContent = `${fmtN(d.series_count || 0)} ชุด · ใช้ ${fmtN(d.total_uses || 0)} ครั้ง · รวม ${fmt(d.total_amount || 0)}`;
+  COUPON_DRILL_PARAMS = params.toString();   // remember filter for the drill modal
+  const momNote = d.mom ? ` · MoM ${d.mom.cur} vs ${d.mom.prev}` : '';
+  if (note) note.textContent = `${fmtN(d.series_count || 0)} ชุด · ใช้ ${fmtN(d.total_uses || 0)} ครั้ง · รวม ${fmt(d.total_amount || 0)}${momNote}`;
   const top = s[0];
   cards.innerHTML = [
     { l: 'มูลค่าคูปองรวม', v: fmt(d.total_amount || 0), s2: `${fmtN(d.total_uses || 0)} ครั้ง`, c: '#f59e0b' },
@@ -18842,19 +18882,68 @@ async function loadCouponSeries(params) {
     { l: 'เฉลี่ย/ครั้ง', v: fmt(d.total_uses ? Math.round(d.total_amount / d.total_uses) : 0), s2: 'ต่อการใช้ 1 ครั้ง', c: '#10b981' },
   ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
+  const momCell = v => v == null ? '<span class="text-slate-300">—</span>'
+    : `<span style="color:${v === 0 ? '#94a3b8' : (v > 0 ? '#ef4444' : '#10b981')};font-weight:600">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
-    return `<tr class="border-t border-slate-100">
+    return `<tr class="border-t border-slate-100 cursor-pointer hover:bg-amber-50/50" onclick="openCouponDrill(${r.id}, ${JSON.stringify(r.name).replace(/"/g, '&quot;')})">
       <td class="num tabular text-slate-400">${i + 1}</td>
       <td class="font-medium">${esc(r.name)}${inactive ? ' <span class="text-[10px] text-slate-400">(ปิดใช้)</span>' : ''}${r.code && r.code !== r.name ? `<div class="text-[10px] text-slate-400">${esc(r.code)}</div>` : ''}</td>
       <td class="num tabular text-slate-500">${fmtN(r.uses)}</td>
       <td class="num tabular font-semibold" style="color:#f59e0b">${fmt(r.amount)}</td>
       <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
       <td class="num tabular">${r.pct}%</td>
+      <td class="num tabular">${momCell(r.mom_pct)}</td>
       <td style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
+      <td class="text-slate-300">›</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="7" class="py-3 text-center text-slate-400">ไม่มีคูปองในช่วงนี้</td></tr>';
+  }).join('') || '<tr><td colspan="9" class="py-3 text-center text-slate-400">ไม่มีคูปองในช่วงนี้</td></tr>';
+}
+
+// ── coupon series drill (by branch / by day) ──
+let COUPON_DRILL_PARAMS = '';
+let COUPON_DRILL = { id: null, name: '', by: 'branch' };
+function openCouponDrill(id, name) {
+  COUPON_DRILL = { id, name, by: 'branch' };
+  document.getElementById('couponDrillTitle').textContent = name;
+  document.getElementById('couponDrillModal').style.display = 'flex';
+  setCouponDrillBy('branch');
+}
+function closeCouponDrill() { document.getElementById('couponDrillModal').style.display = 'none'; }
+function setCouponDrillBy(by) {
+  COUPON_DRILL.by = by;
+  document.getElementById('cdTabBranch').classList.toggle('active', by === 'branch');
+  document.getElementById('cdTabDay').classList.toggle('active', by === 'day');
+  loadCouponDrill();
+}
+async function loadCouponDrill() {
+  const body = document.getElementById('couponDrillBody');
+  const head = document.getElementById('couponDrillHead');
+  const by = COUPON_DRILL.by;
+  head.textContent = by === 'day' ? 'วันที่' : 'สาขา';
+  body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
+  const qp = new URLSearchParams(COUPON_DRILL_PARAMS);
+  qp.set('series_id', COUPON_DRILL.id); qp.set('by', by);
+  let d; try { d = await fetch(`${API}/api/analysis/coupon-series/drill?${qp}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (d.available === false) {
+    body.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-400">ยังไม่มีข้อมูลรายวัน — รัน sync รอบใหม่เพื่อเก็บ pos_coupon_day</td></tr>';
+    return;
+  }
+  const rows = d.rows || [];
+  const tot = rows.reduce((s, r) => s + (r.amount || 0), 0);
+  const maxA = Math.max(1, ...rows.map(r => r.amount || 0));
+  document.getElementById('couponDrillSum').textContent = `${fmtN(rows.length)} ${by === 'day' ? 'วัน' : 'สาขา'} · ใช้ ${fmtN(rows.reduce((s,r)=>s+(r.uses||0),0))} ครั้ง · รวม ${fmt(tot)}`;
+  body.innerHTML = rows.map(r => {
+    const w = Math.round(100 * (r.amount || 0) / maxA);
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-2">${esc(r.label)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.uses)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#f59e0b">${fmt(r.amount)}</td>
+      <td class="py-1.5" style="min-width:120px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="py-3 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
 async function loadDiscountsTab() {

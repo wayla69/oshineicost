@@ -2706,8 +2706,74 @@ def coupon_series_breakdown(month_from: Optional[str] = Query(None), month_to: O
         for r in series:
             r["pct"] = round(100 * (r["amount"] or 0) / tot_amt, 1) if tot_amt else 0
             r["avg"] = round((r["amount"] or 0) / r["uses"]) if r["uses"] else 0
+
+        # ── MoM per series: latest month in scope vs the month before it ──
+        # (branch/group filtered, but NOT range-clipped, so prev month is available
+        #  even when a single month is selected). amount column stays the range total.
+        bbase = ["b.name!='ALL'"]; bp: dict = {}
+        if branch:
+            bbase.append("b.name=:branch"); bp["branch"] = branch
+        _group_filter(bbase, bp, group)
+        cur_m = month or month_to or con.execute(
+            f"SELECT MAX(cm.period_month) m FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id "
+            f"WHERE {' AND '.join(bbase)}", bp).fetchone()["m"]
+        mom_label = None
+        if cur_m:
+            yy, mm = int(cur_m[:4]), int(cur_m[5:7]); mm -= 1
+            if mm == 0: yy -= 1; mm = 12
+            prev_m = f"{yy:04d}-{mm:02d}"
+            mom_label = {"cur": cur_m, "prev": prev_m}
+            cur_amt, prev_amt = {}, {}
+            for r in con.execute(
+                f"SELECT cm.coupon_series_id id, cm.period_month ym, SUM(cm.discount_amount) amt "
+                f"FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id "
+                f"WHERE {' AND '.join(bbase)} AND cm.period_month IN (:cur,:prev) "
+                f"GROUP BY cm.coupon_series_id, cm.period_month",
+                {**bp, "cur": cur_m, "prev": prev_m}):
+                (cur_amt if r["ym"] == cur_m else prev_amt)[r["id"]] = float(r["amt"] or 0)
+            for r in series:
+                c, pv = cur_amt.get(r["id"], 0.0), prev_amt.get(r["id"], 0.0)
+                r["cur_amount"] = round(c)
+                r["mom_pct"] = round((c - pv) / pv * 100, 1) if pv > 0 else (None if c == 0 else None)
         return {"series": series, "total_uses": tot_uses, "total_amount": tot_amt,
-                "series_count": len(series), "staged": True}
+                "series_count": len(series), "mom": mom_label, "staged": True}
+
+
+@app.get("/api/analysis/coupon-series/drill")
+def coupon_series_drill(series_id: int, by: str = Query("branch"),
+                        month_from: Optional[str] = Query(None), month_to: Optional[str] = Query(None),
+                        month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                        group: Optional[str] = Query(None)):
+    """Drill one coupon series → usage by BRANCH (from pos_coupon_month) or by DAY
+    (from pos_coupon_day, populated by the sync). Honours the same month/branch
+    filters as the parent table."""
+    by = "day" if by == "day" else "branch"
+    with get_db() as con:
+        nm = con.execute("SELECT name, code FROM coupon_series WHERE coupon_series_id=?", (series_id,)).fetchone() \
+             if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_series'").fetchone() else None
+        name = (nm["name"] if nm and (nm["name"] or "").strip() else f"Series {series_id}")
+        if by == "day":
+            if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pos_coupon_day'").fetchone():
+                return {"by": "day", "series_id": series_id, "name": name, "rows": [], "available": False}
+            base = ["b.name!='ALL'", "cd.coupon_series_id=:sid"]; p = {"sid": series_id}
+            if branch: base.append("b.name=:branch"); p["branch"] = branch
+            _group_filter(base, p, group)
+            _month_range_filter(base, p, month_from, month_to, month, col="substr(cd.day,1,7)")
+            rows = [dict(r) for r in con.execute(
+                f"SELECT cd.day label, SUM(cd.used_count) uses, ROUND(SUM(cd.discount_amount)) amount "
+                f"FROM pos_coupon_day cd JOIN branches b ON b.branch_id=cd.branch_id "
+                f"WHERE {' AND '.join(base)} GROUP BY cd.day ORDER BY cd.day", p)]
+            return {"by": "day", "series_id": series_id, "name": name, "rows": rows, "available": True}
+        # by branch
+        base = ["b.name!='ALL'", "cm.coupon_series_id=:sid"]; p = {"sid": series_id}
+        if branch: base.append("b.name=:branch"); p["branch"] = branch
+        _group_filter(base, p, group)
+        _month_range_filter(base, p, month_from, month_to, month, col="cm.period_month")
+        rows = [dict(r) for r in con.execute(
+            f"SELECT b.name label, SUM(cm.used_count) uses, ROUND(SUM(cm.discount_amount)) amount "
+            f"FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id "
+            f"WHERE {' AND '.join(base)} GROUP BY b.name ORDER BY amount DESC", p)]
+        return {"by": "branch", "series_id": series_id, "name": name, "rows": rows, "available": True}
 
 
 @app.get("/api/extra/closing-time")
@@ -6256,6 +6322,16 @@ def analysis_discount_bills(
     params["limit"] = limit
 
     with get_db() as con:
+        # Per-bill discount reason + coupon name (synced via sync_mssql). Tables may
+        # be absent on a DB synced before they existed → degrade gracefully.
+        tabs = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pos_discount_reason','coupon_series')")}
+        stcols = {r[1] for r in con.execute("PRAGMA table_info(sales_transaction)")}
+        has_type = {"discount_reason_id", "coupon_series_id"} <= stcols
+        join_r = " LEFT JOIN pos_discount_reason dr ON dr.reason_id = st.discount_reason_id" if ("pos_discount_reason" in tabs and has_type) else ""
+        join_c = " LEFT JOIN coupon_series cs ON cs.coupon_series_id = st.coupon_series_id" if ("coupon_series" in tabs and has_type) else ""
+        sel_r = "dr.reason_desc" if join_r else "NULL"
+        sel_c = "cs.name" if join_c else "NULL"
         rows = con.execute(
             f"""
             SELECT st.receipt_no, st.sold_at, st.cashier, st.table_no,
@@ -6266,9 +6342,11 @@ def analysis_discount_bills(
                    ROUND(st.sp_discount, 2)                      AS sp_discount,
                    (st.food_subtotal + st.drink_subtotal + st.other_subtotal) AS gross,
                    ROUND({base_expr}, 2)                         AS bill_base,
-                   ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct
+                   ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct,
+                   {sel_r} AS reason_desc, {sel_c} AS coupon_name
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
+            {join_r}{join_c}
             {where}
             ORDER BY {order}
             LIMIT :limit
@@ -7709,6 +7787,13 @@ def _init_settings_tables():
         sku_cols = [r[1] for r in con.execute("PRAGMA table_info(skus)").fetchall()]
         if sku_cols and "active" not in sku_cols:
             con.execute("ALTER TABLE skus ADD COLUMN active INTEGER DEFAULT 1")
+        # per-bill discount reason + coupon series (idempotent) — powers the
+        # cashier-discount drill "ประเภทส่วนลด/คูปอง" column. Populated by sync_mssql.
+        st_cols = [r[1] for r in con.execute("PRAGMA table_info(sales_transaction)").fetchall()]
+        if st_cols and "discount_reason_id" not in st_cols:
+            con.execute("ALTER TABLE sales_transaction ADD COLUMN discount_reason_id INTEGER")
+        if st_cols and "coupon_series_id" not in st_cols:
+            con.execute("ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER")
         for k, v in [
             ("default_branch", ""),
             ("default_month",  "latest"),
