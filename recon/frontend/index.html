@@ -772,6 +772,26 @@
   </div>
 </div>
 
+<!-- ═══════════════ EVIDENCE ATTACHMENT MODAL ═══════════════ -->
+<div id="attachmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div class="font-bold text-lg">📎 แนบไฟล์หลักฐาน <span id="attach-scope" class="text-sm font-normal text-gray-400"></span></div>
+      <button onclick="document.getElementById('attachmodal').classList.add('hidden')" class="text-gray-400 text-xl">&times;</button>
+    </div>
+    <div class="space-y-3">
+      <div><label class="text-xs font-semibold text-gray-500 uppercase">ไฟล์ (รูป / PDF · ≤ 10MB)</label>
+        <input id="attach-file" type="file" accept="image/*,.pdf" class="w-full text-sm mt-1"></div>
+      <div class="flex gap-2">
+        <input id="attach-note" class="inp flex-1" placeholder="หมายเหตุ (optional)">
+        <input id="attach-by" class="inp" style="width:130px" placeholder="ชื่อผู้แนบ">
+        <button onclick="uploadAttachment()" class="btn btn-pri">แนบ</button>
+      </div>
+    </div>
+    <div class="mt-4 max-h-72 overflow-auto"><div id="attach-list" class="space-y-2"></div></div>
+  </div>
+</div>
+
 <!-- ═══════════════ LANE DRILL-DOWN MODAL ═══════════════ -->
 <div id="lanemodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
@@ -1230,6 +1250,54 @@ async function loadDailyBoard(){
   if(!data){ document.getElementById('bd-body').innerHTML='<tr><td class="text-center text-red-500 py-8">Failed to load</td></tr>'; return; }
   renderBoard(data);
 }
+// Evidence attachments (photos / PDFs) per branch+day
+let ATTACH_CTX=null;
+function openAttachments(branchId, day, category){
+  ATTACH_CTX={branch_id:branchId, day:day||BOARD_DATE||((document.getElementById('board-date')||{}).value), category:category||''};
+  if(!ATTACH_CTX.day){ toast('เลือกวันก่อน','err'); return; }
+  const bn=((BRANCHES||[]).find(b=>b.branch_id==branchId)||{}).name||'';
+  document.getElementById('attach-scope').textContent=`· ${bn} · ${ATTACH_CTX.day}`+(category?` · ${category}`:'');
+  document.getElementById('attach-file').value=''; document.getElementById('attach-note').value='';
+  document.getElementById('attachmodal').classList.remove('hidden');
+  renderAttachments();
+}
+async function renderAttachments(){
+  const c=ATTACH_CTX, box=document.getElementById('attach-list');
+  let list=[]; try{ list=await api(`/api/attachments?branch_id=${c.branch_id}&day=${c.day}`); }catch(e){}
+  if(!list||!list.length){ box.innerHTML='<div class="text-sm text-gray-400 text-center py-4">ยังไม่มีไฟล์แนบ</div>'; return; }
+  box.innerHTML=list.map(a=>{
+    const url=`${API}/api/attachments/${a.id}/file`;
+    const thumb=(a.mime||'').startsWith('image/')
+      ? `<a href="${url}" target="_blank"><img src="${url}" style="width:42px;height:42px;object-fit:cover;border-radius:6px"></a>`
+      : '<div style="width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:#f1f5f9;border-radius:6px">📄</div>';
+    return `<div class="flex items-center gap-3 border border-gray-100 rounded-lg p-2">${thumb}
+      <div class="flex-1 min-w-0"><a href="${url}" target="_blank" class="text-sm text-indigo-600 hover:underline truncate block">${a.file_name}</a>
+        <div class="text-xs text-gray-400">${Math.round((a.size_bytes||0)/1024)} KB · ${a.uploaded_by||'—'} · ${(a.uploaded_at||'').slice(0,16)}${a.note?' · '+a.note:''}${a.category?' · '+a.category:''}</div></div>
+      <button onclick="delAttachment(${a.id})" class="text-xs text-red-500 hover:underline">ลบ</button></div>`;
+  }).join('');
+}
+async function uploadAttachment(){
+  const c=ATTACH_CTX, f=document.getElementById('attach-file').files[0];
+  if(!f){ toast('เลือกไฟล์ก่อน','err'); return; }
+  const fd=new FormData(); fd.append('branch_id',c.branch_id); fd.append('day',c.day);
+  if(c.category) fd.append('category',c.category);
+  fd.append('note',document.getElementById('attach-note').value);
+  fd.append('uploaded_by',document.getElementById('attach-by').value);
+  fd.append('file',f);
+  try{ await api('/api/attachments',{method:'POST',body:fd}); toast('แนบไฟล์แล้ว','ok');
+    document.getElementById('attach-file').value=''; document.getElementById('attach-note').value=''; renderAttachments(); }
+  catch(e){ toast(e.message,'err'); }
+}
+async function delAttachment(id){ if(!confirm('ลบไฟล์นี้?'))return; try{ await api('/api/attachments/'+id,{method:'DELETE'}); renderAttachments(); }catch(e){ toast(e.message,'err'); } }
+
+// Click a COUPON board cell → Coupon tab, day grain, this branch + board date
+function openCouponFromBoard(branchId){
+  switchTab('coupon');
+  const sel=document.getElementById('cp-branch');
+  // ensure the branch dropdown is populated, then select this branch
+  const apply=()=>{ if(sel){ sel.value=String(branchId); } document.getElementById('cp-date').value=BOARD_DATE||((document.getElementById('board-date')||{}).value); setCpGran('day'); };
+  if(sel && !sel.options.length){ loadCoupon().then(apply); } else { apply(); }
+}
 function openDailyReport(branchId){
   if(!BOARD_DATE){ toast('เลือกวันก่อน','err'); return; }
   const q = branchId ? `?day=${BOARD_DATE}&branch_id=${branchId}` : `?day=${BOARD_DATE}`;
@@ -1279,10 +1347,15 @@ function renderBoard(d){
       const cell=b.cells[c];
       if(!cell) return '<td class="px-3 py-2 text-right text-gray-200">·</td>';
       const cm=meta[c]||{category:c,bank:null};
-      const drillScope=`{day:BOARD_DATE,category:'${cm.category}'${cm.bank?`,bank:'${cm.bank}'`:''}}`;
-      const tip=`${b.branch_name} · ${lbl(c)}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\nclick to reconcile`;
+      // COUPON has no external document — clicking shows the coupon-series detail
+      // (what coupons make up the amount) on the Coupon tab for this branch+day.
+      const isCoupon = cm.category==='COUPON';
+      const onClick = isCoupon
+        ? `openCouponFromBoard(${b.branch_id})`
+        : `openDrill(${b.branch_id},{day:BOARD_DATE,category:'${cm.category}'${cm.bank?`,bank:'${cm.bank}'`:''}},'board')`;
+      const tip=`${b.branch_name} · ${lbl(c)}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\n${isCoupon?'คลิกดูคูปองแยก series':'click to reconcile'}`;
       return `<td class="px-2 py-1.5 text-right">
-        <span onclick="openDrill(${b.branch_id},${drillScope},'board')" title="${tip}"
+        <span onclick="${onClick}" title="${tip}"
           style="display:inline-block;min-width:64px;padding:3px 8px;border-radius:6px;cursor:pointer;font-family:monospace;font-weight:600;background:${BOARD_CELL[cell.status]||'#f1f5f9'};color:${BOARD_FG[cell.status]||'#475569'}">${fmt(cell.pos)}</span></td>`;
     }).join('');
     tr.innerHTML=`<td class="py-1.5 pl-4 pr-3 font-medium sticky left-0 bg-white cursor-pointer hover:text-orange-600" onclick="boardDrill(${b.branch_id})">${b.branch_name}${b.issues?` <span class="badge b-err">${b.issues}</span>`:''}</td>
@@ -1290,7 +1363,7 @@ function renderBoard(d){
       <td class="px-3 text-right font-mono">${fmt(b.pos_total)}</td>
       <td class="px-3 text-right font-mono text-gray-500">${fmt(b.ext_total)}</td>
       <td class="px-3 text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
-      <td class="px-3 text-right whitespace-nowrap"><button onclick="openDailyReport(${b.branch_id})" class="text-xs text-indigo-600 hover:underline mr-2" title="รายงาน PDF ของสาขานี้">📄</button><button onclick="boardUpload(${b.branch_id})" class="text-xs text-orange-600 hover:underline" title="Upload documents for this branch">+ docs</button></td>`;
+      <td class="px-3 text-right whitespace-nowrap"><button onclick="openDailyReport(${b.branch_id})" class="text-xs text-indigo-600 hover:underline mr-2" title="รายงาน PDF ของสาขานี้">📄</button><button onclick="openAttachments(${b.branch_id})" class="text-xs text-slate-600 hover:underline mr-2" title="แนบไฟล์หลักฐาน (รูป/PDF)">📎</button><button onclick="boardUpload(${b.branch_id})" class="text-xs text-orange-600 hover:underline" title="Upload documents for this branch">+ docs</button></td>`;
     tb.appendChild(tr);
   });
 

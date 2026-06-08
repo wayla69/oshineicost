@@ -585,6 +585,65 @@ def delete_upload(upload_id: int):
     return {"deleted": upload_id}
 
 
+# ── Evidence attachments (photos / PDFs per branch+day) ───────────────────────
+_ATTACH_MAX = 10 * 1024 * 1024
+_ATTACH_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf", ".heic")
+
+@app.get("/api/attachments")
+def list_attachments(branch_id: int, day: str):
+    if not _DAY_RE.match(day or ""):
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, branch_id, day, category, file_name, mime, size_bytes, note, "
+            "uploaded_by, uploaded_at FROM recon_attachment "
+            "WHERE branch_id=? AND day=? ORDER BY uploaded_at DESC", (branch_id, day))]
+
+
+@app.post("/api/attachments", dependencies=[Depends(require_write_token)])
+async def create_attachment(branch_id: int = Form(...), day: str = Form(...),
+                            category: str = Form(""), note: str = Form(""),
+                            uploaded_by: str = Form(""), file: UploadFile = File(...)):
+    if not _DAY_RE.match(day or ""):
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    fn = (file.filename or "").strip()
+    if not fn.lower().endswith(_ATTACH_EXT):
+        raise HTTPException(415, "Only images (jpg/png/webp/gif/heic) or PDF are accepted.")
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(422, "Empty file.")
+    if len(raw) > _ATTACH_MAX:
+        raise HTTPException(413, f"File exceeds the {_ATTACH_MAX // (1024*1024)} MB limit.")
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        cur = conn.execute(
+            "INSERT INTO recon_attachment(branch_id,day,category,file_name,mime,size_bytes,data,note,uploaded_by) "
+            "VALUES(?,?,?,?,?,?,?,?,?)",
+            (branch_id, day, (category or None), fn, file.content_type, len(raw), raw,
+             (note or None), (uploaded_by or None)))
+        conn.commit()
+        return {"id": cur.lastrowid, "file_name": fn, "size_bytes": len(raw)}
+
+
+@app.get("/api/attachments/{att_id}/file")
+def get_attachment_file(att_id: int):
+    with get_db() as conn:
+        r = conn.execute("SELECT file_name, mime, data FROM recon_attachment WHERE id=?",
+                         (att_id,)).fetchone()
+    if not r:
+        raise HTTPException(404, "not found")
+    return Response(content=r["data"], media_type=r["mime"] or "application/octet-stream",
+                    headers={"Content-Disposition": f'inline; filename="{r["file_name"]}"'})
+
+
+@app.delete("/api/attachments/{att_id}", dependencies=[Depends(require_write_token)])
+def delete_attachment(att_id: int):
+    with get_db() as conn:
+        conn.execute("DELETE FROM recon_attachment WHERE id=?", (att_id,))
+        conn.commit()
+    return {"deleted": att_id}
+
+
 # ── Sessions ──────────────────────────────────────────────────────────────────
 
 class SessionCreate(BaseModel):

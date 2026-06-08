@@ -318,3 +318,21 @@ CREATE TABLE IF NOT EXISTS recon_manual_match_line (
     amount    REAL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_rmml_match ON recon_manual_match_line(match_id);
+
+-- Generic evidence attachments (photos / PDFs) staff add as reconciliation proof,
+-- scoped to a branch + day (+ optional channel/category, e.g. COUPON). Stored as a
+-- BLOB so it survives a sales-only resync (the whole DB is copied, sales rebuilt).
+CREATE TABLE IF NOT EXISTS recon_attachment (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id   INTEGER NOT NULL,
+    day         TEXT NOT NULL,            -- YYYY-MM-DD
+    category    TEXT,                     -- optional channel (CASH/QR/CREDIT/COUPON…)
+    file_name   TEXT NOT NULL,
+    mime        TEXT,
+    size_bytes  INTEGER,
+    data        BLOB,
+    note        TEXT,
+    uploaded_by TEXT,
+    uploaded_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_recon_attachment ON recon_attachment(branch_id, day);
