@@ -3180,17 +3180,31 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span id="mcStatus" class="text-[11px] text-slate-400 ml-auto"></span>
   </div>
   <div class="card p-5">
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
+      <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+        <button class="gran-btn gran-active" id="mcModeTotal" onclick="mcSetCostMode(false)">ต้นทุนรวม</button>
+        <button class="gran-btn" id="mcModeHead" onclick="mcSetCostMode(true)">ต้นทุน/หัว</button>
+      </div>
+      <span id="mcCoversNote" class="text-[11px] text-slate-400"></span>
+    </div>
     <div class="overflow-auto" style="max-height:640px">
       <table class="tbl-top60 w-full" id="mcTable">
-        <thead><tr>
-          <th class="num">#</th><th>SKU</th><th>เมนู</th>
-          <th class="num">จำนวน A</th><th class="num">จำนวน B</th><th class="num">Δ%<span class="sub">A เทียบ B</span></th>
-          <th class="num">ต้นทุน A</th><th class="num">ต้นทุน B</th><th></th>
-        </tr></thead>
+        <thead id="mcHead"></thead>
         <tbody id="mcBody"></tbody>
         <tfoot id="mcFoot"></tfoot>
       </table>
     </div>
+  </div>
+
+  <!-- Pareto สะสม — cost concentration A vs B -->
+  <div class="card p-5 mt-4" id="mcParetoCard" style="display:none">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">📊 Pareto สะสม — การกระจุกตัวของต้นทุน (A vs B)</h3>
+      <span id="mcParetoSummary" class="text-[11px] text-slate-500"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า</p>
+    <div style="height:300px"><canvas id="mcParetoChart"></canvas></div>
   </div>
 
   <!-- dive-in detail panel — expands inline directly below the table -->
@@ -22801,26 +22815,110 @@ async function loadMenuCompare() {
   const st = document.getElementById('mcStatus'); if (st) st.textContent = 'กำลังโหลด…';
   let d; try { d = await fetch(`${API}/api/sales/menu-compare?${new URLSearchParams(qp)}`).then(r => r.json()); }
   catch (e) { if (st) st.textContent = 'ผิดพลาด'; return; }
-  _mcLast = { items: d.items || [], qp };
+  _mcLast = { items: d.items || [], totals: d.totals || {}, covers_a: d.covers_a || 0,
+              covers_b: d.covers_b || 0, a_range: d.a_range, b_range: d.b_range, qp };
   if (st) st.textContent = `A: ${(d.a_range || []).filter(Boolean).join(' – ') || '—'}   ·   B: ${(d.b_range || []).filter(Boolean).join(' – ') || '—'}`;
-  const body = document.getElementById('mcBody'), foot = document.getElementById('mcFoot');
-  const items = d.items || [];
-  if (!items.length) { body.innerHTML = '<tr><td colspan="9" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>'; foot.innerHTML = ''; return; }
-  body.innerHTML = items.map((r, i) => `<tr class="cursor-pointer" onclick="mcOpenDrill('${jsAttr(r.sku_code)}')" title="คลิกดูเชิงลึก">
+  mcRenderTable();
+  mcRenderPareto();
+}
+
+// Total ↔ per-head (ต่อหัว) cost view. Per-head = COGS ÷ covers, so a drop in
+// total cost that's only caused by fewer customers stops looking like a "win".
+let _mcPerHead = false;
+function mcSetCostMode(perHead) {
+  _mcPerHead = perHead;
+  document.getElementById('mcModeTotal')?.classList.toggle('gran-active', !perHead);
+  document.getElementById('mcModeHead')?.classList.toggle('gran-active', perHead);
+  mcRenderTable();
+}
+function mcRenderTable() {
+  const L = _mcLast; if (!L) return;
+  const head = document.getElementById('mcHead'), body = document.getElementById('mcBody'), foot = document.getElementById('mcFoot');
+  const items = L.items || [], ph = _mcPerHead, Ca = L.covers_a || 0, Cb = L.covers_b || 0;
+  const note = document.getElementById('mcCoversNote');
+  if (note) note.textContent = ph
+    ? `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — ต้นทุน/หัว = COGS ÷ ลูกค้า (ตัดผลของยอดขายที่เปลี่ยน)`
+    : '';
+  const hq = ph ? ['จำนวน/คน A', 'จำนวน/คน B'] : ['จำนวน A', 'จำนวน B'];
+  const hc = ph ? ['ต้นทุน/หัว A', 'ต้นทุน/หัว B'] : ['ต้นทุน A', 'ต้นทุน B'];
+  head.innerHTML = `<tr><th class="num">#</th><th>SKU</th><th>เมนู</th>
+    <th class="num">${hq[0]}</th><th class="num">${hq[1]}</th><th class="num">Δ%<span class="sub">A เทียบ B</span></th>
+    <th class="num">${hc[0]}</th><th class="num">${hc[1]}</th><th class="num">Δ%<span class="sub">ต้นทุน</span></th><th></th></tr>`;
+  if (!items.length) {
+    body.innerHTML = '<tr><td colspan="10" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>';
+    foot.innerHTML = ''; const pc = document.getElementById('mcParetoCard'); if (pc) pc.style.display = 'none'; return;
+  }
+  const vQ = (q, C) => ph ? (C ? q / C : null) : q;
+  const vC = (c, C) => ph ? (C ? c / C : null) : c;
+  const nQ = v => v == null ? '—' : (ph ? v.toFixed(2) : fmtN(v));
+  const nC = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
+  const dp = (a, b) => (a != null && b) ? (a - b) / b * 100 : null;
+  body.innerHTML = items.map((r, i) => {
+    const qa = vQ(r.qty_a, Ca), qb = vQ(r.qty_b, Cb), ca = vC(r.cogs_a, Ca), cb = vC(r.cogs_b, Cb);
+    return `<tr class="cursor-pointer" onclick="mcOpenDrill('${jsAttr(r.sku_code)}')" title="คลิกดูเชิงลึก">
     <td class="num tabular text-slate-400">${i + 1}</td>
     <td class="font-mono text-slate-400 text-[10px]">${esc(r.sku_code)}</td>
     <td class="max-w-xs truncate" title="${esc(r.description || '')}">${esc((r.description || '').replace(/^\((?:A|B|T)\)\s*/, ''))}</td>
-    <td class="num tabular font-semibold">${fmtN(r.qty_a)}</td>
-    <td class="num tabular font-semibold">${fmtN(r.qty_b)}</td>
-    <td class="num tabular">${_momSpan(r.qty_delta_pct, true)}</td>
-    <td class="num tabular text-slate-500">${fmt(r.cogs_a)}</td>
-    <td class="num tabular text-slate-500">${fmt(r.cogs_b)}</td>
-    <td class="num text-indigo-500 text-[11px] whitespace-nowrap">ดูเชิงลึก ›</td></tr>`).join('');
-  const t = d.totals || {};
+    <td class="num tabular font-semibold">${nQ(qa)}</td>
+    <td class="num tabular font-semibold">${nQ(qb)}</td>
+    <td class="num tabular">${_momSpan(dp(qa, qb), true)}</td>
+    <td class="num tabular text-slate-500">${nC(ca)}</td>
+    <td class="num tabular text-slate-500">${nC(cb)}</td>
+    <td class="num tabular">${_momSpan(dp(ca, cb), false)}</td>
+    <td class="num text-indigo-500 text-[11px] whitespace-nowrap">ดูเชิงลึก ›</td></tr>`;
+  }).join('');
+  const t = L.totals || {};
+  const tqa = vQ(t.qty_a, Ca), tqb = vQ(t.qty_b, Cb), tca = vC(t.cogs_a, Ca), tcb = vC(t.cogs_b, Cb);
   foot.innerHTML = `<tr><td></td><td></td><td>รวม ${fmtN(items.length)} เมนู</td>
-    <td class="num tabular">${fmtN(t.qty_a)}</td><td class="num tabular">${fmtN(t.qty_b)}</td>
-    <td class="num tabular">${_momSpan(t.qty_delta_pct, true)}</td>
-    <td class="num tabular">${fmt(t.cogs_a)}</td><td class="num tabular">${fmt(t.cogs_b)}</td><td></td></tr>`;
+    <td class="num tabular">${nQ(tqa)}</td><td class="num tabular">${nQ(tqb)}</td>
+    <td class="num tabular">${_momSpan(dp(tqa, tqb), true)}</td>
+    <td class="num tabular">${nC(tca)}</td><td class="num tabular">${nC(tcb)}</td>
+    <td class="num tabular">${_momSpan(dp(tca, tcb), false)}</td><td></td></tr>`;
+}
+// Cumulative cost-share Pareto: each period sorted by its own COGS desc, plotted
+// as cumulative % of that period's total. Concentration is share-based, so it's
+// identical whether you read total or per-head cost — hence not tied to the toggle.
+function mcRenderPareto() {
+  const L = _mcLast, card = document.getElementById('mcParetoCard'); if (!L || !card) return;
+  const items = L.items || [];
+  if (items.length < 2) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  const cum = key => {
+    const sv = items.map(r => r[key] || 0).filter(v => v > 0).sort((a, b) => b - a);
+    const tot = sv.reduce((s, v) => s + v, 0) || 1;
+    let run = 0; return sv.map(v => { run += v; return run / tot * 100; });
+  };
+  const ca = cum('cogs_a'), cb = cum('cogs_b');
+  const n = Math.max(ca.length, cb.length);
+  const labels = Array.from({ length: n }, (_, i) => i + 1);
+  const rank80 = a => { const i = a.findIndex(v => v >= 80); return i < 0 ? a.length : i + 1; };
+  const topN = (a, k) => a.length ? a[Math.min(k, a.length) - 1].toFixed(0) : '—';
+  const sum = document.getElementById('mcParetoSummary');
+  if (sum) sum.textContent = `80% ของต้นทุน: A = ${rank80(ca)} เมนู · B = ${rank80(cb)} เมนู   |   Top 10 = A ${topN(ca, 10)}% · B ${topN(cb, 10)}%`;
+  const aLbl = 'A (' + ((L.a_range || []).filter(Boolean).join('–') || 'A') + ')';
+  const bLbl = 'B (' + ((L.b_range || []).filter(Boolean).join('–') || 'B') + ')';
+  mkChart('mcParetoChart', {
+    type: 'line',
+    data: {
+      labels, datasets: [
+        { label: aLbl, data: ca, borderColor: '#6366f1', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
+        { label: bLbl, data: cb, borderColor: '#0891b2', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}% สะสม @ ${c.parsed.x} เมนู` } },
+      },
+      scales: {
+        x: { title: { display: true, text: 'จำนวนเมนู (เรียงต้นทุนมาก→น้อย)' }, ticks: { maxTicksLimit: 12 } },
+        y: { title: { display: true, text: '% ต้นทุนสะสม' }, min: 0, max: 100, ticks: { callback: v => v + '%' } },
+      },
+    },
+  });
 }
 async function mcOpenDrill(sku) {
   _mcBomSku = null;

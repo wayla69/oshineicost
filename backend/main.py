@@ -1737,6 +1737,25 @@ def _covers_by_branch(con, mfrom, mto, dfrom, dto, group):
     return {r["br"]: (r["c"] or 0) for r in rows}
 
 
+def _covers_total(con, mfrom, mto, dfrom, dto, branch, group):
+    """Total Easy covers over a month OR day range for the given branch/group
+    scope — the denominator for per-head (ต่อหัว) cost on the compare table."""
+    base = ["b.name!='ALL'", "t.source='Easy'"]; p: dict = {}
+    if branch:
+        base.append("b.name=:cbr"); p["cbr"] = branch
+    _group_filter(base, p, group)
+    if dfrom or dto:
+        if dfrom: base.append("date(t.sold_at)>=:cf"); p["cf"] = dfrom
+        if dto:   base.append("date(t.sold_at)<=:ct"); p["ct"] = dto
+    else:
+        if mfrom: base.append("strftime('%Y-%m',t.sold_at)>=:cmf"); p["cmf"] = mfrom
+        if mto:   base.append("strftime('%Y-%m',t.sold_at)<=:cmt"); p["cmt"] = mto
+    row = con.execute(f"SELECT SUM(t.customer_count) c FROM sales_transaction t "
+                      f"JOIN branches b ON b.branch_id=t.branch_id "
+                      f"WHERE {' AND '.join(base)}", p).fetchone()
+    return row["c"] or 0
+
+
 @app.get("/api/sales/menu-compare")
 def menu_compare(
     a_from: Optional[str] = Query(None), a_to: Optional[str] = Query(None),
@@ -1759,6 +1778,8 @@ def menu_compare(
     with get_db() as con:
         A = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, a_from, a_to, a_date_from, a_date_to)}
         B = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, b_from, b_to, b_date_from, b_date_to)}
+        covers_a = _covers_total(con, a_from, a_to, a_date_from, a_date_to, branch, group)
+        covers_b = _covers_total(con, b_from, b_to, b_date_from, b_date_to, branch, group)
     items = []
     for sid in set(A) | set(B):
         a = A.get(sid); b = B.get(sid); meta = a or b
@@ -1776,9 +1797,11 @@ def menu_compare(
     s = lambda k: round(sum(i[k] for i in items), 2)
     totals = {"qty_a": s("qty_a"), "qty_b": s("qty_b"), "rev_a": s("rev_a"), "rev_b": s("rev_b"),
               "cogs_a": s("cogs_a"), "cogs_b": s("cogs_b"),
+              "covers_a": covers_a, "covers_b": covers_b,
               "qty_delta_pct": _cmp_pct(s("qty_a"), s("qty_b")), "rev_delta_pct": _cmp_pct(s("rev_a"), s("rev_b"))}
     return {"a_range": [a_from or a_date_from, a_to or a_date_to],
             "b_range": [b_from or b_date_from, b_to or b_date_to],
+            "covers_a": covers_a, "covers_b": covers_b,
             "n": len(items), "items": items, "totals": totals}
 
 
