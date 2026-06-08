@@ -132,6 +132,45 @@ def test_menu_compare_drill_branches_and_chronological_trend(client):
     assert months == sorted(months), "trend not in chronological order"
 
 
+def test_scenario_savings_ledger(client):
+    """Phase B ROI: adopt a scenario → realized stays 0 until the cheaper cost is
+    actually in the data, then accrues = (baseline−current) × qty since adoption."""
+    import main
+    body = {"name": "_pytest_roi", "overrides": [
+        {"sku_code": "A0001", "unit_cost": 6.0, "qty": None, "disabled": False},
+    ]}
+    sid = client.post("/api/bom-cost/scenarios", json=body).json()["id"]
+    try:
+        assert client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()["adopted"] is False
+        ad = client.post(f"/api/bom-cost/scenarios/{sid}/adopt", json={"adopted_by": "pytest"}).json()
+        assert ad["baseline_month"] == "2026-06"          # latest fixture month
+        s1 = client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()
+        assert s1["adopted"] is True
+        a = {i["sku_code"]: i for i in s1["items"]}["A0001"]
+        assert abs(a["baseline_cost"] - 10.0) < 1e-6       # effective cost at adoption
+        assert a["qty_since_adopt"] == 80                  # June: 40/branch × 2 branches
+        # not implemented yet → realized 0; potential = (10−6)·80 = 320
+        assert s1["totals"]["realized_saving"] == 0
+        assert abs(s1["totals"]["potential_saving"] - 320.0) < 0.01
+        # simulate implementing the cheaper recipe: effective cost 10 → 7
+        with main.get_db() as con:
+            con.execute("UPDATE sku_effective_cost SET recipe_cost=7 "
+                        "WHERE sku_id=(SELECT sku_id FROM skus WHERE sku_code='A0001')")
+            con.commit()
+        s2 = client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()
+        assert abs(s2["totals"]["realized_saving"] - 240.0) < 0.01   # (10−7)·80
+        assert abs(s2["totals"]["progress_pct"] - 75.0) < 0.1        # 240/320
+        assert abs(s2["series"][-1]["cumulative"] - 240.0) < 0.01
+    finally:
+        # restore the session-scoped fixture cost so later tests see A0001 = 10
+        with main.get_db() as con:
+            con.execute("UPDATE sku_effective_cost SET recipe_cost=10 "
+                        "WHERE sku_id=(SELECT sku_id FROM skus WHERE sku_code='A0001')")
+            con.commit()
+        client.post(f"/api/bom-cost/scenarios/{sid}/unadopt")
+        client.delete(f"/api/bom-cost/scenarios/{sid}")
+
+
 def test_heavy_eaters_margin_identity_and_monotone_percentiles(client):
     d = client.get("/api/sales/heavy-eaters").json()
     assert d["n_bills"] > 0 and d["total_covers"] > 0
@@ -143,3 +182,47 @@ def test_heavy_eaters_margin_identity_and_monotone_percentiles(client):
     # heavy / loss buckets are subsets of all bills
     assert d["heavy"]["bills"] <= d["n_bills"]
     assert d["loss"]["bills"] <= d["n_bills"]
+
+
+# ── Overhaul Phase 1 invariant — ONE COGS, identical GP across every tab ──────
+# The core "ตัวเลขไม่ตรง" complaint was GP differing between tabs because two
+# COGS methods coexisted. Phase 1 unified them (_cogs_case is now a shim over
+# _unified_cogs_expr). This locks that in: the four headline revenue/COGS/GP
+# surfaces must report the SAME whole-store numbers for the SAME period. A swap
+# back to sku_cost on any one of them moves COGS by thousands and trips this.
+#
+# Each endpoint exposes a whole-store roll-up under a different key:
+#   /api/profit/summary     -> top-level   {revenue_ex_vat, cogs, gross_profit}
+#   /api/gp/by-branch-month -> grand_total {revenue, cogs, gp}
+#   /api/pnl/branch         -> chain       {revenue, cogs, gross_profit}
+#   /api/cost/analysis      -> summary     {total_revenue, total_cogs, total_gross_profit}
+def _chain_rev_cogs_gp(client, params):
+    """(revenue, cogs, gp) whole-store roll-up from each of the 4 endpoints."""
+    ps = client.get("/api/profit/summary", params=params).json()
+    gp = client.get("/api/gp/by-branch-month", params=params).json()["grand_total"]
+    pn = client.get("/api/pnl/branch", params=params).json()["chain"]
+    ca = client.get("/api/cost/analysis", params=params).json()["summary"]
+    return {
+        "profit/summary":     (ps["revenue_ex_vat"], ps["cogs"], ps["gross_profit"]),
+        "gp/by-branch-month": (gp["revenue"],        gp["cogs"], gp["gp"]),
+        "pnl/branch":         (pn["revenue"],        pn["cogs"], pn["gross_profit"]),
+        "cost/analysis":      (ca["total_revenue"],  ca["total_cogs"], ca["total_gross_profit"]),
+    }
+
+
+@pytest.mark.parametrize("params", [{}, {"month": B_PER}], ids=["all_months", "single_month"])
+def test_gp_identical_across_tabs(client, params):
+    surfaces = _chain_rev_cogs_gp(client, params)
+    # Tolerance: per-branch roll-ups round before summing, so allow a few cents of
+    # accumulation — but a method swap shifts COGS by thousands, so this stays tight.
+    def close(a, b):
+        return abs(a - b) <= max(0.5, 0.0005 * max(abs(a), abs(b)))
+
+    ref_name, ref = next(iter(surfaces.items()))
+    for name, (rev, cogs, gp) in surfaces.items():
+        r0, c0, g0 = ref
+        assert close(rev, r0),  f"revenue differs: {name}={rev} vs {ref_name}={r0}"
+        assert close(cogs, c0), f"COGS differs: {name}={cogs} vs {ref_name}={c0}"
+        assert close(gp, g0),   f"GP differs: {name}={gp} vs {ref_name}={g0}"
+        # internal identity: GP must be revenue − COGS on every surface
+        assert close(gp, rev - cogs), f"{name}: gp {gp} != rev-cogs {rev - cogs}"

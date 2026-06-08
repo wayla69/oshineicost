@@ -1737,6 +1737,25 @@ def _covers_by_branch(con, mfrom, mto, dfrom, dto, group):
     return {r["br"]: (r["c"] or 0) for r in rows}
 
 
+def _covers_total(con, mfrom, mto, dfrom, dto, branch, group):
+    """Total Easy covers over a month OR day range for the given branch/group
+    scope — the denominator for per-head (ต่อหัว) cost on the compare table."""
+    base = ["b.name!='ALL'", "t.source='Easy'"]; p: dict = {}
+    if branch:
+        base.append("b.name=:cbr"); p["cbr"] = branch
+    _group_filter(base, p, group)
+    if dfrom or dto:
+        if dfrom: base.append("date(t.sold_at)>=:cf"); p["cf"] = dfrom
+        if dto:   base.append("date(t.sold_at)<=:ct"); p["ct"] = dto
+    else:
+        if mfrom: base.append("strftime('%Y-%m',t.sold_at)>=:cmf"); p["cmf"] = mfrom
+        if mto:   base.append("strftime('%Y-%m',t.sold_at)<=:cmt"); p["cmt"] = mto
+    row = con.execute(f"SELECT SUM(t.customer_count) c FROM sales_transaction t "
+                      f"JOIN branches b ON b.branch_id=t.branch_id "
+                      f"WHERE {' AND '.join(base)}", p).fetchone()
+    return row["c"] or 0
+
+
 @app.get("/api/sales/menu-compare")
 def menu_compare(
     a_from: Optional[str] = Query(None), a_to: Optional[str] = Query(None),
@@ -1759,6 +1778,8 @@ def menu_compare(
     with get_db() as con:
         A = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, a_from, a_to, a_date_from, a_date_to)}
         B = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, b_from, b_to, b_date_from, b_date_to)}
+        covers_a = _covers_total(con, a_from, a_to, a_date_from, a_date_to, branch, group)
+        covers_b = _covers_total(con, b_from, b_to, b_date_from, b_date_to, branch, group)
     items = []
     for sid in set(A) | set(B):
         a = A.get(sid); b = B.get(sid); meta = a or b
@@ -1776,9 +1797,11 @@ def menu_compare(
     s = lambda k: round(sum(i[k] for i in items), 2)
     totals = {"qty_a": s("qty_a"), "qty_b": s("qty_b"), "rev_a": s("rev_a"), "rev_b": s("rev_b"),
               "cogs_a": s("cogs_a"), "cogs_b": s("cogs_b"),
+              "covers_a": covers_a, "covers_b": covers_b,
               "qty_delta_pct": _cmp_pct(s("qty_a"), s("qty_b")), "rev_delta_pct": _cmp_pct(s("rev_a"), s("rev_b"))}
     return {"a_range": [a_from or a_date_from, a_to or a_date_to],
             "b_range": [b_from or b_date_from, b_to or b_date_to],
+            "covers_a": covers_a, "covers_b": covers_b,
             "n": len(items), "items": items, "totals": totals}
 
 
@@ -3239,121 +3262,6 @@ def buffet_child(branch: Optional[str] = Query(None)):
 
 
 # ---------------------------------------------------------------------------
-# /api/sales/payment   -  payment method breakdown
-# ---------------------------------------------------------------------------
-@app.get("/api/sales/payment")
-def payment_breakdown(
-    month:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-    branch:     Optional[str] = Query(None),
-    source:     Optional[str] = Query(None),
-):
-    """Payment method totals from sales_month_summary.
-
-    branch='ALL' or omitted → aggregate across all real branches.
-    """
-    filters = []
-    params: dict = {}
-
-    if branch and branch.upper() != "ALL":
-        filters.append("b.name = :branch")
-        params["branch"] = branch
-    _month_range_filter(filters, params, month_from, month_to, month, col="sms.period_month")
-    if source:
-        filters.append("sms.source = :source")
-        params["source"] = source
-
-    where = ("WHERE " + " AND ".join(filters)) if filters else ""
-
-    with get_db() as con:
-        rows = con.execute(
-            f"""
-            SELECT sms.period_month,
-                   b.name AS branch,
-                   ROUND(SUM(sms.cash), 2)        AS cash,
-                   ROUND(SUM(sms.credit_card), 2) AS credit_card,
-                   ROUND(SUM(sms.transfer), 2)    AS transfer,
-                   ROUND(SUM(sms.qr), 2)          AS qr,
-                   ROUND(SUM(sms.coupon), 2)      AS coupon,
-                   ROUND(SUM(sms.gross_sales), 2) AS gross_sales,
-                   ROUND(SUM(sms.net_sales), 2)   AS net_sales,
-                   ROUND(SUM(sms.discounts), 2)   AS discounts,
-                   ROUND(SUM(sms.refunds), 2)     AS refunds,
-                   SUM(sms.customer_count)        AS customer_count,
-                   SUM(sms.transaction_count)     AS transaction_count
-            FROM sales_month_summary sms
-            JOIN branches b ON b.branch_id = sms.branch_id
-            {where}
-            GROUP BY sms.period_month, b.name
-            ORDER BY sms.period_month
-            """,
-            params,
-        ).fetchall()
-
-    return [dict(r) for r in rows]
-
-
-# ---------------------------------------------------------------------------
-# /api/sales/transactions   -  paginated transaction list
-# ---------------------------------------------------------------------------
-@app.get("/api/sales/transactions")
-def list_transactions(
-    month: Optional[str] = Query(None),
-    branch: Optional[str] = Query(None),
-    source: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=1000),
-    offset: int = Query(0, ge=0),
-):
-    """Paginated per-receipt transaction rows."""
-    filters = ["b.name != 'ALL'"]
-    params: dict = {}
-
-    if branch:
-        filters.append("b.name = :branch")
-        params["branch"] = branch
-    if month:
-        filters.append("strftime('%Y-%m', st.sold_at) = :month")
-        params["month"] = month
-    if source:
-        filters.append("st.source = :source")
-        params["source"] = source
-
-    where = "WHERE " + " AND ".join(filters)
-    params["limit"]  = limit
-    params["offset"] = offset
-
-    with get_db() as con:
-        total = con.execute(
-            f"""
-            SELECT COUNT(*)
-            FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
-            {where}
-            """,
-            {k: v for k, v in params.items() if k not in ("limit", "offset")},
-        ).fetchone()[0]
-
-        rows = con.execute(
-            f"""
-            SELECT st.receipt_no, st.sold_at, b.name AS branch,
-                   st.cashier, st.table_no, st.customer_count,
-                   st.food_subtotal, st.drink_subtotal, st.other_subtotal,
-                   st.tip, st.sp_discount, st.discount, st.service_charge,
-                   st.total_inc_vat, st.source
-            FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
-            {where}
-            ORDER BY st.sold_at DESC
-            LIMIT :limit OFFSET :offset
-            """,
-            params,
-        ).fetchall()
-
-    return {"total": total, "offset": offset, "rows": [dict(r) for r in rows]}
-
-
-# ---------------------------------------------------------------------------
 # /api/summary   -  single-call KPI card data
 # ---------------------------------------------------------------------------
 @app.get("/api/summary")
@@ -4018,110 +3926,11 @@ def sales_margin(
     }
 
 
-# ---------------------------------------------------------------------------
-# /api/sales/category-movers  -  MoM revenue change by category (Overview)
-# ---------------------------------------------------------------------------
 def _month_add(ym: str, delta: int) -> str:
     """'YYYY-MM' shifted by `delta` months (delta may be negative)."""
     y, m = _ym_parts(ym)
     idx = (y * 12 + (m - 1)) + delta
     return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
-
-
-@app.get("/api/sales/category-movers")
-@ttl_cache
-def sales_category_movers(
-    month:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-    branch:     Optional[str] = Query(None),
-    limit:      int           = Query(6, ge=1, le=20),
-):
-    """Category revenue (ex-VAT) for the selected period vs the immediately
-    preceding period of equal length — biggest gainers/decliners.
-
-    Revenue-based, so it is ALWAYS reliable regardless of cost coverage (unlike
-    per-category margin, which is distorted by the ~46%-costed buffet model).
-    Non-product categories (Payment/Delivery) are excluded so the movers reflect
-    real menu performance.
-    """
-    cur_to   = month_to or month
-    cur_from = month_from or month
-    if not cur_to:
-        # default to the latest month present in the data
-        with get_db() as con:
-            cur_to = con.execute(
-                "SELECT MAX(period_month) FROM sales_sku_monthly WHERE source='Easy'"
-            ).fetchone()[0]
-        cur_from = cur_to
-    if not cur_from:
-        cur_from = cur_to
-
-    # length of the current window in months (inclusive)
-    fy, fm = _ym_parts(cur_from); ty, tm = _ym_parts(cur_to)
-    span = (ty * 12 + tm) - (fy * 12 + fm)            # 0 for a single month
-    prev_to   = _month_add(cur_from, -1)
-    prev_from = _month_add(prev_to, -span)
-
-    EXCLUDED = ('Payment', 'Other', 'Oshinei DELIVERY', 'Special DELIVERY')
-    excl_ph  = ",".join(f":_x{i}" for i in range(len(EXCLUDED)))
-
-    def _cat_rev(mf: str, mt: str) -> dict:
-        filters = ["b.name != 'ALL'", "sm.source = 'Easy'",
-                   "sm.period_month >= :mf", "sm.period_month <= :mt",
-                   f"c.name NOT IN ({excl_ph})"]
-        params = {"mf": mf, "mt": mt}
-        for i, c in enumerate(EXCLUDED):
-            params[f"_x{i}"] = c
-        if branch:
-            filters.append("b.name = :branch"); params["branch"] = branch
-        where = "WHERE " + " AND ".join(filters)
-        with get_db() as con:
-            rows = con.execute(
-                f"""SELECT c.name AS category, ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue
-                    FROM sales_sku_monthly sm
-                    JOIN branches b   ON b.branch_id   = sm.branch_id
-                    JOIN skus sk      ON sk.sku_id      = sm.sku_id
-                    JOIN categories c ON c.category_id  = sk.category_id
-                    {where}
-                    GROUP BY c.name""",
-                params,
-            ).fetchall()
-        return {r["category"]: (r["revenue"] or 0.0) for r in rows}
-
-    cur_rev  = _cat_rev(cur_from, cur_to)
-    prev_rev = _cat_rev(prev_from, prev_to)
-
-    movers = []
-    for cat in set(cur_rev) | set(prev_rev):
-        now  = cur_rev.get(cat, 0.0)
-        was  = prev_rev.get(cat, 0.0)
-        delta = round(now - was, 2)
-        pct   = round(delta / was * 100, 1) if was > 0 else (None if now == 0 else float('inf'))
-        movers.append({
-            "category":     cat,
-            "revenue":      round(now, 2),
-            "prev_revenue": round(was, 2),
-            "delta":        delta,
-            "delta_pct":    (None if pct == float('inf') else pct),
-            "is_new":       was == 0 and now > 0,
-        })
-
-    # rank by absolute revenue change (biggest movers in baht, both directions)
-    movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
-    top = movers[:limit]
-    # Pick top gainers and top decliners INDEPENDENTLY from the full list — else
-    # the biggest absolute movers (all high-volume gainers) crowd out decliners.
-    gainers = sorted([m for m in movers if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)[:limit]
-    decliners = sorted([m for m in movers if m["delta"] < 0], key=lambda m: m["delta"])[:limit]
-
-    return {
-        "current":  {"from": cur_from, "to": cur_to},
-        "previous": {"from": prev_from, "to": prev_to},
-        "gainers":   gainers,
-        "decliners": decliners,
-        "movers":    top,
-    }
 
 
 # ---------------------------------------------------------------------------
@@ -8220,6 +8029,53 @@ def get_targets(month: Optional[str] = Query(None)):
     return [dict(r) for r in rows]
 
 
+@app.get("/api/targets/suggest")
+def suggest_targets(
+    month:    Optional[str] = Query(None, description="target month (default: latest data month)"),
+    uplift:   float = Query(1.05, ge=0.5, le=3.0, description="stretch factor vs trailing avg"),
+    lookback: int   = Query(3, ge=1, le=12),
+):
+    """Suggest per-branch revenue/customer targets from each branch's trailing
+    `lookback`-month average × `uplift`. Read-only — the client fills the editor so
+    the owner reviews before saving. Seeds the (currently empty) branch_targets."""
+    with get_db() as con:
+        latest = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        target_month = month or latest
+        mrows = con.execute(
+            "SELECT DISTINCT period_month FROM sales_sku_monthly WHERE period_month < ? "
+            "ORDER BY period_month DESC LIMIT ?", (target_month, lookback)).fetchall()
+        mlist = [r["period_month"] for r in mrows]
+        if not mlist:
+            return {"month": target_month, "uplift": uplift, "lookback": 0,
+                    "trailing_months": [], "suggestions": []}
+        ph = ",".join("?" * len(mlist))
+        rev = con.execute(
+            f"""SELECT b.name br, AVG(m.rev) avg_rev
+                  FROM (SELECT branch_id, period_month, SUM(subtotal_ex_vat) rev
+                          FROM sales_sku_monthly WHERE period_month IN ({ph})
+                         GROUP BY branch_id, period_month) m
+                  JOIN branches b ON b.branch_id = m.branch_id
+                 WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+                 GROUP BY b.name""", mlist).fetchall()
+        cust = con.execute(
+            f"""SELECT b.name br, AVG(m.c) avg_c
+                  FROM (SELECT branch_id, strftime('%Y-%m', sold_at) pm, SUM(customer_count) c
+                          FROM sales_transaction WHERE source='Easy'
+                           AND strftime('%Y-%m', sold_at) IN ({ph})
+                         GROUP BY branch_id, pm) m
+                  JOIN branches b ON b.branch_id = m.branch_id
+                 WHERE b.name != 'ALL' GROUP BY b.name""", mlist).fetchall()
+    cmap = {r["br"]: (r["avg_c"] or 0) for r in cust}
+    out = [{
+        "branch": r["br"],
+        "revenue_target":  round((r["avg_rev"] or 0) * uplift, -3),   # nearest ฿1,000
+        "customer_target": int(round(cmap.get(r["br"], 0) * uplift)),
+    } for r in rev]
+    out.sort(key=lambda x: -x["revenue_target"])
+    return {"month": target_month, "uplift": uplift, "lookback": len(mlist),
+            "trailing_months": mlist, "suggestions": out}
+
+
 @app.put("/api/targets", dependencies=[Depends(require_write_token)])
 def put_targets(entries: List[TargetEntry]):
     with get_db() as con:
@@ -8458,6 +8314,24 @@ def cost_analysis(
 
     items = [dict(r) for r in rows]
 
+    # Buffet-component leak guard: a few buffet item-level SKUs (B0xxx) carry a
+    # negligible à-la-carte revenue (the meal is paid via the buffet tier) while
+    # their real BoM cost is large — yielding nonsense margins in this menu-
+    # engineering view (e.g. B0119 ปีกไก่ทอด: ฿10 revenue vs ฿3M cost = −30,306,864%).
+    # Their per-unit ex-VAT price is ≈฿0, so drop items priced below a small floor;
+    # real à-la-carte food is ฿20+/unit, so nothing legitimate is touched. Counted
+    # (not silently capped) and surfaced as summary.buffet_leak_excluded. The whole-
+    # store KPI block (ws_*) is computed separately and still includes every row.
+    _LEAK_PRICE_FLOOR = 5.0   # ฿ ex-VAT per unit
+    def _unit_price(r):
+        q = r["qty"] or 0
+        return (r["revenue_ex_vat"] or 0) / q if q else 0.0
+    _leak_ids = {r["sku_id"] for r in items
+                 if (r["qty"] or 0) > 0 and _unit_price(r) < _LEAK_PRICE_FLOOR}
+    buffet_leak_excluded = len(_leak_ids)
+    if _leak_ids:
+        items = [r for r in items if r["sku_id"] not in _leak_ids]
+
     # Effective-cost-aware costed flag + derived GP/margin (Phase 8 monthly cost).
     # "Costed" means the COALESCE chain (monthly exact -> monthly prior -> default)
     # resolved a unit cost for at least one row — broader than sc.unit_cost alone.
@@ -8587,6 +8461,7 @@ def cost_analysis(
             "avg_qty":            round(avg_qty_all, 1) if avg_qty_all else None,
             "avg_margin":         round(avg_margin_all, 1) if avg_margin_all else None,
             "margin_outliers_excluded": excluded_outliers,
+            "buffet_leak_excluded": buffet_leak_excluded,
         },
     }
 
@@ -11984,7 +11859,16 @@ def buffet_menu_cost_efficiency(
                    c.name AS category,
                    SUM(ssm.qty)               AS servings,
                    SUM({_unified_cogs_expr('ssm')}) AS cost,
-                   SUM(ssm.subtotal_ex_vat)   AS revenue
+                   SUM(ssm.subtotal_ex_vat)   AS revenue,
+                   CASE
+                     WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     -- alias-resolved recipe, matching _unified_cogs_expr (see menu-cost-coverage)
+                     WHEN EXISTS (SELECT 1 FROM bom_sku_alias a JOIN bom_ingredients bi2
+                                    ON bi2.sku_id = a.resolved_sku_id
+                                  WHERE a.bom_sku_code = sk.sku_code) THEN 'bom'
+                     WHEN EXISTS (SELECT 1 FROM sku_cost sc WHERE sc.sku_id = sk.sku_id) THEN 'sku_cost'
+                     ELSE 'none'
+                   END AS cost_source
             FROM sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
             JOIN skus sk      ON sk.sku_id      = ssm.sku_id
@@ -12010,6 +11894,7 @@ def buffet_menu_cost_efficiency(
             # high cost_pct AND high serving_pct = top re-engineering target.
             "reduce_priority": round(cost_pct, 2),
             "is_high_volume": serv_pct >= (100 / max(1, len(rows)) * 2),  # >2× avg share
+            "cost_source": r["cost_source"],
         })
     items.sort(key=lambda x: -x["cost_pct"])
     return {
@@ -12018,6 +11903,105 @@ def buffet_menu_cost_efficiency(
         "total_cost": round(tot_cost, 2),
         "items": items[:limit],
         "n_dishes": len(rows),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-coverage   (Phase 6, 2026-06-08)
+# Recipe-coverage stats: how many dishes have BoM, flat sku_cost, or no cost
+# data at all. Helps identify engineering potential (add recipes) and blind
+# spots (no cost data at all). Returns summary + actionable top-10 lists.
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-coverage")
+@ttl_cache
+def buffet_menu_cost_coverage(
+    branch:     Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Recipe coverage: for every food SKU with sales, classify into bom /
+    sku_cost / none buckets, then return summary stats and top-10 action lists."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT sk.sku_id, sk.sku_code,
+                   COALESCE(sk.description, sk.sku_code) AS description,
+                   c.name AS category,
+                   SUM(ssm.qty)             AS servings,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost,
+                   SUM(ssm.subtotal_ex_vat) AS revenue,
+                   CASE
+                     WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     -- alias-resolved recipe (bom_sku_alias → bom_ingredients): _unified_cogs_expr
+                     -- costs these as real BoM, so the classifier must too or the coverage
+                     -- donut labels a costed SKU 'none' while it contributes COGS.
+                     WHEN EXISTS (SELECT 1 FROM bom_sku_alias a JOIN bom_ingredients bi2
+                                    ON bi2.sku_id = a.resolved_sku_id
+                                  WHERE a.bom_sku_code = sk.sku_code) THEN 'bom'
+                     WHEN EXISTS (SELECT 1 FROM sku_cost sc2 WHERE sc2.sku_id = sk.sku_id) THEN 'sku_cost'
+                     ELSE 'none'
+                   END AS bucket
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id  = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id     = ssm.sku_id
+            JOIN categories c ON c.category_id = sk.category_id
+            {where}
+            GROUP BY sk.sku_id
+            HAVING SUM(ssm.qty) > 0
+        """, params).fetchall()
+
+    summary: dict = {
+        "bom":      {"count": 0, "cost": 0.0, "revenue": 0.0},
+        "sku_cost": {"count": 0, "cost": 0.0, "revenue": 0.0},
+        "none":     {"count": 0, "cost": 0.0, "revenue": 0.0},
+    }
+    high_cost_no_bom: list = []   # sku_cost bucket, high cost — CAN be improved
+    high_revenue_uncosted: list = []  # none bucket, high revenue — blind spots
+
+    for r in rows:
+        bkt  = r["bucket"]
+        cost = float(r["cost"] or 0)
+        rev  = float(r["revenue"] or 0)
+        if bkt not in summary:
+            bkt = "none"
+        summary[bkt]["count"]   += 1
+        summary[bkt]["cost"]    += cost
+        summary[bkt]["revenue"] += rev
+        item = {
+            "sku_code": r["sku_code"],
+            "description": r["description"],
+            "category": r["category"],
+            "servings": round(float(r["servings"] or 0), 0),
+            "cost": round(cost, 2),
+            "revenue": round(rev, 2),
+            "bucket": bkt,
+        }
+        if bkt == "sku_cost":
+            high_cost_no_bom.append(item)
+        elif bkt == "none":
+            high_revenue_uncosted.append(item)
+
+    # Sort and cap at 10
+    high_cost_no_bom.sort(key=lambda x: -x["cost"])
+    high_revenue_uncosted.sort(key=lambda x: -x["revenue"])
+    high_cost_no_bom      = high_cost_no_bom[:10]
+    high_revenue_uncosted = high_revenue_uncosted[:10]
+
+    # Add cost_pct to summary buckets
+    tot_cost = sum(v["cost"] for v in summary.values()) or 1
+    for bkt, s in summary.items():
+        s["cost_pct"] = round(s["cost"] / tot_cost * 100, 1)
+
+    return {
+        "summary":              summary,
+        "high_cost_no_bom":     high_cost_no_bom,
+        "high_revenue_uncosted": high_revenue_uncosted,
     }
 
 
@@ -13004,79 +12988,6 @@ def daypart_economics(
     return {"dayparts": out,
             "assumptions": {"drink_gp": DRINK_GP, "food_other_gp": FOODOTHER_GP,
                             "note": "est_gross_profit is an estimate using fixed component rates"}}
-
-
-# ---------------------------------------------------------------------------
-# GET /api/menu/mix-shift  (Analysis #5)  — à la carte revenue by margin band / month
-# ---------------------------------------------------------------------------
-@app.get("/api/menu/mix-shift")
-@ttl_cache
-def menu_mix_shift(
-    branch:     Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-):
-    """Month-over-month à la carte sales mix by BoM margin band — catches silent
-    erosion toward lower-margin items. Only costed, revenue-bearing SKUs are
-    included (buffet tiers / zero-revenue consumption rows are out of scope)."""
-    filters = ["b.name != 'ALL'"]
-    params: dict = {}
-    if branch:
-        filters.append("b.name = :branch"); params["branch"] = branch
-    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
-    where = "WHERE " + " AND ".join(filters)
-    with get_db() as con:
-        rows = con.execute(f"""
-            WITH eff AS (
-              SELECT ssm.period_month AS m, ssm.sku_id AS sku_id,
-                     ssm.qty AS qty, ssm.subtotal_ex_vat AS rev,
-                     COALESCE(
-                       (SELECT bi.sku_id FROM bom_ingredients bi WHERE bi.sku_id = ssm.sku_id LIMIT 1),
-                       (SELECT a.resolved_sku_id FROM bom_sku_alias a
-                          JOIN skus s ON s.sku_id = ssm.sku_id
-                         WHERE a.bom_sku_code = s.sku_code LIMIT 1)
-                     ) AS bom_sku_id
-              FROM sales_sku_monthly ssm
-              JOIN branches b ON b.branch_id = ssm.branch_id
-              {where}
-            )
-            SELECT eff.m AS m, eff.sku_id AS sku_id,
-                   SUM(eff.rev) AS rev,
-                   SUM(eff.qty * (SELECT SUM(ingredient_cost) FROM bom_ingredients bi
-                                  WHERE bi.sku_id = eff.bom_sku_id)) AS cost
-            FROM eff
-            WHERE eff.bom_sku_id IS NOT NULL AND eff.rev > 0
-            GROUP BY eff.m, eff.sku_id
-        """, params).fetchall()
-    from collections import defaultdict as _dd
-    months = _dd(lambda: {"high": 0.0, "mid": 0.0, "low": 0.0, "neg": 0.0,
-                          "rev": 0.0, "gp": 0.0})
-    for r in rows:
-        rev = r["rev"] or 0.0
-        cost = r["cost"] or 0.0
-        if rev <= 0:
-            continue
-        margin = (rev - cost) / rev
-        b = months[r["m"]]
-        b["rev"] += rev; b["gp"] += (rev - cost)
-        if   margin >= 0.50: b["high"] += rev
-        elif margin >= 0.30: b["mid"]  += rev
-        elif margin >= 0:    b["low"]  += rev
-        else:                b["neg"]  += rev
-    trend = []
-    for m in sorted(months):
-        b = months[m]; rev = b["rev"] or 1
-        trend.append({
-            "period": m,
-            "high_pct": round(b["high"] / rev * 100, 1),
-            "mid_pct":  round(b["mid"]  / rev * 100, 1),
-            "low_pct":  round(b["low"]  / rev * 100, 1),
-            "neg_pct":  round(b["neg"]  / rev * 100, 1),
-            "weighted_margin_pct": round(b["gp"] / rev * 100, 1),
-            "revenue":  round(b["rev"], 2),
-        })
-    return {"monthly_trend": trend,
-            "bands": {"high": "≥50%", "mid": "30-50%", "low": "0-30%", "neg": "<0%"}}
 
 
 # ---------------------------------------------------------------------------
@@ -16019,6 +15930,16 @@ def _ensure_scenario_cols(con):
         con.execute("ALTER TABLE cost_scenario_item ADD COLUMN new_qty REAL")
     if "disabled" not in cols:
         con.execute("ALTER TABLE cost_scenario_item ADD COLUMN disabled INTEGER DEFAULT 0")
+    # Phase B (ROI ledger): per-item effective unit cost snapshotted at adoption.
+    if "baseline_cost" not in cols:
+        con.execute("ALTER TABLE cost_scenario_item ADD COLUMN baseline_cost REAL")
+    hcols = {r["name"] for r in con.execute("PRAGMA table_info(cost_scenario)")}
+    if "adopted_at" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN adopted_at TEXT")
+    if "adopted_by" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN adopted_by TEXT")
+    if "baseline_month" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN baseline_month TEXT")
 
 
 class ScenarioCreate(BaseModel):
@@ -16204,6 +16125,133 @@ def simulate_scenario(body: SimulateBody):
         "overrides_applied": len([c for c in overrides if c in seen_codes]),
         "chain": chain_pack,
         "per_branch": branches_out,
+    }
+
+
+# ── Phase B — Savings Ledger (provable ROI) ──────────────────────────────────
+# Turn a what-if cost_scenario into a tracked outcome. On ADOPT we snapshot each
+# item's effective unit cost (baseline). Thereafter "realized" saving = how much
+# cheaper the SKU is NOW vs that baseline, × the qty sold since adoption — so it
+# only accrues once the cheaper recipe is actually implemented. "potential" =
+# baseline → scenario target (the goal). progress = realized / potential.
+
+class AdoptBody(BaseModel):
+    adopted_by: Optional[str] = None
+
+
+@app.post("/api/bom-cost/scenarios/{scen_id}/adopt", dependencies=[Depends(require_write_token)])
+def adopt_scenario(scen_id: int, body: Optional[AdoptBody] = None):
+    """Mark a scenario adopted: snapshot per-item baseline effective cost + stamp
+    adopted_at and the baseline (latest data) month."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        head = con.execute("SELECT id FROM cost_scenario WHERE id=?", (scen_id,)).fetchone()
+        if head is None:
+            raise HTTPException(404, "scenario not found")
+        _build_sku_effective_cost(con, force=False)   # ensure current costs exist
+        bm = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        now = datetime.now().isoformat(timespec="seconds")
+        items = con.execute("SELECT sku_id FROM cost_scenario_item WHERE scenario_id=?", (scen_id,)).fetchall()
+        for it in items:
+            base = con.execute("SELECT recipe_cost FROM sku_effective_cost WHERE sku_id=?",
+                               (it["sku_id"],)).fetchone()
+            con.execute("UPDATE cost_scenario_item SET baseline_cost=? WHERE scenario_id=? AND sku_id=?",
+                        (base["recipe_cost"] if base else None, scen_id, it["sku_id"]))
+        con.execute("UPDATE cost_scenario SET adopted_at=?, adopted_by=?, baseline_month=? WHERE id=?",
+                    (now, (body.adopted_by if body else None), bm, scen_id))
+        con.commit()
+    invalidate_cache("list_scenarios", "get_scenario")
+    return {"id": scen_id, "adopted_at": now, "baseline_month": bm, "items": len(items)}
+
+
+@app.post("/api/bom-cost/scenarios/{scen_id}/unadopt", dependencies=[Depends(require_write_token)])
+def unadopt_scenario(scen_id: int):
+    """Revert adoption (clears the ledger baseline)."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        if con.execute("SELECT id FROM cost_scenario WHERE id=?", (scen_id,)).fetchone() is None:
+            raise HTTPException(404, "scenario not found")
+        con.execute("UPDATE cost_scenario SET adopted_at=NULL, adopted_by=NULL, baseline_month=NULL WHERE id=?", (scen_id,))
+        con.execute("UPDATE cost_scenario_item SET baseline_cost=NULL WHERE scenario_id=?", (scen_id,))
+        con.commit()
+    invalidate_cache("list_scenarios", "get_scenario")
+    return {"id": scen_id, "adopted": False}
+
+
+@app.get("/api/bom-cost/scenarios/{scen_id}/savings")
+def scenario_savings(scen_id: int):
+    """Realized-vs-potential cost savings for an adopted scenario, with a
+    cumulative monthly series. Honest: realized stays 0 until the cheaper cost is
+    actually in the data (current effective cost < adoption baseline)."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        head = con.execute("SELECT * FROM cost_scenario WHERE id=?", (scen_id,)).fetchone()
+        if head is None:
+            raise HTTPException(404, "scenario not found")
+        head = dict(head)
+        if not head.get("adopted_at"):
+            return {"scenario": {"id": scen_id, "name": head["name"]}, "adopted": False}
+        _build_sku_effective_cost(con, force=False)
+        bm = head.get("baseline_month")
+        rows = con.execute("""
+            SELECT csi.sku_id, sk.sku_code, COALESCE(sk.description,'') AS description,
+                   csi.unit_cost AS target_cost, csi.baseline_cost,
+                   (SELECT recipe_cost FROM sku_effective_cost se WHERE se.sku_id=csi.sku_id) AS current_cost
+              FROM cost_scenario_item csi JOIN skus sk ON sk.sku_id=csi.sku_id
+             WHERE csi.scenario_id=? AND COALESCE(csi.disabled,0)=0
+        """, (scen_id,)).fetchall()
+        items = [dict(r) for r in rows]
+        sku_ids = [it["sku_id"] for it in items]
+        qty_by, months = {}, set()
+        if sku_ids and bm:
+            ph = ",".join("?" * len(sku_ids))
+            for r in con.execute(
+                f"""SELECT sku_id, period_month, SUM(qty) q FROM sales_sku_monthly
+                     WHERE sku_id IN ({ph}) AND period_month >= ?
+                     GROUP BY sku_id, period_month""", (*sku_ids, bm)).fetchall():
+                qty_by[(r["sku_id"], r["period_month"])] = r["q"] or 0
+                months.add(r["period_month"])
+    months = sorted(months)
+    per_item, monthly = [], {m: 0.0 for m in months}
+    realized_total = potential_total = 0.0
+    for it in items:
+        base = it["baseline_cost"]
+        if base is None:
+            continue
+        cur = it["current_cost"] if it["current_cost"] is not None else base
+        tgt = it["target_cost"] if it["target_cost"] is not None else cur
+        unit_real = base - cur          # achieved so far (now vs adoption baseline)
+        unit_pot  = base - tgt          # full goal (baseline vs scenario target)
+        qty_total = sum(qty_by.get((it["sku_id"], m), 0) for m in months)
+        r_save, p_save = unit_real * qty_total, unit_pot * qty_total
+        realized_total += r_save
+        potential_total += p_save
+        for m in months:
+            monthly[m] += unit_real * qty_by.get((it["sku_id"], m), 0)
+        per_item.append({
+            "sku_code": it["sku_code"], "description": it["description"],
+            "baseline_cost": round(base, 4), "current_cost": round(cur, 4),
+            "target_cost": round(tgt, 4), "qty_since_adopt": round(qty_total, 0),
+            "realized_saving": round(r_save, 2), "potential_saving": round(p_save, 2),
+            "unit_progress_pct": round(unit_real / unit_pot * 100, 1) if unit_pot > 0 else None,
+        })
+    cum, series = 0.0, []
+    for m in months:
+        cum += monthly[m]
+        series.append({"month": m, "realized": round(monthly[m], 2), "cumulative": round(cum, 2)})
+    per_item.sort(key=lambda r: -r["realized_saving"])
+    return {
+        "scenario": {"id": scen_id, "name": head["name"], "adopted_at": head.get("adopted_at"),
+                     "adopted_by": head.get("adopted_by"), "baseline_month": bm},
+        "adopted": True,
+        "totals": {
+            "realized_saving": round(realized_total, 2),
+            "potential_saving": round(potential_total, 2),
+            "progress_pct": round(realized_total / potential_total * 100, 1) if potential_total > 0 else None,
+            "months_tracked": len(months),
+        },
+        "items": per_item,
+        "series": series,
     }
 
 
