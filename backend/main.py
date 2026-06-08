@@ -11773,6 +11773,10 @@ def buffet_menu_cost_efficiency(
                    SUM(ssm.subtotal_ex_vat)   AS revenue,
                    CASE
                      WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     -- alias-resolved recipe, matching _unified_cogs_expr (see menu-cost-coverage)
+                     WHEN EXISTS (SELECT 1 FROM bom_sku_alias a JOIN bom_ingredients bi2
+                                    ON bi2.sku_id = a.resolved_sku_id
+                                  WHERE a.bom_sku_code = sk.sku_code) THEN 'bom'
                      WHEN EXISTS (SELECT 1 FROM sku_cost sc WHERE sc.sku_id = sk.sku_id) THEN 'sku_cost'
                      ELSE 'none'
                    END AS cost_source
@@ -11845,6 +11849,12 @@ def buffet_menu_cost_coverage(
                    SUM(ssm.subtotal_ex_vat) AS revenue,
                    CASE
                      WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     -- alias-resolved recipe (bom_sku_alias → bom_ingredients): _unified_cogs_expr
+                     -- costs these as real BoM, so the classifier must too or the coverage
+                     -- donut labels a costed SKU 'none' while it contributes COGS.
+                     WHEN EXISTS (SELECT 1 FROM bom_sku_alias a JOIN bom_ingredients bi2
+                                    ON bi2.sku_id = a.resolved_sku_id
+                                  WHERE a.bom_sku_code = sk.sku_code) THEN 'bom'
                      WHEN EXISTS (SELECT 1 FROM sku_cost sc2 WHERE sc2.sku_id = sk.sku_id) THEN 'sku_cost'
                      ELSE 'none'
                    END AS bucket

@@ -59,6 +59,21 @@ TEST_CATEGORY_PREFIXES = [
 
 FALLBACK_CATEGORY = "Oshinei other"
 
+# Non-food junk (Payment/Voucher/Discount) is currently EXCLUDED from food
+# analytics by main.py's name-keyword filter (_NONFOOD_CATEGORY_KEYWORDS). If we
+# re-pointed those SKUs into "Oshinei other" (a name that matches no keyword) they
+# would silently start counting as food in the new menu-cost tabs. Route them to a
+# fallback whose NAME contains a non-food keyword so the filter keeps excluding
+# them. "Payment" is a keyword, so this name stays excluded.
+NONFOOD_FALLBACK_CATEGORY = "Payment & non-product (archived)"
+# A target category is non-food if its name contains one of these (upper-cased).
+NONFOOD_TARGET_KEYWORDS = ("PAYMENT", "VOUCHER", "DISCOUNT")
+
+
+def _is_nonfood(cat_name: str) -> bool:
+    up = (cat_name or "").upper()
+    return any(kw in up for kw in NONFOOD_TARGET_KEYWORDS)
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -78,17 +93,15 @@ def safe_backup(db_path: Path) -> Path:
     return dst
 
 
-def get_or_create_fallback(cur: sqlite3.Cursor) -> int:
+def get_or_create_category(cur: sqlite3.Cursor, name: str) -> int:
     row = cur.execute(
-        "SELECT category_id FROM categories WHERE name = ?", (FALLBACK_CATEGORY,)
+        "SELECT category_id FROM categories WHERE name = ?", (name,)
     ).fetchone()
     if row:
         return row[0]
-    cur.execute(
-        "INSERT INTO categories (name) VALUES (?)", (FALLBACK_CATEGORY,)
-    )
+    cur.execute("INSERT INTO categories (name) VALUES (?)", (name,))
     fid = cur.lastrowid
-    print(f"  created fallback category '{FALLBACK_CATEGORY}' (id={fid})")
+    print(f"  created fallback category '{name}' (id={fid})")
     return fid
 
 
@@ -96,6 +109,32 @@ def total_revenue(con: sqlite3.Connection) -> float:
     return con.execute(
         "SELECT COALESCE(SUM(total_inc_vat), 0) FROM sales_sku_monthly"
     ).fetchone()[0]
+
+
+def clean_invariants(con: sqlite3.Connection) -> dict:
+    """Snapshot the things the clean must NOT change.
+
+    A flat SUM over sales_sku_monthly is useless as a guard because this script
+    never writes that table — so it can't detect a bad re-point. These three DO
+    move if a SKU is dropped, mis-pointed, or a category is deleted out from under
+    live SKUs (incl. an unexpected FK cascade):
+      - sku_count          : total SKUs (must be preserved — we only move, never drop)
+      - revenue_via_join   : revenue reachable through sales -> skus (falls if any
+                             costed/sold SKU is deleted or orphaned)
+      - dangling_skus      : SKUs whose category_id points at no existing category
+                             (must be 0 after the clean — every SKU lands in a real cat)
+    """
+    sku_count = con.execute("SELECT COUNT(*) FROM skus").fetchone()[0]
+    revenue_via_join = con.execute(
+        "SELECT COALESCE(SUM(ssm.total_inc_vat), 0) "
+        "FROM sales_sku_monthly ssm JOIN skus sk ON sk.sku_id = ssm.sku_id"
+    ).fetchone()[0]
+    dangling = con.execute(
+        "SELECT COUNT(*) FROM skus sk WHERE sk.category_id IS NOT NULL "
+        "AND NOT EXISTS (SELECT 1 FROM categories c WHERE c.category_id = sk.category_id)"
+    ).fetchone()[0]
+    return {"sku_count": sku_count, "revenue_via_join": revenue_via_join,
+            "dangling_skus": dangling}
 
 
 # ── Analysis ───────────────────────────────────────────────────────────────────
@@ -182,21 +221,34 @@ def print_report(targets: list[dict], orphan_count: int, total_rev: float) -> No
 
 def apply_clean(con: sqlite3.Connection, targets: list[dict], orphan_count: int) -> None:
     cur = con.cursor()
-    fallback_id = get_or_create_fallback(cur)
+    # Fallback categories are created in autocommit (con.isolation_level is None,
+    # set in main()) BEFORE the explicit transaction below — so the INSERT here
+    # never leaves an implicit transaction open that would make BEGIN raise
+    # "cannot start a transaction within a transaction".
+    food_fallback_id = get_or_create_category(cur, FALLBACK_CATEGORY)
+    nonfood_fallback_id = None
+    if any(_is_nonfood(t["cat_name"]) for t in targets):
+        nonfood_fallback_id = get_or_create_category(cur, NONFOOD_FALLBACK_CATEGORY)
 
     cur.execute("BEGIN")
     try:
         for t in targets:
             cid = t["category_id"]
             name = t["cat_name"]
+            # Preserve food/non-food classification: name-excluded junk
+            # (Payment/Voucher/Discount) goes to a fallback that the food filter
+            # still excludes, so it can't leak into the menu-cost tabs.
+            nonfood = _is_nonfood(name)
+            dest_id = nonfood_fallback_id if nonfood else food_fallback_id
+            dest_name = NONFOOD_FALLBACK_CATEGORY if nonfood else FALLBACK_CATEGORY
 
             # Re-point any SKUs that live in this category
             if t["sku_count"] > 0:
                 cur.execute(
                     "UPDATE skus SET category_id = ? WHERE category_id = ?",
-                    (fallback_id, cid),
+                    (dest_id, cid),
                 )
-                print(f"  re-pointed {t['sku_count']} SKUs from '{name}' -> '{FALLBACK_CATEGORY}'")
+                print(f"  re-pointed {t['sku_count']} SKUs from '{name}' -> '{dest_name}'")
 
             cur.execute("DELETE FROM categories WHERE category_id = ?", (cid,))
             print(f"  deleted category '{name}' (id={cid})")
@@ -204,7 +256,7 @@ def apply_clean(con: sqlite3.Connection, targets: list[dict], orphan_count: int)
         if orphan_count:
             cur.execute(
                 "UPDATE skus SET category_id = ? WHERE category_id IS NULL",
-                (fallback_id,),
+                (food_fallback_id,),
             )
             print(f"  re-pointed {orphan_count} orphan SKUs -> '{FALLBACK_CATEGORY}'")
 
@@ -245,6 +297,12 @@ def main() -> int:
 
     con = sqlite3.connect(str(args.db))
     con.row_factory = sqlite3.Row
+    # Autocommit: we manage the one mutating transaction explicitly with
+    # BEGIN/COMMIT in apply_clean. Without this, sqlite3's default isolation_level
+    # opens an implicit transaction on the first INSERT (the fallback-category
+    # creation), and the subsequent explicit BEGIN raises "cannot start a
+    # transaction within a transaction".
+    con.isolation_level = None
     con.execute("PRAGMA foreign_keys=ON")
 
     targets = gather_targets(con)
@@ -264,22 +322,37 @@ def main() -> int:
         return 0
 
     # ── Live run ──
+    inv_before = clean_invariants(con)
+
     print("Backing up before any mutation …")
     safe_backup(args.db)
 
     print("\nApplying cleanup …")
     apply_clean(con, targets, orphan_count)
 
-    rev_after = total_revenue(con)
-    print(f"\nRevenue check:")
-    print(f"  before: ฿{rev_before / 1e6:.6f} M")
-    print(f"  after:  ฿{rev_after  / 1e6:.6f} M")
-    if abs(rev_after - rev_before) > 0.01:
-        print("  WARNING: revenue changed — investigate before proceeding!")
+    # ── Verify the things that MUST be preserved (a flat sales sum can't — this
+    #    script never writes sales_sku_monthly, so it would always look OK). ──
+    inv_after = clean_invariants(con)
+    print(f"\nInvariant check:")
+    print(f"  SKU count:        {inv_before['sku_count']} -> {inv_after['sku_count']}")
+    print(f"  revenue via join: ฿{inv_before['revenue_via_join'] / 1e6:.6f} M "
+          f"-> ฿{inv_after['revenue_via_join'] / 1e6:.6f} M")
+    print(f"  dangling SKUs:    {inv_after['dangling_skus']} (must be 0)")
+
+    problems = []
+    if inv_after["sku_count"] != inv_before["sku_count"]:
+        problems.append("SKU count changed — a SKU was dropped (FK cascade?)")
+    if abs(inv_after["revenue_via_join"] - inv_before["revenue_via_join"]) > 0.01:
+        problems.append("revenue reachable through skus changed — SKUs lost/mis-pointed")
+    if inv_after["dangling_skus"] > 0:
+        problems.append(f"{inv_after['dangling_skus']} SKUs point at a deleted category")
+    if problems:
+        print("  WARNING: clean did not preserve invariants — RESTORE FROM BACKUP:")
+        for p in problems:
+            print(f"    - {p}")
         con.close()
         return 1
-    else:
-        print("  OK — revenue unchanged ✓")
+    print("  OK — SKUs preserved, every SKU in a real category ✓")
 
     con.close()
     print("\nPhase 2 complete.\n")
