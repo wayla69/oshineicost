@@ -70,11 +70,17 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "ops.staff", "ops.posextra", "report.export",
     },
     "analyst": {
+        # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra are an
+        # INTENTIONAL widening: an analyst routinely investigates discount leakage
+        # and POS-level detail. Not a cost leak (senior cost-aware role). Trim these
+        # two if the owner wants a strict sales+cost-only analyst.
         "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
         "cost.simulator", "profit.pnl", "ops.discounts", "ops.posextra",
         "report.export",
     },
     "accounting": {
+        # Brief = "งานบัญชี". ops.cash (เงินขาด/เกิน) + ops.discounts are
+        # INTENTIONAL: both feed the books / month-end reconciliation.
         "sales.overview", "profit.pnl", "cost.analysis", "ops.cash",
         "ops.discounts", "report.export",
     },
@@ -321,16 +327,21 @@ def init_auth(con: sqlite3.Connection) -> None:
     con.executescript(
         """
         CREATE TABLE IF NOT EXISTS app_user (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            username   TEXT UNIQUE NOT NULL,
-            pw_hash    TEXT NOT NULL,
-            pw_salt    TEXT NOT NULL,
-            role       TEXT NOT NULL,
-            active     INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            username    TEXT UNIQUE NOT NULL,
+            pw_hash     TEXT NOT NULL,
+            pw_salt     TEXT NOT NULL,
+            role        TEXT NOT NULL,
+            active      INTEGER NOT NULL DEFAULT 1,
+            must_change INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now'))
         );
         """
     )
+    # Additive migration for DBs created before must_change existed.
+    cols = {r[1] for r in con.execute("PRAGMA table_info(app_user)")}
+    if "must_change" not in cols:
+        con.execute("ALTER TABLE app_user ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
     con.commit()
 
 
@@ -365,11 +376,11 @@ def seed_users(con: sqlite3.Connection) -> None:
         role = username.rstrip("12")
         h = hash_password(DEFAULT_PASSWORD)
         con.execute(
-            "INSERT INTO app_user(username, pw_hash, pw_salt, role) VALUES (?,?,?,?)",
-            (username, h["hash"], h["salt"], role),
+            "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change) VALUES (?,?,?,?,1)",
+            (username, h["hash"], h["salt"], role),   # must_change=1 → forced off the shared default
         )
     con.commit()
-    print(f"[auth] seeded {len(SEED_USERS)} users (default password '{DEFAULT_PASSWORD}' — change it)")
+    print(f"[auth] seeded {len(SEED_USERS)} users (default password '{DEFAULT_PASSWORD}' — must change on first login)")
 
 
 # ── user-record helpers (used by the API endpoints in main.py) ──────────────
@@ -381,7 +392,8 @@ def get_user(con: sqlite3.Connection, username: str) -> Optional[sqlite3.Row]:
 
 def list_users(con: sqlite3.Connection) -> List[Dict]:
     rows = con.execute(
-        "SELECT id, username, role, active, created_at FROM app_user ORDER BY role, username"
+        "SELECT id, username, role, active, must_change, created_at "
+        "FROM app_user ORDER BY role, username"
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -391,8 +403,8 @@ def create_user(con: sqlite3.Connection, username: str, password: str, role: str
         raise ValueError("invalid role")
     h = hash_password(password)
     con.execute(
-        "INSERT INTO app_user(username, pw_hash, pw_salt, role) VALUES (?,?,?,?)",
-        (username.strip(), h["hash"], h["salt"], role),
+        "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change) VALUES (?,?,?,?,1)",
+        (username.strip(), h["hash"], h["salt"], role),   # new accounts must set their own password
     )
     con.commit()
 
@@ -406,7 +418,8 @@ def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] =
         sets.append("role = ?"); vals.append(role)
     if password:
         h = hash_password(password)
-        sets += ["pw_hash = ?", "pw_salt = ?"]; vals += [h["hash"], h["salt"]]
+        # An admin reset hands the user a temporary password → force a change.
+        sets += ["pw_hash = ?", "pw_salt = ?", "must_change = 1"]; vals += [h["hash"], h["salt"]]
     if active is not None:
         sets.append("active = ?"); vals.append(1 if active else 0)
     if not sets:
@@ -414,6 +427,22 @@ def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] =
     vals.append(username)
     con.execute(f"UPDATE app_user SET {', '.join(sets)} WHERE username = ?", vals)
     con.commit()
+
+
+def change_own_password(con: sqlite3.Connection, username: str,
+                        old_password: str, new_password: str) -> bool:
+    """Self-service change: verify the caller's CURRENT password, then set the new
+    one and clear must_change. Returns False if the current password is wrong."""
+    row = get_user(con, username)
+    if not row or not verify_password(old_password or "", row["pw_hash"], row["pw_salt"]):
+        return False
+    h = hash_password(new_password)
+    con.execute(
+        "UPDATE app_user SET pw_hash = ?, pw_salt = ?, must_change = 0 WHERE username = ?",
+        (h["hash"], h["salt"], username),
+    )
+    con.commit()
+    return True
 
 
 def delete_user(con: sqlite3.Connection, username: str) -> None:
@@ -429,3 +458,36 @@ def authenticate(con: sqlite3.Connection, username: str, password: str) -> Optio
     if not verify_password(password or "", row["pw_hash"], row["pw_salt"]):
         return None
     return row
+
+
+# ---------------------------------------------------------------------------
+# Login throttle — in-memory, per (ip, username). Predictable usernames + a
+# shared default make online brute force the real risk; pbkdf2 only slows
+# OFFLINE cracking. After _MAX_FAILS failures within the cooldown, reject
+# without even checking the password. Per-process is plenty for a single Fly
+# instance serving ~12 users.
+# ---------------------------------------------------------------------------
+_LOGIN_FAILS: Dict[tuple, List[float]] = {}
+_LOGIN_MAX_FAILS = 5
+_LOGIN_COOLDOWN = 300.0     # seconds; also the sliding window for counting fails
+
+
+def _throttle_key(ip: str, username: str) -> tuple:
+    return (ip or "?", (username or "").strip().lower())
+
+
+def login_throttled(ip: str, username: str) -> bool:
+    """True if this (ip, username) has hit the failure ceiling within the cooldown."""
+    now = time.time()
+    key = _throttle_key(ip, username)
+    fails = [t for t in _LOGIN_FAILS.get(key, []) if now - t < _LOGIN_COOLDOWN]
+    _LOGIN_FAILS[key] = fails           # prune as we go (keeps the dict bounded)
+    return len(fails) >= _LOGIN_MAX_FAILS
+
+
+def record_login_failure(ip: str, username: str) -> None:
+    _LOGIN_FAILS.setdefault(_throttle_key(ip, username), []).append(time.time())
+
+
+def clear_login_failures(ip: str, username: str) -> None:
+    _LOGIN_FAILS.pop(_throttle_key(ip, username), None)

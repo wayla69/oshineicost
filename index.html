@@ -887,6 +887,30 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </form>
 </div>
 
+<!-- ── Change-password overlay (force on first login, or voluntary) ── -->
+<div id="pwOverlay" style="display:none;position:fixed;inset:0;z-index:10000;
+     background:rgba(15,23,42,.72);align-items:center;justify-content:center">
+  <form id="pwForm" onsubmit="submitPasswordChange(event)"
+        style="width:min(380px,92vw);background:#fff;border-radius:18px;padding:30px 28px;
+               box-shadow:0 30px 80px rgba(0,0,0,.5)">
+    <h2 style="margin:0 0 4px;font-size:18px;font-weight:800;color:#1e293b">เปลี่ยนรหัสผ่าน</h2>
+    <p id="pwHint" style="margin:0 0 18px;font-size:12.5px;color:#64748b">ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)</p>
+    <input id="pwCurrent" type="password" autocomplete="current-password" placeholder="รหัสผ่านปัจจุบัน" required
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:12px">
+    <input id="pwNew" type="password" autocomplete="new-password" placeholder="รหัสผ่านใหม่" required
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:12px">
+    <input id="pwConfirm" type="password" autocomplete="new-password" placeholder="ยืนยันรหัสผ่านใหม่" required
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:8px">
+    <div id="pwError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button type="button" id="pwCancel" onclick="closePasswordChange()"
+              style="flex:0 0 auto;background:#f1f5f9;color:#475569;border:none;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer">ยกเลิก</button>
+      <button type="submit" id="pwSubmit"
+              style="flex:1;background:#4f46e5;color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">บันทึกรหัสผ่านใหม่</button>
+    </div>
+  </form>
+</div>
+
 <!-- ── Global loading bar (top of page) ── -->
 <div id="loadingBar" style="display:none"></div>
 
@@ -1297,6 +1321,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div id="userChip" style="display:none;align-items:center;gap:6px;padding:3px 6px 3px 10px;
            border:1px solid var(--border);border-radius:999px;font-size:12px;white-space:nowrap">
         <span id="userChipName" style="font-weight:600;color:var(--text-secondary)"></span>
+        <button onclick="openPasswordChange(false)" class="topbar-icon-btn" title="เปลี่ยนรหัสผ่าน" aria-label="เปลี่ยนรหัสผ่าน" style="width:26px;height:26px">🔑</button>
         <button onclick="doLogout()" class="topbar-icon-btn" title="ออกจากระบบ" aria-label="ออกจากระบบ" style="width:26px;height:26px">⎋</button>
       </div>
       <button onclick="openCostModal()" class="upload-btn whitespace-nowrap">
@@ -5359,7 +5384,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <tbody id="userTableBody"></tbody>
         </table>
       </div>
-      <p class="text-xs mt-4" style="color:var(--text-muted)">บทบาทและสิทธิ์: <b>Management</b> ดูได้ทั้งหมด · <b>Marketing</b> ยอดขาย/เมนู/ลูกค้า · <b>Operation</b> ยอดขาย+ส่วนลด+เงินขาดเกิน · <b>Analyst</b> วิเคราะห์ยอดขาย+ต้นทุน · <b>Accounting</b> P&L/ต้นทุน/เงินสด · <b>Innovation</b> แก้ BoM+วิเคราะห์เมนู/ต้นทุน</p>
+      <div class="mt-5">
+        <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
+        <div id="roleCheatsheet" class="overflow-x-auto"></div>
+      </div>
     </div>
   </div>
 
@@ -5871,12 +5899,22 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
   const TOK_KEY = 'oshinei_upload_token';
   const _origFetch = window.fetch.bind(window);
   const isWrite = m => /^(POST|PUT|DELETE|PATCH)$/i.test(m || 'GET');
+  // When an authenticated session expires (12h), every /api/ call starts 401-ing.
+  // Catch it once and re-open the login overlay instead of letting the SPA break
+  // silently into half-loaded charts + a generic error toast.
+  const observe = (url, res) => {
+    if (res && res.status === 401 && url.includes('/api/') && !url.includes('/api/auth/')
+        && window.AUTH && window.AUTH.enabled) {
+      try { onSessionExpired(); } catch (e) {}
+    }
+    return res;
+  };
   window.fetch = function (input, init) {
     init = init || {};
     const url = typeof input === 'string' ? input : (input && input.url) || '';
     const method = init.method || (typeof input !== 'string' && input && input.method) || 'GET';
     if (!isWrite(method) || !url.includes('/api/') || url.includes('/api/upload')) {
-      return _origFetch(input, init);
+      return _origFetch(input, init).then(r => observe(url, r));
     }
     const send = (tok) => {
       const h = new Headers(init.headers || (typeof input !== 'string' && input ? input.headers : null) || {});
@@ -5884,7 +5922,7 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
       return _origFetch(input, Object.assign({}, init, { headers: h }));
     };
     return send(localStorage.getItem(TOK_KEY) || '').then(res => {
-      if (res.status !== 403) return res;
+      if (res.status !== 403) return observe(url, res);
       const tok = (window.prompt('🔒 ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
       if (!tok) return res;                       // cancelled → surface the 403
       localStorage.setItem(TOK_KEY, tok);
@@ -5895,6 +5933,18 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
     });
   };
 })();
+
+// Session-expiry handler — re-open the login overlay (guarded so a burst of
+// concurrent 401s only prompts once).
+let _sessionExpiredShown = false;
+function onSessionExpired() {
+  if (_sessionExpiredShown) return;
+  _sessionExpiredShown = true;
+  if (window.AUTH) window.AUTH.authenticated = false;
+  const err = document.getElementById('loginError');
+  if (err) { err.textContent = 'เซสชันหมดอายุ — กรุณาเข้าสู่ระบบอีกครั้ง'; err.style.display = 'block'; }
+  if (typeof showLogin === 'function') showLogin();
+}
 
 // ── Role-based authentication (client side; server enforces too) ─────────────
 // window.AUTH = { enabled, authenticated, username, role, modules[] }. When the
@@ -5923,6 +5973,24 @@ const TAB_MODULE = {
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
+};
+// Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
+// so the owner can see what each role unlocks before assigning it.
+const MODULE_LABEL_TH = {
+  'sales.overview':'ยอดขายภาพรวม', 'customer.buffet':'บุฟเฟ่ต์/ลูกค้า',
+  'menu.analysis':'วิเคราะห์เมนู', 'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลองต้นทุน',
+  'bom.edit':'แก้ไข BoM', 'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ',
+  'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
+  'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
+  'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
+};
+const ROLE_MODULES_TH = {
+  management: Object.keys(MODULE_LABEL_TH),
+  marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export'],
+  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export'],
+  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
+  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings'],
 };
 
 function hasModule(m) {
@@ -5977,8 +6045,11 @@ async function doLogin(ev) {
     const data = await res.json();
     window.AUTH = { enabled:true, authenticated:true, username:data.username,
                     role:data.role, modules:data.modules || [] };
+    _sessionExpiredShown = false;
     hideLogin();
     applyPermissions();
+    // Force a password change off the shared/temporary default before using the app.
+    if (data.must_change) { openPasswordChange(true); return; }
     await startApp();
   } catch (e) {
     errEl.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
@@ -5991,6 +6062,54 @@ async function doLogin(ev) {
 async function doLogout() {
   try { await fetch(`${API}/api/auth/logout`, { method:'POST' }); } catch(e){}
   location.reload();
+}
+
+// ── Change password (forced on first login, or voluntary from the user chip) ──
+let _pwForced = false;
+function openPasswordChange(force) {
+  _pwForced = !!force;
+  const ov = document.getElementById('pwOverlay'); if (!ov) return;
+  document.getElementById('pwCurrent').value = '';
+  document.getElementById('pwNew').value = '';
+  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwHint').textContent = force
+    ? 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 8 ตัวอักษร)'
+    : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)';
+  // When forced, no cancel — the user must set a password before continuing.
+  document.getElementById('pwCancel').style.display = force ? 'none' : '';
+  ov.style.display = 'flex';
+  setTimeout(() => document.getElementById('pwCurrent').focus(), 50);
+}
+function closePasswordChange() {
+  const ov = document.getElementById('pwOverlay'); if (ov) ov.style.display = 'none';
+}
+async function submitPasswordChange(ev) {
+  if (ev) ev.preventDefault();
+  const cur = document.getElementById('pwCurrent').value;
+  const nw  = document.getElementById('pwNew').value;
+  const cf  = document.getElementById('pwConfirm').value;
+  const err = document.getElementById('pwError');
+  const btn = document.getElementById('pwSubmit');
+  const fail = (m) => { err.textContent = m; err.style.display = 'block'; };
+  err.style.display = 'none';
+  if (nw.length < 8)  return fail('รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร');
+  if (nw !== cf)      return fail('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  try {
+    const res = await fetch(`${API}/api/auth/me/password`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ current_password: cur, new_password: nw }),
+    });
+    if (!res.ok) { const d = await res.json().catch(()=>({})); return fail(d.detail || 'เปลี่ยนรหัสผ่านไม่สำเร็จ'); }
+    closePasswordChange();
+    if (_pwForced) { _pwForced = false; await startApp(); }   // continue into the app
+    else if (typeof notifySuccess === 'function') notifySuccess('เปลี่ยนรหัสผ่านแล้ว');
+  } catch (e) {
+    fail('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+  } finally {
+    btn.disabled = false; btn.textContent = 'บันทึกรหัสผ่านใหม่';
+  }
 }
 
 function renderUserChip() {
@@ -6029,6 +6148,10 @@ function applyPermissions() {
   if (costUp) costUp.style.display = (hasModule('bom.edit') || hasModule('system.settings')) ? '' : 'none';
   const salesUp = document.querySelector('[onclick*="salesDataFile"]');
   if (salesUp) salesUp.style.display = hasModule('data.upload') ? '' : 'none';
+  // The monthly review pack bundles P&L + top cost drivers → cost/profit roles only
+  // (server gates /api/export/monthly-pack the same way; this avoids a raw-403 page).
+  const packBtn = document.querySelector('[onclick="openMonthlyPackDialog()"]');
+  if (packBtn) packBtn.style.display = (hasModule('cost.analysis') || hasModule('profit.pnl')) ? '' : 'none';
   // 4) Settings → ผู้ใช้งาน sub-tab visible to admins only
   const uBtn = document.getElementById('settabbtn-users');
   if (uBtn) uBtn.style.display = hasModule('system.admin') ? '' : 'none';
@@ -6044,6 +6167,7 @@ async function loadUsers() {
     Object.entries(ROLE_LABEL_TH).forEach(([k,v]) =>
       sel.add(new Option(`${v} (${k})`, k)));
   }
+  renderRoleCheatsheet();
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   let users = [];
@@ -6068,6 +6192,22 @@ async function loadUsers() {
       </td></tr>`;
   }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
 }
+function renderRoleCheatsheet() {
+  const el = document.getElementById('roleCheatsheet');
+  if (!el) return;
+  const rows = Object.keys(ROLE_LABEL_TH).map(role => {
+    const mods = ROLE_MODULES_TH[role] || [];
+    const chips = mods.map(m =>
+      `<span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--bg-input);color:var(--text-secondary)">${MODULE_LABEL_TH[m]||m}</span>`
+    ).join(' ');
+    return `<tr class="border-b align-top" style="border-color:var(--border)">
+      <td class="py-2 pr-4 whitespace-nowrap font-medium" style="color:var(--text-primary)">${ROLE_LABEL_TH[role]} <span class="text-xs" style="color:var(--text-muted)">(${role})</span></td>
+      <td class="py-2"><div class="flex flex-wrap gap-1">${chips}</div></td>
+    </tr>`;
+  }).join('');
+  el.innerHTML = `<table class="text-sm w-full"><tbody>${rows}</tbody></table>`;
+}
+
 function _userStatus(msg, ok) {
   const s = document.getElementById('userSaveStatus');
   if (!s) return;
@@ -18119,6 +18259,12 @@ async function loadBuffetGP() {
 // ── Export GP Excel ──────────────────────────────────────────────────────
 function exportGpExcel(e) {
   e.preventDefault();
+  // Full-page navigation can't catch a 403 — gate it client-side so a role
+  // without cost/profit access gets a message, not a raw JSON error page.
+  if (!hasModule('cost.analysis') && !hasModule('profit.pnl')) {
+    if (typeof notifyError === 'function') notifyError('บัญชีของคุณไม่มีสิทธิ์ส่งออกข้อมูลกำไร (GP)');
+    return;
+  }
   const params = new URLSearchParams({ granularity: _bgpGran });
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());

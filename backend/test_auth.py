@@ -248,3 +248,98 @@ def test_fail_closed_when_enabled_without_secret(client, app_db, monkeypatch):
     import pytest as _pt
     with _pt.raises(auth.AuthMisconfigured):
         auth._secret()
+
+
+# ── matrix fidelity + session lifecycle ─────────────────────────────────────
+def test_role_modules_matrix_resolves_exactly():
+    for role, mods in auth.ROLE_MODULES.items():
+        assert auth.modules_for_role(role) == set(mods), role
+    assert auth.modules_for_role("management") == set(auth.MODULES)
+    assert auth.modules_for_role("nonsense") == set()
+
+def test_expired_cookie_rejected_at_endpoint(client, app_db, auth_on):
+    c = _fresh(app_db)
+    c.cookies.set(auth.SESSION_COOKIE, auth.make_token(1, "management1", "management", ttl=-10))
+    assert c.get("/api/sales/monthly").status_code == 401
+
+def test_login_sets_httponly_samesite_cookie(client, app_db, auth_on):
+    c = _fresh(app_db)
+    sc = _login(c, "management1").headers.get("set-cookie", "").lower()
+    assert "oshinei_session=" in sc and "httponly" in sc and "samesite=lax" in sc
+
+
+# ── #14: role/active changes take effect immediately ────────────────────────
+def test_deactivation_and_role_change_take_effect_immediately(client, app_db, auth_on):
+    mg = _fresh(app_db); _login(mg, "management1")
+    mg.post("/api/auth/users", json={"username": "tmp14", "password": "Temp@1234", "role": "analyst"})
+    u = _fresh(app_db); _login(u, "tmp14", "Temp@1234")
+    assert u.get("/api/cost/analysis").status_code == 200          # analyst → cost ok
+    mg.put("/api/auth/users/tmp14", json={"role": "marketing"})    # downgrade
+    assert u.get("/api/cost/analysis").status_code == 403          # …immediately denied
+    mg.put("/api/auth/users/tmp14", json={"active": False})        # deactivate
+    assert u.get("/api/sales/monthly").status_code == 401          # …immediately logged out
+    mg.delete("/api/auth/users/tmp14")
+
+
+# ── #6: password lifecycle ──────────────────────────────────────────────────
+def test_seeded_and_created_users_must_change(client, app_db, auth_on):
+    c = _fresh(app_db)
+    assert _login(c, "management1").json()["must_change"] is True
+
+def test_self_service_password_change_flow(client, app_db, auth_on):
+    mg = _fresh(app_db); _login(mg, "management1")
+    mg.post("/api/auth/users", json={"username": "pwuser", "password": "Temp@1234", "role": "analyst"})
+    u = _fresh(app_db)
+    assert _login(u, "pwuser", "Temp@1234").json()["must_change"] is True
+    # wrong current → 403; too-short new → 400
+    assert u.post("/api/auth/me/password",
+                  json={"current_password": "nope", "new_password": "NewPw@123"}).status_code == 403
+    assert u.post("/api/auth/me/password",
+                  json={"current_password": "Temp@1234", "new_password": "short"}).status_code == 400
+    # success clears must_change and the new password works
+    assert u.post("/api/auth/me/password",
+                  json={"current_password": "Temp@1234", "new_password": "NewPw@123"}).status_code == 200
+    u2 = _fresh(app_db)
+    assert _login(u2, "pwuser", "NewPw@123").json()["must_change"] is False
+    mg.delete("/api/auth/users/pwuser")
+
+
+# ── #8: login throttle ──────────────────────────────────────────────────────
+def test_login_throttle_unit(monkeypatch):
+    monkeypatch.setattr(auth, "_LOGIN_FAILS", {})
+    ip, u = "10.0.0.1", "marketing1"
+    assert not auth.login_throttled(ip, u)
+    for _ in range(auth._LOGIN_MAX_FAILS):
+        auth.record_login_failure(ip, u)
+    assert auth.login_throttled(ip, u)
+    auth.clear_login_failures(ip, u)
+    assert not auth.login_throttled(ip, u)
+
+def test_login_throttle_endpoint(client, app_db, auth_on, monkeypatch):
+    monkeypatch.setattr(auth, "_LOGIN_FAILS", {})
+    c = _fresh(app_db)
+    for _ in range(auth._LOGIN_MAX_FAILS):
+        assert c.post("/api/auth/login",
+                      json={"username": "management1", "password": "wrong"}).status_code == 401
+    # now throttled even with the CORRECT password
+    assert c.post("/api/auth/login",
+                  json={"username": "management1", "password": DEFAULT_PW}).status_code == 429
+
+
+# ── #2: app_user survives a data-refresh DB swap ────────────────────────────
+def test_carry_forward_preserves_app_user(tmp_path):
+    import main, sqlite3
+    live, inc = str(tmp_path / "live.db"), str(tmp_path / "inc.db")
+    lc = sqlite3.connect(live); auth.init_auth(lc)
+    h = auth.hash_password("x")
+    lc.execute("INSERT INTO app_user(username,pw_hash,pw_salt,role,active) VALUES('boss',?,?,'management',1)",
+               (h["hash"], h["salt"])); lc.commit(); lc.close()
+    ic = sqlite3.connect(inc); auth.init_auth(ic)
+    h2 = auth.hash_password("y")
+    ic.execute("INSERT INTO app_user(username,pw_hash,pw_salt,role,active) VALUES('stale',?,?,'marketing',1)",
+               (h2["hash"], h2["salt"])); ic.commit(); ic.close()
+    main._carry_forward_preserved(live, inc)     # live wins
+    ic = sqlite3.connect(inc); ic.row_factory = sqlite3.Row
+    names = {r["username"] for r in ic.execute("SELECT username FROM app_user")}
+    ic.close()
+    assert names == {"boss"}

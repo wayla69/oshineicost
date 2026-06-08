@@ -129,15 +129,20 @@ import os as _os_db
 DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 
 
-def _carry_forward_recon(live_path: str, inc_path: str) -> None:
-    """Copy reconciliation tables (recon_*) from the live DB into a staged
-    refresh before it replaces the live DB.
+def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
+    """Copy locally-owned tables from the live DB into a staged refresh before it
+    replaces the live DB.
 
-    recon_* tables live in the shared oshinei.db but are NOT produced by the
-    MSSQL sync, so a wholesale swap would wipe all staff reconciliation work
-    (uploads, payment-code maps, bank/acquirer registries, sessions,
-    discrepancies). We recreate each table with its full DDL (preserving PK /
-    UNIQUE / CHECK / FK and explicit indexes) and copy its rows.
+    These tables live in the shared oshinei.db but are NOT produced by the MSSQL
+    sync / data refresh, so a wholesale swap would wipe them:
+      • recon_*   — staff reconciliation work (uploads, payment-code maps,
+                    bank/acquirer registries, sessions, discrepancies)
+      • app_user  — login accounts (passwords, roles, deactivations). Without
+                    this, every live-side user edit is lost on each data refresh
+                    and the seeded defaults silently return (see backend/auth.py).
+    The LIVE copy wins (edits made on the running site survive the swap). We
+    recreate each table with its full DDL (preserving PK / UNIQUE / CHECK / FK
+    and explicit indexes) and copy its rows.
     """
     if not _os_db.path.exists(live_path):
         return
@@ -146,8 +151,8 @@ def _carry_forward_recon(live_path: str, inc_path: str) -> None:
         objs = live.execute(
             "SELECT type, name, sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND ("
-            "  (type='table' AND name     LIKE 'recon\\_%' ESCAPE '\\') OR "
-            "  (type='index' AND tbl_name LIKE 'recon\\_%' ESCAPE '\\'))"
+            "  (type='table' AND (name     LIKE 'recon\\_%' ESCAPE '\\' OR name='app_user')) OR "
+            "  (type='index' AND (tbl_name LIKE 'recon\\_%' ESCAPE '\\' OR tbl_name='app_user')))"
             "ORDER BY (type='index')"            # tables first, then their indexes
         ).fetchall()
         if not any(o[0] == "table" for o in objs):
@@ -202,7 +207,7 @@ def _maybe_swap_incoming_db():
         return
     # Carry forward reconciliation tables so a data refresh never wipes them.
     try:
-        _carry_forward_recon(str(DB_PATH), str(inc))
+        _carry_forward_preserved(str(DB_PATH), str(inc))
     except Exception:
         pass
     # Discard stale WAL/SHM of the OLD db, then atomically replace it.
@@ -336,7 +341,17 @@ async def enforce_auth(request: Request, call_next):
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
         return JSONResponse({"detail": "Authentication required."}, status_code=401)
-    mods = _auth.modules_for_role(payload.get("r", ""))
+    # Re-read the LIVE account so a role change / deactivation / deletion takes
+    # effect immediately instead of lingering until the 12h cookie expires.
+    # Cheap at this scale (indexed lookup on a ~12-row table, served from cache).
+    try:
+        with get_db() as con:
+            row = _auth.get_user(con, payload.get("u", ""))
+    except Exception:
+        row = None
+    if not row or not row["active"]:
+        return JSONResponse({"detail": "Authentication required."}, status_code=401)
+    mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
     if not _auth.path_allowed(request.method, path, mods):
         return JSONResponse(
             {"detail": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (forbidden)."},
@@ -525,7 +540,7 @@ def _apply_incoming_live() -> bool:
         return False
     # Carry forward reconciliation tables so a refresh never wipes them.
     try:
-        _carry_forward_recon(str(DB_PATH), str(inc))
+        _carry_forward_preserved(str(DB_PATH), str(inc))
     except Exception:
         pass
     _db_rw.acquire_write()
@@ -643,16 +658,55 @@ def _require_admin(request: Request):
     return payload
 
 
+class _PwChangeBody(BaseModel):
+    current_password: str
+    new_password: str
+
+
+def _client_ip(request: Request) -> str:
+    # Behind Fly's proxy the real client is the first X-Forwarded-For hop.
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "?"
+
+
 @app.post("/api/auth/login", include_in_schema=False)
 def auth_login(body: _LoginBody, request: Request, response: Response):
+    ip = _client_ip(request)
+    if _auth.login_throttled(ip, body.username):
+        raise HTTPException(status_code=429,
+            detail="พยายามเข้าสู่ระบบบ่อยเกินไป — รอสักครู่แล้วลองใหม่.")
     with get_db() as con:
         row = _auth.authenticate(con, body.username, body.password)
     if not row:
+        _auth.record_login_failure(ip, body.username)
         raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
+    _auth.clear_login_failures(ip, body.username)
     token = _auth.make_token(row["id"], row["username"], row["role"])
     _set_session_cookie(response, request, token)
     return {"username": row["username"], "role": row["role"],
+            "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
+
+
+@app.post("/api/auth/me/password", include_in_schema=False)
+def auth_change_own_password(body: _PwChangeBody, request: Request):
+    """Self-service password change for ANY logged-in user (verifies the current
+    password). Bypasses _require_admin — it only ever affects the caller's own row."""
+    if not _auth.auth_enabled():
+        raise HTTPException(status_code=400, detail="auth disabled")
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if not payload:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if len((body.new_password or "")) < 8:
+        raise HTTPException(status_code=400, detail="รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร.")
+    with get_db() as con:
+        ok = _auth.change_own_password(con, payload.get("u", ""),
+                                       body.current_password, body.new_password)
+    if not ok:
+        raise HTTPException(status_code=403, detail="รหัสผ่านปัจจุบันไม่ถูกต้อง.")
+    return {"ok": True}
 
 
 @app.post("/api/auth/logout", include_in_schema=False)
@@ -671,9 +725,16 @@ def auth_me(request: Request):
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
         return {"enabled": True, "authenticated": False, "modules": []}
+    # Reflect LIVE account state, not the (up-to-12h-stale) cookie: a demoted or
+    # deactivated user is reported logged-out immediately.
+    with get_db() as con:
+        row = _auth.get_user(con, payload.get("u", ""))
+    if not row or not row["active"]:
+        return {"enabled": True, "authenticated": False, "modules": []}
     return {"enabled": True, "authenticated": True,
-            "username": payload.get("u"), "role": payload.get("r"),
-            "modules": sorted(_auth.modules_for_role(payload.get("r", "")))}
+            "username": row["username"], "role": row["role"],
+            "must_change": bool(row["must_change"]),
+            "modules": sorted(_auth.modules_for_role(row["role"]))}
 
 
 # ── user administration (Management only — gated by middleware + _require_admin)
