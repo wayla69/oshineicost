@@ -12022,6 +12022,172 @@ def buffet_menu_cost_efficiency(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-trend   — monthly cost% per dish (top N)
+# Powers the "cost drift" chart in the Phase 6 menu efficiency tab.
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-trend")
+@ttl_cache
+def buffet_menu_cost_trend(
+    branch:     Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    top_n:      int           = Query(10, ge=3, le=30),
+):
+    """Monthly cost% and cost/serving for the top-N highest-cost food dishes.
+    Used to detect which dishes are drifting more expensive over time.
+    Returns {months, dishes: [{sku_code, description, monthly:[{month, cost_pct, cost_per_serving, servings}]}]}
+    """
+    base_filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
+    base_params: dict = {}
+    if branch:
+        base_filters.append("b.name = :branch"); base_params["branch"] = branch
+    _month_range_filter(base_filters, base_params, month_from, month_to, None, col="ssm.period_month")
+    base_where = "WHERE " + " AND ".join(base_filters)
+
+    with get_db() as con:
+        # Step 1: identify top-N dishes by total cost over the period
+        top_rows = con.execute(f"""
+            SELECT sk.sku_id, sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
+                   c.name AS category,
+                   SUM({_unified_cogs_expr('ssm')}) AS total_cost,
+                   SUM(ssm.qty) AS total_servings
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id   = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+            JOIN categories c ON c.category_id  = sk.category_id
+            {base_where}
+            GROUP BY sk.sku_id
+            HAVING SUM(ssm.qty) > 0 AND SUM({_unified_cogs_expr('ssm')}) > 0
+            ORDER BY total_cost DESC
+            LIMIT :top_n
+        """, {**base_params, "top_n": top_n}).fetchall()
+
+        if not top_rows:
+            return {"months": [], "dishes": []}
+
+        sku_ids = [r["sku_id"] for r in top_rows]
+        sku_ph  = ",".join(f":s{i}" for i in range(len(sku_ids)))
+        sku_kp  = {f"s{i}": v for i, v in enumerate(sku_ids)}
+
+        # Step 2: monthly total cost across ALL food (denominator)
+        month_totals_rows = con.execute(f"""
+            SELECT ssm.period_month AS month,
+                   SUM({_unified_cogs_expr('ssm')}) AS total_cost,
+                   SUM(ssm.qty) AS total_servings
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            JOIN categories c ON c.category_id = sk.category_id
+            {base_where}
+            GROUP BY ssm.period_month
+            ORDER BY ssm.period_month
+        """, base_params).fetchall()
+        month_tot = {r["month"]: float(r["total_cost"] or 0) for r in month_totals_rows}
+        months_sorted = sorted(month_tot.keys())
+
+        # Step 3: monthly per-dish data for top N
+        dish_filters = base_filters + [f"ssm.sku_id IN ({sku_ph})"]
+        dish_params  = {**base_params, **sku_kp}
+        dish_where   = "WHERE " + " AND ".join(dish_filters)
+        detail_rows = con.execute(f"""
+            SELECT ssm.sku_id, ssm.period_month AS month,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost,
+                   SUM(ssm.qty) AS servings
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            JOIN categories c ON c.category_id = sk.category_id
+            {dish_where}
+            GROUP BY ssm.sku_id, ssm.period_month
+        """, dish_params).fetchall()
+
+    # Build per-dish monthly series
+    from collections import defaultdict
+    dish_monthly: dict = defaultdict(dict)
+    for r in detail_rows:
+        dish_monthly[r["sku_id"]][r["month"]] = {
+            "cost": float(r["cost"] or 0),
+            "servings": float(r["servings"] or 0),
+        }
+
+    dishes_out = []
+    for r in top_rows:
+        sid = r["sku_id"]
+        monthly = []
+        for m in months_sorted:
+            row_d = dish_monthly[sid].get(m, {})
+            cost = row_d.get("cost", 0)
+            serv = row_d.get("servings", 0)
+            tot  = month_tot.get(m, 0)
+            monthly.append({
+                "month":            m,
+                "cost":             round(cost, 2),
+                "servings":         round(serv, 1),
+                "cost_pct":         round(cost / tot * 100, 2) if tot > 0 else 0,
+                "cost_per_serving": round(cost / serv, 2) if serv > 0 else 0,
+            })
+        dishes_out.append({
+            "sku_id":         r["sku_id"],
+            "sku_code":       r["sku_code"],
+            "description":    r["description"],
+            "category":       r["category"],
+            "total_cost":     round(float(r["total_cost"] or 0), 2),
+            "total_servings": round(float(r["total_servings"] or 0), 1),
+            "monthly":        monthly,
+        })
+
+    return {"months": months_sorted, "dishes": dishes_out}
+
+
+# ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-by-branch   — cost/serving per branch for one SKU
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-by-branch")
+@ttl_cache
+def buffet_menu_cost_by_branch(
+    sku_code:   str           = Query(...),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """For a single SKU: cost/serving and serving count per branch.
+    Shows which branches are running that dish more or less efficiently."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", "sk.sku_code = :sku_code"]
+    params: dict = {"sku_code": sku_code}
+    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch,
+                   SUM(ssm.qty) AS servings,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost,
+                   SUM(ssm.subtotal_ex_vat) AS revenue
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            JOIN categories c ON c.category_id = sk.category_id
+            {where}
+            GROUP BY b.branch_id
+            HAVING SUM(ssm.qty) > 0
+            ORDER BY cost DESC
+        """, params).fetchall()
+    tot_cost = sum(float(r["cost"] or 0) for r in rows) or 1
+    branches = []
+    for r in rows:
+        serv = float(r["servings"] or 0)
+        cost = float(r["cost"] or 0)
+        rev  = float(r["revenue"] or 0)
+        branches.append({
+            "branch":           r["branch"],
+            "servings":         round(serv, 1),
+            "cost":             round(cost, 2),
+            "cost_per_serving": round(cost / serv, 2) if serv else 0,
+            "cost_pct_of_total": round(cost / tot_cost * 100, 1),
+            "food_cost_rate":   round(cost / rev * 100, 1) if rev > 0 else None,
+        })
+    return {"sku_code": sku_code, "branches": branches}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/buffet/portion-velocity   🟡3
 # qty / cover per SKU per month — detect over-ordering trends
 # ---------------------------------------------------------------------------
