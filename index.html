@@ -1755,16 +1755,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <thead class="sticky top-0" style="background:var(--bg-card)">
           <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
             <th class="py-1.5 pr-2">#</th>
+            <th class="py-1.5 pr-1 text-[10px]" title="ABC classification: A=70% cost, B=90%, C=rest">ABC</th>
             <th class="py-1.5 pr-2 cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('description',1)" title="เรียงตามชื่อ">เมนู ↕</th>
             <th class="py-1.5 pr-2 text-slate-400 text-[10px]">หมวด</th>
+            <th class="py-1.5 pr-1 text-[10px]" title="ที่มาของต้นทุน: BoM/Cost/?">แหล่ง</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('servings',-1)" title="เรียงตามจำนวนเสิร์ฟ">เสิร์ฟ ↕</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('serving_pct',-1)" title="เรียงตาม % เสิร์ฟ">%เสิร์ฟ ↕</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost',-1)" title="เรียงตามต้นทุนรวม">ต้นทุนรวม ↕</th>
             <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_pct',-1)" title="เรียงตาม % ต้นทุน">%ต้นทุน ↕</th>
-            <th class="py-1.5 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_per_serving',-1)" title="เรียงตามต้นทุน/จาน">฿/จาน ↕</th>
+            <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_per_serving',-1)" title="เรียงตามต้นทุน/จาน">฿/จาน ↕</th>
+            <th class="py-1.5 text-right text-[10px]" title="Food Cost % = cost/revenue×100">FC%</th>
           </tr>
         </thead>
-        <tbody id="mce2Body"><tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+        <tbody id="mce2Body"><tr><td colspan="11" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -1853,6 +1856,62 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div style="height:260px"><canvas id="mce2BranchBar"></canvas></div>
       <div id="mce2BranchTable" class="overflow-x-auto" style="max-height:260px;overflow-y:auto"></div>
     </div>
+  </div>
+
+  <!-- Card A — Category cost rollup -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #0ea5e9">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🗂️ ต้นทุนรวมตามหมวดสินค้า</h2>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">รวมต้นทุนทุกเมนูจัดกลุ่มตามหมวด — หมวดที่มียอดสูงสุดคือเป้าหมายต่อรองต้นทุนหรือปรับสูตรก่อน</p>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div style="height:300px"><canvas id="mce2CatBar"></canvas></div>
+      <div class="overflow-x-auto" style="max-height:300px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0" style="background:var(--bg-card)">
+            <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+              <th class="py-1.5 pr-2">#</th>
+              <th class="py-1.5 pr-2">หมวด</th>
+              <th class="py-1.5 pr-2 text-right">เมนู</th>
+              <th class="py-1.5 pr-2 text-right">ต้นทุน</th>
+              <th class="py-1.5 pr-2 text-right">%ต้นทุน</th>
+              <th class="py-1.5 pr-2 text-right">FC%</th>
+              <th class="py-1.5 text-right">avg ฿/จาน</th>
+            </tr>
+          </thead>
+          <tbody id="mce2CatBody"><tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card B — Recipe coverage / engineering potential -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #ef4444">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🔬 Engineering Potential — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่ไม่มีสูตร BoM = ปรับต้นทุนได้จำกัด · เมนูที่ไม่มีข้อมูลต้นทุนเลย = blind spot</p>
+    <div id="mce2CovKpis" class="flex flex-wrap gap-2 mb-3"></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div style="height:200px"><canvas id="mce2CovDonut"></canvas></div>
+      <div class="overflow-x-auto" style="max-height:260px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0" style="background:var(--bg-card)">
+            <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+              <th class="py-1.5 pr-2">สถานะ</th>
+              <th class="py-1.5 pr-2">เมนู</th>
+              <th class="py-1.5 pr-2">หมวด</th>
+              <th class="py-1.5 pr-2 text-right">ต้นทุน</th>
+              <th class="py-1.5 text-right">รายได้</th>
+            </tr>
+          </thead>
+          <tbody id="mce2CovBody"><tr><td colspan="5" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Card C — Priority action list -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #10b981">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🚀 สิ่งที่ควรทำต่อไป (Auto-generated from data)</h2>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">วิเคราะห์จากข้อมูลจริง — ลำดับความสำคัญสูงสุดก่อน</p>
+    <div id="mce2Actions" class="space-y-2 mt-2"></div>
   </div>
 </div>
 
@@ -17332,6 +17391,10 @@ async function loadMCE() {
   loadMce2Trend();
   // Pareto renders once data is loaded (sync, data already set above)
   renderMce2Pareto();
+  renderMce2CategoryRollup();
+  loadMce2Coverage();
+  // renderMce2Actions needs trend + coverage — fire after both have had time to load
+  setTimeout(renderMce2Actions, 2500);
 }
 
 function renderMce2Table(col, dir) {
@@ -17342,6 +17405,16 @@ function renderMce2Table(col, dir) {
     if (typeof a[col] === 'string') return dir * a[col].localeCompare(b[col]);
     return dir * ((a[col] || 0) - (b[col] || 0));
   });
+
+  // Pre-compute cumulative cost_pct on cost_pct-sorted order for ABC classification
+  const byCost = [...data].sort((a, b) => b.cost_pct - a.cost_pct);
+  let cum = 0;
+  const abcMap = {};
+  for (const r of byCost) {
+    cum += r.cost_pct;
+    abcMap[r.sku_code] = cum <= 70 ? 'A' : cum <= 90 ? 'B' : 'C';
+  }
+
   const bodyEl = document.getElementById('mce2Body');
   if (!bodyEl) return;
   bodyEl.innerHTML = s2.map((r, i) => {
@@ -17349,8 +17422,26 @@ function renderMce2Table(col, dir) {
     const warn = r.cost_pct >= 2 && r.serving_pct < 2;
     const rowBg = hot ? 'background:rgba(239,68,68,0.04)' : warn ? 'background:rgba(245,158,11,0.04)' : '';
     const descClean = esc((r.description || '').replace(/^\((?:A|B)\)\s*/, ''));
+
+    // ABC badge
+    const abc = abcMap[r.sku_code] || 'C';
+    const abcColor = abc === 'A' ? '#ef4444' : abc === 'B' ? '#f59e0b' : '#94a3b8';
+    const abcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${abcColor}20;color:${abcColor}">${abc}</span>`;
+
+    // Source badge
+    const src = r.cost_source || 'none';
+    const srcLabel = src === 'bom' ? 'BoM' : src === 'sku_cost' ? 'Cost' : '?';
+    const srcColor = src === 'bom' ? '#10b981' : src === 'sku_cost' ? '#f59e0b' : '#ef4444';
+    const srcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${srcColor}20;color:${srcColor}">${srcLabel}</span>`;
+
+    // FC% = cost / revenue * 100
+    const fcPct = r.revenue > 0 ? (r.cost / r.revenue * 100) : null;
+    const fcColor = fcPct == null ? 'var(--text-muted)' : fcPct > 60 ? '#dc2626' : fcPct > 40 ? '#f59e0b' : '#10b981';
+    const fcCell = fcPct != null ? `<span style="color:${fcColor}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
+
     return `<tr class="border-b hover:bg-indigo-50/30" style="border-color:var(--border);${rowBg}">
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-1">${abcBadge}</td>
       <td class="py-1.5 pr-2 font-medium">
         ${hot ? '🎯 ' : warn ? '⚠️ ' : ''}${descClean}
         <span class="inline-flex gap-1 ml-1">
@@ -17359,13 +17450,15 @@ function renderMce2Table(col, dir) {
         </span>
       </td>
       <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.category || '')}</td>
+      <td class="py-1.5 pr-1">${srcBadge}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.servings)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${r.serving_pct.toFixed(1)}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.cost_pct >= 5 ? '#dc2626' : r.cost_pct >= 2 ? '#f59e0b' : 'inherit'}">${r.cost_pct.toFixed(1)}%</td>
-      <td class="py-1.5 text-right tabular-nums">${fmtN(r.cost_per_serving)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cost_per_serving)}</td>
+      <td class="py-1.5 text-right tabular-nums">${fcCell}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
+  }).join('') || '<tr><td colspan="11" class="py-8 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
 }
 
 function exportMce2Csv() {
@@ -17541,6 +17634,8 @@ async function loadMce2Trend() {
   try { d = await fetch(`${API}/api/buffet/menu-cost-trend?${p}`).then(r => r.json()); }
   catch (e) { if (statusEl) statusEl.textContent = 'โหลดไม่สำเร็จ'; return; }
 
+  window._mce2TrendData = d;
+
   if (!d.months || d.months.length < 2) {
     if (statusEl) statusEl.textContent = 'ต้องการข้อมูลอย่างน้อย 2 เดือน';
     return;
@@ -17660,6 +17755,274 @@ async function loadMce2BranchCompare(skuCode, description) {
 
   // Scroll to panel
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Phase 6 Extra: Category Cost Rollup ──────────────────────────────────
+function renderMce2CategoryRollup() {
+  const data = window._mce2Data;
+  const bodyEl = document.getElementById('mce2CatBody');
+  if (!data || !data.length) {
+    if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
+    return;
+  }
+
+  // Aggregate by category
+  const catMap = {};
+  for (const r of data) {
+    const cat = r.category || 'อื่นๆ';
+    if (!catMap[cat]) catMap[cat] = { cost: 0, revenue: 0, servings: 0, count: 0 };
+    catMap[cat].cost     += r.cost     || 0;
+    catMap[cat].revenue  += r.revenue  || 0;
+    catMap[cat].servings += r.servings || 0;
+    catMap[cat].count    += 1;
+  }
+  const totCost = Object.values(catMap).reduce((s, v) => s + v.cost, 0) || 1;
+  const cats = Object.entries(catMap)
+    .map(([name, v]) => ({
+      name,
+      cost:     v.cost,
+      revenue:  v.revenue,
+      servings: v.servings,
+      count:    v.count,
+      cost_pct: v.cost / totCost * 100,
+      fc_rate:  v.revenue > 0 ? v.cost / v.revenue * 100 : null,
+      avg_cps:  v.servings > 0 ? v.cost / v.servings : 0,
+    }))
+    .sort((a, b) => b.cost - a.cost);
+
+  const top12 = cats.slice(0, 12);
+
+  // Bar chart — horizontal, top-12 categories
+  const maxCost = top12[0]?.cost || 1;
+  mkChart('mce2CatBar', {
+    type: 'bar',
+    data: {
+      labels: top12.map(c => c.name.substring(0, 20)),
+      datasets: [{
+        label: 'ต้นทุน', data: top12.map(c => Math.round(c.cost)),
+        backgroundColor: top12.map(c => {
+          const intensity = c.cost / maxCost;
+          const r = Math.round(14  + intensity * (239 - 14));
+          const g = Math.round(165 + intensity * (68  - 165));
+          const b = Math.round(233 + intensity * (68  - 233));
+          return `rgba(${r},${g},${b},0.75)`;
+        }),
+        borderRadius: 3,
+      }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => fmt(ctx.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => fmt(v) } } },
+    },
+  });
+
+  // Table
+  if (bodyEl) bodyEl.innerHTML = cats.map((c, i) => {
+    const fcColor = c.fc_rate == null ? 'var(--text-muted)' : c.fc_rate > 60 ? '#dc2626' : c.fc_rate > 40 ? '#f59e0b' : '#10b981';
+    return `<tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(14,165,233,0.04)' : ''}">
+      <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '⭐ ' : ''}${esc(c.name)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${c.count}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(c.cost)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${c.cost_pct >= 20 ? '#dc2626' : c.cost_pct >= 10 ? '#f59e0b' : 'inherit'}">${c.cost_pct.toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${fcColor}">${c.fc_rate != null ? c.fc_rate.toFixed(1) + '%' : '—'}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(Math.round(c.avg_cps))}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
+}
+
+// ── Phase 6 Extra: Recipe Coverage ───────────────────────────────────────
+async function loadMce2Coverage() {
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch',     getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  const covBodyEl = document.getElementById('mce2CovBody');
+  const covKpiEl  = document.getElementById('mce2CovKpis');
+  if (covBodyEl) covBodyEl.innerHTML = '<tr><td colspan="5" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+
+  let d;
+  try { d = await fetch(`${API}/api/buffet/menu-cost-coverage?${p}`).then(r => r.json()); }
+  catch (e) {
+    if (covBodyEl) covBodyEl.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-red-500">โหลดไม่สำเร็จ: ${esc(e.message)}</td></tr>`;
+    return;
+  }
+
+  window._mce2CovData = d;
+
+  const sm = d.summary || {};
+  const bomCount  = sm.bom?.count      || 0;
+  const scCount   = sm.sku_cost?.count || 0;
+  const noneCount = sm.none?.count     || 0;
+  const total     = bomCount + scCount + noneCount || 1;
+  const noneCost  = sm.none?.cost      || 0;
+
+  // KPI chips
+  if (covKpiEl) covKpiEl.innerHTML = [
+    ['เมนูทั้งหมด',        String(total),                            '#4f46e5'],
+    ['มีสูตร BoM',         `${bomCount} (${(bomCount/total*100).toFixed(0)}%)`, '#10b981'],
+    ['Cost เท่านั้น',      `${scCount} เมนู`,                       '#f59e0b'],
+    ['ไม่มีข้อมูลต้นทุน', `${noneCount} เมนู · ฿${fmt(noneCost)}`, '#ef4444'],
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${c}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+
+  // Donut chart
+  mkChart('mce2CovDonut', {
+    type: 'doughnut',
+    data: {
+      labels: ['BoM (สมบูรณ์)', 'Cost เท่านั้น', 'ไม่มีข้อมูล'],
+      datasets: [{
+        data: [bomCount, scCount, noneCount],
+        backgroundColor: ['rgba(16,185,129,0.75)', 'rgba(245,158,11,0.75)', 'rgba(239,68,68,0.75)'],
+        borderWidth: 2,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 10 }, boxWidth: 10 } },
+        datalabels: {
+          display: ctx => ctx.dataset.data[ctx.dataIndex] > 0,
+          formatter: (v, ctx) => v + '\n' + (v / total * 100).toFixed(0) + '%',
+          color: '#fff', font: { size: 10, weight: 'bold' },
+        },
+      },
+    },
+  });
+
+  // Table: high_cost_no_bom (sku_cost bucket) + high_revenue_uncosted (none bucket)
+  const rows = [];
+  for (const r of (d.high_cost_no_bom || [])) rows.push({ ...r, _badge: 'amber' });
+  for (const r of (d.high_revenue_uncosted || [])) rows.push({ ...r, _badge: 'red' });
+
+  if (covBodyEl) covBodyEl.innerHTML = rows.map(r => {
+    const isAmber = r._badge === 'amber';
+    const badgeColor = isAmber ? '#f59e0b' : '#ef4444';
+    const badgeLabel = isAmber ? '⚠️ Cost' : '❌ ไม่มี';
+    return `<tr class="border-b" style="border-color:var(--border);background:${isAmber ? 'rgba(245,158,11,0.03)' : 'rgba(239,68,68,0.04)'}">
+      <td class="py-1.5 pr-2"><span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${badgeColor}20;color:${badgeColor}">${badgeLabel}</span></td>
+      <td class="py-1.5 pr-2 font-medium">${esc((r.description || '').replace(/^\((?:A|B)\)\s*/, ''))}</td>
+      <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.category || '')}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmt(r.revenue)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="5" class="py-4 text-center" style="color:var(--text-muted)">ข้อมูลครบทุกเมนู ✓</td></tr>';
+}
+
+// ── Phase 6 Extra: Priority Actions ──────────────────────────────────────
+function renderMce2Actions() {
+  const actEl = document.getElementById('mce2Actions');
+  if (!actEl) return;
+
+  const mceData  = window._mce2Data  || [];
+  const trendData = window._mce2TrendData;
+  const covData  = window._mce2CovData;
+
+  const actions = [];
+
+  // Action 1: Top-3 red quadrant dishes (high-volume + high-cost)
+  const redDishes = mceData
+    .filter(r => r.serving_pct >= 2 && r.cost_pct >= 2)
+    .sort((a, b) => b.cost_pct - a.cost_pct)
+    .slice(0, 3);
+  if (redDishes.length) {
+    const names = redDishes.map(r => esc((r.description || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 18))).join(', ');
+    const impact = redDishes.reduce((s, r) => s + (r.cost || 0), 0);
+    actions.push({
+      priority: 1, color: '#ef4444',
+      icon: '🎯',
+      title: `ลดต้นทุน ${redDishes.length} เมนูนี้ก่อน (เสิร์ฟเยอะ + ต้นทุนสูง)`,
+      detail: names,
+      impact: `ผลกระทบ: ฿${fmt(impact)} ต้นทุน`,
+    });
+  }
+
+  // Action 2: High-cost dishes without BoM recipe
+  if (covData) {
+    const noRecipe = (covData.high_cost_no_bom || []).slice(0, 3);
+    if (noRecipe.length) {
+      const n     = (covData.summary?.sku_cost?.count || 0) + (covData.summary?.none?.count || 0);
+      const names = noRecipe.map(r => esc((r.description || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 18))).join(', ');
+      actions.push({
+        priority: 2, color: '#f59e0b',
+        icon: '🔬',
+        title: `เพิ่มสูตร BoM ให้ ${n} เมนูที่ไม่มีสูตร (ปรับต้นทุนได้ทันที)`,
+        detail: `เริ่มจาก: ${names}`,
+        impact: `ต้นทุนที่ยังควบคุมไม่ได้: ฿${fmt((covData.summary?.sku_cost?.cost || 0) + (covData.summary?.none?.cost || 0))}`,
+      });
+    }
+  }
+
+  // Action 3: Top ingredient to negotiate
+  const ingBody = document.getElementById('mce2IngBody');
+  if (ingBody) {
+    const firstRow = ingBody.querySelector('tr:first-child td:nth-child(2)');
+    if (firstRow && firstRow.textContent.trim()) {
+      const ingName = firstRow.textContent.replace(/^⚡\s*/, '').trim().substring(0, 30);
+      actions.push({
+        priority: 3, color: '#8b5cf6',
+        icon: '💰',
+        title: `ต่อรองราคาวัตถุดิบนี้ก่อน`,
+        detail: esc(ingName),
+        impact: 'วัตถุดิบที่ใช้สูงสุดในทุกสูตร',
+      });
+    }
+  }
+
+  // Action 4: Branch with anomaly (static suggestion if branch panel has data)
+  actions.push({
+    priority: 4, color: '#0ea5e9',
+    icon: '🏪',
+    title: `ตรวจสอบสาขาที่ต้นทุน/จานสูงผิดปกติ`,
+    detail: 'คลิก "สาขา →" ในตารางด้านบนเพื่อเปรียบเทียบ',
+    impact: 'สาขาที่แพงกว่าค่าเฉลี่ย 15%+ = โอกาสประหยัด',
+  });
+
+  // Action 5: Rising dishes from trend
+  if (trendData && trendData.dishes) {
+    const risingDishes = trendData.dishes.filter(dish => {
+      const vals = (trendData.months || []).map(m => {
+        const mo = dish.monthly?.find(x => x.month === m);
+        return mo ? mo.cost_pct : null;
+      }).filter(v => v != null);
+      const half = Math.floor(vals.length / 2);
+      if (!half) return false;
+      const avgNew = vals.slice(-half).reduce((a, b) => a + b, 0) / half;
+      const avgOld = vals.slice(0, half).reduce((a, b) => a + b, 0) / half;
+      return avgNew > avgOld * 1.05;
+    });
+    if (risingDishes.length) {
+      const names = risingDishes.slice(0, 2)
+        .map(d => esc((d.description || '').replace(/^\((?:A|B)\)\s*/, '').substring(0, 18))).join(', ');
+      actions.push({
+        priority: 5, color: '#ec4899',
+        icon: '📈',
+        title: `เฝ้าระวัง ${risingDishes.length} เมนูที่ต้นทุนพุ่งขึ้น`,
+        detail: names,
+        impact: 'ต้นทุนสูงขึ้น >5% เทียบกับช่วงก่อนหน้า',
+      });
+    }
+  }
+
+  if (!actions.length) {
+    actEl.innerHTML = '<p class="text-xs" style="color:var(--text-muted)">โหลดข้อมูลไม่ครบ — รอสักครู่แล้วลองใหม่</p>';
+    return;
+  }
+
+  actEl.innerHTML = actions.map(a => `
+    <div class="flex items-start gap-3 p-3 rounded-lg" style="background:${a.color}08;border:1px solid ${a.color}25">
+      <span class="text-lg leading-none mt-0.5">${a.icon}</span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:${a.color};color:#fff">P${a.priority}</span>
+          <span class="text-sm font-semibold" style="color:var(--text-primary)">${a.title}</span>
+        </div>
+        ${a.detail ? `<p class="text-[11px] mt-1" style="color:var(--text-secondary)">${a.detail}</p>` : ''}
+        ${a.impact ? `<p class="text-[11px] mt-0.5 font-medium" style="color:${a.color}">${a.impact}</p>` : ''}
+      </div>
+    </div>`).join('');
 }
 
 // ════════════════════════════════════════════════════════════════

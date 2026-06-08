@@ -11984,7 +11984,12 @@ def buffet_menu_cost_efficiency(
                    c.name AS category,
                    SUM(ssm.qty)               AS servings,
                    SUM({_unified_cogs_expr('ssm')}) AS cost,
-                   SUM(ssm.subtotal_ex_vat)   AS revenue
+                   SUM(ssm.subtotal_ex_vat)   AS revenue,
+                   CASE
+                     WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     WHEN EXISTS (SELECT 1 FROM sku_cost sc WHERE sc.sku_id = sk.sku_id) THEN 'sku_cost'
+                     ELSE 'none'
+                   END AS cost_source
             FROM sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
             JOIN skus sk      ON sk.sku_id      = ssm.sku_id
@@ -12010,6 +12015,7 @@ def buffet_menu_cost_efficiency(
             # high cost_pct AND high serving_pct = top re-engineering target.
             "reduce_priority": round(cost_pct, 2),
             "is_high_volume": serv_pct >= (100 / max(1, len(rows)) * 2),  # >2× avg share
+            "cost_source": r["cost_source"],
         })
     items.sort(key=lambda x: -x["cost_pct"])
     return {
@@ -12022,169 +12028,96 @@ def buffet_menu_cost_efficiency(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/menu-cost-trend   — monthly cost% per dish (top N)
-# Powers the "cost drift" chart in the Phase 6 menu efficiency tab.
+# GET /api/buffet/menu-cost-coverage   (Phase 6, 2026-06-08)
+# Recipe-coverage stats: how many dishes have BoM, flat sku_cost, or no cost
+# data at all. Helps identify engineering potential (add recipes) and blind
+# spots (no cost data at all). Returns summary + actionable top-10 lists.
 # ---------------------------------------------------------------------------
-@app.get("/api/buffet/menu-cost-trend")
+@app.get("/api/buffet/menu-cost-coverage")
 @ttl_cache
-def buffet_menu_cost_trend(
+def buffet_menu_cost_coverage(
     branch:     Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
-    top_n:      int           = Query(10, ge=3, le=30),
 ):
-    """Monthly cost% and cost/serving for the top-N highest-cost food dishes.
-    Used to detect which dishes are drifting more expensive over time.
-    Returns {months, dishes: [{sku_code, description, monthly:[{month, cost_pct, cost_per_serving, servings}]}]}
-    """
-    base_filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
-    base_params: dict = {}
+    """Recipe coverage: for every food SKU with sales, classify into bom /
+    sku_cost / none buckets, then return summary stats and top-10 action lists."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
+    params: dict = {}
     if branch:
-        base_filters.append("b.name = :branch"); base_params["branch"] = branch
-    _month_range_filter(base_filters, base_params, month_from, month_to, None, col="ssm.period_month")
-    base_where = "WHERE " + " AND ".join(base_filters)
-
-    with get_db() as con:
-        # Step 1: identify top-N dishes by total cost over the period
-        top_rows = con.execute(f"""
-            SELECT sk.sku_id, sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
-                   c.name AS category,
-                   SUM({_unified_cogs_expr('ssm')}) AS total_cost,
-                   SUM(ssm.qty) AS total_servings
-            FROM sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id   = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
-            JOIN categories c ON c.category_id  = sk.category_id
-            {base_where}
-            GROUP BY sk.sku_id
-            HAVING SUM(ssm.qty) > 0 AND SUM({_unified_cogs_expr('ssm')}) > 0
-            ORDER BY total_cost DESC
-            LIMIT :top_n
-        """, {**base_params, "top_n": top_n}).fetchall()
-
-        if not top_rows:
-            return {"months": [], "dishes": []}
-
-        sku_ids = [r["sku_id"] for r in top_rows]
-        sku_ph  = ",".join(f":s{i}" for i in range(len(sku_ids)))
-        sku_kp  = {f"s{i}": v for i, v in enumerate(sku_ids)}
-
-        # Step 2: monthly total cost across ALL food (denominator)
-        month_totals_rows = con.execute(f"""
-            SELECT ssm.period_month AS month,
-                   SUM({_unified_cogs_expr('ssm')}) AS total_cost,
-                   SUM(ssm.qty) AS total_servings
-            FROM sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
-            JOIN categories c ON c.category_id = sk.category_id
-            {base_where}
-            GROUP BY ssm.period_month
-            ORDER BY ssm.period_month
-        """, base_params).fetchall()
-        month_tot = {r["month"]: float(r["total_cost"] or 0) for r in month_totals_rows}
-        months_sorted = sorted(month_tot.keys())
-
-        # Step 3: monthly per-dish data for top N
-        dish_filters = base_filters + [f"ssm.sku_id IN ({sku_ph})"]
-        dish_params  = {**base_params, **sku_kp}
-        dish_where   = "WHERE " + " AND ".join(dish_filters)
-        detail_rows = con.execute(f"""
-            SELECT ssm.sku_id, ssm.period_month AS month,
-                   SUM({_unified_cogs_expr('ssm')}) AS cost,
-                   SUM(ssm.qty) AS servings
-            FROM sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
-            JOIN categories c ON c.category_id = sk.category_id
-            {dish_where}
-            GROUP BY ssm.sku_id, ssm.period_month
-        """, dish_params).fetchall()
-
-    # Build per-dish monthly series
-    from collections import defaultdict
-    dish_monthly: dict = defaultdict(dict)
-    for r in detail_rows:
-        dish_monthly[r["sku_id"]][r["month"]] = {
-            "cost": float(r["cost"] or 0),
-            "servings": float(r["servings"] or 0),
-        }
-
-    dishes_out = []
-    for r in top_rows:
-        sid = r["sku_id"]
-        monthly = []
-        for m in months_sorted:
-            row_d = dish_monthly[sid].get(m, {})
-            cost = row_d.get("cost", 0)
-            serv = row_d.get("servings", 0)
-            tot  = month_tot.get(m, 0)
-            monthly.append({
-                "month":            m,
-                "cost":             round(cost, 2),
-                "servings":         round(serv, 1),
-                "cost_pct":         round(cost / tot * 100, 2) if tot > 0 else 0,
-                "cost_per_serving": round(cost / serv, 2) if serv > 0 else 0,
-            })
-        dishes_out.append({
-            "sku_id":         r["sku_id"],
-            "sku_code":       r["sku_code"],
-            "description":    r["description"],
-            "category":       r["category"],
-            "total_cost":     round(float(r["total_cost"] or 0), 2),
-            "total_servings": round(float(r["total_servings"] or 0), 1),
-            "monthly":        monthly,
-        })
-
-    return {"months": months_sorted, "dishes": dishes_out}
-
-
-# ---------------------------------------------------------------------------
-# GET /api/buffet/menu-cost-by-branch   — cost/serving per branch for one SKU
-# ---------------------------------------------------------------------------
-@app.get("/api/buffet/menu-cost-by-branch")
-@ttl_cache
-def buffet_menu_cost_by_branch(
-    sku_code:   str           = Query(...),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-):
-    """For a single SKU: cost/serving and serving count per branch.
-    Shows which branches are running that dish more or less efficiently."""
-    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", "sk.sku_code = :sku_code"]
-    params: dict = {"sku_code": sku_code}
+        filters.append("b.name = :branch"); params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
     where = "WHERE " + " AND ".join(filters)
+
     with get_db() as con:
         rows = con.execute(f"""
-            SELECT b.name AS branch,
-                   SUM(ssm.qty) AS servings,
+            SELECT sk.sku_id, sk.sku_code,
+                   COALESCE(sk.description, sk.sku_code) AS description,
+                   c.name AS category,
+                   SUM(ssm.qty)             AS servings,
                    SUM({_unified_cogs_expr('ssm')}) AS cost,
-                   SUM(ssm.subtotal_ex_vat) AS revenue
+                   SUM(ssm.subtotal_ex_vat) AS revenue,
+                   CASE
+                     WHEN EXISTS (SELECT 1 FROM bom_ingredients bi WHERE bi.sku_id = sk.sku_id) THEN 'bom'
+                     WHEN EXISTS (SELECT 1 FROM sku_cost sc2 WHERE sc2.sku_id = sk.sku_id) THEN 'sku_cost'
+                     ELSE 'none'
+                   END AS bucket
             FROM sales_sku_monthly ssm
-            JOIN branches b   ON b.branch_id = ssm.branch_id
-            JOIN skus sk      ON sk.sku_id    = ssm.sku_id
+            JOIN branches b   ON b.branch_id  = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id     = ssm.sku_id
             JOIN categories c ON c.category_id = sk.category_id
             {where}
-            GROUP BY b.branch_id
+            GROUP BY sk.sku_id
             HAVING SUM(ssm.qty) > 0
-            ORDER BY cost DESC
         """, params).fetchall()
-    tot_cost = sum(float(r["cost"] or 0) for r in rows) or 1
-    branches = []
+
+    summary: dict = {
+        "bom":      {"count": 0, "cost": 0.0, "revenue": 0.0},
+        "sku_cost": {"count": 0, "cost": 0.0, "revenue": 0.0},
+        "none":     {"count": 0, "cost": 0.0, "revenue": 0.0},
+    }
+    high_cost_no_bom: list = []   # sku_cost bucket, high cost — CAN be improved
+    high_revenue_uncosted: list = []  # none bucket, high revenue — blind spots
+
     for r in rows:
-        serv = float(r["servings"] or 0)
+        bkt  = r["bucket"]
         cost = float(r["cost"] or 0)
         rev  = float(r["revenue"] or 0)
-        branches.append({
-            "branch":           r["branch"],
-            "servings":         round(serv, 1),
-            "cost":             round(cost, 2),
-            "cost_per_serving": round(cost / serv, 2) if serv else 0,
-            "cost_pct_of_total": round(cost / tot_cost * 100, 1),
-            "food_cost_rate":   round(cost / rev * 100, 1) if rev > 0 else None,
-        })
-    return {"sku_code": sku_code, "branches": branches}
+        if bkt not in summary:
+            bkt = "none"
+        summary[bkt]["count"]   += 1
+        summary[bkt]["cost"]    += cost
+        summary[bkt]["revenue"] += rev
+        item = {
+            "sku_code": r["sku_code"],
+            "description": r["description"],
+            "category": r["category"],
+            "servings": round(float(r["servings"] or 0), 0),
+            "cost": round(cost, 2),
+            "revenue": round(rev, 2),
+            "bucket": bkt,
+        }
+        if bkt == "sku_cost":
+            high_cost_no_bom.append(item)
+        elif bkt == "none":
+            high_revenue_uncosted.append(item)
+
+    # Sort and cap at 10
+    high_cost_no_bom.sort(key=lambda x: -x["cost"])
+    high_revenue_uncosted.sort(key=lambda x: -x["revenue"])
+    high_cost_no_bom      = high_cost_no_bom[:10]
+    high_revenue_uncosted = high_revenue_uncosted[:10]
+
+    # Add cost_pct to summary buckets
+    tot_cost = sum(v["cost"] for v in summary.values()) or 1
+    for bkt, s in summary.items():
+        s["cost_pct"] = round(s["cost"] / tot_cost * 100, 1)
+
+    return {
+        "summary":              summary,
+        "high_cost_no_bom":     high_cost_no_bom,
+        "high_revenue_uncosted": high_revenue_uncosted,
+    }
 
 
 # ---------------------------------------------------------------------------
