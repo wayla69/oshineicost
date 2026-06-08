@@ -65,6 +65,8 @@
   .btn-sec { border:1px solid #d1d5db; background:#fff; color:#374151; }
   .btn-pri:disabled { opacity:.4; cursor:default; }
   .btn:hover:not(:disabled) { opacity:.88; }
+  .cpgran-btn { cursor:pointer; background:#fff; color:#374151; font-weight:500; }
+  .cpgran-btn.active { background:var(--brand); color:#fff; border-color:var(--brand)!important; font-weight:600; }
 
   /* ── disc bulk bar ──── */
   #disc-bulk-bar { display:none; position:sticky; bottom:0; background:#fff; border-top:2px solid var(--brand); padding:10px 16px; align-items:center; gap:10px; flex-wrap:wrap; z-index:10; }
@@ -187,6 +189,9 @@
     <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
       <span class="icon">⚖️</span><span data-i18n="tab_monthly">By Category</span>
     </button>
+    <button class="side-btn" data-tab="coupon" onclick="switchTab('coupon')">
+      <span class="icon">🎟️</span><span data-i18n="tab_coupon">Coupon detail</span>
+    </button>
     <button class="side-btn" data-tab="trend" onclick="switchTab('trend')">
       <span class="icon">📈</span><span data-i18n="tab_trend">Trend</span>
     </button>
@@ -270,6 +275,7 @@
           <input id="board-date" type="date" class="inp" style="width:165px" onchange="loadDailyBoard()">
           <button onclick="boardStep(-1)" class="btn btn-sec" style="padding:6px 10px" title="Previous day">‹</button>
           <button onclick="boardStep(1)"  class="btn btn-sec" style="padding:6px 10px" title="Next day">›</button>
+          <button onclick="openDailyReport()" class="btn btn-pri" style="padding:6px 12px" data-i18n="board_report">📄 รายงาน PDF (ทุกสาขา)</button>
           <span class="text-xs text-gray-400" data-i18n="board_hint">click a cell to reconcile that branch · numbers are POS revenue per channel</span>
         </div>
       </div>
@@ -448,6 +454,48 @@
           <button onclick="bulkResolve('rejected')"  class="btn btn-sec" style="padding:4px 12px;font-size:12px;color:#dc2626" data-i18n="bulk_reject">Reject all</button>
           <button onclick="clearDiscSel()" class="text-xs text-gray-400 hover:underline ml-auto" data-i18n="bulk_clear">Clear selection</button>
         </div>
+      </div>
+    </div>
+
+    <!-- COUPON DETAIL (monthly — pos_coupon_month has no day grain) -->
+    <div id="tab-coupon" class="tab-pane hidden space-y-5">
+      <div class="card flex items-center gap-3 flex-wrap">
+        <div>
+          <div class="text-xs text-gray-400" data-i18n="cp_title">Coupon detail</div>
+          <div class="font-semibold text-gray-800"><span id="cp-month">—</span></div>
+        </div>
+        <div class="flex items-center gap-1 text-xs ml-2">
+          <button class="cpgran-btn active px-2 py-1 rounded border border-slate-200" data-g="month" onclick="setCpGran('month')" data-i18n="cp_g_month">เดือน</button>
+          <button class="cpgran-btn px-2 py-1 rounded border border-slate-200" data-g="week" onclick="setCpGran('week')" data-i18n="cp_g_week">อาทิตย์</button>
+          <button class="cpgran-btn px-2 py-1 rounded border border-slate-200" data-g="day" onclick="setCpGran('day')" data-i18n="cp_g_day">วัน</button>
+        </div>
+        <input id="cp-date" type="date" class="inp hidden" style="width:160px" onchange="loadCoupon()">
+        <select id="cp-branch" class="inp ml-auto" onchange="loadCoupon()" title="Branch"></select>
+        <span class="text-xs text-gray-400" data-i18n="cp_hint">มูลค่า = ส่วนลด/มูลค่าคูปองที่ใช้</span>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="cp_total">Total value</div><div id="cp-total" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="cp_used">Coupons used</div><div id="cp-usedcount" class="text-2xl font-bold text-gray-800">—</div></div>
+        <div class="card text-center"><div class="text-xs text-gray-400 mb-1" data-i18n="cp_nseries"># Series</div><div id="cp-nseries" class="text-2xl font-bold text-gray-800">—</div></div>
+      </div>
+      <div class="card">
+        <div class="font-semibold text-gray-700 mb-3" data-i18n="cp_by_series">By coupon series</div>
+        <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left py-2" data-i18n="cp_series">Series</th>
+          <th class="text-right py-2" data-i18n="cp_usedh">Used</th>
+          <th class="text-right py-2" data-i18n="cp_value">Value</th>
+          <th class="text-right py-2" data-i18n="cp_share">% share</th>
+        </tr></thead><tbody id="cp-series-body"></tbody></table>
+        <p class="text-xs text-gray-400 mt-2" data-i18n="cp_drill_hint">คลิกแถว series เพื่อดูแยกรายสาขา</p>
+      </div>
+      <div id="cp-drill" class="hidden card" style="border-left:4px solid var(--brand,#ea580c)"></div>
+      <div id="cp-branch-wrap" class="card">
+        <div class="font-semibold text-gray-700 mb-3" data-i18n="cp_by_branch">By branch</div>
+        <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left py-2" data-i18n="c_branch">Branch</th>
+          <th class="text-right py-2" data-i18n="cp_usedh">Used</th>
+          <th class="text-right py-2" data-i18n="cp_value">Value</th>
+        </tr></thead><tbody id="cp-branch-body"></tbody></table>
       </div>
     </div>
 
@@ -655,31 +703,19 @@
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div class="card overflow-x-auto">
           <div class="font-semibold text-gray-700" data-i18n="accts_hd">Bank accounts</div>
-          <p class="text-xs text-gray-500 mb-3">One KTB + one KBANK account per branch.</p>
-          <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Bank</th><th class="text-left pb-2">Account</th><th></th></tr></thead>
+          <p class="text-xs text-gray-500 mb-3" data-i18n="accts_hint">ทุกสาขาเป็นแถว — กรอกเลขบัญชี KTB / KBANK ในช่อง บันทึกอัตโนมัติ (เว้นว่าง = ลบ)</p>
+          <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2" data-i18n="c_branch">Branch</th>
+            <th class="text-left pb-2">KTB</th><th class="text-left pb-2">KBANK</th></tr></thead>
             <tbody id="acct-body"></tbody></table>
-          <div class="flex gap-2 flex-wrap items-end">
-            <select id="na-branch" class="inp"></select>
-            <select id="na-bank" class="inp"><option>KTB</option><option>KBANK</option></select>
-            <input id="na-acct" class="inp" placeholder="account no">
-            <input id="na-name" class="inp" placeholder="name (opt)">
-            <button onclick="addAccount()" class="btn btn-pri">Add</button>
-          </div>
         </div>
         <div class="card overflow-x-auto">
           <div class="font-semibold text-gray-700" data-i18n="mids_hd">Credit-card acquirer MIDs</div>
-          <p class="text-xs text-gray-500 mb-3">Merchant IDs per acquirer (KTB / KBANK / KTC).</p>
-          <table class="w-full text-sm mb-3"><thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2">Branch</th><th class="text-left pb-2">Acquirer</th><th class="text-left pb-2">MID</th><th class="text-left pb-2">Terminal</th><th></th></tr></thead>
+          <p class="text-xs text-gray-500 mb-3" data-i18n="mids_hint">ทุกสาขาเป็นแถว — กรอก Merchant ID ของ KTB / KBANK / KTC บันทึกอัตโนมัติ (เว้นว่าง = ลบ)</p>
+          <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+            <th class="text-left pb-2" data-i18n="c_branch">Branch</th>
+            <th class="text-left pb-2">KTB</th><th class="text-left pb-2">KBANK</th><th class="text-left pb-2">KTC</th></tr></thead>
             <tbody id="mid-body"></tbody></table>
-          <div class="flex gap-2 flex-wrap items-end">
-            <select id="nm-branch" class="inp"></select>
-            <select id="nm-acq" class="inp"><option>KTB</option><option>KBANK</option><option>KTC</option></select>
-            <input id="nm-mid" class="inp" placeholder="merchant id">
-            <input id="nm-term" class="inp" placeholder="terminal (opt)">
-            <button onclick="addMid()" class="btn btn-pri">Add</button>
-          </div>
         </div>
       </div>
 
@@ -797,10 +833,14 @@ const I18N = {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
     tab_overview:"ภาพรวม", tab_board:"บอร์ดรายวันทุกสาขา", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
     sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_system:"ระบบ",
-    board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)",
+    board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)", board_report:"📄 รายงาน PDF (ทุกสาขา)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
     bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_manual:"จับคู่เอง", bd_lg_none:"ไม่มีแหล่ง",
     tab_discrepancies:"รายการต้องตรวจ", tab_trend:"แนวโน้ม", tab_audit:"ประวัติการแก้ไข", tab_setup:"ตั้งค่า",
+    tab_coupon:"รายละเอียดคูปอง", cp_title:"รายละเอียดคูปอง", cp_month:"เดือน", cp_hint:"รายเดือน · มูลค่า = ส่วนลด/มูลค่าคูปองที่ใช้",
+    cp_total:"มูลค่ารวม", cp_used:"จำนวนคูปองที่ใช้", cp_nseries:"จำนวน series", cp_by_series:"แยกตาม series",
+    cp_series:"Series", cp_usedh:"จำนวนใช้", cp_value:"มูลค่า", cp_share:"% สัดส่วน", cp_by_branch:"แยกตามสาขา",
+    cp_drill_hint:"คลิกแถว series เพื่อดูแยกรายสาขา", cp_g_month:"เดือน", cp_g_week:"อาทิตย์", cp_g_day:"วัน",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
     btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
@@ -814,6 +854,8 @@ const I18N = {
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
     accts_hd:"บัญชีธนาคาร", mids_hd:"MID บัตรเครดิต",
+    accts_hint:"ทุกสาขาเป็นแถว — กรอกเลขบัญชี KTB / KBANK บันทึกอัตโนมัติ (เว้นว่าง = ลบ)",
+    mids_hint:"ทุกสาขาเป็นแถว — กรอก Merchant ID ของ KTB / KBANK / KTC บันทึกอัตโนมัติ (เว้นว่าง = ลบ)",
     step_title:"เริ่มต้นใช้งาน", step_dismiss:"ซ่อน",
     step1:"① ตั้งค่า — จับคู่รหัสรับเงินกับธนาคาร", step2:"② อัปโหลดเอกสาร ธนาคาร/บัตร/Grab/Line Man",
     step3:"③ ประมวลผล — อ่านบอร์ดรายวัน", step4:"④ ตรวจรับ — ทุกช่องทางตรงหรืออธิบายได้",
@@ -909,10 +951,14 @@ const I18N = {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
     tab_overview:"Overview", tab_board:"Daily Board (all)", tab_daily:"Daily Reconcile", tab_monthly:"By Category", tab_uploads:"Documents",
     sec_daily:"Daily work", sec_docs:"Documents & review", sec_system:"System",
-    board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)",
+    board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)", board_report:"📄 Daily report PDF (all)",
     board_reporting:"Branches reporting", board_total:"All branches",
     bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_manual:"manual match", bd_lg_none:"no source",
     tab_discrepancies:"To Review", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
+    tab_coupon:"Coupon detail", cp_title:"Coupon detail", cp_month:"Month", cp_hint:"Monthly · value = coupon discount used",
+    cp_total:"Total value", cp_used:"Coupons used", cp_nseries:"# Series", cp_by_series:"By coupon series",
+    cp_series:"Series", cp_usedh:"Used", cp_value:"Value", cp_share:"% share", cp_by_branch:"By branch",
+    cp_drill_hint:"Click a series row to break it down by branch", cp_g_month:"Month", cp_g_week:"Week", cp_g_day:"Day",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
     btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
@@ -926,6 +972,8 @@ const I18N = {
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
     accts_hd:"Bank accounts", mids_hd:"Credit-card acquirer MIDs",
+    accts_hint:"One row per branch — type KTB / KBANK account no, saved automatically (blank = delete)",
+    mids_hint:"One row per branch — type KTB / KBANK / KTC merchant id, saved automatically (blank = delete)",
     step_title:"Getting started", step_dismiss:"Dismiss",
     step1:"① Setup — map tender codes to a bank", step2:"② Upload bank / card / Grab / Line Man docs",
     step3:"③ Run Match — read the daily board", step4:"④ Sign-off — every lane matched or explained",
@@ -1093,6 +1141,7 @@ function switchTab(name){
   if(name==='board')         loadDailyBoard();
   if(name==='daily')         loadDaily();
   if(name==='reconcile')     renderReconcile();
+  if(name==='coupon')        loadCoupon();
   if(name==='uploads')       loadUploads();
   if(name==='discrepancies') loadDiscrepancies();
   if(name==='trend')         loadTrend();
@@ -1180,6 +1229,11 @@ async function loadDailyBoard(){
   if(!data){ document.getElementById('bd-body').innerHTML='<tr><td class="text-center text-red-500 py-8">Failed to load</td></tr>'; return; }
   renderBoard(data);
 }
+function openDailyReport(branchId){
+  if(!BOARD_DATE){ toast('เลือกวันก่อน','err'); return; }
+  const q = branchId ? `?day=${BOARD_DATE}&branch_id=${branchId}` : `?day=${BOARD_DATE}`;
+  window.open(API+'/api/daily-report'+q, '_blank');
+}
 function boardStep(delta){
   const d=new Date(BOARD_DATE+'T00:00:00'); d.setDate(d.getDate()+delta);
   BOARD_DATE=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
@@ -1235,7 +1289,7 @@ function renderBoard(d){
       <td class="px-3 text-right font-mono">${fmt(b.pos_total)}</td>
       <td class="px-3 text-right font-mono text-gray-500">${fmt(b.ext_total)}</td>
       <td class="px-3 text-right font-mono ${varCls(b.variance)}">${varTxt(b.variance)}</td>
-      <td class="px-3 text-right"><button onclick="boardUpload(${b.branch_id})" class="text-xs text-orange-600 hover:underline" title="Upload documents for this branch">+ docs</button></td>`;
+      <td class="px-3 text-right whitespace-nowrap"><button onclick="openDailyReport(${b.branch_id})" class="text-xs text-indigo-600 hover:underline mr-2" title="รายงาน PDF ของสาขานี้">📄</button><button onclick="boardUpload(${b.branch_id})" class="text-xs text-orange-600 hover:underline" title="Upload documents for this branch">+ docs</button></td>`;
     tb.appendChild(tr);
   });
 
@@ -1568,6 +1622,89 @@ async function renderReconcile(){
   renderCouponSeries();
 }
 
+// COUPON detail — dedicated page (cross-branch, monthly)
+function _cpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _cpName(r){ return r.series_name
+  ? `${_cpEsc(r.series_name)} <span class="text-gray-300 text-xs">#${r.series_id}</span>`
+  : `Series ${r.series_id}`; }
+let _cpBranchInit=false, _cpGran='month';
+function setCpGran(g){
+  _cpGran=g;
+  document.querySelectorAll('.cpgran-btn').forEach(b=>b.classList.toggle('active', b.dataset.g===g));
+  const di=document.getElementById('cp-date');
+  di.classList.toggle('hidden', g==='month');
+  if(g!=='month' && !di.value){ di.value=(document.getElementById('board-date')||{}).value || (period()+'-01'); }
+  loadCoupon();
+}
+// query string for /api/coupon-series respecting the current grain
+function _cpQuery(extra){
+  let q;
+  if(_cpGran==='month'){ q=`?gran=month&period_month=${period()}`; }
+  else { const d=(document.getElementById('cp-date').value)||(period()+'-01'); q=`?gran=${_cpGran}&day=${d}`; }
+  return q+(extra||'');
+}
+async function loadCoupon(){
+  const sel=document.getElementById('cp-branch');
+  if(sel && !_cpBranchInit){
+    sel.innerHTML='<option value="">ทุกสาขา / All branches</option>'+
+      (BRANCHES||[]).map(b=>`<option value="${b.branch_id}">${b.name}</option>`).join('');
+    _cpBranchInit=true;
+  }
+  const bid = sel ? sel.value : '';
+  let d=null;
+  try{ d=await api(`/api/coupon-series${_cpQuery(bid?`&branch_id=${bid}`:'')}`); }catch(e){}
+  d = d || {series:[],by_branch:[],total:0,total_used:0,label:period()};
+  const gl={month:'เดือน',week:'อาทิตย์',day:'วัน'}[_cpGran];
+  document.getElementById('cp-month').textContent = `${gl} · ${d.label||period()}`;
+  document.getElementById('cp-total').textContent    = fmt(d.total||0);
+  document.getElementById('cp-usedcount').textContent= fmt(d.total_used||0);
+  document.getElementById('cp-nseries').textContent  = (d.series||[]).length;
+  const tot=d.total||0;
+  const sb=document.getElementById('cp-series-body');
+  sb.innerHTML = (d.series&&d.series.length)
+    ? d.series.map(r=>`<tr class="border-b border-gray-50 cursor-pointer hover:bg-orange-50" onclick="drillCouponSeries(${r.series_id})" title="คลิกดูแยกรายสาขา">
+        <td class="py-1.5">${r.series_name?_cpName(r):'Series '+r.series_id} <span class="text-gray-300">›</span></td>
+        <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
+        <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td>
+        <td class="py-1.5 text-right font-mono text-gray-500">${tot?(r.discount_amount/tot*100).toFixed(1):'0.0'}%</td></tr>`).join('')
+    : '<tr><td colspan="4" class="py-4 text-center text-gray-400">ไม่มีข้อมูลคูปองในช่วงนี้</td></tr>';
+  document.getElementById('cp-drill').classList.add('hidden');   // reset drill on reload
+  // by-branch table only when not filtered to a single branch
+  const wrap=document.getElementById('cp-branch-wrap'), bb=document.getElementById('cp-branch-body');
+  if(!bid && d.by_branch && d.by_branch.length){
+    wrap.classList.remove('hidden');
+    bb.innerHTML=d.by_branch.map(r=>`<tr class="border-b border-gray-50">
+      <td class="py-1.5">${r.branch_name}</td>
+      <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
+      <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td></tr>`).join('');
+  } else { wrap.classList.add('hidden'); }
+  applyI18n();
+}
+
+// Drill into one coupon series → breakdown by branch for the selected month
+async function drillCouponSeries(seriesId){
+  const box=document.getElementById('cp-drill'); if(!box) return;
+  box.classList.remove('hidden');
+  box.innerHTML=`<div class="text-gray-400 text-sm">… Series ${seriesId}</div>`;
+  let d=null;
+  try{ d=await api(`/api/coupon-series${_cpQuery(`&series_id=${seriesId}`)}`); }catch(e){}
+  const rows=(d&&d.by_branch)||[];
+  const nm=(d&&d.series&&d.series[0]&&d.series[0].series_name)?_cpEsc(d.series[0].series_name):'';
+  box.innerHTML=`<div class="flex items-center justify-between mb-3">
+      <div class="font-semibold text-gray-700">🎟️ ${nm?nm+' ':''}<span class="text-gray-400 font-normal">#${seriesId}</span> — แยกรายสาขา · ${(d&&d.label)||period()}
+        <span class="font-normal text-gray-400 text-sm">รวม ${fmt((d&&d.total)||0)} · ${fmt((d&&d.total_used)||0)} ใบ</span></div>
+      <button onclick="document.getElementById('cp-drill').classList.add('hidden')" class="text-xs text-gray-400 hover:underline">ปิด ✕</button></div>`
+    + (rows.length
+      ? `<table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left py-2">สาขา</th><th class="text-right py-2">จำนวนใช้</th><th class="text-right py-2">มูลค่า</th></tr></thead><tbody>`
+        + rows.map(r=>`<tr class="border-b border-gray-50"><td class="py-1.5">${r.branch_name}</td>
+          <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
+          <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td></tr>`).join('')
+        + `</tbody></table>`
+      : `<div class="text-gray-400 text-sm py-3">ไม่มีข้อมูลสาขาสำหรับ series นี้</div>`);
+  box.scrollIntoView({block:'nearest'});
+}
+
 // COUPON detail by series (monthly only — pos_coupon_month has no day grain)
 async function renderCouponSeries(){
   const box=document.getElementById('rec-coupon'); if(!box||!SESSION) return;
@@ -1580,7 +1717,7 @@ async function renderCouponSeries(){
     <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
       <th class="text-left py-2">Coupon series</th><th class="text-right py-2">จำนวนใช้</th><th class="text-right py-2">มูลค่า</th>
     </tr></thead><tbody>${d.series.map(r=>`<tr class="border-b border-gray-50">
-      <td class="py-1.5">Series ${r.series_id}</td>
+      <td class="py-1.5">${_cpName(r)}</td>
       <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
       <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td></tr>`).join('')}</tbody>
     <tfoot><tr class="font-semibold"><td class="py-2">รวม</td><td></td><td class="py-2 text-right font-mono">${fmt(d.total)}</td></tr></tfoot></table>`;
@@ -2030,15 +2167,36 @@ async function loadSetup(){
       <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
   });
-  const accts=await api('/api/bank-accounts'); const ab=document.getElementById('acct-body'); ab.innerHTML='';
-  accts.forEach(a=>{ const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="py-1.5">${a.branch_name}</td><td>${a.bank}</td><td class="font-mono">${a.account_no}</td>
-      <td class="text-right"><button onclick="delAccount(${a.account_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; ab.appendChild(tr); });
-  const mids=await api('/api/acquirer-mids'); const mb=document.getElementById('mid-body'); mb.innerHTML='';
-  mids.forEach(x=>{ const tr=document.createElement('tr');
-    tr.innerHTML=`<td class="py-1.5">${x.branch_name}</td><td>${x.acquirer}</td><td class="font-mono">${x.merchant_id||'—'}</td><td>${x.terminal_id||'—'}</td>
-      <td class="text-right"><button onclick="delMid(${x.mid_id})" class="text-xs text-red-500 hover:underline">✕</button></td>`; mb.appendChild(tr); });
+  // Bank accounts — one row per master branch, KTB + KBANK editable inline
+  const accts=await api('/api/bank-accounts');
+  const aMap={}; accts.forEach(a=>{ aMap[a.branch_id+'|'+a.bank]=a; });
+  const ab=document.getElementById('acct-body'); ab.innerHTML='';
+  (BRANCHES||[]).forEach(b=>{
+    const cell=bank=>{ const a=aMap[b.branch_id+'|'+bank];
+      return `<td class="py-1 pr-3"><input class="inp" style="min-width:150px" placeholder="account no"
+        value="${a?_attr(a.account_no):''}" data-aid="${a?a.account_id:''}" data-name="${a?_attr(a.account_name||''):''}"
+        onchange="saveAccount(${b.branch_id},'${bank}',this)">
+        <span class="text-xs ml-1" id="aok-${b.branch_id}-${bank}"></span></td>`; };
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`<td class="py-1 pr-3 whitespace-nowrap">${b.name}</td>${cell('KTB')}${cell('KBANK')}`;
+    ab.appendChild(tr);
+  });
+  // Acquirer MIDs — one row per master branch, KTB/KBANK/KTC merchant id inline
+  const mids=await api('/api/acquirer-mids');
+  const mMap={}; mids.forEach(x=>{ mMap[x.branch_id+'|'+x.acquirer]=x; });
+  const mb=document.getElementById('mid-body'); mb.innerHTML='';
+  (BRANCHES||[]).forEach(b=>{
+    const cell=acq=>{ const m=mMap[b.branch_id+'|'+acq];
+      return `<td class="py-1 pr-3"><input class="inp" style="min-width:130px" placeholder="merchant id"
+        value="${m?_attr(m.merchant_id||''):''}" data-mid="${m?m.mid_id:''}" data-term="${m?_attr(m.terminal_id||''):''}"
+        onchange="saveMid(${b.branch_id},'${acq}',this)">
+        <span class="text-xs ml-1" id="mok2-${b.branch_id}-${acq}"></span></td>`; };
+    const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
+    tr.innerHTML=`<td class="py-1 pr-3 whitespace-nowrap">${b.name}</td>${cell('KTB')}${cell('KBANK')}${cell('KTC')}`;
+    mb.appendChild(tr);
+  });
 }
+function _attr(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); }
 async function saveMap(id){
   const ok=document.getElementById('mok-'+id);
   try{
@@ -2061,14 +2219,29 @@ async function refreshAttention(){
   } else att.classList.add('hidden');
 }
 async function reseed(){ try{ const r=await api('/api/payment-map/seed',{method:'POST'}); toast(`Seeded ${r.inserted} new code(s)`,'ok'); loadSetup(); }catch(e){ toast(e.message,'err'); } }
-async function addAccount(){ await api('/api/bank-accounts',{method:'POST',json:{
-  branch_id:+document.getElementById('na-branch').value, bank:document.getElementById('na-bank').value,
-  account_no:document.getElementById('na-acct').value, account_name:document.getElementById('na-name').value}}).then(()=>{toast(t('toast_acct_added'),'ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
-async function delAccount(id){ await api('/api/bank-accounts/'+id,{method:'DELETE'}); loadSetup(); }
-async function addMid(){ await api('/api/acquirer-mids',{method:'POST',json:{
-  branch_id:+document.getElementById('nm-branch').value, acquirer:document.getElementById('nm-acq').value,
-  merchant_id:document.getElementById('nm-mid').value, terminal_id:document.getElementById('nm-term').value}}).then(()=>{toast(t('toast_mid_added'),'ok');loadSetup();}).catch(e=>toast(e.message,'err')); }
-async function delMid(id){ await api('/api/acquirer-mids/'+id,{method:'DELETE'}); loadSetup(); }
+// Inline upsert for the per-branch grids: PATCH if a row exists, POST if new,
+// DELETE if the field is cleared. Preserves account_name / terminal_id.
+function _flag(el,sym,colorClass){ if(el){ el.className='text-xs ml-1 '+colorClass; el.textContent=sym; if(sym==='✓') setTimeout(()=>{el.textContent='';},1200); } }
+async function saveAccount(branchId, bank, el){
+  const val=el.value.trim(), aid=el.dataset.aid, ok=document.getElementById(`aok-${branchId}-${bank}`);
+  try{
+    if(val && aid){ await api('/api/bank-accounts/'+aid,{method:'PATCH',json:{branch_id:branchId,bank,account_no:val,account_name:el.dataset.name||''}}); }
+    else if(val){ const r=await api('/api/bank-accounts',{method:'POST',json:{branch_id:branchId,bank,account_no:val}}); el.dataset.aid=r.account_id; }
+    else if(aid){ await api('/api/bank-accounts/'+aid,{method:'DELETE'}); el.dataset.aid=''; }
+    else return;
+    _flag(ok,'✓','text-green-600');
+  }catch(e){ _flag(ok,'✗','text-red-600'); toast(e.message,'err'); }
+}
+async function saveMid(branchId, acq, el){
+  const val=el.value.trim(), mid=el.dataset.mid, ok=document.getElementById(`mok2-${branchId}-${acq}`);
+  try{
+    if(val && mid){ await api('/api/acquirer-mids/'+mid,{method:'PATCH',json:{branch_id:branchId,acquirer:acq,merchant_id:val,terminal_id:el.dataset.term||''}}); }
+    else if(val){ const r=await api('/api/acquirer-mids',{method:'POST',json:{branch_id:branchId,acquirer:acq,merchant_id:val}}); el.dataset.mid=r.mid_id; }
+    else if(mid){ await api('/api/acquirer-mids/'+mid,{method:'DELETE'}); el.dataset.mid=''; }
+    else return;
+    _flag(ok,'✓','text-green-600');
+  }catch(e){ _flag(ok,'✗','text-red-600'); toast(e.message,'err'); }
+}
 
 init();
 </script>
