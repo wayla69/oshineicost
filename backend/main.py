@@ -2358,9 +2358,15 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
         tt = con.execute(f"SELECT ROUND(AVG(avg_turn_min),0) avg_min, SUM(tabs) tabs, SUM(customers) cust "
                          f"FROM pos_table_turn_day WHERE substr(day,1,7)=:m{tbf} AND avg_turn_min>0", {"m": mon, **tbp}).fetchone()
         table = {"avg_turn_min": tt["avg_min"], "tabs": tt["tabs"] or 0, "customers": tt["cust"] or 0}
+        _has_cs = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_series'").fetchone()
+        _cs_join = "LEFT JOIN coupon_series cs ON cs.coupon_series_id=cm.coupon_series_id" if _has_cs else ""
+        _cs_name = "COALESCE(NULLIF(TRIM(cs.name),''),'Series '||cm.coupon_series_id)" if _has_cs else "'Series '||cm.coupon_series_id"
+        _cs_code = "cs.code" if _has_cs else "NULL"
         promo = [dict(r) for r in con.execute(
-            f"SELECT coupon_series_id series, SUM(used_count) uses, ROUND(SUM(discount_amount)) discount "
-            f"FROM pos_coupon_month WHERE period_month=:m{bfc} GROUP BY coupon_series_id ORDER BY uses DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
+            f"SELECT cm.coupon_series_id series, {_cs_name} name, {_cs_code} code, "
+            f"SUM(cm.used_count) uses, ROUND(SUM(cm.discount_amount)) discount "
+            f"FROM pos_coupon_month cm {_cs_join} WHERE cm.period_month=:m{bfc} "
+            f"GROUP BY cm.coupon_series_id ORDER BY discount DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
     return {"month": mon, "payment": payment, "channel": channel, "void": void,
             "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0,
                            "bom_cost": (vt["bom_cost"] or 0) if vt else 0},
@@ -2664,6 +2670,44 @@ def discount_reasons(month_from: Optional[str] = Query(None), month_to: Optional
         return {"reasons": reasons, "total_bills": tot_bills, "total_amount": tot_amt,
                 "untyped_pct": (round(100 * (untyped["amount"] or 0) / tot_amt, 1) if (untyped and tot_amt) else 0),
                 "staged": True}
+
+
+@app.get("/api/analysis/coupon-series")
+def coupon_series_breakdown(month_from: Optional[str] = Query(None), month_to: Optional[str] = Query(None),
+                            month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                            group: Optional[str] = Query(None)):
+    """Coupon/promotion breakdown by SERIES, with the human-readable series name
+    (CouponSeries master → coupon_series table). pos_coupon_month holds usage per
+    branch × month × coupon_series_id; this joins the title so staff see WHICH promo
+    (เด็กสูง / ผู้สูงอายุ / วันเกิด / VIP / ผู้ถือหุ้น …) drives the most discount."""
+    base = ["b.name!='ALL'"]; p: dict = {}
+    if branch:
+        base.append("b.name=:branch"); p["branch"] = branch
+    _group_filter(base, p, group)
+    _month_range_filter(base, p, month_from, month_to, month, col="cm.period_month")
+    with get_db() as con:
+        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='pos_coupon_month'").fetchone():
+            return {"series": [], "total_uses": 0, "total_amount": 0, "series_count": 0, "staged": False}
+        has_cs = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_series'").fetchone()
+        name_c = "COALESCE(NULLIF(TRIM(cs.name),''),'Series '||cm.coupon_series_id)" if has_cs else "'Series '||cm.coupon_series_id"
+        code_c = "cs.code" if has_cs else "NULL"
+        actv_c = "COALESCE(cs.active,0)" if has_cs else "0"
+        join   = "LEFT JOIN coupon_series cs ON cs.coupon_series_id=cm.coupon_series_id" if has_cs else ""
+        rows = con.execute(f"""
+            SELECT cm.coupon_series_id id, {name_c} name, {code_c} code, {actv_c} active,
+                   SUM(cm.used_count) uses, ROUND(SUM(cm.discount_amount)) amount
+            FROM pos_coupon_month cm JOIN branches b ON b.branch_id=cm.branch_id {join}
+            WHERE {' AND '.join(base)}
+            GROUP BY cm.coupon_series_id
+            ORDER BY amount DESC""", p).fetchall()
+        series = [dict(r) for r in rows]
+        tot_amt = sum(r["amount"] or 0 for r in series)
+        tot_uses = sum(r["uses"] or 0 for r in series)
+        for r in series:
+            r["pct"] = round(100 * (r["amount"] or 0) / tot_amt, 1) if tot_amt else 0
+            r["avg"] = round((r["amount"] or 0) / r["uses"]) if r["uses"] else 0
+        return {"series": series, "total_uses": tot_uses, "total_amount": tot_amt,
+                "series_count": len(series), "staged": True}
 
 
 @app.get("/api/extra/closing-time")

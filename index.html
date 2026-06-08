@@ -3364,6 +3364,23 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </table></div>
   </div>
 
+  <!-- Coupon / promotion by SERIES (CouponSeries name) -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🎟️ คูปอง/โปรโมชัน (แยกตามชุด series)</h2>
+      <span id="coupon-series-note" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">ส่วนลดจากคูปอง/โปรแยกตาม "ชื่อชุด" (เด็กสูง · ผู้สูงอายุ · วันเกิด · VIP · ผู้ถือหุ้น …) — ดูว่าชุดไหนใช้เงินลดมากสุด · เฉลี่ย/ครั้ง สูงผิดปกติ = ตรวจสอบ</p>
+    <div id="coupon-series-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4"></div>
+    <div style="max-height:380px;overflow:auto"><table class="tbl-top60 w-full text-xs">
+      <thead><tr>
+        <th class="num">#</th><th>ชุดคูปอง (series)</th><th class="num">ครั้งที่ใช้</th>
+        <th class="num">มูลค่าลด</th><th class="num">เฉลี่ย/ครั้ง</th><th class="num">% ของคูปอง</th><th>สัดส่วน</th>
+      </tr></thead>
+      <tbody id="coupon-series-body"></tbody>
+    </table></div>
+  </div>
+
   <div class="card p-5 mb-5 overflow-x-auto">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
       <h2 class="section-title mb-0">แคชเชียร์ส่วนลดสูงสุด</h2>
@@ -15524,7 +15541,7 @@ async function loadOpsReport(force) {
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(x.bom_cost)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   document.getElementById('opPromo').innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
-    <td class="py-1.5 pr-2 font-mono text-[11px]">${esc(String(x.series))}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
+    <td class="py-1.5 pr-2">${esc(x.name || ('Series ' + x.series))}${x.code && x.code !== x.name ? ` <span class="text-[10px] text-slate-400">${esc(x.code)}</span>` : ''}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#f59e0b">${fmt(x.discount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
@@ -18801,6 +18818,45 @@ async function loadDiscountReasons(params) {
   }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
 }
 
+async function loadCouponSeries(params) {
+  const body = document.getElementById('coupon-series-body');
+  const cards = document.getElementById('coupon-series-cards');
+  const note = document.getElementById('coupon-series-note');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
+  let d; try { d = await fetch(`${API}/api/analysis/coupon-series?${params}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (d.staged === false) {
+    if (note) note.textContent = '';
+    cards.innerHTML = '';
+    body.innerHTML = '<tr><td colspan="7" class="py-3 text-center text-slate-400">ยังไม่มีข้อมูล — รัน sync รอบใหม่เพื่อเก็บชื่อชุดคูปอง</td></tr>';
+    return;
+  }
+  const s = d.series || [];
+  if (note) note.textContent = `${fmtN(d.series_count || 0)} ชุด · ใช้ ${fmtN(d.total_uses || 0)} ครั้ง · รวม ${fmt(d.total_amount || 0)}`;
+  const top = s[0];
+  cards.innerHTML = [
+    { l: 'มูลค่าคูปองรวม', v: fmt(d.total_amount || 0), s2: `${fmtN(d.total_uses || 0)} ครั้ง`, c: '#f59e0b' },
+    { l: 'จำนวนชุดที่ใช้', v: fmtN(d.series_count || 0), s2: 'series', c: '#6366f1' },
+    { l: 'ชุดที่ลดมากสุด', v: top ? top.pct + '%' : '—', s2: top ? esc(top.name) : '—', c: '#ef4444' },
+    { l: 'เฉลี่ย/ครั้ง', v: fmt(d.total_uses ? Math.round(d.total_amount / d.total_uses) : 0), s2: 'ต่อการใช้ 1 ครั้ง', c: '#10b981' },
+  ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
+  const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
+  body.innerHTML = s.map((r, i) => {
+    const w = Math.round(100 * (r.amount || 0) / maxAmt);
+    const inactive = !r.active;
+    return `<tr class="border-t border-slate-100">
+      <td class="num tabular text-slate-400">${i + 1}</td>
+      <td class="font-medium">${esc(r.name)}${inactive ? ' <span class="text-[10px] text-slate-400">(ปิดใช้)</span>' : ''}${r.code && r.code !== r.name ? `<div class="text-[10px] text-slate-400">${esc(r.code)}</div>` : ''}</td>
+      <td class="num tabular text-slate-500">${fmtN(r.uses)}</td>
+      <td class="num tabular font-semibold" style="color:#f59e0b">${fmt(r.amount)}</td>
+      <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
+      <td class="num tabular">${r.pct}%</td>
+      <td style="min-width:90px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="py-3 text-center text-slate-400">ไม่มีคูปองในช่วงนี้</td></tr>';
+}
+
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const params = new URLSearchParams();
@@ -18809,6 +18865,7 @@ async function loadDiscountsTab() {
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
   loadDiscountReasons(new URLSearchParams(params));
+  loadCouponSeries(new URLSearchParams(params));
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   const o = d.overall || {};
 
