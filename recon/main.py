@@ -127,6 +127,22 @@ def _migrate_payment_bank(conn):
         conn.execute("""INSERT INTO recon_payment_map (payment_code_norm,category,bank,reconcile,updated_by)
             VALUES ('Credit BAY','CREDIT','BAY',1,'seed-franchise')
             ON CONFLICT(payment_code_norm) DO NOTHING""")
+        # widen recon_acquirer_mid.acquirer to allow BAY/SCB/BBL (same CHECK problem)
+        arow = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_acquirer_mid'").fetchone()
+        if arow and "'BAY'" not in (arow[0] or ""):
+            conn.executescript("""
+                CREATE TABLE recon_acquirer_mid__new (
+                    mid_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
+                    acquirer TEXT NOT NULL CHECK(acquirer IN ('KTB','KBANK','KTC','BAY','SCB','BBL')),
+                    merchant_id TEXT, terminal_id TEXT, active INTEGER NOT NULL DEFAULT 1
+                );
+                INSERT INTO recon_acquirer_mid__new (mid_id,branch_id,acquirer,merchant_id,terminal_id,active)
+                    SELECT mid_id,branch_id,acquirer,merchant_id,terminal_id,active FROM recon_acquirer_mid;
+                DROP TABLE recon_acquirer_mid;
+                ALTER TABLE recon_acquirer_mid__new RENAME TO recon_acquirer_mid;
+            """)
     except sqlite3.OperationalError:
         pass
 
@@ -441,8 +457,8 @@ def list_acquirer_mids(branch_id: int | None = None):
 
 @app.post("/api/acquirer-mids", dependencies=[Depends(require_write_token)])
 def create_acquirer_mid(body: AcquirerMid):
-    if body.acquirer not in ("KTB", "KBANK", "KTC"):
-        raise HTTPException(400, "acquirer must be KTB, KBANK or KTC")
+    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB or BBL")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         cur = conn.execute("""
@@ -455,8 +471,8 @@ def create_acquirer_mid(body: AcquirerMid):
 
 @app.patch("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
 def update_acquirer_mid(mid_id: int, body: AcquirerMid):
-    if body.acquirer not in ("KTB", "KBANK", "KTC"):
-        raise HTTPException(400, "acquirer must be KTB, KBANK or KTC")
+    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB or BBL")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         conn.execute("""
