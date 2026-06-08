@@ -3201,9 +3201,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-5 mt-4" id="mcParetoCard" style="display:none">
     <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
       <h3 class="text-sm font-bold" style="color:var(--text-primary)">📊 Pareto สะสม — การกระจุกตัวของต้นทุน (A vs B)</h3>
-      <span id="mcParetoSummary" class="text-[11px] text-slate-500"></span>
+      <div class="flex items-center gap-2 flex-wrap">
+        <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+          <button class="gran-btn gran-active" id="mcParetoModeConc" onclick="mcSetParetoMode('concentration')" title="แต่ละช่วงเรียงต้นทุนของตัวเอง — ดูการกระจุกตัว">การกระจุกตัว</button>
+          <button class="gran-btn" id="mcParetoModeAlign" onclick="mcSetParetoMode('aligned')" title="ใช้ลำดับเมนูชุดเดียวกันทั้ง A/B — เทียบเมนูตัวต่อตัว">เทียบตัวต่อตัว</button>
+        </div>
+        <span id="mcParetoSummary" class="text-[11px] text-slate-500"></span>
+      </div>
     </div>
-    <p class="text-xs text-slate-400 mb-3">เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า</p>
+    <p id="mcParetoHint" class="text-xs text-slate-400 mb-3">เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%</p>
     <div style="height:300px"><canvas id="mcParetoChart"></canvas></div>
   </div>
 
@@ -22833,6 +22839,10 @@ function mcSetCostMode(perHead) {
   document.getElementById('mcModeTotal')?.classList.toggle('gran-active', !perHead);
   document.getElementById('mcModeHead')?.classList.toggle('gran-active', perHead);
   mcRenderTable();
+  // Keep the dive-in in sync: the main toggle also drives the per-branch view.
+  _mcDrillPerHead = perHead;
+  const dm = document.getElementById('mcDrillModal');
+  if (dm && !dm.classList.contains('hidden') && _mcDrillData) mcRenderBranch();
 }
 function mcRenderTable() {
   const L = _mcLast; if (!L) return;
@@ -22881,23 +22891,46 @@ function mcRenderTable() {
 // Cumulative cost-share Pareto: each period sorted by its own COGS desc, plotted
 // as cumulative % of that period's total. Concentration is share-based, so it's
 // identical whether you read total or per-head cost — hence not tied to the toggle.
+let _mcParetoMode = 'concentration';   // 'concentration' (each sorted by own cost) | 'aligned' (shared menu order)
+function mcSetParetoMode(mode) {
+  _mcParetoMode = mode;
+  document.getElementById('mcParetoModeConc')?.classList.toggle('gran-active', mode === 'concentration');
+  document.getElementById('mcParetoModeAlign')?.classList.toggle('gran-active', mode === 'aligned');
+  mcRenderPareto();
+}
 function mcRenderPareto() {
   const L = _mcLast, card = document.getElementById('mcParetoCard'); if (!L || !card) return;
   const items = L.items || [];
   if (items.length < 2) { card.style.display = 'none'; return; }
   card.style.display = 'block';
-  const cum = key => {
-    const sv = items.map(r => r[key] || 0).filter(v => v > 0).sort((a, b) => b - a);
-    const tot = sv.reduce((s, v) => s + v, 0) || 1;
-    let run = 0; return sv.map(v => { run += v; return run / tot * 100; });
-  };
-  const ca = cum('cogs_a'), cb = cum('cogs_b');
+  const totA = items.reduce((s, r) => s + (r.cogs_a || 0), 0) || 1;
+  const totB = items.reduce((s, r) => s + (r.cogs_b || 0), 0) || 1;
+  const aligned = _mcParetoMode === 'aligned';
+  let ca, cb, names;
+  if (aligned) {
+    // SAME menu order for both periods (by combined cost) → compare item-by-item.
+    const ord = [...items].sort((a, b) => ((b.cogs_a || 0) + (b.cogs_b || 0)) - ((a.cogs_a || 0) + (a.cogs_b || 0)));
+    let ra = 0, rb = 0; ca = []; cb = []; names = [];
+    ord.forEach(r => { ra += (r.cogs_a || 0); rb += (r.cogs_b || 0); ca.push(ra / totA * 100); cb.push(rb / totB * 100);
+      names.push((r.description || r.sku_code || '').replace(/^\((?:A|B|T)\)\s*/, '')); });
+  } else {
+    // concentration: each period sorted by its OWN cost desc.
+    const cum = (key, tot) => { const sv = items.map(r => r[key] || 0).filter(v => v > 0).sort((a, b) => b - a);
+      let run = 0; return sv.map(v => { run += v; return run / tot * 100; }); };
+    ca = cum('cogs_a', totA); cb = cum('cogs_b', totB);
+  }
   const n = Math.max(ca.length, cb.length);
   const labels = Array.from({ length: n }, (_, i) => i + 1);
   const rank80 = a => { const i = a.findIndex(v => v >= 80); return i < 0 ? a.length : i + 1; };
   const topN = (a, k) => a.length ? a[Math.min(k, a.length) - 1].toFixed(0) : '—';
   const sum = document.getElementById('mcParetoSummary');
-  if (sum) sum.textContent = `80% ของต้นทุน: A = ${rank80(ca)} เมนู · B = ${rank80(cb)} เมนู   |   Top 10 = A ${topN(ca, 10)}% · B ${topN(cb, 10)}%`;
+  if (sum) sum.textContent = aligned
+    ? `Top 10 เมนู(ชุดเดียวกัน) = A ${topN(ca, 10)}% · B ${topN(cb, 10)}% ของต้นทุน`
+    : `80% ของต้นทุน: A = ${rank80(ca)} เมนู · B = ${rank80(cb)} เมนู   |   Top 10 = A ${topN(ca, 10)}% · B ${topN(cb, 10)}%`;
+  const hint = document.getElementById('mcParetoHint');
+  if (hint) hint.textContent = aligned
+    ? 'เรียงเมนูชุดเดียวกันทั้ง A/B (ตามต้นทุนรวม) — อันดับ N = เมนูชุดเดียวกัน ดูว่าเมนูเดิมกินสัดส่วนต้นทุนต่างกันแค่ไหนในแต่ละช่วง · เส้นประ = 80%'
+    : 'เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%';
   const aLbl = 'A (' + ((L.a_range || []).filter(Boolean).join('–') || 'A') + ')';
   const bLbl = 'B (' + ((L.b_range || []).filter(Boolean).join('–') || 'B') + ')';
   mkChart('mcParetoChart', {
@@ -22906,18 +22939,26 @@ function mcRenderPareto() {
       labels, datasets: [
         { label: aLbl, data: ca, borderColor: '#6366f1', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
         { label: bLbl, data: cb, borderColor: '#0891b2', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
+        // 80% guideline (hidden from legend + tooltip via filters below)
+        { label: '_80', data: labels.map(() => 80), borderColor: 'rgba(148,163,184,0.8)', borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false, tension: 0 },
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 }, filter: it => it.text !== '_80' } },
         datalabels: { display: false },
-        tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}% สะสม @ ${c.parsed.x} เมนู` } },
+        tooltip: {
+          filter: it => it.dataset.label !== '_80',
+          callbacks: {
+            title: items => aligned && names ? `#${items[0].label} ${names[items[0].dataIndex] || ''}` : `${items[0].label} เมนู`,
+            label: c => `${c.dataset.label}: ${c.parsed.y.toFixed(1)}% สะสม`,
+          }
+        },
       },
       scales: {
-        x: { title: { display: true, text: 'จำนวนเมนู (เรียงต้นทุนมาก→น้อย)' }, ticks: { maxTicksLimit: 12 } },
+        x: { title: { display: true, text: aligned ? 'อันดับเมนู (ชุดเดียวกันทั้ง A/B)' : 'จำนวนเมนู (เรียงต้นทุนมาก→น้อย)' }, ticks: { maxTicksLimit: 12 } },
         y: { title: { display: true, text: '% ต้นทุนสะสม' }, min: 0, max: 100, ticks: { callback: v => v + '%' } },
       },
     },
@@ -22937,6 +22978,7 @@ async function mcOpenDrill(sku) {
   let d; try { d = await fetch(`${API}/api/sales/menu-compare/drill?${new URLSearchParams(q)}`).then(r => r.json()); }
   catch (e) { bEl.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้</p>'; return; }
   _mcDrillData = d;
+  _mcDrillPerHead = _mcPerHead;   // open the dive-in in the same mode as the main table
   mcRenderBranch();
 }
 
