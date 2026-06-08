@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS recon_payment_map (
     category          TEXT NOT NULL CHECK(category IN
                         ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
     bank              TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','PROMPTPAY','NONE','UNKNOWN')),
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN')),
     reconcile         INTEGER NOT NULL DEFAULT 1,   -- 0 = informational only (e.g. ENTERTAIN)
     notes             TEXT,
     updated_at        TEXT DEFAULT (datetime('now')),

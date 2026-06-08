@@ -97,11 +97,46 @@ def _migrate(conn):
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
+def _migrate_payment_bank(conn):
+    """Widen recon_payment_map.bank to allow BAY/SCB/BBL (the CHECK constraint
+    can't be ALTERed in SQLite → recreate the table once, preserving rows). Then
+    future-proof the franchise-only 'Credit BAY' tender (seed_payment_map is
+    master-scoped so it never picks it up)."""
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_payment_map'").fetchone()
+        if row and "'BAY'" not in (row[0] or ""):
+            conn.executescript("""
+                CREATE TABLE recon_payment_map__new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    payment_code_norm TEXT NOT NULL UNIQUE,
+                    category TEXT NOT NULL CHECK(category IN
+                        ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
+                    bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN')),
+                    reconcile INTEGER NOT NULL DEFAULT 1,
+                    notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
+                );
+                INSERT INTO recon_payment_map__new
+                    (id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by)
+                    SELECT id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by
+                    FROM recon_payment_map;
+                DROP TABLE recon_payment_map;
+                ALTER TABLE recon_payment_map__new RENAME TO recon_payment_map;
+            """)
+        conn.execute("""INSERT INTO recon_payment_map (payment_code_norm,category,bank,reconcile,updated_by)
+            VALUES ('Credit BAY','CREDIT','BAY',1,'seed-franchise')
+            ON CONFLICT(payment_code_norm) DO NOTHING""")
+    except sqlite3.OperationalError:
+        pass
+
+
 @app.on_event("startup")
 def startup():
     with get_db() as conn:
         conn.executescript(_SCHEMA.read_text())
         _migrate(conn)
+        _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
         conn.commit()
 
@@ -211,7 +246,7 @@ def list_branches():
 # ── Config: payment-code map ──────────────────────────────────────────────────
 
 _CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
-_BANKS      = {"KTB", "KBANK", "KTC", "PROMPTPAY", "NONE", "UNKNOWN"}
+_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "PROMPTPAY", "NONE", "UNKNOWN"}
 
 
 class PaymentMapUpsert(BaseModel):
