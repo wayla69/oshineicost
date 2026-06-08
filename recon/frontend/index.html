@@ -484,6 +484,7 @@
           <th class="text-left py-2" data-i18n="cp_series">Series</th>
           <th class="text-right py-2" data-i18n="cp_usedh">Used</th>
           <th class="text-right py-2" data-i18n="cp_value">Value</th>
+          <th class="text-right py-2" data-i18n="cp_mom">vs ก่อนหน้า</th>
           <th class="text-right py-2" data-i18n="cp_share">% share</th>
         </tr></thead><tbody id="cp-series-body"></tbody></table>
         <p class="text-xs text-gray-400 mt-2" data-i18n="cp_drill_hint">คลิกแถว series เพื่อดูแยกรายสาขา</p>
@@ -839,7 +840,7 @@ const I18N = {
     tab_discrepancies:"รายการต้องตรวจ", tab_trend:"แนวโน้ม", tab_audit:"ประวัติการแก้ไข", tab_setup:"ตั้งค่า",
     tab_coupon:"รายละเอียดคูปอง", cp_title:"รายละเอียดคูปอง", cp_month:"เดือน", cp_hint:"รายเดือน · มูลค่า = ส่วนลด/มูลค่าคูปองที่ใช้",
     cp_total:"มูลค่ารวม", cp_used:"จำนวนคูปองที่ใช้", cp_nseries:"จำนวน series", cp_by_series:"แยกตาม series",
-    cp_series:"Series", cp_usedh:"จำนวนใช้", cp_value:"มูลค่า", cp_share:"% สัดส่วน", cp_by_branch:"แยกตามสาขา",
+    cp_series:"Series", cp_usedh:"จำนวนใช้", cp_value:"มูลค่า", cp_share:"% สัดส่วน", cp_by_branch:"แยกตามสาขา", cp_mom:"vs ก่อนหน้า",
     cp_drill_hint:"คลิกแถว series เพื่อดูแยกรายสาขา", cp_g_month:"เดือน", cp_g_week:"อาทิตย์", cp_g_day:"วัน",
     kpi_pos:"ยอด POS (ที่กระทบได้)", kpi_ext:"ยอดจากเอกสาร", kpi_var:"ส่วนต่าง", kpi_issues:"รายการค้าง",
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
@@ -957,7 +958,7 @@ const I18N = {
     tab_discrepancies:"To Review", tab_trend:"Trend", tab_audit:"Audit Log", tab_setup:"Setup",
     tab_coupon:"Coupon detail", cp_title:"Coupon detail", cp_month:"Month", cp_hint:"Monthly · value = coupon discount used",
     cp_total:"Total value", cp_used:"Coupons used", cp_nseries:"# Series", cp_by_series:"By coupon series",
-    cp_series:"Series", cp_usedh:"Used", cp_value:"Value", cp_share:"% share", cp_by_branch:"By branch",
+    cp_series:"Series", cp_usedh:"Used", cp_value:"Value", cp_share:"% share", cp_by_branch:"By branch", cp_mom:"vs prev",
     cp_drill_hint:"Click a series row to break it down by branch", cp_g_month:"Month", cp_g_week:"Week", cp_g_day:"Day",
     kpi_pos:"POS Tender (reconcilable)", kpi_ext:"External Total", kpi_var:"Variance", kpi_issues:"Open Issues",
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
@@ -1627,6 +1628,12 @@ function _cpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 function _cpName(r){ return r.series_name
   ? `${_cpEsc(r.series_name)} <span class="text-gray-300 text-xs">#${r.series_id}</span>`
   : `Series ${r.series_id}`; }
+// MoM vs previous period. More coupon discount (up) = more given away → amber/red.
+function _cpMom(pct){
+  if(pct==null) return '<span class="text-amber-600 text-xs">ใหม่</span>';
+  const c = pct>0?'#ef4444':pct<0?'#10b981':'#94a3b8';
+  return `<span style="color:${c};font-weight:600">${pct>0?'▲':pct<0?'▼':''} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
 let _cpBranchInit=false, _cpGran='month';
 function setCpGran(g){
   _cpGran=g;
@@ -1662,12 +1669,13 @@ async function loadCoupon(){
   const tot=d.total||0;
   const sb=document.getElementById('cp-series-body');
   sb.innerHTML = (d.series&&d.series.length)
-    ? d.series.map(r=>`<tr class="border-b border-gray-50 cursor-pointer hover:bg-orange-50" onclick="drillCouponSeries(${r.series_id})" title="คลิกดูแยกรายสาขา">
+    ? d.series.map(r=>`<tr class="border-b border-gray-50 cursor-pointer hover:bg-orange-50" onclick="drillCouponSeries(${r.series_id})" title="คลิกดูแยกรายสาขา/รายวัน">
         <td class="py-1.5">${r.series_name?_cpName(r):'Series '+r.series_id} <span class="text-gray-300">›</span></td>
         <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
         <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td>
+        <td class="py-1.5 text-right font-mono">${_cpMom(r.mom_pct)}</td>
         <td class="py-1.5 text-right font-mono text-gray-500">${tot?(r.discount_amount/tot*100).toFixed(1):'0.0'}%</td></tr>`).join('')
-    : '<tr><td colspan="4" class="py-4 text-center text-gray-400">ไม่มีข้อมูลคูปองในช่วงนี้</td></tr>';
+    : '<tr><td colspan="5" class="py-4 text-center text-gray-400">ไม่มีข้อมูลคูปองในช่วงนี้</td></tr>';
   document.getElementById('cp-drill').classList.add('hidden');   // reset drill on reload
   // by-branch table only when not filtered to a single branch
   const wrap=document.getElementById('cp-branch-wrap'), bb=document.getElementById('cp-branch-body');
@@ -1688,20 +1696,25 @@ async function drillCouponSeries(seriesId){
   box.innerHTML=`<div class="text-gray-400 text-sm">… Series ${seriesId}</div>`;
   let d=null;
   try{ d=await api(`/api/coupon-series${_cpQuery(`&series_id=${seriesId}`)}`); }catch(e){}
-  const rows=(d&&d.by_branch)||[];
+  const brows=(d&&d.by_branch)||[], drows=(d&&d.by_day)||[];
   const nm=(d&&d.series&&d.series[0]&&d.series[0].series_name)?_cpEsc(d.series[0].series_name):'';
-  box.innerHTML=`<div class="flex items-center justify-between mb-3">
-      <div class="font-semibold text-gray-700">🎟️ ${nm?nm+' ':''}<span class="text-gray-400 font-normal">#${seriesId}</span> — แยกรายสาขา · ${(d&&d.label)||period()}
-        <span class="font-normal text-gray-400 text-sm">รวม ${fmt((d&&d.total)||0)} · ${fmt((d&&d.total_used)||0)} ใบ</span></div>
-      <button onclick="document.getElementById('cp-drill').classList.add('hidden')" class="text-xs text-gray-400 hover:underline">ปิด ✕</button></div>`
-    + (rows.length
-      ? `<table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
-          <th class="text-left py-2">สาขา</th><th class="text-right py-2">จำนวนใช้</th><th class="text-right py-2">มูลค่า</th></tr></thead><tbody>`
-        + rows.map(r=>`<tr class="border-b border-gray-50"><td class="py-1.5">${r.branch_name}</td>
+  const mom=(d&&d.series&&d.series[0])?d.series[0].mom_pct:null;
+  const tbl=(title,rows,keyLabel,keyFn)=> rows.length
+      ? `<div class="font-semibold text-gray-600 text-sm mt-3 mb-1">${title}</div>
+         <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left py-2">${keyLabel}</th><th class="text-right py-2">จำนวนใช้</th><th class="text-right py-2">มูลค่า</th></tr></thead><tbody>`
+        + rows.map(r=>`<tr class="border-b border-gray-50"><td class="py-1.5">${keyFn(r)}</td>
           <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
           <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td></tr>`).join('')
         + `</tbody></table>`
-      : `<div class="text-gray-400 text-sm py-3">ไม่มีข้อมูลสาขาสำหรับ series นี้</div>`);
+      : '';
+  box.innerHTML=`<div class="flex items-center justify-between mb-1">
+      <div class="font-semibold text-gray-700">🎟️ ${nm?nm+' ':''}<span class="text-gray-400 font-normal">#${seriesId}</span> · ${(d&&d.label)||period()}
+        <span class="font-normal text-gray-400 text-sm">รวม ${fmt((d&&d.total)||0)} · ${fmt((d&&d.total_used)||0)} ใบ · เทียบก่อนหน้า ${_cpMom(mom)}</span></div>
+      <button onclick="document.getElementById('cp-drill').classList.add('hidden')" class="text-xs text-gray-400 hover:underline">ปิด ✕</button></div>`
+    + (brows.length||drows.length
+        ? tbl('แยกรายสาขา', brows, 'สาขา', r=>r.branch_name) + tbl('แยกรายวัน', drows, 'วันที่', r=>r.day)
+        : `<div class="text-gray-400 text-sm py-3">ไม่มีข้อมูลสำหรับ series นี้</div>`);
   box.scrollIntoView({block:'nearest'});
 }
 

@@ -372,6 +372,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     sq.executemany("INSERT INTO pos_coupon_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_pcd ON pos_coupon_day(coupon_series_id, day)")
+    sq.execute("CREATE INDEX IF NOT EXISTS idx_cpd ON pos_coupon_day(day, branch_id)")
     print(f"        pos_coupon_day: {len(drows)} groups")
 
     # ── coupon_series: master names for the series ids above (recon drill labels) ──
@@ -383,18 +384,6 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
         [(r["CouponSeriesId"], (r["CouponSeriesName"] or "").strip(),
           (r["CouponSeriesCode"] or "").strip(), int(r["Active"] or 0)) for r in csrows])
     print(f"        coupon_series: {len(csrows)} series names")
-
-    # ── pos_coupon_day: coupon usage at DAY grain (powers recon day/week views) ──
-    sq.executescript("DROP TABLE IF EXISTS pos_coupon_day; CREATE TABLE pos_coupon_day("
-                     "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
-    rows = run(f"""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
-                 COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
-                 FROM CouponCardOutsideSystemUsed WHERE UsedDate >= %s
-                 GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""")
-    sq.executemany("INSERT INTO pos_coupon_day VALUES(?,?,?,?,?)",
-        [(bid_map.get(r["bid"]), r["d"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
-    sq.execute("CREATE INDEX IF NOT EXISTS idx_cpd ON pos_coupon_day(day, branch_id)")
-    print(f"        pos_coupon_day: {len(rows)} groups")
 
     # ── pos_kitchen_month: cook/ticket time ──
     sq.executescript("DROP TABLE IF EXISTS pos_kitchen_month; CREATE TABLE pos_kitchen_month("
