@@ -15,6 +15,23 @@
       "port": 8010
     },
     {
+      "name": "oshinei-auth",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--port",
+        "8012"
+      ],
+      "cwd": "${workspaceFolder}/backend",
+      "env": {
+        "OSHINEI_AUTH": "1",
+        "OSHINEI_AUTH_SECRET": "local-verify-secret"
+      },
+      "port": 8012
+    },
+    {
       "name": "docs-static",
       "runtimeExecutable": "python",
       "runtimeArgs": [

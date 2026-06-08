@@ -15,11 +15,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
 
-from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Depends
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Depends, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+
+try:                                   # works as `backend.main:app`
+    from . import auth as _auth
+except ImportError:                     # …and as `main:app` from inside backend/
+    import auth as _auth                # role-based authentication (backend/auth.py)
 
 # ---------------------------------------------------------------------------
 # Response cache  (TTL-based, keyed on function name + query-param values)
@@ -304,6 +309,40 @@ from fastapi.middleware.gzip import GZipMiddleware
 # because every cached-response hit is re-compressed on the 1-CPU host.
 app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 
+# ---------------------------------------------------------------------------
+# Auth enforcement middleware
+# ---------------------------------------------------------------------------
+# Env-gated (OSHINEI_AUTH): when unset the dashboard behaves exactly as before
+# (no login, every endpoint open) so local dev + the test-suite are unaffected.
+# When set, every /api/* request must carry a valid session cookie and the
+# user's role must grant the module the path maps to (see backend/auth.py).
+@app.middleware("http")
+async def enforce_auth(request: Request, call_next):
+    if not _auth.auth_enabled():
+        return await call_next(request)
+    path = request.url.path
+    # Fail CLOSED: auth is on but no real signing secret is configured → every
+    # cookie would be forgeable with the source-tree dev key. Refuse all API
+    # traffic (the SPA shell still loads so the operator sees the 503 in the UI).
+    if path.startswith("/api/") and not _auth.secret_configured():
+        return JSONResponse(
+            {"detail": "Auth misconfigured: set OSHINEI_AUTH_SECRET."}, status_code=503)
+    # Only gate the API. The SPA shell, static assets and login itself stay open
+    # so an unauthenticated browser can load the page and reach the login form.
+    if not path.startswith("/api/") or path.startswith("/api/auth/login") \
+            or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
+            or path.startswith("/api/analysis/health"):
+        return await call_next(request)
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if not payload:
+        return JSONResponse({"detail": "Authentication required."}, status_code=401)
+    mods = _auth.modules_for_role(payload.get("r", ""))
+    if not _auth.path_allowed(request.method, path, mods):
+        return JSONResponse(
+            {"detail": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (forbidden)."},
+            status_code=403)
+    return await call_next(request)
+
 # Serve vendor JS/CSS
 if STATIC.exists():
     app.mount("/vendor", StaticFiles(directory=str(STATIC)), name="vendor")
@@ -564,6 +603,146 @@ def root():
     if INDEX.exists():
         return FileResponse(str(INDEX))
     return {"message": "Oshinei API running. Dashboard file not found."}
+
+
+# ---------------------------------------------------------------------------
+# Authentication endpoints  (see backend/auth.py for the role/module model)
+# ---------------------------------------------------------------------------
+class _LoginBody(BaseModel):
+    username: str
+    password: str
+
+class _UserCreate(BaseModel):
+    username: str
+    password: str
+    role: str
+
+class _UserUpdate(BaseModel):
+    role: Optional[str] = None
+    password: Optional[str] = None
+    active: Optional[bool] = None
+
+
+def _set_session_cookie(response: Response, request: Request, token: str):
+    response.set_cookie(
+        _auth.SESSION_COOKIE, token,
+        max_age=_auth.SESSION_TTL, httponly=True, samesite="lax",
+        secure=(request.url.scheme == "https"), path="/",
+    )
+
+def _require_admin(request: Request):
+    """Resolve the caller's session and assert the system.admin module. When auth
+    is disabled (local dev) this is a no-op so the user-admin UI works offline."""
+    if not _auth.auth_enabled():
+        return None
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if not payload:
+        raise HTTPException(status_code=401, detail="Authentication required.")
+    if "system.admin" not in _auth.modules_for_role(payload.get("r", "")):
+        raise HTTPException(status_code=403, detail="ต้องเป็น Management เท่านั้น.")
+    return payload
+
+
+@app.post("/api/auth/login", include_in_schema=False)
+def auth_login(body: _LoginBody, request: Request, response: Response):
+    with get_db() as con:
+        row = _auth.authenticate(con, body.username, body.password)
+    if not row:
+        raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
+    token = _auth.make_token(row["id"], row["username"], row["role"])
+    _set_session_cookie(response, request, token)
+    return {"username": row["username"], "role": row["role"],
+            "modules": sorted(_auth.modules_for_role(row["role"]))}
+
+
+@app.post("/api/auth/logout", include_in_schema=False)
+def auth_logout(response: Response):
+    response.delete_cookie(_auth.SESSION_COOKIE, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me", include_in_schema=False)
+def auth_me(request: Request):
+    """Frontend bootstrap. When auth is disabled, report enabled=False with the
+    full module set so nothing is hidden (current behaviour preserved)."""
+    if not _auth.auth_enabled():
+        return {"enabled": False, "username": None, "role": "management",
+                "modules": sorted(_auth.MODULES)}
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if not payload:
+        return {"enabled": True, "authenticated": False, "modules": []}
+    return {"enabled": True, "authenticated": True,
+            "username": payload.get("u"), "role": payload.get("r"),
+            "modules": sorted(_auth.modules_for_role(payload.get("r", "")))}
+
+
+# ── user administration (Management only — gated by middleware + _require_admin)
+@app.get("/api/auth/users", include_in_schema=False)
+def auth_users_list(request: Request):
+    _require_admin(request)
+    with get_db() as con:
+        return _auth.list_users(con)
+
+
+@app.post("/api/auth/users", include_in_schema=False)
+def auth_users_create(body: _UserCreate, request: Request):
+    _require_admin(request)
+    try:
+        with get_db() as con:
+            if _auth.get_user(con, body.username):
+                raise HTTPException(status_code=409, detail="มีชื่อผู้ใช้นี้แล้ว.")
+            _auth.create_user(con, body.username, body.password, body.role)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
+@app.put("/api/auth/users/{username}", include_in_schema=False)
+def auth_users_update(username: str, body: _UserUpdate, request: Request):
+    payload = _require_admin(request)
+    try:
+        with get_db() as con:
+            target = _auth.get_user(con, username)
+            if not target:
+                raise HTTPException(status_code=404, detail="ไม่พบผู้ใช้.")
+            # Would this change strip an active admin of their admin access?
+            new_role   = body.role if body.role is not None else target["role"]
+            new_active = bool(target["active"]) if body.active is None else bool(body.active)
+            was_admin  = _auth.is_admin_role(target["role"]) and bool(target["active"])
+            will_admin = _auth.is_admin_role(new_role) and new_active
+            if was_admin and not will_admin:
+                # (a) never let an admin demote/disable THEMSELVES (one-click lockout)
+                if payload and payload.get("u") == username:
+                    raise HTTPException(status_code=400,
+                        detail="เปลี่ยนบทบาท/ปิดบัญชีผู้ดูแลของตัวเองไม่ได้.")
+                # (b) never remove the LAST active admin
+                if _auth.count_active_admins(con) <= 1:
+                    raise HTTPException(status_code=400,
+                        detail="ต้องมีผู้ดูแล (Management) ที่ใช้งานได้อย่างน้อย 1 บัญชี.")
+            _auth.update_user(con, username, role=body.role,
+                              password=body.password, active=body.active)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"ok": True}
+
+
+@app.delete("/api/auth/users/{username}", include_in_schema=False)
+def auth_users_delete(username: str, request: Request):
+    payload = _require_admin(request)
+    # Don't let an admin delete their own account out from under themselves.
+    if payload and payload.get("u") == username:
+        raise HTTPException(status_code=400, detail="ลบบัญชีตัวเองไม่ได้.")
+    with get_db() as con:
+        target = _auth.get_user(con, username)
+        if not target:
+            raise HTTPException(status_code=404, detail="ไม่พบผู้ใช้.")
+        # Never delete the last active admin (would lock out user management).
+        if _auth.is_admin_role(target["role"]) and bool(target["active"]) \
+                and _auth.count_active_admins(con) <= 1:
+            raise HTTPException(status_code=400,
+                detail="ต้องมีผู้ดูแล (Management) ที่ใช้งานได้อย่างน้อย 1 บัญชี.")
+        _auth.delete_user(con, username)
+    return {"ok": True}
 
 
 # ---------------------------------------------------------------------------
@@ -13966,6 +14145,13 @@ def _bom_startup():
     _bom_ensure_and_seed()
     _sku_cost_monthly_ensure()
     _perf_startup()
+    # Auth tables + seed the 12 default users (idempotent; no-op once seeded).
+    try:
+        with get_db() as con:
+            _auth.init_auth(con)
+            _auth.seed_users(con)
+    except Exception as e:
+        print(f"[auth] init/seed failed: {e}")
     # Background hot-swap: pick up a freshly-synced .incoming without a restart.
     # Disable with OSHINEI_NO_AUTOSWAP=1 (e.g. tests). On Fly the daily refresh
     # restarts the machine anyway, but the poller is harmless there too.

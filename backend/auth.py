@@ -1,0 +1,431 @@
+"""
+Role-based authentication for the Oshinei dashboard.
+
+Self-contained, no third-party deps (stdlib hashlib/hmac only). Wired into
+backend/main.py: tables are created + seeded at startup, a handful of /api/auth/*
+endpoints handle login/logout/me + user admin, and an HTTP middleware enforces
+per-role module access on /api/* requests.
+
+Enforcement is env-gated, mirroring the existing OSHINEI_SEED_TOKEN philosophy:
+  • OSHINEI_AUTH unset  → auth DISABLED. Login is optional, every /api/ is open.
+                          Keeps local dev + the existing test-suite untouched.
+  • OSHINEI_AUTH=1       → auth ENFORCED. /api/ needs a valid session cookie and
+                          the user's role must grant the module a path maps to.
+
+Sessions are stateless: a signed (HMAC-SHA256) cookie carries {uid, user, role,
+exp}; nothing is stored server-side, so Fly restarts don't log everyone out as
+long as OSHINEI_AUTH_SECRET is stable.
+"""
+
+from __future__ import annotations
+
+import os
+import hmac
+import json
+import time
+import base64
+import hashlib
+import sqlite3
+from typing import Optional, Dict, List, Set
+
+# ---------------------------------------------------------------------------
+# Roles & modules  — the permission model
+# ---------------------------------------------------------------------------
+# A *module* is the smallest unit of access. Each role grants a set of modules.
+# The frontend hides nav items whose module the user lacks; the middleware below
+# returns 403 if a role hits an API path that maps to a module it doesn't hold.
+
+ROLES: List[str] = [
+    "management", "marketing", "operation", "analyst", "accounting", "innovation",
+]
+
+MODULES: List[str] = [
+    "sales.overview",      # หน้าแรก, ภาพรวม&KPI, ต้องดูวันนี้, รายวัน, แนวโน้ม, A/B, insight
+    "customer.buffet",     # บุฟเฟ่ต์, บุฟเฟ่ต์เด็ก, ลูกค้า&ยอด/หัว, ช่วงเวลา
+    "menu.analysis",       # วิเคราะห์เมนู, menu engineering, เทียบเมนู
+    "cost.analysis",       # ต้นทุน, ต้นทุน/หัว, นักกินหนัก, ความครอบคลุม, BoM (view), GP
+    "cost.simulator",      # simulators
+    "bom.edit",            # แก้ไข BoM / SKU / cost (write)
+    "profit.pnl",          # GP รายสาขา, P&L, กำไร SKU, benchmark
+    "ops.report",          # รายงานปฏิบัติการ
+    "ops.discounts",       # ส่วนลด, coupon
+    "ops.cash",            # เงินขาด/เกิน
+    "ops.staff",           # พนักงาน/แคชเชียร์
+    "ops.posextra",        # custtype, modifiers, price-zone, cancel-bills, close-time
+    "report.export",       # ส่งออกรายงาน Excel/PDF
+    "system.settings",     # ตั้งค่า (targets, branch, sku active, closed hours)
+    "system.admin",        # จัดการผู้ใช้
+    "data.upload",         # อัปโหลด/seed ข้อมูล
+]
+
+# Recommended starting matrix (owner can edit user roles from Settings; the
+# module-per-role mapping itself lives here in code).
+ROLE_MODULES: Dict[str, Set[str]] = {
+    "management": set(MODULES),                       # ดูได้ทั้งหมด
+    "marketing": {
+        "sales.overview", "customer.buffet", "menu.analysis", "report.export",
+    },
+    "operation": {
+        "sales.overview", "ops.report", "ops.discounts", "ops.cash",
+        "ops.staff", "ops.posextra", "report.export",
+    },
+    "analyst": {
+        "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
+        "cost.simulator", "profit.pnl", "ops.discounts", "ops.posextra",
+        "report.export",
+    },
+    "accounting": {
+        "sales.overview", "profit.pnl", "cost.analysis", "ops.cash",
+        "ops.discounts", "report.export",
+    },
+    "innovation": {
+        "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
+        "bom.edit", "system.settings",
+    },
+}
+
+
+def modules_for_role(role: str) -> Set[str]:
+    return set(ROLE_MODULES.get((role or "").lower(), set()))
+
+
+# ---------------------------------------------------------------------------
+# API path → module map  (server-side enforcement)
+# ---------------------------------------------------------------------------
+# PUBLIC: scaffolding every tab's filters need. Documentary only — these prefixes
+# simply match no MODULE_RULES entry and so fall through to default-allow in
+# path_allowed(). Listed here to make the "open to any authenticated user" intent
+# explicit. NOTE: a sensitive sub-path under one of these (e.g.
+# /api/branches/fixed-costs) IS tagged in MODULE_RULES and, being a longer prefix,
+# overrides the public parent.
+PUBLIC_PREFIXES = (
+    "/api/auth/",          # login/me/logout reachable pre-authorization (middleware-exempt)
+    "/api/branches",
+    "/api/months",
+    "/api/meta",
+    "/api/data-coverage",
+    "/api/market",
+    "/api/search",
+    "/api/analysis/health",
+)
+
+# Rules: (methods, path_prefix, {modules}). `methods` is "*", "GET", or "W"
+# (write = POST/PUT/DELETE/PATCH). A request is allowed when the user's modules
+# intersect the union of EVERY matching rule; paths matching no rule fall through
+# to default-allow (every role holds sales.overview, so generic /api/sales and
+# /api/analysis reads need no rule). Only the sensitive prefixes are tagged.
+MODULE_RULES = [
+    # ── reads that must be denied to some roles ────────────────────────────
+    ("GET", "/api/cost",                     {"cost.analysis"}),
+    ("GET", "/api/sales/margin",             {"cost.analysis"}),
+    ("GET", "/api/sales/cost-per-head",      {"cost.analysis"}),
+    ("GET", "/api/sales/heavy-eaters",       {"cost.analysis"}),   # per-cover COGS/margin
+    ("GET", "/api/analysis/gross_profit",    {"cost.analysis"}),
+    ("GET", "/api/analysis/food_cost_trend", {"cost.analysis"}),
+    ("GET", "/api/bom-cost",                 {"cost.simulator", "bom.edit", "cost.analysis"}),
+    ("GET", "/api/menu/engineering",         {"cost.analysis"}),   # star/dog by margin = cost
+    ("GET", "/api/finance/prime-cost",       {"cost.analysis", "profit.pnl"}),
+    ("GET", "/api/branches/fixed-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
+    ("GET", "/api/branches/labor-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
+    ("GET", "/api/export/monthly-pack",      {"cost.analysis", "profit.pnl"}),  # bundles P&L + cost drivers
+    # Buffet: the broad prefix is customer/sales-facing (covers tier-mix, child,
+    # revpash, performance, forecast…). Longest-prefix wins, so the cost-bearing
+    # sub-paths below DROP customer.buffet and require a cost/profit module —
+    # otherwise Marketing's customer.buffet would unlock buffet GP/COGS/P&L.
+    ("GET", "/api/buffet",                   {"customer.buffet", "cost.analysis",
+                                              "cost.simulator", "profit.pnl"}),
+    ("GET", "/api/buffet/gp",                {"cost.analysis", "profit.pnl"}),  # +gp-calendar, gp/export
+    ("GET", "/api/buffet/pnl",               {"profit.pnl", "cost.analysis"}),
+    ("GET", "/api/buffet/cover-economics",   {"cost.analysis", "profit.pnl"}),
+    ("GET", "/api/buffet/plate-cost-dist",   {"cost.analysis"}),
+    ("GET", "/api/buffet/cost-sensitivity",  {"cost.analysis", "cost.simulator"}),
+    ("GET", "/api/buffet/menu-cost-efficiency", {"cost.analysis"}),
+    ("GET", "/api/buffet/heavy-eater-tail",  {"cost.analysis"}),
+    ("GET", "/api/buffet/breakeven",         {"cost.analysis", "profit.pnl"}),
+    ("GET", "/api/buffet/upgrade-simulator", {"cost.simulator", "cost.analysis"}),
+    ("GET", "/api/profit",                   {"profit.pnl"}),
+    ("GET", "/api/pnl",                      {"profit.pnl"}),
+    ("GET", "/api/gp",                       {"profit.pnl"}),
+    ("GET", "/api/reports/pnl-bill",         {"profit.pnl"}),
+    ("GET", "/api/reports/ops",              {"ops.report"}),
+    ("GET", "/api/analysis/discount",        {"ops.discounts"}),
+    ("GET", "/api/analysis/coupon",          {"ops.discounts"}),
+    ("GET", "/api/extra/cash",               {"ops.cash"}),
+    ("GET", "/api/analysis/cashier",         {"ops.staff"}),
+    ("GET", "/api/extra/customer-type",      {"ops.posextra", "customer.buffet"}),
+    ("GET", "/api/extra/modifiers",          {"ops.posextra"}),
+    ("GET", "/api/extra/price-zone",         {"ops.posextra", "customer.buffet"}),
+    ("GET", "/api/extra/cancel-bills",       {"ops.posextra"}),
+    ("GET", "/api/extra/closing-time",       {"ops.posextra", "customer.buffet"}),
+    ("GET", "/api/sales/skus",               {"menu.analysis", "cost.analysis"}),
+    ("GET", "/api/sales/top_ordered",        {"menu.analysis", "cost.analysis"}),
+    ("GET", "/api/sales/menu-compare",       {"menu.analysis"}),
+    ("GET", "/api/sales/menu-spike",         {"menu.analysis", "customer.buffet"}),
+    ("GET", "/api/analysis/affinity",        {"menu.analysis"}),
+    ("GET", "/api/analysis/persona",         {"menu.analysis", "customer.buffet"}),
+    # ── writes (also write-token gated in main.py — defense in depth) ───────
+    ("W",   "/api/cost",                     {"bom.edit"}),
+    ("W",   "/api/skus",                     {"bom.edit"}),
+    ("W",   "/api/bom",                      {"bom.edit"}),
+    ("W",   "/api/settings",                 {"system.settings"}),
+    ("W",   "/api/targets",                  {"system.settings"}),
+    ("W",   "/api/branches",                 {"system.settings"}),
+    ("W",   "/api/closed_hours",             {"system.settings"}),
+    ("W",   "/api/upload",                   {"data.upload"}),
+    ("W",   "/api/_admin/seed-db",           {"data.upload"}),
+    ("*",   "/api/auth/users",               {"system.admin"}),
+]
+
+
+def _method_matches(rule_methods: str, method: str) -> bool:
+    method = (method or "GET").upper()
+    if rule_methods == "*":
+        return True
+    if rule_methods == "GET":
+        return method == "GET"
+    if rule_methods == "W":
+        return method in ("POST", "PUT", "DELETE", "PATCH")
+    return rule_methods == method
+
+
+def path_allowed(method: str, path: str, user_modules: Set[str]) -> bool:
+    """True if a user holding `user_modules` may call `method path`.
+
+    LONGEST-PREFIX wins: among the rules matching this method+path, only the
+    most specific (longest prefix) decide access — so a narrow cost rule like
+    ``/api/buffet/gp`` overrides the broad ``/api/buffet`` rule and a sensitive
+    ``/api/branches/fixed-costs`` overrides the public ``/api/branches`` list.
+    A path matching NO rule defaults to allowed (every authenticated role holds
+    sales.overview, so generic /api/sales and /api/analysis reads need no rule).
+    PUBLIC_PREFIXES are documentary: they simply match no rule and fall through."""
+    matched = [(len(pfx), mods) for (meths, pfx, mods) in MODULE_RULES
+               if path.startswith(pfx) and _method_matches(meths, method)]
+    if not matched:
+        return True
+    longest = max(length for length, _ in matched)
+    allowed = set().union(*[mods for length, mods in matched if length == longest])
+    return bool(allowed & user_modules)
+
+
+# ---------------------------------------------------------------------------
+# Passwords  (pbkdf2-hmac-sha256, stdlib)
+# ---------------------------------------------------------------------------
+_PBKDF2_ROUNDS = 200_000
+
+
+def hash_password(password: str, salt: Optional[bytes] = None) -> Dict[str, str]:
+    if salt is None:
+        salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, _PBKDF2_ROUNDS)
+    return {"hash": dk.hex(), "salt": salt.hex()}
+
+
+def verify_password(password: str, pw_hash: str, pw_salt: str) -> bool:
+    try:
+        salt = bytes.fromhex(pw_salt)
+    except (ValueError, TypeError):
+        return False
+    calc = hashlib.pbkdf2_hmac("sha256", (password or "").encode("utf-8"),
+                               salt, _PBKDF2_ROUNDS)
+    return hmac.compare_digest(calc.hex(), pw_hash or "")
+
+
+# ---------------------------------------------------------------------------
+# Stateless signed-cookie sessions
+# ---------------------------------------------------------------------------
+SESSION_COOKIE = "oshinei_session"
+SESSION_TTL = 12 * 3600   # 12 hours
+
+
+class AuthMisconfigured(RuntimeError):
+    """Raised when auth is ENABLED but no real signing secret is configured —
+    refusing to sign/verify with the public dev fallback (which would make every
+    session forgeable). Callers translate this to HTTP 503."""
+
+
+# Domain-separation tag: the session-signing key is derived through this prefix so
+# it can NEVER equal the raw write-token, even when OSHINEI_AUTH_SECRET is unset
+# and we fall back to OSHINEI_SEED_TOKEN. Without it, any write-token holder could
+# mint a forged admin cookie offline.
+_SESSION_KEY_DOMAIN = b"oshinei-session-key-v1|"
+
+
+def secret_configured() -> bool:
+    """True if a real (non-dev) signing secret is present in the environment."""
+    return bool(os.environ.get("OSHINEI_AUTH_SECRET")
+                or os.environ.get("OSHINEI_SEED_TOKEN"))
+
+
+def _secret() -> bytes:
+    raw = os.environ.get("OSHINEI_AUTH_SECRET") or os.environ.get("OSHINEI_SEED_TOKEN")
+    if not raw:
+        # Fail CLOSED when enforcing: never sign real sessions with a constant
+        # baked into the source tree. Locally (auth off) a fixed dev key is fine.
+        if auth_enabled():
+            raise AuthMisconfigured(
+                "OSHINEI_AUTH=1 but no OSHINEI_AUTH_SECRET/OSHINEI_SEED_TOKEN set")
+        raw = "oshinei-dev-secret-change-me"
+    # Domain-separate + fix the key length so a short token still yields a strong key.
+    return hashlib.sha256(_SESSION_KEY_DOMAIN + raw.encode("utf-8")).digest()
+
+
+def _b64(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _unb64(s: str) -> bytes:
+    pad = "=" * (-len(s) % 4)
+    return base64.urlsafe_b64decode(s + pad)
+
+
+def make_token(uid: int, username: str, role: str, ttl: int = SESSION_TTL) -> str:
+    payload = {"uid": uid, "u": username, "r": role, "exp": int(time.time()) + ttl}
+    body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
+    sig = _b64(hmac.new(_secret(), body.encode("ascii"), hashlib.sha256).digest())
+    return f"{body}.{sig}"
+
+
+def parse_token(token: str) -> Optional[Dict]:
+    """Return the payload dict if the token is well-formed, correctly signed and
+    unexpired; otherwise None."""
+    if not token or "." not in token:
+        return None
+    body, _, sig = token.partition(".")
+    expected = _b64(hmac.new(_secret(), body.encode("ascii"), hashlib.sha256).digest())
+    if not hmac.compare_digest(sig, expected):
+        return None
+    try:
+        payload = json.loads(_unb64(body))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    if int(payload.get("exp", 0)) < int(time.time()):
+        return None
+    return payload
+
+
+def auth_enabled() -> bool:
+    return os.environ.get("OSHINEI_AUTH", "").strip() not in ("", "0", "false", "False")
+
+
+# ---------------------------------------------------------------------------
+# User store
+# ---------------------------------------------------------------------------
+# Two seeded users per role. Default password is shared and documented — it MUST
+# be changed from Settings → ผู้ใช้งาน after first login.
+DEFAULT_PASSWORD = "Oshinei@2026"
+
+SEED_USERS = [f"{role}{n}" for role in ROLES for n in (1, 2)]
+
+
+def init_auth(con: sqlite3.Connection) -> None:
+    con.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS app_user (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            username   TEXT UNIQUE NOT NULL,
+            pw_hash    TEXT NOT NULL,
+            pw_salt    TEXT NOT NULL,
+            role       TEXT NOT NULL,
+            active     INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        """
+    )
+    con.commit()
+
+
+def admin_roles() -> Set[str]:
+    """Roles that grant the system.admin module (i.e. can manage users)."""
+    return {r for r in ROLES if "system.admin" in ROLE_MODULES.get(r, set())}
+
+
+def is_admin_role(role: str) -> bool:
+    return "system.admin" in modules_for_role(role)
+
+
+def count_active_admins(con: sqlite3.Connection) -> int:
+    """How many ACTIVE users currently hold an admin role — used to refuse the
+    last-admin lockout."""
+    roles = admin_roles()
+    if not roles:
+        return 0
+    placeholders = ",".join("?" * len(roles))
+    return con.execute(
+        f"SELECT COUNT(*) FROM app_user WHERE active=1 AND role IN ({placeholders})",
+        tuple(roles),
+    ).fetchone()[0]
+
+
+def seed_users(con: sqlite3.Connection) -> None:
+    """Create the 12 default users iff the table is empty (idempotent)."""
+    n = con.execute("SELECT COUNT(*) FROM app_user").fetchone()[0]
+    if n:
+        return
+    for username in SEED_USERS:
+        role = username.rstrip("12")
+        h = hash_password(DEFAULT_PASSWORD)
+        con.execute(
+            "INSERT INTO app_user(username, pw_hash, pw_salt, role) VALUES (?,?,?,?)",
+            (username, h["hash"], h["salt"], role),
+        )
+    con.commit()
+    print(f"[auth] seeded {len(SEED_USERS)} users (default password '{DEFAULT_PASSWORD}' — change it)")
+
+
+# ── user-record helpers (used by the API endpoints in main.py) ──────────────
+def get_user(con: sqlite3.Connection, username: str) -> Optional[sqlite3.Row]:
+    return con.execute(
+        "SELECT * FROM app_user WHERE username = ?", (username,)
+    ).fetchone()
+
+
+def list_users(con: sqlite3.Connection) -> List[Dict]:
+    rows = con.execute(
+        "SELECT id, username, role, active, created_at FROM app_user ORDER BY role, username"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_user(con: sqlite3.Connection, username: str, password: str, role: str) -> None:
+    if role not in ROLES:
+        raise ValueError("invalid role")
+    h = hash_password(password)
+    con.execute(
+        "INSERT INTO app_user(username, pw_hash, pw_salt, role) VALUES (?,?,?,?)",
+        (username.strip(), h["hash"], h["salt"], role),
+    )
+    con.commit()
+
+
+def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] = None,
+                password: Optional[str] = None, active: Optional[bool] = None) -> None:
+    sets, vals = [], []
+    if role is not None:
+        if role not in ROLES:
+            raise ValueError("invalid role")
+        sets.append("role = ?"); vals.append(role)
+    if password:
+        h = hash_password(password)
+        sets += ["pw_hash = ?", "pw_salt = ?"]; vals += [h["hash"], h["salt"]]
+    if active is not None:
+        sets.append("active = ?"); vals.append(1 if active else 0)
+    if not sets:
+        return
+    vals.append(username)
+    con.execute(f"UPDATE app_user SET {', '.join(sets)} WHERE username = ?", vals)
+    con.commit()
+
+
+def delete_user(con: sqlite3.Connection, username: str) -> None:
+    con.execute("DELETE FROM app_user WHERE username = ?", (username,))
+    con.commit()
+
+
+def authenticate(con: sqlite3.Connection, username: str, password: str) -> Optional[sqlite3.Row]:
+    """Return the user row on success, else None. Inactive users can't log in."""
+    row = get_user(con, (username or "").strip())
+    if not row or not row["active"]:
+        return None
+    if not verify_password(password or "", row["pw_hash"], row["pw_salt"]):
+        return None
+    return row
