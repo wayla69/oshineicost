@@ -19,7 +19,7 @@ import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timedelta as _td
 from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
@@ -29,6 +29,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .matcher import (
+    _eff_fee_vat,
     category_reconciliation,
     daily_board,
     daily_reconciliation,
@@ -1150,36 +1151,91 @@ def daily_board_dates():
             return {"min_day": None, "max_day": None}
 
 
-@app.get("/api/coupon-series")
-def coupon_series(period_month: str, branch_id: int | None = None):
-    """COUPON detail broken down by coupon series for a month (monthly view only —
-    pos_coupon_month has no day grain). Floored to RECON_START_MONTH; master only."""
+def _coupon_range(gran: str, period_month: str, day: str | None):
+    """Resolve (date_from, date_to, label) for a coupon view. gran = day|week|month.
+    Day strings compare lexicographically, so '-31' is a safe month upper bound."""
+    if gran == "day":
+        if not (day and _DAY_RE.match(day)):
+            raise HTTPException(400, "gran=day needs a valid 'day' (YYYY-MM-DD)")
+        return day, day, day
+    if gran == "week":
+        if not (day and _DAY_RE.match(day)):
+            raise HTTPException(400, "gran=week needs a valid 'day' (YYYY-MM-DD)")
+        d = _dt.strptime(day, "%Y-%m-%d").date()
+        mon = d - _td(days=d.weekday())
+        sun = mon + _td(days=6)
+        return mon.isoformat(), sun.isoformat(), f"{mon.isoformat()} – {sun.isoformat()}"
     _validate_period(period_month)
-    if period_month < RECON_START_MONTH:
-        return {"period_month": period_month, "series": [], "total": 0.0}
+    return period_month + "-01", period_month + "-31", period_month
+
+
+@app.get("/api/coupon-series")
+def coupon_series(period_month: str = "", gran: str = "month",
+                  day: str | None = None, branch_id: int | None = None,
+                  series_id: int | None = None):
+    """COUPON detail by coupon series, at day / week / month grain (from
+    pos_coupon_day). Floored to RECON_START_MONTH; master only. Pass series_id to
+    drill one series (by_branch = that series per branch)."""
+    if gran not in ("day", "week", "month"):
+        raise HTTPException(400, "gran must be day, week or month")
+    if gran == "month" and not period_month:
+        raise HTTPException(400, "period_month required for gran=month")
+    d_from, d_to, label = _coupon_range(gran, period_month, day)
+    empty = {"gran": gran, "label": label, "range": [d_from, d_to],
+             "series": [], "by_branch": [], "total": 0.0, "total_used": 0}
+    if d_to < RECON_START_DAY:
+        return empty
+    if d_from < RECON_START_DAY:
+        d_from = RECON_START_DAY
     with get_db() as conn:
-        params = [period_month]
-        where = "WHERE cm.period_month=? AND COALESCE(b.branch_type,'master')='master' AND b.active=1"
+        params = [d_from, d_to]
+        where = ("WHERE cd.day BETWEEN ? AND ? "
+                 "AND COALESCE(b.branch_type,'master')='master' AND b.active=1")
         if branch_id:
-            where += " AND cm.branch_id=?"; params.append(branch_id)
+            where += " AND cd.branch_id=?"; params.append(branch_id)
+        if series_id is not None:
+            where += " AND cd.coupon_series_id=?"; params.append(series_id)
         try:
             rows = [dict(r) for r in conn.execute(f"""
-                SELECT cm.coupon_series_id AS series_id,
-                       SUM(cm.used_count)      AS used_count,
-                       SUM(cm.discount_amount) AS discount_amount
-                FROM pos_coupon_month cm JOIN branches b ON b.branch_id = cm.branch_id
+                SELECT cd.coupon_series_id AS series_id,
+                       SUM(cd.used_count)      AS used_count,
+                       SUM(cd.discount_amount) AS discount_amount
+                FROM pos_coupon_day cd JOIN branches b ON b.branch_id = cd.branch_id
                 {where}
-                GROUP BY cm.coupon_series_id
+                GROUP BY cd.coupon_series_id
                 ORDER BY discount_amount DESC
             """, params)]
         except sqlite3.OperationalError:
-            return {"period_month": period_month, "series": [], "total": 0.0,
-                    "hint": "pos_coupon_month not found — run sync_mssql.py"}
+            return {**empty, "hint": "pos_coupon_day not found — run sync_mssql.py"}
         total = round(sum(r["discount_amount"] or 0 for r in rows), 2)
+        total_used = int(sum(r["used_count"] or 0 for r in rows))
+        name_map = {}
+        try:
+            for nr in conn.execute("SELECT coupon_series_id, name, code FROM coupon_series"):
+                name_map[nr["coupon_series_id"]] = (nr["name"] or "", nr["code"] or "")
+        except sqlite3.OperationalError:
+            pass
         for r in rows:
             r["discount_amount"] = round(r["discount_amount"] or 0, 2)
-        return {"period_month": period_month, "branch_id": branch_id,
-                "series": rows, "total": total}
+            nm = name_map.get(r["series_id"], ("", ""))
+            r["series_name"], r["series_code"] = nm[0], nm[1]
+        by_branch = []
+        if not branch_id:
+            by_branch = [dict(r) for r in conn.execute(f"""
+                SELECT b.branch_id, b.name AS branch_name,
+                       SUM(cd.used_count)      AS used_count,
+                       SUM(cd.discount_amount) AS discount_amount
+                FROM pos_coupon_day cd JOIN branches b ON b.branch_id = cd.branch_id
+                {where}
+                GROUP BY b.branch_id
+                ORDER BY discount_amount DESC
+            """, params)]
+            for r in by_branch:
+                r["discount_amount"] = round(r["discount_amount"] or 0, 2)
+        return {"gran": gran, "label": label, "range": [d_from, d_to],
+                "period_month": period_month, "branch_id": branch_id,
+                "series": rows, "by_branch": by_branch,
+                "total": total, "total_used": total_used}
 
 
 @app.get("/api/daily-board")
@@ -1188,6 +1244,208 @@ def daily_board_endpoint(day: str):
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
     with get_db() as conn:
         return daily_board(conn, day)
+
+
+# ── Daily reconciliation report (print-to-PDF evidence) ───────────────────────
+_STATUS_TH = {"matched": "ตรงกับเอกสาร", "variance": "มีส่วนต่าง", "pos_only": "รอเอกสาร",
+              "ext_only": "เกินจากเอกสาร", "no_source": "ไม่มีแหล่งอ้างอิง", "manual": "กระทบมือ"}
+
+def _m(v):
+    return f"{(v or 0):,.2f}"
+
+def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
+    board = daily_board(conn, day)
+    cmeta = board.get("column_meta", {})
+    rows = board["branches"]
+    if branch_id:
+        rows = [r for r in rows if r["branch_id"] == branch_id]
+    keep = {r["branch_id"] for r in rows}
+    bf = " AND branch_id=?" if branch_id else ""
+    p = [day, branch_id] if branch_id else [day]
+
+    def grouped(sql, params):
+        out = {}
+        for r in conn.execute(sql, params):
+            out.setdefault(r["branch_id"], []).append(r)
+        return out
+    cc   = grouped(f"SELECT * FROM recon_cc_lines WHERE settlement_date=?{bf}", p)
+    grab = grouped(f"SELECT * FROM recon_grab_lines WHERE order_date=? AND order_status='Completed'{bf}", p)
+    lnmn = grouped(f"SELECT * FROM recon_lineman_lines WHERE order_date=? AND order_status='Completed'{bf}", p)
+    bank = grouped(f"SELECT * FROM recon_bank_lines WHERE txn_date=? AND credit>0{bf}", p)
+    # manual matches for the month, keep those that touch this day
+    mm = {}
+    mp = [day[:7], branch_id] if branch_id else [day[:7]]
+    for r in conn.execute(f"SELECT * FROM recon_manual_match WHERE period_month=?{bf}", mp):
+        try:
+            days = json.loads(r["pos_days"] or "[]")
+        except Exception:
+            days = []
+        amt = sum(float(x.get("amount") or 0) for x in days if x.get("day") == day)
+        if amt:
+            mm.setdefault(r["branch_id"], []).append((r, amt))
+
+    css = """<style>
+      @page{size:A4;margin:14mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:19px;margin:0 0 2px} h2{font-size:15px;margin:22px 0 8px;border-left:4px solid #ea580c;padding-left:8px}
+      h3{font-size:13px;margin:14px 0 6px;color:#475569}
+      .muted{color:#64748b;font-size:11px} .right{text-align:right} .mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
+      table{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:11.5px}
+      th,td{padding:5px 7px;border-bottom:1px solid #eef2f7;text-align:left}
+      th{color:#64748b;font-size:10px;text-transform:uppercase;border-bottom:1.5px solid #e2e8f0}
+      tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
+      .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+      .kpi{flex:1;min-width:120px;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px}
+      .kpi .l{font-size:10px;color:#64748b} .kpi .v{font-size:17px;font-weight:700}
+      .pos{color:#059669} .neg{color:#dc2626} .badge{padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600}
+      .b-ok{background:#dcfce7;color:#166534}.b-warn{background:#fef9c3;color:#854d0e}.b-err{background:#fee2e2;color:#b91c1c}.b-mut{background:#f1f5f9;color:#475569}
+      .toolbar{max-width:900px;margin:0 auto 14px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .note{background:#fff7ed;border-left:3px solid #f59e0b;padding:6px 10px;border-radius:4px;margin:4px 0}
+      .sign{display:flex;gap:40px;margin-top:34px} .sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0;page-break-after:always}}
+    </style>"""
+
+    def status_badge(s):
+        cls = {"matched": "b-ok", "manual": "b-ok", "variance": "b-err", "ext_only": "b-warn",
+               "pos_only": "b-warn", "no_source": "b-mut"}.get(s, "b-mut")
+        return f'<span class="badge {cls}">{_STATUS_TH.get(s, s)}</span>'
+
+    scope = "ทุกสาขา" if not branch_id else (rows[0]["branch_name"] if rows else "—")
+    parts = [f"<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+             css, "</head><body>",
+             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>"]
+
+    if not rows:
+        parts.append(f"<div class='sheet'><h1>รายงานกระทบยอดรายวัน</h1><p class='muted'>{day} · {scope}</p>"
+                     "<p>ไม่มีข้อมูลการขายสำหรับวันนี้</p></div>")
+        parts.append("</body></html>")
+        return "".join(parts)
+
+    for b in rows:
+        bid = b["branch_id"]
+        parts.append("<div class='sheet'>")
+        parts.append(f"<h1>รายงานกระทบยอดรายวัน — หลักฐานการกระทบยอด</h1>"
+                     f"<p class='muted'>สาขา <b>{b['branch_name']}</b> · วันที่ <b>{day}</b> · "
+                     f"ออกรายงานเมื่อ {_dt.now().strftime('%Y-%m-%d %H:%M')}</p>")
+        var = b["variance"]; vc = "pos" if abs(var) < 1 else "neg"
+        parts.append("<div class='kpis'>"
+                     f"<div class='kpi'><div class='l'>ยอด POS (ที่กระทบได้)</div><div class='v mono'>{_m(b['pos_total'])}</div></div>"
+                     f"<div class='kpi'><div class='l'>ยอดจากเอกสาร</div><div class='v mono'>{_m(b['ext_total'])}</div></div>"
+                     f"<div class='kpi'><div class='l'>ส่วนต่าง</div><div class='v mono {vc}'>{_m(var)}</div></div>"
+                     f"<div class='kpi'><div class='l'>รายการมีปัญหา</div><div class='v'>{b['issues']}</div></div>"
+                     "</div>")
+
+        # 1) Category reconciliation (POS vs documents)
+        parts.append("<h2>① กระทบยอดตามช่องทาง (POS เทียบเอกสาร)</h2>"
+                     "<table><thead><tr><th>ช่องทาง</th><th class='right'>POS</th><th class='right'>เอกสาร</th>"
+                     "<th class='right'>กระทบมือ</th><th class='right'>ส่วนต่าง</th><th>สถานะ</th></tr></thead><tbody>")
+        for ck, cell in b["cells"].items():
+            lbl = (cmeta.get(ck) or {}).get("label", ck)
+            v = cell["variance"]
+            parts.append(f"<tr><td>{lbl}</td><td class='right mono'>{_m(cell['pos'])}</td>"
+                         f"<td class='right mono'>{_m(cell['ext'])}</td><td class='right mono'>{_m(cell.get('manual'))}</td>"
+                         f"<td class='right mono {'pos' if abs(v)<1 else 'neg'}'>{_m(v)}</td><td>{status_badge(cell['status'])}</td></tr>")
+        parts.append(f"<tr><td colspan='6' class='muted' style='border:0'></td></tr></tbody><tfoot><tr><td>รวม</td>"
+                     f"<td class='right mono'>{_m(b['pos_total'])}</td><td class='right mono'>{_m(b['ext_total'])}</td>"
+                     f"<td></td><td class='right mono {vc}'>{_m(var)}</td><td></td></tr></tfoot></table>")
+
+        # 2) Fees & VAT — line level
+        cc_l, gr_l, ln_l = cc.get(bid, []), grab.get(bid, []), lnmn.get(bid, [])
+        tot = {"gross": 0.0, "fee": 0.0, "vat": 0.0, "promo": 0.0, "refund": 0.0, "net": 0.0}
+        feerows = []
+        for r in cc_l:
+            fee, _ = _eff_fee_vat(r, "mdr_fee", None); vat = r["vat_manual"] or 0.0
+            gross = float(r["gross_amount"] or 0); refund = float(r["refund_amount"] or 0)
+            net = gross - refund - fee - vat
+            tot["gross"] += gross; tot["fee"] += fee; tot["vat"] += vat; tot["refund"] += refund; tot["net"] += net
+            feerows.append(("CREDIT " + (r["acquirer"] or ""), gross, refund, fee, vat, 0.0, net,
+                            "MDR" + (" (แก้มือ)" if r["fee_manual"] is not None else "")))
+        for r in gr_l:
+            fee, _ = _eff_fee_vat(r, "commission_amt", None); vat = r["vat_manual"] or 0.0
+            gross = float(r["food_amount"] or 0); promo = float(r["promo_deduct"] or 0)
+            net = gross - fee - vat - promo
+            tot["gross"] += gross; tot["fee"] += fee; tot["vat"] += vat; tot["promo"] += promo; tot["net"] += net
+            feerows.append(("GRAB", gross, 0.0, fee, vat, promo, net, "ค่าคอมมิชชั่น"))
+        for r in ln_l:
+            fee, vat = _eff_fee_vat(r, "commission_amt", "vat_on_commission")
+            gross = float(r["food_amount"] or 0); promo = float(r["promo_deduct"] or 0)
+            net = gross - fee - vat - promo
+            tot["gross"] += gross; tot["fee"] += fee; tot["vat"] += vat; tot["promo"] += promo; tot["net"] += net
+            feerows.append(("LINEMAN", gross, 0.0, fee, vat, promo, net, "ค่าคอมมิชชั่น + VAT"))
+        if feerows:
+            parts.append("<h2>② ค่าธรรมเนียม &amp; VAT (รายบรรทัดจากเอกสาร)</h2>"
+                         "<table><thead><tr><th>ช่องทาง</th><th class='right'>ยอดเต็ม</th><th class='right'>คืนเงิน</th>"
+                         "<th class='right'>ค่าธรรมเนียม</th><th class='right'>VAT</th><th class='right'>โปรโมชัน</th>"
+                         "<th class='right'>สุทธิ</th><th>หมายเหตุ</th></tr></thead><tbody>")
+            for nm, g, rf, fe, va, pr, nt, note in feerows:
+                parts.append(f"<tr><td>{nm}</td><td class='right mono'>{_m(g)}</td><td class='right mono'>{_m(rf)}</td>"
+                             f"<td class='right mono neg'>{_m(fe)}</td><td class='right mono neg'>{_m(va)}</td>"
+                             f"<td class='right mono neg'>{_m(pr)}</td><td class='right mono'>{_m(nt)}</td><td class='muted'>{note}</td></tr>")
+            parts.append(f"</tbody><tfoot><tr><td>รวม</td><td class='right mono'>{_m(tot['gross'])}</td>"
+                         f"<td class='right mono'>{_m(tot['refund'])}</td><td class='right mono neg'>{_m(tot['fee'])}</td>"
+                         f"<td class='right mono neg'>{_m(tot['vat'])}</td><td class='right mono neg'>{_m(tot['promo'])}</td>"
+                         f"<td class='right mono'>{_m(tot['net'])}</td><td></td></tr></tfoot></table>"
+                         f"<p class='muted'>สุทธิ = ยอดเต็ม − คืนเงิน − ค่าธรรมเนียม − VAT − โปรโมชัน · "
+                         f"ค่าธรรมเนียมรวม {_m(tot['fee'])} · VAT รวม {_m(tot['vat'])}</p>")
+
+        # 3) Manual matches — wrong-category reclassification with reason
+        ms = mm.get(bid, [])
+        if ms:
+            parts.append("<h2>③ การกระทบมือ (สาขาบันทึกผิดประเภท / จับคู่เอง)</h2>")
+            parts.append("<table><thead><tr><th>ช่องทาง</th><th>ธนาคาร</th><th class='right'>ยอดที่กระทบ (วันนี้)</th>"
+                         "<th>เหตุผล / หมายเหตุ</th><th>โดย</th></tr></thead><tbody>")
+            for r, amt in ms:
+                parts.append(f"<tr><td>{r['category']}</td><td>{r['bank'] or '—'}</td>"
+                             f"<td class='right mono'>{_m(amt)}</td><td>{(r['note'] or '—')}</td>"
+                             f"<td class='muted'>{(r['matched_by'] or '—')}<br>{(r['matched_at'] or '')[:16]}</td></tr>")
+            parts.append("</tbody></table>")
+
+        # 4) Document evidence — the actual lines used
+        parts.append("<h2>④ เอกสารที่ใช้อ้างอิง (หลักฐาน)</h2>")
+        bk = bank.get(bid, [])
+        if bk:
+            parts.append("<h3>รายการเดินบัญชีธนาคาร</h3><table><thead><tr><th>ช่องทาง</th><th>บัญชี</th>"
+                         "<th class='right'>เงินเข้า</th></tr></thead><tbody>")
+            for r in bk:
+                parts.append(f"<tr><td>{r['channel']}</td><td class='mono'>{r['account_no'] or '—'}</td>"
+                             f"<td class='right mono'>{_m(r['credit'])}</td></tr>")
+            parts.append("</tbody></table>")
+        if cc_l:
+            parts.append("<h3>สรุปยอดบัตรเครดิต (settlement)</h3><table><thead><tr><th>ผู้รับบัตร</th>"
+                         "<th>MID/Terminal</th><th class='right'>ยอดเต็ม</th><th class='right'>สุทธิ</th></tr></thead><tbody>")
+            for r in cc_l:
+                parts.append(f"<tr><td>{r['acquirer'] or '—'}</td><td class='mono'>{(r['merchant_id'] or '—')}/{(r['terminal_id'] or '—')}</td>"
+                             f"<td class='right mono'>{_m(r['gross_amount'])}</td><td class='right mono'>{_m(r['net_amount'])}</td></tr>")
+            parts.append("</tbody></table>")
+        if gr_l or ln_l:
+            parts.append("<h3>รายงาน Grab / Line Man (ออเดอร์สำเร็จ)</h3><table><thead><tr><th>ผู้ให้บริการ</th>"
+                         "<th class='right'>จำนวนออเดอร์</th><th class='right'>ยอดอาหาร</th></tr></thead><tbody>")
+            if gr_l: parts.append(f"<tr><td>Grab</td><td class='right'>{len(gr_l)}</td><td class='right mono'>{_m(sum(float(r['food_amount'] or 0) for r in gr_l))}</td></tr>")
+            if ln_l: parts.append(f"<tr><td>Line Man</td><td class='right'>{len(ln_l)}</td><td class='right mono'>{_m(sum(float(r['food_amount'] or 0) for r in ln_l))}</td></tr>")
+            parts.append("</tbody></table>")
+        if not (bk or cc_l or gr_l or ln_l):
+            parts.append("<p class='note'>ยังไม่มีเอกสารอัปโหลดสำหรับวันนี้ — ยอดที่แสดงเป็นฝั่ง POS เท่านั้น</p>")
+
+        parts.append("<div class='sign'><div>ผู้จัดทำ (กระทบยอด)</div><div>ผู้ตรวจสอบ</div><div>ผู้อนุมัติ</div></div>")
+        parts.append("</div>")  # sheet
+
+    parts.append("</body></html>")
+    return "".join(parts)
+
+
+@app.get("/api/daily-report")
+def daily_report(day: str, branch_id: int | None = None):
+    """Print-to-PDF daily reconciliation evidence: POS vs documents, manual
+    matches (wrong-category reclass + reason), all fees, and VAT — per the
+    selected day. Omit branch_id for an all-branches pack (one page each)."""
+    if not _DAY_RE.match(day or ""):
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    with get_db() as conn:
+        html = _daily_report_html(conn, day, branch_id)
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 # ── Transaction-level drill-down (mapped / unmapped codes + statement lines) ───
