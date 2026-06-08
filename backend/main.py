@@ -15883,6 +15883,16 @@ def _ensure_scenario_cols(con):
         con.execute("ALTER TABLE cost_scenario_item ADD COLUMN new_qty REAL")
     if "disabled" not in cols:
         con.execute("ALTER TABLE cost_scenario_item ADD COLUMN disabled INTEGER DEFAULT 0")
+    # Phase B (ROI ledger): per-item effective unit cost snapshotted at adoption.
+    if "baseline_cost" not in cols:
+        con.execute("ALTER TABLE cost_scenario_item ADD COLUMN baseline_cost REAL")
+    hcols = {r["name"] for r in con.execute("PRAGMA table_info(cost_scenario)")}
+    if "adopted_at" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN adopted_at TEXT")
+    if "adopted_by" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN adopted_by TEXT")
+    if "baseline_month" not in hcols:
+        con.execute("ALTER TABLE cost_scenario ADD COLUMN baseline_month TEXT")
 
 
 class ScenarioCreate(BaseModel):
@@ -16068,6 +16078,133 @@ def simulate_scenario(body: SimulateBody):
         "overrides_applied": len([c for c in overrides if c in seen_codes]),
         "chain": chain_pack,
         "per_branch": branches_out,
+    }
+
+
+# ── Phase B — Savings Ledger (provable ROI) ──────────────────────────────────
+# Turn a what-if cost_scenario into a tracked outcome. On ADOPT we snapshot each
+# item's effective unit cost (baseline). Thereafter "realized" saving = how much
+# cheaper the SKU is NOW vs that baseline, × the qty sold since adoption — so it
+# only accrues once the cheaper recipe is actually implemented. "potential" =
+# baseline → scenario target (the goal). progress = realized / potential.
+
+class AdoptBody(BaseModel):
+    adopted_by: Optional[str] = None
+
+
+@app.post("/api/bom-cost/scenarios/{scen_id}/adopt", dependencies=[Depends(require_write_token)])
+def adopt_scenario(scen_id: int, body: Optional[AdoptBody] = None):
+    """Mark a scenario adopted: snapshot per-item baseline effective cost + stamp
+    adopted_at and the baseline (latest data) month."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        head = con.execute("SELECT id FROM cost_scenario WHERE id=?", (scen_id,)).fetchone()
+        if head is None:
+            raise HTTPException(404, "scenario not found")
+        _build_sku_effective_cost(con, force=False)   # ensure current costs exist
+        bm = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        now = datetime.now().isoformat(timespec="seconds")
+        items = con.execute("SELECT sku_id FROM cost_scenario_item WHERE scenario_id=?", (scen_id,)).fetchall()
+        for it in items:
+            base = con.execute("SELECT recipe_cost FROM sku_effective_cost WHERE sku_id=?",
+                               (it["sku_id"],)).fetchone()
+            con.execute("UPDATE cost_scenario_item SET baseline_cost=? WHERE scenario_id=? AND sku_id=?",
+                        (base["recipe_cost"] if base else None, scen_id, it["sku_id"]))
+        con.execute("UPDATE cost_scenario SET adopted_at=?, adopted_by=?, baseline_month=? WHERE id=?",
+                    (now, (body.adopted_by if body else None), bm, scen_id))
+        con.commit()
+    invalidate_cache("list_scenarios", "get_scenario")
+    return {"id": scen_id, "adopted_at": now, "baseline_month": bm, "items": len(items)}
+
+
+@app.post("/api/bom-cost/scenarios/{scen_id}/unadopt", dependencies=[Depends(require_write_token)])
+def unadopt_scenario(scen_id: int):
+    """Revert adoption (clears the ledger baseline)."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        if con.execute("SELECT id FROM cost_scenario WHERE id=?", (scen_id,)).fetchone() is None:
+            raise HTTPException(404, "scenario not found")
+        con.execute("UPDATE cost_scenario SET adopted_at=NULL, adopted_by=NULL, baseline_month=NULL WHERE id=?", (scen_id,))
+        con.execute("UPDATE cost_scenario_item SET baseline_cost=NULL WHERE scenario_id=?", (scen_id,))
+        con.commit()
+    invalidate_cache("list_scenarios", "get_scenario")
+    return {"id": scen_id, "adopted": False}
+
+
+@app.get("/api/bom-cost/scenarios/{scen_id}/savings")
+def scenario_savings(scen_id: int):
+    """Realized-vs-potential cost savings for an adopted scenario, with a
+    cumulative monthly series. Honest: realized stays 0 until the cheaper cost is
+    actually in the data (current effective cost < adoption baseline)."""
+    with get_db() as con:
+        _ensure_scenario_cols(con)
+        head = con.execute("SELECT * FROM cost_scenario WHERE id=?", (scen_id,)).fetchone()
+        if head is None:
+            raise HTTPException(404, "scenario not found")
+        head = dict(head)
+        if not head.get("adopted_at"):
+            return {"scenario": {"id": scen_id, "name": head["name"]}, "adopted": False}
+        _build_sku_effective_cost(con, force=False)
+        bm = head.get("baseline_month")
+        rows = con.execute("""
+            SELECT csi.sku_id, sk.sku_code, COALESCE(sk.description,'') AS description,
+                   csi.unit_cost AS target_cost, csi.baseline_cost,
+                   (SELECT recipe_cost FROM sku_effective_cost se WHERE se.sku_id=csi.sku_id) AS current_cost
+              FROM cost_scenario_item csi JOIN skus sk ON sk.sku_id=csi.sku_id
+             WHERE csi.scenario_id=? AND COALESCE(csi.disabled,0)=0
+        """, (scen_id,)).fetchall()
+        items = [dict(r) for r in rows]
+        sku_ids = [it["sku_id"] for it in items]
+        qty_by, months = {}, set()
+        if sku_ids and bm:
+            ph = ",".join("?" * len(sku_ids))
+            for r in con.execute(
+                f"""SELECT sku_id, period_month, SUM(qty) q FROM sales_sku_monthly
+                     WHERE sku_id IN ({ph}) AND period_month >= ?
+                     GROUP BY sku_id, period_month""", (*sku_ids, bm)).fetchall():
+                qty_by[(r["sku_id"], r["period_month"])] = r["q"] or 0
+                months.add(r["period_month"])
+    months = sorted(months)
+    per_item, monthly = [], {m: 0.0 for m in months}
+    realized_total = potential_total = 0.0
+    for it in items:
+        base = it["baseline_cost"]
+        if base is None:
+            continue
+        cur = it["current_cost"] if it["current_cost"] is not None else base
+        tgt = it["target_cost"] if it["target_cost"] is not None else cur
+        unit_real = base - cur          # achieved so far (now vs adoption baseline)
+        unit_pot  = base - tgt          # full goal (baseline vs scenario target)
+        qty_total = sum(qty_by.get((it["sku_id"], m), 0) for m in months)
+        r_save, p_save = unit_real * qty_total, unit_pot * qty_total
+        realized_total += r_save
+        potential_total += p_save
+        for m in months:
+            monthly[m] += unit_real * qty_by.get((it["sku_id"], m), 0)
+        per_item.append({
+            "sku_code": it["sku_code"], "description": it["description"],
+            "baseline_cost": round(base, 4), "current_cost": round(cur, 4),
+            "target_cost": round(tgt, 4), "qty_since_adopt": round(qty_total, 0),
+            "realized_saving": round(r_save, 2), "potential_saving": round(p_save, 2),
+            "unit_progress_pct": round(unit_real / unit_pot * 100, 1) if unit_pot > 0 else None,
+        })
+    cum, series = 0.0, []
+    for m in months:
+        cum += monthly[m]
+        series.append({"month": m, "realized": round(monthly[m], 2), "cumulative": round(cum, 2)})
+    per_item.sort(key=lambda r: -r["realized_saving"])
+    return {
+        "scenario": {"id": scen_id, "name": head["name"], "adopted_at": head.get("adopted_at"),
+                     "adopted_by": head.get("adopted_by"), "baseline_month": bm},
+        "adopted": True,
+        "totals": {
+            "realized_saving": round(realized_total, 2),
+            "potential_saving": round(potential_total, 2),
+            "progress_pct": round(realized_total / potential_total * 100, 1) if potential_total > 0 else None,
+            "months_tracked": len(months),
+        },
+        "items": per_item,
+        "series": series,
     }
 
 

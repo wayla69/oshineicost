@@ -132,6 +132,45 @@ def test_menu_compare_drill_branches_and_chronological_trend(client):
     assert months == sorted(months), "trend not in chronological order"
 
 
+def test_scenario_savings_ledger(client):
+    """Phase B ROI: adopt a scenario → realized stays 0 until the cheaper cost is
+    actually in the data, then accrues = (baseline−current) × qty since adoption."""
+    import main
+    body = {"name": "_pytest_roi", "overrides": [
+        {"sku_code": "A0001", "unit_cost": 6.0, "qty": None, "disabled": False},
+    ]}
+    sid = client.post("/api/bom-cost/scenarios", json=body).json()["id"]
+    try:
+        assert client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()["adopted"] is False
+        ad = client.post(f"/api/bom-cost/scenarios/{sid}/adopt", json={"adopted_by": "pytest"}).json()
+        assert ad["baseline_month"] == "2026-06"          # latest fixture month
+        s1 = client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()
+        assert s1["adopted"] is True
+        a = {i["sku_code"]: i for i in s1["items"]}["A0001"]
+        assert abs(a["baseline_cost"] - 10.0) < 1e-6       # effective cost at adoption
+        assert a["qty_since_adopt"] == 80                  # June: 40/branch × 2 branches
+        # not implemented yet → realized 0; potential = (10−6)·80 = 320
+        assert s1["totals"]["realized_saving"] == 0
+        assert abs(s1["totals"]["potential_saving"] - 320.0) < 0.01
+        # simulate implementing the cheaper recipe: effective cost 10 → 7
+        with main.get_db() as con:
+            con.execute("UPDATE sku_effective_cost SET recipe_cost=7 "
+                        "WHERE sku_id=(SELECT sku_id FROM skus WHERE sku_code='A0001')")
+            con.commit()
+        s2 = client.get(f"/api/bom-cost/scenarios/{sid}/savings").json()
+        assert abs(s2["totals"]["realized_saving"] - 240.0) < 0.01   # (10−7)·80
+        assert abs(s2["totals"]["progress_pct"] - 75.0) < 0.1        # 240/320
+        assert abs(s2["series"][-1]["cumulative"] - 240.0) < 0.01
+    finally:
+        # restore the session-scoped fixture cost so later tests see A0001 = 10
+        with main.get_db() as con:
+            con.execute("UPDATE sku_effective_cost SET recipe_cost=10 "
+                        "WHERE sku_id=(SELECT sku_id FROM skus WHERE sku_code='A0001')")
+            con.commit()
+        client.post(f"/api/bom-cost/scenarios/{sid}/unadopt")
+        client.delete(f"/api/bom-cost/scenarios/{sid}")
+
+
 def test_heavy_eaters_margin_identity_and_monotone_percentiles(client):
     d = client.get("/api/sales/heavy-eaters").json()
     assert d["n_bills"] > 0 and d["total_covers"] > 0

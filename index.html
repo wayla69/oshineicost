@@ -23581,6 +23581,8 @@ async function bcLoadSimulator() {
       </label>
       <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">💾 Save current</button>
       <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">🗑 Delete</button>
+      <button onclick="bcAdoptScenario()" class="px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg font-medium" title="บันทึกว่าใช้จริง แล้วติดตามเงินที่ประหยัดได้สะสม">📌 Adopt & Track ROI</button>
+      <button onclick="bcShowRoi()" class="px-3 py-1.5 text-xs bg-violet-100 text-violet-700 rounded-lg font-medium" title="ดูผลประหยัดสะสมของ scenario ที่ adopt">💰 ROI</button>
       <button onclick="bcResetOverrides()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg">↺ Reset</button>
       <span class="border-l border-slate-200 h-5 mx-1"></span>
       <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">⬇ Export template</button>
@@ -23588,6 +23590,7 @@ async function bcLoadSimulator() {
       <input type="file" id="bcTplFile" accept=".csv,text/csv" style="display:none" onchange="bcImportTemplate(this)">
       <span class="text-xs text-slate-400 ml-auto" id="bcSimMeta">SKUs ในตาราง: ${data.skus.length}</span>
     </div>
+    <div id="bcRoiPanel" class="card p-4 mb-4 hidden" style="border-left:4px solid #7c3aed"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card p-4">
         <h3 class="font-semibold mb-3">Editor — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
@@ -23850,6 +23853,83 @@ async function bcDeleteScenario() {
   if (!confirm('ลบ scenario นี้?')) return;
   await fetch(`${API}/api/bom-cost/scenarios/${id}`, {method:'DELETE'});
   bcLoadSimulator();
+}
+
+// ── Phase B: adopt a scenario + show its realized-savings (ROI) ledger ─────────
+async function bcAdoptScenario() {
+  const id = document.getElementById('bcScenSel')?.value;
+  if (!id) { alert('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด 💾 Save current)'); return; }
+  if (!confirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
+  const r = await fetch(`${API}/api/bom-cost/scenarios/${id}/adopt`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
+  });
+  if (!r.ok) { alert('Adopt ไม่สำเร็จ'); return; }
+  bcShowRoi();
+}
+async function bcUnadopt(id) {
+  if (!confirm('ยกเลิกการ adopt? (ล้าง baseline และผลประหยัดสะสม)')) return;
+  await fetch(`${API}/api/bom-cost/scenarios/${id}/unadopt`, { method: 'POST' });
+  bcShowRoi();
+}
+async function bcShowRoi() {
+  const id = document.getElementById('bcScenSel')?.value;
+  const panel = document.getElementById('bcRoiPanel'); if (!panel) return;
+  if (!id) { alert('เลือก scenario ก่อน'); return; }
+  panel.classList.remove('hidden');
+  panel.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
+  let d; try { d = await fetch(`${API}/api/bom-cost/scenarios/${id}/savings`).then(r => r.json()); }
+  catch (e) { panel.innerHTML = '<p class="text-sm text-red-500 py-4 text-center">โหลดไม่สำเร็จ</p>'; return; }
+  bcRenderRoi(d, id);
+}
+function bcRenderRoi(d, id) {
+  const panel = document.getElementById('bcRoiPanel'); if (!panel) return;
+  const close = `<button onclick="document.getElementById('bcRoiPanel').classList.add('hidden')" class="topbar-icon-btn" aria-label="ปิด">✕</button>`;
+  if (!d.adopted) {
+    panel.innerHTML = `<div class="flex items-center justify-between"><h3 class="text-sm font-bold" style="color:#7c3aed">💰 ผลประหยัดจริง (ROI)</h3>${close}</div>
+      <p class="text-sm text-slate-500 mt-2">scenario นี้ยังไม่ได้ adopt — กด <b>📌 Adopt &amp; Track ROI</b> เพื่อเริ่มจับ baseline แล้วติดตามเงินที่ประหยัดได้จริง</p>`;
+    return;
+  }
+  const t = d.totals || {}, sc = d.scenario || {};
+  const prog = t.progress_pct == null ? 0 : Math.max(0, Math.min(100, t.progress_pct));
+  const rows = (d.items || []).map(i => {
+    const pp = i.unit_progress_pct;
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-2 font-mono text-[10px] text-slate-400">${esc(i.sku_code)}</td>
+      <td class="py-1.5 pr-2 max-w-xs truncate" title="${esc(i.description||'')}">${esc((i.description||'').replace(/^\((?:A|B|T)\)\s*/,''))}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(i.baseline_cost)}→${fmt(i.current_cost)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-400">${fmt(i.target_cost)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(i.qty_since_adopt)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${i.realized_saving>0?'#059669':'var(--text-muted)'}">${fmt(i.realized_saving)}</td>
+      <td class="py-1.5 text-right tabular-nums text-slate-400">${pp==null?'—':pp.toFixed(0)+'%'}</td></tr>`;
+  }).join('');
+  panel.innerHTML = `
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-bold" style="color:#7c3aed">💰 ผลประหยัดจริง (ROI) — ${esc(sc.name||'')}</h3>
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] text-slate-400">adopt ${esc((sc.adopted_at||'').slice(0,10))} · baseline ${esc(sc.baseline_month||'')} · ${t.months_tracked||0} เดือน</span>
+        <button onclick="bcUnadopt('${id}')" class="text-[11px] border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">ยกเลิก adopt</button>
+        ${close}
+      </div>
+    </div>
+    <div class="flex flex-wrap items-end gap-6 mt-3 mb-2">
+      <div><div class="text-[11px] text-slate-400">ประหยัดได้จริงสะสม</div>
+        <div class="text-2xl font-bold" style="color:#059669">${fmt(t.realized_saving)}</div></div>
+      <div><div class="text-[11px] text-slate-400">เป้าหมายเต็ม (ถ้าทำได้ครบ)</div>
+        <div class="text-lg font-semibold text-slate-500">${fmt(t.potential_saving)}</div></div>
+      <div class="flex-1 min-w-[160px]">
+        <div class="text-[11px] text-slate-400 mb-1">ความคืบหน้า ${t.progress_pct==null?'—':t.progress_pct.toFixed(0)+'%'}</div>
+        <div style="height:10px;background:var(--bg-subtle);border-radius:6px;overflow:hidden">
+          <div style="height:100%;width:${prog}%;background:linear-gradient(90deg,#7c3aed,#059669)"></div></div>
+      </div>
+    </div>
+    <p class="text-[11px] text-slate-400 mb-3">ประหยัด "จริง" = (ต้นทุน/หน่วยตอน adopt − ต้นทุน/หน่วยปัจจุบัน) × จำนวนที่ขายตั้งแต่ adopt — จะขึ้นเมื่อต้นทุนจริงลดลงตามที่วางแผน</p>
+    <div class="overflow-auto" style="max-height:300px">
+      <table class="text-xs w-full"><thead><tr style="color:var(--text-muted)" class="border-b">
+        <th class="py-1 pr-2 text-left">SKU</th><th class="py-1 pr-2 text-left">เมนู</th>
+        <th class="py-1 pr-2 text-right">baseline→ปัจจุบัน</th><th class="py-1 pr-2 text-right">เป้า</th>
+        <th class="py-1 pr-2 text-right">ขาย(หลัง adopt)</th><th class="py-1 pr-2 text-right">ประหยัดจริง</th><th class="py-1 text-right">คืบหน้า</th>
+      </tr></thead><tbody>${rows || '<tr><td colspan="7" class="py-3 text-center text-slate-400">ไม่มีรายการ</td></tr>'}</tbody></table>
+    </div>`;
 }
 </script>
 </body>
