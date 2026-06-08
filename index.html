@@ -2092,6 +2092,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <div id="tab-benchmark" style="display:none">
   <div id="benchmark-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
+  <!-- Food-cost benchmark: each branch vs chain peer median + target band -->
+  <div class="card p-5 mb-5" id="benchFoodCostCard">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🌐 Benchmark ต้นทุนอาหารรายสาขา</h2>
+      <span id="benchFcSummary" class="text-[11px] text-slate-500"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">% ต้นทุนอาหารแต่ละสาขา เทียบ <b>ค่ากลางเครือ (peer)</b> และ <b>ช่วงเป้า</b> · เขียว = ดีกว่าเพื่อน (quartile บน), แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p>
+    <div id="benchFoodCostBody"></div>
+  </div>
+
   <!-- Score formula explainer -->
   <div class="card p-4 mb-5" style="background:linear-gradient(135deg,#eef2ff 0%,#f0f9ff 100%);border-left:4px solid #4f46e5">
     <div class="flex items-start gap-3">
@@ -19882,6 +19892,42 @@ async function saveFixedCosts() {
   _lastPnlKey = null; _primeKey = null;   // force P&L + Prime-cost reload
 }
 
+// Food-cost benchmark: rank branches vs the chain peer median + the target band.
+async function renderBenchFoodCost(params) {
+  const body = document.getElementById('benchFoodCostBody'); if (!body) return;
+  body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
+  let d; try { d = await fetch(`${API}/api/gp/by-branch-month?${params}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<p class="text-sm text-red-400 py-4 text-center">โหลดไม่สำเร็จ</p>'; return; }
+  const rows = (d.rows || []).filter(b => b.total_food_cost_pct != null && (b.total_revenue || 0) > 0);
+  if (!rows.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีข้อมูลในช่วงนี้</p>'; return; }
+  const lo = d.target_lo ?? 55, hi = d.target_hi ?? 70;
+  const fcs = rows.map(b => b.total_food_cost_pct).sort((a, b) => a - b);
+  const pctile = q => { const i = (fcs.length - 1) * q, a = Math.floor(i), b = Math.ceil(i); return fcs[a] + (fcs[b] - fcs[a]) * (i - a); };
+  const median = pctile(0.5), q1 = pctile(0.25), q3 = pctile(0.75);
+  const sorted = [...rows].sort((a, b) => a.total_food_cost_pct - b.total_food_cost_pct);  // best (low) first
+  const maxFc = Math.max(...fcs, hi) * 1.08;
+  const color = fc => fc <= q1 ? '#059669' : fc >= q3 ? '#dc2626' : '#f59e0b';
+  const sumEl = document.getElementById('benchFcSummary');
+  if (sumEl) sumEl.textContent = `ค่ากลางเครือ ${median.toFixed(1)}% · เป้า ${lo}-${hi}% · ดีสุด ${sorted[0].branch} ${sorted[0].total_food_cost_pct.toFixed(1)}% · แย่สุด ${sorted[sorted.length-1].branch} ${sorted[sorted.length-1].total_food_cost_pct.toFixed(1)}%`;
+  const medPct = median / maxFc * 100, loPct = lo / maxFc * 100, hiPct = hi / maxFc * 100;
+  body.innerHTML = sorted.map(b => {
+    const fc = b.total_food_cost_pct, w = fc / maxFc * 100, c = color(fc), vs = fc - median;
+    return `<div class="flex items-center gap-2 mb-1.5 text-xs">
+      <div style="width:130px" class="truncate font-medium" title="${esc(b.branch)}">${esc(b.branch)}</div>
+      <div style="flex:1;position:relative;height:18px;background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+        <div style="position:absolute;left:${loPct}%;width:${Math.max(0,hiPct-loPct)}%;height:100%;background:rgba(16,185,129,0.12)"></div>
+        <div style="height:100%;width:${w}%;background:${c};opacity:.85"></div>
+        <div style="position:absolute;left:${medPct}%;top:0;bottom:0;border-left:2px dashed #475569"></div>
+      </div>
+      <div style="width:52px;color:${c}" class="text-right tabular-nums font-semibold">${fc.toFixed(1)}%</div>
+      <div style="width:60px" class="text-right tabular-nums ${vs<=0?'text-emerald-600':'text-rose-500'}" title="เทียบค่ากลางเครือ">${vs>0?'+':''}${vs.toFixed(1)}</div>
+    </div>`;
+  }).join('') + `<div class="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[10px] text-slate-400">
+      <span>🟩 quartile บน (ดีกว่าเพื่อน)</span><span>🟨 กลาง</span><span>🟥 quartile ล่าง (ต้องแก้ก่อน)</span>
+      <span>┊ ค่ากลางเครือ ${median.toFixed(1)}%</span><span>▮ แถบเขียวจาง = ช่วงเป้า ${lo}-${hi}%</span>
+      <span>คอลัมน์ขวา = เทียบค่ากลาง (− ดีกว่า)</span></div>`;
+}
+
 async function loadBenchmark() {
   const _fk = _filterKey(); if (_tabLastKey.benchmark === _fk) return; _tabLastKey.benchmark = _fk;
   const params = new URLSearchParams();
@@ -19907,6 +19953,8 @@ async function loadBenchmark() {
     { label: 'ยอดบิลเฉลี่ยเครือข่าย', value: fmt(avgTick), sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: '% ส่วนลดเครือข่าย', value: `${avgDisc.toFixed(1)}%`, sub: 'ของยอดบิล', color: '#f59e0b' },
   ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+
+  renderBenchFoodCost(params);
 
   // ── Branch KPI table: latest month vs previous month (MoM), sortable ──
   const curMonth = getMonthTo() || await fetch(`${API}/api/months`).then(r => r.json())
