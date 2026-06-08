@@ -1169,6 +1169,35 @@ def _coupon_range(gran: str, period_month: str, day: str | None):
     return period_month + "-01", period_month + "-31", period_month
 
 
+def _coupon_prev(gran: str, period_month: str, day: str | None):
+    """Previous comparable period (prev day / prev week / prev month) for MoM."""
+    if gran == "day":
+        d = _dt.strptime(day, "%Y-%m-%d").date() - _td(days=1)
+        return d.isoformat(), d.isoformat(), d.isoformat()
+    if gran == "week":
+        d = _dt.strptime(day, "%Y-%m-%d").date()
+        mon = d - _td(days=d.weekday() + 7)
+        sun = mon + _td(days=6)
+        return mon.isoformat(), sun.isoformat(), f"{mon.isoformat()} – {sun.isoformat()}"
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    pm = f"{y-1:04d}-12" if m == 1 else f"{y:04d}-{m-1:02d}"
+    return pm + "-01", pm + "-31", pm
+
+
+def _coupon_series_map(conn, d_from, d_to, branch_id):
+    """series_id → discount total for a date range (+ optional branch)."""
+    w = ("WHERE cd.day BETWEEN ? AND ? AND COALESCE(b.branch_type,'master')='master' AND b.active=1")
+    p = [d_from, d_to]
+    if branch_id:
+        w += " AND cd.branch_id=?"; p.append(branch_id)
+    out = {}
+    for r in conn.execute(f"""SELECT cd.coupon_series_id sid, SUM(cd.discount_amount) amt
+                              FROM pos_coupon_day cd JOIN branches b ON b.branch_id=cd.branch_id
+                              {w} GROUP BY cd.coupon_series_id""", p):
+        out[r["sid"]] = r["amt"] or 0
+    return out
+
+
 @app.get("/api/coupon-series")
 def coupon_series(period_month: str = "", gran: str = "month",
                   day: str | None = None, branch_id: int | None = None,
@@ -1215,10 +1244,18 @@ def coupon_series(period_month: str = "", gran: str = "month",
                 name_map[nr["coupon_series_id"]] = (nr["name"] or "", nr["code"] or "")
         except sqlite3.OperationalError:
             pass
+        # Previous comparable period → MoM per series
+        pf, pt, plabel = _coupon_prev(gran, period_month, day)
+        if pf < RECON_START_DAY:
+            pf = RECON_START_DAY
+        prev_map = _coupon_series_map(conn, pf, pt, branch_id) if pt >= RECON_START_DAY else {}
         for r in rows:
             r["discount_amount"] = round(r["discount_amount"] or 0, 2)
             nm = name_map.get(r["series_id"], ("", ""))
             r["series_name"], r["series_code"] = nm[0], nm[1]
+            prev = prev_map.get(r["series_id"], 0)
+            r["prev_amount"] = round(prev, 2)
+            r["mom_pct"] = round((r["discount_amount"] - prev) / prev * 100, 1) if prev else None
         by_branch = []
         if not branch_id:
             by_branch = [dict(r) for r in conn.execute(f"""
@@ -1232,10 +1269,26 @@ def coupon_series(period_month: str = "", gran: str = "month",
             """, params)]
             for r in by_branch:
                 r["discount_amount"] = round(r["discount_amount"] or 0, 2)
+        # Drill: per-day breakdown for a single series
+        by_day = []
+        if series_id is not None:
+            by_day = [dict(r) for r in conn.execute(f"""
+                SELECT cd.day,
+                       SUM(cd.used_count)      AS used_count,
+                       SUM(cd.discount_amount) AS discount_amount
+                FROM pos_coupon_day cd JOIN branches b ON b.branch_id = cd.branch_id
+                {where}
+                GROUP BY cd.day
+                ORDER BY cd.day
+            """, params)]
+            for r in by_day:
+                r["discount_amount"] = round(r["discount_amount"] or 0, 2)
         return {"gran": gran, "label": label, "range": [d_from, d_to],
+                "prev_label": plabel, "prev_range": [pf, pt],
                 "period_month": period_month, "branch_id": branch_id,
-                "series": rows, "by_branch": by_branch,
-                "total": total, "total_used": total_used}
+                "series": rows, "by_branch": by_branch, "by_day": by_day,
+                "total": total, "total_used": total_used,
+                "prev_total": round(sum(prev_map.values()), 2)}
 
 
 @app.get("/api/daily-board")
