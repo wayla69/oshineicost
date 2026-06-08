@@ -336,7 +336,11 @@ async def enforce_auth(request: Request, call_next):
     # so an unauthenticated browser can load the page and reach the login form.
     if not path.startswith("/api/") or path.startswith("/api/auth/login") \
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
-            or path.startswith("/api/analysis/health"):
+            or path.startswith("/api/analysis/health") \
+            or path.startswith("/api/_admin/seed-db"):
+        # seed-db is a headless machine-to-machine endpoint with its OWN token auth
+        # (?token=, returns 404 on mismatch). It must bypass the login middleware,
+        # else enabling OSHINEI_AUTH silently breaks the hosted data-refresh push.
         return await call_next(request)
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
