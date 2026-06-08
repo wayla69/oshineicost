@@ -65,6 +65,15 @@ def test_forged_cookie_is_401(client, app_db, auth_on):
     assert c.get("/api/sales/monthly").status_code == 401
 
 
+def test_seed_db_bypasses_login_middleware(client, app_db, auth_on):
+    # /api/_admin/seed-db is a headless machine-to-machine endpoint with its OWN
+    # ?token= auth — it must NOT be caught by the login middleware, else enabling
+    # OSHINEI_AUTH silently breaks the hosted data-refresh push. With no cookie it
+    # must NOT 401 (it gets past the gate; missing file → 422, bad token → 404).
+    c = _fresh(app_db)
+    assert c.post("/api/_admin/seed-db?token=wrong").status_code != 401
+
+
 def test_logout_clears_session(client, app_db, auth_on):
     c = _fresh(app_db)
     _login(c, "management1")
