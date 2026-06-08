@@ -323,6 +323,7 @@
           <div class="font-semibold text-gray-700 mb-3" data-i18n="recon_by_cat">Reconciliation by category</div>
           <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
         </div>
+        <div id="rec-coupon" class="hidden card"></div>
         <div id="rec-payout-wrap" class="hidden">
           <div class="font-semibold text-gray-700 mb-1">
             <span data-i18n="payout_chain">Payout chain</span>
@@ -759,7 +760,7 @@ let FOCUS_DATE = null;
 // ── fetch with write-token + error surfacing ─────────────────────────────────
 async function api(path, opts={}) {
   opts.headers = opts.headers || {};
-  const tok = localStorage.getItem('oshinei_token');
+  const tok = (localStorage.getItem('oshinei_token') || '').trim();
   if (tok) opts.headers['X-Upload-Token'] = tok;
   if (opts.json !== undefined) { opts.headers['Content-Type']='application/json'; opts.body=JSON.stringify(opts.json); delete opts.json; }
   const r = await fetch(API+path, opts);
@@ -769,7 +770,7 @@ async function api(path, opts={}) {
   if (!r.ok) { throw new Error(data.detail || r.status); }
   return data;
 }
-function setToken(){ const t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); toast('Token saved','ok'); }
+function setToken(){ let t=prompt('Write token (leave blank to clear):', localStorage.getItem('oshinei_token')||''); if(t===null)return; t=t.trim(); t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token'); toast('Token saved','ok'); }
 
 // ── toasts ────────────────────────────────────────────────────────────────────
 const TOAST_CLS = {ok:'#16a34a', err:'#dc2626', warn:'#d97706', info:'#334155'};
@@ -1041,12 +1042,17 @@ const STATUS_BADGE = {matched:'b-ok', mismatch:'b-err', pos_only:'b-warn', ext_o
 // ── init ─────────────────────────────────────────────────────────────────────
 async function init(){
   const sel=document.getElementById('sel-period'); const now=new Date();
+  // Floor the month list to the reconciliation cutoff (backend RECON_START_MONTH).
+  // Historical months stay in the DB for the dashboard but aren't reconciled here.
+  const RECON_START='2026-05';
   for(let i=0;i<14;i++){
     const d=new Date(now.getFullYear(),now.getMonth()-i,1);
     const v=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    if(v<RECON_START) break;
     const o=document.createElement('option'); o.value=v; o.textContent=v; sel.appendChild(o);
   }
-  sel.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const cur=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  sel.value = (cur>=RECON_START) ? cur : RECON_START;
   sel.onchange = ()=>{ syncDateBounds(); loadOverview(); reloadActive(); };
   BRANCHES = await api('/api/branches').catch(()=>[]);
   ['sel-branch','up-branch','na-branch','nm-branch'].forEach(id=>{
@@ -1182,6 +1188,8 @@ function boardStep(delta){
 
 function renderBoard(d){
   const cats=d.categories||[];
+  const meta=d.column_meta||{};
+  const lbl=c=>(meta[c]&&meta[c].label)||c;
   // summary strip
   document.getElementById('bd-pos').textContent = fmt(d.totals.pos);
   document.getElementById('bd-ext').textContent = fmt(d.totals.ext);
@@ -1200,7 +1208,7 @@ function renderBoard(d){
   // header
   document.getElementById('bd-head').innerHTML =
     `<th class="text-left py-3 pl-4 pr-3 sticky left-0 bg-white" data-i18n="c_branch">Branch</th>`+
-    cats.map(c=>`<th class="text-right py-3 px-3">${c}</th>`).join('')+
+    cats.map(c=>`<th class="text-right py-3 px-3">${lbl(c)}</th>`).join('')+
     `<th class="text-right py-3 px-3" data-i18n="kpi_pos">POS</th>`+
     `<th class="text-right py-3 px-3" data-i18n="kpi_ext">Docs</th>`+
     `<th class="text-right py-3 px-3" data-i18n="kpi_var">Var</th>`+
@@ -1215,9 +1223,11 @@ function renderBoard(d){
     const cells=cats.map(c=>{
       const cell=b.cells[c];
       if(!cell) return '<td class="px-3 py-2 text-right text-gray-200">·</td>';
-      const tip=`${b.branch_name} · ${c}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\nclick to reconcile`;
+      const cm=meta[c]||{category:c,bank:null};
+      const drillScope=`{day:BOARD_DATE,category:'${cm.category}'${cm.bank?`,bank:'${cm.bank}'`:''}}`;
+      const tip=`${b.branch_name} · ${lbl(c)}\nPOS ${fmt(cell.pos)} / docs ${fmt(cell.ext)}\nvariance ${varTxt(cell.variance)} (${cell.status})\nclick to reconcile`;
       return `<td class="px-2 py-1.5 text-right">
-        <span onclick="openDrill(${b.branch_id},{day:BOARD_DATE,category:'${c}'},'board')" title="${tip}"
+        <span onclick="openDrill(${b.branch_id},${drillScope},'board')" title="${tip}"
           style="display:inline-block;min-width:64px;padding:3px 8px;border-radius:6px;cursor:pointer;font-family:monospace;font-weight:600;background:${BOARD_CELL[cell.status]||'#f1f5f9'};color:${BOARD_FG[cell.status]||'#475569'}">${fmt(cell.pos)}</span></td>`;
     }).join('');
     tr.innerHTML=`<td class="py-1.5 pl-4 pr-3 font-medium sticky left-0 bg-white cursor-pointer hover:text-orange-600" onclick="boardDrill(${b.branch_id})">${b.branch_name}${b.issues?` <span class="badge b-err">${b.issues}</span>`:''}</td>
@@ -1555,6 +1565,25 @@ async function renderReconcile(){
   });
   renderPayouts(s.payouts||[]);
   loadFeeVat();
+  renderCouponSeries();
+}
+
+// COUPON detail by series (monthly only — pos_coupon_month has no day grain)
+async function renderCouponSeries(){
+  const box=document.getElementById('rec-coupon'); if(!box||!SESSION) return;
+  let d=null;
+  try{ d=await api(`/api/coupon-series?period_month=${SESSION.period_month}&branch_id=${SESSION.branch_id}`); }catch(e){}
+  if(!d || !d.series || !d.series.length){ box.classList.add('hidden'); box.innerHTML=''; return; }
+  box.classList.remove('hidden');
+  box.innerHTML = `<div class="font-semibold text-gray-700 mb-3">🎟️ COUPON แยกตาม series · ${SESSION.period_month}
+      <span class="font-normal text-gray-400 text-sm">— รวม ${fmt(d.total)} (ส่วนลด/มูลค่าคูปอง · ไม่มีรายวัน)</span></div>
+    <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+      <th class="text-left py-2">Coupon series</th><th class="text-right py-2">จำนวนใช้</th><th class="text-right py-2">มูลค่า</th>
+    </tr></thead><tbody>${d.series.map(r=>`<tr class="border-b border-gray-50">
+      <td class="py-1.5">Series ${r.series_id}</td>
+      <td class="py-1.5 text-right font-mono">${fmt(r.used_count)}</td>
+      <td class="py-1.5 text-right font-mono">${fmt(r.discount_amount)}</td></tr>`).join('')}</tbody>
+    <tfoot><tr class="font-semibold"><td class="py-2">รวม</td><td></td><td class="py-2 text-right font-mono">${fmt(d.total)}</td></tr></tfoot></table>`;
 }
 
 const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};

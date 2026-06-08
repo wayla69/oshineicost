@@ -118,6 +118,12 @@ if _FRONTEND.exists():
 
 _MASTER_ONLY = "COALESCE(branch_type,'master')='master' AND active=1"
 
+# Reconciliation only considers data from this month onward — the app reconciles
+# the live business, not the full historical DB (which the dashboard shares).
+# Floor only; nothing is deleted. Override with env RECON_START_MONTH (YYYY-MM).
+RECON_START_MONTH = os.getenv("RECON_START_MONTH", "2026-05")
+RECON_START_DAY   = RECON_START_MONTH + "-01"
+
 
 # ── Write auth + upload validation ────────────────────────────────────────────
 # Mirrors the dashboard's gate: when OSHINEI_SEED_TOKEN is set (hosted deploys) a
@@ -129,11 +135,30 @@ _ALLOWED_EXT     = (".xlsx", ".xls")
 _PERIOD_RE       = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
+def _accepted_tokens() -> dict:
+    """Parse OSHINEI_SEED_TOKEN into {token: label}. Comma/newline list so several
+    people can each hold a token; entries may be 'label:token'. Single token still
+    works. Shared shape with the dashboard gate."""
+    raw = os.getenv("OSHINEI_SEED_TOKEN", "") or ""
+    out: dict = {}
+    for part in raw.replace("\n", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            label, tok = part.split(":", 1)
+            tok = tok.strip()
+            if tok:
+                out[tok] = label.strip()
+        else:
+            out[part] = ""
+    return out
+
 def require_write_token(token: str = Query(""), x_upload_token: str = Header(None)):
-    expected = os.getenv("OSHINEI_SEED_TOKEN")
-    if expected:
-        provided = x_upload_token or token or ""
-        if not hmac.compare_digest(provided, expected):
+    toks = _accepted_tokens()
+    if toks:
+        provided = (x_upload_token or token or "").strip()
+        if not any(hmac.compare_digest(provided, t) for t in toks):
             raise HTTPException(403, "A valid write token is required.")
 
 
@@ -221,8 +246,9 @@ def list_payment_map(needs_attention: int = 0):
                 SELECT p.payment_code, SUM(p.amount) amt, SUM(p.txn_count) n
                 FROM pos_payment_month p JOIN branches b ON b.branch_id = p.branch_id
                 WHERE COALESCE(b.branch_type,'master')='master' AND b.active=1
+                  AND p.period_month >= ?
                 GROUP BY p.payment_code
-            """):
+            """, (RECON_START_MONTH,)):
                 a = amounts.setdefault(normalize(r["payment_code"]), {"amount": 0.0, "txn": 0})
                 a["amount"] += float(r["amt"] or 0)
                 a["txn"]    += int(r["n"] or 0)
@@ -1110,13 +1136,50 @@ _DAY_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 
 @app.get("/api/daily-board/dates")
 def daily_board_dates():
-    """Min / max day with POS daily data — drives the date picker bounds + default."""
+    """Min / max day with POS daily data — drives the date picker bounds + default.
+
+    min_day is floored to RECON_START_DAY so the board never surfaces pre-cutoff
+    data (the historical rows stay in the DB for the dashboard)."""
     with get_db() as conn:
         try:
-            row = conn.execute("SELECT MIN(day) mn, MAX(day) mx FROM pos_payment_day").fetchone()
-            return {"min_day": row["mn"], "max_day": row["mx"]}
+            row = conn.execute(
+                "SELECT MIN(day) mn, MAX(day) mx FROM pos_payment_day WHERE day >= ?",
+                (RECON_START_DAY,)).fetchone()
+            return {"min_day": row["mn"] or RECON_START_DAY, "max_day": row["mx"]}
         except sqlite3.OperationalError:
             return {"min_day": None, "max_day": None}
+
+
+@app.get("/api/coupon-series")
+def coupon_series(period_month: str, branch_id: int | None = None):
+    """COUPON detail broken down by coupon series for a month (monthly view only —
+    pos_coupon_month has no day grain). Floored to RECON_START_MONTH; master only."""
+    _validate_period(period_month)
+    if period_month < RECON_START_MONTH:
+        return {"period_month": period_month, "series": [], "total": 0.0}
+    with get_db() as conn:
+        params = [period_month]
+        where = "WHERE cm.period_month=? AND COALESCE(b.branch_type,'master')='master' AND b.active=1"
+        if branch_id:
+            where += " AND cm.branch_id=?"; params.append(branch_id)
+        try:
+            rows = [dict(r) for r in conn.execute(f"""
+                SELECT cm.coupon_series_id AS series_id,
+                       SUM(cm.used_count)      AS used_count,
+                       SUM(cm.discount_amount) AS discount_amount
+                FROM pos_coupon_month cm JOIN branches b ON b.branch_id = cm.branch_id
+                {where}
+                GROUP BY cm.coupon_series_id
+                ORDER BY discount_amount DESC
+            """, params)]
+        except sqlite3.OperationalError:
+            return {"period_month": period_month, "series": [], "total": 0.0,
+                    "hint": "pos_coupon_month not found — run sync_mssql.py"}
+        total = round(sum(r["discount_amount"] or 0 for r in rows), 2)
+        for r in rows:
+            r["discount_amount"] = round(r["discount_amount"] or 0, 2)
+        return {"period_month": period_month, "branch_id": branch_id,
+                "series": rows, "total": total}
 
 
 @app.get("/api/daily-board")

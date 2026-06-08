@@ -323,16 +323,39 @@ if DOCS.exists():
 # the route decorator so endpoint signatures stay untouched.
 # NOTE: read-only POSTs (e.g. /api/bom-cost/simulate) are intentionally NOT
 # gated — they compute but never write, so anonymous use is harmless.
+def _accepted_tokens() -> dict:
+    """Parse OSHINEI_SEED_TOKEN into {token: label}. Supports a comma/newline list
+    so several people can each hold their own token; an entry may be 'label:token'
+    (label is for bookkeeping only). A single bare token still works unchanged."""
+    raw = _os_db.environ.get("OSHINEI_SEED_TOKEN", "") or ""
+    out: dict = {}
+    for part in raw.replace("\n", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            label, tok = part.split(":", 1)
+            tok = tok.strip()
+            if tok:
+                out[tok] = label.strip()
+        else:
+            out[part] = ""
+    return out
+
+def _token_accepted(provided: str) -> bool:
+    import hmac
+    provided = (provided or "").strip()
+    # Compare against every configured token (constant-time each) so timing can't
+    # reveal which one matched.
+    return any(hmac.compare_digest(provided, t) for t in _accepted_tokens())
+
 def require_write_token(
     token: str = Query(""),
     x_upload_token: str = Header(None),
 ):
-    import hmac
-    expected = _os_db.environ.get("OSHINEI_SEED_TOKEN")
-    if expected:
-        provided = x_upload_token or token or ""
-        if not hmac.compare_digest(provided, expected):
-            raise HTTPException(status_code=403, detail="A valid write token is required.")
+    toks = _accepted_tokens()
+    if toks and not _token_accepted(x_upload_token or token or ""):
+        raise HTTPException(status_code=403, detail="A valid write token is required.")
 
 
 # ---------------------------------------------------------------------------
@@ -560,8 +583,8 @@ def root():
 @app.post("/api/_admin/seed-db", include_in_schema=False)
 async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     import gzip, shutil, tempfile, os as _os2
-    expected = _os2.environ.get("OSHINEI_SEED_TOKEN")
-    if not expected or token != expected:
+    toks = _accepted_tokens()
+    if not toks or not _token_accepted(token):
         raise HTTPException(status_code=404, detail="not found")
     inc = str(DB_PATH) + ".incoming"
     # Stream upload → temp gz, then stream-decompress into the .incoming stage.
