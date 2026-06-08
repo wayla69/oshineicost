@@ -3875,6 +3875,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- Anomaly / Insight banner -->
   <div id="anomalyBanner" class="hidden"></div>
 
+  <!-- Executive summary: this-month forecast vs target + GP health (one glance) -->
+  <div id="execSummary" class="hidden mb-5"></div>
+
   <!-- Latest-month hero — leads with the latest month + MoM (not a cumulative sum) -->
   <div id="kpiHeroWrap" class="mb-5 hidden">
     <div class="flex items-baseline gap-2 mb-2">
@@ -7912,8 +7915,9 @@ async function loadOverall() {
     loadTopSkusChart(),
     kpiDone.then(() => loadMarginTable()),
     loadBranchHeatmap(),
+    renderExecSummary(),
   ]);
-  const names = ['loadAnomalyBanner','loadSummaryKpis','loadTrendChart','loadCatChart','loadBreakdownChart','loadTopSkusChart','loadMarginTable','loadBranchHeatmap'];
+  const names = ['loadAnomalyBanner','loadSummaryKpis','loadTrendChart','loadCatChart','loadBreakdownChart','loadTopSkusChart','loadMarginTable','loadBranchHeatmap','renderExecSummary'];
   results.forEach((r, i) => {
     if (r.status === 'rejected') console.error(names[i] + ' failed:', r.reason);
   });
@@ -7922,6 +7926,54 @@ async function loadOverall() {
 // Latest-month hero: leads with the latest month + MoM (monthly-framed, not a
 // cumulative sum). Called twice — first with just trendData (fast core), then
 // re-rendered with gpb + disc to add GP / discount tiles + best/worst branch.
+// Executive summary — one card tying THIS month's revenue forecast to the target
+// and GP health. Surfaces what's only otherwise buried on the trend line.
+async function renderExecSummary() {
+  const host = document.getElementById('execSummary'); if (!host) return;
+  const bq = new URLSearchParams();
+  if (getBranch()) bq.set('branch', getBranch());
+  if (getGroup())  bq.set('group', getGroup());
+  let fc;
+  try { fc = await fetch(`${API}/api/analysis/forecast?${bq}`).then(r => r.json()); }
+  catch (e) { host.classList.add('hidden'); return; }
+  if (!fc || !fc.available) { host.classList.add('hidden'); return; }
+  // GP for the same month + total revenue target for that month (parallel)
+  const pq = new URLSearchParams(bq); pq.set('month', fc.period);
+  const [prof, tg] = await Promise.all([
+    fetch(`${API}/api/profit/summary?${pq}`).then(r => r.json()).catch(() => null),
+    fetch(`${API}/api/targets?month=${fc.period}`).then(r => r.json()).catch(() => []),
+  ]);
+  const tgtTotal = (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
+  const projVsTgt = tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null;
+  const gp = prof && prof.margin_pct != null ? prof.margin_pct : null;
+  const gpColor = gp == null ? 'var(--text-muted)' : gp >= 40 ? '#059669' : gp >= 30 ? '#f59e0b' : '#dc2626';
+  const tgtColor = projVsTgt == null ? 'var(--text-muted)' : projVsTgt >= 100 ? '#059669' : projVsTgt >= 90 ? '#f59e0b' : '#dc2626';
+  const tile = (label, value, sub, color) => `<div style="flex:1;min-width:150px">
+      <div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
+      <div class="text-xl font-bold" style="color:${color || 'var(--text-primary)'}">${value}</div>
+      <div class="text-[11px]" style="color:var(--text-muted)">${sub}</div></div>`;
+  // plain-language headline
+  const onPace = projVsTgt == null ? '' : projVsTgt >= 100 ? 'เกินเป้า ✅' : projVsTgt >= 90 ? 'ใกล้เป้า ⚠️' : 'ต่ำกว่าเป้า 🔴';
+  const gpWord = gp == null ? '' : gp >= 40 ? 'แข็งแรง' : gp >= 30 ? 'พอใช้' : 'ต่ำ';
+  const narrative = `เดือน ${fmtMonth(fc.period)}: ทำไปแล้ว ${fc.days_elapsed}/${fc.days_total} วัน · คาดการณ์รายได้ทั้งเดือน <b>${fmt(fc.projected)}</b>` +
+    (projVsTgt != null ? ` (<b style="color:${tgtColor}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
+    (gp != null ? ` · GP <b style="color:${gpColor}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
+  host.classList.remove('hidden');
+  host.innerHTML = `<div class="card p-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #4f46e5">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <h2 class="section-title mb-0">🧭 สรุปผู้บริหาร (Executive Summary)</h2>
+      <span class="text-[11px]" style="color:var(--text-muted)">${getBranch() || 'ทุกสาขา'} · อัปเดตตามข้อมูลล่าสุด</span>
+    </div>
+    <div class="flex flex-wrap gap-5 mb-2">
+      ${tile('🔮 คาดการณ์เดือนนี้', fmt(fc.projected), `ช่วง ${fmt(fc.lo)}–${fmt(fc.hi)} · ทำไป ${fc.days_elapsed}/${fc.days_total} วัน`, '#4f46e5')}
+      ${tile('🎯 เทียบเป้ารายได้', projVsTgt == null ? '—' : projVsTgt.toFixed(0) + '%', tgtTotal > 0 ? `เป้า ${fmt(tgtTotal)}` : 'ยังไม่ตั้งเป้า', tgtColor)}
+      ${tile('💰 GP เดือนนี้', gp == null ? '—' : gp.toFixed(1) + '%', 'กำไรขั้นต้น (BoM)', gpColor)}
+      ${tile('📅 ทำไปแล้ว', `${fc.days_elapsed}/${fc.days_total} วัน`, `MTD ${fmt(fc.mtd)}`, '#0891b2')}
+    </div>
+    <p class="text-xs" style="color:var(--text-secondary)">${narrative}</p>
+  </div>`;
+}
+
 let _heroMtd = null;   // fair MTD-vs-MTD payload for the latest (partial) month
 function renderKpiHero(trendData, gpb, disc) {
   const wrap = document.getElementById('kpiHeroWrap');
