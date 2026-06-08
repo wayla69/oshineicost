@@ -2915,7 +2915,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
 
   <!-- dive-in modal -->
-  <div id="mcDrillModal" class="hidden" style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.5);display:flex;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)mcCloseDrill()">
+  <div id="mcDrillModal" class="hidden" style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.5);display:none;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)mcCloseDrill()">
     <div style="background:var(--bg-card);max-width:920px;width:100%;max-height:88vh;overflow:auto;padding:20px;border-radius:12px">
       <div class="flex items-center justify-between mb-3">
         <h3 id="mcDrillTitle" class="text-base font-bold text-slate-800"></h3>
@@ -21199,7 +21199,7 @@ async function mcOpenDrill(sku) {
   _mcBomSku = null;
   const it = (_mcLast?.items || []).find(x => x.sku_code === sku) || { description: sku };
   document.getElementById('mcDrillTitle').textContent = '🆚 ' + (it.description || sku) + ' · ' + sku;
-  document.getElementById('mcDrillModal').classList.remove('hidden');
+  const _mcm = document.getElementById('mcDrillModal'); _mcm.style.display = 'flex'; _mcm.classList.remove('hidden');
   mcDrillTab('branch');
   const bEl = document.getElementById('mcDrillBranch');
   bEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">กำลังโหลด…</p>';
@@ -21278,7 +21278,7 @@ async function mcLoadBom() {
       <td class="num tabular">${fmt(g.ingredient_cost || 0)}</td></tr>`).join('')}</tbody>
     <tfoot><tr><td colspan="3">รวมต้นทุน/เสิร์ฟ</td><td class="num tabular">${fmt(d.total_cost || 0)}</td></tr></tfoot></table>`;
 }
-function mcCloseDrill() { document.getElementById('mcDrillModal').classList.add('hidden'); }
+function mcCloseDrill() { const m = document.getElementById('mcDrillModal'); m.style.display = 'none'; m.classList.add('hidden'); }
 
 // ─── Global "count service charge as revenue" toggle (persisted, all analysis pages) ───
 function inclService() { return localStorage.getItem('inclService') === '1'; }
