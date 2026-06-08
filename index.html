@@ -863,6 +863,30 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </head>
 <body>
 
+<!-- ── Login overlay (shown only when server auth is enabled & no session) ── -->
+<div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;
+     background:linear-gradient(135deg,#1e1b4b,#0f172a);align-items:center;justify-content:center">
+  <form id="loginForm" onsubmit="doLogin(event)"
+        style="width:min(380px,92vw);background:#fff;border-radius:18px;padding:34px 30px;
+               box-shadow:0 30px 80px rgba(0,0,0,.5)">
+    <div style="text-align:center;margin-bottom:6px;font-size:30px">🍱</div>
+    <h2 style="text-align:center;margin:0 0 2px;font-size:20px;font-weight:800;color:#1e293b">Oshinei Dashboard</h2>
+    <p style="text-align:center;margin:0 0 22px;font-size:13px;color:#64748b">เข้าสู่ระบบเพื่อใช้งาน</p>
+    <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">ชื่อผู้ใช้</label>
+    <input id="loginUser" autocomplete="username" required
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
+                  padding:10px 12px;font-size:14px;margin-bottom:14px">
+    <label style="display:block;font-size:12px;font-weight:600;color:#475569;margin-bottom:4px">รหัสผ่าน</label>
+    <input id="loginPass" type="password" autocomplete="current-password" required
+           style="width:100%;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:10px;
+                  padding:10px 12px;font-size:14px;margin-bottom:8px">
+    <div id="loginError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
+    <button type="submit" id="loginBtn"
+            style="width:100%;margin-top:8px;background:#4f46e5;color:#fff;border:none;border-radius:10px;
+                   padding:11px;font-size:14px;font-weight:700;cursor:pointer">เข้าสู่ระบบ</button>
+  </form>
+</div>
+
 <!-- ── Global loading bar (top of page) ── -->
 <div id="loadingBar" style="display:none"></div>
 
@@ -1269,6 +1293,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <button onclick="openMonthlyPackDialog()" class="topbar-icon-btn" aria-label="ส่งออกแพ็กรายงานรายเดือน (Excel/PDF)" title="📥 Export Monthly Review Pack (Excel/PDF)"><span aria-hidden="true">📥</span></button>
       <button onclick="printReport()" class="topbar-icon-btn" aria-label="พิมพ์ หรือ บันทึก PDF" title="พิมพ์ / บันทึก PDF (Ctrl+P)"><span aria-hidden="true">🖨️</span></button>
       <button onclick="toggleDarkMode()" id="darkBtn" class="topbar-icon-btn" aria-pressed="false" aria-label="สลับโหมดมืด" title="สลับโหมดมืด">🌙</button>
+      <!-- Logged-in user chip + logout (populated by renderUserChip; hidden when auth is off) -->
+      <div id="userChip" style="display:none;align-items:center;gap:6px;padding:3px 6px 3px 10px;
+           border:1px solid var(--border);border-radius:999px;font-size:12px;white-space:nowrap">
+        <span id="userChipName" style="font-weight:600;color:var(--text-secondary)"></span>
+        <button onclick="doLogout()" class="topbar-icon-btn" title="ออกจากระบบ" aria-label="ออกจากระบบ" style="width:26px;height:26px">⎋</button>
+      </div>
       <button onclick="openCostModal()" class="upload-btn whitespace-nowrap">
         ↑ อัพโหลดต้นทุน
       </button>
@@ -2914,9 +2944,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
-  <!-- dive-in modal -->
-  <div id="mcDrillModal" class="hidden" style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.5);display:none;align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)mcCloseDrill()">
-    <div style="background:var(--bg-card);max-width:920px;width:100%;max-height:88vh;overflow:auto;padding:20px;border-radius:12px">
+  <!-- dive-in detail panel — expands inline directly below the table -->
+  <div id="mcDrillModal" class="card p-5 mt-4 hidden" style="display:none;scroll-margin-top:16px">
+    <div>
       <div class="flex items-center justify-between mb-3">
         <h3 id="mcDrillTitle" class="text-base font-bold text-slate-800"></h3>
         <button onclick="mcCloseDrill()" class="topbar-icon-btn" aria-label="ปิด">✕</button>
@@ -5301,6 +5331,36 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <button class="subtab-btn" onclick="switchSettingsTab('hours')">ชั่วโมงเปิดทำการ</button>
     <button class="subtab-btn" onclick="switchSettingsTab('prefs')">Preferences</button>
     <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">Deactivate</button>
+    <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">👥 ผู้ใช้งาน</button>
+  </div>
+
+  <!-- ── User management (Management only) ── -->
+  <div id="settab-users" class="hidden">
+    <div class="card p-5" style="max-width:900px">
+      <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">👥 จัดการผู้ใช้งาน</h3>
+      <p class="text-xs mb-4" style="color:var(--text-muted)">กำหนดบทบาท (role) ของผู้ใช้ — แต่ละบทบาทเห็น modules ต่างกันตามสิทธิ์ · รหัสเริ่มต้นของผู้ใช้ที่สร้างใหม่ตั้งเองได้</p>
+      <!-- Add user -->
+      <div class="flex items-end gap-2 flex-wrap mb-5 p-3 rounded-lg" style="background:var(--bg-input)">
+        <div><label class="block text-xs font-medium mb-1" style="color:var(--text-muted)">ชื่อผู้ใช้</label>
+          <input id="newUserName" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)" placeholder="เช่น marketing3"></div>
+        <div><label class="block text-xs font-medium mb-1" style="color:var(--text-muted)">รหัสผ่าน</label>
+          <input id="newUserPass" type="text" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)" placeholder="รหัสผ่าน"></div>
+        <div><label class="block text-xs font-medium mb-1" style="color:var(--text-muted)">บทบาท</label>
+          <select id="newUserRole" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></select></div>
+        <button onclick="createUser()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg">+ เพิ่มผู้ใช้</button>
+        <span id="userSaveStatus" class="text-sm"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="text-sm w-full">
+          <thead><tr class="text-left text-xs border-b" style="color:var(--text-muted);border-color:var(--border)">
+            <th class="py-2 pr-4">ชื่อผู้ใช้</th><th class="py-2 pr-4">บทบาท</th>
+            <th class="py-2 pr-4">สถานะ</th><th class="py-2 pr-4">สร้างเมื่อ</th><th class="py-2 text-right">การจัดการ</th>
+          </tr></thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
+      </div>
+      <p class="text-xs mt-4" style="color:var(--text-muted)">บทบาทและสิทธิ์: <b>Management</b> ดูได้ทั้งหมด · <b>Marketing</b> ยอดขาย/เมนู/ลูกค้า · <b>Operation</b> ยอดขาย+ส่วนลด+เงินขาดเกิน · <b>Analyst</b> วิเคราะห์ยอดขาย+ต้นทุน · <b>Accounting</b> P&L/ต้นทุน/เงินสด · <b>Innovation</b> แก้ BoM+วิเคราะห์เมนู/ต้นทุน</p>
+    </div>
   </div>
 
   <!-- ── Monthly Targets ── -->
@@ -5835,6 +5895,220 @@ const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
     });
   };
 })();
+
+// ── Role-based authentication (client side; server enforces too) ─────────────
+// window.AUTH = { enabled, authenticated, username, role, modules[] }. When the
+// server has OSHINEI_AUTH off, /api/auth/me reports enabled:false + all modules,
+// so nothing below hides anything (current behaviour preserved).
+window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };
+
+// Sidebar tab → module it requires. Tabs absent from the map (e.g. 'manual') are
+// always allowed to any logged-in user. Mirrors MODULE_RULES in backend/auth.py.
+const TAB_MODULE = {
+  home:'sales.overview', overall:'sales.overview', action:'sales.overview',
+  dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
+  buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
+  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis',
+  cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis',
+  heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
+  simhub:'cost.simulator',
+  gpbranch:'profit.pnl', pnlbranch:'profit.pnl', pnlbill:'profit.pnl', profit:'profit.pnl', benchmark:'profit.pnl',
+  opsreport:'ops.report', ops:'ops.report',
+  staff:'ops.staff', discounts:'ops.discounts',
+  cashctl:'ops.cash',
+  custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
+  cancelbill:'ops.posextra', closetime:'ops.posextra',
+  report:'report.export', settings:'system.settings',
+};
+const ROLE_LABEL_TH = {
+  management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
+  analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
+};
+
+function hasModule(m) {
+  if (!window.AUTH || !window.AUTH.enabled) return true;   // auth off → everything
+  return (window.AUTH.modules || []).includes(m);
+}
+function tabAllowed(name) {
+  const m = TAB_MODULE[name];
+  return !m || hasModule(m);                                // unmapped → always allowed
+}
+function firstAllowedTab() {
+  const order = ['overall','home','action','dailysales','trend','compare','more',
+    'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
+    'staff','custtype','manual'];
+  return order.find(tabAllowed) || 'manual';
+}
+
+async function bootstrapAuth() {
+  try {
+    const r = await fetch(`${API}/api/auth/me`);
+    window.AUTH = await r.json();
+    window.AUTH.modules = window.AUTH.modules || [];
+  } catch (e) {
+    // Network/health failure — don't hard-lock the UI; treat as auth-off.
+    window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };
+  }
+}
+
+function showLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='flex';
+                        setTimeout(()=>document.getElementById('loginUser')?.focus(),50); }
+function hideLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='none'; }
+
+async function doLogin(ev) {
+  if (ev) ev.preventDefault();
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ…';
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username:u, password:p }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      errEl.textContent = d.detail || 'เข้าสู่ระบบไม่สำเร็จ';
+      errEl.style.display = 'block';
+      return;
+    }
+    const data = await res.json();
+    window.AUTH = { enabled:true, authenticated:true, username:data.username,
+                    role:data.role, modules:data.modules || [] };
+    hideLogin();
+    applyPermissions();
+    await startApp();
+  } catch (e) {
+    errEl.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+  }
+}
+
+async function doLogout() {
+  try { await fetch(`${API}/api/auth/logout`, { method:'POST' }); } catch(e){}
+  location.reload();
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('userChip');
+  if (!chip) return;
+  if (window.AUTH && window.AUTH.enabled && window.AUTH.authenticated) {
+    const role = window.AUTH.role || '';
+    document.getElementById('userChipName').textContent =
+      `${window.AUTH.username} · ${ROLE_LABEL_TH[role] || role}`;
+    chip.style.display = 'flex';
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+// Hide nav items / sections / topbar actions the current role can't use.
+function applyPermissions() {
+  renderUserChip();
+  if (!window.AUTH || !window.AUTH.enabled) return;   // auth off → show everything
+  // 1) Hide disallowed nav items (don't force-show ones intentionally display:none)
+  Object.keys(TAB_MODULE).forEach(tab => {
+    const el = document.getElementById('nav-' + tab);
+    if (el && !tabAllowed(tab)) el.style.display = 'none';
+  });
+  // 2) Collapse nav-section headers whose items are all hidden
+  document.querySelectorAll('.nav-section').forEach(sec => {
+    let n = sec.nextElementSibling, anyVisible = false;
+    while (n && !n.classList.contains('nav-section')) {
+      if (n.classList.contains('nav-item') && getComputedStyle(n).display !== 'none') anyVisible = true;
+      n = n.nextElementSibling;
+    }
+    sec.style.display = anyVisible ? '' : 'none';
+  });
+  // 3) Topbar action buttons
+  const costUp = document.querySelector('[onclick="openCostModal()"]');
+  if (costUp) costUp.style.display = (hasModule('bom.edit') || hasModule('system.settings')) ? '' : 'none';
+  const salesUp = document.querySelector('[onclick*="salesDataFile"]');
+  if (salesUp) salesUp.style.display = hasModule('data.upload') ? '' : 'none';
+  // 4) Settings → ผู้ใช้งาน sub-tab visible to admins only
+  const uBtn = document.getElementById('settabbtn-users');
+  if (uBtn) uBtn.style.display = hasModule('system.admin') ? '' : 'none';
+  // 5) If the current/landing tab isn't allowed, jump to the first allowed one
+  if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
+}
+
+// ── User management (Settings → ผู้ใช้งาน) ──────────────────────────────────
+async function loadUsers() {
+  // Populate the role <select> for the add-user form
+  const sel = document.getElementById('newUserRole');
+  if (sel && !sel.options.length) {
+    Object.entries(ROLE_LABEL_TH).forEach(([k,v]) =>
+      sel.add(new Option(`${v} (${k})`, k)));
+  }
+  const tb = document.getElementById('userTableBody');
+  if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  let users = [];
+  try { users = await fetch(`${API}/api/auth/users`).then(r => r.json()); }
+  catch(e) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">โหลดรายชื่อผู้ใช้ไม่ได้</td></tr>'; return; }
+  if (!Array.isArray(users)) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">ไม่มีสิทธิ์ดูรายชื่อผู้ใช้</td></tr>'; return; }
+  tb.innerHTML = users.map(u => {
+    const opts = Object.entries(ROLE_LABEL_TH).map(([k,v]) =>
+      `<option value="${k}" ${k===u.role?'selected':''}>${v} (${k})</option>`).join('');
+    const me = window.AUTH && window.AUTH.username === u.username;
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-2 pr-4 font-medium" style="color:var(--text-primary)">${u.username}${me?' <span class=\"text-xs\" style=\"color:var(--text-muted)\">(คุณ)</span>':''}</td>
+      <td class="py-2 pr-4"><select onchange="updateUserRole('${u.username}', this.value)" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border)">${opts}</select></td>
+      <td class="py-2 pr-4">${u.active
+        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">ใช้งาน</span>'
+        : '<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ปิด</span>'}</td>
+      <td class="py-2 pr-4 text-xs" style="color:var(--text-muted)">${(u.created_at||'').slice(0,10)}</td>
+      <td class="py-2 text-right whitespace-nowrap">
+        <button onclick="resetUserPassword('${u.username}')" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)" title="ตั้งรหัสผ่านใหม่">🔑</button>
+        <button onclick="toggleUserActive('${u.username}', ${u.active?0:1})" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)">${u.active?'ปิดใช้':'เปิดใช้'}</button>
+        ${me ? '' : `<button onclick="deleteUser('${u.username}')" class="text-xs px-2 py-1 rounded border text-rose-600" style="border-color:var(--border)" title="ลบผู้ใช้">🗑️</button>`}
+      </td></tr>`;
+  }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
+}
+function _userStatus(msg, ok) {
+  const s = document.getElementById('userSaveStatus');
+  if (!s) return;
+  s.textContent = msg; s.className = 'text-sm ' + (ok ? 'text-emerald-600' : 'text-rose-600');
+  setTimeout(() => { s.textContent = ''; }, 4000);
+}
+async function createUser() {
+  const username = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPass').value;
+  const role = document.getElementById('newUserRole').value;
+  if (!username || !password) { _userStatus('กรอกชื่อผู้ใช้และรหัสผ่าน', false); return; }
+  const res = await fetch(`${API}/api/auth/users`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, password, role }) });
+  if (res.ok) {
+    document.getElementById('newUserName').value = '';
+    document.getElementById('newUserPass').value = '';
+    _userStatus('เพิ่มผู้ใช้แล้ว', true); loadUsers();
+  } else {
+    const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'เพิ่มไม่สำเร็จ', false);
+  }
+}
+async function _putUser(username, body, okMsg) {
+  const res = await fetch(`${API}/api/auth/users/${encodeURIComponent(username)}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { _userStatus(okMsg, true); loadUsers(); }
+  else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'บันทึกไม่สำเร็จ', false); }
+}
+function updateUserRole(username, role) { _putUser(username, { role }, `เปลี่ยนบทบาท ${username} แล้ว`); }
+function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
+function resetUserPassword(username) {
+  const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);
+  if (pw) _putUser(username, { password: pw }, 'ตั้งรหัสผ่านใหม่แล้ว');
+}
+async function deleteUser(username) {
+  if (!window.confirm(`ลบผู้ใช้ ${username}?`)) return;
+  const res = await fetch(`${API}/api/auth/users/${encodeURIComponent(username)}`, { method:'DELETE' });
+  if (res.ok) { _userStatus('ลบผู้ใช้แล้ว', true); loadUsers(); }
+  else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'ลบไม่สำเร็จ', false); }
+}
+
 const PALETTE = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6','#a78bfa','#fb923c'];
 
 // ── World-class semantic color system ─────────────────────────
@@ -6275,6 +6549,8 @@ async function onGroupChange() {
 const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
+  // Permission guard — refuse tabs the current role can't access (server enforces too).
+  if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
   ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','ops','settings',
    'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
@@ -6332,7 +6608,7 @@ function _updateClusterBar(name) {
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
-    cl.tabs.map(([t, lbl]) => {
+    cl.tabs.filter(([t]) => tabAllowed(t)).map(([t, lbl]) => {
       const on = t === name;
       return `<button onclick="switchTab('${t}')" class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
         ? 'background:var(--indigo);color:#fff;font-weight:600'
@@ -6370,10 +6646,10 @@ let costSearchTimer = null;
 function switchSettingsTab(name) {
   activeSettingsTab = name;
   document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
-    const subs = ['targets','costs','fixedcosts','branches','hours','prefs','deactivate'];
+    const subs = ['targets','costs','fixedcosts','branches','hours','prefs','deactivate','users'];
     b.classList.toggle('active', subs[i] === name);
   });
-  ['targets','costs','fixedcosts','branches','hours','prefs','deactivate'].forEach(s => {
+  ['targets','costs','fixedcosts','branches','hours','prefs','deactivate','users'].forEach(s => {
     document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
   });
   loadSettingsSubtab();
@@ -6454,6 +6730,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'deactivate') loadDeactivate();
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();
+  if (activeSettingsTab === 'users')    loadUsers();
 }
 
 function loadActiveTab() {
@@ -6884,6 +7161,18 @@ function hideLoadingBar() {
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
   initDarkMode();
+  showLoadingBar();
+  await bootstrapAuth();
+  if (window.AUTH.enabled && !window.AUTH.authenticated) {
+    hideLoadingBar();
+    showLogin();
+    return;                       // hold the app until the user logs in
+  }
+  applyPermissions();
+  await startApp();
+}
+
+async function startApp() {
   showLoadingBar();
   try {
     const ok = await checkApiHealth();
@@ -21199,7 +21488,8 @@ async function mcOpenDrill(sku) {
   _mcBomSku = null;
   const it = (_mcLast?.items || []).find(x => x.sku_code === sku) || { description: sku };
   document.getElementById('mcDrillTitle').textContent = '🆚 ' + (it.description || sku) + ' · ' + sku;
-  const _mcm = document.getElementById('mcDrillModal'); _mcm.style.display = 'flex'; _mcm.classList.remove('hidden');
+  const _mcm = document.getElementById('mcDrillModal'); _mcm.style.display = 'block'; _mcm.classList.remove('hidden');
+  _mcm.scrollIntoView({ behavior: 'smooth', block: 'start' });
   mcDrillTab('branch');
   const bEl = document.getElementById('mcDrillBranch');
   bEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">กำลังโหลด…</p>';
