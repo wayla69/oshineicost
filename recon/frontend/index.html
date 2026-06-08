@@ -421,7 +421,7 @@
           </select>
           <select id="df-bank" class="inp text-xs" onchange="DISC_FILTER.bank=this.value;loadDiscrepancies()">
             <option value="" data-i18n="df_allbank">All banks</option>
-            <option>KTB</option><option>KBANK</option><option>KTC</option><option>PROMPTPAY</option>
+            <option>KTB</option><option>KBANK</option><option>KTC</option><option>BAY</option><option>SCB</option><option>BBL</option><option>PROMPTPAY</option>
           </select>
           <button onclick="loadDiscrepancies()" class="btn btn-sec text-xs" style="padding:5px 10px" data-i18n="btn_refresh">⟳ Refresh</button>
         </div>
@@ -719,10 +719,10 @@
         </div>
         <div class="card overflow-x-auto">
           <div class="font-semibold text-gray-700" data-i18n="mids_hd">Credit-card acquirer MIDs</div>
-          <p class="text-xs text-gray-500 mb-3" data-i18n="mids_hint">ทุกสาขาเป็นแถว — กรอก Merchant ID ของ KTB / KBANK / KTC บันทึกอัตโนมัติ (เว้นว่าง = ลบ)</p>
+          <p class="text-xs text-gray-500 mb-3" data-i18n="mids_hint">ทุกสาขาเป็นแถว — กรอก Merchant ID ของ KTB / KBANK / KTC / BAY / SCB / BBL บันทึกอัตโนมัติ (เว้นว่าง = ลบ)</p>
           <table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
             <th class="text-left pb-2" data-i18n="c_branch">Branch</th>
-            <th class="text-left pb-2">KTB</th><th class="text-left pb-2">KBANK</th><th class="text-left pb-2">KTC</th></tr></thead>
+            <th class="text-left pb-2">KTB</th><th class="text-left pb-2">KBANK</th><th class="text-left pb-2">KTC</th><th class="text-left pb-2">BAY</th><th class="text-left pb-2">SCB</th><th class="text-left pb-2">BBL</th></tr></thead>
             <tbody id="mid-body"></tbody></table>
         </div>
       </div>
@@ -2285,7 +2285,7 @@ async function loadSetup(){
         onchange="saveMid(${b.branch_id},'${acq}',this)">
         <span class="text-xs ml-1" id="mok2-${b.branch_id}-${acq}"></span></td>`; };
     const tr=document.createElement('tr'); tr.className='border-b border-gray-50';
-    tr.innerHTML=`<td class="py-1 pr-3 whitespace-nowrap">${b.name}</td>${cell('KTB')}${cell('KBANK')}${cell('KTC')}`;
+    tr.innerHTML=`<td class="py-1 pr-3 whitespace-nowrap">${b.name}</td>${cell('KTB')}${cell('KBANK')}${cell('KTC')}${cell('BAY')}${cell('SCB')}${cell('BBL')}`;
     mb.appendChild(tr);
   });
 }
@@ -2337,7 +2337,7 @@ async function saveMid(branchId, acq, el){
 }
 
 // ── Export / Import the bank-account + MID grid as one CSV (one row per branch) ──
-const _SETUP_COLS = ['สาขา','branch_id','KTB บัญชี','KBANK บัญชี','KTB MID','KBANK MID','KTC MID'];
+const _SETUP_COLS = ['สาขา','branch_id','KTB บัญชี','KBANK บัญชี','KTB MID','KBANK MID','KTC MID','BAY MID','SCB MID','BBL MID'];
 function _csvCell(s){ s=String(s==null?'':s); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; }
 async function exportSetupTemplate(){
   try{
@@ -2347,7 +2347,8 @@ async function exportSetupTemplate(){
     const rows=[_SETUP_COLS.join(',')];
     (BRANCHES||[]).forEach(b=>{ rows.push([b.name,b.branch_id,
       aMap[b.branch_id+'|KTB']||'', aMap[b.branch_id+'|KBANK']||'',
-      mMap[b.branch_id+'|KTB']||'', mMap[b.branch_id+'|KBANK']||'', mMap[b.branch_id+'|KTC']||''
+      mMap[b.branch_id+'|KTB']||'', mMap[b.branch_id+'|KBANK']||'', mMap[b.branch_id+'|KTC']||'',
+      mMap[b.branch_id+'|BAY']||'', mMap[b.branch_id+'|SCB']||'', mMap[b.branch_id+'|BBL']||''
     ].map(_csvCell).join(',')); });
     const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
@@ -2372,7 +2373,8 @@ async function importSetupTemplate(file){
   const rows=_parseCsv(text); if(rows.length<2){ toast('ไฟล์ว่าง','err'); return; }
   const hdr=rows[0].map(h=>h.trim()); const idx=k=>hdr.indexOf(k);
   const ci={bid:idx('branch_id'), ka:idx('KTB บัญชี'), kba:idx('KBANK บัญชี'),
-            km:idx('KTB MID'), kbm:idx('KBANK MID'), ktc:idx('KTC MID')};
+            km:idx('KTB MID'), kbm:idx('KBANK MID'), ktc:idx('KTC MID'),
+            bay:idx('BAY MID'), scb:idx('SCB MID'), bbl:idx('BBL MID')};
   if(ci.bid<0){ toast('ไม่พบคอลัมน์ branch_id — ใช้ template จากปุ่ม Export','err'); return; }
   const [accts, mids] = await Promise.all([api('/api/bank-accounts'), api('/api/acquirer-mids')]);
   const aId={}; (accts||[]).forEach(a=>aId[a.branch_id+'|'+a.bank]=a);
@@ -2394,6 +2396,9 @@ async function importSetupTemplate(file){
     if(ci.km>=0)  await upMid(bid,'KTB',  r[ci.km]);
     if(ci.kbm>=0) await upMid(bid,'KBANK',r[ci.kbm]);
     if(ci.ktc>=0) await upMid(bid,'KTC',  r[ci.ktc]);
+    if(ci.bay>=0) await upMid(bid,'BAY',  r[ci.bay]);
+    if(ci.scb>=0) await upMid(bid,'SCB',  r[ci.scb]);
+    if(ci.bbl>=0) await upMid(bid,'BBL',  r[ci.bbl]);
   }
   toast(`import: อัปเดต ${n} ช่อง${err?` · ผิด ${err}`:''}`, err?'err':'ok');
   loadSetup();
