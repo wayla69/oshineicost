@@ -831,7 +831,13 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     if not toks or not _token_accepted(token):
         raise HTTPException(status_code=404, detail="not found")
     inc = str(DB_PATH) + ".incoming"
-    # Stream upload → temp gz, then stream-decompress into the .incoming stage.
+    # Decompress+validate into a .partial first, then atomically rename to the
+    # .incoming name the hot-swap poller watches — as the LAST step. Otherwise the
+    # poller can grab a half-written .incoming, or swap it out from under us before
+    # we build the response (FileNotFoundError on the final stat → spurious 500
+    # even though the data applied fine).
+    stage = inc + ".partial"
+    # Stream upload → temp gz, then stream-decompress into the .partial stage.
     with tempfile.NamedTemporaryFile(delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp, 1024 * 1024)
         tmp_path = tmp.name
@@ -839,7 +845,7 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
         # Cap the DECOMPRESSED size so a gzip-bomb can't fill the volume.
         max_bytes = 2 * 1024 * 1024 * 1024  # 2 GB — well above a real ~270 MB DB
         written = 0
-        with gzip.open(tmp_path, "rb") as gz, open(inc, "wb") as out:
+        with gzip.open(tmp_path, "rb") as gz, open(stage, "wb") as out:
             while True:
                 chunk = gz.read(1024 * 1024)
                 if not chunk:
@@ -849,27 +855,31 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
                     raise ValueError("decompressed payload exceeds size limit")
                 out.write(chunk)
     except Exception as e:
-        for p in (tmp_path, inc):
+        for p in (tmp_path, stage):
             try: _os2.remove(p)
             except OSError: pass
         raise HTTPException(status_code=400, detail=f"decompress failed: {e}")
     finally:
         try: _os2.remove(tmp_path)
         except OSError: pass
-    # Validate the staged DB before we ever consider swapping it in.
+    # Validate the .partial before we ever expose it to the swap poller.
     try:
-        chk = sqlite3.connect(inc)
+        chk = sqlite3.connect(stage)
         ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
         rows = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
         chk.close()
     except Exception as e:
         ok, rows = f"error: {e}", 0
     if ok != "ok" or not rows:
-        try: _os2.remove(inc)
+        try: _os2.remove(stage)
         except OSError: pass
         raise HTTPException(status_code=422,
                             detail=f"staged DB rejected (integrity={ok}, rows={rows})")
-    return {"ok": True, "staged_bytes": _os2.path.getsize(inc), "staged_rows": rows,
+    # Capture the size NOW (before the poller can swap the file away), then
+    # publish atomically. The response uses the captured values — never re-stats.
+    staged_bytes = _os2.path.getsize(stage)
+    _os2.replace(stage, inc)   # atomic: poller only ever sees a complete, valid DB
+    return {"ok": True, "staged_bytes": staged_bytes, "staged_rows": rows,
             "note": "restart the machine to apply (atomic swap at startup)"}
 
 
