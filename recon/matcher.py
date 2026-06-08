@@ -637,6 +637,24 @@ def daily_reconciliation(conn, branch_id, period_month):
 
 _BOARD_CAT_ORDER = ["CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"]
 
+# Categories that get one board column PER acquirer/bank instead of one combined
+# column. CREDIT → e.g. กรุงไทย vs กสิกร, matching the rows in recon_payment_map.
+_SPLIT_BY_BANK = {"CREDIT"}
+_BANK_LABEL = {"KTB": "กรุงไทย", "KBANK": "กสิกร", "KTC": "KTC", "SCB": "SCB",
+               "BBL": "กรุงเทพ", "BAY": "กรุงศรี"}
+
+def _col_key(category: str, bank: str | None) -> str:
+    """Column identity on the board. Split categories key on category+bank so each
+    acquirer is its own column; everything else stays one column per category."""
+    if category in _SPLIT_BY_BANK and bank and bank != "UNKNOWN":
+        return f"{category}:{bank}"
+    return category
+
+def _col_label(category: str, bank: str | None) -> str:
+    if category in _SPLIT_BY_BANK and bank and bank != "UNKNOWN":
+        return f"{category} {_BANK_LABEL.get(bank, bank)}"
+    return category
+
 
 def lane_pos_days(conn, branch_id, period_month, category, bank):
     """Per-day POS totals for one (category, bank) lane in a month — the POS side
@@ -745,9 +763,11 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         "SELECT branch_id, name FROM branches "
         "WHERE COALESCE(branch_type,'master')='master' AND active=1")}
 
-    # POS revenue per (branch, category)
+    # POS revenue per (branch, column). column = category, or category:bank for
+    # split categories (CREDIT). col_meta carries label + raw category/bank.
     pos: dict = {}
     unmapped: dict = {}
+    col_meta: dict = {}
     for r in conn.execute(
         "SELECT branch_id, payment_code, SUM(amount) amt "
         "FROM pos_payment_day WHERE day=? GROUP BY branch_id, payment_code", (day,)):
@@ -761,14 +781,19 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
             continue
         if not m["reconcile"]:
             continue
-        pos[(r["branch_id"], m["category"])] = pos.get((r["branch_id"], m["category"]), 0.0) + amt
+        ck = _col_key(m["category"], m["bank"])
+        col_meta.setdefault(ck, {"label": _col_label(m["category"], m["bank"]),
+                                 "category": m["category"], "bank": m["bank"]})
+        pos[(r["branch_id"], ck)] = pos.get((r["branch_id"], ck), 0.0) + amt
 
     # External documents per (branch, category), summed on their own line date
     ext: dict = {}
-    def add(bid, cat, amount, net):
+    def add(bid, cat, bank, amount, net):
         if bid not in branches:
             return
-        b = ext.setdefault((bid, cat), {"amount": 0.0, "net": 0.0})
+        ck = _col_key(cat, bank)
+        col_meta.setdefault(ck, {"label": _col_label(cat, bank), "category": cat, "bank": bank})
+        b = ext.setdefault((bid, ck), {"amount": 0.0, "net": 0.0})
         b["amount"] += amount
         b["net"]    += net
 
@@ -777,12 +802,13 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         "WHERE credit>0 AND match_status!='manual' AND txn_date=?", (day,)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if cat:
-            add(r["branch_id"], cat, float(r["credit"] or 0), float(r["credit"] or 0))
+            add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
         fee, vat = _eff_fee_vat(r, "mdr_fee", None)
         gross = float(r["gross_amount"] or 0)
-        add(r["branch_id"], "CREDIT", gross, gross - float(r["refund_amount"] or 0) - fee - vat)
+        add(r["branch_id"], "CREDIT", r["acquirer"], gross,
+            gross - float(r["refund_amount"] or 0) - fee - vat)
 
     for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
@@ -790,7 +816,7 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
             f"SELECT * FROM {table} WHERE order_status='Completed' AND match_status!='manual' AND order_date=?", (day,)):
             fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
             gross = float(r["food_amount"] or 0)
-            add(r["branch_id"], cat, gross, gross - fee - vat - float(r["promo_deduct"] or 0))
+            add(r["branch_id"], cat, None, gross, gross - fee - vat - float(r["promo_deduct"] or 0))
 
     # manually-cleared POS per (branch, category) for this day (bank collapsed)
     consumed: dict = {}
@@ -802,14 +828,19 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
                 continue
             for x in json.loads(r["pos_days"] or "[]"):
                 if x["day"] == day:
-                    k = (r["branch_id"], r["category"])
+                    ck = _col_key(r["category"], r["bank"])
+                    k = (r["branch_id"], ck)
                     consumed[k] = consumed.get(k, 0.0) + float(x.get("amount") or 0)
     except sqlite3.OperationalError:
         pass
 
     cats_present = {c for (_, c) in pos} | {c for (_, c) in ext}
-    categories = [c for c in _BOARD_CAT_ORDER if c in cats_present] \
-        + sorted(cats_present - set(_BOARD_CAT_ORDER))
+    # Order: base category order, then by bank within a split category.
+    def _ck_sort(ck):
+        cat = col_meta.get(ck, {}).get("category", ck)
+        base = _BOARD_CAT_ORDER.index(cat) if cat in _BOARD_CAT_ORDER else 99
+        return (base, col_meta.get(ck, {}).get("bank") or "", ck)
+    categories = sorted(cats_present, key=_ck_sort)
 
     rows = []
     tot_pos = tot_ext = tot_var = 0.0
@@ -855,6 +886,8 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     return {
         "day": day,
         "categories": categories,
+        "column_meta": {c: col_meta.get(c, {"label": c, "category": c, "bank": None})
+                        for c in categories},
         "branches": rows,
         "totals": {
             "pos": round(tot_pos, 2),

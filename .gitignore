@@ -54,5 +54,6 @@ Thumbs.db
 
 # Deploy bootstrap artifacts (local only)
 backend/.seed_token.txt
+backend/.seed_token*.txt
 backend/dbchunks/
 backend/*.db.gz
