@@ -576,6 +576,20 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
 }
 .period-preset:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(99,102,241,0.06); }
 .period-preset.active { background: var(--indigo); color: #fff; border-color: var(--indigo); font-weight: 600; }
+/* Phase 5 — branch drill-down: clickable branch names across all views */
+.branch-drillable {
+  cursor: pointer; font-weight: 600; white-space: nowrap; transition: color 0.15s;
+}
+.branch-drillable:hover { color: var(--indigo); text-decoration: underline; }
+.drill-branch-btn {
+  display: inline-block; margin-left: 5px; padding: 1px 6px; font-size: 10px;
+  font-weight: 500; border-radius: 4px; background: rgba(99,102,241,0.1);
+  color: var(--indigo); border: none; cursor: pointer; opacity: 0;
+  transition: opacity 0.15s; vertical-align: middle; line-height: 1.5;
+}
+tr:hover .drill-branch-btn { opacity: 1; }
+.gpb-box-drill { cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+.gpb-box-drill:hover { transform: translateY(-2px); box-shadow: 0 4px 14px rgba(99,102,241,0.18); }
 .gran-active {
   background: var(--bg-card) !important;
   color: var(--indigo) !important;
@@ -6680,6 +6694,18 @@ function setYoYRange() {
   if (selTo)   selTo.value   = latest;
   const ySel = document.getElementById('selYearQuick');
   if (ySel) ySel.value = '';
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+
+// Phase 5 — click any branch name/box to drill into it globally.
+// Calling twice on the same branch toggles back to "all branches".
+function drillIntoBranch(branchName) {
+  const sel = document.getElementById('selBranch');
+  if (!sel) return;
+  sel.value = (sel.value === branchName) ? '' : branchName;
+  sel.style.transition = 'box-shadow 0.5s';
+  sel.style.boxShadow = sel.value ? '0 0 0 3px rgba(99,102,241,0.45)' : '';
+  setTimeout(() => { sel.style.boxShadow = ''; }, 700);
   if (typeof onFilterChange === 'function') onFilterChange();
 }
 
@@ -13393,7 +13419,7 @@ async function loadBranchHeatmap() {
       </tr></thead>
       <tbody>
         ${branches.map(br => `<tr>
-          <td class="heatmap-branch-label">${br}</td>
+          <td class="heatmap-branch-label branch-drillable" onclick="drillIntoBranch('${jsAttr(br)}')" title="คลิกเพื่อดูเฉพาะ ${jsAttr(br)}">${br}</td>
           ${periods.map(p => {
             const cell = map[br][p];
             const rev = cell?.revenue || 0;
@@ -14851,7 +14877,7 @@ function _gpbRenderBoxes() {
     const dTxt = b.delta == null
       ? '<span class="text-slate-400">ไม่มีเดือนก่อนเทียบ</span>'
       : `${b.delta >= 0 ? '▲' : '▼'} ${Math.abs(b.delta).toFixed(1)} pp <span class="text-slate-400">vs ${b.prevM}</span>`;
-    return `<div class="rounded-xl border p-3" style="border-color:${gpColor}33;background:${gpColor}0a">
+    return `<div class="rounded-xl border p-3 gpb-box-drill" onclick="drillIntoBranch('${jsAttr(b.branch)}')" title="คลิกเพื่อดูเฉพาะ ${esc(b.branch)}" style="border-color:${gpColor}33;background:${gpColor}0a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${gpColor}">${b.cur.toFixed(1)}%</p>
       <p class="text-[11px] text-slate-400 mt-0.5">GP% · ${b.lastM || ''}</p>
@@ -14893,7 +14919,7 @@ function _gpbRenderTable() {
     const arrow = expanded ? '▾' : '▸';
     const main = `
       <tr class="gpb-row" style="border-bottom:1px solid var(--border);cursor:pointer" onclick="_gpbToggleRow(${r.branch_id})">
-        <td class="px-3 py-2 font-medium">${arrow} ${esc(r.branch)}</td>
+        <td class="px-3 py-2 font-medium">${arrow} ${esc(r.branch)}<button class="drill-branch-btn" onclick="event.stopPropagation();drillIntoBranch('${jsAttr(r.branch)}')" title="ดูเฉพาะสาขานี้">เจาะลึก →</button></td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_revenue)}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_cogs)}</td>
         <td class="px-3 py-2 text-right" style="color:${(r.total_gp || 0) >= 0 ? '#10b981' : '#ef4444'};font-weight:600">${fmtB(r.total_gp)}</td>
