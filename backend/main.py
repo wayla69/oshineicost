@@ -8267,6 +8267,24 @@ def cost_analysis(
 
     items = [dict(r) for r in rows]
 
+    # Buffet-component leak guard: a few buffet item-level SKUs (B0xxx) carry a
+    # negligible à-la-carte revenue (the meal is paid via the buffet tier) while
+    # their real BoM cost is large — yielding nonsense margins in this menu-
+    # engineering view (e.g. B0119 ปีกไก่ทอด: ฿10 revenue vs ฿3M cost = −30,306,864%).
+    # Their per-unit ex-VAT price is ≈฿0, so drop items priced below a small floor;
+    # real à-la-carte food is ฿20+/unit, so nothing legitimate is touched. Counted
+    # (not silently capped) and surfaced as summary.buffet_leak_excluded. The whole-
+    # store KPI block (ws_*) is computed separately and still includes every row.
+    _LEAK_PRICE_FLOOR = 5.0   # ฿ ex-VAT per unit
+    def _unit_price(r):
+        q = r["qty"] or 0
+        return (r["revenue_ex_vat"] or 0) / q if q else 0.0
+    _leak_ids = {r["sku_id"] for r in items
+                 if (r["qty"] or 0) > 0 and _unit_price(r) < _LEAK_PRICE_FLOOR}
+    buffet_leak_excluded = len(_leak_ids)
+    if _leak_ids:
+        items = [r for r in items if r["sku_id"] not in _leak_ids]
+
     # Effective-cost-aware costed flag + derived GP/margin (Phase 8 monthly cost).
     # "Costed" means the COALESCE chain (monthly exact -> monthly prior -> default)
     # resolved a unit cost for at least one row — broader than sc.unit_cost alone.
@@ -8396,6 +8414,7 @@ def cost_analysis(
             "avg_qty":            round(avg_qty_all, 1) if avg_qty_all else None,
             "avg_margin":         round(avg_margin_all, 1) if avg_margin_all else None,
             "margin_outliers_excluded": excluded_outliers,
+            "buffet_leak_excluded": buffet_leak_excluded,
         },
     }
 

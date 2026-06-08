@@ -12323,7 +12323,10 @@ function renderCostDetail() {
     return costSortAsc ? av - bv : bv - av;
   });
 
-  document.getElementById('costItemCount').textContent = `${rows.length.toLocaleString()} items`;
+  const _leak = costData.summary?.buffet_leak_excluded || 0;
+  document.getElementById('costItemCount').textContent =
+    `${rows.length.toLocaleString()} items` +
+    (_leak ? ` · ตัดเมนูบุฟเฟ่ต์ (ราคา/หน่วย≈0) ${_leak.toLocaleString()} รายการ` : '');
 
   const QLABELS = { star:'⭐', puzzle:'🔮', plowhorse:'🐴', dog:'🐕', uncosted:'⚪' };
   const QPILLS  = { star:'pill-up', puzzle:'pill-neu', plowhorse:'pill-warn', dog:'pill-down', uncosted:'' };
