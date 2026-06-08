@@ -2217,7 +2217,7 @@ async function loadAudit(){
 
 // ── setup ────────────────────────────────────────────────────────────────────
 const CATS=['CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'];
-const BANKS=['KTB','KBANK','KTC','PROMPTPAY','NONE','UNKNOWN'];
+const BANKS=['KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN'];
 async function refreshSetupBadge(){
   const m=await api('/api/payment-map?needs_attention=1').catch(()=>[]);
   const b=document.getElementById('setup-badge'); b.textContent=m.length; b.classList.toggle('hidden',!m.length);
