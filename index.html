@@ -5644,6 +5644,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <select id="targetMonth" onchange="loadTargets()"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"></select>
         </div>
+        <button onclick="suggestTargets()" title="เติมเป้าจากค่าเฉลี่ย 3 เดือนย้อนหลัง × +5% (แก้ได้ก่อนกด Save)"
+          class="px-4 py-1.5 bg-violet-100 hover:bg-violet-200 text-violet-700 text-sm font-medium rounded-lg transition-colors">
+          🎯 แนะนำเป้า (จากผลย้อนหลัง)
+        </button>
         <button onclick="saveTargets()"
           class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">
           Save Targets
@@ -12714,6 +12718,28 @@ async function saveTargets() {
     status.textContent = '✗ ' + e.message;
     status.className = 'text-sm text-red-600';
   }
+}
+
+async function suggestTargets() {
+  const month = document.getElementById('targetMonth').value;
+  const status = document.getElementById('targetSaveStatus');
+  if (!month) return;
+  status.textContent = 'กำลังคำนวณ…'; status.className = 'text-sm text-slate-400';
+  let d; try { d = await fetch(`${API}/api/targets/suggest?month=${encodeURIComponent(month)}`).then(r => r.json()); }
+  catch (e) { status.textContent = '✗ ' + e.message; status.className = 'text-sm text-red-600'; return; }
+  if (!d.suggestions || !d.suggestions.length) {
+    status.textContent = 'ไม่มีข้อมูลย้อนหลังพอ'; status.className = 'text-sm text-amber-600'; return;
+  }
+  const map = {}; d.suggestions.forEach(s => { map[s.branch] = s; });
+  // fill the editable inputs — owner reviews, then presses Save Targets
+  document.querySelectorAll('.target-rev-input').forEach(inp => {
+    const s = map[inp.dataset.branch]; if (s) inp.value = s.revenue_target || '';
+  });
+  document.querySelectorAll('.target-cust-input').forEach(inp => {
+    const s = map[inp.dataset.branch]; if (s) inp.value = s.customer_target || '';
+  });
+  status.innerHTML = `✓ เติมจากเฉลี่ย ${d.lookback} เดือน (${(d.trailing_months||[]).map(fmtMonth).join(', ')}) ×${d.uplift} — ตรวจแล้วกด <b>Save Targets</b>`;
+  status.className = 'text-sm text-violet-700';
 }
 
 function populateTargetMonths() {

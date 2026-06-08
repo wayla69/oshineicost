@@ -8029,6 +8029,53 @@ def get_targets(month: Optional[str] = Query(None)):
     return [dict(r) for r in rows]
 
 
+@app.get("/api/targets/suggest")
+def suggest_targets(
+    month:    Optional[str] = Query(None, description="target month (default: latest data month)"),
+    uplift:   float = Query(1.05, ge=0.5, le=3.0, description="stretch factor vs trailing avg"),
+    lookback: int   = Query(3, ge=1, le=12),
+):
+    """Suggest per-branch revenue/customer targets from each branch's trailing
+    `lookback`-month average × `uplift`. Read-only — the client fills the editor so
+    the owner reviews before saving. Seeds the (currently empty) branch_targets."""
+    with get_db() as con:
+        latest = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        target_month = month or latest
+        mrows = con.execute(
+            "SELECT DISTINCT period_month FROM sales_sku_monthly WHERE period_month < ? "
+            "ORDER BY period_month DESC LIMIT ?", (target_month, lookback)).fetchall()
+        mlist = [r["period_month"] for r in mrows]
+        if not mlist:
+            return {"month": target_month, "uplift": uplift, "lookback": 0,
+                    "trailing_months": [], "suggestions": []}
+        ph = ",".join("?" * len(mlist))
+        rev = con.execute(
+            f"""SELECT b.name br, AVG(m.rev) avg_rev
+                  FROM (SELECT branch_id, period_month, SUM(subtotal_ex_vat) rev
+                          FROM sales_sku_monthly WHERE period_month IN ({ph})
+                         GROUP BY branch_id, period_month) m
+                  JOIN branches b ON b.branch_id = m.branch_id
+                 WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
+                 GROUP BY b.name""", mlist).fetchall()
+        cust = con.execute(
+            f"""SELECT b.name br, AVG(m.c) avg_c
+                  FROM (SELECT branch_id, strftime('%Y-%m', sold_at) pm, SUM(customer_count) c
+                          FROM sales_transaction WHERE source='Easy'
+                           AND strftime('%Y-%m', sold_at) IN ({ph})
+                         GROUP BY branch_id, pm) m
+                  JOIN branches b ON b.branch_id = m.branch_id
+                 WHERE b.name != 'ALL' GROUP BY b.name""", mlist).fetchall()
+    cmap = {r["br"]: (r["avg_c"] or 0) for r in cust}
+    out = [{
+        "branch": r["br"],
+        "revenue_target":  round((r["avg_rev"] or 0) * uplift, -3),   # nearest ฿1,000
+        "customer_target": int(round(cmap.get(r["br"], 0) * uplift)),
+    } for r in rev]
+    out.sort(key=lambda x: -x["revenue_target"])
+    return {"month": target_month, "uplift": uplift, "lookback": len(mlist),
+            "trailing_months": mlist, "suggestions": out}
+
+
 @app.put("/api/targets", dependencies=[Depends(require_write_token)])
 def put_targets(entries: List[TargetEntry]):
     with get_db() as con:
