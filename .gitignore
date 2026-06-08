@@ -51,6 +51,8 @@ Thumbs.db
 
 # Volatile runtime lock
 .claude/scheduled_tasks.lock
+# Agent worktrees (ephemeral, created by Claude Code subagents)
+.claude/worktrees/
 
 # Deploy bootstrap artifacts (local only)
 backend/.seed_token.txt
