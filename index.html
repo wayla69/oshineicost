@@ -3744,8 +3744,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
             <th class="num">จำนวนขาย</th>
             <th class="num">% เทียบยอดรวม</th>
             <th class="num">% สะสม<span class="sub">Pareto</span></th>
-            <th class="num">ต้นทุน/จาน<span class="sub">฿ · BoM</span></th>
-            <th class="num">% ต้นทุนรวม<span class="sub">ของ COGS</span></th>
+            <th class="num">ต้นทุนรวม<span class="sub">฿ · BoM</span></th>
+            <th class="num">% สะสม COGS<span class="sub">Pareto</span></th>
             <th class="num">เปลี่ยนแปลง %<span class="sub">จำนวนขาย</span></th>
           </tr></thead>
           <tbody id="orderedBody"></tbody>
@@ -5550,7 +5550,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
             <option value="none">none (ยังไม่มี cost)</option>
           </select>
         </label>
-        <span id="mcStatus" class="text-xs text-slate-400 ml-auto"></span>
+        <span id="mcostStatus" class="text-xs text-slate-400 ml-auto"></span>
       </div>
       <div class="overflow-x-auto" style="max-height:520px">
         <table class="text-xs w-full">
@@ -5564,7 +5564,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
             <th class="py-2 pr-3">หมายเหตุ</th>
             <th class="py-2 pr-3"></th>
           </tr></thead>
-          <tbody id="mcBody"><tr><td colspan="8" class="py-4 text-center text-slate-400">เลือกเดือนแล้วกด "โหลด"</td></tr></tbody>
+          <tbody id="mcostBody"><tr><td colspan="8" class="py-4 text-center text-slate-400">เลือกเดือนแล้วกด "โหลด"</td></tr></tbody>
         </table>
       </div>
       <div class="mt-3 flex items-center gap-2">
@@ -8406,13 +8406,13 @@ function _renderTop60Sales(d) {
   const noteEl = document.getElementById('orderedMomNote');
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'MoM เทียบ ');
   const cn = document.getElementById('orderedCoverNote');
-  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · ต้นทุน/จาน = ต้นทุน BoM ÷ จำนวนขาย · % ต้นทุนรวม = สัดส่วน COGS ของเมนู (เมนูขายดี + ต้นทุน/จานสูง = เป้าปรับสูตร)';
+  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · ต้นทุนรวม = ต้นทุน BoM รวมของเมนู (ต้นทุน/จาน × จำนวนขาย) · % สะสม COGS = Pareto สัดส่วนต้นทุนสะสม (เมนูแรกๆ ที่ทำให้ถึง 80% = ตัวขับต้นทุนหลัก)';
   const body = document.getElementById('orderedBody'), foot = document.getElementById('orderedFoot');
   if (!items.length) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
   // prev qty (from qty MoM%) drives the total-MoM% in the footer
   const prevQtyOf = r => (r.qty_mom_pct != null && r.qty_mom_pct != -100) ? (r.qty || 0) / (1 + r.qty_mom_pct / 100) : null;
   const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
-  let sumQty = 0, sumShare = 0, sumPrev = 0, sumCogs = 0, sumCogsShare = 0, cum = 0;
+  let sumQty = 0, sumShare = 0, sumPrev = 0, sumCogs = 0, cum = 0, cumCogs = 0;
   body.innerHTML = items.map((r, i) => {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const mom = r.qty_mom_pct;
@@ -8420,10 +8420,10 @@ function _renderTop60Sales(d) {
     cum += r.qty_share_pct || 0;
     sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
     const momCell = mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true);
-    const cogs = r.cogs || 0; sumCogs += cogs; sumCogsShare += r.cogs_share_pct || 0;
-    const cpd = (r.qty > 0 && cogs > 0) ? cogs / r.qty : null;       // cost per dish (BoM)
-    const cpdCell = cpd != null ? f2(cpd) : '<span class="text-slate-300">—</span>';
-    const cshCell = r.cogs_share_pct != null ? r.cogs_share_pct.toFixed(1) + '%' : '<span class="text-slate-300">—</span>';
+    const cogs = r.cogs || 0; sumCogs += cogs;
+    cumCogs += r.cogs_share_pct || 0;                                // running Pareto of COGS share
+    const costCell = cogs > 0 ? fmtN(cogs) : '<span class="text-slate-300">—</span>';  // TOTAL cost (BoM)
+    const cumCogsCell = r.cogs_share_pct != null ? cumCogs.toFixed(1) + '%' : '<span class="text-slate-300">—</span>';
     const spk = (typeof mkSparkline === 'function' && Array.isArray(r.spark) && r.spark.length >= 2) ? mkSparkline(r.spark.slice(-8), '#6366f1', 64, 22) : '';
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
@@ -8434,8 +8434,8 @@ function _renderTop60Sales(d) {
       <td class="num tabular font-semibold">${fmtN(r.qty)}</td>
       <td class="num tabular text-slate-600">${r.qty_share_pct != null ? r.qty_share_pct.toFixed(1) + '%' : '—'}</td>
       <td class="num tabular text-slate-400">${cum.toFixed(1)}%</td>
-      <td class="num tabular font-medium text-orange-700">${cpdCell}</td>
-      <td class="num tabular text-slate-600">${cshCell}</td>
+      <td class="num tabular font-medium text-orange-700">${costCell}</td>
+      <td class="num tabular text-slate-400">${cumCogsCell}</td>
       <td class="num tabular">${momCell}</td>
     </tr>`;
   }).join('');
@@ -8444,8 +8444,8 @@ function _renderTop60Sales(d) {
     <td class="num tabular">${fmtN(sumQty)}</td>
     <td class="num tabular">${sumShare.toFixed(1)}%</td>
     <td class="num tabular">${cum.toFixed(1)}%</td>
-    <td class="num tabular font-medium text-orange-700">${sumQty > 0 && sumCogs > 0 ? f2(sumCogs / sumQty) : '—'}</td>
-    <td class="num tabular text-slate-600">${sumCogsShare.toFixed(1)}%</td>
+    <td class="num tabular font-medium text-orange-700">${sumCogs > 0 ? fmtN(sumCogs) : '—'}</td>
+    <td class="num tabular text-slate-400">${cumCogs.toFixed(1)}%</td>
     <td class="num tabular">${_momSpan(sumPrev > 0 ? (sumQty - sumPrev) / sumPrev * 100 : null, true)}</td>
   </tr>`;
 }
@@ -10069,7 +10069,7 @@ function _mcCurrentMonth() {
 
 async function loadMonthlyCost() {
   const month = _mcCurrentMonth();
-  const status = document.getElementById('mcStatus');
+  const status = document.getElementById('mcostStatus');
   status.textContent = 'กำลังโหลด…';
   try {
     const data = await fetch(`${API}/api/cost/monthly?month=${month}`).then(r => r.json());
@@ -10085,7 +10085,7 @@ async function loadMonthlyCost() {
 }
 
 function renderMonthlyCostTable() {
-  const body = document.getElementById('mcBody');
+  const body = document.getElementById('mcostBody');
   if (!mcRows.length) {
     body.innerHTML = '<tr><td colspan="8" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
     return;
