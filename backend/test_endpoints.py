@@ -143,3 +143,47 @@ def test_heavy_eaters_margin_identity_and_monotone_percentiles(client):
     # heavy / loss buckets are subsets of all bills
     assert d["heavy"]["bills"] <= d["n_bills"]
     assert d["loss"]["bills"] <= d["n_bills"]
+
+
+# ── Overhaul Phase 1 invariant — ONE COGS, identical GP across every tab ──────
+# The core "ตัวเลขไม่ตรง" complaint was GP differing between tabs because two
+# COGS methods coexisted. Phase 1 unified them (_cogs_case is now a shim over
+# _unified_cogs_expr). This locks that in: the four headline revenue/COGS/GP
+# surfaces must report the SAME whole-store numbers for the SAME period. A swap
+# back to sku_cost on any one of them moves COGS by thousands and trips this.
+#
+# Each endpoint exposes a whole-store roll-up under a different key:
+#   /api/profit/summary     -> top-level   {revenue_ex_vat, cogs, gross_profit}
+#   /api/gp/by-branch-month -> grand_total {revenue, cogs, gp}
+#   /api/pnl/branch         -> chain       {revenue, cogs, gross_profit}
+#   /api/cost/analysis      -> summary     {total_revenue, total_cogs, total_gross_profit}
+def _chain_rev_cogs_gp(client, params):
+    """(revenue, cogs, gp) whole-store roll-up from each of the 4 endpoints."""
+    ps = client.get("/api/profit/summary", params=params).json()
+    gp = client.get("/api/gp/by-branch-month", params=params).json()["grand_total"]
+    pn = client.get("/api/pnl/branch", params=params).json()["chain"]
+    ca = client.get("/api/cost/analysis", params=params).json()["summary"]
+    return {
+        "profit/summary":     (ps["revenue_ex_vat"], ps["cogs"], ps["gross_profit"]),
+        "gp/by-branch-month": (gp["revenue"],        gp["cogs"], gp["gp"]),
+        "pnl/branch":         (pn["revenue"],        pn["cogs"], pn["gross_profit"]),
+        "cost/analysis":      (ca["total_revenue"],  ca["total_cogs"], ca["total_gross_profit"]),
+    }
+
+
+@pytest.mark.parametrize("params", [{}, {"month": B_PER}], ids=["all_months", "single_month"])
+def test_gp_identical_across_tabs(client, params):
+    surfaces = _chain_rev_cogs_gp(client, params)
+    # Tolerance: per-branch roll-ups round before summing, so allow a few cents of
+    # accumulation — but a method swap shifts COGS by thousands, so this stays tight.
+    def close(a, b):
+        return abs(a - b) <= max(0.5, 0.0005 * max(abs(a), abs(b)))
+
+    ref_name, ref = next(iter(surfaces.items()))
+    for name, (rev, cogs, gp) in surfaces.items():
+        r0, c0, g0 = ref
+        assert close(rev, r0),  f"revenue differs: {name}={rev} vs {ref_name}={r0}"
+        assert close(cogs, c0), f"COGS differs: {name}={cogs} vs {ref_name}={c0}"
+        assert close(gp, g0),   f"GP differs: {name}={gp} vs {ref_name}={g0}"
+        # internal identity: GP must be revenue − COGS on every surface
+        assert close(gp, rev - cogs), f"{name}: gp {gp} != rev-cogs {rev - cogs}"
