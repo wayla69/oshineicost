@@ -1157,6 +1157,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 002-2V2M5 11v11M11 2v20M11 12h3a2 2 0 002-2V5a3 3 0 00-3-3"/></svg>
     <span class="nav-label">🍽️ ความต้องการพิเศษ</span>
   </div>
+  <div class="nav-item" id="nav-menuefficiency" onclick="switchTab('menuefficiency')" title="🎯 เมนูเสิร์ฟเยอะ × ต้นทุน — เป้าหมายลดต้นทุนพร้อมวัตถุดิบที่ควรโจมตีก่อน">
+    <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="11"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="2" y1="12" x2="6" y2="12"/></svg>
+    <span class="nav-label">🎯 เป้าลดต้นทุน</span>
+  </div>
 
   <!-- ═══ GROUP 4: 💵 สาขา & กำไร (branch GP, P&L, per-bill, benchmark) ═══ -->
   <div class="nav-section">💵 สาขา &amp; กำไร</div>
@@ -1714,6 +1718,82 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-5">
     <h2 class="section-title mb-3">ความต้องการพิเศษยอดฮิต (Top 25)</h2>
     <div id="modBars"></div>
+  </div>
+</div>
+
+<!-- ══ Phase 6: 🎯 เป้าลดต้นทุน — เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน ══ -->
+<div id="tab-menuefficiency" style="display:none">
+  <!-- scope + controls bar -->
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">🎯 เป้าลดต้นทุน</span>
+    <span id="mce2Scope" class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(239,68,68,.1);color:#dc2626"></span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">แกนนอน = % จำนวนเสิร์ฟ · แกนตั้ง = % ต้นทุน · <b>มุมบนขวา (🔴) = ลดต้นทุนได้มากที่สุด</b></span>
+  </div>
+  <!-- KPI chips -->
+  <div id="mce2Kpis" class="flex flex-wrap gap-2 mb-4"></div>
+  <!-- Quadrant scatter + legend -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">📊 Quadrant: เสิร์ฟ × ต้นทุน</h2>
+      <div class="flex gap-3 text-[11px]" style="color:var(--text-muted)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:3px"></span>เสิร์ฟเยอะ + ต้นทุนสูง (ลดก่อน)</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:3px"></span>เสิร์ฟน้อย + ต้นทุนสูง (ตัดเมนู?)</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#10b981;margin-right:3px"></span>เสิร์ฟเยอะ + ต้นทุนต่ำ (ดีมาก)</span>
+      </div>
+    </div>
+    <div style="height:420px"><canvas id="mce2Scatter" style="cursor:pointer"></canvas></div>
+    <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เส้นประ = เกณฑ์ 2% (ค่าเฉลี่ยถ่วงน้ำหนัก) · คลิกจุดเพื่อดูสูตร BoM ของเมนูนั้น</p>
+  </div>
+  <!-- Full sortable table -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">📋 รายการทั้งหมด (คลิกหัวคอลัมน์เพื่อเรียงลำดับ)</h2>
+      <button onclick="exportMce2Csv()" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">⬇ CSV</button>
+    </div>
+    <div class="overflow-x-auto" style="max-height:420px;overflow-y:auto">
+      <table class="text-xs w-full">
+        <thead class="sticky top-0" style="background:var(--bg-card)">
+          <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+            <th class="py-1.5 pr-2">#</th>
+            <th class="py-1.5 pr-2 cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('description',1)" title="เรียงตามชื่อ">เมนู ↕</th>
+            <th class="py-1.5 pr-2 text-slate-400 text-[10px]">หมวด</th>
+            <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('servings',-1)" title="เรียงตามจำนวนเสิร์ฟ">เสิร์ฟ ↕</th>
+            <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('serving_pct',-1)" title="เรียงตาม % เสิร์ฟ">%เสิร์ฟ ↕</th>
+            <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost',-1)" title="เรียงตามต้นทุนรวม">ต้นทุนรวม ↕</th>
+            <th class="py-1.5 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_pct',-1)" title="เรียงตาม % ต้นทุน">%ต้นทุน ↕</th>
+            <th class="py-1.5 text-right cursor-pointer hover:text-indigo-600" onclick="renderMce2Table('cost_per_serving',-1)" title="เรียงตามต้นทุน/จาน">฿/จาน ↕</th>
+          </tr>
+        </thead>
+        <tbody id="mce2Body"><tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- Ingredient attack section -->
+  <div class="card p-5 mb-4" style="border-left:4px solid #8b5cf6">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🧬 วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว)</h2>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p>
+    <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div>
+        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 วัตถุดิบ (ตามต้นทุนรวม)</p>
+        <div style="height:380px"><canvas id="mce2IngBar"></canvas></div>
+      </div>
+      <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0" style="background:var(--bg-card)">
+            <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+              <th class="py-1.5 pr-2">#</th>
+              <th class="py-1.5 pr-2">วัตถุดิบ</th>
+              <th class="py-1.5 pr-2 text-slate-400 text-[10px]">ประเภท</th>
+              <th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
+              <th class="py-1.5 pr-2 text-right">% ต้นทุน</th>
+              <th class="py-1.5 text-right">ใน N เมนู</th>
+            </tr>
+          </thead>
+          <tbody id="mce2IngBody"><tr><td colspan="6" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -5984,7 +6064,7 @@ const TAB_MODULE = {
   home:'sales.overview', overall:'sales.overview', action:'sales.overview',
   dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
   buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
-  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis',
+  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis',
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
   simhub:'cost.simulator',
@@ -6771,14 +6851,14 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
   ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
    'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
@@ -6995,8 +7075,9 @@ function loadActiveTab() {
   if (activeTab === 'branchbom')   loadBranchBom();
   if (activeTab === 'bomcost')     loadBomCostTab();
   if (activeTab === 'simhub')      loadSimhub();
-  if (activeTab === 'menucompare') loadMenuCompare();
-  if (activeTab === 'coverage')    loadCostCoverage();
+  if (activeTab === 'menucompare')    loadMenuCompare();
+  if (activeTab === 'menuefficiency') loadMCE();
+  if (activeTab === 'coverage')       loadCostCoverage();
   if (activeTab === 'pnlbranch')   loadPnlBranch();
   if (activeTab === 'more')        loadMoreAnalytics();
   if (activeTab === 'heavyeater')  loadHeavyEaters();
@@ -13437,6 +13518,145 @@ async function loadBranchHeatmap() {
 
 function closeDrill() {}  // legacy no-op (old cached callers)
 
+// ════════════════════════════════════════════════════════════════
+// PHASE 7 — Async dive-in enhancers (real breakdown, not just bigger chart)
+// ════════════════════════════════════════════════════════════════
+const _DIVE_ENHANCERS = {
+  chartTrend:       _diveEnhanceTrend,
+  chartBranchCompare: _diveEnhanceBranchCompare,
+  chartCat:         _diveEnhanceCategory,
+  chartBreakdown:   _diveEnhanceCategory,
+  chartProfitBranch: _diveEnhanceProfitBranch,
+};
+
+async function _diveEnhanceTrend(_cfg) {
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch',     getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  let gp, cats;
+  try {
+    [gp, cats] = await Promise.all([
+      fetch(`${API}/api/gp/by-branch-month?${p}`).then(r => r.json()),
+      fetch(`${API}/api/sales/category?${p}`).then(r => r.json()).catch(() => null),
+    ]);
+  } catch (e) {
+    return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ: ${e.message}</p>`;
+  }
+
+  const branches = (gp.branches || []).sort((a, b) => (b.total_revenue || 0) - (a.total_revenue || 0));
+  const branchRows = branches.map(b => {
+    const gpp = b.gp_pct != null ? b.gp_pct : (b.total_revenue ? (b.total_revenue - b.total_cogs) / b.total_revenue * 100 : null);
+    const gv = gpp != null ? gpp.toFixed(1) : '—';
+    const color = gpp == null ? '' : gpp >= 60 ? '#059669' : gpp >= 40 ? '#d97706' : '#dc2626';
+    return `<tr class="border-b cursor-pointer hover:bg-indigo-50/30" style="border-color:var(--border)"
+                onclick="closeDive();drillIntoBranch('${jsAttr(b.branch)}')" title="เจาะลึก ${esc(b.branch)}">
+      <td class="py-1.5 pr-2 font-medium">${esc(b.branch)} <span style="opacity:.4">›</span></td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(b.total_revenue)}</td>
+      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${color}">${gv}%</td>
+    </tr>`;
+  }).join('');
+
+  let catHtml = '';
+  if (Array.isArray(cats) && cats.length) {
+    const grand = cats.reduce((s, c) => s + (c.revenue || 0), 0) || 1;
+    catHtml = _diveSection('หมวดสินค้า Top 5', '🍱',
+      cats.slice(0, 5).map(c => _diveMetric(c.category, `${fmt(c.revenue)} (${(c.revenue/grand*100).toFixed(0)}%)`)).join(''));
+  }
+
+  return _diveSection('แยกรายสาขา (คลิกเพื่อเจาะลึก)', '🏪', `
+    <div style="overflow-x:auto;margin-top:4px">
+      <table class="text-xs w-full">
+        <thead><tr style="color:var(--text-muted)" class="border-b">
+          <th class="py-1 pr-2 text-left">สาขา</th>
+          <th class="py-1 pr-2 text-right">รายได้</th>
+          <th class="py-1 text-right">GP%</th>
+        </tr></thead>
+        <tbody>${branchRows}</tbody>
+      </table>
+    </div>`) + catHtml;
+}
+
+async function _diveEnhanceBranchCompare(_cfg) {
+  const p = new URLSearchParams();
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  let d;
+  try { d = await fetch(`${API}/api/gp/by-branch-month?${p}`).then(r => r.json()); }
+  catch (e) { return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ</p>`; }
+
+  const branches = (d.branches || []).sort((a, b) => (b.total_revenue || 0) - (a.total_revenue || 0));
+  const grandRev = branches.reduce((s, b) => s + (b.total_revenue || 0), 0) || 1;
+  const rows = branches.map(b => {
+    const share = ((b.total_revenue || 0) / grandRev * 100).toFixed(1);
+    const gp    = (b.total_revenue || 0) - (b.total_cogs || 0);
+    const gpp   = b.total_revenue ? (gp / b.total_revenue * 100).toFixed(1) : '—';
+    return `<tr class="border-b cursor-pointer hover:bg-indigo-50/30" style="border-color:var(--border)"
+                onclick="closeDive();drillIntoBranch('${jsAttr(b.branch)}')" title="เจาะลึก ${esc(b.branch)}">
+      <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
+      <td class="py-1.5 pr-2 text-right">${fmt(b.total_revenue)}</td>
+      <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${share}%</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${parseFloat(gpp)>=60?'#059669':parseFloat(gpp)>=40?'#d97706':'#dc2626'}">${gpp}%</td>
+    </tr>`;
+  }).join('');
+
+  return _diveSection('GP รายสาขา (คลิกเจาะลึก)', '💵', `
+    <div style="overflow-x:auto;margin-top:4px">
+      <table class="text-xs w-full">
+        <thead><tr style="color:var(--text-muted)" class="border-b">
+          <th class="py-1 pr-2 text-left">สาขา</th>
+          <th class="py-1 pr-2 text-right">รายได้</th>
+          <th class="py-1 pr-2 text-right">%รวม</th>
+          <th class="py-1 text-right">GP%</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`);
+}
+
+async function _diveEnhanceCategory(_cfg) {
+  const p = new URLSearchParams();
+  if (getBranch())    p.set('branch',     getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  let cats;
+  try { cats = await fetch(`${API}/api/sales/category?${p}`).then(r => r.json()); }
+  catch (e) { return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ</p>`; }
+
+  if (!Array.isArray(cats)) return '';
+  const top = cats.slice(0, 10);
+  const grand = cats.reduce((s, c) => s + (c.revenue || 0), 0) || 1;
+  const rows = top.map((c, i) => {
+    const pct = ((c.revenue || 0) / grand * 100).toFixed(1);
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-2 font-medium">${esc(c.category)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(c.revenue)}</td>
+      <td class="py-1.5 text-right tabular-nums font-semibold">${pct}%</td>
+    </tr>`;
+  }).join('');
+
+  return _diveSection('Top หมวดสินค้า (ช่วงนี้)', '🍱', `
+    <div style="overflow-x:auto;margin-top:4px">
+      <table class="text-xs w-full">
+        <thead><tr style="color:var(--text-muted)" class="border-b">
+          <th class="py-1 pr-2">#</th>
+          <th class="py-1 pr-2 text-left">หมวด</th>
+          <th class="py-1 pr-2 text-right">รายได้</th>
+          <th class="py-1 text-right">%รวม</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`);
+}
+
+async function _diveEnhanceProfitBranch(_cfg) {
+  return _diveEnhanceBranchCompare(_cfg);
+}
+
 // ── DIVE IN — chart zoom + side-by-side analysis ──────────────────────────
 function closeDive() {
   const m = document.getElementById('diveModal');
@@ -13489,10 +13709,13 @@ function diveInChart(chartId) {
     cfg.options.responsive = true;
     cfg.options.maintainAspectRatio = false;
 
-    // 2. Build analysis sidebar
-    const analysisHtml = (typeof analyzeChartForDive === 'function')
-      ? analyzeChartForDive(chartId, cfg)
-      : '<p class="text-sm text-slate-400">No analysis available.</p>';
+    // 2. Build analysis sidebar — static baseline first; async enhancer replaces it
+    const hasEnhancer = typeof _DIVE_ENHANCERS !== 'undefined' && !!_DIVE_ENHANCERS[chartId];
+    const analysisHtml = hasEnhancer
+      ? '<div id="diveEnhancerPane" style="padding:16px 4px"><span class="text-xs" style="color:var(--text-muted)">⏳ กำลังโหลดข้อมูลเชิงลึก…</span></div>'
+      : ((typeof analyzeChartForDive === 'function')
+          ? analyzeChartForDive(chartId, cfg)
+          : '<p class="text-sm text-slate-400">No analysis available.</p>');
 
     // 3. Set ALL content BEFORE showing modal (lesson from the drill-down bug)
     title.textContent = `🔍 ${titleMap[chartId] || chartId}`;
@@ -13501,9 +13724,9 @@ function diveInChart(chartId) {
         <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative">
           <canvas id="zoomChart"></canvas>
         </div>
-        <div class="dive-insight-bar dive-side">
+        <div class="dive-insight-bar dive-side" id="diveInsightPanel">
           ${analysisHtml}
-          <div class="dive-section">
+          <div class="dive-section" id="diveActionsSection">
             <div class="dive-section-title">🛠️ Actions</div>
             <button onclick="exportChartData('${chartId}')" class="dive-action-btn">⬇ Export this chart data (CSV)</button>
             <button onclick="if(chartInstances['zoomChart'])chartInstances['zoomChart'].resetZoom&&chartInstances['zoomChart'].resetZoom()" class="dive-action-btn">⟳ Reset zoom &amp; pan</button>
@@ -13526,6 +13749,22 @@ function diveInChart(chartId) {
         body.innerHTML = `<p class="text-sm text-red-500 py-4">⚠ Could not render chart: ${e.message}</p>`;
       }
     }, 50);
+
+    // 6. Fire async enhancer (replaces the loading pane inside the panel)
+    if (hasEnhancer) {
+      _DIVE_ENHANCERS[chartId](cfg).then(html => {
+        const pane = document.getElementById('diveEnhancerPane');
+        const actSec = document.getElementById('diveActionsSection');
+        if (pane && html) {
+          pane.outerHTML = html;
+          // Ensure actions section is still present (enhancer html goes before it)
+          if (actSec) actSec.style.display = '';
+        }
+      }).catch(err => {
+        const pane = document.getElementById('diveEnhancerPane');
+        if (pane) pane.innerHTML = `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ: ${err.message}</p>`;
+      });
+    }
   } catch (e) {
     console.error('diveInChart error:', e);
     title.textContent = '🔍 Error';
@@ -16922,6 +17161,200 @@ async function loadBuffetMix() {
       scales: { x: { stacked: true }, y: { stacked: true, ticks: { callback: v => fmt(v) } } }
     }
   });
+}
+
+// ════════════════════════════════════════════════════════════════
+// PHASE 6 — Dedicated Menu Cost Efficiency tab
+// ════════════════════════════════════════════════════════════════
+let _mce2SortCol = 'cost_pct', _mce2SortDir = -1;
+
+async function loadMCE() {
+  const _fk = _filterKey();
+  if (_tabLastKey.menuefficiency === _fk) return;
+  _tabLastKey.menuefficiency = _fk;
+
+  const p = new URLSearchParams({ limit: '200' });
+  if (getBranch())    p.set('branch',     getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  const kpiEl  = document.getElementById('mce2Kpis');
+  const bodyEl = document.getElementById('mce2Body');
+  if (kpiEl)  kpiEl.innerHTML  = '<span class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</span>';
+  if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+
+  let d;
+  try { d = await fetch(`${API}/api/buffet/menu-cost-efficiency?${p}`).then(r => r.json()); }
+  catch (e) {
+    if (kpiEl) kpiEl.innerHTML = `<span class="text-xs text-red-500">โหลดไม่สำเร็จ: ${e.message}</span>`;
+    return;
+  }
+
+  const scopeEl = document.getElementById('mce2Scope');
+  if (scopeEl) scopeEl.textContent = (getBranch() || 'ทุกสาขา') + ' · ' + d.n_dishes + ' เมนู';
+
+  // KPI chips
+  const top5cost  = d.items.slice(0, 5).reduce((a, r) => a + r.cost_pct, 0);
+  const hotCount  = d.items.filter(r => r.serving_pct >= 2 && r.cost_pct >= 2).length;
+  const avgCps    = d.items.length ? d.items.reduce((a, r) => a + r.cost_per_serving, 0) / d.items.length : 0;
+  if (kpiEl) kpiEl.innerHTML = [
+    ['ต้นทุนรวม',           fmt(d.total_cost),             '#ef4444'],
+    ['Top 5 เมนู = % ต้นทุน', top5cost.toFixed(0) + '%',   '#f59e0b'],
+    ['เมนูเสิร์ฟเยอะ+แพง',  hotCount + ' เมนู 🎯',         '#dc2626'],
+    ['ต้นทุน/จาน เฉลี่ย',   fmt(avgCps),                   '#8b5cf6'],
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${c}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+
+  // Quadrant scatter
+  window._mce2Data = d.items;
+  const pts = d.items.map(r => ({
+    x: r.serving_pct, y: r.cost_pct,
+    r: 5 + Math.min(20, Math.sqrt(Math.max(0, r.cost_per_serving) * 1.5)),
+    item: r,
+  }));
+  mkChart('mce2Scatter', {
+    type: 'bubble',
+    data: { datasets: [{ data: pts,
+      backgroundColor: pts.map(p => p.x >= 2 && p.y >= 2 ? 'rgba(239,68,68,0.65)' :
+                                     p.x >= 2 ? 'rgba(16,185,129,0.55)' :
+                                     p.y >= 2 ? 'rgba(245,158,11,0.60)' :
+                                                'rgba(148,163,184,0.30)'),
+      borderColor:     pts.map(p => p.x >= 2 && p.y >= 2 ? '#ef4444' :
+                                     p.x >= 2 ? '#10b981' : p.y >= 2 ? '#f59e0b' : '#94a3b8'),
+      borderWidth: 1.5 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => {
+          const it = ctx.raw.item;
+          return [`📌 ${it.description}`,
+                  `เสิร์ฟ ${it.serving_pct.toFixed(1)}% · ต้นทุน ${it.cost_pct.toFixed(1)}% · ฿${fmtN(it.cost_per_serving)}/จาน`];
+        } } },
+      },
+      scales: {
+        x: { title: { display: true, text: '% จำนวนเสิร์ฟ →', font: { size: 11 } },
+             ticks: { callback: v => v + '%' } },
+        y: { title: { display: true, text: '% ต้นทุน →', font: { size: 11 } },
+             ticks: { callback: v => v + '%' } },
+      },
+      onClick: (_, elements) => {
+        if (!elements.length) return;
+        const it = pts[elements[0].index]?.item;
+        if (it) gpbSkuDrill(it.sku_code);
+      },
+    },
+  });
+
+  // Add dashed quadrant lines manually via afterDraw plugin
+  const chart = chartInstances['mce2Scatter'];
+  if (chart && !chart._mce2LinesPlugin) {
+    chart._mce2LinesPlugin = true;
+    const origDraw = chart.draw.bind(chart);
+    chart.draw = function () {
+      origDraw();
+      const ctx2 = chart.ctx;
+      const xa = chart.scales.x, ya = chart.scales.y;
+      const x2px = xa.getPixelForValue(2), y2px = ya.getPixelForValue(2);
+      ctx2.save();
+      ctx2.setLineDash([4, 3]);
+      ctx2.strokeStyle = 'rgba(239,68,68,0.35)';
+      ctx2.lineWidth = 1;
+      ctx2.beginPath(); ctx2.moveTo(x2px, ya.top); ctx2.lineTo(x2px, ya.bottom); ctx2.stroke();
+      ctx2.beginPath(); ctx2.moveTo(xa.left, y2px); ctx2.lineTo(xa.right, y2px); ctx2.stroke();
+      ctx2.setLineDash([]);
+      ctx2.restore();
+    };
+    chart.draw();
+  }
+
+  renderMce2Table(_mce2SortCol, _mce2SortDir);
+  loadMce2Ingredients();
+}
+
+function renderMce2Table(col, dir) {
+  _mce2SortCol = col; _mce2SortDir = dir;
+  const data = window._mce2Data;
+  if (!data) return;
+  const s2 = [...data].sort((a, b) => {
+    if (typeof a[col] === 'string') return dir * a[col].localeCompare(b[col]);
+    return dir * ((a[col] || 0) - (b[col] || 0));
+  });
+  const bodyEl = document.getElementById('mce2Body');
+  if (!bodyEl) return;
+  bodyEl.innerHTML = s2.map((r, i) => {
+    const hot  = r.serving_pct >= 2 && r.cost_pct >= 2;
+    const warn = r.cost_pct >= 2 && r.serving_pct < 2;
+    const rowBg = hot ? 'background:rgba(239,68,68,0.04)' : warn ? 'background:rgba(245,158,11,0.04)' : '';
+    return `<tr class="border-b cursor-pointer hover:bg-indigo-50/30" style="border-color:var(--border);${rowBg}"
+              onclick="gpbSkuDrill('${jsAttr(r.sku_code)}')" title="คลิกดูสูตร BoM ของ ${esc(r.description)}">
+      <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-2 font-medium">${hot ? '🎯 ' : warn ? '⚠️ ' : ''}${esc((r.description || '').replace(/^\((?:A|B)\)\s*/, ''))}</td>
+      <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.category || '')}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.servings)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${r.serving_pct.toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.cost_pct >= 5 ? '#dc2626' : r.cost_pct >= 2 ? '#f59e0b' : 'inherit'}">${r.cost_pct.toFixed(1)}%</td>
+      <td class="py-1.5 text-right tabular-nums">${fmtN(r.cost_per_serving)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">ไม่มีข้อมูล</td></tr>';
+}
+
+function exportMce2Csv() {
+  const data = window._mce2Data;
+  if (!data) return;
+  const hdr = ['sku_code','description','category','servings','serving_pct','cost','cost_pct','cost_per_serving'];
+  const rows = data.map(r => hdr.map(k => JSON.stringify(r[k] ?? '')).join(','));
+  const blob = new Blob([hdr.join(',') + '\n' + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'menu_cost_efficiency.csv'; a.click();
+}
+
+async function loadMce2Ingredients() {
+  const p = new URLSearchParams({ limit: '60', group_family: 'true' });
+  if (getBranch())    p.set('branch',     getBranch());
+  if (getMonthFrom()) p.set('month_from', getMonthFrom());
+  if (getMonthTo())   p.set('month_to',   getMonthTo());
+
+  let d;
+  try { d = await fetch(`${API}/api/bom/consumption-analysis?${p}`).then(r => r.json()); }
+  catch (e) { return; }
+
+  const ing = d.ingredients || d.rows || [];
+  if (!ing.length) return;
+
+  const kpiEl = document.getElementById('mce2IngKpis');
+  const grand = ing.reduce((a, r) => a + (r.total_cost || 0), 0);
+  const top3pct = ing.slice(0, 3).reduce((a, r) => a + (r.pct || 0), 0);
+  if (kpiEl) kpiEl.innerHTML = [
+    ['ต้นทุนวัตถุดิบรวม', fmt(grand), '#8b5cf6'],
+    ['Top 3 = % ต้นทุน',  top3pct.toFixed(0) + '%', '#f59e0b'],
+    ['จำนวนวัตถุดิบ', String(ing.length), '#4f46e5'],
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${c}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+
+  const top20 = ing.slice(0, 20);
+  mkChart('mce2IngBar', {
+    type: 'bar',
+    data: {
+      labels: top20.map(r => (r.name || r.code || '').substring(0, 22)),
+      datasets: [{ label: 'ต้นทุน', data: top20.map(r => Math.round(r.total_cost || 0)),
+        backgroundColor: top20.map((_, i) => i < 3 ? 'rgba(139,92,246,0.80)' : 'rgba(139,92,246,0.45)'),
+        borderRadius: 3 }],
+    },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { label: ctx => fmt(ctx.parsed.x) } } },
+      scales: { x: { ticks: { callback: v => fmt(v) } } },
+    },
+  });
+
+  const bodyEl = document.getElementById('mce2IngBody');
+  if (bodyEl) bodyEl.innerHTML = ing.slice(0, 40).map((r, i) => `
+    <tr class="border-b" style="border-color:var(--border);background:${i < 3 ? 'rgba(139,92,246,0.05)' : ''}">
+      <td class="py-1.5 pr-2" style="color:var(--text-muted)">${i + 1}</td>
+      <td class="py-1.5 pr-2 font-medium">${i < 3 ? '⚡ ' : ''}${esc(r.name || r.code || '')}</td>
+      <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.type || '')}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.total_cost)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.pct >= 10 ? '#8b5cf6' : 'inherit'}">${(r.pct || 0).toFixed(1)}%</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${r.n_menus || 0}</td>
+    </tr>`).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
