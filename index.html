@@ -3688,8 +3688,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
             <th class="num">จำนวนขาย</th>
             <th class="num">% เทียบยอดรวม</th>
             <th class="num">% สะสม<span class="sub">Pareto</span></th>
-            <th class="num">GP%<span class="sub">à-la-carte</span></th>
-            <th class="num">อันดับ<span class="sub">Δ vs เดือนก่อน</span></th>
+            <th class="num">ต้นทุน/จาน<span class="sub">฿ · BoM</span></th>
+            <th class="num">% ต้นทุนรวม<span class="sub">ของ COGS</span></th>
             <th class="num">เปลี่ยนแปลง %<span class="sub">จำนวนขาย</span></th>
           </tr></thead>
           <tbody id="orderedBody"></tbody>
@@ -8350,15 +8350,13 @@ function _renderTop60Sales(d) {
   const noteEl = document.getElementById('orderedMomNote');
   if (noteEl) noteEl.textContent = _top60MomLabel(d, 'MoM เทียบ ');
   const cn = document.getElementById('orderedCoverNote');
-  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · อันดับ = ขยับกี่อันดับเทียบเดือนก่อน · GP% เฉพาะเมนูมีราคา (บุฟเฟต์ = —)';
+  if (cn) cn.textContent = 'ABC = Pareto (A ≤80% สะสม · B 80–95% · C หาง) · เทรนด์ = จำนวนขายรายเดือน · ต้นทุน/จาน = ต้นทุน BoM ÷ จำนวนขาย · % ต้นทุนรวม = สัดส่วน COGS ของเมนู (เมนูขายดี + ต้นทุน/จานสูง = เป้าปรับสูตร)';
   const body = document.getElementById('orderedBody'), foot = document.getElementById('orderedFoot');
   if (!items.length) { body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; if (foot) foot.innerHTML = ''; return; }
-  // derived prev-period rank (by prev qty) for the rank-change column
+  // prev qty (from qty MoM%) drives the total-MoM% in the footer
   const prevQtyOf = r => (r.qty_mom_pct != null && r.qty_mom_pct != -100) ? (r.qty || 0) / (1 + r.qty_mom_pct / 100) : null;
-  const prevRank = {};
-  items.map(r => ({ sku: r.sku_code, pq: prevQtyOf(r) })).filter(x => x.pq != null)
-       .sort((a, b) => b.pq - a.pq).forEach((x, idx) => { prevRank[x.sku] = idx + 1; });
-  let sumQty = 0, sumShare = 0, sumPrev = 0, gpRev = 0, gpCogs = 0, cum = 0;
+  const f2 = v => (v == null ? '—' : Number(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  let sumQty = 0, sumShare = 0, sumPrev = 0, sumCogs = 0, sumCogsShare = 0, cum = 0;
   body.innerHTML = items.map((r, i) => {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const mom = r.qty_mom_pct;
@@ -8366,13 +8364,10 @@ function _renderTop60Sales(d) {
     cum += r.qty_share_pct || 0;
     sumQty += r.qty || 0; sumShare += r.qty_share_pct || 0; if (pq != null) sumPrev += Math.round(pq);
     const momCell = mom == null ? '<span class="text-amber-600">เมนูใหม่</span>' : _momSpan(mom, true);
-    const pr = prevRank[r.sku_code];
-    let rankCell;
-    if (mom == null || pr == null) rankCell = '<span class="text-amber-600 text-[10px]">ใหม่</span>';
-    else { const dr = pr - (i + 1); rankCell = dr === 0 ? '<span class="text-slate-400">–</span>' : `<span style="color:${dr > 0 ? '#10b981' : '#ef4444'};font-weight:600">${dr > 0 ? '▲' : '▼'}${Math.abs(dr)}</span>`; }
-    const gp = (typeof _hasMenuPrice === 'function' && _hasMenuPrice(r)) ? (r.revenue - r.cogs) / r.revenue * 100 : null;
-    if (gp != null) { gpRev += r.revenue; gpCogs += r.cogs; }
-    const gpCell = gp == null ? '<span class="text-slate-300">—</span>' : `<span style="color:${gp >= 60 ? '#10b981' : gp >= 40 ? '#f59e0b' : '#ef4444'};font-weight:600">${gp.toFixed(0)}%</span>`;
+    const cogs = r.cogs || 0; sumCogs += cogs; sumCogsShare += r.cogs_share_pct || 0;
+    const cpd = (r.qty > 0 && cogs > 0) ? cogs / r.qty : null;       // cost per dish (BoM)
+    const cpdCell = cpd != null ? f2(cpd) : '<span class="text-slate-300">—</span>';
+    const cshCell = r.cogs_share_pct != null ? r.cogs_share_pct.toFixed(1) + '%' : '<span class="text-slate-300">—</span>';
     const spk = (typeof mkSparkline === 'function' && Array.isArray(r.spark) && r.spark.length >= 2) ? mkSparkline(r.spark.slice(-8), '#6366f1', 64, 22) : '';
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
@@ -8383,8 +8378,8 @@ function _renderTop60Sales(d) {
       <td class="num tabular font-semibold">${fmtN(r.qty)}</td>
       <td class="num tabular text-slate-600">${r.qty_share_pct != null ? r.qty_share_pct.toFixed(1) + '%' : '—'}</td>
       <td class="num tabular text-slate-400">${cum.toFixed(1)}%</td>
-      <td class="num tabular">${gpCell}</td>
-      <td class="num tabular">${rankCell}</td>
+      <td class="num tabular font-medium text-orange-700">${cpdCell}</td>
+      <td class="num tabular text-slate-600">${cshCell}</td>
       <td class="num tabular">${momCell}</td>
     </tr>`;
   }).join('');
@@ -8393,8 +8388,8 @@ function _renderTop60Sales(d) {
     <td class="num tabular">${fmtN(sumQty)}</td>
     <td class="num tabular">${sumShare.toFixed(1)}%</td>
     <td class="num tabular">${cum.toFixed(1)}%</td>
-    <td class="num tabular">${gpRev > 0 ? ((gpRev - gpCogs) / gpRev * 100).toFixed(0) + '%' : '—'}</td>
-    <td></td>
+    <td class="num tabular font-medium text-orange-700">${sumQty > 0 && sumCogs > 0 ? f2(sumCogs / sumQty) : '—'}</td>
+    <td class="num tabular text-slate-600">${sumCogsShare.toFixed(1)}%</td>
     <td class="num tabular">${_momSpan(sumPrev > 0 ? (sumQty - sumPrev) / sumPrev * 100 : null, true)}</td>
   </tr>`;
 }
