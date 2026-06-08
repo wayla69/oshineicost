@@ -57,3 +57,8 @@ backend/.seed_token.txt
 backend/.seed_token*.txt
 backend/dbchunks/
 backend/*.db.gz
+
+# Local-only artifacts (presentation deck + ad-hoc data) — not source code
+Oshinei_App_Presentation_TH.pptx
+deck_assets/
+Reconciliation Data Udon/
