@@ -6437,9 +6437,10 @@ def analysis_discount_bills(
         # Payment method per receipt. A bill can split across codes → show the
         # DOMINANT (largest-amount) code; payment_n = how many distinct codes.
         has_pay = "sale_payment" in tabs
-        sel_pay  = ("(SELECT sp.payment_code FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
+        _pc = "CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END"
+        sel_pay  = (f"(SELECT {_pc} FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
                     "AND sp.receipt_no=st.receipt_no ORDER BY sp.amount DESC LIMIT 1)" if has_pay else "NULL")
-        sel_payn = ("(SELECT COUNT(DISTINCT sp.payment_code) FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
+        sel_payn = (f"(SELECT COUNT(DISTINCT {_pc}) FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
                     "AND sp.receipt_no=st.receipt_no)" if has_pay else "0")
         rows = con.execute(
             f"""
@@ -6678,6 +6679,96 @@ def analysis_discount_leakage(
         "abnormal_branches": [b["branch"] for b in abnormal],
         "summary": headline,
         "reasons_staged": reasons_staged,
+    }
+
+
+# ---------------------------------------------------------------------------
+# /api/analysis/payment_discount  -  payment method × discount cross-analysis
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/payment_discount")
+@ttl_cache
+def analysis_payment_discount(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Payment-method × discount cross-analysis for the Discounts tab:
+      • mix       — payment-code split on discounted bills (by dominant code)
+      • heaviest  — which payment type gets the deepest discounts (avg disc% of bill)
+      • cash_heavy — the leakage flag: cash-paid bills discounted >=20% of bill,
+                     by branch (cash + big markdown = highest shrinkage risk)
+    disc% uses the reconstructed pre-discount base. Payment code is Cash-normalized
+    at query level (POS has 'CASH'/'Cash' dups). Needs the per-bill sale_payment
+    table (sync_mssql) → returns available=False if it isn't synced yet.
+    """
+    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    HEAVY = 0.20   # discount >= 20% of the (pre-discount) bill = "heavy"
+    filters = ["b.name != 'ALL'", "st.discount > 0"]
+    params: dict = {}
+    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+
+    with get_db() as con:
+        if not con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_payment'").fetchone():
+            return {"available": False, "mix": [], "heaviest": [], "cash_heavy": {},
+                    "heavy_pct": int(HEAVY * 100)}
+        # dominant (largest-amount) payment code per discounted receipt, Cash-normalised
+        dom_cte = """
+            WITH dom AS (
+              SELECT branch_id, receipt_no,
+                     CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END AS code,
+                     ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
+              FROM sale_payment
+            )"""
+        rows = con.execute(f"""
+            {dom_cte}
+            SELECT d.code AS code, COUNT(*) AS bills,
+                   ROUND(SUM(st.discount)) AS discount,
+                   ROUND(100.0 * SUM(st.discount) / NULLIF(SUM({base}), 0), 1) AS disc_pct,
+                   ROUND(AVG(st.discount)) AS avg_discount
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
+            {where}
+            GROUP BY d.code
+            ORDER BY bills DESC
+        """, params).fetchall()
+        mix = [dict(r) for r in rows]
+
+        # cash + heavy discount, by branch (the leakage flag)
+        ch_rows = con.execute(f"""
+            {dom_cte}
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS discount
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
+            {where} AND d.code = 'Cash' AND {base} > 0 AND st.discount * 1.0 / {base} >= {HEAVY}
+            GROUP BY b.name ORDER BY discount DESC
+        """, params).fetchall()
+        cash_heavy_branches = [dict(r) for r in ch_rows]
+
+    total_bills = sum(m["bills"] for m in mix)
+    total_disc  = sum(m["discount"] or 0 for m in mix)
+    # heaviest payment types (>=50 bills) by disc% of bill
+    heaviest = sorted([m for m in mix if m["bills"] >= 50],
+                      key=lambda m: -(m["disc_pct"] or 0))[:6]
+    ch_bills = sum(b["bills"] for b in cash_heavy_branches)
+    ch_disc  = sum(b["discount"] or 0 for b in cash_heavy_branches)
+    top = cash_heavy_branches[0] if cash_heavy_branches else None
+    return {
+        "available": True,
+        "heavy_pct": int(HEAVY * 100),
+        "total_discount_bills": total_bills,
+        "total_discount": total_disc,
+        "mix": mix[:14],
+        "heaviest": heaviest,
+        "cash_heavy": {
+            "bills": ch_bills, "discount": ch_disc,
+            "share_of_discount": round(100.0 * ch_disc / total_disc, 1) if total_disc else 0,
+            "branches": cash_heavy_branches[:10],
+            "top_branch": (top["branch"] if top else None),
+            "top_branch_discount": (top["discount"] if top else 0),
+        },
     }
 
 

@@ -45,6 +45,13 @@ from ingest_may26_update import BRANCH_ALIAS   # MSSQL/full name → short DB na
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
 
+def _norm_paycode(c):
+    """Collapse payment-code case-dups (POS has both 'CASH' and 'Cash') to one
+    canonical label for the per-bill sale_payment table. Minimal — readable codes
+    (Credit, QR code TTB, Bank Transfer, …) are left untouched."""
+    c = (c or "").strip()
+    return "Cash" if c.upper() == "CASH" else c
+
 def connect_mssql():
     import pymssql
     # Fail loud + clear if creds are missing, instead of a cryptic KeyError deep
@@ -360,7 +367,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                  WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1
                  GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""")
     sq.executemany("INSERT INTO sale_payment VALUES(?,?,?,?)",
-        [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', r["pc"], round(r["amt"] or 0, 2))
+        [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', _norm_paycode(r["pc"]), round(r["amt"] or 0, 2))
          for r in rows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_salepay ON sale_payment(branch_id, receipt_no)")
     print(f"        sale_payment: {len(rows)} rows (per receipt × code)")
