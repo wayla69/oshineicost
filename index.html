@@ -3697,27 +3697,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
-  <!-- Discount pattern groups + common fixed amounts -->
+  <!-- Discount pattern groups + common fixed amounts (visual, read-at-a-glance) -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <div class="card p-5">
-      <h2 class="section-title mb-1">ลักษณะการลด (จัดกลุ่มตาม % ของบิล)</h2>
-      <p class="text-xs text-slate-400 mb-3">บิลที่ลด 20–50% ของยอด มักเป็นจุดรั่วของเงินส่วนลดมากที่สุด</p>
-      <div style="max-height:280px;overflow:auto"><table class="w-full text-sm">
-        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
-          <th class="py-1.5 pr-2">กลุ่ม</th><th class="py-1.5 pr-2 text-right">บิล</th>
-          <th class="py-1.5 pr-2 text-right">มูลค่า</th><th class="py-1.5 text-right">% เงินลด</th></tr></thead>
-        <tbody id="disc-pattern"></tbody>
-      </table></div>
+      <h2 class="section-title mb-1">ลักษณะการลด — เงินลดไปกับบิลแบบไหน?</h2>
+      <p class="text-xs text-slate-400 mb-3">จัดกลุ่มบิลตาม % ที่ลดของยอดบิล · ลดหนัก ≥20% = จุดรั่วหลัก · คลิกแถวเพื่อดูบิล</p>
+      <div id="disc-pattern"></div>
     </div>
     <div class="card p-5">
-      <h2 class="section-title mb-1">ค่าลดยอดฮิต (น่าจะเป็นคูปอง/โปรคงที่)</h2>
-      <p class="text-xs text-slate-400 mb-3">ค่าส่วนลดที่ซ้ำบ่อย = โปรโมชั่นมาตรฐาน ใช้ตรวจว่าตรงนโยบายไหม</p>
-      <div style="max-height:280px;overflow:auto"><table class="w-full text-sm">
-        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
-          <th class="py-1.5 pr-2">ส่วนลด/บิล</th><th class="py-1.5 pr-2 text-right">จำนวนครั้ง</th>
-          <th class="py-1.5 text-right">มูลค่ารวม</th></tr></thead>
-        <tbody id="disc-amounts"></tbody>
-      </table></div>
+      <h2 class="section-title mb-1">ค่าลดยอดฮิต — น่าจะเป็นคูปอง/โปรคงที่</h2>
+      <p class="text-xs text-slate-400 mb-3">ค่าส่วนลดที่ซ้ำบ่อย = โปรมาตรฐาน · ใช้ตรวจว่าตรงนโยบายไหม · คลิกเพื่อดูบิล</p>
+      <div id="disc-amounts"></div>
     </div>
   </div>
 
@@ -3732,7 +3722,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
     <p class="text-xs text-slate-400 mb-3">เหตุผลส่วนลดที่พนักงานเลือกตอนกดลด · "ไม่ระบุ" = ลดโดยไม่เลือกเหตุผล (จุดที่ควรคุมนโยบาย)</p>
     <div id="disc-reason-alert" class="hidden mb-3 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e"></div>
-    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4"></div>
+    <div id="disc-reason-cards" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-3"></div>
+    <div id="disc-reason-split" class="mb-4"></div>
     <div style="max-height:320px;overflow:auto"><table class="tbl-top60 w-full text-xs">
       <thead><tr>
         <th>เหตุผล</th><th class="num">บิล</th><th class="num">มูลค่าลด</th><th class="num">% ของเงินลด</th><th>สัดส่วน</th>
@@ -20728,6 +20719,20 @@ async function loadDiscountReasons(params) {
     { l: '⚠️ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
     { l: '✓ ระบุเหตุผล', v: (d.total_amount ? (100 - (d.untyped_pct || 0)).toFixed(1) + '%' : '—'), s: fmt(typedAmt), c: '#10b981' },
   ].map(k => `<div class="ms-kpi" style="border-left:4px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+  // typed-vs-untyped split bar — instant read of the policy gap
+  const splitEl = document.getElementById('disc-reason-split');
+  if (splitEl) {
+    const up = d.untyped_pct || 0, tp = Math.max(0, 100 - up);
+    splitEl.innerHTML = (d.total_amount ? `
+      <div class="flex items-center justify-between text-[11px] mb-1">
+        <span style="color:#f59e0b;font-weight:700">⚠️ ไม่ระบุเหตุผล ${up.toFixed(0)}%</span>
+        <span style="color:#10b981;font-weight:700">ระบุเหตุผล ${tp.toFixed(0)}% ✓</span>
+      </div>
+      <div class="flex w-full rounded-full overflow-hidden" style="height:14px;background:#e2e8f0">
+        <div title="ไม่ระบุเหตุผล ${up.toFixed(1)}%" style="width:${up}%;background:#f59e0b"></div>
+        <div title="ระบุเหตุผล ${tp.toFixed(1)}%" style="width:${tp}%;background:#10b981"></div>
+      </div>` : '');
+  }
   const maxAmt = Math.max(1, ...reasons.map(r => r.amount || 0));
   body.innerHTML = reasons.map(r => {
     const unty = r.reason_id === 0;
@@ -20979,29 +20984,63 @@ async function loadDiscountsTab() {
     }
   });
 
-  // Discount pattern groups (bucket by % of bill)
-  const pat = d.pattern_groups || [];
-  const patTot = pat.reduce((s,r)=>s+(r.baht||0),0) || 1;
-  document.getElementById('disc-pattern').innerHTML = pat.map(r => {
-    const share = (r.baht||0)/patTot*100;
-    const heavy = /20–50|50% ขึ้น|100%/.test(r.grp);
-    const drill = _discPatternDrillAttr(r.grp);
-    return `<tr class="border-b border-slate-50 hover:bg-indigo-50 cursor-pointer" ${drill}>
-      <td class="py-1.5 pr-2 ${heavy?'font-semibold text-red-600':''}">${esc(r.grp)} 🔍</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(r.bills)}</td>
-      <td class="py-1.5 pr-2 text-right">${fmt(r.baht)}</td>
-      <td class="py-1.5 text-right font-semibold">${share.toFixed(1)}%</td>
-    </tr>`;
-  }).join('') || '<tr><td colspan="4" class="py-3 text-center text-slate-400">—</td></tr>';
+  // ── ลักษณะการลด: visual "where the discount money goes" ──────────────────
+  (() => {
+    const el = document.getElementById('disc-pattern');
+    if (!el) return;
+    const pat = d.pattern_groups || [];
+    if (!pat.length) { el.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">— ไม่มีส่วนลดในช่วงนี้ —</p>'; return; }
+    const META = {
+      '100% (ฟรี/เท่ายอดบิล)':      { c:'#991b1b', heavy:true },
+      '50% ขึ้นไป':                 { c:'#dc2626', heavy:true },
+      '20–50%':                     { c:'#f97316', heavy:true },
+      '10–20%':                     { c:'#eab308', heavy:false },
+      'ต่ำกว่า 10%':                { c:'#22c55e', heavy:false },
+      'ไม่มียอดบิล (เฉพาะส่วนลด)':  { c:'#64748b', heavy:true },
+    };
+    const order = ['100% (ฟรี/เท่ายอดบิล)','50% ขึ้นไป','20–50%','10–20%','ต่ำกว่า 10%','ไม่มียอดบิล (เฉพาะส่วนลด)'];
+    const byG = {}; pat.forEach(r => byG[r.grp] = r);
+    const rows = order.map(g => byG[g]).filter(Boolean);
+    const tot = rows.reduce((s,r)=>s+(r.baht||0),0) || 1;
+    const heavyBaht = rows.filter(r => (META[r.grp]||{}).heavy).reduce((s,r)=>s+(r.baht||0),0);
+    const heavyPct = heavyBaht/tot*100;
+    const hc = heavyPct>=40 ? '#dc2626' : heavyPct>=20 ? '#d97706' : '#16a34a';
+    const hi = heavyPct>=40 ? '🔻' : heavyPct>=20 ? '⚠️' : '✓';
+    const seg = rows.map(r => { const w=(r.baht||0)/tot*100, m=META[r.grp]||{c:'#94a3b8'};
+      return w<=0 ? '' : `<div title="${esc(r.grp)}: ${fmt(r.baht)} (${w.toFixed(0)}%)" style="width:${w}%;background:${m.c}"></div>`; }).join('');
+    el.innerHTML =
+      `<div class="px-3 py-2 rounded-lg text-sm mb-3" style="background:${heavyPct>=20?'#fef2f2':'#f0fdf4'};color:${hc};font-weight:600;line-height:1.4">
+        ${hi} เงินลด <b>${heavyPct.toFixed(0)}%</b> (${fmt(heavyBaht)}) ไปกับบิลที่ <b>ลดหนัก ≥20%</b> ของยอด${heavyPct>=20?' — ควรตรวจสอบ':''}</div>
+      <div class="flex w-full rounded-full overflow-hidden mb-3" style="height:14px;background:#f1f5f9">${seg}</div>`
+      + rows.map(r => { const m=META[r.grp]||{c:'#94a3b8'}, share=(r.baht||0)/tot*100;
+        return `<div class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-indigo-50/60 border-b border-slate-50" ${_discPatternDrillAttr(r.grp)}>
+          <span style="width:11px;height:11px;border-radius:3px;background:${m.c};flex:none"></span>
+          <span class="text-sm ${m.heavy?'font-semibold':''}" style="color:${m.heavy?m.c:'#334155'}">${esc(r.grp)}</span>
+          <span class="text-[10px] text-slate-400">${fmtN(r.bills)} บิล</span>
+          <span class="ml-auto text-sm font-bold tabular-nums" style="color:${m.c}">${share.toFixed(0)}%</span>
+          <span class="text-xs text-slate-500 tabular-nums" style="width:74px;text-align:right">${fmt(r.baht)}</span>
+        </div>`; }).join('');
+  })();
 
-  // Common fixed amounts — click to see every bill with that exact discount
-  document.getElementById('disc-amounts').innerHTML = (d.common_amounts||[]).map(r => `
-    <tr class="border-b border-slate-50 hover:bg-indigo-50 cursor-pointer"
-        onclick="openDiscountBills({amount:${r.amount}, title:'บิลส่วนลด ${fmtN(r.amount)} ฿ พอดี'})">
-      <td class="py-1.5 pr-2 font-medium text-indigo-700">${fmtN(r.amount)} ฿ 🔍</td>
-      <td class="py-1.5 pr-2 text-right">${fmtN(r.bills)}</td>
-      <td class="py-1.5 text-right text-slate-500">${fmt(r.baht)}</td>
-    </tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
+  // ── ค่าลดยอดฮิต: ranked bar list ─────────────────────────────────────────
+  (() => {
+    const el = document.getElementById('disc-amounts');
+    if (!el) return;
+    const amts = (d.common_amounts||[]).slice(0, 8);
+    if (!amts.length) { el.innerHTML = '<p class="text-sm text-slate-400 text-center py-6">— ไม่มีส่วนลดในช่วงนี้ —</p>'; return; }
+    const maxB = Math.max(1, ...amts.map(r=>r.bills||0));
+    const t = amts[0];
+    el.innerHTML =
+      `<div class="px-3 py-2 rounded-lg text-sm mb-3" style="background:#eff6ff;color:#1e40af;font-weight:600;line-height:1.4">
+        💡 ส่วนลด <b>${fmtN(t.amount)} ฿</b> ใช้บ่อยสุด <b>${fmtN(t.bills)} ครั้ง</b> — น่าจะเป็นคูปอง/โปรมาตรฐาน</div>`
+      + amts.map(r => { const w=Math.max(3, Math.round(100*(r.bills||0)/maxB));
+        return `<div class="flex items-center gap-2 py-1 px-1 rounded cursor-pointer hover:bg-indigo-50/60"
+            onclick="openDiscountBills({amount:${r.amount}, title:'บิลส่วนลด ${fmtN(r.amount)} ฿ พอดี'})">
+          <span class="text-sm font-semibold text-indigo-700 tabular-nums" style="width:62px">${fmtN(r.amount)} ฿</span>
+          <div class="flex-1" style="background:#f1f5f9;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:18px;background:#6366f1;border-radius:4px"></div></div>
+          <span class="text-xs text-slate-600 tabular-nums" style="width:118px;text-align:right">${fmtN(r.bills)} ครั้ง · ${fmt(r.baht)}</span>
+        </div>`; }).join('');
+  })();
 
   // Outlier callout
   const cashiers = d.top_cashiers || [];
