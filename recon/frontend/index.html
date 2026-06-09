@@ -904,7 +904,7 @@ const I18N = {
     coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
     up_title:"อัปโหลดเอกสาร & รายงาน",
     disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
-    sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
+    sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_verify:"ตรวจสอบ & จับคู่", sugg_reason_ph:"เหตุผล", sugg_reason_def:"บันทึกผิดช่องทาง", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
@@ -1025,7 +1025,7 @@ const I18N = {
     coverage_hd:"Coverage — last day each source's document covers",
     up_title:"Upload Statements & Reports",
     disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
-    sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
+    sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_verify:"Verify & match", sugg_reason_ph:"reason", sugg_reason_def:"Wrong channel:", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
@@ -1581,11 +1581,14 @@ async function renderDrillExtras(scope){
     if(list.length){
       DRILL_SUGG=list; sg.classList.remove('hidden');
       sg.innerHTML=`<div class="font-semibold text-indigo-700 mb-2">💡 ${t('sugg_hd')}</div>`+
-        list.map((s,i)=>`<div class="flex items-center justify-between gap-2 text-sm py-1">
-          <div class="min-w-0"><span class="font-mono font-semibold">${fmt(s.amount)}</span>
-            <span class="badge b-mut mx-1">${s.pos_lane}</span>→<span class="badge b-mut mx-1">${s.ext_lane}</span>
+        list.map((s,i)=>`<div class="text-sm py-1">
+          <div class="flex items-center gap-2 flex-wrap"><span class="font-mono font-semibold">${fmt(s.amount)}</span>
+            <span class="badge b-mut">${s.pos_lane}</span>→<span class="badge b-mut">${s.ext_lane}</span>
             <span class="text-gray-400">${s.pos_day}${s.confidence==='high'?'':' / '+s.ext_day}</span></div>
-          <button onclick="applyDrillSugg(${i},event)" class="btn btn-pri text-xs shrink-0" style="padding:3px 10px">${t('sugg_apply')}</button>
+          <div class="flex items-center gap-2 mt-1">
+            <input id="dsugg-reason-${i}" class="inp text-xs flex-1" value="${_suggReason(s)}" data-i18n-ph="sugg_reason_ph">
+            <button onclick="applyDrillSugg(${i},event)" class="btn btn-pri text-xs shrink-0" style="padding:3px 10px" data-i18n="sugg_verify">ตรวจสอบ & จับคู่</button>
+          </div>
         </div>`).join('');
     }
   }
@@ -1615,9 +1618,10 @@ async function renderDrillExtras(scope){
 }
 function applyDrillSugg(i,ev){
   const s=DRILL_SUGG[i]; if(!s) return;
+  const note=(document.getElementById('dsugg-reason-'+i)||{}).value || s.note;
   withBusy(ev&&ev.target,'…',async()=>{
     try{ await api('/api/manual',{method:'POST',json:{branch_id:s.branch_id,period_month:s.period_month,
-        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
+        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note,matched_by:'staff'}});
       toast(t('sugg_done'),'ok'); openDrill(DRILL_CTX.branch_id,DRILL_CTX.scope,DRILL_BACK);   // refresh drawer
     }catch(e){ toast(e.message,'err'); }
   });
@@ -2225,25 +2229,29 @@ async function loadSuggestions(){
   panel.classList.remove('hidden');
   document.getElementById('sugg-count').textContent=`(${list.length})`;
   body.innerHTML=list.map((s,i)=>`
-    <div class="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 text-sm">
-      <div class="min-w-0">
+    <div class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 text-sm">
+      <div class="flex items-center gap-2 flex-wrap">
         <span class="font-mono font-semibold">${fmt(s.amount)}</span>
-        <span class="badge b-mut mx-1">${s.pos_lane}</span>→<span class="badge b-mut mx-1">${s.ext_lane}</span>
+        <span class="badge b-mut">${s.pos_lane}</span>→<span class="badge b-mut">${s.ext_lane}</span>
         <span class="text-gray-400">${s.pos_day}${s.confidence==='high'?'':' / '+s.ext_day}</span>
         ${s.confidence==='high'?`<span class="text-green-600 text-xs">● ${t('sugg_sameday')}</span>`:`<span class="text-amber-600 text-xs">● ±1 ${t('sugg_day')}</span>`}
       </div>
-      <div class="flex gap-2 shrink-0">
-        <button onclick="applySuggestion(${i},event)" class="btn btn-pri text-xs" style="padding:4px 10px" data-i18n="sugg_apply">จับคู่</button>
-        <button onclick="dismissSuggestion(${i})" class="btn btn-sec text-xs" style="padding:4px 10px" data-i18n="sugg_skip">ข้าม</button>
+      <div class="flex items-center gap-2 mt-2">
+        <input id="sugg-reason-${i}" class="inp text-xs flex-1" value="${_suggReason(s)}" data-i18n-ph="sugg_reason_ph">
+        <button onclick="applySuggestion(${i},event)" class="btn btn-pri text-xs shrink-0" style="padding:4px 10px" data-i18n="sugg_verify">ตรวจสอบ & จับคู่</button>
+        <button onclick="dismissSuggestion(${i})" class="btn btn-sec text-xs shrink-0" style="padding:4px 10px" data-i18n="sugg_skip">ข้าม</button>
       </div>
     </div>`).join('');
 }
+// default verify reason (the accountant can edit it before confirming)
+function _suggReason(s){ return `${t('sugg_reason_def')} ${s.pos_lane}↔${s.ext_lane} ${fmt(s.amount)} (${s.pos_day})`; }
 async function applySuggestion(i,ev){
   const s=SUGG_LIST[i]; if(!s) return;
+  const note=(document.getElementById('sugg-reason-'+i)||{}).value || s.note;
   await withBusy(ev&&ev.target,'…',async()=>{
     try{
       await api('/api/manual',{method:'POST',json:{branch_id:s.branch_id,period_month:s.period_month,
-        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
+        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note,matched_by:'staff'}});
       toast(`${t('sugg_done')}: ${s.pos_lane} ↔ ${s.ext_lane}`,'ok');
       loadDiscrepancies();
     }catch(e){ toast(t('sugg_fail')+': '+e.message,'err'); }
