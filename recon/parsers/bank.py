@@ -41,8 +41,19 @@ def _normalise_channel(description: str) -> str:
     return "OTHER"
 
 
+# Thai abbreviated month names as they appear in KBank/KTB statements
+# (e.g. "01-พ.ค.-2569"). Both the dotted and un-dotted forms are accepted.
+_THAI_MONTHS = {
+    "ม.ค.": 1, "ก.พ.": 2, "มี.ค.": 3, "เม.ย.": 4, "พ.ค.": 5, "มิ.ย.": 6,
+    "ก.ค.": 7, "ส.ค.": 8, "ก.ย.": 9, "ต.ค.": 10, "พ.ย.": 11, "ธ.ค.": 12,
+}
+_THAI_DATE_RE = re.compile(r"^\s*(\d{1,2})\s*[-/\s]\s*([ก-๙.]+?)\s*[-/\s]\s*(\d{4})")
+
+
 def _parse_thai_date(raw: Any) -> str | None:
-    """Convert Thai date strings (DD/MM/YYYY or DD-MM-YYYY BE/CE) to YYYY-MM-DD."""
+    """Convert Thai date strings to YYYY-MM-DD. Handles numeric forms
+    (DD/MM/YYYY or DD-MM-YYYY, BE or CE) and Thai abbreviated months
+    (e.g. '01-พ.ค.-2569')."""
     if isinstance(raw, (datetime, date)):
         return raw.strftime("%Y-%m-%d") if isinstance(raw, datetime) else raw.isoformat()
     if not raw:
@@ -57,6 +68,18 @@ def _parse_thai_date(raw: Any) -> str | None:
             return d.strftime("%Y-%m-%d")
         except ValueError:
             continue
+    # Thai abbreviated-month form, e.g. "01-พ.ค.-2569"
+    m = _THAI_DATE_RE.match(s)
+    if m:
+        day, mon_th, year = m.group(1), m.group(2).strip(), int(m.group(3))
+        mon = _THAI_MONTHS.get(mon_th)
+        if mon:
+            if year > 2500:
+                year -= 543
+            try:
+                return date(year, mon, int(day)).strftime("%Y-%m-%d")
+            except ValueError:
+                return None
     return None
 
 

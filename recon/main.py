@@ -48,6 +48,7 @@ from .parsers import (
     parse_lineman_report,
 )
 from .parsers.loader import to_parseable_xlsx
+from .parsers.pdf_formats import detect_and_parse as _detect_pdf_format
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
@@ -505,8 +506,13 @@ _LINE_TABLE = {
 
 
 def _parse(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
-    """Returns (provider, rows, skipped_rows). CSV/PDF inputs are normalised to an
-    in-memory .xlsx first so the domain parsers run unchanged."""
+    """Returns (provider, rows, skipped_rows). Recognised Thai bank/acquirer/Grab
+    PDFs are handled by format-specific extractors; otherwise CSV/PDF inputs are
+    normalised to an in-memory .xlsx so the domain parsers run unchanged."""
+    if (filename or "").lower().endswith(".pdf"):
+        special = _detect_pdf_format(source_type, raw)
+        if special is not None:
+            return special
     raw = to_parseable_xlsx(raw, filename)
     if source_type == "bank":
         prov, rows, skipped = parse_bank_statement(raw, provider or None)
