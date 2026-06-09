@@ -326,6 +326,27 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     sq.execute("CREATE INDEX IF NOT EXISTS ix_ppd ON pos_payment_day(branch_id, day)")
     print(f"        pos_payment_day: {len(rows)} groups")
 
+    # ── pos_coupon_payment_month/day: Coupon tenders split by CouponSeriesId ──
+    # SalePayment rolls every coupon up to PaymentCode='Coupon'; loyalty-point
+    # redemptions (BAY/Krungsri, KTC) are distinguished only by CouponSeriesId.
+    # Capture that split so the recon can use the point-redemption series as the
+    # POS leg of the points 3-way (POS coupon ↔ issuer settlement ↔ bank deposit).
+    for grain, col, conv in (("month", "period_month", "char(7)"), ("day", "day", "char(10)")):
+        tbl = f"pos_coupon_payment_{grain}"
+        sq.executescript(f"DROP TABLE IF EXISTS {tbl}; CREATE TABLE {tbl}("
+                         f"branch_id INT, {col} TEXT, coupon_series_id INT, amount REAL, txn_count INT);")
+        rows = run(f"""SELECT p.BranchId bid, CONVERT({conv},s.SaleDate,126) g, p.CouponSeriesId csid,
+                     SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
+                     FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
+                     WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 AND p.PaymentCode='Coupon'
+                     GROUP BY p.BranchId, CONVERT({conv},s.SaleDate,126), p.CouponSeriesId""")
+        sq.executemany(f"INSERT INTO {tbl} VALUES(?,?,?,?,?)",
+            [(bid_map.get(r["bid"]), r["g"], r["csid"], round(r["amt"] or 0, 2), r["n"])
+             for r in rows if bid_map.get(r["bid"])])
+        if grain == "day":
+            sq.execute(f"CREATE INDEX IF NOT EXISTS ix_pcp ON {tbl}(branch_id, day)")
+        print(f"        {tbl}: {len(rows)} groups")
+
     # ── sale_payment: per-RECEIPT payment lines (powers the discount-bill drill) ──
     # Same SalePayment source as pos_payment_month, but kept per receipt instead of
     # rolled up — a bill can have >1 row (split payment: e.g. cash + credit).

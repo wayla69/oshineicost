@@ -231,6 +231,30 @@ def test_bay_point_parses_and_ties_to_bank():
     assert not any(r["bank"] == "BAYPOINT" for r in cats)   # excluded from POS-credit lanes
 
 
+def test_point_pos_total_classifies_by_series_name(client):
+    """POS loyalty-point leg = Coupon tenders on the issuer's point-redemption
+    series, classified by name (Krungsri/KTC) — generic discounts excluded."""
+    from recon.matcher import point_pos_total
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_month(branch_id INT,period_month TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.executemany("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", [
+        (17, "โปรบัตรกรุงศรี 1,000 คะแนนแลกรับส่วนลด 100 บาท", "KS"),
+        (4,  "แต้ม KTC 1000 แต้มแลกส่วนลด 100 บาท", "KTC"),
+        (2,  "ส่วนลด 5%", "D")])
+    c.executemany("INSERT INTO pos_coupon_payment_month VALUES(4,'2026-06',?,?,?)",
+                  [(17, 1700, 17), (4, 800, 8), (2, 999, 3)])
+    c.commit(); c.close()
+    assert point_pos_total(main._DB_PATH and sqlite3.connect(main._DB_PATH), 4, "2026-06", "BAY") == 1700.0
+    assert point_pos_total(sqlite3.connect(main._DB_PATH), 4, "2026-06", "KTC") == 800.0  # excludes the 5% discount
+
+
+def test_point_pos_total_graceful_without_sync(client):
+    """No coupon-payment table yet (sync not run) → 0, not a crash."""
+    from recon.matcher import point_pos_total
+    assert point_pos_total(sqlite3.connect(main._DB_PATH), 4, "2026-06", "BAY") == 0.0
+
+
 def test_payout_matching_real_grab_ties_to_transfers():
     """Real Udon: each Grab net day matches the next-day bank transfer; net total
     equals payout total with nothing awaiting."""

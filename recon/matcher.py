@@ -260,7 +260,8 @@ def payout_reconciliation(conn, branch_id, period_month):
         status = ("awaiting_payout" if bp["awaiting_total"] > TOL_ABS
                   else "matched" if abs(pay - net) <= TOL_ABS else "mismatch")
         rows.append({"category": "BAYPOINT", "report_net": net, "bank_payout": pay,
-                     "variance": round(pay - net, 2), "status": status})
+                     "variance": round(pay - net, 2), "status": status,
+                     "pos_point": bp.get("pos_point_total", 0.0)})
     return rows
 
 
@@ -309,6 +310,38 @@ def _payout_net_by_day(conn, branch_id, period_month):
             add(cat, r["order_date"],
                 float(r["food_amount"] or 0) - fee - vat - float(r["promo_deduct"] or 0))
     return out
+
+
+# Loyalty-point redemptions are booked on POS as Coupon tenders under issuer-
+# specific coupon series. Classify by series NAME (ids vary / grow over time).
+_POINT_SERIES_KW = {"BAY": "กรุงศรี", "KTC": "KTC"}
+
+
+def point_pos_total(conn, branch_id, period_month, provider):
+    """POS amount the customers redeemed as <provider> loyalty points that month
+    (Coupon tenders on the issuer's point-redemption series). 0 if the coupon-
+    payment breakdown hasn't been synced yet."""
+    kw = _POINT_SERIES_KW.get(provider)
+    if not kw:
+        return 0.0
+    try:
+        row = conn.execute("""
+            SELECT COALESCE(SUM(p.amount), 0) FROM pos_coupon_payment_month p
+            JOIN coupon_series s ON s.coupon_series_id = p.coupon_series_id
+            WHERE p.branch_id=? AND p.period_month=? AND s.name LIKE ? AND s.name LIKE '%คะแนน%' COLLATE NOCASE
+        """, (branch_id, period_month, f"%{kw}%")).fetchone()
+        if row and row[0]:
+            return round(float(row[0]), 2)
+        # fall back: any matching-issuer series (some point series say 'แต้ม' not 'คะแนน')
+        row = conn.execute("""
+            SELECT COALESCE(SUM(p.amount), 0) FROM pos_coupon_payment_month p
+            JOIN coupon_series s ON s.coupon_series_id = p.coupon_series_id
+            WHERE p.branch_id=? AND p.period_month=? AND s.name LIKE ?
+              AND (s.name LIKE '%คะแนน%' OR s.name LIKE '%แต้ม%' OR s.name LIKE '%point%')
+        """, (branch_id, period_month, f"%{kw}%")).fetchone()
+        return round(float(row[0] or 0), 2) if row else 0.0
+    except sqlite3.OperationalError:
+        return 0.0
 
 
 def _payout_candidate_credits(conn, branch_id, period_month, channels):
@@ -377,6 +410,9 @@ def payout_matching(conn, branch_id, period_month, max_group=4, max_lag=7):
             "payout_total": round(sum(p["amount"] for p in payouts if p["status"] == "matched"), 2),
             "awaiting_total": round(sum(p["group_net"] for p in payouts if p["status"] == "awaiting"), 2),
         }
+    # BAY Point is a 3-way: also surface the POS leg (Krungsri point coupons).
+    if "BAYPOINT" in result:
+        result["BAYPOINT"]["pos_point_total"] = point_pos_total(conn, branch_id, period_month, "BAY")
     return result
 
 

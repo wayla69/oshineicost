@@ -921,7 +921,7 @@ const I18N = {
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_verify:"ตรวจสอบ & จับคู่", sugg_reason_ph:"เหตุผล", sugg_reason_def:"บันทึกผิดช่องทาง", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
-    pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)",
+    pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)", pm_pos_point:"POS แต้ม",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -1043,7 +1043,7 @@ const I18N = {
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_verify:"Verify & match", sugg_reason_ph:"reason", sugg_reason_def:"Wrong channel:", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
-    pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)",
+    pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)", pm_pos_point:"POS points",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -2055,7 +2055,8 @@ async function openPayoutMatch(cat){
   if(!d || !d.payouts.length){ body.innerHTML=`<div class="card text-center text-gray-400 py-6">${t('pm_empty')}</div>`;
     document.getElementById('pm-summary').innerHTML=''; return; }
   document.getElementById('pm-summary').innerHTML =
-    `<span class="text-gray-400">${t('l_report_net')}</span> <b class="font-mono">${fmt(d.net_total)}</b> ·
+    (d.pos_point_total!==undefined?`<span class="text-gray-400">${t('pm_pos_point')}</span> <b class="font-mono">${fmt(d.pos_point_total)}</b> · `:'')
+    + `<span class="text-gray-400">${t('l_report_net')}</span> <b class="font-mono">${fmt(d.net_total)}</b> ·
      <span class="text-gray-400">${t('l_bank_payout')}</span> <b class="font-mono">${fmt(d.payout_total)}</b>`
     + (d.awaiting_total>0?` · <span class="text-amber-600">${t('p_awaiting')} ${fmt(d.awaiting_total)}</span>`:'');
   body.innerHTML = d.payouts.map(p=>{
