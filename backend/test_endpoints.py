@@ -105,6 +105,9 @@ def test_menu_compare_delta_direction_and_totals(client):
     d = client.get("/api/sales/menu-compare", params={
         "a_from": A_PER, "a_to": A_PER, "b_from": B_PER, "b_to": B_PER}).json()
     assert d["items"], "no compare items"
+    # buffet-only: à-la-carte (description-prefixed "(A)") must never appear here
+    assert all(not (i.get("description") or "").startswith("(A)") for i in d["items"]), \
+        "à-la-carte leaked into buffet-only compare"
     # June (B) is scaled 0.8 vs May (A): every shown item should be down (or equal),
     # never up — catches a flipped-sign / swapped-period bug.
     movers = [i for i in d["items"] if (i["qty_a"] or 0) > 0]
