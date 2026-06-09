@@ -214,6 +214,89 @@ def test_loader_rejects_unextractable_pdf():
         to_parseable_xlsx(blank, "scan.pdf")
 
 
+# ── format-specific PDF extractors (Thai bank / acquirer / Grab) ──────────────
+
+def test_thai_abbreviated_and_full_month_dates():
+    from recon.parsers.bank import _parse_thai_date
+    assert _parse_thai_date("01-พ.ค.-2569") == "2026-05-01"   # abbreviated, BE
+    assert _parse_thai_date("15-ธ.ค.-2568") == "2025-12-15"
+    assert _parse_thai_date("01/05/2569")   == "2026-05-01"   # numeric BE still works
+    assert _parse_thai_date("01/05/2026")   == "2026-05-01"   # numeric CE
+    assert _parse_thai_date("not a date")   is None
+
+
+def test_cordianew_cid_to_digit_remap():
+    """KTB CordiaNew digits decode as '(cid:344..353)' == 0..9."""
+    from recon.parsers.pdf_formats import _decid
+    assert _decid("รหัส (cid:348)(cid:345)(cid:344)(cid:344)(cid:344)") == "รหัส 41000"
+    assert _decid("หน้า (cid:345)/(cid:351)") == "หน้า 1/7"
+    assert _decid("(cid:999)") == ""           # out-of-range cid dropped, not crash
+
+
+# Real Udon documents live outside the repo (they hold live account data); these
+# checks run locally where the folder exists and skip in CI otherwise.
+_UDON = Path(__file__).resolve().parents[2] / "Reconciliation Data Udon"
+
+
+def _udon(name):
+    f = _UDON / name
+    if not f.exists():
+        pytest.skip(f"sample not present: {name}")
+    return f.read_bytes()
+
+
+def _balance_continuity_ok(rows):
+    """Every bank row's balance must equal prev balance + credit - debit."""
+    for i in range(1, len(rows)):
+        exp = round(rows[i - 1]["balance"] + rows[i]["credit"] - rows[i]["debit"], 2)
+        if abs(exp - rows[i]["balance"]) > 0.01:
+            return False
+    return True
+
+
+def test_kbank_statement_pdf_balance_continuity():
+    from recon.parsers.pdf_formats import _kbank_statement
+    prov, rows, skipped = _kbank_statement(_udon("UDN_Statements KB_SA_05.2569.pdf"))
+    assert prov == "kbank" and len(rows) > 100 and skipped == 0
+    assert _balance_continuity_ok(rows)
+
+
+def test_ktb_statement_pdf_cid_and_balance():
+    from recon.parsers.pdf_formats import _ktb_statement
+    prov, rows, skipped = _ktb_statement(_udon("UDN_Statements KTB_SA_05.2569.pdf"))
+    assert prov == "ktb" and len(rows) > 50
+    assert _balance_continuity_ok(rows)
+    # cid digits recovered → real amounts, not zeros
+    assert any(r["credit"] > 1000 for r in rows)
+
+
+def test_ktc_settlement_pdf_totals():
+    from recon.parsers.pdf_formats import _ktc_settlement
+    prov, rows, skipped = _ktc_settlement(_udon("006_0170570924_260501-RTxInv-02.pdf"))
+    assert prov == "KTC" and len(rows) == 8 and skipped == 0
+    assert abs(sum(r["gross_amount"] for r in rows) - 40902.45) < 0.01
+    assert abs(sum(r["net_amount"]   for r in rows) - 39910.02) < 0.01
+
+
+def test_kbank_cc_pdf_one_row_per_settlement_date():
+    from recon.parsers.pdf_formats import _kbank_cc
+    prov, rows, skipped = _kbank_cc(_udon("ใบกำกับภาษีบัตรเครดิต KBank_01-05.05.69.pdf"))
+    assert prov == "KBANK" and len(rows) >= 5
+    # one settlement per date; 05-01 net ties to the KBank statement sales credit
+    by_date = {r["settlement_date"]: r for r in rows}
+    assert abs(by_date["2026-05-01"]["net_amount"] - 34758.35) < 0.01
+
+
+def test_grab_daily_pdf_multi_day_split():
+    from recon.parsers.pdf_formats import _grab_daily
+    rows, skipped = _grab_daily(_udon("3-CZDJNJ21VTMEEX-20260501.pdf"))
+    assert skipped == 0 and len(rows) >= 4
+    # the bundle spans several days — orders must carry their own page's date
+    assert len({r["order_date"] for r in rows}) > 1
+    for r in rows:                       # net == food - commission on every order
+        assert abs(r["food_amount"] - r["commission_amt"] - r["net_payout"]) < 0.01
+
+
 # ── endpoint auth + validation ────────────────────────────────────────────────
 
 def test_master_only_and_period_validation(client):
