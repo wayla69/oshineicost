@@ -195,15 +195,15 @@
     <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
       <span class="icon">📅</span><span data-i18n="tab_daily">Daily reconcile</span>
     </button>
+    <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
+      <span class="icon">⚖️</span><span data-i18n="tab_monthly">Monthly reconcile · Run Match</span>
+    </button>
     <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
       <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">To Review</span>
       <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
     </button>
 
     <div class="side-section" data-i18n="sec_reports">Reports</div>
-    <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
-      <span class="icon">⚖️</span><span data-i18n="tab_monthly">By Category</span>
-    </button>
     <button class="side-btn" data-tab="coupon" onclick="switchTab('coupon')">
       <span class="icon">🎟️</span><span data-i18n="tab_coupon">Coupon detail</span>
     </button>
@@ -899,7 +899,7 @@ async function withBusy(btn, label, fn){
 const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
-    tab_overview:"สรุปทุกสาขา", tab_board:"บอร์ดรายวัน", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
+    tab_overview:"สรุปทุกสาขา", tab_board:"บอร์ดรายวัน", tab_daily:"กระทบยอดรายวัน", tab_monthly:"กระทบยอดรายเดือน · ประมวลผล", tab_uploads:"อัปโหลดเอกสาร",
     sec_overview:"ภาพรวม", sec_recon:"กระทบยอดประจำวัน", sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_reports:"รายงาน & วิเคราะห์", sec_system:"ระบบ",
     board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)", board_report:"📄 รายงาน PDF (ทุกสาขา)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
@@ -1021,7 +1021,7 @@ const I18N = {
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
-    tab_overview:"All branches", tab_board:"Daily board", tab_daily:"Daily reconcile", tab_monthly:"By Category", tab_uploads:"Upload documents",
+    tab_overview:"All branches", tab_board:"Daily board", tab_daily:"Daily reconcile", tab_monthly:"Monthly reconcile · Run Match", tab_uploads:"Upload documents",
     sec_overview:"Overview", sec_recon:"Daily reconcile", sec_daily:"Daily work", sec_docs:"Documents & review", sec_reports:"Reports & analytics", sec_system:"System",
     board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)", board_report:"📄 Daily report PDF (all)",
     board_reporting:"Branches reporting", board_total:"All branches",
