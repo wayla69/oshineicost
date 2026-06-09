@@ -36,6 +36,7 @@ from .matcher import (
     lane_ext_lines,
     lane_lines,
     lane_pos_days,
+    payout_matching,
     payout_reconciliation,
     pos_codes_scope,
     run_auto_match,
@@ -1690,6 +1691,17 @@ class ManualMatch(BaseModel):
     ext:          list[dict] = []   # [{table, id, amount}]
     note:         str = ""
     matched_by:   str = ""
+
+
+@app.get("/api/payout-matching")
+def payout_matching_api(branch_id: int, period_month: str):
+    """Per-provider net-day ↔ bank-credit grouping (handles combined-day payouts).
+    The 3rd leg of the chain: POS↔report gross, report net↔bank payout, here
+    traced per actual transfer."""
+    _validate_period(period_month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return payout_matching(conn, branch_id, period_month)
 
 
 @app.get("/api/suggestions")

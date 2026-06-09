@@ -168,6 +168,60 @@ def test_suggestions_ignores_cross_bank(client):
     assert client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"] == []
 
 
+def test_payout_matching_combines_consecutive_days(client):
+    """Grab paid two days' net in one bank transfer → auto-grouped as one combined
+    payout covering both days."""
+    from recon.matcher import payout_matching
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('grab',4,'Grab','g','2026-06',0,'confirmed')").lastrowid
+    # two days, net 100 and 200 (no fee for simplicity)
+    c.execute("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,food_amount,commission_amt,vat_amount,net_payout) VALUES(?,4,'2026-06-07','Completed',100,0,0,100)", (up,))
+    c.execute("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,food_amount,commission_amt,vat_amount,net_payout) VALUES(?,4,'2026-06-08','Completed',200,0,0,200)", (up,))
+    # one bank transfer of 300 two days after the second day
+    bu = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'kbank','b','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-09','TRANSFER',300)", (bu,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        res = payout_matching(conn, 4, "2026-06")
+    g = res["GRAB"]
+    assert g["net_total"] == 300 and g["payout_total"] == 300 and g["awaiting_total"] == 0
+    assert len(g["payouts"]) == 1
+    p = g["payouts"][0]
+    assert p["status"] == "matched" and p["combined"] is True
+    assert [x["day"] for x in p["days"]] == ["2026-06-07", "2026-06-08"]
+    assert p["amount"] == 300 and p["payout_date"] == "2026-06-09"
+
+
+def test_payout_matching_real_grab_ties_to_transfers():
+    """Real Udon: each Grab net day matches the next-day bank transfer; net total
+    equals payout total with nothing awaiting."""
+    from recon.parsers.pdf_formats import _grab_daily, _kbank_statement
+    import recon.main as m, sqlite3 as sq, tempfile, pathlib
+    raw_g = _udon("3-CZDJNJ21VTMEEX-20260501.pdf")          # skips if absent
+    raw_b = _udon("UDN_Statements KB_SA_05.2569.pdf")
+    from recon.matcher import payout_matching
+    db = pathlib.Path(tempfile.mkdtemp()) / "p.db"
+    c = sq.connect(db); c.execute("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY,name TEXT,branch_type TEXT,active INTEGER)")
+    c.execute("INSERT INTO branches VALUES(25,'อุดร','master',1)"); c.commit(); c.close()
+    m._DB_PATH = db
+    from fastapi.testclient import TestClient
+    import os; os.environ.pop("OSHINEI_SEED_TOKEN", None)
+    with TestClient(m.app) as cl:
+        for st, name, raw in [("grab", "g.pdf", raw_g), ("bank", "b.pdf", raw_b)]:
+            cl.post(f"/api/uploads/{st}/confirm",
+                    files={"file": (name, raw, "application/pdf")},
+                    data={"branch_id": 25, "period_month": "2026-05"})
+        with m.get_db() as conn:
+            g = payout_matching(conn, 25, "2026-05")["GRAB"]
+    assert g["awaiting_total"] == 0
+    assert abs(g["net_total"] - g["payout_total"]) < 0.01 and g["net_total"] > 0
+    assert all(p["status"] == "matched" for p in g["payouts"])
+
+
 def test_fee_vat_changes_net(client):
     sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
     c = sqlite3.connect(main._DB_PATH)

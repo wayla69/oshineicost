@@ -252,6 +252,118 @@ def payout_reconciliation(conn, branch_id, period_month):
     return rows
 
 
+# ── Per-payout auto-grouping (net days ↔ bank credit, handles combined days) ───
+# Providers remit each day's NET a day or two later, often grouping 2–3 days into
+# one bank credit (e.g. weekends). On KBank those land as plain "รับโอนเงิน"
+# (TRANSFER) with no Grab/Lineman tag, so we match by AMOUNT + date-lag, grouping
+# consecutive net-days until they equal a bank credit. This gives the operator a
+# day-level trace ("payout 8 พ.ค. = net 6+7 พ.ค.") instead of a month lump.
+
+_PAYOUT_CANDIDATE_CHANNELS = {
+    "GRAB":    ("GRAB_PAYOUT", "TRANSFER"),
+    "LINEMAN": ("LINEMAN_PAYOUT", "TRANSFER"),
+    "CREDIT":  ("CC_SETTLE", "TRANSFER"),
+}
+
+
+def _pd(s: str) -> date:
+    return date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
+
+
+def _payout_net_by_day(conn, branch_id, period_month):
+    """{category: {day: net}} for GRAB/LINEMAN/CREDIT from the provider reports."""
+    out: dict = {}
+
+    def add(cat, day, net):
+        b = out.setdefault(cat, {})
+        b[day] = round(b.get(day, 0.0) + net, 2)
+
+    for r in conn.execute(
+        "SELECT * FROM recon_cc_lines WHERE branch_id=? AND strftime('%Y-%m',settlement_date)=?",
+        (branch_id, period_month)):
+        fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
+        add("CREDIT", r["settlement_date"],
+            float(r["gross_amount"] or 0) - float(r["refund_amount"] or 0) - fee - vat)
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", "vat_amount"),
+                                ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
+        for r in conn.execute(
+            f"SELECT * FROM {table} WHERE branch_id=? AND order_status='Completed' "
+            f"AND strftime('%Y-%m',order_date)=?", (branch_id, period_month)):
+            fee, vat = _eff_fee_vat(r, "commission_amt", vat_col)
+            add(cat, r["order_date"],
+                float(r["food_amount"] or 0) - fee - vat - float(r["promo_deduct"] or 0))
+    return out
+
+
+def _payout_candidate_credits(conn, branch_id, period_month, channels):
+    ph = ",".join("?" * len(channels))
+    try:
+        rows = conn.execute(f"""
+            SELECT id, txn_date, credit, channel FROM recon_bank_lines
+            WHERE branch_id=? AND credit>0 AND channel IN ({ph})
+              AND strftime('%Y-%m',txn_date)=?
+            ORDER BY txn_date, id
+        """, (branch_id, *channels, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [{"id": r["id"], "date": r["txn_date"], "amount": float(r["credit"] or 0),
+             "channel": r["channel"]} for r in rows]
+
+
+def payout_matching(conn, branch_id, period_month, max_group=4, max_lag=7):
+    """Per-provider: group consecutive net-days to the bank credit that pays them.
+    Returns {cat: {payouts:[...], net_total, payout_total, awaiting_total}}.
+    Each payout row: {payout_date, amount, days:[{day,net}], group_net, combined,
+    lag, status('matched'|'awaiting')}. 'awaiting' = a net-day with no matching
+    credit yet (late/month-boundary or a short payment to investigate)."""
+    nets = _payout_net_by_day(conn, branch_id, period_month)
+    result: dict = {}
+    for cat, channels in _PAYOUT_CANDIDATE_CHANNELS.items():
+        days = sorted((d, n) for d, n in nets.get(cat, {}).items() if n > TOL_ABS_DAY)
+        credits = _payout_candidate_credits(conn, branch_id, period_month, channels)
+        used: set = set()
+        payouts, di = [], 0
+        while di < len(days):
+            hit = None
+            s = 0.0
+            for k in range(1, min(max_group, len(days) - di) + 1):
+                s = round(s + days[di + k - 1][1], 2)
+                last_day = days[di + k - 1][0]
+                for c in credits:                       # earliest unused credit that fits
+                    if c["id"] in used or abs(c["amount"] - s) > TOL_ABS:
+                        continue
+                    lag = (_pd(c["date"]) - _pd(last_day)).days
+                    if 0 <= lag <= max_lag:
+                        hit = (k, c); break
+                if hit:
+                    break
+            if hit:
+                k, c = hit
+                used.add(c["id"])
+                grp = days[di:di + k]
+                payouts.append({
+                    "payout_date": c["date"], "amount": round(c["amount"], 2),
+                    "days": [{"day": d, "net": round(n, 2)} for d, n in grp],
+                    "group_net": round(sum(n for _, n in grp), 2),
+                    "combined": k > 1, "lag": (_pd(c["date"]) - _pd(grp[-1][0])).days,
+                    "status": "matched",
+                })
+                di += k
+            else:
+                d, n = days[di]
+                payouts.append({"payout_date": None, "amount": 0.0,
+                                "days": [{"day": d, "net": round(n, 2)}], "group_net": round(n, 2),
+                                "combined": False, "lag": None, "status": "awaiting"})
+                di += 1
+        result[cat] = {
+            "payouts": payouts,
+            "net_total":    round(sum(n for _, n in days), 2),
+            "payout_total": round(sum(p["amount"] for p in payouts if p["status"] == "matched"), 2),
+            "awaiting_total": round(sum(p["group_net"] for p in payouts if p["status"] == "awaiting"), 2),
+        }
+    return result
+
+
 # ── Line-level drill-down ─────────────────────────────────────────────────────
 # The external lines that make up a (category, bank) lane, so staff can see what
 # drives a variance. (POS has no per-receipt tender split — the POS side stays an

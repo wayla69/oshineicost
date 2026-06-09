@@ -704,6 +704,20 @@
       </div>
     </div>
 
+    <!-- PAYOUT MATCHING (drawer): net days ↔ bank credit, handles combined-day payouts -->
+    <div id="tab-payoutmatch" class="tab-pane hidden space-y-4">
+      <div class="card" style="padding:14px 18px">
+        <div class="flex items-center gap-4 flex-wrap">
+          <button onclick="closeDrawer('payoutmatch')" class="btn btn-sec" style="padding:6px 12px" data-i18n="drill_back">← Back</button>
+          <div><div class="text-xs text-gray-400" data-i18n="pm_title">Payout matching</div>
+            <div id="pm-scope" class="font-semibold text-gray-800"></div></div>
+          <div id="pm-summary" class="ml-auto text-sm text-right"></div>
+        </div>
+        <div class="text-xs text-gray-500 mt-2" data-i18n="pm_hint">Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.</div>
+      </div>
+      <div id="pm-body" class="space-y-2"></div>
+    </div>
+
     <!-- SETUP -->
     <div id="tab-setup" class="tab-pane hidden space-y-6">
       <div class="card" style="background:var(--brand-light)">
@@ -907,6 +921,7 @@ const I18N = {
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_verify:"ตรวจสอบ & จับคู่", sugg_reason_ph:"เหตุผล", sugg_reason_def:"บันทึกผิดช่องทาง", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
+    pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -1028,6 +1043,7 @@ const I18N = {
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_verify:"Verify & match", sugg_reason_ph:"reason", sugg_reason_def:"Wrong channel:", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
+    pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -2012,9 +2028,11 @@ function renderPayouts(payouts){
   if(!payouts.length){ wrap.classList.add('hidden'); cont.innerHTML=''; return; }
   wrap.classList.remove('hidden'); cont.innerHTML='';
   payouts.forEach(p=>{
-    const div=document.createElement('div'); div.className='card';
+    const div=document.createElement('div'); div.className='card hover:shadow-md';
+    div.style.cursor='pointer'; div.title=t('pm_open');
+    div.onclick=()=>openPayoutMatch(p.category);
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
-        <div class="font-semibold text-gray-800">${p.category} ${t('payout_word')}</div>
+        <div class="font-semibold text-gray-800">${p.category} ${t('payout_word')} <span class="text-gray-300">›</span></div>
         <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
       <div class="grid grid-cols-3 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
@@ -2023,6 +2041,41 @@ function renderPayouts(payouts){
       </div>`;
     cont.appendChild(div);
   });
+}
+
+// per-payout chain (net days ↔ bank transfer, auto-grouped)
+async function openPayoutMatch(cat){
+  if(!SESSION) return;
+  openDrawer('payoutmatch');
+  document.getElementById('pm-scope').textContent = `${SESSION.branch_name} · ${SESSION.period_month} · ${cat}`;
+  const body=document.getElementById('pm-body'); body.innerHTML=`<div class="text-center text-gray-400 py-6">${t('loading')}</div>`;
+  let all=null; try{ all=await api(`/api/payout-matching?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`); }catch(e){}
+  const d=(all||{})[cat];
+  if(!d || !d.payouts.length){ body.innerHTML=`<div class="card text-center text-gray-400 py-6">${t('pm_empty')}</div>`;
+    document.getElementById('pm-summary').innerHTML=''; return; }
+  document.getElementById('pm-summary').innerHTML =
+    `<span class="text-gray-400">${t('l_report_net')}</span> <b class="font-mono">${fmt(d.net_total)}</b> ·
+     <span class="text-gray-400">${t('l_bank_payout')}</span> <b class="font-mono">${fmt(d.payout_total)}</b>`
+    + (d.awaiting_total>0?` · <span class="text-amber-600">${t('p_awaiting')} ${fmt(d.awaiting_total)}</span>`:'');
+  body.innerHTML = d.payouts.map(p=>{
+    const dayList=p.days.map(x=>`${x.day} <span class="text-gray-400 font-mono">${fmt(x.net)}</span>`).join(' + ');
+    if(p.status==='awaiting'){
+      return `<div class="card flex items-center justify-between" style="border-left:4px solid var(--warn);padding:10px 14px">
+        <div><span class="badge b-warn">${t('p_awaiting')}</span> <span class="ml-2">${t('pm_net_day')} ${dayList}</span></div>
+        <div class="text-gray-400 text-sm">${t('pm_no_credit')}</div></div>`;
+    }
+    return `<div class="card" style="border-left:4px solid var(--ok);padding:10px 14px">
+      <div class="flex items-center justify-between flex-wrap gap-2">
+        <div><span class="badge b-ok">✓</span>
+          <span class="font-semibold ml-1">${t('pm_transfer')} ${p.payout_date}</span>
+          <span class="font-mono ml-1">${fmt(p.amount)}</span>
+          ${p.combined?`<span class="badge b-mut ml-1">${t('pm_combined')} ${p.days.length} ${t('sugg_day')}</span>`:''}
+          ${p.lag?`<span class="text-xs text-gray-400 ml-1">(+${p.lag} ${t('sugg_day')})</span>`:''}
+        </div>
+      </div>
+      <div class="text-sm text-gray-600 mt-1">= ${t('pm_net_day')} ${dayList}</div>
+    </div>`;
+  }).join('');
 }
 
 function downloadExport(){
