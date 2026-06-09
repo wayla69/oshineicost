@@ -60,6 +60,19 @@ app = FastAPI(title="Oshinei Revenue Reconciliation", version="1.0.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
+@app.middleware("http")
+async def _frontend_no_cache(request, call_next):
+    """The frontend is a single inline-HTML file served by StaticFiles, which
+    sends only last-modified/etag (no Cache-Control). Browsers then apply
+    heuristic caching and may serve a stale build even after a refresh. Force
+    revalidation on /app so a fresh deploy is visible immediately (the etag still
+    yields a cheap 304 when nothing changed)."""
+    resp = await call_next(request)
+    if request.url.path.startswith("/app"):
+        resp.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return resp
+
+
 @contextmanager
 def get_db():
     conn = sqlite3.connect(_DB_PATH, timeout=10)
