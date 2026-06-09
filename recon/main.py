@@ -58,7 +58,15 @@ _DB_PATH   = Path(os.getenv("OSHINEI_DB", "/data/oshinei.db"))
 _SCHEMA    = Path(__file__).parent / "schema.sql"
 
 app = FastAPI(title="Oshinei Revenue Reconciliation", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+# The frontend is served same-origin (/app on this service), so it needs no CORS
+# grant; restrict cross-origin reads to the known hosts instead of a blanket '*'.
+# Override with OSHINEI_CORS_ORIGINS (comma-separated) if another origin must call in.
+_CORS_ORIGINS = [o.strip() for o in os.getenv(
+    "OSHINEI_CORS_ORIGINS",
+    "https://oshinei-dashboard.fly.dev,https://oshinei-dashboard.fly.dev:8443,"
+    "http://localhost:8001,http://127.0.0.1:8001,http://localhost:8013,http://127.0.0.1:8013"
+).split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_CORS_ORIGINS, allow_methods=["*"], allow_headers=["*"])
 
 
 @app.middleware("http")
@@ -435,10 +443,12 @@ def update_bank_account(account_id: int, body: BankAccount):
         raise HTTPException(400, "bank must be KTB or KBANK")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
-        conn.execute("""
+        cur = conn.execute("""
             UPDATE recon_bank_account SET branch_id=?, bank=?, account_no=?, account_name=?, active=?
             WHERE account_id=?
         """, (body.branch_id, body.bank, body.account_no, body.account_name, body.active, account_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"bank account {account_id} not found")
         conn.commit()
     return {"account_id": account_id}
 
@@ -446,7 +456,9 @@ def update_bank_account(account_id: int, body: BankAccount):
 @app.delete("/api/bank-accounts/{account_id}", dependencies=[Depends(require_write_token)])
 def delete_bank_account(account_id: int):
     with get_db() as conn:
-        conn.execute("DELETE FROM recon_bank_account WHERE account_id=?", (account_id,))
+        cur = conn.execute("DELETE FROM recon_bank_account WHERE account_id=?", (account_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"bank account {account_id} not found")
         conn.commit()
     return {"deleted": account_id}
 
@@ -475,8 +487,8 @@ def list_acquirer_mids(branch_id: int | None = None):
 
 @app.post("/api/acquirer-mids", dependencies=[Depends(require_write_token)])
 def create_acquirer_mid(body: AcquirerMid):
-    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL"):
-        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB or BBL")
+    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "KTCPOINT", "BAYPOINT"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB, BBL, KTCPOINT or BAYPOINT")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         cur = conn.execute("""
@@ -489,14 +501,16 @@ def create_acquirer_mid(body: AcquirerMid):
 
 @app.patch("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
 def update_acquirer_mid(mid_id: int, body: AcquirerMid):
-    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL"):
-        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB or BBL")
+    if body.acquirer not in ("KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "KTCPOINT", "BAYPOINT"):
+        raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB, BBL, KTCPOINT or BAYPOINT")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
-        conn.execute("""
+        cur = conn.execute("""
             UPDATE recon_acquirer_mid SET branch_id=?, acquirer=?, merchant_id=?, terminal_id=?, active=?
             WHERE mid_id=?
         """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active, mid_id))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"acquirer MID {mid_id} not found")
         conn.commit()
     return {"mid_id": mid_id}
 
@@ -504,7 +518,9 @@ def update_acquirer_mid(mid_id: int, body: AcquirerMid):
 @app.delete("/api/acquirer-mids/{mid_id}", dependencies=[Depends(require_write_token)])
 def delete_acquirer_mid(mid_id: int):
     with get_db() as conn:
-        conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
+        cur = conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"acquirer MID {mid_id} not found")
         conn.commit()
     return {"deleted": mid_id}
 
@@ -836,7 +852,9 @@ def update_session_status(
     with get_db() as conn:
         old_row = conn.execute(
             "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()
-        old_status = old_row["status"] if old_row else None
+        if not old_row:
+            raise HTTPException(404, f"session {session_id} not found")
+        old_status = old_row["status"]
         # Approval gate: don't let a month be signed off while issues are open.
         if status in ("approved", "closed"):
             pending = conn.execute(
@@ -1999,7 +2017,7 @@ def get_audit_log(
 # ── Diagnostic endpoints ──────────────────────────────────────────────────────
 # Use these to inspect what's actually in the database before tuning matchers.
 
-@app.get("/api/diagnostics/payment-codes")
+@app.get("/api/diagnostics/payment-codes", dependencies=[Depends(require_write_token)])
 def diag_payment_codes(period_month: str, branch_id: int | None = None):
     """
     Show all PaymentCode values in pos_payment_month for a given month.
@@ -2025,7 +2043,7 @@ def diag_payment_codes(period_month: str, branch_id: int | None = None):
             return {"error": str(exc), "hint": "pos_payment_month not found — run sync_mssql.py first"}
 
 
-@app.get("/api/diagnostics/customer-types")
+@app.get("/api/diagnostics/customer-types", dependencies=[Depends(require_write_token)])
 def diag_customer_types(period_month: str, branch_id: int | None = None):
     """
     Show all CustomerTypeName values in pos_customer_type_month for a given month.
@@ -2051,7 +2069,7 @@ def diag_customer_types(period_month: str, branch_id: int | None = None):
             return {"error": str(exc), "hint": "pos_customer_type_month not found — run sync_mssql.py first"}
 
 
-@app.get("/api/diagnostics/excel-payment-cols")
+@app.get("/api/diagnostics/excel-payment-cols", dependencies=[Depends(require_write_token)])
 def diag_excel_payment_cols(period_month: str, branch_id: int | None = None):
     """
     Show Easy POS Excel payment column totals from sales_month_summary.

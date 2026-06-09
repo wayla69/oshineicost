@@ -525,6 +525,37 @@ def test_grab_daily_pdf_multi_day_split():
         assert r["vat_amount"] > 0       # VAT split out of the bundled commission
 
 
+# ── endpoint audit fixes ──────────────────────────────────────────────────────
+
+def test_config_endpoints_404_on_missing(client):
+    assert client.patch("/api/bank-accounts/99999", json={"branch_id": 4, "bank": "KTB", "account_no": "x"}).status_code == 404
+    assert client.delete("/api/bank-accounts/99999").status_code == 404
+    assert client.patch("/api/acquirer-mids/99999", json={"branch_id": 4, "acquirer": "KTC", "merchant_id": "x"}).status_code == 404
+    assert client.delete("/api/acquirer-mids/99999").status_code == 404
+    r = client.patch("/api/sessions/99999/status", data={"status": "approved"})
+    assert r.status_code == 404
+
+
+def test_acquirer_endpoint_accepts_point_acquirers(client):
+    # the live --api seeder POSTs KTCPOINT/BAYPOINT — must not be rejected
+    r = client.post("/api/acquirer-mids", json={"branch_id": 4, "acquirer": "KTCPOINT", "merchant_id": "000001889101674"})
+    assert r.status_code == 200 and r.json().get("mid_id")
+    r2 = client.post("/api/acquirer-mids", json={"branch_id": 4, "acquirer": "BAYPOINT", "merchant_id": "442652010"})
+    assert r2.status_code == 200
+    r3 = client.post("/api/acquirer-mids", json={"branch_id": 4, "acquirer": "NONSENSE", "merchant_id": "1"})
+    assert r3.status_code == 400
+
+
+def test_diagnostics_require_write_token(client):
+    os.environ["OSHINEI_SEED_TOKEN"] = "secret-x"
+    try:
+        assert client.get("/api/diagnostics/payment-codes?period_month=2026-06").status_code == 403
+        ok = client.get("/api/diagnostics/payment-codes?period_month=2026-06", headers={"X-Upload-Token": "secret-x"})
+        assert ok.status_code == 200
+    finally:
+        os.environ.pop("OSHINEI_SEED_TOKEN", None)
+
+
 # ── endpoint auth + validation ────────────────────────────────────────────────
 
 def test_master_only_and_period_validation(client):
