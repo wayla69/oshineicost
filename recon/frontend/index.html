@@ -180,20 +180,20 @@
   </div>
 
   <nav id="sidebar-nav">
-    <div class="side-section" data-i18n="sec_daily">Daily work</div>
+    <div class="side-section" data-i18n="sec_overview">Overview</div>
     <button class="side-btn active" data-tab="overview" onclick="switchTab('overview')">
-      <span class="icon">📊</span><span data-i18n="tab_overview">Overview</span>
+      <span class="icon">📊</span><span data-i18n="tab_overview">All branches</span>
     </button>
     <button class="side-btn" data-tab="board" onclick="switchTab('board')">
-      <span class="icon">🗓️</span><span data-i18n="tab_board">Daily Board (all)</span>
-    </button>
-    <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
-      <span class="icon">📅</span><span data-i18n="tab_daily">Daily Reconcile</span>
+      <span class="icon">🗓️</span><span data-i18n="tab_board">Daily board</span>
     </button>
 
-    <div class="side-section" data-i18n="sec_docs">Documents &amp; review</div>
+    <div class="side-section" data-i18n="sec_recon">Daily reconcile</div>
     <button class="side-btn" data-tab="uploads" onclick="switchTab('uploads')">
-      <span class="icon">📤</span><span data-i18n="tab_uploads">Documents</span>
+      <span class="icon">📤</span><span data-i18n="tab_uploads">Upload documents</span>
+    </button>
+    <button class="side-btn" data-tab="daily" onclick="switchTab('daily')">
+      <span class="icon">📅</span><span data-i18n="tab_daily">Daily reconcile</span>
     </button>
     <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
       <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">To Review</span>
@@ -899,8 +899,8 @@ async function withBusy(btn, label, fn){
 const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
-    tab_overview:"ภาพรวม", tab_board:"บอร์ดรายวันทุกสาขา", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
-    sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_reports:"รายงาน & วิเคราะห์", sec_system:"ระบบ",
+    tab_overview:"สรุปทุกสาขา", tab_board:"บอร์ดรายวัน", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
+    sec_overview:"ภาพรวม", sec_recon:"กระทบยอดประจำวัน", sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_reports:"รายงาน & วิเคราะห์", sec_system:"ระบบ",
     board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)", board_report:"📄 รายงาน PDF (ทุกสาขา)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
     bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_manual:"จับคู่เอง", bd_lg_none:"ไม่มีแหล่ง",
@@ -1021,8 +1021,8 @@ const I18N = {
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
-    tab_overview:"Overview", tab_board:"Daily Board (all)", tab_daily:"Daily Reconcile", tab_monthly:"By Category", tab_uploads:"Documents",
-    sec_daily:"Daily work", sec_docs:"Documents & review", sec_reports:"Reports & analytics", sec_system:"System",
+    tab_overview:"All branches", tab_board:"Daily board", tab_daily:"Daily reconcile", tab_monthly:"By Category", tab_uploads:"Upload documents",
+    sec_overview:"Overview", sec_recon:"Daily reconcile", sec_daily:"Daily work", sec_docs:"Documents & review", sec_reports:"Reports & analytics", sec_system:"System",
     board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)", board_report:"📄 Daily report PDF (all)",
     board_reporting:"Branches reporting", board_total:"All branches",
     bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_manual:"manual match", bd_lg_none:"no source",
