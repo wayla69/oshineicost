@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>การประเมินมูลค่าระบบ · Oshinei Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-page:#f0f4f8; --bg-card:#ffffff; --bg-subtle:#f8fafc;
+  --text-primary:#0f172a; --text-secondary:#475569; --text-muted:#94a3b8;
+  --border:#e2e8f0; --border-soft:#f1f5f9;
+  --indigo:#4f46e5; --indigo-mid:#6366f1; --indigo-soft:#eef2ff;
+  --good:#16a34a; --bad:#dc2626; --warn:#d97706; --cyan:#0891b2;
+  --good-soft:#dcfce7; --warn-soft:#fef3c7; --cyan-soft:#cffafe;
+  --shadow-sm:0 1px 3px rgba(15,23,42,.04),0 2px 8px rgba(15,23,42,.06);
+  --shadow-md:0 4px 8px rgba(15,23,42,.05),0 12px 24px rgba(15,23,42,.08);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 4px 10px rgba(15,23,42,.05);
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
+}
+body.dark{
+  --bg-page:#080e1c; --bg-card:#0f1a2e; --bg-subtle:#111828;
+  --text-primary:#f1f5f9; --text-secondary:#94a3b8; --text-muted:#64748b;
+  --border:#1e2d45; --border-soft:#131f35;
+  --indigo:#818cf8; --indigo-mid:#6366f1; --indigo-soft:#1c2060;
+  --good-soft:#0c2a1a; --warn-soft:#2c2208; --cyan-soft:#0a2730;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+  --shadow-md:0 8px 24px rgba(0,0,0,.4); --shadow-lg:0 20px 50px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{
+  font-family:'Sarabun','Inter',system-ui,-apple-system,sans-serif;
+  background:var(--bg-page); color:var(--text-primary);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+  transition:background .3s,color .3s;
+}
+.mono{font-family:'Inter',ui-monospace,'SF Mono',Menlo,monospace;font-variant-numeric:tabular-nums}
+code{font-family:'Inter',ui-monospace,Menlo,monospace;font-size:.84em;
+  background:var(--indigo-soft);color:var(--indigo);padding:.1em .45em;border-radius:6px;font-weight:600}
+body.dark code{background:#1c2060}
+a{color:var(--indigo);text-decoration:none}
+
+/* NAV */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(14px);
+  background:color-mix(in srgb,var(--bg-page) 82%,transparent);
+  border-bottom:1px solid var(--border);}
+.nav-in{max-width:1120px;margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;letter-spacing:-.02em}
+.brand .dot{width:26px;height:26px;border-radius:8px;
+  background:linear-gradient(135deg,var(--indigo),#a855f7);
+  display:grid;place-items:center;color:#fff;font-size:13px;font-weight:900;box-shadow:0 4px 12px rgba(79,70,229,.4)}
+.nav-links{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.nav-links a{font-size:13px;font-weight:600;color:var(--text-secondary);padding:6px 11px;border-radius:8px;transition:.15s}
+.nav-links a:hover,.nav-links a.active{background:var(--indigo-soft);color:var(--indigo)}
+.toggle{cursor:pointer;border:1px solid var(--border);background:var(--bg-card);
+  width:38px;height:38px;border-radius:10px;font-size:16px;display:grid;place-items:center;flex-shrink:0}
+@media(max-width:860px){.nav-links{display:none}}
+
+/* LAYOUT */
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+section{padding:44px 0;border-bottom:1px solid var(--border-soft)}
+section:last-child{border-bottom:0}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--indigo);margin-bottom:10px}
+h1{font-size:34px;font-weight:900;letter-spacing:-.03em;line-height:1.15;margin-bottom:14px}
+h2{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:6px;display:flex;align-items:center;gap:11px}
+h2 .n{width:30px;height:30px;border-radius:9px;background:var(--indigo-soft);color:var(--indigo);
+  display:grid;place-items:center;font-size:14px;font-weight:900;flex-shrink:0}
+.sub{color:var(--text-secondary);font-size:15px;margin-bottom:22px;max-width:760px}
+p{color:var(--text-secondary);font-size:14.5px;margin-bottom:12px}
+strong{color:var(--text-primary);font-weight:700}
+
+/* HERO */
+.hero{padding:54px 0 40px}
+.hero-grid{display:grid;grid-template-columns:1.3fr 1fr;gap:34px;align-items:center}
+@media(max-width:860px){.hero-grid{grid-template-columns:1fr}}
+.hero p.lead{font-size:16px;line-height:1.7}
+.pill{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;font-weight:700;
+  background:var(--good-soft);color:var(--good);padding:5px 12px;border-radius:999px;margin-bottom:18px}
+.pill .d{width:7px;height:7px;border-radius:50%;background:var(--good)}
+.hero-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-xl);
+  padding:26px;box-shadow:var(--shadow-md)}
+.hero-card h4{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:16px}
+.kv{display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--border)}
+.kv:last-child{border-bottom:0}
+.kv .l{font-size:13.5px;color:var(--text-secondary)}
+.kv .v{font-size:16px;font-weight:800;letter-spacing:-.01em}
+
+/* STAT STRIP */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:6px}
+@media(max-width:860px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:18px;box-shadow:var(--shadow-sm)}
+.stat .num{font-size:26px;font-weight:900;letter-spacing:-.02em;line-height:1}
+.stat .lab{font-size:12.5px;color:var(--text-secondary);margin-top:7px;font-weight:600}
+.stat .hint{font-size:11.5px;color:var(--text-muted);margin-top:3px}
+
+/* CARDS */
+.cards{display:grid;gap:16px;margin-top:8px}
+.cards.c3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:860px){.cards.c3{grid-template-columns:1fr}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:22px;box-shadow:var(--shadow-sm)}
+.card.hl{border-color:var(--indigo);box-shadow:0 0 0 1px var(--indigo),var(--shadow-md)}
+.card .tag{display:inline-block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  padding:3px 9px;border-radius:6px;margin-bottom:12px}
+.tag.t-indigo{background:var(--indigo-soft);color:var(--indigo)}
+.tag.t-good{background:var(--good-soft);color:var(--good)}
+.tag.t-warn{background:var(--warn-soft);color:var(--warn)}
+.tag.t-cyan{background:var(--cyan-soft);color:var(--cyan)}
+.card h3{font-size:16px;font-weight:800;margin-bottom:8px}
+.card .big{font-size:22px;font-weight:900;letter-spacing:-.02em;margin:6px 0;color:var(--indigo)}
+.card ul{list-style:none;margin-top:10px}
+.card li{font-size:13.5px;color:var(--text-secondary);padding:5px 0 5px 20px;position:relative}
+.card li::before{content:"›";position:absolute;left:4px;color:var(--indigo);font-weight:900}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm);font-size:14px;margin-top:6px}
+.tbl th{text-align:left;font-size:11.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;
+  color:var(--text-muted);padding:13px 16px;background:var(--bg-subtle);border-bottom:1px solid var(--border)}
+.tbl td{padding:13px 16px;border-bottom:1px solid var(--border-soft);color:var(--text-secondary)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl td strong{color:var(--text-primary)}
+.tbl .r{text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--text-primary)}
+.tbl tr.emph{background:var(--indigo-soft)}
+.tbl tr.emph td{color:var(--indigo);font-weight:700}
+
+/* CALLOUT */
+.callout{display:flex;gap:14px;background:var(--bg-card);border:1px solid var(--border);
+  border-left:4px solid var(--indigo);border-radius:var(--r-md);padding:18px 20px;margin-top:18px;box-shadow:var(--shadow-sm)}
+.callout.warn{border-left-color:var(--warn)}
+.callout .ico{font-size:20px;flex-shrink:0}
+.callout p{margin:0;font-size:13.5px}
+.callout strong{color:var(--text-primary)}
+
+/* SLIDER PRICE BLOCK */
+.priceband{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:8px}
+@media(max-width:860px){.priceband{grid-template-columns:1fr}}
+.plan{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);padding:24px;box-shadow:var(--shadow-sm);position:relative}
+.plan.best{border-color:var(--indigo);box-shadow:0 0 0 1px var(--indigo),var(--shadow-md);transform:translateY(-4px)}
+.plan .ribbon{position:absolute;top:-11px;left:24px;font-size:11px;font-weight:800;letter-spacing:.04em;
+  background:var(--indigo);color:#fff;padding:4px 11px;border-radius:7px;box-shadow:var(--shadow-sm)}
+.plan h3{font-size:17px;font-weight:800;margin-bottom:4px}
+.plan .price{font-size:30px;font-weight:900;letter-spacing:-.02em;margin:8px 0 2px}
+.plan .price small{font-size:14px;font-weight:600;color:var(--text-muted)}
+.plan .per{font-size:12.5px;color:var(--text-muted);margin-bottom:14px}
+.plan ul{list-style:none}
+.plan li{font-size:13.5px;color:var(--text-secondary);padding:6px 0 6px 24px;position:relative;border-top:1px solid var(--border-soft)}
+.plan li:first-child{border-top:0}
+.plan li::before{content:"✓";position:absolute;left:2px;color:var(--good);font-weight:900}
+
+footer{padding:34px 0 60px;text-align:center}
+footer p{font-size:12.5px;color:var(--text-muted);max-width:720px;margin:0 auto 6px}
+.disclaimer{background:var(--warn-soft);border:1px solid var(--warn);border-radius:var(--r-md);
+  padding:14px 18px;font-size:12.5px;color:var(--text-secondary);margin-top:20px}
+.disclaimer strong{color:var(--warn)}
+@media print{.nav,.toggle{display:none}.hero-card,.card,.stat,.plan,.tbl{box-shadow:none}}
+</style>
+</head>
+<body>
+
+<nav class="nav"><div class="nav-in">
+  <div class="brand"><span class="dot">O</span> Oshinei · การประเมินมูลค่าระบบ</div>
+  <div class="nav-links">
+    <a href="#scope">ขอบเขต</a>
+    <a href="#dev">ต้นทุนพัฒนา</a>
+    <a href="#sale">มูลค่าขาย</a>
+    <a href="#value">มูลค่าเชิงคุณค่า</a>
+    <a href="#saas">SaaS</a>
+    <a href="#summary">สรุป</a>
+  </div>
+  <div class="toggle" onclick="document.body.classList.toggle('dark')">🌓</div>
+</div></nav>
+
+<!-- HERO -->
+<header class="wrap hero">
+  <div class="hero-grid">
+    <div>
+      <div class="pill"><span class="d"></span> อิงโค้ดจริง + ฐานข้อมูลจริง พ.ค. 2026</div>
+      <h1>มูลค่าระบบ Oshinei Cost-Analytics &amp; Reconciliation</h1>
+      <p class="lead">ประเมิน 4 มุม: ต้นทุนถ้าจ้างคนพัฒนา · มูลค่าถ้าขายให้บริษัทอื่น ·
+      มูลค่าเชิงคุณค่าตามรายได้สาขา · และราคา SaaS ต่อสาขาที่ลูกค้าจ่ายไหวและคุ้ม</p>
+    </div>
+    <div class="hero-card">
+      <h4>ตัวเลขที่ใช้ประเมิน (verified)</h4>
+      <div class="kv"><span class="l">Backend (Python)</span><span class="v mono">28,500 บรรทัด</span></div>
+      <div class="kv"><span class="l">Frontend dashboard</span><span class="v mono">24,000 บรรทัด</span></div>
+      <div class="kv"><span class="l">API endpoints</span><span class="v mono">219</span></div>
+      <div class="kv"><span class="l">สาขา active</span><span class="v mono">26 / 27</span></div>
+      <div class="kv"><span class="l">รายได้/เดือน (พ.ค.)</span><span class="v mono">~127 ล้าน฿</span></div>
+      <div class="kv"><span class="l">รายได้/สาขา/เดือน</span><span class="v mono">~4.5 ล้าน฿</span></div>
+    </div>
+  </div>
+</header>
+
+<!-- SCOPE -->
+<section id="scope"><div class="wrap">
+  <div class="eyebrow">01 — ขอบเขตระบบ</div>
+  <h2><span class="n">A</span> ระบบนี้ใหญ่แค่ไหน</h2>
+  <p class="sub">ปริมาณงานจริงจากการนับโค้ดและสำรวจฐานข้อมูล ไม่ใช่การประมาณคร่าวๆ —
+  เป็นแพลตฟอร์ม BI + ETL + reconciliation ระดับองค์กร ไม่ใช่แค่แดชบอร์ด</p>
+  <div class="stats">
+    <div class="stat"><div class="num mono">28.5k</div><div class="lab">บรรทัด Python</div><div class="hint">38 โมดูล</div></div>
+    <div class="stat"><div class="num mono">219</div><div class="lab">API endpoints</div><div class="hint">172 dashboard + 47 recon</div></div>
+    <div class="stat"><div class="num mono">60+</div><div class="lab">ตารางฐานข้อมูล</div><div class="hint">sales · cost · recon · auth</div></div>
+    <div class="stat"><div class="num mono">26</div><div class="lab">สาขาใช้งานจริง</div><div class="hint">เชน ~1,400 ล้าน฿/ปี</div></div>
+  </div>
+  <div class="cards c3" style="margin-top:20px">
+    <div class="card"><span class="tag t-indigo">Data Pipeline</span><h3>เชื่อม POS สด</h3>
+      <p>ดึง Easy POS HQ (MSSQL) แบบ read-only, full-rebuild, sync อัตโนมัติทุกวัน 06:00</p></div>
+    <div class="card"><span class="tag t-good">Cost Engine</span><h3>ต้นทุน &amp; กำไร</h3>
+      <p>BoM costing, GP/COGS, P&amp;L, food-cost benchmark, forecast/targets รายสาขา</p></div>
+    <div class="card"><span class="tag t-cyan">Reconciliation</span><h3>กระทบยอดเงิน</h3>
+      <p>POS เทียบ bank / บัตร / Grab / Lineman จับเงินรั่ว — 47 endpoints เฉพาะส่วนนี้</p></div>
+  </div>
+</div></section>
+
+<!-- DEV COST -->
+<section id="dev"><div class="wrap">
+  <div class="eyebrow">02 — ต้นทุนถ้าจ้างคนทำ</div>
+  <h2><span class="n">1</span> Replacement Cost</h2>
+  <p class="sub">ปริมาณงานเทียบเท่า <strong>~12–15 person-months</strong> ของทีมมืออาชีพ
+  ส่วนที่กินเวลาที่สุดคือการจัดการ "ข้อมูลสกปรก" จากระบบจริง (VAT, วันสิ้นเดือนหาย, BoM นับซ้ำ ฯลฯ) ที่ทีมใหม่ก็จะเจอเหมือนกัน</p>
+  <table class="tbl">
+    <thead><tr><th>รูปแบบผู้พัฒนา</th><th>เรตตลาดไทย</th><th class="r">ต้นทุนรวมโดยประมาณ</th></tr></thead>
+    <tbody>
+      <tr><td><strong>ฟรีแลนซ์ senior full-stack คนเดียว</strong></td><td>90k–150k ฿/เดือน</td><td class="r">1.3 – 2.2 ล้าน฿</td></tr>
+      <tr class="emph"><td><strong>Software house</strong> (PM+QA, มาร์กอัป 2–2.5×)</td><td>quote เป็นโปรเจกต์</td><td class="r">2.5 – 4.5 ล้าน฿</td></tr>
+      <tr><td><strong>SI / เจ้าใหญ่ enterprise</strong></td><td>เรตองค์กร</td><td class="r">5 – 8 ล้าน฿</td></tr>
+    </tbody>
+  </table>
+  <div class="callout"><span class="ico">💡</span>
+    <p>ตัวเลขที่สมจริงที่สุดถ้าให้ทีมมืออาชีพทำใหม่ทั้งระบบ: <strong>ประมาณ 2.5–4 ล้านบาท</strong></p></div>
+</div></section>
+
+<!-- SALE VALUE -->
+<section id="sale"><div class="wrap">
+  <div class="eyebrow">03 — มูลค่าถ้าขายให้บริษัทอื่น</div>
+  <h2><span class="n">2</span> Asset / IP Sale</h2>
+  <p class="sub">ขึ้นกับว่าขายแบบไหน — ระบบที่ "พิสูจน์แล้วบนข้อมูลจริงเละๆ ของเชน 1,400 ล้าน/ปี" มีค่ามากกว่าโค้ดเปล่า 2–3 เท่า</p>
+  <div class="cards" style="grid-template-columns:1fr 1fr">
+    <div class="card"><span class="tag t-warn">Custom Deal</span>
+      <h3>ขายแบบปรับแต่งให้เชนอื่น</h3>
+      <div class="big">1.5 – 3 ล้าน฿ <small style="font-size:13px;color:var(--text-muted)">/ ดีล</small></div>
+      <p>single-tenant ≈ ต้นทุน replacement หักค่าปรับแต่งเข้าระบบลูกค้า</p></div>
+    <div class="card hl"><span class="tag t-good">IP / Product</span>
+      <h3>ขาย source + know-how ทั้งระบบ</h3>
+      <div class="big">4 – 10 ล้าน฿</div>
+      <p>พิสูจน์แล้วว่ารันบนเชนใหญ่จริง — มูลค่าสูงสุดเมื่อทำ multi-tenant SaaS (Phase D) เสร็จ เปลี่ยนจาก "โปรเจกต์" เป็น "บริษัท"</p></div>
+  </div>
+</div></section>
+
+<!-- VALUE BASED -->
+<section id="value"><div class="wrap">
+  <div class="eyebrow">04 — มูลค่าตามคุณค่าที่สร้าง</div>
+  <h2><span class="n">3</span> Value-Based (ตรงคำถามที่สุด)</h2>
+  <p class="sub">มูลค่าจริง = เงินที่ระบบช่วยประหยัด/กู้คืน บนฐานรายได้เชน ~1,400 ล้านบาท/ปี</p>
+  <div class="cards c3">
+    <div class="card"><span class="tag t-cyan">จับเงินรั่ว</span><h3>Reconciliation</h3>
+      <p>POS เทียบ bank / บัตร / Grab / Lineman — เงินที่เคยตกหล่นถูกจับคืน</p></div>
+    <div class="card"><span class="tag t-good">คุมต้นทุน</span><h3>Cost / GP</h3>
+      <p>เห็น food-cost รายสาขา/รายเมนู เปรียบเทียบ benchmark ลดต้นทุนที่เกิน</p></div>
+    <div class="card hl"><span class="tag t-indigo">ผลลัพธ์</span><h3>มูลค่าที่สร้าง/ปี</h3>
+      <div class="big">4 – 7 ล้าน฿</div>
+      <p>แค่ปรับมาร์จิ้นดีขึ้น <strong>0.3–0.5%</strong> บน 1,400 ล้าน</p></div>
+  </div>
+  <div class="callout"><span class="ico">🎯</span>
+    <p>หลักการตั้งราคา: เก็บเพียง <strong>10–20%</strong> ของมูลค่าที่สร้าง เพื่อให้ ROI ลูกค้าชัดเจน — โยงไปสู่ราคา SaaS ด้านล่าง</p></div>
+</div></section>
+
+<!-- SAAS -->
+<section id="saas"><div class="wrap">
+  <div class="eyebrow">05 — ราคา SaaS ต่อสาขา</div>
+  <h2><span class="n">4</span> ถ้าทำเป็น SaaS คิดเท่าไร</h2>
+  <p class="sub">สาขาเฉลี่ยทำรายได้ ~4.5 ล้านบาท/เดือน — ถือเป็นสาขาใหญ่ จ่ายค่าระบบไหวสบาย
+  เทียบตลาด BI/back-office ร้านอาหารไทย–SEA ปกติ 1,000–3,000 ฿/สาขา/เดือน แต่ระบบนี้มี reconciliation + live POS sync ที่ลึกกว่าทั่วไป</p>
+  <div class="priceband">
+    <div class="plan"><h3>Basic</h3>
+      <div class="price">1,500<small> ฿</small></div><div class="per">/ สาขา / เดือน</div>
+      <ul><li>Dashboard รายได้/สาขา</li><li>Cost &amp; GP analytics</li><li>รายงาน Excel/PDF</li></ul></div>
+    <div class="plan best"><div class="ribbon">แนะนำ</div><h3>Pro</h3>
+      <div class="price">3,000–3,500<small> ฿</small></div><div class="per">/ สาขา / เดือน</div>
+      <ul><li>ทุกอย่างใน Basic</li><li>Reconciliation เต็มรูปแบบ</li><li>Forecast &amp; targets รายสาขา</li><li>Market context</li></ul></div>
+    <div class="plan"><h3>Enterprise</h3>
+      <div class="price">5,000<small> ฿</small></div><div class="per">/ สาขา / เดือน + setup</div>
+      <ul><li>ทุกอย่างใน Pro</li><li>Live POS sync (MSSQL)</li><li>RBAC 6 บทบาท × 16 โมดูล</li><li>Custom integration</li></ul></div>
+  </div>
+
+  <h3 style="font-size:16px;font-weight:800;margin:30px 0 10px">ตัวอย่างจริง: เชน Oshinei เอง (26 สาขา × Pro 3,500฿)</h3>
+  <table class="tbl">
+    <thead><tr><th>รายการ</th><th class="r">ค่า</th></tr></thead>
+    <tbody>
+      <tr><td>ค่าบริการ/เดือน</td><td class="r">~91,000 ฿</td></tr>
+      <tr><td>ค่าบริการ/ปี (ARR ต่อ 1 เชน)</td><td class="r">~1.1 ล้าน฿</td></tr>
+      <tr><td>คิดเป็น % ของรายได้เชน</td><td class="r">~0.08%</td></tr>
+      <tr class="emph"><td>เทียบมูลค่าที่ระบบสร้าง/ปี</td><td class="r">4–7 ล้าน฿ → ROI ชัดมาก</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout"><span class="ico">📈</span>
+    <p><strong>มุมมองสร้างบริษัท SaaS:</strong> เซ็นได้แค่ 5 เชนขนาดนี้ ≈ <strong>5.5 ล้านบาท ARR</strong> →
+    มูลค่าบริษัทที่ valuation 3–5× ARR = <strong>17 – 27 ล้านบาท</strong></p></div>
+</div></section>
+
+<!-- SUMMARY -->
+<section id="summary"><div class="wrap">
+  <div class="eyebrow">06 — สรุป</div>
+  <h2><span class="n">∑</span> สรุปทุกมุมมอง</h2>
+  <table class="tbl" style="margin-top:14px">
+    <thead><tr><th>คำถาม</th><th class="r">คำตอบ</th></tr></thead>
+    <tbody>
+      <tr><td><strong>ต้นทุนถ้าจ้างคนทำ</strong></td><td class="r">2.5 – 4 ล้าน฿ <span style="color:var(--text-muted);font-weight:400">(freelance 1.3–2.2M · agency 2.5–4.5M)</span></td></tr>
+      <tr><td><strong>ขายให้บริษัทอื่น (custom)</strong></td><td class="r">1.5 – 3 ล้าน฿ / ดีล</td></tr>
+      <tr><td><strong>ขาย IP ทั้งระบบ</strong></td><td class="r">4 – 10 ล้าน฿</td></tr>
+      <tr><td><strong>มูลค่าที่สร้าง/ปี</strong></td><td class="r">4 – 7 ล้าน฿</td></tr>
+      <tr class="emph"><td><strong>ราคา SaaS แนะนำ (Pro)</strong></td><td class="r">3,000–3,500 ฿ / สาขา / เดือน</td></tr>
+      <tr><td><strong>ARR จากเชน Oshinei เอง</strong></td><td class="r">~1.1 ล้าน฿ / ปี</td></tr>
+      <tr><td><strong>มูลค่าบริษัท SaaS (5 เชน)</strong></td><td class="r">17 – 27 ล้าน฿</td></tr>
+    </tbody>
+  </table>
+
+  <div class="disclaimer">
+    <strong>ข้อควรระวัง:</strong> ตัวเลขเหล่านี้เป็นการประเมิน (estimate) เพื่อการตัดสินใจเชิงธุรกิจ
+    ไม่ใช่การประเมินมูลค่าทางบัญชีหรือโดยนักประเมินอิสระ · <code>net_sales</code> อิงฐาน ex-VAT ตามที่ระบบจัดเก็บ ·
+    มูลค่าขายและราคา SaaS จริงขึ้นกับการเจรจาและสภาพตลาด ณ ขณะนั้น
+  </div>
+</div></section>
+
+<footer><div class="wrap">
+  <p>จัดทำจากการนับโค้ดจริง (28,500 บรรทัด Python · 219 endpoints) และฐานข้อมูลจริง <code>oshinei.db</code> (26 สาขา active · รายได้ พ.ค. 2026)</p>
+  <p>Oshinei Enterprise ERP — Cost Analysis · ปรับปรุง 9 มิ.ย. 2026</p>
+</div></footer>
+
+</body>
+</html>
