@@ -56,10 +56,13 @@ def _build_db(path: str):
     cx.executemany("INSERT INTO branches(branch_id,name,branch_type,active) VALUES(?,?,?,?)",
                    [(1, "BranchA", "master", 1), (2, "BranchB", "franchise", 1)])
     cx.executemany("INSERT INTO categories(category_id,name) VALUES(?,?)",
-                   [(1, "BUFFET"), (2, "A La Carte")])
+                   [(1, "BUFFET"), (2, "A La Carte"), (3, "Sashimi")])
+    # Mirrors production: the BUFFET category holds only the tier; buffet component
+    # dishes (B) sit in real FOOD categories (e.g. Sashimi). menu-compare is
+    # buffet-only, so the (A) à-la-carte item is excluded there by design.
     cx.executemany("INSERT INTO skus(sku_id,sku_code,description,category_id,unit,business_type,active) VALUES(?,?,?,?,?,?,1)",
                    [(1, "BUFFET", "ค่าบุฟเฟ่ต์", 1, "pax", "buffet_tier"),
-                    (2, "B0001", "(B) แซลมอน", 1, "plate", "buffet"),
+                    (2, "B0001", "(B) แซลมอน", 3, "plate", "buffet"),
                     (3, "A0001", "(A) สเต๊ก", 2, "plate", "alacarte")])
     cx.executemany("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(?,?)",
                    [(1, 99.0), (2, 8.0), (3, 10.0)])   # tier 99 must be ignored
