@@ -1783,12 +1783,15 @@ def menu_compare(
     MONTH range (*_from/*_to, YYYY-MM) or a DAY range (*_date_from/*_date_to,
     YYYY-MM-DD). Per-SKU qty/rev/cogs for each period + deltas, ranked by
     combined volume, with a totals row over the shown rows."""
-    ew = ["b.name!='ALL'", "COALESCE(sk.active,1)=1", _FOOD_CATEGORY_FILTER]
+    # Buffet-only analysis: à-la-carte SKUs (description prefixed "(A)") are excluded
+    # here on purpose — buffet is the core business and à-la-carte distorts the mix.
+    ew = ["b.name!='ALL'", "COALESCE(sk.active,1)=1", _FOOD_CATEGORY_FILTER,
+          "COALESCE(sk.description,'') NOT LIKE '(A)%'"]
     pb: dict = {}
     if branch:
         ew.append("b.name=:br"); pb["br"] = branch
     _group_filter(ew, pb, group)
-    sel = "sk.sku_id sku_id, sk.sku_code sku_code, sk.description description"
+    sel = "sk.sku_id sku_id, sk.sku_code sku_code, sk.description description, c.name category"
     with get_db() as con:
         A = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, a_from, a_to, a_date_from, a_date_to)}
         B = {r["sku_id"]: r for r in _menucmp_agg(con, sel, "sk.sku_id", ew, pb, b_from, b_to, b_date_from, b_date_to)}
@@ -1801,6 +1804,7 @@ def menu_compare(
         ra = (a or {}).get("rev", 0) or 0; rb = (b or {}).get("rev", 0) or 0
         items.append({
             "sku_id": sid, "sku_code": meta["sku_code"], "description": meta["description"],
+            "category": meta.get("category"),
             "qty_a": qa, "qty_b": qb, "qty_delta_pct": _cmp_pct(qa, qb),
             "rev_a": ra, "rev_b": rb, "rev_delta_pct": _cmp_pct(ra, rb),
             "cogs_a": (a or {}).get("cogs", 0) or 0, "cogs_b": (b or {}).get("cogs", 0) or 0,

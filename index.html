@@ -3189,13 +3189,20 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <button onclick="exportTable('mcTable','menu_compare.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
     <span id="mcStatus" class="text-[11px] text-slate-400 ml-auto"></span>
   </div>
+  <!-- การ์ดสรุปอัตโนมัติ: มาแรง / ร่วงแรง / ใหม่ / หาย -->
+  <div id="mcInsights" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
   <div class="card p-5">
+    <h3 class="text-sm font-bold mb-1" style="color:var(--text-primary)">📋 ตารางที่ 1 · เทียบเมนู A vs B — ยอดรวม
+      <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวนชิ้นรวม · สัดส่วน · ต้นทุน ของแต่ละช่วง · คลิกหัวคอลัมน์เพื่อเรียง)</span></h3>
     <div class="flex items-center gap-2 mb-3 flex-wrap">
       <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
       <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
         <button class="gran-btn gran-active" id="mcModeTotal" onclick="mcSetCostMode(false)">ต้นทุนรวม</button>
         <button class="gran-btn" id="mcModeHead" onclick="mcSetCostMode(true)">ต้นทุน/หัว</button>
       </div>
+      <span class="text-xs text-slate-500 ml-2">หมวด:</span>
+      <select id="mcCatFilter" onchange="mcSetCat(this.value)" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)"><option value="">ทั้งหมด</option></select>
       <span id="mcCoversNote" class="text-[11px] text-slate-400"></span>
     </div>
     <div class="overflow-auto" style="max-height:640px">
@@ -3203,6 +3210,23 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <thead id="mcHead"></thead>
         <tbody id="mcBody"></tbody>
         <tfoot id="mcFoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ตารางที่ 2 — เกณฑ์ "ต่อหัว" เสมอ (เพิ่มเติม ไม่ทับตารางที่ 1) -->
+  <div class="card p-5 mt-4">
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">📋 ตารางที่ 2 · เทียบเมนู A vs B — ต่อหัว
+        <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวน/คน &amp; ต้นทุน/หัว = หารด้วยจำนวนลูกค้าของแต่ละช่วง)</span></h3>
+      <button onclick="exportTable('mcTable2','menu_compare_per_head.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+    </div>
+    <div class="mb-3"><span id="mcCoversNote2" class="text-[11px] text-slate-400"></span></div>
+    <div class="overflow-auto" style="max-height:640px">
+      <table class="tbl-top60 w-full" id="mcTable2">
+        <thead id="mcHead2"></thead>
+        <tbody id="mcBody2"></tbody>
+        <tfoot id="mcFoot2"></tfoot>
       </table>
     </div>
   </div>
@@ -22970,48 +22994,130 @@ function mcSetCostMode(perHead) {
   const dm = document.getElementById('mcDrillModal');
   if (dm && !dm.classList.contains('hidden') && _mcDrillData) mcRenderBranch();
 }
+// ── Menu-compare table state ────────────────────────────────────────────────
+// Table 1 follows the total↔per-head toggle; Table 2 is always per-head (added
+// alongside, not replacing). Both share one category filter + one sort order so
+// a given row sits at the same position in both — easy side-by-side reading.
+const MC_NOISE_QTY = 50;                       // Δ% on volumes below this = noise → dimmed
+let _mcCatSel = '';                            // category filter ('' = all)
+let _mcSort = { key: 'vol', dir: -1 };         // sort key + direction (-1 desc, 1 asc)
+const _dpRaw  = (a, b) => b ? (a - b) / b * 100 : null;                 // raw Δ% A vs B
+function _mcTotals(items) {
+  const s = k => items.reduce((a, r) => a + (r[k] || 0), 0);
+  return { qty_a: s('qty_a'), qty_b: s('qty_b'), cogs_a: s('cogs_a'), cogs_b: s('cogs_b') };
+}
+function mcSetCat(v) { _mcCatSel = v; mcRenderTable(); }
+function mcSort(key) {
+  if (_mcSort.key === key) _mcSort.dir *= -1; else _mcSort = { key, dir: -1 };
+  mcRenderTable();
+}
+function _mcApplySort(items) {
+  const k = _mcSort.key, d = _mcSort.dir;
+  const val = r => ({ vol: r._vol, qty_a: r.qty_a, qty_b: r.qty_b, qd: r._qd, mix: r._mix_b,
+    cogs_a: r.cogs_a, cogs_b: r.cogs_b, cd: r._cd }[k]);
+  items.sort((a, b) => { const x = val(a), y = val(b);
+    if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
+    return (x - y) * d; });
+}
+function _mcRenderCats(allItems) {
+  const sel = document.getElementById('mcCatFilter'); if (!sel) return;
+  const cats = [...new Set(allItems.map(r => r.category).filter(Boolean))].sort();
+  if (_mcCatSel && !cats.includes(_mcCatSel)) _mcCatSel = '';   // stale filter from a prior period
+  const want = `<option value="">ทั้งหมด</option>` + cats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if (sel.dataset.sig !== want) { sel.dataset.sig = want; sel.innerHTML = want; }
+  sel.value = _mcCatSel;
+}
+function _mcRenderInsights(items) {
+  const el = document.getElementById('mcInsights'); if (!el) return;
+  const nm = r => esc((r.description || '').replace(/^\((?:A|B|T)\)\s*/, '')).slice(0, 26);
+  const movers = items.filter(r => !r.only_in_a && !r.only_in_b && !r._noise && r._qd != null);
+  const up   = movers.filter(r => r._qd > 0).sort((a, b) => b._qd - a._qd).slice(0, 3);
+  const down = movers.filter(r => r._qd < 0).sort((a, b) => a._qd - b._qd).slice(0, 3);
+  const neu  = items.filter(r => r.only_in_b).sort((a, b) => b.qty_b - a.qty_b).slice(0, 3);
+  const gone = items.filter(r => r.only_in_a).sort((a, b) => b.qty_a - a.qty_a).slice(0, 3);
+  const card = (title, color, rows, fmt) =>
+    `<div class="card p-3"><div class="text-xs font-bold mb-1.5" style="color:${color}">${title}</div>` +
+    (rows.length ? rows.map(fmt).join('') : '<div class="text-[11px] text-slate-400">—</div>') + '</div>';
+  el.innerHTML =
+    card('🔼 มาแรง', '#16a34a', up, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#16a34a;font-weight:600">▲${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('🔽 ร่วงแรง', '#dc2626', down, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#dc2626;font-weight:600">▼${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('🆕 เมนูใหม่ <span class="font-normal text-slate-400">(มีใน B)</span>', '#4f46e5', neu, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_b)}</span></div>`) +
+    card('⛔ หายไป <span class="font-normal text-slate-400">(เหลือใน A)</span>', '#d97706', gone, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_a)}</span></div>`);
+}
 function mcRenderTable() {
   const L = _mcLast; if (!L) return;
-  const head = document.getElementById('mcHead'), body = document.getElementById('mcBody'), foot = document.getElementById('mcFoot');
-  const items = L.items || [], ph = _mcPerHead, Ca = L.covers_a || 0, Cb = L.covers_b || 0;
+  const Ca = L.covers_a || 0, Cb = L.covers_b || 0;
+  _mcRenderCats(L.items || []);
+  let items = (L.items || []).filter(r => !_mcCatSel || r.category === _mcCatSel);
+  const T = _mcTotals(items);
+  items.forEach(r => {
+    r._mix_a = T.qty_a ? r.qty_a / T.qty_a : 0; r._mix_b = T.qty_b ? r.qty_b / T.qty_b : 0;
+    r._vol = (r.qty_a || 0) + (r.qty_b || 0);
+    r._qd = _dpRaw(r.qty_a, r.qty_b); r._cd = _dpRaw(r.cogs_a, r.cogs_b);
+    r._noise = Math.min(r.qty_a || 0, r.qty_b || 0) < MC_NOISE_QTY;  // small base ⇒ Δ% unstable
+  });
+  _mcApplySort(items);
+  _mcRenderInsights(items);
+  mcRenderMcInto('mcHead', 'mcBody', 'mcFoot', _mcPerHead, items, T, Ca, Cb);
+  mcRenderMcInto('mcHead2', 'mcBody2', 'mcFoot2', true, items, T, Ca, Cb);
+  const catNote = _mcCatSel ? ` · กรองหมวด: ${esc(_mcCatSel)}` : '';
   const note = document.getElementById('mcCoversNote');
-  if (note) note.textContent = ph
-    ? `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — ต้นทุน/หัว = COGS ÷ ลูกค้า (ตัดผลของยอดขายที่เปลี่ยน)`
-    : '';
+  if (note) note.textContent = (_mcPerHead
+    ? `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — /หัว = ยอด ÷ ลูกค้า (ตัดผลของยอดขายที่เปลี่ยน)`
+    : `แสดง ${fmtN(items.length)} เมนู · สัดส่วน = ส่วนแบ่งใน Top ที่แสดง`) + catNote;
+  const note2 = document.getElementById('mcCoversNote2');
+  if (note2) note2.textContent = `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — ทุกคอลัมน์หารด้วยจำนวนลูกค้า (สัดส่วนเป็นอัตราส่วน จึงเท่ากับตารางที่ 1)` + catNote;
+}
+// ph divides qty/cost by covers for the per-head table; mix-share is a ratio so
+// identical in both. Δ% is recomputed from displayed values (per-head deltas
+// differ from raw because covers differ between periods).
+function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
+  const head = document.getElementById(headId), body = document.getElementById(bodyId), foot = document.getElementById(footId);
+  if (!head || !body || !foot) return;
   const hq = ph ? ['จำนวน/คน A', 'จำนวน/คน B'] : ['จำนวน A', 'จำนวน B'];
   const hc = ph ? ['ต้นทุน/หัว A', 'ต้นทุน/หัว B'] : ['ต้นทุน A', 'ต้นทุน B'];
+  const ind = k => _mcSort.key === k ? (_mcSort.dir < 0 ? ' ▾' : ' ▴') : '';
+  const sth = (lbl, k) => `<th class="num" style="cursor:pointer;user-select:none" onclick="mcSort('${k}')" title="คลิกเพื่อเรียง">${lbl}${ind(k)}</th>`;
   head.innerHTML = `<tr><th class="num">#</th><th>SKU</th><th>เมนู</th>
-    <th class="num">${hq[0]}</th><th class="num">${hq[1]}</th><th class="num">Δ%<span class="sub">A เทียบ B</span></th>
-    <th class="num">${hc[0]}</th><th class="num">${hc[1]}</th><th class="num">Δ%<span class="sub">ต้นทุน</span></th><th></th></tr>`;
+    ${sth(hq[0], 'qty_a')}${sth(hq[1], 'qty_b')}${sth('Δ%<span class="sub">จำนวน</span>', 'qd')}
+    ${sth('สัดส่วน<span class="sub">B · Δpp</span>', 'mix')}
+    ${sth(hc[0], 'cogs_a')}${sth(hc[1], 'cogs_b')}${sth('Δ%<span class="sub">ต้นทุน</span>', 'cd')}<th></th></tr>`;
   if (!items.length) {
-    body.innerHTML = '<tr><td colspan="10" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วงที่เลือก</td></tr>';
-    foot.innerHTML = ''; const pc = document.getElementById('mcParetoCard'); if (pc) pc.style.display = 'none'; return;
+    body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วง/หมวดที่เลือก</td></tr>';
+    foot.innerHTML = ''; return;
   }
-  const vQ = (q, C) => ph ? (C ? q / C : null) : q;
-  const vC = (c, C) => ph ? (C ? c / C : null) : c;
+  const vD = (x, C) => ph ? (C ? x / C : null) : x;          // divide by covers when per-head
   const nQ = v => v == null ? '—' : (ph ? v.toFixed(2) : fmtN(v));
-  const nC = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
+  const nM = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
   const dp = (a, b) => (a != null && b) ? (a - b) / b * 100 : null;
+  const badge = r => r.only_in_b
+    ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:6px;margin-left:5px;font-weight:700">ใหม่</span>'
+    : r.only_in_a
+      ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:6px;margin-left:5px;font-weight:700">หาย</span>' : '';
   body.innerHTML = items.map((r, i) => {
-    const qa = vQ(r.qty_a, Ca), qb = vQ(r.qty_b, Cb), ca = vC(r.cogs_a, Ca), cb = vC(r.cogs_b, Cb);
+    const qa = vD(r.qty_a, Ca), qb = vD(r.qty_b, Cb);
+    const ca = vD(r.cogs_a, Ca), cb = vD(r.cogs_b, Cb);
+    const dpp = (r._mix_b - r._mix_a) * 100;
+    const dimQ = r._noise ? ' style="opacity:.45" title="ปริมาณช่วงใดช่วงหนึ่งน้อย (<' + MC_NOISE_QTY + ' ชิ้น) — % ผันผวนง่าย"' : '';
     return `<tr class="cursor-pointer" onclick="mcOpenDrill('${jsAttr(r.sku_code)}')" title="คลิกดูเชิงลึก">
     <td class="num tabular text-slate-400">${i + 1}</td>
     <td class="font-mono text-slate-400 text-[10px]">${esc(r.sku_code)}</td>
-    <td class="max-w-xs truncate" title="${esc(r.description || '')}">${esc((r.description || '').replace(/^\((?:A|B|T)\)\s*/, ''))}</td>
+    <td class="max-w-xs truncate" title="${esc(r.description || '')}">${esc((r.description || '').replace(/^\((?:A|B|T)\)\s*/, ''))}${badge(r)}</td>
     <td class="num tabular font-semibold">${nQ(qa)}</td>
     <td class="num tabular font-semibold">${nQ(qb)}</td>
-    <td class="num tabular">${_momSpan(dp(qa, qb), true)}</td>
-    <td class="num tabular text-slate-500">${nC(ca)}</td>
-    <td class="num tabular text-slate-500">${nC(cb)}</td>
+    <td class="num tabular"${dimQ}>${_momSpan(dp(qa, qb), true)}</td>
+    <td class="num tabular"><div>${(r._mix_b * 100).toFixed(1)}%</div><div class="text-[10px]" style="color:${dpp >= 0 ? '#16a34a' : '#dc2626'}">${dpp >= 0 ? '+' : ''}${dpp.toFixed(1)}pp</div></td>
+    <td class="num tabular text-slate-500">${nM(ca)}</td>
+    <td class="num tabular text-slate-500">${nM(cb)}</td>
     <td class="num tabular">${_momSpan(dp(ca, cb), false)}</td>
     <td class="num text-indigo-500 text-[11px] whitespace-nowrap">ดูเชิงลึก ›</td></tr>`;
   }).join('');
-  const t = L.totals || {};
-  const tqa = vQ(t.qty_a, Ca), tqb = vQ(t.qty_b, Cb), tca = vC(t.cogs_a, Ca), tcb = vC(t.cogs_b, Cb);
+  const tqa = vD(T.qty_a, Ca), tqb = vD(T.qty_b, Cb), tca = vD(T.cogs_a, Ca), tcb = vD(T.cogs_b, Cb);
   foot.innerHTML = `<tr><td></td><td></td><td>รวม ${fmtN(items.length)} เมนู</td>
     <td class="num tabular">${nQ(tqa)}</td><td class="num tabular">${nQ(tqb)}</td>
     <td class="num tabular">${_momSpan(dp(tqa, tqb), true)}</td>
-    <td class="num tabular">${nC(tca)}</td><td class="num tabular">${nC(tcb)}</td>
+    <td class="num tabular">100%</td>
+    <td class="num tabular">${nM(tca)}</td><td class="num tabular">${nM(tcb)}</td>
     <td class="num tabular">${_momSpan(dp(tca, tcb), false)}</td><td></td></tr>`;
 }
 // Cumulative cost-share Pareto: each period sorted by its own COGS desc, plotted
@@ -23093,7 +23199,8 @@ function mcRenderPareto() {
 async function mcOpenDrill(sku) {
   _mcBomSku = null;
   const it = (_mcLast?.items || []).find(x => x.sku_code === sku) || { description: sku };
-  document.getElementById('mcDrillTitle').textContent = '🆚 ' + (it.description || sku) + ' · ' + sku;
+  const _mcName = (it.description || sku).replace(/^\((?:A|B|T)\)\s*/, '');   // strip channel prefix like the table
+  document.getElementById('mcDrillTitle').textContent = '🆚 ' + _mcName + ' · ' + sku;
   const _mcm = document.getElementById('mcDrillModal'); _mcm.style.display = 'block'; _mcm.classList.remove('hidden');
   _mcm.scrollIntoView({ behavior: 'smooth', block: 'start' });
   mcDrillTab('branch');
