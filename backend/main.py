@@ -6827,7 +6827,8 @@ def analysis_discount_alerts(
     base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
     TH = {"cash_pct": 20, "cash_min": 50000, "untyped_pct": 80, "untyped_min": 50000,  # DEFAULTS
           "cashier_mult": 2.0, "cashier_floor": 5.0, "cashier_min_disc": 30000,
-          "repeat_min": 30, "late_from": 22, "late_min_bills": 40, "late_min_share": 25.0}
+          "repeat_min": 30, "late_from": 22, "late_min_bills": 40, "late_min_share": 25.0,
+          "void_min": 20000}
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
@@ -6949,6 +6950,25 @@ def analysis_discount_alerts(
                 flags.append({"type": "drift", "severity": "med", "branch": br_name, "title": "ส่วนลดพุ่งผิดปกติ",
                     "text": f"{br_name}: เดือน {latest[0]} ลด {latest[1]:.1f}% ของยอด (ปกติ ~{tavg:.1f}%) — พุ่ง {latest[1]/tavg:.1f}× เทียบตัวเอง",
                     "amount": latest[2], "drill": {"branch": br_name, "month_from": latest[0], "month_to": latest[0]}})
+
+        # 7) discount applied then bill VOIDED — manipulation risk (needs the
+        # discount column on pos_cancel_bill_detail, added 2026-06-09 → guard).
+        try:
+            ccols = {rr[1] for rr in con.execute("PRAGMA table_info(pos_cancel_bill_detail)")}
+        except Exception:
+            ccols = set()
+        if "discount" in ccols:
+            vf = ["b.name!='ALL'"]; vp: dict = {}
+            _month_range_filter(vf, vp, month_from, month_to, month, col="cd.period_month")
+            for r in con.execute(f"""
+                SELECT b.name br, COUNT(*) n, ROUND(SUM(cd.discount)) disc
+                FROM pos_cancel_bill_detail cd JOIN branches b ON b.branch_id=cd.branch_id
+                WHERE {' AND '.join(vf)} AND cd.discount > 0
+                GROUP BY b.name HAVING SUM(cd.discount) >= {TH['void_min']} ORDER BY disc DESC LIMIT 6""", vp):
+                flags.append({"type": "void", "severity": "high" if (r["disc"] or 0) >= 50000 else "med",
+                    "branch": r["br"], "title": "ลดแล้วยกเลิกบิล",
+                    "text": f"{r['br']}: บิล 'ลดแล้วถูกยกเลิก' {r['n']:,} ใบ · ส่วนลดรวม ฿{thb(r['disc'])} — เสี่ยงแก้ไข/ลบบิล"})
+                    # (no drill: voided bills aren't in sales_transaction; review via cancel-bills detail)
 
     rank = {"high": 0, "med": 1}
     flags.sort(key=lambda f: (rank.get(f["severity"], 2), -(f.get("amount") or 0)))

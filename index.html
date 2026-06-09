@@ -20980,7 +20980,7 @@ async function loadDiscountAlerts(params) {
     el.innerHTML = '<div class="px-3 py-2 rounded-lg text-sm" style="background:#f0fdf4;border-left:4px solid #22c55e;color:#166534">✓ ไม่พบสัญญาณส่วนลดผิดปกติในช่วงนี้</div>';
     return;
   }
-  const ICON = { cash_heavy: '💵', untyped: '🏷️', cashier: '🧑‍💼', repeat: '🔁', late: '🌙' };
+  const ICON = { cash_heavy: '💵', untyped: '🏷️', cashier: '🧑‍💼', repeat: '🔁', late: '🌙', drift: '📈', void: '🚫' };
   el.innerHTML = flags.map(f => {
     const dot = f.severity === 'high' ? '#dc2626' : '#f59e0b';
     const opts = Object.assign({ sort: 'discount' }, f.drill || {});
