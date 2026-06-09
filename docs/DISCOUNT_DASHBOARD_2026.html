@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Discount Monitor Dashboard — Oshinei · H1 2026</title>
+<script src="../vendor/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--bg:#f1f5f9;--card:#fff;--indigo:#4f46e5;--indk:#312e81;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--purple:#7c3aed}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Sarabun','Segoe UI',sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+/* NAV */
+.nav{background:linear-gradient(135deg,var(--indk),var(--indigo));color:#fff;padding:0 24px;display:flex;align-items:center;gap:20px;height:56px;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.nav-brand{font-weight:800;font-size:16px;letter-spacing:.5px}
+.nav-sub{font-size:11px;opacity:.75}
+.nav-badge{background:rgba(239,68,68,.3);border:1px solid rgba(239,68,68,.5);color:#fca5a5;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700;margin-left:auto}
+/* FILTER BAR */
+.filter-bar{background:#fff;border-bottom:1px solid var(--line);padding:10px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.filter-bar label{font-size:12px;font-weight:600;color:var(--mut)}
+.filter-bar select,.filter-bar button{border:1px solid var(--line);border-radius:6px;padding:5px 10px;font-family:inherit;font-size:13px;background:#fff;cursor:pointer}
+.filter-bar button.active{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+.filter-bar button:hover:not(.active){background:#f0f4ff}
+/* LAYOUT */
+.wrap{max-width:1400px;margin:0 auto;padding:20px 24px 60px}
+.section-title{font-size:18px;font-weight:800;margin-bottom:4px}
+.section-sub{font-size:12px;color:var(--mut);margin-bottom:16px}
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.kpi-card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;position:relative;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--indigo)}
+.kpi-card.rd::before{background:var(--rd)}.kpi-card.em::before{background:var(--em)}.kpi-card.am::before{background:var(--am)}
+.kpi-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600;margin-bottom:4px}
+.kpi-val{font-size:26px;font-weight:800;line-height:1.1;margin-bottom:2px}
+.kpi-val.rd{color:var(--rd)}.kpi-val.em{color:var(--em)}.kpi-val.am{color:var(--am)}.kpi-val.in{color:var(--indigo)}
+.kpi-sub{font-size:12px;color:var(--mut)}
+/* CARD */
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,.04);margin-bottom:20px}
+.card-title{font-size:14px;font-weight:700;margin-bottom:4px}
+.card-sub{font-size:11px;color:var(--mut);margin-bottom:14px}
+.chart-wrap{position:relative;height:280px}
+.chart-wrap.short{height:220px}
+/* GRID */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}
+/* TABLE */
+.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);font-weight:700;background:#f8fafc;padding:8px 10px;border-bottom:2px solid var(--line);text-align:right}
+.dt th:first-child{text-align:left}
+.dt td{padding:7px 10px;border-bottom:1px solid var(--line);text-align:right}
+.dt td:first-child{text-align:left;font-weight:500}
+.dt tfoot td{font-weight:800;background:#f0f4ff;border-top:2px solid var(--indigo)}
+.dt tbody tr:hover{background:#fafbff}
+/* BADGE */
+.badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:11px;font-weight:700}
+.badge.rd{background:#fff1f2;color:#991b1b}.badge.em{background:#ecfdf5;color:#065f46}.badge.am{background:#fffbeb;color:#92400e}.badge.in{background:#eef2ff;color:#3730a3}
+/* ALERT */
+.alert{border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:13px}
+.alert.rd{background:#fff1f2;border:1px solid #fca5a5;color:#991b1b}
+.alert.am{background:#fffbeb;border:1px solid #fcd34d;color:#92400e}
+.alert.em{background:#ecfdf5;border:1px solid #6ee7b7;color:#065f46}
+.alert strong{font-weight:700}
+/* SECTION TABS */
+.tabs{display:flex;gap:4px;background:#f1f5f9;border-radius:8px;padding:4px;margin-bottom:20px}
+.tab{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--mut);transition:.15s}
+.tab:hover{background:rgba(79,70,229,.1);color:var(--indigo)}
+.tab.active{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+.tab-content{display:none}.tab-content.active{display:block}
+/* BAR INLINE */
+.bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.bar-label{width:110px;font-size:12px;text-align:right;flex-shrink:0;color:var(--ink)}
+.bar-track{flex:1;height:8px;background:#f1f5f9;border-radius:4px;overflow:hidden}
+.bar-fill{height:100%;border-radius:4px;background:var(--indigo)}
+.bar-fill.rd{background:var(--rd)}.bar-fill.em{background:var(--em)}.bar-fill.am{background:var(--am)}
+.bar-val{width:80px;font-size:12px;font-weight:700}
+/* HEATMAP */
+.heatmap{display:grid;grid-template-columns:60px repeat(7,1fr);gap:2px;font-size:11px}
+.hm-head{text-align:center;font-weight:700;color:var(--mut);padding:4px 0}
+.hm-label{text-align:right;font-weight:600;padding-right:6px;display:flex;align-items:center;justify-content:flex-end;font-size:10px;color:var(--mut)}
+.hm-cell{border-radius:4px;height:28px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:#fff;cursor:default}
+/* RESPONSIVE */
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+@media(max-width:600px){.kpi-grid{grid-template-columns:repeat(2,1fr)}.tabs{flex-wrap:wrap}}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div>
+    <div class="nav-brand">Oshinei · Discount Monitor</div>
+    <div class="nav-sub">ระบบติดตามการใช้ส่วนลดผิดปกติ · ข้อมูล H1 2026</div>
+  </div>
+  <div class="nav-badge">🚨 มิ.ย. MTD: ฿2,961/บิล +68%</div>
+</nav>
+
+<div class="filter-bar">
+  <label>ช่วงเวลา:</label>
+  <button class="active" onclick="setView('all',this)">H1 2026 ทั้งหมด</button>
+  <button onclick="setView('udon',this)">สาขาอุดรธานีเท่านั้น</button>
+  <label style="margin-left:8px">ดูข้อมูล:</label>
+  <select id="branchSel" onchange="updateBranchFilter()">
+    <option value="all">ทุกสาขา</option>
+    <option value="udon" selected>อุดรธานี</option>
+    <option value="cm">เชียงใหม่</option>
+    <option value="ubn">อุบลราชธานี</option>
+    <option value="sur">สุรินทร์</option>
+    <option value="kor">โคราช</option>
+  </select>
+  <span style="margin-left:auto;font-size:12px;color:var(--mut)">อัปเดตล่าสุด: 9 มิ.ย. 2569</span>
+</div>
+
+<div class="wrap">
+
+  <!-- KPI ROW -->
+  <div class="kpi-grid" style="margin-top:4px">
+    <div class="kpi-card rd"><div class="kpi-lbl">ส่วนลดรวม H1 (เครือ)</div><div class="kpi-val rd">฿7.48M</div><div class="kpi-sub">4,397 บิล · 5.0% ของบิลทั้งหมด</div></div>
+    <div class="kpi-card rd"><div class="kpi-lbl">สาขาอุดรธานี</div><div class="kpi-val rd">฿3.13M</div><div class="kpi-sub">41.8% ของเครือ · อันดับ 1</div></div>
+    <div class="kpi-card rd"><div class="kpi-lbl">มิ.ย. เฉลี่ย/บิล (อุดร)</div><div class="kpi-val rd">฿2,961</div><div class="kpi-sub">+68% vs เฉลี่ย 5 เดือน</div></div>
+    <div class="kpi-card rd"><div class="kpi-lbl">Cashier "admin"</div><div class="kpi-val rd">78.0%</div><div class="kpi-sub">ของส่วนลดอุดร · บัญชีรวม</div></div>
+    <div class="kpi-card rd"><div class="kpi-lbl">ไม่ระบุเหตุผล</div><div class="kpi-val rd">~99%</div><div class="kpi-sub">ทั้งเครือ · ตรวจสอบไม่ได้</div></div>
+    <div class="kpi-card am"><div class="kpi-lbl">Pattern ฿631 ซ้ำ</div><div class="kpi-val am">456 ครั้ง</div><div class="kpi-sub">฿287,736 · ผิดปกติสูง</div></div>
+    <div class="kpi-card am"><div class="kpi-lbl">เงินสด × ส่วนลด</div><div class="kpi-val am">67.0%</div><div class="kpi-sub">ของบิลส่วนลดอุดร</div></div>
+    <div class="kpi-card"><div class="kpi-lbl">ส่วนลดหนัก ≥20%</div><div class="kpi-val in">61.0%</div><div class="kpi-sub">ของบิล · 76% ของมูลค่า</div></div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('overview',this)">ภาพรวมเครือ</div>
+    <div class="tab" onclick="showTab('monthly',this)">รายเดือน (อุดร)</div>
+    <div class="tab" onclick="showTab('users',this)">ผู้ใช้งาน</div>
+    <div class="tab" onclick="showTab('timing',this)">ช่วงเวลา</div>
+    <div class="tab" onclick="showTab('payment',this)">ช่องทางชำระ</div>
+    <div class="tab" onclick="showTab('patterns',this)">Pattern Analysis</div>
+    <div class="tab" onclick="showTab('flags',this)">🚩 Red Flags</div>
+  </div>
+
+  <!-- TAB: OVERVIEW -->
+  <div id="tab-overview" class="tab-content active">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">ส่วนลดรายเดือน — ทั้งเครือ (฿)</div>
+        <div class="card-sub">มกราคม–มิถุนายน 2026</div>
+        <div class="chart-wrap"><canvas id="chainMonthlyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">สัดส่วนส่วนลดรายสาขา H1 2026</div>
+        <div class="card-sub">มูลค่ารวม ฿7,480,820</div>
+        <div class="chart-wrap"><canvas id="branchPieChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">การจัดอันดับสาขาตามมูลค่าส่วนลด H1 2026</div>
+      <div class="card-sub">เรียงจากสูงสุด — Disc% คือ % ของส่วนลดต่อยอดขาย</div>
+      <table class="dt">
+        <thead><tr><th>สาขา</th><th>บิลส่วนลด</th><th>ส่วนลดรวม (฿)</th><th>เฉลี่ย/บิล (฿)</th><th>อัตราบิล%</th><th>Disc%ยอด</th><th>กราฟเทียบ</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge rd">🚨</span> อุดรธานี</td><td>1,647</td><td>3,126,620</td><td>1,898</td><td>7.7%</td><td>3.98%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill rd" style="width:100%"></div></div></div></td></tr>
+          <tr><td>เชียงใหม่</td><td>623</td><td>1,013,200</td><td>1,626</td><td>5.2%</td><td>2.14%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill am" style="width:32%"></div></div></div></td></tr>
+          <tr><td>อุบลราชธานี</td><td>534</td><td>876,400</td><td>1,641</td><td>4.8%</td><td>2.31%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill am" style="width:28%"></div></div></div></td></tr>
+          <tr><td>สุรินทร์</td><td>412</td><td>654,300</td><td>1,588</td><td>4.5%</td><td>2.18%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill" style="width:21%"></div></div></div></td></tr>
+          <tr><td>โคราช</td><td>378</td><td>589,700</td><td>1,560</td><td>4.3%</td><td>1.97%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill" style="width:19%"></div></div></div></td></tr>
+          <tr><td style="color:var(--mut)">อื่นๆ 22 สาขา รวม</td><td>803</td><td>1,220,600</td><td>1,520</td><td>2.3%</td><td>1.10%</td><td><div class="bar-row" style="margin:0"><div class="bar-track"><div class="bar-fill em" style="width:39%"></div></div></div></td></tr>
+        </tbody>
+        <tfoot><tr><td>รวมทั้งเครือ</td><td>4,397</td><td>7,480,820</td><td>1,701</td><td>5.0%</td><td>1.36%</td><td></td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: MONTHLY UDON -->
+  <div id="tab-monthly" class="tab-content">
+    <div class="alert rd"><strong>🚨 มิถุนายน MTD:</strong> ค่าเฉลี่ยส่วนลดต่อบิลพุ่งเป็น ฿2,961 สูงกว่าค่าเฉลี่ย 5 เดือนแรก +68% — ต้องสอบสวนทันที</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">ส่วนลดรวมรายเดือน — อุดรธานี (฿)</div>
+        <div class="card-sub">มกราคม–มิถุนายน 2026</div>
+        <div class="chart-wrap"><canvas id="udonMonthlyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">เฉลี่ยส่วนลดต่อบิล (฿/บิล) — อุดรธานี</div>
+        <div class="card-sub">แนวโน้มสูง → ต่ำ → พุ่งพรวด — สัญญาณวิกฤต</div>
+        <div class="chart-wrap"><canvas id="udonAvgChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">ตารางสรุปรายเดือน — สาขาอุดรธานี H1 2026</div>
+      <table class="dt">
+        <thead><tr><th>เดือน</th><th>รายได้ (฿)</th><th>ธุรกรรม</th><th>บิลส่วนลด</th><th>ส่วนลดรวม (฿)</th><th>เฉลี่ย/บิล (฿)</th><th>อัตราบิล</th><th>Disc%ยอด</th></tr></thead>
+        <tbody>
+          <tr><td>มกราคม</td><td>14,218,500</td><td>3,802</td><td>312</td><td>680,450</td><td style="color:var(--rd);font-weight:700">2,181</td><td>8.2%</td><td>4.79%</td></tr>
+          <tr><td>กุมภาพันธ์</td><td>13,836,700</td><td>3,714</td><td>289</td><td>495,320</td><td>1,714</td><td>7.8%</td><td>3.58%</td></tr>
+          <tr><td>มีนาคม</td><td>15,124,300</td><td>4,269</td><td>324</td><td>542,680</td><td>1,675</td><td>7.6%</td><td>3.59%</td></tr>
+          <tr style="background:#ecfdf5"><td>เมษายน</td><td>14,698,200</td><td>4,080</td><td>301</td><td>498,950</td><td style="color:var(--em);font-weight:700">1,658</td><td>7.4%</td><td style="color:var(--em);font-weight:700">3.39%</td></tr>
+          <tr><td>พฤษภาคม</td><td>13,892,400</td><td>3,837</td><td>287</td><td>512,330</td><td style="color:var(--am)">1,785</td><td>7.5%</td><td>3.69%</td></tr>
+          <tr style="background:#fff1f2"><td><strong>มิถุนายน (MTD)</strong></td><td>6,712,500</td><td>1,698</td><td>134</td><td>396,890</td><td style="color:var(--rd);font-weight:800">2,961 🚨</td><td style="color:var(--rd)">7.9%</td><td style="color:var(--rd);font-weight:700">5.91%</td></tr>
+        </tbody>
+        <tfoot><tr><td>รวม H1</td><td>78,482,600</td><td>21,400</td><td>1,647</td><td>3,126,620</td><td>1,898</td><td>7.7%</td><td>3.98%</td></tr></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- TAB: USERS -->
+  <div id="tab-users" class="tab-content">
+    <div class="alert rd"><strong>⚠ cashier "admin"</strong> — บัญชีรวมที่ใช้ร่วมกัน ไม่สามารถระบุผู้ดำเนินการจริงได้ ครอบครอง 78% ของส่วนลดทั้งหมดในสาขาอุดรธานี</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">สัดส่วนส่วนลดรายผู้ใช้ — อุดรธานี H1 2026</div>
+        <div class="chart-wrap short"><canvas id="userPieChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Scorecard ผู้ใช้งาน</div>
+        <div class="card-sub">อัตราส่วนลดต่อยอดขาย (%) สูงกว่า 2× median = ⚠ outlier</div>
+        <table class="dt">
+          <thead><tr><th>Cashier</th><th>บิลส่วนลด</th><th>ส่วนลดรวม (฿)</th><th>%เครืออุดร</th><th>เฉลี่ย/บิล</th><th>Rate%</th><th>สถานะ</th></tr></thead>
+          <tbody>
+            <tr style="background:#fff1f2"><td>admin</td><td>1,287</td><td>2,437,480</td><td>78.0%</td><td>1,893</td><td>9.2%</td><td><span class="badge rd">⚠ Outlier</span></td></tr>
+            <tr style="background:#fffbeb"><td>admin001</td><td>198</td><td>375,240</td><td>12.0%</td><td>1,895</td><td>4.1%</td><td><span class="badge am">ตรวจสอบ</span></td></tr>
+            <tr><td>KASAMA</td><td>94</td><td>187,560</td><td>6.0%</td><td>1,996</td><td>3.2%</td><td><span class="badge em">ปกติ</span></td></tr>
+            <tr><td>supervisor01</td><td>46</td><td>93,780</td><td>3.0%</td><td>2,039</td><td>2.8%</td><td><span class="badge em">ปกติ</span></td></tr>
+            <tr><td>watana</td><td>22</td><td>32,560</td><td>1.0%</td><td>1,480</td><td>1.8%</td><td><span class="badge em">ปกติ</span></td></tr>
+          </tbody>
+          <tfoot><tr><td>รวม</td><td>1,647</td><td>3,126,620</td><td>100%</td><td>1,898</td><td>7.7%</td><td></td></tr></tfoot>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">จำนวนบิลส่วนลดรายผู้ใช้ รายเดือน — อุดรธานี</div>
+      <div class="chart-wrap"><canvas id="userMonthlyChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- TAB: TIMING -->
+  <div id="tab-timing" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">ส่วนลดตามช่วงเวลา (ชั่วโมง) — อุดรธานี H1</div>
+        <div class="card-sub">19:00–20:00 น. = 26% ของส่วนลดทั้งหมด</div>
+        <div class="chart-wrap"><canvas id="hourlyChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">ส่วนลดรายวัน (วันในสัปดาห์) — อุดรธานี H1</div>
+        <div class="card-sub">วันเสาร์สูงสุด · วันธรรมดาค่อนข้างสม่ำเสมอ</div>
+        <div class="chart-wrap"><canvas id="dowChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">สัดส่วนช่วงกะ (Daypart)</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px">
+        <div style="text-align:center;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:4px">กะเช้า 07–11น.</div>
+          <div style="font-size:24px;font-weight:800;color:var(--em)">1.7%</div>
+          <div style="font-size:11px;color:var(--mut)">28 บิล · ฿53,150</div>
+        </div>
+        <div style="text-align:center;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:4px">กะกลางวัน 11–15น.</div>
+          <div style="font-size:24px;font-weight:800;color:var(--am)">19.3%</div>
+          <div style="font-size:11px;color:var(--mut)">318 บิล · ฿603,760</div>
+        </div>
+        <div style="text-align:center;padding:16px;background:#fff1f2;border-radius:8px;border:1px solid #fca5a5">
+          <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:4px">กะเย็น 17–21น.</div>
+          <div style="font-size:24px;font-weight:800;color:var(--rd)">69.5%</div>
+          <div style="font-size:11px;color:var(--mut)">1,143 บิล · ฿2,172,000</div>
+        </div>
+        <div style="text-align:center;padding:16px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);font-weight:600;margin-bottom:4px">กะดึก 21–24น.</div>
+          <div style="font-size:24px;font-weight:800;color:var(--am)">9.5%</div>
+          <div style="font-size:11px;color:var(--mut)">158 บิล · ฿297,710</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PAYMENT -->
+  <div id="tab-payment" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">ช่องทางชำระเงิน × ส่วนลด — อุดรธานี H1</div>
+        <div class="card-sub">เงินสด 67% — ความเสี่ยงสูงสุด</div>
+        <div class="chart-wrap short"><canvas id="paymentChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">เปรียบเทียบ: อุดรธานี vs เครือเฉลี่ย</div>
+        <div class="card-sub">สัดส่วนเงินสดในบิลที่มีส่วนลด</div>
+        <table class="dt" style="margin-top:8px">
+          <thead><tr><th>ช่องทาง</th><th>อุดรธานี %</th><th>เครือเฉลี่ย %</th><th>ต่างกัน</th></tr></thead>
+          <tbody>
+            <tr><td>เงินสด</td><td style="color:var(--rd);font-weight:700">67.0%</td><td>53.0%</td><td style="color:var(--rd);font-weight:700">+14.0 จุด</td></tr>
+            <tr><td>บัตรเครดิต/เดบิต</td><td>18.0%</td><td>22.0%</td><td style="color:var(--em)">−4.0 จุด</td></tr>
+            <tr><td>PromptPay/QR</td><td>11.0%</td><td>17.0%</td><td style="color:var(--em)">−6.0 จุด</td></tr>
+            <tr><td>Line Pay / อื่นๆ</td><td>4.0%</td><td>8.0%</td><td style="color:var(--em)">−4.0 จุด</td></tr>
+          </tbody>
+        </table>
+        <div class="alert rd" style="margin-top:12px;font-size:12px"><strong>ความเสี่ยง:</strong> เงินสด + ส่วนลด = ไม่มี digital trail · กระทบยอดยาก · ความเสี่ยงสูญเสียรายได้สูงสุด</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: PATTERNS -->
+  <div id="tab-patterns" class="tab-content">
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Pattern: จำนวนเงินคงที่ที่พบซ้ำผิดปกติ</div>
+        <div class="card-sub">อุดรธานี H1 2026 — ฿631 พบ 456 ครั้ง ผิดปกติสูงมาก</div>
+        <div class="chart-wrap"><canvas id="fixedAmtChart"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Pattern: ความหนักของส่วนลด (% ของยอดบิล)</div>
+        <div class="card-sub">61% ของบิลถูกลดหนักเกิน 20%</div>
+        <div class="chart-wrap short"><canvas id="severityChart"></canvas></div>
+        <table class="dt" style="margin-top:8px;font-size:12px">
+          <thead><tr><th>กลุ่ม</th><th>บิล</th><th>%บิล</th><th>มูลค่า (฿)</th><th>%มูลค่า</th></tr></thead>
+          <tbody>
+            <tr style="background:#fff1f2"><td>100% ฟรี</td><td>49</td><td>3%</td><td>93,780</td><td>3%</td></tr>
+            <tr style="background:#fff1f2"><td>50% ขึ้นไป</td><td>297</td><td>18%</td><td>687,856</td><td>22%</td></tr>
+            <tr style="background:#fffbeb"><td>20–50%</td><td>708</td><td>43%</td><td>1,687,475</td><td>54%</td></tr>
+            <tr><td>10–20%</td><td>478</td><td>29%</td><td>562,772</td><td>18%</td></tr>
+            <tr><td>ต่ำกว่า 10%</td><td>115</td><td>7%</td><td>94,737</td><td>3%</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: RED FLAGS -->
+  <div id="tab-flags" class="tab-content">
+    <div class="alert rd"><strong>พบ 8 ธงแดงที่ต้องดำเนินการทันที</strong> — เรียงตามความรุนแรง</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div style="border:2px solid var(--rd);border-radius:10px;padding:16px;background:#fff1f2">
+        <div style="font-size:12px;font-weight:800;color:var(--rd);margin-bottom:6px">🔴 วิกฤต — ดำเนินการทันที</div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>1. บัญชีรวม "admin"</strong><br><span style="font-size:12px;color:var(--mut)">78% ของส่วนลดอุดรผ่าน 1 บัญชี ไม่สามารถระบุผู้รับผิดชอบได้</span></div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>2. มิ.ย. เฉลี่ย +68%</strong><br><span style="font-size:12px;color:var(--mut)">฿2,961/บิล vs เฉลี่ย 5 เดือน ฿1,763 — กำลังเร่งตัวขึ้น</span></div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>3. บิล 100% ฟรี</strong><br><span style="font-size:12px;color:var(--mut)">49 บิล มูลค่า ฿93,780 ถูกลดเต็ม 100% — ลูกค้าไม่จ่ายเงิน</span></div>
+        <div style="font-size:13px"><strong>4. ฿631 ซ้ำ 456 ครั้ง</strong><br><span style="font-size:12px;color:var(--mut)">จำนวนเงินเดิมซ้ำผิดปกติ ≈ ราคาบุฟเฟ่ต์เด็ก — อาจไม่ได้ลงทะเบียนเด็กจริง</span></div>
+      </div>
+      <div style="border:2px solid var(--am);border-radius:10px;padding:16px;background:#fffbeb">
+        <div style="font-size:12px;font-weight:800;color:#92400e;margin-bottom:6px">🟡 สูง — แก้ไขใน 30 วัน</div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>5. เงินสด 67% ของบิลส่วนลด</strong><br><span style="font-size:12px;color:var(--mut)">สูงกว่าเครือ 14 จุด — ไม่มี digital trail สูญเสียรายได้ยากต่อการพิสูจน์</span></div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>6. ส่วนลดหนัก ≥20% 61%</strong><br><span style="font-size:12px;color:var(--mut)">61% ของบิลถูกลดเกิน 20% ของยอด ไม่มีเพดานควบคุม</span></div>
+        <div style="font-size:13px;margin-bottom:8px"><strong>7. กระจุก 19–21น.</strong><br><span style="font-size:12px;color:var(--mut)">45% ของส่วนลดรวมอยู่ในช่วง 2 ชั่วโมง — มี pattern ชัดเจน</span></div>
+        <div style="font-size:13px"><strong>8. 99% ไม่ระบุเหตุผล (เครือ)</strong><br><span style="font-size:12px;color:var(--mut)">ทั้งเครือ ตรวจสอบนโยบายย้อนหลังไม่ได้เลย</span></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:20px">
+      <div class="card-title">เป้าหมายควบคุม H2 2026</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:12px">
+        <div style="text-align:center;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:4px">Disc%ยอดขาย (อุดร)</div>
+          <div style="font-size:13px;font-weight:700;color:var(--rd)">ปัจจุบัน: 3.98%</div>
+          <div style="font-size:13px;font-weight:700;color:var(--em)">เป้า H2: &lt;2.0%</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:4px">เฉลี่ย/บิล (อุดร)</div>
+          <div style="font-size:13px;font-weight:700;color:var(--rd)">ปัจจุบัน: ฿1,898</div>
+          <div style="font-size:13px;font-weight:700;color:var(--em)">เป้า H2: &lt;฿1,000</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:4px">ส่วนลดไม่ระบุเหตุผล</div>
+          <div style="font-size:13px;font-weight:700;color:var(--rd)">ปัจจุบัน: 99%</div>
+          <div style="font-size:13px;font-weight:700;color:var(--em)">เป้า H2: &lt;5%</div>
+        </div>
+        <div style="text-align:center;padding:12px;background:#f8fafc;border-radius:8px;border:1px solid var(--line)">
+          <div style="font-size:11px;color:var(--mut);margin-bottom:4px">อุดร % ของเครือ</div>
+          <div style="font-size:13px;font-weight:700;color:var(--rd)">ปัจจุบัน: 41.8%</div>
+          <div style="font-size:13px;font-weight:700;color:var(--em)">เป้า H2: &lt;20%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end wrap -->
+
+<script>
+// ── Tab switching ─────────────────────────────
+function showTab(id, el) {
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  el.classList.add('active');
+}
+function setView(v,el){document.querySelectorAll('.filter-bar button').forEach(b=>b.classList.remove('active'));el.classList.add('active')}
+function updateBranchFilter(){}
+
+// ── Chart defaults ─────────────────────────────
+Chart.defaults.font.family = "'Sarabun','Segoe UI',sans-serif";
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#64748b';
+const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.'];
+const RED='#ef4444',GRN='#10b981',AMB='#f59e0b',IND='#4f46e5',MUT='#94a3b8';
+
+// 1. Chain monthly bar
+new Chart(document.getElementById('chainMonthlyChart'),{type:'bar',data:{labels:MONTHS,datasets:[{label:'ส่วนลดรวม (฿)',data:[1423500,1187200,1356800,1289400,1245600,978320],backgroundColor:[IND,IND,IND,IND,IND,RED],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'฿'+(v/1e6).toFixed(1)+'M'},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+
+// 2. Branch pie
+new Chart(document.getElementById('branchPieChart'),{type:'doughnut',data:{labels:['อุดรธานี','เชียงใหม่','อุบลราชธานี','สุรินทร์','โคราช','อื่นๆ'],datasets:[{data:[3126620,1013200,876400,654300,589700,1220600],backgroundColor:[RED,AMB,'#f97316',IND,'#8b5cf6',MUT],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+
+// 3. Udon monthly bar
+new Chart(document.getElementById('udonMonthlyChart'),{type:'bar',data:{labels:MONTHS,datasets:[{label:'ส่วนลดรวม (฿)',data:[680450,495320,542680,498950,512330,396890],backgroundColor:[RED,GRN,GRN,GRN,AMB,RED],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'฿'+(v/1e3).toFixed(0)+'K'},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+
+// 4. Udon avg per bill line
+new Chart(document.getElementById('udonAvgChart'),{type:'line',data:{labels:MONTHS,datasets:[{label:'เฉลี่ย/บิล (฿)',data:[2181,1714,1675,1658,1785,2961],borderColor:RED,backgroundColor:'rgba(239,68,68,.08)',fill:true,tension:0.3,pointBackgroundColor:[RED,GRN,GRN,GRN,AMB,RED],pointRadius:6,pointHoverRadius:8},{label:'เฉลี่ย H1 (฿1,763)',data:[1763,1763,1763,1763,1763,1763],borderColor:IND,borderDash:[4,3],borderWidth:1.5,pointRadius:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{font:{size:11}}}},scales:{y:{ticks:{callback:v=>'฿'+v.toLocaleString()},grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+
+// 5. User pie
+new Chart(document.getElementById('userPieChart'),{type:'doughnut',data:{labels:['admin','admin001','KASAMA','supervisor01','watana'],datasets:[{data:[2437480,375240,187560,93780,32560],backgroundColor:[RED,AMB,IND,GRN,'#06b6d4'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+
+// 6. User monthly stacked bar
+new Chart(document.getElementById('userMonthlyChart'),{type:'bar',data:{labels:MONTHS,datasets:[{label:'admin',data:[243,225,253,235,224,107],backgroundColor:RED},{label:'admin001',data:[38,34,38,33,36,16],backgroundColor:AMB},{label:'KASAMA',data:[16,14,17,16,15,8],backgroundColor:IND},{label:'supervisor01',data:[8,12,11,14,9,3],backgroundColor:GRN},{label:'watana',data:[4,4,5,3,3,0],backgroundColor:MUT}]},options:{responsive:true,maintainAspectRatio:false,scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,grid:{color:'#f1f5f9'}}},plugins:{legend:{labels:{font:{size:11}}}}}});
+
+// 7. Hourly bar
+new Chart(document.getElementById('hourlyChart'),{type:'bar',data:{labels:['11-12น.','12-13น.','13-14น.','14-17น.','17-18น.','18-19น.','19-20น.','20-21น.','21-22น.','อื่นๆ'],datasets:[{label:'มูลค่าส่วนลด (฿)',data:[168950,279130,155680,53150,296260,592820,812930,468990,235490,63220],backgroundColor:['#818cf8','#818cf8','#818cf8',MUT,AMB,RED,RED,AMB,'#818cf8',MUT],borderRadius:3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{ticks:{callback:v=>'฿'+(v/1e3).toFixed(0)+'K'},grid:{color:'#f1f5f9'}},x:{grid:{display:false},ticks:{font:{size:10}}}}}});
+
+// 8. Day-of-week
+new Chart(document.getElementById('dowChart'),{type:'bar',data:{labels:['จันทร์','อังคาร','พุธ','พฤหัส','ศุกร์','เสาร์','อาทิตย์'],datasets:[{label:'บิลส่วนลด',data:[178,189,201,215,287,342,235],backgroundColor:[IND,IND,IND,IND,AMB,RED,AMB],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+
+// 9. Payment channel
+new Chart(document.getElementById('paymentChart'),{type:'doughnut',data:{labels:['เงินสด','บัตรเครดิต','PromptPay/QR','Line Pay','อื่นๆ'],datasets:[{data:[2094795,562792,344128,78165,46740],backgroundColor:[RED,IND,GRN,AMB,MUT],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+
+// 10. Fixed amount pattern
+new Chart(document.getElementById('fixedAmtChart'),{type:'bar',data:{labels:['฿631','฿100','฿500','฿1,180','฿2,000','฿3,000','฿5,000'],datasets:[{label:'จำนวนครั้ง',data:[456,342,167,89,45,23,8],backgroundColor:[RED,IND,IND,AMB,RED,RED,RED],borderRadius:4}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{grid:{color:'#f1f5f9'}},x:{grid:{display:false}}}}});
+
+// 11. Severity
+new Chart(document.getElementById('severityChart'),{type:'doughnut',data:{labels:['100% ฟรี','50%+','20-50%','10-20%','<10%'],datasets:[{data:[93780,687856,1687475,562772,94737],backgroundColor:[RED,'#f97316',AMB,IND,GRN],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:11}}}}}});
+</script>
+</body>
+</html>
