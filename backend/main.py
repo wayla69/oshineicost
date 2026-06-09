@@ -6917,6 +6917,26 @@ def analysis_discount_alerts(
                     "text": f"{r['br']}: ลดหลัง {TH['late_from']}:00 — {lb:,} บิล ({share:.0f}% ของบิลลด) · ฿{thb(r['late_disc'])}",
                     "amount": r["late_disc"], "drill": {"branch": r["br"]}})
 
+        # 6) baseline drift — a branch's latest month disc% vs its OWN trailing-3 avg
+        # (full history, ignores the period filter; catches a branch trending worse).
+        bd: dict = {}
+        for r in con.execute(f"""
+            SELECT b.name br, strftime('%Y-%m', st.sold_at) m,
+                   ROUND(100.0*SUM(st.discount)/NULLIF(SUM({base}),0),2) pct, ROUND(SUM(st.discount)) disc
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE b.name!='ALL' GROUP BY b.name, m HAVING SUM({base}) > 0"""):
+            bd.setdefault(r["br"], []).append((r["m"], r["pct"] or 0, r["disc"] or 0))
+        for br_name, series in bd.items():
+            series.sort()
+            if len(series) < 4:
+                continue
+            latest = series[-1]
+            tavg = sum(x[1] for x in series[-4:-1]) / 3.0   # 3 months before the latest
+            if tavg > 0 and latest[1] >= 1.5*tavg and latest[1] >= 3.0 and latest[2] >= 50000:
+                flags.append({"type": "drift", "severity": "med", "branch": br_name, "title": "ส่วนลดพุ่งผิดปกติ",
+                    "text": f"{br_name}: เดือน {latest[0]} ลด {latest[1]:.1f}% ของยอด (ปกติ ~{tavg:.1f}%) — พุ่ง {latest[1]/tavg:.1f}× เทียบตัวเอง",
+                    "amount": latest[2], "drill": {"branch": br_name, "month_from": latest[0], "month_to": latest[0]}})
+
     rank = {"high": 0, "med": 1}
     flags.sort(key=lambda f: (rank.get(f["severity"], 2), -(f.get("amount") or 0)))
     return {

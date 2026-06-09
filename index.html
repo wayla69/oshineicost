@@ -13681,14 +13681,19 @@ async function loadActionCenter() {
   const dp = new URLSearchParams({ gran: 'month' });
   if (getBranch()) dp.set('branch', getBranch());
   if (getGroup()) dp.set('group', getGroup());
-  let an = { insights: [] }, dy = { branches: [] };
+  let an = { insights: [] }, dy = { branches: [] }, al = { flags: [] };
   try {
-    [an, dy] = await Promise.all([
+    [an, dy, al] = await Promise.all([
       fetch(`${API}/api/analysis/anomalies?${p}`).then(r => r.json()),
       fetch(`${API}/api/sales/daily?${dp}`).then(r => r.json()),
+      fetch(`${API}/api/analysis/discount_alerts?${p}`).then(r => r.json()).catch(() => ({ flags: [] })),
     ]);
   } catch (e) {}
   const items = [];
+  // discount-risk flags (high severity) → action items, click → Discounts tab Alert Center
+  (al.flags || []).filter(f => f.severity === 'high').slice(0, 6).forEach(f => items.push({
+    sev: 'bad', msg: '🚩 ' + f.text, drill: 'discounts',
+  }));
   (an.insights || []).forEach(ins => items.push({
     sev: ins.severity === 'good' ? 'good' : 'bad',
     msg: ins.message,
