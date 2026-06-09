@@ -6363,6 +6363,7 @@ def analysis_discount_bills(
     min_pct:      Optional[float] = Query(None),
     max_pct:      Optional[float] = Query(None),
     gross_zero:   bool            = Query(False),
+    payment:      Optional[str]   = Query(None, description="filter by dominant payment code (e.g. Cash, Credit)"),
     sort:         str             = Query("discount", pattern="^(discount|pct|date|total)$"),
     limit:        int             = Query(100, ge=1, le=1000),
 ):
@@ -6442,6 +6443,13 @@ def analysis_discount_bills(
                     "AND sp.receipt_no=st.receipt_no ORDER BY sp.amount DESC LIMIT 1)" if has_pay else "NULL")
         sel_payn = (f"(SELECT COUNT(DISTINCT {_pc}) FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
                     "AND sp.receipt_no=st.receipt_no)" if has_pay else "0")
+        # payment-method filter (by dominant code). Keep `where_base` (scope WITHOUT
+        # the payment filter) for the dropdown option list below.
+        where_base = where
+        if payment and has_pay:
+            filters.append(f"{sel_pay} = :payment")
+            params["payment"] = payment
+            where = "WHERE " + " AND ".join(filters)
         rows = con.execute(
             f"""
             SELECT st.receipt_no, st.sold_at, st.cashier, st.table_no,
@@ -6478,6 +6486,29 @@ def analysis_discount_bills(
             params,
         ).fetchone()
 
+        # Distinct payment codes available in this scope (ignoring the payment
+        # filter) → powers the "filter by วิธีจ่าย" dropdown.
+        payment_codes = []
+        if has_pay:
+            base_params = {k: v for k, v in params.items() if k != "payment"}
+            pc_rows = con.execute(
+                f"""
+                WITH dom AS (
+                  SELECT branch_id, receipt_no,
+                         CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code,
+                         ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
+                  FROM sale_payment)
+                SELECT d.code AS code, COUNT(*) AS n
+                FROM sales_transaction st
+                JOIN branches b ON b.branch_id = st.branch_id
+                JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
+                {where_base}
+                GROUP BY d.code ORDER BY n DESC
+                """,
+                base_params,
+            ).fetchall()
+            payment_codes = [r["code"] for r in pc_rows if r["code"]]
+
     # p95 of discount amount — anything above is "abnormally high" for this scope.
     discs = sorted((r["discount"] or 0) for r in rows)
     p95 = discs[min(len(discs) - 1, int(len(discs) * 0.95))] if discs else 0
@@ -6488,6 +6519,8 @@ def analysis_discount_bills(
             "p95_discount": round(p95, 2),
             "returned": len(rows),
         },
+        "payment_codes": payment_codes,
+        "payment": payment,
     }
 
 

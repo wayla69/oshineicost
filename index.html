@@ -20421,6 +20421,8 @@ async function openBillItems(row = {}) {
     <p class="text-[11px] text-slate-400 mt-3">รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. COGS = BoM เท่านั้น (buffet tier = 0).</p>`;
 }
 
+let _discBillsCtx = {};   // remembered drill context so the วิธีจ่าย dropdown can re-query
+function discBillsSetPayment(v) { openDiscountBills({ ..._discBillsCtx, payment: v || undefined }); }
 async function openDiscountBills(opts = {}) {
   const modal = document.getElementById('discBillsModal');
   const title = document.getElementById('discBillsTitle');
@@ -20442,6 +20444,11 @@ async function openDiscountBills(opts = {}) {
   if (opts.min_pct != null) p.set('min_pct', opts.min_pct);
   if (opts.max_pct != null) p.set('max_pct', opts.max_pct);
   if (opts.gross_zero)     p.set('gross_zero', 'true');
+  if (opts.payment)        p.set('payment', opts.payment);
+  // remember context so the payment dropdown can re-query the same drill
+  _discBillsCtx = { branch, cashier, month_from, month_to, sort: opts.sort, amount: opts.amount,
+                    min_pct: opts.min_pct, max_pct: opts.max_pct, gross_zero: opts.gross_zero,
+                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment };
   title.textContent = '🔍 ' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
   sumEl.innerHTML = '';
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
@@ -20453,11 +20460,20 @@ async function openDiscountBills(opts = {}) {
     d = await r.json();
   } catch(e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message||e))}</p>`; return; }
   const s = d.summary || {};
-  sumEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
+  const codes = d.payment_codes || [];
+  const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-3 flex-wrap">
+      <span class="text-xs font-medium text-slate-500">💳 วิธีจ่าย:</span>
+      <select onchange="discBillsSetPayment(this.value)" class="text-xs border border-slate-300 rounded-lg px-2 py-1" style="max-width:220px">
+        <option value="">ทั้งหมด (${fmtN(codes.length)} วิธี)</option>
+        ${codes.map(c=>`<option value="${esc(c)}" ${opts.payment===c?'selected':''}>${esc(c)}</option>`).join('')}
+      </select>
+      ${opts.payment?`<button onclick="discBillsSetPayment('')" class="text-xs text-red-600 underline">ล้างตัวกรอง</button>`:''}
+    </div>` : '';
+  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
     ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
-  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · แสดง ${fmtN(s.returned||0)} บิลแรก</p>`;
+  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}</p>`;
   if (!d.bills.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">ไม่มีบิลส่วนลดในขอบเขตนี้</p>'; return; }
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
@@ -20927,7 +20943,7 @@ async function loadPaymentDiscount(params) {
   chEl.innerHTML = chb.length ? chb.map(b => {
     const w = Math.max(3, Math.round(100 * (b.discount || 0) / maxc));
     return `<div class="flex items-center gap-2 py-1 px-1 rounded cursor-pointer hover:bg-red-50/60"
-        onclick="openDiscountBills({branch:'${jsAttr(b.branch)}', sort:'discount', title:'บิลส่วนลด · ${jsAttr(b.branch)}'})" title="คลิกดูบิล">
+        onclick="openDiscountBills({branch:'${jsAttr(b.branch)}', payment:'Cash', sort:'discount', title:'บิลส่วนลด · เงินสด · ${jsAttr(b.branch)}'})" title="คลิกดูบิล (เฉพาะเงินสด)">
       <span class="text-xs truncate" style="width:80px">${esc(b.branch)}</span>
       <div class="flex-1" style="background:#fee2e2;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:#ef4444;border-radius:4px"></div></div>
       <span class="text-xs text-slate-600 tabular-nums" style="width:104px;text-align:right">${fmtN(b.bills)} บิล · ${fmt(b.discount)}</span>
