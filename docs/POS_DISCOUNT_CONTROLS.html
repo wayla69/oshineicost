@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>แนวทางตั้งค่า POS เพื่อป้องกันส่วนลดรั่ว — Oshinei</title>
+<style>
+  :root { --ink:#1e293b; --muted:#64748b; --line:#e2e8f0; --red:#dc2626; --amber:#d97706; --green:#16a34a; --indigo:#4f46e5; }
+  * { box-sizing:border-box; }
+  body { font-family:"Sarabun","Segoe UI",system-ui,sans-serif; color:var(--ink); max-width:880px; margin:0 auto; padding:28px 20px 60px; line-height:1.6; background:#f8fafc; }
+  h1 { font-size:1.5rem; margin:0 0 4px; }
+  h2 { font-size:1.1rem; margin:28px 0 8px; padding-top:14px; border-top:1px solid var(--line); }
+  .sub { color:var(--muted); font-size:.9rem; margin:0 0 18px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px 18px; margin:12px 0; box-shadow:0 1px 3px rgba(0,0,0,.04); }
+  .pri { display:inline-block; font-size:.7rem; font-weight:700; padding:2px 8px; border-radius:999px; color:#fff; }
+  .p1 { background:var(--red); } .p2 { background:var(--amber); } .p3 { background:var(--green); }
+  .why { background:#fef2f2; border-left:4px solid var(--red); padding:8px 12px; border-radius:8px; font-size:.85rem; margin:8px 0; color:#991b1b; }
+  ul { margin:8px 0; padding-left:22px; } li { margin:3px 0; }
+  code { background:#eef2ff; color:var(--indigo); padding:1px 6px; border-radius:5px; font-size:.85em; }
+  .foot { color:var(--muted); font-size:.8rem; margin-top:30px; border-top:1px solid var(--line); padding-top:12px; }
+  table { width:100%; border-collapse:collapse; font-size:.85rem; margin:8px 0; }
+  th,td { border:1px solid var(--line); padding:6px 8px; text-align:left; } th { background:#f1f5f9; }
+</style>
+</head>
+<body>
+  <h1>🛡️ แนวทางตั้งค่า POS เพื่อป้องกัน "ส่วนลดรั่ว"</h1>
+  <p class="sub">Easy POS · จัดทำจากผลวิเคราะห์ส่วนลดจริง · Dashboard ทำหน้าที่ <b>ตรวจจับ + เตือน</b> — ตัวกัน "ที่หน้างาน" จริงต้องตั้งที่ POS + กระบวนการด้านล่าง</p>
+
+  <div class="card">
+    <b>สรุปสิ่งที่ตรวจพบ (ใช้เป็นเหตุผลของแต่ละข้อ):</b>
+    <ul>
+      <li>ส่วนลดเครือ <b>~99% ไม่เลือกเหตุผล</b> ("ไม่ระบุ") → คุมนโยบาย/ตรวจสอบไม่ได้</li>
+      <li>จุดรั่วใหญ่สุด = <b>เงินสด + ลดหนัก ≥20%</b> ฿2.6M, <b>65% อยู่อุดรธานี</b></li>
+      <li>ส่วนใหญ่ผ่าน login <code>admin</code> — เช่น ลดเงินสด <b>฿631 ซ้ำ 456 ครั้ง</b> (รูปแบบกดลดซ้ำผิดปกติ)</li>
+    </ul>
+  </div>
+
+  <h2><span class="pri p1">ลำดับ 1</span> บังคับเลือก "เหตุผลส่วนลด" ทุกครั้ง</h2>
+  <div class="why">แก้ปัญหาใหญ่สุด: 99% ของส่วนลดไม่มีเหตุผล — เปิดบังคับแล้วทุกการลดจะตรวจสอบได้ทันที</div>
+  <ul>
+    <li>ตั้งให้ช่องเหตุผลส่วนลดเป็น <b>required</b> (กดลดไม่ได้ถ้าไม่เลือกเหตุผล)</li>
+    <li>จัดรายการเหตุผลให้สั้น ชัด (เด็กสูง &lt;110 · ผู้สูงอายุ · พนักงาน · โปรโมชัน · เคลม) — เลี่ยง "อื่นๆ" ที่กว้างเกินไป</li>
+  </ul>
+
+  <h2><span class="pri p1">ลำดับ 2</span> เพดาน % ส่วนลดต่อบิล + ลดเกินต้องอนุมัติ</h2>
+  <div class="why">บิลเงินสดถูกลดถึง 35–50% ของยอด — เพดาน + อนุมัติจะตัดการลดก้อนใหญ่ผิดปกติ</div>
+  <ul>
+    <li>ตั้ง <b>เพดาน %</b> ที่พนักงานทั่วไปลดได้เอง (เช่น ≤10–15%)</li>
+    <li>ลดเกินเพดาน หรือเกินจำนวนเงินที่กำหนด (เช่น &gt;฿500) → <b>ต้องใส่รหัส manager อนุมัติ</b></li>
+    <li>ปิดการลดแบบ "กรอกตัวเลขเอง" ถ้าทำได้ — ใช้รายการส่วนลด/โปรที่กำหนดไว้แทน</li>
+  </ul>
+
+  <h2><span class="pri p1">ลำดับ 3</span> จำกัดสิทธิ์ตาม Role + เลิกใช้ login รวม "admin"</h2>
+  <div class="why">การลดส่วนใหญ่มาจาก login <code>admin</code> (ใช้ร่วมกัน) → ไล่ไม่ได้ว่าใครทำ</div>
+  <ul>
+    <li>ให้พนักงานแต่ละคนมี <b>login ของตัวเอง</b> — เลิกใช้บัญชีรวม <code>admin</code> หน้าขาย</li>
+    <li>กำหนดสิทธิ์การลดตาม role (แคชเชียร์ = ลดได้จำกัด / manager = ลดได้มากกว่า)</li>
+    <li>ทุกการลดต้องผูกกับชื่อผู้ทำ เพื่อให้ Scorecard/Alert ไล่ที่มาได้</li>
+  </ul>
+
+  <h2><span class="pri p2">ลำดับ 4</span> คุมส่วนลดเงินสดเป็นพิเศษ</h2>
+  <ul>
+    <li>เงินสด + ส่วนลด = ความเสี่ยงเงินหายสูงสุด — ให้ manager สุ่มตรวจใบเสร็จเงินสดที่มีส่วนลดรายวัน</li>
+    <li>กระทบยอดเงินสด (cash count) เทียบยอดขาย-ส่วนลดทุกกะ</li>
+  </ul>
+
+  <h2><span class="pri p3">กระบวนการ</span> รีวิว + ติดตามด้วย Dashboard</h2>
+  <ul>
+    <li>เปิด <b>"ต้องดูวันนี้"</b> / การ์ด <b>"🚩 ส่วนลดที่ต้องระวัง"</b> ทุกวัน — ธงด่วน (เงินสด+ลดหนัก, ลดซ้ำ, cashier เกินเกณฑ์) จะเด้งให้เห็น</li>
+    <li>ปรับ <b>เกณฑ์เตือน (⚙ เกณฑ์)</b> ให้เข้ากับนโยบายร้าน</li>
+    <li>เริ่มที่ <b>อุดรธานี</b> ก่อน (สาขารั่วอันดับ 1) แล้วใช้เป็นต้นแบบคุมสาขาอื่น</li>
+  </ul>
+
+  <table>
+    <tr><th>ปัญหา</th><th>ตัวกันที่ POS</th><th>Dashboard ช่วย</th></tr>
+    <tr><td>ไม่ระบุเหตุผล 99%</td><td>บังคับเลือกเหตุผล</td><td>การ์ดประเภทส่วนลด · ธง untyped</td></tr>
+    <tr><td>ลดหนัก/ก้อนใหญ่</td><td>เพดาน % + manager อนุมัติ</td><td>ลักษณะการลด · cash+heavy</td></tr>
+    <tr><td>login รวม admin</td><td>login รายคน + role limit</td><td>Scorecard cashier · ธง repeat</td></tr>
+    <tr><td>เงินสดรั่ว</td><td>สุ่มตรวจ + กระทบยอดกะ</td><td>วิธีจ่าย × ส่วนลด · filter เงินสด</td></tr>
+  </table>
+
+  <p class="foot">เอกสารนี้เป็นคำแนะนำเชิงนโยบาย — ฟีเจอร์จริงใน Easy POS ขึ้นกับเวอร์ชัน/สิทธิ์ ตรวจสอบกับผู้ดูแลระบบ POS (easyrestaurant.asia) ก่อนตั้งค่า · อัปเดต 2026-06-09</p>
+</body>
+</html>

@@ -6825,7 +6825,7 @@ def analysis_discount_alerts(
     Each flag carries a `drill` so the UI can open the matching discount_bills view.
     """
     base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
-    TH = {"cash_pct": 20, "cash_min": 50000, "untyped_pct": 80, "untyped_min": 50000,
+    TH = {"cash_pct": 20, "cash_min": 50000, "untyped_pct": 80, "untyped_min": 50000,  # DEFAULTS
           "cashier_mult": 2.0, "cashier_floor": 5.0, "cashier_min_disc": 30000,
           "repeat_min": 30, "late_from": 22, "late_min_bills": 40, "late_min_share": 25.0}
     filters = ["b.name != 'ALL'", "st.discount > 0"]
@@ -6835,6 +6835,19 @@ def analysis_discount_alerts(
     flags = []
     def thb(x): return f"{(x or 0):,.0f}"
     with get_db() as con:
+        # Configurable overrides (Settings key 'discount_alert_thresholds', JSON).
+        # SECURITY: these values are interpolated into SQL → accept only known keys
+        # and coerce to numbers; never let a raw string through.
+        try:
+            row = con.execute("SELECT value FROM app_settings WHERE key='discount_alert_thresholds'").fetchone()
+            if row and row[0]:
+                stored = _json.loads(row[0])
+                for _k in TH:
+                    if _k in stored:
+                        try: TH[_k] = float(stored[_k])
+                        except (TypeError, ValueError): pass
+        except Exception:
+            pass
         has_pay = bool(con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_payment'").fetchone())
         dom = ("WITH dom AS (SELECT branch_id, receipt_no, "
                "CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code, "
@@ -8347,6 +8360,8 @@ def put_settings(body: Dict[str, str]):
                 "INSERT OR REPLACE INTO app_settings(key,value) VALUES(?,?)", (k, str(v))
             )
         con.commit()
+    # settings feed cached endpoints (e.g. discount_alerts thresholds) → drop stale
+    invalidate_cache("analysis_discount_alerts")
     return {"ok": True}
 
 
