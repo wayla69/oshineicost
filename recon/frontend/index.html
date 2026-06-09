@@ -1226,6 +1226,18 @@ function closeAllDrawers(){
   document.getElementById('drawer-backdrop').classList.add('hidden');
   document.body.classList.remove('drawer-locked');
 }
+// Re-render whichever main view a drawer was opened from, so it reflects edits
+// made inside the drawer (resolve / match / attach) after it closes.
+function refreshTab(name){
+  ({overview:loadOverview, board:loadDailyBoard, daily:loadDaily,
+    discrepancies:loadDiscrepancies, reconcile:renderReconcile}[name] || (()=>{}))();
+}
+// ESC closes the top-most drawer (manual → drill), like every other modal.
+document.addEventListener('keydown', e=>{
+  if(e.key!=='Escape') return;
+  if(document.getElementById('tab-manual').classList.contains('as-drawer')) manualBack();
+  else if(document.getElementById('tab-drill').classList.contains('as-drawer')) drillBack();
+});
 
 function switchTab(name){
   closeAllDrawers();                       // changing the main tab dismisses any drawer
@@ -1493,7 +1505,7 @@ async function openDrill(branch_id, scope, back){
   try{ const d=await api(q); renderDrill(d, scope); }
   catch(e){ host.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
 }
-function drillBack(){ closeDrawer('drill'); reloadActive(); }
+function drillBack(){ closeDrawer('drill'); refreshTab(DRILL_BACK); }
 
 function mapStatusHtml(c){
   if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>
@@ -1634,9 +1646,13 @@ async function openManual(branch_id, category, bank, period_month, back){
   document.getElementById('manual-pos').innerHTML=`<tr><td colspan="3" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
   await loadManual();
 }
-// Close the manual drawer; if it was opened from the drill drawer, that stays open
-// underneath. Otherwise refresh the page behind it.
-function manualBack(){ closeDrawer('manual'); if(MANUAL_BACK!=='drill') reloadActive(); }
+// Close the manual drawer. If it was opened from the drill drawer, re-render the
+// drill (now under it) so the new match shows; otherwise refresh the page behind.
+function manualBack(){
+  closeDrawer('manual');
+  if(MANUAL_BACK==='drill' && DRILL_CTX) openDrill(DRILL_CTX.branch_id, DRILL_CTX.scope, DRILL_BACK);
+  else refreshTab(MANUAL_BACK);
+}
 
 async function loadManual(){
   const c=MANUAL_CTX; if(!c) return;
