@@ -326,6 +326,24 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     sq.execute("CREATE INDEX IF NOT EXISTS ix_ppd ON pos_payment_day(branch_id, day)")
     print(f"        pos_payment_day: {len(rows)} groups")
 
+    # ── sale_payment: per-RECEIPT payment lines (powers the discount-bill drill) ──
+    # Same SalePayment source as pos_payment_month, but kept per receipt instead of
+    # rolled up — a bill can have >1 row (split payment: e.g. cash + credit).
+    # receipt_no is built IDENTICALLY to sales_transaction ("<date>-<SaleNum>-<SaleId>",
+    # see the header build above) so it joins 1:1.
+    sq.executescript("DROP TABLE IF EXISTS sale_payment; CREATE TABLE sale_payment("
+                     "branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL);")
+    rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, s.SaleNum num, s.SaleId sid,
+                 p.PaymentCode pc, SUM(CAST(p.Amount AS float)) amt
+                 FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
+                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1
+                 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""")
+    sq.executemany("INSERT INTO sale_payment VALUES(?,?,?,?)",
+        [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', r["pc"], round(r["amt"] or 0, 2))
+         for r in rows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_salepay ON sale_payment(branch_id, receipt_no)")
+    print(f"        sale_payment: {len(rows)} rows (per receipt × code)")
+
     # ── pos_table_turn_day: turnover / dwell ──
     sq.executescript("DROP TABLE IF EXISTS pos_table_turn_day; CREATE TABLE pos_table_turn_day("
                      "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")

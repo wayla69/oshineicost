@@ -20454,6 +20454,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3 text-right">ยอดก่อนลด</th>
     <th class="py-2 pr-3 text-right">ส่วนลด</th>
     <th class="py-2 pr-3 text-right">จ่ายจริง</th>
+    <th class="py-2 pr-3">วิธีจ่าย</th>
     <th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`;
   const rows = bills.map(b => {
     const hot = (b.discount||0) >= p95 && p95 > 0;
@@ -20464,6 +20465,10 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       ? `<span class="text-indigo-600">🎟️ ${esc(b.coupon_name)}</span>`
       : (b.reason_desc ? esc(b.reason_desc)
         : '<span class="text-slate-400">ไม่ระบุประเภท</span>');
+    // payment method: dominant (largest-amount) code; "+N" if the bill split across codes
+    const payCell = b.payment_code
+      ? `${esc(b.payment_code)}${(b.payment_n||0) > 1 ? ` <span class="text-[9px] text-slate-400" title="จ่ายหลายแบบในบิลเดียว">+${b.payment_n-1}</span>` : ''}`
+      : '<span class="text-slate-300">—</span>';
     return `<tr class="border-b border-slate-100 ${hot?'bg-red-50':''}">
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-500">${esc((b.sold_at||'').replace('T',' ').slice(0,16))}</td>
@@ -20474,6 +20479,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       <td class="py-1.5 pr-3 text-right text-slate-600">${fmtN(base)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
+      <td class="py-1.5 pr-3 text-slate-600">${payCell}</td>
       <td class="py-1.5 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td></tr>`;
   }).join('');
   return head + rows + '</tbody></table>';

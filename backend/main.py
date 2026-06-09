@@ -6423,16 +6423,24 @@ def analysis_discount_bills(
     params["limit"] = limit
 
     with get_db() as con:
-        # Per-bill discount reason + coupon name (synced via sync_mssql). Tables may
-        # be absent on a DB synced before they existed → degrade gracefully.
+        # Per-bill discount reason + coupon name + payment method (synced via
+        # sync_mssql). Tables/columns may be absent on a DB synced before they
+        # existed → degrade gracefully (NULL / 0).
         tabs = {r[0] for r in con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pos_discount_reason','coupon_series')")}
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pos_discount_reason','coupon_series','sale_payment')")}
         stcols = {r[1] for r in con.execute("PRAGMA table_info(sales_transaction)")}
         has_type = {"discount_reason_id", "coupon_series_id"} <= stcols
         join_r = " LEFT JOIN pos_discount_reason dr ON dr.reason_id = st.discount_reason_id" if ("pos_discount_reason" in tabs and has_type) else ""
         join_c = " LEFT JOIN coupon_series cs ON cs.coupon_series_id = st.coupon_series_id" if ("coupon_series" in tabs and has_type) else ""
         sel_r = "dr.reason_desc" if join_r else "NULL"
         sel_c = "cs.name" if join_c else "NULL"
+        # Payment method per receipt. A bill can split across codes → show the
+        # DOMINANT (largest-amount) code; payment_n = how many distinct codes.
+        has_pay = "sale_payment" in tabs
+        sel_pay  = ("(SELECT sp.payment_code FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
+                    "AND sp.receipt_no=st.receipt_no ORDER BY sp.amount DESC LIMIT 1)" if has_pay else "NULL")
+        sel_payn = ("(SELECT COUNT(DISTINCT sp.payment_code) FROM sale_payment sp WHERE sp.branch_id=st.branch_id "
+                    "AND sp.receipt_no=st.receipt_no)" if has_pay else "0")
         rows = con.execute(
             f"""
             SELECT st.receipt_no, st.sold_at, st.cashier, st.table_no,
@@ -6444,7 +6452,8 @@ def analysis_discount_bills(
                    (st.food_subtotal + st.drink_subtotal + st.other_subtotal) AS gross,
                    ROUND({base_expr}, 2)                         AS bill_base,
                    ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct,
-                   {sel_r} AS reason_desc, {sel_c} AS coupon_name
+                   {sel_r} AS reason_desc, {sel_c} AS coupon_name,
+                   {sel_pay} AS payment_code, {sel_payn} AS payment_n
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {join_r}{join_c}
