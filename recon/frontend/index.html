@@ -154,9 +154,19 @@
     #sidebar-logo .app-name { display:none; }     /* icon-only logo on phones */
     main { padding:10px !important; }
   }
+  /* Slide-in drawer: drill & manual-match open over the current page (no tab flip) */
+  .tab-pane.as-drawer{
+    position:fixed; top:0; right:0; height:100vh; width:min(900px,96vw);
+    background:#f8fafc; box-shadow:-10px 0 34px rgba(15,23,42,.20); z-index:60;
+    overflow-y:auto; padding:18px; animation:drawerIn .18s ease-out; }
+  #tab-manual.as-drawer{ z-index:62; width:min(820px,94vw); }
+  @keyframes drawerIn{ from{transform:translateX(36px);opacity:.3} to{transform:none;opacity:1} }
+  #drawer-backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.38); z-index:58; }
+  body.drawer-locked{ overflow:hidden; }
 </style>
 </head>
 <body>
+<div id="drawer-backdrop" class="hidden" onclick="closeAllDrawers()"></div>
 
 <!-- ═══════════════ SIDEBAR ═══════════════ -->
 <aside id="sidebar">
@@ -1182,7 +1192,29 @@ function syncDateBounds(){
 }
 function clearDate(){ FOCUS_DATE=null; document.getElementById('sel-date').value=''; document.getElementById('btn-clear-date').classList.add('hidden'); if(SESSION&&!document.getElementById('tab-daily').classList.contains('hidden')) loadDaily(); }
 
+// ── slide-in drawers (drill & manual open over the current page) ──────────────
+function openDrawer(name){
+  const el=document.getElementById('tab-'+name);
+  el.classList.remove('hidden'); el.classList.add('as-drawer'); el.scrollTop=0;
+  document.getElementById('drawer-backdrop').classList.remove('hidden');
+  document.body.classList.add('drawer-locked');
+}
+function closeDrawer(name){
+  const el=document.getElementById('tab-'+name);
+  el.classList.add('hidden'); el.classList.remove('as-drawer');
+  if(!document.querySelector('.tab-pane.as-drawer')){
+    document.getElementById('drawer-backdrop').classList.add('hidden');
+    document.body.classList.remove('drawer-locked');
+  }
+}
+function closeAllDrawers(){
+  document.querySelectorAll('.tab-pane.as-drawer').forEach(el=>{ el.classList.add('hidden'); el.classList.remove('as-drawer'); });
+  document.getElementById('drawer-backdrop').classList.add('hidden');
+  document.body.classList.remove('drawer-locked');
+}
+
 function switchTab(name){
+  closeAllDrawers();                       // changing the main tab dismisses any drawer
   document.querySelectorAll('.side-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.add('hidden'));
   document.getElementById('tab-'+name).classList.remove('hidden');
@@ -1437,7 +1469,7 @@ let DRILL_CTX = null;
 async function openDrill(branch_id, scope, back){
   DRILL_BACK = back || 'board';
   DRILL_CTX = {branch_id, scope, back:DRILL_BACK};
-  switchTab('drill');
+  openDrawer('drill');
   const host=document.getElementById('drill-codes');
   host.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
   let q=`/api/drill?branch_id=${branch_id}`;
@@ -1447,7 +1479,7 @@ async function openDrill(branch_id, scope, back){
   try{ const d=await api(q); renderDrill(d, scope); }
   catch(e){ host.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
 }
-function drillBack(){ switchTab(DRILL_BACK); }
+function drillBack(){ closeDrawer('drill'); reloadActive(); }
 
 function mapStatusHtml(c){
   if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>
@@ -1516,11 +1548,13 @@ async function openManual(branch_id, category, bank, period_month, back){
   MANUAL_BACK = back || 'drill';
   MANUAL_CTX = {branch_id, category, bank, period_month};
   MANUAL_POS.clear(); MANUAL_EXT.clear();
-  switchTab('manual');
+  openDrawer('manual');
   document.getElementById('manual-pos').innerHTML=`<tr><td colspan="3" class="text-center text-gray-400 py-6">${t('loading')}</td></tr>`;
   await loadManual();
 }
-function manualBack(){ switchTab(MANUAL_BACK); }
+// Close the manual drawer; if it was opened from the drill drawer, that stays open
+// underneath. Otherwise refresh the page behind it.
+function manualBack(){ closeDrawer('manual'); if(MANUAL_BACK!=='drill') reloadActive(); }
 
 async function loadManual(){
   const c=MANUAL_CTX; if(!c) return;
