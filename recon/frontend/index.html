@@ -794,7 +794,7 @@
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="c_branch">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_period">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_provider">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank" data-i18n-ph="m_provider_ph"></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_file">File (.xlsx / .csv / .pdf)</label><input id="up-file" type="file" accept=".xlsx,.xls,.csv,.pdf" multiple class="w-full text-sm mt-1">
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_file">File (.xlsx / .csv / .pdf)</label><input id="up-file" type="file" accept=".xlsx,.xls,.csv,.pdf" multiple onchange="onUpFile()" class="w-full text-sm mt-1">
         <div class="text-xs text-gray-400 mt-1" data-i18n="m_file_multi">เลือกได้หลายไฟล์ (เช่น Grab/Line Man ไฟล์ละวัน) — ยืนยันครั้งเดียวอัปทั้งหมด</div></div>
     </div>
     <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
@@ -2126,6 +2126,14 @@ function openUploadModal(src){
   const bid=document.getElementById('sel-branch').value; if(bid) document.getElementById('up-branch').value=bid;
 }
 function closeUploadModal(){ document.getElementById('upmodal').classList.add('hidden'); document.getElementById('up-preview').classList.add('hidden'); document.getElementById('up-confirm').disabled=true; document.getElementById('up-file').value=''; }
+// Enable Confirm as soon as a file is picked — Preview is optional, not a
+// prerequisite (the confirm endpoint parses server-side anyway). Clears any
+// stale preview when the selection changes.
+function onUpFile(){
+  const has = document.getElementById('up-file').files.length > 0;
+  document.getElementById('up-confirm').disabled = !has;
+  document.getElementById('up-preview').classList.add('hidden');
+}
 function upFormFor(file){ const f=new FormData();
   f.append('file',file);
   f.append('branch_id',document.getElementById('up-branch').value);
