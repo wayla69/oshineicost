@@ -22,6 +22,7 @@ Anything outside tolerance becomes a discrepancy for accounting staff.
 from __future__ import annotations
 import json
 import sqlite3
+from datetime import date
 
 from .seed_payment_map import normalize
 
@@ -714,6 +715,101 @@ def lane_ext_lines(conn, branch_id, period_month, category, bank):
               AND strftime('%Y-%m',order_date)=? ORDER BY order_date""",
             (branch_id, period_month)):
             add(table, r["id"], r["d"], r["ref"], r["order_status"], r["amt"], r["ms"])
+    return out
+
+
+# ── Wrong-channel suggestions (same bank, equal amount, ±1 day) ───────────────
+# Common data-entry error: a sale is booked under the wrong POS payment code, so
+# the POS lands in lane A (e.g. QR·KBANK) while the money shows on the statement
+# under lane B (e.g. TRANSFER·KBANK). It surfaces as a POS surplus in A and an
+# unmatched statement line in B of the SAME amount, same bank, same/adjacent day.
+# We detect those pairs and return ready-to-apply manual-match payloads — the
+# operator just clicks Apply (which POSTs to /api/manual).
+
+def _d(s: str) -> date:
+    return date(int(s[0:4]), int(s[5:7]), int(s[8:10]))
+
+
+def _pick_ext_lines(conn, branch_id, period_month, category, bank, day, amount):
+    """Unmatched statement lines in lane (category,bank) on `day` that sum to
+    ~amount. Prefer a single exact line; else greedily accumulate. Returns
+    [(table, id, amount)] or [] if nothing fits."""
+    cand = [l for l in lane_ext_lines(conn, branch_id, period_month, category, bank)
+            if l["date"] == day and l["match_status"] != "manual"]
+    for l in cand:                                   # exact single line first
+        if abs(l["amount"] - amount) <= TOL_ABS_DAY:
+            return [(l["table"], l["id"], l["amount"])]
+    picked, run = [], 0.0                             # else greedy sum
+    for l in sorted(cand, key=lambda x: -x["amount"]):
+        if run >= amount - TOL_ABS_DAY:
+            break
+        picked.append((l["table"], l["id"], l["amount"]))
+        run += l["amount"]
+    return picked if abs(run - amount) <= TOL_ABS_DAY else []
+
+
+def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
+    """Detect likely wrong-channel bookings (same bank, different category, equal
+    amount, within ±max_day_gap days). Returns a list of suggestions, each a
+    ready-to-POST /api/manual payload plus display fields."""
+    pos, _unmapped, available = pos_category_totals_daily(conn, branch_id, period_month)
+    if not available:
+        return []
+    consumed = _manual_consumed(conn, branch_id, period_month)
+    ext = _external_buckets_daily(conn, branch_id, period_month)   # excludes manual lines
+
+    # Net imbalance per (category, bank, day): POS-surplus vs external-surplus.
+    pos_surplus, ext_surplus = [], []
+    for (d, c, b) in set(pos) | set(ext):
+        p = pos.get((d, c, b), 0.0) - consumed.get((d, c, b), 0.0)
+        e = ext.get((d, c, b), {}).get("amount", 0.0)
+        net = round(p - e, 2)
+        if net > TOL_ABS_DAY:
+            pos_surplus.append((c, b, d, net))
+        elif net < -TOL_ABS_DAY:
+            ext_surplus.append((c, b, d, -net))
+
+    out, used_pos, used_ext = [], set(), set()
+    for ca, ba, da, xa in sorted(pos_surplus, key=lambda t: -t[3]):
+        if (ca, ba, da) in used_pos:
+            continue
+        # Best opposite lane: same bank, different category, closest day, equal amount.
+        best = None
+        for cb, bb, db, xb in ext_surplus:
+            if bb != ba or cb == ca or (cb, bb, db) in used_ext:
+                continue
+            gap = abs((_d(da) - _d(db)).days)
+            if gap > max_day_gap or abs(xa - xb) > TOL_ABS_DAY:
+                continue
+            if best is None or gap < best[0]:
+                best = (gap, cb, bb, db, xb)
+        if not best:
+            continue
+        gap, cb, bb, db, xb = best
+        lines = _pick_ext_lines(conn, branch_id, period_month, cb, bb, db, xb)
+        if not lines:
+            continue
+        used_pos.add((ca, ba, da))
+        used_ext.add((cb, bb, db))
+        out.append({
+            "bank":       ba,
+            "amount":     round(xa, 2),
+            "confidence": "high" if gap == 0 else "med",
+            "day_gap":    gap,
+            # ready-to-POST /api/manual payload
+            "category":     ca,           # record the match under the POS lane
+            "period_month": period_month,
+            "branch_id":    branch_id,
+            "pos_days":   [{"day": da, "amount": round(xa, 2)}],
+            "ext":        [{"table": t, "id": i, "amount": round(a, 2)} for (t, i, a) in lines],
+            # display
+            "pos_lane": f"{ca}·{ba}",
+            "ext_lane": f"{cb}·{bb}",
+            "pos_day":  da,
+            "ext_day":  db,
+            "note": (f"Suggested: POS {ca}·{ba} ↔ statement {cb}·{bb}, "
+                     f"equal {xa:,.0f} on {da}" + ("" if gap == 0 else f" / {db}")),
+        })
     return out
 
 

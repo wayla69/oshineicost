@@ -39,6 +39,7 @@ from .matcher import (
     payout_reconciliation,
     pos_codes_scope,
     run_auto_match,
+    suggest_reclassifications,
 )
 from .seed_payment_map import seed_payment_map
 from .parsers import (
@@ -1675,6 +1676,16 @@ class ManualMatch(BaseModel):
     ext:          list[dict] = []   # [{table, id, amount}]
     note:         str = ""
     matched_by:   str = ""
+
+
+@app.get("/api/suggestions")
+def suggestions(branch_id: int, period_month: str):
+    """Wrong-channel reclassification candidates: same bank, equal amount, ±1 day.
+    Each item is a ready-to-apply /api/manual payload (POST it to accept)."""
+    _validate_period(period_month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return {"suggestions": suggest_reclassifications(conn, branch_id, period_month)}
 
 
 @app.get("/api/manual")

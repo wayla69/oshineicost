@@ -426,6 +426,11 @@
           <button onclick="loadDiscrepancies()" class="btn btn-sec text-xs" style="padding:5px 10px" data-i18n="btn_refresh">⟳ Refresh</button>
         </div>
       </div>
+      <!-- Wrong-channel suggestions -->
+      <div id="sugg-panel" class="card hidden" style="padding:14px 16px">
+        <div class="font-semibold text-gray-700 text-sm mb-2">💡 <span data-i18n="sugg_hd">ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)</span> <span id="sugg-count" class="text-gray-400"></span></div>
+        <div id="sugg-body" class="space-y-2"></div>
+      </div>
       <!-- Table -->
       <div class="card overflow-x-auto" style="padding:0;position:relative">
         <table class="w-full text-sm">
@@ -879,6 +884,7 @@ const I18N = {
     coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
     up_title:"อัปโหลดเอกสาร & รายงาน",
     disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
+    sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -997,6 +1003,7 @@ const I18N = {
     coverage_hd:"Coverage — last day each source's document covers",
     up_title:"Upload Statements & Reports",
     disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
+    sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -2034,7 +2041,48 @@ async function loadDiscrepancies(){
 
   renderDiscTable();
   updateBulkBar();
+  loadSuggestions();
 }
+
+// ── wrong-channel suggestions (same bank, equal amount, ±1 day) ───────────────
+let SUGG_LIST=[]; const SUGG_DISMISSED=new Set();
+const suggKey=s=>`${s.pos_lane}|${s.ext_lane}|${s.pos_day}|${s.amount}`;
+async function loadSuggestions(){
+  const panel=document.getElementById('sugg-panel'), body=document.getElementById('sugg-body');
+  if(!SESSION){ panel.classList.add('hidden'); return; }
+  let list=[];
+  try{ list=(await api(`/api/suggestions?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`)).suggestions||[]; }catch(e){}
+  list=list.filter(s=>!SUGG_DISMISSED.has(suggKey(s)));
+  SUGG_LIST=list;
+  if(!list.length){ panel.classList.add('hidden'); body.innerHTML=''; return; }
+  panel.classList.remove('hidden');
+  document.getElementById('sugg-count').textContent=`(${list.length})`;
+  body.innerHTML=list.map((s,i)=>`
+    <div class="flex items-center justify-between gap-3 border border-amber-200 bg-amber-50 rounded-lg px-3 py-2 text-sm">
+      <div class="min-w-0">
+        <span class="font-mono font-semibold">${fmt(s.amount)}</span>
+        <span class="badge b-mut mx-1">${s.pos_lane}</span>→<span class="badge b-mut mx-1">${s.ext_lane}</span>
+        <span class="text-gray-400">${s.pos_day}${s.confidence==='high'?'':' / '+s.ext_day}</span>
+        ${s.confidence==='high'?`<span class="text-green-600 text-xs">● ${t('sugg_sameday')}</span>`:`<span class="text-amber-600 text-xs">● ±1 ${t('sugg_day')}</span>`}
+      </div>
+      <div class="flex gap-2 shrink-0">
+        <button onclick="applySuggestion(${i},event)" class="btn btn-pri text-xs" style="padding:4px 10px" data-i18n="sugg_apply">จับคู่</button>
+        <button onclick="dismissSuggestion(${i})" class="btn btn-sec text-xs" style="padding:4px 10px" data-i18n="sugg_skip">ข้าม</button>
+      </div>
+    </div>`).join('');
+}
+async function applySuggestion(i,ev){
+  const s=SUGG_LIST[i]; if(!s) return;
+  await withBusy(ev&&ev.target,'…',async()=>{
+    try{
+      await api('/api/manual',{method:'POST',json:{branch_id:s.branch_id,period_month:s.period_month,
+        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
+      toast(`${t('sugg_done')}: ${s.pos_lane} ↔ ${s.ext_lane}`,'ok');
+      loadDiscrepancies();
+    }catch(e){ toast(t('sugg_fail')+': '+e.message,'err'); }
+  });
+}
+function dismissSuggestion(i){ const s=SUGG_LIST[i]; if(s){ SUGG_DISMISSED.add(suggKey(s)); loadSuggestions(); } }
 
 function renderDiscTable(){
   const tb = document.getElementById('disc-body');

@@ -116,6 +116,58 @@ def test_category_reconciliation_statuses(client, tmp_path):
     assert len(client.get(f"/api/sessions/{sid}/discrepancies").json()) == before
 
 
+def test_suggestions_wrong_channel_same_bank(client):
+    """POS booked under QR·KBANK but the money shows as a TRANSFER·KBANK bank line
+    of the same amount/day → one wrong-channel suggestion, and applying it (POST
+    the payload to /api/manual) reconciles both lanes."""
+    db = main._DB_PATH
+    # map K-SHOP → QR/KBANK explicitly (seed already does, but be deterministic)
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['K-SHOP']['id']}", json={"category": "QR", "bank": "KBANK"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','K-SHOP',5000)")   # POS in QR·KBANK
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'kbank','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-10','TRANSFER',5000,'unmatched')", (up,))   # money in TRANSFER·KBANK
+    c.commit(); c.close()
+
+    sug = client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"]
+    assert len(sug) == 1
+    s = sug[0]
+    assert s["pos_lane"] == "QR·KBANK" and s["ext_lane"] == "TRANSFER·KBANK"
+    assert s["bank"] == "KBANK" and abs(s["amount"] - 5000) < 0.01 and s["confidence"] == "high"
+
+    # The suggestion is itself a valid /api/manual payload → applying it succeeds.
+    r = client.post("/api/manual", json={
+        "branch_id": s["branch_id"], "period_month": s["period_month"],
+        "category": s["category"], "bank": s["bank"],
+        "pos_days": s["pos_days"], "ext": s["ext"], "note": s["note"],
+    })
+    assert r.status_code == 200
+    # the consumed line is now flagged, so the suggestion no longer reappears
+    assert client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"] == []
+
+
+def test_suggestions_ignores_cross_bank(client):
+    """A same-amount opposite imbalance across DIFFERENT banks must NOT be
+    suggested (operator chose same-bank-only)."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['K-SHOP']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','K-SHOP',5000)")    # POS QR·KBANK
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'ktb','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-10','TRANSFER',5000,'unmatched')", (up,))        # money TRANSFER·KTB (other bank)
+    c.commit(); c.close()
+    assert client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"] == []
+
+
 def test_fee_vat_changes_net(client):
     sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
     c = sqlite3.connect(main._DB_PATH)
