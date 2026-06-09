@@ -628,6 +628,10 @@
           </table>
         </div>
       </div>
+      <!-- in-drawer actions: lane suggestions -->
+      <div id="drill-suggest" class="hidden card" style="border-left:4px solid #6366f1;padding:12px 16px"></div>
+      <!-- in-drawer actions: resolve + attach -->
+      <div id="drill-actions" class="card" style="padding:12px 16px"></div>
       <div class="px-1">
         <button id="drill-manual-btn" onclick="openManualFromDrill()" class="btn btn-sec" style="display:none">
           🔗 <span data-i18n="manual_match_btn">Manual match (lump sum)</span>
@@ -796,7 +800,7 @@
 </div>
 
 <!-- ═══════════════ EVIDENCE ATTACHMENT MODAL ═══════════════ -->
-<div id="attachmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
+<div id="attachmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden" style="z-index:70">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 p-6">
     <div class="flex items-center justify-between mb-4">
       <div class="font-bold text-lg">📎 แนบไฟล์หลักฐาน <span id="attach-scope" class="text-sm font-normal text-gray-400"></span></div>
@@ -895,6 +899,7 @@ const I18N = {
     up_title:"อัปโหลดเอกสาร & รายงาน",
     disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
+    drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -1014,6 +1019,7 @@ const I18N = {
     up_title:"Upload Statements & Reports",
     disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
+    drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -1530,6 +1536,74 @@ function renderDrill(d, scope){
   const mb=document.getElementById('drill-manual-btn');
   mb.style.display = (d.category && d.category!=='COUPON') ? '' : 'none';
   applyI18n();
+  renderDrillExtras(scope);
+}
+
+// ── in-drawer actions: lane suggestions, resolve+note, attach evidence ─────────
+let DRILL_SUGG=[], DRILL_DISC=null;
+async function renderDrillExtras(scope){
+  const cat=scope.category, bank=scope.bank||'NONE', bid=DRILL_CTX.branch_id;
+  const pm=scope.period_month || (scope.day? scope.day.slice(0,7) : null);
+
+  // 1) wrong-channel suggestions touching this lane
+  const sg=document.getElementById('drill-suggest'); sg.classList.add('hidden'); sg.innerHTML=''; DRILL_SUGG=[];
+  if(cat && pm){
+    let list=[]; try{ list=(await api(`/api/suggestions?branch_id=${bid}&period_month=${pm}`)).suggestions||[]; }catch(e){}
+    const lane=`${cat}·${bank}`;
+    list=list.filter(s=>s.pos_lane===lane||s.ext_lane===lane);
+    if(scope.day) list=list.filter(s=>s.pos_day===scope.day||s.ext_day===scope.day);
+    if(list.length){
+      DRILL_SUGG=list; sg.classList.remove('hidden');
+      sg.innerHTML=`<div class="font-semibold text-indigo-700 mb-2">💡 ${t('sugg_hd')}</div>`+
+        list.map((s,i)=>`<div class="flex items-center justify-between gap-2 text-sm py-1">
+          <div class="min-w-0"><span class="font-mono font-semibold">${fmt(s.amount)}</span>
+            <span class="badge b-mut mx-1">${s.pos_lane}</span>→<span class="badge b-mut mx-1">${s.ext_lane}</span>
+            <span class="text-gray-400">${s.pos_day}${s.confidence==='high'?'':' / '+s.ext_day}</span></div>
+          <button onclick="applyDrillSugg(${i},event)" class="btn btn-pri text-xs shrink-0" style="padding:3px 10px">${t('sugg_apply')}</button>
+        </div>`).join('');
+    }
+  }
+
+  // 2) resolve (accept/adjust/reject + note) when a matching discrepancy exists, + attach
+  const ac=document.getElementById('drill-actions'); ac.innerHTML=''; DRILL_DISC=null;
+  let html='';
+  if(SESSION && cat){
+    let dl=[]; try{ dl=await api(`/api/sessions/${SESSION.session_id}/discrepancies?resolution=all&category=${encodeURIComponent(cat)}&bank=${encodeURIComponent(bank)}`); }catch(e){}
+    const disc=(dl||[])[0];
+    if(disc){
+      DRILL_DISC=disc;
+      const cur=(disc.resolution&&disc.resolution!=='pending')?`<span class="badge b-ok">${disc.resolution}</span>`:`<span class="badge b-warn">${t('df_pending')}</span>`;
+      html=`<div class="flex items-center gap-2 flex-wrap">
+        <span class="text-sm font-semibold text-gray-600">${t('drill_resolve')}:</span>${cur}
+        <button onclick="resolveDrill('accepted',event)" class="btn btn-sec text-xs" style="padding:4px 10px">${t('df_accepted')}</button>
+        <button onclick="resolveDrill('adjusted',event)" class="btn btn-sec text-xs" style="padding:4px 10px">${t('df_adjusted')}</button>
+        <button onclick="resolveDrill('rejected',event)" class="btn btn-sec text-xs" style="padding:4px 10px">${t('df_rejected')}</button>
+        <input id="drill-note" class="inp text-xs" style="flex:1;min-width:140px" placeholder="${t('manual_note_ph')}" value="${(disc.resolution_note||'').replace(/"/g,'&quot;')}">
+      </div>`;
+    }
+  }
+  const attach = scope.day
+    ? `<button onclick="openAttachments(${bid},'${scope.day}','${cat||''}')" class="btn btn-sec text-xs" style="padding:4px 10px">📎 ${t('attach_btn')}</button>` : '';
+  ac.innerHTML = html + (attach?`<div class="${html?'mt-2':''}">${attach}</div>`:'');
+  if(!html && !attach) ac.classList.add('hidden'); else ac.classList.remove('hidden');
+}
+function applyDrillSugg(i,ev){
+  const s=DRILL_SUGG[i]; if(!s) return;
+  withBusy(ev&&ev.target,'…',async()=>{
+    try{ await api('/api/manual',{method:'POST',json:{branch_id:s.branch_id,period_month:s.period_month,
+        category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
+      toast(t('sugg_done'),'ok'); openDrill(DRILL_CTX.branch_id,DRILL_CTX.scope,DRILL_BACK);   // refresh drawer
+    }catch(e){ toast(e.message,'err'); }
+  });
+}
+async function resolveDrill(res,ev){
+  const d=DRILL_DISC; if(!d) return;
+  const note=(document.getElementById('drill-note')||{}).value||'';
+  await withBusy(ev&&ev.target,'…',async()=>{
+    try{ await api(`/api/discrepancies/${d.id}/resolve`,{method:'PATCH',json:{resolution:res,resolution_note:note,resolved_by:'staff'}});
+      toast(t('sugg_done'),'ok'); openDrill(DRILL_CTX.branch_id,DRILL_CTX.scope,DRILL_BACK);
+    }catch(e){ toast(e.message,'err'); }
+  });
 }
 
 // ── manual reconciliation (tick-to-match, reversible) ──────────────────────────
