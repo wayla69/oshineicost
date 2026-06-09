@@ -12364,6 +12364,121 @@ def buffet_menu_cost_efficiency(
 
 
 # ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-trend   (Phase 6, 2026-06-09)
+# Monthly cost-share trend for the top-N food dishes (by total BoM/COGS cost):
+# each dish's cost expressed as a % of total dish cost in that period_month, so
+# dishes whose cost share is creeping up can be spotted and re-engineered.
+# Powers the "ต้นทุนรายเดือน (top-8)" line chart on the Menu Efficiency tab.
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-trend")
+@ttl_cache
+def buffet_menu_cost_trend(
+    branch:     Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    top_n:      int           = Query(8, ge=1, le=30),
+):
+    """Per-dish monthly cost share (cost / total dish cost that month, %).
+    Returns the sorted month axis plus the top-N dishes by total cost across
+    the range. Buffet tier rows excluded (cost lives on the item dishes)."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", _FOOD_CATEGORY_FILTER]
+    params: dict = {}
+    if branch:
+        filters.append("b.name = :branch"); params["branch"] = branch
+    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
+                   ssm.period_month AS month,
+                   SUM(ssm.qty)                     AS servings,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id   = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+            JOIN categories c ON c.category_id  = sk.category_id
+            {where}
+            GROUP BY sk.sku_id, ssm.period_month
+            HAVING SUM(ssm.qty) > 0
+        """, params).fetchall()
+    # total dish cost per month → each dish's cost share
+    month_tot: dict = {}
+    for r in rows:
+        month_tot[r["month"]] = month_tot.get(r["month"], 0) + (r["cost"] or 0)
+    dishes: dict = {}
+    for r in rows:
+        d = dishes.setdefault(r["sku_code"], {
+            "sku_code": r["sku_code"], "description": r["description"],
+            "total_cost": 0.0, "monthly": [],
+        })
+        cost = r["cost"] or 0
+        tot  = month_tot.get(r["month"]) or 1
+        d["total_cost"] += cost
+        d["monthly"].append({
+            "month": r["month"], "cost": round(cost, 2),
+            "cost_pct": round(cost / tot * 100, 2),
+        })
+    months = sorted(month_tot.keys())
+    top = sorted(dishes.values(), key=lambda x: -x["total_cost"])[:top_n]
+    for d in top:
+        d["monthly"].sort(key=lambda x: x["month"])
+        d["total_cost"] = round(d["total_cost"], 2)
+    return {
+        "branch": branch or "ทุกสาขา",
+        "months": months,
+        "dishes": top,
+        "n_dishes": len(dishes),
+    }
+
+
+# ---------------------------------------------------------------------------
+# GET /api/buffet/menu-cost-by-branch   (Phase 6, 2026-06-09)
+# For ONE dish (sku_code): per-branch servings, cost/serving, cost share and
+# food-cost rate — so a single dish's portioning/cost can be benchmarked across
+# branches. Drill-down from the Menu Efficiency table.
+# ---------------------------------------------------------------------------
+@app.get("/api/buffet/menu-cost-by-branch")
+@ttl_cache
+def buffet_menu_cost_by_branch(
+    sku_code:   str           = Query(...),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Per-branch cost efficiency for a single dish (cost/serving, share, FC%)."""
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'", "sk.sku_code = :sku"]
+    params: dict = {"sku": sku_code}
+    _month_range_filter(filters, params, month_from, month_to, None, col="ssm.period_month")
+    where = "WHERE " + " AND ".join(filters)
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch,
+                   SUM(ssm.qty)                     AS servings,
+                   SUM({_unified_cogs_expr('ssm')}) AS cost,
+                   SUM(ssm.subtotal_ex_vat)         AS revenue
+            FROM sales_sku_monthly ssm
+            JOIN branches b   ON b.branch_id   = ssm.branch_id
+            JOIN skus sk      ON sk.sku_id      = ssm.sku_id
+            {where}
+            GROUP BY b.branch_id
+            HAVING SUM(ssm.qty) > 0
+        """, params).fetchall()
+    tot_cost = sum((r["cost"] or 0) for r in rows) or 1
+    branches = []
+    for r in rows:
+        serv = r["servings"] or 0; cost = r["cost"] or 0; rev = r["revenue"] or 0
+        branches.append({
+            "branch": r["branch"],
+            "servings": round(serv, 0),
+            "cost": round(cost, 2),
+            "cost_per_serving": round(cost / serv, 2) if serv else 0,
+            "cost_pct_of_total": round(cost / tot_cost * 100, 2),
+            "food_cost_rate": round(cost / rev * 100, 2) if rev else None,
+        })
+    branches.sort(key=lambda x: x["cost_per_serving"])
+    return {"sku_code": sku_code, "branches": branches, "n_branches": len(branches)}
+
+
+# ---------------------------------------------------------------------------
 # GET /api/buffet/menu-cost-coverage   (Phase 6, 2026-06-08)
 # Recipe-coverage stats: how many dishes have BoM, flat sku_cost, or no cost
 # data at all. Helps identify engineering potential (add recipes) and blind
