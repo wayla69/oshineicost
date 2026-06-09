@@ -9,17 +9,24 @@ Pipeline (one command, idempotent):
                     validated server-side; the live DB is NOT touched yet)
   4. restart      → flyctl machine restart; the app atomically swaps the staged
                     DB in at startup (see _maybe_swap_incoming_db in main.py)
-  5. verify       → poll the live API until its row count matches local
+  5. verify       → poll the live API until its row count matches local. When the
+                    live deploy has OSHINEI_AUTH enabled the verify endpoint needs
+                    a session cookie, so this logs in first (see login resolution).
 
 Usage:
     python backend/refresh_fly_db.py
     python backend/refresh_fly_db.py --no-restart      # upload only
     python backend/refresh_fly_db.py --db /path/to/oshinei.db --app oshinei-dashboard
+    python backend/refresh_fly_db.py --user owner --password '…'   # for auth verify
 
-Token resolution: --token  →  env OSHINEI_SEED_TOKEN  →  backend/.seed_token.txt
+Token resolution:  --token  →  env OSHINEI_SEED_TOKEN  →  backend/.seed_token.txt
+Login resolution (verify only, when OSHINEI_AUTH is on):  --user/--password  →
+    env OSHINEI_REFRESH_USER/OSHINEI_REFRESH_PASS  →  backend/.refresh_login.txt
+    ('user:pass' on one line, or username and password on two lines). Optional —
+    without it the upload/swap still happen; only the row-count verify is skipped.
 Restart step needs flyctl on PATH (or ~/.fly/bin).
 """
-import argparse, gzip, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
+import argparse, gzip, http.cookiejar, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 import urllib.request, urllib.error
 from pathlib import Path
 
@@ -54,23 +61,129 @@ def rowcount(db_path):
         c.close()
 
 
+def get_login(args):
+    """Resolve (username, password) for the post-refresh verify when the live
+    deploy has OSHINEI_AUTH enabled (the verify endpoint then needs a session).
+    Order: --user/--password → env OSHINEI_REFRESH_USER/OSHINEI_REFRESH_PASS →
+    backend/.refresh_login.txt ('user:pass' one line, or user + pass two lines).
+    Returns (None, None) when nothing is configured (verify is then skipped)."""
+    if args.user and args.password:
+        return args.user.strip(), args.password
+    u, p = os.environ.get("OSHINEI_REFRESH_USER"), os.environ.get("OSHINEI_REFRESH_PASS")
+    if u and p:
+        return u.strip(), p
+    f = HERE / ".refresh_login.txt"
+    if f.exists():
+        lines = [ln.strip() for ln in f.read_text(encoding="utf-8").splitlines() if ln.strip()]
+        if lines and ":" in lines[0]:
+            u, p = lines[0].split(":", 1)
+            return u.strip(), p.strip()
+        if len(lines) >= 2:
+            return lines[0], lines[1]
+    return None, None
+
+
+def verify_live(api, local_n, opener):
+    """Poll /api/profit/summary until tx_count == local_n. Returns 'ok' on match,
+    'auth' if it requires login (HTTP 401), or 'timeout' within the ~4 min window.
+    `opener` carries the cookie jar so a prior login is reused."""
+    deadline = time.time() + 240          # generous: swap-at-startup + matplotlib import
+    while time.time() < deadline:
+        try:
+            with opener.open(f"{api}/api/profit/summary", timeout=60) as r:
+                if json.load(r).get("tx_count") == local_n:
+                    return "ok"
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                return "auth"
+        except Exception:
+            pass
+        time.sleep(4)
+    return "timeout"
+
+
+def run_verify(api, local_n, args):
+    """Step 5: confirm the live DB now reports local_n rows. When the deploy has
+    OSHINEI_AUTH enabled the verify endpoint needs a session, so this logs in
+    first (credentials via get_login). Never fails the refresh — at worst it
+    prints a note explaining the staged swap still applied."""
+    print("5/5 verifying live data… (cold start + swap can take ~1-2 min)")
+    # Cookie-aware opener so we can authenticate when OSHINEI_AUTH is enabled on
+    # the live deploy (the verify endpoint then returns 401 without a session).
+    opener = urllib.request.build_opener(
+        urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+    result = verify_live(api, local_n, opener)
+
+    if result == "auth":
+        # Live API requires a login. Authenticate (if creds are configured) and
+        # re-check the row count, reusing the cookie now held by `opener`.
+        user, password = get_login(args)
+        if user and password:
+            try:
+                body = json.dumps({"username": user, "password": password}).encode()
+                req = urllib.request.Request(
+                    f"{api}/api/auth/login", data=body, method="POST",
+                    headers={"Content-Type": "application/json"})
+                with opener.open(req, timeout=60) as r:
+                    who = json.load(r)
+                print(f"     logged in as {who.get('username', user)} "
+                      f"({who.get('role', '?')}); confirming row count…")
+                result = verify_live(api, local_n, opener)
+            except urllib.error.HTTPError as e:
+                detail = e.read().decode(errors="replace")[:200]
+                print(f"     WARNING: login failed (HTTP {e.code} — {detail}). The "
+                      "upload staged + machine restarted, so the swap still applies;")
+                print(f"              confirm visually at {api}/  (staged {local_n:,} rows).")
+                return
+            except Exception as e:
+                print(f"     WARNING: login error ({e}); could not row-verify. The "
+                      f"swap still applies — confirm at {api}/ .")
+                return
+        else:
+            print("     NOTE: live API requires login (OSHINEI_AUTH) and no verify "
+                  "credentials are configured, so the row count was not auto-checked.")
+            print("           The app answered (HTTP 401) → it restarted and the staged "
+                  "swap applies at startup; the upload itself was validated server-side.")
+            print(f"           staged {local_n:,} rows OK — verify visually at {api}/ .")
+            print("           Enable auto-verify next time via --user/--password, env "
+                  "OSHINEI_REFRESH_USER/OSHINEI_REFRESH_PASS, or backend/.refresh_login.txt")
+            return
+
+    if result == "ok":
+        print(f"     ✓ live tx_count = {local_n:,} (matches local) — refresh complete.")
+    else:   # timeout
+        print("     Could not confirm within ~4 min. The swap usually still applies —"
+              f" open {api}/ and check, or re-run if needed.")
+
+
 def main():
     ap = argparse.ArgumentParser(description="Refresh the Fly.io DB from local data.")
     ap.add_argument("--api", default="https://oshinei-dashboard.fly.dev")
     ap.add_argument("--app", default="oshinei-dashboard")
     ap.add_argument("--db",  default=str(HERE / "oshinei.db"))
     ap.add_argument("--token", default=None)
+    ap.add_argument("--user", default=None,
+                    help="login username for the verify step (when OSHINEI_AUTH is on)")
+    ap.add_argument("--password", default=None, help="login password (see --user)")
     ap.add_argument("--no-restart", action="store_true",
                     help="upload + stage only; restart the machine yourself")
+    ap.add_argument("--verify-only", action="store_true",
+                    help="skip snapshot/upload/restart; only run the auth-aware "
+                         "row-count verify against the live API")
     args = ap.parse_args()
     api = args.api.rstrip("/")
     db = Path(args.db)
     if not db.exists():
         sys.exit(f"local DB not found: {db}")
-    token = get_token(args)
 
     local_n = rowcount(db)
     print(f"local DB : {db}\n           {local_n:,} sales rows")
+
+    if args.verify_only:
+        run_verify(api, local_n, args)
+        return
+
+    token = get_token(args)
 
     tmp = Path(tempfile.mkdtemp(prefix="oshinei_refresh_"))
     snap, gz = tmp / "snap.db", tmp / "snap.db.gz"
@@ -128,20 +241,7 @@ def main():
     for mid in ids:
         subprocess.run([fly, "machine", "restart", mid, "--app", args.app], check=False)
 
-    print("5/5 verifying live data… (cold start + 268 MB swap can take ~1-2 min)")
-    deadline = time.time() + 240          # generous: swap-at-startup + matplotlib import
-    while time.time() < deadline:
-        try:
-            with urllib.request.urlopen(f"{api}/api/profit/summary", timeout=60) as r:
-                d = json.load(r)
-            if d.get("tx_count") == local_n:
-                print(f"     ✓ live tx_count = {d['tx_count']:,} (matches local) — refresh complete.")
-                return
-        except Exception:
-            pass
-        time.sleep(4)
-    print("     Could not confirm within ~4 min. The swap usually still applies —"
-          f" open {api}/ and check, or re-run if needed.")
+    run_verify(api, local_n, args)
 
 
 if __name__ == "__main__":
