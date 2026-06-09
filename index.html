@@ -20885,7 +20885,7 @@ async function loadDiscountLeakage(params) {
     : 'background:#f0fdf4;border-left:4px solid #22c55e;color:#166534';
   sumEl.textContent = d.summary || '';
 
-  meta.textContent = `ค่าเฉลี่ยทุกสาขา ${avg.toFixed(1)}% · กลาง ${(chain.median_branch_pct||0).toFixed(1)}% · เกณฑ์ผิดปกติ ≥ ${(chain.threshold_pct||0).toFixed(1)}% · ${chain.branch_count||0} สาขา`
+  meta.textContent = `ค่าเฉลี่ยทุกสาขา ${avg.toFixed(2)}% · กลาง ${(chain.median_branch_pct||0).toFixed(2)}% · เกณฑ์ผิดปกติ ≥ ${(chain.threshold_pct||0).toFixed(2)}% · ${chain.branch_count||0} สาขา`
     + (d.reasons_staged ? '' : ' · (ยังไม่มีข้อมูลประเภทส่วนลด)');
 
   wrap.innerHTML = d.branches.map(b => {
@@ -20894,7 +20894,7 @@ async function loadDiscountLeakage(params) {
     const pctColor = abn ? '#dc2626' : (pct >= avg ? '#d97706' : '#16a34a');
     const vs = b.vs_avg_pts || 0;
     const vsColor = vs > 0 ? '#dc2626' : '#16a34a';
-    const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(1) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain : '–') + ' ค่าเฉลี่ย';
+    const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(2) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain.toFixed(2) : '–') + ' ค่าเฉลี่ย';
     const reason = b.top_reason ? esc(b.top_reason) : '—';
     const untyped = b.top_reason && b.top_reason.indexOf('ไม่ระบุ') >= 0;
     const reasonColor = untyped ? '#b45309' : '#475569';
@@ -20906,7 +20906,7 @@ async function loadDiscountLeakage(params) {
         <span class="font-semibold text-sm truncate">${abn ? '🚩 ' : ''}${esc(b.branch)}</span>
         <span class="text-[10px] text-slate-300">🔍</span>
       </div>
-      <p class="mt-1 font-bold" style="color:${pctColor};font-size:1.45rem;line-height:1.1">${pct.toFixed(1)}<span style="font-size:.8rem">%</span></p>
+      <p class="mt-1 font-bold" style="color:${pctColor};font-size:1.4rem;line-height:1.1">${pct.toFixed(2)}<span style="font-size:.8rem">%</span></p>
       <p class="text-xs text-slate-500">ส่วนลดรวม <b>${fmt(b.total_discount||0)}</b> · ${fmtN(b.discount_tx||0)} บิล</p>
       <p class="text-[11px] mt-0.5" style="color:${vsColor}">${vsTxt}</p>
       <p class="text-[11px] mt-1 truncate" style="color:${reasonColor}" title="${reason}${reasonPct}">ประเภทเยอะสุด: <b>${reason}</b>${reasonPct}</p>

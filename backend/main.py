@@ -6649,15 +6649,15 @@ def analysis_discount_leakage(
 
     abnormal = [b for b in branches if b["is_abnormal"]]
     if abnormal:
-        parts = [f"{b['branch']} {b['disc_pct']:.1f}%"
-                 + (f" (×{b['ratio_vs_chain']:.1f} ของค่าเฉลี่ย)" if b["ratio_vs_chain"] else "")
+        parts = [f"{b['branch']} {b['disc_pct']:.2f}%"
+                 + (f" (×{b['ratio_vs_chain']:.2f} ของค่าเฉลี่ย)" if b["ratio_vs_chain"] else "")
                  + (f", ส่วนใหญ่: {b['top_reason']}" if b.get("top_reason") else "")
                  for b in abnormal[:6]]
-        headline = (f"🚩 {len(abnormal)} สาขาใช้ส่วนลดสูงผิดปกติ (เกิน {threshold:.1f}% ของยอดก่อนลด · "
-                    f"ค่าเฉลี่ยทุกสาขา {chain_pct:.1f}%): " + " · ".join(parts))
+        headline = (f"🚩 {len(abnormal)} สาขาใช้ส่วนลดสูงผิดปกติ (เกิน {threshold:.2f}% ของยอดก่อนลด · "
+                    f"ค่าเฉลี่ยทุกสาขา {chain_pct:.2f}%): " + " · ".join(parts))
     else:
-        headline = (f"✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ {threshold:.1f}% "
-                    f"(ค่าเฉลี่ยทุกสาขา {chain_pct:.1f}% ของยอดก่อนลด)")
+        headline = (f"✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ {threshold:.2f}% "
+                    f"(ค่าเฉลี่ยทุกสาขา {chain_pct:.2f}% ของยอดก่อนลด)")
 
     return {
         "chain": {"total_discount": round(chain_disc, 2), "gross_base": round(chain_base, 2),
