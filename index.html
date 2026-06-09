@@ -3686,14 +3686,22 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div id="disc-leak-boxes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
   </div>
 
+  <div class="card p-5 mb-5">
+    <h2 class="section-title mb-3">แนวโน้ม % ส่วนลด</h2>
+    <div style="height:200px"><canvas id="chartDiscTrend"></canvas></div>
+  </div>
+
+  <!-- Two paired per-branch views: frequency (% of bills) vs amount (% of sales) -->
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <div class="card p-5">
-      <h2 class="section-title mb-3">แนวโน้ม % ส่วนลด</h2>
-      <div style="height:200px"><canvas id="chartDiscTrend"></canvas></div>
+      <h2 class="section-title mb-1">% บิลที่มีส่วนลด รายสาขา</h2>
+      <p class="text-xs text-slate-400 mb-3">ลด<b>บ่อย</b>แค่ไหน (กี่ % ของบิลถูกลด) · คลิกแท่งเพื่อดูบิล</p>
+      <div style="height:230px"><canvas id="chartDiscBranch"></canvas></div>
     </div>
     <div class="card p-5">
-      <h2 class="section-title mb-3">ส่วนลดรายสาขา</h2>
-      <div style="height:200px"><canvas id="chartDiscBranch"></canvas></div>
+      <h2 class="section-title mb-1">% เงินลดต่อยอดขาย รายสาขา</h2>
+      <p class="text-xs text-slate-400 mb-3">ลดเป็น<b>เงิน</b>เท่าไหร่ (% ของยอดก่อนหักส่วนลด · ตรงกับกล่อง KPI) · 🚩 แดง = ผิดปกติ</p>
+      <div style="height:230px"><canvas id="chartDiscPctBranch"></canvas></div>
     </div>
   </div>
 
@@ -20917,6 +20925,28 @@ async function loadDiscountLeakage(params) {
       <p class="text-[11px] mt-1 truncate" style="color:${reasonColor}" title="${reason}${reasonPct}">ประเภทเยอะสุด: <b>${reason}</b>${reasonPct}</p>
     </div>`;
   }).join('');
+
+  // Paired chart: % เงินลดต่อยอดขาย รายสาขา — same (correct-base) metric as the KPI boxes
+  if (typeof mkChart === 'function' && document.getElementById('chartDiscPctBranch')) {
+    const cr = [...d.branches].sort((a, b) => (b.disc_pct || 0) - (a.disc_pct || 0));
+    mkChart('chartDiscPctBranch', {
+      type: 'bar',
+      data: {
+        labels: cr.map(b => b.branch),
+        datasets: [{ label: '% เงินลดต่อยอดขาย', data: cr.map(b => b.disc_pct || 0),
+          backgroundColor: cr.map(b => b.is_abnormal ? '#dc2626' : ((b.disc_pct||0) >= avg ? '#f59e0b' : '#22c55e')), borderRadius: 4 }]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        onClick: (e, els) => { if (els.length) { const br = cr[els[0].index]; if (br) openDiscountBills({ branch: br.branch, title: 'บิลส่วนลด · ' + br.branch }); } },
+        plugins: { legend: { display: false }, datalabels: { display: false },
+          tooltip: { callbacks: {
+            label: c => ` ${c.parsed.y.toFixed(2)}% ของยอด` + (cr[c.dataIndex].ratio_vs_chain != null ? ` · ×${cr[c.dataIndex].ratio_vs_chain.toFixed(2)} ค่าเฉลี่ย` : ''),
+            afterLabel: () => 'คลิกเพื่อดูบิล' } } },
+        scales: { y: { beginAtZero: true, title: { display: true, text: '% เงินลดต่อยอดขาย', font: { size: 10 } }, ticks: { callback: v => v + '%' } } }
+      }
+    });
+  }
 }
 
 async function loadDiscountsTab() {
@@ -20952,7 +20982,7 @@ async function loadDiscountsTab() {
     data: {
       labels: trend.map(t => t.period_month),
       datasets: [
-        { label: 'Discount Rate %', data: trend.map(t => t.rate), borderColor: '#ef4444', backgroundColor: '#ef444422', tension: 0.3, fill: true, yAxisID: 'rate' },
+        { label: '% บิลที่มีส่วนลด', data: trend.map(t => t.rate), borderColor: '#ef4444', backgroundColor: '#ef444422', tension: 0.3, fill: true, yAxisID: 'rate' },
         { label: 'ส่วนลดรวม', data: trend.map(t => t.total_discount), borderColor: '#f59e0b', backgroundColor: 'transparent', tension: 0.3, borderDash: [4,4], yAxisID: 'amt' },
       ]
     },
@@ -20966,21 +20996,21 @@ async function loadDiscountsTab() {
     }
   });
 
-  // By branch — click a bar to drill into that branch's discounted bills
-  const byBranch = d.by_branch || [];
+  // % บิลที่มีส่วนลด รายสาขา — frequency view (sorted desc; click a bar to drill)
+  const byBranch = [...(d.by_branch || [])].sort((a, b) => (b.rate || 0) - (a.rate || 0));
   mkChart('chartDiscBranch', {
     type: 'bar',
     data: {
       labels: byBranch.map(b => b.branch),
-      datasets: [{ label: 'Discount Rate %', data: byBranch.map(b => b.rate || 0),
+      datasets: [{ label: '% บิลที่มีส่วนลด', data: byBranch.map(b => b.rate || 0),
         backgroundColor: byBranch.map(b => (b.rate||0) > 20 ? '#ef4444' : '#f59e0b'), borderRadius: 4 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       onClick: (e, els) => { if (els.length) { const br = byBranch[els[0].index]; if (br) openDiscountBills({ branch: br.branch, title: 'บิลส่วนลด · ' + br.branch }); } },
       plugins: { legend: { display: false }, datalabels: { display: false },
-        tooltip: { callbacks: { afterLabel: () => 'คลิกเพื่อดูบิล' } } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => v + '%' } } }
+        tooltip: { callbacks: { label: c => ` ${c.parsed.y}% ของบิลมีส่วนลด`, afterLabel: () => 'คลิกเพื่อดูบิล' } } },
+      scales: { y: { beginAtZero: true, title: { display: true, text: '% บิลที่มีส่วนลด', font: { size: 10 } }, ticks: { callback: v => v + '%' } } }
     }
   });
 
