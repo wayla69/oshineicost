@@ -128,12 +128,13 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
         add((cat, bank), "recon_bank_lines", r["id"], amt, amt)
 
     # Credit-card settlement: gross vs net (after effective fee/VAT)
+    pmids = _point_mids(conn, branch_id)
     for r in conn.execute("""
         SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
         WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
-        acq = r["acquirer"] or _provider_acquirer(r["provider"])
-        if acq == "BAYPOINT":          # loyalty reimbursement — no POS tender, reconciled 2-way vs bank
+        acq = _cc_acquirer(r, pmids)
+        if acq.endswith("POINT"):      # loyalty (BAY/KTC point) — no POS-credit tender, reconciled separately
             continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
@@ -262,6 +263,18 @@ def payout_reconciliation(conn, branch_id, period_month):
         rows.append({"category": "BAYPOINT", "report_net": net, "bank_payout": pay,
                      "variance": round(pay - net, 2), "status": status,
                      "pos_point": bp.get("pos_point_total", 0.0)})
+
+    # KTC Point: 2-way only (POS KTC-point coupon ↔ the KTC-point settlement rows,
+    # split by MID). The bank leg is inside the combined KTC deposit (CREDIT·KTC),
+    # so there is no separate bank credit to match here.
+    ktcp_settle = _point_settlement_gross(conn, branch_id, period_month, "KTCPOINT")
+    ktcp_pos = point_pos_total(conn, branch_id, period_month, "KTC")
+    if ktcp_settle > TOL_ABS or ktcp_pos > TOL_ABS:
+        rows.append({"category": "KTCPOINT", "report_net": round(ktcp_settle, 2),
+                     "bank_payout": None, "pos_point": round(ktcp_pos, 2),
+                     "variance": round(ktcp_settle - ktcp_pos, 2),
+                     "status": "matched" if abs(ktcp_settle - ktcp_pos) <= TOL_ABS else "mismatch",
+                     "bank_in_credit": True})
     return rows
 
 
@@ -295,7 +308,10 @@ def _payout_net_by_day(conn, branch_id, period_month):
     for r in conn.execute(
         "SELECT * FROM recon_cc_lines WHERE branch_id=? AND strftime('%Y-%m',settlement_date)=?",
         (branch_id, period_month)):
-        if r["acquirer"] == "BAYPOINT":          # point reimbursement → its own stream, net = gross
+        # BAY Point is a separate document + separate bank credit → own stream.
+        # KTC Point settles INSIDE the KTC deposit (one combined KTB credit), so
+        # it stays in CREDIT for the bank leg (the gross split happens elsewhere).
+        if r["acquirer"] == "BAYPOINT":
             add("BAYPOINT", r["settlement_date"], float(r["net_amount"] or 0))
             continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
@@ -342,6 +358,48 @@ def point_pos_total(conn, branch_id, period_month, provider):
         return round(float(row[0] or 0), 2) if row else 0.0
     except sqlite3.OperationalError:
         return 0.0
+
+
+def _point_settlement_gross(conn, branch_id, period_month, point_acq):
+    """Gross of the acquirer-settlement rows whose MID is a point MID (e.g. the
+    KTC Point rows inside the KTC RTxInv), via recon_acquirer_mid."""
+    pm = _point_mids(conn, branch_id)
+    mids = [m for m, a in pm.items() if a == point_acq and m]
+    if not mids:
+        return 0.0
+    ph = ",".join("?" * len(mids))
+    try:
+        row = conn.execute(
+            f"SELECT COALESCE(SUM(gross_amount),0) FROM recon_cc_lines "
+            f"WHERE branch_id=? AND strftime('%Y-%m',settlement_date)=? "
+            f"AND TRIM(COALESCE(merchant_id,'')) IN ({ph})",
+            (branch_id, period_month, *mids)).fetchone()
+        return round(float(row[0] or 0), 2)
+    except sqlite3.OperationalError:
+        return 0.0
+
+
+def _point_mids(conn, branch_id):
+    """{merchant_id: acquirer} for point-redemption MIDs of a branch (e.g. the
+    KTC Point MID), from recon_acquirer_mid. Lets us split point rows out of an
+    acquirer settlement (KTC RTxInv mixes regular KTC + KTC Point by MID)."""
+    try:
+        return {(r["merchant_id"] or "").strip(): r["acquirer"]
+                for r in conn.execute(
+                    "SELECT merchant_id, acquirer FROM recon_acquirer_mid "
+                    "WHERE branch_id=? AND acquirer LIKE '%POINT' AND COALESCE(active,1)=1 "
+                    "AND COALESCE(merchant_id,'')<>''", (branch_id,))}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def _cc_acquirer(row, point_mids):
+    """Effective acquirer for a cc settlement row: a point MID overrides to its
+    point acquirer (KTCPOINT), else the row's own acquirer."""
+    mid = (row["merchant_id"] or "").strip() if "merchant_id" in row.keys() else ""
+    if mid and mid in point_mids:
+        return point_mids[mid]
+    return row["acquirer"] or _provider_acquirer(row["provider"]) if "provider" in row.keys() else row["acquirer"]
 
 
 def _payout_candidate_credits(conn, branch_id, period_month, channels):

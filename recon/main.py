@@ -144,15 +144,16 @@ def _migrate_payment_bank(conn):
         conn.execute("""INSERT INTO recon_payment_map (payment_code_norm,category,bank,reconcile,updated_by)
             VALUES ('Credit BAY','CREDIT','BAY',1,'seed-franchise')
             ON CONFLICT(payment_code_norm) DO NOTHING""")
-        # widen recon_acquirer_mid.acquirer to allow BAY/SCB/BBL (same CHECK problem)
+        # widen recon_acquirer_mid.acquirer to allow BAY/SCB/BBL + point acquirers
         arow = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_acquirer_mid'").fetchone()
-        if arow and "'BAY'" not in (arow[0] or ""):
+        if arow and "KTCPOINT" not in (arow[0] or ""):
             conn.executescript("""
                 CREATE TABLE recon_acquirer_mid__new (
                     mid_id INTEGER PRIMARY KEY AUTOINCREMENT,
                     branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
-                    acquirer TEXT NOT NULL CHECK(acquirer IN ('KTB','KBANK','KTC','BAY','SCB','BBL')),
+                    acquirer TEXT NOT NULL CHECK(acquirer IN
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','KTCPOINT','BAYPOINT')),
                     merchant_id TEXT, terminal_id TEXT, active INTEGER NOT NULL DEFAULT 1
                 );
                 INSERT INTO recon_acquirer_mid__new (mid_id,branch_id,acquirer,merchant_id,terminal_id,active)

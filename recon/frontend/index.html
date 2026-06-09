@@ -921,7 +921,7 @@ const I18N = {
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_verify:"ตรวจสอบ & จับคู่", sugg_reason_ph:"เหตุผล", sugg_reason_def:"บันทึกผิดช่องทาง", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
-    pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)", pm_pos_point:"POS แต้ม",
+    pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)", pm_pos_point:"POS แต้ม", pm_bank_in_credit:"เงินเข้าบัญชีรวมอยู่ในก้อนบัตรเครดิต KTC",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -1043,7 +1043,7 @@ const I18N = {
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_verify:"Verify & match", sugg_reason_ph:"reason", sugg_reason_def:"Wrong channel:", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
-    pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)", pm_pos_point:"POS points",
+    pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)", pm_pos_point:"POS points", pm_bank_in_credit:"Bank credit is inside the combined KTC settlement",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -2020,7 +2020,7 @@ async function renderCouponSeries(){
     <tfoot><tr class="font-semibold"><td class="py-2">รวม</td><td></td><td class="py-2 text-right font-mono">${fmt(d.total)}</td></tr></tfoot></table>`;
 }
 
-const PAYOUT_CATLBL = {BAYPOINT:'BAY Point', GRAB:'Grab', LINEMAN:'Line Man', CREDIT:'บัตรเครดิต'};
+const PAYOUT_CATLBL = {BAYPOINT:'BAY Point', KTCPOINT:'KTC Point', GRAB:'Grab', LINEMAN:'Line Man', CREDIT:'บัตรเครดิต'};
 const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};
 const PAYOUT_KEY   = {matched:'p_matched', mismatch:'p_mismatch', awaiting_payout:'p_awaiting', ext_only:'p_extra'};
 const payoutLbl = s => t(PAYOUT_KEY[s]||'p_matched');
@@ -2029,17 +2029,31 @@ function renderPayouts(payouts){
   if(!payouts.length){ wrap.classList.add('hidden'); cont.innerHTML=''; return; }
   wrap.classList.remove('hidden'); cont.innerHTML='';
   payouts.forEach(p=>{
-    const div=document.createElement('div'); div.className='card hover:shadow-md';
-    div.style.cursor='pointer'; div.title=t('pm_open');
-    div.onclick=()=>openPayoutMatch(p.category);
-    div.innerHTML=`<div class="flex items-center justify-between mb-2">
-        <div class="font-semibold text-gray-800">${PAYOUT_CATLBL[p.category]||p.category} ${t('payout_word')} <span class="text-gray-300">›</span></div>
-        <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
-      <div class="grid grid-cols-3 gap-2 text-sm">
-        <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
-        <div><div class="text-xs text-gray-400">${t('l_bank_payout')}</div><div class="font-mono">${fmt(p.bank_payout)}</div></div>
-        <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
-      </div>`;
+    const div=document.createElement('div'); div.className='card';
+    const lbl=`${PAYOUT_CATLBL[p.category]||p.category} ${t('payout_word')}`;
+    if(p.bank_in_credit){
+      // KTC Point: 2-way (POS coupon ↔ settlement), bank is inside the KTC deposit
+      div.innerHTML=`<div class="flex items-center justify-between mb-2">
+          <div class="font-semibold text-gray-800">${lbl}</div>
+          <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <div><div class="text-xs text-gray-400">${t('pm_pos_point')}</div><div class="font-mono">${fmt(p.pos_point)}</div></div>
+          <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
+          <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
+        </div>
+        <div class="text-xs text-gray-400 mt-1">${t('pm_bank_in_credit')}</div>`;
+    } else {
+      div.className='card hover:shadow-md'; div.style.cursor='pointer'; div.title=t('pm_open');
+      div.onclick=()=>openPayoutMatch(p.category);
+      div.innerHTML=`<div class="flex items-center justify-between mb-2">
+          <div class="font-semibold text-gray-800">${lbl} <span class="text-gray-300">›</span></div>
+          <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
+        <div class="grid grid-cols-3 gap-2 text-sm">
+          <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
+          <div><div class="text-xs text-gray-400">${t('l_bank_payout')}</div><div class="font-mono">${fmt(p.bank_payout)}</div></div>
+          <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(p.variance)}">${varTxt(p.variance)}</div></div>
+        </div>`;
+    }
     cont.appendChild(div);
   });
 }

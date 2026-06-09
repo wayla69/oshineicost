@@ -249,6 +249,36 @@ def test_point_pos_total_classifies_by_series_name(client):
     assert point_pos_total(sqlite3.connect(main._DB_PATH), 4, "2026-06", "KTC") == 800.0  # excludes the 5% discount
 
 
+def test_ktc_point_split_by_mid(client):
+    """A KTC RTxInv mixes regular KTC + KTC Point (by MID). With the point MID in
+    recon_acquirer_mid, the point rows leave CREDIT·KTC gross and form a KTCPOINT
+    2-way vs the POS KTC-point coupon (bank stays in the combined KTC deposit)."""
+    from recon.matcher import category_reconciliation, payout_reconciliation, _point_settlement_gross
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    # MID map: 661 = regular KTC, 662 = KTC Point (Udon)
+    c.execute("INSERT INTO recon_acquirer_mid(branch_id,acquirer,merchant_id,terminal_id,active) VALUES(4,'KTC','661','',1)")
+    c.execute("INSERT INTO recon_acquirer_mid(branch_id,acquirer,merchant_id,terminal_id,active) VALUES(4,'KTCPOINT','662','',1)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTC','f','2026-06',0,'confirmed')").lastrowid
+    # regular KTC 5,000 (MID 661) + KTC point 160 (MID 662)
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,mdr_fee,vat_amount,net_amount,merchant_id) VALUES(?,4,'2026-06-03','KTC',5000,0,0,5000,'661')", (up,))
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,mdr_fee,vat_amount,net_amount,merchant_id) VALUES(?,4,'2026-06-03','KTC',160,0,0,160,'662')", (up,))
+    # POS KTC-point coupon = 160
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_month(branch_id INT,period_month TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.execute("INSERT OR REPLACE INTO coupon_series VALUES(1,'แลกคะแนน KTC 699 คะแนนลด 80 บาท','KTC',1)")
+    c.execute("INSERT INTO pos_coupon_payment_month VALUES(4,'2026-06',1,160,2)")
+    c.commit(); c.close()
+    with main.get_db() as conn:
+        cats, _ = category_reconciliation(conn, 4, "2026-06")
+        ktc_gross = [x["ext_amount"] for x in cats if x["category"] == "CREDIT" and x["bank"] == "KTC"]
+        kp = [x for x in payout_reconciliation(conn, 4, "2026-06") if x["category"] == "KTCPOINT"]
+    assert ktc_gross == [5000.0]                       # point row (160) excluded from regular KTC
+    assert kp and kp[0]["report_net"] == 160.0 and kp[0]["pos_point"] == 160.0
+    assert kp[0]["status"] == "matched" and kp[0]["bank_in_credit"] is True
+
+
 def test_point_pos_total_graceful_without_sync(client):
     """No coupon-payment table yet (sync not run) → 0, not a crash."""
     from recon.matcher import point_pos_total

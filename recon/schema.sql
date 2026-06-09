@@ -248,7 +248,7 @@ CREATE TABLE IF NOT EXISTS recon_bank_account (
 CREATE TABLE IF NOT EXISTS recon_acquirer_mid (
     mid_id      INTEGER PRIMARY KEY AUTOINCREMENT,
     branch_id   INTEGER NOT NULL REFERENCES branches(branch_id),
-    acquirer    TEXT NOT NULL CHECK(acquirer IN ('KTB','KBANK','KTC','BAY','SCB','BBL')),
+    acquirer    TEXT NOT NULL CHECK(acquirer IN ('KTB','KBANK','KTC','BAY','SCB','BBL','KTCPOINT','BAYPOINT')),
     merchant_id TEXT,
     terminal_id TEXT,
     active      INTEGER NOT NULL DEFAULT 1
