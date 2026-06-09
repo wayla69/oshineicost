@@ -1129,7 +1129,24 @@ async function init(){
   }
   const cur=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   sel.value = (cur>=RECON_START) ? cur : RECON_START;
-  sel.onchange = ()=>{ syncDateBounds(); loadOverview(); reloadActive(); };
+  sel.onchange = ()=>{
+    // The selected day belongs to the old month — clear the focus filter.
+    FOCUS_DATE=null;
+    document.getElementById('sel-date').value='';
+    document.getElementById('btn-clear-date').classList.add('hidden');
+    syncDateBounds();
+    loadOverview();
+    // A reconciliation SESSION is bound to one month; the daily / reconcile
+    // views key off SESSION.period_month, so just reloading them keeps showing
+    // the old month. Restart the session for the new month (same branch, same
+    // tab) so the board actually moves.
+    const bid = +document.getElementById('sel-branch').value;
+    if(SESSION && bid){
+      startSession(bid, document.querySelector('.side-btn.active')?.dataset.tab || 'daily');
+    } else {
+      reloadActive();
+    }
+  };
   BRANCHES = await api('/api/branches').catch(()=>[]);
   ['sel-branch','up-branch','na-branch','nm-branch'].forEach(id=>{
     const el=document.getElementById(id); if(!el) return;
