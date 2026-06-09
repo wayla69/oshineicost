@@ -182,7 +182,7 @@ def _ktc_settlement(raw: bytes) -> tuple[str, list[dict], int]:
         lm = _KTC_TYPE_LINE.match(line.strip())
         if not lm:
             continue
-        merchant_no, typ, gross, fee, _vat, net = lm.groups()
+        merchant_no, typ, gross, fee, vat, net = lm.groups()
         if not settle:
             skipped += 1
             continue
@@ -192,8 +192,9 @@ def _ktc_settlement(raw: bytes) -> tuple[str, list[dict], int]:
             "txn_count":  0,
             "gross_amount":  _to_float(gross),
             "refund_amount": 0.0,
-            "mdr_fee":       _to_float(fee),
-            "net_amount":    _to_float(net),
+            "mdr_fee":       _to_float(fee),     # commission ex-VAT
+            "vat_amount":    _to_float(vat),     # VAT on the commission
+            "net_amount":    _to_float(net),     # gross − fee − VAT (what the bank credits)
             "acquirer":   "KTC",
             "terminal_id": "",
             "merchant_id": merchant_no,
@@ -231,14 +232,15 @@ def _kbank_cc(raw: bytes) -> tuple[str, list[dict], int]:
                 continue
             settle = _parse_thai_date(dm.group(1))
             mid = _KB_CC_MID.search(txt)
-            count, gross, fee, _vat, net = tm.groups()
+            count, gross, fee, vat, net = tm.groups()
             rows.append({
                 "settlement_date": settle,
                 "card_type":  "",                       # KBank reports credit+debit combined
                 "txn_count":  int(count),
                 "gross_amount":  _to_float(gross),
                 "refund_amount": 0.0,
-                "mdr_fee":       _to_float(fee),
+                "mdr_fee":       _to_float(fee),     # commission ex-VAT
+                "vat_amount":    _to_float(vat),     # VAT on the commission
                 "net_amount":    _to_float(net),
                 "acquirer":   "KBANK",
                 "terminal_id": "",
@@ -391,6 +393,11 @@ def _grab_daily(raw: bytes) -> tuple[list[dict], int]:
                 if len(nums) < 2:
                     skipped += 1
                     continue
+                # Grab's "ค่าคอมมิชชันและภาษีทั้งหมด" bundles the 7% VAT in. Split it
+                # out so fee/VAT report separately (matches the IM tax invoice exactly:
+                # comm_incl_vat / 1.07 = fee, remainder = VAT). net_payout is unchanged.
+                comm_incl_vat = abs(sum(n for n in nums if n < 0))
+                fee = round(comm_incl_vat / 1.07, 2)
                 rows.append({
                     "order_date":      current_date,
                     "order_id":        order_id,
@@ -398,7 +405,8 @@ def _grab_daily(raw: bytes) -> tuple[list[dict], int]:
                     "order_type":      "GrabFood" if order_id.startswith("GF") else "GrabMart",
                     "order_status":    "Completed",
                     "food_amount":     nums[0],
-                    "commission_amt":  abs(sum(n for n in nums if n < 0)),
+                    "commission_amt":  fee,                              # ex-VAT
+                    "vat_amount":      round(comm_incl_vat - fee, 2),    # the 7% VAT
                     "promo_deduct":    0.0,
                     "net_payout":      nums[-1],
                 })

@@ -2074,13 +2074,13 @@ async function loadFeeVat(){
   const tb=document.getElementById('fv-body'); tb.innerHTML='';
   if(!lines.length){ tb.innerHTML=`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('fv_empty')}</td></tr>`; return; }
   lines.forEach(l=>{
-    FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed};
+    FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed, vat_parsed:l.vat_parsed||0};
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
       <td class="text-right font-mono">${fmt(l.gross)}</td>
       <td class="text-right"><input class="inp w-24 text-right" id="fee-${l.id}" value="${l.fee??''}" placeholder="${fmt(l.fee_parsed)}"
             oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
-      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="0"
+      <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="${fmt(l.vat_parsed||0)}"
             oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
       <td class="text-right font-mono text-gray-600" id="net-${l.id}">${fmt(l.net)}</td>
       <td class="text-right"><span id="fvok-${l.id}" class="text-xs text-green-600"></span></td>`;
@@ -2092,7 +2092,7 @@ function recalcNet(src,id){
   const m=FV_LINE[id]; if(!m) return;
   const feeIn=document.getElementById('fee-'+id).value, vatIn=document.getElementById('vat-'+id).value;
   const fee = feeIn===''? m.fee_parsed : +feeIn;
-  const vat = vatIn===''? 0 : +vatIn;
+  const vat = vatIn===''? m.vat_parsed : +vatIn;
   document.getElementById('net-'+id).textContent = fmt(m.gross - m.other - fee - vat);
 }
 async function saveFeeVat(src,id){

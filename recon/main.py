@@ -90,9 +90,9 @@ def get_db():
 _MIGRATIONS = {
     "recon_bank_lines":    [("account_no", "TEXT")],
     "recon_cc_lines":      [("acquirer", "TEXT"), ("fee_manual", "REAL"), ("vat_manual", "REAL"),
-                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
+                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT"), ("vat_amount", "REAL")],
     "recon_grab_lines":    [("fee_manual", "REAL"), ("vat_manual", "REAL"),
-                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
+                            ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT"), ("vat_amount", "REAL")],
     "recon_lineman_lines": [("fee_manual", "REAL"), ("vat_manual", "REAL"),
                             ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
     "recon_discrepancies": [("category", "TEXT"), ("bank", "TEXT"), ("assigned_to", "TEXT")],
@@ -1180,9 +1180,9 @@ def list_lines(source: str, branch_id: int, period_month: str):
         raise HTTPException(400, f"source must be one of {sorted(_FEE_VAT_TABLE)}")
     table = _FEE_VAT_TABLE[source]
     spec = {
-        "grab":        ("order_date",      "order_id",  "food_amount",  "commission_amt", None,               "promo_deduct"),
+        "grab":        ("order_date",      "order_id",  "food_amount",  "commission_amt", "vat_amount",       "promo_deduct"),
         "lineman":     ("order_date",      "order_id",  "food_amount",  "commission_amt", "vat_on_commission","promo_deduct"),
-        "credit_card": ("settlement_date", "batch_no",  "gross_amount", "mdr_fee",        None,               None),
+        "credit_card": ("settlement_date", "batch_no",  "gross_amount", "mdr_fee",        "vat_amount",       None),
     }[source]
     date_col, ref_col, gross_col, fee_col, vat_col, promo_col = spec
     out = []
@@ -1210,6 +1210,7 @@ def list_lines(source: str, branch_id: int, period_month: str):
                 "fee":        r["fee_manual"],
                 "vat":        r["vat_manual"],
                 "fee_parsed": round(float(r[fee_col] or 0), 2),
+                "vat_parsed": round(float(r[vat_col] or 0) if vat_col else 0.0, 2),
                 "other":      round(refund + promo, 2),   # non-fee deductions → client live-recompute
                 "net":        round(gross - refund - fee - vat - promo, 2),
             })
@@ -1543,14 +1544,14 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
         tot = {"gross": 0.0, "fee": 0.0, "vat": 0.0, "promo": 0.0, "refund": 0.0, "net": 0.0}
         feerows = []
         for r in cc_l:
-            fee, _ = _eff_fee_vat(r, "mdr_fee", None); vat = r["vat_manual"] or 0.0
+            fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
             gross = float(r["gross_amount"] or 0); refund = float(r["refund_amount"] or 0)
             net = gross - refund - fee - vat
             tot["gross"] += gross; tot["fee"] += fee; tot["vat"] += vat; tot["refund"] += refund; tot["net"] += net
             feerows.append(("CREDIT " + (r["acquirer"] or ""), gross, refund, fee, vat, 0.0, net,
                             "MDR" + (" (แก้มือ)" if r["fee_manual"] is not None else "")))
         for r in gr_l:
-            fee, _ = _eff_fee_vat(r, "commission_amt", None); vat = r["vat_manual"] or 0.0
+            fee, vat = _eff_fee_vat(r, "commission_amt", "vat_amount")
             gross = float(r["food_amount"] or 0); promo = float(r["promo_deduct"] or 0)
             net = gross - fee - vat - promo
             tot["gross"] += gross; tot["fee"] += fee; tot["vat"] += vat; tot["promo"] += promo; tot["net"] += net

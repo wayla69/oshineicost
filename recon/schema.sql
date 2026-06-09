@@ -53,11 +53,12 @@ CREATE TABLE IF NOT EXISTS recon_cc_lines (
     txn_count       INTEGER DEFAULT 0,
     gross_amount    REAL DEFAULT 0,
     refund_amount   REAL DEFAULT 0,
-    mdr_fee         REAL DEFAULT 0,   -- Merchant Discount Rate fee
-    net_amount      REAL DEFAULT 0,   -- gross - refund - mdr_fee
+    mdr_fee         REAL DEFAULT 0,   -- Merchant Discount Rate fee (ex-VAT)
+    vat_amount      REAL DEFAULT 0,   -- VAT on the fee, parsed from the statement
+    net_amount      REAL DEFAULT 0,   -- gross - refund - mdr_fee - vat_amount
     acquirer        TEXT,             -- 'KTB','KBANK','KTC' (→ POS credit-by-acquirer)
     fee_manual      REAL,             -- staff-entered fee (overrides mdr_fee when set)
-    vat_manual      REAL,             -- staff-entered VAT on fee
+    vat_manual      REAL,             -- staff-entered VAT (overrides vat_amount when set)
     fee_vat_by      TEXT,
     fee_vat_at      TEXT,
     terminal_id     TEXT,
@@ -83,11 +84,12 @@ CREATE TABLE IF NOT EXISTS recon_grab_lines (
     order_status    TEXT,             -- 'Completed','Cancelled','Refunded'
     food_amount     REAL DEFAULT 0,
     commission_rate REAL,
-    commission_amt  REAL DEFAULT 0,
+    commission_amt  REAL DEFAULT 0,   -- commission ex-VAT
+    vat_amount      REAL DEFAULT 0,   -- VAT 7% on the commission (Grab bundles it; we split it out)
     promo_deduct    REAL DEFAULT 0,
-    net_payout      REAL DEFAULT 0,   -- food_amount - commission - promo
+    net_payout      REAL DEFAULT 0,   -- food_amount - commission - vat - promo
     fee_manual      REAL,             -- staff-entered fee (overrides commission_amt when set)
-    vat_manual      REAL,             -- staff-entered VAT on commission
+    vat_manual      REAL,             -- staff-entered VAT (overrides vat_amount when set)
     fee_vat_by      TEXT,
     fee_vat_at      TEXT,
     payout_date     TEXT,             -- 'YYYY-MM-DD' when Grab transfers to bank

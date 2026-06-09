@@ -133,13 +133,13 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
         WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
         acq = r["acquirer"] or _provider_acquirer(r["provider"])
-        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
         net = gross - float(r["refund_amount"] or 0) - fee - vat
         add(("CREDIT", acq), "recon_cc_lines", r["id"], gross, net)
 
     # Delivery reports: gross (food) vs net (after effective fee/VAT/promo); Completed only
-    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", "vat_amount"),
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
         for r in conn.execute(f"""
             SELECT * FROM {table}
@@ -492,12 +492,12 @@ def _external_buckets_daily(conn, branch_id, period_month):
         WHERE l.branch_id=? AND l.match_status!='manual' AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
         acq = r["acquirer"] or _provider_acquirer(r["provider"])
-        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
         add(r["settlement_date"], "CREDIT", acq, gross,
             gross - float(r["refund_amount"] or 0) - fee - vat)
 
-    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", "vat_amount"),
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
         for r in conn.execute(f"""
             SELECT * FROM {table}
@@ -901,12 +901,12 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
             add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
-        fee, vat = _eff_fee_vat(r, "mdr_fee", None)
+        fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
         add(r["branch_id"], "CREDIT", r["acquirer"], gross,
             gross - float(r["refund_amount"] or 0) - fee - vat)
 
-    for cat, table, vat_col in (("GRAB", "recon_grab_lines", None),
+    for cat, table, vat_col in (("GRAB", "recon_grab_lines", "vat_amount"),
                                 ("LINEMAN", "recon_lineman_lines", "vat_on_commission")):
         for r in conn.execute(
             f"SELECT * FROM {table} WHERE order_status='Completed' AND match_status!='manual' AND order_date=?", (day,)):

@@ -327,7 +327,11 @@ def test_ktc_settlement_pdf_totals():
     prov, rows, skipped = _ktc_settlement(_udon("006_0170570924_260501-RTxInv-02.pdf"))
     assert prov == "KTC" and len(rows) == 8 and skipped == 0
     assert abs(sum(r["gross_amount"] for r in rows) - 40902.45) < 0.01
+    assert abs(sum(r["mdr_fee"]      for r in rows) -   927.49) < 0.01
+    assert abs(sum(r["vat_amount"]   for r in rows) -    64.94) < 0.01   # VAT captured, not dropped
     assert abs(sum(r["net_amount"]   for r in rows) - 39910.02) < 0.01
+    # net ties to gross − fee − VAT
+    assert all(abs(r["gross_amount"] - r["mdr_fee"] - r["vat_amount"] - r["net_amount"]) < 0.01 for r in rows)
 
 
 def test_kbank_cc_pdf_one_row_per_settlement_date():
@@ -336,7 +340,10 @@ def test_kbank_cc_pdf_one_row_per_settlement_date():
     assert prov == "KBANK" and len(rows) >= 5
     # one settlement per date; 05-01 net ties to the KBank statement sales credit
     by_date = {r["settlement_date"]: r for r in rows}
-    assert abs(by_date["2026-05-01"]["net_amount"] - 34758.35) < 0.01
+    r1 = by_date["2026-05-01"]
+    assert abs(r1["net_amount"] - 34758.35) < 0.01
+    assert abs(r1["mdr_fee"] - 688.77) < 0.01 and abs(r1["vat_amount"] - 48.21) < 0.01
+    assert abs(r1["gross_amount"] - r1["mdr_fee"] - r1["vat_amount"] - r1["net_amount"]) < 0.01
 
 
 def test_grab_daily_pdf_multi_day_split():
@@ -345,8 +352,9 @@ def test_grab_daily_pdf_multi_day_split():
     assert skipped == 0 and len(rows) >= 4
     # the bundle spans several days — orders must carry their own page's date
     assert len({r["order_date"] for r in rows}) > 1
-    for r in rows:                       # net == food - commission on every order
-        assert abs(r["food_amount"] - r["commission_amt"] - r["net_payout"]) < 0.01
+    for r in rows:                       # net == food - fee - VAT on every order
+        assert abs(r["food_amount"] - r["commission_amt"] - r["vat_amount"] - r["net_payout"]) < 0.01
+        assert r["vat_amount"] > 0       # VAT split out of the bundled commission
 
 
 # ── endpoint auth + validation ────────────────────────────────────────────────
