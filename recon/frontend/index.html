@@ -2020,6 +2020,7 @@ async function renderCouponSeries(){
     <tfoot><tr class="font-semibold"><td class="py-2">รวม</td><td></td><td class="py-2 text-right font-mono">${fmt(d.total)}</td></tr></tfoot></table>`;
 }
 
+const PAYOUT_CATLBL = {BAYPOINT:'BAY Point', GRAB:'Grab', LINEMAN:'Line Man', CREDIT:'บัตรเครดิต'};
 const PAYOUT_BADGE = {matched:'b-ok', mismatch:'b-err', awaiting_payout:'b-warn', ext_only:'b-warn'};
 const PAYOUT_KEY   = {matched:'p_matched', mismatch:'p_mismatch', awaiting_payout:'p_awaiting', ext_only:'p_extra'};
 const payoutLbl = s => t(PAYOUT_KEY[s]||'p_matched');
@@ -2032,7 +2033,7 @@ function renderPayouts(payouts){
     div.style.cursor='pointer'; div.title=t('pm_open');
     div.onclick=()=>openPayoutMatch(p.category);
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
-        <div class="font-semibold text-gray-800">${p.category} ${t('payout_word')} <span class="text-gray-300">›</span></div>
+        <div class="font-semibold text-gray-800">${PAYOUT_CATLBL[p.category]||p.category} ${t('payout_word')} <span class="text-gray-300">›</span></div>
         <span class="badge ${PAYOUT_BADGE[p.status]||'b-mut'}">${payoutLbl(p.status)}</span></div>
       <div class="grid grid-cols-3 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">${t('l_report_net')}</div><div class="font-mono">${fmt(p.report_net)}</div></div>
@@ -2047,7 +2048,7 @@ function renderPayouts(payouts){
 async function openPayoutMatch(cat){
   if(!SESSION) return;
   openDrawer('payoutmatch');
-  document.getElementById('pm-scope').textContent = `${SESSION.branch_name} · ${SESSION.period_month} · ${cat}`;
+  document.getElementById('pm-scope').textContent = `${SESSION.branch_name} · ${SESSION.period_month} · ${PAYOUT_CATLBL[cat]||cat}`;
   const body=document.getElementById('pm-body'); body.innerHTML=`<div class="text-center text-gray-400 py-6">${t('loading')}</div>`;
   let all=null; try{ all=await api(`/api/payout-matching?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`); }catch(e){}
   const d=(all||{})[cat];

@@ -133,6 +133,8 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
         WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
     """, (branch_id, period_month)):
         acq = r["acquirer"] or _provider_acquirer(r["provider"])
+        if acq == "BAYPOINT":          # loyalty reimbursement — no POS tender, reconciled 2-way vs bank
+            continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         gross = float(r["gross_amount"] or 0)
         net = gross - float(r["refund_amount"] or 0) - fee - vat
@@ -249,6 +251,16 @@ def payout_reconciliation(conn, branch_id, period_month):
             status = "ext_only"
         rows.append({"category": cat, "report_net": net, "bank_payout": pay,
                      "variance": round(pay - net, 2), "status": status})
+
+    # BAY Point reimbursement has no GRAB_PAYOUT-style channel (it arrives as a
+    # plain transfer), so derive its card from the amount-matched view.
+    bp = payout_matching(conn, branch_id, period_month).get("BAYPOINT")
+    if bp and (bp["net_total"] > TOL_ABS or bp["payout_total"] > TOL_ABS):
+        net, pay = round(bp["net_total"], 2), round(bp["payout_total"], 2)
+        status = ("awaiting_payout" if bp["awaiting_total"] > TOL_ABS
+                  else "matched" if abs(pay - net) <= TOL_ABS else "mismatch")
+        rows.append({"category": "BAYPOINT", "report_net": net, "bank_payout": pay,
+                     "variance": round(pay - net, 2), "status": status})
     return rows
 
 
@@ -263,6 +275,7 @@ _PAYOUT_CANDIDATE_CHANNELS = {
     "GRAB":    ("GRAB_PAYOUT", "TRANSFER"),
     "LINEMAN": ("LINEMAN_PAYOUT", "TRANSFER"),
     "CREDIT":  ("CC_SETTLE", "TRANSFER"),
+    "BAYPOINT": ("TRANSFER",),          # Krungsri point reimbursement lands as a bank transfer
 }
 
 
@@ -281,6 +294,9 @@ def _payout_net_by_day(conn, branch_id, period_month):
     for r in conn.execute(
         "SELECT * FROM recon_cc_lines WHERE branch_id=? AND strftime('%Y-%m',settlement_date)=?",
         (branch_id, period_month)):
+        if r["acquirer"] == "BAYPOINT":          # point reimbursement → its own stream, net = gross
+            add("BAYPOINT", r["settlement_date"], float(r["net_amount"] or 0))
+            continue
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
         add("CREDIT", r["settlement_date"],
             float(r["gross_amount"] or 0) - float(r["refund_amount"] or 0) - fee - vat)

@@ -196,6 +196,41 @@ def test_payout_matching_combines_consecutive_days(client):
     assert p["amount"] == 300 and p["payout_date"] == "2026-06-09"
 
 
+def test_bay_point_parses_and_ties_to_bank():
+    """BAY Point (Krungsri loyalty reimbursement) parses under credit_card as a
+    BAYPOINT settlement, is kept OUT of the POS-credit lanes, and ties 2-way to
+    the KBANK transfer of the same amount."""
+    import glob
+    bay = [f for f in glob.glob(str(_UDON / "*.pdf")) if "BAY" in f]
+    if not bay:
+        pytest.skip("BAY Point sample not present")
+    from recon.parsers.pdf_formats import _bay_point, _looks_like_bay_point
+    raw = open(bay[0], "rb").read()
+    assert _looks_like_bay_point(raw)
+    prov, rows, _ = _bay_point(raw)
+    assert prov == "BAYPOINT" and len(rows) == 1
+    r = rows[0]
+    assert r["acquirer"] == "BAYPOINT" and abs(r["net_amount"] - 1700.0) < 0.01 and r["mdr_fee"] == 0.0
+
+    # end-to-end: ties to the KBANK transfer, and does NOT pollute CREDIT lanes
+    import recon.main as m, sqlite3 as sq, tempfile, pathlib, os
+    from fastapi.testclient import TestClient
+    from recon.matcher import payout_matching, category_reconciliation
+    db = pathlib.Path(tempfile.mkdtemp()) / "b.db"
+    c = sq.connect(db); c.execute("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY,name TEXT,branch_type TEXT,active INTEGER)")
+    c.execute("INSERT INTO branches VALUES(25,'อุดร','master',1)"); c.commit(); c.close()
+    m._DB_PATH = db; os.environ.pop("OSHINEI_SEED_TOKEN", None)
+    with TestClient(m.app) as cl:
+        for st, raw2 in [("credit_card", raw), (_udon and "bank", _udon("UDN_Statements KB_SA_05.2569.pdf"))]:
+            cl.post(f"/api/uploads/{st}/confirm", files={"file": ("x.pdf", raw2, "application/pdf")},
+                    data={"branch_id": 25, "period_month": "2026-05"})
+        with m.get_db() as conn:
+            bp = payout_matching(conn, 25, "2026-05")["BAYPOINT"]
+            cats, _ = category_reconciliation(conn, 25, "2026-05")
+    assert abs(bp["net_total"] - 1700) < 0.01 and abs(bp["payout_total"] - 1700) < 0.01
+    assert not any(r["bank"] == "BAYPOINT" for r in cats)   # excluded from POS-credit lanes
+
+
 def test_payout_matching_real_grab_ties_to_transfers():
     """Real Udon: each Grab net day matches the next-day bank transfer; net total
     equals payout total with nothing awaiting."""

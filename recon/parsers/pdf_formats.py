@@ -263,6 +263,49 @@ def _kbank_channel(desc: str) -> str:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# BAY Point — Krungsri loyalty-point reimbursement (Payment Advice)  → recon_cc_lines
+# ══════════════════════════════════════════════════════════════════════════════
+# Customers redeem Krungsri points (booked as a Coupon/discount on POS, not a
+# tender), and Krungsri reimburses the merchant — one payment run (Media Date)
+# crediting the bank. So there is no POS-tender leg: we store it as an acquirer
+# 'BAYPOINT' settlement that reconciles 2-way against the bank deposit.
+_BAY_MEDIA  = re.compile(r"Media Date\s*:\s*(\d{2}/\d{2}/\d{4})")
+_BAY_SUMMARY = re.compile(r"Summary[^\n]*?:\s*\d+\s+([\d,]+\.\d{2})\s+(\d+)\s+([\d,]+\.\d{2})")
+_BAY_MID    = re.compile(r"by MID\s*:\s*(\d+)")
+
+
+def _looks_like_bay_point(raw: bytes) -> bool:
+    txt = _full_text(raw)
+    return "KRUNGSRIAYUDHYA" in txt and ("Payment Advice" in txt or "Payment Point" in txt)
+
+
+def _bay_point(raw: bytes) -> tuple[str, list[dict], int]:
+    txt = _full_text(raw)
+    md = _BAY_MEDIA.search(txt)
+    sm = _BAY_SUMMARY.search(txt)
+    mid = _BAY_MID.search(txt)
+    if not (md and sm):
+        return "BAYPOINT", [], 0
+    settle = _parse_thai_date(md.group(1))
+    total  = _to_float(sm.group(3))
+    rows = [{
+        "settlement_date": settle,
+        "card_type":  "POINT",
+        "txn_count":  int(sm.group(2)),
+        "gross_amount":  total,
+        "refund_amount": 0.0,
+        "mdr_fee":       0.0,            # full reimbursement, no fee
+        "vat_amount":    0.0,
+        "net_amount":    total,
+        "acquirer":   "BAYPOINT",
+        "terminal_id": "",
+        "merchant_id": mid.group(1) if mid else "",
+        "batch_no":   "",
+    }]
+    return "BAYPOINT", rows, 0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # #6  KTB savings-account statement (CordiaNew cid digits)  → recon_bank_lines
 # ══════════════════════════════════════════════════════════════════════════════
 # After cid→digit repair the layout is:
@@ -427,6 +470,8 @@ def detect_and_parse(source_type: str, raw: bytes):
             if _looks_like_ktb_statement(raw):
                 return _ktb_statement(raw)
         elif source_type == "credit_card":
+            if _looks_like_bay_point(raw):
+                return _bay_point(raw)
             if _looks_like_ktc_settlement(raw):
                 return _ktc_settlement(raw)
             if _looks_like_kbank_cc(raw):
