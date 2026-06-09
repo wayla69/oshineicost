@@ -13275,13 +13275,13 @@ def buffet_gp_export(
     if month_to:    params["month_to"]   = month_to
     params["granularity"] = granularity
 
-    # Build query string and call internal function
-    from fastapi.testclient import TestClient
-    # Direct call to avoid HTTP overhead
-    gp_data = buffet_gp(
+    # buffet_gp is @ttl_cache-wrapped → a direct (in-process) call returns a JSON
+    # Response, NOT a dict. Parse its body. (Falls back to dict if ever un-cached.)
+    gp_resp = buffet_gp(
         branch=branch, month_from=month_from,
         month_to=month_to, granularity=granularity,
     )
+    gp_data = _json.loads(gp_resp.body) if hasattr(gp_resp, "body") else gp_resp
 
     wb  = openpyxl.Workbook()
     HDR = Font(bold=True, color="FFFFFF")
