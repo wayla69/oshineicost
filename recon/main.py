@@ -565,13 +565,45 @@ async def preview_upload(
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
     prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
+    detected = _detect_branch_from_rows(source_type, rows)   # by bank account # / acquirer MID
     return {
         "provider":     prov,
         "row_count":    len(rows),
         "skipped_rows": skipped,   # data rows dropped for an unparseable date
         "preview":      rows[:50],
         "columns":      list(rows[0].keys()) if rows else [],
+        **detected,                # detected_branch_id / detected_branch_name / detected_key
     }
+
+
+def _detect_branch_from_rows(source_type: str, rows: list) -> dict:
+    """Auto-attribute an upload to a branch from the identifiers inside it:
+    a bank statement's account number (recon_bank_account) or an acquirer
+    settlement's merchant MID (recon_acquirer_mid). Returns {} if no unambiguous
+    match (the operator's chosen branch then stands)."""
+    if not rows:
+        return {}
+    key, sql = None, None
+    if source_type == "bank":
+        key = next((r.get("account_no") for r in rows if r.get("account_no")), None)
+        sql = "SELECT branch_id FROM recon_bank_account WHERE account_no=? AND COALESCE(active,1)=1"
+    elif source_type == "credit_card":
+        key = next((r.get("merchant_id") for r in rows if r.get("merchant_id")), None)
+        sql = "SELECT branch_id FROM recon_acquirer_mid WHERE merchant_id=? AND COALESCE(active,1)=1"
+    if not key:
+        return {}
+    key = str(key).strip()
+    try:
+        with get_db() as conn:
+            hit = conn.execute(sql, (key,)).fetchone()
+            if not hit:
+                return {}
+            name = conn.execute("SELECT name FROM branches WHERE branch_id=?", (hit["branch_id"],)).fetchone()
+            return {"detected_branch_id": hit["branch_id"],
+                    "detected_branch_name": name["name"] if name else None,
+                    "detected_key": key}
+    except sqlite3.OperationalError:
+        return {}
 
 
 @app.post("/api/uploads/{source_type}/confirm", dependencies=[Depends(require_write_token)])

@@ -49,6 +49,17 @@ def _open(raw: bytes):
     return pdfplumber.open(io.BytesIO(raw))
 
 
+# Bank account number on a statement header, e.g. "เลขที่บัญชีเงินฝาก 057-3-49826-7"
+# / (KTB) "เลขทีบัญชี 017-0-57092-4". Used to auto-attribute the upload to a branch
+# via recon_bank_account.
+_ACCT_RE = re.compile(r"บัญชี[^\d]{0,14}(\d{3}-\d-\d{4,6}-\d)")
+
+
+def _extract_account(txt: str) -> str:
+    m = _ACCT_RE.search(txt or "")
+    return m.group(1) if m else ""
+
+
 def _full_text(raw: bytes, decid: bool = False) -> str:
     with _open(raw) as pdf:
         parts = [(p.extract_text() or "") for p in pdf.pages]
@@ -106,7 +117,9 @@ def _kbank_statement(raw: bytes) -> tuple[str, list[dict], int]:
     skipped = 0
     prev_balance: float | None = None
 
-    for line in _full_text(raw).splitlines():
+    txt = _full_text(raw)
+    acct = _extract_account(txt)
+    for line in txt.splitlines():
         m = _KB_DATE_PREFIX.match(line)
         if not m:
             continue
@@ -147,6 +160,7 @@ def _kbank_statement(raw: bytes) -> tuple[str, list[dict], int]:
             "credit":      credit,
             "balance":     balance,
             "ref_no":      "",
+            "account_no":  acct,
         })
     return "kbank", rows, skipped
 
@@ -326,6 +340,7 @@ def _ktb_statement(raw: bytes) -> tuple[str, list[dict], int]:
     rows, skipped = [], 0
     prev_balance: float | None = None
     txt = _full_text(raw, decid=True)
+    acct = _extract_account(txt)
 
     # Seed opening balance from "ยอดคงเหลือยกมา <balance>".
     for line in txt.splitlines():
@@ -367,6 +382,7 @@ def _ktb_statement(raw: bytes) -> tuple[str, list[dict], int]:
             "credit":      credit,
             "balance":     balance,
             "ref_no":      "",
+            "account_no":  acct,
         })
     return "ktb", rows, skipped
 

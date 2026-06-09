@@ -972,7 +972,7 @@ const I18N = {
     // upload + lane modals
     m_upload:"อัปโหลดเอกสาร", m_source:"ประเภทเอกสาร", m_period:"เดือน",
     m_provider:"ผู้ให้บริการ (ธนาคาร/ผู้รับบัตร เช่น KTB, KBANK, KTC)", m_provider_ph:"เว้นว่างเพื่อตรวจอัตโนมัติ",
-    m_file:"ไฟล์ (.xlsx / .csv / .pdf)", m_file_multi:"เลือกได้หลายไฟล์ (เช่น Grab/Line Man ไฟล์ละวัน) — ยืนยันครั้งเดียวอัปทั้งหมด", btn_preview:"ดูตัวอย่าง", btn_confirm:"ยืนยัน", btn_add:"เพิ่ม",
+    m_file:"ไฟล์ (.xlsx / .csv / .pdf)", m_file_multi:"เลือกได้หลายไฟล์ (เช่น Grab/Line Man ไฟล์ละวัน) — ยืนยันครั้งเดียวอัปทั้งหมด", up_detected:"ระบุสาขาอัตโนมัติจากเลขบัญชี/MID", btn_preview:"ดูตัวอย่าง", btn_confirm:"ยืนยัน", btn_add:"เพิ่ม",
     src_bank:"รายการเดินบัญชีธนาคาร", src_cc:"สรุปยอดบัตรเครดิต", src_grab:"รายงาน Grab", src_lineman:"รายงาน Line Man",
     lane_detail:"รายละเอียด", lane_amount:"จำนวนเงิน", loading:"กำลังโหลด…",
     up_uploads:"เอกสารที่อัปโหลด", up_allbranch:"ทุกสาขา",
@@ -1094,7 +1094,7 @@ const I18N = {
     // upload + lane modals
     m_upload:"Upload", m_source:"Source", m_period:"Period",
     m_provider:"Provider (bank/acquirer, e.g. KTB, KBANK, KTC)", m_provider_ph:"auto-detect if blank",
-    m_file:"File (.xlsx / .csv / .pdf)", m_file_multi:"Multiple files allowed (e.g. one Grab/Line Man file per day) — one Confirm uploads them all", btn_preview:"Preview", btn_confirm:"Confirm", btn_add:"Add",
+    m_file:"File (.xlsx / .csv / .pdf)", m_file_multi:"Multiple files allowed (e.g. one Grab/Line Man file per day) — one Confirm uploads them all", up_detected:"Branch auto-detected from account/MID", btn_preview:"Preview", btn_confirm:"Confirm", btn_add:"Add",
     src_bank:"Bank Statement", src_cc:"Credit Card Settlement", src_grab:"Grab Report", src_lineman:"Line Man Report",
     lane_detail:"Detail", lane_amount:"Amount", loading:"Loading…",
     up_uploads:"Uploads", up_allbranch:"all branches",
@@ -2225,7 +2225,15 @@ async function previewUpload(){ const src=document.getElementById('up-source').v
   try{ const r=await api(`/api/uploads/${src}/preview`,{method:'POST',body:upFormFor(files[0])});
     const p=document.getElementById('up-preview'); p.classList.remove('hidden');
     const multi = files.length>1 ? `<div class="text-indigo-600 mb-1">📎 ${files.length} ไฟล์ที่เลือก — ดูตัวอย่างไฟล์แรก, กดยืนยันจะอัปทั้งหมด</div>` : '';
-    p.innerHTML=multi+`<div class="font-semibold mb-1">${files[0].name}: ${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+
+    // auto-detect branch from the doc's account #/MID → select it + flag
+    let det='';
+    if(r.detected_branch_id){
+      const bs=document.getElementById('up-branch');
+      const matched = String(bs.value)===String(r.detected_branch_id);
+      bs.value=r.detected_branch_id;
+      det=`<div class="mt-1 ${matched?'text-green-600':'text-indigo-600'}">🏠 ${t('up_detected')}: <b>${r.detected_branch_name||r.detected_branch_id}</b> <span class="text-gray-400">(${r.detected_key})</span></div>`;
+    }
+    p.innerHTML=multi+`<div class="font-semibold mb-1">${files[0].name}: ${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+det+
       r.preview.slice(0,4).map(row=>Object.entries(row).slice(0,6).map(([k,v])=>`<span class="text-gray-400">${k}:</span>${v}`).join('  ')).join('<br>');
     document.getElementById('up-confirm').disabled=false;
   }catch(e){ toast('Parse error: '+e.message,'err'); }

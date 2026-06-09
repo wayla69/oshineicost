@@ -279,6 +279,31 @@ def test_ktc_point_split_by_mid(client):
     assert kp[0]["status"] == "matched" and kp[0]["bank_in_credit"] is True
 
 
+def test_bank_account_seed_and_branch_autodetect(client):
+    """Seed recon_bank_account from the template, then a bank statement carrying
+    that account number auto-detects its branch on preview."""
+    from recon.seed_acquirer_mids import _accounts, seed_sqlite
+    from recon.parsers.pdf_formats import _extract_account
+    # account extraction from statement-style text
+    assert _extract_account("เลขที่บัญชีเงินฝาก 057-3-49826-7") == "057-3-49826-7"
+    assert _extract_account("เลขทีบัญชี 017-0-57092-4 ประเภท ออมทรัพย์") == "017-0-57092-4"
+    # the seeder reads KTB + KBANK account columns
+    csv = str(Path(__file__).resolve().parents[2] / "recon_accounts_mids_template.csv")
+    if not Path(csv).exists():
+        pytest.skip("template CSV not present")
+    accts = list(_accounts(csv))
+    assert any(b == "KTB" for _, b, _, _ in accts) and any(b == "KBANK" for _, b, _, _ in accts)
+
+    # branch auto-detect from a bank row's account_no
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("INSERT INTO recon_bank_account(branch_id,bank,account_no,account_name,active) VALUES(4,'KBANK','057-3-49826-7','x',1)")
+    c.commit(); c.close()
+    det = main._detect_branch_from_rows("bank", [{"account_no": "057-3-49826-7", "credit": 100}])
+    assert det.get("detected_branch_id") == 4
+    # unknown account → no detection (operator's branch stands)
+    assert main._detect_branch_from_rows("bank", [{"account_no": "999-9-99999-9"}]) == {}
+
+
 def test_point_pos_total_graceful_without_sync(client):
     """No coupon-payment table yet (sync not run) → 0, not a crash."""
     from recon.matcher import point_pos_total
