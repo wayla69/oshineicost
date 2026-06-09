@@ -47,6 +47,7 @@ from .parsers import (
     parse_grab_report,
     parse_lineman_report,
 )
+from .parsers.loader import to_parseable_xlsx
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
@@ -183,7 +184,7 @@ RECON_START_DAY   = RECON_START_MONTH + "-01"
 # locally → writes are open, so the gate is invisible in dev.
 
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024          # 15 MB
-_ALLOWED_EXT     = (".xlsx", ".xls")
+_ALLOWED_EXT     = (".xlsx", ".xls", ".csv", ".pdf")
 _PERIOD_RE       = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
@@ -216,7 +217,7 @@ def require_write_token(token: str = Query(""), x_upload_token: str = Header(Non
 
 async def _read_upload(file: UploadFile) -> bytes:
     if not (file.filename or "").lower().endswith(_ALLOWED_EXT):
-        raise HTTPException(415, "Only .xlsx/.xls files are accepted.")
+        raise HTTPException(415, "Only .xlsx/.xls/.csv/.pdf files are accepted.")
     raw = await file.read()
     if not raw:
         raise HTTPException(422, "Empty file.")
@@ -503,8 +504,10 @@ _LINE_TABLE = {
 }
 
 
-def _parse(source_type: SourceType, raw: bytes, provider: str):
-    """Returns (provider, rows, skipped_rows)."""
+def _parse(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
+    """Returns (provider, rows, skipped_rows). CSV/PDF inputs are normalised to an
+    in-memory .xlsx first so the domain parsers run unchanged."""
+    raw = to_parseable_xlsx(raw, filename)
     if source_type == "bank":
         prov, rows, skipped = parse_bank_statement(raw, provider or None)
     elif source_type == "credit_card":
@@ -518,9 +521,9 @@ def _parse(source_type: SourceType, raw: bytes, provider: str):
     return prov, rows, skipped
 
 
-def _parse_or_422(source_type: SourceType, raw: bytes, provider: str):
+def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
     try:
-        return _parse(source_type, raw, provider)
+        return _parse(source_type, raw, provider, filename)
     except HTTPException:
         raise
     except Exception as exc:
@@ -539,7 +542,7 @@ async def preview_upload(
     raw = await _read_upload(file)
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
-    prov, rows, skipped = _parse_or_422(source_type, raw, provider)
+    prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
     return {
         "provider":     prov,
         "row_count":    len(rows),
@@ -578,7 +581,7 @@ async def confirm_upload(
                      f"'{dup['file_name']}' on {dup['uploaded_at']}. "
                      "Delete that upload first if you mean to replace it.")
 
-        prov, rows, skipped = _parse_or_422(source_type, raw, provider)
+        prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
 
         cur = conn.execute("""
             INSERT INTO recon_uploads

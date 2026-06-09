@@ -769,7 +769,7 @@
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="c_branch">Branch</label><select id="up-branch" class="inp w-full mt-1"></select></div>
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_period">Period</label><input id="up-period" type="month" class="inp w-full mt-1"></div>
       <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_provider">Provider (bank/acquirer, e.g. KTB, KBANK, KTC)</label><input id="up-provider" class="inp w-full mt-1" placeholder="auto-detect if blank" data-i18n-ph="m_provider_ph"></div>
-      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_file">File (.xlsx)</label><input id="up-file" type="file" accept=".xlsx,.xls" class="w-full text-sm mt-1"></div>
+      <div><label class="text-xs font-semibold text-gray-500 uppercase" data-i18n="m_file">File (.xlsx / .csv / .pdf)</label><input id="up-file" type="file" accept=".xlsx,.xls,.csv,.pdf" class="w-full text-sm mt-1"></div>
     </div>
     <div id="up-preview" class="hidden mt-4 bg-gray-50 rounded-lg p-3 text-xs"></div>
     <div class="flex justify-end gap-3 mt-6">
@@ -928,7 +928,7 @@ const I18N = {
     // upload + lane modals
     m_upload:"อัปโหลดเอกสาร", m_source:"ประเภทเอกสาร", m_period:"เดือน",
     m_provider:"ผู้ให้บริการ (ธนาคาร/ผู้รับบัตร เช่น KTB, KBANK, KTC)", m_provider_ph:"เว้นว่างเพื่อตรวจอัตโนมัติ",
-    m_file:"ไฟล์ (.xlsx)", btn_preview:"ดูตัวอย่าง", btn_confirm:"ยืนยัน", btn_add:"เพิ่ม",
+    m_file:"ไฟล์ (.xlsx / .csv / .pdf)", btn_preview:"ดูตัวอย่าง", btn_confirm:"ยืนยัน", btn_add:"เพิ่ม",
     src_bank:"รายการเดินบัญชีธนาคาร", src_cc:"สรุปยอดบัตรเครดิต", src_grab:"รายงาน Grab", src_lineman:"รายงาน Line Man",
     lane_detail:"รายละเอียด", lane_amount:"จำนวนเงิน", loading:"กำลังโหลด…",
     up_uploads:"เอกสารที่อัปโหลด", up_allbranch:"ทุกสาขา",
@@ -1046,7 +1046,7 @@ const I18N = {
     // upload + lane modals
     m_upload:"Upload", m_source:"Source", m_period:"Period",
     m_provider:"Provider (bank/acquirer, e.g. KTB, KBANK, KTC)", m_provider_ph:"auto-detect if blank",
-    m_file:"File (.xlsx)", btn_preview:"Preview", btn_confirm:"Confirm", btn_add:"Add",
+    m_file:"File (.xlsx / .csv / .pdf)", btn_preview:"Preview", btn_confirm:"Confirm", btn_add:"Add",
     src_bank:"Bank Statement", src_cc:"Credit Card Settlement", src_grab:"Grab Report", src_lineman:"Line Man Report",
     lane_detail:"Detail", lane_amount:"Amount", loading:"Loading…",
     up_uploads:"Uploads", up_allbranch:"all branches",

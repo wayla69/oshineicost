@@ -142,6 +142,78 @@ def test_grab_parser_skips_bad_dates_and_returns_count():
     assert len(rows) == 1 and skipped == 1
 
 
+# ── input loader: CSV / PDF → parseable xlsx ──────────────────────────────────
+
+def test_loader_csv_feeds_bank_parser():
+    """A Thai-BOM CSV with BE dates and Thai headers round-trips through the
+    loader into the bank parser, with provider auto-detect and skip counting."""
+    from recon.parsers.loader import to_parseable_xlsx
+    from recon.parsers import parse_bank_statement
+    csv_text = (
+        "Kasikorn Bank\n"
+        "วันที่,รายการ,รายการถอน,รายการฝาก,ยอดคงเหลือ\n"
+        "01/06/2569,QR พร้อมเพย์,0,1500.50,1500.50\n"   # BE 2569 → 2026; QR channel
+        "NOT-A-DATE,junk,0,0,0\n"                          # unparseable date → skipped
+    )
+    xlsx = to_parseable_xlsx(csv_text.encode("utf-8-sig"), "kbank.csv")
+    prov, rows, skipped = parse_bank_statement(xlsx)
+    assert prov == "kbank"
+    assert len(rows) == 1 and skipped == 1
+    assert rows[0]["txn_date"] == "2026-06-01"
+    assert rows[0]["channel"] == "QR"
+    assert rows[0]["credit"] == 1500.50
+
+
+def test_loader_csv_sniffs_semicolon_delimiter():
+    from recon.parsers.loader import to_parseable_xlsx
+    xlsx = to_parseable_xlsx(b"a;b;c\n1;2;3\n4;5;6\n", "x.csv")
+    ws = openpyxl.load_workbook(io.BytesIO(xlsx)).active
+    assert list(ws.iter_rows(values_only=True))[0] == ("a", "b", "c")
+
+
+def test_loader_pdf_table_feeds_bank_parser():
+    """A ruled-table PDF (what real bank statements use) extracts column-aligned
+    rows. Skipped when reportlab isn't installed to build the fixture."""
+    reportlab = pytest.importorskip("reportlab")
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from recon.parsers.loader import to_parseable_xlsx
+    from recon.parsers import parse_bank_statement
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4)
+    data = [
+        ["Siam Commercial Bank", "", "", "", ""],
+        ["transaction date", "description", "withdrawal", "deposit", "balance"],
+        ["01/06/2569", "transfer", "0", "2000", "2000"],
+        ["03/06/2569", "grab payout", "0", "850.75", "2850.75"],
+    ]
+    t = Table(data, colWidths=[90, 110, 70, 70, 70])
+    t.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.black)]))
+    doc.build([t])
+
+    xlsx = to_parseable_xlsx(buf.getvalue(), "scb.pdf")
+    prov, rows, skipped = parse_bank_statement(xlsx)
+    assert prov == "scb"
+    assert len(rows) == 2
+    assert rows[0]["credit"] == 2000.0
+    assert rows[1]["credit"] == 850.75
+    assert rows[1]["channel"] == "GRAB_PAYOUT"
+
+
+def test_loader_rejects_unextractable_pdf():
+    """An image-only / empty PDF yields a user-facing error rather than 0 rows."""
+    from recon.parsers.loader import to_parseable_xlsx
+    # Minimal valid PDF with no extractable text.
+    blank = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+             b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+             b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]>>endobj\n"
+             b"trailer<</Root 1 0 R>>\n%%EOF")
+    with pytest.raises(Exception):
+        to_parseable_xlsx(blank, "scan.pdf")
+
+
 # ── endpoint auth + validation ────────────────────────────────────────────────
 
 def test_master_only_and_period_validation(client):
