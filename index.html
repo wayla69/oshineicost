@@ -3675,6 +3675,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <div id="tab-discounts" style="display:none">
   <div id="disc-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
+  <!-- Discount risk Alert Center -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🚩 ส่วนลดที่ต้องระวัง (Alert Center)</h2>
+      <span id="disc-alert-meta" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">สัญญาณเสี่ยงรั่ว/ลดมั่ว เรียงตามความสำคัญ · 🔴 ด่วน · 🟠 เฝ้าระวัง · คลิกแถวเพื่อดูบิล</p>
+    <div id="disc-alert-list"></div>
+  </div>
+
   <!-- Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary -->
   <div class="card p-5 mb-5">
     <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
@@ -20913,6 +20923,36 @@ async function loadCouponDrill() {
 // Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary.
 // disc% uses the reconstructed pre-discount base (matches discount_bills), so it
 // is accurate for buffet bills and intentionally differs from the legacy chart's %.
+// Discount risk Alert Center — prioritized flags, each drillable to the matching bills
+async function loadDiscountAlerts(params) {
+  const el = document.getElementById('disc-alert-list');
+  const meta = document.getElementById('disc-alert-meta');
+  if (!el) return;
+  el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังตรวจ…</p>';
+  const d = await fetch(`${API}/api/analysis/discount_alerts?${params}`).then(r => r.json()).catch(() => null);
+  if (!d) { el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; if (meta) meta.textContent = ''; return; }
+  const flags = d.flags || [];
+  if (meta) meta.textContent = flags.length ? `🔴 ${d.counts.high} ด่วน · 🟠 ${d.counts.med} เฝ้าระวัง` : '';
+  if (!flags.length) {
+    el.innerHTML = '<div class="px-3 py-2 rounded-lg text-sm" style="background:#f0fdf4;border-left:4px solid #22c55e;color:#166534">✓ ไม่พบสัญญาณส่วนลดผิดปกติในช่วงนี้</div>';
+    return;
+  }
+  const ICON = { cash_heavy: '💵', untyped: '🏷️', cashier: '🧑‍💼', repeat: '🔁', late: '🌙' };
+  el.innerHTML = flags.map(f => {
+    const dot = f.severity === 'high' ? '#dc2626' : '#f59e0b';
+    const opts = Object.assign({ sort: 'discount' }, f.drill || {});
+    if (!opts.title) opts.title = 'บิลส่วนลด · ' + (opts.branch || '');
+    const drillAttr = f.drill ? `onclick='openDiscountBills(${JSON.stringify(opts).replace(/'/g, "&#39;")})'` : '';
+    const clk = f.drill ? 'cursor-pointer hover:bg-slate-50' : '';
+    return `<div class="flex items-start gap-2 py-2 px-2 border-b border-slate-50 rounded ${clk}" ${drillAttr}>
+      <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none;margin-top:5px"></span>
+      <span style="flex:none">${ICON[f.type] || '•'}</span>
+      <span class="text-sm text-slate-700" style="flex:1">${esc(f.text)}</span>
+      ${f.drill ? '<span class="text-[10px] text-slate-300" style="margin-top:3px">🔍</span>' : ''}
+    </div>`;
+  }).join('');
+}
+
 // Payment method × discount — cash+heavy leakage flag + payment mix on discount bills
 async function loadPaymentDiscount(params) {
   const sumEl = document.getElementById('paydisc-summary');
@@ -21055,6 +21095,7 @@ async function loadDiscountsTab() {
   if (getMonthTo())   _leakP.set('month_to', getMonthTo());
   loadDiscountLeakage(_leakP);
   loadPaymentDiscount(new URLSearchParams(_leakP));
+  loadDiscountAlerts(new URLSearchParams(_leakP));
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   const o = d.overall || {};
 

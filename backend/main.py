@@ -6805,6 +6805,127 @@ def analysis_payment_discount(
     }
 
 
+# ---------------------------------------------------------------------------
+# /api/analysis/discount_alerts  -  consolidated discount-risk alert engine
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/discount_alerts")
+@ttl_cache
+def analysis_discount_alerts(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Prioritized discount-risk flags so leakage/fraud is seen without drilling:
+      • cash_heavy — branches with big cash + heavy-discount (≥20%) totals
+      • untyped    — branches discounting mostly without a reason (control gap)
+      • cashier    — cashiers whose disc% is far above the chain median
+      • repeat     — same cashier + exact discount amount + cash, repeated (manual-discount abuse)
+      • late       — discounts concentrated after 22:00 by branch
+    Reconstructed pre-discount base; cash signals need sale_payment (degrade gracefully).
+    Each flag carries a `drill` so the UI can open the matching discount_bills view.
+    """
+    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    TH = {"cash_pct": 20, "cash_min": 50000, "untyped_pct": 80, "untyped_min": 50000,
+          "cashier_mult": 2.0, "cashier_floor": 5.0, "cashier_min_disc": 30000,
+          "repeat_min": 30, "late_from": 22, "late_min_bills": 40, "late_min_share": 25.0}
+    filters = ["b.name != 'ALL'", "st.discount > 0"]
+    params: dict = {}
+    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+    flags = []
+    def thb(x): return f"{(x or 0):,.0f}"
+    with get_db() as con:
+        has_pay = bool(con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_payment'").fetchone())
+        dom = ("WITH dom AS (SELECT branch_id, receipt_no, "
+               "CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code, "
+               "ROW_NUMBER() OVER (PARTITION BY branch_id,receipt_no ORDER BY amount DESC) rn FROM sale_payment)")
+
+        # 1) cash + heavy discount, by branch
+        if has_pay:
+            for r in con.execute(f"""{dom}
+                SELECT b.name br, COUNT(*) bills, ROUND(SUM(st.discount)) disc
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
+                {where} AND d.code='Cash' AND {base}>0 AND st.discount*1.0/{base} >= {TH['cash_pct']/100.0}
+                GROUP BY b.name HAVING SUM(st.discount) >= {TH['cash_min']} ORDER BY disc DESC LIMIT 6""", params):
+                flags.append({"type": "cash_heavy", "severity": "high" if (r["disc"] or 0) >= 200000 else "med",
+                    "branch": r["br"], "title": "เงินสด + ลดหนัก",
+                    "text": f"{r['br']}: บิลเงินสดที่ลด ≥{TH['cash_pct']}% — {r['bills']:,} บิล · ฿{thb(r['disc'])}",
+                    "amount": r["disc"], "drill": {"branch": r["br"], "payment": "Cash"}})
+
+        # 2) untyped-reason share high, by branch (from pos_discount_month)
+        if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_discount_month'").fetchone():
+            rf = ["b.name!='ALL'"]; rp: dict = {}
+            _month_range_filter(rf, rp, month_from, month_to, month, col="dm.period_month")
+            for r in con.execute(f"""
+                SELECT b.name br, ROUND(SUM(dm.amount)) tot,
+                       ROUND(SUM(CASE WHEN COALESCE(dm.reason_id,0)=0 THEN dm.amount ELSE 0 END)) unty
+                FROM pos_discount_month dm JOIN branches b ON b.branch_id=dm.branch_id
+                WHERE {' AND '.join(rf)} GROUP BY b.name""", rp):
+                tot, unty = (r["tot"] or 0), (r["unty"] or 0)
+                if tot >= TH["untyped_min"] and unty >= TH["untyped_min"] and 100.0*unty/tot >= TH["untyped_pct"]:
+                    pct = round(100.0*unty/tot, 1)
+                    flags.append({"type": "untyped", "severity": "med", "branch": r["br"], "title": "ลดไม่ระบุเหตุผล",
+                        "text": f"{r['br']}: ลดโดยไม่เลือกเหตุผล {pct}% (฿{thb(unty)}) — คุมนโยบายไม่ได้",
+                        "amount": unty, "drill": {"branch": r["br"]}})
+
+        # 3) cashier disc% outliers (>= 2× branch-cashier median, floor 5%)
+        crows = con.execute(f"""
+            SELECT st.cashier ca, b.name br, COUNT(*) bills, ROUND(SUM(st.discount)) disc,
+                   ROUND(100.0*SUM(st.discount)/NULLIF(SUM({base}),0),1) pct
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} AND st.cashier<>'' GROUP BY st.cashier, b.name HAVING SUM(st.discount) >= {TH['cashier_min_disc']}""",
+            params).fetchall()
+        pcts = sorted([r["pct"] for r in crows if r["pct"] is not None])
+        med = pcts[len(pcts)//2] if pcts else 0
+        thr = max(med*TH["cashier_mult"], TH["cashier_floor"])
+        ncash = 0
+        for r in sorted(crows, key=lambda x: -(x["pct"] or 0)):
+            if (r["pct"] or 0) >= thr and ncash < 6:
+                ncash += 1
+                flags.append({"type": "cashier", "severity": "high" if (r["pct"] or 0) >= thr*1.5 else "med",
+                    "branch": r["br"], "cashier": r["ca"], "title": "แคชเชียร์ลดเกินเกณฑ์",
+                    "text": f"{r['ca']} ({r['br']}): ลด {r['pct']}% ของยอด (เกณฑ์ {thr:.1f}%) · ฿{thb(r['disc'])}",
+                    "amount": r["disc"], "drill": {"branch": r["br"], "cashier": r["ca"]}})
+
+        # 4) repeat exact-amount cash discounts by the same cashier (manual-discount abuse)
+        if has_pay:
+            for r in con.execute(f"""{dom}
+                SELECT b.name br, st.cashier ca, st.discount amt, COUNT(*) n, ROUND(SUM(st.discount)) tot
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
+                {where} AND d.code='Cash' AND st.cashier<>''
+                GROUP BY b.name, st.cashier, st.discount HAVING COUNT(*) >= {TH['repeat_min']}
+                ORDER BY n DESC LIMIT 5""", params):
+                flags.append({"type": "repeat", "severity": "high" if r["n"] >= 80 else "med",
+                    "branch": r["br"], "cashier": r["ca"], "title": "ลดเงินสดค่าเดิมซ้ำ",
+                    "text": f"{r['ca']} ({r['br']}): ลดเงินสด ฿{thb(r['amt'])} ซ้ำ {r['n']:,} ครั้ง (฿{thb(r['tot'])})",
+                    "amount": r["tot"], "drill": {"branch": r["br"], "cashier": r["ca"], "payment": "Cash", "amount": r["amt"]}})
+
+        # 5) late-hour discount clustering, by branch
+        for r in con.execute(f"""
+            SELECT b.name br,
+                   SUM(CASE WHEN CAST(strftime('%H',st.sold_at) AS INT) >= {TH['late_from']} THEN 1 ELSE 0 END) late_bills,
+                   COUNT(*) bills,
+                   ROUND(SUM(CASE WHEN CAST(strftime('%H',st.sold_at) AS INT) >= {TH['late_from']} THEN st.discount ELSE 0 END)) late_disc
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} GROUP BY b.name""", params):
+            lb, tb = (r["late_bills"] or 0), (r["bills"] or 1)
+            share = 100.0*lb/tb
+            if lb >= TH["late_min_bills"] and share >= TH["late_min_share"]:
+                flags.append({"type": "late", "severity": "med", "branch": r["br"], "title": "ลดช่วงดึก",
+                    "text": f"{r['br']}: ลดหลัง {TH['late_from']}:00 — {lb:,} บิล ({share:.0f}% ของบิลลด) · ฿{thb(r['late_disc'])}",
+                    "amount": r["late_disc"], "drill": {"branch": r["br"]}})
+
+    rank = {"high": 0, "med": 1}
+    flags.sort(key=lambda f: (rank.get(f["severity"], 2), -(f.get("amount") or 0)))
+    return {
+        "flags": flags, "thresholds": TH, "has_payment": has_pay,
+        "counts": {"high": sum(1 for f in flags if f["severity"] == "high"),
+                   "med":  sum(1 for f in flags if f["severity"] == "med"), "total": len(flags)},
+    }
+
+
 # ===========================================================================
 # NEW ADVANCED FEATURES  -  period compare, heatmap, anomalies, health, search
 # ===========================================================================
