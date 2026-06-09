@@ -163,6 +163,9 @@
   @keyframes drawerIn{ from{transform:translateX(36px);opacity:.3} to{transform:none;opacity:1} }
   #drawer-backdrop{ position:fixed; inset:0; background:rgba(15,23,42,.38); z-index:58; }
   body.drawer-locked{ overflow:hidden; }
+  /* status/action chips on the daily hub */
+  .hub-chip{ display:inline-flex; align-items:center; gap:4px; padding:5px 11px; border-radius:999px;
+    font-size:13px; font-weight:600; border:none; line-height:1.4; }
 </style>
 </head>
 <body>
@@ -196,6 +199,8 @@
       <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">To Review</span>
       <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
     </button>
+
+    <div class="side-section" data-i18n="sec_reports">Reports</div>
     <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
       <span class="icon">⚖️</span><span data-i18n="tab_monthly">By Category</span>
     </button>
@@ -376,6 +381,7 @@
         <div class="card flex items-center gap-4 flex-wrap">
           <div><div class="text-xs text-gray-400" data-i18n="l_daily_hdr">Daily reconciliation</div><div id="daily-title" class="font-semibold text-gray-800"></div></div>
           <div id="daily-pending" class="ml-auto text-sm"></div>
+          <div id="daily-hub" class="flex flex-wrap gap-2 w-full"></div>
         </div>
         <div class="card overflow-x-auto">
           <div class="flex items-center justify-between mb-1">
@@ -880,7 +886,7 @@ const I18N = {
   th: {
     subtitle:"กระทบยอดรายได้", master_branches:"สาขาบริษัท",
     tab_overview:"ภาพรวม", tab_board:"บอร์ดรายวันทุกสาขา", tab_daily:"กระทบยอดรายวัน", tab_monthly:"สรุปตามประเภท", tab_uploads:"อัปโหลดเอกสาร",
-    sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_system:"ระบบ",
+    sec_daily:"งานประจำวัน", sec_docs:"เอกสารและตรวจสอบ", sec_reports:"รายงาน & วิเคราะห์", sec_system:"ระบบ",
     board_hd:"รายได้รายวัน — ทุกสาขา", board_hint:"คลิกช่องเพื่อกระทบยอดสาขานั้น · ตัวเลขคือเงินรับ POS รวม VAT (ตรงกับยอดในเอกสารธนาคาร/บัตร)", board_report:"📄 รายงาน PDF (ทุกสาขา)",
     board_reporting:"สาขาที่มีข้อมูล", board_total:"รวมทุกสาขา",
     bd_lg_matched:"ตรงกับเอกสาร", bd_lg_var:"มีส่วนต่าง", bd_lg_await:"รอเอกสาร", bd_lg_manual:"จับคู่เอง", bd_lg_none:"ไม่มีแหล่ง",
@@ -900,6 +906,7 @@ const I18N = {
     disc_hd:"รายการต่างสำหรับบัญชี", disc_sub:"เรียงตามส่วนต่างมากสุด",
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
+    hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
     pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
@@ -1000,7 +1007,7 @@ const I18N = {
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
     tab_overview:"Overview", tab_board:"Daily Board (all)", tab_daily:"Daily Reconcile", tab_monthly:"By Category", tab_uploads:"Documents",
-    sec_daily:"Daily work", sec_docs:"Documents & review", sec_system:"System",
+    sec_daily:"Daily work", sec_docs:"Documents & review", sec_reports:"Reports & analytics", sec_system:"System",
     board_hd:"Daily revenue — all branches", board_hint:"click a cell to reconcile that branch · figures are POS tender incl. VAT (matches bank/card statements)", board_report:"📄 Daily report PDF (all)",
     board_reporting:"Branches reporting", board_total:"All branches",
     bd_lg_matched:"matched to documents", bd_lg_var:"variance", bd_lg_await:"awaiting document", bd_lg_manual:"manual match", bd_lg_none:"no source",
@@ -1020,6 +1027,7 @@ const I18N = {
     disc_hd:"Discrepancies for accounting", disc_sub:"largest variance first",
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
+    hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
     pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
@@ -1744,7 +1752,27 @@ const LANE_FG   = {matched:'#15803d', variance:'#b91c1c', missing:'#b91c1c', pen
 const _CAT_ORDER = {CASH:0,QR:1,TRANSFER:2,CREDIT:3,GRAB:4,LINEMAN:5,COUPON:6};
 function _laneLabel(cat,bank){ return cat.slice(0,4)+(bank&&bank!=='NONE'?'·'+bank:''); }
 
+async function renderDailyHub(d){
+  const hub=document.getElementById('daily-hub'); if(!hub||!SESSION) return;
+  let matched=0, review=0, pending=0;
+  (d.days||[]).forEach(day=>(day.lanes||[]).forEach(l=>{
+    if(l.status==='matched'||l.status==='manual') matched++;
+    else if(l.status==='variance'||l.status==='missing') review++;
+    else if(l.status==='pending') pending++;
+  }));
+  let sugg=0, disc=review;
+  try{ sugg=((await api(`/api/suggestions?branch_id=${SESSION.branch_id}&period_month=${SESSION.period_month}`)).suggestions||[]).length; }catch(e){}
+  try{ disc=(await api(`/api/sessions/${SESSION.session_id}/discrepancies?resolution=pending`)).length; }catch(e){}
+  const chip=(bg,fg,txt,onclick)=>`<${onclick?'button':'span'} ${onclick?`onclick="${onclick}"`:''} class="hub-chip" style="background:${bg};color:${fg}${onclick?';cursor:pointer':''}">${txt}</${onclick?'button':'span'}>`;
+  hub.innerHTML =
+    chip('#dcfce7','#15803d',`✅ ${matched} ${t('hub_matched')}`)
+    + chip(disc?'#fee2e2':'#f1f5f9', disc?'#b91c1c':'#94a3b8', `⚠️ ${disc} ${t('hub_review')}`, "switchTab('discrepancies')")
+    + (sugg?chip('#e0e7ff','#4338ca',`💡 ${sugg} ${t('hub_sugg')}`,"switchTab('discrepancies')"):'')
+    + chip(pending?'#fef9c3':'#f1f5f9', pending?'#854d0e':'#94a3b8', `📄 ${pending} ${t('hub_pending')}`, "switchTab('uploads')");
+}
+
 function renderDailyBoard(d){
+  renderDailyHub(d);
   const ps = d.pending_summary || {coverage:{}};
   document.getElementById('daily-pending').innerHTML =
     `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} ${t('d_lane_days')}</span>
