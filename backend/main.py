@@ -6542,6 +6542,136 @@ def analysis_discount_composition(
     return {"bucket_keys": keys, "branches": out}
 
 
+# ---------------------------------------------------------------------------
+# /api/analysis/discount_leakage  -  per-branch discount KPI boxes + leakage summary
+# ---------------------------------------------------------------------------
+@app.get("/api/analysis/discount_leakage")
+@ttl_cache
+def analysis_discount_leakage(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """Per-branch discount KPI boxes for the 'Discounts & Leakage' view, plus a
+    cross-branch comparison and an 'abnormal usage' summary.
+
+    Always spans ALL branches (this view IS a cross-branch comparison), honouring
+    only the period filter. disc% uses the RECONSTRUCTED pre-discount base
+    ((total_inc_vat - service)/1.07 + discount) — the same base as discount_bills,
+    NOT food+drink+other_subtotal which undercounts buffet bills and overstates
+    disc% (see discount_bills for the rationale). So this %, by design, will not
+    match the legacy /api/analysis/discounts disc_pct_of_sales.
+    """
+    base_expr = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
+    filters = ["b.name != 'ALL'"]
+    params: dict = {}
+    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    where = "WHERE " + " AND ".join(filters)
+
+    with get_db() as con:
+        rows = con.execute(f"""
+            SELECT b.name AS branch,
+                   COUNT(*) AS total_tx,
+                   SUM(CASE WHEN st.discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
+                   ROUND(SUM(st.discount), 2) AS total_discount,
+                   ROUND(AVG(CASE WHEN st.discount > 0 THEN st.discount END), 0) AS avg_discount,
+                   ROUND(SUM({base_expr}), 2) AS gross_base
+            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+            {where}
+            GROUP BY b.name
+        """, params).fetchall()
+
+        # Per-branch top discount REASON (Sale.DiscountReasonId → DiscountSaleReason),
+        # staged into pos_discount_month by sync. Absent on older DBs → skip gracefully.
+        reasons_staged = bool(con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='pos_discount_month'").fetchone())
+        reason_rows = []
+        if reasons_staged:
+            rfilters = ["b.name != 'ALL'"]; rparams: dict = {}
+            _month_range_filter(rfilters, rparams, month_from, month_to, month, col="dm.period_month")
+            reason_rows = con.execute(f"""
+                SELECT b.name AS branch, COALESCE(dm.reason_id,0) AS reason_id,
+                       COALESCE(dr.reason_desc,
+                                CASE WHEN COALESCE(dm.reason_id,0)=0 THEN 'ไม่ระบุ (ไม่เลือกเหตุผล)'
+                                     ELSE 'รหัส '||dm.reason_id END) AS reason,
+                       ROUND(SUM(dm.amount)) AS amount, SUM(dm.bills) AS bills
+                FROM pos_discount_month dm JOIN branches b ON b.branch_id = dm.branch_id
+                LEFT JOIN pos_discount_reason dr ON dr.reason_id = dm.reason_id
+                WHERE {' AND '.join(rfilters)}
+                GROUP BY b.name, COALESCE(dm.reason_id,0), reason
+            """, rparams).fetchall()
+
+    # Build per-branch reason map: top reason (by amount) + 'untyped' share (the
+    # biggest controllable leak — cashier discounted without picking a reason).
+    by_reason: dict = {}
+    for r in reason_rows:
+        by_reason.setdefault(r["branch"], []).append(dict(r))
+    reason_top: dict = {}
+    for br, lst in by_reason.items():
+        tot = sum(x["amount"] or 0 for x in lst) or 0
+        top = max(lst, key=lambda x: x["amount"] or 0) if lst else None
+        untyped = next((x for x in lst if x["reason_id"] == 0), None)
+        reason_top[br] = {
+            "top_reason":        (top["reason"] if top else None),
+            "top_reason_amount": (top["amount"] if top else 0),
+            "top_reason_pct":    (round(100 * (top["amount"] or 0) / tot, 1) if (top and tot) else 0),
+            "untyped_pct":       (round(100 * (untyped["amount"] or 0) / tot, 1) if (untyped and tot) else 0),
+        }
+
+    branches = []
+    for r in rows:
+        d = dict(r)
+        gb = d.get("gross_base") or 0
+        d["disc_pct"]      = round(100.0 * (d.get("total_discount") or 0) / gb, 2) if gb > 0 else 0
+        d["discount_rate"] = round(100.0 * (d.get("discount_tx") or 0) / d["total_tx"], 1) if d["total_tx"] else 0
+        d.update(reason_top.get(d["branch"], {
+            "top_reason": None, "top_reason_amount": 0, "top_reason_pct": 0, "untyped_pct": 0}))
+        branches.append(d)
+
+    # Chain baseline (weighted): total discount / total pre-discount base, all branches.
+    chain_disc = sum(b.get("total_discount") or 0 for b in branches)
+    chain_base = sum(b.get("gross_base") or 0 for b in branches)
+    chain_tx   = sum(b.get("total_tx") or 0 for b in branches)
+    chain_dtx  = sum(b.get("discount_tx") or 0 for b in branches)
+    chain_pct  = round(100.0 * chain_disc / chain_base, 2) if chain_base > 0 else 0
+
+    # Abnormal = disc% clearly above the typical branch: >= 1.5× the branch median
+    # (floor 3% so nothing is flagged when everyone discounts lightly) AND above the
+    # chain average. Threshold is returned so the UI can show the rule.
+    pcts = sorted(b["disc_pct"] for b in branches if (b.get("gross_base") or 0) > 0)
+    median = pcts[len(pcts)//2] if pcts else 0
+    threshold = round(max(median * 1.5, 3.0), 2)
+    for b in branches:
+        b["vs_avg_pts"]     = round(b["disc_pct"] - chain_pct, 2)
+        b["ratio_vs_chain"] = round(b["disc_pct"] / chain_pct, 2) if chain_pct > 0 else None
+        b["is_abnormal"]    = (b.get("gross_base") or 0) > 0 and b["disc_pct"] >= threshold and b["disc_pct"] > chain_pct
+    branches.sort(key=lambda x: -x["disc_pct"])
+
+    abnormal = [b for b in branches if b["is_abnormal"]]
+    if abnormal:
+        parts = [f"{b['branch']} {b['disc_pct']:.1f}%"
+                 + (f" (×{b['ratio_vs_chain']:.1f} ของค่าเฉลี่ย)" if b["ratio_vs_chain"] else "")
+                 + (f", ส่วนใหญ่: {b['top_reason']}" if b.get("top_reason") else "")
+                 for b in abnormal[:6]]
+        headline = (f"🚩 {len(abnormal)} สาขาใช้ส่วนลดสูงผิดปกติ (เกิน {threshold:.1f}% ของยอดก่อนลด · "
+                    f"ค่าเฉลี่ยทุกสาขา {chain_pct:.1f}%): " + " · ".join(parts))
+    else:
+        headline = (f"✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ {threshold:.1f}% "
+                    f"(ค่าเฉลี่ยทุกสาขา {chain_pct:.1f}% ของยอดก่อนลด)")
+
+    return {
+        "chain": {"total_discount": round(chain_disc, 2), "gross_base": round(chain_base, 2),
+                  "disc_pct": chain_pct, "total_tx": chain_tx, "discount_tx": chain_dtx,
+                  "discount_rate": round(100.0 * chain_dtx / chain_tx, 1) if chain_tx else 0,
+                  "median_branch_pct": round(median, 2), "threshold_pct": threshold,
+                  "branch_count": len(branches)},
+        "branches": branches,
+        "abnormal_branches": [b["branch"] for b in abnormal],
+        "summary": headline,
+        "reasons_staged": reasons_staged,
+    }
+
+
 # ===========================================================================
 # NEW ADVANCED FEATURES  -  period compare, heatmap, anomalies, health, search
 # ===========================================================================

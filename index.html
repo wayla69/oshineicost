@@ -3675,6 +3675,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <div id="tab-discounts" style="display:none">
   <div id="disc-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
+  <!-- Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-baseline justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🏬 ส่วนลด &amp; จุดรั่วรายสาขา (Discounts &amp; Leakage by Branch)</h2>
+      <span id="disc-leak-meta" class="text-xs text-slate-400"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">% = ส่วนลดรวม ÷ ยอดขาย<b>ก่อนหักส่วนลด</b> (ฐานคำนวณจริง รวมค่าบุฟเฟต์ต่อหัว) · เทียบกับค่าเฉลี่ยทุกสาขา · 🚩 = ใช้ส่วนลดสูงผิดปกติ · คลิกกล่องเพื่อดูบิล</p>
+    <div id="disc-leak-summary" class="mb-4"></div>
+    <div id="disc-leak-boxes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3"></div>
+  </div>
+
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
     <div class="card p-5">
       <h2 class="section-title mb-3">แนวโน้ม % ส่วนลด</h2>
@@ -20847,6 +20858,62 @@ async function loadCouponDrill() {
   }).join('') || '<tr><td colspan="4" class="py-3 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
+// Per-branch Discounts & Leakage KPI boxes + abnormal-usage summary.
+// disc% uses the reconstructed pre-discount base (matches discount_bills), so it
+// is accurate for buffet bills and intentionally differs from the legacy chart's %.
+async function loadDiscountLeakage(params) {
+  const wrap  = document.getElementById('disc-leak-boxes');
+  const sumEl = document.getElementById('disc-leak-summary');
+  const meta  = document.getElementById('disc-leak-meta');
+  if (!wrap) return;
+  wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">กำลังโหลด…</div>';
+  const d = await fetch(`${API}/api/analysis/discount_leakage?${params}`).then(r => r.json()).catch(() => null);
+  if (!d || !Array.isArray(d.branches) || !d.branches.length) {
+    wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">ไม่มีข้อมูลส่วนลดในช่วงนี้</div>';
+    if (sumEl) { sumEl.removeAttribute('style'); sumEl.innerHTML = ''; }
+    if (meta) meta.textContent = '';
+    return;
+  }
+  const chain = d.chain || {};
+  const avg = chain.disc_pct || 0;
+
+  // Abnormal-usage summary banner — red if any branch flagged, green otherwise.
+  const hasAbn = (d.abnormal_branches || []).length > 0;
+  sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
+  sumEl.style.cssText = hasAbn
+    ? 'background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b'
+    : 'background:#f0fdf4;border-left:4px solid #22c55e;color:#166534';
+  sumEl.textContent = d.summary || '';
+
+  meta.textContent = `ค่าเฉลี่ยทุกสาขา ${avg.toFixed(1)}% · กลาง ${(chain.median_branch_pct||0).toFixed(1)}% · เกณฑ์ผิดปกติ ≥ ${(chain.threshold_pct||0).toFixed(1)}% · ${chain.branch_count||0} สาขา`
+    + (d.reasons_staged ? '' : ' · (ยังไม่มีข้อมูลประเภทส่วนลด)');
+
+  wrap.innerHTML = d.branches.map(b => {
+    const abn = b.is_abnormal;
+    const pct = b.disc_pct || 0;
+    const pctColor = abn ? '#dc2626' : (pct >= avg ? '#d97706' : '#16a34a');
+    const vs = b.vs_avg_pts || 0;
+    const vsColor = vs > 0 ? '#dc2626' : '#16a34a';
+    const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(1) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain : '–') + ' ค่าเฉลี่ย';
+    const reason = b.top_reason ? esc(b.top_reason) : '—';
+    const untyped = b.top_reason && b.top_reason.indexOf('ไม่ระบุ') >= 0;
+    const reasonColor = untyped ? '#b45309' : '#475569';
+    const reasonPct = b.top_reason_pct ? ` (${Math.round(b.top_reason_pct)}%)` : '';
+    return `<div class="card p-3 cursor-pointer hover:ring-2 hover:ring-indigo-200 ${abn ? 'ring-2 ring-red-300' : ''}"
+        ${abn ? 'style="background:#fff7f7"' : ''}
+        onclick="openDiscountBills({branch:'${jsAttr(b.branch)}', title:'บิลส่วนลด · ${jsAttr(b.branch)}'})" title="คลิกดูบิลส่วนลดของสาขานี้">
+      <div class="flex items-center justify-between">
+        <span class="font-semibold text-sm truncate">${abn ? '🚩 ' : ''}${esc(b.branch)}</span>
+        <span class="text-[10px] text-slate-300">🔍</span>
+      </div>
+      <p class="mt-1 font-bold" style="color:${pctColor};font-size:1.45rem;line-height:1.1">${pct.toFixed(1)}<span style="font-size:.8rem">%</span></p>
+      <p class="text-xs text-slate-500">ส่วนลดรวม <b>${fmt(b.total_discount||0)}</b> · ${fmtN(b.discount_tx||0)} บิล</p>
+      <p class="text-[11px] mt-0.5" style="color:${vsColor}">${vsTxt}</p>
+      <p class="text-[11px] mt-1 truncate" style="color:${reasonColor}" title="${reason}${reasonPct}">ประเภทเยอะสุด: <b>${reason}</b>${reasonPct}</p>
+    </div>`;
+  }).join('');
+}
+
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const params = new URLSearchParams();
@@ -20856,6 +20923,12 @@ async function loadDiscountsTab() {
 
   loadDiscountReasons(new URLSearchParams(params));
   loadCouponSeries(new URLSearchParams(params));
+  // Per-branch leakage view is a cross-branch comparison by design → ignore the
+  // branch filter, honour only the period range.
+  const _leakP = new URLSearchParams();
+  if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
+  if (getMonthTo())   _leakP.set('month_to', getMonthTo());
+  loadDiscountLeakage(_leakP);
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   const o = d.overall || {};
 
