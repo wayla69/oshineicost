@@ -378,6 +378,11 @@ def list_payment_map(needs_attention: int = 0):
             a = amounts.get(row["payment_code_norm"], {"amount": 0.0, "txn": 0})
             row["pos_amount"] = round(a["amount"], 2)
             row["pos_txn"]    = a["txn"]
+        if needs_attention:
+            # Only codes that actually carry money block reconciliation. Dormant
+            # seed codes (฿0, 0 txns) are mappable but not urgent — drop them here
+            # so the attention badge counts real work, not dead POS codes.
+            rows = [r for r in rows if r["pos_txn"] > 0 or r["pos_amount"] > 0]
         return rows
 
 
