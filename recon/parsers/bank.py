@@ -23,20 +23,16 @@ import openpyxl
 
 _CHANNEL_PATTERNS: list[tuple[re.Pattern, str]] = [
     # Generic / multi-bank
-    (re.compile(r"promptpay|พร้อมเพย์|QR CODE", re.I),        "QR"),
-    (re.compile(r"โอน|transfer|trf|สั่งจ่าย", re.I),          "TRANSFER"),
+    # SDCH = KTB Same-Day Clearing House (PromptPay/QR settlement)
+    (re.compile(r"promptpay|พร้อมเพย์|QR|QR CODE|SDCH", re.I), "QR"),
+    # IORSDT / NBSDT = KTB interbank credit transfers received
+    (re.compile(r"โอน|transfer|trf|สั่งจ่าย|IORSDT|NBSDT", re.I), "TRANSFER"),
     (re.compile(r"ฝาก|deposit|cash dep", re.I),                "CASH_DEP"),
     (re.compile(r"ค่าธรรมเนียม|fee|charge", re.I),            "FEE"),
-    (re.compile(r"edcsettle|credit card settle", re.I),         "CC_SETTLE"),
+    # SD Single credit = KTB single-day CC/acquirer settlement payout
+    (re.compile(r"edcsettle|credit card settle|SD Single credit", re.I), "CC_SETTLE"),
     (re.compile(r"grab|แกร็บ", re.I),                          "GRAB_PAYOUT"),
     (re.compile(r"line man|lineman|ไลน์แมน", re.I),            "LINEMAN_PAYOUT"),
-    # KTB-specific description codes (Krungthai Bank)
-    # SDCH = Same-Day Clearing House → PromptPay/QR settlement via KTB
-    (re.compile(r"\bSDCH\b", re.I),                            "QR"),
-    # IORSDT / NBSDT = interbank credit transfers received
-    (re.compile(r"\b(IORSDT|NBSDT)\b", re.I),                  "TRANSFER"),
-    # SD Single credit = KTB single-day credit card settlement payout
-    (re.compile(r"\bSD\s+Single\s+credit\b", re.I),            "CC_SETTLE"),
 ]
 
 
