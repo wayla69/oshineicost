@@ -1611,20 +1611,33 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         b["amount"] += amount
         b["net"]    += net
 
-    # Non-cash bank credits land on their own date; CASH_DEP belongs to the
-    # PREVIOUS day's sales (next-business-day deposit), so the board reads the
-    # day+1 deposits as this day's cash — same shift as the per-branch daily view.
-    next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+    # Cash: use the SAME per-branch lump matcher as the Daily view (channel-
+    # agnostic, T+1 / multi-day grouping) so the board is consistent everywhere.
+    # For each branch, the deposit matched to this POS day becomes the day's cash
+    # ext; the bank lines it claimed (often labelled QR/SDCH) are excluded from
+    # the QR/transfer columns below so they don't double-count as ext_only.
+    month = day[:7]
+    cash_consumed: set = set()
+    for bid in branches:
+        cm = cash_deposit_matching(conn, bid, month)
+        cash_consumed |= cm["consumed_ids"]
+        for g in cm["groups"]:
+            for j, dd in enumerate(g["days"]):
+                if dd["day"] == day:
+                    is_last = j == len(g["days"]) - 1
+                    share = dd["pos"] + (g["variance"] if is_last else 0.0)
+                    add(bid, "CASH", None, share, share)
+
+    # Non-cash bank credits land on their own date (skip cash-claimed lines).
     for r in conn.execute(
-        "SELECT branch_id, credit, channel FROM recon_bank_lines "
-        "WHERE credit>0 AND match_status NOT IN ('manual','excluded') AND txn_date=? AND channel!='CASH_DEP'", (day,)):
+        "SELECT id, branch_id, credit, channel FROM recon_bank_lines "
+        "WHERE credit>0 AND match_status NOT IN ('manual','excluded') "
+        "AND txn_date=? AND channel NOT IN ('CASH_DEP')", (day,)):
+        if r["id"] in cash_consumed:
+            continue
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if cat:
             add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
-    for r in conn.execute(
-        "SELECT branch_id, credit FROM recon_bank_lines "
-        "WHERE credit>0 AND match_status NOT IN ('manual','excluded') AND txn_date=? AND channel='CASH_DEP'", (next_day,)):
-        add(r["branch_id"], "CASH", None, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
