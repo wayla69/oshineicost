@@ -2270,6 +2270,10 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
     twhere = " AND ".join(tfilt)
     dbf = ""  # branch filter for the daily-sku side (by name via join)
     if branch: dbf = " AND b.name=:branch"
+    # fix A1: build group condition for the COGS/revenue query so it matches the customer query scope
+    _gcond_list: list = []; _gcond_params: dict = {}
+    _group_filter(_gcond_list, _gcond_params, group)
+    gcond = (" AND " + " AND ".join(_gcond_list)) if _gcond_list else ""
 
     with get_db() as con:
         maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
@@ -2293,8 +2297,8 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
                     FROM (SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source
                           FROM sales_sku_daily WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
-                    WHERE b.name!='ALL'{dbf} GROUP BY b.name""",
-                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {})}).fetchall():
+                    WHERE b.name!='ALL'{dbf}{gcond} GROUP BY b.name""",
+                {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {}), **_gcond_params}).fetchall():
                 cogs[r["branch"]] = r["cogs"] or 0
                 rev[r["branch"]]  = r["rev"] or 0
             return cust, cogs, rev, (s, e)
@@ -2343,7 +2347,12 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
     _group_filter(tfilt, tp, group)
     twhere = " AND ".join(tfilt)
     dbf = " AND b.name=:branch" if branch else ""
-    dbp = {"branch": branch} if branch else {}
+    # fix A2: propagate group filter into the COGS query so it matches the revenue query scope
+    _gcond_list2: list = []; _gcond_params2: dict = {}
+    _group_filter(_gcond_list2, _gcond_params2, group)
+    gcond2 = (" AND " + " AND ".join(_gcond_list2)) if _gcond_list2 else ""
+    dbp = ({"branch": branch} if branch else {})
+    dbp.update(_gcond_params2)
 
     with get_db() as con:
         maxday = con.execute("SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
@@ -2369,7 +2378,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
                     FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM sales_sku_daily
                           WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
-                    WHERE b.name!='ALL'{dbf}""",
+                    WHERE b.name!='ALL'{dbf}{gcond2}""",
                 {"s": s.isoformat(), "e": e.isoformat(), **dbp}).fetchone()
             rev = r["rev"] or 0; cogs = co["cogs"] or 0
             return {"revenue_ex_vat": rev, "customers": r["cust"] or 0, "discount": r["disc"] or 0,
@@ -6543,7 +6552,8 @@ def analysis_discount_composition(
     small markdowns vs heavy 50%+/free bills) and compare it month-over-month.
     Buckets mirror the discounts-tab pattern groups. Amounts are baht of discount.
     """
-    gross = "(st.food_subtotal + st.drink_subtotal + st.other_subtotal)"
+    # fix D2: use reconstructed pre-discount base to avoid overstating disc% on buffet bills
+    gross = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
     bucket = f"""CASE
         WHEN {gross} <= 0            THEN 'zero_gross'
         WHEN st.discount >= {gross}  THEN 'free'
