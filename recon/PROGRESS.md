@@ -41,6 +41,8 @@ classification is **config-driven, not regex**:
 | Master-only scope + write-auth gate + upload guards | ✅ Done |
 | Idempotent run-match; ENTERTAIN excluded; unmapped codes surfaced | ✅ Done |
 | Guided **Mapping Flow** (Setup) — per-payment-type stepper: type → bank chips → reconciling document, progress bar, deep links from every unmapped-code banner (`openMappingFlow`); needs_attention now includes PROMPTPAY in bank-required cats | ✅ Done 2026-06-10 |
+| **Cash deposit matching v2** — `cash_deposit_matching()` groups 1–4 consecutive POS-cash days → CASH_DEP credit (lag 0–3, incl. next-month rollover for day-31 cash); weekend lump deposits now match; daily lanes carry deposit trace (date/lag/combined); cash coverage falls back to bank coverage when statements have ZERO deposit lines → days read **missing** not eternal pending; `cash_summary` in /daily + red banner "ไม่พบการนำฝากเงินสด" (UDN May: POS cash ฿2.33M, deposits 0 — REAL finding, all 11 statements checked); cross-branch daily_board CASH column off-by-one fixed (now reads day+1 deposits) | ✅ Done 2026-06-10 |
+| **Upload usability** — empty statements (KBank CA "No Data") confirm cleanly with note "ไม่มีรายการในเอกสาร" + "ว่าง" badge (no more scary 0-row/422); confirm-time wrong-branch guard (doc's account#/MID vs chosen branch → 409); `PATCH /api/uploads/{id}/branch` + "ย้ายสาขา" button moves an upload + its lines (fix for live upload 23: UBN KTB statement sitting under UDN branch 25) | ✅ Done 2026-06-10 |
 
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +

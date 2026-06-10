@@ -476,6 +476,19 @@ def _grab_daily(raw: bytes) -> tuple[list[dict], int]:
 # Dispatcher
 # ══════════════════════════════════════════════════════════════════════════════
 
+def is_empty_statement(raw: bytes) -> bool:
+    """True when a PDF is a structurally valid statement with zero movements
+    (e.g. a KBank current-account month with 'No Data'). Lets the UI say
+    'เอกสารไม่มีรายการ' instead of presenting 0 rows as a parser failure."""
+    try:
+        txt = _full_text(raw)
+    except Exception:
+        return False
+    if not txt.strip():
+        return False
+    return ("No Data" in txt or "ไม่มีรายการ" in txt or "ไม่พบรายการ" in txt)
+
+
 def detect_and_parse(source_type: str, raw: bytes):
     """Return (provider, rows, skipped) when `raw` is a recognised special PDF for
     this source_type, else None (caller falls back to the generic grid loader)."""

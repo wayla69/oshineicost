@@ -396,6 +396,7 @@
           <div id="daily-pending" class="ml-auto text-sm"></div>
           <div id="daily-hub" class="flex flex-wrap gap-2 w-full"></div>
         </div>
+        <div id="daily-cash-alert" class="hidden"></div>
         <div class="card overflow-x-auto">
           <div class="flex items-center justify-between mb-1">
             <div class="font-semibold text-gray-700" data-i18n="daily_recon">Daily reconciliation — day × lane</div>
@@ -1017,6 +1018,14 @@ const I18N = {
     flow_iss_needs_bank:"ต้องเลือกธนาคาร", flow_iss_check_type:"ตรวจประเภท",
     flow_seeded:"ดึงรหัสใหม่ {n} รหัส", flow_not_found:"ไม่พบรหัส {c} ในตาราง — กด ⟳ ดึงรหัสใหม่จาก POS",
     flow_click_map:"คลิกรหัสเพื่อไปตั้งค่า",
+    cash_none_title:"ไม่พบการนำฝากเงินสดในบัญชีที่อัปโหลด",
+    cash_none_body:"เงินสด POS เดือนนี้รวม {pos} บาท แต่ statement ทุกใบไม่มีรายการฝากเงินสดเลย — ตรวจสอบว่าเงินสดถูกนำฝากเข้าบัญชีไหน แล้วอัปโหลด statement บัญชีนั้น หรือสอบถามสาขาว่านำฝากอย่างไร",
+    cash_partial_title:"เงินสด {n} วันยังไม่พบยอดนำฝาก",
+    cash_dep_sum:"ยอดฝากรวม", cash_matched_grp:"จับคู่แล้ว", cash_combined:"ฝากควบหลายวัน",
+    cash_ok:"เงินสดนำฝากครบ",
+    up_empty_badge:"ว่าง (ไม่มีรายการ)", up_move:"ย้ายสาขา",
+    up_move_prompt:"ย้ายอัปโหลดนี้ไปสาขา:", up_moved:"ย้ายสาขาเรียบร้อย — รายการ {n} แถวถูกย้ายตาม",
+    up_empty_note:"เอกสารถูกต้องแต่ไม่มีรายการ (บัญชีไม่มีความเคลื่อนไหวเดือนนี้)",
     flow_doc_CASH:"ยอดฝากเงินสดเข้าบัญชี (รายการฝากเงินสดใน statement)",
     flow_doc_QR:"statement ธนาคาร — เงินเข้า QR ของธนาคารนั้น",
     flow_doc_TRANSFER:"statement ธนาคาร — รายการโอนเข้า",
@@ -1167,6 +1176,14 @@ const I18N = {
     flow_iss_needs_bank:"needs a bank", flow_iss_check_type:"check the type",
     flow_seeded:"Picked up {n} new code(s)", flow_not_found:"Code {c} not in the map — press ⟳ Re-seed from POS",
     flow_click_map:"click a code to map it",
+    cash_none_title:"No cash deposits found in the uploaded accounts",
+    cash_none_body:"POS cash this month totals {pos} baht, but no statement contains a single cash-deposit line — find which account the cash is banked into and upload that statement, or ask the branch how cash is deposited.",
+    cash_partial_title:"{n} cash day(s) with no deposit found",
+    cash_dep_sum:"deposits total", cash_matched_grp:"matched", cash_combined:"multi-day lumps",
+    cash_ok:"cash fully banked",
+    up_empty_badge:"empty (no movements)", up_move:"Move branch",
+    up_move_prompt:"Move this upload to branch:", up_moved:"Branch updated — {n} lines moved with it",
+    up_empty_note:"Valid document with zero movements (account inactive this month)",
     flow_doc_CASH:"Cash-deposit lines in the bank statement",
     flow_doc_QR:"Bank statement — incoming QR credits of that bank",
     flow_doc_TRANSFER:"Bank statement — incoming transfers",
@@ -1952,6 +1969,7 @@ async function renderDailyHub(d){
 
 function renderDailyBoard(d){
   renderDailyHub(d);
+  renderCashAlert(d.cash_summary);
   const ps = d.pending_summary || {coverage:{}};
   document.getElementById('daily-pending').innerHTML =
     `<span class="badge ${ps.pending_lane_days?'b-warn':'b-ok'}">${ps.pending_lane_days||0} ${t('d_lane_days')}</span>
@@ -1987,9 +2005,10 @@ function renderDailyBoard(d){
     const cells=lanes.map(l=>{
       const o=byKey[`${l.category}|${l.bank}`];
       if(!o) return '<td class="px-1"></td>';
+      const depInfo = o.deposit_date ? ` · ฝากเข้า ${o.deposit_date}${o.deposit_combined?' (ฝากควบหลายวัน)':''}` : '';
       return `<td class="px-1 text-center">
         <span onclick="openDrill(SESSION.branch_id,{day:'${day.day}',category:'${o.category}',bank:'${o.bank}'},'daily')"
-          title="${o.category}${o.bank!=='NONE'?'·'+o.bank:''}: POS ${fmt(o.pos)} / ext ${fmt(o.ext)} (${o.status}) — click for lines"
+          title="${o.category}${o.bank!=='NONE'?'·'+o.bank:''}: POS ${fmt(o.pos)} / ext ${fmt(o.ext)} (${o.status})${depInfo} — click for lines"
           style="display:inline-block;min-width:30px;padding:2px 4px;border-radius:5px;cursor:pointer;font-weight:600;background:${LANE_CELL[o.status]||'#f1f5f9'};color:${LANE_FG[o.status]||'#475569'}">${LANE_SYM[o.status]||'·'}</span></td>`;
     }).join('');
     return `<tr data-day="${day.day}" style="${focus?'background:#fff7ed;outline:2px solid var(--brand)':''}">
@@ -2005,6 +2024,32 @@ function renderDailyBoard(d){
   if(FOCUS_DATE){ const fr=host.querySelector(`tr[data-day="${FOCUS_DATE}"]`);
     if(fr) fr.scrollIntoView({block:'center',behavior:'smooth'});
     else host.insertAdjacentHTML('afterbegin', `<div class="text-center text-amber-600 py-3">No activity on ${FOCUS_DATE}.</div>`); }
+}
+
+// ── Cash banking summary banner ───────────────────────────────────────────────
+// Three states: no deposits at all (loud red — POS cash never reached the bank),
+// partial (amber — some days unbanked), healthy (quiet mint chip).
+function renderCashAlert(cs){
+  const el=document.getElementById('daily-cash-alert'); if(!el) return;
+  if(!cs || !cs.pos_total){ el.classList.add('hidden'); el.innerHTML=''; return; }
+  el.classList.remove('hidden');
+  if(!cs.has_deposit_lines){
+    el.innerHTML=`<div class="card" style="background:#fbe3e3;border-color:#f3c1c1">
+      <div class="font-semibold" style="color:#bf5757">💵 ${t('cash_none_title')}</div>
+      <div class="text-sm mt-1" style="color:#9c4646">${t('cash_none_body')
+        .replace('{pos}', fmt(cs.pos_total))}</div></div>`;
+    return;
+  }
+  const un = cs.unmatched_days||0;
+  const dep = `${t('cash_dep_sum')}: ${fmt(cs.deposit_total)} · ${t('cash_matched_grp')}: ${cs.matched_groups}`
+    + (cs.combined_groups?` (${cs.combined_groups} ${t('cash_combined')})`:'');
+  if(un>0){
+    el.innerHTML=`<div class="card" style="background:#fdf0d9;border-color:#f0ddb8">
+      <div class="font-semibold" style="color:#a9722d">💵 ${t('cash_partial_title').replace('{n}', un)}</div>
+      <div class="text-sm mt-1" style="color:#8a5e26">POS ${fmt(cs.pos_total)} · ${dep}</div></div>`;
+  } else {
+    el.innerHTML=`<div class="text-sm"><span class="badge b-ok">💵 ${t('cash_ok')} — POS ${fmt(cs.pos_total)} · ${dep}</span></div>`;
+  }
 }
 
 function toggleVarBreakdown(day){
@@ -2425,14 +2470,32 @@ async function loadUploads(){
   const data = await api(q).catch(()=>[]);
   const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
   data.forEach(u=>{ const tr=document.createElement('tr');
+    const isEmpty = u.row_count===0 && /No Data|ไม่มีรายการ/.test(u.error_msg||'');
+    const rowsCell = isEmpty
+      ? `<span class="badge b-mut" title="${t('up_empty_note')}">${t('up_empty_badge')}</span>`
+      : (u.row_count===0 ? `<span class="badge b-warn" title="0 แถว — ตรวจไฟล์/parser">0 ⚠</span>` : u.row_count);
     tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
-      <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${u.row_count}</td>
+      <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${rowsCell}</td>
       <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
-      <td class="text-right"><button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline">${t('u_delete')}</button></td>`;
+      <td class="text-right whitespace-nowrap">
+        <button onclick="moveUpload(${u.upload_id},${u.branch_id})" class="text-xs hover:underline" style="color:#5b53b0">${t('up_move')}</button>
+        <button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline ml-2">${t('u_delete')}</button></td>`;
     tb.appendChild(tr);
   });
 }
 async function delUpload(id){ if(!confirm(t('toast_del_confirm')))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast(t('toast_updeleted'),'ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
+async function moveUpload(id, curBid){
+  const opts = BRANCHES.map(b=>`${b.branch_id}=${b.name}`).join('\n');
+  const pick = prompt(`${t('up_move_prompt')}\n${opts}`, String(curBid||''));
+  if(pick===null) return;
+  const bid = parseInt(pick,10);
+  if(!bid || bid===curBid){ return; }
+  try{
+    const r = await api(`/api/uploads/${id}/branch`,{method:'PATCH', json:{branch_id:bid}});
+    toast(t('up_moved').replace('{n}', r.moved_lines), 'ok');
+    loadUploads();
+  }catch(e){ toast(e.message,'err'); }
+}
 
 function openUploadModal(src){
   document.getElementById('upmodal').classList.remove('hidden');
@@ -2468,7 +2531,9 @@ async function previewUpload(){ const src=document.getElementById('up-source').v
       bs.value=r.detected_branch_id;
       det=`<div class="mt-1 ${matched?'text-green-600':'text-indigo-600'}">🏠 ${t('up_detected')}: <b>${r.detected_branch_name||r.detected_branch_id}</b> <span class="text-gray-400">(${r.detected_key})</span></div>`;
     }
-    p.innerHTML=multi+`<div class="font-semibold mb-1">${files[0].name}: ${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+det+
+    const emptyNote = r.empty_statement
+      ? `<div class="mt-1 badge b-mut">📄 ${t('up_empty_note')}</div>` : '';
+    p.innerHTML=multi+`<div class="font-semibold mb-1">${files[0].name}: ${r.row_count} rows · provider: ${r.provider}${r.skipped_rows?` · <span class="text-amber-600">${r.skipped_rows} skipped</span>`:''}</div>`+emptyNote+det+
       r.preview.slice(0,4).map(row=>Object.entries(row).slice(0,6).map(([k,v])=>`<span class="text-gray-400">${k}:</span>${v}`).join('  ')).join('<br>');
     document.getElementById('up-confirm').disabled=false;
   }catch(e){ toast('Parse error: '+e.message,'err'); }

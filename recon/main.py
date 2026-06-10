@@ -612,6 +612,10 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
     except HTTPException:
         raise
     except Exception as exc:
+        # A statement with zero movements (e.g. KBank CA 'No Data' month) has no
+        # table for any parser to find — that's a valid empty document, not an error.
+        if _is_empty_statement(raw, filename):
+            return (provider or "", [], 0)
         raise HTTPException(422, f"Parse error: {exc}")
 
 
@@ -635,8 +639,17 @@ async def preview_upload(
         "skipped_rows": skipped,   # data rows dropped for an unparseable date
         "preview":      rows[:50],
         "columns":      list(rows[0].keys()) if rows else [],
+        "empty_statement": _is_empty_statement(raw, file.filename) if not rows else False,
         **detected,                # detected_branch_id / detected_branch_name / detected_key
     }
+
+
+def _is_empty_statement(raw: bytes, filename: str | None) -> bool:
+    """Valid statement with zero movements (e.g. KBank CA 'No Data' month)."""
+    if not (filename or "").lower().endswith(".pdf"):
+        return False
+    from .parsers.pdf_formats import is_empty_statement
+    return is_empty_statement(raw)
 
 
 def _detect_branch_from_rows(source_type: str, rows: list) -> dict:
@@ -700,11 +713,24 @@ async def confirm_upload(
 
         prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
 
+        # Wrong-branch guard: if the document identifies its own branch (bank
+        # account # / acquirer MID in the registry) and it isn't the chosen one,
+        # refuse — this is exactly how a UBN statement ends up under UDN.
+        detected = _detect_branch_from_rows(source_type, rows)
+        det_bid = detected.get("detected_branch_id")
+        if det_bid and det_bid != branch_id:
+            raise HTTPException(
+                409, f"เอกสารนี้เป็นของสาขา '{detected.get('detected_branch_name')}' "
+                     f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก — "
+                     "เปลี่ยนสาขาให้ตรงก่อนยืนยัน")
+
+        note = "ไม่มีรายการในเอกสาร (No Data)" if (
+            not rows and _is_empty_statement(raw, file.filename)) else None
         cur = conn.execute("""
             INSERT INTO recon_uploads
-                (source_type, branch_id, provider, file_name, period_month, row_count, file_hash, status)
-            VALUES (?,?,?,?,?,?,?,'confirmed')
-        """, (source_type, branch_id, prov, file.filename, period_month, len(rows), file_hash))
+                (source_type, branch_id, provider, file_name, period_month, row_count, file_hash, status, error_msg)
+            VALUES (?,?,?,?,?,?,?,'confirmed',?)
+        """, (source_type, branch_id, prov, file.filename, period_month, len(rows), file_hash, note))
         upload_id = cur.lastrowid
 
         table = _LINE_TABLE[source_type]
@@ -754,6 +780,38 @@ def delete_upload(upload_id: int):
                [{"field": "file_name", "old": up["file_name"] if up else None, "new": None}])
         conn.commit()
     return {"deleted": upload_id}
+
+
+class _UploadBranchBody(BaseModel):
+    branch_id: int
+
+
+@app.patch("/api/uploads/{upload_id}/branch", dependencies=[Depends(require_write_token)])
+def reassign_upload_branch(upload_id: int, body: _UploadBranchBody):
+    """Move a confirmed upload (and all its parsed lines) to another branch —
+    the 2-click fix for a statement confirmed under the wrong branch."""
+    with get_db() as conn:
+        up = conn.execute(
+            "SELECT source_type, branch_id, period_month, file_name FROM recon_uploads WHERE upload_id=?",
+            (upload_id,)).fetchone()
+        if not up:
+            raise HTTPException(404, "upload not found")
+        if up["branch_id"] == body.branch_id:
+            return {"upload_id": upload_id, "branch_id": body.branch_id, "moved_lines": 0}
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, up["branch_id"], up["period_month"])
+        _assert_period_open(conn, body.branch_id, up["period_month"])
+
+        table = _LINE_TABLE[up["source_type"]]
+        moved = conn.execute(
+            f"UPDATE {table} SET branch_id=? WHERE upload_id=?",
+            (body.branch_id, upload_id)).rowcount
+        conn.execute("UPDATE recon_uploads SET branch_id=? WHERE upload_id=?",
+                     (body.branch_id, upload_id))
+        _audit(conn, "upload", upload_id, "update", "staff",
+               [{"field": "branch_id", "old": up["branch_id"], "new": body.branch_id}])
+        conn.commit()
+    return {"upload_id": upload_id, "branch_id": body.branch_id, "moved_lines": moved}
 
 
 # ── Evidence attachments (photos / PDFs per branch+day) ───────────────────────

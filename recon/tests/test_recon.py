@@ -816,3 +816,106 @@ def test_write_token_gate(client):
         assert ok.status_code == 200
     finally:
         main.os.environ.pop("OSHINEI_SEED_TOKEN", None)
+
+
+# ── cash lump-sum / no-deposit behaviours (2026-06-10) ───────────────────────
+
+def test_cash_weekend_lump_deposit_groups_days(client):
+    """Fri+Sat+Sun cash banked as ONE Monday deposit → all 3 days 'matched',
+    with the deposit trace (date / combined) on each lane."""
+    from recon.matcher import daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'Cash',?,0)", [
+        ("2026-06-05", 12000), ("2026-06-06", 18000), ("2026-06-07", 9000)])
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # one lump deposit Monday 06-08 = 12000+18000+9000
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-08','CASH_DEP',39000,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        result = daily_reconciliation(conn, 4, "2026-06")
+
+    days = {d["day"]: d for d in result["days"]}
+    for dd in ("2026-06-05", "2026-06-06", "2026-06-07"):
+        lane = next(l for l in days[dd]["lanes"] if l["category"] == "CASH")
+        assert lane["status"] == "matched", f"{dd} expected matched, got {lane['status']}"
+        assert lane["deposit_date"] == "2026-06-08"
+        assert lane["deposit_combined"] is True
+    cs = result["cash_summary"]
+    assert cs["matched_groups"] == 1 and cs["combined_groups"] == 1
+    assert abs(cs["matched_pos_total"] - 39000) < 0.01
+
+
+def test_cash_no_deposit_lines_reads_missing_not_pending(client):
+    """Statements cover the month but contain ZERO cash-deposit lines → cash days
+    must read 'missing' (a real gap), not 'pending' (awaiting a document), and
+    cash_summary must flag has_deposit_lines=False."""
+    from recon.matcher import daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',20000,4)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # statement has QR lines through 06-20 but NO CASH_DEP at all
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-20','QR',500,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        result = daily_reconciliation(conn, 4, "2026-06")
+
+    days = {d["day"]: d for d in result["days"]}
+    lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
+    assert lane["status"] == "missing", f"expected missing, got {lane['status']}"
+    cs = result["cash_summary"]
+    assert cs["has_deposit_lines"] is False
+    assert cs["pos_total"] == 20000 and cs["deposit_total"] == 0
+
+
+def test_upload_branch_reassign_moves_lines(client):
+    """PATCH /api/uploads/{id}/branch moves the upload AND its lines."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','wrong.pdf','2026-06',2,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit)"
+              " VALUES(?,4,'2026-06-01','QR',100)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit)"
+              " VALUES(?,4,'2026-06-02','QR',200)", (up,))
+    c.commit(); c.close()
+
+    r = client.patch(f"/api/uploads/{up}/branch", json={"branch_id": 5})
+    assert r.status_code == 200
+    assert r.json()["moved_lines"] == 2
+
+    c = sqlite3.connect(db); c.row_factory = sqlite3.Row
+    assert c.execute("SELECT branch_id FROM recon_uploads WHERE upload_id=?", (up,)).fetchone()[0] == 5
+    assert all(x[0] == 5 for x in c.execute(
+        "SELECT branch_id FROM recon_bank_lines WHERE upload_id=?", (up,)))
+    c.close()
+    # non-master target refused
+    bad = client.patch(f"/api/uploads/{up}/branch", json={"branch_id": 1})
+    assert bad.status_code in (400, 404, 422)
+
+
+def test_empty_statement_detection():
+    """The KBank CA 'No Data' month is a valid-but-empty statement."""
+    from recon.parsers.pdf_formats import is_empty_statement
+    raw = _udon("May/UDN_Statements KB_CA_05.2569.pdf")
+    assert is_empty_statement(raw) is True
+    # a statement WITH movements must not be flagged empty
+    full = _udon("UDN_Statements KB_SA_05.2569.pdf")
+    assert is_empty_statement(full) is False

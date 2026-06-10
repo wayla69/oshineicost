@@ -727,11 +727,15 @@ def _manual_consumed(conn, branch_id, period_month):
     return out
 
 
-def _external_buckets_daily(conn, branch_id, period_month):
+def _external_buckets_daily(conn, branch_id, period_month, include_cash=True):
     """{(day, category, bank): {amount, net}} from external lines, keyed by line date.
     Manually-matched lines (match_status='manual') are excluded — they're accounted
     for in the manual layer, so they don't double-count or show a false variance on
-    the lump-sum's own date."""
+    the lump-sum's own date.
+
+    include_cash=False skips CASH_DEP lines: daily_reconciliation matches cash
+    through cash_deposit_matching() (handles T+1, same-day, and multi-day lump
+    deposits), so the naive shift-back-one-day bucket would double-count."""
     buckets = {}
     def add(day, cat, bank, amount, net):
         b = buckets.setdefault((day, cat, bank), {"amount": 0.0, "net": 0.0})
@@ -750,6 +754,8 @@ def _external_buckets_daily(conn, branch_id, period_month):
         # CASH_DEP lands on the bank a day after the sale (next-business-day deposit).
         # Shift the key back 1 day so the bucket aligns with the POS sale day.
         if cat == "CASH":
+            if not include_cash:
+                continue
             try:
                 key_day = (date.fromisoformat(r["d"]) - timedelta(days=1)).isoformat()
             except (ValueError, TypeError):
@@ -805,6 +811,13 @@ def _coverage(conn, branch_id, period_month):
             cov[("cash", None)] = (date.fromisoformat(cash_mx) - timedelta(days=1)).isoformat()
         except (ValueError, TypeError):
             cov[("cash", None)] = cash_mx
+    else:
+        # No CASH_DEP lines at all, but bank statements DO cover the month → the
+        # absence of deposits is a real finding, not a late document. Without this
+        # fallback every cash day reads 'pending' forever and the gap stays hidden.
+        bank_cov = [v for (src, _b), v in cov.items() if src == "bank" and v]
+        if bank_cov:
+            cov[("cash", None)] = max(bank_cov)
     for r in conn.execute("""
         SELECT u.provider, MAX(l.settlement_date) mx
         FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
@@ -832,12 +845,139 @@ def _lane_cov_key(category, bank):
 _REAL_BANKS = {"KTB", "KBANK"}              # banks we get statements from
 
 
+# ── Cash deposit matching (T+1 / same-day / multi-day lump sums) ──────────────
+# Cash is normally banked the NEXT day (T+1). But weekends and holidays produce
+# one lump deposit covering 2–3 sale days, some branches deposit same-day, and
+# the last days of a month are deposited in the NEXT month. A fixed one-day
+# shift can't express any of that, so cash gets its own grouped matcher
+# (mirroring payout_matching): group 1..max_group consecutive POS-cash days and
+# find the earliest unused CASH_DEP credit equal to the group sum.
+
+def _cash_pos_days(conn, branch_id, period_month):
+    """{day: pos_cash_amount} for the month (all CASH lanes, bank collapsed)."""
+    pos, _unmapped, available = pos_category_totals_daily(conn, branch_id, period_month)
+    out: dict = {}
+    for (day, cat, _bank), amt in pos.items():
+        if cat == "CASH":
+            out[day] = out.get(day, 0.0) + amt
+    return out, available
+
+
+def _cash_dep_credits(conn, branch_id, period_month, max_lag):
+    """CASH_DEP credits that could pay this month's cash: the month itself plus
+    the first max_lag days of the next month (day-31 cash deposits on the 1st)."""
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    month_start = date(y, m, 1).isoformat()
+    nm_y, nm_m = (y + 1, 1) if m == 12 else (y, m + 1)
+    next_cutoff = (date(nm_y, nm_m, 1) + timedelta(days=max_lag)).isoformat()
+    try:
+        rows = conn.execute("""
+            SELECT id, txn_date, credit FROM recon_bank_lines
+            WHERE branch_id=? AND credit>0 AND channel='CASH_DEP'
+              AND match_status!='manual' AND txn_date>=? AND txn_date<?
+            ORDER BY txn_date, id
+        """, (branch_id, month_start, next_cutoff)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    return [{"id": r["id"], "date": r["txn_date"], "amount": float(r["credit"] or 0)}
+            for r in rows]
+
+
+def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3):
+    """Group POS-cash days to the CASH_DEP bank credits that banked them.
+
+    Returns {
+      groups:   [{deposit_date, amount, days:[{day,pos}], group_pos, lag,
+                  combined, variance}],         — matched deposits
+      day_group: {day: index into groups},      — which group covers a POS day
+      unmatched_pos:    [day, ...],             — cash days with no deposit found
+      unmatched_credits:[{id, date, amount}],   — deposits matching no POS days
+      pos_total, deposit_total, matched_pos_total,
+      has_deposit_lines: bool,                  — False = no CASH_DEP lines AT ALL
+      pos_available: bool,
+    }"""
+    cash_days, available = _cash_pos_days(conn, branch_id, period_month)
+    credits = _cash_dep_credits(conn, branch_id, period_month, max_lag)
+    days = sorted((d, a) for d, a in cash_days.items() if a > TOL_ABS_DAY)
+
+    groups, day_group, used = [], {}, set()
+    di = 0
+    while di < len(days):
+        hit = None
+        s = 0.0
+        for k in range(1, min(max_group, len(days) - di) + 1):
+            s = round(s + days[di + k - 1][1], 2)
+            last_day = days[di + k - 1][0]
+            for c in credits:                        # earliest unused credit that fits
+                if c["id"] in used or not _within_tol_day(c["amount"], s):
+                    continue
+                lag = (_pd(c["date"]) - _pd(last_day)).days
+                if 0 <= lag <= max_lag:
+                    hit = (k, c)
+                    break
+            if hit:
+                break
+        if hit:
+            k, c = hit
+            used.add(c["id"])
+            grp = days[di:di + k]
+            gp = round(sum(a for _, a in grp), 2)
+            day_group.update({d: len(groups) for d, _ in grp})
+            groups.append({
+                "deposit_date": c["date"], "amount": round(c["amount"], 2),
+                "days": [{"day": d, "pos": round(a, 2)} for d, a in grp],
+                "group_pos": gp, "lag": (_pd(c["date"]) - _pd(grp[-1][0])).days,
+                "combined": k > 1, "variance": round(c["amount"] - gp, 2),
+            })
+            di += k
+        else:
+            di += 1
+
+    matched_days = set(day_group)
+    return {
+        "groups": groups,
+        "day_group": day_group,
+        "unmatched_pos": [d for d, _ in days if d not in matched_days],
+        "unmatched_credits": [c for c in credits if c["id"] not in used],
+        "pos_total": round(sum(cash_days.values()), 2),
+        "deposit_total": round(sum(c["amount"] for c in credits), 2),
+        "matched_pos_total": round(sum(g["group_pos"] for g in groups), 2),
+        "has_deposit_lines": bool(credits),
+        "pos_available": available,
+    }
+
+
 def daily_reconciliation(conn, branch_id, period_month):
     """Per-day, per-lane reconciliation with pending tracking for late documents."""
     pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
-    ext = _external_buckets_daily(conn, branch_id, period_month)
+    ext = _external_buckets_daily(conn, branch_id, period_month, include_cash=False)
     cov = _coverage(conn, branch_id, period_month)
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+
+    # Feed matched cash groups back in as per-day external amounts: each POS day
+    # in a group is covered by its deposit (the group's variance lands on the
+    # LAST day so a lump's rounding shows once, not on every member day).
+    cash_day_info: dict = {}
+    for gi, g in enumerate(cash["groups"]):
+        for j, dd in enumerate(g["days"]):
+            is_last = j == len(g["days"]) - 1
+            ext_share = dd["pos"] + (g["variance"] if is_last else 0.0)
+            cash_day_info[dd["day"]] = {
+                "ext": ext_share, "deposit_date": g["deposit_date"],
+                "combined": g["combined"], "lag": g["lag"], "group": gi,
+            }
+    # Unmatched deposits surface as ext_only on deposit_date − 1 (the sale day
+    # they most plausibly belong to under the normal T+1 rhythm).
+    for c in cash["unmatched_credits"]:
+        try:
+            kd = (date.fromisoformat(c["date"]) - timedelta(days=1)).isoformat()
+        except (ValueError, TypeError):
+            kd = c["date"]
+        if kd[:7] != period_month:
+            continue
+        b = ext.setdefault((kd, "CASH", "NONE"), {"amount": 0.0, "net": 0.0})
+        b["amount"] += c["amount"]; b["net"] += c["amount"]
 
     by_day = {}
     for (day, cat, bank) in set(pos) | set(ext):
@@ -847,6 +987,11 @@ def daily_reconciliation(conn, branch_id, period_month):
         eb = ext.get((day, cat, bank))
         ext_amt = eb["amount"] if eb else 0.0
         ext_net = eb["net"] if eb else 0.0
+        cash_info = cash_day_info.get(day) if cat == "CASH" else None
+        if cash_info:                              # day covered by a matched deposit group
+            ext_amt += cash_info["ext"]
+            ext_net += cash_info["ext"]
+            eb = True
 
         if cons > 0 and abs(pos_eff) <= TOL_ABS_DAY and ext_amt <= TOL_ABS_DAY:
             status = "manual"                      # fully reconciled by hand
@@ -864,13 +1009,18 @@ def daily_reconciliation(conn, branch_id, period_month):
             cmax = cov.get(_lane_cov_key(cat, bank))
             status = "missing" if (cmax and day <= cmax) else "pending"
 
-        by_day.setdefault(day, []).append({
+        lane = {
             "category": cat, "bank": bank,
             "pos": round(pos_amt, 2), "ext": round(ext_amt, 2), "ext_net": round(ext_net, 2),
             "manual": round(cons, 2),
             "variance": 0.0 if status == "manual" else round(ext_amt - pos_eff, 2),
             "status": status,
-        })
+        }
+        if cash_info:                              # deposit trace for the UI tooltip
+            lane["deposit_date"] = cash_info["deposit_date"]
+            lane["deposit_lag"] = cash_info["lag"]
+            lane["deposit_combined"] = cash_info["combined"]
+        by_day.setdefault(day, []).append(lane)
 
     days = []
     pending_by_source = {}
@@ -896,6 +1046,18 @@ def daily_reconciliation(conn, branch_id, period_month):
         "pos_daily_available": pos_available,
         "days": days,
         "unmapped": [{"code": k, "amount": round(v, 2)} for k, v in sorted(unmapped.items())],
+        # Cash banking summary: surfaces "เงินสดไม่เคยถูกนำฝาก" loud and clear.
+        "cash_summary": {
+            "pos_total":         cash["pos_total"],
+            "deposit_total":     cash["deposit_total"],
+            "matched_pos_total": cash["matched_pos_total"],
+            "matched_groups":    len(cash["groups"]),
+            "combined_groups":   sum(1 for g in cash["groups"] if g["combined"]),
+            "unmatched_days":    len(cash["unmatched_pos"]),
+            "has_deposit_lines": cash["has_deposit_lines"],
+            "groups":            cash["groups"],
+            "unmatched_credits": cash["unmatched_credits"],
+        },
         "pending_summary": {
             "pending_lane_days": sum(d["pending_count"] for d in days),
             "days_with_pending": sum(1 for d in days if d["pending_count"]),
@@ -1170,12 +1332,20 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
         b["amount"] += amount
         b["net"]    += net
 
+    # Non-cash bank credits land on their own date; CASH_DEP belongs to the
+    # PREVIOUS day's sales (next-business-day deposit), so the board reads the
+    # day+1 deposits as this day's cash — same shift as the per-branch daily view.
+    next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
     for r in conn.execute(
         "SELECT branch_id, credit, channel FROM recon_bank_lines "
-        "WHERE credit>0 AND match_status!='manual' AND txn_date=?", (day,)):
+        "WHERE credit>0 AND match_status!='manual' AND txn_date=? AND channel!='CASH_DEP'", (day,)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if cat:
             add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
+    for r in conn.execute(
+        "SELECT branch_id, credit FROM recon_bank_lines "
+        "WHERE credit>0 AND match_status!='manual' AND txn_date=? AND channel='CASH_DEP'", (next_day,)):
+        add(r["branch_id"], "CASH", None, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
         fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
