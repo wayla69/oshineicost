@@ -4827,9 +4827,13 @@ def buffet_branch_tier_matrix(
     month_to:   Optional[str] = Query(None),
 ):
     """Per-branch buffet tier mix: pax, premium %, avg GP/cover, revenue."""
+    # fix C2/C5: revenue/pax from BUFFET category; COGS from ALL SKUs (item COGS on B0xxx rows)
+    # fix C5: premium price bands in ex-VAT units (590÷1.07≈551, 799÷1.07≈747)
     filters: list = ["c.name = 'BUFFET'"]
+    cogs_filters: list = []
     params:  dict = {}
     _month_range_filter(filters, params, month_from, month_to, month)
+    _month_range_filter(cogs_filters, params, month_from, month_to, month)
 
     sql = f"""
         SELECT
@@ -4838,32 +4842,41 @@ def buffet_branch_tier_matrix(
             SUM(sm.subtotal_ex_vat)                                         AS rev_ex,
             SUM(sm.total_inc_vat)                                           AS rev_inc,
             SUM(CASE
-                    WHEN sk.sku_code IN ('BUFFET590','BUFFET799','B02','B11','B03')
-                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 570 AND 620
-                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 780 AND 820
-                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) > 1000
+                    WHEN sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 535 AND 575
+                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 720 AND 760
+                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) > 950
                     THEN sm.qty ELSE 0
-                END)                                                        AS premium_pax,
-            SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')})                   AS total_cogs
+                END)                                                        AS premium_pax
         FROM sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id  = sm.branch_id
         JOIN skus       sk ON sk.sku_id    = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
-        LEFT JOIN sku_cost sc ON sc.sku_id = sm.sku_id
         WHERE {' AND '.join(filters)} AND b.name != 'ALL'
         GROUP BY b.name
         ORDER BY b.name
     """
 
+    cogs_where = ("WHERE " + " AND ".join(cogs_filters + ["b.name != 'ALL'"])) if cogs_filters else "WHERE b.name != 'ALL'"
+    cogs_sql = f"""
+        SELECT b.name AS branch, SUM({_unified_cogs_expr(ssm='sm')}) AS total_cogs
+        FROM sales_sku_monthly sm
+        JOIN branches b ON b.branch_id = sm.branch_id
+        {cogs_where}
+        GROUP BY b.name
+    """
+
     with get_db() as con:
-        rows = con.execute(sql, params).fetchall()
+        rows      = con.execute(sql,      params).fetchall()
+        cogs_rows = con.execute(cogs_sql, params).fetchall()
+
+    cogs_by_branch = {r["branch"]: (r["total_cogs"] or 0.0) for r in cogs_rows}
 
     result = []
     for r in rows:
         total_pax   = r["total_pax"]   or 0
         premium_pax = r["premium_pax"] or 0
         premium_pct = round(premium_pax / total_pax * 100, 2) if total_pax else 0.0
-        total_cogs  = r["total_cogs"]
+        total_cogs  = cogs_by_branch.get(r["branch"])
         rev_ex      = r["rev_ex"] or 0.0
         if total_cogs is not None and total_pax:
             gp_total          = rev_ex - total_cogs
