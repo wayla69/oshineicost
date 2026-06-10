@@ -338,3 +338,25 @@ CREATE TABLE IF NOT EXISTS recon_attachment (
     uploaded_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_recon_attachment ON recon_attachment(branch_id, day);
+
+-- ─── Lane adjustments (off-POS revenue / manual deposit entries) ──────────────
+-- One row per (branch × period × category × bank).
+-- adj_pos  = manual POS-side addition  (e.g. off-POS QR scanned on KTB PromptPay)
+-- adj_ext  = manual EXT-side addition  (e.g. cash deposit not reflected in bank statement)
+-- Applied at summary-read time; no re-run-match needed.
+CREATE TABLE IF NOT EXISTS recon_lane_adj (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    period_month TEXT    NOT NULL,
+    category     TEXT    NOT NULL,
+    bank         TEXT    NOT NULL DEFAULT 'NONE',
+    adj_pos      REAL    NOT NULL DEFAULT 0,
+    adj_ext      REAL    NOT NULL DEFAULT 0,
+    note         TEXT,
+    adj_type     TEXT    NOT NULL DEFAULT 'other'
+                     CHECK(adj_type IN ('off_pos','deposit_note','other')),
+    created_by   TEXT,
+    created_at   TEXT    DEFAULT (datetime('now')),
+    UNIQUE(branch_id, period_month, category, bank)
+);
+CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);

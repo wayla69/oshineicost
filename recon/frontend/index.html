@@ -842,6 +842,53 @@
   </div>
 </div>
 
+<!-- ═══════════════ LANE ADJUSTMENT MODAL ═══════════════ -->
+<div id="adjmodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden" style="z-index:75">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 p-6">
+    <div class="flex items-center justify-between mb-4">
+      <div class="font-bold text-lg">✏ ปรับยอด Lane <span id="adj-lane-title" class="text-sm font-normal text-gray-400"></span></div>
+      <button onclick="closeAdjModal()" class="text-gray-400 text-xl">&times;</button>
+    </div>
+    <div class="space-y-3 text-sm">
+      <div class="bg-amber-50 text-amber-800 rounded-lg px-3 py-2 text-xs">
+        ใช้สำหรับรายรับนอก POS (เช่น KTB PromptPay ที่ลูกค้าสแกนตรง) หรือเงินสดที่ฝากธนาคารแยก<br>
+        ยอดที่ใส่จะบวกเพิ่มในด้านนั้นๆ เพื่อคำนวณส่วนต่าง
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase block mb-1">+ ยอด POS (฿)</label>
+          <input id="adj-pos" type="number" step="0.01" min="0" class="inp w-full" placeholder="0.00">
+          <div class="text-xs text-gray-400 mt-0.5">รายรับนอก POS ที่ธนาคารรับแล้ว</div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase block mb-1">+ ยอด External (฿)</label>
+          <input id="adj-ext" type="number" step="0.01" min="0" class="inp w-full" placeholder="0.00">
+          <div class="text-xs text-gray-400 mt-0.5">ฝากเงินนอก statement ที่อัพโหลด</div>
+        </div>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase block mb-1">ประเภท</label>
+        <select id="adj-type" class="inp w-full">
+          <option value="off_pos">รายรับนอก POS (Off-POS revenue)</option>
+          <option value="deposit_note">ฝากเงินแยก (Separate deposit)</option>
+          <option value="other">อื่นๆ</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase block mb-1">หมายเหตุ</label>
+        <input id="adj-note" class="inp w-full" placeholder="เช่น KTB PromptPay สแกนตรงโดยลูกค้า">
+      </div>
+    </div>
+    <div class="flex items-center justify-between mt-5">
+      <button id="adj-del-btn" onclick="deleteAdj()" class="text-xs text-red-500 hover:underline hidden">ลบการปรับ</button>
+      <div class="flex gap-2 ml-auto">
+        <button onclick="closeAdjModal()" class="btn btn-sec">ยกเลิก</button>
+        <button onclick="saveAdj()" class="btn btn-pri">บันทึก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════ LANE DRILL-DOWN MODAL ═══════════════ -->
 <div id="lanemodal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 hidden">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4 p-6">
@@ -1949,19 +1996,30 @@ async function renderReconcile(){
   if(!s.categories.length){ cont.innerHTML='<div class="text-gray-400">No reconcilable POS tender for this period.</div>'; }
   s.categories.forEach(c=>{
     const showNet = (c.category==='CREDIT'||c.category==='GRAB'||c.category==='LINEMAN');
-    const div=document.createElement('div'); div.className='card cursor-pointer hover:shadow-md';
+    const div=document.createElement('div'); div.className='card hover:shadow-md'; div.style.position='relative';
     div.title='คลิกเพื่อดูรายละเอียด / click for detail';
     div.onclick=()=>openDrill(SESSION.branch_id,{period_month:SESSION.period_month,category:c.category,bank:c.bank},'reconcile');
     const manualBadge = c.manual ? `<span class="badge" style="background:#dbeafe;color:#1d4ed8">🔗 ${c.manual.count}</span>` : '';
+    const adjBadge = c.adj_pos||c.adj_ext ? `<span class="badge" style="background:#f3e8ff;color:#7c3aed" title="${c.adj_note||''}">✏</span>` : '';
+    const adjRow = (c.adj_pos||c.adj_ext) ? `
+      <div style="margin-top:6px;font-size:11px;color:#7c3aed;border-top:1px dashed #e9d5ff;padding-top:4px">
+        ${c.adj_pos?`+POS ${fmt(c.adj_pos)} `:''} ${c.adj_ext?`+EXT ${fmt(c.adj_ext)} `:''}
+        <span style="color:#9ca3af">${c.adj_note||''}</span>
+      </div>` : '';
     div.innerHTML=`<div class="flex items-center justify-between mb-2">
         <div class="font-semibold text-gray-800">${c.category}${c.bank!=='NONE'?` · ${c.bank}`:''}</div>
-        <div class="flex items-center gap-1">${manualBadge}<span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span></div></div>
+        <div class="flex items-center gap-1">
+          ${adjBadge}${manualBadge}<span class="badge ${STATUS_BADGE[c.status]}">${t('st_'+c.status)}</span>
+          <button class="badge" style="background:#f3f4f6;color:#374151;cursor:pointer;padding:2px 6px"
+            title="ปรับยอด lane"
+            onclick="event.stopPropagation();openAdjModal(${SESSION.branch_id},'${SESSION.period_month}','${c.category}','${c.bank}',${c.adj_pos||0},${c.adj_ext||0},${JSON.stringify(c.adj_note||'')},${JSON.stringify(c.adj_type||'other')},${c.adj_id||'null'})">✏</button>
+        </div></div>
       <div class="grid grid-cols-2 gap-2 text-sm">
         <div><div class="text-xs text-gray-400">${t('l_pos_tender')}</div><div class="font-mono">${fmt(c.pos_amount)}</div></div>
         <div><div class="text-xs text-gray-400">${t('l_statement')}</div><div class="font-mono">${fmt(c.ext_amount)}</div></div>
         ${showNet?`<div><div class="text-xs text-gray-400">${t('l_net_fee')}</div><div class="font-mono">${fmt(c.ext_net)}</div></div>`:''}
         <div><div class="text-xs text-gray-400">${t('kpi_var')}</div><div class="font-mono ${varCls(c.variance)}">${varTxt(c.variance)}</div></div>
-      </div>`;
+      </div>${adjRow}`;
     cont.appendChild(div);
   });
   renderPayouts(s.payouts||[]);
@@ -2184,6 +2242,50 @@ async function openLaneModal(category, bank, day){
   }catch(e){ tb.innerHTML=`<tr><td colspan="4" class="text-center text-red-500 py-6">${e.message}</td></tr>`; }
 }
 function closeLaneModal(){ document.getElementById('lanemodal').classList.add('hidden'); }
+
+// ── Lane adjustment modal ─────────────────────────────────────────────────────
+let _adjCtx = null;
+function openAdjModal(branchId, periodMonth, category, bank, adjPos, adjExt, adjNote, adjType, adjId){
+  _adjCtx = {branchId, periodMonth, category, bank, adjId};
+  document.getElementById('adj-lane-title').textContent = `${category}${bank&&bank!=='NONE'?' · '+bank:''}`;
+  document.getElementById('adj-pos').value  = adjPos  || '';
+  document.getElementById('adj-ext').value  = adjExt  || '';
+  document.getElementById('adj-note').value = adjNote || '';
+  document.getElementById('adj-type').value = adjType || 'other';
+  const delBtn = document.getElementById('adj-del-btn');
+  adjId ? delBtn.classList.remove('hidden') : delBtn.classList.add('hidden');
+  document.getElementById('adjmodal').classList.remove('hidden');
+}
+function closeAdjModal(){ document.getElementById('adjmodal').classList.add('hidden'); _adjCtx=null; }
+
+async function saveAdj(){
+  if(!_adjCtx) return;
+  const adjPos  = parseFloat(document.getElementById('adj-pos').value)  || 0;
+  const adjExt  = parseFloat(document.getElementById('adj-ext').value)  || 0;
+  const adjNote = document.getElementById('adj-note').value.trim();
+  const adjType = document.getElementById('adj-type').value;
+  if(adjPos===0 && adjExt===0){ toast('ใส่ยอดอย่างน้อยหนึ่งด้านครับ','warn'); return; }
+  try{
+    await api('/api/lanes/adj',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({branch_id:_adjCtx.branchId, period_month:_adjCtx.periodMonth,
+        category:_adjCtx.category, bank:_adjCtx.bank,
+        adj_pos:adjPos, adj_ext:adjExt, note:adjNote, adj_type:adjType})});
+    closeAdjModal();
+    toast('บันทึกการปรับยอดแล้ว','ok');
+    renderReconcile();
+  }catch(e){ toast('บันทึกไม่สำเร็จ: '+e.message,'err'); }
+}
+
+async function deleteAdj(){
+  if(!_adjCtx||!_adjCtx.adjId) return;
+  if(!confirm('ลบการปรับยอดนี้?')) return;
+  try{
+    await api(`/api/lanes/adj/${_adjCtx.adjId}`,{method:'DELETE'});
+    closeAdjModal();
+    toast('ลบการปรับยอดแล้ว','ok');
+    renderReconcile();
+  }catch(e){ toast('ลบไม่สำเร็จ: '+e.message,'err'); }
+}
 
 async function runMatch(ev){
   await withBusy(ev&&ev.target, 'Running…', async ()=>{

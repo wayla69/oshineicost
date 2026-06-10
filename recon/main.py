@@ -217,6 +217,7 @@ def startup():
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
         _migrate_attachment_to_fs(conn)
+        # recon_lane_adj: created by schema.sql executescript above (IF NOT EXISTS)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
         conn.commit()
 
@@ -972,7 +973,8 @@ def session_summary(session_id: int):
         categories = []
         for r in rows:
             c = {k: r[k] for k in
-                 ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status")}
+                 ("category", "bank", "pos_amount", "ext_amount", "ext_net", "variance", "status",
+                  "adj_pos", "adj_ext", "adj_note", "adj_type", "adj_id")}
             c["manual"] = manual.get(f"{r['category']}|{r['bank']}")
             categories.append(c)
         payouts = payout_reconciliation(conn, bid, pm)
@@ -1957,6 +1959,76 @@ def manual_delete(match_id: int):
                [{"field": "match", "old": "matched", "new": None}])
         conn.commit()
     return {"deleted": match_id}
+
+
+# ── Lane adjustments (off-POS revenue / manual deposit entries) ──────────────
+
+class LaneAdj(BaseModel):
+    branch_id:    int
+    period_month: str
+    category:     str
+    bank:         str = "NONE"
+    adj_pos:      float = 0.0
+    adj_ext:      float = 0.0
+    note:         str | None = None
+    adj_type:     str = "other"
+    created_by:   str | None = None
+
+
+@app.get("/api/lanes/adj")
+def lane_adj_list(branch_id: int, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM recon_lane_adj WHERE branch_id=? AND period_month=? "
+            "ORDER BY category, bank",
+            (branch_id, period_month)).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/lanes/adj", dependencies=[Depends(require_write_token)])
+def lane_adj_upsert(body: LaneAdj):
+    _validate_period(body.period_month)
+    if body.adj_type not in ("off_pos", "deposit_note", "other"):
+        raise HTTPException(400, "adj_type must be off_pos | deposit_note | other")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.period_month)
+        existing = conn.execute(
+            "SELECT id FROM recon_lane_adj WHERE branch_id=? AND period_month=? "
+            "AND category=? AND bank=?",
+            (body.branch_id, body.period_month, body.category, body.bank)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE recon_lane_adj SET adj_pos=?, adj_ext=?, note=?, adj_type=?, "
+                "created_by=?, created_at=datetime('now') WHERE id=?",
+                (body.adj_pos, body.adj_ext, body.note, body.adj_type,
+                 body.created_by or "staff", existing["id"]))
+            row_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO recon_lane_adj "
+                "(branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (body.branch_id, body.period_month, body.category, body.bank,
+                 body.adj_pos, body.adj_ext, body.note, body.adj_type,
+                 body.created_by or "staff"))
+            row_id = cur.lastrowid
+        conn.commit()
+    return {"id": row_id, "adj_pos": body.adj_pos, "adj_ext": body.adj_ext}
+
+
+@app.delete("/api/lanes/adj/{adj_id}", dependencies=[Depends(require_write_token)])
+def lane_adj_delete(adj_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT branch_id, period_month FROM recon_lane_adj WHERE id=?", (adj_id,)).fetchone()
+        if not row:
+            raise HTTPException(404)
+        _assert_period_open(conn, row["branch_id"], row["period_month"])
+        conn.execute("DELETE FROM recon_lane_adj WHERE id=?", (adj_id,))
+        conn.commit()
+    return {"deleted": adj_id}
 
 
 # ── Cross-branch overview ─────────────────────────────────────────────────────
