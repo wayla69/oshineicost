@@ -919,3 +919,69 @@ def test_empty_statement_detection():
     # a statement WITH movements must not be flagged empty
     full = _udon("UDN_Statements KB_SA_05.2569.pdf")
     assert is_empty_statement(full) is False
+
+
+# ── document match status + map-from-documents suggestions (2026-06-10) ───────
+
+def test_map_bank_suggestions_from_documents(client):
+    """KNNQR (QR/UNKNOWN) daily series tracks the KTB QR statement lane →
+    suggest KNNQR → QR·KTB with the evidence counts."""
+    from recon.matcher import map_bank_suggestions
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    days = [("2026-06-%02d" % i, 10000 + i * 137) for i in range(1, 8)]
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'KNNQR',?,5)", days)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    for d, amt in days:
+        c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                  " VALUES(?,4,?,'QR',?,'unmatched')", (up, d, amt))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        sugs = map_bank_suggestions(conn, 4, "2026-06")
+    knn = next((s for s in sugs if s["norm"] == "KNNQR"), None)
+    assert knn is not None, f"no KNNQR suggestion in {sugs}"
+    assert knn["category"] == "QR" and knn["bank"] == "KTB"
+    assert knn["hits"] == 7 and knn["active_days"] == 7
+    assert knn["map_id"], "seeded KNNQR row should carry its map_id for one-click PATCH"
+
+    # endpoint wraps it
+    r = client.get("/api/map-suggestions?branch_id=4&period_month=2026-06")
+    assert r.status_code == 200
+    assert any(s["norm"] == "KNNQR" for s in r.json()["suggestions"])
+
+
+def test_uploads_match_stats_and_lines_drill(client):
+    """/api/uploads carries match_done/match_total; /uploads/{id}/lines lists
+    per-line status; run-match marks a grouped cash deposit line matched."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',15000,3)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',2,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-11','CASH_DEP',15000,'unmatched')", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-12','QR',999,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+
+    ups = client.get("/api/uploads?period_month=2026-06&branch_id=4").json()
+    u = next(x for x in ups if x["upload_id"] == up)
+    assert u["match_total"] == 2
+    assert u["match_done"] >= 1, "grouped cash deposit line should be marked matched by run-match"
+
+    d = client.get(f"/api/uploads/{up}/lines").json()
+    assert d["count"] == 2
+    cashline = next(l for l in d["lines"] if l["channel"] == "CASH_DEP")
+    assert cashline["match_status"] == "matched"

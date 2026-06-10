@@ -37,6 +37,7 @@ from .matcher import (
     lane_ext_lines,
     lane_lines,
     lane_pos_days,
+    map_bank_suggestions,
     payout_matching,
     payout_reconciliation,
     pos_codes_scope,
@@ -764,7 +765,62 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
             {where}
             ORDER BY u.uploaded_at DESC LIMIT 200
         """, params).fetchall()
-        return [dict(r) for r in rows]
+        out = [dict(r) for r in rows]
+
+        # Per-upload match status: how much of each document has reconciled.
+        # Bank statements count credit lines only (debits aren't revenue-in);
+        # delivery reports count Completed orders (cancelled = excluded).
+        stats: dict = {}
+        for src, table, scope in (
+            ("bank",        "recon_bank_lines",    "credit>0"),
+            ("credit_card", "recon_cc_lines",      "1=1"),
+            ("grab",        "recon_grab_lines",    "order_status='Completed'"),
+            ("lineman",     "recon_lineman_lines", "order_status='Completed'"),
+        ):
+            try:
+                for r in conn.execute(f"""
+                    SELECT upload_id,
+                           COUNT(*) total,
+                           SUM(CASE WHEN match_status IN ('matched','manual') THEN 1 ELSE 0 END) matched
+                    FROM {table} WHERE {scope} GROUP BY upload_id
+                """):
+                    stats[r["upload_id"]] = {"match_total": r["total"],
+                                             "match_done": int(r["matched"] or 0)}
+            except sqlite3.OperationalError:
+                pass
+        for u in out:
+            s = stats.get(u["upload_id"], {"match_total": 0, "match_done": 0})
+            u["match_total"] = s["match_total"]
+            u["match_done"]  = s["match_done"]
+        return out
+
+
+@app.get("/api/uploads/{upload_id}/lines")
+def upload_lines(upload_id: int, limit: int = 300):
+    """The parsed lines of one upload WITH their match status — lets staff open a
+    document and see exactly which lines reconciled and which still hang."""
+    with get_db() as conn:
+        up = conn.execute("SELECT source_type FROM recon_uploads WHERE upload_id=?",
+                          (upload_id,)).fetchone()
+        if not up:
+            raise HTTPException(404, "upload not found")
+        spec = {
+            "bank":        ("recon_bank_lines",    "txn_date",        "description", "credit"),
+            "credit_card": ("recon_cc_lines",      "settlement_date", "batch_no",    "gross_amount"),
+            "grab":        ("recon_grab_lines",    "order_date",      "order_id",    "food_amount"),
+            "lineman":     ("recon_lineman_lines", "order_date",      "order_id",    "food_amount"),
+        }[up["source_type"]]
+        table, date_col, ref_col, amt_col = spec
+        rows = conn.execute(f"""
+            SELECT id, {date_col} AS date, {ref_col} AS ref, {amt_col} AS amount,
+                   match_status
+                   {', channel, debit' if table == 'recon_bank_lines' else ''}
+            FROM {table} WHERE upload_id=? ORDER BY {date_col}, id LIMIT ?
+        """, (upload_id, max(1, min(limit, 1000)))).fetchall()
+        out = [dict(r) for r in rows]
+        done = sum(1 for r in out if r["match_status"] in ("matched", "manual"))
+        return {"source_type": up["source_type"], "count": len(out),
+                "matched": done, "lines": out}
 
 
 @app.delete("/api/uploads/{upload_id}", dependencies=[Depends(require_write_token)])
@@ -1910,6 +1966,15 @@ def payout_matching_api(branch_id: int, period_month: str):
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
         return payout_matching(conn, branch_id, period_month)
+
+
+@app.get("/api/map-suggestions")
+def get_map_suggestions(branch_id: int, period_month: str):
+    """Bank suggestions for needs-map POS codes, derived from the uploaded
+    documents themselves (daily-series match against statement-lane residuals)."""
+    _validate_period(period_month)
+    with get_db() as conn:
+        return {"suggestions": map_bank_suggestions(conn, branch_id, period_month)}
 
 
 @app.get("/api/suggestions")

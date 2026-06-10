@@ -424,9 +424,9 @@
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b">
             <th class="text-left pb-2" data-i18n="u_file">File</th><th class="text-left pb-2" data-i18n="u_source">Source</th><th class="text-left pb-2" data-i18n="u_provider">Provider</th>
-            <th class="text-left pb-2" data-i18n="c_branch">Branch</th><th class="text-right pb-2" data-i18n="u_rows">Rows</th><th class="text-center pb-2" data-i18n="c_status">Status</th><th></th>
+            <th class="text-left pb-2" data-i18n="c_branch">Branch</th><th class="text-right pb-2" data-i18n="u_rows">Rows</th><th class="text-center pb-2" data-i18n="u_match">Matched</th><th class="text-center pb-2" data-i18n="c_status">Status</th><th></th>
           </tr></thead>
-          <tbody id="up-body"><tr><td colspan="7" class="text-center text-gray-400 py-6" data-i18n="e_no_uploads">No uploads</td></tr></tbody>
+          <tbody id="up-body"><tr><td colspan="8" class="text-center text-gray-400 py-6" data-i18n="e_no_uploads">No uploads</td></tr></tbody>
         </table>
       </div>
     </div>
@@ -739,6 +739,7 @@
         <p class="text-sm text-gray-600" data-i18n="setup_p">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
       </div>
       <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+      <div id="map-suggest" class="hidden card" style="border-left:4px solid var(--ok)"></div>
 
       <!-- Guided mapping flow — one step per payment type -->
       <div class="card">
@@ -1024,6 +1025,12 @@ const I18N = {
     cash_dep_sum:"ยอดฝากรวม", cash_matched_grp:"จับคู่แล้ว", cash_combined:"ฝากควบหลายวัน",
     cash_ok:"เงินสดนำฝากครบ",
     up_empty_badge:"ว่าง (ไม่มีรายการ)", up_move:"ย้ายสาขา",
+    u_match:"จับคู่แล้ว", up_match_hint:"รายการที่กระทบยอดแล้ว / รายการทั้งหมด — คลิกดูรายบรรทัด (อัปเดตเมื่อกด Run Match)",
+    up_lines_sub:"จับคู่แล้ว {m} จาก {n} รายการ", c_date:"วันที่", c_desc:"รายการ", c_amount:"จำนวนเงิน",
+    sug_hd:"เอกสารบอกธนาคารได้ — ข้อเสนอจับคู่รหัส POS",
+    sug_p:"เทียบยอดรายวันของรหัสที่ยังไม่ระบุธนาคาร กับรายการเงินเข้าใน statement ({b} · {m}) — ถ้าตรงกันเกือบทุกวัน แปลว่าเงินของรหัสนั้นเข้าบัญชีนั้น กด ใช้ค่านี้ เพื่อบันทึก",
+    sug_match_days:"ตรงกัน {h}/{n} วัน", sug_apply:"ใช้ค่านี้",
+    sug_applied:"ตั้งค่า {c} → {b} แล้ว — กด Run Match อีกครั้งเพื่อกระทบยอดใหม่",
     up_move_prompt:"ย้ายอัปโหลดนี้ไปสาขา:", up_moved:"ย้ายสาขาเรียบร้อย — รายการ {n} แถวถูกย้ายตาม",
     up_empty_note:"เอกสารถูกต้องแต่ไม่มีรายการ (บัญชีไม่มีความเคลื่อนไหวเดือนนี้)",
     flow_doc_CASH:"ยอดฝากเงินสดเข้าบัญชี (รายการฝากเงินสดใน statement)",
@@ -1182,6 +1189,12 @@ const I18N = {
     cash_dep_sum:"deposits total", cash_matched_grp:"matched", cash_combined:"multi-day lumps",
     cash_ok:"cash fully banked",
     up_empty_badge:"empty (no movements)", up_move:"Move branch",
+    u_match:"Matched", up_match_hint:"Reconciled lines / total — click for per-line detail (updates on Run Match)",
+    up_lines_sub:"{m} of {n} lines matched", c_date:"Date", c_desc:"Description", c_amount:"Amount",
+    sug_hd:"The documents know the bank — POS code suggestions",
+    sug_p:"Each needs-map code's daily POS series is compared with statement credits ({b} · {m}) — near-daily agreement means that's where the money lands. Click Apply to save.",
+    sug_match_days:"{h}/{n} days match", sug_apply:"Apply",
+    sug_applied:"{c} → {b} saved — press Run Match to re-reconcile",
     up_move_prompt:"Move this upload to branch:", up_moved:"Branch updated — {n} lines moved with it",
     up_empty_note:"Valid document with zero movements (account inactive this month)",
     flow_doc_CASH:"Cash-deposit lines in the bank statement",
@@ -2468,14 +2481,23 @@ async function loadUploads(){
   document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:` · ${t('up_allbranch')}`);
   let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
   const data = await api(q).catch(()=>[]);
-  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
+  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="8" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
   data.forEach(u=>{ const tr=document.createElement('tr');
     const isEmpty = u.row_count===0 && /No Data|ไม่มีรายการ/.test(u.error_msg||'');
     const rowsCell = isEmpty
       ? `<span class="badge b-mut" title="${t('up_empty_note')}">${t('up_empty_badge')}</span>`
       : (u.row_count===0 ? `<span class="badge b-warn" title="0 แถว — ตรวจไฟล์/parser">0 ⚠</span>` : u.row_count);
+    // match progress: done/total reconcilable lines, click → per-line drill
+    let matchCell='—';
+    if(u.match_total>0){
+      const pct=u.match_done/u.match_total;
+      const cls=pct>=0.999?'b-ok':pct>0?'b-warn':'b-mut';
+      matchCell=`<button class="badge ${cls}" style="cursor:pointer" title="${t('up_match_hint')}"
+        onclick="openUploadLines(${u.upload_id},'${_attr(u.file_name||'')}')">${u.match_done}/${u.match_total}</button>`;
+    } else if(isEmpty){ matchCell=''; }
     tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
       <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${rowsCell}</td>
+      <td class="text-center">${matchCell}</td>
       <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
       <td class="text-right whitespace-nowrap">
         <button onclick="moveUpload(${u.upload_id},${u.branch_id})" class="text-xs hover:underline" style="color:#5b53b0">${t('up_move')}</button>
@@ -2484,6 +2506,39 @@ async function loadUploads(){
   });
 }
 async function delUpload(id){ if(!confirm(t('toast_del_confirm')))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast(t('toast_updeleted'),'ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
+// Per-line match-status drill for one uploaded document
+const LINE_ST_BADGE = {matched:'b-ok', manual:'b-ok', unmatched:'b-warn', excluded:'b-mut'};
+async function openUploadLines(id, fname){
+  let el=document.getElementById('uplines-modal');
+  if(!el){
+    el=document.createElement('div'); el.id='uplines-modal';
+    el.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:70;display:flex;align-items:center;justify-content:center;padding:20px';
+    el.onclick=e=>{ if(e.target===el) el.remove(); };
+    document.body.appendChild(el);
+  }
+  el.innerHTML=`<div class="card" style="max-width:760px;width:100%;max-height:84vh;overflow-y:auto">
+    <div class="text-center text-gray-400 py-8">Loading…</div></div>`;
+  try{
+    const d=await api(`/api/uploads/${id}/lines`);
+    const pct = d.count? Math.round(d.matched/d.count*100):0;
+    el.innerHTML=`<div class="card" style="max-width:760px;width:100%;max-height:84vh;overflow-y:auto">
+      <div class="flex items-center justify-between mb-2">
+        <div><div class="font-semibold">${fname}</div>
+          <div class="text-sm text-gray-400">${t('up_lines_sub').replace('{m}',d.matched).replace('{n}',d.count)} (${pct}%)</div></div>
+        <button class="btn btn-sec" onclick="document.getElementById('uplines-modal').remove()">✕</button>
+      </div>
+      <table class="w-full text-sm">
+        <thead><tr class="text-gray-400 text-xs uppercase border-b">
+          <th class="text-left pb-1">${t('c_date')||'Date'}</th><th class="text-left pb-1">${t('c_desc')||'Description'}</th>
+          <th class="text-right pb-1">${t('c_amount')||'Amount'}</th><th class="text-center pb-1">${t('c_status')||'Status'}</th></tr></thead>
+        <tbody>${d.lines.map(l=>`<tr class="border-b border-gray-50">
+          <td class="py-1 pr-2 whitespace-nowrap">${l.date||''}</td>
+          <td class="py-1 pr-2">${(l.ref||'')+(l.channel?` <span class="text-gray-400 text-xs">[${l.channel}]</span>`:'')}</td>
+          <td class="py-1 text-right font-mono">${fmt(l.amount||0)}</td>
+          <td class="py-1 text-center"><span class="badge ${LINE_ST_BADGE[l.match_status]||'b-mut'}">${l.match_status}</span></td>
+        </tr>`).join('')}</tbody></table></div>`;
+  }catch(e){ el.remove(); toast(e.message,'err'); }
+}
 async function moveUpload(id, curBid){
   const opts = BRANCHES.map(b=>`${b.branch_id}=${b.name}`).join('\n');
   const pick = prompt(`${t('up_move_prompt')}\n${opts}`, String(curBid||''));
@@ -2925,12 +2980,56 @@ function renderReference(){
       <td class="text-gray-600">${t('bankd_'+b)}</td></tr>`;}).join('');
 }
 
+// ── Map-from-documents: suggest the bank for needs-map codes ──────────────────
+// The statement already shows where each tender settles; when an unmapped code's
+// per-day POS series tracks one lane's credits, offer a one-click Apply.
+async function loadMapSuggestions(){
+  const el=document.getElementById('map-suggest'); if(!el) return;
+  el.classList.add('hidden'); el.innerHTML='';
+  const bid = document.getElementById('sel-branch').value || (BRANCHES[0]&&BRANCHES[0].branch_id);
+  if(!bid) return;
+  let d; try{ d=await api(`/api/map-suggestions?branch_id=${bid}&period_month=${period()}`); }catch(e){ return; }
+  const sugs=(d.suggestions||[]);
+  if(!sugs.length) return;
+  const bname = (BRANCHES.find(b=>String(b.branch_id)===String(bid))||{}).name||'';
+  el.classList.remove('hidden');
+  el.innerHTML=`<div class="font-semibold text-gray-700 mb-1">💡 ${t('sug_hd')}</div>
+    <p class="text-xs text-gray-500 mb-2">${t('sug_p').replace('{b}',bname).replace('{m}',period())}</p>`+
+    sugs.map((s,i)=>`<div class="flex items-center gap-3 flex-wrap py-1.5 border-t border-gray-50">
+      <span class="font-semibold">${s.code}</span>
+      <span class="text-gray-400 text-sm">${fmt(s.pos_total)}</span>
+      <span class="badge b-ok">→ ${s.category} · ${t('bankd_'+s.bank)||s.bank}</span>
+      <span class="text-xs text-gray-400" title="${(s.sample||[]).map(x=>`${x.day}: POS ${fmt(x.pos)} ≈ ${fmt(x.ext)}`).join('\n')}">
+        ${t('sug_match_days').replace('{h}',s.hits).replace('{n}',s.active_days)}</span>
+      <button class="btn btn-pri text-xs ml-auto" style="padding:4px 12px"
+        onclick="applyMapSuggestion(${i})">${t('sug_apply')}</button>
+    </div>`).join('');
+  window._MAP_SUGS = sugs;
+}
+async function applyMapSuggestion(i){
+  const s=(window._MAP_SUGS||[])[i]; if(!s) return;
+  try{
+    if(s.map_id){
+      await api(`/api/payment-map/${s.map_id}`,{method:'PATCH',
+        json:{category:s.category, bank:s.bank, reconcile:1,
+              notes:`from documents: ${s.hits}/${s.active_days} days matched`, updated_by:'doc-suggest'}});
+    } else {
+      await api('/api/payment-map',{method:'POST',
+        json:{payment_code_norm:s.norm, category:s.category, bank:s.bank, reconcile:1,
+              notes:`from documents: ${s.hits}/${s.active_days} days matched`, updated_by:'doc-suggest'}});
+    }
+    toast(t('sug_applied').replace('{c}',s.code).replace('{b}',t('bankd_'+s.bank)||s.bank),'ok');
+    loadSetup();
+  }catch(e){ toast(e.message,'err'); }
+}
+
 async function loadSetup(){
   refreshSetupBadge();
   renderReference();
   MAP_DATA=await api('/api/payment-map');
   renderFlow();
   renderMapTable();
+  loadMapSuggestions();   // async, fills #map-suggest when documents know the answer
   // Bank accounts — one row per master branch, KTB + KBANK editable inline
   const accts=await api('/api/bank-accounts');
   const aMap={}; accts.forEach(a=>{ aMap[a.branch_id+'|'+a.bank]=a; });

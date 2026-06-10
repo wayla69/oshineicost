@@ -642,6 +642,13 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
             """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
                   r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"]))
 
+    # Cash: deposits matched by the grouped cash matcher are reconciled lines —
+    # mark them so per-upload match stats (and the lump-sum's own date) read true.
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    for g in cash["groups"]:
+        conn.execute("UPDATE recon_bank_lines SET match_status='matched' WHERE id=?",
+                     (g["line_id"],))
+
     # Payout chain: provider NET ↔ bank payout credit. Only a real mismatch is a
     # discrepancy; awaiting_payout/ext_only are informational (shown, not queued).
     payouts = payout_reconciliation(conn, branch_id, period_month)
@@ -925,6 +932,7 @@ def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3)
             day_group.update({d: len(groups) for d, _ in grp})
             groups.append({
                 "deposit_date": c["date"], "amount": round(c["amount"], 2),
+                "line_id": c["id"],
                 "days": [{"day": d, "pos": round(a, 2)} for d, a in grp],
                 "group_pos": gp, "lag": (_pd(c["date"]) - _pd(grp[-1][0])).days,
                 "combined": k > 1, "variance": round(c["amount"] - gp, 2),
@@ -1284,6 +1292,121 @@ def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
             "needs_map": (m is None) or (bank in ("UNKNOWN", "PROMPTPAY")),
         })
     out.sort(key=lambda x: -x["amount"])
+    return out
+
+
+# ── Bank suggestions for unmapped POS codes ───────────────────────────────────
+# The biggest setup blocker is a code like KNNQR (฿80M) sitting on UNKNOWN bank.
+# But the documents already know the answer: if the code's per-day POS series
+# tracks one statement lane's per-day credits (minus what mapped codes already
+# explain), that lane's bank is where the code settles. We surface that as a
+# one-click suggestion instead of making staff guess.
+
+def map_bank_suggestions(conn, branch_id, period_month, min_hits=4, min_score=0.6):
+    """Suggest (category, bank) for needs-map POS codes by matching their daily
+    series against statement-lane residuals. Returns ranked suggestions:
+    [{code, norm, map_id, category, bank, hits, active_days, score,
+      pos_total, ext_total, sample:[{day, pos, ext}]}]"""
+    try:
+        codes = pos_codes_scope(conn, branch_id, period_month=period_month)
+    except sqlite3.OperationalError:
+        return []
+    cands = [c for c in codes if c["needs_map"] and c["amount"] > TOL_ABS_DAY]
+    if not cands:
+        return []
+
+    pmap = {r["payment_code_norm"]: r for r in conn.execute(
+        "SELECT id, payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+
+    # Per-code and per-mapped-lane POS daily series
+    code_series: dict = {}
+    lane_pos: dict = {}
+    for r in conn.execute(
+        "SELECT day, payment_code, SUM(amount) amt FROM pos_payment_day "
+        "WHERE branch_id=? AND substr(day,1,7)=? GROUP BY day, payment_code",
+        (branch_id, period_month)):
+        norm = normalize(r["payment_code"])
+        amt = float(r["amt"] or 0)
+        cs = code_series.setdefault(norm, {})
+        cs[r["day"]] = cs.get(r["day"], 0.0) + amt
+        m = pmap.get(norm)
+        if m and m["reconcile"] and m["bank"] in _REAL_BANKS | {"KTC"}:
+            lp = lane_pos.setdefault((m["category"], m["bank"]), {})
+            lp[r["day"]] = lp.get(r["day"], 0.0) + amt
+
+    # Statement-lane daily credits (independent of the POS map)
+    lane_ext: dict = {}
+    for r in conn.execute("""
+        SELECT l.txn_date d, l.credit, l.channel, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+          AND l.channel IN ('QR','TRANSFER')
+    """, (branch_id, period_month)):
+        key = (r["channel"], _provider_bank(r["provider"]))
+        le = lane_ext.setdefault(key, {})
+        le[r["d"]] = le.get(r["d"], 0.0) + float(r["credit"] or 0)
+    for r in conn.execute("""
+        SELECT l.settlement_date d, l.gross_amount g, l.acquirer, u.provider
+        FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        key = ("CREDIT", r["acquirer"] or _provider_acquirer(r["provider"]))
+        le = lane_ext.setdefault(key, {})
+        le[r["d"]] = le.get(r["d"], 0.0) + float(r["g"] or 0)
+
+    # Residual = statement minus what mapped POS already explains
+    lane_resid: dict = {}
+    for key, ed in lane_ext.items():
+        pd_ = lane_pos.get(key, {})
+        lane_resid[key] = {d: v - pd_.get(d, 0.0) for d, v in ed.items()}
+
+    out = []
+    for c in cands:
+        cs = code_series.get(c["norm"], {})
+        active = [(d, v) for d, v in sorted(cs.items()) if v > TOL_ABS_DAY]
+        if len(active) < min_hits:
+            continue
+        # category fixed when already mapped (e.g. KNNQR is QR/UNKNOWN); else open
+        cats = [c["category"]] if c["category"] in ("QR", "TRANSFER", "CREDIT") else \
+               ["QR", "TRANSFER", "CREDIT"]
+        best = None
+        for (lcat, lbank), resid in lane_resid.items():
+            if lcat not in cats or lbank == "UNKNOWN":
+                continue
+            hits, sample = 0, []
+            for d, v in active:
+                # CC settles T+1/T+2 → also accept the next two days' settlement
+                if lcat == "CREDIT":
+                    days_try = [d,
+                                (_pd(d) + timedelta(days=1)).isoformat(),
+                                (_pd(d) + timedelta(days=2)).isoformat()]
+                else:
+                    days_try = [d]
+                ev = next((resid.get(dt) for dt in days_try
+                           if resid.get(dt) is not None), None)
+                if ev is not None and _within_tol_day(ev, v):
+                    hits += 1
+                    if len(sample) < 3:
+                        sample.append({"day": d, "pos": round(v, 2), "ext": round(ev, 2)})
+            score = hits / len(active)
+            if hits >= min_hits and score >= min_score:
+                cand = {"category": lcat, "bank": lbank, "hits": hits, "score": score,
+                        "sample": sample,
+                        "ext_total": round(sum(max(x, 0.0) for x in resid.values()), 2)}
+                if best is None or (cand["hits"], cand["score"]) > (best["hits"], best["score"]):
+                    best = cand
+        if best:
+            m = pmap.get(c["norm"])
+            out.append({
+                "code": c["code"], "norm": c["norm"],
+                "map_id": m["id"] if m else None,
+                "category": best["category"], "bank": best["bank"],
+                "hits": best["hits"], "active_days": len(active),
+                "score": round(best["score"], 2),
+                "pos_total": round(c["amount"], 2), "ext_total": best["ext_total"],
+                "sample": best["sample"],
+            })
+    out.sort(key=lambda x: -x["pos_total"])
     return out
 
 
