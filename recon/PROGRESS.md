@@ -40,6 +40,7 @@ classification is **config-driven, not regex**:
 | Phase E — pytest suite (23 tests) | ✅ Done |
 | Master-only scope + write-auth gate + upload guards | ✅ Done |
 | Idempotent run-match; ENTERTAIN excluded; unmapped codes surfaced | ✅ Done |
+| Guided **Mapping Flow** (Setup) — per-payment-type stepper: type → bank chips → reconciling document, progress bar, deep links from every unmapped-code banner (`openMappingFlow`); needs_attention now includes PROMPTPAY in bank-required cats | ✅ Done 2026-06-10 |
 
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +

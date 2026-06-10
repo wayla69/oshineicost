@@ -728,10 +728,25 @@
         <p class="text-sm text-gray-600" data-i18n="setup_p">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
       </div>
       <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+
+      <!-- Guided mapping flow — one step per payment type -->
+      <div class="card">
+        <div class="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <div class="font-semibold text-gray-700" data-i18n="flow_hd">Mapping flow — by payment type</div>
+            <p class="text-xs text-gray-500 mt-0.5" data-i18n="flow_p">Walk each payment type: what it is → which bank the money lands in → which document reconciles it. Changes save instantly.</p>
+          </div>
+          <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes" data-i18n="reseed">⟳ Re-seed from POS</button>
+        </div>
+        <div id="flow-progress" class="mt-3"></div>
+        <div id="flow-steps" class="flex flex-wrap gap-2 mt-3"></div>
+        <div id="flow-body" class="mt-3 overflow-x-auto"></div>
+      </div>
+
       <div class="card overflow-x-auto">
         <div class="flex items-center justify-between mb-3">
-          <div class="font-semibold text-gray-700" data-i18n="pmap_hd">Payment-code map</div>
-          <button onclick="reseed()" class="btn btn-sec" title="Pick up any new POS codes" data-i18n="reseed">⟳ Re-seed from POS</button>
+          <div><span class="font-semibold text-gray-700" data-i18n="pmap_hd">Payment-code map</span>
+            <span class="text-xs text-gray-400 ml-1" data-i18n="pmap_adv">(advanced — every code in one table)</span></div>
         </div>
         <table class="w-full text-sm">
           <thead><tr class="text-gray-400 text-xs uppercase border-b">
@@ -979,7 +994,26 @@ const I18N = {
     pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)", pm_pos_point:"POS แต้ม", pm_bank_in_credit:"เงินเข้าบัญชีรวมอยู่ในก้อนบัตรเครดิต KTC",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
-    pmap_hd:"ตารางจับคู่รหัสรับเงิน", reseed:"⟳ ดึงรหัสใหม่จาก POS",
+    pmap_hd:"ตารางจับคู่รหัสรับเงิน", pmap_adv:"(ขั้นสูง — ทุกรหัสในตารางเดียว)", reseed:"⟳ ดึงรหัสใหม่จาก POS",
+    // guided mapping flow
+    flow_hd:"ขั้นตอนจับคู่ — แยกตามช่องทางรับเงิน",
+    flow_p:"ไล่ทีละช่องทาง: รหัสนี้คืออะไร → เงินเข้าธนาคารไหน → กระทบกับเอกสารอะไร · บันทึกทันทีที่แก้",
+    flow_ready:"รหัสพร้อมกระทบยอด", flow_no_codes:"ไม่มีรหัสในประเภทนี้",
+    flow_pick_bank:"เลือกธนาคารที่เงินเข้า", flow_reset_none:"ตั้งเป็นไม่ใช้ธนาคาร",
+    flow_lbl_bank:"เงินเข้าธนาคารไหน? (ต้องเลือก)", flow_lbl_nobank:"ไม่ต้องระบุธนาคาร",
+    flow_move:"ประเภท", flow_off:"ไม่กระทบยอด", flow_ok:"พร้อม", flow_saved:"บันทึกแล้ว",
+    flow_iss_needs_bank:"ต้องเลือกธนาคาร", flow_iss_check_type:"ตรวจประเภท",
+    flow_seeded:"ดึงรหัสใหม่ {n} รหัส", flow_not_found:"ไม่พบรหัส {c} ในตาราง — กด ⟳ ดึงรหัสใหม่จาก POS",
+    flow_click_map:"คลิกรหัสเพื่อไปตั้งค่า",
+    flow_doc_CASH:"ยอดฝากเงินสดเข้าบัญชี (รายการฝากเงินสดใน statement)",
+    flow_doc_QR:"statement ธนาคาร — เงินเข้า QR ของธนาคารนั้น",
+    flow_doc_TRANSFER:"statement ธนาคาร — รายการโอนเข้า",
+    flow_doc_CREDIT:"ใบสรุปยอดบัตร (settlement) แยกตามผู้รับบัตร",
+    flow_doc_GRAB:"รายงาน Grab (ยอดรวม / สุทธิหลังค่าธรรมเนียม)",
+    flow_doc_LINEMAN:"รายงาน Line Man (ยอดรวม / สุทธิหลังค่าธรรมเนียม)",
+    flow_doc_COUPON:"ยังไม่มีเอกสารภายนอก — แสดงเพื่อติดตาม",
+    flow_doc_ENTERTAIN:"ไม่นำมากระทบยอด (รับรองภายใน — ปิด Reconcile)",
+    flow_doc_OTHER:"ยังไม่จัดประเภท — ย้ายไปประเภทที่ถูกต้องด้วยช่อง “ประเภท”",
     accts_hd:"บัญชีธนาคาร", mids_hd:"MID บัตรเครดิต",
     accts_hint:"ทุกสาขาเป็นแถว — กรอกเลขบัญชี KTB / KBANK บันทึกอัตโนมัติ (เว้นว่าง = ลบ)",
     mids_hint:"ทุกสาขาเป็นแถว — กรอก Merchant ID ของ KTB / KBANK / KTC บันทึกอัตโนมัติ (เว้นว่าง = ลบ)",
@@ -1108,7 +1142,26 @@ const I18N = {
     pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)", pm_pos_point:"POS points", pm_bank_in_credit:"Bank credit is inside the combined KTC settlement",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
-    pmap_hd:"Payment-code map", reseed:"⟳ Re-seed from POS",
+    pmap_hd:"Payment-code map", pmap_adv:"(advanced — every code in one table)", reseed:"⟳ Re-seed from POS",
+    // guided mapping flow
+    flow_hd:"Mapping flow — by payment type",
+    flow_p:"Walk each payment type: what the code is → which bank the money lands in → which document reconciles it. Saves instantly.",
+    flow_ready:"codes ready to reconcile", flow_no_codes:"No codes in this type",
+    flow_pick_bank:"pick the bank the money lands in", flow_reset_none:"set to no-bank",
+    flow_lbl_bank:"Which bank does the money land in? (required)", flow_lbl_nobank:"No bank needed",
+    flow_move:"Type", flow_off:"Not reconciled", flow_ok:"Ready", flow_saved:"Saved",
+    flow_iss_needs_bank:"needs a bank", flow_iss_check_type:"check the type",
+    flow_seeded:"Picked up {n} new code(s)", flow_not_found:"Code {c} not in the map — press ⟳ Re-seed from POS",
+    flow_click_map:"click a code to map it",
+    flow_doc_CASH:"Cash-deposit lines in the bank statement",
+    flow_doc_QR:"Bank statement — incoming QR credits of that bank",
+    flow_doc_TRANSFER:"Bank statement — incoming transfers",
+    flow_doc_CREDIT:"Card settlement statement, per acquirer",
+    flow_doc_GRAB:"Grab report (gross / net after fees)",
+    flow_doc_LINEMAN:"Line Man report (gross / net after fees)",
+    flow_doc_COUPON:"No external document yet — tracked only",
+    flow_doc_ENTERTAIN:"Not reconciled (internal comps — Reconcile off)",
+    flow_doc_OTHER:"Unclassified — move it to the right type with the “Type” select",
     accts_hd:"Bank accounts", mids_hd:"Credit-card acquirer MIDs",
     accts_hint:"One row per branch — type KTB / KBANK account no, saved automatically (blank = delete)",
     mids_hint:"One row per branch — type KTB / KBANK / KTC merchant id, saved automatically (blank = delete)",
@@ -1508,7 +1561,7 @@ function renderBoard(d){
   const un=document.getElementById('bd-unmapped');
   if(d.unmapped&&d.unmapped.length){ un.classList.remove('hidden');
     un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes (excluded from this board)</div>
-      <div class="text-sm">${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')} — map them in Setup.</div>`;
+      <div class="text-sm">${d.unmapped.map(u=>mapBtn(u.code,`${u.code}: ${fmt(u.amount)}`)).join('')} — ${t('flow_click_map')}</div>`;
   } else un.classList.add('hidden');
 
   // header
@@ -1601,11 +1654,10 @@ async function openDrill(branch_id, scope, back){
 function drillBack(){ closeDrawer('drill'); refreshTab(DRILL_BACK); }
 
 function mapStatusHtml(c){
-  if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>
-    <button onclick="event.stopPropagation();switchTab('setup')" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
+  const goBtn=`<button data-code="${_attr(c.code)}" onclick="event.stopPropagation();openMappingFlow(this.dataset.code)" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
+  if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>${goBtn}`;
   if(c.bank==='UNKNOWN'||c.bank==='PROMPTPAY') return `<span class="badge b-warn">${t('drill_needs_bank')}</span>
-    <span class="text-xs text-gray-500 ml-1">${c.category}·${c.bank}</span>
-    <button onclick="event.stopPropagation();switchTab('setup')" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
+    <span class="text-xs text-gray-500 ml-1">${c.category}·${c.bank}</span>${goBtn}`;
   const off = c.reconcile? '' : ` <span class="text-xs text-gray-400">(${t('drill_recon_off')})</span>`;
   return `<span class="badge ${MAP_BADGE[c.category]||'b-mut'}">${c.category}${c.bank!=='NONE'?'·'+c.bank:''}</span>${off}`;
 }
@@ -1623,7 +1675,7 @@ function renderDrill(d, scope){
   if(d.attention && d.attention.length){ att.classList.remove('hidden');
     att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${t('drill_attention')}</div>
       <div class="flex flex-wrap gap-2 mt-1">${d.attention.map(c=>
-        `<button onclick="switchTab('setup')" class="badge b-warn" style="cursor:pointer">${c.code} · ${fmt(c.amount)}${c.txn_count?` · ${c.txn_count}`:''}</button>`).join('')}</div>`;
+        mapBtn(c.code,`${c.code} · ${fmt(c.amount)}${c.txn_count?` · ${c.txn_count}`:''}`)).join('')}</div>`;
   } else att.classList.add('hidden');
 
   // POS codes (lane-scoped if a category was given, else all codes for the day)
@@ -1893,7 +1945,7 @@ function renderDailyBoard(d){
   document.getElementById('daily-coverage').innerHTML = (Object.keys(ps.coverage||{}).length
     ? Object.entries(ps.coverage).map(([k,v])=>`<span class="badge b-mut mr-1">${k}: ${v}</span>`).join('')
     : `<span class="text-gray-400">${t('e_no_docs')}</span>`)
-    + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')} — add them in Setup.</div>`:'');
+    + ((d.unmapped&&d.unmapped.length)?`<div class="mt-2 text-amber-700">⚠ Unmapped POS codes (excluded): ${d.unmapped.map(u=>mapBtn(u.code,`${u.code}: ${fmt(u.amount)}`)).join('')} — ${t('flow_click_map')}</div>`:'');
 
   const host=document.getElementById('daily-matrix');
   if(!d.days||!d.days.length){ host.innerHTML='<div class="text-center text-gray-400 py-6">No activity for this period</div>'; return; }
@@ -1989,8 +2041,8 @@ async function renderReconcile(){
   const un=document.getElementById('rec-unmapped');
   if(s.unmapped && s.unmapped.length){ un.classList.remove('hidden');
     un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes</div>
-      <div class="text-sm text-gray-600">These tender codes have no mapping and are excluded. Add them in Setup → Payment-code map:</div>
-      <div class="text-sm mt-1">${s.unmapped.map(u=>`<span class="badge b-warn mr-1">${u.code}: ${fmt(u.amount)}</span>`).join('')}</div>`;
+      <div class="text-sm text-gray-600">${t('flow_click_map')}</div>
+      <div class="text-sm mt-1">${s.unmapped.map(u=>mapBtn(u.code,`${u.code}: ${fmt(u.amount)}`)).join('')}</div>`;
   } else un.classList.add('hidden');
   const cont=document.getElementById('rec-cards'); cont.innerHTML='';
   if(!s.categories.length){ cont.innerHTML='<div class="text-gray-400">No reconcilable POS tender for this period.</div>'; }
@@ -2797,22 +2849,9 @@ function renderReference(){
 async function loadSetup(){
   refreshSetupBadge();
   renderReference();
-  const map=await api('/api/payment-map'); const tb=document.getElementById('map-body'); tb.innerHTML='';
-  const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
-  const att=document.getElementById('map-attention');
-  if(need.length){ att.classList.remove('hidden');
-    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
-      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ${fmt(m.pos_amount)}</span>`).join('')}</div>`;
-  } else att.classList.add('hidden');
-  map.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY'); if(attn) tr.style.background='#fff7ed';
-    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}${attn?' <span class="text-amber-600">⚠</span>':''}</td>
-      <td class="text-right font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
-      <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
-      <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
-      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
-      <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
-    tb.appendChild(tr);
-  });
+  MAP_DATA=await api('/api/payment-map');
+  renderFlow();
+  renderMapTable();
   // Bank accounts — one row per master branch, KTB + KBANK editable inline
   const accts=await api('/api/bank-accounts');
   const aMap={}; accts.forEach(a=>{ aMap[a.branch_id+'|'+a.bank]=a; });
@@ -2842,26 +2881,178 @@ async function loadSetup(){
     mb.appendChild(tr);
   });
 }
-function _attr(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); }
-async function saveMap(id){
-  const ok=document.getElementById('mok-'+id);
-  try{
-    await api(`/api/payment-map/${id}`,{method:'PATCH',json:{
-      category:document.getElementById('mc-'+id).value, bank:document.getElementById('mb-'+id).value,
-      reconcile:document.getElementById('mr-'+id).checked?1:0, updated_by:'staff'}});
-    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
-    const attn=['UNKNOWN','PROMPTPAY'].includes(document.getElementById('mb-'+id).value);
-    document.getElementById('mb-'+id).closest('tr').style.background = attn?'#fff7ed':'';
-    refreshSetupBadge(); refreshAttention();
-  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
-}
-async function refreshAttention(){
-  const map=await api('/api/payment-map').catch(()=>[]);
+
+function renderMapTable(){
+  const map=MAP_DATA; const tb=document.getElementById('map-body'); tb.innerHTML='';
   const need=map.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
   const att=document.getElementById('map-attention');
   if(need.length){ att.classList.remove('hidden');
     att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
-      <div class="text-sm text-gray-600">${need.sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>`<span class="badge b-warn mr-1">${m.payment_code_norm} · ${fmt(m.pos_amount)}</span>`).join('')}</div>`;
+      <div class="text-sm text-gray-600">${need.slice().sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>mapBtn(m.payment_code_norm,`${m.payment_code_norm} · ${fmt(m.pos_amount)}`)).join('')}</div>`;
+  } else att.classList.add('hidden');
+  map.forEach(m=>{ const tr=document.createElement('tr'); const attn=(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY'); if(attn) tr.style.background='#fff7ed';
+    tr.innerHTML=`<td class="py-1.5 font-mono">${m.payment_code_norm}${attn?' <span class="text-amber-600">⚠</span>':''}</td>
+      <td class="text-right font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
+      <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
+      <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
+    tb.appendChild(tr);
+  });
+}
+function _attr(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); }
+
+// ── Guided mapping flow (one step per payment type) ──────────────────────────
+// What each type IS → which bank the money lands in → which document proves it.
+let MAP_DATA=[], FLOW_STEP=null, FLOW_FOCUS=null, FLOW_RESEEDED=false;
+const NEEDS_BANK={QR:1,TRANSFER:1,CREDIT:1};
+const FLOW_TYPES=[
+  {cat:'CASH',     icon:'💵', banks:[]},
+  {cat:'QR',       icon:'📱', banks:['KTB','KBANK']},
+  {cat:'TRANSFER', icon:'🏦', banks:['KTB','KBANK']},
+  {cat:'CREDIT',   icon:'💳', banks:['KTB','KBANK','KTC','BAY','SCB','BBL']},
+  {cat:'GRAB',     icon:'🟢', banks:[]},
+  {cat:'LINEMAN',  icon:'🟡', banks:[]},
+  {cat:'COUPON',   icon:'🎟️', banks:[]},
+  {cat:'ENTERTAIN',icon:'🍽️', banks:[]},
+  {cat:'OTHER',    icon:'❔', banks:[]},
+];
+const _normCode=s=>String(s||'').trim().replace(/\s+/g,' ');
+const _isFocus=m=>FLOW_FOCUS && m.payment_code_norm.toLowerCase()===FLOW_FOCUS.toLowerCase();
+// null = ready to reconcile; otherwise the i18n suffix of the blocking issue
+function codeIssue(m){
+  if(!m.reconcile) return null;                       // informational only — handled
+  if(NEEDS_BANK[m.category]&&(m.bank==='UNKNOWN'||m.bank==='PROMPTPAY')) return 'needs_bank';
+  if(m.category==='OTHER') return 'check_type';
+  return null;
+}
+// Deep link from any "unmapped code" banner: jump to Setup, open the step that
+// holds the code and highlight it (re-seeding once if the code is brand-new).
+function openMappingFlow(code){
+  FLOW_FOCUS=_normCode(code)||null; FLOW_RESEEDED=false;
+  switchTab('setup');
+}
+function mapBtn(code,label){
+  return `<button class="badge b-warn mr-1" style="cursor:pointer" data-code="${_attr(code)}"
+    title="${t('drill_map_now')} →" onclick="event.stopPropagation();openMappingFlow(this.dataset.code)">${label}</button>`;
+}
+async function renderFlow(){
+  const stepsHost=document.getElementById('flow-steps'); if(!stepsHost) return;
+  if(FLOW_FOCUS){
+    const hit=MAP_DATA.find(_isFocus);
+    if(hit) FLOW_STEP=hit.category;
+    else if(!FLOW_RESEEDED){
+      FLOW_RESEEDED=true;
+      try{ const r=await api('/api/payment-map/seed',{method:'POST'});
+        if(r.inserted) toast(t('flow_seeded').replace('{n}',r.inserted),'ok');
+        MAP_DATA=await api('/api/payment-map'); renderMapTable(); return renderFlow();
+      }catch(e){ toast(e.message,'err'); FLOW_FOCUS=null; }
+    } else { toast(t('flow_not_found').replace('{c}',FLOW_FOCUS),'warn'); FLOW_FOCUS=null; }
+  }
+  const byCat={}; MAP_DATA.forEach(m=>(byCat[m.category]=byCat[m.category]||[]).push(m));
+  if(!FLOW_STEP){ const first=FLOW_TYPES.find(ft=>(byCat[ft.cat]||[]).some(codeIssue)); FLOW_STEP=first?first.cat:'CASH'; }
+  // overall progress
+  const total=MAP_DATA.length, ready=total-MAP_DATA.filter(codeIssue).length;
+  const pct=total?Math.round(ready/total*100):100;
+  document.getElementById('flow-progress').innerHTML=`
+    <div class="flex items-center gap-3">
+      <div style="flex:1;height:8px;background:#eef2f7;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${pct===100?'var(--ok)':'var(--warn)'}"></div></div>
+      <span class="text-xs font-semibold whitespace-nowrap ${pct===100?'text-green-600':'text-amber-700'}">${ready}/${total} ${t('flow_ready')}</span>
+    </div>`;
+  // step chips — ⚠ count where codes still block reconciliation, ✓ when done
+  stepsHost.innerHTML=FLOW_TYPES.map(ft=>{
+    const codes=byCat[ft.cat]||[]; const n=codes.filter(codeIssue).length;
+    const badge=n?`<span class="badge b-warn ml-1">${n}</span>`:(codes.length?'<span class="text-green-600 ml-1">✓</span>':'');
+    return `<button onclick="setFlowStep('${ft.cat}')" class="btn ${ft.cat===FLOW_STEP?'btn-pri':'btn-sec'}"
+      style="padding:5px 11px;font-size:12.5px${codes.length?'':';opacity:.45'}">${ft.icon} ${t('catd_'+ft.cat)}${badge}</button>`;
+  }).join('');
+  renderFlowStep(byCat);
+}
+function setFlowStep(cat){ FLOW_STEP=cat; FLOW_FOCUS=null; renderFlow(); }
+function renderFlowStep(byCat){
+  const ft=FLOW_TYPES.find(f=>f.cat===FLOW_STEP)||FLOW_TYPES[0];
+  const codes=(byCat[ft.cat]||[]).slice().sort((a,b)=>(b.pos_amount||0)-(a.pos_amount||0));
+  const host=document.getElementById('flow-body');
+  const arrow='<span class="text-gray-300 mx-1.5">→</span>';
+  const crumb=`<div class="text-sm mb-3" style="background:#f8fafc;border:1px solid #eef2f7;border-radius:8px;padding:8px 12px">
+      <span class="badge ${MAP_BADGE[ft.cat]||'b-mut'}">${ft.icon} ${t('catd_'+ft.cat)}</span>${arrow}
+      <span class="text-gray-600">🏦 ${NEEDS_BANK[ft.cat]?t('flow_lbl_bank'):t('flow_lbl_nobank')}</span>${arrow}
+      <span class="text-gray-600">📄 ${t('flow_doc_'+ft.cat)}</span>
+    </div>`;
+  if(!codes.length){ host.innerHTML=crumb+`<div class="text-gray-400 text-sm py-2">${t('flow_no_codes')}</div>`; return; }
+  const rows=codes.map(m=>{
+    const issue=codeIssue(m);
+    const chips = NEEDS_BANK[ft.cat]
+      ? ft.banks.map(b=>`<button onclick="flowSetBank(${m.id},'${b}')" class="badge ${m.bank===b?'b-ok':'b-mut'}"
+            style="cursor:pointer;border:1px solid ${m.bank===b?'#16a34a':'#e2e8f0'};margin-right:4px">${b}</button>`).join('')
+        + (issue==='needs_bank'?` <span class="text-xs text-amber-700">← ${t('flow_pick_bank')}</span>`:'')
+      : (m.bank!=='NONE'
+          ? `<span class="badge b-warn mr-1">${m.bank}</span><button onclick="flowSetBank(${m.id},'NONE')" class="text-xs text-orange-600 hover:underline">${t('flow_reset_none')}</button>`
+          : `<span class="text-xs text-gray-400">${t('flow_lbl_nobank')}</span>`);
+    const status = !m.reconcile?`<span class="badge b-mut">${t('flow_off')}</span>`
+      : issue?`<span class="badge b-warn">⚠ ${t('flow_iss_'+issue)}</span>`
+      : `<span class="badge b-ok">✓ ${t('flow_ok')}</span>`;
+    return `<tr id="flow-row-${m.id}" class="border-b border-gray-50" style="${_isFocus(m)?'background:#fff7ed;outline:2px solid var(--brand)':''}">
+      <td class="py-2 pr-2 font-mono font-semibold whitespace-nowrap">${m.payment_code_norm}</td>
+      <td class="text-right pr-3 font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
+      <td class="pr-2 whitespace-nowrap">${chips}</td>
+      <td class="pr-2"><select class="inp" style="font-size:12px;padding:3px 6px" onchange="flowMove(${m.id},this.value)" title="${t('flow_move')}">
+        ${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
+      <td class="text-center"><input type="checkbox" ${m.reconcile?'checked':''} onchange="flowRecon(${m.id},this.checked)" title="${t('s_reconcile')}"></td>
+      <td class="text-right pl-2 whitespace-nowrap">${status}</td>
+    </tr>`;
+  }).join('');
+  host.innerHTML=crumb+`<table class="w-full text-sm"><thead><tr class="text-gray-400 text-xs uppercase border-b">
+      <th class="text-left pb-1">${t('s_poscode')}</th><th class="text-right pb-1 pr-3">${t('s_volume')}</th>
+      <th class="text-left pb-1">${t('s_bank')}</th><th class="text-left pb-1">${t('flow_move')}</th>
+      <th class="text-center pb-1">${t('s_reconcile')}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+  const focusRow=codes.find(_isFocus);
+  if(focusRow){ const el=document.getElementById('flow-row-'+focusRow.id); if(el) el.scrollIntoView({block:'center',behavior:'smooth'}); }
+}
+function _mapById(id){ return MAP_DATA.find(m=>m.id===id); }
+async function _flowPatch(id, changes){
+  const m=_mapById(id); if(!m) return;
+  try{
+    await api(`/api/payment-map/${m.id}`,{method:'PATCH',json:{
+      category:changes.category??m.category, bank:changes.bank??m.bank,
+      reconcile:('reconcile' in changes)?changes.reconcile:m.reconcile,
+      notes:m.notes||'', updated_by:'staff'}});
+    Object.assign(m,changes);
+    renderFlow(); renderMapTable(); refreshSetupBadge();
+    toast(t('flow_saved'),'ok',1400);
+  }catch(e){ toast(e.message,'err'); renderFlow(); renderMapTable(); }
+}
+function flowSetBank(id,bank){ _flowPatch(id,{bank}); }
+function flowRecon(id,on){ _flowPatch(id,{reconcile:on?1:0}); }
+function flowMove(id,cat){
+  const m=_mapById(id); if(!m||cat===m.category) return;
+  const changes={category:cat};
+  // default the bank to something sensible for the target type
+  if(NEEDS_BANK[cat]){ if(!['KTB','KBANK','KTC','BAY','SCB','BBL'].includes(m.bank)) changes.bank='UNKNOWN'; }
+  else changes.bank='NONE';
+  if(cat==='ENTERTAIN') changes.reconcile=0;
+  _flowPatch(id,changes);
+}
+async function saveMap(id){
+  const ok=document.getElementById('mok-'+id);
+  try{
+    const category=document.getElementById('mc-'+id).value, bank=document.getElementById('mb-'+id).value,
+          reconcile=document.getElementById('mr-'+id).checked?1:0;
+    await api(`/api/payment-map/${id}`,{method:'PATCH',json:{category,bank,reconcile,updated_by:'staff'}});
+    const m=_mapById(id); if(m) Object.assign(m,{category,bank,reconcile});
+    if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
+    const attn=['UNKNOWN','PROMPTPAY'].includes(bank);
+    document.getElementById('mb-'+id).closest('tr').style.background = attn?'#fff7ed':'';
+    refreshSetupBadge(); refreshAttention(); renderFlow();
+  }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
+}
+function refreshAttention(){
+  const need=MAP_DATA.filter(m=>m.bank==='UNKNOWN'||m.bank==='PROMPTPAY');
+  const att=document.getElementById('map-attention');
+  if(need.length){ att.classList.remove('hidden');
+    att.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ ${need.length} code(s) need a bank before they can reconcile</div>
+      <div class="text-sm text-gray-600">${need.slice().sort((a,b)=>b.pos_amount-a.pos_amount).map(m=>mapBtn(m.payment_code_norm,`${m.payment_code_norm} · ${fmt(m.pos_amount)}`)).join('')}</div>`;
   } else att.classList.add('hidden');
 }
 async function reseed(){ try{ const r=await api('/api/payment-map/seed',{method:'POST'}); toast(`Seeded ${r.inserted} new code(s)`,'ok'); loadSetup(); }catch(e){ toast(e.message,'err'); } }

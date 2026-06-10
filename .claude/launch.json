@@ -57,6 +57,22 @@
         "OSHINEI_DB": "backend/oshinei.db"
       },
       "port": 8014
+    },
+    {
+      "name": "recon-ux",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "recon.main:app",
+        "--port",
+        "8013"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OSHINEI_DB": "_uxtest.db"
+      },
+      "port": 8013
     }
   ]
 }

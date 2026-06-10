@@ -352,7 +352,10 @@ def list_payment_map(needs_attention: int = 0):
     with get_db() as conn:
         sql = "SELECT * FROM recon_payment_map"
         if needs_attention:
-            sql += " WHERE bank='UNKNOWN'"
+            # Codes the daily engine can't lane: bank not set, or PROMPTPAY in a
+            # category that reconciles per settling bank (matcher → unmapped_bank).
+            sql += (" WHERE bank='UNKNOWN'"
+                    " OR (bank='PROMPTPAY' AND category IN ('QR','TRANSFER','CREDIT'))")
         sql += " ORDER BY (bank='UNKNOWN') DESC, category, bank, payment_code_norm"
         rows = [dict(r) for r in conn.execute(sql)]
         # Attach POS volume per normalized code (master branches) so staff can see
