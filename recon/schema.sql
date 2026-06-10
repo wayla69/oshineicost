@@ -322,8 +322,8 @@ CREATE TABLE IF NOT EXISTS recon_manual_match_line (
 CREATE INDEX IF NOT EXISTS idx_rmml_match ON recon_manual_match_line(match_id);
 
 -- Generic evidence attachments (photos / PDFs) staff add as reconciliation proof,
--- scoped to a branch + day (+ optional channel/category, e.g. COUPON). Stored as a
--- BLOB so it survives a sales-only resync (the whole DB is copied, sales rebuilt).
+-- scoped to a branch + day (+ optional channel/category, e.g. COUPON).
+-- Files are stored on the Fly volume at ATTACH_DIR/{file_path}; only metadata here.
 CREATE TABLE IF NOT EXISTS recon_attachment (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     branch_id   INTEGER NOT NULL,
@@ -332,7 +332,7 @@ CREATE TABLE IF NOT EXISTS recon_attachment (
     file_name   TEXT NOT NULL,
     mime        TEXT,
     size_bytes  INTEGER,
-    data        BLOB,
+    file_path   TEXT,                     -- relative path under ATTACH_DIR
     note        TEXT,
     uploaded_by TEXT,
     uploaded_at TEXT DEFAULT (datetime('now'))

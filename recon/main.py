@@ -17,6 +17,7 @@ import json
 import os
 import re
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from datetime import datetime as _dt, timedelta as _td
@@ -54,8 +55,9 @@ from .parsers.pdf_formats import detect_and_parse as _detect_pdf_format
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-_DB_PATH   = Path(os.getenv("OSHINEI_DB", "/data/oshinei.db"))
-_SCHEMA    = Path(__file__).parent / "schema.sql"
+_DB_PATH    = Path(os.getenv("OSHINEI_DB", "/data/oshinei.db"))
+_SCHEMA     = Path(__file__).parent / "schema.sql"
+_ATTACH_DIR = Path(os.getenv("OSHINEI_ATTACH_DIR", str(_DB_PATH.parent / "attachments")))
 
 app = FastAPI(title="Oshinei Revenue Reconciliation", version="1.0.0")
 # The frontend is served same-origin (/app on this service), so it needs no CORS
@@ -173,12 +175,48 @@ def _migrate_payment_bank(conn):
         pass
 
 
+def _migrate_attachment_to_fs(conn):
+    """Replace recon_attachment.data (BLOB) with file_path (TEXT).
+    Files uploaded before this migration are lost (acceptable — feature was unused).
+    Idempotent: skips if file_path already present."""
+    try:
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(recon_attachment)")}
+    except sqlite3.OperationalError:
+        return
+    if "file_path" in existing:
+        return  # already migrated
+    conn.executescript("""
+        CREATE TABLE recon_attachment__new (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            branch_id   INTEGER NOT NULL,
+            day         TEXT NOT NULL,
+            category    TEXT,
+            file_name   TEXT NOT NULL,
+            mime        TEXT,
+            size_bytes  INTEGER,
+            file_path   TEXT,
+            note        TEXT,
+            uploaded_by TEXT,
+            uploaded_at TEXT
+        );
+        INSERT INTO recon_attachment__new
+            (id,branch_id,day,category,file_name,mime,size_bytes,note,uploaded_by,uploaded_at)
+            SELECT id,branch_id,day,category,file_name,mime,size_bytes,note,uploaded_by,uploaded_at
+            FROM recon_attachment;
+        DROP TABLE recon_attachment;
+        ALTER TABLE recon_attachment__new RENAME TO recon_attachment;
+        CREATE INDEX IF NOT EXISTS idx_recon_attachment ON recon_attachment(branch_id, day);
+    """)
+
+
 @app.on_event("startup")
 def startup():
+    _ATTACH_DIR.mkdir(parents=True, exist_ok=True)
     with get_db() as conn:
         conn.executescript(_SCHEMA.read_text())
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
+        _migrate_attachment_to_fs(conn)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
         conn.commit()
 
@@ -738,31 +776,54 @@ async def create_attachment(branch_id: int = Form(...), day: str = Form(...),
         raise HTTPException(422, "Empty file.")
     if len(raw) > _ATTACH_MAX:
         raise HTTPException(413, f"File exceeds the {_ATTACH_MAX // (1024*1024)} MB limit.")
-    with get_db() as conn:
-        _validate_master_branch(conn, branch_id)
-        cur = conn.execute(
-            "INSERT INTO recon_attachment(branch_id,day,category,file_name,mime,size_bytes,data,note,uploaded_by) "
-            "VALUES(?,?,?,?,?,?,?,?,?)",
-            (branch_id, day, (category or None), fn, file.content_type, len(raw), raw,
-             (note or None), (uploaded_by or None)))
-        conn.commit()
-        return {"id": cur.lastrowid, "file_name": fn, "size_bytes": len(raw)}
+
+    # Store file on volume, not in DB
+    safe_ext = Path(fn).suffix.lower()
+    rel_path = f"{day[:7]}/{branch_id}_{day}_{uuid.uuid4().hex[:8]}{safe_ext}"
+    dest = _ATTACH_DIR / rel_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(raw)
+
+    try:
+        with get_db() as conn:
+            _validate_master_branch(conn, branch_id)
+            cur = conn.execute(
+                "INSERT INTO recon_attachment"
+                "(branch_id,day,category,file_name,mime,size_bytes,file_path,note,uploaded_by) "
+                "VALUES(?,?,?,?,?,?,?,?,?)",
+                (branch_id, day, (category or None), fn, file.content_type,
+                 len(raw), rel_path, (note or None), (uploaded_by or None)))
+            conn.commit()
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    return {"id": cur.lastrowid, "file_name": fn, "size_bytes": len(raw)}
 
 
 @app.get("/api/attachments/{att_id}/file")
 def get_attachment_file(att_id: int):
     with get_db() as conn:
-        r = conn.execute("SELECT file_name, mime, data FROM recon_attachment WHERE id=?",
-                         (att_id,)).fetchone()
+        r = conn.execute(
+            "SELECT file_name, mime, file_path FROM recon_attachment WHERE id=?",
+            (att_id,)).fetchone()
     if not r:
         raise HTTPException(404, "not found")
-    return Response(content=r["data"], media_type=r["mime"] or "application/octet-stream",
+    fp = _ATTACH_DIR / r["file_path"] if r["file_path"] else None
+    if not fp or not fp.exists():
+        raise HTTPException(404, "file missing from storage")
+    return Response(content=fp.read_bytes(),
+                    media_type=r["mime"] or "application/octet-stream",
                     headers={"Content-Disposition": f'inline; filename="{r["file_name"]}"'})
 
 
 @app.delete("/api/attachments/{att_id}", dependencies=[Depends(require_write_token)])
 def delete_attachment(att_id: int):
     with get_db() as conn:
+        r = conn.execute("SELECT file_path FROM recon_attachment WHERE id=?",
+                         (att_id,)).fetchone()
+        if r and r["file_path"]:
+            fp = _ATTACH_DIR / r["file_path"]
+            fp.unlink(missing_ok=True)
         conn.execute("DELETE FROM recon_attachment WHERE id=?", (att_id,))
         conn.commit()
     return {"deleted": att_id}
