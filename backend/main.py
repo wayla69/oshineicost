@@ -5049,24 +5049,33 @@ def buffet_breakeven(
     monthly_fixed_cost:   float           = Query(0.0),
 ):
     """Breakeven analysis: covers needed to cover fixed costs given avg GP/cover."""
-    sku_filters:  list = ["c.name = 'BUFFET'"]
+    # fix C2: revenue + pax from BUFFET tier SKUs; COGS from ALL SKUs (tier COGS is on B0xxx item rows)
+    sku_filters:  list = ["c.name = 'BUFFET'", "b.name != 'ALL'"]
+    cogs_filters: list = ["b.name != 'ALL'"]
     sku_params:   dict = {}
     if branch:
         sku_filters.append("b.name = :branch")
+        cogs_filters.append("b.name = :branch")
         sku_params["branch"] = branch
     _month_range_filter(sku_filters, sku_params, month_from, month_to, month)
+    _month_range_filter(cogs_filters, sku_params, month_from, month_to, month)
 
     sku_sql = f"""
         SELECT
-            SUM(sm.qty)                        AS total_pax,
-            SUM(sm.subtotal_ex_vat)            AS rev_ex,
-            SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS total_cogs
+            SUM(sm.qty)             AS total_pax,
+            SUM(sm.subtotal_ex_vat) AS rev_ex
         FROM sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
-        LEFT JOIN sku_cost sc ON sc.sku_id  = sm.sku_id
-        WHERE {' AND '.join(sku_filters)} AND b.name != 'ALL'
+        WHERE {' AND '.join(sku_filters)}
+    """
+
+    cogs_sql = f"""
+        SELECT SUM({_unified_cogs_expr(ssm='sm')}) AS total_cogs
+        FROM sales_sku_monthly sm
+        JOIN branches b ON b.branch_id = sm.branch_id
+        WHERE {' AND '.join(cogs_filters)}
     """
 
     tx_filters: list = ["st.source = 'Easy'"]
@@ -5087,12 +5096,13 @@ def buffet_breakeven(
     """
 
     with get_db() as con:
-        sku_row = con.execute(sku_sql, sku_params).fetchone()
-        tx_row  = con.execute(tx_sql,  tx_params).fetchone()
+        sku_row  = con.execute(sku_sql,  sku_params).fetchone()
+        cogs_row = con.execute(cogs_sql, sku_params).fetchone()
+        tx_row   = con.execute(tx_sql,   tx_params).fetchone()
 
     total_pax  = (sku_row["total_pax"] or 0) if sku_row else 0
     rev_ex     = (sku_row["rev_ex"]    or 0.0) if sku_row else 0.0
-    total_cogs = (sku_row["total_cogs"]) if sku_row else None
+    total_cogs = (cogs_row["total_cogs"]) if cogs_row else None
 
     avg_rev_per_cover = round(rev_ex / total_pax, 2) if total_pax else 0.0
 
