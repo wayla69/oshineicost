@@ -1540,12 +1540,15 @@ const BOARD_FG   = {matched:'#15803d', variance:'#b91c1c', pos_only:'#854d0e', e
 
 async function loadDailyBoard(){
   const di=document.getElementById('board-date');
-  if(!BOARD_DATE){
+  if(!di.dataset.bounds){                        // fetch min/max once, seed default
     const dates=await api('/api/daily-board/dates').catch(()=>({}));
-    BOARD_DATE = di.value || dates.max_day || period()+'-01';
     if(dates.min_day) di.min=dates.min_day;
     if(dates.max_day) di.max=dates.max_day;
+    if(!di.value) di.value = BOARD_DATE || dates.max_day || period()+'-01';
+    di.dataset.bounds='1';
   }
+  // The date input is the source of truth so typing/picking a date actually works.
+  BOARD_DATE = di.value || BOARD_DATE || period()+'-01';
   di.value = BOARD_DATE;
   const data = await api('/api/daily-board?day='+BOARD_DATE).catch(()=>null);
   if(!data){ document.getElementById('bd-body').innerHTML='<tr><td class="text-center text-red-500 py-8">Failed to load</td></tr>'; return; }
@@ -1605,8 +1608,10 @@ function openDailyReport(branchId){
   window.open(API+'/api/daily-report'+q, '_blank');
 }
 function boardStep(delta){
-  const d=new Date(BOARD_DATE+'T00:00:00'); d.setDate(d.getDate()+delta);
+  const base = BOARD_DATE || document.getElementById('board-date').value || (period()+'-01');
+  const d=new Date(base+'T00:00:00'); d.setDate(d.getDate()+delta);
   BOARD_DATE=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  document.getElementById('board-date').value=BOARD_DATE;   // keep input in sync
   loadDailyBoard();
 }
 
