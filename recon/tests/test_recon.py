@@ -1090,3 +1090,47 @@ def test_upload_stats_live_without_run_match(client):
     assert d["total_lines"] == 4                          # all lines still shown
     statuses = sorted(l["status"] for l in d["lines"])
     assert statuses == ["informational", "informational", "matched", "unmatched"]
+
+
+# ── cash deposited under a non-cash code (KTB 'SDCH'), matched by amount+T+1 ───
+
+def test_cash_matches_next_day_credit_under_qr_label(client):
+    """A bank posts the next-day cash lump under a QR/SDCH code in a lane no POS
+    tender claims. The matcher should tie it to the day's POS cash by amount, mark
+    the cash day matched, and NOT leave it as a QR ext_only — while a real QR lane
+    that POS does claim is left untouched."""
+    from recon.matcher import daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "KTB"})
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KBANK"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # POS: cash 30000 on the 10th; KNNQR (QR) 50000 same day
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',30000,5)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','KNNQR',50000,9)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    upk = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                    "period_month,row_count,status) VALUES('bank',4,'kbank','s2','2026-06',0,'confirmed')").lastrowid
+    # KTB QR(SDCH)=cash lump, posts NEXT day (11th); KBANK QR = real KNNQR same day
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description) "
+              "VALUES(?,4,'2026-06-11','QR',30000,'SDCH')", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) "
+              "VALUES(?,4,'2026-06-10','QR',50000)", (upk,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        d = daily_reconciliation(conn, 4, "2026-06")
+    day10 = next(x for x in d["days"] if x["day"] == "2026-06-10")
+    cash = next(l for l in day10["lanes"] if l["category"] == "CASH")
+    assert cash["status"] == "matched", f"cash should match the next-day SDCH lump, got {cash['status']}"
+    # the KTB SDCH line must NOT also appear as a QR·KTB ext_only
+    qr_ktb = [l for l in day10["lanes"] if l["category"] == "QR" and l["bank"] == "KTB"]
+    assert not qr_ktb, "the SDCH line was claimed as cash, it must not show as QR·KTB"
+    # the genuine QR·KBANK lane (POS KNNQR) is untouched and matched
+    qr_kbank = next(l for l in day10["lanes"] if l["category"] == "QR" and l["bank"] == "KBANK")
+    assert qr_kbank["status"] == "matched"
+    assert d["cash_summary"]["has_deposit_lines"] is True
