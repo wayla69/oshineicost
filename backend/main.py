@@ -916,6 +916,7 @@ def update_branch_type(branch_id: int, body: BranchTypeUpdate):
     with get_db() as con:
         con.execute("UPDATE branches SET branch_type=? WHERE branch_id=?", (body.branch_type, branch_id))
         con.commit()
+    invalidate_cache()
     return {"ok": True}
 
 
@@ -2726,11 +2727,13 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
                 FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
                 WHERE {tw} AND x.period_month=:m GROUP BY x.type_name ORDER BY customers DESC""",
             {**p, "m": mon}).fetchall()]
-        tc = sum(r["customers"] or 0 for r in rows) or 1
-        tn = sum(r["net"] or 0 for r in rows) or 1
+        tc = sum(r["customers"] or 0 for r in rows)
+        tn = sum(r["net"] or 0 for r in rows)
+        tc_guard = tc or 1
+        tn_guard = tn or 1
         for r in rows:
-            r["cust_pct"] = round((r["customers"] or 0) / tc * 100, 1)
-            r["net_pct"] = round((r["net"] or 0) / tn * 100, 1)
+            r["cust_pct"] = round((r["customers"] or 0) / tc_guard * 100, 1)
+            r["net_pct"] = round((r["net"] or 0) / tn_guard * 100, 1)
         # Per-branch breakdown (แยกตามสาขา): total + delivery share per branch.
         brows = con.execute(
             f"""SELECT b.name branch, x.type_name type, SUM(x.customers) customers, ROUND(SUM(x.net)/{VAT_DIVISOR}) net
@@ -2750,7 +2753,7 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
     for e in bmap.values():
         cu = e["customers"]
         by_branch.append({**e, "delivery_pct": round(e["delivery_cust"] / cu * 100, 1) if cu else 0,
-                          "net_pct": round(e["net"] / tn * 100, 1) if tn else 0})
+                          "net_pct": round(e["net"] / tn_guard * 100, 1) if tn else 0})
     by_branch.sort(key=lambda r: -(r["net"] or 0))
     return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn,
             "by_branch": by_branch, "count_caveat": True}
@@ -2779,7 +2782,7 @@ def extra_modifiers(branch: Optional[str] = Query(None), group: Optional[str] = 
 
 @app.get("/api/extra/price-zone")
 def extra_price_zone(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
-                     group: Optional[str] = Query(None), limit: int = Query(100)):
+                     group: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=500)):  # fix B5
     """Price-override log (governance) + table-zone layout per branch."""
     filt = ["b.name!='ALL'"]; p: dict = {}
     if branch: filt.append("b.name=:branch"); p["branch"] = branch
@@ -3351,7 +3354,7 @@ def summary(
             "avg_ticket":      round(rev_ex / tx, 2) if tx else 0,
         }
 
-    filters_sku = ["b.name != 'ALL'"]
+    filters_sku = ["b.name != 'ALL'", "sm.source = 'Easy'"]   # fix B4
     filters_tx  = ["b.name != 'ALL'"]
     params_sku: dict = {}
     params_tx:  dict = {}
@@ -3875,7 +3878,7 @@ def sales_margin(
     branch:     Optional[str] = Query(None),
 ):
     """Per-category margin. Requires sku_cost to be populated."""
-    filters = ["b.name != 'ALL'"]
+    filters = ["b.name != 'ALL'", "sm.source = 'Easy'"]   # fix B4
     params: dict = {}
 
     if branch:
@@ -5316,7 +5319,9 @@ def upload_file(
 
         # Rename the temp file to match original name so pattern matching works.
         # Guard: the target MUST stay inside the temp directory.
-        named_path = tmp_path.parent / filename
+        # Include unique tmp stem to avoid collision when two uploads of the same
+        # filename arrive concurrently (fix C11).
+        named_path = tmp_path.parent / f"{tmp_path.stem}_{filename}"
         if named_path.resolve().parent != tmp_path.parent.resolve():
             raise HTTPException(status_code=400, detail="Invalid filename")
         tmp_path.rename(named_path)
@@ -5604,8 +5609,8 @@ def analysis_gross_profit(
                 "period_month": r["m"],
                 "revenue":      round(day_rev_ex, 2),
                 "revenue_inc":  round(day_rev_inc, 2),
-                "cogs":         0.0,
-                "gross_profit": round(day_rev_ex, 2),
+                "cogs":         None,   # fix C10: None so aggregates use `or 0` guard, not inflate GP
+                "gross_profit": None,
                 "margin_pct":   None,
             })
             continue
@@ -7391,9 +7396,8 @@ def analysis_anomalies(
     ]
     monthly = monthly_combined
 
-    # Revenue MoM: latest month vs the immediately-prior month (house rule —
-    # always compare like-for-like consecutive periods, never against an
-    # all-period average, which mixes seasons and is not actionable).
+    # Revenue MoM — use threshold param as sensitivity (fix D10)
+    _thr = threshold
     if len(monthly) >= 2:
         last = monthly[-1]
         prev = monthly[-2]
@@ -7401,14 +7405,14 @@ def analysis_anomalies(
         prev_rev = prev["revenue"] or 0
         if prev_rev > 0:
             mom_pct = (last_rev - prev_rev) / prev_rev * 100
-            if mom_pct >= 5:
+            if mom_pct >= _thr:
                 insights.append({
                     "type": "spike", "severity": "good",
                     "metric": "revenue", "period": last["month"],
                     "value": last_rev, "mom_pct": round(mom_pct, 1),
                     "message": f"📈 รายได้เดือน {last['month']} โต {mom_pct:+.1f}% จากเดือน {prev['month']} — {last_rev:,.0f} (ก่อนหน้า {prev_rev:,.0f}){mtd_note}",
                 })
-            elif mom_pct <= -5:
+            elif mom_pct <= -_thr:
                 insights.append({
                     "type": "dip", "severity": "bad",
                     "metric": "revenue", "period": last["month"],
@@ -7434,14 +7438,14 @@ def analysis_anomalies(
     growths.sort(key=lambda x: -x["growth_pct"])
     if growths:
         top = growths[0]
-        if top["growth_pct"] > 5:
+        if top["growth_pct"] > _thr:
             insights.append({
                 "type": "growth", "severity": "good", "metric": "branch_mom",
                 "branch": top["branch"], "value": top["growth_pct"],
                 "message": f"🚀 เติบโตเร็วสุด: {top['branch']} +{top['growth_pct']:.1f}% MoM ({top['last_revenue']:,.0f}){mtd_note}",
             })
         worst = growths[-1]
-        if worst["growth_pct"] < -5:
+        if worst["growth_pct"] < -_thr:
             insights.append({
                 "type": "drop", "severity": "bad", "metric": "branch_mom",
                 "branch": worst["branch"], "value": worst["growth_pct"],
@@ -7476,14 +7480,14 @@ def analysis_anomalies(
             curr_pct = bc  / rev  * 100
             prev_pct = pbc / prev * 100
             delta = curr_pct - prev_pct
-            if delta >= 5:
+            if delta >= _thr:
                 insights.append({
                     "type": "cost_spike", "severity": "bad",
                     "metric": "bom_cost_pct", "period": m,
                     "value": round(curr_pct, 1),
                     "message": f"⚠️ ต้นทุน BoM พุ่งในเดือน {m} — {curr_pct:.1f}% of revenue (+{delta:.1f}pp จากเดือนก่อน)",
                 })
-            elif delta <= -5:
+            elif delta <= -_thr:
                 insights.append({
                     "type": "cost_drop", "severity": "good",
                     "metric": "bom_cost_pct", "period": m,
@@ -7809,6 +7813,14 @@ def get_closed_hours():
 
 @app.put("/api/closed_hours", dependencies=[Depends(require_write_token)])
 def put_closed_hours(entries: List[ClosedHoursEntry]):
+    # fix D12: validate ranges before touching the DB
+    for e in entries:
+        if not (0 <= e.dow <= 6):
+            raise HTTPException(400, f"dow must be 0-6, got {e.dow}")
+        if not (0 <= e.hour_from <= 23):
+            raise HTTPException(400, f"hour_from must be 0-23, got {e.hour_from}")
+        if not (0 <= e.hour_to <= 23):
+            raise HTTPException(400, f"hour_to must be 0-23, got {e.hour_to}")
     with get_db() as con:
         cur = con.cursor()
         for e in entries:
@@ -7861,22 +7873,30 @@ def analysis_yoy(
             {**params, "mf": month_from or "0000-00", "mt": month_to or "9999-99"},
         ).fetchall()
 
+        # fix D11: batch prior-year revenue into one query instead of N+1
+        cur_months = [r["period_month"] for r in rng]
+        ly_months_unique = list({f"{int(m.split('-')[0])-1}-{m.split('-')[1]}" for m in cur_months})
+        if ly_months_unique:
+            ly_ph = ",".join(f":ly{i}" for i in range(len(ly_months_unique)))
+            ly_params = {**params, **{f"ly{i}": m for i, m in enumerate(ly_months_unique)}}
+            ly_rows = con.execute(
+                f"""SELECT sm.period_month, ROUND(SUM(sm.subtotal_ex_vat),2) AS revenue
+                    FROM sales_sku_monthly sm
+                    JOIN branches b ON b.branch_id = sm.branch_id
+                    WHERE b.name != 'ALL' AND sm.period_month IN ({ly_ph}) {where_branch}
+                    GROUP BY sm.period_month""",
+                ly_params,
+            ).fetchall()
+            ly_rev_map = {r["period_month"]: (r["revenue"] or 0) for r in ly_rows}
+        else:
+            ly_rev_map = {}
+
         out = []
         for r in rng:
             cur_mo = r["period_month"]
-            # Same month last year
             yr, mo = cur_mo.split("-")
-            ly_mo = f"{int(yr)-1}-{mo}"
-            ly = con.execute(
-                f"""
-                SELECT ROUND(SUM(sm.subtotal_ex_vat),2) AS revenue
-                FROM sales_sku_monthly sm
-                JOIN branches b ON b.branch_id = sm.branch_id
-                WHERE b.name != 'ALL' AND sm.period_month = :ly_mo {where_branch}
-                """,
-                {**params, "ly_mo": ly_mo},
-            ).fetchone()
-            ly_rev = (ly["revenue"] if ly and ly["revenue"] else 0) or 0
+            ly_mo  = f"{int(yr)-1}-{mo}"
+            ly_rev = ly_rev_map.get(ly_mo, 0)
             yoy_pct = ((r["revenue"] - ly_rev) / ly_rev * 100) if ly_rev > 0 else None
             out.append({
                 "period_month": cur_mo,
@@ -7931,7 +7951,7 @@ def analysis_forecast(
     if not daily:
         return {"available": False}
     days_in_month = monthrange(d.year, d.month)[1]
-    days_elapsed = len(daily)
+    days_elapsed = d.day
     revs = [r["rev"] or 0 for r in daily]
     mtd = sum(revs)
     avg_daily = mtd / max(1, days_elapsed)
@@ -8007,10 +8027,14 @@ def analysis_forecast_branches(group: Optional[str] = Query(None)):
         ).fetchall()
         # All real branches + their last sale date — to flag inactive ones (no sales
         # in the forecast month) so the 26-vs-27 gap is explained, not silently dropped.
+        # fix D13: move st.source='Easy' to JOIN ON so inactive branches aren't dropped
+        allbr_branch_filters = [f for f in filters if "st.source" not in f]
+        allbr_where = ("WHERE " + " AND ".join(allbr_branch_filters)) if allbr_branch_filters else ""
         allbr = con.execute(
             f"""SELECT b.name AS branch, MAX(DATE(st.sold_at)) AS last_sale
-                FROM branches b LEFT JOIN sales_transaction st ON st.branch_id = b.branch_id
-                {where} GROUP BY b.name""", params,
+                FROM branches b LEFT JOIN sales_transaction st
+                    ON st.branch_id = b.branch_id AND st.source = 'Easy'
+                {allbr_where} GROUP BY b.name""", params,
         ).fetchall()
 
     active_names = {r["branch"] for r in cur}
@@ -8683,13 +8707,19 @@ def get_cost_detail(
             params,
         ).fetchall()
 
+        # fix E2: wrap in subquery to apply the same HAVING filter as the main query
         total = con.execute(
             f"""
-            SELECT COUNT(DISTINCT sk.sku_id)
-            FROM skus sk
-            JOIN categories c ON c.category_id = sk.category_id
-            LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
-            {where}
+            SELECT COUNT(*) FROM (
+                SELECT sk.sku_id
+                FROM skus sk
+                JOIN categories c ON c.category_id = sk.category_id
+                LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
+                LEFT JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+                {where}
+                GROUP BY sk.sku_id
+                {having_clause}
+            )
             """,
             cnt_params,
         ).fetchone()[0]
@@ -8758,7 +8788,7 @@ def cost_analysis(
     so the analysis focuses on à la carte food items.
     Quadrant = star | plowhorse | puzzle | dog | uncosted
     """
-    filters = ["b.name != 'ALL'"]
+    filters = ["b.name != 'ALL'", "ssm.source = 'Easy'"]   # fix E8
     params: dict = {}
     if branch:
         filters.append("b.name = :branch")
@@ -8894,7 +8924,7 @@ def cost_analysis(
         med_qty    = _median([r["qty"]        for r in quad_items])
         med_margin = _median([r["margin_pct"] for r in quad_items])
         for r in items:
-            if r["unit_cost"] is None or r["margin_pct"] is None:
+            if not r["has_cost"] or r["margin_pct"] is None:   # fix E7: use has_cost (covers BoM-only items)
                 r["quadrant"] = "uncosted"
             else:
                 hi_pop = r["qty"]        >= med_qty
@@ -9579,6 +9609,11 @@ def buffet_performance(
 
     # ── Pricing recommendation ──────────────────────────────────────────────
     TIER_PRICES = {'BUFFET350': 350, 'BUFFET500': 500, 'BUFFET590': 590, 'BUFFET799': 799, 'BUFFETCHILD': 295}
+    # fix E6: use actual food-cost ratio from BoM data instead of raw sku_cost
+    # (sku_cost.unit_cost ≈ selling price for tier SKUs, not ingredient cost)
+    _fc_rev_total  = sum(v[0] for v in bf_cost_by_month.values())
+    _fc_cogs_total = sum(v[1] for v in bf_cost_by_month.values())
+    _food_cost_ratio = (_fc_cogs_total / _fc_rev_total) if _fc_rev_total > 0 else 0.40
     # Overall actual tier mix (across all months)
     actual_pax = {t: 0 for t in tier_list}
     for mo_data in tier_trend.values():
@@ -9586,12 +9621,12 @@ def buffet_performance(
             actual_pax[t] += p
     total_pax = sum(actual_pax.values()) or 1
     actual_mix_pct = {t: actual_pax[t] / total_pax * 100 for t in tier_list}
-    # Revenue contribution per tier
+    # Revenue contribution per tier (cost from real food-cost ratio, not sku_cost)
     tier_revenue_actual = {}
     tier_margin_actual = {}
     for t in tier_list:
-        rev = TIER_PRICES[t] * actual_pax[t]
-        cost = (tier_cost.get(t) or TIER_PRICES[t] * 0.4) * actual_pax[t]
+        rev  = TIER_PRICES[t] * actual_pax[t]
+        cost = TIER_PRICES[t] * _food_cost_ratio * actual_pax[t]
         tier_revenue_actual[t] = rev
         tier_margin_actual[t]  = rev - cost
     actual_total_rev    = sum(tier_revenue_actual.values())
@@ -9607,7 +9642,7 @@ def buffet_performance(
     target_pax['BUFFET590'] += shift_350 * 0.7 + shift_500 * 0.7
     target_pax['BUFFET799'] += shift_350 * 0.3 + shift_500 * 0.3
     target_revenue = sum(TIER_PRICES[t] * target_pax[t] for t in tier_list)
-    target_cost    = sum((tier_cost.get(t) or TIER_PRICES[t] * 0.4) * target_pax[t] for t in tier_list)
+    target_cost    = sum(TIER_PRICES[t] * _food_cost_ratio * target_pax[t] for t in tier_list)
     target_margin  = target_revenue - target_cost
     target_margin_pct = (target_margin / target_revenue * 100) if target_revenue else 0
     margin_gain = target_margin - actual_total_margin
@@ -11626,7 +11661,7 @@ def food_cost_trend(
                    ROUND(SUM(sm.subtotal_ex_vat), 2)                              AS revenue,
                    ROUND(SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}), 2)         AS cost,
                    ROUND(SUM(sm.qty), 0)                                          AS servings,
-                   COUNT(DISTINCT CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NULL
+                   COUNT(DISTINCT CASE WHEN {_unified_cogs_expr('sm', 'sk')} = 0
                                        THEN sk.sku_id END)                         AS uncosted
             FROM sales_sku_monthly sm
             JOIN branches b   ON b.branch_id   = sm.branch_id
@@ -12103,6 +12138,8 @@ def buffet_gp(
             })
     else:
         # Day or week: pro-rate monthly BoM by daily revenue fraction
+        # fix F7: pre-index covers to avoid O(days × tx_rows) linear rescan
+        daily_covers_idx = {(r2["branch"], r2["d"]): (r2["covers"] or 0) for r2 in daily_tx_rows}
         daily_bucket: dict = defaultdict(lambda: {"rev": 0.0, "bom_cost": 0.0, "covers": 0})
         for br, months in daily_tx.items():
             for m, days in months.items():
@@ -12111,16 +12148,11 @@ def buffet_gp(
                 for d, d_rev_tx in days.items():
                     fraction   = (d_rev_tx / m_rev_tx) if m_rev_tx else 0.0
                     d_bom_cost = m_bom * fraction
-                    # revenue for series comes from transactions
                     bucket = d if granularity == "day" else week_bucket(d)
                     db = daily_bucket[bucket]
                     db["rev"]      += d_rev_tx
                     db["bom_cost"] += d_bom_cost
-                    # covers
-                    for r2 in daily_tx_rows:
-                        if r2["branch"] == br and r2["d"] == d:
-                            db["covers"] += r2["covers"] or 0
-                            break
+                    db["covers"]   += daily_covers_idx.get((br, d), 0)
         series = []
         for bucket in sorted(daily_bucket.keys()):
             b = daily_bucket[bucket]
@@ -16665,7 +16697,9 @@ def simulate_scenario(body: SimulateBody):
     cogs_expr       = _cogs_case('ssm', 'sk', 'sc')
     costed_rev_expr = _costed_rev_case('ssm', 'sk', 'sc')
 
-    overrides = {o.sku_code: float(o.unit_cost) for o in (body.overrides or [])}
+    overrides     = {o.sku_code: float(o.unit_cost) for o in (body.overrides or [])}
+    override_qty  = {o.sku_code: float(o.qty) for o in (body.overrides or []) if o.qty is not None}  # fix H3
+    disabled_skus = {o.sku_code for o in (body.overrides or []) if o.disabled}                        # fix H3
 
     with get_db() as con:
         rows = con.execute(f"""
@@ -16702,8 +16736,12 @@ def simulate_scenario(body: SimulateBody):
         seen_codes.add(code)
         new_c   = base_c
         new_cst = base_cst
-        if code in overrides and base_c > 0:
-            new_c   = qty * overrides[code]
+        if code in disabled_skus:         # fix H3: disabled items → 0 COGS + 0 costed rev
+            new_c   = 0.0
+            new_cst = 0.0
+        elif code in overrides and base_c > 0:
+            scen_qty = override_qty.get(code, qty)   # fix H3: use scenario qty if set
+            new_c    = scen_qty * overrides[code]
         chain["revenue"]     += rev
         chain["base_cogs"]   += base_c
         chain["base_costed"] += base_cst
