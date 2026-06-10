@@ -763,6 +763,7 @@
             <th class="text-left pb-2" data-i18n="s_poscode">POS code</th><th class="text-right pb-2" data-i18n="s_volume">Volume (POS)</th>
             <th class="text-left pb-2" data-i18n="s_category">Category</th>
             <th class="text-left pb-2" data-i18n="s_bank">Bank / Acquirer</th>
+            <th class="text-left pb-2" data-i18n="s_doc">Document</th>
             <th class="text-center pb-2" data-i18n="s_reconcile">Reconcile</th><th></th>
           </tr></thead>
           <tbody id="map-body"></tbody>
@@ -1091,7 +1092,9 @@ const I18N = {
     // uploads
     u_file:"ไฟล์", u_source:"แหล่ง", u_provider:"ผู้ให้บริการ", u_branch:"สาขา", u_rows:"แถว", u_delete:"ลบ",
     // setup table
-    s_poscode:"รหัส POS", s_volume:"ปริมาณ (POS)", s_category:"ประเภท", s_bank:"ธนาคาร / ผู้รับบัตร", s_reconcile:"กระทบยอด",
+    s_poscode:"รหัส POS", s_volume:"ปริมาณ (POS)", s_category:"ประเภท", s_bank:"ธนาคาร / ผู้รับบัตร", s_doc:"เอกสารที่ใช้กระทบยอด", s_reconcile:"กระทบยอด",
+    doc_stmt:"Statement", doc_cashdep:"รายการฝากเงินสด", doc_ccsettle:"ใบสรุปยอดบัตร",
+    doc_setbank:"⚠ ตั้งธนาคารก่อน", doc_none:"ยังไม่มีแหล่งเอกสาร", doc_internal:"ไม่กระทบยอด (ภายใน)",
     // daily recon dynamics
     d_lane_days:"ช่องทาง-วันที่รอเอกสาร", d_awaiting:"วันที่รอเอกสาร",
     l_session:"เซสชัน", l_daily_hdr:"กระทบยอดรายวัน",
@@ -1133,6 +1136,7 @@ const I18N = {
     catd_CREDIT:"บัตรเครดิต/เดบิต", catd_GRAB:"เดลิเวอรี Grab", catd_LINEMAN:"เดลิเวอรี Line Man",
     catd_COUPON:"คูปอง/ส่วนลด", catd_ENTERTAIN:"รับรอง (ไม่นำมากระทบยอด)", catd_OTHER:"อื่น ๆ",
     bankd_KTB:"ธนาคารกรุงไทย", bankd_KBANK:"ธนาคารกสิกรไทย", bankd_KTC:"เคทีซี (ผู้รับบัตรเครดิต)",
+    bankd_BAY:"กรุงศรี", bankd_SCB:"ไทยพาณิชย์", bankd_BBL:"กรุงเทพ",
     bankd_PROMPTPAY:"พร้อมเพย์", bankd_NONE:"ไม่เกี่ยวกับธนาคาร (เช่น เงินสด/คูปอง)",
     bankd_UNKNOWN:"ยังไม่ระบุ — ต้องตั้งค่าก่อนกระทบยอด",
     // manual reconciliation (tick-to-match)
@@ -1263,7 +1267,9 @@ const I18N = {
     // uploads
     u_file:"File", u_source:"Source", u_provider:"Provider", u_branch:"Branch", u_rows:"Rows", u_delete:"Delete",
     // setup table
-    s_poscode:"POS code", s_volume:"Volume (POS)", s_category:"Category", s_bank:"Bank / Acquirer", s_reconcile:"Reconcile",
+    s_poscode:"POS code", s_volume:"Volume (POS)", s_category:"Category", s_bank:"Bank / Acquirer", s_doc:"Reconciling document", s_reconcile:"Reconcile",
+    doc_stmt:"Statement", doc_cashdep:"cash-deposit lines", doc_ccsettle:"card settlement",
+    doc_setbank:"⚠ set a bank first", doc_none:"no document source yet", doc_internal:"not reconciled (internal)",
     // daily recon dynamics
     d_lane_days:"pending lane-days", d_awaiting:"day(s) awaiting documents",
     l_session:"Session", l_daily_hdr:"Daily reconciliation",
@@ -1305,6 +1311,7 @@ const I18N = {
     catd_CREDIT:"Credit/debit card", catd_GRAB:"Grab delivery", catd_LINEMAN:"Line Man delivery",
     catd_COUPON:"Coupon / voucher", catd_ENTERTAIN:"Complimentary (not reconciled)", catd_OTHER:"Other",
     bankd_KTB:"Krungthai Bank", bankd_KBANK:"Kasikornbank", bankd_KTC:"KTC (card acquirer)",
+    bankd_BAY:"Krungsri", bankd_SCB:"SCB", bankd_BBL:"Bangkok Bank",
     bankd_PROMPTPAY:"PromptPay", bankd_NONE:"Not bank-related (e.g. cash/coupon)",
     bankd_UNKNOWN:"Not set — map before it can reconcile",
     // manual reconciliation (tick-to-match)
@@ -3149,6 +3156,38 @@ async function loadSetup(){
   });
 }
 
+// Which external document reconciles a (category, bank) lane — so staff can see
+// at a glance that every code points at a real statement/report. Returns
+// {text, ok}: ok=false means "no document possible / needs a bank set".
+function docLabel(category, bank){
+  const B = t('bankd_'+bank)||bank;
+  switch(category){
+    case 'CASH':     return {text:`${t('doc_stmt')} ${B} · ${t('doc_cashdep')}`, ok:true};
+    case 'QR':
+    case 'TRANSFER':
+      if(bank==='UNKNOWN'||bank==='PROMPTPAY'||bank==='NONE') return {text:t('doc_setbank'), ok:false};
+      return {text:`${t('doc_stmt')} ${B}`, ok:true};
+    case 'CREDIT':
+      if(bank==='KTC')  return {text:'KTC Settlement (RTxInv)', ok:true};
+      if(bank==='BAY')  return {text:'BAY Point (Krungsri)', ok:true};
+      if(bank==='KTB')  return {text:`${t('doc_ccsettle')} KTB`, ok:true};
+      if(bank==='KBANK')return {text:`${t('doc_ccsettle')} KBANK`, ok:true};
+      if(bank==='NONE'||bank==='UNKNOWN') return {text:t('doc_setbank'), ok:false};
+      return {text:`${t('doc_ccsettle')} ${B}`, ok:true};
+    case 'GRAB':     return {text:'Grab report', ok:true};
+    case 'LINEMAN':  return {text:'Line Man report', ok:true};
+    case 'COUPON':   return {text:t('doc_none'), ok:false};
+    case 'ENTERTAIN':return {text:t('doc_internal'), ok:false};
+    default:         return {text:'—', ok:false};
+  }
+}
+function docLabelHtml(category, bank, reconcile){
+  if(!reconcile) return `<span class="text-gray-300">—</span>`;
+  const d=docLabel(category,bank);
+  return d.ok ? `<span class="text-gray-600">📄 ${d.text}</span>`
+              : `<span class="text-amber-600">${d.text}</span>`;
+}
+
 function renderMapTable(){
   const map=MAP_DATA; const tb=document.getElementById('map-body'); tb.innerHTML='';
   const need=map.filter(codeIssue);                 // carry money + can't lane = urgent
@@ -3169,6 +3208,7 @@ function renderMapTable(){
       <td class="text-right font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
       <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
       <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td id="md-${m.id}" class="text-xs">${docLabelHtml(m.category,m.bank,m.reconcile)}</td>
       <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
       <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
@@ -3327,6 +3367,7 @@ async function saveMap(id){
     if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
     const tr=document.getElementById('mb-'+id).closest('tr');
     tr.style.background = (m&&codeIssue(m))?'#fff7ed':''; tr.style.opacity=(m&&codeDormant(m))?'.55':'';
+    const dc=document.getElementById('md-'+id); if(dc) dc.innerHTML=docLabelHtml(category,bank,reconcile);
     refreshSetupBadge(); refreshAttention(); renderFlow();
   }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
 }
