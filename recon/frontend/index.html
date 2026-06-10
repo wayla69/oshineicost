@@ -419,15 +419,14 @@
           <button onclick="openUploadModal('lineman')"     class="card text-center hover:shadow-md"><div class="text-3xl">🟡</div><div class="font-semibold text-sm mt-1" data-i18n="uc_lineman">Line Man Report</div><div class="text-xs text-gray-400">LINE MAN Wongnai</div></button>
         </div>
       </div>
-      <div class="card overflow-x-auto">
+      <!-- reconciliation health for the selected branch+month -->
+      <div id="up-headline"></div>
+      <!-- documents tell us the bank: one-click mapping suggestions -->
+      <div id="up-suggest" class="hidden card" style="border-left:4px solid var(--ok)"></div>
+      <!-- per-document match status -->
+      <div class="card">
         <div class="font-semibold text-gray-700 mb-3"><span data-i18n="up_uploads">Uploads</span> — <span id="up-ctx" class="text-gray-400 text-sm"></span></div>
-        <table class="w-full text-sm">
-          <thead><tr class="text-gray-400 text-xs uppercase border-b">
-            <th class="text-left pb-2" data-i18n="u_file">File</th><th class="text-left pb-2" data-i18n="u_source">Source</th><th class="text-left pb-2" data-i18n="u_provider">Provider</th>
-            <th class="text-left pb-2" data-i18n="c_branch">Branch</th><th class="text-right pb-2" data-i18n="u_rows">Rows</th><th class="text-center pb-2" data-i18n="u_match">Matched</th><th class="text-center pb-2" data-i18n="c_status">Status</th><th></th>
-          </tr></thead>
-          <tbody id="up-body"><tr><td colspan="8" class="text-center text-gray-400 py-6" data-i18n="e_no_uploads">No uploads</td></tr></tbody>
-        </table>
+        <div id="up-docs"><div class="text-center text-gray-400 py-6" data-i18n="e_no_uploads">No uploads</div></div>
       </div>
     </div>
 
@@ -739,7 +738,6 @@
         <p class="text-sm text-gray-600" data-i18n="setup_p">Reconciliation reads your POS payment codes. Tell it what each code <b>is</b> (category) and where the money <b>lands</b> (bank/acquirer). Codes with an unknown bank can't be matched to a statement until you set them — they're listed below, biggest first. Changes save automatically.</p>
       </div>
       <div id="map-attention" class="hidden card" style="border-left:4px solid var(--warn)"></div>
-      <div id="map-suggest" class="hidden card" style="border-left:4px solid var(--ok)"></div>
 
       <!-- Guided mapping flow — one step per payment type -->
       <div class="card">
@@ -765,6 +763,7 @@
             <th class="text-left pb-2" data-i18n="s_poscode">POS code</th><th class="text-right pb-2" data-i18n="s_volume">Volume (POS)</th>
             <th class="text-left pb-2" data-i18n="s_category">Category</th>
             <th class="text-left pb-2" data-i18n="s_bank">Bank / Acquirer</th>
+            <th class="text-left pb-2" data-i18n="s_doc">Document</th>
             <th class="text-center pb-2" data-i18n="s_reconcile">Reconcile</th><th></th>
           </tr></thead>
           <tbody id="map-body"></tbody>
@@ -1025,12 +1024,20 @@ const I18N = {
     cash_dep_sum:"ยอดฝากรวม", cash_matched_grp:"จับคู่แล้ว", cash_combined:"ฝากควบหลายวัน",
     cash_ok:"เงินสดนำฝากครบ",
     up_empty_badge:"ว่าง (ไม่มีรายการ)", up_move:"ย้ายสาขา",
-    u_match:"จับคู่แล้ว", up_match_hint:"รายการที่กระทบยอดแล้ว / รายการทั้งหมด — คลิกดูรายบรรทัด (อัปเดตเมื่อกด Run Match)",
+    u_match:"จับคู่แล้ว", up_match_hint:"รายการที่กระทบยอดแล้ว / รายการทั้งหมด — คลิกดูรายบรรทัด",
     up_lines_sub:"จับคู่แล้ว {m} จาก {n} รายการ", c_date:"วันที่", c_desc:"รายการ", c_amount:"จำนวนเงิน",
+    up_match_n:"จับคู่ {m}/{n}", up_unmatched_n:"ยังไม่จับคู่", up_lines_word:"รายการ",
+    up_health:"กระทบยอดแล้ว {p}%", up_missing_docs:"ยังขาดเอกสาร",
+    linest_matched:"จับคู่แล้ว", linest_unmatched:"ยังไม่จับคู่", linest_excluded:"โอนภายใน",
+    linest_manual:"จับคู่มือ", linest_informational:"ข้อมูล (ไม่นับ)",
     sug_hd:"เอกสารบอกธนาคารได้ — ข้อเสนอจับคู่รหัส POS",
     sug_p:"เทียบยอดรายวันของรหัสที่ยังไม่ระบุธนาคาร กับรายการเงินเข้าใน statement ({b} · {m}) — ถ้าตรงกันเกือบทุกวัน แปลว่าเงินของรหัสนั้นเข้าบัญชีนั้น กด ใช้ค่านี้ เพื่อบันทึก",
     sug_match_days:"ตรงกัน {h}/{n} วัน", sug_apply:"ใช้ค่านี้",
     sug_applied:"ตั้งค่า {c} → {b} แล้ว — กด Run Match อีกครั้งเพื่อกระทบยอดใหม่",
+    ign_do:"ตัดออก", ign_undo:"เลิกตัดออก", ign_badge:"โอนภายใน",
+    ign_hint:"ระบุว่าเป็นเงินโอนภายใน/ไม่ใช่รายได้ — จะไม่ถูกนับในการกระทบยอด",
+    ign_prompt:"เหตุผล (เช่น โอนเงินระหว่างบริษัท):",
+    ign_done:"ตัดรายการออกจากการกระทบยอดแล้ว", ign_undone:"นำรายการกลับเข้าการกระทบยอดแล้ว",
     up_move_prompt:"ย้ายอัปโหลดนี้ไปสาขา:", up_moved:"ย้ายสาขาเรียบร้อย — รายการ {n} แถวถูกย้ายตาม",
     up_empty_note:"เอกสารถูกต้องแต่ไม่มีรายการ (บัญชีไม่มีความเคลื่อนไหวเดือนนี้)",
     flow_doc_CASH:"ยอดฝากเงินสดเข้าบัญชี (รายการฝากเงินสดใน statement)",
@@ -1085,7 +1092,9 @@ const I18N = {
     // uploads
     u_file:"ไฟล์", u_source:"แหล่ง", u_provider:"ผู้ให้บริการ", u_branch:"สาขา", u_rows:"แถว", u_delete:"ลบ",
     // setup table
-    s_poscode:"รหัส POS", s_volume:"ปริมาณ (POS)", s_category:"ประเภท", s_bank:"ธนาคาร / ผู้รับบัตร", s_reconcile:"กระทบยอด",
+    s_poscode:"รหัส POS", s_volume:"ปริมาณ (POS)", s_category:"ประเภท", s_bank:"ธนาคาร / ผู้รับบัตร", s_doc:"เอกสารที่ใช้กระทบยอด", s_reconcile:"กระทบยอด",
+    doc_stmt:"Statement", doc_cashdep:"รายการฝากเงินสด", doc_ccsettle:"ใบสรุปยอดบัตร",
+    doc_setbank:"⚠ ตั้งธนาคารก่อน", doc_none:"ยังไม่มีแหล่งเอกสาร", doc_internal:"ไม่กระทบยอด (ภายใน)",
     // daily recon dynamics
     d_lane_days:"ช่องทาง-วันที่รอเอกสาร", d_awaiting:"วันที่รอเอกสาร",
     l_session:"เซสชัน", l_daily_hdr:"กระทบยอดรายวัน",
@@ -1127,6 +1136,7 @@ const I18N = {
     catd_CREDIT:"บัตรเครดิต/เดบิต", catd_GRAB:"เดลิเวอรี Grab", catd_LINEMAN:"เดลิเวอรี Line Man",
     catd_COUPON:"คูปอง/ส่วนลด", catd_ENTERTAIN:"รับรอง (ไม่นำมากระทบยอด)", catd_OTHER:"อื่น ๆ",
     bankd_KTB:"ธนาคารกรุงไทย", bankd_KBANK:"ธนาคารกสิกรไทย", bankd_KTC:"เคทีซี (ผู้รับบัตรเครดิต)",
+    bankd_BAY:"กรุงศรี", bankd_SCB:"ไทยพาณิชย์", bankd_BBL:"กรุงเทพ",
     bankd_PROMPTPAY:"พร้อมเพย์", bankd_NONE:"ไม่เกี่ยวกับธนาคาร (เช่น เงินสด/คูปอง)",
     bankd_UNKNOWN:"ยังไม่ระบุ — ต้องตั้งค่าก่อนกระทบยอด",
     // manual reconciliation (tick-to-match)
@@ -1189,12 +1199,20 @@ const I18N = {
     cash_dep_sum:"deposits total", cash_matched_grp:"matched", cash_combined:"multi-day lumps",
     cash_ok:"cash fully banked",
     up_empty_badge:"empty (no movements)", up_move:"Move branch",
-    u_match:"Matched", up_match_hint:"Reconciled lines / total — click for per-line detail (updates on Run Match)",
+    u_match:"Matched", up_match_hint:"Reconciled lines / total — click for per-line detail",
     up_lines_sub:"{m} of {n} lines matched", c_date:"Date", c_desc:"Description", c_amount:"Amount",
+    up_match_n:"{m}/{n} matched", up_unmatched_n:"unmatched", up_lines_word:"lines",
+    up_health:"{p}% reconciled", up_missing_docs:"Missing documents",
+    linest_matched:"matched", linest_unmatched:"unmatched", linest_excluded:"internal",
+    linest_manual:"manual", linest_informational:"info (not counted)",
     sug_hd:"The documents know the bank — POS code suggestions",
     sug_p:"Each needs-map code's daily POS series is compared with statement credits ({b} · {m}) — near-daily agreement means that's where the money lands. Click Apply to save.",
     sug_match_days:"{h}/{n} days match", sug_apply:"Apply",
     sug_applied:"{c} → {b} saved — press Run Match to re-reconcile",
+    ign_do:"Ignore", ign_undo:"Un-ignore", ign_badge:"internal",
+    ign_hint:"Mark as an internal transfer / not revenue — excluded from reconciliation",
+    ign_prompt:"Reason (e.g. intercompany transfer):",
+    ign_done:"Line excluded from reconciliation", ign_undone:"Line restored to reconciliation",
     up_move_prompt:"Move this upload to branch:", up_moved:"Branch updated — {n} lines moved with it",
     up_empty_note:"Valid document with zero movements (account inactive this month)",
     flow_doc_CASH:"Cash-deposit lines in the bank statement",
@@ -1249,7 +1267,9 @@ const I18N = {
     // uploads
     u_file:"File", u_source:"Source", u_provider:"Provider", u_branch:"Branch", u_rows:"Rows", u_delete:"Delete",
     // setup table
-    s_poscode:"POS code", s_volume:"Volume (POS)", s_category:"Category", s_bank:"Bank / Acquirer", s_reconcile:"Reconcile",
+    s_poscode:"POS code", s_volume:"Volume (POS)", s_category:"Category", s_bank:"Bank / Acquirer", s_doc:"Reconciling document", s_reconcile:"Reconcile",
+    doc_stmt:"Statement", doc_cashdep:"cash-deposit lines", doc_ccsettle:"card settlement",
+    doc_setbank:"⚠ set a bank first", doc_none:"no document source yet", doc_internal:"not reconciled (internal)",
     // daily recon dynamics
     d_lane_days:"pending lane-days", d_awaiting:"day(s) awaiting documents",
     l_session:"Session", l_daily_hdr:"Daily reconciliation",
@@ -1291,6 +1311,7 @@ const I18N = {
     catd_CREDIT:"Credit/debit card", catd_GRAB:"Grab delivery", catd_LINEMAN:"Line Man delivery",
     catd_COUPON:"Coupon / voucher", catd_ENTERTAIN:"Complimentary (not reconciled)", catd_OTHER:"Other",
     bankd_KTB:"Krungthai Bank", bankd_KBANK:"Kasikornbank", bankd_KTC:"KTC (card acquirer)",
+    bankd_BAY:"Krungsri", bankd_SCB:"SCB", bankd_BBL:"Bangkok Bank",
     bankd_PROMPTPAY:"PromptPay", bankd_NONE:"Not bank-related (e.g. cash/coupon)",
     bankd_UNKNOWN:"Not set — map before it can reconcile",
     // manual reconciliation (tick-to-match)
@@ -1697,6 +1718,19 @@ async function openDrill(branch_id, scope, back){
 }
 function drillBack(){ closeDrawer('drill'); refreshTab(DRILL_BACK); }
 
+// Internal-transfer toggle: flag/unflag a bank credit as not-revenue. The note
+// is optional — the audit log records the line itself either way.
+async function toggleIgnoreLine(id, ignore){
+  let note='';
+  if(ignore){ note=prompt(t('ign_prompt'),''); if(note===null) return; }
+  try{
+    await api(`/api/bank-lines/${id}/ignore`,{method:'PATCH', json:{ignored:ignore, note:note||''}});
+    toast(ignore?t('ign_done'):t('ign_undone'),'ok');
+    const drillOpen = document.getElementById('tab-drill').classList.contains('as-drawer');
+    if(DRILL_CTX && drillOpen) openDrill(DRILL_CTX.branch_id, DRILL_CTX.scope, DRILL_CTX.back);
+  }catch(e){ toast(e.message,'err'); }
+}
+
 function mapStatusHtml(c){
   const goBtn=`<button data-code="${_attr(c.code)}" onclick="event.stopPropagation();openMappingFlow(this.dataset.code)" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
   if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>${goBtn}`;
@@ -1732,13 +1766,21 @@ function renderDrill(d, scope){
       <td class="text-right font-mono text-gray-500">${c.txn_count||'—'}</td>
       <td>${mapStatusHtml(c)}</td></tr>`).join('');
 
-  // statement lines
+  // statement lines — bank lanes get an "internal transfer" ignore toggle per line
   const lt=document.getElementById('drill-lines');
+  const canIgnore = ['CASH','QR','TRANSFER'].includes(d.category);
   if(!d.ext_lines || !d.ext_lines.length){ lt.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('drill_no_lines')}</td></tr>`; }
-  else { lt.innerHTML = d.ext_lines.map(l=>`<tr>
-      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
-      <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono">${fmt(l.amount)}</td></tr>`).join('');
-    const tot=d.ext_lines.reduce((s,l)=>s+(l.amount||0),0);
+  else { lt.innerHTML = d.ext_lines.map(l=>{
+      const ignored = l.match_status==='excluded';
+      const act = (canIgnore && l.id)
+        ? (ignored
+            ? `<button onclick="toggleIgnoreLine(${l.id},false)" class="text-xs hover:underline ml-2" style="color:#5b53b0">${t('ign_undo')}</button>`
+            : `<button onclick="toggleIgnoreLine(${l.id},true)" class="text-xs hover:underline ml-2" style="color:#bf5757" title="${t('ign_hint')}">${t('ign_do')}</button>`)
+        : '';
+      return `<tr style="${ignored?'opacity:.45':''}">
+      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}${ignored?` <span class="badge b-mut">${t('ign_badge')}</span>`:''}</td>
+      <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono whitespace-nowrap">${fmt(l.amount)}${act}</td></tr>`;}).join('');
+    const tot=d.ext_lines.filter(l=>l.match_status!=='ignored').reduce((s,l)=>s+(l.amount||0),0);
     lt.innerHTML+=`<tr class="font-semibold" style="background:#f8fafc"><td colspan="3">${d.ext_lines.length}</td><td class="text-right font-mono">${fmt(tot)}</td></tr>`;
   }
   // manual-match button: only meaningful for a real lane that has an external source
@@ -2475,39 +2517,82 @@ async function renderPayoutsFromSummary(){
   try{ const s=await api(`/api/sessions/${SESSION.session_id}/summary`); renderPayouts(s.payouts||[]); }catch(e){}
 }
 
-// ── uploads ──────────────────────────────────────────────────────────────────
+// ── uploads — one reconciliation panel (status + suggestions, auto-refresh) ────
+const SRC_ICON = {bank:'🏦', credit_card:'💳', grab:'🟢', lineman:'🟡'};
 async function loadUploads(){
   const bid=document.getElementById('sel-branch').value;
   document.getElementById('up-ctx').textContent = period()+(bid?` · ${BRANCHES.find(b=>b.branch_id==bid)?.name||''}`:` · ${t('up_allbranch')}`);
   let q=`/api/uploads?period_month=${period()}`+(bid?`&branch_id=${bid}`:'');
   const data = await api(q).catch(()=>[]);
-  const tb=document.getElementById('up-body'); tb.innerHTML = data.length?'':`<tr><td colspan="8" class="text-center text-gray-400 py-6">${t('e_no_uploads')}</td></tr>`;
-  data.forEach(u=>{ const tr=document.createElement('tr');
-    const isEmpty = u.row_count===0 && /No Data|ไม่มีรายการ/.test(u.error_msg||'');
-    const rowsCell = isEmpty
-      ? `<span class="badge b-mut" title="${t('up_empty_note')}">${t('up_empty_badge')}</span>`
-      : (u.row_count===0 ? `<span class="badge b-warn" title="0 แถว — ตรวจไฟล์/parser">0 ⚠</span>` : u.row_count);
-    // match progress: done/total reconcilable lines, click → per-line drill
-    let matchCell='—';
-    if(u.match_total>0){
-      const pct=u.match_done/u.match_total;
-      const cls=pct>=0.999?'b-ok':pct>0?'b-warn':'b-mut';
-      matchCell=`<button class="badge ${cls}" style="cursor:pointer" title="${t('up_match_hint')}"
-        onclick="openUploadLines(${u.upload_id},'${_attr(u.file_name||'')}')">${u.match_done}/${u.match_total}</button>`;
-    } else if(isEmpty){ matchCell=''; }
-    tr.innerHTML=`<td class="py-1.5">${u.file_name}</td><td class="capitalize">${u.source_type.replace('_',' ')}</td>
-      <td>${u.provider||'—'}</td><td>${u.branch_name||'—'}</td><td class="text-right">${rowsCell}</td>
-      <td class="text-center">${matchCell}</td>
-      <td class="text-center"><span class="badge b-ok">${u.status}</span></td>
-      <td class="text-right whitespace-nowrap">
-        <button onclick="moveUpload(${u.upload_id},${u.branch_id})" class="text-xs hover:underline" style="color:#5b53b0">${t('up_move')}</button>
-        <button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline ml-2">${t('u_delete')}</button></td>`;
-    tb.appendChild(tr);
-  });
+  renderUploadHeadline(data, bid);
+  loadMapSuggestions('up-suggest', bid);     // inline, same page
+
+  const host=document.getElementById('up-docs');
+  if(!data.length){ host.innerHTML=`<div class="text-center text-gray-400 py-6">${t('e_no_uploads')}</div>`; return; }
+  host.innerHTML = data.map(u=>uploadRow(u, !bid)).join('');
+}
+
+// One document row: icon · name · live match progress bar · drill/move/delete.
+function uploadRow(u, showBranch){
+  const isEmpty = u.row_count===0 && /No Data|ไม่มีรายการ/.test(u.error_msg||'');
+  const tot=u.match_total||0, done=u.match_done||0, excl=u.match_excluded||0;
+  const pct = tot? Math.round(done/tot*100) : (isEmpty?100:0);
+  const barCol = pct>=99?'var(--ok)':pct>0?'var(--warn)':'#e6dcf3';
+  let statusLine;
+  if(isEmpty){
+    statusLine = `<span class="badge b-mut" title="${t('up_empty_note')}">${t('up_empty_badge')}</span>`;
+  } else if(tot>0){
+    const unm = tot-done;
+    statusLine = `<div class="flex items-center gap-2">
+      <div title="${done}/${tot}" style="height:7px;width:120px;background:#f0e9fb;border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:${barCol}"></div></div>
+      <button class="text-sm hover:underline" style="color:var(--ink)"
+        onclick="openUploadLines(${u.upload_id},'${_attr(u.file_name||'')}')">
+        ${t('up_match_n').replace('{m}',done).replace('{n}',tot)} (${pct}%)${unm>0?` · <span style="color:#bf5757">${unm} ${t('up_unmatched_n')}</span>`:''}</button>
+      ${excl>0?`<span class="badge b-mut" title="${t('ign_badge')}">${excl} ${t('ign_badge')}</span>`:''}</div>`;
+  } else {
+    statusLine = `<span class="badge b-warn" title="0 แถว — ตรวจไฟล์/parser">0 ⚠</span>`;
+  }
+  return `<div class="flex items-center gap-3 py-2 border-b border-gray-50 flex-wrap">
+    <span class="text-xl" style="flex-shrink:0">${SRC_ICON[u.source_type]||'📄'}</span>
+    <div style="min-width:200px;flex:1">
+      <div class="font-medium text-sm">${u.file_name}</div>
+      <div class="text-xs text-gray-400">${u.provider||'—'}${showBranch?` · ${u.branch_name||'—'}`:''} · ${u.row_count} ${t('u_rows').toLowerCase()}</div>
+    </div>
+    <div style="flex-shrink:0">${statusLine}</div>
+    <div class="text-right whitespace-nowrap" style="flex-shrink:0">
+      <button onclick="moveUpload(${u.upload_id},${u.branch_id})" class="text-xs hover:underline" style="color:#5b53b0">${t('up_move')}</button>
+      <button onclick="delUpload(${u.upload_id})" class="text-xs text-red-500 hover:underline ml-2">${t('u_delete')}</button>
+    </div></div>`;
+}
+
+// Reconciliation health headline for the chosen branch+month.
+function renderUploadHeadline(data, bid){
+  const el=document.getElementById('up-headline');
+  if(!bid || !data.length){ el.innerHTML=''; return; }
+  let tot=0, done=0, missingDocs=[];
+  const have=new Set(data.map(u=>u.source_type));
+  data.forEach(u=>{ tot+=u.match_total||0; done+=u.match_done||0; });
+  ['bank','credit_card','grab','lineman'].forEach(s=>{ if(!have.has(s)) missingDocs.push(s); });
+  const pct = tot? Math.round(done/tot*100):0;
+  const col = pct>=99?'var(--ok)':pct>0?'var(--warn)':'var(--danger)';
+  const bname = (BRANCHES.find(b=>String(b.branch_id)===String(bid))||{}).name||'';
+  el.innerHTML=`<div class="card flex items-center gap-4 flex-wrap">
+    <div><div class="text-xs text-gray-400">${bname} · ${period()}</div>
+      <div class="font-semibold" style="color:${col}">${t('up_health').replace('{p}',pct)}</div></div>
+    <div style="flex:1;min-width:120px;height:9px;background:#f0e9fb;border-radius:5px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:${col}"></div></div>
+    <div class="text-sm text-gray-500">${done}/${tot} ${t('up_lines_word')}</div>
+    ${missingDocs.length?`<div class="text-sm" style="color:#a9722d">⚠ ${t('up_missing_docs')}: ${missingDocs.map(s=>t('uc_'+(s==='credit_card'?'cc':s))).join(', ')}</div>`:''}
+  </div>`;
 }
 async function delUpload(id){ if(!confirm(t('toast_del_confirm')))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast(t('toast_updeleted'),'ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
 // Per-line match-status drill for one uploaded document
-const LINE_ST_BADGE = {matched:'b-ok', manual:'b-ok', unmatched:'b-warn', excluded:'b-mut'};
+const LINE_ST_BADGE = {matched:'b-ok', manual:'b-ok', unmatched:'b-warn', excluded:'b-mut', ignored:'b-mut', informational:'b-mut'};
+async function igFromModal(lineId, ignore, upId, fname){
+  await toggleIgnoreLine(lineId, ignore);
+  openUploadLines(upId, fname);   // refresh the modal
+}
 async function openUploadLines(id, fname){
   let el=document.getElementById('uplines-modal');
   if(!el){
@@ -2531,12 +2616,20 @@ async function openUploadLines(id, fname){
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-1">${t('c_date')||'Date'}</th><th class="text-left pb-1">${t('c_desc')||'Description'}</th>
           <th class="text-right pb-1">${t('c_amount')||'Amount'}</th><th class="text-center pb-1">${t('c_status')||'Status'}</th></tr></thead>
-        <tbody>${d.lines.map(l=>`<tr class="border-b border-gray-50">
+        <tbody>${d.lines.map(l=>{
+          const isBank = d.source_type==='bank';
+          const ign = l.status==='excluded';
+          const act = isBank
+            ? (ign ? `<button onclick="igFromModal(${l.id},false,${id},'${_attr(fname)}')" class="text-xs hover:underline ml-1" style="color:#5b53b0">${t('ign_undo')}</button>`
+                   : ((l.status==='unmatched'||l.status==='informational') && (l.amount||0)>0
+                      ? `<button onclick="igFromModal(${l.id},true,${id},'${_attr(fname)}')" class="text-xs hover:underline ml-1" style="color:#bf5757">${t('ign_do')}</button>` : ''))
+            : '';
+          return `<tr class="border-b border-gray-50" style="${ign?'opacity:.5':''}">
           <td class="py-1 pr-2 whitespace-nowrap">${l.date||''}</td>
           <td class="py-1 pr-2">${(l.ref||'')+(l.channel?` <span class="text-gray-400 text-xs">[${l.channel}]</span>`:'')}</td>
           <td class="py-1 text-right font-mono">${fmt(l.amount||0)}</td>
-          <td class="py-1 text-center"><span class="badge ${LINE_ST_BADGE[l.match_status]||'b-mut'}">${l.match_status}</span></td>
-        </tr>`).join('')}</tbody></table></div>`;
+          <td class="py-1 text-center"><span class="badge ${LINE_ST_BADGE[l.status]||'b-mut'}">${t('linest_'+l.status)||l.status}</span>${act}</td>
+        </tr>`;}).join('')}</tbody></table></div>`;
   }catch(e){ el.remove(); toast(e.message,'err'); }
 }
 async function moveUpload(id, curBid){
@@ -2983,10 +3076,12 @@ function renderReference(){
 // ── Map-from-documents: suggest the bank for needs-map codes ──────────────────
 // The statement already shows where each tender settles; when an unmapped code's
 // per-day POS series tracks one lane's credits, offer a one-click Apply.
-async function loadMapSuggestions(){
-  const el=document.getElementById('map-suggest'); if(!el) return;
+// Render into any host (default the Uploads page card). `bidArg` lets the caller
+// pass the selected branch; falls back to the branch picker / first branch.
+async function loadMapSuggestions(hostId, bidArg){
+  const el=document.getElementById(hostId||'up-suggest'); if(!el) return;
   el.classList.add('hidden'); el.innerHTML='';
-  const bid = document.getElementById('sel-branch').value || (BRANCHES[0]&&BRANCHES[0].branch_id);
+  const bid = bidArg || document.getElementById('sel-branch').value || (BRANCHES[0]&&BRANCHES[0].branch_id);
   if(!bid) return;
   let d; try{ d=await api(`/api/map-suggestions?branch_id=${bid}&period_month=${period()}`); }catch(e){ return; }
   const sugs=(d.suggestions||[]);
@@ -3019,7 +3114,8 @@ async function applyMapSuggestion(i){
               notes:`from documents: ${s.hits}/${s.active_days} days matched`, updated_by:'doc-suggest'}});
     }
     toast(t('sug_applied').replace('{c}',s.code).replace('{b}',t('bankd_'+s.bank)||s.bank),'ok');
-    loadSetup();
+    refreshSetupBadge();
+    loadUploads();                 // refresh status + suggestions in place
   }catch(e){ toast(e.message,'err'); }
 }
 
@@ -3029,7 +3125,7 @@ async function loadSetup(){
   MAP_DATA=await api('/api/payment-map');
   renderFlow();
   renderMapTable();
-  loadMapSuggestions();   // async, fills #map-suggest when documents know the answer
+  // Map-from-documents suggestions live on the Uploads page now (one panel).
   // Bank accounts — one row per master branch, KTB + KBANK editable inline
   const accts=await api('/api/bank-accounts');
   const aMap={}; accts.forEach(a=>{ aMap[a.branch_id+'|'+a.bank]=a; });
@@ -3060,6 +3156,38 @@ async function loadSetup(){
   });
 }
 
+// Which external document reconciles a (category, bank) lane — so staff can see
+// at a glance that every code points at a real statement/report. Returns
+// {text, ok}: ok=false means "no document possible / needs a bank set".
+function docLabel(category, bank){
+  const B = t('bankd_'+bank)||bank;
+  switch(category){
+    case 'CASH':     return {text:`${t('doc_stmt')} ${B} · ${t('doc_cashdep')}`, ok:true};
+    case 'QR':
+    case 'TRANSFER':
+      if(bank==='UNKNOWN'||bank==='PROMPTPAY'||bank==='NONE') return {text:t('doc_setbank'), ok:false};
+      return {text:`${t('doc_stmt')} ${B}`, ok:true};
+    case 'CREDIT':
+      if(bank==='KTC')  return {text:'KTC Settlement (RTxInv)', ok:true};
+      if(bank==='BAY')  return {text:'BAY Point (Krungsri)', ok:true};
+      if(bank==='KTB')  return {text:`${t('doc_ccsettle')} KTB`, ok:true};
+      if(bank==='KBANK')return {text:`${t('doc_ccsettle')} KBANK`, ok:true};
+      if(bank==='NONE'||bank==='UNKNOWN') return {text:t('doc_setbank'), ok:false};
+      return {text:`${t('doc_ccsettle')} ${B}`, ok:true};
+    case 'GRAB':     return {text:'Grab report', ok:true};
+    case 'LINEMAN':  return {text:'Line Man report', ok:true};
+    case 'COUPON':   return {text:t('doc_none'), ok:false};
+    case 'ENTERTAIN':return {text:t('doc_internal'), ok:false};
+    default:         return {text:'—', ok:false};
+  }
+}
+function docLabelHtml(category, bank, reconcile){
+  if(!reconcile) return `<span class="text-gray-300">—</span>`;
+  const d=docLabel(category,bank);
+  return d.ok ? `<span class="text-gray-600">📄 ${d.text}</span>`
+              : `<span class="text-amber-600">${d.text}</span>`;
+}
+
 function renderMapTable(){
   const map=MAP_DATA; const tb=document.getElementById('map-body'); tb.innerHTML='';
   const need=map.filter(codeIssue);                 // carry money + can't lane = urgent
@@ -3080,6 +3208,7 @@ function renderMapTable(){
       <td class="text-right font-mono text-gray-600">${fmt(m.pos_amount)}<div class="text-xs text-gray-300">${fmt(m.pos_txn)} txns</div></td>
       <td><select class="inp" id="mc-${m.id}" onchange="saveMap(${m.id})">${CATS.map(c=>`<option ${c===m.category?'selected':''}>${c}</option>`).join('')}</select></td>
       <td><select class="inp ${attn?'border-amber-400':''}" id="mb-${m.id}" onchange="saveMap(${m.id})">${BANKS.map(b=>`<option ${b===m.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+      <td id="md-${m.id}" class="text-xs">${docLabelHtml(m.category,m.bank,m.reconcile)}</td>
       <td class="text-center"><input type="checkbox" id="mr-${m.id}" ${m.reconcile?'checked':''} onchange="saveMap(${m.id})"></td>
       <td class="text-right"><span id="mok-${m.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
@@ -3238,6 +3367,7 @@ async function saveMap(id){
     if(ok){ ok.className='text-xs text-green-600'; ok.textContent='✓ saved'; setTimeout(()=>ok.textContent='',1500); }
     const tr=document.getElementById('mb-'+id).closest('tr');
     tr.style.background = (m&&codeIssue(m))?'#fff7ed':''; tr.style.opacity=(m&&codeDormant(m))?'.55':'';
+    const dc=document.getElementById('md-'+id); if(dc) dc.innerHTML=docLabelHtml(category,bank,reconcile);
     refreshSetupBadge(); refreshAttention(); renderFlow();
   }catch(e){ if(ok){ ok.className='text-xs text-red-600'; ok.textContent='✗ '+e.message; } }
 }

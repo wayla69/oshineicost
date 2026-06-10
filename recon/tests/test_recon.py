@@ -985,3 +985,108 @@ def test_uploads_match_stats_and_lines_drill(client):
     assert d["count"] == 2
     cashline = next(l for l in d["lines"] if l["channel"] == "CASH_DEP")
     assert cashline["match_status"] == "matched"
+
+
+# ── internal-transfer ignore flag (2026-06-10) ────────────────────────────────
+
+def test_ignore_flag_excludes_line_everywhere(client):
+    """An ignored bank credit vanishes from monthly + daily lanes and from
+    upload match denominators; Run Match must NOT un-ignore it; un-ignore
+    restores it."""
+    from recon.matcher import category_reconciliation, daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'kbank','s','2026-06',1,'confirmed')").lastrowid
+    # a ฿2M intercompany sweep — no POS side, pure TRANSFER ext_only noise
+    lid = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-15','TRANSFER',2000000,'unmatched')", (up,)).lastrowid
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert any(r["category"] == "TRANSFER" and r["ext_amount"] == 2000000 for r in rows)
+
+    r = client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": True, "note": "intercompany"})
+    assert r.status_code == 200 and r.json()["match_status"] == "excluded"
+
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert not any(r["category"] == "TRANSFER" and r["ext_amount"] >= 2000000 for r in rows), \
+            "ignored sweep still in monthly TRANSFER lane"
+        daily = daily_reconciliation(conn, 4, "2026-06")
+        for day in daily["days"]:
+            for l in day["lanes"]:
+                assert not (l["category"] == "TRANSFER" and l["ext"] >= 2000000), \
+                    "ignored sweep still in daily lanes"
+
+    # Run Match must preserve the operator's decision
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json().get("session_id")
+    if sid:
+        client.post(f"/api/sessions/{sid}/run-match")
+    cc = sqlite3.connect(db); cc.row_factory = sqlite3.Row
+    assert cc.execute("SELECT match_status FROM recon_bank_lines WHERE id=?",
+                      (lid,)).fetchone()[0] == "excluded"
+    cc.close()
+
+    # upload stats: ignored line is out of the denominator? No — it stays in
+    # total but is not 'done'; the per-line view shows the badge. Un-ignore:
+    r = client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": False})
+    assert r.status_code == 200 and r.json()["match_status"] == "unmatched"
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert any(r["category"] == "TRANSFER" and r["ext_amount"] == 2000000 for r in rows)
+
+
+def test_ignore_flag_guards(client):
+    """Manual lines refuse ignore; un-ignoring a non-ignored line refuses."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',1,'confirmed')").lastrowid
+    man = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-15','TRANSFER',500,'manual')", (up,)).lastrowid
+    raw = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-16','TRANSFER',600,'unmatched')", (up,)).lastrowid
+    c.commit(); c.close()
+    assert client.patch(f"/api/bank-lines/{man}/ignore", json={"ignored": True}).status_code == 409
+    assert client.patch(f"/api/bank-lines/{raw}/ignore", json={"ignored": False}).status_code == 409
+    assert client.patch("/api/bank-lines/999999/ignore", json={"ignored": True}).status_code == 404
+
+
+# ── uploads panel: live match stats without Run Match (2026-06-10) ────────────
+
+def test_upload_stats_live_without_run_match(client):
+    """Match stats compute on read (lane-based) — no session / Run Match needed.
+    Revenue credits in a matched lane count; debits + FEE/payout lines don't
+    inflate the denominator; per-line drill agrees with the panel."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',4,'confirmed')").lastrowid
+    # QR credit matches the fixture's KNNQR=100000; + 1 debit, 1 FEE, 1 lone transfer
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-03','QR',100000)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,debit) VALUES(?,4,'2026-06-03','TRANSFER',0,500)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-03','FEE',0)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-04','TRANSFER',777)", (up,))
+    c.commit(); c.close()
+
+    # NO session, NO run-match — stats must still be correct
+    u = next(x for x in client.get("/api/uploads?period_month=2026-06&branch_id=4").json()
+             if x["upload_id"] == up)
+    assert u["match_total"] == 2, "only the 2 revenue credits (QR + transfer) are reconcilable"
+    assert u["match_done"] == 1, "the QR lane matched POS 100000"
+
+    d = client.get(f"/api/uploads/{up}/lines").json()
+    assert d["count"] == 2 and d["matched"] == 1        # agrees with the panel
+    assert d["total_lines"] == 4                          # all lines still shown
+    statuses = sorted(l["status"] for l in d["lines"])
+    assert statuses == ["informational", "informational", "matched", "unmatched"]

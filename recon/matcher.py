@@ -114,11 +114,13 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
         b["net"]    += net
         b["lines"].append((table, line_id))
 
-    # Bank statement: QR / TRANSFER / CASH_DEP credits
+    # Bank statement: QR / TRANSFER / CASH_DEP credits ('excluded' on a bank
+    # line = operator-flagged internal transfer, not revenue — skipped everywhere)
     for r in conn.execute("""
         SELECT l.id, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
-        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+        WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='excluded'
+          AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if not cat:
@@ -439,6 +441,7 @@ def _payout_candidate_credits(conn, branch_id, period_month, channels):
         rows = conn.execute(f"""
             SELECT id, txn_date, credit, channel FROM recon_bank_lines
             WHERE branch_id=? AND credit>0 AND channel IN ({ph})
+              AND match_status!='excluded'
               AND strftime('%Y-%m',txn_date)=?
             ORDER BY txn_date, id
         """, (branch_id, *channels, period_month)).fetchall()
@@ -543,14 +546,15 @@ def lane_lines(conn, branch_id, period_month, category, bank, day=None):
         else:
             df, p = _df("l.txn_date")
         for r in conn.execute(f"""
-            SELECT l.txn_date d, l.description ref, l.credit amt, u.provider
+            SELECT l.id, l.match_status ms, l.txn_date d, l.description ref, l.credit amt, u.provider
             FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
             WHERE l.branch_id=? AND l.credit>0 AND l.channel=?{df} ORDER BY l.txn_date
         """, [branch_id, chan] + p):
             rb = "NONE" if category == "CASH" else _provider_bank(r["provider"])
             if rb != bank:
                 continue
-            out.append({"date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
+            out.append({"id": r["id"], "match_status": r["ms"],
+                        "date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
                         "detail": r["provider"] or ""})
         return out
 
@@ -596,9 +600,12 @@ def _reset_session(conn, session_id, branch_id, period_month):
     conn.execute("DELETE FROM recon_category_result WHERE session_id=?", (session_id,))
     conn.execute("DELETE FROM recon_discrepancies WHERE session_id=? AND resolution='pending'", (session_id,))
     for table, date_col in _LINE_TABLES:
+        # 'manual' (tick-to-match) and 'excluded' (cancelled delivery orders /
+        # operator-flagged internal transfers) are decisions — a re-run keeps them.
         conn.execute(f"""
             UPDATE {table} SET match_status='unmatched', match_id=NULL
-            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=? AND match_status!='manual'
+            WHERE branch_id=? AND strftime('%Y-%m', {date_col})=?
+              AND match_status NOT IN ('manual','excluded')
         """, (branch_id, period_month))
 
 
@@ -751,7 +758,8 @@ def _external_buckets_daily(conn, branch_id, period_month, include_cash=True):
     for r in conn.execute("""
         SELECT l.txn_date d, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
-        WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='manual'
+        WHERE l.branch_id=? AND l.credit>0
+          AND l.match_status NOT IN ('manual','excluded')
           AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
@@ -881,7 +889,8 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag):
         rows = conn.execute("""
             SELECT id, txn_date, credit FROM recon_bank_lines
             WHERE branch_id=? AND credit>0 AND channel='CASH_DEP'
-              AND match_status!='manual' AND txn_date>=? AND txn_date<?
+              AND match_status NOT IN ('manual','excluded')
+              AND txn_date>=? AND txn_date<?
             ORDER BY txn_date, id
         """, (branch_id, month_start, next_cutoff)).fetchall()
     except sqlite3.OperationalError:
@@ -1295,6 +1304,82 @@ def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
     return out
 
 
+# ── Per-document match status (live, no Run Match needed) ─────────────────────
+# "How much of this statement reconciled?" answered read-only by lane: a line is
+# matched if it was hand-matched (manual) or its (category,bank) lane reconciled
+# this month. 'excluded' lines (ignored internal transfers) are reported apart,
+# out of the denominator. Because it's recomputed on read, the numbers are always
+# current — staff never have to remember to press Run Match first.
+
+def _line_status(ms, cat, bank, lane_status, cash_ids=None, line_id=None):
+    if ms == "excluded":
+        return "excluded"
+    if ms == "manual":
+        return "matched"
+    if cash_ids is not None and cat == "CASH" and line_id in cash_ids:
+        return "matched"
+    return "matched" if lane_status.get((cat, bank)) == "matched" else "unmatched"
+
+
+def _lane_status_map(conn, branch_id, period_month):
+    rows, _ = category_reconciliation(conn, branch_id, period_month)
+    return {(r["category"], r["bank"]): r["status"] for r in rows}
+
+
+def upload_match_stats(conn, branch_id, period_month):
+    """{upload_id: {total, matched, excluded}} computed live by lane status."""
+    lane_status = _lane_status_map(conn, branch_id, period_month)
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    cash_ids = {g["line_id"] for g in cash["groups"]}
+
+    out: dict = {}
+    def bump(uid, key):
+        d = out.setdefault(uid, {"total": 0, "matched": 0, "excluded": 0})
+        d[key] += 1
+
+    for r in conn.execute("""
+        SELECT l.id, l.upload_id, l.channel, l.match_status ms, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+    """, (branch_id, period_month)):
+        cat = _CHANNEL_CATEGORY.get(r["channel"])
+        if not cat:                       # FEE / OTHER / payout legs — not a revenue lane
+            continue
+        bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
+        st = _line_status(r["ms"], cat, bank, lane_status, cash_ids, r["id"])
+        if st == "excluded":
+            bump(r["upload_id"], "excluded"); continue
+        bump(r["upload_id"], "total")
+        if st == "matched":
+            bump(r["upload_id"], "matched")
+
+    for r in conn.execute("""
+        SELECT l.upload_id, l.match_status ms, l.acquirer, u.provider
+        FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        bank = r["acquirer"] or _provider_acquirer(r["provider"])
+        st = _line_status(r["ms"], "CREDIT", bank, lane_status)
+        if st == "excluded":
+            bump(r["upload_id"], "excluded"); continue
+        bump(r["upload_id"], "total")
+        if st == "matched":
+            bump(r["upload_id"], "matched")
+
+    for cat, table in (("GRAB", "recon_grab_lines"), ("LINEMAN", "recon_lineman_lines")):
+        for r in conn.execute(f"""
+            SELECT upload_id, match_status ms FROM {table}
+            WHERE branch_id=? AND order_status='Completed' AND strftime('%Y-%m', order_date)=?
+        """, (branch_id, period_month)):
+            st = _line_status(r["ms"], cat, "NONE", lane_status)
+            if st == "excluded":
+                bump(r["upload_id"], "excluded"); continue
+            bump(r["upload_id"], "total")
+            if st == "matched":
+                bump(r["upload_id"], "matched")
+    return out
+
+
 # ── Bank suggestions for unmapped POS codes ───────────────────────────────────
 # The biggest setup blocker is a code like KNNQR (฿80M) sitting on UNKNOWN bank.
 # But the documents already know the answer: if the code's per-day POS series
@@ -1339,7 +1424,8 @@ def map_bank_suggestions(conn, branch_id, period_month, min_hits=4, min_score=0.
     for r in conn.execute("""
         SELECT l.txn_date d, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
-        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+        WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='excluded'
+          AND strftime('%Y-%m', l.txn_date)=?
           AND l.channel IN ('QR','TRANSFER')
     """, (branch_id, period_month)):
         key = (r["channel"], _provider_bank(r["provider"]))
@@ -1461,13 +1547,13 @@ def daily_board(conn: sqlite3.Connection, day: str) -> dict:
     next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
     for r in conn.execute(
         "SELECT branch_id, credit, channel FROM recon_bank_lines "
-        "WHERE credit>0 AND match_status!='manual' AND txn_date=? AND channel!='CASH_DEP'", (day,)):
+        "WHERE credit>0 AND match_status NOT IN ('manual','excluded') AND txn_date=? AND channel!='CASH_DEP'", (day,)):
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if cat:
             add(r["branch_id"], cat, None, float(r["credit"] or 0), float(r["credit"] or 0))
     for r in conn.execute(
         "SELECT branch_id, credit FROM recon_bank_lines "
-        "WHERE credit>0 AND match_status!='manual' AND txn_date=? AND channel='CASH_DEP'", (next_day,)):
+        "WHERE credit>0 AND match_status NOT IN ('manual','excluded') AND txn_date=? AND channel='CASH_DEP'", (next_day,)):
         add(r["branch_id"], "CASH", None, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("SELECT * FROM recon_cc_lines WHERE match_status!='manual' AND settlement_date=?", (day,)):
