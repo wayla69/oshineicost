@@ -38,6 +38,7 @@ from .matcher import (
     lane_lines,
     lane_pos_days,
     map_bank_suggestions,
+    upload_match_stats,
     payout_matching,
     payout_reconciliation,
     pos_codes_scope,
@@ -767,31 +768,21 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
         """, params).fetchall()
         out = [dict(r) for r in rows]
 
-        # Per-upload match status: how much of each document has reconciled.
-        # Bank statements count credit lines only (debits aren't revenue-in);
-        # delivery reports count Completed orders (cancelled = excluded).
+        # Per-upload match status, computed LIVE by lane (no Run Match needed).
+        # Recompute once per (branch, month) present in the result, then attach.
+        scopes = {(u["branch_id"], u["period_month"]) for u in out
+                  if u.get("branch_id") and u.get("period_month")}
         stats: dict = {}
-        for src, table, scope in (
-            ("bank",        "recon_bank_lines",    "credit>0"),
-            ("credit_card", "recon_cc_lines",      "1=1"),
-            ("grab",        "recon_grab_lines",    "order_status='Completed'"),
-            ("lineman",     "recon_lineman_lines", "order_status='Completed'"),
-        ):
+        for bid, pm in scopes:
             try:
-                for r in conn.execute(f"""
-                    SELECT upload_id,
-                           COUNT(*) total,
-                           SUM(CASE WHEN match_status IN ('matched','manual') THEN 1 ELSE 0 END) matched
-                    FROM {table} WHERE {scope} GROUP BY upload_id
-                """):
-                    stats[r["upload_id"]] = {"match_total": r["total"],
-                                             "match_done": int(r["matched"] or 0)}
+                stats.update(upload_match_stats(conn, bid, pm))
             except sqlite3.OperationalError:
                 pass
         for u in out:
-            s = stats.get(u["upload_id"], {"match_total": 0, "match_done": 0})
-            u["match_total"] = s["match_total"]
-            u["match_done"]  = s["match_done"]
+            s = stats.get(u["upload_id"], {"total": 0, "matched": 0, "excluded": 0})
+            u["match_total"]    = s["total"]
+            u["match_done"]     = s["matched"]
+            u["match_excluded"] = s["excluded"]
         return out
 
 
@@ -799,28 +790,59 @@ def list_uploads(branch_id: int | None = None, period_month: str | None = None):
 def upload_lines(upload_id: int, limit: int = 300):
     """The parsed lines of one upload WITH their match status — lets staff open a
     document and see exactly which lines reconciled and which still hang."""
+    from .matcher import (_CHANNEL_CATEGORY, _provider_bank, _provider_acquirer,
+                          _line_status, _lane_status_map, cash_deposit_matching)
     with get_db() as conn:
-        up = conn.execute("SELECT source_type FROM recon_uploads WHERE upload_id=?",
-                          (upload_id,)).fetchone()
+        up = conn.execute(
+            "SELECT source_type, branch_id, period_month, provider FROM recon_uploads WHERE upload_id=?",
+            (upload_id,)).fetchone()
         if not up:
             raise HTTPException(404, "upload not found")
+        st_, bid, pm, prov = up["source_type"], up["branch_id"], up["period_month"], up["provider"]
+        is_cc = st_ == "credit_card"
         spec = {
             "bank":        ("recon_bank_lines",    "txn_date",        "description", "credit"),
             "credit_card": ("recon_cc_lines",      "settlement_date", "batch_no",    "gross_amount"),
             "grab":        ("recon_grab_lines",    "order_date",      "order_id",    "food_amount"),
             "lineman":     ("recon_lineman_lines", "order_date",      "order_id",    "food_amount"),
-        }[up["source_type"]]
+        }[st_]
         table, date_col, ref_col, amt_col = spec
+        extra = (", channel" if table == "recon_bank_lines"
+                 else ", acquirer" if is_cc else "")
         rows = conn.execute(f"""
             SELECT id, {date_col} AS date, {ref_col} AS ref, {amt_col} AS amount,
-                   match_status
-                   {', channel, debit' if table == 'recon_bank_lines' else ''}
+                   match_status{extra}
             FROM {table} WHERE upload_id=? ORDER BY {date_col}, id LIMIT ?
         """, (upload_id, max(1, min(limit, 1000)))).fetchall()
         out = [dict(r) for r in rows]
-        done = sum(1 for r in out if r["match_status"] in ("matched", "manual"))
-        return {"source_type": up["source_type"], "count": len(out),
-                "matched": done, "lines": out}
+
+        # Derive each line's LIVE reconciliation status by lane so the drill
+        # agrees with the panel without a Run Match. One upload = one bank, so the
+        # provider's bank is resolved once.
+        lane_status = _lane_status_map(conn, bid, pm)
+        cash_ids = {g["line_id"] for g in cash_deposit_matching(conn, bid, pm)["groups"]}
+        prov_bank = _provider_bank(prov)
+        prov_acq  = _provider_acquirer(prov)
+        for r in out:
+            if st_ == "bank":
+                cat = _CHANNEL_CATEGORY.get(r.get("channel"))
+                bank = "NONE" if cat == "CASH" else prov_bank
+                # only revenue-channel CREDITS reconcile; debits / zero / FEE / payout
+                # legs are informational (mirrors upload_match_stats' credit>0 filter)
+                if cat is None or (r.get("amount") or 0) <= 0:
+                    r["status"] = "informational"; continue
+            elif is_cc:
+                cat, bank = "CREDIT", (r.get("acquirer") or prov_acq)
+            else:
+                cat, bank = ("GRAB" if st_ == "grab" else "LINEMAN"), "NONE"
+            r["status"] = _line_status(r["match_status"], cat, bank, lane_status, cash_ids, r["id"])
+        done = sum(1 for r in out if r["status"] == "matched")
+        excl = sum(1 for r in out if r["status"] == "excluded")
+        # Denominator = reconcilable revenue lines (exclude informational + excluded),
+        # so "X of Y" here equals the panel's match bar.
+        reconcilable = sum(1 for r in out if r["status"] in ("matched", "unmatched", "manual"))
+        return {"source_type": st_, "count": reconcilable, "total_lines": len(out),
+                "matched": done, "excluded": excl, "lines": out}
 
 
 @app.delete("/api/uploads/{upload_id}", dependencies=[Depends(require_write_token)])

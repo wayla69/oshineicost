@@ -1057,3 +1057,36 @@ def test_ignore_flag_guards(client):
     assert client.patch(f"/api/bank-lines/{man}/ignore", json={"ignored": True}).status_code == 409
     assert client.patch(f"/api/bank-lines/{raw}/ignore", json={"ignored": False}).status_code == 409
     assert client.patch("/api/bank-lines/999999/ignore", json={"ignored": True}).status_code == 404
+
+
+# ── uploads panel: live match stats without Run Match (2026-06-10) ────────────
+
+def test_upload_stats_live_without_run_match(client):
+    """Match stats compute on read (lane-based) — no session / Run Match needed.
+    Revenue credits in a matched lane count; debits + FEE/payout lines don't
+    inflate the denominator; per-line drill agrees with the panel."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',4,'confirmed')").lastrowid
+    # QR credit matches the fixture's KNNQR=100000; + 1 debit, 1 FEE, 1 lone transfer
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-03','QR',100000)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,debit) VALUES(?,4,'2026-06-03','TRANSFER',0,500)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-03','FEE',0)", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-04','TRANSFER',777)", (up,))
+    c.commit(); c.close()
+
+    # NO session, NO run-match — stats must still be correct
+    u = next(x for x in client.get("/api/uploads?period_month=2026-06&branch_id=4").json()
+             if x["upload_id"] == up)
+    assert u["match_total"] == 2, "only the 2 revenue credits (QR + transfer) are reconcilable"
+    assert u["match_done"] == 1, "the QR lane matched POS 100000"
+
+    d = client.get(f"/api/uploads/{up}/lines").json()
+    assert d["count"] == 2 and d["matched"] == 1        # agrees with the panel
+    assert d["total_lines"] == 4                          # all lines still shown
+    statuses = sorted(l["status"] for l in d["lines"])
+    assert statuses == ["informational", "informational", "matched", "unmatched"]

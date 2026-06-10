@@ -1304,6 +1304,82 @@ def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
     return out
 
 
+# ── Per-document match status (live, no Run Match needed) ─────────────────────
+# "How much of this statement reconciled?" answered read-only by lane: a line is
+# matched if it was hand-matched (manual) or its (category,bank) lane reconciled
+# this month. 'excluded' lines (ignored internal transfers) are reported apart,
+# out of the denominator. Because it's recomputed on read, the numbers are always
+# current — staff never have to remember to press Run Match first.
+
+def _line_status(ms, cat, bank, lane_status, cash_ids=None, line_id=None):
+    if ms == "excluded":
+        return "excluded"
+    if ms == "manual":
+        return "matched"
+    if cash_ids is not None and cat == "CASH" and line_id in cash_ids:
+        return "matched"
+    return "matched" if lane_status.get((cat, bank)) == "matched" else "unmatched"
+
+
+def _lane_status_map(conn, branch_id, period_month):
+    rows, _ = category_reconciliation(conn, branch_id, period_month)
+    return {(r["category"], r["bank"]): r["status"] for r in rows}
+
+
+def upload_match_stats(conn, branch_id, period_month):
+    """{upload_id: {total, matched, excluded}} computed live by lane status."""
+    lane_status = _lane_status_map(conn, branch_id, period_month)
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    cash_ids = {g["line_id"] for g in cash["groups"]}
+
+    out: dict = {}
+    def bump(uid, key):
+        d = out.setdefault(uid, {"total": 0, "matched": 0, "excluded": 0})
+        d[key] += 1
+
+    for r in conn.execute("""
+        SELECT l.id, l.upload_id, l.channel, l.match_status ms, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+    """, (branch_id, period_month)):
+        cat = _CHANNEL_CATEGORY.get(r["channel"])
+        if not cat:                       # FEE / OTHER / payout legs — not a revenue lane
+            continue
+        bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
+        st = _line_status(r["ms"], cat, bank, lane_status, cash_ids, r["id"])
+        if st == "excluded":
+            bump(r["upload_id"], "excluded"); continue
+        bump(r["upload_id"], "total")
+        if st == "matched":
+            bump(r["upload_id"], "matched")
+
+    for r in conn.execute("""
+        SELECT l.upload_id, l.match_status ms, l.acquirer, u.provider
+        FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        bank = r["acquirer"] or _provider_acquirer(r["provider"])
+        st = _line_status(r["ms"], "CREDIT", bank, lane_status)
+        if st == "excluded":
+            bump(r["upload_id"], "excluded"); continue
+        bump(r["upload_id"], "total")
+        if st == "matched":
+            bump(r["upload_id"], "matched")
+
+    for cat, table in (("GRAB", "recon_grab_lines"), ("LINEMAN", "recon_lineman_lines")):
+        for r in conn.execute(f"""
+            SELECT upload_id, match_status ms FROM {table}
+            WHERE branch_id=? AND order_status='Completed' AND strftime('%Y-%m', order_date)=?
+        """, (branch_id, period_month)):
+            st = _line_status(r["ms"], cat, "NONE", lane_status)
+            if st == "excluded":
+                bump(r["upload_id"], "excluded"); continue
+            bump(r["upload_id"], "total")
+            if st == "matched":
+                bump(r["upload_id"], "matched")
+    return out
+
+
 # ── Bank suggestions for unmapped POS codes ───────────────────────────────────
 # The biggest setup blocker is a code like KNNQR (฿80M) sitting on UNKNOWN bank.
 # But the documents already know the answer: if the code's per-day POS series
