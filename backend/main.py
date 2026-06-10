@@ -4905,7 +4905,9 @@ def buffet_child_trend(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
 ):
-    """Monthly adult/child pax split and GP% trend for BUFFET category."""
+    """Monthly adult/child pax split and GP% trend for BUFFET category.
+    fix C2/C4: adult codes include 'BUFFET'; COGS from all-SKU query (item COGS on B0xxx rows).
+    """
     filters: list = []
     params:  dict = {}
     if branch:
@@ -4921,6 +4923,7 @@ def buffet_child_trend(
 
     where = ("WHERE " + " AND ".join(mf_filter)) if mf_filter else ""
 
+    # Tier/pax query — BUFFET category for revenue and cover counts
     sql = f"""
         SELECT
             sm.period_month,
@@ -4928,24 +4931,36 @@ def buffet_child_trend(
             sk.description,
             c.name          AS category,
             SUM(sm.qty)     AS qty,
-            SUM(sm.subtotal_ex_vat) AS rev_ex,
-            SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs
+            SUM(sm.subtotal_ex_vat) AS rev_ex
         FROM sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
-        LEFT JOIN sku_cost sc ON sc.sku_id  = sm.sku_id
         {where}
         GROUP BY sm.period_month, sk.sku_code, sk.description, c.name
         ORDER BY sm.period_month
     """
 
+    # All-SKU COGS per month — item consumption is on B0xxx rows, not BUFFET category
+    cogs_base_filters = [f for f in mf_filter if "period_month" in f or "b.name" in f]
+    cogs_where = ("WHERE " + " AND ".join(cogs_base_filters + ["b.name != 'ALL'"])) if cogs_base_filters else "WHERE b.name != 'ALL'"
+    cogs_sql = f"""
+        SELECT sm.period_month, SUM({_unified_cogs_expr(ssm='sm')}) AS cogs
+        FROM sales_sku_monthly sm
+        JOIN branches b ON b.branch_id = sm.branch_id
+        {cogs_where}
+        GROUP BY sm.period_month
+    """
+
     with get_db() as con:
-        rows = con.execute(sql, params).fetchall()
+        rows      = con.execute(sql,      params).fetchall()
+        cogs_rows = con.execute(cogs_sql, params).fetchall()
+
+    cogs_by_month = {r["period_month"]: (r["cogs"] or 0.0) for r in cogs_rows}
 
     # Aggregate per month
     from collections import defaultdict
-    monthly: dict = defaultdict(lambda: {"adult": 0.0, "child": 0.0, "rev_ex": 0.0, "cogs": 0.0, "has_cost": False})
+    monthly: dict = defaultdict(lambda: {"adult": 0.0, "child": 0.0, "rev_ex": 0.0})
 
     for r in rows:
         mo   = r["period_month"]
@@ -4965,9 +4980,6 @@ def buffet_child_trend(
 
         if cat == "BUFFET":
             monthly[mo]["rev_ex"] += r["rev_ex"] or 0.0
-            if r["cogs"] is not None:
-                monthly[mo]["cogs"]     += r["cogs"]
-                monthly[mo]["has_cost"]  = True
 
     result = []
     for mo in sorted(monthly):
@@ -4978,8 +4990,9 @@ def buffet_child_trend(
         child_pct  = round(child_pax / total_pax * 100, 2) if total_pax else 0.0
         rev_ex     = d["rev_ex"]
         gp_pct     = None
-        if d["has_cost"] and rev_ex:
-            gp         = rev_ex - d["cogs"]
+        month_cogs = cogs_by_month.get(mo)
+        if month_cogs is not None and rev_ex:
+            gp         = rev_ex - month_cogs
             gp_pct     = round(gp / rev_ex * 100, 2)
 
         result.append({
