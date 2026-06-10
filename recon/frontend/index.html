@@ -1031,6 +1031,10 @@ const I18N = {
     sug_p:"เทียบยอดรายวันของรหัสที่ยังไม่ระบุธนาคาร กับรายการเงินเข้าใน statement ({b} · {m}) — ถ้าตรงกันเกือบทุกวัน แปลว่าเงินของรหัสนั้นเข้าบัญชีนั้น กด ใช้ค่านี้ เพื่อบันทึก",
     sug_match_days:"ตรงกัน {h}/{n} วัน", sug_apply:"ใช้ค่านี้",
     sug_applied:"ตั้งค่า {c} → {b} แล้ว — กด Run Match อีกครั้งเพื่อกระทบยอดใหม่",
+    ign_do:"ตัดออก", ign_undo:"เลิกตัดออก", ign_badge:"โอนภายใน",
+    ign_hint:"ระบุว่าเป็นเงินโอนภายใน/ไม่ใช่รายได้ — จะไม่ถูกนับในการกระทบยอด",
+    ign_prompt:"เหตุผล (เช่น โอนเงินระหว่างบริษัท):",
+    ign_done:"ตัดรายการออกจากการกระทบยอดแล้ว", ign_undone:"นำรายการกลับเข้าการกระทบยอดแล้ว",
     up_move_prompt:"ย้ายอัปโหลดนี้ไปสาขา:", up_moved:"ย้ายสาขาเรียบร้อย — รายการ {n} แถวถูกย้ายตาม",
     up_empty_note:"เอกสารถูกต้องแต่ไม่มีรายการ (บัญชีไม่มีความเคลื่อนไหวเดือนนี้)",
     flow_doc_CASH:"ยอดฝากเงินสดเข้าบัญชี (รายการฝากเงินสดใน statement)",
@@ -1195,6 +1199,10 @@ const I18N = {
     sug_p:"Each needs-map code's daily POS series is compared with statement credits ({b} · {m}) — near-daily agreement means that's where the money lands. Click Apply to save.",
     sug_match_days:"{h}/{n} days match", sug_apply:"Apply",
     sug_applied:"{c} → {b} saved — press Run Match to re-reconcile",
+    ign_do:"Ignore", ign_undo:"Un-ignore", ign_badge:"internal",
+    ign_hint:"Mark as an internal transfer / not revenue — excluded from reconciliation",
+    ign_prompt:"Reason (e.g. intercompany transfer):",
+    ign_done:"Line excluded from reconciliation", ign_undone:"Line restored to reconciliation",
     up_move_prompt:"Move this upload to branch:", up_moved:"Branch updated — {n} lines moved with it",
     up_empty_note:"Valid document with zero movements (account inactive this month)",
     flow_doc_CASH:"Cash-deposit lines in the bank statement",
@@ -1697,6 +1705,19 @@ async function openDrill(branch_id, scope, back){
 }
 function drillBack(){ closeDrawer('drill'); refreshTab(DRILL_BACK); }
 
+// Internal-transfer toggle: flag/unflag a bank credit as not-revenue. The note
+// is optional — the audit log records the line itself either way.
+async function toggleIgnoreLine(id, ignore){
+  let note='';
+  if(ignore){ note=prompt(t('ign_prompt'),''); if(note===null) return; }
+  try{
+    await api(`/api/bank-lines/${id}/ignore`,{method:'PATCH', json:{ignored:ignore, note:note||''}});
+    toast(ignore?t('ign_done'):t('ign_undone'),'ok');
+    const drillOpen = document.getElementById('tab-drill').classList.contains('as-drawer');
+    if(DRILL_CTX && drillOpen) openDrill(DRILL_CTX.branch_id, DRILL_CTX.scope, DRILL_CTX.back);
+  }catch(e){ toast(e.message,'err'); }
+}
+
 function mapStatusHtml(c){
   const goBtn=`<button data-code="${_attr(c.code)}" onclick="event.stopPropagation();openMappingFlow(this.dataset.code)" class="text-xs text-orange-600 hover:underline ml-1">${t('drill_map_now')} →</button>`;
   if(!c.mapped) return `<span class="badge b-err">${t('drill_unmapped')}</span>${goBtn}`;
@@ -1732,13 +1753,21 @@ function renderDrill(d, scope){
       <td class="text-right font-mono text-gray-500">${c.txn_count||'—'}</td>
       <td>${mapStatusHtml(c)}</td></tr>`).join('');
 
-  // statement lines
+  // statement lines — bank lanes get an "internal transfer" ignore toggle per line
   const lt=document.getElementById('drill-lines');
+  const canIgnore = ['CASH','QR','TRANSFER'].includes(d.category);
   if(!d.ext_lines || !d.ext_lines.length){ lt.innerHTML=`<tr><td colspan="4" class="text-center text-gray-400 py-6">${t('drill_no_lines')}</td></tr>`; }
-  else { lt.innerHTML = d.ext_lines.map(l=>`<tr>
-      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
-      <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono">${fmt(l.amount)}</td></tr>`).join('');
-    const tot=d.ext_lines.reduce((s,l)=>s+(l.amount||0),0);
+  else { lt.innerHTML = d.ext_lines.map(l=>{
+      const ignored = l.match_status==='excluded';
+      const act = (canIgnore && l.id)
+        ? (ignored
+            ? `<button onclick="toggleIgnoreLine(${l.id},false)" class="text-xs hover:underline ml-2" style="color:#5b53b0">${t('ign_undo')}</button>`
+            : `<button onclick="toggleIgnoreLine(${l.id},true)" class="text-xs hover:underline ml-2" style="color:#bf5757" title="${t('ign_hint')}">${t('ign_do')}</button>`)
+        : '';
+      return `<tr style="${ignored?'opacity:.45':''}">
+      <td>${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}${ignored?` <span class="badge b-mut">${t('ign_badge')}</span>`:''}</td>
+      <td class="text-gray-500">${l.detail||''}</td><td class="text-right font-mono whitespace-nowrap">${fmt(l.amount)}${act}</td></tr>`;}).join('');
+    const tot=d.ext_lines.filter(l=>l.match_status!=='ignored').reduce((s,l)=>s+(l.amount||0),0);
     lt.innerHTML+=`<tr class="font-semibold" style="background:#f8fafc"><td colspan="3">${d.ext_lines.length}</td><td class="text-right font-mono">${fmt(tot)}</td></tr>`;
   }
   // manual-match button: only meaningful for a real lane that has an external source
@@ -2507,7 +2536,11 @@ async function loadUploads(){
 }
 async function delUpload(id){ if(!confirm(t('toast_del_confirm')))return; try{ await api('/api/uploads/'+id,{method:'DELETE'}); toast(t('toast_updeleted'),'ok'); loadUploads(); }catch(e){ toast(e.message,'err'); } }
 // Per-line match-status drill for one uploaded document
-const LINE_ST_BADGE = {matched:'b-ok', manual:'b-ok', unmatched:'b-warn', excluded:'b-mut'};
+const LINE_ST_BADGE = {matched:'b-ok', manual:'b-ok', unmatched:'b-warn', excluded:'b-mut', ignored:'b-mut'};
+async function igFromModal(lineId, ignore, upId, fname){
+  await toggleIgnoreLine(lineId, ignore);
+  openUploadLines(upId, fname);   // refresh the modal
+}
 async function openUploadLines(id, fname){
   let el=document.getElementById('uplines-modal');
   if(!el){
@@ -2531,12 +2564,20 @@ async function openUploadLines(id, fname){
         <thead><tr class="text-gray-400 text-xs uppercase border-b">
           <th class="text-left pb-1">${t('c_date')||'Date'}</th><th class="text-left pb-1">${t('c_desc')||'Description'}</th>
           <th class="text-right pb-1">${t('c_amount')||'Amount'}</th><th class="text-center pb-1">${t('c_status')||'Status'}</th></tr></thead>
-        <tbody>${d.lines.map(l=>`<tr class="border-b border-gray-50">
+        <tbody>${d.lines.map(l=>{
+          const isBank = d.source_type==='bank';
+          const ign = l.match_status==='excluded';
+          const act = isBank
+            ? (ign ? `<button onclick="igFromModal(${l.id},false,${id},'${_attr(fname)}')" class="text-xs hover:underline ml-1" style="color:#5b53b0">${t('ign_undo')}</button>`
+                   : (l.match_status==='unmatched' && (l.amount||0)>0
+                      ? `<button onclick="igFromModal(${l.id},true,${id},'${_attr(fname)}')" class="text-xs hover:underline ml-1" style="color:#bf5757">${t('ign_do')}</button>` : ''))
+            : '';
+          return `<tr class="border-b border-gray-50" style="${ign?'opacity:.5':''}">
           <td class="py-1 pr-2 whitespace-nowrap">${l.date||''}</td>
           <td class="py-1 pr-2">${(l.ref||'')+(l.channel?` <span class="text-gray-400 text-xs">[${l.channel}]</span>`:'')}</td>
           <td class="py-1 text-right font-mono">${fmt(l.amount||0)}</td>
-          <td class="py-1 text-center"><span class="badge ${LINE_ST_BADGE[l.match_status]||'b-mut'}">${l.match_status}</span></td>
-        </tr>`).join('')}</tbody></table></div>`;
+          <td class="py-1 text-center"><span class="badge ${LINE_ST_BADGE[l.match_status]||'b-mut'}">${l.match_status}</span>${act}</td>
+        </tr>`;}).join('')}</tbody></table></div>`;
   }catch(e){ el.remove(); toast(e.message,'err'); }
 }
 async function moveUpload(id, curBid){

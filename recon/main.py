@@ -870,6 +870,39 @@ def reassign_upload_branch(upload_id: int, body: _UploadBranchBody):
     return {"upload_id": upload_id, "branch_id": body.branch_id, "moved_lines": moved}
 
 
+class _IgnoreBody(BaseModel):
+    ignored: bool
+    note:    str = ""
+    by:      str = ""
+
+
+@app.patch("/api/bank-lines/{line_id}/ignore", dependencies=[Depends(require_write_token)])
+def set_bank_line_ignore(line_id: int, body: _IgnoreBody):
+    """Flag a bank credit as an internal transfer (not revenue) so it stops
+    polluting the lanes — e.g. a ฿2M intercompany sweep showing as TRANSFER
+    ext_only. Reversible; survives Run Match; audited with the note."""
+    with get_db() as conn:
+        line = conn.execute(
+            "SELECT branch_id, txn_date, description, credit, match_status "
+            "FROM recon_bank_lines WHERE id=?", (line_id,)).fetchone()
+        if not line:
+            raise HTTPException(404, "bank line not found")
+        _assert_period_open(conn, line["branch_id"], str(line["txn_date"])[:7])
+        if body.ignored and line["match_status"] == "manual":
+            raise HTTPException(409, "line is manually matched — undo the manual match first")
+        if not body.ignored and line["match_status"] != "excluded":
+            raise HTTPException(409, "line is not ignored")
+        new_status = "excluded" if body.ignored else "unmatched"
+        conn.execute("UPDATE recon_bank_lines SET match_status=? WHERE id=?",
+                     (new_status, line_id))
+        _audit(conn, "bank_line", line_id, "update", body.by or "staff",
+               [{"field": "match_status", "old": line["match_status"], "new": new_status},
+                {"field": "note", "old": None,
+                 "new": body.note or f"{line['txn_date']} {line['description']} {line['credit']}"}])
+        conn.commit()
+    return {"line_id": line_id, "match_status": new_status}
+
+
 # ── Evidence attachments (photos / PDFs per branch+day) ───────────────────────
 _ATTACH_MAX = 10 * 1024 * 1024
 _ATTACH_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf", ".heic")

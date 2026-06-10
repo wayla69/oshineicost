@@ -985,3 +985,75 @@ def test_uploads_match_stats_and_lines_drill(client):
     assert d["count"] == 2
     cashline = next(l for l in d["lines"] if l["channel"] == "CASH_DEP")
     assert cashline["match_status"] == "matched"
+
+
+# ── internal-transfer ignore flag (2026-06-10) ────────────────────────────────
+
+def test_ignore_flag_excludes_line_everywhere(client):
+    """An ignored bank credit vanishes from monthly + daily lanes and from
+    upload match denominators; Run Match must NOT un-ignore it; un-ignore
+    restores it."""
+    from recon.matcher import category_reconciliation, daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'kbank','s','2026-06',1,'confirmed')").lastrowid
+    # a ฿2M intercompany sweep — no POS side, pure TRANSFER ext_only noise
+    lid = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-15','TRANSFER',2000000,'unmatched')", (up,)).lastrowid
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert any(r["category"] == "TRANSFER" and r["ext_amount"] == 2000000 for r in rows)
+
+    r = client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": True, "note": "intercompany"})
+    assert r.status_code == 200 and r.json()["match_status"] == "excluded"
+
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert not any(r["category"] == "TRANSFER" and r["ext_amount"] >= 2000000 for r in rows), \
+            "ignored sweep still in monthly TRANSFER lane"
+        daily = daily_reconciliation(conn, 4, "2026-06")
+        for day in daily["days"]:
+            for l in day["lanes"]:
+                assert not (l["category"] == "TRANSFER" and l["ext"] >= 2000000), \
+                    "ignored sweep still in daily lanes"
+
+    # Run Match must preserve the operator's decision
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json().get("session_id")
+    if sid:
+        client.post(f"/api/sessions/{sid}/run-match")
+    cc = sqlite3.connect(db); cc.row_factory = sqlite3.Row
+    assert cc.execute("SELECT match_status FROM recon_bank_lines WHERE id=?",
+                      (lid,)).fetchone()[0] == "excluded"
+    cc.close()
+
+    # upload stats: ignored line is out of the denominator? No — it stays in
+    # total but is not 'done'; the per-line view shows the badge. Un-ignore:
+    r = client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": False})
+    assert r.status_code == 200 and r.json()["match_status"] == "unmatched"
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+        assert any(r["category"] == "TRANSFER" and r["ext_amount"] == 2000000 for r in rows)
+
+
+def test_ignore_flag_guards(client):
+    """Manual lines refuse ignore; un-ignoring a non-ignored line refuses."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',1,'confirmed')").lastrowid
+    man = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-15','TRANSFER',500,'manual')", (up,)).lastrowid
+    raw = c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                    " VALUES(?,4,'2026-06-16','TRANSFER',600,'unmatched')", (up,)).lastrowid
+    c.commit(); c.close()
+    assert client.patch(f"/api/bank-lines/{man}/ignore", json={"ignored": True}).status_code == 409
+    assert client.patch(f"/api/bank-lines/{raw}/ignore", json={"ignored": False}).status_code == 409
+    assert client.patch("/api/bank-lines/999999/ignore", json={"ignored": True}).status_code == 404
