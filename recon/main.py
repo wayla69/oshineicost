@@ -1135,6 +1135,34 @@ def _audit(conn, entity: str, entity_id: int, action: str, by: str,
             )
 
 
+@app.get("/api/discrepancies/{disc_id}/days")
+def disc_daily_breakdown(disc_id: int):
+    """Per-day POS + external breakdown for one discrepancy (same lane, filtered daily)."""
+    with get_db() as conn:
+        disc = conn.execute(
+            """SELECT d.category, d.bank, s.branch_id, s.period_month
+               FROM recon_discrepancies d
+               JOIN recon_sessions s ON s.session_id = d.session_id
+               WHERE d.id=?""", (disc_id,)).fetchone()
+        if not disc:
+            raise HTTPException(404)
+        cat, bank, bid, pm = disc["category"], disc["bank"], disc["branch_id"], disc["period_month"]
+        daily = daily_reconciliation(conn, bid, pm)
+        days_out = []
+        for day in daily.get("days", []):
+            for lane in day.get("lanes", []):
+                if lane["category"] == cat and lane["bank"] == (bank or "NONE"):
+                    days_out.append({
+                        "day":      day["day"],
+                        "pos":      lane["pos"],
+                        "ext":      lane["ext"],
+                        "ext_net":  lane["ext_net"],
+                        "variance": round((lane["ext"] or 0) - (lane["pos"] or 0), 2),
+                        "status":   lane["status"],
+                    })
+        return {"category": cat, "bank": bank, "period_month": pm, "days": days_out}
+
+
 @app.patch("/api/discrepancies/{disc_id}/resolve", dependencies=[Depends(require_write_token)])
 def resolve_discrepancy(disc_id: int, body: ResolveBody):
     with get_db() as conn:

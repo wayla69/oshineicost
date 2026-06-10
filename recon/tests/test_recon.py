@@ -490,6 +490,73 @@ def test_ktb_statement_pdf_cid_and_balance():
     assert any(r["credit"] > 1000 for r in rows)
 
 
+# ── cash next-day deposit lag ─────────────────────────────────────────────────
+
+def test_cash_daily_matches_next_day_deposit(client):
+    """POS cash on day 10 → bank CASH_DEP credit on day 11 → daily status 'matched'.
+    Without the lag fix both sides would be 'pending'/'ext_only' instead."""
+    from recon.matcher import daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    # ensure Cash is mapped (seed does this, but be explicit)
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+
+    c = sqlite3.connect(db)
+    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',15000,3)")
+
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # deposit on day 11 (next-business-day) for sales on day 10
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-11','CASH_DEP',15000,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        result = daily_reconciliation(conn, 4, "2026-06")
+
+    days = {d["day"]: d for d in result["days"]}
+    day10 = days.get("2026-06-10", {})
+    cash_lane = next((l for l in day10.get("lanes", []) if l["category"] == "CASH"), None)
+    assert cash_lane is not None, "CASH lane missing for day 10"
+    assert cash_lane["status"] == "matched", (
+        f"expected 'matched', got '{cash_lane['status']}' — deposit-lag shift not working")
+    assert abs(cash_lane["variance"]) < 1.0
+
+
+def test_cash_lag_skips_deposit_outside_period(client):
+    """CASH_DEP on the 1st of the next month (for last-day sales) is out of scope
+    for the current period and must not appear as an ext_only bucket."""
+    from recon.matcher import daily_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+
+    c = sqlite3.connect(db)
+    c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # last day of May sales — the deposit lands on 2026-06-01 (next month)
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-05-31','Cash',8000,2)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-05',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-01','CASH_DEP',8000,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        result = daily_reconciliation(conn, 4, "2026-05")
+
+    # The cross-month deposit is excluded; the POS day should be pending/missing, NOT ext_only.
+    days = {d["day"]: d for d in result["days"]}
+    day31 = days.get("2026-05-31", {})
+    cash_lane = next((l for l in day31.get("lanes", []) if l["category"] == "CASH"), None)
+    if cash_lane:
+        assert cash_lane["status"] != "ext_only", "cross-month deposit leaked into period as ext_only"
+
+
 def test_ktc_settlement_pdf_totals():
     from recon.parsers.pdf_formats import _ktc_settlement
     prov, rows, skipped = _ktc_settlement(_udon("006_0170570924_260501-RTxInv-02.pdf"))

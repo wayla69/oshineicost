@@ -22,7 +22,7 @@ Anything outside tolerance becomes a discrepancy for accounting staff.
 from __future__ import annotations
 import json
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 
 from .seed_payment_map import normalize
 
@@ -501,7 +501,16 @@ def lane_lines(conn, branch_id, period_month, category, bank, day=None):
 
     if category in ("CASH", "QR", "TRANSFER"):
         chan = {"CASH": "CASH_DEP", "QR": "QR", "TRANSFER": "TRANSFER"}[category]
-        df, p = _df("l.txn_date")
+        # CASH_DEP: the deposit lands on sale_day+1. When drilling a single POS day,
+        # query txn_date = day+1 so the caller sees the matching bank line.
+        if category == "CASH" and day:
+            try:
+                deposit_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
+                df, p = " AND l.txn_date=?", [deposit_day]
+            except (ValueError, TypeError):
+                df, p = _df("l.txn_date")
+        else:
+            df, p = _df("l.txn_date")
         for r in conn.execute(f"""
             SELECT l.txn_date d, l.description ref, l.credit amt, u.provider
             FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
@@ -707,7 +716,18 @@ def _external_buckets_daily(conn, branch_id, period_month):
         if not cat:
             continue
         bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
-        add(r["d"], cat, bank, float(r["credit"] or 0), float(r["credit"] or 0))
+        # CASH_DEP lands on the bank a day after the sale (next-business-day deposit).
+        # Shift the key back 1 day so the bucket aligns with the POS sale day.
+        if cat == "CASH":
+            try:
+                key_day = (date.fromisoformat(r["d"]) - timedelta(days=1)).isoformat()
+            except (ValueError, TypeError):
+                key_day = r["d"]
+            if key_day[:7] != period_month:   # deposit in next month → out of scope
+                continue
+        else:
+            key_day = r["d"]
+        add(key_day, cat, bank, float(r["credit"] or 0), float(r["credit"] or 0))
 
     for r in conn.execute("""
         SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
@@ -749,7 +769,11 @@ def _coverage(conn, branch_id, period_month):
         "WHERE branch_id=? AND channel='CASH_DEP' AND strftime('%Y-%m',txn_date)=?",
         (branch_id, period_month)).fetchone()[0]
     if cash_mx:
-        cov[("cash", None)] = cash_mx
+        # Deposit date = sale day + 1; coverage in POS terms = last deposit_date - 1.
+        try:
+            cov[("cash", None)] = (date.fromisoformat(cash_mx) - timedelta(days=1)).isoformat()
+        except (ValueError, TypeError):
+            cov[("cash", None)] = cash_mx
     for r in conn.execute("""
         SELECT u.provider, MAX(l.settlement_date) mx
         FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id

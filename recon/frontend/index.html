@@ -353,8 +353,11 @@
           <div id="rec-payouts" class="grid grid-cols-1 md:grid-cols-3 gap-4"></div>
         </div>
         <div class="card">
-          <div class="flex items-center justify-between mb-3">
-            <div class="font-semibold text-gray-700" data-i18n="feevat_title">Fee &amp; VAT — manual entry (Grab / Line Man / Credit Card)</div>
+          <div class="flex items-center justify-between mb-1">
+            <div>
+              <div class="font-semibold text-gray-700" data-i18n="feevat_title">Fee &amp; VAT</div>
+              <div class="text-xs text-gray-400 mt-0.5" data-i18n="feevat_hint">placeholder สีเทา = อ่านจากเอกสารอัตโนมัติ · เว้นว่างเพื่อใช้ค่านั้น · เติมตัวเลขเพื่อปรับแก้</div>
+            </div>
             <select id="fv-source" class="inp" onchange="loadFeeVat()">
               <option value="grab">Grab</option><option value="lineman">Line Man</option><option value="credit_card">Credit Card</option>
             </select>
@@ -860,6 +863,8 @@ const API = '';
 let SESSION = null;
 let BRANCHES = [];
 let FOCUS_DATE = null;
+let DAILY_DAYS = [];   // last daily_reconciliation response — drives VAR expand
+let DAILY_LANES = [];  // ordered lane list for colspan calculation
 
 // ── fetch with write-token + error surfacing ─────────────────────────────────
 async function api(path, opts={}) {
@@ -921,6 +926,9 @@ const I18N = {
     sugg_hd:"ข้อเสนอแนะ — บันทึกผิดช่องทาง (ยอดเท่ากัน ธนาคารเดียวกัน)", sugg_apply:"จับคู่", sugg_verify:"ตรวจสอบ & จับคู่", sugg_reason_ph:"เหตุผล", sugg_reason_def:"บันทึกผิดช่องทาง", sugg_skip:"ข้าม", sugg_sameday:"ตรงวัน", sugg_day:"วัน", sugg_done:"จับคู่แล้ว", sugg_fail:"จับคู่ไม่สำเร็จ",
     drill_resolve:"จัดการส่วนต่าง", attach_btn:"แนบหลักฐาน",
     hub_matched:"ตรง", hub_review:"ต้องตรวจ", hub_sugg:"ข้อเสนอ", hub_pending:"รอเอกสาร",
+    var_expand_hint:"คลิกเพื่อดูแยกช่องทาง", var_breakdown_hd:"รายละเอียด VAR แยกช่องทาง",
+    disc_drill_hint:"คลิกเพื่อดูรายวัน", disc_no_days:"ไม่มีข้อมูลรายวัน",
+    col_day:"วัน", col_status:"สถานะ",
     pm_title:"จับคู่การโอนเงิน", pm_hint:"เงินเข้าบัญชีแต่ละก้อนจับกับยอดสุทธิรายวันที่จ่าย — วันที่ติดกันถูกรวมให้อัตโนมัติ", pm_open:"คลิกดูการจับคู่รายโอน", pm_empty:"ยังไม่มีข้อมูลการโอน/รายงานในเดือนนี้", pm_net_day:"สุทธิวัน", pm_transfer:"โอน", pm_combined:"รวม", pm_no_credit:"ยังไม่พบเงินเข้าบัญชีที่ตรง (รอโอน/คาบเดือน)", pm_pos_point:"POS แต้ม", pm_bank_in_credit:"เงินเข้าบัญชีรวมอยู่ในก้อนบัตรเครดิต KTC",
     setup_hd:"① จับคู่รหัสรับเงิน POS → ② เพิ่มบัญชีธนาคาร & MID บัตร",
     setup_p:"ระบบอ่านรหัสรับเงินจาก POS บอกระบบว่าแต่ละรหัสคืออะไร (ประเภท) และเงินเข้าที่ไหน (ธนาคาร) รหัสที่ไม่รู้ธนาคารจะกระทบยอดไม่ได้จนกว่าจะตั้งค่า บันทึกอัตโนมัติ",
@@ -931,12 +939,16 @@ const I18N = {
     step_title:"เริ่มต้นใช้งาน", step_dismiss:"ซ่อน",
     step1:"① ตั้งค่า — จับคู่รหัสรับเงินกับธนาคาร", step2:"② อัปโหลดเอกสาร ธนาคาร/บัตร/Grab/Line Man",
     step3:"③ ประมวลผล — อ่านบอร์ดรายวัน", step4:"④ ตรวจรับ — ทุกช่องทางตรงหรืออธิบายได้",
-    st_matched:"ตรงกัน", st_mismatch:"ไม่ตรง", st_pos_only:"ไม่มีเอกสาร", st_ext_only:"เกินในเอกสาร", st_no_source:"ไม่มีแหล่ง",
+    st_matched:"ตรงกัน", st_manual:"ปรับมือ", st_mismatch:"ไม่ตรง", st_variance:"ส่วนต่าง",
+    st_missing:"ขาดหาย", st_pos_only:"ไม่มีเอกสาร", st_ext_only:"เกินในเอกสาร",
+    st_pending:"รอตรวจ", st_no_source:"ไม่มีแหล่ง", st_unmapped_bank:"ไม่ได้จับคู่",
     p_matched:"ตรงกัน", p_mismatch:"ไม่ตรง", p_awaiting:"รอเงินโอน", p_extra:"เงินโอนเกิน",
     // category / payout cards
     l_pos_tender:"ยอด POS", l_statement:"ยอดเอกสาร", l_net_fee:"สุทธิ (หักค่าธรรมเนียม/VAT)",
     l_report_net:"สุทธิตามรายงาน", l_bank_payout:"เงินเข้าบัญชีจริง", payout_word:"การโอน",
     // fee / VAT table
+    feevat_title:"ค่าธรรมเนียม &amp; VAT", feevat_hint:"placeholder สีเทา = อ่านจากเอกสารอัตโนมัติ · เว้นว่างเพื่อใช้ค่านั้น · เติมตัวเลขเพื่อปรับแก้",
+    fv_from_doc:"จากเอกสาร", fv_needs_input:"กรอกด้วยตนเอง",
     th_date:"วันที่", th_ref:"อ้างอิง", th_gross:"ยอดรวม", th_fee:"ค่าธรรมเนียม", th_vat:"VAT", th_net:"สุทธิ",
     fv_empty:"ยังไม่มีรายการของช่องทางนี้",
     // empty states
@@ -1043,6 +1055,9 @@ const I18N = {
     sugg_hd:"Suggestions — wrong-channel booking (equal amount, same bank)", sugg_apply:"Match", sugg_verify:"Verify & match", sugg_reason_ph:"reason", sugg_reason_def:"Wrong channel:", sugg_skip:"Skip", sugg_sameday:"same day", sugg_day:"day", sugg_done:"Matched", sugg_fail:"Match failed",
     drill_resolve:"Resolve variance", attach_btn:"Attach evidence",
     hub_matched:"matched", hub_review:"to review", hub_sugg:"suggestions", hub_pending:"awaiting docs",
+    var_expand_hint:"Click to see per-lane breakdown", var_breakdown_hd:"VAR breakdown by lane",
+    disc_drill_hint:"Click to see daily breakdown", disc_no_days:"No daily data found",
+    col_day:"Day", col_status:"Status",
     pm_title:"Payout matching", pm_hint:"Each bank transfer is matched to the net day(s) it pays — consecutive days are grouped automatically.", pm_open:"Click to trace each transfer", pm_empty:"No payouts/reports for this month yet", pm_net_day:"net", pm_transfer:"transfer", pm_combined:"combined", pm_no_credit:"No matching bank credit yet (awaiting / month boundary)", pm_pos_point:"POS points", pm_bank_in_credit:"Bank credit is inside the combined KTC settlement",
     setup_hd:"① Map your POS tender codes → ② add bank accounts & card MIDs",
     setup_p:"Reconciliation reads your POS payment codes. Tell it what each code is (category) and where the money lands (bank/acquirer). Codes with an unknown bank can't be matched until you set them. Changes save automatically.",
@@ -1053,12 +1068,16 @@ const I18N = {
     step_title:"Getting started", step_dismiss:"Dismiss",
     step1:"① Setup — map tender codes to a bank", step2:"② Upload bank / card / Grab / Line Man docs",
     step3:"③ Run Match — read the daily board", step4:"④ Sign-off — every lane matched or explained",
-    st_matched:"Matched", st_mismatch:"Mismatch", st_pos_only:"No statement", st_ext_only:"Extra in statement", st_no_source:"No source",
+    st_matched:"Matched", st_manual:"Manual adj.", st_mismatch:"Mismatch", st_variance:"Variance",
+    st_missing:"Missing", st_pos_only:"No statement", st_ext_only:"Extra in statement",
+    st_pending:"Pending", st_no_source:"No source", st_unmapped_bank:"Unmapped bank",
     p_matched:"Matched", p_mismatch:"Mismatch", p_awaiting:"Awaiting payout", p_extra:"Extra payout",
     // category / payout cards
     l_pos_tender:"POS tender", l_statement:"Statement", l_net_fee:"Net (after fee/VAT)",
     l_report_net:"Report net", l_bank_payout:"Bank payout", payout_word:"payout",
     // fee / VAT table
+    feevat_title:"Fee &amp; VAT", feevat_hint:"Grey placeholder = auto-read from uploaded document · leave blank to use it · type to override",
+    fv_from_doc:"from doc", fv_needs_input:"enter manually",
     th_date:"Date", th_ref:"Ref", th_gross:"Gross", th_fee:"Fee", th_vat:"VAT", th_net:"Net",
     fv_empty:"No lines uploaded for this source",
     // empty states
@@ -1161,7 +1180,12 @@ const fmt = n => n==null ? '—' : new Intl.NumberFormat('th-TH',{maximumFractio
 const period = () => document.getElementById('sel-period').value;
 function varCls(v){ return Math.abs(v)<100 ? 'var-zero' : v>0?'var-pos':'var-neg'; }
 function varTxt(v){ return (v>=0?'+':'')+fmt(v); }
-const STATUS_BADGE = {matched:'b-ok', mismatch:'b-err', pos_only:'b-warn', ext_only:'b-warn', no_source:'b-mut'};
+const STATUS_BADGE = {
+  matched:'b-ok', manual:'b-ok',
+  mismatch:'b-err', variance:'b-err', missing:'b-err',
+  pos_only:'b-warn', ext_only:'b-warn', pending:'b-warn',
+  no_source:'b-mut', unmapped_bank:'b-mut',
+};
 
 // ── init ─────────────────────────────────────────────────────────────────────
 async function init(){
@@ -1809,7 +1833,7 @@ async function renderDailyHub(d){
   hub.innerHTML =
     chip('#dcfce7','#15803d',`✅ ${matched} ${t('hub_matched')}`)
     + chip(disc?'#fee2e2':'#f1f5f9', disc?'#b91c1c':'#94a3b8', `⚠️ ${disc} ${t('hub_review')}`, "switchTab('discrepancies')")
-    + (sugg?chip('#e0e7ff','#4338ca',`💡 ${sugg} ${t('hub_sugg')}`,"switchTab('discrepancies')"):'')
+    + chip(sugg?'#e0e7ff':'#f1f5f9', sugg?'#4338ca':'#94a3b8', `💡 ${sugg} ${t('hub_sugg')}`, "switchTab('discrepancies')")
     + chip(pending?'#fef9c3':'#f1f5f9', pending?'#854d0e':'#94a3b8', `📄 ${pending} ${t('hub_pending')}`, "switchTab('uploads')");
 }
 
@@ -1827,10 +1851,12 @@ function renderDailyBoard(d){
   const host=document.getElementById('daily-matrix');
   if(!d.days||!d.days.length){ host.innerHTML='<div class="text-center text-gray-400 py-6">No activity for this period</div>'; return; }
 
+  DAILY_DAYS = d.days;
   const laneKeys=new Map();
   d.days.forEach(day=>day.lanes.forEach(l=>laneKeys.set(`${l.category}|${l.bank}`, {category:l.category, bank:l.bank})));
   const lanes=[...laneKeys.values()].sort((a,b)=>
     (_CAT_ORDER[a.category]??9)-(_CAT_ORDER[b.category]??9) || a.bank.localeCompare(b.bank));
+  DAILY_LANES = lanes;
 
   const head=`<tr class="text-gray-400 text-xs uppercase border-b">
       <th class="text-left pb-2 pr-3 sticky left-0 bg-white">Day</th>
@@ -1858,7 +1884,7 @@ function renderDailyBoard(d){
       <td class="pr-3"><div title="${matched}/${total} lanes matched" style="height:5px;width:54px;background:#eef2f7;border-radius:3px;overflow:hidden;display:inline-block;vertical-align:middle"><div style="height:100%;width:${pct}%;background:${barCol}"></div></div></td>
       <td class="text-right font-mono pr-3">${fmt(day.pos_total)}</td>
       <td class="text-right font-mono pr-3">${fmt(day.ext_total)}</td>
-      <td class="text-right font-mono pr-4 ${varCls(day.ext_total-day.pos_total)}">${varTxt(day.ext_total-day.pos_total)}</td>
+      <td class="text-right font-mono pr-4 ${varCls(day.ext_total-day.pos_total)} cursor-pointer select-none" onclick="toggleVarBreakdown('${day.day}')" title="${t('var_expand_hint')}">▾ ${varTxt(day.ext_total-day.pos_total)}</td>
       ${cells}</tr>`;
   }).join('');
 
@@ -1866,6 +1892,43 @@ function renderDailyBoard(d){
   if(FOCUS_DATE){ const fr=host.querySelector(`tr[data-day="${FOCUS_DATE}"]`);
     if(fr) fr.scrollIntoView({block:'center',behavior:'smooth'});
     else host.insertAdjacentHTML('afterbegin', `<div class="text-center text-amber-600 py-3">No activity on ${FOCUS_DATE}.</div>`); }
+}
+
+function toggleVarBreakdown(day){
+  const existing=document.getElementById('var-expand-'+day);
+  if(existing){ existing.remove(); return; }
+  const dayData=DAILY_DAYS.find(d=>d.day===day);
+  const dayRow=document.querySelector(`tr[data-day="${day}"]`);
+  if(!dayData||!dayRow) return;
+  const colCount=5+DAILY_LANES.length;
+
+  const issues=dayData.lanes.filter(l=>l.status!=='matched'&&l.status!=='manual')
+    .sort((a,b)=>Math.abs(b.variance)-Math.abs(a.variance));
+  const ok=dayData.lanes.filter(l=>l.status==='matched'||l.status==='manual');
+
+  const laneRow=l=>{
+    const lbl=`${l.category}${l.bank&&l.bank!=='NONE'?'·'+l.bank:''}`;
+    const badgeCls=STATUS_BADGE[l.status]||'b-mut';
+    return `<div class="flex items-center gap-3 py-0.5">
+      <span class="font-medium text-gray-700 w-28 shrink-0 text-xs">${lbl}</span>
+      <span class="font-mono text-gray-400 text-xs w-20 text-right">POS ${fmt(l.pos)}</span>
+      <span class="font-mono text-gray-400 text-xs w-20 text-right">ext ${fmt(l.ext)}</span>
+      <span class="font-mono font-semibold text-xs w-20 text-right ${varCls(l.variance)}">${varTxt(l.variance)}</span>
+      <span class="badge ${badgeCls} text-xs">${t('st_'+l.status)||l.status}</span>
+    </div>`;
+  };
+
+  const body=(issues.length?issues.map(laneRow).join(''):'')
+    +(ok.length?`<div class="text-xs text-gray-400 mt-1">✅ ${ok.length} lane${ok.length>1?'s':''} matched / manual — no variance</div>`:'');
+
+  const exp=document.createElement('tr');
+  exp.id='var-expand-'+day;
+  exp.innerHTML=`<td colspan="${colCount}" style="padding:0;border-bottom:1px solid #e5e7eb">
+    <div style="background:#f8fafc;padding:8px 20px 10px 20px">
+      <div class="text-xs text-gray-500 font-semibold mb-2">${t('var_breakdown_hd')} — ${day}</div>
+      ${body||'<div class="text-xs text-gray-400">All lanes matched</div>'}
+    </div></td>`;
+  dayRow.insertAdjacentElement('afterend',exp);
 }
 
 // ── reconcile ────────────────────────────────────────────────────────────────
@@ -2148,6 +2211,10 @@ async function loadFeeVat(){
   if(!lines.length){ tb.innerHTML=`<tr><td colspan="7" class="text-center text-gray-400 py-6">${t('fv_empty')}</td></tr>`; return; }
   lines.forEach(l=>{
     FV_LINE[l.id] = {gross:l.gross, other:l.other||0, fee_parsed:l.fee_parsed, vat_parsed:l.vat_parsed||0};
+    const hasParsed = (l.fee_parsed||0) > 0 || (l.vat_parsed||0) > 0;
+    const srcBadge = hasParsed
+      ? `<span class="text-xs text-green-600 whitespace-nowrap" title="${t('feevat_hint')}">📄 ${t('fv_from_doc')}</span>`
+      : `<span class="text-xs text-amber-500 whitespace-nowrap">${t('fv_needs_input')}</span>`;
     const tr=document.createElement('tr');
     tr.innerHTML=`<td class="py-1.5">${l.date||'—'}</td><td class="text-gray-500">${l.ref||''}</td>
       <td class="text-right font-mono">${fmt(l.gross)}</td>
@@ -2156,7 +2223,7 @@ async function loadFeeVat(){
       <td class="text-right"><input class="inp w-20 text-right" id="vat-${l.id}" value="${l.vat??''}" placeholder="${fmt(l.vat_parsed||0)}"
             oninput="recalcNet('${src}',${l.id})" onblur="saveFeeVat('${src}',${l.id})"></td>
       <td class="text-right font-mono text-gray-600" id="net-${l.id}">${fmt(l.net)}</td>
-      <td class="text-right"><span id="fvok-${l.id}" class="text-xs text-green-600"></span></td>`;
+      <td class="text-right flex items-center justify-end gap-1">${srcBadge}<span id="fvok-${l.id}" class="text-xs text-green-600"></span></td>`;
     tb.appendChild(tr);
   });
 }
@@ -2367,7 +2434,8 @@ function renderDiscTable(){
       <td class="py-1.5 font-medium">${d.category||'—'}</td>
       <td>${d.bank&&d.bank!=='NONE'?d.bank:'—'}</td>
       <td class="text-xs text-gray-500">${d.disc_type?t('dt_'+d.disc_type):'—'}</td>
-      <td class="text-right font-mono ${varCls(d.variance)}">${varTxt(d.variance)}</td>
+      <td class="text-right font-mono ${varCls(d.variance)} cursor-pointer select-none"
+          onclick="toggleDiscDays(${d.id},this)" title="${t('disc_drill_hint')}">▾ ${varTxt(d.variance)}</td>
       <td class="text-right font-mono">${fmt(d.amount_external)}</td>
       <td class="text-right font-mono">${fmt(d.amount_pos)}</td>
       <td><input class="inp w-28" style="font-size:12px" placeholder="${t('assign_ph')}" value="${d.assigned_to||''}" onchange="assignDisc(${d.id},this.value)"></td>
@@ -2388,6 +2456,55 @@ function sortDisc(field){
   if(DISC_SORT.field===field) DISC_SORT.dir*=-1;
   else { DISC_SORT.field=field; DISC_SORT.dir=-1; }
   renderDiscTable();
+}
+
+async function toggleDiscDays(discId, cell){
+  const tb = cell.closest('tbody');
+  const parentTr = cell.closest('tr');
+  const expandId = `disc-days-${discId}`;
+  const existing = document.getElementById(expandId);
+  if(existing){ existing.remove(); cell.textContent = cell.textContent.replace('▸','▾'); return; }
+
+  const colspan = parentTr.children.length;
+  const expTr = document.createElement('tr');
+  expTr.id = expandId;
+  expTr.className = 'bg-slate-50';
+  expTr.innerHTML = `<td colspan="${colspan}" class="px-8 py-3 text-xs text-gray-400">${t('loading')}…</td>`;
+  parentTr.after(expTr);
+
+  try{
+    const r = await api(`/api/discrepancies/${discId}/days`);
+    const days = r.days || [];
+    if(!days.length){
+      expTr.querySelector('td').innerHTML = `<span class="text-gray-400">${t('disc_no_days')}</span>`;
+      return;
+    }
+    const rows = days.map(d=>{
+      const cls = varCls(d.variance);
+      const stBadge = STATUS_BADGE[d.status]||'b-mut';
+      const stLabel = t('st_'+d.status)||d.status;
+      return `<tr class="border-t border-slate-100">
+        <td class="pl-8 pr-3 py-1 font-mono text-xs text-gray-500">${d.day}</td>
+        <td class="px-3 py-1 text-right font-mono text-xs">${fmt(d.pos)}</td>
+        <td class="px-3 py-1 text-right font-mono text-xs">${fmt(d.ext)}</td>
+        <td class="px-3 py-1 text-right font-mono text-xs ${cls}">${varTxt(d.variance)}</td>
+        <td class="px-3 py-1"><span class="badge ${stBadge}">${stLabel}</span></td>
+      </tr>`;
+    }).join('');
+    expTr.innerHTML = `<td colspan="${colspan}" class="p-0">
+      <table class="w-full text-xs">
+        <thead><tr class="text-gray-400 border-b border-slate-200">
+          <th class="pl-8 pr-3 py-1 text-left font-normal">${t('col_day')}</th>
+          <th class="px-3 py-1 text-right font-normal">${t('l_pos_tender')}</th>
+          <th class="px-3 py-1 text-right font-normal">${t('l_statement')}</th>
+          <th class="px-3 py-1 text-right font-normal">VAR</th>
+          <th class="px-3 py-1 text-left font-normal">${t('col_status')}</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table></td>`;
+  }catch(e){
+    expTr.querySelector('td').innerHTML = `<span class="text-red-400">${e.message}</span>`;
+  }
 }
 
 function toggleDiscSel(id, checked){
