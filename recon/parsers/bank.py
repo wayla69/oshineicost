@@ -29,8 +29,16 @@ _CHANNEL_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"โอน|transfer|trf|สั่งจ่าย|IORSDT|NBSDT", re.I), "TRANSFER"),
     (re.compile(r"ฝาก|deposit|cash dep", re.I),                "CASH_DEP"),
     (re.compile(r"ค่าธรรมเนียม|fee|charge", re.I),            "FEE"),
-    # SD Single credit = KTB single-day CC/acquirer settlement payout
-    (re.compile(r"edcsettle|credit card settle|SD Single credit", re.I), "CC_SETTLE"),
+    # KTB CC settlement descriptions:
+    #   SD Single credit = single-day EDC/acquirer payout
+    #   SDCK :ZICID:     = KTB credit-card settlement via clearing (distinct from SDCH=QR)
+    #   รับเงินจากการขาย  = Thai "received from sales" — KTB EDC settlement
+    (re.compile(
+        r"edcsettle|credit card settle|SD Single credit|SDCK|รับเงินจากการขาย",
+        re.I
+    ), "CC_SETTLE"),
+    # Digital wallet payouts (Alipay, WeChat Pay)
+    (re.compile(r"alipay|wechat|อาลีเพย์", re.I),              "QR"),
     (re.compile(r"grab|แกร็บ", re.I),                          "GRAB_PAYOUT"),
     (re.compile(r"line man|lineman|ไลน์แมน", re.I),            "LINEMAN_PAYOUT"),
 ]
