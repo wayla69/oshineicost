@@ -88,7 +88,10 @@ def pos_category_totals(conn: sqlite3.Connection, branch_id: int, period_month: 
             continue
         if not m["reconcile"]:
             continue
-        key = (m["category"], m["bank"])
+        # Cash has no bank dimension on the statement side (a deposit is a deposit),
+        # so collapse CASH to NONE even if the code was mapped to a bank.
+        bank = "NONE" if m["category"] == "CASH" else m["bank"]
+        key = (m["category"], bank)
         totals[key] = totals.get(key, 0.0) + amt
     return totals, unmapped
 
@@ -115,18 +118,25 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
         b["lines"].append((table, line_id))
 
     # Bank statement: QR / TRANSFER / CASH_DEP credits ('excluded' on a bank
-    # line = operator-flagged internal transfer, not revenue — skipped everywhere)
+    # line = operator-flagged internal transfer, not revenue — skipped everywhere).
+    # Lines the cash matcher claimed as deposits (often labelled QR/TRANSFER, e.g.
+    # KTB 'SDCH') are re-bucketed to the CASH lane so monthly cash ties out and the
+    # spurious QR/transfer ext_only disappears.
+    cash_ids = cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"]
     for r in conn.execute("""
         SELECT l.id, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
         WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='excluded'
           AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
+        amt = float(r["credit"] or 0)
+        if r["id"] in cash_ids:
+            add(("CASH", "NONE"), "recon_bank_lines", r["id"], amt, amt)
+            continue
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if not cat:
             continue
         bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
-        amt = float(r["credit"] or 0)
         add((cat, bank), "recon_bank_lines", r["id"], amt, amt)
 
     # Credit-card settlement: gross vs net (after effective fee/VAT)
@@ -718,7 +728,8 @@ def pos_category_totals_daily(conn, branch_id, period_month):
             continue
         if not m["reconcile"]:
             continue
-        key = (r["day"], m["category"], m["bank"])
+        bank = "NONE" if m["category"] == "CASH" else m["bank"]   # cash: no bank dimension
+        key = (r["day"], m["category"], bank)
         totals[key] = totals.get(key, 0.0) + amt
     return totals, unmapped, True
 
@@ -741,7 +752,7 @@ def _manual_consumed(conn, branch_id, period_month):
     return out
 
 
-def _external_buckets_daily(conn, branch_id, period_month, include_cash=True):
+def _external_buckets_daily(conn, branch_id, period_month, include_cash=True, exclude_ids=None):
     """{(day, category, bank): {amount, net}} from external lines, keyed by line date.
     Manually-matched lines (match_status='manual') are excluded — they're accounted
     for in the manual layer, so they don't double-count or show a false variance on
@@ -749,19 +760,26 @@ def _external_buckets_daily(conn, branch_id, period_month, include_cash=True):
 
     include_cash=False skips CASH_DEP lines: daily_reconciliation matches cash
     through cash_deposit_matching() (handles T+1, same-day, and multi-day lump
-    deposits), so the naive shift-back-one-day bucket would double-count."""
+    deposits), so the naive shift-back-one-day bucket would double-count.
+
+    exclude_ids: bank-line ids the cash matcher has claimed as cash deposits (they
+    may be parsed as QR/TRANSFER, e.g. KTB 'SDCH') — skip them here so they don't
+    also show as an ext_only QR/transfer line on their own date."""
+    exclude_ids = exclude_ids or set()
     buckets = {}
     def add(day, cat, bank, amount, net):
         b = buckets.setdefault((day, cat, bank), {"amount": 0.0, "net": 0.0})
         b["amount"] += amount; b["net"] += net
 
     for r in conn.execute("""
-        SELECT l.txn_date d, l.credit, l.channel, u.provider
+        SELECT l.id, l.txn_date d, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
         WHERE l.branch_id=? AND l.credit>0
           AND l.match_status NOT IN ('manual','excluded')
           AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
+        if r["id"] in exclude_ids:
+            continue
         cat = _CHANNEL_CATEGORY.get(r["channel"])
         if not cat:
             continue
@@ -827,12 +845,17 @@ def _coverage(conn, branch_id, period_month):
         except (ValueError, TypeError):
             cov[("cash", None)] = cash_mx
     else:
-        # No CASH_DEP lines at all, but bank statements DO cover the month → the
-        # absence of deposits is a real finding, not a late document. Without this
-        # fallback every cash day reads 'pending' forever and the gap stays hidden.
+        # Cash often posts under non-CASH_DEP codes (e.g. KTB 'SDCH'), so there may
+        # be no literal CASH_DEP line yet the deposits are really there. Coverage =
+        # last bank-statement day − 1: a deposit lands T+1, so the last sale day we
+        # could possibly see banked is (last statement day − 1). Days beyond → still
+        # awaiting next period's statement ('pending'); earlier gaps → 'missing'.
         bank_cov = [v for (src, _b), v in cov.items() if src == "bank" and v]
         if bank_cov:
-            cov[("cash", None)] = max(bank_cov)
+            try:
+                cov[("cash", None)] = (date.fromisoformat(max(bank_cov)) - timedelta(days=1)).isoformat()
+            except (ValueError, TypeError):
+                cov[("cash", None)] = max(bank_cov)
     for r in conn.execute("""
         SELECT u.provider, MAX(l.settlement_date) mx
         FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
@@ -878,25 +901,59 @@ def _cash_pos_days(conn, branch_id, period_month):
     return out, available
 
 
+def _claimed_lanes(conn, branch_id, period_month):
+    """(category, bank) lanes that mapped POS electronic tenders settle into —
+    their bank credits are 'spoken for' (QR/transfer/card) and must NOT be
+    grabbed by cash matching, so a real KNNQR-on-KBANK line is never mistaken
+    for a cash deposit."""
+    try:
+        pos, _u, _a = pos_category_totals_daily(conn, branch_id, period_month)
+    except sqlite3.OperationalError:
+        return set()
+    return {(cat, bank) for (_day, cat, bank), amt in pos.items()
+            if cat in ("QR", "TRANSFER", "CREDIT") and amt > 0}
+
+
 def _cash_dep_credits(conn, branch_id, period_month, max_lag):
-    """CASH_DEP credits that could pay this month's cash: the month itself plus
-    the first max_lag days of the next month (day-31 cash deposits on the 1st)."""
+    """Bank credits that could be a cash lump deposit for this month.
+
+    Banks post the next-day cash deposit under inconsistent codes (CASH_DEP,
+    but also SDCH / รับโอนเงิน / plain transfer depending on the account), so we
+    can't match on the channel label alone. Candidates therefore are:
+      • every line literally parsed as CASH_DEP, plus
+      • QR/TRANSFER credits in a lane NO mapped POS tender claims (an
+        unexplained credit — cash is the only tender with no electronic trail).
+    Card settlements, fees and payout legs are never cash. Window = the month
+    plus the first max_lag days of the next month (day-31 cash banked on the 1st).
+    """
     y, m = int(period_month[:4]), int(period_month[5:7])
     month_start = date(y, m, 1).isoformat()
     nm_y, nm_m = (y + 1, 1) if m == 12 else (y, m + 1)
     next_cutoff = (date(nm_y, nm_m, 1) + timedelta(days=max_lag)).isoformat()
+    claimed = _claimed_lanes(conn, branch_id, period_month)
     try:
         rows = conn.execute("""
-            SELECT id, txn_date, credit FROM recon_bank_lines
-            WHERE branch_id=? AND credit>0 AND channel='CASH_DEP'
-              AND match_status NOT IN ('manual','excluded')
-              AND txn_date>=? AND txn_date<?
-            ORDER BY txn_date, id
+            SELECT l.id, l.txn_date, l.credit, l.channel, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0
+              AND l.match_status NOT IN ('manual','excluded')
+              AND l.txn_date>=? AND l.txn_date<?
+            ORDER BY l.txn_date, l.id
         """, (branch_id, month_start, next_cutoff)).fetchall()
     except sqlite3.OperationalError:
         return []
-    return [{"id": r["id"], "date": r["txn_date"], "amount": float(r["credit"] or 0)}
-            for r in rows]
+    out = []
+    for r in rows:
+        ch = r["channel"]
+        if ch != "CASH_DEP":
+            cat = _CHANNEL_CATEGORY.get(ch)          # only QR/TRANSFER are credible cash codes
+            if cat not in ("QR", "TRANSFER"):
+                continue
+            if (cat, _provider_bank(r["provider"])) in claimed:
+                continue                             # a real electronic lane — leave it alone
+        out.append({"id": r["id"], "date": r["txn_date"],
+                    "amount": float(r["credit"] or 0), "channel": ch})
+    return out
 
 
 def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3):
@@ -954,12 +1011,20 @@ def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3)
     return {
         "groups": groups,
         "day_group": day_group,
+        "consumed_ids": used,                         # bank-line ids now accounted as cash
         "unmatched_pos": [d for d, _ in days if d not in matched_days],
-        "unmatched_credits": [c for c in credits if c["id"] not in used],
+        # Only LITERAL cash-deposit lines that found no sales are surfaced as cash
+        # ext_only. Broadened candidates (QR/transfer the matcher merely considered)
+        # stay in their own lane if unused — they aren't necessarily cash.
+        "unmatched_credits": [c for c in credits
+                              if c["id"] not in used and c.get("channel") == "CASH_DEP"],
         "pos_total": round(sum(cash_days.values()), 2),
-        "deposit_total": round(sum(c["amount"] for c in credits), 2),
+        "deposit_total": round(sum(g["amount"] for g in groups), 2),
         "matched_pos_total": round(sum(g["group_pos"] for g in groups), 2),
-        "has_deposit_lines": bool(credits),
+        # True = we found & matched at least one cash deposit. False → the loud
+        # "no cash deposit found" alert (statements cover the month but cash never
+        # reconciled — a real gap, not a late document).
+        "has_deposit_lines": bool(groups),
         "pos_available": available,
     }
 
@@ -967,10 +1032,13 @@ def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3)
 def daily_reconciliation(conn, branch_id, period_month):
     """Per-day, per-lane reconciliation with pending tracking for late documents."""
     pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
-    ext = _external_buckets_daily(conn, branch_id, period_month, include_cash=False)
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    # Lines the cash matcher claimed (may be labelled QR/TRANSFER, e.g. KTB SDCH)
+    # are excluded from the electronic buckets so they aren't double-counted.
+    ext = _external_buckets_daily(conn, branch_id, period_month,
+                                  include_cash=False, exclude_ids=cash["consumed_ids"])
     cov = _coverage(conn, branch_id, period_month)
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
-    cash = cash_deposit_matching(conn, branch_id, period_month)
 
     # Feed matched cash groups back in as per-day external amounts: each POS day
     # in a group is covered by its deposit (the group's variance lands on the
@@ -1316,7 +1384,9 @@ def _line_status(ms, cat, bank, lane_status, cash_ids=None, line_id=None):
         return "excluded"
     if ms == "manual":
         return "matched"
-    if cash_ids is not None and cat == "CASH" and line_id in cash_ids:
+    # A line the cash matcher claimed as a deposit is matched, whatever the bank
+    # labelled its channel (KTB posts cash as 'SDCH', parsed as QR).
+    if cash_ids and line_id in cash_ids:
         return "matched"
     return "matched" if lane_status.get((cat, bank)) == "matched" else "unmatched"
 
