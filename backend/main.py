@@ -3436,9 +3436,10 @@ def summary(
         k = (r["branch"], r["m"])
         if k in covered:
             continue  # sku_monthly already counted this branch×month
-        # Use month_summary as fallback — net_sales is post-discount; treat as inc-VAT and divide by 1.07 for ex-VAT
-        total_rev_inc += r["net"] or 0
-        total_rev_ex  += ex_vat(r["net"] or 0)
+        # net_sales is already VAT-EXCLUSIVE (ingest hard rule); reconstruct inc-VAT for the inc total (fix: B1)
+        _net = r["net"] or 0
+        total_rev_ex  += _net
+        total_rev_inc += _net * 1.07
         covered.add(k)
 
     # Tx + customers
@@ -4636,7 +4637,7 @@ def buffet_upgrade_simulator(
 # Buffet Analytics Helpers
 # ---------------------------------------------------------------------------
 
-_BUFFET_ADULT_CODES = ("BUFFET350", "BUFFET500", "BUFFET590", "BUFFET799", "B01", "B02", "B07", "B11", "B03")
+_BUFFET_ADULT_CODES = ("BUFFET", "BUFFET350", "BUFFET500", "BUFFET590", "BUFFET799", "B01", "B02", "B07", "B11", "B03")
 _BUFFET_CHILD_CODES = ("B04", "B05", "B12", "BUFFETCHILD")
 _BUFFET_PREMIUM_CODES = ("BUFFET590", "BUFFET799", "B02", "B11", "B03")
 
@@ -5563,7 +5564,7 @@ def analysis_gross_profit(
                 "margin_pct":   None,
             })
             continue
-        share = day_rev_inc / bm_daily_total_inc[k]   # share of this branch+month's tx revenue
+        share = day_rev_inc / bm["rev_inc"]   # fraction of full-month revenue — correct proration (fix: C1)
         day_cogs = bm["cogs"] * share
         # Day revenue ex-VAT: use the same share against monthly ex-VAT (keeps GP consistent)
         day_rev_ex = bm["rev_ex"] * share
@@ -6221,7 +6222,7 @@ def analysis_discounts(
                    SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
                    ROUND(SUM(discount), 2)                        AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
-                   ROUND(SUM(food_subtotal+drink_subtotal+other_subtotal), 2) AS gross_sales
+                   ROUND(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount), 2) AS gross_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -6239,7 +6240,7 @@ def analysis_discounts(
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM(food_subtotal+drink_subtotal+other_subtotal),0), 1) AS disc_pct_of_sales
+                         / NULLIF(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -6277,7 +6278,7 @@ def analysis_discounts(
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM(food_subtotal+drink_subtotal+other_subtotal),0), 1) AS disc_pct_of_sales
+                         / NULLIF(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -6292,7 +6293,8 @@ def analysis_discounts(
         pattern_groups = con.execute(
             f"""
             WITH t AS (
-              SELECT discount AS d, (food_subtotal+drink_subtotal+other_subtotal) AS gross
+              SELECT discount AS d,
+                     ((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount) AS gross
               FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
               {where} AND discount > 0
             )
@@ -13617,7 +13619,9 @@ def revenue_forecast(
     """Project ex-VAT revenue for the next `horizon` months from the monthly trend
     via OLS, with a ± band from the residual spread. Branch-specific or chain."""
     horizon = max(1, min(6, horizon))
-    filters = ["b.name != 'ALL'"]
+    # Exclude the in-progress calendar month so OLS is not biased by a partial point (fix: G5)
+    filters = ["b.name != 'ALL'",
+               "ssm.period_month < strftime('%Y-%m', 'now')"]
     params: dict = {}
     if branch:
         filters.append("b.name = :branch"); params["branch"] = branch
@@ -13703,7 +13707,7 @@ def buffet_gp_export(
     FILL_H = PatternFill("solid", fgColor="1F4E79")
     FILL_GP = PatternFill("solid", fgColor="E8F5E9")
     NUM_FMT  = '#,##0'
-    PCT_FMT  = '0.0"%"'
+    PCT_FMT  = '0.0%'
     CENTER   = Alignment(horizontal="center")
 
     def make_header(ws, headers, fill=FILL_H):
@@ -13730,7 +13734,7 @@ def buffet_gp_export(
     ws1.append(["GP Margin %",      (pt.get("margin_pct") or 0) / 100])
     ws1.append(["Covers",           pt.get("covers") or 0])
     ws1.append(["Cost/Cover",       pt.get("cost_per_cover") or 0])
-    ws1["B4"].number_format = PCT_FMT
+    ws1["B5"].number_format = PCT_FMT
     autofit(ws1)
 
     # Sheet 2: Time Series
@@ -15047,9 +15051,9 @@ def cost_recalibration(
     cost % hits target_pct.
     """
     # Phase 14b: use _cogs_case so monthly overrides are honored.
+    # fix G3: use LEFT JOIN and HAVING so BoM-only SKUs (no sku_cost row) are included
     cogs_expr = _cogs_case(ssm='ssm', sk='sk', sc='sc')
-    filters = [f"{_effective_cost_subquery(ssm='ssm', sc='sc')} > 0",
-               f"sk.sku_code NOT IN {_EASY_TIER_CODES_SQL}",
+    filters = [f"sk.sku_code NOT IN {_EASY_TIER_CODES_SQL}",
                "sk.sku_code != 'SERVICECHARGE'"]
     params: dict = {}
     if month_from:
@@ -15099,9 +15103,10 @@ def cost_recalibration(
                    SUM(ssm.subtotal_ex_vat) / NULLIF(SUM(ssm.qty), 0) AS avg_sell
             FROM sales_sku_monthly ssm
             JOIN skus sk ON sk.sku_id = ssm.sku_id
-            JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
+            LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
             GROUP BY sk.sku_id
+            HAVING SUM({cogs_expr}) > 0
             ORDER BY SUM({cogs_expr}) DESC
             LIMIT :n
         """, {**params, "n": limit}).fetchall()
