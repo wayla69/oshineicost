@@ -5707,8 +5707,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         </table>
       </div>
       <div class="mt-5">
-        <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
-        <div id="roleCheatsheet" class="overflow-x-auto"></div>
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <div class="text-xs font-semibold" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
+          <div class="flex items-center gap-2">
+            <span id="permSaveStatus" class="text-xs"></span>
+            <button onclick="saveRolePermissions()" id="permSaveBtn" class="hidden text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">💾 บันทึกสิทธิ์</button>
+          </div>
+        </div>
+        <div id="rolePermMatrix" class="overflow-x-auto"></div>
       </div>
     </div>
   </div>
@@ -6493,7 +6499,6 @@ async function loadUsers() {
     Object.entries(ROLE_LABEL_TH).forEach(([k,v]) =>
       sel.add(new Option(`${v} (${k})`, k)));
   }
-  renderRoleCheatsheet();
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   let users = [];
@@ -6518,20 +6523,111 @@ async function loadUsers() {
       </td></tr>`;
   }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
 }
-function renderRoleCheatsheet() {
-  const el = document.getElementById('roleCheatsheet');
+let _rolePermsData = null;
+
+async function loadRolePermissions() {
+  const el = document.getElementById('rolePermMatrix');
   if (!el) return;
-  const rows = Object.keys(ROLE_LABEL_TH).map(role => {
-    const mods = ROLE_MODULES_TH[role] || [];
-    const chips = mods.map(m =>
-      `<span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--bg-input);color:var(--text-secondary)">${MODULE_LABEL_TH[m]||m}</span>`
-    ).join(' ');
-    return `<tr class="border-b align-top" style="border-color:var(--border)">
-      <td class="py-2 pr-4 whitespace-nowrap font-medium" style="color:var(--text-primary)">${ROLE_LABEL_TH[role]} <span class="text-xs" style="color:var(--text-muted)">(${role})</span></td>
-      <td class="py-2"><div class="flex flex-wrap gap-1">${chips}</div></td>
-    </tr>`;
+  const canEdit = window.AUTH && window.AUTH.enabled && window.AUTH.modules && window.AUTH.modules.includes('system.admin');
+  const btn = document.getElementById('permSaveBtn');
+  if (btn) btn.classList.toggle('hidden', !canEdit);
+
+  // Try to load from API; fall back to local constants
+  let roles, modules, permissions;
+  try {
+    const d = await fetch(`${API}/api/auth/role-permissions`).then(r => r.ok ? r.json() : null);
+    if (d) {
+      roles = d.roles;
+      modules = d.modules;
+      permissions = d.permissions;
+    }
+  } catch(e) {}
+  if (!permissions) {
+    roles = Object.keys(ROLE_LABEL_TH);
+    modules = Object.keys(MODULE_LABEL_TH);
+    permissions = {};
+    roles.forEach(r => { permissions[r] = ROLE_MODULES_TH[r] || []; });
+  }
+  _rolePermsData = { roles, modules, permissions };
+  _renderPermMatrix(canEdit);
+}
+
+function _renderPermMatrix(canEdit) {
+  const el = document.getElementById('rolePermMatrix');
+  if (!el || !_rolePermsData) return;
+  const { roles, modules, permissions } = _rolePermsData;
+
+  // Group modules for readability
+  const MOD_GROUP = {
+    'sales.overview':'ยอดขาย', 'customer.buffet':'ลูกค้า', 'menu.analysis':'เมนู',
+    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้ BoM',
+    'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
+    'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
+    'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
+    'data.upload':'Upload',
+  };
+
+  const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
+  const th_mods = modules.map(m =>
+    `<th class="py-2 px-2 text-center text-[10px] font-medium whitespace-nowrap" style="color:var(--text-muted)" title="${m}">${MOD_GROUP[m]||m}</th>`
+  ).join('');
+
+  const rows = roles.map(role => {
+    const roleMods = new Set(permissions[role] || []);
+    const cells = modules.map(m => {
+      const checked = roleMods.has(m);
+      const dis = (role === 'management' && m === 'system.admin') ? ' title="management เสมอ"' : '';
+      const inp = canEdit
+        ? `<input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''} ${dis}
+             onchange="_permToggle(this)" class="w-3.5 h-3.5 accent-indigo-600">`
+        : `<span style="color:${checked?'#4f46e5':'#e2e8f0'};font-size:14px">${checked?'✓':'–'}</span>`;
+      return `<td class="py-1.5 px-2 text-center">${inp}</td>`;
+    }).join('');
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-4 text-sm font-medium sticky left-0" style="background:var(--bg-card);color:var(--text-primary)">
+        ${ROLE_LABEL_TH[role]||role} <span class="text-xs" style="color:var(--text-muted)">(${role})</span>
+      </td>${cells}</tr>`;
   }).join('');
-  el.innerHTML = `<table class="text-sm w-full"><tbody>${rows}</tbody></table>`;
+
+  el.innerHTML = `<table class="text-sm w-full border-collapse">
+    <thead><tr class="border-b" style="border-color:var(--border)">${th_role}${th_mods}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function _permToggle(cb) {
+  if (!_rolePermsData) return;
+  const role = cb.dataset.role, mod = cb.dataset.mod;
+  const perms = _rolePermsData.permissions;
+  if (!perms[role]) perms[role] = [];
+  if (cb.checked) { if (!perms[role].includes(mod)) perms[role].push(mod); }
+  else { perms[role] = perms[role].filter(m => m !== mod); }
+}
+
+async function saveRolePermissions() {
+  if (!_rolePermsData) return;
+  const btn = document.getElementById('permSaveBtn');
+  const status = document.getElementById('permSaveStatus');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+  try {
+    const res = await fetch(`${API}/api/auth/role-permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissions: _rolePermsData.permissions }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      if (status) { status.textContent = d.detail || 'บันทึกไม่สำเร็จ'; status.className = 'text-xs text-rose-600'; }
+    } else {
+      if (status) { status.textContent = 'บันทึกแล้ว ✓'; status.className = 'text-xs text-emerald-600'; }
+      setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+      await loadRolePermissions();
+    }
+  } catch(e) {
+    if (status) { status.textContent = 'เชื่อมต่อไม่ได้'; status.className = 'text-xs text-rose-600'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึกสิทธิ์'; }
+  }
 }
 
 function _userStatus(msg, ok) {
@@ -7255,7 +7351,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'deactivate') loadDeactivate();
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();
-  if (activeSettingsTab === 'users')    loadUsers();
+  if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
 }
 
 function loadActiveTab() {
@@ -20467,11 +20563,13 @@ async function openDiscountBills(opts = {}) {
   if (opts.min_pct != null) p.set('min_pct', opts.min_pct);
   if (opts.max_pct != null) p.set('max_pct', opts.max_pct);
   if (opts.gross_zero)     p.set('gross_zero', 'true');
-  if (opts.payment)        p.set('payment', opts.payment);
-  // remember context so the payment dropdown can re-query the same drill
+  if (opts.payment)           p.set('payment', opts.payment);
+  if (opts.reprinted_only)    p.set('reprinted_only', 'true');
+  // remember context so the payment dropdown and reprint toggle can re-query the same drill
   _discBillsCtx = { branch, cashier, month_from, month_to, sort: opts.sort, amount: opts.amount,
                     min_pct: opts.min_pct, max_pct: opts.max_pct, gross_zero: opts.gross_zero,
-                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment };
+                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment,
+                    reprinted_only: opts.reprinted_only };
   title.textContent = '🔍 ' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
   sumEl.innerHTML = '';
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
@@ -20484,19 +20582,25 @@ async function openDiscountBills(opts = {}) {
   } catch(e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message||e))}</p>`; return; }
   const s = d.summary || {};
   const codes = d.payment_codes || [];
-  const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-3 flex-wrap">
+  const reprintBadge = (s.reprinted_bills||0) > 0
+    ? `<span class="ml-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">🖨️ Reprint ${fmtN(s.reprinted_bills)} บิล</span>` : '';
+  const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-2 flex-wrap">
       <span class="text-xs font-medium text-slate-500">💳 วิธีจ่าย:</span>
       <select onchange="discBillsSetPayment(this.value)" class="text-xs border border-slate-300 rounded-lg px-2 py-1" style="max-width:220px">
         <option value="">ทั้งหมด (${fmtN(codes.length)} วิธี)</option>
         ${codes.map(c=>`<option value="${esc(c)}" ${opts.payment===c?'selected':''}>${esc(c)}</option>`).join('')}
       </select>
       ${opts.payment?`<button onclick="discBillsSetPayment('')" class="text-xs text-red-600 underline">ล้างตัวกรอง</button>`:''}
+      <button onclick="openDiscountBills({..._discBillsCtx, reprinted_only:${!opts.reprinted_only}, sort:'reprints', title:'บิลที่พิมพ์ซ้ำ + มีส่วนลด'})"
+        class="text-xs px-2 py-1 rounded-lg border ${opts.reprinted_only?'bg-orange-100 border-orange-400 text-orange-700 font-bold':'border-slate-300 text-slate-500 hover:bg-slate-50'}">
+        🖨️ ${opts.reprinted_only?'ดูทั้งหมด':'เฉพาะ Reprint'}
+      </button>
     </div>` : '';
-  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
-    ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)]]
+  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
+    ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)],['พิมพ์ซ้ำ (>1x)', `<span class="${(s.reprinted_bills||0)>0?'text-orange-600 font-bold':''}">${fmtN(s.reprinted_bills||0)}</span>`]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
-  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}</p>`;
+  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:#ea580c">เฉพาะ Reprint</b>':''}</p>`;
   if (!d.bills.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">ไม่มีบิลส่วนลดในขอบเขตนี้</p>'; return; }
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
@@ -20511,21 +20615,24 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3 text-right">ส่วนลด</th>
     <th class="py-2 pr-3 text-right">จ่ายจริง</th>
     <th class="py-2 pr-3">วิธีจ่าย</th>
-    <th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`;
+    <th class="py-2 pr-3 text-right">% ของบิล</th>
+    <th class="py-2 text-right" title="จำนวนครั้งที่พิมพ์ใบเสร็จ (Easy POS PrintTimes)">🖨️ พิมพ์</th>
+    </tr></thead><tbody>`;
   const rows = bills.map(b => {
     const hot = (b.discount||0) >= p95 && p95 > 0;
-    // pre-discount base: prefer reconstructed bill_base; fall back to paid+discount
     const base = b.bill_base != null ? b.bill_base : (b.total_inc_vat||0) + (b.discount||0);
-    // discount type: coupon name wins (🎟️), else discount reason, else unknown
     const dtype = b.coupon_name
       ? `<span class="text-indigo-600">🎟️ ${esc(b.coupon_name)}</span>`
       : (b.reason_desc ? esc(b.reason_desc)
         : '<span class="text-slate-400">ไม่ระบุประเภท</span>');
-    // payment method: dominant (largest-amount) code; "+N" if the bill split across codes
     const payCell = b.payment_code
       ? `${esc(b.payment_code)}${(b.payment_n||0) > 1 ? ` <span class="text-[9px] text-slate-400" title="จ่ายหลายแบบในบิลเดียว">+${b.payment_n-1}</span>` : ''}`
       : '<span class="text-slate-300">—</span>';
-    return `<tr class="border-b border-slate-100 ${hot?'bg-red-50':''}">
+    const pt = b.print_times || 0;
+    const printCell = pt > 1
+      ? `<span class="font-bold text-red-600" title="พิมพ์ซ้ำ ${pt} ครั้ง — ตรวจสอบ">${pt}x 🚩</span>`
+      : (pt === 1 ? `<span class="text-slate-400">1x</span>` : `<span class="text-slate-300">—</span>`);
+    return `<tr class="border-b border-slate-100 ${pt>1?'bg-orange-50':hot?'bg-red-50':''}">
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-500">${esc((b.sold_at||'').replace('T',' ').slice(0,16))}</td>
       ${showBranch?`<td class="py-1.5 pr-3">${esc(b.branch||'—')}</td>`:''}
@@ -20536,7 +20643,8 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
       <td class="py-1.5 pr-3 text-slate-600">${payCell}</td>
-      <td class="py-1.5 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td></tr>`;
+      <td class="py-1.5 pr-3 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 text-right">${printCell}</td></tr>`;
   }).join('');
   return head + rows + '</tbody></table>';
 }
@@ -20755,7 +20863,7 @@ function exportDiscountReasons() {
   downloadCSV(rows.join('\n'), 'discount_reasons.csv');
 }
 
-async function loadDiscountReasons(params) {
+async function loadDiscountReasons(params, gen) {
   const body = document.getElementById('disc-reason-body');
   const cards = document.getElementById('disc-reason-cards');
   const note = document.getElementById('disc-reason-note');
@@ -20763,6 +20871,7 @@ async function loadDiscountReasons(params) {
   body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   let d; try { d = await fetch(`${API}/api/analysis/discount-reasons?${params}`).then(r => r.json()); }
   catch (e) { body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
     if (note) note.textContent = '';
     cards.innerHTML = '';
@@ -20817,7 +20926,7 @@ async function loadDiscountReasons(params) {
   }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
 }
 
-async function loadCouponSeries(params) {
+async function loadCouponSeries(params, gen) {
   const body = document.getElementById('coupon-series-body');
   const cards = document.getElementById('coupon-series-cards');
   const note = document.getElementById('coupon-series-note');
@@ -20825,6 +20934,7 @@ async function loadCouponSeries(params) {
   body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   let d; try { d = await fetch(`${API}/api/analysis/coupon-series?${params}`).then(r => r.json()); }
   catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
     if (note) note.textContent = '';
     cards.innerHTML = '';
@@ -20954,12 +21064,13 @@ async function discAlertSaveThresholds() {
 }
 
 // Discount risk Alert Center — prioritized flags, each drillable to the matching bills
-async function loadDiscountAlerts(params) {
+async function loadDiscountAlerts(params, gen) {
   const el = document.getElementById('disc-alert-list');
   const meta = document.getElementById('disc-alert-meta');
   if (!el) return;
   el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังตรวจ…</p>';
   const d = await fetch(`${API}/api/analysis/discount_alerts?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d) { el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; if (meta) meta.textContent = ''; return; }
   const flags = d.flags || [];
   if (meta) meta.textContent = flags.length ? `🔴 ${d.counts.high} ด่วน · 🟠 ${d.counts.med} เฝ้าระวัง` : '';
@@ -21001,13 +21112,14 @@ async function loadDiscountAlerts(params) {
 }
 
 // Payment method × discount — cash+heavy leakage flag + payment mix on discount bills
-async function loadPaymentDiscount(params) {
+async function loadPaymentDiscount(params, gen) {
   const sumEl = document.getElementById('paydisc-summary');
   const chEl  = document.getElementById('paydisc-cashheavy');
   const mixEl = document.getElementById('paydisc-mix');
   if (!chEl) return;
   chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังโหลด…</p>';
   const d = await fetch(`${API}/api/analysis/payment_discount?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d) { chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; return; }
   if (!d.available) {
     sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
@@ -21051,13 +21163,14 @@ async function loadPaymentDiscount(params) {
   }).join('');
 }
 
-async function loadDiscountLeakage(params) {
+async function loadDiscountLeakage(params, gen) {
   const wrap  = document.getElementById('disc-leak-boxes');
   const sumEl = document.getElementById('disc-leak-summary');
   const meta  = document.getElementById('disc-leak-meta');
   if (!wrap) return;
   wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">กำลังโหลด…</div>';
   const d = await fetch(`${API}/api/analysis/discount_leakage?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d || !Array.isArray(d.branches) || !d.branches.length) {
     wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">ไม่มีข้อมูลส่วนลดในช่วงนี้</div>';
     if (sumEl) { sumEl.removeAttribute('style'); sumEl.innerHTML = ''; }
@@ -21128,22 +21241,24 @@ async function loadDiscountLeakage(params) {
 
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
+  const gen = loadGen;
   const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  loadDiscountReasons(new URLSearchParams(params));
-  loadCouponSeries(new URLSearchParams(params));
+  loadDiscountReasons(new URLSearchParams(params), gen);
+  loadCouponSeries(new URLSearchParams(params), gen);
   // Per-branch leakage view is a cross-branch comparison by design → ignore the
   // branch filter, honour only the period range.
   const _leakP = new URLSearchParams();
   if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
   if (getMonthTo())   _leakP.set('month_to', getMonthTo());
-  loadDiscountLeakage(_leakP);
-  loadPaymentDiscount(new URLSearchParams(_leakP));
-  loadDiscountAlerts(new URLSearchParams(_leakP));
+  loadDiscountLeakage(_leakP, gen);
+  loadPaymentDiscount(new URLSearchParams(_leakP), gen);
+  loadDiscountAlerts(new URLSearchParams(_leakP), gen);
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
+  if (gen !== loadGen) return;
   const o = d.overall || {};
 
   const discRate = o.total_tx ? (o.discount_tx / o.total_tx * 100).toFixed(1) : '0';
