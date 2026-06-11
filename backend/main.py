@@ -822,6 +822,10 @@ def auth_users_delete(username: str, request: Request):
     return {"ok": True}
 
 
+class RolePermissionsBody(BaseModel):
+    permissions: Dict[str, List[str]]
+
+
 @app.get("/api/auth/role-permissions", include_in_schema=False)
 def auth_role_permissions_get(request: Request):
     _require_admin(request)
@@ -8468,9 +8472,6 @@ with get_db() as _boot_con:
 # ---------------------------------------------------------------------------
 # Pydantic models for settings endpoints
 # ---------------------------------------------------------------------------
-class RolePermissionsBody(BaseModel):
-    permissions: Dict[str, List[str]]
-
 class TargetEntry(BaseModel):
     branch: str
     period_month: str
