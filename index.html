@@ -20467,11 +20467,13 @@ async function openDiscountBills(opts = {}) {
   if (opts.min_pct != null) p.set('min_pct', opts.min_pct);
   if (opts.max_pct != null) p.set('max_pct', opts.max_pct);
   if (opts.gross_zero)     p.set('gross_zero', 'true');
-  if (opts.payment)        p.set('payment', opts.payment);
-  // remember context so the payment dropdown can re-query the same drill
+  if (opts.payment)           p.set('payment', opts.payment);
+  if (opts.reprinted_only)    p.set('reprinted_only', 'true');
+  // remember context so the payment dropdown and reprint toggle can re-query the same drill
   _discBillsCtx = { branch, cashier, month_from, month_to, sort: opts.sort, amount: opts.amount,
                     min_pct: opts.min_pct, max_pct: opts.max_pct, gross_zero: opts.gross_zero,
-                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment };
+                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment,
+                    reprinted_only: opts.reprinted_only };
   title.textContent = '🔍 ' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
   sumEl.innerHTML = '';
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
@@ -20484,19 +20486,25 @@ async function openDiscountBills(opts = {}) {
   } catch(e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message||e))}</p>`; return; }
   const s = d.summary || {};
   const codes = d.payment_codes || [];
-  const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-3 flex-wrap">
+  const reprintBadge = (s.reprinted_bills||0) > 0
+    ? `<span class="ml-2 text-xs font-bold text-orange-600 bg-orange-50 border border-orange-200 rounded px-2 py-0.5">🖨️ Reprint ${fmtN(s.reprinted_bills)} บิล</span>` : '';
+  const payFilter = codes.length ? `<div class="flex items-center gap-2 mb-2 flex-wrap">
       <span class="text-xs font-medium text-slate-500">💳 วิธีจ่าย:</span>
       <select onchange="discBillsSetPayment(this.value)" class="text-xs border border-slate-300 rounded-lg px-2 py-1" style="max-width:220px">
         <option value="">ทั้งหมด (${fmtN(codes.length)} วิธี)</option>
         ${codes.map(c=>`<option value="${esc(c)}" ${opts.payment===c?'selected':''}>${esc(c)}</option>`).join('')}
       </select>
       ${opts.payment?`<button onclick="discBillsSetPayment('')" class="text-xs text-red-600 underline">ล้างตัวกรอง</button>`:''}
+      <button onclick="openDiscountBills({..._discBillsCtx, reprinted_only:${!opts.reprinted_only}, sort:'reprints', title:'บิลที่พิมพ์ซ้ำ + มีส่วนลด'})"
+        class="text-xs px-2 py-1 rounded-lg border ${opts.reprinted_only?'bg-orange-100 border-orange-400 text-orange-700 font-bold':'border-slate-300 text-slate-500 hover:bg-slate-50'}">
+        🖨️ ${opts.reprinted_only?'ดูทั้งหมด':'เฉพาะ Reprint'}
+      </button>
     </div>` : '';
-  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-1">
-    ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)]]
+  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
+    ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)],['พิมพ์ซ้ำ (>1x)', `<span class="${(s.reprinted_bills||0)>0?'text-orange-600 font-bold':''}">${fmtN(s.reprinted_bills||0)}</span>`]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
-  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}</p>`;
+  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:#ea580c">เฉพาะ Reprint</b>':''}</p>`;
   if (!d.bills.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">ไม่มีบิลส่วนลดในขอบเขตนี้</p>'; return; }
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
@@ -20511,21 +20519,24 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3 text-right">ส่วนลด</th>
     <th class="py-2 pr-3 text-right">จ่ายจริง</th>
     <th class="py-2 pr-3">วิธีจ่าย</th>
-    <th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`;
+    <th class="py-2 pr-3 text-right">% ของบิล</th>
+    <th class="py-2 text-right" title="จำนวนครั้งที่พิมพ์ใบเสร็จ (Easy POS PrintTimes)">🖨️ พิมพ์</th>
+    </tr></thead><tbody>`;
   const rows = bills.map(b => {
     const hot = (b.discount||0) >= p95 && p95 > 0;
-    // pre-discount base: prefer reconstructed bill_base; fall back to paid+discount
     const base = b.bill_base != null ? b.bill_base : (b.total_inc_vat||0) + (b.discount||0);
-    // discount type: coupon name wins (🎟️), else discount reason, else unknown
     const dtype = b.coupon_name
       ? `<span class="text-indigo-600">🎟️ ${esc(b.coupon_name)}</span>`
       : (b.reason_desc ? esc(b.reason_desc)
         : '<span class="text-slate-400">ไม่ระบุประเภท</span>');
-    // payment method: dominant (largest-amount) code; "+N" if the bill split across codes
     const payCell = b.payment_code
       ? `${esc(b.payment_code)}${(b.payment_n||0) > 1 ? ` <span class="text-[9px] text-slate-400" title="จ่ายหลายแบบในบิลเดียว">+${b.payment_n-1}</span>` : ''}`
       : '<span class="text-slate-300">—</span>';
-    return `<tr class="border-b border-slate-100 ${hot?'bg-red-50':''}">
+    const pt = b.print_times || 0;
+    const printCell = pt > 1
+      ? `<span class="font-bold text-red-600" title="พิมพ์ซ้ำ ${pt} ครั้ง — ตรวจสอบ">${pt}x 🚩</span>`
+      : (pt === 1 ? `<span class="text-slate-400">1x</span>` : `<span class="text-slate-300">—</span>`);
+    return `<tr class="border-b border-slate-100 ${pt>1?'bg-orange-50':hot?'bg-red-50':''}">
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
       <td class="py-1.5 pr-3 text-slate-500">${esc((b.sold_at||'').replace('T',' ').slice(0,16))}</td>
       ${showBranch?`<td class="py-1.5 pr-3">${esc(b.branch||'—')}</td>`:''}
@@ -20536,7 +20547,8 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
       <td class="py-1.5 pr-3 text-slate-600">${payCell}</td>
-      <td class="py-1.5 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td></tr>`;
+      <td class="py-1.5 pr-3 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 text-right">${printCell}</td></tr>`;
   }).join('');
   return head + rows + '</tbody></table>';
 }

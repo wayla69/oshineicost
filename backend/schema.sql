@@ -56,6 +56,7 @@ CREATE TABLE IF NOT EXISTS sales_transaction (
   service_charge   REAL,
   total_inc_vat    REAL,
   source           TEXT NOT NULL,
+  print_times      INTEGER DEFAULT 0,   -- Easy POS Sale.PrintTimes: times receipt was printed
   PRIMARY KEY (branch_id, receipt_no, source)
 );
 

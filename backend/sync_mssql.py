@@ -222,7 +222,8 @@ def main():
                s.NumOfCust AS cust, CAST(s.Discount AS float) AS disc, s.DiscountReasonId AS rid,
                CAST(ISNULL(s.ServiceChargeAmount,0) AS float) AS svc,
                CAST(ISNULL(s.TipsAmount,0) AS float) AS tip, CAST(s.Total AS float) AS total,
-               LTRIM(RTRIM(COALESCE(u.Username,''))) AS cashier
+               LTRIM(RTRIM(COALESCE(u.Username,''))) AS cashier,
+               ISNULL(s.PrintTimes, 0) AS ptimes
         FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
         WHERE {SALE_FILTER} AND s.SaleDate >= %s
     """, (args.since,))
@@ -239,13 +240,13 @@ def main():
         txr.append((bid, receipt, sold, r["cashier"] or "", "", r["cust"] or 0,
                     round(f, 2), round(d, 2), round(o, 2), round(r["tip"] or 0, 2),
                     0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy",
-                    (r["rid"] or None), (cs[0] if cs else None)))
+                    (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0)))
     sq.execute("DELETE FROM sales_transaction")
     sq.executemany("""INSERT INTO sales_transaction
         (branch_id,receipt_no,sold_at,cashier,table_no,customer_count,food_subtotal,drink_subtotal,
          other_subtotal,tip,sp_discount,discount,service_charge,total_inc_vat,source,
-         discount_reason_id,coupon_series_id)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
+         discount_reason_id,coupon_series_id,print_times)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
     print(f"      inserted {len(txr):,} transactions")
 
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")

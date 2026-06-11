@@ -6284,7 +6284,9 @@ def analysis_discounts(
                    SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
                    ROUND(SUM(discount), 2)                        AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
-                   ROUND(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount), 2) AS gross_sales
+                   ROUND(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount), 2) AS gross_sales,
+                   SUM(CASE WHEN discount > 0 AND COALESCE(print_times,0) > 1 THEN 1 ELSE 0 END) AS reprinted_disc_bills,
+                   MAX(COALESCE(print_times, 0)) AS max_print_times
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -6340,7 +6342,9 @@ def analysis_discounts(
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount),0), 1) AS disc_pct_of_sales
+                         / NULLIF(SUM((total_inc_vat - COALESCE(service_charge,0)) / 1.07 + discount),0), 1) AS disc_pct_of_sales,
+                   SUM(CASE WHEN discount > 0 AND COALESCE(print_times,0) > 1 THEN 1 ELSE 0 END) AS reprinted_disc_bills,
+                   MAX(COALESCE(print_times, 0)) AS max_print_times
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -6427,9 +6431,10 @@ def analysis_discount_bills(
     min_pct:      Optional[float] = Query(None),
     max_pct:      Optional[float] = Query(None),
     gross_zero:   bool            = Query(False),
-    payment:      Optional[str]   = Query(None, description="filter by dominant payment code (e.g. Cash, Credit)"),
-    sort:         str             = Query("discount", pattern="^(discount|pct|date|total)$"),
-    limit:        int             = Query(100, ge=1, le=1000),
+    payment:        Optional[str]   = Query(None, description="filter by dominant payment code (e.g. Cash, Credit)"),
+    reprinted_only: bool            = Query(False, description="only bills printed more than once"),
+    sort:           str             = Query("discount", pattern="^(discount|pct|date|total|reprints)$"),
+    limit:          int             = Query(100, ge=1, le=1000),
 ):
     """Receipt-level drill-down of discounted bills, newest/biggest first.
 
@@ -6466,6 +6471,8 @@ def analysis_discount_bills(
     if amount is not None:
         filters.append("st.discount = :amount")
         params["amount"] = amount
+    if reprinted_only:
+        filters.append("COALESCE(st.print_times, 0) > 1")
     if gross_zero:
         filters.append(f"{gross_expr} <= 0")
     else:
@@ -6484,6 +6491,7 @@ def analysis_discount_bills(
         "pct":      "disc_pct DESC",
         "date":     "st.sold_at DESC",
         "total":    "st.total_inc_vat DESC",
+        "reprints": "COALESCE(st.print_times, 0) DESC, st.discount DESC",
     }[sort]
     params["limit"] = limit
 
@@ -6526,7 +6534,8 @@ def analysis_discount_bills(
                    ROUND({base_expr}, 2)                         AS bill_base,
                    ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct,
                    {sel_r} AS reason_desc, {sel_c} AS coupon_name,
-                   {sel_pay} AS payment_code, {sel_payn} AS payment_n
+                   {sel_pay} AS payment_code, {sel_payn} AS payment_n,
+                   COALESCE(st.print_times, 0) AS print_times
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {join_r}{join_c}
@@ -6542,7 +6551,9 @@ def analysis_discount_bills(
             SELECT COUNT(*) AS bills,
                    ROUND(SUM(st.discount), 2) AS total_discount,
                    ROUND(AVG(st.discount), 2) AS avg_discount,
-                   ROUND(MAX(st.discount), 2) AS max_discount
+                   ROUND(MAX(st.discount), 2) AS max_discount,
+                   SUM(CASE WHEN COALESCE(st.print_times,0) > 1 THEN 1 ELSE 0 END) AS reprinted_bills,
+                   MAX(COALESCE(st.print_times, 0)) AS max_print_times
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -8416,6 +8427,8 @@ def _init_settings_tables():
             con.execute("ALTER TABLE sales_transaction ADD COLUMN discount_reason_id INTEGER")
         if st_cols and "coupon_series_id" not in st_cols:
             con.execute("ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER")
+        if st_cols and "print_times" not in st_cols:
+            con.execute("ALTER TABLE sales_transaction ADD COLUMN print_times INTEGER DEFAULT 0")
         for k, v in [
             ("default_branch", ""),
             ("default_month",  "latest"),
