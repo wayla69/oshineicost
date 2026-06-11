@@ -150,6 +150,66 @@ def test_v2_reconcile_channel_first(client):
     assert ch2.get("TRANSFER", {}).get("ext", 0) == 0   # excluded ≠ revenue lane
 
 
+def test_v2_accept_clears_todo_and_allows_close(client):
+    """The 'รับทราบ' escape hatch: a channel-level accept (reason required)
+    drops its items from todo, and run-match writes that lane's discrepancy
+    born 'accepted' so the approval gate doesn't block the month."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    _add_bank_line(db, "KTB", "QR", 99950)
+    _add_bank_line(db, "KTB", "CASH_DEP", 20000)
+
+    # reason is mandatory
+    assert client.post("/api/lanes/adj", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "GRAB",
+        "bank": "ALL", "adj_pos": 0, "adj_ext": 0, "note": "", "adj_type": "accept",
+    }).status_code == 400
+
+    r0 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    todo0 = len(r0["todo"])
+    blocked = [c["key"] for c in r0["channels"]
+               if c["status"] not in ("ok", "no_source") and not c["accepted"]]
+    # accept every blocked channel with a reason
+    for key in blocked:
+        assert client.post("/api/lanes/adj", json={
+            "branch_id": 4, "period_month": "2026-06", "category": key,
+            "bank": "ALL", "adj_pos": 0, "adj_ext": 0,
+            "note": "ยอดเล็ก ไม่คุ้มตามเอกสาร", "adj_type": "accept",
+        }).status_code == 200
+
+    r1 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert len(r1["todo"]) < todo0
+    acc = {c["key"]: c["accepted"] for c in r1["channels"]}
+    for key in blocked:
+        assert acc[key] and "ยอดเล็ก" in acc[key]["note"]
+
+    # accept does NOT distort the numbers (zero-amount marker only)
+    ch0 = {c["key"]: c for c in r0["channels"]}
+    ch1 = {c["key"]: c for c in r1["channels"]}
+    for key in blocked:
+        assert ch1[key]["pos"] == ch0[key]["pos"]
+        assert ch1[key]["variance"] == ch0[key]["variance"]
+
+    # close flow: run-match → accepted lanes' discrepancies born resolved → approve OK
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    discs = client.get(f"/api/sessions/{sid}/discrepancies",
+                       params={"resolution": "all"}).json()
+    # No discrepancy of an accepted channel may be born pending (that would
+    # re-block approval); the ones that exist carry the staff reason.
+    assert not [d for d in discs
+                if d["category"] in blocked and d["resolution"] == "pending"]
+    born_accepted = [d for d in discs if d["resolution"] == "accepted"]
+    assert born_accepted and all("ยอดเล็ก" in (d["resolution_note"] or "")
+                                 for d in born_accepted)
+    pending = [d for d in discs if d["resolution"] == "pending"]
+    if not pending:                                  # gate passes when all accepted
+        assert client.patch(f"/api/sessions/{sid}/status",
+                            data={"status": "approved", "approved_by": "mgr"}
+                            ).status_code == 200
+
+
 def test_v2_overview_lists_master_branches(client):
     r = client.get("/api/v2/overview", params={"month": "2026-06"}).json()
     names = [b["branch_name"] for b in r["branches"]]

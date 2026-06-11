@@ -12,12 +12,14 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
 .wrap{max-width:980px;margin:0 auto;padding:16px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
 .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;white-space:nowrap;border:none}
 .c-ok{background:#e1f5ee;color:#085041}.c-warn{background:#faeeda;color:#633806}
 .c-err{background:#fcebeb;color:#791f1f}.c-mut{background:#f1f5f9;color:#475569}
 .c-setup{background:#e6f1fb;color:#0c447c}
+button.chip{cursor:pointer}
 .btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px}
 .btn-pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-sm{font-size:12px;padding:3px 9px}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .mono{font-family:Consolas,monospace}
 .grid-ch{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.3fr 22px;gap:8px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
@@ -35,28 +37,31 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--t
 table{border-collapse:collapse;width:100%}
 td,th{padding:8px 10px;font-size:13.5px;border-bottom:1px solid var(--line);text-align:right}
 td:first-child,th:first-child{text-align:left}
-.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none;z-index:50}
 .toast.show{opacity:1}
 a{color:var(--brand)}
 h1{font-size:20px;font-weight:600}h2{font-size:16px;font-weight:600}
 .muted{color:var(--sub);font-size:13px}
+.todo-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
+.todo-item:last-child{border-bottom:none}
+.sugg{background:#e1f5ee;border:1px solid #9FE1CB;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13.5px}
 </style>
 </head>
 <body>
 <div class="wrap" id="app">กำลังโหลด…</div>
 <div class="toast" id="toast"></div>
+<input type="file" id="file-input" style="display:none" accept=".pdf,.xlsx,.xls,.csv">
 <script>
 const $=id=>document.getElementById(id);
 const fmt=n=>(n==null?'—':Math.round(n).toLocaleString('th-TH'));
-const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+function tokenHdr(){const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
 async function api(path,opts={}){
-  opts.headers=opts.headers||{};
-  const tok=(localStorage.getItem('oshinei_token')||'').trim();
-  if(tok)opts.headers['X-Upload-Token']=tok;
-  if(opts.body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
+  opts.headers={...(opts.headers||{}),...tokenHdr()};
+  if(opts.body && !(opts.body instanceof FormData)){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
   const r=await fetch(path,opts);
-  if(!r.ok){let d='';try{d=(await r.json()).detail||''}catch(e){};throw new Error(d||r.status);}
+  if(!r.ok){let d='';try{d=(await r.json()).detail||''}catch(e){};throw new Error(d||('HTTP '+r.status));}
   return r.json();
 }
 
@@ -65,11 +70,10 @@ const CH_ST={ok:['c-ok','ตรง'],diff:['c-err','ต่าง'],waiting_doc:[
 const SES_ST={draft:'กำลังทำ',in_review:'รอผู้จัดการตรวจ',approved:'ปิดเดือนแล้ว'};
 
 let MONTH=localStorage.getItem('v2_month')||new Date().toISOString().slice(0,7);
-let DATA=null;
+let DATA=null, UP_DOC=null;
 
 function route(){
-  const h=location.hash.slice(1);
-  const m=h.match(/^b\/(\d+)/);
+  const m=location.hash.slice(1).match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
 window.addEventListener('hashchange',route);
@@ -115,31 +119,48 @@ async function loadBranch(bid){
   DATA=r;
   const ses=r.session,st=(ses&&ses.status)||'draft';
   const closed=st==='approved';
+  DATA.closed=closed;
   let html=header(`<a href="#" onclick="location.hash='';return false" class="lbl">← ทุกสาขา</a>`);
   html+=`<div class="card row" style="margin-bottom:12px">
     <div><div class="lbl">สาขา</div><h2>${esc(r.branch_name)} · ${MONTH}</h2></div>
     <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${SES_ST[st]}</span>
+    ${closed?`<span class="lbl">โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))}</span>`:''}
+    ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
     <div class="row" style="margin-left:auto">
       <div class="prog" style="width:130px"><div style="width:${r.progress_pct}%"></div></div>
       <span class="lbl">ตรงแล้ว ${r.progress_pct}%</span>
     </div></div>`;
 
-  // เอกสาร
+  if(closed) html+=`<div class="card c-ok" style="margin-bottom:12px;background:#e1f5ee">🔒 เดือนนี้ปิดแล้ว — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ (ผู้จัดการกด "ส่งกลับแก้" ในเครื่องมือขั้นสูงหากต้องเปิดใหม่)</div>`;
+
+  // เอกสาร — chip ที่ขาดกดอัปโหลดได้เลย
   html+=`<div class="card" style="margin-bottom:12px"><div class="row">
     <b style="font-size:13.5px">เอกสาร</b>`;
   for(const d of r.documents){
     const cls=d.status==='uploaded'?'c-ok':d.status==='partial'?'c-warn':'c-err';
-    html+=`<span class="chip ${cls}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</span>`;
+    if(d.status==='uploaded'||closed)
+      html+=`<span class="chip ${cls}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</span>`;
+    else
+      html+=`<button class="chip ${cls}" title="คลิกเพื่ออัปโหลด" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
   }
-  html+=`<a href="/app#uploads" class="lbl" style="margin-left:auto">อัปโหลด ↗</a></div></div>`;
+  html+=`</div><div id="up-panel"></div></div>`;
 
   // คำถามตั้งค่า (unmapped codes)
   for(const q of r.setup_questions){
     html+=`<div class="card c-setup" style="margin-bottom:12px;background:#e6f1fb">
       รหัสชำระ <b>${esc(q.code)}</b> (${fmt(q.amount)} บาท) ยังไม่รู้ว่าเข้าธนาคารไหน
       ${q.suggestion?` — เอกสารชี้ว่าเป็น <b>${esc(q.suggestion.category)}·${esc(q.suggestion.bank)}</b> (ตรง ${q.suggestion.hits} วัน)
-        <button class="btn" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`
+        ${closed?'':`<button class="btn btn-sm" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`}`
        :` — <a href="/app#setup">ไปตั้งค่า ↗</a>`}</div>`;
+  }
+
+  // การ์ดแนะนำ: ยอดอยู่ผิดช่อง (ยอดเท่ากัน ธนาคารเดียวกัน)
+  if(!closed)for(let i=0;i<(r.reclass_suggestions||[]).length;i++){
+    const s=r.reclass_suggestions[i];
+    html+=`<div class="sugg row">💡 ยอด <b class="mono">${fmt(s.amount)}</b> วันที่ ${s.pos_day.slice(8)}
+      น่าจะเป็นคู่กัน: POS ${esc(s.pos_lane)} ↔ เอกสาร ${esc(s.ext_lane)}
+      <span class="chip ${s.confidence==='high'?'c-ok':'c-warn'}">${s.confidence==='high'?'มั่นใจสูง':'น่าจะใช่'}</span>
+      <button class="btn btn-sm btn-pri" style="margin-left:auto" onclick="applyReclass(${i})">จับคู่</button></div>`;
   }
 
   // ตาราง channel
@@ -149,13 +170,15 @@ async function loadBranch(bid){
       <span class="lbl num">เงินเข้าจริง</span><span class="lbl" style="text-align:right">สถานะ</span><span></span>
     </div>`;
   r.channels.forEach((ch,i)=>{
-    const [cls,lab]=CH_ST[ch.status]||['c-mut',ch.status];
+    const acc=ch.accepted;
+    const [cls,lab]=acc?['c-mut','รับทราบแล้ว']:(CH_ST[ch.status]||['c-mut',ch.status]);
     html+=`<div class="grid-ch" onclick="toggleDays(${i})">
       <div>${esc(ch.label)}${ch.days_total?`<div class="lbl">${ch.days_done}/${ch.days_total} วัน ✓</div>`:''}</div>
       <div class="num">${fmt(ch.pos)}</div>
       <div class="num">${ch.ext?fmt(ch.ext):'—'}</div>
       <div style="text-align:right"><span class="chip ${cls}">${lab}</span>
-        ${ch.detail?`<div class="lbl">${esc(ch.detail)}</div>`:''}</div>
+        ${acc?`<div class="lbl" title="${esc(acc.note)}">"${esc(acc.note)}" ${closed?'':`<a href="#" onclick="event.stopPropagation();unaccept(${acc.id});return false">เลิกรับทราบ</a>`}</div>`
+            :ch.detail?`<div class="lbl">${esc(ch.detail)}</div>`:''}</div>
       <span class="lbl">▾</span></div>
     <div id="days-${i}" style="display:none;border-bottom:1px solid var(--line)"></div>`;
   });
@@ -171,20 +194,95 @@ async function loadBranch(bid){
     </table></div>`;
   }
 
-  // สิ่งที่เหลือ + ปุ่มสถานะ
-  html+=`<div class="card row">
-    <div style="flex:1;min-width:200px">${r.todo.length
-      ?`<b style="font-size:13.5px">เหลือ ${r.todo.length} เรื่อง:</b> <span class="muted">${r.todo.map(t=>esc(t.label)).join(' · ')}</span>`
-      :'<span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span>'}</div>
+  // สิ่งที่เหลือ (พร้อมปุ่มรับทราบ) + ปุ่มสถานะ
+  html+=`<div class="card">`;
+  if(r.todo.length){
+    html+=`<b style="font-size:13.5px">เหลือ ${r.todo.length} เรื่องก่อนปิดเดือน</b><div style="margin:6px 0 10px">`;
+    r.todo.forEach((t,i)=>{
+      const acceptable=!closed && (t.channel||t.type==='diff');
+      html+=`<div class="todo-item"><span style="flex:1">• ${esc(t.label)}</span>
+        ${t.type==='upload'&&!closed?`<button class="btn btn-sm" onclick='pickFile(${JSON.stringify(DATA.documents.find(d=>d.key===t.doc)||null)})'>⬆ อัปโหลด</button>`:''}
+        ${acceptable?`<button class="btn btn-sm" onclick="acceptTodo('${esc(t.channel)}','${esc(t.label)}')">✓ รับทราบ + เหตุผล</button>`:''}
+      </div>`;
+    });
+    html+=`</div><div class="muted">"รับทราบ" = ยอมรับผลต่างโดยใส่เหตุผล (เช่น ยอดเล็ก ไม่คุ้มตามเอกสาร) — เหตุผลจะติดไปในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ</div>`;
+  } else {
+    html+=`<span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span>`;
+  }
+  html+=`<div class="row" style="margin-top:10px;justify-content:flex-end">
     ${closed?'':st==='in_review'
-      ?`<button class="btn btn-pri" onclick="closeMonth(${bid})">ปิดเดือน (ผู้จัดการ)</button>
-         <button class="btn" onclick="setSt(${bid},'draft')">ส่งกลับแก้</button>`
+      ?`<button class="btn" onclick="setSt(${bid},'draft')">ส่งกลับแก้</button>
+         <button class="btn btn-pri" onclick="closeMonth(${bid})" ${r.todo.length?'disabled title="ยังมีเรื่องค้าง — จัดการหรือรับทราบให้ครบก่อน"':''}>ปิดเดือน (ผู้จัดการ)</button>`
       :`<button class="btn btn-pri" onclick="setSt(${bid},'in_review')">ส่งตรวจ</button>`}
-  </div>`;
+  </div></div>`;
   $('app').innerHTML=html;
 }
 
 function toggleNR(){const e=$('nr');e.style.display=e.style.display==='none'?'':'none';}
+
+/* ── อัปโหลดเอกสารในหน้า ── */
+function pickFile(doc){
+  if(!doc)return;
+  UP_DOC=doc;
+  $('file-input').value='';
+  $('file-input').onchange=()=>previewUpload();
+  $('file-input').click();
+}
+async function previewUpload(){
+  const f=$('file-input').files[0];
+  if(!f||!UP_DOC)return;
+  const panel=$('up-panel');
+  panel.innerHTML=`<div class="muted" style="margin-top:10px">กำลังอ่าน ${esc(f.name)}…</div>`;
+  const fd=new FormData();
+  fd.append('file',f);fd.append('branch_id',DATA.branch_id);
+  fd.append('period_month',MONTH);fd.append('provider',UP_DOC.provider||'');
+  let p;
+  try{p=await api(`/api/uploads/${UP_DOC.source}/preview`,{method:'POST',body:fd});}
+  catch(e){panel.innerHTML=`<div class="chip c-err" style="margin-top:10px">อ่านไฟล์ไม่ได้: ${esc(e.message)}</div>`;return;}
+  const wrongBranch=p.detected_branch_id&&p.detected_branch_id!==DATA.branch_id;
+  panel.innerHTML=`<div class="card" style="margin-top:10px;background:#fafafa">
+    <div class="row"><b style="font-size:13.5px">${esc(UP_DOC.label)}</b>
+      <span class="lbl">${esc(f.name)} · ${p.row_count} รายการ${p.skipped_rows?` (ข้าม ${p.skipped_rows})`:''} · ${esc(p.provider||'')}</span></div>
+    ${p.empty_statement?`<div class="chip c-warn" style="margin-top:6px">เอกสารว่าง (No Data) — ยืนยันได้ ระบบจะบันทึกว่าเดือนนี้ไม่มีรายการ</div>`:''}
+    ${wrongBranch?`<div class="chip c-err" style="margin-top:6px">⚠ เอกสารนี้เป็นของสาขา ${esc(p.detected_branch_name)} — ยืนยันไม่ได้</div>`:''}
+    <div class="row" style="margin-top:10px">
+      <button class="btn btn-pri" ${wrongBranch?'disabled':''} onclick="confirmUpload()">✓ ยืนยันบันทึก</button>
+      <button class="btn" onclick="$('up-panel').innerHTML=''">ยกเลิก</button>
+    </div></div>`;
+}
+async function confirmUpload(){
+  const f=$('file-input').files[0];
+  if(!f||!UP_DOC)return;
+  const fd=new FormData();
+  fd.append('file',f);fd.append('branch_id',DATA.branch_id);
+  fd.append('period_month',MONTH);fd.append('provider',UP_DOC.provider||'');
+  try{const r=await api(`/api/uploads/${UP_DOC.source}/confirm`,{method:'POST',body:fd});
+      toast(`บันทึกแล้ว ${r.rows_saved} รายการ`);route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── รับทราบผลต่าง ── */
+async function acceptTodo(channel,label){
+  if(!channel||channel==='null'){toast('ข้อนี้รับทราบไม่ได้ — ต้องอัปโหลดเอกสาร');return;}
+  const note=prompt(`เหตุผลที่ยอมรับ "${label}" (จำเป็น จะแสดงในไฟล์ Excel):`);
+  if(note===null)return;
+  if(!note.trim()){toast('ต้องใส่เหตุผล');return;}
+  try{await api('/api/lanes/adj',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+      category:channel,bank:'ALL',adj_pos:0,adj_ext:0,note:note.trim(),adj_type:'accept'}});
+      toast('รับทราบแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function unaccept(adjId){
+  try{await api(`/api/lanes/adj/${adjId}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── จับคู่: การ์ดแนะนำ + เลือกเองในวัน ── */
+async function applyReclass(i){
+  const s=DATA.reclass_suggestions[i];
+  try{await api('/api/manual',{method:'POST',body:{branch_id:s.branch_id,period_month:s.period_month,
+      category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
+      toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
 
 function toggleDays(i){
   const el=$('days-'+i);
@@ -210,16 +308,50 @@ async function openDay(i,day){
     try{const r=await api(`/api/v2/lane?branch_id=${DATA.branch_id}&month=${MONTH}&category=${ch.key}&bank=${b}&day=${day}`);
         lines.push(...r.lines.map(l=>({...l,bank:b})));}catch(e){}
   }
+  window._DAY={i,day,lines,key:ch.key};
   box.innerHTML=`<div class="card" style="background:#fafafa">
     <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">${day} · ${esc(ch.label)}</b>
       <span class="lbl">POS ${fmt(d.pos)} · เข้าจริง ${fmt(d.ext)} · ต่าง ${d.variance>0?'+':''}${fmt(d.variance)}</span></div>
-    ${lines.length?`<table>${lines.map(l=>`<tr>
-      <td style="text-align:left">${esc(l.ref||l.description||'')}<span class="lbl"> ${esc(l.bank)}</span></td>
+    ${lines.length?`<table>${lines.map((l,j)=>`<tr>
+      <td style="width:26px">${!DATA.closed&&l.id&&l.match_status!=='manual'?`<input type="checkbox" data-j="${j}" onchange="updMatchBar()">`:''}</td>
+      <td style="text-align:left">${esc(l.ref||'')}<span class="lbl"> ${esc(l.bank)}${l.match_status==='manual'?' · จับคู่แล้ว':''}</span></td>
+      <td>${l.date}</td>
       <td class="mono">${fmt(l.amount)}</td>
-      <td style="width:110px">${l.id?`<button class="btn" style="font-size:12px;padding:3px 8px" onclick="ignoreLine(${l.id})">ตัดออก ไม่ใช่ยอดขาย</button>`:''}</td>
-    </tr>`).join('')}</table>`
+      <td style="width:90px">${!DATA.closed&&l.id?`<button class="btn btn-sm" onclick="ignoreLine(${l.id})">ตัดออก</button>`:''}</td>
+    </tr>`).join('')}</table>
+    <div id="match-bar" class="row" style="margin-top:8px;display:none">
+      <span class="lbl" id="match-sum"></span>
+      <button class="btn btn-sm btn-pri" onclick="manualMatchDay()">🔗 จับคู่กับยอด POS วันนี้</button>
+    </div>`
     :'<div class="muted">ไม่มีบรรทัดเงินเข้าของวันนี้ (รอเอกสาร หรือยอดถูกฝากรวมวันอื่น)</div>'}
   </div>`;
+}
+function updMatchBar(){
+  const ck=[...document.querySelectorAll('#daylines-'+window._DAY.i+' input[type=checkbox]:checked')];
+  const bar=$('match-bar');if(!bar)return;
+  if(!ck.length){bar.style.display='none';return;}
+  const sum=ck.reduce((a,c)=>a+window._DAY.lines[+c.dataset.j].amount,0);
+  $('match-sum').textContent=`เลือก ${ck.length} รายการ รวม ${fmt(sum)} บาท`;
+  bar.style.display='flex';
+}
+async function manualMatchDay(){
+  const D=window._DAY;
+  const ck=[...document.querySelectorAll('#daylines-'+D.i+' input[type=checkbox]:checked')];
+  if(!ck.length)return;
+  const sel=ck.map(c=>D.lines[+c.dataset.j]);
+  const banks=[...new Set(sel.map(l=>l.bank))];
+  if(banks.length>1){toast('เลือกได้ทีละธนาคาร');return;}
+  const ch=DATA.channels[D.i];
+  const d=ch.days.find(x=>x.day===D.day);
+  const sum=sel.reduce((a,l)=>a+l.amount,0);
+  const posAmt=Math.min(d.pos,sum);
+  if(posAmt<=0){toast('วันนี้ไม่มียอด POS ให้จับคู่');return;}
+  const note=prompt(`จับคู่ ${sel.length} รายการ (${fmt(sum)}) กับยอด POS วันที่ ${D.day} (${fmt(posAmt)})\nหมายเหตุ:`,'');
+  if(note===null)return;
+  try{await api('/api/manual',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+      category:D.key,bank:banks[0],pos_days:[{day:D.day,amount:posAmt}],
+      ext:sel.map(l=>({table:'recon_bank_lines',id:l.id,amount:l.amount})),note:note||'v2 day match'}});
+      toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
 async function ignoreLine(id){
@@ -233,21 +365,26 @@ async function applySugg(mapId,cat,bank){
       toast('บันทึกแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
+/* ── สถานะ session: ส่งตรวจ → ปิดเดือน ── */
 async function ensureSession(bid){
   if(DATA.session)return DATA.session.session_id;
   const s=await api('/api/sessions',{method:'POST',body:{branch_id:bid,period_month:MONTH}});
   return s.session_id;
 }
+function stForm(status,by){const fd=new FormData();fd.append('status',status);if(by)fd.append('approved_by',by);return fd;}
 async function setSt(bid,st){
   try{const sid=await ensureSession(bid);
-      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:{status:st}});
+      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:stForm(st)});
       toast(st==='in_review'?'ส่งตรวจแล้ว':'ส่งกลับแก้แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 async function closeMonth(bid){
-  if(!confirm('ปิดเดือน: บันทึกผลถาวร + ออกไฟล์ Excel ได้ และล็อกการแก้ไขทั้งเดือนนี้ ยืนยัน?'))return;
+  const who=prompt('ชื่อผู้จัดการที่อนุมัติ:');
+  if(who===null)return;
+  if(!who.trim()){toast('ต้องใส่ชื่อผู้อนุมัติ');return;}
+  if(!confirm('ปิดเดือน: บันทึกผลถาวร ออกไฟล์ Excel ได้ และล็อกการแก้ไขทั้งเดือนนี้ ยืนยัน?'))return;
   try{const sid=await ensureSession(bid);
       await api(`/api/sessions/${sid}/run-match`,{method:'POST'});   // snapshot at close
-      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:{status:'approved'}});
+      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:stForm('approved',who.trim())});
       toast('ปิดเดือนแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 

@@ -343,6 +343,8 @@ CREATE INDEX IF NOT EXISTS idx_recon_attachment ON recon_attachment(branch_id, d
 -- One row per (branch × period × category × bank).
 -- adj_pos  = manual POS-side addition  (e.g. off-POS QR scanned on KTB PromptPay)
 -- adj_ext  = manual EXT-side addition  (e.g. cash deposit not reflected in bank statement)
+-- adj_type 'accept' = v2 acknowledged variance: zero-amount marker (bank='ALL')
+--   whose note is the staff reason; clears the channel's todo so the month can close.
 -- Applied at summary-read time; no re-run-match needed.
 CREATE TABLE IF NOT EXISTS recon_lane_adj (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -354,7 +356,7 @@ CREATE TABLE IF NOT EXISTS recon_lane_adj (
     adj_ext      REAL    NOT NULL DEFAULT 0,
     note         TEXT,
     adj_type     TEXT    NOT NULL DEFAULT 'other'
-                     CHECK(adj_type IN ('off_pos','deposit_note','other')),
+                     CHECK(adj_type IN ('off_pos','deposit_note','other','accept')),
     created_by   TEXT,
     created_at   TEXT    DEFAULT (datetime('now')),
     UNIQUE(branch_id, period_month, category, bank)

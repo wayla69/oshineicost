@@ -798,6 +798,17 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
 
     rows, unmapped = category_reconciliation(conn, branch_id, period_month)
 
+    # Channel-level acknowledged variances (v2 "รับทราบ" — lane_adj adj_type='accept'):
+    # their lanes still get a discrepancy row for the audit trail, but born
+    # 'accepted' with the staff reason, so the approval gate doesn't block on them.
+    try:
+        accepted = {a["category"]: a for a in conn.execute(
+            "SELECT category, note, created_by FROM recon_lane_adj "
+            "WHERE branch_id=? AND period_month=? AND adj_type='accept'",
+            (branch_id, period_month))}
+    except sqlite3.OperationalError:
+        accepted = {}
+
     for r in rows:
         conn.execute("""
             INSERT INTO recon_category_result
@@ -816,13 +827,25 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
                 "pos_only":  "unmatched_pos",
                 "no_source": "unmatched_pos",
             }[r["status"]]
-            conn.execute("""
-                INSERT INTO recon_discrepancies
-                    (session_id, disc_type, source_type, category, bank,
-                     amount_external, amount_pos, variance)
-                VALUES (?,?,?,?,?,?,?,?)
-            """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
-                  r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"]))
+            acc = accepted.get(r["category"])
+            if acc:
+                conn.execute("""
+                    INSERT INTO recon_discrepancies
+                        (session_id, disc_type, source_type, category, bank,
+                         amount_external, amount_pos, variance,
+                         resolution, resolution_note, resolved_by, resolved_at)
+                    VALUES (?,?,?,?,?,?,?,?,'accepted',?,?,datetime('now'))
+                """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
+                      r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"],
+                      f"รับทราบ: {acc['note']}", acc["created_by"] or "staff"))
+            else:
+                conn.execute("""
+                    INSERT INTO recon_discrepancies
+                        (session_id, disc_type, source_type, category, bank,
+                         amount_external, amount_pos, variance)
+                    VALUES (?,?,?,?,?,?,?,?)
+                """, (session_id, disc_type, _CATEGORY_SOURCE.get(r["category"], "pos"),
+                      r["category"], r["bank"], r["ext_amount"], r["pos_amount"], r["variance"]))
 
     # Cash: deposits matched by the grouped cash matcher are reconciled lines —
     # mark them so per-upload match stats (and the lump-sum's own date) read true.

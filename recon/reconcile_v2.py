@@ -24,6 +24,7 @@ from .matcher import (
     credit_three_way,
     daily_reconciliation,
     map_bank_suggestions,
+    suggest_reclassifications,
     _coverage,
     _lane_cov_key,
     _REAL_BANKS,
@@ -87,7 +88,34 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
             add("grab", "รายงาน Grab", ("grab", None))
         if r["category"] == "LINEMAN" and r["pos_amount"] > 0:
             add("lineman", "รายงาน Line Man", ("lineman", None))
+    # Upload metadata so the v2 UI can open the right uploader from the chip:
+    # source_type + provider hint, and which channel an "accept" would clear
+    # (a whole missing statement is never acceptable — nothing reconciles without it)
+    for d in docs:
+        k = d["key"]
+        if k.startswith("stmt_"):
+            d.update(source="bank", provider=k[5:], channel=None)
+        elif k.startswith("cc_"):
+            d.update(source="credit_card", provider=k[3:], channel="CREDIT")
+        elif k == "grab":
+            d.update(source="grab", provider="GRAB", channel="GRAB")
+        else:
+            d.update(source="lineman", provider="LINEMAN", channel="LINEMAN")
     return docs
+
+
+def _accepted_channels(conn, branch_id, period_month):
+    """Staff-acknowledged variances: lane_adj rows with adj_type='accept'
+    (one per channel, bank='ALL', zero amounts — a pure marker with a reason).
+    They clear the channel's todo so the month can actually close."""
+    try:
+        return {r["category"]: {"id": r["id"], "note": r["note"],
+                                "by": r["created_by"], "at": r["created_at"]}
+                for r in conn.execute(
+                    "SELECT * FROM recon_lane_adj WHERE branch_id=? AND period_month=? "
+                    "AND adj_type='accept'", (branch_id, period_month))}
+    except sqlite3.OperationalError:
+        return {}
 
 
 def _non_revenue(conn, branch_id, period_month):
@@ -111,6 +139,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     daily = daily_reconciliation(conn, branch_id, period_month)
     cov = _coverage(conn, branch_id, period_month)
     c3 = credit_three_way(conn, branch_id, period_month)
+    accepted = _accepted_channels(conn, branch_id, period_month)
 
     # Collapse day-lanes by channel (sum over banks within a day)
     ch_days: dict = {}     # channel -> {day: {pos, ext, statuses:set, banks:set}}
@@ -199,7 +228,8 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
               "variance": round(ext_amt - pos_amt, 2), "status": status,
               "detail": detail, "days": days,
               "days_done": n_done, "days_total": len(days),
-              "banks": m["banks"] if m else []}
+              "banks": m["banks"] if m else [],
+              "accepted": accepted.get(key)}
         if key == "CREDIT":
             ch["three_way"] = c3["rows"]
         channels.append(ch)
@@ -229,14 +259,19 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                                if u["code"] in sugg else None)}
                for u in daily["unmapped"]]
 
-    # To-do list = exactly what blocks the month from closing
+    # To-do list = exactly what blocks the month from closing. A channel-level
+    # "accept" (acknowledged variance with a reason) clears its items — that's
+    # the escape hatch that lets a month close over a ฿396 missing report.
     todo = []
     for doc in docs:
-        if doc["status"] == "missing":
-            todo.append({"type": "upload", "label": f"อัปโหลด{doc['label']}", "doc": doc["key"]})
+        if doc["status"] == "missing" and not (doc["channel"] and doc["channel"] in accepted):
+            todo.append({"type": "upload", "label": f"อัปโหลด{doc['label']}",
+                         "doc": doc["key"], "channel": doc["channel"]})
     for q in setup_q:
         todo.append({"type": "setup", "label": f"ระบุธนาคารของ {q['code']}", "code": q["code"]})
     for ch in channels:
+        if ch["accepted"]:
+            continue
         if ch["status"] == "diff":
             todo.append({"type": "diff", "channel": ch["key"],
                          "label": f"ตรวจผลต่าง{ch['label']} {ch['variance']:+,.0f} บาท"})
@@ -246,10 +281,18 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
                          "label": f"{ch['label']}: {ch['detail']}"})
 
     session = conn.execute(
-        "SELECT session_id, status FROM recon_sessions WHERE branch_id=? AND period_month=?",
+        "SELECT session_id, status, approved_at, approved_by "
+        "FROM recon_sessions WHERE branch_id=? AND period_month=?",
         (branch_id, period_month)).fetchone()
     branch = conn.execute(
         "SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()
+
+    # Wrong-channel suggestions (same bank, equal amount, ±1 day) — each is a
+    # ready-to-POST /api/manual payload the UI applies in one click
+    try:
+        reclass = suggest_reclassifications(conn, branch_id, period_month)
+    except sqlite3.OperationalError:
+        reclass = []
 
     return {
         "branch_id": branch_id,
@@ -260,6 +303,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         "channels": channels,
         "non_revenue": _non_revenue(conn, branch_id, period_month),
         "setup_questions": setup_q,
+        "reclass_suggestions": reclass,
         "todo": todo,
         "progress_pct": progress,
         "can_close": not todo,

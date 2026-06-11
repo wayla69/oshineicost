@@ -75,6 +75,25 @@ internal transfer shows in the non-revenue strip. +2 pytest (72 pass).
 Remaining for v2: manual-match action in the day drill, upload from within v2,
 close-month lock surfacing in UI, then retire the old tabs.
 
+**v2 P1 — ใช้ได้จริง (2026-06-11):** (1) **Upload in-page** — missing doc chips
+are buttons → file picker → `/preview` (row count, provider, wrong-branch guard
+shown inline) → confirm; doc checklist carries `source`/`provider`/`channel`.
+(2) **รับทราบผลต่าง (accept)** — the close-blocker fix: channel-level
+`recon_lane_adj` row `adj_type='accept'` (bank='ALL', zero amounts, note =
+mandatory reason; CHECK widened via `_migrate_lane_adj_accept`). Clears the
+channel's todo + its doc todo, numbers stay honest (variance unchanged);
+`run_auto_match` writes that lane's discrepancy **born 'accepted'** with the
+reason so the approval gate passes — a month can now close over a ฿396 missing
+Line Man report. Reversible (เลิกรับทราบ = DELETE adj). (3) **Manual match in
+day drill** — checkbox bank lines → "จับคู่กับยอด POS วันนี้" (POSTs
+`/api/manual`); `reclass_suggestions` (wrong-channel, same bank/amount/±1d)
+rendered as green one-click cards. (4) **Close lock + Excel** — approved month:
+all mutating buttons hidden, 🔒 banner, approved_by/at shown, ⬇ Excel button
+(`/export.xlsx`); ปิดเดือน now prompts for the manager name (sent as
+approved_by; status endpoint is Form-encoded, not JSON). E2E on live-copy DB:
+UDN May todo 6→4 after accepting GRAB+LINEMAN, variance intact (-396), doc
+chips carry upload metadata. 73 pytest pass.
+
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +
   idempotency, fee/VAT net, parser skipped-count, master-only/period/token gates).

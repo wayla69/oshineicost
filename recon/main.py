@@ -179,6 +179,41 @@ def _migrate_payment_bank(conn):
         pass
 
 
+def _migrate_lane_adj_accept(conn):
+    """Widen recon_lane_adj.adj_type to allow 'accept' (v2 acknowledged
+    variance). SQLite can't ALTER a CHECK → recreate once, preserving rows."""
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_lane_adj'").fetchone()
+        if row and "'accept'" not in (row[0] or ""):
+            conn.executescript("""
+                CREATE TABLE recon_lane_adj__new (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+                    period_month TEXT    NOT NULL,
+                    category     TEXT    NOT NULL,
+                    bank         TEXT    NOT NULL DEFAULT 'NONE',
+                    adj_pos      REAL    NOT NULL DEFAULT 0,
+                    adj_ext      REAL    NOT NULL DEFAULT 0,
+                    note         TEXT,
+                    adj_type     TEXT    NOT NULL DEFAULT 'other'
+                                     CHECK(adj_type IN ('off_pos','deposit_note','other','accept')),
+                    created_by   TEXT,
+                    created_at   TEXT    DEFAULT (datetime('now')),
+                    UNIQUE(branch_id, period_month, category, bank)
+                );
+                INSERT INTO recon_lane_adj__new
+                    (id,branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by,created_at)
+                    SELECT id,branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by,created_at
+                    FROM recon_lane_adj;
+                DROP TABLE recon_lane_adj;
+                ALTER TABLE recon_lane_adj__new RENAME TO recon_lane_adj;
+                CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);
+            """)
+    except sqlite3.OperationalError:
+        pass
+
+
 def _migrate_attachment_to_fs(conn):
     """Replace recon_attachment.data (BLOB) with file_path (TEXT).
     Files uploaded before this migration are lost (acceptable — feature was unused).
@@ -220,6 +255,7 @@ def startup():
         conn.executescript(_SCHEMA.read_text())
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
+        _migrate_lane_adj_accept(conn)  # widen adj_type CHECK for v2 'accept'
         _migrate_attachment_to_fs(conn)
         # recon_lane_adj: created by schema.sql executescript above (IF NOT EXISTS)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
@@ -2267,8 +2303,10 @@ def lane_adj_list(branch_id: int, period_month: str):
 @app.post("/api/lanes/adj", dependencies=[Depends(require_write_token)])
 def lane_adj_upsert(body: LaneAdj):
     _validate_period(body.period_month)
-    if body.adj_type not in ("off_pos", "deposit_note", "other"):
-        raise HTTPException(400, "adj_type must be off_pos | deposit_note | other")
+    if body.adj_type not in ("off_pos", "deposit_note", "other", "accept"):
+        raise HTTPException(400, "adj_type must be off_pos | deposit_note | other | accept")
+    if body.adj_type == "accept" and not (body.note or "").strip():
+        raise HTTPException(400, "การรับทราบผลต่างต้องใส่เหตุผล (note required)")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)
