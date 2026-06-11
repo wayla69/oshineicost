@@ -919,6 +919,17 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
             "note": "restart the machine to apply (atomic swap at startup)"}
 
 
+@app.post("/api/_admin/apply-cost-patches", include_in_schema=False)
+def admin_apply_cost_patches(token: str = Query("")):
+    """Run _apply_cost_patches() on demand (hidden; write-token required).
+    Useful to apply startup cost corrections without a full restart."""
+    toks = _accepted_tokens()
+    if not toks or not _token_accepted(token):
+        raise HTTPException(status_code=404, detail="not found")
+    _apply_cost_patches()
+    return {"ok": True, "patches": [p[0] for p in _COST_PATCHES]}
+
+
 # ---------------------------------------------------------------------------
 # /api/branches
 # ---------------------------------------------------------------------------
