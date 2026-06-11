@@ -8704,6 +8704,12 @@ def get_cost_detail(
                    c.name AS category,
                    COALESCE(sk.business_type,'buffet') AS business_type,  -- buffet-first default (85% of business)
                    sc.unit_cost, sc.updated_at,
+                   -- Effective COGS the rest of the app actually uses (BoM recipe →
+                   -- alias BoM → sku_cost → 0). Lets the worklist show a real cost for
+                   -- the ~98 recipe-costed SKUs whose manual sc.unit_cost is NULL, so
+                   -- they no longer read as "uncosted" when they're costed via BoM.
+                   (SELECT sec.recipe_cost FROM sku_effective_cost sec
+                      WHERE sec.sku_id = sk.sku_id) AS effective_cost,
                    ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.subtotal_ex_vat END), 0) AS total_revenue,
                    ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.qty END), 0)            AS total_qty
             FROM skus sk

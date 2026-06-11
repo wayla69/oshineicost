@@ -12916,10 +12916,14 @@ async function loadCosts() {
           <input type="number" min="0" step="1"
             class="w-24 border border-slate-200 rounded-lg px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
             id="cost-inp-${r.sku_id}" value="${r.unit_cost != null ? r.unit_cost : ''}"
+            placeholder="${r.unit_cost == null && r.effective_cost > 0 ? fmtN(r.effective_cost) : ''}"
             oninput="debounceCostSave(${r.sku_id}, '${jsAttr(r.sku_code)}')"
             onblur="saveCostRow(${r.sku_id}, '${jsAttr(r.sku_code)}')">
           <span id="cost-stat-${r.sku_id}" class="text-sm w-5 text-center font-bold" title="บันทึกอัตโนมัติ · auto-saves"></span>
         </div>
+        ${r.unit_cost == null && r.effective_cost > 0
+          ? `<div class="text-[10px] text-emerald-600 mt-0.5" title="ต้นทุนจากสูตร BoM — ใช้คำนวณ COGS อยู่แล้ว; พิมพ์ทับได้ถ้าต้องการแก้">🧮 BoM ฿${fmtN(r.effective_cost)}</div>`
+          : ''}
       </td>
       <td class="py-2 pr-3 text-right text-slate-500">${r.total_revenue != null ? fmtN(r.total_revenue) : '—'}</td>
       <td class="py-2 text-right text-slate-500">${r.total_qty != null ? fmtN(r.total_qty) : '—'}</td>
