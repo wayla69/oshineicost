@@ -20767,7 +20767,7 @@ function exportDiscountReasons() {
   downloadCSV(rows.join('\n'), 'discount_reasons.csv');
 }
 
-async function loadDiscountReasons(params) {
+async function loadDiscountReasons(params, gen) {
   const body = document.getElementById('disc-reason-body');
   const cards = document.getElementById('disc-reason-cards');
   const note = document.getElementById('disc-reason-note');
@@ -20775,6 +20775,7 @@ async function loadDiscountReasons(params) {
   body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   let d; try { d = await fetch(`${API}/api/analysis/discount-reasons?${params}`).then(r => r.json()); }
   catch (e) { body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
     if (note) note.textContent = '';
     cards.innerHTML = '';
@@ -20829,7 +20830,7 @@ async function loadDiscountReasons(params) {
   }).join('') || '<tr><td colspan="5" class="py-3 text-center text-slate-400">ไม่มีส่วนลดในช่วงนี้</td></tr>';
 }
 
-async function loadCouponSeries(params) {
+async function loadCouponSeries(params, gen) {
   const body = document.getElementById('coupon-series-body');
   const cards = document.getElementById('coupon-series-cards');
   const note = document.getElementById('coupon-series-note');
@@ -20837,6 +20838,7 @@ async function loadCouponSeries(params) {
   body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   let d; try { d = await fetch(`${API}/api/analysis/coupon-series?${params}`).then(r => r.json()); }
   catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
+  if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
     if (note) note.textContent = '';
     cards.innerHTML = '';
@@ -20966,12 +20968,13 @@ async function discAlertSaveThresholds() {
 }
 
 // Discount risk Alert Center — prioritized flags, each drillable to the matching bills
-async function loadDiscountAlerts(params) {
+async function loadDiscountAlerts(params, gen) {
   const el = document.getElementById('disc-alert-list');
   const meta = document.getElementById('disc-alert-meta');
   if (!el) return;
   el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังตรวจ…</p>';
   const d = await fetch(`${API}/api/analysis/discount_alerts?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d) { el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; if (meta) meta.textContent = ''; return; }
   const flags = d.flags || [];
   if (meta) meta.textContent = flags.length ? `🔴 ${d.counts.high} ด่วน · 🟠 ${d.counts.med} เฝ้าระวัง` : '';
@@ -21013,13 +21016,14 @@ async function loadDiscountAlerts(params) {
 }
 
 // Payment method × discount — cash+heavy leakage flag + payment mix on discount bills
-async function loadPaymentDiscount(params) {
+async function loadPaymentDiscount(params, gen) {
   const sumEl = document.getElementById('paydisc-summary');
   const chEl  = document.getElementById('paydisc-cashheavy');
   const mixEl = document.getElementById('paydisc-mix');
   if (!chEl) return;
   chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังโหลด…</p>';
   const d = await fetch(`${API}/api/analysis/payment_discount?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d) { chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; return; }
   if (!d.available) {
     sumEl.className = 'mb-4 text-sm px-3 py-2 rounded-lg';
@@ -21063,13 +21067,14 @@ async function loadPaymentDiscount(params) {
   }).join('');
 }
 
-async function loadDiscountLeakage(params) {
+async function loadDiscountLeakage(params, gen) {
   const wrap  = document.getElementById('disc-leak-boxes');
   const sumEl = document.getElementById('disc-leak-summary');
   const meta  = document.getElementById('disc-leak-meta');
   if (!wrap) return;
   wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">กำลังโหลด…</div>';
   const d = await fetch(`${API}/api/analysis/discount_leakage?${params}`).then(r => r.json()).catch(() => null);
+  if (gen != null && gen !== loadGen) return;
   if (!d || !Array.isArray(d.branches) || !d.branches.length) {
     wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">ไม่มีข้อมูลส่วนลดในช่วงนี้</div>';
     if (sumEl) { sumEl.removeAttribute('style'); sumEl.innerHTML = ''; }
@@ -21140,22 +21145,24 @@ async function loadDiscountLeakage(params) {
 
 async function loadDiscountsTab() {
   const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
+  const gen = loadGen;
   const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  loadDiscountReasons(new URLSearchParams(params));
-  loadCouponSeries(new URLSearchParams(params));
+  loadDiscountReasons(new URLSearchParams(params), gen);
+  loadCouponSeries(new URLSearchParams(params), gen);
   // Per-branch leakage view is a cross-branch comparison by design → ignore the
   // branch filter, honour only the period range.
   const _leakP = new URLSearchParams();
   if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
   if (getMonthTo())   _leakP.set('month_to', getMonthTo());
-  loadDiscountLeakage(_leakP);
-  loadPaymentDiscount(new URLSearchParams(_leakP));
-  loadDiscountAlerts(new URLSearchParams(_leakP));
+  loadDiscountLeakage(_leakP, gen);
+  loadPaymentDiscount(new URLSearchParams(_leakP), gen);
+  loadDiscountAlerts(new URLSearchParams(_leakP), gen);
   const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
+  if (gen !== loadGen) return;
   const o = d.overall || {};
 
   const discRate = o.total_tx ? (o.discount_tx / o.total_tx * 100).toFixed(1) : '0';
