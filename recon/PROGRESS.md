@@ -141,6 +141,23 @@ monthly/bankcov) intentionally NOT deleted yet — that's the post-month cleanup
 once the team has closed one real month on v2 and confirms nothing sends them
 back to classic. 76 pytest pass.
 
+**v2 cleanup + LIVE DEPLOY (2026-06-11):** owner chose to finish in one pass.
+Removed the three duplicate nav buttons from classic (Daily / Monthly·Run Match
+/ Bank statement check — v2 owns them; panes left as dead code, reachable by
+hash). Coupon decision = **keep in classic**, linked from v2's COUPON channel.
+Pre-deploy gap caught + fixed: v2 read the write token from localStorage but had
+no UI to set it → on the gated live server every mutation would 403; added the
+"🔑 รหัส" button + setToken() (same localStorage key as classic). **Deployed to
+Fly** (`flyctl deploy`, branch `claude/recon-v2-channel-first`, 0 behind main):
+foreign uncommitted WIP from a parallel session (backend/main.py, index.html,
+gen_menu_ab_deep_report.py) was `git stash`ed before the build and restored
+after, so only the committed branch shipped. Verified live: main dashboard 200,
+`oshinei-dashboard.fly.dev:8443/app/` = v2 ("กระทบยอด — Oshinei"),
+/app/classic.html = old app, /app/v2.html → redirect, /api/v2/overview = 5
+branches real data. Ops follow-ups for owner: staff must enter the write token
+once via 🔑 (OSHINEI_SEED_TOKEN is set on Fly); set OSHINEI_MANAGER_TOKEN on Fly
+if two-tier close should be enforced (unset = approve open).
+
 **v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
 every channel carries `codes` (POS payment codes behind the total, via
 `_pos_codes_by_channel`); expanding a channel shows "ที่มา POS: KNNQR 3.6M…"
