@@ -14808,7 +14808,9 @@ def _bom_ensure_and_seed():
 # be corrected immediately. Each entry removes the SKU's BOM rows (so the
 # COALESCE falls through to sku_cost) and upserts the confirmed unit cost.
 _COST_PATCHES: list[tuple[str, float]] = [
-    ("B0040", 13.40),   # หอยเชลล์ต้มฮอกไกโด (1 ชิ้น) — BOM workbook had ~38.2 (wrong)
+    ("B0040",    13.40),  # หอยเชลล์ต้มฮอกไกโด (1 ชิ้น)  — BOM workbook had ~38.2 (wrong)
+    ("B0322",    13.40),  # หอยเชลล์ฮอกไกโดซาชิมิ (1 ตัว) — same ingredient, same correction
+    ("1150-084", 13.40),  # HOKKAIDO HOTATE SASHIMI (1PCS) — same ingredient, same correction
 ]
 
 
