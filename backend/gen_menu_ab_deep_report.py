@@ -581,6 +581,17 @@ ch_ratio = svg_line([('Cost ratio %', '#dc2626', [ratio[m] for m in MONTHS])],
 
 scallop_grp = find('หอยเชลล์')
 scallop_head_may = sum(head('2026-05', s) for s in scallop_grp)
+scallop_head_mar = sum(head('2026-03', s) for s in scallop_grp)
+# Individual sub-groups for narrative text
+_scallop_tom_sids   = find('หอยเชลล์ต้ม')    # B0040
+_scallop_steak_sids = find('สเต็กหอยเชลล์')  # B0027 (description starts with สเต็ก)
+if not _scallop_steak_sids:
+    _scallop_steak_sids = [s for s in scallop_grp if s not in _scallop_tom_sids]
+b0040_delta_mar = sum(head('2026-03', s) - head(BASE, s) for s in _scallop_tom_sids)
+b0027_delta_mar = sum(head('2026-03', s) - head(BASE, s) for s in _scallop_steak_sids)
+_peak_delta = tot_head['2026-03'] - tot_head[BASE]
+_scallop_delta_mar = scallop_head_mar - sum(head(BASE, s) for s in scallop_grp)
+scallop_pct_of_peak = round(_scallop_delta_mar / _peak_delta * 100) if _peak_delta else 0
 salmon_sids = find('แซลมอน ซาชิมิ')
 covers5 = cov['2026-05']
 
@@ -896,7 +907,7 @@ html_out = f"""<!DOCTYPE html>
 </div>
 <ul>
   <li><b>ต้นทุน/หัวสูงกว่าฐาน ธ.ค. 2025 ตลอด 5 เดือน</b> — ไต่ขึ้นถึงพีค มี.ค. ({f2(tot_head['2026-03'])} บ., {dlt(tot_head['2026-03']-tot_head[BASE])} บ./หัว) แล้วถูกดึงกลับเหลือ {dlt(tot_head['2026-05']-tot_head[BASE])} บ./หัว ({dlt(dpct(tot_head['2026-05'],tot_head[BASE]),1)}%) ใน พ.ค. — เส้นทางนี้คือผลของ "ใส่ของแพงเข้า แล้วค่อยหาจุดสมดุล"</li>
-  <li><b>~85% ของส่วนเพิ่ม ณ จุดพีค ({dlt(tot_head['2026-03']-tot_head[BASE])} บ./หัว) มาจากเมนูใหม่กลุ่มหอยเชลล์ฮอกไกโด</b> (ต้ม +31.2, สเต็ก +6.2 บ./หัว ณ มี.ค.) — เดือน เม.ย.–พ.ค. ถูกบริหารลงมาเหลือรวม ~{f1(scallop_head_may)} บ./หัว · ส่วนที่เหลือคือปลาไหลใหม่ที่เริ่มเข้าม มี.ค. (+2.0 บ./หัว)</li>
+  <li><b>~{scallop_pct_of_peak}% ของส่วนเพิ่ม ณ จุดพีค ({dlt(tot_head['2026-03']-tot_head[BASE])} บ./หัว) มาจากเมนูใหม่กลุ่มหอยเชลล์ฮอกไกโด</b> (ต้ม +{f1(b0040_delta_mar)}, สเต็ก +{f1(b0027_delta_mar)} บ./หัว ณ มี.ค.) — เดือน เม.ย.–พ.ค. ถูกบริหารลงมาเหลือรวม ~{f1(scallop_head_may)} บ./หัว · ส่วนที่เหลือคือปลาไหลใหม่ที่เริ่มเข้า มี.ค. (+2.0 บ./หัว)</li>
   <li><b>แซลมอนซาชิมิ — เมนูต้นทุนอันดับ 1 ({f1((sku['2026-05'][salmon_sids[0]]['cogs'] or 0)/tot_cogs['2026-05']*100) if salmon_sids else '17'}% ของต้นทุนทั้งหมด)</b> ลดจาก 72.72 → 63.47 บ./หัว (−9.25) ใน เม.ย.–พ.ค. จากการกิน/หัวที่ลดลง (ไม่ใช่ราคาปลาลง) — ตัวถ่วงดุลหลักของระบบ</li>
   <li><b>เศรษฐศาสตร์ต่อหัวดีขึ้นสุทธิ:</b> รายได้/หัว 644 → 727 บ. (+12.9%) โตเร็วกว่าต้นทุน → spread/หัว {f1(spread[BASE])} → {f1(spread['2026-05'])} บ. (+{f1(dpct(spread['2026-05'],spread[BASE]))}%) และ cost ratio {f1(ratio[BASE])}% → {f1(ratio['2026-05'])}%</li>
   <li><b>ศักยภาพลดต้นทุนที่ระบุได้เป็นรูปธรรม ≈ −15 บ./หัว (~620,000 บ./เดือน)</b> จาก 5 มาตรการ (ส่วนที่ 11)</li>
@@ -1011,7 +1022,7 @@ html_out = f"""<!DOCTYPE html>
 <table class="avoid-break">
 <thead><tr><th>กลุ่มเมนูใหม่</th><th>เข้าเมื่อ</th><th class="num">ต้นทุนเพิ่ม บ./หัว</th><th>ผลต่อรายได้/ภาพลักษณ์</th><th>คำตัดสิน</th></tr></thead>
 <tbody>
-<tr><td><b>หอยเชลล์ฮอกไกโด (ต้ม+สเต็ก)</b></td><td>ก.พ.</td><td class="num">+33.8 (พ.ค.)</td><td>รายได้/หัวเพิ่ม +54 บ. ช่วง มี.ค.→พ.ค. · cost ratio กลับลดลง {f1(ratio['2026-03'])}→{f1(ratio['2026-05'])}% · เป็นแม่เหล็กการตลาดชัดเจน</td><td><b class="ok">คงไว้ + คุมรอบเสิร์ฟ</b> — ถ้าปล่อยอิสระต้นทุนวิ่งถึง +37 บ./หัว (มี.ค.)</td></tr>
+<tr><td><b>หอยเชลล์ฮอกไกโด (ต้ม+สเต็ก)</b></td><td>ก.พ.</td><td class="num">+{f1(scallop_head_may)} (พ.ค.)</td><td>รายได้/หัวเพิ่ม +54 บ. ช่วง มี.ค.→พ.ค. · cost ratio กลับลดลง {f1(ratio['2026-03'])}→{f1(ratio['2026-05'])}% · เป็นแม่เหล็กการตลาดชัดเจน</td><td><b class="ok">คงไว้ + คุมรอบเสิร์ฟ</b> — ถ้าปล่อยอิสระต้นทุนวิ่งถึง +{f1(scallop_head_mar)} บ./หัว (มี.ค.)</td></tr>
 <tr><td><b>แมงกะพรุน 3 เมนู</b></td><td>เม.ย.</td><td class="num">+9.0 (พ.ค.)</td><td>เพิ่มความหลากหลายหมวดยำด้วยวัตถุดิบถูก ทดแทนยำซีฟู้ดเดิม</td><td><b class="ok">ตัวอย่างที่ดี</b> ของเมนูใหม่ต้นทุนคุมได้</td></tr>
 <tr><td><b>คาโมะ/โอโทโร่/คารูบิ</b></td><td>ก.พ.–เม.ย.</td><td class="num">+1–2</td><td>เพิ่มความรู้สึกพรีเมียมด้วย impact ต่ำ บางตัวถูกถอดออกหลัง 1–2 เดือน (คารูบิหายไปหลัง เม.ย.)</td><td><b class="ok">ใส่ได้</b> · ใช้เป็นเมนูหมุนเวียน</td></tr>
 <tr><td><b>ปลาไหลญี่ปุ่น 5 เมนู</b></td><td>มี.ค.</td><td class="num">+{f2(eel_head_may)} (พ.ค. · ประมาณการ 8 บ./ชิ้น)</td><td>อุนางิเป็นวัตถุดิบแพงและเป็นจุดขายญี่ปุ่นแท้ — ขยายเร็วมาก มี.ค. 7,339 → พ.ค. {f0(eel_qty_may)} ชิ้น ({f1(sum(qph('2026-05', s) for s in eel_sids))} ชิ้น/100หัว)</td><td><b class="warn">รอ BoM จริงยืนยัน</b> — เปิดขายโดยไม่มี BoM (ละเมิด stage-gate) รีวิวด้วยต้นทุนจริง มิ.ย.</td></tr>
@@ -1044,8 +1055,8 @@ html_out = f"""<!DOCTYPE html>
 <table>
 <thead><tr><th>#</th><th>มาตรการ</th><th>วิธีปฏิบัติ</th><th class="num">เป้า บ./หัว</th><th class="num">มูลค่า/เดือน*</th><th>เจ้าของ</th></tr></thead>
 <tbody>
-<tr><td>1</td><td><b>คุมสเปคแซลมอนซาชิมิ</b><br><span class="small mut">63.47 บ./หัว · 17.4% ของต้นทุน</span></td><td>กำหนดน้ำหนักชิ้น 12–13 g + ชั่งสุ่ม 5 ชิ้น/กะ บันทึกผล · ถาดเล็กลงเติมถี่ขึ้นช่วง peak · off-cut เข้าเมนูยำ/โรลทั้งหมด</td><td class="num">−3.2 (−5%)</td><td class="num">~130,000</td><td>ครัวกลาง + ผจก.สาขา</td></tr>
-<tr><td>2</td><td><b>หอยเชลล์ฮอกไกโด → เสิร์ฟแบบควบคุม</b><br><span class="small mut">33.8 บ./หัว (กลุ่มต้ม+สเต็ก)</span></td><td>เปลี่ยนจากวางไลน์อิสระเป็นเสิร์ฟรอบเวลา (2–3 รอบ/วัน) หรือจานแรกต่อโต๊ะ+สั่งเพิ่มได้ · วัด waste ก่อน/หลัง 2 สัปดาห์</td><td class="num">−8.0</td><td class="num">~328,000</td><td>ฝ่ายปฏิบัติการ</td></tr>
+<tr><td>1</td><td><b>คุมสเปคแซลมอนซาชิมิ</b><br><span class="small mut">{f2(sum(head("2026-05",s) for s in salmon_sids))} บ./หัว · {f1(sum((sku["2026-05"][s]["cogs"] or 0) for s in salmon_sids)/tot_cogs["2026-05"]*100)}% ของต้นทุน</span></td><td>กำหนดน้ำหนักชิ้น 12–13 g + ชั่งสุ่ม 5 ชิ้น/กะ บันทึกผล · ถาดเล็กลงเติมถี่ขึ้นช่วง peak · off-cut เข้าเมนูยำ/โรลทั้งหมด</td><td class="num">−3.2 (−5%)</td><td class="num">~130,000</td><td>ครัวกลาง + ผจก.สาขา</td></tr>
+<tr><td>2</td><td><b>หอยเชลล์ฮอกไกโด → เสิร์ฟแบบควบคุม</b><br><span class="small mut">{f1(scallop_head_may)} บ./หัว (กลุ่มต้ม+สเต็ก)</span></td><td>เปลี่ยนจากวางไลน์อิสระเป็นเสิร์ฟรอบเวลา (2–3 รอบ/วัน) หรือจานแรกต่อโต๊ะ+สั่งเพิ่มได้ · วัด waste ก่อน/หลัง 2 สัปดาห์</td><td class="num">−8.0</td><td class="num">~328,000</td><td>ฝ่ายปฏิบัติการ</td></tr>
 <tr><td>3</td><td><b>เจรจารวมซื้อกุ้งสด+กุ้งดอง</b><br><span class="small mut">24.5 บ./หัว รวม 2 เมนู</span></td><td>สัญญาราคารายไตรมาสรวม 5 สาขา · ล็อกไซส์ตัว/กก. · supplier สำรอง 1 ราย</td><td class="num">−1.2 (−5%)</td><td class="num">~50,000</td><td>จัดซื้อกลาง</td></tr>
 <tr><td>4</td><td><b>Cross-utilization แซลมอน</b><br><span class="small mut">กลุ่มยำแซลมอน 18.6 บ./หัว</span></td><td>บังคับสูตรยำใช้ trim จากไลน์ซาชิมิ ≥ 60% · รายงาน yield ปลาต่อตัวรายสัปดาห์</td><td class="num">−2.8 (−15%)</td><td class="num">~115,000</td><td>ครัวกลาง</td></tr>
 <tr><td>5</td><td><b>ปิดช่องว่างสาขา (เชียงใหม่/อุดรฯ)</b><br><span class="small mut">สูงกว่าเครือ +31.5 / +12.6 บ./หัว</span></td><td>Waste audit รายสัปดาห์เทียบ checklist สุรินทร์ (benchmark) · ตรวจ portion 10 เมนู Top · ทบทวนการเติมไลน์ช่วงท้ายวัน</td><td class="num">−6–8 (เฉพาะ 2 สาขา)</td><td class="num">~180,000</td><td>ผอ.เขต</td></tr>
