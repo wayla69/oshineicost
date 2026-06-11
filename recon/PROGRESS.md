@@ -123,9 +123,23 @@ suggestions can't answer. (M3) **สรุปสำหรับผู้จั�
 in_review, a review table appears above the buttons: every channel's
 POS/เข้าจริง/ต่าง + status, the staff's accept reasons with who wrote them,
 and the internal-transfer total, so the manager reads everything before
-entering the close code. JS parse-checked (node), 76 pytest pass. Remaining:
-M4 — switch /app default to v2 + retire duplicate tabs after the team closes
-one real month on v2.
+entering the close code. JS parse-checked (node), 76 pytest pass.
+
+**v2 M4 — switch the entry point (2026-06-11):** `git mv` swapped the files —
+v2 is now `frontend/index.html` (served at **/app/** by the StaticFiles
+html=True mount, no route change) and the old app is `frontend/classic.html`
+(**/app/classic.html**), kept as the escape hatch for ~1 month. `frontend/v2.html`
+is now a tiny meta+JS redirect to /app/ so old bookmarks / the old Start Recon.bat
+URL still land right. Cross-links updated: v2's "เครื่องมือขั้นสูง ↗" → classic;
+classic's top banner now grey "นี่คือหน้าเดิม (สำรอง) → ไปหน้าหลักแบบใหม่".
+Coupon (the one tab v2 lacks) stays in classic and is reachable from v2's COUPON
+channel via "🎟️ รายละเอียดคูปอง ↗" → /app/classic.html#coupon; classic's init()
+now reads location.hash and opens that tab directly. Start Recon.bat opens /app/.
+Verified live: /app/=v2, /app/classic.html=old, /app/v2.html→redirect,
+#coupon deep-link opens the coupon tab. Duplicate tabs (overview/board/daily/
+monthly/bankcov) intentionally NOT deleted yet — that's the post-month cleanup
+once the team has closed one real month on v2 and confirms nothing sends them
+back to classic. 76 pytest pass.
 
 **v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
 every channel carries `codes` (POS payment codes behind the total, via
