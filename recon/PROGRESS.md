@@ -94,6 +94,28 @@ approved_by; status endpoint is Form-encoded, not JSON). E2E on live-copy DB:
 UDN May todo 6→4 after accepting GRAB+LINEMAN, variance intact (-396), doc
 chips carry upload metadata. 73 pytest pass.
 
+**v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
+every channel carries `codes` (POS payment codes behind the total, via
+`_pos_codes_by_channel`); expanding a channel shows "ที่มา POS: KNNQR 3.6M…"
+chips. (P2.6) **Fee/VAT in v2** — CREDIT expand renders the 3-document chain
+cards (POS รูด → สรุปยอดบัตร − fee+VAT → เข้าบัญชี, leg chips) +
+"✎ ค่าธรรมเนียม & VAT" table for CREDIT/GRAB/LINEMAN with inline inputs
+(PATCH `/api/lines/{src}/{id}/fee-vat`, auto-save, live net recompute).
+(P2.7) **Manager gate** — `OSHINEI_MANAGER_TOKEN` env (open when unset, same
+pattern as the write gate): PATCH status→approved/closed requires
+`X-Manager-Token`; staff transitions stay open; v2 prompts for the code only
+when the server demands it (remembers per browser session). (P3.8)
+**Month-boundary rollover** — `prev_month_consumed_ids()`: deposits on the
+1st–3rd that the PREVIOUS month's cash matcher claims (T+1 of month-end cash)
+are now excluded from this month's buckets/daily/coverage (coverage shows them
+informational·CASH) — kills the systematic "statement เยอะกว่า" at every month
+start; pytest-proven with a May-31-cash → June-1-SDCH case. (P3.9) Mobile CSS
+(stacked channel grid, smaller day cells ≤640px). (P3.10) Old /app now shows a
+banner linking to v2 — old tabs intentionally NOT removed until the team
+finishes one full month on v2. 76 pytest pass. Verified live: UDN May QR
+provenance = KNNQR 3,623,111; CREDIT split กรุงไทย/กสิกรไทย; manager gate
+403→(409 discrepancy gate) on real session; overview 5 branches 0.06s.
+
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +
   idempotency, fee/VAT net, parser skipped-count, master-only/period/token gates).

@@ -45,6 +45,16 @@ h1{font-size:20px;font-weight:600}h2{font-size:16px;font-weight:600}
 .todo-item{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
 .todo-item:last-child{border-bottom:none}
 .sugg{background:#e1f5ee;border:1px solid #9FE1CB;border-radius:10px;padding:10px 14px;margin-bottom:8px;font-size:13.5px}
+.fee-in{width:84px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;font-family:Consolas,monospace;font-size:12.5px;text-align:right}
+.c3{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:8px;padding:0 12px 12px}
+.c3 .card{padding:10px 12px;font-size:12.5px}
+@media (max-width:640px){
+  .grid-ch{grid-template-columns:1fr 1fr;row-gap:4px}
+  .grid-ch>span:last-child{display:none}
+  .daygrid{grid-template-columns:repeat(auto-fill,minmax(64px,1fr))}
+  .wrap{padding:10px}
+  td,th{padding:6px 6px;font-size:12.5px}
+}
 </style>
 </head>
 <body>
@@ -284,11 +294,35 @@ async function applyReclass(i){
       toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
+const FEE_SOURCE={CREDIT:'credit_card',GRAB:'grab',LINEMAN:'lineman'};
+const C3_LEG={matched:['c-ok','✓ ตรง'],mismatch:['c-err','≠ ต่าง'],pos_only:['c-warn','รอสรุปยอดบัตร'],
+              ext_only:['c-warn','ไม่มียอด POS'],awaiting:['c-warn','รอเงินเข้า'],no_bank:['c-mut','—'],none:['c-mut','—']};
+function _legChip(s){const [c,t]=C3_LEG[s]||['c-mut',s];return `<span class="chip ${c}">${t}</span>`;}
+
 function toggleDays(i){
   const el=$('days-'+i);
   if(el.style.display!=='none'){el.style.display='none';return;}
   const ch=DATA.channels[i];
-  el.innerHTML=`<div class="daygrid">${ch.days.map(d=>`
+  // ที่มาของยอด POS — แตกเป็นรหัสชำระ ให้ตรวจสอบได้ ไม่ใช่เลขลอย ๆ
+  const codes=(ch.codes||[]).map(c=>
+    `<span class="chip c-mut mono" title="${esc(c.bank)}">${esc(c.code)} ${fmt(c.amount)}</span>`).join(' ');
+  // บัตรเครดิต: สายโซ่ 3 เอกสาร POS → สรุปยอดบัตร (หักค่าธรรมเนียม) → เงินเข้าธนาคาร
+  const c3=(ch.key==='CREDIT'&&ch.three_way)?`<div class="c3">${ch.three_way
+    .filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0).map(r=>`
+    <div class="card"><b>บัตร ${esc(r.acquirer)}</b>
+      <div class="row" style="justify-content:space-between">ยอดรูด POS <span class="mono">${fmt(r.pos_gross)}</span></div>
+      <div class="row" style="justify-content:space-between">สรุปยอดบัตร <span class="mono">${fmt(r.settle_gross)}</span> ${_legChip(r.pos_leg)}</div>
+      <div class="row" style="justify-content:space-between">− ค่าธรรมเนียม+VAT <span class="mono">${fmt(r.settle_fee)}</span></div>
+      <div class="row" style="justify-content:space-between">เข้าบัญชีจริง <span class="mono">${fmt(r.bank_credit)}</span> ${_legChip(r.bank_leg)}</div>
+    </div>`).join('')}</div>`:'';
+  const feeBtn=FEE_SOURCE[ch.key]&&!DATA.closed?
+    `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
+  el.innerHTML=`
+  ${codes?`<div class="row" style="padding:10px 14px 0"><span class="lbl">ที่มา POS:</span> ${codes} ${feeBtn}</div>`
+         :feeBtn?`<div style="padding:10px 14px 0">${feeBtn}</div>`:''}
+  ${c3}
+  <div id="fees-${i}"></div>
+  <div class="daygrid">${ch.days.map(d=>`
     <div class="daycell d-${d.status}" onclick="event.stopPropagation();openDay(${i},'${d.day}')">
       <b>${+d.day.slice(8)}</b> <span class="lbl">${{ok:'✓',diff:'≠',waiting:'⏳',setup:'?',no_source:'·'}[d.status]||''}</span>
       <div class="mono" style="font-size:11px">${fmt(d.pos)}</div>
@@ -296,6 +330,41 @@ function toggleDays(i){
     </div>`).join('')}</div>
   <div id="daylines-${i}" style="padding:0 12px 12px"></div>`;
   el.style.display='';
+}
+
+/* ── ค่าธรรมเนียม & VAT (บัตร / Grab / Line Man) ── */
+async function loadFees(i){
+  const ch=DATA.channels[i], src=FEE_SOURCE[ch.key];
+  const box=$('fees-'+i);
+  if(box.innerHTML){box.innerHTML='';return;}
+  box.innerHTML='<div class="muted" style="padding:8px 14px">กำลังโหลด…</div>';
+  let lines;try{lines=await api(`/api/lines/${src}?branch_id=${DATA.branch_id}&period_month=${MONTH}`);}
+  catch(e){box.innerHTML=`<div class="chip c-err" style="margin:8px 14px">โหลดไม่ได้: ${esc(e.message)}</div>`;return;}
+  if(!lines.length){box.innerHTML='<div class="muted" style="padding:8px 14px">ยังไม่มีรายการ (อัปโหลดเอกสารก่อน)</div>';return;}
+  box.innerHTML=`<div style="padding:8px 12px"><div class="card" style="padding:0;max-height:300px;overflow:auto"><table>
+    <tr><th>วันที่</th><th>อ้างอิง</th><th>ยอดเต็ม</th><th>ค่าธรรมเนียม</th><th>VAT</th><th>สุทธิ</th></tr>
+    ${lines.map(l=>`<tr data-gross="${l.gross}" data-other="${l.other||0}">
+      <td>${l.date}</td><td style="text-align:left">${esc(l.ref)}</td>
+      <td class="mono">${fmt(l.gross)}</td>
+      <td><input class="fee-in" type="number" step="0.01" value="${l.fee!=null?l.fee:l.fee_parsed}"
+           onchange="saveFee('${src}',${l.id},this)"></td>
+      <td><input class="fee-in" type="number" step="0.01" value="${l.vat!=null?l.vat:l.vat_parsed}"
+           onchange="saveFee('${src}',${l.id},this)"></td>
+      <td class="mono" id="net-${src}-${l.id}">${fmt(l.net)}</td>
+    </tr>`).join('')}
+  </table></div>
+  <div class="muted" style="margin-top:4px">แก้แล้วบันทึกอัตโนมัติ — ยอดสุทธิ (หลังหักค่าธรรมเนียม) คือตัวที่เทียบกับเงินเข้าบัญชี</div></div>`;
+}
+async function saveFee(src,id,input){
+  const row=input.closest('tr');
+  const ins=row.querySelectorAll('input');
+  const fee=parseFloat(ins[0].value), vat=parseFloat(ins[1].value);
+  if(isNaN(fee)||isNaN(vat)||fee<0||vat<0){toast('ตัวเลขไม่ถูกต้อง');return;}
+  try{await api(`/api/lines/${src}/${id}/fee-vat`,{method:'PATCH',body:{fee_manual:fee,vat_manual:vat}});
+      const net=(+row.dataset.gross)-fee-vat-(+row.dataset.other);
+      $('net-'+src+'-'+id).textContent=fmt(net);
+      toast('บันทึกค่าธรรมเนียมแล้ว');}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
 async function openDay(i,day){
@@ -382,10 +451,28 @@ async function closeMonth(bid){
   if(who===null)return;
   if(!who.trim()){toast('ต้องใส่ชื่อผู้อนุมัติ');return;}
   if(!confirm('ปิดเดือน: บันทึกผลถาวร ออกไฟล์ Excel ได้ และล็อกการแก้ไขทั้งเดือนนี้ ยืนยัน?'))return;
-  try{const sid=await ensureSession(bid);
-      await api(`/api/sessions/${sid}/run-match`,{method:'POST'});   // snapshot at close
-      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:stForm('approved',who.trim())});
-      toast('ปิดเดือนแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+  try{
+    const sid=await ensureSession(bid);
+    await api(`/api/sessions/${sid}/run-match`,{method:'POST'});   // snapshot at close
+    await approveWithManagerCode(sid,who.trim());
+    toast('ปิดเดือนแล้ว');route();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function approveWithManagerCode(sid,who){
+  // ลองด้วยรหัสที่จำไว้ก่อน; ถ้าเซิร์ฟเวอร์ขอรหัสผู้จัดการ (403) ค่อยถาม แล้วลองใหม่
+  let code=sessionStorage.getItem('mgr_code')||'';
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      await api(`/api/sessions/${sid}/status`,
+        {method:'PATCH',body:stForm('approved',who),headers:code?{'X-Manager-Token':code}:{}});
+      if(code)sessionStorage.setItem('mgr_code',code);
+      return;
+    }catch(e){
+      if(!String(e.message).includes('ผู้จัดการ')||attempt===1)throw e;
+      code=prompt('ใส่รหัสผู้จัดการเพื่อปิดเดือน:')||'';
+      if(!code)throw new Error('ยกเลิก — ไม่ได้ใส่รหัสผู้จัดการ');
+    }
+  }
 }
 
 route();

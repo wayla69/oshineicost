@@ -104,6 +104,34 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
     return docs
 
 
+def _pos_codes_by_channel(conn, branch_id, period_month):
+    """Which POS payment codes make up each channel's total — so staff can see
+    where a number comes from (e.g. QR = KNNQR 3.1M + K-SHOP 0.5M) instead of
+    having to trust an opaque sum."""
+    from .seed_payment_map import normalize
+    out: dict = {}
+    try:
+        pmap = {r["payment_code_norm"]: r for r in conn.execute(
+            "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+        rows = conn.execute(
+            "SELECT payment_code, amount FROM pos_payment_month "
+            "WHERE branch_id=? AND period_month=?", (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    agg: dict = {}
+    for r in rows:
+        m = pmap.get(normalize(r["payment_code"]))
+        if m is None or not m["reconcile"]:
+            continue
+        k = (m["category"], normalize(r["payment_code"]), m["bank"])
+        agg[k] = agg.get(k, 0.0) + float(r["amount"] or 0)
+    for (cat, code, bank), amt in agg.items():
+        out.setdefault(cat, []).append({"code": code, "bank": bank, "amount": round(amt, 2)})
+    for cat in out:
+        out[cat].sort(key=lambda x: -x["amount"])
+    return out
+
+
 def _accepted_channels(conn, branch_id, period_month):
     """Staff-acknowledged variances: lane_adj rows with adj_type='accept'
     (one per channel, bank='ALL', zero amounts — a pure marker with a reason).
@@ -140,6 +168,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     cov = _coverage(conn, branch_id, period_month)
     c3 = credit_three_way(conn, branch_id, period_month)
     accepted = _accepted_channels(conn, branch_id, period_month)
+    pos_codes = _pos_codes_by_channel(conn, branch_id, period_month)
 
     # Collapse day-lanes by channel (sum over banks within a day)
     ch_days: dict = {}     # channel -> {day: {pos, ext, statuses:set, banks:set}}
@@ -229,6 +258,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
               "detail": detail, "days": days,
               "days_done": n_done, "days_total": len(days),
               "banks": m["banks"] if m else [],
+              "codes": pos_codes.get(key, []),
               "accepted": accepted.get(key)}
         if key == "CREDIT":
             ch["three_way"] = c3["rows"]

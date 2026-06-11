@@ -107,6 +107,25 @@ def _eff_fee_vat(row, fee_col, vat_col):
     return float(fee), float(vat)
 
 
+def prev_month_consumed_ids(conn, branch_id, period_month) -> set:
+    """Bank-line ids in THIS month that the PREVIOUS month's cash matcher already
+    claimed (T+1 rollover: cash sold on the 30th/31st is deposited on the 1st).
+    Those credits are last month's revenue — without this, every month-start
+    deposit shows up as a spurious ext_only/QR diff in the new month."""
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+    try:
+        consumed = cash_deposit_matching(conn, branch_id, prev)["consumed_ids"]
+    except sqlite3.OperationalError:
+        return set()
+    if not consumed:
+        return set()
+    qs = ",".join("?" * len(consumed))
+    return {r["id"] for r in conn.execute(
+        f"SELECT id FROM recon_bank_lines WHERE id IN ({qs}) "
+        f"AND strftime('%Y-%m', txn_date)=?", (*consumed, period_month))}
+
+
 def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str) -> dict:
     """Aggregate external lines into {(category, bank): {amount, net, lines:[(table,id)]}}."""
     buckets: dict = {}
@@ -123,6 +142,7 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
     # KTB 'SDCH') are re-bucketed to the CASH lane so monthly cash ties out and the
     # spurious QR/transfer ext_only disappears.
     cash_ids = cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"]
+    prev_ids = prev_month_consumed_ids(conn, branch_id, period_month)
     for r in conn.execute("""
         SELECT l.id, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
@@ -130,6 +150,8 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
           AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
         amt = float(r["credit"] or 0)
+        if r["id"] in prev_ids:      # last month's rollover cash — not this month's revenue
+            continue
         if r["id"] in cash_ids:
             add(("CASH", "NONE"), "recon_bank_lines", r["id"], amt, amt)
             continue
@@ -1222,9 +1244,11 @@ def daily_reconciliation(conn, branch_id, period_month):
     pos, unmapped, pos_available = pos_category_totals_daily(conn, branch_id, period_month)
     cash = cash_deposit_matching(conn, branch_id, period_month)
     # Lines the cash matcher claimed (may be labelled QR/TRANSFER, e.g. KTB SDCH)
-    # are excluded from the electronic buckets so they aren't double-counted.
-    ext = _external_buckets_daily(conn, branch_id, period_month,
-                                  include_cash=False, exclude_ids=cash["consumed_ids"])
+    # are excluded from the electronic buckets so they aren't double-counted —
+    # likewise month-start deposits the PREVIOUS month's matcher already claimed.
+    ext = _external_buckets_daily(
+        conn, branch_id, period_month, include_cash=False,
+        exclude_ids=set(cash["consumed_ids"]) | prev_month_consumed_ids(conn, branch_id, period_month))
     cov = _coverage(conn, branch_id, period_month)
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
 
@@ -1657,6 +1681,7 @@ def bank_statement_coverage(conn, branch_id, period_month):
     lane_status = _lane_status_map(conn, branch_id, period_month)
     cash = cash_deposit_matching(conn, branch_id, period_month)
     cash_ids = set(cash["consumed_ids"]) | {g["line_id"] for g in cash["groups"]}
+    prev_ids = prev_month_consumed_ids(conn, branch_id, period_month)
 
     # CREDIT 3-document chain (per acquirer) — also yields the bank lines it consumed.
     c3 = credit_three_way(conn, branch_id, period_month, exclude_ids=cash_ids)
@@ -1694,6 +1719,8 @@ def bank_statement_coverage(conn, branch_id, period_month):
 
         if r["ms"] == "excluded":
             status, group, lane_bank = "excluded", "excluded", bankp
+        elif r["id"] in prev_ids:    # explained by LAST month's cash (T+1 rollover)
+            status, group, lane_bank = "informational", "CASH", "NONE"
         elif r["id"] in cash_ids:
             status, group, lane_bank = "matched", "CASH", "NONE"
         elif r["id"] in credit_ids:

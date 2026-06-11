@@ -319,6 +319,14 @@ def require_write_token(token: str = Query(""), x_upload_token: str = Header(Non
             raise HTTPException(403, "A valid write token is required.")
 
 
+def _require_manager(x_manager_token: str | None):
+    """Two-tier close: approving a month needs the manager code when
+    OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate)."""
+    expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
+    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+        raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     if not (file.filename or "").lower().endswith(_ALLOWED_EXT):
         raise HTTPException(415, "Only .xlsx/.xls/.csv/.pdf files are accepted.")
@@ -1122,10 +1130,13 @@ def update_session_status(
     session_id:  int,
     status:      str = Form(...),
     approved_by: str = Form(""),
+    x_manager_token: str = Header(None),
 ):
     valid = {"draft", "in_review", "approved", "closed"}
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
+    if status in ("approved", "closed"):
+        _require_manager(x_manager_token)
     with get_db() as conn:
         old_row = conn.execute(
             "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()

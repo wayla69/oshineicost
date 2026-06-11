@@ -210,6 +210,62 @@ def test_v2_accept_clears_todo_and_allows_close(client):
                             ).status_code == 200
 
 
+def test_v2_pos_codes_breakdown(client):
+    """Each channel carries the POS payment codes behind its total, so staff can
+    see where a number comes from."""
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr = next(c for c in r["channels"] if c["key"] == "QR")
+    codes = {c["code"]: c["amount"] for c in qr["codes"]}
+    assert codes.get("KNNQR") == 100000 and codes.get("K-SHOP") == 50000
+    assert abs(sum(codes.values()) - qr["pos"]) < 1
+
+
+def test_manager_token_gates_approve(client, monkeypatch):
+    """Two-tier close: with OSHINEI_MANAGER_TOKEN set, approving needs the code;
+    staff transitions (draft/in_review) stay open."""
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "in_review"}).status_code == 200
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"}).status_code == 403
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"},
+                        headers={"X-Manager-Token": "wrong"}).status_code == 403
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"},
+                        headers={"X-Manager-Token": "mgr-1234"}).status_code == 200
+
+
+def test_prev_month_rollover_deposit_not_this_months_diff(client):
+    """A deposit on the 1st that the PREVIOUS month's cash matcher claims (T+1
+    rollover of month-end cash) must not appear as this month's QR/transfer
+    ext_only — the classic 'statement เยอะกว่า' at every month boundary."""
+    db = main._DB_PATH
+    conn = sqlite3.connect(db)
+    # Previous month (2026-05): POS cash on the 31st…
+    conn.execute("CREATE TABLE IF NOT EXISTS pos_payment_day("
+                 "branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT)")
+    conn.execute("INSERT INTO pos_payment_day VALUES (4,'2026-05-31','Cash',7777,1)")
+    conn.execute("INSERT INTO pos_payment_month(branch_id,period_month,payment_code,amount,txn_count) "
+                 "VALUES (4,'2026-05','Cash',7777,1)")
+    conn.commit(); conn.close()
+    # …banked as a QR-labelled credit on June 1st (e.g. KTB SDCH)
+    _add_bank_line(db, "KTB", "QR", 7777, date="2026-06-01")
+
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr = next(c for c in r["channels"] if c["key"] == "QR")
+    # the 7777 rollover deposit is May's cash — June's QR lane must not count it
+    assert qr["ext"] == 0
+    day1 = next((d for d in qr["days"] if d["day"] == "2026-06-01"), None)
+    assert day1 is None or day1["ext"] == 0
+
+
 def test_v2_overview_lists_master_branches(client):
     r = client.get("/api/v2/overview", params={"month": "2026-06"}).json()
     names = [b["branch_name"] for b in r["branches"]]
