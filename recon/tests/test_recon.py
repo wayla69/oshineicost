@@ -116,6 +116,192 @@ def test_category_reconciliation_statuses(client, tmp_path):
     assert len(client.get(f"/api/sessions/{sid}/discrepancies").json()) == before
 
 
+def test_v2_reconcile_channel_first(client):
+    """/api/v2/reconcile composes the month channel-first with the 4-word status
+    vocabulary, a derived document checklist, and a todo list."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    _add_bank_line(db, "KTB", "QR", 99950)        # vs 100000 → within ฿100 tolerance
+    _add_bank_line(db, "KTB", "CASH_DEP", 20000)  # vs cash 20000
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    ch = {c["key"]: c for c in r["channels"]}
+    assert ch["COUPON"]["status"] == "no_source"
+    assert ch["CREDIT"]["status"] == "waiting_doc"      # no settlement summary uploaded
+    assert ch["GRAB"]["status"] == "waiting_doc"
+    assert "ENTERTAIN" not in ch                        # internal comps stay out
+    # documents checklist derives from POS channels (CC acquirers present)
+    doc_keys = {d["key"] for d in r["documents"]}
+    assert "cc_KTB" in doc_keys and "grab" in doc_keys
+    # todo blocks closing
+    assert r["todo"] and r["can_close"] is False
+    assert 0 <= r["progress_pct"] <= 100
+
+    # excluded internal transfer lands in non_revenue, not a channel
+    _add_bank_line(db, "KBANK", "TRANSFER", 2_000_000)
+    conn = sqlite3.connect(db)
+    conn.execute("UPDATE recon_bank_lines SET match_status='excluded' WHERE credit=2000000")
+    conn.commit(); conn.close()
+    r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert r2["non_revenue"]["count"] == 1
+    assert r2["non_revenue"]["amount"] == 2_000_000
+    ch2 = {c["key"]: c for c in r2["channels"]}
+    assert ch2.get("TRANSFER", {}).get("ext", 0) == 0   # excluded ≠ revenue lane
+
+
+def test_v2_accept_clears_todo_and_allows_close(client):
+    """The 'รับทราบ' escape hatch: a channel-level accept (reason required)
+    drops its items from todo, and run-match writes that lane's discrepancy
+    born 'accepted' so the approval gate doesn't block the month."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    _add_bank_line(db, "KTB", "QR", 99950)
+    _add_bank_line(db, "KTB", "CASH_DEP", 20000)
+
+    # reason is mandatory
+    assert client.post("/api/lanes/adj", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "GRAB",
+        "bank": "ALL", "adj_pos": 0, "adj_ext": 0, "note": "", "adj_type": "accept",
+    }).status_code == 400
+
+    r0 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    todo0 = len(r0["todo"])
+    blocked = [c["key"] for c in r0["channels"]
+               if c["status"] not in ("ok", "no_source") and not c["accepted"]]
+    # accept every blocked channel with a reason
+    for key in blocked:
+        assert client.post("/api/lanes/adj", json={
+            "branch_id": 4, "period_month": "2026-06", "category": key,
+            "bank": "ALL", "adj_pos": 0, "adj_ext": 0,
+            "note": "ยอดเล็ก ไม่คุ้มตามเอกสาร", "adj_type": "accept",
+        }).status_code == 200
+
+    r1 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert len(r1["todo"]) < todo0
+    acc = {c["key"]: c["accepted"] for c in r1["channels"]}
+    for key in blocked:
+        assert acc[key] and "ยอดเล็ก" in acc[key]["note"]
+
+    # accept does NOT distort the numbers (zero-amount marker only)
+    ch0 = {c["key"]: c for c in r0["channels"]}
+    ch1 = {c["key"]: c for c in r1["channels"]}
+    for key in blocked:
+        assert ch1[key]["pos"] == ch0[key]["pos"]
+        assert ch1[key]["variance"] == ch0[key]["variance"]
+
+    # close flow: run-match → accepted lanes' discrepancies born resolved → approve OK
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    discs = client.get(f"/api/sessions/{sid}/discrepancies",
+                       params={"resolution": "all"}).json()
+    # No discrepancy of an accepted channel may be born pending (that would
+    # re-block approval); the ones that exist carry the staff reason.
+    assert not [d for d in discs
+                if d["category"] in blocked and d["resolution"] == "pending"]
+    born_accepted = [d for d in discs if d["resolution"] == "accepted"]
+    assert born_accepted and all("ยอดเล็ก" in (d["resolution_note"] or "")
+                                 for d in born_accepted)
+    pending = [d for d in discs if d["resolution"] == "pending"]
+    if not pending:                                  # gate passes when all accepted
+        assert client.patch(f"/api/sessions/{sid}/status",
+                            data={"status": "approved", "approved_by": "mgr"}
+                            ).status_code == 200
+
+
+def test_v2_pos_codes_breakdown(client):
+    """Each channel carries the POS payment codes behind its total, so staff can
+    see where a number comes from."""
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr = next(c for c in r["channels"] if c["key"] == "QR")
+    codes = {c["code"]: c["amount"] for c in qr["codes"]}
+    assert codes.get("KNNQR") == 100000 and codes.get("K-SHOP") == 50000
+    assert abs(sum(codes.values()) - qr["pos"]) < 1
+
+
+def test_manager_token_gates_approve(client, monkeypatch):
+    """Two-tier close: with OSHINEI_MANAGER_TOKEN set, approving needs the code;
+    staff transitions (draft/in_review) stay open."""
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "in_review"}).status_code == 200
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"}).status_code == 403
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"},
+                        headers={"X-Manager-Token": "wrong"}).status_code == 403
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"},
+                        headers={"X-Manager-Token": "mgr-1234"}).status_code == 200
+
+
+def test_prev_month_rollover_deposit_not_this_months_diff(client):
+    """A deposit on the 1st that the PREVIOUS month's cash matcher claims (T+1
+    rollover of month-end cash) must not appear as this month's QR/transfer
+    ext_only — the classic 'statement เยอะกว่า' at every month boundary."""
+    db = main._DB_PATH
+    conn = sqlite3.connect(db)
+    # Previous month (2026-05): POS cash on the 31st…
+    conn.execute("CREATE TABLE IF NOT EXISTS pos_payment_day("
+                 "branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT)")
+    conn.execute("INSERT INTO pos_payment_day VALUES (4,'2026-05-31','Cash',7777,1)")
+    conn.execute("INSERT INTO pos_payment_month(branch_id,period_month,payment_code,amount,txn_count) "
+                 "VALUES (4,'2026-05','Cash',7777,1)")
+    conn.commit(); conn.close()
+    # …banked as a QR-labelled credit on June 1st (e.g. KTB SDCH)
+    _add_bank_line(db, "KTB", "QR", 7777, date="2026-06-01")
+
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr = next(c for c in r["channels"] if c["key"] == "QR")
+    # the 7777 rollover deposit is May's cash — June's QR lane must not count it
+    assert qr["ext"] == 0
+    day1 = next((d for d in qr["days"] if d["day"] == "2026-06-01"), None)
+    assert day1 is None or day1["ext"] == 0
+
+
+def test_v2_overview_lists_master_branches(client):
+    r = client.get("/api/v2/overview", params={"month": "2026-06"}).json()
+    names = [b["branch_name"] for b in r["branches"]]
+    assert "Korat1" in names and "Chonburi" not in names   # master-only scope
+    b = next(x for x in r["branches"] if x["branch_name"] == "Korat1")
+    assert "channels" in b and "progress_pct" in b
+    # bad month rejected
+    assert client.get("/api/v2/overview", params={"month": "2026-13"}).status_code == 400
+
+
+def test_summary_freshness_flags_stale_snapshot(client):
+    """The persisted category snapshot (Excel/approval) only refreshes on Run
+    Match. /summary.freshness must report stale=True before the first run and
+    after a later upload, and stale=False right after a run."""
+    db = main._DB_PATH
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+
+    # never run → stale, no computed_at
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is True and f["computed_at"] is None
+
+    # run match → fresh
+    client.post(f"/api/sessions/{sid}/run-match")
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is False and f["computed_at"] is not None
+
+    # a later upload post-dates the run → stale again
+    _add_bank_line(db, "KTB", "QR", 99950, date="2026-06-12")
+    c = sqlite3.connect(db)
+    c.execute("UPDATE recon_uploads SET uploaded_at='2099-01-01 00:00:00' "
+              "WHERE upload_id=(SELECT MAX(upload_id) FROM recon_uploads)")
+    c.commit(); c.close()
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is True
+
+
 def test_suggestions_wrong_channel_same_bank(client):
     """POS booked under QR·KBANK but the money shows as a TRANSFER·KBANK bank line
     of the same amount/day → one wrong-channel suggestion, and applying it (POST

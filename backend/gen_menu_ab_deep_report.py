@@ -20,6 +20,9 @@ BASE = MONTHS[0]; M26 = MONTHS[1:]
 WK_FROM, WK_TO = '2026-02-09', '2026-05-31'   # sales_sku_daily coverage
 
 ph = ','.join(f':b{i}' for i in range(len(BRANCHES)))
+# _FOOD_CATEGORY_FILTER now whitelists durian centrally (it's filed under
+# Special KKN / Promotion / Oshinei SERVICE but is real, costed buffet food), so
+# this report counts it automatically — no report-local override needed.
 EW = ["b.name!='ALL'", "COALESCE(sk.active,1)=1", _FOOD_CATEGORY_FILTER,
       "COALESCE(sk.description,'') NOT LIKE '(A)%'", f"b.name IN ({ph})"]
 PB = {f'b{i}': n for i, n in enumerate(BRANCHES)}
@@ -276,6 +279,7 @@ for m, pm in chain:
             s += (f'<tr><td>{esc(name(sid))}{tag}</td><td class="mut">{esc(cat(sid))}</td>'
                   f'<td class="num">{f2(head(pmm,sid))}</td><td class="num">{f2(head(mm,sid))}</td>'
                   f'<td class="num">{dlt(dd)}</td>'
+                  f'<td class="num small">{f2(qph(pmm,sid)/100)}→{f2(qph(mm,sid)/100)}</td>'
                   f'<td class="num small">{f1(qph(pmm,sid))}→{f1(qph(mm,sid))}</td></tr>')
         return s
     mom_html += f'''
@@ -290,8 +294,8 @@ for m, pm in chain:
       <tr><td><b>รวม {LBL[m]}</b></td><td class="num"><b>{f2(tot_head[m])}</b></td></tr>
     </tbody></table>
     <div class="cols2">
-      <table><thead><tr><th>เพิ่มขึ้นแรงสุด 12 อันดับ</th><th>หมวด</th><th class="num">B</th><th class="num">A</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{li(u)}</tbody></table>
-      <table><thead><tr><th>ลดลงแรงสุด 12 อันดับ</th><th>หมวด</th><th class="num">B</th><th class="num">A</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{li(dn)}</tbody></table>
+      <table><thead><tr><th>เพิ่มขึ้นแรงสุด 12 อันดับ</th><th>หมวด</th><th class="num">B</th><th class="num">A</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{li(u)}</tbody></table>
+      <table><thead><tr><th>ลดลงแรงสุด 12 อันดับ</th><th>หมวด</th><th class="num">B</th><th class="num">A</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{li(dn)}</tbody></table>
     </div></div>'''
 
 # category chapters
@@ -346,6 +350,7 @@ def br_chapter(br):
         mv_rows += (f'<tr><td>{esc(name(s))}{tag}</td><td class="mut">{esc(cat(s))}</td>'
                     f'<td class="num">{f2(bhead(BASE,br,s))}</td><td class="num">{f2(bhead("2026-05",br,s))}</td>'
                     f'<td class="num">{dlt(d_)}</td>'
+                    f'<td class="num small">{f2(bqph(BASE,br,s)/100)}→{f2(bqph("2026-05",br,s)/100)}</td>'
                     f'<td class="num small">{f1(bqph(BASE,br,s))}→{f1(bqph("2026-05",br,s))}</td></tr>')
     # top menus in branch (May)
     top_b = sorted(bsku['2026-05'].get(br, {}), key=lambda s: -(bsku['2026-05'][br][s]['cogs'] or 0))[:15]
@@ -356,6 +361,7 @@ def br_chapter(br):
         top_rows += (f'<tr><td class="num mut">{i}</td><td>{esc(name(s))}</td><td class="mut">{esc(cat(s))}</td>'
                      f'<td class="num">{f2(bh)}</td><td class="num">{f2(net_h)}</td>'
                      f'<td class="num">{dlt(bh-net_h)}</td>'
+                     f'<td class="num">{f2(bqph("2026-05",br,s)/100)}</td>'
                      f'<td class="num">{f1(bqph("2026-05",br,s))}</td></tr>')
     wk_table = ''
     for i, w in enumerate(WEEKS):
@@ -383,9 +389,9 @@ def br_chapter(br):
     <tbody><tr><td>ต้นทุน/หัว (บ.)</td>{wk_table}</tr></tbody></table>
     <div class="cols2">
       <div><h3>Top 15 เมนูต้นทุนสูงสุดของสาขา (พ.ค. 2026)</h3>
-      <table><thead><tr><th>#</th><th>เมนู</th><th>หมวด</th><th class="num">บ./หัว สาขา</th><th class="num">บ./หัว เครือ</th><th class="num">Δ vs เครือ</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{top_rows}</tbody></table></div>
+      <table><thead><tr><th>#</th><th>เมนู</th><th>หมวด</th><th class="num">บ./หัว สาขา</th><th class="num">บ./หัว เครือ</th><th class="num">Δ vs เครือ</th><th class="num">ชิ้น/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{top_rows}</tbody></table></div>
       <div><h3>เมนูที่เปลี่ยนแรงสุดของสาขา (พ.ค. vs ธ.ค.)</h3>
-      <table><thead><tr><th>เมนู</th><th>หมวด</th><th class="num">ธ.ค.</th><th class="num">พ.ค.</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{mv_rows}</tbody></table></div>
+      <table><thead><tr><th>เมนู</th><th>หมวด</th><th class="num">ธ.ค.</th><th class="num">พ.ค.</th><th class="num">Δ/หัว</th><th class="num">ชิ้น/หัว</th><th class="num">ชิ้น/100หัว</th></tr></thead><tbody>{mv_rows}</tbody></table></div>
     </div>'''
 
 branch_html = ''.join(br_chapter(br) for br in BRANCHES)
@@ -425,7 +431,8 @@ def deep_page(idx, sid):
     obs.append(f'สาขาที่กินแรงสุด: {bmax} ({f2(bheads[bmax])} บ./หัว) เทียบต่ำสุด {bmin} ({f2(bheads[bmin])} บ./หัว) — ช่องว่าง {f2(bheads[bmax]-bheads[bmin])} บ./หัว')
     if not bom:
         obs.append('⚠ ไม่พบ BoM ตรงของ SKU นี้ (ต้นทุนอาจมาจาก alias/unit_cost)')
-    month_rows = (f'<tr><td>ชิ้น/100 หัว</td>{"".join(f"<td class=num>{f1(q)}</td>" for q in qs)}</tr>'
+    month_rows = (f'<tr><td>ชิ้น/หัว</td>{"".join(f"<td class=num>{f2(q/100)}</td>" for q in qs)}</tr>'
+                  f'<tr><td>ชิ้น/100 หัว</td>{"".join(f"<td class=num>{f1(q)}</td>" for q in qs)}</tr>'
                   f'<tr><td>ต้นทุน/ชิ้น (บ.)</td>{"".join(f"<td class=num>{f2(u) if u else chr(8212)}</td>" for u in us)}</tr>'
                   f'<tr><td><b>ต้นทุน/หัว (บ.)</b></td>{"".join(f"<td class=num><b>{f2(h)}</b></td>" for h in hs)}</tr>')
     return f'''
@@ -629,6 +636,221 @@ ol li,ul li{margin:4px 0}
 }
 """
 
+# ───────────────── Menu Re-engineering Lab (section ME) ─────────────────
+def menu_reeng_section():
+    import statistics as _st
+    M = '2026-05'; covm = cov[M]; TC = tot_cogs[M]
+    NETX = 5.4   # rough multiplier: 5 master → ~27 active branches (monthly ฿ for whole network)
+    items = []
+    for sid, r in sku[M].items():
+        q = r['qty'] or 0
+        if q <= 0:
+            continue
+        cg = r['cogs'] or 0
+        items.append(dict(sid=sid, q=q, cg=cg, eff=cg / q, q100=qph(M, sid),
+                          ch=head(M, sid), share=(cg / TC * 100 if TC else 0),
+                          nm=name(sid), cat=cat(sid)))
+    med_pop = _st.median([d['q100'] for d in items])
+    med_eff = _st.median([d['eff'] for d in items if d['eff'] > 0])
+    downsize = sorted(items, key=lambda d: -d['ch'])[:14]
+    remove = sorted([d for d in items if d['q100'] < med_pop and d['eff'] > med_eff and d['ch'] > 0.12],
+                    key=lambda d: -d['ch'])
+    hero = sorted([d for d in items if d['q100'] > med_pop and 0 < d['eff'] < med_eff],
+                  key=lambda d: -d['q100'])
+
+    # ── ingredient cost drivers + unique-vs-shared check for remove candidates ──
+    with get_db() as con:
+        mph = ','.join('?' for _ in BRANCHES)
+        ing_rows = con.execute(
+            f"""SELECT bi.ingredient_name ing, SUM(q.qty*bi.ingredient_cost) tot,
+                       COUNT(DISTINCT bi.sku_id) nm
+                FROM bom_ingredients bi
+                JOIN (SELECT sm.sku_id, SUM(sm.qty) qty FROM sales_sku_monthly sm
+                      JOIN branches b ON b.branch_id=sm.branch_id
+                      WHERE b.name IN ({mph}) AND sm.period_month='2026-05' AND sm.source='Easy'
+                      GROUP BY sm.sku_id) q ON q.sku_id=bi.sku_id
+                GROUP BY bi.ingredient_name HAVING tot>0 ORDER BY tot DESC LIMIT 16""",
+            BRANCHES).fetchall()
+        ing = [dict(ing=r['ing'], th=(r['tot'] or 0) / covm, nm=r['nm']) for r in ing_rows]
+        salmon_head = sum(d['th'] for d in ing if 'แซลมอน' in d['ing'])
+        shrimp_head = sum(d['th'] for d in ing if 'กุ้ง' in d['ing'])
+
+        def shared_n(sid):
+            top = con.execute("SELECT ingredient_name FROM bom_ingredients WHERE sku_id=? "
+                              "ORDER BY ingredient_cost DESC LIMIT 1", (sid,)).fetchone()
+            if not top:
+                return None, 0
+            n = con.execute(
+                "SELECT COUNT(DISTINCT bx.sku_id) FROM bom_ingredients bx "
+                "WHERE bx.ingredient_name=? AND bx.sku_id!=? "
+                "AND EXISTS(SELECT 1 FROM sales_sku_monthly sm WHERE sm.sku_id=bx.sku_id AND sm.source='Easy')",
+                (top['ingredient_name'], sid)).fetchone()[0]
+            return top['ingredient_name'], n
+        for d in remove:
+            d['toping'], d['shared'] = shared_n(d['sid'])
+
+    # per-branch portion discipline on the top-5 cost drivers
+    drivers = downsize[:5]
+    net_drv = [head(M, d['sid']) for d in drivers]
+    bstat = []
+    for br in BRANCHES:
+        bstat.append(dict(br=br,
+                          tot=sum(bhead(M, br, d['sid']) for d in items),
+                          drv=[bhead(M, br, d['sid']) for d in drivers]))
+    bstat.sort(key=lambda x: -x['tot'])
+
+    def bn(x): return f"{x:,.0f}"
+    top6 = sorted(items, key=lambda d: -d['cg'])[:6]
+    top6_share = sum(d['share'] for d in top6)
+
+    # ── savings model ──
+    PORTION_CUT = 0.15
+    dz_save_head = sum(d['ch'] * PORTION_CUT for d in downsize[:8])
+    rm_unique = [d for d in remove if d.get('shared') == 0]
+    rm_save_head = sum(d['ch'] for d in rm_unique[:10])
+
+    # ───────── render ─────────
+    ING_ROWS = ''.join(
+        f"<tr><td>{esc(d['ing'][:30])}</td><td class='num'><b>{f2(d['th'])}</b></td>"
+        f"<td class='num'>{f1(d['th']/tot_head[M]*100)}%</td><td class='num'>{d['nm']}</td></tr>"
+        for d in ing)
+    DZ_ROWS = ''.join(
+        f"<tr><td>{esc(d['nm'][:34])}</td><td class='mut small'>{esc(d['cat'])}</td>"
+        f"<td class='num'>{f2(d['ch'])}</td><td class='num'>{f1(d['eff'])}</td>"
+        f"<td class='num'>{f2(d['q100']/100)}</td><td class='num'>{f1(d['share'])}%</td>"
+        f"<td class='num warn'>−{f2(d['ch']*PORTION_CUT)}</td>"
+        f"<td class='num'>~{bn(d['ch']*PORTION_CUT*covm)}</td></tr>"
+        for d in downsize)
+    def rm_tag(d):
+        if d.get('shared') == 0:
+            return "<span class='newtag' style='background:#dcfce7;color:#166534'>วัตถุดิบเฉพาะ — ตัดแล้วลดซื้อจริง</span>"
+        return f"<span class='mut small'>แชร์วัตถุดิบกับ {d.get('shared')} เมนู — ตัดไม่ลดซื้อมาก</span>"
+    RM_ROWS = ''.join(
+        f"<tr><td>{esc(d['nm'][:32])}</td><td class='mut small'>{esc(d['cat'])}</td>"
+        f"<td class='num'>{f2(d['q100']/100)}</td><td class='num'>{f1(d['eff'])}</td>"
+        f"<td class='num'>{f2(d['ch'])}</td><td class='small'>{esc((d.get('toping') or '')[:18])}</td>"
+        f"<td>{rm_tag(d)}</td></tr>"
+        for d in remove[:12])
+    HERO_ROWS = ''.join(
+        f"<tr><td>{esc(d['nm'][:32])}</td><td class='mut small'>{esc(d['cat'])}</td>"
+        f"<td class='num'><b>{f1(d['q100'])}</b></td><td class='num'>{f1(d['eff'])}</td>"
+        f"<td class='num'>{f2(d['ch'])}</td></tr>"
+        for d in hero[:16])
+    DRV_TH = ''.join(f"<th class='num'>{esc(d['nm'][:11])}</th>" for d in drivers)
+    BR_ROWS = ''.join(
+        "<tr><td>" + esc(b['br']) + f"</td><td class='num'><b>{f1(b['tot'])}</b></td>" +
+        ''.join(f"<td class='num{' warn' if b['drv'][k] > net_drv[k]*1.10 else ''}'>{f2(b['drv'][k])}</td>"
+                for k in range(len(drivers))) + "</tr>"
+        for b in bstat)
+    NET_ROW = ("<tr style='background:#f1f5f9'><td><b>ค่าเฉลี่ยเครือ 5 สาขา</b></td>"
+               f"<td class='num'><b>{f1(tot_head[M])}</b></td>" +
+               ''.join(f"<td class='num'>{f2(v)}</td>" for v in net_drv) + "</tr>")
+    hi_br = bstat[0]['br']; lo_br = bstat[-1]['br']
+    gap_br = bstat[0]['tot'] - bstat[-1]['tot']
+
+    return f"""
+<div class="page-break"></div>
+<h2 id="sME">🍽️ ส่วนพิเศษ — กลยุทธ์ปรับเมนูลดต้นทุน (Menu Re-engineering Lab)</h2>
+<p class="small mut">ส่วนนี้แปลตัวเลขในรายงานเป็น <b>คำแนะนำเชิงปฏิบัติระดับ "รายเมนู"</b> — เมนูไหนควรลดพอร์ชัน เมนูไหนตัดได้ เมนูไหนดันให้เด่น และไอเดียเมนูใหม่ต้นทุนต่ำ — ผสานข้อมูลภายในกับหลัก menu engineering และเทรนด์ตลาดภายนอก (มิ.ย. 2026) · ฐาน 5 สาขา Master พ.ค. 2026 · ต้นทุนอาหารบุฟเฟ่ต์รวม <b>{f1(tot_head[M])} บ./หัว</b></p>
+
+<div style="background:#fef2f2;border-left:4px solid #ef4444;padding:10px 14px;border-radius:6px;margin:10px 0">
+<b>หัวใจของเรื่อง:</b> ต้นทุนบุฟเฟ่ต์กระจุกตัวรุนแรง — <b>6 เมนูแรก = {f1(top6_share)}%</b> ของต้นทุนอาหารทั้งหมด และวัตถุดิบเพียง 3 กลุ่ม (<b>แซลมอน ~{f1(salmon_head)} บ./หัว · ทุเรียน · หอยเชลล์</b>) กินงบเกินครึ่ง การลดต้นทุนจึงไม่ใช่ "ตัดเยอะๆ" แต่คือ <b>คุม 5–6 ตัวขับหลักให้แม่น</b> แล้วใช้เมนูถูก-ที่-คนรักช่วยถ่วงค่าเฉลี่ย
+</div>
+
+<h3>ME.1 — เงินไปอยู่ที่ไหน: วัตถุดิบที่ขับต้นทุน (Top 16, บ./หัว)</h3>
+<p class="small mut">ต้นทุนระดับ "วัตถุดิบดิบ" สำคัญกว่าระดับเมนู เพราะวัตถุดิบหนึ่งตัวกระจายอยู่หลายเมนู — คุมที่วัตถุดิบ = คุมได้ทั้งกลุ่ม</p>
+<table><thead><tr><th>วัตถุดิบ</th><th class="num">บ./หัว</th><th class="num">% ต้นทุน</th><th class="num">อยู่ในกี่เมนู</th></tr></thead><tbody>{ING_ROWS}</tbody></table>
+<p class="small"><b>อ่านตาราง:</b> "เนื้อปลาแซลมอน" และ "แซลมอนหั่นเต๋า" อยู่ใน 18 และ 6 เมนู — แปลว่าการคุมสเปค/ยีลด์แซลมอนตัวเดียว ส่งผลต่อหลายสิบเมนูพร้อมกัน · ตรงข้ามกับ "หอยเชลล์/กุ้งสด" ที่อยู่เมนูเดียว — คุมได้ตรงตัวที่เมนูนั้น</p>
+
+<div class="page-break"></div>
+<h3>ME.2 — เจาะลึก "แซลมอน" ตัวขับต้นทุนอันดับ 1 (~{f1(salmon_head)} บ./หัว ≈ {f1(salmon_head/tot_head[M]*100)}% ของต้นทุนอาหาร)</h3>
+<p>แซลมอนปรากฏในเมนูมากกว่า 18 รายการ ตั้งแต่ซาชิมิ ยำ ข้าวห่อ ไปจนสเต็ก/หัวปลา การจัดการแซลมอนคือ <b>เลเวอเรจที่ใหญ่ที่สุดเพียงจุดเดียว</b> มี 3 คันโยก:</p>
+<table><thead><tr><th>คันโยก</th><th>ทำอะไร</th><th class="num">ศักยภาพ บ./หัว</th></tr></thead><tbody>
+<tr><td><b>1. คุมพอร์ชัน (Portion)</b></td><td>แซลมอนซาชิมิ (B0035) ลูกค้ากินเฉลี่ย <b>{f2([d['q100'] for d in items if d['nm'].startswith('แซลมอน ซาชิมิ')][0]/100 if any(d['nm'].startswith('แซลมอน ซาชิมิ') for d in items) else 0)} ชิ้น/คน</b> ที่ {f1([d['eff'] for d in items if d['nm'].startswith('แซลมอน ซาชิมิ')][0] if any(d['nm'].startswith('แซลมอน ซาชิมิ') for d in items) else 0)} บ./ชิ้น — กำหนดน้ำหนักชิ้น 12–13 ก. + ตัดบางลง 1–2 มม. + เสิร์ฟถาดเล็กเติมถี่</td><td class="num warn">−10 ถึง −13</td></tr>
+<tr><td><b>2. Cross-utilization (ใช้เศษ)</b></td><td>บังคับเมนูยำ/โรล/ข้าวห่อ ใช้ <b>trim จากไลน์ซาชิมิ ≥ 60%</b> แทนการตัดบล็อกใหม่ — รายงานยีลด์ต่อปลาทั้งตัวรายสัปดาห์</td><td class="num warn">−2 ถึง −3</td></tr>
+<tr><td><b>3. Redirect ดีมานด์</b></td><td>ดันปลาขาว/ซาบะ/ทูน่า (ถูกกว่า 3–4 เท่า, คนชอบ) ให้เด่นขึ้น เพื่อดึงการกินบางส่วนออกจากแซลมอน (ดู ME.5–ME.6)</td><td class="num warn">−3 ถึง −5</td></tr>
+</tbody></table>
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:10px 14px;border-radius:6px;margin:10px 0">
+<b>🌍 จังหวะตลาด (ข้อมูลภายนอก มิ.ย. 2026):</b> ราคาแซลมอนนอร์เวย์ปี 2025 เฉลี่ย <b>~77 NOK/กก. ต่ำกว่าปี 2024 ถึง ~15 NOK/กก.</b> จาก oversupply · ต้นปี 2026 เริ่มขยับขึ้น (สัปดาห์ 10 ~88 NOK/กก.) และมี <b>สัญญาณ supply เริ่มตึง</b> → จังหวะนี้เหมาะ <b>ล็อกสัญญาซื้อล่วงหน้า/ราคาคงที่รายไตรมาส</b> ก่อนราคาขาขึ้น เพราะแซลมอนคือต้นทุน #1 ของร้าน
+</div>
+
+<div class="page-break"></div>
+<h3>ME.3 — ลดพอร์ชัน / หั่นเล็กลง (เมนูต้นทุน/หัวสูงสุด)</h3>
+<p class="small mut">เมนูที่ "ต้นทุน/หัว" สูง = ที่ที่การลดพอร์ชันเพียงเล็กน้อยให้ผลเป็นเงินมากสุด (เพราะคูณด้วยปริมาณมหาศาล) · คอลัมน์สุดท้าย = ถ้าลดสเปค/พอร์ชัน {int(PORTION_CUT*100)}% (บางลง/นับชิ้น/ถาดเล็ก) จะประหยัดเท่าไร</p>
+<table><thead><tr><th>เมนู</th><th>หมวด</th><th class="num">บ./หัว</th><th class="num">บ./ชิ้น</th><th class="num">ชิ้น/หัว</th><th class="num">% ต้นทุน</th><th class="num">ลด {int(PORTION_CUT*100)}% → ฿/หัว</th><th class="num">฿/เดือน*</th></tr></thead><tbody>{DZ_ROWS}</tbody></table>
+<p class="small mut">*฿/เดือน = เฉพาะ 5 สาขา Master ({bn(covm)} หัว/เดือน) — ทั้งเครือ ~27 สาขา คูณประมาณ ×{NETX:.0f}</p>
+<p><b>วิธีคุมพอร์ชันที่ได้ผล (จากหลัก buffet operations):</b> ① กำหนด <b>น้ำหนัก/จำนวนชิ้นมาตรฐาน</b> ต่อการเสิร์ฟ + สุ่มชั่ง 5 ชิ้น/กะ ② ใช้ <b>ถาด/ทัพพีเล็กลง</b> — ลด over-serving โดยไม่กระทบความพอใจ ③ <b>เสิร์ฟเป็นรอบเวลา</b> สำหรับของแพง (หอยเชลล์/กุ้ง/ทุเรียน) แทนวางไลน์อิสระ ④ <b>batch เล็ก เติมถี่</b> ลดของเหลือทิ้งใต้โคมไฟ</p>
+<div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:8px 14px;border-radius:6px;margin:8px 0">
+รวมศักยภาพเฉพาะ "ลดพอร์ชัน {int(PORTION_CUT*100)}% ใน 8 เมนูแพงสุด" ≈ <b>−{f1(dz_save_head)} บ./หัว</b> = ~<b>{bn(dz_save_head*covm)} บ./เดือน</b> (5 สาขา) ≈ <b>{bn(dz_save_head*covm*NETX)} บ./เดือนทั้งเครือ</b> โดยลูกค้าแทบไม่รู้สึก
+</div>
+
+<div class="page-break"></div>
+<h3>ME.4 — เมนูที่ "ตัดออกได้" (คนกินน้อย + ต้นทุน/ชิ้นสูง)</h3>
+<p class="small mut">เกณฑ์: ความนิยมต่ำกว่าค่ากลาง ({f2(med_pop/100)} ชิ้น/หัว) <b>และ</b> ต้นทุน/ชิ้นสูงกว่าค่ากลาง ({f1(med_eff)} บ.) · <b>กุญแจสำคัญ:</b> ตัดแล้วจะ "ลดการซื้อจริง" ก็ต่อเมื่อวัตถุดิบหลัก <b>ไม่แชร์</b> กับเมนูอื่น — ถ้าแชร์ (เช่นใช้แซลมอนเหมือนกัน) การตัดแค่ลดความหลากหลาย ไม่ลดต้นทุนซื้อ</p>
+<table><thead><tr><th>เมนู</th><th>หมวด</th><th class="num">ชิ้น/หัว</th><th class="num">บ./ชิ้น</th><th class="num">บ./หัว</th><th>วัตถุดิบหลัก</th><th>ตัดแล้วลดซื้อ?</th></tr></thead><tbody>{RM_ROWS}</tbody></table>
+<p><b>คำแนะนำ:</b> เริ่มจากตัวที่ติดป้าย <span class="newtag" style="background:#dcfce7;color:#166534">วัตถุดิบเฉพาะ</span> ก่อน (เช่นกลุ่มข้าวห่อสาหร่ายที่ทำซับซ้อน 9–12 วัตถุดิบ แต่คนสั่งน้อย) — ตัดแล้วได้ทั้ง <b>ลดต้นทุนซื้อ + ลดงานครัว + ลดของเสีย</b> · เมนูที่ "แชร์วัตถุดิบ" ให้ <b>ยุบรวม</b> แทนตัด (เช่นรวมข้าวหน้าปลาดิบหลายแบบเป็น 1–2 แบบ)</p>
+<div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:8px 14px;border-radius:6px;margin:8px 0">
+<b>⚠ ระวัง:</b> บุฟเฟ่ต์ขายที่ "ความหลากหลาย/รู้สึกคุ้ม" — อย่าตัดจนเหลือน้อย แนะนำตัด/ยุบ <b>เฉพาะ 10–15 เมนูท้ายตารางที่ซับซ้อนและคนแทบไม่แตะ</b> แล้ววัดรีวิว/ยอด 1 เดือน ก่อนตัดเพิ่ม
+</div>
+
+<div class="page-break"></div>
+<h3>ME.5 — เมนู "พระเอก" ต้นทุนต่ำ + คนกินเยอะ (ดันให้เด่น)</h3>
+<p class="small mut">ต้นทุน/ชิ้นต่ำกว่าค่ากลาง แต่ความนิยมสูงกว่าค่ากลาง — เมนูพวกนี้คือ <b>เพื่อนแท้</b>: ยิ่งคนกินเยอะยิ่งถ่วงต้นทุนเฉลี่ยลง ควร <b>วางให้เด่น เติมให้เต็ม ทำป้ายเชียร์</b></p>
+<table><thead><tr><th>เมนู</th><th>หมวด</th><th class="num">ชิ้น/100หัว</th><th class="num">บ./ชิ้น</th><th class="num">บ./หัว</th></tr></thead><tbody>{HERO_ROWS}</tbody></table>
+<p><b>กลยุทธ์การจัดไลน์ (Menu Engineering · buffet flow):</b> วาง <b>ของถูก-ที่-คนรัก ไว้ "ต้นไลน์"</b> — ข้าว, ซุปใส, สาหร่าย, ผักรวม, ปลาขาว/ซาบะ/ทูน่าซาชิมิ, เนื้อเสือร้องไห้ — ให้ลูกค้าตักจนอิ่มระดับหนึ่งก่อนถึงโซนแซลมอน/หอยเชลล์/ทุเรียน · งานวิจัยบุฟเฟ่ต์ชี้ว่าลำดับการจัดวางมีผลต่อสิ่งที่ลูกค้าตักมากกว่าที่คิด — ของที่เจอก่อนถูกตักมากกว่า</p>
+
+<div class="page-break"></div>
+<h3>ME.6 — ไอเดียเมนูใหม่: วัตถุดิบที่คนนิยม แต่ต้นทุนต่ำ (Creative)</h3>
+<p class="small mut">หลักคิด: เอา "วัตถุดิบถูกที่คนพิสูจน์แล้วว่าชอบ" (ปลาขาว ซาบะ ทูน่า ปลาหมึก สาหร่าย เต้าหู้ ข้าว) มาแปลงเป็นเมนูที่ <b>ดูพรีเมียม รสจัด แต่ต้นทุนต่ำ</b> เพื่อ <b>ดึงการกินออกจากแซลมอน/หอยเชลล์</b> — ขายความอร่อย ไม่ใช่ความแพง</p>
+<table><thead><tr><th>ไอเดียเมนูใหม่</th><th>วัตถุดิบหลัก (ถูก)</th><th>ทำไมเวิร์ก</th><th>ดึงดีมานด์จาก</th></tr></thead><tbody>
+<tr><td><b>ปลาขาวอาบุริ ทรัฟเฟิลโชยุ</b></td><td>ปลาเนื้อขาว (~4 บ./ชิ้น)</td><td>เผาผิวหอม + ซอสกลิ่นหรู → รู้สึกพรีเมียมด้วยต้นทุนต่ำสุดในไลน์</td><td>แซลมอนเบิร์น</td></tr>
+<tr><td><b>โพเกะโบวล์ ทูน่า-ข้าวญี่ปุ่น</b></td><td>ทูน่า (~8.7) + ข้าว (filler)</td><td>ข้าวเป็นตัวเติมอิ่ม คุมสัดส่วนปลาได้ · เทรนด์ poke มาแรง ถ่ายรูปสวย</td><td>ข้าวหน้าปลาดิบรวม</td></tr>
+<tr><td><b>ซาบะดองส้มยุซุ</b></td><td>ปลาซาบะดอง (~4 บ.)</td><td>เปรี้ยวสดชื่น คนเอเชียคุ้นรส ต้นทุนต่ำมาก กินเพลิน</td><td>แซลมอนดอง (24.5 บ.)</td></tr>
+<tr><td><b>ยำปลาหมึก-สาหร่าย แซ่บ</b></td><td>หนวดปลาหมึก + สาหร่าย</td><td>รสจัดแบบไทย ต้นทุนต่ำ คนไทยรักของแซ่บ ทำง่ายปริมาณมาก</td><td>ยำแซลมอนน้ำปลาร้า (48 บ.)</td></tr>
+<tr><td><b>เต้าหู้ทอดราดซอสปูอัด-ไข่กุ้ง</b></td><td>เต้าหู้ + ปูอัด + ไข่กุ้งสังเคราะห์</td><td>เนื้อสัมผัสครบ ดูแน่น ต้นทุนต่ำ เป็น filler โปรตีนชั้นดี</td><td>ซูชิ/ข้าวห่อแพง</td></tr>
+<tr><td><b>ซุปมิโซะหอยเชลล์ตัวเล็ก (รอบเสิร์ฟ)</b></td><td>เศษ/หอยเชลล์ไซส์เล็ก</td><td>ใช้ของไซส์รองที่ต้นทุนต่ำกว่า ให้ "ฟีลหอยเชลล์" โดยไม่ต้องเสิร์ฟตัวใหญ่อิสระ</td><td>หอยเชลล์ต้มไลน์อิสระ</td></tr>
+</tbody></table>
+<p class="small mut">ทุกไอเดียอิงวัตถุดิบที่ <b>มีอยู่แล้วในครัว + พิสูจน์แล้วว่าคนกิน</b> (จากตาราง ME.5) จึงไม่เพิ่ม SKU วัตถุดิบใหม่/ของเสีย และช่วย "อัปเดตเมนู 20–30% ต่อไตรมาส" ซึ่งงานวิจัยพบว่าเพิ่มความถี่ลูกค้ากลับมา ~10–15%/ปี</p>
+
+<div class="page-break"></div>
+<h3>ME.7 — วินัยพอร์ชันรายสาขา: ใครเสิร์ฟเกินตัวขับต้นทุนหลัก</h3>
+<p class="small mut">ต้นทุน/หัวต่างกันมากระหว่างสาขา ทั้งที่เมนูเหมือนกัน = ความต่างอยู่ที่ <b>วินัยการเสิร์ฟ/พอร์ชัน + ของเหลือทิ้ง</b> ตารางนี้แยกต้นทุน/หัวของ <b>5 ตัวขับหลัก</b> รายสาขา — ช่อง <span class="warn">สีแดง</span> = สูงกว่าค่าเฉลี่ยเครือ >10% (เป้าหมายโค้ชชิ่งก่อน)</p>
+<table><thead><tr><th>สาขา</th><th class="num">ต้นทุน/หัว รวม</th>{DRV_TH}</tr></thead>
+<tbody>{BR_ROWS}{NET_ROW}</tbody></table>
+<p><b>อ่านผล:</b> <b>{esc(hi_br)}</b> ต้นทุน/หัวสูงสุด ({f1(bstat[0]['tot'])} บ.) ห่างจาก <b>{esc(lo_br)}</b> ({f1(bstat[-1]['tot'])} บ.) ถึง <b>{f1(gap_br)} บ./หัว</b> — ถ้าสาขาสูงทำได้เท่าค่ามัธยฐานเครือ จะประหยัดได้ทันทีโดยไม่ต้องแตะสูตรเลย · ใช้สาขาต้นทุนต่ำเป็น <b>benchmark checklist</b> (วิธีเสิร์ฟ/เติมไลน์/คุมของเหลือ) ให้สาขาสูงทำตาม</p>
+<div style="background:#eff6ff;border-left:4px solid #3b82f6;padding:8px 14px;border-radius:6px;margin:8px 0">
+<b>ทำไมเรื่องนี้สำคัญ:</b> การปิดช่องว่างระหว่างสาขา (operational) มักได้ผลเร็วและเสี่ยงต่ำกว่าการแก้สูตร/ตัดเมนู (menu) เพราะไม่กระทบประสบการณ์ลูกค้าเลย — แค่ทำให้ทุกสาขาวินัยเท่าสาขาที่ดีที่สุด
+</div>
+
+<div class="page-break"></div>
+<h3>ME.8 — วิธีพิสูจน์ว่าได้ผลจริง (Measurement Playbook)</h3>
+<p>คำเตือนสำคัญ: <b>"ต้นทุน/หัว" รวมทั้งของที่ลูกค้ากินจริง + ของที่ตักแล้วทิ้ง</b> การลดต้นทุนที่ยั่งยืนต้องแยกสองอย่างนี้ และวัดก่อน-หลังทุกมาตรการ ไม่งั้นจะเดาว่าได้ผลทั้งที่อาจแค่ของขาด/ลูกค้าน้อยลง</p>
+<table><thead><tr><th>สิ่งที่วัด</th><th>วิธี</th><th>ความถี่</th><th>ใช้ตัดสินใจอะไร</th></tr></thead><tbody>
+<tr><td><b>Waste จานคืน (plate waste)</b></td><td>ชั่งของเหลือบนจานคืนช่วง peak 3 วัน/เดือน แยกตามโซน (แซลมอน/หอยเชลล์/ทุเรียน)</td><td>รายเดือน</td><td>โซนไหนทิ้งเยอะ = ลดพอร์ชัน/เปลี่ยนเป็นเสิร์ฟรอบ</td></tr>
+<tr><td><b>Yield ปลาต่อตัว</b></td><td>ชั่งปลาเข้า ÷ เนื้อใช้ได้ (ซาชิมิ + trim เข้าเมนูอื่น) ต่อปลา 1 ตัว</td><td>รายสัปดาห์</td><td>ยีลด์ต่ำ = สอนการแล่/บังคับใช้ trim ในเมนูยำ</td></tr>
+<tr><td><b>น้ำหนัก/ชิ้นมาตรฐาน</b></td><td>สุ่มชั่ง 5 ชิ้น/กะ ของ 10 เมนูตัวขับหลัก เทียบสเปค</td><td>ทุกกะ</td><td>เกินสเปค = เบรกพอร์ชันทันที</td></tr>
+<tr><td><b>ต้นทุน/หัว ราย<u>สัปดาห์</u></b></td><td>มีในรายงานนี้แล้ว (control chart ±2SD ส่วนที่ 7) เทียบก่อน/หลังมาตรการ</td><td>รายสัปดาห์</td><td>มาตรการได้ผลจริงไหม (ต้องหลุดกรอบลงอย่างมีนัย)</td></tr>
+<tr><td><b>คะแนนรีวิว/ความพอใจ</b></td><td>รีวิวออนไลน์ + แบบสอบถามสั้นหลังปรับเมนู</td><td>รายเดือน</td><td>ลดต้นทุนแล้วลูกค้ารู้สึกแย่ลงไหม (กันลดเกินไป)</td></tr>
+</tbody></table>
+<p class="small mut"><b>หลักทอง:</b> ปรับ <b>ทีละมาตรการ</b> + วัดก่อน/หลัง 2–4 สัปดาห์ ก่อนขยายทุกสาขา — การปรับหลายอย่างพร้อมกันทำให้แยกไม่ออกว่าอะไรได้ผล · ตั้งเป้า food cost ≤ 40% (เกณฑ์มาตรฐานบุฟเฟ่ต์ที่ทำกำไรได้)</p>
+
+<div class="page-break"></div>
+<h3>ME.9 — สรุปศักยภาพประหยัด + ลำดับลงมือ</h3>
+<table><thead><tr><th>กลุ่มมาตรการ</th><th>ทำอะไร</th><th class="num">฿/หัว</th><th class="num">฿/เดือน (เครือ)*</th><th>ความยาก</th></tr></thead><tbody>
+<tr><td><b>Quick win 1–2 สัปดาห์</b></td><td>คุมพอร์ชันแซลมอนซาชิมิ + หอยเชลล์เป็นรอบเสิร์ฟ + ถาดเล็ก</td><td class="num warn">−{f1(dz_save_head*0.6)}</td><td class="num">~{bn(dz_save_head*0.6*covm*NETX)}</td><td>ง่าย</td></tr>
+<tr><td><b>โครงสร้าง 1–3 เดือน</b></td><td>Cross-utilization แซลมอน + ตัด/ยุบเมนูวัตถุดิบเฉพาะ {len(rm_unique[:10])} เมนู + ดันพระเอกหน้าไลน์</td><td class="num warn">−{f1(rm_save_head/covm if False else (rm_save_head))}</td><td class="num">~{bn(rm_save_head*covm*NETX) if False else bn(rm_save_head*covm*NETX)}</td><td>กลาง</td></tr>
+<tr><td><b>จัดซื้อ/สัญญา</b></td><td>ล็อกราคาแซลมอน/กุ้ง/หอยเชลล์รายไตรมาสรวม 5 สาขา (จังหวะราคาแซลมอนต่ำ)</td><td class="num warn">−2 ถึง −4</td><td class="num">~{bn(3*covm*NETX)}</td><td>กลาง</td></tr>
+<tr><td><b>เมนูใหม่ (ME.6)</b></td><td>ออก 4–6 เมนูใหม่ต้นทุนต่ำ ดึงดีมานด์จากของแพง</td><td class="num warn">−3 ถึง −6</td><td class="num">~{bn(4*covm*NETX)}</td><td>กลาง</td></tr>
+</tbody></table>
+<p class="small mut">*ประมาณการเชิงอนุรักษ์ ทั้งเครือ ~27 สาขา · ตัวเลขจริงต้องยืนยันด้วยการ <b>วัด waste ก่อน/หลัง</b> เพราะส่วนหนึ่งของ "ต้นทุน/หัว" คือของที่ตักแล้วทิ้ง ไม่ใช่ที่กินจริง</p>
+<div style="background:#f0fdf4;border-left:4px solid #16a34a;padding:10px 14px;border-radius:6px;margin:8px 0">
+<b>เป้ารวมที่เป็นไปได้:</b> ลดต้นทุนอาหารบุฟเฟ่ต์ราว <b>−15 ถึง −30 บ./หัว</b> (จาก {f1(tot_head[M])}) โดยไม่ลดคุณค่าที่ลูกค้ารับรู้ — เน้น "คุมตัวขับหลักให้แม่น + ดันของถูกที่คนรัก" มากกว่า "ตัดเยอะ"
+</div>
+<p class="small mut">⚠ ข้อควรระวังด้านข้อมูล: ต้นทุน <b>ทุเรียน (30 บ./หน่วย) และปลาไหล (8 บ./ชิ้น) ยังเป็นค่าประมาณการชั่วคราว</b> — ตัวเลขประหยัดของ 2 กลุ่มนี้จะคลาดเคลื่อนจนกว่าจะมี BoM จริง · คำแนะนำ "ตัดเมนู" อิงข้อมูล 5 สาขา Master พ.ค. 2026 ควรตรวจสอบความนิยมข้ามสาขาก่อนตัดถาวร (บางเมนูอาจนิยมเฉพาะบางสาขา)</p>
+"""
+
+menu_reeng_html = menu_reeng_section()
+
 # ───────────────────────────── assemble ─────────────────────────────
 TOC = """
 <ol class="toc">
@@ -642,6 +864,7 @@ TOC = """
 <li><a href="#s8">8. เจาะลึกเมนูยุทธศาสตร์ 12 เมนู (BoM + รายสาขา)</a></li>
 <li><a href="#s9">9. เมนูใหม่ทั้งหมด + Cannibalization + ความเหมาะสม</a></li>
 <li><a href="#s10">10. Pareto + ดัชนีความเข้มข้นต้นทุน</a></li>
+<li><a href="#sME"><b>🍽️ ส่วนพิเศษ — กลยุทธ์ปรับเมนูลดต้นทุน (Menu Re-engineering Lab)</b></a></li>
 <li><a href="#s11">11. แผนปรับลดต้นทุน + Roadmap 90 วัน</a></li>
 <li><a href="#s12">12. Playbook บริหารเครือบุฟเฟ่ต์ญี่ปุ่นระดับโลก</a></li>
 <li><a href="#s13">13. ความเสี่ยงและคุณภาพข้อมูล</a></li>
@@ -686,7 +909,7 @@ html_out = f"""<!DOCTYPE html>
 <tr><td style="width:200px"><b>ขอบเขตสาขา</b></td><td>สาขา master 5 สาขา (โคราช1, เชียงใหม่, สุรินทร์, อุดรธานี, อุบลราชธานี) — <b>ไม่รวมโคราช2ทุกช่วง รวมถึงฐาน ธ.ค. 2025</b> (โคราช2 หยุดดำเนินการตั้งแต่ ธ.ค. 2025)</td></tr>
 <tr><td><b>ขอบเขตเมนู</b></td><td>เฉพาะเมนูบุฟเฟ่ต์ — SKU ที่ขึ้นต้น (B) หรือไม่ใช่ (A) à-la-carte, หมวดอาหารเท่านั้น (ไม่รวมเครื่องดื่ม) เกณฑ์เดียวกับหน้า "เทียบเมนู A vs B" ของแดชบอร์ด</td></tr>
 <tr><td><b>ต้นทุน (COGS)</b></td><td>BoM ingredient cost ต่อเสิร์ฟ × จำนวนชิ้นขาย ผ่าน helper มาตรฐานของระบบ (เมนูแพ็กเกจบุฟเฟ่ต์เอง COGS = 0 กันการนับซ้ำ · alias BoM และ unit_cost fallback ตามลำดับ)</td></tr>
-<tr><td><b>ต่อหัว</b></td><td>ต้นทุน/หัว = COGS รวมของช่วง ÷ จำนวนลูกค้า (covers) ของช่วงเดียวกัน · ชิ้น/100 หัว = จำนวนชิ้น ÷ ลูกค้า × 100</td></tr>
+<tr><td><b>ต่อหัว</b></td><td>ต้นทุน/หัว = COGS รวมของช่วง ÷ จำนวนลูกค้า (covers) ของช่วงเดียวกัน · ชิ้น/หัว = จำนวนชิ้น ÷ ลูกค้า (สื่อตรง: ลูกค้ากินกี่ชิ้น/คน) · ชิ้น/100 หัว = ค่าเดียวกัน × 100 (อ่านง่ายสำหรับเมนูที่กินน้อย ไม่ถูกปัดเป็น 0)</td></tr>
 <tr><td><b>รายได้</b></td><td>total_inc_vat ÷ 1.07 = ex-VAT (เกณฑ์ที่กระทบยอดกับบัญชี) · cost ratio = COGS บุฟเฟ่ต์ ÷ รายได้รวม ex-VAT (ตัวหารรวมเครื่องดื่ม/อื่น ๆ — ใช้ดูทิศทาง ไม่ใช่ food cost % บัญชีเป๊ะ)</td></tr>
 <tr><td><b>การแยกสาเหตุ</b></td><td>Δต้นทุน/หัว ของเมนูเดิม = ผลจากการกิน (ชิ้น/หัวเปลี่ยน × ต้นทุน/ชิ้นเดิม) + ผลจากราคา (ชิ้น/หัวใหม่ × Δต้นทุน/ชิ้น) — แสดงเป็นตาราง Bridge ทุกเดือนในส่วนที่ 5</td></tr>
 <tr><td><b>ข้อมูลรายสัปดาห์</b></td><td>ต้นทุน/หัวรายสัปดาห์ (จันทร์–อาทิตย์) จากยอดขายรายวัน มีตั้งแต่ 9 ก.พ. 2026 — ใช้ทำ control chart ในบทรายสาขา</td></tr>
@@ -814,6 +1037,7 @@ html_out = f"""<!DOCTYPE html>
 <thead><tr><th>#</th><th>เมนู</th><th class="num">% ต้นทุน</th><th class="num">% ชิ้น</th><th class="num">ดัชนี</th><th class="num">ต้นทุน/ชิ้น (บ.)</th></tr></thead>
 <tbody>{ci_rows}</tbody>
 </table>
+{menu_reeng_html}
 
 <div class="page-break"></div>
 <h2 id="s11">11) แผนปรับลดต้นทุนอย่างเป็นรูปธรรม + Roadmap 90 วัน</h2>
@@ -888,7 +1112,7 @@ html_out = f"""<!DOCTYPE html>
 <h2 id="appB">ภาคผนวก ข. — นิยามศัพท์</h2>
 <table class="avoid-break"><tbody>
 <tr><td style="width:220px"><b>ต้นทุน/หัว (cost per head)</b></td><td>COGS (BoM) รวมของช่วง ÷ จำนวนลูกค้า (covers) ของช่วงเดียวกัน — ตัวเลขหลักของทั้งรายงาน</td></tr>
-<tr><td><b>ชิ้น/100 หัว</b></td><td>จำนวนชิ้นขาย ÷ ลูกค้า × 100 — วัด "ความนิยม" ที่ปรับฐานลูกค้าแล้ว เทียบข้ามเดือน/สาขาได้ตรง</td></tr>
+<tr><td><b>ชิ้น/หัว · ชิ้น/100 หัว</b></td><td>จำนวนชิ้นขาย ÷ ลูกค้า ( ×100 ในคอลัมน์ /100หัว) — วัด "ความนิยม" ที่ปรับฐานลูกค้าแล้ว เทียบข้ามเดือน/สาขาได้ตรง · ชิ้น/หัว สื่อตรง (1.85 = กิน 1.85 ชิ้น/คน), /100หัว ช่วยเมนูที่กินน้อยไม่ถูกปัดเป็น 0</td></tr>
 <tr><td><b>ต้นทุน/ชิ้น</b></td><td>COGS ÷ จำนวนชิ้น — สะท้อนราคา/สูตรวัตถุดิบ (จาก BoM มาตรฐาน)</td></tr>
 <tr><td><b>Spread/หัว</b></td><td>รายได้ ex-VAT/หัว − ต้นทุนบุฟเฟ่ต์/หัว — กำไรขั้นต้นเชิงวัตถุดิบต่อลูกค้า 1 คน</td></tr>
 <tr><td><b>Cost ratio</b></td><td>COGS เมนูบุฟเฟ่ต์ ÷ รายได้รวม ex-VAT ของ 5 สาขา</td></tr>

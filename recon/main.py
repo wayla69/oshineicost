@@ -46,6 +46,7 @@ from .matcher import (
     run_auto_match,
     suggest_reclassifications,
 )
+from .reconcile_v2 import reconcile_month, reconcile_overview
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -178,6 +179,41 @@ def _migrate_payment_bank(conn):
         pass
 
 
+def _migrate_lane_adj_accept(conn):
+    """Widen recon_lane_adj.adj_type to allow 'accept' (v2 acknowledged
+    variance). SQLite can't ALTER a CHECK → recreate once, preserving rows."""
+    try:
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_lane_adj'").fetchone()
+        if row and "'accept'" not in (row[0] or ""):
+            conn.executescript("""
+                CREATE TABLE recon_lane_adj__new (
+                    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+                    period_month TEXT    NOT NULL,
+                    category     TEXT    NOT NULL,
+                    bank         TEXT    NOT NULL DEFAULT 'NONE',
+                    adj_pos      REAL    NOT NULL DEFAULT 0,
+                    adj_ext      REAL    NOT NULL DEFAULT 0,
+                    note         TEXT,
+                    adj_type     TEXT    NOT NULL DEFAULT 'other'
+                                     CHECK(adj_type IN ('off_pos','deposit_note','other','accept')),
+                    created_by   TEXT,
+                    created_at   TEXT    DEFAULT (datetime('now')),
+                    UNIQUE(branch_id, period_month, category, bank)
+                );
+                INSERT INTO recon_lane_adj__new
+                    (id,branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by,created_at)
+                    SELECT id,branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by,created_at
+                    FROM recon_lane_adj;
+                DROP TABLE recon_lane_adj;
+                ALTER TABLE recon_lane_adj__new RENAME TO recon_lane_adj;
+                CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);
+            """)
+    except sqlite3.OperationalError:
+        pass
+
+
 def _migrate_attachment_to_fs(conn):
     """Replace recon_attachment.data (BLOB) with file_path (TEXT).
     Files uploaded before this migration are lost (acceptable — feature was unused).
@@ -219,6 +255,7 @@ def startup():
         conn.executescript(_SCHEMA.read_text())
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
+        _migrate_lane_adj_accept(conn)  # widen adj_type CHECK for v2 'accept'
         _migrate_attachment_to_fs(conn)
         # recon_lane_adj: created by schema.sql executescript above (IF NOT EXISTS)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
@@ -280,6 +317,14 @@ def require_write_token(token: str = Query(""), x_upload_token: str = Header(Non
         provided = (x_upload_token or token or "").strip()
         if not any(hmac.compare_digest(provided, t) for t in toks):
             raise HTTPException(403, "A valid write token is required.")
+
+
+def _require_manager(x_manager_token: str | None):
+    """Two-tier close: approving a month needs the manager code when
+    OSHINEI_MANAGER_TOKEN is set (open locally when unset, like the write gate)."""
+    expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
+    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+        raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -1085,10 +1130,13 @@ def update_session_status(
     session_id:  int,
     status:      str = Form(...),
     approved_by: str = Form(""),
+    x_manager_token: str = Header(None),
 ):
     valid = {"draft", "in_review", "approved", "closed"}
     if status not in valid:
         raise HTTPException(400, f"status must be one of {valid}")
+    if status in ("approved", "closed"):
+        _require_manager(x_manager_token)
     with get_db() as conn:
         old_row = conn.execute(
             "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()
@@ -1126,6 +1174,47 @@ def update_session_status(
 
 
 # ── Session summary + category reconciliation ─────────────────────────────────
+
+def _norm_ts(s):
+    """Normalise a stored timestamp for lexical comparison. computed_at /
+    uploaded_at use 'YYYY-MM-DD HH:MM:SS' while audit_log.ts uses a 'T' separator
+    — line them up so a plain string `>` is correct."""
+    return s.replace("T", " ")[:19] if s else None
+
+
+def _match_freshness(conn, session_id, branch_id, period_month):
+    """When did Run Match last persist this session's category snapshot, vs. the
+    latest data change (upload, manual match, lane adjustment, internal-transfer
+    ignore)? The live `/summary` cards are always recomputed, but the *persisted*
+    `recon_category_result` (Excel export, `/categories`, approval snapshot) only
+    refreshes on Run Match — `stale=True` means it lags and staff should re-run."""
+    computed_at = _norm_ts(conn.execute(
+        "SELECT MAX(computed_at) FROM recon_category_result WHERE session_id=?",
+        (session_id,)).fetchone()[0])
+    changes = [
+        conn.execute(
+            "SELECT MAX(COALESCE(confirmed_at, uploaded_at)) FROM recon_uploads "
+            "WHERE branch_id=? AND period_month=? AND status!='error'",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(matched_at) FROM recon_manual_match WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(created_at) FROM recon_lane_adj WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(a.ts) FROM recon_audit_log a "
+            "JOIN recon_bank_lines bl ON bl.id = a.entity_id "
+            "WHERE a.entity='bank_line' AND bl.branch_id=? "
+            "AND strftime('%Y-%m', bl.txn_date)=?",
+            (branch_id, period_month)).fetchone()[0],
+    ]
+    norm = [_norm_ts(x) for x in changes if x]
+    last_change_at = max(norm) if norm else None
+    # Stale when results were never computed, or a change post-dates the last run.
+    stale = computed_at is None or (last_change_at is not None and last_change_at > computed_at)
+    return {"computed_at": computed_at, "last_change_at": last_change_at, "stale": stale}
+
 
 @app.get("/api/sessions/{session_id}/summary")
 def session_summary(session_id: int):
@@ -1173,6 +1262,7 @@ def session_summary(session_id: int):
             "variance":              round(ext_total - pos_total, 2),
             "matched":               sum(1 for r in rows if r["status"] == "matched"),
             "pending_discrepancies": pending,
+            "freshness":             _match_freshness(conn, session_id, bid, pm),
         }
 
 
@@ -1211,6 +1301,39 @@ def session_bank_coverage(session_id: int):
         if not s:
             raise HTTPException(404)
         return bank_statement_coverage(conn, s["branch_id"], s["period_month"])
+
+
+# ── Reconcile v2 — channel-first composed view (no session required) ──────────
+
+@app.get("/api/v2/overview")
+def v2_overview(month: str):
+    """All master branches for one month: progress, per-channel variance, status."""
+    _validate_period(month)
+    with get_db() as conn:
+        return reconcile_overview(conn, month)
+
+
+@app.get("/api/v2/reconcile")
+def v2_reconcile(branch_id: int, month: str):
+    """One branch, one month, channel-first: documents checklist, channel cards
+    with per-day detail, non-revenue (internal transfers), setup questions, todo."""
+    _validate_period(month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return reconcile_month(conn, branch_id, month)
+
+
+@app.get("/api/v2/lane")
+def v2_lane(branch_id: int, month: str, category: str, bank: str, day: str | None = None):
+    """Line-level drill for v2 (same data as the session lane endpoint, keyed by
+    branch+month directly so the UI needs no session to browse)."""
+    _validate_period(month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        lines = lane_lines(conn, branch_id, month, category, bank, day)
+        return {"category": category, "bank": bank, "day": day,
+                "count": len(lines), "total": round(sum(l["amount"] for l in lines), 2),
+                "lines": lines}
 
 
 @app.get("/api/sessions/{session_id}/lane")
@@ -2191,8 +2314,10 @@ def lane_adj_list(branch_id: int, period_month: str):
 @app.post("/api/lanes/adj", dependencies=[Depends(require_write_token)])
 def lane_adj_upsert(body: LaneAdj):
     _validate_period(body.period_month)
-    if body.adj_type not in ("off_pos", "deposit_note", "other"):
-        raise HTTPException(400, "adj_type must be off_pos | deposit_note | other")
+    if body.adj_type not in ("off_pos", "deposit_note", "other", "accept"):
+        raise HTTPException(400, "adj_type must be off_pos | deposit_note | other | accept")
+    if body.adj_type == "accept" and not (body.note or "").strip():
+        raise HTTPException(400, "การรับทราบผลต่างต้องใส่เหตุผล (note required)")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)

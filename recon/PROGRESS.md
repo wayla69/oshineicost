@@ -51,6 +51,135 @@ classification is **config-driven, not regex**:
 | **Internal-transfer ignore flag** — `PATCH /api/bank-lines/{id}/ignore` sets bank-line `match_status='excluded'` (reuses the CHECK-allowed status; no migration): excluded everywhere (monthly + daily lanes, daily board, cash credits, payout candidates, map suggestions), survives Run Match, reversible, audited with note; "ตัดออก / เลิกตัดออก" buttons in the drill drawer + upload-lines modal; verified live-mirror: 05-29 ฿2M+฿1.5M intercompany sweeps drop TRANSFER·KBANK from 3.5M to 1.4k | ✅ Done 2026-06-10 (branch claude/recon-internal-transfers) |
 | **Map-from-documents suggestions** — `map_bank_suggestions()` matches each needs-map POS code's daily series against statement-lane residuals (QR/TRANSFER per bank, CREDIT per acquirer with T+1/T+2 lag) → `/api/map-suggestions`; Setup shows a green "เอกสารบอกธนาคารได้" card with one-click Apply (audit note "from documents: h/n days matched"). Verified on real UDN May data: **KNNQR → QR·KBANK, 24/31 days satang-exact** — answers the long-open "which bank does KNNQR settle into" | ✅ Done 2026-06-10 |
 
+## Reconcile v2 — channel-first redesign (2026-06-11, in progress)
+Owner decisions: main view = POS channels; daily board folded into a monthly
+overview (variance per cell, drillable); two-tier close (staff ส่งตรวจ →
+manager ปิดเดือน). New composition layer `reconcile_v2.py` (NO new matching
+logic — composes category_reconciliation + daily_reconciliation + cash matcher +
+credit_three_way + _coverage) with the status vocabulary collapsed to
+ok / diff / waiting_doc / no_source / setup. Always computed live — **no Run
+Match button**; the persisted snapshot happens once, inside ปิดเดือน
+(run-match + approve). Progress is money-weighted (1 − Σ|variance|/Σmax(pos,ext)),
+not day-counted. Endpoints: `GET /api/v2/overview?month=` (all master branches),
+`GET /api/v2/reconcile?branch_id=&month=` (documents checklist derived from the
+branch's POS channels, channel cards with per-day status, non_revenue =
+excluded internal transfers reported apart, setup_questions with one-click
+map-suggestion apply, todo list, can_close), `GET /api/v2/lane` (line drill, no
+session needed). New UI `frontend/v2.html` served at **/app/v2.html** —
+runs PARALLEL to the old /app (nothing removed yet): overview table → branch
+page → channel rows → day calendar → bank lines with "ตัดออก ไม่ใช่ยอดขาย";
+reuses existing mutating endpoints only (sessions, payment-map PATCH,
+bank-lines ignore). Verified live on real data: UDN May progress 75.2%,
+todo 6 (สรุปยอดบัตร×2, Grab, Line Man, QR diff, transfer residue); ฿3.5M
+internal transfer shows in the non-revenue strip. +2 pytest (72 pass).
+Remaining for v2: manual-match action in the day drill, upload from within v2,
+close-month lock surfacing in UI, then retire the old tabs.
+
+**v2 P1 — ใช้ได้จริง (2026-06-11):** (1) **Upload in-page** — missing doc chips
+are buttons → file picker → `/preview` (row count, provider, wrong-branch guard
+shown inline) → confirm; doc checklist carries `source`/`provider`/`channel`.
+(2) **รับทราบผลต่าง (accept)** — the close-blocker fix: channel-level
+`recon_lane_adj` row `adj_type='accept'` (bank='ALL', zero amounts, note =
+mandatory reason; CHECK widened via `_migrate_lane_adj_accept`). Clears the
+channel's todo + its doc todo, numbers stay honest (variance unchanged);
+`run_auto_match` writes that lane's discrepancy **born 'accepted'** with the
+reason so the approval gate passes — a month can now close over a ฿396 missing
+Line Man report. Reversible (เลิกรับทราบ = DELETE adj). (3) **Manual match in
+day drill** — checkbox bank lines → "จับคู่กับยอด POS วันนี้" (POSTs
+`/api/manual`); `reclass_suggestions` (wrong-channel, same bank/amount/±1d)
+rendered as green one-click cards. (4) **Close lock + Excel** — approved month:
+all mutating buttons hidden, 🔒 banner, approved_by/at shown, ⬇ Excel button
+(`/export.xlsx`); ปิดเดือน now prompts for the manager name (sent as
+approved_by; status endpoint is Form-encoded, not JSON). E2E on live-copy DB:
+UDN May todo 6→4 after accepting GRAB+LINEMAN, variance intact (-396), doc
+chips carry upload metadata. 73 pytest pass.
+
+**v2 M1 — merge plan step 1: full document manager in v2 (2026-06-11):**
+Merge direction decided with owner: v2 = main path, old app's mature tools get
+absorbed as deep layers (M1 docs ✅ → M2 full manual matcher + mapping flow →
+M3 manager review screen → M4 switch /app to v2, retire duplicate tabs).
+M1 ships the old Uploads page's strengths inside v2's เอกสาร card:
+"จัดการไฟล์ ▾" expands a table of this branch+month's uploads with live
+match-progress bars (`match_done/match_total` from /api/uploads), per-line
+drill (รายบรรทัด → /api/uploads/{id}/lines with the same live status chips as
+the old panel), ย้ายสาขา (PATCH /branch, master-only target list), and ลบ
+(DELETE + re-upload; dedup guard server-side). Mutations hidden when the month
+is closed. Frontend-only — all endpoints already existed. Verified live UDN
+May: 3 files, KB_SA 31/65 bar, drill 72 lines = 30 matched / 8 unmatched / 34
+informational.
+
+**v2 M2+M3 — full matcher, self-serve mapping, manager review (2026-06-11):**
+(M2a) **จับคู่ละเอียด** per channel ("🔧" in the channel expand; bank chips when
+the channel spans several): two-pane lane matcher fed by GET /api/manual —
+left = POS days with remaining + partial-amount inputs, right = document lines
+with checkboxes (auto-`matched` lines shown dimmed and unselectable so they
+can't be double-claimed; `manual` ones hidden), live both-side sums with
+variance color, note → POST /api/manual; existing matches listed with ยกเลิก
+(DELETE). Covers the lump-over-several-days / partial-allocation cases the
+simple day-drill match can't. (M2b) **ตั้งค่าเอง** on every setup-question
+card: category+bank selects → PATCH when the code already has a map row,
+POST to create when it doesn't — no more jumping to /app#setup for a code the
+suggestions can't answer. (M3) **สรุปสำหรับผู้จัดการ** — when the session is
+in_review, a review table appears above the buttons: every channel's
+POS/เข้าจริง/ต่าง + status, the staff's accept reasons with who wrote them,
+and the internal-transfer total, so the manager reads everything before
+entering the close code. JS parse-checked (node), 76 pytest pass.
+
+**v2 M4 — switch the entry point (2026-06-11):** `git mv` swapped the files —
+v2 is now `frontend/index.html` (served at **/app/** by the StaticFiles
+html=True mount, no route change) and the old app is `frontend/classic.html`
+(**/app/classic.html**), kept as the escape hatch for ~1 month. `frontend/v2.html`
+is now a tiny meta+JS redirect to /app/ so old bookmarks / the old Start Recon.bat
+URL still land right. Cross-links updated: v2's "เครื่องมือขั้นสูง ↗" → classic;
+classic's top banner now grey "นี่คือหน้าเดิม (สำรอง) → ไปหน้าหลักแบบใหม่".
+Coupon (the one tab v2 lacks) stays in classic and is reachable from v2's COUPON
+channel via "🎟️ รายละเอียดคูปอง ↗" → /app/classic.html#coupon; classic's init()
+now reads location.hash and opens that tab directly. Start Recon.bat opens /app/.
+Verified live: /app/=v2, /app/classic.html=old, /app/v2.html→redirect,
+#coupon deep-link opens the coupon tab. Duplicate tabs (overview/board/daily/
+monthly/bankcov) intentionally NOT deleted yet — that's the post-month cleanup
+once the team has closed one real month on v2 and confirms nothing sends them
+back to classic. 76 pytest pass.
+
+**v2 cleanup + LIVE DEPLOY (2026-06-11):** owner chose to finish in one pass.
+Removed the three duplicate nav buttons from classic (Daily / Monthly·Run Match
+/ Bank statement check — v2 owns them; panes left as dead code, reachable by
+hash). Coupon decision = **keep in classic**, linked from v2's COUPON channel.
+Pre-deploy gap caught + fixed: v2 read the write token from localStorage but had
+no UI to set it → on the gated live server every mutation would 403; added the
+"🔑 รหัส" button + setToken() (same localStorage key as classic). **Deployed to
+Fly** (`flyctl deploy`, branch `claude/recon-v2-channel-first`, 0 behind main):
+foreign uncommitted WIP from a parallel session (backend/main.py, index.html,
+gen_menu_ab_deep_report.py) was `git stash`ed before the build and restored
+after, so only the committed branch shipped. Verified live: main dashboard 200,
+`oshinei-dashboard.fly.dev:8443/app/` = v2 ("กระทบยอด — Oshinei"),
+/app/classic.html = old app, /app/v2.html → redirect, /api/v2/overview = 5
+branches real data. Ops follow-ups for owner: staff must enter the write token
+once via 🔑 (OSHINEI_SEED_TOKEN is set on Fly); set OSHINEI_MANAGER_TOKEN on Fly
+if two-tier close should be enforced (unset = approve open).
+
+**v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
+every channel carries `codes` (POS payment codes behind the total, via
+`_pos_codes_by_channel`); expanding a channel shows "ที่มา POS: KNNQR 3.6M…"
+chips. (P2.6) **Fee/VAT in v2** — CREDIT expand renders the 3-document chain
+cards (POS รูด → สรุปยอดบัตร − fee+VAT → เข้าบัญชี, leg chips) +
+"✎ ค่าธรรมเนียม & VAT" table for CREDIT/GRAB/LINEMAN with inline inputs
+(PATCH `/api/lines/{src}/{id}/fee-vat`, auto-save, live net recompute).
+(P2.7) **Manager gate** — `OSHINEI_MANAGER_TOKEN` env (open when unset, same
+pattern as the write gate): PATCH status→approved/closed requires
+`X-Manager-Token`; staff transitions stay open; v2 prompts for the code only
+when the server demands it (remembers per browser session). (P3.8)
+**Month-boundary rollover** — `prev_month_consumed_ids()`: deposits on the
+1st–3rd that the PREVIOUS month's cash matcher claims (T+1 of month-end cash)
+are now excluded from this month's buckets/daily/coverage (coverage shows them
+informational·CASH) — kills the systematic "statement เยอะกว่า" at every month
+start; pytest-proven with a May-31-cash → June-1-SDCH case. (P3.9) Mobile CSS
+(stacked channel grid, smaller day cells ≤640px). (P3.10) Old /app now shows a
+banner linking to v2 — old tabs intentionally NOT removed until the team
+finishes one full month on v2. 76 pytest pass. Verified live: UDN May QR
+provenance = KNNQR 3,623,111; CREDIT split กรุงไทย/กสิกรไทย; manager gate
+403→(409 discrepancy gate) on real session; overview 5 branches 0.06s.
+
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +
   idempotency, fee/VAT net, parser skipped-count, master-only/period/token gates).

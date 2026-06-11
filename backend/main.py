@@ -263,8 +263,18 @@ _NONFOOD_CATEGORY_KEYWORDS = (
     "DESSERT", "ICE-CREAM", "ICECREAM",                               # dessert
     "SPECIAL",                                                         # branch 'Special <x>' menus
 )
+# Real foods that live under NON-food categories and would be wrongly dropped by
+# the keyword blacklist above. Durian is filed under 'Special KKN' / 'Promotion' /
+# 'Oshinei SERVICE' (→ hits SPECIAL/PROMOTI/SERVICE) yet sells ~192k servings
+# across the 5 master branches during buffet and is costed @30฿ — excluding it
+# understated buffet cost/head by ~27฿ (≈60฿ in May). Whitelisted by code so EVERY
+# food/cost report counts it (the whole category+code filter is OR'd with this
+# list). Add a SKU here when a genuine dish hides under a non-food category.
+# (2026-06-11 — see [[eel_bom_estimate]] + debug-mantra "category-not-branch" rule)
+_FOOD_SKU_WHITELIST = ('KKN018', 'KKN019', 'PM0010', 'PM0011', 'PM0012', 'DUR-999')  # durian
+_FOOD_SKU_WHITELIST_SQL = "(" + ",".join(f"'{c}'" for c in _FOOD_SKU_WHITELIST) + ")"
 _FOOD_CATEGORY_FILTER = (
-    "(" + " AND ".join(
+    "((" + " AND ".join(
         f"UPPER(c.name) NOT LIKE '%{kw}%'" for kw in _NONFOOD_CATEGORY_KEYWORDS
     ) + ")"
     # Code-level guards: OT* = penalty / room-opening charges, SERVICECHARGE/SP =
@@ -274,6 +284,8 @@ _FOOD_CATEGORY_FILTER = (
     " AND sk.sku_code NOT GLOB 'DEL[0-9]*'"
     " AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE','SP','SERVICE','DISCOUNT','DEPOSIT')"
     " AND sk.sku_code NOT LIKE 'BUFFET%'"
+    # … OR an explicitly whitelisted real-food SKU that a category keyword caught.
+    f" OR sk.sku_code IN {_FOOD_SKU_WHITELIST_SQL})"
 )
 
 
@@ -8692,6 +8704,12 @@ def get_cost_detail(
                    c.name AS category,
                    COALESCE(sk.business_type,'buffet') AS business_type,  -- buffet-first default (85% of business)
                    sc.unit_cost, sc.updated_at,
+                   -- Effective COGS the rest of the app actually uses (BoM recipe →
+                   -- alias BoM → sku_cost → 0). Lets the worklist show a real cost for
+                   -- the ~98 recipe-costed SKUs whose manual sc.unit_cost is NULL, so
+                   -- they no longer read as "uncosted" when they're costed via BoM.
+                   (SELECT sec.recipe_cost FROM sku_effective_cost sec
+                      WHERE sec.sku_id = sk.sku_id) AS effective_cost,
                    ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.subtotal_ex_vat END), 0) AS total_revenue,
                    ROUND(SUM(CASE WHEN ssm.source='Easy' THEN ssm.qty END), 0)            AS total_qty
             FROM skus sk
