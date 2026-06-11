@@ -116,6 +116,32 @@ def test_category_reconciliation_statuses(client, tmp_path):
     assert len(client.get(f"/api/sessions/{sid}/discrepancies").json()) == before
 
 
+def test_summary_freshness_flags_stale_snapshot(client):
+    """The persisted category snapshot (Excel/approval) only refreshes on Run
+    Match. /summary.freshness must report stale=True before the first run and
+    after a later upload, and stale=False right after a run."""
+    db = main._DB_PATH
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+
+    # never run → stale, no computed_at
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is True and f["computed_at"] is None
+
+    # run match → fresh
+    client.post(f"/api/sessions/{sid}/run-match")
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is False and f["computed_at"] is not None
+
+    # a later upload post-dates the run → stale again
+    _add_bank_line(db, "KTB", "QR", 99950, date="2026-06-12")
+    c = sqlite3.connect(db)
+    c.execute("UPDATE recon_uploads SET uploaded_at='2099-01-01 00:00:00' "
+              "WHERE upload_id=(SELECT MAX(upload_id) FROM recon_uploads)")
+    c.commit(); c.close()
+    f = client.get(f"/api/sessions/{sid}/summary").json()["freshness"]
+    assert f["stale"] is True
+
+
 def test_suggestions_wrong_channel_same_bank(client):
     """POS booked under QR·KBANK but the money shows as a TRANSFER·KBANK bank line
     of the same amount/day → one wrong-channel suggestion, and applying it (POST

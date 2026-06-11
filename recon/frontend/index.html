@@ -353,6 +353,7 @@
           </div>
         </div>
         <div id="rec-unmapped" class="hidden card" style="border-left:4px solid var(--warn)"></div>
+        <div id="rec-stale" class="hidden card" style="border-left:4px solid var(--warn);background:#fffbeb"></div>
         <div>
           <div class="font-semibold text-gray-700 mb-3" data-i18n="recon_by_cat">Reconciliation by category</div>
           <div id="rec-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
@@ -1035,6 +1036,9 @@ const I18N = {
     branch_overview:"ภาพรวมรายสาขา", c_branch:"สาขา", c_status:"สถานะ", c_issues:"ปัญหา",
     btn_upload:"+ อัปโหลด", btn_run:"▶ ประมวลผล", btn_excel:"⬇ Excel", btn_inreview:"ส่งตรวจ", btn_approve:"อนุมัติ",
     recon_by_cat:"กระทบยอดตามประเภท", payout_chain:"สายการโอนเงิน", payout_hint:"— ยอดสุทธิจากผู้ให้บริการต้องเท่ากับเงินที่เข้าบัญชี",
+    stale_title:"ผลที่บันทึกไว้ล้าสมัย", stale_never:"ยังไม่เคยกด Run Match — ตัวเลขบนการ์ดคำนวณสดให้ แต่ไฟล์ Excel/การอนุมัติยังว่าง กด Run Match เพื่อบันทึกผล",
+    stale_body:"มีการอัปโหลด/แก้ไขเอกสารหลังกด Run Match ครั้งล่าสุด ({chg}) ตัวเลขบนการ์ดนี้คำนวณสดแล้ว แต่ไฟล์ Excel และผลที่ใช้อนุมัติยังเป็นของเก่า ({run}) — กด Run Match เพื่อกระทบยอดใหม่",
+    stale_btn:"▶ Run Match เดี๋ยวนี้",
     feevat_title:"ค่าธรรมเนียม & VAT — กรอกเอง (Grab / Line Man / บัตรเครดิต)",
     daily_recon:"กระทบยอดรายวัน — วัน × ช่องทาง", daily_legend:"✓ ตรง · ≠ ต่าง · ✗ ขาด · … รอเอกสาร · 🔗 จับคู่เอง · ? ตั้งค่าธนาคาร · คลิกเพื่อดูรายการ",
     coverage_hd:"ความครอบคลุม — วันล่าสุดของแต่ละเอกสาร",
@@ -1221,6 +1225,9 @@ const I18N = {
     branch_overview:"Branch Overview", c_branch:"Branch", c_status:"Status", c_issues:"Issues",
     btn_upload:"+ Upload", btn_run:"▶ Run Match", btn_excel:"⬇ Excel", btn_inreview:"Mark In-Review", btn_approve:"Approve",
     recon_by_cat:"Reconciliation by category", payout_chain:"Payout chain", payout_hint:"— provider net should equal the bank payout credit",
+    stale_title:"Saved results are out of date", stale_never:"Run Match hasn't run yet — the cards below are computed live, but the Excel export and approval snapshot are still empty. Press Run Match to persist.",
+    stale_body:"A document was uploaded/edited after the last Run Match ({chg}). The cards below are already recomputed live, but the Excel export and the snapshot used for approval are still the old run ({run}) — press Run Match to refresh them.",
+    stale_btn:"▶ Run Match now",
     feevat_title:"Fee & VAT — manual entry (Grab / Line Man / Credit Card)",
     daily_recon:"Daily reconciliation — day × lane", daily_legend:"✓ matched · ≠ variance · ✗ missing · … awaiting · 🔗 manual · ? map bank · click a cell for lines",
     coverage_hd:"Coverage — last day each source's document covers",
@@ -2321,6 +2328,7 @@ async function renderReconcile(){
   document.getElementById('rec-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
   document.getElementById('rec-status').innerHTML = `<span class="pill pill-${SESSION.status}">${SESSION.status.replace('_',' ')}</span>`;
   const s = await api(`/api/sessions/${SESSION.session_id}/summary`);
+  renderStaleBanner(s.freshness);
   const un=document.getElementById('rec-unmapped');
   if(s.unmapped && s.unmapped.length){ un.classList.remove('hidden');
     un.innerHTML=`<div class="font-semibold text-amber-700 mb-1">⚠ Unmapped POS codes</div>
@@ -2360,6 +2368,26 @@ async function renderReconcile(){
   renderPayouts(s.payouts||[]);
   loadFeeVat();
   renderCouponSeries();
+}
+
+// Stale-snapshot guard: the cards are live, but the persisted result (Excel /
+// approval) only refreshes on Run Match. Warn when an upload/edit post-dates it.
+function renderStaleBanner(f){
+  const el=document.getElementById('rec-stale');
+  if(!el) return;
+  if(!f || !f.stale){ el.classList.add('hidden'); el.innerHTML=''; return; }
+  const fmtTs=s=>s? String(s).replace('T',' ').slice(0,16) : '—';
+  const msg = f.computed_at
+    ? t('stale_body').replace('{chg}', fmtTs(f.last_change_at)).replace('{run}', fmtTs(f.computed_at))
+    : t('stale_never');
+  el.innerHTML = `<div class="flex items-center gap-3 flex-wrap">
+      <div class="flex-1 min-w-0">
+        <div class="font-semibold text-amber-700">⚠ ${t('stale_title')}</div>
+        <div class="text-sm text-gray-600 mt-1">${msg}</div>
+      </div>
+      <button onclick="runMatch(event)" class="btn btn-pri">${t('stale_btn')}</button>
+    </div>`;
+  el.classList.remove('hidden');
 }
 
 // COUPON detail — dedicated page (cross-branch, monthly)

@@ -1127,6 +1127,47 @@ def update_session_status(
 
 # ── Session summary + category reconciliation ─────────────────────────────────
 
+def _norm_ts(s):
+    """Normalise a stored timestamp for lexical comparison. computed_at /
+    uploaded_at use 'YYYY-MM-DD HH:MM:SS' while audit_log.ts uses a 'T' separator
+    — line them up so a plain string `>` is correct."""
+    return s.replace("T", " ")[:19] if s else None
+
+
+def _match_freshness(conn, session_id, branch_id, period_month):
+    """When did Run Match last persist this session's category snapshot, vs. the
+    latest data change (upload, manual match, lane adjustment, internal-transfer
+    ignore)? The live `/summary` cards are always recomputed, but the *persisted*
+    `recon_category_result` (Excel export, `/categories`, approval snapshot) only
+    refreshes on Run Match — `stale=True` means it lags and staff should re-run."""
+    computed_at = _norm_ts(conn.execute(
+        "SELECT MAX(computed_at) FROM recon_category_result WHERE session_id=?",
+        (session_id,)).fetchone()[0])
+    changes = [
+        conn.execute(
+            "SELECT MAX(COALESCE(confirmed_at, uploaded_at)) FROM recon_uploads "
+            "WHERE branch_id=? AND period_month=? AND status!='error'",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(matched_at) FROM recon_manual_match WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(created_at) FROM recon_lane_adj WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchone()[0],
+        conn.execute(
+            "SELECT MAX(a.ts) FROM recon_audit_log a "
+            "JOIN recon_bank_lines bl ON bl.id = a.entity_id "
+            "WHERE a.entity='bank_line' AND bl.branch_id=? "
+            "AND strftime('%Y-%m', bl.txn_date)=?",
+            (branch_id, period_month)).fetchone()[0],
+    ]
+    norm = [_norm_ts(x) for x in changes if x]
+    last_change_at = max(norm) if norm else None
+    # Stale when results were never computed, or a change post-dates the last run.
+    stale = computed_at is None or (last_change_at is not None and last_change_at > computed_at)
+    return {"computed_at": computed_at, "last_change_at": last_change_at, "stale": stale}
+
+
 @app.get("/api/sessions/{session_id}/summary")
 def session_summary(session_id: int):
     """Live per-category reconciliation (POS tender vs the right external source),
@@ -1173,6 +1214,7 @@ def session_summary(session_id: int):
             "variance":              round(ext_total - pos_total, 2),
             "matched":               sum(1 for r in rows if r["status"] == "matched"),
             "pending_discrepancies": pending,
+            "freshness":             _match_freshness(conn, session_id, bid, pm),
         }
 
 
