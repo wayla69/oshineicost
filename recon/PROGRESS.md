@@ -94,6 +94,20 @@ approved_by; status endpoint is Form-encoded, not JSON). E2E on live-copy DB:
 UDN May todo 6→4 after accepting GRAB+LINEMAN, variance intact (-396), doc
 chips carry upload metadata. 73 pytest pass.
 
+**v2 M1 — merge plan step 1: full document manager in v2 (2026-06-11):**
+Merge direction decided with owner: v2 = main path, old app's mature tools get
+absorbed as deep layers (M1 docs ✅ → M2 full manual matcher + mapping flow →
+M3 manager review screen → M4 switch /app to v2, retire duplicate tabs).
+M1 ships the old Uploads page's strengths inside v2's เอกสาร card:
+"จัดการไฟล์ ▾" expands a table of this branch+month's uploads with live
+match-progress bars (`match_done/match_total` from /api/uploads), per-line
+drill (รายบรรทัด → /api/uploads/{id}/lines with the same live status chips as
+the old panel), ย้ายสาขา (PATCH /branch, master-only target list), and ลบ
+(DELETE + re-upload; dedup guard server-side). Mutations hidden when the month
+is closed. Frontend-only — all endpoints already existed. Verified live UDN
+May: 3 files, KB_SA 31/65 bar, drill 72 lines = 30 matched / 8 unmatched / 34
+informational.
+
 **v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
 every channel carries `codes` (POS payment codes behind the total, via
 `_pos_codes_by_channel`); expanding a channel shows "ที่มา POS: KNNQR 3.6M…"

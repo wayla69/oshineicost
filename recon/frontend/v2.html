@@ -143,7 +143,7 @@ async function loadBranch(bid){
 
   if(closed) html+=`<div class="card c-ok" style="margin-bottom:12px;background:#e1f5ee">🔒 เดือนนี้ปิดแล้ว — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ (ผู้จัดการกด "ส่งกลับแก้" ในเครื่องมือขั้นสูงหากต้องเปิดใหม่)</div>`;
 
-  // เอกสาร — chip ที่ขาดกดอัปโหลดได้เลย
+  // เอกสาร — chip ที่ขาดกดอัปโหลดได้เลย + แผงจัดการไฟล์ที่อัปแล้ว (ยกมาจากหน้าเดิม)
   html+=`<div class="card" style="margin-bottom:12px"><div class="row">
     <b style="font-size:13.5px">เอกสาร</b>`;
   for(const d of r.documents){
@@ -153,7 +153,8 @@ async function loadBranch(bid){
     else
       html+=`<button class="chip ${cls}" title="คลิกเพื่ออัปโหลด" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
   }
-  html+=`</div><div id="up-panel"></div></div>`;
+  html+=`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
+  </div><div id="up-panel"></div><div id="docs-panel" style="display:none"></div></div>`;
 
   // คำถามตั้งค่า (unmapped codes)
   for(const q of r.setup_questions){
@@ -268,6 +269,75 @@ async function confirmUpload(){
   fd.append('period_month',MONTH);fd.append('provider',UP_DOC.provider||'');
   try{const r=await api(`/api/uploads/${UP_DOC.source}/confirm`,{method:'POST',body:fd});
       toast(`บันทึกแล้ว ${r.rows_saved} รายการ`);route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── แผงจัดการไฟล์ที่อัปโหลดแล้ว (ยกความสามารถหน้า Uploads เดิมเข้ามา) ── */
+const SRC_LABEL={bank:'สเตทเมนต์',credit_card:'สรุปยอดบัตร',grab:'Grab',lineman:'Line Man'};
+const LINE_ST={matched:['c-ok','✓ จับคู่แล้ว'],manual:['c-ok','🔗 จับคู่เอง'],unmatched:['c-warn','⌛ ยังไม่จับคู่'],
+               excluded:['c-mut','⊘ ตัดออก'],informational:['c-mut','· ข้อมูลทั่วไป']};
+async function toggleDocs(){
+  const panel=$('docs-panel'), tg=$('docs-toggle');
+  if(panel.style.display!=='none'){panel.style.display='none';tg.textContent='จัดการไฟล์ ▾';return;}
+  tg.textContent='จัดการไฟล์ ▴';
+  panel.style.display='';
+  panel.innerHTML='<div class="muted" style="margin-top:10px">กำลังโหลด…</div>';
+  let ups;try{ups=await api(`/api/uploads?branch_id=${DATA.branch_id}&period_month=${MONTH}`);}
+  catch(e){panel.innerHTML=`<div class="chip c-err">โหลดไม่ได้: ${esc(e.message)}</div>`;return;}
+  if(!ups.length){panel.innerHTML='<div class="muted" style="margin-top:10px">ยังไม่มีไฟล์ของสาขา/เดือนนี้</div>';return;}
+  panel.innerHTML=`<div class="card" style="padding:0;margin-top:10px;overflow-x:auto"><table>
+    <tr><th>ไฟล์</th><th>ประเภท</th><th>รายการ</th><th style="min-width:130px">จับคู่แล้ว</th><th>อัปเมื่อ</th><th></th></tr>
+    ${ups.map(u=>{
+      const tot=u.match_total||0, done=u.match_done||0;
+      const pct=tot?Math.round(100*done/tot):0;
+      const bar=tot?`<div class="row"><div class="prog" style="min-width:60px"><div style="width:${pct}%"></div></div>
+                     <span class="lbl">${done}/${tot}</span></div>`
+        :(u.error_msg?`<span class="chip c-mut">${esc(u.error_msg)}</span>`:'<span class="lbl">—</span>');
+      return `<tr>
+        <td style="text-align:left;max-width:230px;overflow:hidden;text-overflow:ellipsis" title="${esc(u.file_name)}">${esc(u.file_name)}</td>
+        <td>${SRC_LABEL[u.source_type]||u.source_type} ${esc(u.provider||'')}</td>
+        <td class="mono">${u.row_count}</td>
+        <td>${bar}</td>
+        <td class="lbl">${esc((u.uploaded_at||'').slice(5,16))}</td>
+        <td style="white-space:nowrap">
+          <button class="btn btn-sm" onclick="upLines(${u.upload_id},this)">รายบรรทัด</button>
+          ${DATA.closed?'':`<button class="btn btn-sm" onclick="moveUpload(${u.upload_id})" title="เอกสารอยู่ผิดสาขา">ย้ายสาขา</button>
+          <button class="btn btn-sm" style="color:var(--err)" onclick="delUpload(${u.upload_id},'${esc(u.file_name)}')">ลบ</button>`}
+        </td></tr>
+        <tr id="uplines-${u.upload_id}" style="display:none"><td colspan="6" style="text-align:left;background:#fafafa"></td></tr>`;
+    }).join('')}
+  </table></div>
+  <div class="muted" style="margin-top:4px">% จับคู่คำนวณสดจากเอกสารจริง — ลบไฟล์แล้วอัปใหม่ได้ถ้าอัปผิด (ระบบกันไฟล์ซ้ำให้)</div>`;
+}
+async function upLines(uid,btn){
+  const row=$('uplines-'+uid);
+  if(row.style.display!=='none'){row.style.display='none';return;}
+  row.style.display='';
+  const cell=row.firstElementChild;
+  cell.innerHTML='<span class="muted">กำลังโหลด…</span>';
+  let d;try{d=await api(`/api/uploads/${uid}/lines`);}
+  catch(e){cell.innerHTML=`<span class="chip c-err">${esc(e.message)}</span>`;return;}
+  cell.innerHTML=`<div style="max-height:280px;overflow:auto"><table>
+    <tr><th>วันที่</th><th>รายละเอียด</th><th>ยอด</th><th>สถานะ</th></tr>
+    ${d.lines.map(l=>{const [cls,lab]=LINE_ST[l.status]||['c-mut',l.status];
+      return `<tr><td>${l.date}</td><td style="text-align:left">${esc(l.ref||'')}</td>
+        <td class="mono">${fmt(l.amount)}</td><td><span class="chip ${cls}">${lab}</span></td></tr>`;}).join('')}
+  </table></div>
+  <div class="lbl" style="margin-top:4px">จับคู่ ${d.matched}/${d.count} รายการที่ต้องกระทบยอด (อีก ${d.total_lines-d.count} รายการเป็นข้อมูลทั่วไป/ตัดออก)</div>`;
+}
+async function moveUpload(uid){
+  let brs;try{brs=await api('/api/branches');}catch(e){toast(e.message);return;}
+  const opts=brs.map(b=>`${b.branch_id}=${b.name}`).join('  ');
+  const pick=prompt(`ย้ายไฟล์ไปสาขาไหน? พิมพ์หมายเลข:\n${opts}`);
+  if(pick===null)return;
+  const bid=parseInt(pick.trim());
+  if(!brs.some(b=>b.branch_id===bid)){toast('หมายเลขสาขาไม่ถูกต้อง');return;}
+  try{const r=await api(`/api/uploads/${uid}/branch`,{method:'PATCH',body:{branch_id:bid}});
+      toast(`ย้ายแล้ว (${r.moved_lines} รายการ)`);route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function delUpload(uid,name){
+  if(!confirm(`ลบไฟล์ "${name}" และรายการทั้งหมดของมัน? (อัปใหม่ได้ภายหลัง)`))return;
+  try{await api(`/api/uploads/${uid}`,{method:'DELETE'});toast('ลบแล้ว');route();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
