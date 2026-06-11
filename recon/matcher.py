@@ -518,6 +518,171 @@ def payout_matching(conn, branch_id, period_month, max_group=4, max_lag=7):
     return result
 
 
+# ── Credit card: full 3-document match (POS ↔ settlement ↔ bank), per acquirer ──
+# The owner's accounting chain for cards is three documents:
+#   1) POS gross  ↔  credit-card settlement summary gross (before fee & VAT)
+#   2) settlement net (gross − refund − MDR fee − VAT)  ↔  bank statement credit
+# The bank only ever credits the NET, so the gap between gross and the bank line is
+# exactly the fee+VAT — already stored on each settlement line and pulled in
+# automatically here (via _eff_fee_vat), so it explains the gap instead of looking
+# like a discrepancy. We split per acquirer (CREDIT·KTB / CREDIT·KBANK) because each
+# acquirer settles into its own bank account.
+
+# Acquirer → the bank account its settlement nets into. KTB/KBANK have statements;
+# KTC has no own bank account here (its bank leg, if any, rides a KTB/KBANK transfer).
+_ACQ_BANK = {"KTB": "KTB", "KBANK": "KBANK"}
+
+
+def _match_net_days_to_credits(net_by_day, credits, max_group=4, max_lag=7):
+    """Group 1..max_group consecutive net-days to the earliest unused bank credit
+    equal to the group sum (daily tolerance) within max_lag days. Mirrors the
+    grouping in payout_matching/cash_deposit_matching. Returns
+    (matched_total, used_ids, groups[{credit_id, date, amount, days:[{day,net}]}])."""
+    days = sorted((d, n) for d, n in net_by_day.items() if n > TOL_ABS_DAY)
+    used: set = set()
+    groups = []
+    di = 0
+    while di < len(days):
+        hit = None
+        s = 0.0
+        for k in range(1, min(max_group, len(days) - di) + 1):
+            s = round(s + days[di + k - 1][1], 2)
+            last_day = days[di + k - 1][0]
+            for c in credits:
+                if c["id"] in used or not _within_tol_day(c["amount"], s):
+                    continue
+                lag = (_pd(c["date"]) - _pd(last_day)).days
+                if 0 <= lag <= max_lag:
+                    hit = (k, c)
+                    break
+            if hit:
+                break
+        if hit:
+            k, c = hit
+            used.add(c["id"])
+            grp = days[di:di + k]
+            groups.append({"credit_id": c["id"], "date": c["date"],
+                           "amount": round(c["amount"], 2),
+                           "days": [{"day": d, "net": round(n, 2)} for d, n in grp]})
+            di += k
+        else:
+            di += 1
+    return round(sum(g["amount"] for g in groups), 2), used, groups
+
+
+def _credit_bank_candidates(conn, branch_id, period_month, bank, exclude_ids=None):
+    """Bank credit lines that could be a card settlement landing on `bank` this
+    month. Acquirers remit the net under inconsistent codes — KTB posts CC_SETTLE
+    (SDCK / 'รับเงินจากการขาย'), KBank often a plain รับโอนเงิน (TRANSFER) — so we
+    consider both channels and match by amount + date-lag (same idea as
+    payout_matching)."""
+    exclude_ids = exclude_ids or set()
+    try:
+        rows = conn.execute("""
+            SELECT l.id, l.txn_date, l.credit, l.channel, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0
+              AND l.match_status NOT IN ('manual','excluded')
+              AND l.channel IN ('CC_SETTLE','TRANSFER')
+              AND strftime('%Y-%m', l.txn_date)=?
+            ORDER BY l.txn_date, l.id
+        """, (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    out = []
+    for r in rows:
+        if r["id"] in exclude_ids:
+            continue
+        if _provider_bank(r["provider"]) != bank:
+            continue
+        out.append({"id": r["id"], "date": r["txn_date"],
+                    "amount": float(r["credit"] or 0), "channel": r["channel"]})
+    return out
+
+
+def credit_three_way(conn, branch_id, period_month, exclude_ids=None):
+    """Per-acquirer 3-document credit reconciliation. Returns
+    {rows: [...], bank_line_ids: set}. Each row:
+      acquirer, bank, pos_gross, settle_gross, settle_refund, settle_fee (MDR+VAT,
+      auto-pulled), settle_net, bank_credit, pos_leg, bank_leg, fee_variance,
+      bank_groups (day-traces of the bank match).
+    `exclude_ids` are bank-line ids already claimed elsewhere (e.g. by cash
+    matching) so they aren't double-counted as a card settlement."""
+    exclude_ids = set(exclude_ids or set())
+    pos, _unmapped = pos_category_totals(conn, branch_id, period_month)
+    pos_credit = {bank: amt for (cat, bank), amt in pos.items() if cat == "CREDIT"}
+
+    pmids = _point_mids(conn, branch_id)
+    agg: dict = {}        # acq -> {gross, refund, fee, net}
+    net_day: dict = {}    # acq -> {day: net}
+    for r in conn.execute("""
+        SELECT l.*, u.provider FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+    """, (branch_id, period_month)):
+        acq = _cc_acquirer(r, pmids)
+        if acq.endswith("POINT"):     # loyalty point settles separately (own stream)
+            continue
+        fee, vat = _eff_fee_vat(r, "mdr_fee", "vat_amount")
+        gross = float(r["gross_amount"] or 0)
+        refund = float(r["refund_amount"] or 0)
+        net = gross - refund - fee - vat
+        a = agg.setdefault(acq, {"gross": 0.0, "refund": 0.0, "fee": 0.0, "net": 0.0})
+        a["gross"] += gross
+        a["refund"] += refund
+        a["fee"] += fee + vat
+        a["net"] += net
+        nd = net_day.setdefault(acq, {})
+        nd[r["settlement_date"]] = nd.get(r["settlement_date"], 0.0) + net
+
+    rows = []
+    bank_line_ids: set = set()
+    for acq in sorted(set(agg) | set(pos_credit)):
+        a = agg.get(acq, {"gross": 0.0, "refund": 0.0, "fee": 0.0, "net": 0.0})
+        pos_gross = pos_credit.get(acq, 0.0)
+        bank = _ACQ_BANK.get(acq)
+        bank_credit, used, groups = 0.0, set(), []
+        if bank:
+            credits = _credit_bank_candidates(conn, branch_id, period_month, bank,
+                                              exclude_ids | bank_line_ids)
+            bank_credit, used, groups = _match_net_days_to_credits(net_day.get(acq, {}), credits)
+            bank_line_ids |= used
+
+        # POS leg: POS gross ↔ settlement gross
+        if pos_gross > 0 and a["gross"] > 0:
+            pos_leg = "matched" if _within_tol(a["gross"], pos_gross) else "mismatch"
+        elif pos_gross > 0:
+            pos_leg = "pos_only"          # POS booked a card tender, no settlement doc yet
+        else:
+            pos_leg = "ext_only"          # settlement with no POS card tender
+
+        # Bank leg: settlement net ↔ bank credit (fee already auto-pulled into net)
+        if a["net"] > TOL_ABS and bank_credit > 0:
+            bank_leg = "matched" if _within_tol(bank_credit, a["net"]) else "mismatch"
+        elif a["net"] > TOL_ABS:
+            bank_leg = "awaiting" if bank else "no_bank"   # net to land / no statement acct
+        elif bank_credit > 0:
+            bank_leg = "ext_only"
+        else:
+            bank_leg = "none"
+
+        rows.append({
+            "acquirer":      acq,
+            "bank":          bank or acq,
+            "pos_gross":     round(pos_gross, 2),
+            "settle_gross":  round(a["gross"], 2),
+            "settle_refund": round(a["refund"], 2),
+            "settle_fee":    round(a["fee"], 2),       # MDR + VAT, auto-pulled
+            "settle_net":    round(a["net"], 2),
+            "bank_credit":   round(bank_credit, 2),
+            "pos_leg":       pos_leg,
+            "bank_leg":      bank_leg,
+            "pos_variance":  round(a["gross"] - pos_gross, 2),
+            "bank_variance": round(bank_credit - a["net"], 2),
+            "bank_groups":   groups,
+        })
+    return {"rows": rows, "bank_line_ids": bank_line_ids}
+
+
 # ── Line-level drill-down ─────────────────────────────────────────────────────
 # The external lines that make up a (category, bank) lane, so staff can see what
 # drives a variance. (POS has no per-receipt tender split — the POS side stays an
@@ -1448,6 +1613,123 @@ def upload_match_stats(conn, branch_id, period_month):
             if st == "matched":
                 bump(r["upload_id"], "matched")
     return out
+
+
+# ── Bank-statement coverage (bank-first: is every credit line explained?) ─────
+# Reconcile/Daily are POS-first. This view is BANK-first: walk every credit line on
+# the statements and answer "did this money get explained?" — matched to a revenue
+# lane (cash/QR/transfer), consumed as a cash deposit, tied to a provider net payout
+# (incl. the CREDIT 3-document chain, where the fee+VAT is auto-pulled to bridge
+# gross→net), ignored as an internal transfer, or still unmatched (→ staff matches it
+# in POS). Non-revenue debits/fees are informational and stay out of the denominator.
+
+_PAYOUT_CHANNELS = {"CC_SETTLE", "GRAB_PAYOUT", "LINEMAN_PAYOUT"}
+_PAYOUT_CHAN_CAT = {"CC_SETTLE": "CREDIT", "GRAB_PAYOUT": "GRAB", "LINEMAN_PAYOUT": "LINEMAN"}
+
+
+def bank_statement_coverage(conn, branch_id, period_month):
+    """Per-line coverage of every bank-statement credit for a branch/month, plus the
+    CREDIT 3-document chain. Returns {totals, groups, credit_three_way,
+    unmatched_lines, lines}."""
+    lane_status = _lane_status_map(conn, branch_id, period_month)
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    cash_ids = set(cash["consumed_ids"]) | {g["line_id"] for g in cash["groups"]}
+
+    # CREDIT 3-document chain (per acquirer) — also yields the bank lines it consumed.
+    c3 = credit_three_way(conn, branch_id, period_month, exclude_ids=cash_ids)
+    credit_ids = set(c3["bank_line_ids"])
+
+    # Grab / Line Man net payouts → which bank credits they consumed. Share one 'used'
+    # set seeded with cash + credit ids so a single line is never double-claimed.
+    used = set(cash_ids) | credit_ids
+    payout_ids = {"GRAB": set(), "LINEMAN": set()}
+    net_by_day_all = _payout_net_by_day(conn, branch_id, period_month)
+    for cat in ("GRAB", "LINEMAN"):
+        cand = [c for c in _payout_candidate_credits(
+                    conn, branch_id, period_month, _PAYOUT_CANDIDATE_CHANNELS[cat])
+                if c["id"] not in used]
+        _tot, u, _g = _match_net_days_to_credits(net_by_day_all.get(cat, {}), cand)
+        payout_ids[cat] = u
+        used |= u
+
+    lines = []
+    groups: dict = {}
+    tot = {"matched": 0, "unmatched": 0, "excluded": 0, "informational": 0,
+           "amt_matched": 0.0, "amt_unmatched": 0.0, "amt_excluded": 0.0}
+
+    for r in conn.execute("""
+        SELECT l.id, l.txn_date d, l.description ref, l.credit amt, l.channel,
+               l.match_status ms, u.provider
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND l.credit>0 AND strftime('%Y-%m', l.txn_date)=?
+        ORDER BY l.txn_date, l.id
+    """, (branch_id, period_month)):
+        amt = float(r["amt"] or 0)
+        chan = r["channel"]
+        bankp = _provider_bank(r["provider"])
+        cat = _CHANNEL_CATEGORY.get(chan)        # CASH/QR/TRANSFER or None
+
+        if r["ms"] == "excluded":
+            status, group, lane_bank = "excluded", "excluded", bankp
+        elif r["id"] in cash_ids:
+            status, group, lane_bank = "matched", "CASH", "NONE"
+        elif r["id"] in credit_ids:
+            status, group, lane_bank = "matched", "CREDIT", bankp
+        elif r["id"] in payout_ids["GRAB"]:
+            status, group, lane_bank = "matched", "GRAB", "NONE"
+        elif r["id"] in payout_ids["LINEMAN"]:
+            status, group, lane_bank = "matched", "LINEMAN", "NONE"
+        elif chan in _PAYOUT_CHANNELS:           # payout leg with no provider net behind it
+            status, group, lane_bank = "unmatched", _PAYOUT_CHAN_CAT[chan], bankp
+        elif cat:
+            bank = "NONE" if cat == "CASH" else bankp
+            st = _line_status(r["ms"], cat, bank, lane_status, cash_ids, r["id"])
+            status = "matched" if st == "matched" else "unmatched"
+            group, lane_bank = cat, bank
+        else:                                     # FEE / OTHER credits — not a revenue lane
+            status, group, lane_bank = "informational", "OTHER", bankp
+
+        lines.append({"id": r["id"], "date": r["d"], "ref": r["ref"] or "",
+                      "amount": round(amt, 2), "channel": chan, "bank": lane_bank,
+                      "category": group, "status": status})
+
+        if status == "excluded":
+            tot["excluded"] += 1; tot["amt_excluded"] += amt
+        elif status == "informational":
+            tot["informational"] += 1
+        else:
+            tot[status] += 1
+            tot["amt_matched" if status == "matched" else "amt_unmatched"] += amt
+        g = groups.setdefault(group, {"matched": 0, "unmatched": 0, "excluded": 0,
+                                      "informational": 0, "count": 0,
+                                      "amt_matched": 0.0, "amt_unmatched": 0.0})
+        g["count"] += 1
+        g[status] += 1
+        if status == "matched":
+            g["amt_matched"] += amt
+        elif status == "unmatched":
+            g["amt_unmatched"] += amt
+
+    denom = tot["matched"] + tot["unmatched"]
+    return {
+        "totals": {
+            "lines_total":      denom,
+            "matched":          tot["matched"],
+            "unmatched":        tot["unmatched"],
+            "excluded":         tot["excluded"],
+            "informational":    tot["informational"],
+            "amount_matched":   round(tot["amt_matched"], 2),
+            "amount_unmatched": round(tot["amt_unmatched"], 2),
+            "amount_excluded":  round(tot["amt_excluded"], 2),
+            "pct_matched":      round(100.0 * tot["matched"] / denom, 1) if denom else 100.0,
+        },
+        "groups": {k: {**v, "amt_matched": round(v["amt_matched"], 2),
+                       "amt_unmatched": round(v["amt_unmatched"], 2)}
+                   for k, v in sorted(groups.items())},
+        "credit_three_way": c3["rows"],
+        "unmatched_lines":  [l for l in lines if l["status"] == "unmatched"],
+        "lines":            lines,
+    }
 
 
 # ── Bank suggestions for unmapped POS codes ───────────────────────────────────
