@@ -14803,6 +14803,47 @@ def _bom_ensure_and_seed():
         print(f"[bom] ensure_table failed: {e}")
 
 
+# Manual cost corrections — applied at every startup after BOM seed.
+# Use when the BOM workbook has a verified-wrong ingredient cost and cannot
+# be corrected immediately. Each entry removes the SKU's BOM rows (so the
+# COALESCE falls through to sku_cost) and upserts the confirmed unit cost.
+_COST_PATCHES: list[tuple[str, float]] = [
+    ("B0040",    13.40),  # หอยเชลล์ต้มฮอกไกโด (1 ชิ้น)  — BOM workbook had ~38.2 (wrong)
+    ("B0322",    13.40),  # หอยเชลล์ฮอกไกโดซาชิมิ (1 ตัว) — same ingredient, same correction
+    ("1150-084", 13.40),  # HOKKAIDO HOTATE SASHIMI (1PCS) — same ingredient, same correction
+]
+
+
+def _apply_cost_patches():
+    """Delete BOM rows for patched SKUs and upsert the verified sku_cost."""
+    if not _COST_PATCHES:
+        return
+    try:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        with get_db() as con:
+            for sku_code, unit_cost in _COST_PATCHES:
+                row = con.execute(
+                    "SELECT sku_id FROM skus WHERE sku_code = ?", (sku_code,)
+                ).fetchone()
+                if row is None:
+                    print(f"[cost-patch] SKU not found: {sku_code} — skipped")
+                    continue
+                sku_id = row[0]
+                deleted = con.execute(
+                    "DELETE FROM bom_ingredients WHERE sku_id = ?", (sku_id,)
+                ).rowcount
+                con.execute(
+                    """INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)
+                       VALUES(?, ?, ?, ?)""",
+                    (sku_id, unit_cost, now[:10], now),
+                )
+                print(f"[cost-patch] {sku_code}: bom rows removed={deleted}, sku_cost={unit_cost}")
+            con.commit()
+        invalidate_cache()
+    except Exception as e:
+        print(f"[cost-patch] failed: {e}")
+
+
 def _sku_cost_monthly_ensure():
     """Create sku_cost_monthly table (Phase 8) if missing."""
     try:
@@ -14827,6 +14868,7 @@ def _sku_cost_monthly_ensure():
 @app.on_event("startup")
 def _bom_startup():
     _bom_ensure_and_seed()
+    _apply_cost_patches()
     _sku_cost_monthly_ensure()
     _perf_startup()
     # Auth tables + seed the 12 default users (idempotent; no-op once seeded).
