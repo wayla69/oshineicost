@@ -51,6 +51,30 @@ classification is **config-driven, not regex**:
 | **Internal-transfer ignore flag** — `PATCH /api/bank-lines/{id}/ignore` sets bank-line `match_status='excluded'` (reuses the CHECK-allowed status; no migration): excluded everywhere (monthly + daily lanes, daily board, cash credits, payout candidates, map suggestions), survives Run Match, reversible, audited with note; "ตัดออก / เลิกตัดออก" buttons in the drill drawer + upload-lines modal; verified live-mirror: 05-29 ฿2M+฿1.5M intercompany sweeps drop TRANSFER·KBANK from 3.5M to 1.4k | ✅ Done 2026-06-10 (branch claude/recon-internal-transfers) |
 | **Map-from-documents suggestions** — `map_bank_suggestions()` matches each needs-map POS code's daily series against statement-lane residuals (QR/TRANSFER per bank, CREDIT per acquirer with T+1/T+2 lag) → `/api/map-suggestions`; Setup shows a green "เอกสารบอกธนาคารได้" card with one-click Apply (audit note "from documents: h/n days matched"). Verified on real UDN May data: **KNNQR → QR·KBANK, 24/31 days satang-exact** — answers the long-open "which bank does KNNQR settle into" | ✅ Done 2026-06-10 |
 
+## Reconcile v2 — channel-first redesign (2026-06-11, in progress)
+Owner decisions: main view = POS channels; daily board folded into a monthly
+overview (variance per cell, drillable); two-tier close (staff ส่งตรวจ →
+manager ปิดเดือน). New composition layer `reconcile_v2.py` (NO new matching
+logic — composes category_reconciliation + daily_reconciliation + cash matcher +
+credit_three_way + _coverage) with the status vocabulary collapsed to
+ok / diff / waiting_doc / no_source / setup. Always computed live — **no Run
+Match button**; the persisted snapshot happens once, inside ปิดเดือน
+(run-match + approve). Progress is money-weighted (1 − Σ|variance|/Σmax(pos,ext)),
+not day-counted. Endpoints: `GET /api/v2/overview?month=` (all master branches),
+`GET /api/v2/reconcile?branch_id=&month=` (documents checklist derived from the
+branch's POS channels, channel cards with per-day status, non_revenue =
+excluded internal transfers reported apart, setup_questions with one-click
+map-suggestion apply, todo list, can_close), `GET /api/v2/lane` (line drill, no
+session needed). New UI `frontend/v2.html` served at **/app/v2.html** —
+runs PARALLEL to the old /app (nothing removed yet): overview table → branch
+page → channel rows → day calendar → bank lines with "ตัดออก ไม่ใช่ยอดขาย";
+reuses existing mutating endpoints only (sessions, payment-map PATCH,
+bank-lines ignore). Verified live on real data: UDN May progress 75.2%,
+todo 6 (สรุปยอดบัตร×2, Grab, Line Man, QR diff, transfer residue); ฿3.5M
+internal transfer shows in the non-revenue strip. +2 pytest (72 pass).
+Remaining for v2: manual-match action in the day drill, upload from within v2,
+close-month lock surfacing in UI, then retire the old tabs.
+
 ## Verification
 - `pytest recon/tests/test_recon.py` — 23 pass (classify, seed, engine statuses +
   idempotency, fee/VAT net, parser skipped-count, master-only/period/token gates).

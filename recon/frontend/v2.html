@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>กระทบยอด v2 — Oshinei</title>
+<style>
+:root{--brand:#0F6E56;--ok:#1D9E75;--warn:#BA7517;--err:#A32D2D;--mut:#6b7280;
+--bg:#f6f7f9;--card:#fff;--line:#e5e7eb;--txt:#1f2937;--sub:#6b7280}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:var(--bg);color:var(--txt);font-size:15px}
+.wrap{max-width:980px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.chip{display:inline-block;font-size:12px;padding:3px 10px;border-radius:999px;white-space:nowrap}
+.c-ok{background:#e1f5ee;color:#085041}.c-warn{background:#faeeda;color:#633806}
+.c-err{background:#fcebeb;color:#791f1f}.c-mut{background:#f1f5f9;color:#475569}
+.c-setup{background:#e6f1fb;color:#0c447c}
+.btn{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:14px}
+.btn-pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.mono{font-family:Consolas,monospace}
+.grid-ch{display:grid;grid-template-columns:1.5fr 1fr 1fr 1.3fr 22px;gap:8px;align-items:center;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.grid-ch:hover{background:#fafafa}
+.grid-ch:last-child{border-bottom:none}
+.num{text-align:right;font-family:Consolas,monospace;font-size:13.5px}
+.lbl{font-size:12px;color:var(--sub)}
+.daygrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:6px;padding:12px}
+.daycell{border:1px solid var(--line);border-radius:8px;padding:6px 8px;font-size:12px;cursor:pointer;background:#fff}
+.daycell:hover{border-color:var(--brand)}
+.d-ok{border-left:4px solid var(--ok)}.d-diff{border-left:4px solid var(--err)}
+.d-waiting{border-left:4px solid var(--warn)}.d-setup{border-left:4px solid #378ADD}
+.prog{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;flex:1;min-width:90px}
+.prog>div{height:100%;background:var(--ok)}
+table{border-collapse:collapse;width:100%}
+td,th{padding:8px 10px;font-size:13.5px;border-bottom:1px solid var(--line);text-align:right}
+td:first-child,th:first-child{text-align:left}
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:#1f2937;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;opacity:0;transition:opacity .3s;pointer-events:none}
+.toast.show{opacity:1}
+a{color:var(--brand)}
+h1{font-size:20px;font-weight:600}h2{font-size:16px;font-weight:600}
+.muted{color:var(--sub);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app">กำลังโหลด…</div>
+<div class="toast" id="toast"></div>
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>(n==null?'—':Math.round(n).toLocaleString('th-TH'));
+const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600);}
+async function api(path,opts={}){
+  opts.headers=opts.headers||{};
+  const tok=(localStorage.getItem('oshinei_token')||'').trim();
+  if(tok)opts.headers['X-Upload-Token']=tok;
+  if(opts.body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
+  const r=await fetch(path,opts);
+  if(!r.ok){let d='';try{d=(await r.json()).detail||''}catch(e){};throw new Error(d||r.status);}
+  return r.json();
+}
+
+const CH_ST={ok:['c-ok','ตรง'],diff:['c-err','ต่าง'],waiting_doc:['c-warn','รอเอกสาร'],
+              no_source:['c-mut','ไม่มีแหล่งตรวจ'],setup:['c-setup','ตั้งค่า']};
+const SES_ST={draft:'กำลังทำ',in_review:'รอผู้จัดการตรวจ',approved:'ปิดเดือนแล้ว'};
+
+let MONTH=localStorage.getItem('v2_month')||new Date().toISOString().slice(0,7);
+let DATA=null;
+
+function route(){
+  const h=location.hash.slice(1);
+  const m=h.match(/^b\/(\d+)/);
+  if(m)loadBranch(+m[1]);else loadOverview();
+}
+window.addEventListener('hashchange',route);
+
+function header(extra){
+  return `<div class="row" style="margin-bottom:14px">
+    <h1 style="cursor:pointer" onclick="location.hash=''">กระทบยอดรายเดือน</h1>
+    <input type="month" value="${MONTH}" onchange="setMonth(this.value)" style="padding:6px;border:1px solid var(--line);border-radius:8px">
+    ${extra||''}
+    <a href="/app" style="margin-left:auto;font-size:13px">เครื่องมือขั้นสูง ↗</a>
+  </div>`;
+}
+function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);route();}
+
+/* ── ภาพรวมทุกสาขา ── */
+async function loadOverview(){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let ov;try{ov=await api(`/api/v2/overview?month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const chans=ov.channel_order.filter(k=>ov.branches.some(b=>b.channels[k]));
+  let html=header()+`<div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>ความคืบหน้า</th>${chans.map(k=>`<th>${esc(ov.channel_labels[k])}</th>`).join('')}<th>สถานะ</th></tr>`;
+  for(const b of ov.branches){
+    html+=`<tr style="cursor:pointer" onclick="location.hash='b/${b.branch_id}'">
+      <td><b>${esc(b.branch_name)}</b><div class="lbl">${b.todo_count?b.todo_count+' เรื่องค้าง':'ครบ'}</div></td>
+      <td><div class="row"><div class="prog"><div style="width:${b.progress_pct}%"></div></div><span class="lbl">${b.progress_pct}%</span></div></td>`;
+    for(const k of chans){
+      const c=b.channels[k];
+      if(!c){html+='<td class="lbl">—</td>';continue;}
+      const [cls]=CH_ST[c.status]||['c-mut'];
+      html+=`<td><span class="chip ${cls} mono" title="POS ${fmt(c.pos)} / เข้าจริง ${fmt(c.ext)}">${c.status==='ok'?'✓':fmt(c.variance)}</span></td>`;
+    }
+    html+=`<td><span class="chip ${b.status==='approved'?'c-ok':'c-mut'}">${SES_ST[b.status]||b.status}</span></td></tr>`;
+  }
+  html+=`</table></div>
+  <div class="muted" style="margin-top:8px">ตัวเลขในตาราง = ผลต่าง (เข้าจริง − POS) ของเดือน · คลิกสาขาเพื่อตรวจสอบและทำงานต่อ</div>`;
+  $('app').innerHTML=html;
+}
+
+/* ── หน้าสาขา ── */
+async function loadBranch(bid){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let r;try{r=await api(`/api/v2/reconcile?branch_id=${bid}&month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  DATA=r;
+  const ses=r.session,st=(ses&&ses.status)||'draft';
+  const closed=st==='approved';
+  let html=header(`<a href="#" onclick="location.hash='';return false" class="lbl">← ทุกสาขา</a>`);
+  html+=`<div class="card row" style="margin-bottom:12px">
+    <div><div class="lbl">สาขา</div><h2>${esc(r.branch_name)} · ${MONTH}</h2></div>
+    <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${SES_ST[st]}</span>
+    <div class="row" style="margin-left:auto">
+      <div class="prog" style="width:130px"><div style="width:${r.progress_pct}%"></div></div>
+      <span class="lbl">ตรงแล้ว ${r.progress_pct}%</span>
+    </div></div>`;
+
+  // เอกสาร
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row">
+    <b style="font-size:13.5px">เอกสาร</b>`;
+  for(const d of r.documents){
+    const cls=d.status==='uploaded'?'c-ok':d.status==='partial'?'c-warn':'c-err';
+    html+=`<span class="chip ${cls}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</span>`;
+  }
+  html+=`<a href="/app#uploads" class="lbl" style="margin-left:auto">อัปโหลด ↗</a></div></div>`;
+
+  // คำถามตั้งค่า (unmapped codes)
+  for(const q of r.setup_questions){
+    html+=`<div class="card c-setup" style="margin-bottom:12px;background:#e6f1fb">
+      รหัสชำระ <b>${esc(q.code)}</b> (${fmt(q.amount)} บาท) ยังไม่รู้ว่าเข้าธนาคารไหน
+      ${q.suggestion?` — เอกสารชี้ว่าเป็น <b>${esc(q.suggestion.category)}·${esc(q.suggestion.bank)}</b> (ตรง ${q.suggestion.hits} วัน)
+        <button class="btn" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`
+       :` — <a href="/app#setup">ไปตั้งค่า ↗</a>`}</div>`;
+  }
+
+  // ตาราง channel
+  html+=`<div class="card" style="padding:0;margin-bottom:12px">
+    <div class="grid-ch" style="cursor:default;background:#fafafa;border-radius:12px 12px 0 0">
+      <span class="lbl">ช่องทาง</span><span class="lbl num">ยอดขาย POS</span>
+      <span class="lbl num">เงินเข้าจริง</span><span class="lbl" style="text-align:right">สถานะ</span><span></span>
+    </div>`;
+  r.channels.forEach((ch,i)=>{
+    const [cls,lab]=CH_ST[ch.status]||['c-mut',ch.status];
+    html+=`<div class="grid-ch" onclick="toggleDays(${i})">
+      <div>${esc(ch.label)}${ch.days_total?`<div class="lbl">${ch.days_done}/${ch.days_total} วัน ✓</div>`:''}</div>
+      <div class="num">${fmt(ch.pos)}</div>
+      <div class="num">${ch.ext?fmt(ch.ext):'—'}</div>
+      <div style="text-align:right"><span class="chip ${cls}">${lab}</span>
+        ${ch.detail?`<div class="lbl">${esc(ch.detail)}</div>`:''}</div>
+      <span class="lbl">▾</span></div>
+    <div id="days-${i}" style="display:none;border-bottom:1px solid var(--line)"></div>`;
+  });
+  html+=`</div>`;
+
+  // โอนภายใน
+  if(r.non_revenue.count){
+    html+=`<div class="card row" style="margin-bottom:12px;font-size:13.5px;color:var(--sub)">
+      ⇄ เงินเข้าที่ไม่ใช่ยอดขาย: โอนภายใน ${r.non_revenue.count} รายการ ${fmt(r.non_revenue.amount)} บาท (ตัดออกแล้ว)
+      <a href="#" class="lbl" style="margin-left:auto" onclick="toggleNR();return false">ดูรายการ</a></div>
+    <div id="nr" class="card" style="display:none;margin-bottom:12px;padding:0"><table>
+      ${r.non_revenue.lines.map(l=>`<tr><td>${l.date}</td><td style="text-align:left">${esc(l.ref)}</td><td class="mono">${fmt(l.amount)}</td></tr>`).join('')}
+    </table></div>`;
+  }
+
+  // สิ่งที่เหลือ + ปุ่มสถานะ
+  html+=`<div class="card row">
+    <div style="flex:1;min-width:200px">${r.todo.length
+      ?`<b style="font-size:13.5px">เหลือ ${r.todo.length} เรื่อง:</b> <span class="muted">${r.todo.map(t=>esc(t.label)).join(' · ')}</span>`
+      :'<span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span>'}</div>
+    ${closed?'':st==='in_review'
+      ?`<button class="btn btn-pri" onclick="closeMonth(${bid})">ปิดเดือน (ผู้จัดการ)</button>
+         <button class="btn" onclick="setSt(${bid},'draft')">ส่งกลับแก้</button>`
+      :`<button class="btn btn-pri" onclick="setSt(${bid},'in_review')">ส่งตรวจ</button>`}
+  </div>`;
+  $('app').innerHTML=html;
+}
+
+function toggleNR(){const e=$('nr');e.style.display=e.style.display==='none'?'':'none';}
+
+function toggleDays(i){
+  const el=$('days-'+i);
+  if(el.style.display!=='none'){el.style.display='none';return;}
+  const ch=DATA.channels[i];
+  el.innerHTML=`<div class="daygrid">${ch.days.map(d=>`
+    <div class="daycell d-${d.status}" onclick="event.stopPropagation();openDay(${i},'${d.day}')">
+      <b>${+d.day.slice(8)}</b> <span class="lbl">${{ok:'✓',diff:'≠',waiting:'⏳',setup:'?',no_source:'·'}[d.status]||''}</span>
+      <div class="mono" style="font-size:11px">${fmt(d.pos)}</div>
+      ${d.status==='diff'?`<div class="mono" style="font-size:11px;color:var(--err)">${d.variance>0?'+':''}${fmt(d.variance)}</div>`:''}
+    </div>`).join('')}</div>
+  <div id="daylines-${i}" style="padding:0 12px 12px"></div>`;
+  el.style.display='';
+}
+
+async function openDay(i,day){
+  const ch=DATA.channels[i];
+  const box=$('daylines-'+i);
+  box.innerHTML='<div class="muted">กำลังโหลด…</div>';
+  const d=ch.days.find(x=>x.day===day);
+  let lines=[];
+  for(const b of d.banks){
+    try{const r=await api(`/api/v2/lane?branch_id=${DATA.branch_id}&month=${MONTH}&category=${ch.key}&bank=${b}&day=${day}`);
+        lines.push(...r.lines.map(l=>({...l,bank:b})));}catch(e){}
+  }
+  box.innerHTML=`<div class="card" style="background:#fafafa">
+    <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">${day} · ${esc(ch.label)}</b>
+      <span class="lbl">POS ${fmt(d.pos)} · เข้าจริง ${fmt(d.ext)} · ต่าง ${d.variance>0?'+':''}${fmt(d.variance)}</span></div>
+    ${lines.length?`<table>${lines.map(l=>`<tr>
+      <td style="text-align:left">${esc(l.ref||l.description||'')}<span class="lbl"> ${esc(l.bank)}</span></td>
+      <td class="mono">${fmt(l.amount)}</td>
+      <td style="width:110px">${l.id?`<button class="btn" style="font-size:12px;padding:3px 8px" onclick="ignoreLine(${l.id})">ตัดออก ไม่ใช่ยอดขาย</button>`:''}</td>
+    </tr>`).join('')}</table>`
+    :'<div class="muted">ไม่มีบรรทัดเงินเข้าของวันนี้ (รอเอกสาร หรือยอดถูกฝากรวมวันอื่น)</div>'}
+  </div>`;
+}
+
+async function ignoreLine(id){
+  if(!confirm('ยืนยัน: บรรทัดนี้ไม่ใช่ยอดขาย (เช่น โอนภายใน)?'))return;
+  try{await api(`/api/bank-lines/${id}/ignore`,{method:'PATCH',body:{ignored:true,note:'v2: not revenue'}});
+      toast('ตัดออกแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+async function applySugg(mapId,cat,bank){
+  try{await api(`/api/payment-map/${mapId}`,{method:'PATCH',body:{category:cat,bank:bank}});
+      toast('บันทึกแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+async function ensureSession(bid){
+  if(DATA.session)return DATA.session.session_id;
+  const s=await api('/api/sessions',{method:'POST',body:{branch_id:bid,period_month:MONTH}});
+  return s.session_id;
+}
+async function setSt(bid,st){
+  try{const sid=await ensureSession(bid);
+      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:{status:st}});
+      toast(st==='in_review'?'ส่งตรวจแล้ว':'ส่งกลับแก้แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function closeMonth(bid){
+  if(!confirm('ปิดเดือน: บันทึกผลถาวร + ออกไฟล์ Excel ได้ และล็อกการแก้ไขทั้งเดือนนี้ ยืนยัน?'))return;
+  try{const sid=await ensureSession(bid);
+      await api(`/api/sessions/${sid}/run-match`,{method:'POST'});   // snapshot at close
+      await api(`/api/sessions/${sid}/status`,{method:'PATCH',body:{status:'approved'}});
+      toast('ปิดเดือนแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+route();
+</script>
+</body>
+</html>

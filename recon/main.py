@@ -46,6 +46,7 @@ from .matcher import (
     run_auto_match,
     suggest_reclassifications,
 )
+from .reconcile_v2 import reconcile_month, reconcile_overview
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -1253,6 +1254,39 @@ def session_bank_coverage(session_id: int):
         if not s:
             raise HTTPException(404)
         return bank_statement_coverage(conn, s["branch_id"], s["period_month"])
+
+
+# ── Reconcile v2 — channel-first composed view (no session required) ──────────
+
+@app.get("/api/v2/overview")
+def v2_overview(month: str):
+    """All master branches for one month: progress, per-channel variance, status."""
+    _validate_period(month)
+    with get_db() as conn:
+        return reconcile_overview(conn, month)
+
+
+@app.get("/api/v2/reconcile")
+def v2_reconcile(branch_id: int, month: str):
+    """One branch, one month, channel-first: documents checklist, channel cards
+    with per-day detail, non-revenue (internal transfers), setup questions, todo."""
+    _validate_period(month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return reconcile_month(conn, branch_id, month)
+
+
+@app.get("/api/v2/lane")
+def v2_lane(branch_id: int, month: str, category: str, bank: str, day: str | None = None):
+    """Line-level drill for v2 (same data as the session lane endpoint, keyed by
+    branch+month directly so the UI needs no session to browse)."""
+    _validate_period(month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        lines = lane_lines(conn, branch_id, month, category, bank, day)
+        return {"category": category, "bank": bank, "day": day,
+                "count": len(lines), "total": round(sum(l["amount"] for l in lines), 2),
+                "lines": lines}
 
 
 @app.get("/api/sessions/{session_id}/lane")

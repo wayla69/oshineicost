@@ -116,6 +116,50 @@ def test_category_reconciliation_statuses(client, tmp_path):
     assert len(client.get(f"/api/sessions/{sid}/discrepancies").json()) == before
 
 
+def test_v2_reconcile_channel_first(client):
+    """/api/v2/reconcile composes the month channel-first with the 4-word status
+    vocabulary, a derived document checklist, and a todo list."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    _add_bank_line(db, "KTB", "QR", 99950)        # vs 100000 → within ฿100 tolerance
+    _add_bank_line(db, "KTB", "CASH_DEP", 20000)  # vs cash 20000
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    ch = {c["key"]: c for c in r["channels"]}
+    assert ch["COUPON"]["status"] == "no_source"
+    assert ch["CREDIT"]["status"] == "waiting_doc"      # no settlement summary uploaded
+    assert ch["GRAB"]["status"] == "waiting_doc"
+    assert "ENTERTAIN" not in ch                        # internal comps stay out
+    # documents checklist derives from POS channels (CC acquirers present)
+    doc_keys = {d["key"] for d in r["documents"]}
+    assert "cc_KTB" in doc_keys and "grab" in doc_keys
+    # todo blocks closing
+    assert r["todo"] and r["can_close"] is False
+    assert 0 <= r["progress_pct"] <= 100
+
+    # excluded internal transfer lands in non_revenue, not a channel
+    _add_bank_line(db, "KBANK", "TRANSFER", 2_000_000)
+    conn = sqlite3.connect(db)
+    conn.execute("UPDATE recon_bank_lines SET match_status='excluded' WHERE credit=2000000")
+    conn.commit(); conn.close()
+    r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert r2["non_revenue"]["count"] == 1
+    assert r2["non_revenue"]["amount"] == 2_000_000
+    ch2 = {c["key"]: c for c in r2["channels"]}
+    assert ch2.get("TRANSFER", {}).get("ext", 0) == 0   # excluded ≠ revenue lane
+
+
+def test_v2_overview_lists_master_branches(client):
+    r = client.get("/api/v2/overview", params={"month": "2026-06"}).json()
+    names = [b["branch_name"] for b in r["branches"]]
+    assert "Korat1" in names and "Chonburi" not in names   # master-only scope
+    b = next(x for x in r["branches"] if x["branch_name"] == "Korat1")
+    assert "channels" in b and "progress_pct" in b
+    # bad month rejected
+    assert client.get("/api/v2/overview", params={"month": "2026-13"}).status_code == 400
+
+
 def test_summary_freshness_flags_stale_snapshot(client):
     """The persisted category snapshot (Excel/approval) only refreshes on Run
     Match. /summary.freshness must report stale=True before the first run and
