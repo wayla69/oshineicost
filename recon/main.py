@@ -31,6 +31,7 @@ from pydantic import BaseModel
 
 from .matcher import (
     _eff_fee_vat,
+    bank_statement_coverage,
     category_reconciliation,
     daily_board,
     daily_reconciliation,
@@ -1195,6 +1196,21 @@ def session_daily(session_id: int):
         if not s:
             raise HTTPException(404)
         return daily_reconciliation(conn, s["branch_id"], s["period_month"])
+
+
+@app.get("/api/sessions/{session_id}/bank-coverage")
+def session_bank_coverage(session_id: int):
+    """Bank-first coverage: every statement credit line classified matched /
+    unmatched / excluded / informational, plus the CREDIT 3-document chain (POS gross
+    ↔ settlement gross, settlement net ↔ bank credit, fee+VAT auto-pulled). Computed
+    live so it reflects current uploads, manual matches and fee/VAT edits."""
+    with get_db() as conn:
+        s = conn.execute(
+            "SELECT branch_id, period_month FROM recon_sessions WHERE session_id=?",
+            (session_id,)).fetchone()
+        if not s:
+            raise HTTPException(404)
+        return bank_statement_coverage(conn, s["branch_id"], s["period_month"])
 
 
 @app.get("/api/sessions/{session_id}/lane")

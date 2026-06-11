@@ -763,6 +763,63 @@ def test_payout_chain_ties_net_to_bank(client):
     assert any(d["category"] == "GRAB" and d["bank"] == "PAYOUT" for d in discs)
 
 
+def test_credit_three_way_full_chain(client):
+    """Credit 3-document match per acquirer: POS gross ↔ settlement gross, and
+    settlement net (gross − fee − VAT, auto-pulled) ↔ bank statement credit — both
+    legs matched."""
+    from recon.matcher import credit_three_way
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTB','f','2026-06',0,'confirmed')").lastrowid
+    # settlement gross 30000 == POS 'Credit กรุงไทย'; fee 800 + VAT 56 → net 29144
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,refund_amount,mdr_fee,vat_amount,net_amount)"
+              " VALUES(?,4,'2026-06-05','KTB',30000,0,800,56,29144)", (up,))
+    # the net lands next day on the KTB account as a CC_SETTLE credit
+    bu = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'ktb','b','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-06','CC_SETTLE',29144)", (bu,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        res = credit_three_way(conn, 4, "2026-06")
+    ktb = next(r for r in res["rows"] if r["bank"] == "KTB")
+    assert ktb["pos_gross"] == 30000 and ktb["settle_gross"] == 30000 and ktb["pos_leg"] == "matched"
+    assert abs(ktb["settle_fee"] - 856) < 0.01                 # MDR + VAT auto-pulled
+    assert abs(ktb["settle_net"] - 29144) < 0.01
+    assert abs(ktb["bank_credit"] - 29144) < 0.01 and ktb["bank_leg"] == "matched"
+    assert len(res["bank_line_ids"]) == 1
+
+
+def test_bank_statement_coverage_buckets(client):
+    """Bank-first coverage: a matched QR line, an unmatched stray TRANSFER, and an
+    ignored internal transfer land in the right buckets; 'excluded' is out of the
+    matched/unmatched denominator."""
+    from recon.matcher import bank_statement_coverage
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'ktb','b','2026-06',0,'confirmed')").lastrowid
+    # QR credit ties to POS KNNQR (100000) → matched
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status) VALUES(?,4,'2026-06-10','QR',100000,'unmatched')", (up,))
+    # stray transfer with nothing behind it → unmatched (staff matches in POS)
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status) VALUES(?,4,'2026-06-12','TRANSFER',7777,'unmatched')", (up,))
+    # operator-flagged internal transfer → reported apart, out of the denominator
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status) VALUES(?,4,'2026-06-13','TRANSFER',2000000,'excluded')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        cov = bank_statement_coverage(conn, 4, "2026-06")
+    tot = cov["totals"]
+    assert tot["matched"] == 1 and tot["unmatched"] == 1
+    assert tot["excluded"] == 1 and tot["lines_total"] == 2            # excluded out of denom
+    assert cov["groups"]["QR"]["matched"] == 1
+    assert abs(tot["amount_excluded"] - 2000000) < 0.01
+    assert any(l["status"] == "unmatched" and l["category"] == "TRANSFER" for l in cov["unmatched_lines"])
+
+
 def test_approval_gate_and_period_lock(client):
     """Can't approve with open discrepancies; an approved month is locked until reopened."""
     sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]

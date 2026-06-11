@@ -208,6 +208,9 @@
     <button class="side-btn" data-tab="reconcile" onclick="switchTab('reconcile')">
       <span class="icon">⚖️</span><span data-i18n="tab_monthly">Monthly reconcile · Run Match</span>
     </button>
+    <button class="side-btn" data-tab="bankcov" onclick="switchTab('bankcov')">
+      <span class="icon">🏦</span><span data-i18n="tab_bankcov">Bank statement check</span>
+    </button>
     <button class="side-btn" data-tab="discrepancies" onclick="switchTab('discrepancies')">
       <span class="icon">⚠️</span><span data-i18n="tab_discrepancies">To Review</span>
       <span id="disc-badge" class="side-badge hidden" style="background:#fee2e2;color:#b91c1c">0</span>
@@ -378,6 +381,47 @@
               <th class="text-right pb-2" data-i18n="th_fee">Fee</th><th class="text-right pb-2" data-i18n="th_vat">VAT</th><th class="text-right pb-2" data-i18n="th_net">Net</th><th></th>
             </tr></thead>
             <tbody id="fv-body"><tr><td colspan="7" class="text-center text-gray-400 py-6">No lines</td></tr></tbody>
+          </table></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- BANK STATEMENT CHECK -->
+    <div id="tab-bankcov" class="tab-pane hidden space-y-5">
+      <div id="bc-empty" class="card text-center py-12">
+        <div class="text-5xl mb-3">🏦</div>
+        <div class="text-gray-500 mb-4" data-i18n="empty_bankcov">Open a branch session from Overview to check whether every bank-statement amount was matched.</div>
+        <button onclick="switchTab('overview')" class="btn btn-sec" data-i18n="empty_go_overview">Go to Overview</button>
+      </div>
+      <div id="bc-body" class="hidden space-y-5">
+        <div class="card flex items-center gap-4 flex-wrap">
+          <div><div class="text-xs text-gray-400" data-i18n="bc_hdr">Bank statement check</div><div id="bc-title" class="font-semibold text-gray-800"></div></div>
+          <div id="bc-health" class="ml-auto text-sm text-right"></div>
+        </div>
+        <div>
+          <div class="font-semibold text-gray-700 mb-1">
+            <span data-i18n="bc_credit_title">Credit card — 3-document match</span>
+            <span class="font-normal text-gray-400 text-sm" data-i18n="bc_credit_hint">— POS ↔ settlement summary (gross) · settlement net ↔ bank statement (fee/VAT auto-pulled)</span>
+          </div>
+          <div id="bc-credit" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        </div>
+        <div class="card">
+          <div class="flex items-center justify-between mb-1">
+            <div class="font-semibold text-gray-700" data-i18n="bc_lines_title">Every bank-statement amount</div>
+            <div class="text-xs text-gray-400" data-i18n="bc_legend">✓ matched · ⌛ needs matching in POS · ⊘ ignored (internal transfer)</div>
+          </div>
+          <div id="bc-groups" class="text-sm text-gray-600 mb-3"></div>
+          <div id="bc-filter" class="flex flex-wrap gap-2 mb-3"></div>
+          <div class="overflow-x-auto"><table class="w-full text-sm">
+            <thead><tr class="text-gray-400 text-xs uppercase border-b">
+              <th class="text-left pb-2" data-i18n="th_date">Date</th>
+              <th class="text-left pb-2" data-i18n="bc_th_lane">Lane</th>
+              <th class="text-left pb-2" data-i18n="th_ref">Ref</th>
+              <th class="text-right pb-2" data-i18n="bc_th_amount">Amount</th>
+              <th class="text-center pb-2" data-i18n="bc_th_status">Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="bc-lines"><tr><td colspan="6" class="text-center text-gray-400 py-6">Loading…</td></tr></tbody>
           </table></div>
         </div>
       </div>
@@ -1149,6 +1193,17 @@ const I18N = {
     manual_none_ext:"ไม่มีรายการในเอกสาร (รอเอกสาร)", manual_none_matches:"ยังไม่มีการจับคู่เอง",
     manual_done:"จับคู่แล้ว", manual_undone:"ยกเลิกการจับคู่แล้ว", manual_note_ph:"หมายเหตุ (ไม่บังคับ)",
     manual_matched_badge:"จับคู่แล้ว",
+    tab_bankcov:"เช็คยอดธนาคาร", empty_bankcov:"เปิด session ของสาขาจากหน้าสรุป เพื่อเช็คว่ายอดทุกบรรทัดใน bank statement ถูกจับคู่หมดหรือยัง",
+    bc_hdr:"เช็คยอด bank statement", bc_credit_title:"บัตรเครดิต — กระทบ 3 เอกสาร",
+    bc_credit_hint:"— POS ↔ สรุปยอดบัตร (ก่อนหักค่าธรรมเนียม) · ยอดสุทธิ ↔ bank statement (ดึงค่าธรรมเนียม/VAT อัตโนมัติ)",
+    bc_lines_title:"ทุกบรรทัดใน bank statement", bc_legend:"✓ จับคู่แล้ว · ⌛ ต้องจับคู่ใน POS · ⊘ ตัดออก (โอนภายใน)",
+    bc_th_lane:"ช่องทาง", bc_th_amount:"จำนวนเงิน", bc_th_status:"สถานะ",
+    bc_pos_gross:"POS (ก่อนหักค่าธรรมเนียม)", bc_settle_gross:"สรุปยอดบัตร (gross)", bc_fee:"ค่าธรรมเนียม + VAT (อัตโนมัติ)",
+    bc_settle_net:"ยอดสุทธิ (หลังหัก)", bc_bank:"ยอดเข้า bank statement", bc_match_pos:"จับคู่ใน POS",
+    bc_leg_pos:"POS ↔ สรุปยอดบัตร", bc_leg_bank:"ยอดสุทธิ ↔ ธนาคาร",
+    bc_all_matched:"จับคู่ครบทุกบรรทัด 🎉", bc_need_match:"ต้องจับคู่ใน POS",
+    bc_st_matched:"จับคู่แล้ว", bc_st_unmatched:"ยังไม่จับคู่", bc_st_excluded:"ตัดออก", bc_st_informational:"ข้อมูลทั่วไป", bc_filter_all:"ทั้งหมด",
+    bc_no_settle:"ยังไม่ได้อัปโหลดสรุปยอดบัตร", bc_no_bank:"ยังไม่มียอดเข้าธนาคาร",
   },
   en: {
     subtitle:"Revenue Reconciliation", master_branches:"master branches",
@@ -1324,6 +1379,17 @@ const I18N = {
     manual_none_ext:"No statement lines (awaiting document)", manual_none_matches:"No manual matches yet",
     manual_done:"Matched", manual_undone:"Unmatched", manual_note_ph:"note (optional)",
     manual_matched_badge:"matched",
+    tab_bankcov:"Bank statement check", empty_bankcov:"Open a branch session from Overview to check whether every bank-statement amount was matched.",
+    bc_hdr:"Bank statement check", bc_credit_title:"Credit card — 3-document match",
+    bc_credit_hint:"— POS ↔ settlement summary (gross) · settlement net ↔ bank statement (fee/VAT auto-pulled)",
+    bc_lines_title:"Every bank-statement amount", bc_legend:"✓ matched · ⌛ needs matching in POS · ⊘ ignored (internal transfer)",
+    bc_th_lane:"Lane", bc_th_amount:"Amount", bc_th_status:"Status",
+    bc_pos_gross:"POS (before fees)", bc_settle_gross:"Settlement summary (gross)", bc_fee:"Fee + VAT (auto)",
+    bc_settle_net:"Net (after fees)", bc_bank:"Landed in bank statement", bc_match_pos:"Match in POS",
+    bc_leg_pos:"POS ↔ settlement", bc_leg_bank:"Net ↔ bank",
+    bc_all_matched:"Every line matched 🎉", bc_need_match:"need matching in POS",
+    bc_st_matched:"matched", bc_st_unmatched:"unmatched", bc_st_excluded:"ignored", bc_st_informational:"informational", bc_filter_all:"All",
+    bc_no_settle:"No settlement summary uploaded yet", bc_no_bank:"No bank credit yet",
   },
 };
 let LANG = localStorage.getItem('recon_lang') || 'th';
@@ -1441,7 +1507,7 @@ function closeAllDrawers(){
 // made inside the drawer (resolve / match / attach) after it closes.
 function refreshTab(name){
   ({overview:loadOverview, board:loadDailyBoard, daily:loadDaily,
-    discrepancies:loadDiscrepancies, reconcile:renderReconcile}[name] || (()=>{}))();
+    discrepancies:loadDiscrepancies, reconcile:renderReconcile, bankcov:loadBankCoverage}[name] || (()=>{}))();
 }
 // ESC closes the top-most drawer (manual → drill), like every other modal.
 document.addEventListener('keydown', e=>{
@@ -1463,6 +1529,7 @@ function switchTab(name){
   if(name==='board')         loadDailyBoard();
   if(name==='daily')         loadDaily();
   if(name==='reconcile')     renderReconcile();
+  if(name==='bankcov')       loadBankCoverage();
   if(name==='coupon')        loadCoupon();
   if(name==='uploads')       loadUploads();
   if(name==='discrepancies') loadDiscrepancies();
@@ -1991,6 +2058,103 @@ async function unmatchManual(id){
 // ── daily board ──────────────────────────────────────────────────────────────
 const LANE_CHIP = {matched:'b-ok', variance:'b-err', missing:'b-err', pending:'b-warn', ext_only:'b-warn', no_source:'b-mut', unmapped_bank:'b-warn', manual:'b-ok'};
 const LANE_SYM  = {matched:'✓', variance:'≠', missing:'✗', pending:'…', ext_only:'+', no_source:'·', unmapped_bank:'?', manual:'🔗'};
+// ── bank statement check (bank-first coverage + credit 3-document match) ───────
+const BC_LANE_LABEL = {CASH:'เงินสด/Cash', QR:'QR', TRANSFER:'โอน/Transfer', CREDIT:'บัตร/Credit',
+                       GRAB:'Grab', LINEMAN:'Line Man', OTHER:'อื่นๆ/Other', excluded:'ตัดออก/Ignored'};
+const BC_LEG_CHIP = {matched:['b-ok','✓'], mismatch:['b-err','≠'], pos_only:['b-warn','POS'],
+                     ext_only:['b-warn','+'], awaiting:['b-warn','…'], no_bank:['b-mut','—'], none:['b-mut','·']};
+
+async function loadBankCoverage(){
+  if(!SESSION){ document.getElementById('bc-empty').classList.remove('hidden'); document.getElementById('bc-body').classList.add('hidden'); return; }
+  document.getElementById('bc-empty').classList.add('hidden');
+  document.getElementById('bc-body').classList.remove('hidden');
+  document.getElementById('bc-title').textContent = `${SESSION.branch_name} · ${SESSION.period_month}`;
+  const d = await api(`/api/sessions/${SESSION.session_id}/bank-coverage`);
+  renderBankCoverage(d);
+}
+
+function _bcLegChip(status){ const [cls,sym]=BC_LEG_CHIP[status]||['b-mut','·']; return `<span class="badge ${cls}">${sym}</span>`; }
+
+let BC_DATA=null, BC_FILTER='all';
+const BC_LINE_ST={matched:['b-ok','✓'], unmatched:['b-warn','⌛'], excluded:['b-mut','⊘'], informational:['b-mut','·']};
+
+function renderBankCoverage(d){
+  BC_DATA=d;
+  const tot=d.totals||{};
+  const pct = tot.pct_matched ?? 100;
+  const col = pct>=99?'b-ok':pct>=70?'b-warn':'b-err';
+  document.getElementById('bc-health').innerHTML =
+    `<span class="badge ${col}" style="font-size:1rem">${tot.matched||0}/${tot.lines_total||0} ${t('bc_st_matched')} · ${pct}%</span>
+     <div class="text-xs text-gray-400 mt-1">✓ ${t('bc_st_matched')} ${fmt(tot.amount_matched)} · ⌛ ${t('bc_st_unmatched')} ${fmt(tot.amount_unmatched)}${tot.excluded?` · ⊘ ${t('bc_st_excluded')} ${fmt(tot.amount_excluded)}`:''}</div>`;
+
+  // CREDIT 3-document cards — only acquirers with activity
+  const cc=document.getElementById('bc-credit');
+  const rows=(d.credit_three_way||[]).filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0);
+  const line=(label,val)=>`<div class="flex justify-between"><span class="text-gray-500">${label}</span><span class="font-mono">${fmt(val)}</span></div>`;
+  cc.innerHTML = rows.length ? rows.map(r=>`
+    <div class="card">
+      <div class="font-semibold text-gray-800 mb-2">CREDIT·${r.bank}</div>
+      <div class="space-y-1 text-sm">
+        ${line(t('bc_pos_gross'), r.pos_gross)}
+        ${line(t('bc_settle_gross'), r.settle_gross)}
+        <div class="flex justify-between items-center pt-1 mt-1 border-t"><span class="text-xs text-gray-500">${t('bc_leg_pos')}</span>${_bcLegChip(r.pos_leg)}</div>
+        ${line('− '+t('bc_fee'), r.settle_fee)}
+        ${line(t('bc_settle_net'), r.settle_net)}
+        ${line(t('bc_bank'), r.bank_credit)}
+        <div class="flex justify-between items-center pt-1 mt-1 border-t"><span class="text-xs text-gray-500">${t('bc_leg_bank')}</span>${_bcLegChip(r.bank_leg)}</div>
+        ${r.settle_gross===0 && r.pos_gross>0 ? `<div class="text-xs text-amber-700 mt-1">⚠ ${t('bc_no_settle')}</div>` : ''}
+        ${r.settle_net>100 && r.bank_credit===0 ? `<div class="text-xs text-amber-700 mt-1">⚠ ${t('bc_no_bank')}</div>` : ''}
+      </div></div>`).join('') : `<div class="text-gray-400 text-sm">—</div>`;
+
+  // per-lane summary chips
+  document.getElementById('bc-groups').innerHTML = Object.entries(d.groups||{})
+    .map(([k,g])=>`<span class="badge ${g.unmatched?'b-warn':'b-ok'} mr-1">${BC_LANE_LABEL[k]||k}: ${g.matched}/${g.count}</span>`).join('');
+
+  // status filter — default to the actionable view (unmatched) when there is work
+  BC_FILTER = (tot.unmatched>0) ? 'unmatched' : 'all';
+  renderBcLines();
+}
+
+function renderBcFilter(){
+  const tot=(BC_DATA&&BC_DATA.totals)||{};
+  const opts=[['unmatched',`⌛ ${t('bc_st_unmatched')}`,tot.unmatched||0],
+              ['matched',`✓ ${t('bc_st_matched')}`,tot.matched||0],
+              ['excluded',`⊘ ${t('bc_st_excluded')}`,tot.excluded||0],
+              ['all',t('bc_filter_all'),(tot.matched||0)+(tot.unmatched||0)+(tot.excluded||0)+(tot.informational||0)]];
+  document.getElementById('bc-filter').innerHTML = opts.filter(([k,,n])=>n>0||k==='all').map(([k,lbl,n])=>
+    `<button onclick="bcSetFilter('${k}')" class="hub-chip" style="cursor:pointer;${BC_FILTER===k?'background:var(--brand);color:#fff':'background:#f1f5f9;color:#475569'}">${lbl} ${n}</button>`).join('');
+}
+
+function bcSetFilter(f){ BC_FILTER=f; renderBcLines(); }
+
+function renderBcLines(){
+  renderBcFilter();
+  const d=BC_DATA||{}; const tb=document.getElementById('bc-lines');
+  let lines=(d.lines||[]);
+  if(BC_FILTER!=='all') lines=lines.filter(l=>l.status===BC_FILTER);
+  if(!lines.length){ tb.innerHTML=`<tr><td colspan="6" class="text-center text-gray-400 py-6">${BC_FILTER==='unmatched'?t('bc_all_matched'):'—'}</td></tr>`; return; }
+  tb.innerHTML=lines.map(l=>{
+    const [cls,sym]=BC_LINE_ST[l.status]||['b-mut','·'];
+    const lbl=t('bc_st_'+l.status)||l.status;
+    const lane=(BC_LANE_LABEL[l.category]||l.category)+(l.bank&&l.bank!=='NONE'&&l.bank!=='UNKNOWN'?'·'+l.bank:'');
+    const act=l.status==='unmatched'
+      ? `<button class="text-xs text-indigo-600 hover:underline" onclick="bcMatchInPos('${l.category}','${l.bank||'NONE'}')">${t('bc_match_pos')} →</button>` : '';
+    const dim=(l.status==='excluded'||l.status==='informational')?'opacity:.5':'';
+    return `<tr class="border-b" style="${dim}">
+      <td class="py-1.5">${l.date||'—'}</td>
+      <td class="text-gray-600">${lane}</td>
+      <td class="text-gray-400 text-xs" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l.ref||''}</td>
+      <td class="text-right font-mono">${fmt(l.amount)}</td>
+      <td class="text-center"><span class="badge ${cls}" title="${lbl}">${sym}</span></td>
+      <td class="text-right pr-2">${act}</td></tr>`;
+  }).join('');
+}
+
+function bcMatchInPos(category, bank){
+  if(!SESSION) return;
+  openManual(SESSION.branch_id, category, bank, SESSION.period_month, 'bankcov');
+}
+
 async function loadDaily(){
   if(!SESSION){ document.getElementById('daily-empty').classList.remove('hidden'); document.getElementById('daily-body').classList.add('hidden'); return; }
   document.getElementById('daily-empty').classList.add('hidden');
