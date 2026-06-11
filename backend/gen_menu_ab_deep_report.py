@@ -20,6 +20,9 @@ BASE = MONTHS[0]; M26 = MONTHS[1:]
 WK_FROM, WK_TO = '2026-02-09', '2026-05-31'   # sales_sku_daily coverage
 
 ph = ','.join(f':b{i}' for i in range(len(BRANCHES)))
+# _FOOD_CATEGORY_FILTER now whitelists durian centrally (it's filed under
+# Special KKN / Promotion / Oshinei SERVICE but is real, costed buffet food), so
+# this report counts it automatically — no report-local override needed.
 EW = ["b.name!='ALL'", "COALESCE(sk.active,1)=1", _FOOD_CATEGORY_FILTER,
       "COALESCE(sk.description,'') NOT LIKE '(A)%'", f"b.name IN ({ph})"]
 PB = {f'b{i}': n for i, n in enumerate(BRANCHES)}
