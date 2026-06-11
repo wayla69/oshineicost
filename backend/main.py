@@ -1759,14 +1759,16 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
         if dfrom: base.append("d.day>=:df"); p["df"] = dfrom
         if dto:   base.append("d.day<=:dt"); p["dt"] = dto
         # sales_sku_daily has no `source` column (it's Easy-only), so use a daily-specific
-        # COGS expr that drops the source check but keeps buffet-tier=0 + BoM/unit_cost logic.
+        # COGS expr that drops the source check but keeps buffet-tier=0.
+        # Chain mirrors _unified_cogs_expr: cost-management (non-zero) → BoM → alias → 0.
         cogs = (f"CASE WHEN (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=d.sku_id) "
                 f"IN {_EASY_TIER_CODES_SQL} THEN 0 ELSE d.qty * COALESCE("
+                f"(SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id AND sec.recipe_cost>0), "
                 f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=d.sku_id), "
                 f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
                 f"JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id "
                 f"JOIN skus s_al ON s_al.sku_id=d.sku_id WHERE a.bom_sku_code=s_al.sku_code), "
-                f"(SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id=d.sku_id), 0) END")
+                f"0) END")
         sql = (f"SELECT {gb_select}, ROUND(SUM(d.qty),2) qty, ROUND(SUM(d.subtotal_ex_vat),2) rev, "
                f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_daily d "
                f"JOIN branches b ON b.branch_id=d.branch_id JOIN skus sk ON sk.sku_id=d.sku_id "
