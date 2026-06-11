@@ -156,14 +156,24 @@ async function loadBranch(bid){
   html+=`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
   </div><div id="up-panel"></div><div id="docs-panel" style="display:none"></div></div>`;
 
-  // คำถามตั้งค่า (unmapped codes)
-  for(const q of r.setup_questions){
+  // คำถามตั้งค่า (unmapped codes) — ตอบจากคำแนะนำเอกสาร หรือตั้งค่าเองตรงนี้เลย
+  r.setup_questions.forEach((q,qi)=>{
     html+=`<div class="card c-setup" style="margin-bottom:12px;background:#e6f1fb">
-      รหัสชำระ <b>${esc(q.code)}</b> (${fmt(q.amount)} บาท) ยังไม่รู้ว่าเข้าธนาคารไหน
+      <div class="row">รหัสชำระ <b>${esc(q.code)}</b> (${fmt(q.amount)} บาท) ยังไม่รู้ว่าเข้าธนาคารไหน
       ${q.suggestion?` — เอกสารชี้ว่าเป็น <b>${esc(q.suggestion.category)}·${esc(q.suggestion.bank)}</b> (ตรง ${q.suggestion.hits} วัน)
-        ${closed?'':`<button class="btn btn-sm" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`}`
-       :` — <a href="/app#setup">ไปตั้งค่า ↗</a>`}</div>`;
-  }
+        ${closed?'':`<button class="btn btn-sm" onclick="applySugg(${q.suggestion.map_id},'${esc(q.suggestion.category)}','${esc(q.suggestion.bank)}')">ใช้คำตอบนี้</button>`}`:''}
+      ${closed?'':`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleMapper(${qi});return false">ตั้งค่าเอง ▾</a>`}</div>
+      <div id="mapper-${qi}" style="display:none;margin-top:8px" class="row">
+        <select id="map-cat-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:6px">
+          ${['QR','TRANSFER','CREDIT','CASH','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'].map(c=>`<option>${c}</option>`).join('')}
+        </select>
+        <select id="map-bank-${qi}" style="padding:5px;border:1px solid var(--line);border-radius:6px">
+          ${['KTB','KBANK','KTC','BAY','SCB','BBL','NONE'].map(b=>`<option>${b}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-pri" onclick="applyMapper(${qi},'${esc(q.code)}')">บันทึก</button>
+        <span class="lbl">เงินสด/Grab/Line Man/คูปอง เลือกธนาคาร NONE</span>
+      </div></div>`;
+  });
 
   // การ์ดแนะนำ: ยอดอยู่ผิดช่อง (ยอดเท่ากัน ธนาคารเดียวกัน)
   if(!closed)for(let i=0;i<(r.reclass_suggestions||[]).length;i++){
@@ -203,6 +213,28 @@ async function loadBranch(bid){
     <div id="nr" class="card" style="display:none;margin-bottom:12px;padding:0"><table>
       ${r.non_revenue.lines.map(l=>`<tr><td>${l.date}</td><td style="text-align:left">${esc(l.ref)}</td><td class="mono">${fmt(l.amount)}</td></tr>`).join('')}
     </table></div>`;
+  }
+
+  // จอสรุปผู้จัดการ — เห็นทุกอย่างที่ staff ทำ/รับทราบ ก่อนใส่รหัสปิดเดือน
+  if(st==='in_review'&&!closed){
+    html+=`<div class="card" style="margin-bottom:12px;border-left:4px solid var(--brand)">
+      <b style="font-size:13.5px">📋 สรุปสำหรับผู้จัดการ — ตรวจก่อนปิดเดือน</b>
+      <table style="margin-top:8px">
+        <tr><th>ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th><th>ต่าง</th><th style="text-align:left">สถานะ / เหตุผลที่ staff รับทราบ</th></tr>
+        ${r.channels.map(c=>{
+          const [cls,lab]=c.accepted?['c-mut','รับทราบ']:(CH_ST[c.status]||['c-mut',c.status]);
+          return `<tr><td>${esc(c.label)}</td><td class="mono">${fmt(c.pos)}</td>
+            <td class="mono">${c.ext?fmt(c.ext):'—'}</td>
+            <td class="mono" style="color:${Math.abs(c.variance)<=100?'inherit':'var(--err)'}">${c.variance>0?'+':''}${fmt(c.variance)}</td>
+            <td style="text-align:left"><span class="chip ${cls}">${lab}</span>
+              ${c.accepted?` <span class="lbl">"${esc(c.accepted.note)}" — ${esc(c.accepted.by||'staff')}</span>`
+                :c.detail?` <span class="lbl">${esc(c.detail)}</span>`:''}</td></tr>`;}).join('')}
+        ${r.non_revenue.count?`<tr><td style="color:var(--sub)">โอนภายใน (ตัดออก)</td><td></td>
+          <td class="mono" style="color:var(--sub)">${fmt(r.non_revenue.amount)}</td><td></td>
+          <td style="text-align:left" class="lbl">${r.non_revenue.count} รายการ — ไม่นับเป็นยอดขาย</td></tr>`:''}
+      </table>
+      <div class="lbl" style="margin-top:6px">ปิดเดือนแล้วเหตุผลทั้งหมดจะติดไปในไฟล์ Excel · แก้ไขไม่ได้จนกว่าจะส่งกลับแก้</div>
+    </div>`;
   }
 
   // สิ่งที่เหลือ (พร้อมปุ่มรับทราบ) + ปุ่มสถานะ
@@ -387,11 +419,13 @@ function toggleDays(i){
     </div>`).join('')}</div>`:'';
   const feeBtn=FEE_SOURCE[ch.key]&&!DATA.closed?
     `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
+  const mmBtn=!DATA.closed&&ch.key!=='COUPON'?
+    `<button class="btn btn-sm" onclick="event.stopPropagation();openMatcher(${i})">🔧 จับคู่ละเอียด</button>`:'';
   el.innerHTML=`
-  ${codes?`<div class="row" style="padding:10px 14px 0"><span class="lbl">ที่มา POS:</span> ${codes} ${feeBtn}</div>`
-         :feeBtn?`<div style="padding:10px 14px 0">${feeBtn}</div>`:''}
+  ${codes||feeBtn||mmBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${feeBtn} ${mmBtn}</div>`:''}
   ${c3}
   <div id="fees-${i}"></div>
+  <div id="matcher-${i}"></div>
   <div class="daygrid">${ch.days.map(d=>`
     <div class="daycell d-${d.status}" onclick="event.stopPropagation();openDay(${i},'${d.day}')">
       <b>${+d.day.slice(8)}</b> <span class="lbl">${{ok:'✓',diff:'≠',waiting:'⏳',setup:'?',no_source:'·'}[d.status]||''}</span>
@@ -493,6 +527,102 @@ async function manualMatchDay(){
       toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
+/* ── ตัวจับคู่ละเอียด (ยกความสามารถ manual matcher เดิมเข้ามา) ──
+   เลือกหลายวัน POS (แบ่งยอดบางส่วนได้) จับกับหลายบรรทัดเอกสาร — เคสยอดก้อนเดียว
+   ครอบหลายวัน / เงินเข้าเป็นงวด ที่ตัวจับคู่แบบง่ายในหน้า drill เอาไม่อยู่ */
+let _MM=null;
+async function openMatcher(i,bank){
+  const ch=DATA.channels[i];
+  const box=$('matcher-'+i);
+  if(box.innerHTML&&!bank){box.innerHTML='';_MM=null;return;}
+  const bankList=[...new Set((ch.banks||[]).map(b=>b.bank))];
+  if(!bank){
+    if(bankList.length>1){
+      box.innerHTML=`<div class="row" style="padding:8px 14px"><span class="lbl">เลือกธนาคาร/ผู้รับบัตร:</span>
+        ${bankList.map(b=>`<button class="btn btn-sm" onclick="openMatcher(${i},'${esc(b)}')">${esc(b)}</button>`).join('')}</div>`;
+      return;
+    }
+    bank=bankList[0]||'NONE';
+  }
+  box.innerHTML='<div class="muted" style="padding:8px 14px">กำลังโหลด…</div>';
+  let d;try{d=await api(`/api/manual?branch_id=${DATA.branch_id}&category=${ch.key}&bank=${encodeURIComponent(bank)}&period_month=${MONTH}`);}
+  catch(e){box.innerHTML=`<div class="chip c-err" style="margin:8px 14px">${esc(e.message)}</div>`;return;}
+  _MM={i,bank,cat:ch.key,pos:d.pos_days,ext:d.ext_lines};
+  const posRows=d.pos_days.filter(p=>p.remaining>0.5).map((p,j)=>`
+    <tr><td><input type="checkbox" data-pj="${j}" onchange="mmSum()"></td>
+      <td>${p.day}</td><td class="mono">${fmt(p.remaining)}</td>
+      <td><input class="fee-in" type="number" step="0.01" max="${p.remaining}" value="${p.remaining}" data-pamt="${j}" oninput="mmSum()"></td></tr>`).join('');
+  const extRows=d.ext_lines.filter(l=>l.match_status!=='manual').map((l,j)=>{
+    const done=l.match_status==='matched';   // จับคู่อัตโนมัติแล้ว — ติ๊กซ้ำ = นับสองรอบ
+    return `<tr style="${done?'opacity:.45':''}">
+      <td>${done?'<span class="lbl" title="จับคู่อัตโนมัติแล้ว">✓</span>':`<input type="checkbox" data-ej="${j}" onchange="mmSum()">`}</td>
+      <td>${l.date}</td><td style="text-align:left;max-width:170px;overflow:hidden" title="${esc(l.ref)}">${esc(l.ref)}</td>
+      <td class="mono">${fmt(l.amount)}</td></tr>`;}).join('');
+  const matches=(d.matches||[]).map(m=>`
+    <div class="row" style="font-size:12.5px;padding:3px 0">
+      🔗 POS ${fmt(m.pos_amount)} ↔ เอกสาร ${fmt(m.ext_amount)}
+      <span class="lbl">${esc(m.note||'')}</span>
+      ${DATA.closed?'':`<button class="btn btn-sm" style="margin-left:auto" onclick="mmDelete(${m.match_id})">ยกเลิก</button>`}
+    </div>`).join('');
+  box.innerHTML=`<div class="card" style="margin:8px 12px;background:#fafafa">
+    <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">จับคู่ละเอียด — ${esc(ch.label)} · ${esc(bank)}</b>
+      <a href="#" class="lbl" style="margin-left:auto" onclick="openMatcher(${i});return false">ปิด</a></div>
+    ${matches?`<div style="border-bottom:1px dashed var(--line);margin-bottom:6px;padding-bottom:4px">${matches}</div>`:''}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div class="lbl" style="margin-bottom:4px">① ยอด POS (เลือกวัน — แก้จำนวนได้ถ้าจับแค่บางส่วน)</div>
+        <div style="max-height:220px;overflow:auto"><table>
+          <tr><th></th><th>วัน</th><th>คงเหลือ</th><th>ใช้</th></tr>${posRows||'<tr><td colspan=4 class="muted">ไม่มียอดค้าง</td></tr>'}
+        </table></div></div>
+      <div><div class="lbl" style="margin-bottom:4px">② บรรทัดเอกสาร</div>
+        <div style="max-height:220px;overflow:auto"><table>
+          <tr><th></th><th>วัน</th><th>อ้างอิง</th><th>ยอด</th></tr>${extRows||'<tr><td colspan=4 class="muted">ไม่มีบรรทัดให้จับ</td></tr>'}
+        </table></div></div>
+    </div>
+    <div class="row" style="margin-top:8px">
+      <span class="lbl" id="mm-sum">เลือกทั้งสองฝั่งเพื่อจับคู่</span>
+      <input id="mm-note" placeholder="หมายเหตุ" style="flex:1;min-width:120px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px">
+      <button class="btn btn-sm btn-pri" id="mm-go" disabled onclick="mmSubmit()">🔗 จับคู่</button>
+    </div></div>`;
+}
+function _mmPick(){
+  const box=$('matcher-'+_MM.i);
+  const posOk=_MM.pos.filter(p=>p.remaining>0.5);
+  const pos=[...box.querySelectorAll('input[data-pj]:checked')].map(c=>{
+    const j=+c.dataset.pj;
+    const amt=parseFloat(box.querySelector(`input[data-pamt="${j}"]`).value)||0;
+    return {day:posOk[j].day, amount:Math.min(amt,posOk[j].remaining)};
+  }).filter(x=>x.amount>0);
+  const extOk=_MM.ext.filter(l=>l.match_status!=='manual');
+  const ext=[...box.querySelectorAll('input[data-ej]:checked')].map(c=>{
+    const l=extOk[+c.dataset.ej];
+    return {table:l.table, id:l.id, amount:l.amount};
+  });
+  return {pos,ext};
+}
+function mmSum(){
+  if(!_MM)return;
+  const {pos,ext}=_mmPick();
+  const ps=pos.reduce((a,x)=>a+x.amount,0), es=ext.reduce((a,x)=>a+x.amount,0);
+  const el=$('mm-sum'), go=$('mm-go');
+  if(!pos.length||!ext.length){el.textContent='เลือกทั้งสองฝั่งเพื่อจับคู่';go.disabled=true;return;}
+  const diff=es-ps;
+  el.innerHTML=`POS ${fmt(ps)} ↔ เอกสาร ${fmt(es)} <span style="color:${Math.abs(diff)<=50?'var(--ok)':'var(--err)'}">(ต่าง ${diff>0?'+':''}${fmt(diff)})</span>`;
+  go.disabled=false;
+}
+async function mmSubmit(){
+  const {pos,ext}=_mmPick();
+  if(!pos.length||!ext.length)return;
+  try{await api('/api/manual',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+      category:_MM.cat,bank:_MM.bank,pos_days:pos,ext:ext,
+      note:$('mm-note').value||'v2 จับคู่ละเอียด'}});
+      toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function mmDelete(mid){
+  if(!confirm('ยกเลิกการจับคู่นี้?'))return;
+  try{await api(`/api/manual/${mid}`,{method:'DELETE'});toast('ยกเลิกแล้ว');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
 async function ignoreLine(id){
   if(!confirm('ยืนยัน: บรรทัดนี้ไม่ใช่ยอดขาย (เช่น โอนภายใน)?'))return;
   try{await api(`/api/bank-lines/${id}/ignore`,{method:'PATCH',body:{ignored:true,note:'v2: not revenue'}});
@@ -502,6 +632,18 @@ async function ignoreLine(id){
 async function applySugg(mapId,cat,bank){
   try{await api(`/api/payment-map/${mapId}`,{method:'PATCH',body:{category:cat,bank:bank}});
       toast('บันทึกแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+function toggleMapper(qi){const e=$('mapper-'+qi);e.style.display=e.style.display==='none'?'flex':'none';}
+async function applyMapper(qi,code){
+  const cat=$('map-cat-'+qi).value, bank=$('map-bank-'+qi).value;
+  try{
+    // มีแถวใน map แล้ว (เช่น bank=UNKNOWN) → PATCH; ยังไม่มีเลย → POST สร้างใหม่
+    const all=await api('/api/payment-map');
+    const hit=all.find(m=>m.payment_code_norm===code);
+    if(hit) await api(`/api/payment-map/${hit.id}`,{method:'PATCH',body:{category:cat,bank:bank}});
+    else    await api('/api/payment-map',{method:'POST',body:{payment_code_norm:code,category:cat,bank:bank,reconcile:1}});
+    toast(`ตั้งค่า ${code} → ${cat}·${bank} แล้ว`);route();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
 /* ── สถานะ session: ส่งตรวจ → ปิดเดือน ── */

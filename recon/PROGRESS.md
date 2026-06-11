@@ -108,6 +108,25 @@ is closed. Frontend-only — all endpoints already existed. Verified live UDN
 May: 3 files, KB_SA 31/65 bar, drill 72 lines = 30 matched / 8 unmatched / 34
 informational.
 
+**v2 M2+M3 — full matcher, self-serve mapping, manager review (2026-06-11):**
+(M2a) **จับคู่ละเอียด** per channel ("🔧" in the channel expand; bank chips when
+the channel spans several): two-pane lane matcher fed by GET /api/manual —
+left = POS days with remaining + partial-amount inputs, right = document lines
+with checkboxes (auto-`matched` lines shown dimmed and unselectable so they
+can't be double-claimed; `manual` ones hidden), live both-side sums with
+variance color, note → POST /api/manual; existing matches listed with ยกเลิก
+(DELETE). Covers the lump-over-several-days / partial-allocation cases the
+simple day-drill match can't. (M2b) **ตั้งค่าเอง** on every setup-question
+card: category+bank selects → PATCH when the code already has a map row,
+POST to create when it doesn't — no more jumping to /app#setup for a code the
+suggestions can't answer. (M3) **สรุปสำหรับผู้จัดการ** — when the session is
+in_review, a review table appears above the buttons: every channel's
+POS/เข้าจริง/ต่าง + status, the staff's accept reasons with who wrote them,
+and the internal-transfer total, so the manager reads everything before
+entering the close code. JS parse-checked (node), 76 pytest pass. Remaining:
+M4 — switch /app default to v2 + retire duplicate tabs after the team closes
+one real month on v2.
+
 **v2 P2+P3 — trust & polish (2026-06-11):** (P2.5) **POS-number provenance** —
 every channel carries `codes` (POS payment codes behind the total, via
 `_pos_codes_by_channel`); expanding a channel shows "ที่มา POS: KNNQR 3.6M…"
