@@ -105,9 +105,13 @@ def refresh_perm_cache(con: sqlite3.Connection) -> None:
     """Load role→module mapping from app_settings into memory cache. Called at
     startup and after every permission save so the middleware stays current."""
     global _perm_cache
-    row = con.execute(
-        "SELECT value FROM app_settings WHERE key='role_permissions'"
-    ).fetchone()
+    try:
+        row = con.execute(
+            "SELECT value FROM app_settings WHERE key='role_permissions'"
+        ).fetchone()
+    except sqlite3.OperationalError:
+        _perm_cache = None
+        return
     if not row:
         _perm_cache = None
         return
