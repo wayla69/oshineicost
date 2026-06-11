@@ -822,6 +822,26 @@ def auth_users_delete(username: str, request: Request):
     return {"ok": True}
 
 
+@app.get("/api/auth/role-permissions", include_in_schema=False)
+def auth_role_permissions_get(request: Request):
+    _require_admin(request)
+    with get_db() as con:
+        return {
+            "roles": _auth.ROLES,
+            "modules": _auth.MODULES,
+            "module_labels": {m: m for m in _auth.MODULES},  # frontend adds labels
+            "permissions": _auth.get_role_permissions(con),
+        }
+
+
+@app.put("/api/auth/role-permissions", include_in_schema=False)
+def auth_role_permissions_put(request: Request, body: RolePermissionsBody):
+    _require_admin(request)
+    with get_db() as con:
+        _auth.set_role_permissions(con, body.permissions)
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # DB refresh/seed over HTTPS (hosted deploys). Accepts a gzipped SQLite file —
 # far more reliable than the WireGuard SFTP tunnel for large files. Used both to
@@ -8440,11 +8460,17 @@ def _init_settings_tables():
         con.commit()
 
 _init_settings_tables()
+# Load dynamic role permissions into memory cache (falls back to hardcoded ROLE_MODULES if not stored)
+with get_db() as _boot_con:
+    _auth.refresh_perm_cache(_boot_con)
 
 
 # ---------------------------------------------------------------------------
 # Pydantic models for settings endpoints
 # ---------------------------------------------------------------------------
+class RolePermissionsBody(BaseModel):
+    permissions: Dict[str, List[str]]
+
 class TargetEntry(BaseModel):
     branch: str
     period_month: str

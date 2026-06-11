@@ -91,8 +91,56 @@ ROLE_MODULES: Dict[str, Set[str]] = {
 }
 
 
+# In-memory cache for dynamically stored role permissions (None = use ROLE_MODULES fallback).
+_perm_cache: Optional[Dict[str, Set[str]]] = None
+
+
 def modules_for_role(role: str) -> Set[str]:
+    if _perm_cache is not None:
+        return set(_perm_cache.get((role or "").lower(), set()))
     return set(ROLE_MODULES.get((role or "").lower(), set()))
+
+
+def refresh_perm_cache(con: sqlite3.Connection) -> None:
+    """Load role→module mapping from app_settings into memory cache. Called at
+    startup and after every permission save so the middleware stays current."""
+    global _perm_cache
+    row = con.execute(
+        "SELECT value FROM app_settings WHERE key='role_permissions'"
+    ).fetchone()
+    if not row:
+        _perm_cache = None
+        return
+    try:
+        data = json.loads(row["value"])
+        result: Dict[str, Set[str]] = {}
+        for r in ROLES:
+            mods = set(data.get(r, []))
+            result[r] = mods & set(MODULES)  # only known modules
+        _perm_cache = result
+    except Exception:
+        _perm_cache = None
+
+
+def get_role_permissions(con: sqlite3.Connection) -> Dict[str, List[str]]:
+    """Return the effective role→module mapping (DB overrides ROLE_MODULES)."""
+    if _perm_cache is not None:
+        return {r: sorted(_perm_cache.get(r, set())) for r in ROLES}
+    return {r: sorted(ROLE_MODULES.get(r, set())) for r in ROLES}
+
+
+def set_role_permissions(con: sqlite3.Connection, perms: Dict[str, List[str]]) -> None:
+    """Persist role→module mapping to app_settings and refresh in-memory cache."""
+    cleaned: Dict[str, List[str]] = {}
+    for role in ROLES:
+        mods = set(perms.get(role, [])) & set(MODULES)
+        cleaned[role] = sorted(mods)
+    con.execute(
+        "INSERT OR REPLACE INTO app_settings(key, value) VALUES ('role_permissions', ?)",
+        (json.dumps(cleaned),),
+    )
+    con.commit()
+    refresh_perm_cache(con)
 
 
 # ---------------------------------------------------------------------------

@@ -5707,8 +5707,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         </table>
       </div>
       <div class="mt-5">
-        <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
-        <div id="roleCheatsheet" class="overflow-x-auto"></div>
+        <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+          <div class="text-xs font-semibold" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
+          <div class="flex items-center gap-2">
+            <span id="permSaveStatus" class="text-xs"></span>
+            <button onclick="saveRolePermissions()" id="permSaveBtn" class="hidden text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">💾 บันทึกสิทธิ์</button>
+          </div>
+        </div>
+        <div id="rolePermMatrix" class="overflow-x-auto"></div>
       </div>
     </div>
   </div>
@@ -6493,7 +6499,6 @@ async function loadUsers() {
     Object.entries(ROLE_LABEL_TH).forEach(([k,v]) =>
       sel.add(new Option(`${v} (${k})`, k)));
   }
-  renderRoleCheatsheet();
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   let users = [];
@@ -6518,20 +6523,111 @@ async function loadUsers() {
       </td></tr>`;
   }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
 }
-function renderRoleCheatsheet() {
-  const el = document.getElementById('roleCheatsheet');
+let _rolePermsData = null;
+
+async function loadRolePermissions() {
+  const el = document.getElementById('rolePermMatrix');
   if (!el) return;
-  const rows = Object.keys(ROLE_LABEL_TH).map(role => {
-    const mods = ROLE_MODULES_TH[role] || [];
-    const chips = mods.map(m =>
-      `<span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--bg-input);color:var(--text-secondary)">${MODULE_LABEL_TH[m]||m}</span>`
-    ).join(' ');
-    return `<tr class="border-b align-top" style="border-color:var(--border)">
-      <td class="py-2 pr-4 whitespace-nowrap font-medium" style="color:var(--text-primary)">${ROLE_LABEL_TH[role]} <span class="text-xs" style="color:var(--text-muted)">(${role})</span></td>
-      <td class="py-2"><div class="flex flex-wrap gap-1">${chips}</div></td>
-    </tr>`;
+  const canEdit = window.AUTH && window.AUTH.enabled && window.AUTH.modules && window.AUTH.modules.includes('system.admin');
+  const btn = document.getElementById('permSaveBtn');
+  if (btn) btn.classList.toggle('hidden', !canEdit);
+
+  // Try to load from API; fall back to local constants
+  let roles, modules, permissions;
+  try {
+    const d = await fetch(`${API}/api/auth/role-permissions`).then(r => r.ok ? r.json() : null);
+    if (d) {
+      roles = d.roles;
+      modules = d.modules;
+      permissions = d.permissions;
+    }
+  } catch(e) {}
+  if (!permissions) {
+    roles = Object.keys(ROLE_LABEL_TH);
+    modules = Object.keys(MODULE_LABEL_TH);
+    permissions = {};
+    roles.forEach(r => { permissions[r] = ROLE_MODULES_TH[r] || []; });
+  }
+  _rolePermsData = { roles, modules, permissions };
+  _renderPermMatrix(canEdit);
+}
+
+function _renderPermMatrix(canEdit) {
+  const el = document.getElementById('rolePermMatrix');
+  if (!el || !_rolePermsData) return;
+  const { roles, modules, permissions } = _rolePermsData;
+
+  // Group modules for readability
+  const MOD_GROUP = {
+    'sales.overview':'ยอดขาย', 'customer.buffet':'ลูกค้า', 'menu.analysis':'เมนู',
+    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้ BoM',
+    'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
+    'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
+    'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
+    'data.upload':'Upload',
+  };
+
+  const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
+  const th_mods = modules.map(m =>
+    `<th class="py-2 px-2 text-center text-[10px] font-medium whitespace-nowrap" style="color:var(--text-muted)" title="${m}">${MOD_GROUP[m]||m}</th>`
+  ).join('');
+
+  const rows = roles.map(role => {
+    const roleMods = new Set(permissions[role] || []);
+    const cells = modules.map(m => {
+      const checked = roleMods.has(m);
+      const dis = (role === 'management' && m === 'system.admin') ? ' title="management เสมอ"' : '';
+      const inp = canEdit
+        ? `<input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''} ${dis}
+             onchange="_permToggle(this)" class="w-3.5 h-3.5 accent-indigo-600">`
+        : `<span style="color:${checked?'#4f46e5':'#e2e8f0'};font-size:14px">${checked?'✓':'–'}</span>`;
+      return `<td class="py-1.5 px-2 text-center">${inp}</td>`;
+    }).join('');
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-4 text-sm font-medium sticky left-0" style="background:var(--bg-card);color:var(--text-primary)">
+        ${ROLE_LABEL_TH[role]||role} <span class="text-xs" style="color:var(--text-muted)">(${role})</span>
+      </td>${cells}</tr>`;
   }).join('');
-  el.innerHTML = `<table class="text-sm w-full"><tbody>${rows}</tbody></table>`;
+
+  el.innerHTML = `<table class="text-sm w-full border-collapse">
+    <thead><tr class="border-b" style="border-color:var(--border)">${th_role}${th_mods}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function _permToggle(cb) {
+  if (!_rolePermsData) return;
+  const role = cb.dataset.role, mod = cb.dataset.mod;
+  const perms = _rolePermsData.permissions;
+  if (!perms[role]) perms[role] = [];
+  if (cb.checked) { if (!perms[role].includes(mod)) perms[role].push(mod); }
+  else { perms[role] = perms[role].filter(m => m !== mod); }
+}
+
+async function saveRolePermissions() {
+  if (!_rolePermsData) return;
+  const btn = document.getElementById('permSaveBtn');
+  const status = document.getElementById('permSaveStatus');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+  try {
+    const res = await fetch(`${API}/api/auth/role-permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissions: _rolePermsData.permissions }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      if (status) { status.textContent = d.detail || 'บันทึกไม่สำเร็จ'; status.className = 'text-xs text-rose-600'; }
+    } else {
+      if (status) { status.textContent = 'บันทึกแล้ว ✓'; status.className = 'text-xs text-emerald-600'; }
+      setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+      await loadRolePermissions();
+    }
+  } catch(e) {
+    if (status) { status.textContent = 'เชื่อมต่อไม่ได้'; status.className = 'text-xs text-rose-600'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึกสิทธิ์'; }
+  }
 }
 
 function _userStatus(msg, ok) {
@@ -7255,7 +7351,7 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'deactivate') loadDeactivate();
   if (activeSettingsTab === 'hours')    loadClosedHours();
   if (activeSettingsTab === 'prefs')    loadPreferences();
-  if (activeSettingsTab === 'users')    loadUsers();
+  if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
 }
 
 function loadActiveTab() {
