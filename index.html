@@ -20392,20 +20392,24 @@ async function openBillItems(row = {}) {
   const sumEl = document.getElementById('billItemsSummary');
   const body  = document.getElementById('billItemsBody');
   title.textContent = '🧾 เมนูที่สั่ง · ' + (row.receipt || '');
-  const rev = row.rev || 0, disc = row.disc || 0, cogs = row.cogs || 0;
-  const netRev  = rev - disc;                       // ex-VAT revenue actually received (after bill discount)
-  const lossNet = Math.round(cogs - netRev);        // true loss = COGS − net revenue
-  sumEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-1">
+  const renderSummary = (rw) => {
+    const rev = rw.rev || 0, disc = rw.disc || 0, cogs = rw.cogs || 0;
+    const netRev  = rev - disc;                       // ex-VAT revenue actually received (after bill discount)
+    const lossNet = Math.round(cogs - netRev);        // true loss = COGS − net revenue
+    sumEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-1">
     ${[
-      ['สาขา', esc(row.branch || '—')],
-      ['ลูกค้า', fmtN(row.cust || 0)],
+      ['สาขา', esc(rw.branch || '—')],
+      ['ลูกค้า', fmtN(rw.cust || 0)],
       ['รายได้ก่อนลด', fmt(rev)],
       ['ส่วนลดบิล', disc ? `<span style="color:#f59e0b">−${fmt(disc)}</span>` : '—'],
       ['รายได้สุทธิ', `<span style="color:#4f46e5">${fmt(netRev)}</span>`],
       ['COGS (BoM)', fmt(cogs)],
-      ['ขาดทุนสุทธิ', `<span style="color:#ef4444">${fmt(lossNet)}</span>`],
+      [lossNet >= 0 ? 'ขาดทุนสุทธิ' : 'กำไรขั้นต้น',
+       `<span style="color:${lossNet >= 0 ? '#ef4444' : '#10b981'}">${fmt(Math.abs(lossNet))}</span>`],
     ].map(([k, v]) => `<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-base font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>`;
+  };
+  renderSummary(row);
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.style.display = 'flex';
   let d;
@@ -20414,6 +20418,8 @@ async function openBillItems(row = {}) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     d = await r.json();
   } catch (e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message || e))}</p>`; return; }
+  // server header carries live-recomputed COGS (cost-management table) + discount incl. sp_discount
+  if (d.header) renderSummary({ ...row, ...d.header });
   if (!d.synced) {
     body.innerHTML = '<p class="text-sm text-amber-600 py-8 text-center">ยังไม่มีรายละเอียดเมนูต่อบิล — ตาราง <code>sale_bill_item</code> จะถูกสร้างหลังการ sync ข้อมูลครั้งถัดไป</p>';
     return;
@@ -20422,10 +20428,12 @@ async function openBillItems(row = {}) {
   if (!items.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">ไม่พบรายการเมนูสำหรับบิลนี้</p>'; return; }
   const rows = items.map(it => {
     const mCol = it.margin < 0 ? '#ef4444' : it.margin === 0 ? '#94a3b8' : '#10b981';
+    const uc = it.unit_cost != null ? it.unit_cost : (it.qty ? it.cogs / it.qty : 0);
     return `<tr class="border-b border-slate-100 ${it.margin < 0 ? 'bg-rose-50/40' : ''}">
       <td class="py-1.5 pr-3">${esc(it.menu || '—')}</td>
       <td class="py-1.5 pr-3 text-slate-400 font-mono text-[10.5px]">${esc(it.sku_code || '')}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(it.qty)}</td>
+      <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${uc ? uc.toFixed(2) : '—'}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${fmt(it.rev)}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(it.cogs)}</td>
       <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${mCol}">${fmt(it.margin)}</td></tr>`;
@@ -20433,15 +20441,16 @@ async function openBillItems(row = {}) {
   const tot = items.reduce((a, it) => ({ rev: a.rev + it.rev, cogs: a.cogs + it.cogs, margin: a.margin + it.margin }), { rev: 0, cogs: 0, margin: 0 });
   body.innerHTML = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
       <th class="py-2 pr-3">เมนู</th><th class="py-2 pr-3">SKU</th>
-      <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">รายได้</th>
+      <th class="py-2 pr-3 text-right">จำนวน</th><th class="py-2 pr-3 text-right">@BoM (ทุน/หน่วย)</th>
+      <th class="py-2 pr-3 text-right">รายได้</th>
       <th class="py-2 pr-3 text-right">COGS (BoM)</th><th class="py-2 text-right">กำไรขั้นต้น</th></tr></thead>
     <tbody>${rows}</tbody>
     <tfoot><tr class="border-t-2 border-slate-200 font-bold">
-      <td class="py-2 pr-3" colspan="3">รวม ${fmtN(items.length)} เมนู</td>
+      <td class="py-2 pr-3" colspan="4">รวม ${fmtN(items.length)} เมนู</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.rev)}</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmt(tot.cogs)}</td>
       <td class="py-2 text-right tabular-nums" style="color:${tot.margin < 0 ? '#ef4444' : '#10b981'}">${fmt(tot.margin)}</td></tr></tfoot></table>
-    <p class="text-[11px] text-slate-400 mt-3">รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. COGS = BoM เท่านั้น (buffet tier = 0).</p>`;
+    <p class="text-[11px] text-slate-400 mt-3">รายได้ต่อเมนู = ยอด ex-VAT ก่อนหักส่วนลดระดับบิล — ผลรวมจึงอาจสูงกว่า "รายได้สุทธิ" ของบิลด้านบนตามส่วนลด${row.disc ? ` (ส่วนลดบิลนี้ ${fmt(row.disc)})` : ''}. ทุน/หน่วย = ตาราง Cost Management ก่อน แล้วจึง BoM (buffet tier = 0).</p>`;
 }
 
 let _discBillsCtx = {};   // remembered drill context so the วิธีจ่าย dropdown can re-query

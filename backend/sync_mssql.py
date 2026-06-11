@@ -470,8 +470,9 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     print(f"        sales_sku_daily: {len(drows)} rows (since {dly_since})")
 
     # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
-    #    Per-sku BoM unit cost from OUR data (recipe → sku_cost → BUFFET tier=0;
-    #    IRON RULE: BoM only). Heavy pull (bill×item) but stored per-bill (lean).
+    #    Per-sku unit cost from OUR data (sku_cost cost-management table first,
+    #    then recipe → alias; BUFFET tier=0). Same priority as main._unified_cogs_expr
+    #    (cost-management first since 2026-06-11). Heavy pull but stored per-bill.
     bill_since = dly_since
     if mx:
         y, m, d = (int(x) for x in mx.split("-"))
@@ -480,12 +481,26 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     for r in sq.execute("""
         SELECT s.sku_id, s.sku_code,
           COALESCE(
+            (SELECT NULLIF(sc.unit_cost, 0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
             (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
             (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-               JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code),
-            (SELECT sc.unit_cost FROM sku_cost sc WHERE sc.sku_id=s.sku_id), 0) AS c
+               JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code), 0) AS c
         FROM skus s""").fetchall():
         costmap[r["sku_id"]] = 0.0 if (r["sku_code"] or "").startswith("BUFFET") else (r["c"] or 0.0)
+    # Refresh the per-SKU effective-cost lookup in the staged DB with the SAME
+    # chain, so a swapped-in DB never serves stale costs (main only force-rebuilds
+    # it at startup, not on hot-swap pre-2026-06-11).
+    sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
+                     "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
+                     "DELETE FROM sku_effective_cost;")
+    sq.execute("""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
+                  SELECT s.sku_id, COALESCE(
+                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
+                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
+                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
+                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
+                       WHERE a.bom_sku_code=s.sku_code), 0)
+                  FROM skus s""")
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     mc.execute(f"""
