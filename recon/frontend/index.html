@@ -118,6 +118,14 @@ const progCls=p=>p>=95?'':p>=70?'p-warn':'p-err';
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 function tokenHdr(){const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
+function setToken(){
+  let t=prompt('รหัสสำหรับบันทึกข้อมูล (Write token) — เว้นว่างเพื่อล้าง:',localStorage.getItem('oshinei_token')||'');
+  if(t===null)return; t=t.trim();
+  t?localStorage.setItem('oshinei_token',t):localStorage.removeItem('oshinei_token');
+  toast(t?'บันทึกรหัสแล้ว':'ล้างรหัสแล้ว');
+}
+// ถ้าเซิร์ฟเวอร์ตอบ 403 เพราะยังไม่ได้ใส่รหัส → ชวนตั้งรหัสทันที
+function hint403(e){ if(String(e.message||'').includes('write token')||String(e.message).includes('403')) toast('ต้องตั้งรหัสบันทึกก่อน — กดปุ่ม 🔑 มุมบนขวา'); }
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),...tokenHdr()};
   if(opts.body && !(opts.body instanceof FormData)){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
@@ -150,7 +158,8 @@ function header(extra){
     <input type="month" value="${MONTH}" onchange="setMonth(this.value)"
       style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
-    <a href="/app/classic.html" style="margin-left:auto;font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
+    <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)">🔑 รหัส</button>
+    <a href="/app/classic.html" style="font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
   </div>`;
 }
 function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);route();}
