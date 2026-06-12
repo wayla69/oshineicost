@@ -564,6 +564,83 @@ def test_grab_parser_skips_bad_dates_and_returns_count():
     assert len(rows) == 1 and skipped == 1
 
 
+# ── Krungsri (BAY) RDB003 acquirer settlement ─────────────────────────────────
+
+def _rdb003_xlsx(data_rows):
+    """Build an RDB003-shaped workbook: metadata rows, a header row with the
+    real column names (two 'VAT Amt' columns — MSF's then ETL's), then data."""
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["AP Dealer : Payment Advice"])
+    ws.append(["Print Date : 05/05/2026"])
+    ws.append([None])
+    ws.append(["Entity Name : KRUNGSRI"])          # provider marker
+    ws.append([None])
+    ws.append(["Bank Channel : KBANK"])
+    ws.append([None]); ws.append([None]); ws.append([None]); ws.append([None])
+    # header (indices mirror the real file: MSF Amt then its VAT, ETL Amt then its VAT)
+    ws.append(["No.", "MID", "MID Name", "Transaction Date", "Value Date", "Card No",
+               "Amount Finance /Point Amount baht *", "MSF Amt", "VAT Amt",
+               "ETL Amt", "VAT Amt", "Net Payment"])
+    for r in data_rows:
+        ws.append(r)
+    buf = io.BytesIO(); wb.save(buf)
+    return buf.getvalue()
+
+
+def test_krungsri_rdb003_aggregates_by_value_date():
+    from recon.parsers import parse_cc_settlement
+    xlsx = _rdb003_xlsx([
+        # No, MID, name, txn_date, value_date, card, amount, MSF, MSF-VAT, ETL, ETL-VAT, net
+        [1, "442562000", "ร้าน", "2026-05-04", "2026-05-05", "4943XX", 1000, 15, 1.05, 0, 0, 983.95],
+        [2, "442562000", "ร้าน", "2026-05-04", "2026-05-05", "4943XX", 500, 7.5, 0.53, 0, 0, 491.97],
+        [3, "442562000", "ร้าน", "2026-05-05", "2026-05-06", "4943XX", 200, 3, 0.21, 0, 0, 196.79],
+        ["", "", "", "", "", "", "", "", "", "", "", ""],       # blank tail → not skipped
+    ])
+    prov, rows, skipped = parse_cc_settlement(xlsx, provider=None)
+    assert prov == "Krungsri" and skipped == 0
+    by_date = {r["settlement_date"]: r for r in rows}
+    assert set(by_date) == {"2026-05-05", "2026-05-06"}        # grouped by Value Date
+    d1 = by_date["2026-05-05"]
+    assert d1["acquirer"] == "BAY"
+    assert d1["txn_count"] == 2
+    assert d1["gross_amount"] == 1500.0
+    assert d1["mdr_fee"] == 22.5                                # 15 + 7.5
+    assert d1["vat_amount"] == 1.58                             # MSF VAT only (1.05+0.53)
+    assert d1["net_amount"] == 1475.92
+    assert d1["merchant_id"] == "442562000"
+
+
+def test_krungsri_rdb003_detected_without_provider_hint():
+    """Even with the KRUNGSRI label stripped, the MSF/Net-Payment column
+    signature routes the file to the RDB003 parser (not the generic one)."""
+    from recon.parsers import parse_cc_settlement
+    wb = openpyxl.load_workbook(io.BytesIO(_rdb003_xlsx([
+        [1, "111", "x", "2026-05-04", "2026-05-05", "4", 100, 1.5, 0.11, 0, 0, 98.39],
+    ])))
+    ws = wb.active
+    ws["A4"] = "Entity Name : (redacted)"            # remove the krungsri keyword
+    buf = io.BytesIO(); wb.save(buf)
+    prov, rows, skipped = parse_cc_settlement(buf.getvalue(), provider=None)
+    assert prov == "Krungsri" and len(rows) == 1
+    assert rows[0]["acquirer"] == "BAY"
+
+
+def test_loader_legacy_xls_converts(tmp_path):
+    """A genuine BIFF .xls (which openpyxl cannot open) is transcoded to xlsx by
+    the loader, with date cells emitted as ISO strings. Needs xlwt to build one."""
+    xlwt = pytest.importorskip("xlwt")
+    from recon.parsers.loader import to_parseable_xlsx
+    book = xlwt.Workbook()
+    sh = book.add_sheet("s")
+    sh.write(0, 0, "Net Payment")
+    sh.write(1, 0, 12345)
+    p = tmp_path / "legacy.xls"
+    book.save(str(p))
+    xlsx = to_parseable_xlsx(p.read_bytes(), "legacy.xls")
+    ws = openpyxl.load_workbook(io.BytesIO(xlsx)).active
+    assert list(ws.iter_rows(values_only=True))[0][0] == "Net Payment"
+
+
 # ── input loader: CSV / PDF → parseable xlsx ──────────────────────────────────
 
 def test_loader_csv_feeds_bank_parser():

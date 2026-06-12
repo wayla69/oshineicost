@@ -10,6 +10,8 @@ backup_*.html
 # Source exports (large) — DB is built from these locally, not in-image
 Data for Oshinei/
 BoM/
+All recon data/
+Reconciliation Data Udon/
 *.zip
 
 # Logs / scratch

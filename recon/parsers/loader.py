@@ -9,7 +9,8 @@ workbook with the same tabular layout and hand those bytes to the existing
 parser. Header detection, provider sniffing and date parsing then "just work".
 
 Supported inputs:
-  - .xlsx / .xls  → passed through unchanged (parsers already read these)
+  - .xlsx         → passed through unchanged (parsers already read these)
+  - .xls          → legacy BIFF converted to .xlsx (openpyxl can't read BIFF)
   - .csv          → decoded (Thai-aware) and laid out cell-for-cell
   - .pdf          → tables extracted via pdfplumber; text-line fallback
 
@@ -70,6 +71,39 @@ def _csv_to_xlsx(raw: bytes) -> bytes:
     rows = [r for r in reader]
     if not rows:
         raise ValueError("CSV file contained no rows.")
+    return _rows_to_xlsx(rows)
+
+
+# ── Legacy .xls (BIFF) ───────────────────────────────────────────────────────
+
+def _xls_to_xlsx(raw: bytes) -> bytes:
+    """Convert a legacy BIFF .xls into .xlsx bytes. openpyxl only reads the
+    modern OOXML .xlsx, so old portal exports (e.g. Krungsri RDB003 settlements)
+    must be transcoded via xlrd first. Date cells are emitted as ISO strings so
+    the domain parsers' ``_parse_thai_date`` reads them unchanged."""
+    try:
+        import xlrd
+    except ImportError as exc:                           # pragma: no cover
+        raise ValueError(
+            "Legacy .xls support requires the 'xlrd' package (pip install xlrd)."
+        ) from exc
+
+    book = xlrd.open_workbook(file_contents=raw)
+    sh = book.sheet_by_index(0)
+    rows: list[list] = []
+    for r in range(sh.nrows):
+        out_row = []
+        for c in range(sh.ncols):
+            v = sh.cell_value(r, c)
+            if sh.cell_type(r, c) == xlrd.XL_CELL_DATE:
+                try:
+                    v = xlrd.xldate_as_datetime(v, book.datemode).strftime("%Y-%m-%d")
+                except (ValueError, OverflowError):
+                    pass
+            out_row.append(v)
+        rows.append(out_row)
+    if not rows:
+        raise ValueError("The .xls file contained no rows.")
     return _rows_to_xlsx(rows)
 
 
@@ -146,5 +180,7 @@ def to_parseable_xlsx(raw: bytes, filename: str) -> bytes:
         return _csv_to_xlsx(raw)
     if name.endswith(".pdf"):
         return _pdf_to_xlsx(raw)
-    # .xlsx / .xls (and anything else already gated upstream) → unchanged.
+    if name.endswith(".xls"):
+        return _xls_to_xlsx(raw)
+    # .xlsx (and anything else already gated upstream) → unchanged.
     return raw
