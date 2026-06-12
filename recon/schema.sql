@@ -228,7 +228,7 @@ CREATE TABLE IF NOT EXISTS recon_payment_map (
     -- 'ANY' = the code can land in more than one bank (e.g. generic 'Bank Transfer'
     -- → KTB or KBANK); the matcher checks both statements' residual lines.
     bank              TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','ANY','NONE','UNKNOWN')),
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','TTB','PROMPTPAY','ANY','NONE','UNKNOWN')),
     reconcile         INTEGER NOT NULL DEFAULT 1,   -- 0 = informational only (e.g. ENTERTAIN)
     notes             TEXT,
     updated_at        TEXT DEFAULT (datetime('now')),

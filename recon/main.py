@@ -138,25 +138,35 @@ def _migrate_payment_bank(conn):
     try:
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_payment_map'").fetchone()
-        if row and ("'BAY'" not in (row[0] or "") or "'ANY'" not in (row[0] or "")):
-            conn.executescript("""
-                CREATE TABLE recon_payment_map__new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    payment_code_norm TEXT NOT NULL UNIQUE,
-                    category TEXT NOT NULL CHECK(category IN
-                        ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
-                    bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','ANY','NONE','UNKNOWN')),
-                    reconcile INTEGER NOT NULL DEFAULT 1,
-                    notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
-                );
-                INSERT INTO recon_payment_map__new
-                    (id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by)
-                    SELECT id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by
-                    FROM recon_payment_map;
-                DROP TABLE recon_payment_map;
-                ALTER TABLE recon_payment_map__new RENAME TO recon_payment_map;
-            """)
+        if row and any(f"'{b}'" not in (row[0] or "") for b in ("BAY", "ANY", "TTB")):
+            # Explicit transaction (NOT executescript): a CHECK failure mid-script
+            # must roll the whole recreate back, never leave the table half-gone.
+            # (Live data taught us this — it contained bank='TTB'.)
+            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""
+                    CREATE TABLE recon_payment_map__new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        payment_code_norm TEXT NOT NULL UNIQUE,
+                        category TEXT NOT NULL CHECK(category IN
+                            ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
+                        bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
+                            ('KTB','KBANK','KTC','BAY','SCB','BBL','TTB','PROMPTPAY','ANY','NONE','UNKNOWN')),
+                        reconcile INTEGER NOT NULL DEFAULT 1,
+                        notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
+                    )""")
+                conn.execute("""
+                    INSERT INTO recon_payment_map__new
+                        (id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by)
+                        SELECT id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by
+                        FROM recon_payment_map""")
+                conn.execute("DROP TABLE recon_payment_map")
+                conn.execute("ALTER TABLE recon_payment_map__new RENAME TO recon_payment_map")
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
         conn.execute("""INSERT INTO recon_payment_map (payment_code_norm,category,bank,reconcile,updated_by)
             VALUES ('Credit BAY','CREDIT','BAY',1,'seed-franchise')
             ON CONFLICT(payment_code_norm) DO NOTHING""")
@@ -490,7 +500,7 @@ def list_branches():
 # ── Config: payment-code map ──────────────────────────────────────────────────
 
 _CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
-_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "PROMPTPAY", "ANY", "NONE", "UNKNOWN"}
+_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "TTB", "PROMPTPAY", "ANY", "NONE", "UNKNOWN"}
 
 
 class PaymentMapUpsert(BaseModel):

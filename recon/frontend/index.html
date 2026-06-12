@@ -159,6 +159,7 @@ function header(extra){
       style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
     <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)">🔑 รหัส</button>
+    <a href="/app/setup.html" style="font-size:13px" title="ตารางจับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID">ตั้งค่าระบบ ↗</a>
     <a href="/app/classic.html" style="font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
   </div>`;
 }
@@ -479,25 +480,28 @@ function toggleDays(i){
   // ที่มาของยอด POS — แตกเป็นรหัสชำระ ให้ตรวจสอบได้ ไม่ใช่เลขลอย ๆ
   const codes=(ch.codes||[]).map(c=>
     `<span class="chip c-mut mono" title="${esc(c.bank)}">${esc(c.code)} ${fmt(c.amount)}</span>`).join(' ');
-  // บัตรเครดิต: สายโซ่ 3 เอกสาร POS → สรุปยอดบัตร (หักค่าธรรมเนียม) → เงินเข้าธนาคาร
+  // บัตรเครดิต: วิธี 2 ขั้นตามตารางเจ้าของ — ขั้น 1: สรุปยอด↔สเตทเมนต์ · ขั้น 2: gross↔POS
   const c3=(ch.key==='CREDIT'&&ch.three_way)?`<div class="c3">${ch.three_way
     .filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0).map(r=>`
     <div class="card"><b>บัตร ${esc(r.acquirer)}</b>
       <div class="row" style="justify-content:space-between">ยอดรูด POS <span class="mono">${fmt(r.pos_gross)}</span></div>
-      <div class="row" style="justify-content:space-between">สรุปยอดบัตร <span class="mono">${fmt(r.settle_gross)}</span> ${_legChip(r.pos_leg)}</div>
+      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 2</span> สรุปยอดบัตร ↔ POS</span> <span class="mono">${fmt(r.settle_gross)}</span> ${_legChip(r.pos_leg)}</div>
       <div class="row" style="justify-content:space-between">− ค่าธรรมเนียม+VAT <span class="mono">${fmt(r.settle_fee)}</span></div>
-      <div class="row" style="justify-content:space-between">เข้าบัญชีจริง <span class="mono">${fmt(r.bank_credit)}</span> ${_legChip(r.bank_leg)}</div>
+      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 1</span> ยอดสุทธิ ↔ เงินเข้า</span> <span class="mono">${fmt(r.bank_credit)}</span> ${_legChip(r.bank_leg)}</div>
     </div>`).join('')}</div>`:'';
+  const pt=payoutTraceHtml(ch);
+  const cash3=cashThreeWayHtml(ch);
+  const cpCards=couponCardsHtml(ch);
   const feeBtn=FEE_SOURCE[ch.key]&&!DATA.closed?
     `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
   const mmBtn=!DATA.closed&&ch.key!=='COUPON'?
     `<button class="btn btn-sm" onclick="event.stopPropagation();openMatcher(${i})">🔧 จับคู่ละเอียด</button>`:'';
-  // คูปองยังไม่มีแหล่งตรวจอัตโนมัติใน v2 — ลิงก์ไปหน้ารายละเอียดคูปอง (หน้าเดิม)
+  // คูปอง: แต้ม KTC/BAY ตรวจอัตโนมัติแล้ว — ลิงก์หน้าเดิมไว้ดูคูปองซีรีส์อื่น
   const cpBtn=ch.key==='COUPON'?
     `<a class="btn btn-sm" href="/app/classic.html#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง ↗</a>`:'';
   el.innerHTML=`
   ${codes||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
-  ${c3}
+  ${c3}${pt}${cash3}${cpCards}
   <div id="fees-${i}"></div>
   <div id="matcher-${i}"></div>
   <div class="daygrid">${ch.days.map(d=>`
@@ -508,6 +512,83 @@ function toggleDays(i){
     </div>`).join('')}</div>
   <div id="daylines-${i}" style="padding:0 12px 12px"></div>`;
   el.style.display='';
+}
+
+/* ── ขั้น 2 ของ Grab/Line Man: ยอดสุทธิรายวัน ↔ เงินเข้าธนาคาร (รวมวันได้) ── */
+function payoutTraceHtml(ch){
+  if(!(ch.key==='GRAB'||ch.key==='LINEMAN')||!ch.payout_trace)return '';
+  const p=ch.payout_trace;
+  if(!p.payouts||!p.payouts.length)return '';
+  return `<div style="padding:6px 18px 10px">
+    <div class="lbl" style="margin-bottom:4px"><b>ขั้น 1</b>: สรุปยอด ${esc(ch.label)} ↔ POS (gross ก่อนค่าธรรมเนียม+VAT — ดูตัวเลขด้านบน) ·
+      <b>ขั้น 2</b>: ยอดสุทธิ ↔ เงินเข้า KBANK (โอนวันถัดไป อาจรวม 2 วัน)</div>
+    <div class="card" style="padding:0;box-shadow:none;max-height:250px;overflow:auto"><table>
+      <tr><th>วันขาย</th><th>ยอดสุทธิ</th><th>เงินเข้า</th><th>วันที่เงินเข้า</th><th>สถานะ</th></tr>
+      ${p.payouts.map(x=>`<tr>
+        <td style="text-align:left">${x.days.map(d=>+d.day.slice(8)).join('+')}
+          ${x.combined?`<span class="chip c-mut">รวม ${x.days.length} วัน</span>`:''}</td>
+        <td class="mono">${fmt(x.group_net)}</td>
+        <td class="mono">${x.amount?fmt(x.amount):'—'}</td>
+        <td>${x.payout_date?x.payout_date.slice(5):'—'}${x.lag?` <span class="lbl">ช้า ${x.lag} วัน</span>`:''}</td>
+        <td>${x.status==='matched'?'<span class="chip c-ok">✓ ตรง</span>':'<span class="chip c-warn">รอเงินเข้า</span>'}</td>
+      </tr>`).join('')}
+    </table></div>
+    <div class="lbl" style="margin-top:3px">สุทธิรวม ${fmt(p.net_total)} · เข้าบัญชีแล้ว ${fmt(p.payout_total)}${p.awaiting_total>0?` · รอเข้า ${fmt(p.awaiting_total)}`:''}</div>
+  </div>`;
+}
+
+/* ── เงินสด 3 ทาง: POS ↔ สลิปนำฝาก (พิมพ์ยอด) ↔ เงินเข้าธนาคาร ── */
+function cashThreeWayHtml(ch){
+  if(ch.key!=='CASH'||!(ch.cash_three_way||[]).length)return '';
+  const SLIP_CHIP={matched:r=>`<span class="chip c-ok">✓${r.slip_variance?` ต่าง ${r.slip_variance>0?'+':''}${fmt(r.slip_variance)}`:''}</span>`,
+    variance:r=>`<span class="chip c-err">ต่าง ${r.slip_variance>0?'+':''}${fmt(r.slip_variance)}</span>`,
+    slip_only:()=>'<span class="chip c-warn">ไม่มียอด POS</span>',
+    no_slip:()=>'<span class="chip c-mut">ยังไม่ใส่</span>'};
+  const BANK_CHIP={matched:()=>'<span class="chip c-ok">✓ เข้าแล้ว</span>',
+    variance:r=>`<span class="chip c-err">ต่าง ${r.bank_variance>0?'+':''}${fmt(r.bank_variance)}</span>`,
+    pending:()=>'<span class="chip c-warn">รอเงินเข้า</span>',none:()=>'<span class="lbl">—</span>'};
+  return `<div style="padding:6px 18px 10px">
+    <div class="lbl" style="margin-bottom:4px">3 ทาง: POS เงินสด ↔ สลิปนำฝาก (พิมพ์ยอดจากสลิป) ↔ เงินเข้าธนาคาร — ฝากวันถัดไปก่อน 13:00</div>
+    <div class="card" style="padding:0;box-shadow:none;max-height:300px;overflow:auto"><table>
+      <tr><th>วัน</th><th>POS เงินสด</th><th>สลิปนำฝาก</th><th>เงินเข้า</th><th>ฝากเมื่อ</th><th>สถานะเงินเข้า</th></tr>
+      ${ch.cash_three_way.map(r=>{
+        const slipCell=DATA.closed
+          ?`<span class="mono">${r.slip_amount!=null?fmt(r.slip_amount):'—'}</span>`
+          :`<input class="fee-in" type="number" step="0.01" min="0" value="${r.slip_amount!=null?r.slip_amount:''}"
+              placeholder="ยอดสลิป" onchange="saveSlip('${r.day}',this)">`;
+        return `<tr><td><b>${+r.day.slice(8)}</b></td>
+          <td class="mono">${fmt(r.pos_cash)}</td>
+          <td>${slipCell} ${(SLIP_CHIP[r.slip_leg]||(()=>''))(r)}</td>
+          <td class="mono">${r.bank_deposit!=null?fmt(r.bank_deposit):'—'}</td>
+          <td>${r.deposit_date?r.deposit_date.slice(8)+(r.deposit_combined?' <span class="lbl">(ฝากรวมวัน)</span>':''):'—'}</td>
+          <td>${(BANK_CHIP[r.bank_leg]||(()=>''))(r)}</td></tr>`;}).join('')}
+    </table></div>
+    <div class="lbl" style="margin-top:3px">สลิปต่างจาก POS ได้ไม่เกิน ±฿10 — พิมพ์แล้วบันทึกอัตโนมัติ · ไม่ใส่สลิปไม่บล็อกการปิดเดือน · แนบรูปสลิปได้ที่ปุ่มหลักฐานในวัน</div>
+  </div>`;
+}
+async function saveSlip(day,input){
+  if(input.value==='')return;
+  const amt=parseFloat(input.value);
+  if(isNaN(amt)||amt<=0){toast('ยอดสลิปไม่ถูกต้อง');return;}
+  try{await api('/api/deposit-slips',{method:'POST',body:{branch_id:DATA.branch_id,sale_day:day,amount:amt}});
+      toast('บันทึกสลิปแล้ว');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
+}
+
+/* ── คูปอง: การ์ดแต้ม KTC/BAY (วิธี issuer_points ตามตารางเจ้าของ) ── */
+const IP_CHIP={matched:'<span class="chip c-ok">✓ ตรง</span>',mismatch:'<span class="chip c-err">≠ ต่าง</span>',
+  waiting_doc:'<span class="chip c-warn">รอใบสรุปคะแนน</span>',awaiting_payout:'<span class="chip c-warn">รอเงินเข้า</span>',
+  ext_only:'<span class="chip c-warn">ไม่มียอด POS</span>'};
+function couponCardsHtml(ch){
+  if(ch.key!=='COUPON'||!(ch.issuer_points||[]).length)return '';
+  return `<div class="c3">${ch.issuer_points.map(r=>`
+    <div class="card"><b>แต้มบัตร ${esc(r.issuer)}</b>
+      <div class="row" style="justify-content:space-between">ใช้แต้มบน POS <span class="mono">${fmt(r.pos_point)}</span></div>
+      <div class="row" style="justify-content:space-between">ใบสรุปคะแนน <span class="mono">${fmt(r.settle_gross)}</span> ${IP_CHIP[r.status]||''}</div>
+      ${r.bank_in_credit
+        ?'<div class="lbl">เงินคืนแต้มรวมอยู่ในยอดฝากบัตร KTC (ดูช่องบัตรเครดิต)</div>'
+        :`<div class="row" style="justify-content:space-between">เงินเข้า KBANK <span class="mono">${fmt(r.bank_payout)}</span></div>`}
+    </div>`).join('')}</div>`;
 }
 
 /* ── ค่าธรรมเนียม & VAT (บัตร / Grab / Line Man) ── */
