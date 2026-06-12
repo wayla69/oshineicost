@@ -1715,13 +1715,22 @@ def test_setup_master_marks_unknown_bank_rows(client):
 
 
 def test_method_config_crud_and_validation(client):
-    # bad enums / out-of-range params are rejected
+    # bad enums are still rejected (no sensible clamp for strings)
     bad = {"category": "QR", "bank": "KBANK", "method": "magic"}
     assert client.post("/api/method-config", json=bad).status_code == 400
-    assert client.post("/api/method-config", json={
-        "category": "QR", "bank": "KBANK", "method": "direct", "lag_days": 99}).status_code == 400
-    assert client.post("/api/method-config", json={
-        "category": "QR", "bank": "KBANK", "method": "direct", "merge_days": 0}).status_code == 400
+    # out-of-range numeric params are clamped server-side (Blueprint 1.4), not rejected
+    r_lag = client.post("/api/method-config", json={
+        "category": "QR", "bank": "TTB", "method": "direct", "lag_days": 99})
+    assert r_lag.status_code in (200, 201)
+    all_cfgs = client.get("/api/method-config").json()
+    ttb = next(c for c in all_cfgs if c["category"] == "QR" and c["bank"] == "TTB")
+    assert ttb["lag_days"] == 14                    # clamped to max
+    r_merge = client.post("/api/method-config", json={
+        "category": "QR", "bank": "SCB", "method": "direct", "merge_days": 0})
+    assert r_merge.status_code in (200, 201)
+    all_cfgs2 = client.get("/api/method-config").json()
+    scb = next(c for c in all_cfgs2 if c["category"] == "QR" and c["bank"] == "SCB")
+    assert scb["merge_days"] == 1                   # clamped to min
     # duplicate lane → 409
     assert client.post("/api/method-config", json={
         "category": "QR", "bank": "KBANK", "method": "itemized"}).status_code == 409
