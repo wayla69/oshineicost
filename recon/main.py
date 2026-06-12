@@ -33,7 +33,9 @@ from .matcher import (
     TOL_ABS, TOL_PCT, TOL_ABS_DAY, TOL_PCT_DAY,
     _eff_fee_vat,
     bank_statement_coverage,
+    cash_three_way,
     category_reconciliation,
+    coupon_reconciliation,
     daily_board,
     daily_reconciliation,
     lane_ext_lines,
@@ -1845,6 +1847,23 @@ def _build_export(conn, session) -> bytes:
           [[d["disc_type"], d["category"], d["bank"], d["amount_external"], d["amount_pos"],
             d["variance"], d["resolution"], d["assigned_to"] or "", d["resolution_note"] or ""]
            for d in discs])
+
+    # Cash 3-way (POS ↔ typed deposit slip ↔ bank deposit) per the owner's table
+    tw = cash_three_way(conn, bid, pm)
+    sheet("Cash 3-way",
+          ["Day", "POS cash", "Slip amount", "Slip day", "Bank deposit", "Deposit date",
+           "Slip status", "Bank status", "Slip var", "Bank var"],
+          [[r["day"], r["pos_cash"], r["slip_amount"], r["slip_day"] or "", r["bank_deposit"],
+            r["deposit_date"] or "", r["slip_leg"], r["bank_leg"],
+            r["slip_variance"], r["bank_variance"]] for r in tw["rows"]])
+
+    # Coupon issuer points (KTC/BAY) — issuer_points method
+    ip = coupon_reconciliation(conn, bid, pm)
+    sheet("Coupon points",
+          ["Issuer", "POS points", "Summary gross", "Bank payout", "Variance", "Status"],
+          [[r["issuer"], r["pos_point"], r["settle_gross"],
+            ("in KTC deposit" if r["bank_in_credit"] else r["bank_payout"]),
+            r["variance"], r["status"]] for r in ip])
 
     buf = io.BytesIO()
     wb.save(buf)
