@@ -214,6 +214,36 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
     return buckets
 
 
+# ── TRANSFER 'ANY' (multi-bank codes, e.g. generic 'Bank Transfer') ───────────
+# The owner's table: a generic transfer can land in KTB OR KBANK. Per-bank
+# TRANSFER lanes consume their own statement lines FIRST; whatever transfer
+# credit is left over feeds the (TRANSFER, ANY) lane so the money is matched
+# without double-counting and a per-bank lane never shows a false surplus.
+
+def _apply_transfer_any(pos: dict, ext: dict, key=("TRANSFER", "ANY")):
+    """Mutates ext: moves each real-bank TRANSFER lane's leftover (ext beyond its
+    own POS) into the ANY lane. No-op when no ANY POS exists."""
+    if key not in pos:
+        return
+    resid, lines = 0.0, []
+    for bk in _REAL_BANKS:
+        k = ("TRANSFER", bk) if len(key) == 2 else (key[0], "TRANSFER", bk)
+        eb = ext.get(k)
+        if not eb:
+            continue
+        p = max(pos.get(k, 0.0), 0.0)
+        leftover = max(0.0, eb["amount"] - p)
+        if leftover > 0:
+            resid += leftover
+            eb["amount"] -= leftover
+            if "net" in eb:
+                eb["net"] -= leftover
+    if resid > 0:
+        b = ext.setdefault(key, {"amount": 0.0, "net": 0.0, "lines": lines})
+        b["amount"] += resid
+        b["net"] = b.get("net", 0.0) + resid
+
+
 # ── Reconciliation (pure compute) ─────────────────────────────────────────────
 
 def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_month: str):
@@ -225,6 +255,7 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
     pos, unmapped = pos_category_totals(conn, branch_id, period_month)
     ext = external_buckets(conn, branch_id, period_month)
     cfgs = method_config(conn)
+    _apply_transfer_any(pos, ext)
 
     # Load lane adjustments (graceful if table not yet created)
     adjs: dict = {}
@@ -470,6 +501,150 @@ def _point_settlement_gross(conn, branch_id, period_month, point_acq):
         return 0.0
 
 
+def point_settlement_total(conn, branch_id, period_month, point_acq):
+    """Total gross of <point_acq> settlement rows for a branch/month, found by
+    EITHER the row's own acquirer (the BAY Point doc parses as acquirer=BAYPOINT)
+    OR a registered point MID (KTC Point rows hide inside the KTC RTxInv under
+    acquirer=KTC, split by MID). One query — no double count when both match."""
+    pm = _point_mids(conn, branch_id)
+    mids = [m for m, a in pm.items() if a == point_acq and m]
+    cond = "l.acquirer=?"
+    params: list = [branch_id, period_month, point_acq]
+    if mids:
+        ph = ",".join("?" * len(mids))
+        cond += f" OR TRIM(COALESCE(l.merchant_id,'')) IN ({ph})"
+        params += mids
+    try:
+        row = conn.execute(
+            f"SELECT COALESCE(SUM(l.gross_amount),0) FROM recon_cc_lines l "
+            f"WHERE l.branch_id=? AND strftime('%Y-%m',l.settlement_date)=? AND ({cond})",
+            params).fetchone()
+        return round(float(row[0] or 0), 2)
+    except sqlite3.OperationalError:
+        return 0.0
+
+
+def coupon_reconciliation(conn, branch_id, period_month):
+    """Per-issuer loyalty-point reconciliation for the COUPON channel (the
+    owner's table: Coupon = KTC/BAY credit-card points used as discount).
+
+    KTC — 2-way: POS KTC-point coupons ↔ KTC-Point settlement rows; the bank
+    leg rides INSIDE the combined KTC deposit (CREDIT·KTB lane), flagged
+    bank_in_credit. BAY — 3-way: POS ↔ BAYPOINT settlement ↔ KBANK transfer
+    credit (matched by payout_matching's BAYPOINT stream).
+
+    Returns rows [{issuer, pos_point, settle_gross, bank_payout, bank_in_credit,
+    variance, status}] — status: matched | mismatch | waiting_doc (POS points
+    exist, no summary doc) | awaiting_payout | ext_only. Empty list when the
+    branch has no point activity at all."""
+    rows = []
+
+    def _status(pos, settle):
+        if settle > 0 and pos > 0:
+            return "matched" if abs(settle - pos) <= TOL_ABS else "mismatch"
+        return "waiting_doc" if pos > 0 else "ext_only"
+
+    pos_ktc = point_pos_total(conn, branch_id, period_month, "KTC")
+    settle_ktc = point_settlement_total(conn, branch_id, period_month, "KTCPOINT")
+    if pos_ktc > 0 or settle_ktc > 0:
+        rows.append({"issuer": "KTC", "pos_point": pos_ktc, "settle_gross": settle_ktc,
+                     "bank_payout": None, "bank_in_credit": True,
+                     "variance": round(settle_ktc - pos_ktc, 2),
+                     "status": _status(pos_ktc, settle_ktc)})
+
+    pos_bay = point_pos_total(conn, branch_id, period_month, "BAY")
+    settle_bay = point_settlement_total(conn, branch_id, period_month, "BAYPOINT")
+    if pos_bay > 0 or settle_bay > 0:
+        bp = payout_matching(conn, branch_id, period_month).get("BAYPOINT") or {}
+        status = _status(pos_bay, settle_bay)
+        if status == "matched" and bp.get("awaiting_total", 0.0) > TOL_ABS:
+            status = "awaiting_payout"            # summary ties to POS, money not landed yet
+        rows.append({"issuer": "BAY", "pos_point": pos_bay, "settle_gross": settle_bay,
+                     "bank_payout": round(bp.get("payout_total", 0.0), 2),
+                     "bank_in_credit": False,
+                     "variance": round(settle_bay - pos_bay, 2), "status": status})
+    return rows
+
+
+# ── CASH 3-way: POS cash ↔ typed deposit slip ↔ bank deposit ──────────────────
+# The owner's table: staff deposit day-D cash the next day before 13:00; the slip
+# amount may differ from POS by a few baht. Slips are typed by staff
+# (recon_deposit_slip); a missing slip degrades to the 2-way (never blocks close).
+
+def deposit_slips(conn, branch_id, period_month):
+    """{sale_day: slip-row-dict} for a branch/month; {} when table absent."""
+    try:
+        return {r["sale_day"]: dict(r) for r in conn.execute(
+            "SELECT * FROM recon_deposit_slip WHERE branch_id=? AND substr(sale_day,1,7)=?",
+            (branch_id, period_month))}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def cash_three_way(conn, branch_id, period_month, cash=None):
+    """Per sale-day 3-way rows for the CASH channel. Tolerance = the CASH lane's
+    tol_abs_day (owner: ฿10 strict) — within tolerance counts matched but the
+    variance stays visible. `cash` lets callers reuse an existing
+    cash_deposit_matching result (it's expensive enough to not recompute)."""
+    mc = _cfg(method_config(conn), "CASH")
+    tol = mc.get("tol_abs_day")
+    tol_eff = float(tol) if tol is not None else TOL_ABS_DAY
+    cash = cash or cash_deposit_matching(conn, branch_id, period_month)
+    slips = deposit_slips(conn, branch_id, period_month)
+    pos_days, available = _cash_pos_days(conn, branch_id, period_month)
+
+    day_info: dict = {}
+    for g in cash["groups"]:
+        for j, dd in enumerate(g["days"]):
+            is_last = j == len(g["days"]) - 1
+            day_info[dd["day"]] = {
+                "bank_share": dd["pos"] + (g["variance"] if is_last else 0.0),
+                "deposit_date": g["deposit_date"], "combined": g["combined"], "lag": g["lag"]}
+
+    rows = []
+    for day in sorted(set(d for d, a in pos_days.items() if a > 0) | set(slips)):
+        pos = round(pos_days.get(day, 0.0), 2)
+        s = slips.get(day)
+        slip_amt = round(float(s["amount"]), 2) if s else None
+        info = day_info.get(day)
+        bank_amt = round(info["bank_share"], 2) if info else None
+
+        if s is None:
+            slip_leg = "no_slip"                      # informational — never blocks
+        elif pos <= 0:
+            slip_leg = "slip_only"                    # slip typed for a day with no POS cash
+        else:
+            slip_leg = "matched" if abs(slip_amt - pos) <= tol_eff else "variance"
+        if info is None:
+            bank_leg = "pending" if (pos > 0 or slip_amt) else "none"
+        else:
+            ref = slip_amt if slip_amt is not None else pos
+            bank_leg = "matched" if abs(bank_amt - ref) <= tol_eff else "variance"
+
+        rows.append({
+            "day": day, "pos_cash": pos,
+            "slip_id": s["id"] if s else None,
+            "slip_amount": slip_amt,
+            "slip_day": (s["deposit_day"] if s else None),
+            "attachment_id": (s["attachment_id"] if s else None),
+            "slip_note": (s["note"] if s else None),
+            "bank_deposit": bank_amt,
+            "deposit_date": info["deposit_date"] if info else None,
+            "deposit_combined": info["combined"] if info else False,
+            "slip_leg": slip_leg, "bank_leg": bank_leg,
+            "slip_variance": round(slip_amt - pos, 2) if (s and pos > 0) else None,
+            "bank_variance": round(bank_amt - pos, 2) if info else None,
+        })
+    return {
+        "rows": rows,
+        "slip_count": sum(1 for r in rows if r["slip_amount"] is not None),
+        "pos_total":  round(sum(r["pos_cash"] for r in rows), 2),
+        "slip_total": round(sum(r["slip_amount"] or 0 for r in rows), 2),
+        "bank_total": round(sum(r["bank_deposit"] or 0 for r in rows), 2),
+        "pos_available": available,
+    }
+
+
 def _point_mids(conn, branch_id):
     """{merchant_id: acquirer} for point-redemption MIDs of a branch (e.g. the
     KTC Point MID), from recon_acquirer_mid. Lets us split point rows out of an
@@ -497,16 +672,17 @@ def _payout_candidate_credits(conn, branch_id, period_month, channels):
     ph = ",".join("?" * len(channels))
     try:
         rows = conn.execute(f"""
-            SELECT id, txn_date, credit, channel FROM recon_bank_lines
-            WHERE branch_id=? AND credit>0 AND channel IN ({ph})
-              AND match_status!='excluded'
-              AND strftime('%Y-%m',txn_date)=?
-            ORDER BY txn_date, id
+            SELECT l.id, l.txn_date, l.credit, l.channel, u.provider
+            FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND l.credit>0 AND l.channel IN ({ph})
+              AND l.match_status!='excluded'
+              AND strftime('%Y-%m',l.txn_date)=?
+            ORDER BY l.txn_date, l.id
         """, (branch_id, *channels, period_month)).fetchall()
     except sqlite3.OperationalError:
         return []
     return [{"id": r["id"], "date": r["txn_date"], "amount": float(r["credit"] or 0),
-             "channel": r["channel"]} for r in rows]
+             "channel": r["channel"], "bank": _provider_bank(r["provider"])} for r in rows]
 
 
 def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None):
@@ -526,6 +702,10 @@ def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None)
         lag_max = max_lag if max_lag is not None else int(mc.get("lag_days") or DEF_PAYOUT_LAG)
         days = sorted((d, n) for d, n in nets.get(cat, {}).items() if n > TOL_ABS_DAY)
         credits = _payout_candidate_credits(conn, branch_id, period_month, channels)
+        if cat == "BAYPOINT":
+            # BAY reimburses points into KBANK only (owner's table) — don't let
+            # the amount-match grab a coincidental KTB transfer.
+            credits = [c for c in credits if c["bank"] == "KBANK"]
         used: set = set()
         payouts, di = [], 0
         while di < len(days):
@@ -786,7 +966,7 @@ def lane_lines(conn, branch_id, period_month, category, bank, day=None):
             WHERE l.branch_id=? AND l.credit>0 AND l.channel=?{df} ORDER BY l.txn_date
         """, [branch_id, chan] + p):
             rb = "NONE" if category == "CASH" else _provider_bank(r["provider"])
-            if rb != bank:
+            if bank != "ANY" and rb != bank:        # ANY = multi-bank lane → both statements
                 continue
             out.append({"id": r["id"], "match_status": r["ms"],
                         "date": r["d"], "ref": r["ref"] or "", "amount": round(float(r["amt"] or 0), 2),
@@ -1106,6 +1286,10 @@ def _coverage(conn, branch_id, period_month):
                 cov[("cash", None)] = (date.fromisoformat(max(bank_cov)) - timedelta(days=1)).isoformat()
             except (ValueError, TypeError):
                 cov[("cash", None)] = max(bank_cov)
+    # Multi-bank (ANY) lanes are covered as far as the furthest statement we have.
+    any_cov = [v for (src, b), v in cov.items() if src == "bank" and b in _REAL_BANKS and v]
+    if any_cov:
+        cov[("bank", "ANY")] = max(any_cov)
     for r in conn.execute("""
         SELECT u.provider, MAX(l.settlement_date) mx
         FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
@@ -1160,8 +1344,13 @@ def _claimed_lanes(conn, branch_id, period_month):
         pos, _u, _a = pos_category_totals_daily(conn, branch_id, period_month)
     except sqlite3.OperationalError:
         return set()
-    return {(cat, bank) for (_day, cat, bank), amt in pos.items()
-            if cat in ("QR", "TRANSFER", "CREDIT") and amt > 0}
+    lanes = {(cat, bank) for (_day, cat, bank), amt in pos.items()
+             if cat in ("QR", "TRANSFER", "CREDIT") and amt > 0}
+    if ("TRANSFER", "ANY") in lanes:
+        # a multi-bank transfer code claims BOTH banks' transfer lines — the cash
+        # matcher must not mistake them for lump cash deposits
+        lanes |= {("TRANSFER", b) for b in _REAL_BANKS}
+    return lanes
 
 
 def _cash_dep_credits(conn, branch_id, period_month, max_lag):
@@ -1303,6 +1492,11 @@ def daily_reconciliation(conn, branch_id, period_month):
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
     cfgs = method_config(conn)                                   # per-lane tolerance overrides
 
+    # Multi-bank TRANSFER codes (bank='ANY'): per-bank lanes consume their own
+    # statement lines first, the leftover feeds the day's ANY lane.
+    for d in {dy for (dy, c, b) in pos if c == "TRANSFER" and b == "ANY"}:
+        _apply_transfer_any(pos, ext, (d, "TRANSFER", "ANY"))
+
     # Feed matched cash groups back in as per-day external amounts: each POS day
     # in a group is covered by its deposit (the group's variance lands on the
     # LAST day so a lump's rounding shows once, not on every member day).
@@ -1350,7 +1544,7 @@ def daily_reconciliation(conn, branch_id, period_month):
             status = "ext_only"
         elif cat == "COUPON":
             status = "no_source"
-        elif cat in ("QR", "TRANSFER") and bank not in _REAL_BANKS:
+        elif cat in ("QR", "TRANSFER") and bank not in (_REAL_BANKS | {"ANY"}):
             status = "unmapped_bank"               # map this code's bank in Setup (e.g. PROMPTPAY/UNKNOWN)
         elif cat == "CREDIT" and bank not in (_REAL_BANKS | {"KTC"}):
             status = "unmapped_bank"
@@ -1406,6 +1600,8 @@ def daily_reconciliation(conn, branch_id, period_month):
             "has_deposit_lines": cash["has_deposit_lines"],
             "groups":            cash["groups"],
             "unmatched_credits": cash["unmatched_credits"],
+            # 3-way rows (POS ↔ typed slip ↔ bank deposit) for the v2 CASH channel
+            "three_way":         cash_three_way(conn, branch_id, period_month, cash=cash)["rows"],
         },
         "pending_summary": {
             "pending_lane_days": sum(d["pending_count"] for d in days),
@@ -1481,7 +1677,7 @@ def lane_ext_lines(conn, branch_id, period_month, category, bank):
             WHERE l.branch_id=? AND l.credit>0 AND l.channel=? AND strftime('%Y-%m',l.txn_date)=?
             ORDER BY l.txn_date""", (branch_id, chan, period_month)):
             rb = "NONE" if category == "CASH" else _provider_bank(r["provider"])
-            if rb != bank:
+            if bank != "ANY" and rb != bank:        # ANY = multi-bank lane → both statements
                 continue
             add("recon_bank_lines", r["id"], r["d"], r["ref"], r["provider"], r["amt"], r["ms"])
     elif category == "CREDIT":

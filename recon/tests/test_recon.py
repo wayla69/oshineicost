@@ -1452,3 +1452,163 @@ def test_matcher_uses_method_config_tolerance(client):
     days = {x["day"]: x for x in client.get(f"/api/sessions/{sid}/daily").json()["days"]}
     lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
     assert lane["status"] == "matched"
+
+
+# ── phase 2: coupon channel, cash 3-way, TRANSFER/ANY, payout trace ───────────
+
+def _seed_point_pos(db, series_name, series_id, amount):
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_month"
+              "(branch_id INT,period_month TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.execute("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", (series_id, series_name, ""))
+    c.execute("INSERT INTO pos_coupon_payment_month VALUES(4,'2026-06',?,?,1)", (series_id, amount))
+    c.commit(); c.close()
+
+
+def test_coupon_channel_reconciles_ktc_points(client):
+    """COUPON channel leaves no_source when the issuer's point summary is in:
+    POS KTC-point coupons ↔ KTC-Point settlement rows (split by MID) → ok."""
+    db = main._DB_PATH
+    _seed_point_pos(db, "แลกคะแนน KTC 699 คะแนนลด 80 บาท", 1, 160)
+    c = sqlite3.connect(db)
+    c.execute("INSERT INTO recon_acquirer_mid(branch_id,acquirer,merchant_id,terminal_id,active)"
+              " VALUES(4,'KTCPOINT','662','',1)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTC','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,"
+              "mdr_fee,vat_amount,net_amount,merchant_id) VALUES(?,4,'2026-06-03','KTC',160,0,0,160,'662')", (up,))
+    c.commit(); c.close()
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cp = next(ch for ch in r["channels"] if ch["key"] == "COUPON")
+    assert cp["status"] == "ok", cp
+    ip = {x["issuer"]: x for x in cp["issuer_points"]}
+    assert ip["KTC"]["pos_point"] == 160 and ip["KTC"]["settle_gross"] == 160
+    assert ip["KTC"]["status"] == "matched" and ip["KTC"]["bank_in_credit"] is True
+
+
+def test_coupon_without_points_doc_is_waiting(client):
+    """POS shows point coupons but no summary uploaded → waiting_doc + the
+    points doc appears in the checklist (uploadable, acceptable)."""
+    _seed_point_pos(main._DB_PATH, "แต้มกรุงศรี 1000 ลด 100", 7, 1700)
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cp = next(ch for ch in r["channels"] if ch["key"] == "COUPON")
+    assert cp["status"] == "waiting_doc" and "BAY" in cp["detail"]
+    doc = next(d for d in r["documents"] if d["key"] == "points_BAY")
+    assert doc["status"] == "missing" and doc["source"] == "credit_card"
+    assert doc["provider"] == "BAYPOINT" and doc["channel"] == "COUPON"
+
+
+def test_cash_three_way_with_slip(client):
+    """POS cash ↔ typed slip ↔ bank deposit. Slip ±few baht passes (≤฿10) with
+    the variance visible; a >฿10 slip shows variance; missing slip = no_slip
+    (informational, never blocks close)."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'Cash',?,0)",
+                  [("2026-06-10", 20000), ("2026-06-11", 15000)])
+    c.commit(); c.close()
+    _add_bank_line(db, "KTB", "CASH_DEP", 19995, date="2026-06-11")  # ฿5 short — within ฿10
+    _add_bank_line(db, "KTB", "CASH_DEP", 15000, date="2026-06-12")
+
+    # slip for day 10 (฿5 off → matched with visible variance); none for day 11
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 19995,
+        "deposit_day": "2026-06-11"}).status_code == 200
+
+    from recon.matcher import cash_three_way
+    with main.get_db() as conn:
+        tw = cash_three_way(conn, 4, "2026-06")
+    rows = {r["day"]: r for r in tw["rows"]}
+    d10, d11 = rows["2026-06-10"], rows["2026-06-11"]
+    assert d10["slip_leg"] == "matched" and d10["slip_variance"] == -5.0
+    assert d10["bank_leg"] == "matched" and d10["deposit_date"] == "2026-06-11"
+    assert d11["slip_leg"] == "no_slip" and d11["bank_leg"] == "matched"
+
+    # a slip ฿30 off the POS → variance (strict ฿10)
+    client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 19970})
+    with main.get_db() as conn:
+        tw = cash_three_way(conn, 4, "2026-06")
+    assert {r["day"]: r for r in tw["rows"]}["2026-06-10"]["slip_leg"] == "variance"
+
+    # the v2 CASH channel carries the 3-way rows
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cash_ch = next(ch for ch in r["channels"] if ch["key"] == "CASH")
+    assert len(cash_ch["cash_three_way"]) == 2
+
+
+def test_deposit_slip_endpoints_validation_and_lock(client):
+    db = main._DB_PATH
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "bad", "amount": 100}).status_code == 400
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 0}).status_code == 400
+    # upsert: same day replaces
+    a = client.post("/api/deposit-slips", json={"branch_id": 4, "sale_day": "2026-06-10", "amount": 100}).json()
+    b = client.post("/api/deposit-slips", json={"branch_id": 4, "sale_day": "2026-06-10", "amount": 120}).json()
+    assert a["id"] == b["id"]
+    slips = client.get("/api/deposit-slips", params={"branch_id": 4, "period_month": "2026-06"}).json()
+    assert len(slips) == 1 and slips[0]["amount"] == 120
+    # closed month → 423
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    c = sqlite3.connect(db)
+    c.execute("UPDATE recon_discrepancies SET resolution='accepted' WHERE session_id=?", (sid,))
+    c.commit(); c.close()
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"}).status_code == 200
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-15", "amount": 100}).status_code == 423
+    assert client.delete(f"/api/deposit-slips/{a['id']}").status_code == 423
+
+
+def test_grab_channel_exposes_payout_trace(client):
+    """GRAB channel carries stage 2 (net-day groups <-> bank credits) so the UI
+    can render two-stage cards like CREDIT."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('grab',4,'Grab','g','2026-06',0,'confirmed')").lastrowid
+    # two net days 3000+5000 paid as ONE combined credit (8000) on the 12th
+    c.executemany("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,"
+                  "food_amount,commission_amt,vat_amount,net_payout) VALUES(?,4,?,'Completed',?,?,0,?)",
+                  [(up, "2026-06-10", 3300, 300, 3000), (up, "2026-06-11", 5500, 500, 5000)])
+    c.commit(); c.close()
+    _add_bank_line(db, "KBANK", "GRAB_PAYOUT", 8000, date="2026-06-12")
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    grab = next(ch for ch in r["channels"] if ch["key"] == "GRAB")
+    pt = grab["payout_trace"]
+    assert pt and pt["payouts"][0]["status"] == "matched"
+    assert pt["payouts"][0]["combined"] is True and len(pt["payouts"][0]["days"]) == 2
+    assert pt["payout_total"] == 8000.0
+
+
+def test_transfer_any_matches_both_banks_no_double_count(client):
+    """A generic 'Bank Transfer' code (TRANSFER/ANY) reconciles against the
+    leftover transfer credits of BOTH banks; per-bank lanes consume their own
+    lines first and never show a false surplus."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    # POS month: per-bank lane 4,000 + generic Bank Transfer 7,000 (ANY)
+    c.executemany("INSERT INTO pos_payment_month VALUES(4,'2026-06',?,?,0)",
+                  [("โอน KTB", 4000), ("Bank Transfer", 7000)])
+    c.commit(); c.close()
+    # statements: KTB transfers 9,000 (4k per-bank + 5k of ANY), KBANK 2,000 (rest of ANY)
+    _add_bank_line(db, "KTB", "TRANSFER", 9000, date="2026-06-10")
+    _add_bank_line(db, "KBANK", "TRANSFER", 2000, date="2026-06-10")
+
+    from recon.matcher import category_reconciliation
+    with main.get_db() as conn:
+        cats, _ = category_reconciliation(conn, 4, "2026-06")
+    lanes = {(x["category"], x["bank"]): x for x in cats}
+    assert lanes[("TRANSFER", "KTB")]["status"] == "matched"
+    assert lanes[("TRANSFER", "KTB")]["ext_amount"] == 4000.0   # leftover moved to ANY
+    any_lane = lanes[("TRANSFER", "ANY")]
+    assert any_lane["pos_amount"] == 7000.0 and any_lane["ext_amount"] == 7000.0
+    assert any_lane["status"] == "matched"

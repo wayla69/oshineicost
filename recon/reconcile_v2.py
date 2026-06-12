@@ -21,9 +21,13 @@ import sqlite3
 
 from .matcher import (
     category_reconciliation,
+    coupon_reconciliation,
     credit_three_way,
     daily_reconciliation,
     map_bank_suggestions,
+    payout_matching,
+    point_pos_total,
+    point_settlement_total,
     suggest_reclassifications,
     _coverage,
     _lane_cov_key,
@@ -83,11 +87,25 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
         add(f"stmt_{b}", f"สเตทเมนต์ {b}", ("bank", b))
     for a in sorted(cc_acqs):
         add(f"cc_{a}", f"สรุปยอดบัตร {a}", ("cc", a))
+    # Multi-bank transfer codes (ANY) can land in either bank → need both statements
+    if any(r["category"] == "TRANSFER" and r["bank"] == "ANY" and r["pos_amount"] > 0
+           for r in monthly_rows):
+        for b in sorted(_REAL_BANKS - pos_banks):
+            add(f"stmt_{b}", f"สเตทเมนต์ {b}", ("bank", b))
+            pos_banks.add(b)
     for r in monthly_rows:
         if r["category"] == "GRAB" and r["pos_amount"] > 0:
             add("grab", "รายงาน Grab", ("grab", None))
         if r["category"] == "LINEMAN" and r["pos_amount"] > 0:
             add("lineman", "รายงาน Line Man", ("lineman", None))
+    # Loyalty-point summaries (Coupon channel): required when POS shows the
+    # issuer's point coupons; "uploaded" = the point settlement rows are present.
+    for issuer, pacq in (("KTC", "KTCPOINT"), ("BAY", "BAYPOINT")):
+        if point_pos_total(conn, branch_id, period_month, issuer) > 0:
+            have = point_settlement_total(conn, branch_id, period_month, pacq) > 0
+            docs.append({"key": f"points_{issuer}", "label": f"สรุปคะแนน {issuer}",
+                         "status": "uploaded" if have else "missing",
+                         "detail": "" if have else "ยังไม่ได้อัปโหลด"})
     # Upload metadata so the v2 UI can open the right uploader from the chip:
     # source_type + provider hint, and which channel an "accept" would clear
     # (a whole missing statement is never acceptable — nothing reconciles without it)
@@ -97,6 +115,10 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
             d.update(source="bank", provider=k[5:], channel=None)
         elif k.startswith("cc_"):
             d.update(source="credit_card", provider=k[3:], channel="CREDIT")
+        elif k.startswith("points_"):
+            # KTC/BAY point summaries upload through the credit_card parser
+            # (they parse as KTCPOINT/BAYPOINT settlement rows)
+            d.update(source="credit_card", provider=k[7:] + "POINT", channel="COUPON")
         elif k == "grab":
             d.update(source="grab", provider="GRAB", channel="GRAB")
         else:
@@ -169,6 +191,8 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     c3 = credit_three_way(conn, branch_id, period_month)
     accepted = _accepted_channels(conn, branch_id, period_month)
     pos_codes = _pos_codes_by_channel(conn, branch_id, period_month)
+    payouts = payout_matching(conn, branch_id, period_month)     # GRAB/LM stage-2 trace
+    issuer_points = coupon_reconciliation(conn, branch_id, period_month)
 
     # Collapse day-lanes by channel (sum over banks within a day)
     ch_days: dict = {}     # channel -> {day: {pos, ext, statuses:set, banks:set}}
@@ -231,7 +255,21 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
             doc_missing = [key]
 
         if key == "COUPON":
-            status, detail = "no_source", "ตรวจกับผู้ออกคูปอง"
+            # Issuer-points method (owner's table): KTC/BAY point coupons check
+            # against the issuer's point summary. Other coupon series still have
+            # no external source → channel stays no_source when no points exist.
+            if not issuer_points:
+                status, detail = "no_source", "ตรวจกับผู้ออกคูปอง"
+            elif any(r["status"] == "mismatch" for r in issuer_points):
+                status, detail = "diff", "ยอดแต้มไม่ตรงกับใบสรุปคะแนน"
+            elif any(r["status"] == "waiting_doc" for r in issuer_points):
+                miss = [r["issuer"] for r in issuer_points if r["status"] == "waiting_doc"]
+                status, detail = "waiting_doc", "อัปโหลดสรุปคะแนน " + ", ".join(miss)
+            elif any(r["status"] == "awaiting_payout" for r in issuer_points):
+                status, detail = "waiting_doc", "รอเงินแต้มเข้าบัญชี"
+            else:
+                ok_iss = "/".join(r["issuer"] for r in issuer_points)
+                status, detail = "ok", f"แต้ม {ok_iss} ตรงตามใบสรุป"
         elif n_setup:
             codes = ", ".join(u["code"] for u in
                               [{"code": k} for k in sorted(set(
@@ -262,15 +300,31 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
               "accepted": accepted.get(key)}
         if key == "CREDIT":
             ch["three_way"] = c3["rows"]
+        if key in ("GRAB", "LINEMAN"):
+            # Stage 2 of the owner's two-stage method: provider NET ↔ bank credit,
+            # with combined-day groups + lag — rendered like CREDIT's three_way.
+            ch["payout_trace"] = payouts.get(key)
+        if key == "COUPON":
+            ch["issuer_points"] = issuer_points
+            if issuer_points:
+                # the channel's headline variance = the points variance (the
+                # non-point coupon remainder has no external source to differ from)
+                ch["variance"] = round(sum(r["variance"] for r in issuer_points), 2)
+        if key == "CASH":
+            # 3-way rows: POS cash ↔ typed deposit slip ↔ bank deposit group
+            ch["cash_three_way"] = daily["cash_summary"].get("three_way", [])
         channels.append(ch)
 
     # Progress is money-weighted, not day-counted: 27 days of ฿1k transfer noise
     # must not drag the gauge as hard as ฿3.6M of matched QR. unexplained =
     # |channel variance| summed over checkable channels; base = larger side.
+    # COUPON stays out of the money base in all statuses: points are discounts,
+    # not bank money-in (the reimbursement rides the CREDIT/TRANSFER lanes), so
+    # counting it would wrongly drag the gauge once the points doc arrives.
     unexplained = sum(abs(ch["variance"]) for ch in channels
-                      if ch["status"] != "no_source")
+                      if ch["status"] != "no_source" and ch["key"] != "COUPON")
     base = sum(max(ch["pos"], ch["ext"]) for ch in channels
-               if ch["status"] != "no_source")
+               if ch["status"] != "no_source" and ch["key"] != "COUPON")
     progress = round(max(0.0, 100.0 * (1 - unexplained / base)), 1) if base else 100.0
 
     docs = _doc_checklist(conn, branch_id, period_month, monthly_rows, cov)

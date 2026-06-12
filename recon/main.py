@@ -1157,6 +1157,80 @@ def delete_attachment(att_id: int):
     return {"deleted": att_id}
 
 
+# ── Deposit slips (สลิปนำฝาก — CASH stage-1 evidence, typed by staff) ──────────
+
+class DepositSlip(BaseModel):
+    branch_id:     int
+    sale_day:      str                  # POS day D the cash belongs to
+    amount:        float
+    deposit_day:   str | None = None    # normally D+1 (before 13:00)
+    attachment_id: int | None = None    # optional slip photo (recon_attachment)
+    note:          str = ""
+    created_by:    str = ""
+
+
+@app.get("/api/deposit-slips")
+def list_deposit_slips(branch_id: int, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM recon_deposit_slip WHERE branch_id=? AND substr(sale_day,1,7)=? "
+            "ORDER BY sale_day", (branch_id, period_month))]
+
+
+@app.post("/api/deposit-slips", dependencies=[Depends(require_write_token)])
+def upsert_deposit_slip(body: DepositSlip):
+    """One slip per (branch, sale_day) — POSTing again replaces the amount."""
+    if not _DAY_RE.match(body.sale_day or ""):
+        raise HTTPException(400, "sale_day must be in 'YYYY-MM-DD' format.")
+    if body.deposit_day and not _DAY_RE.match(body.deposit_day):
+        raise HTTPException(400, "deposit_day must be in 'YYYY-MM-DD' format.")
+    if body.amount <= 0:
+        raise HTTPException(400, "amount must be positive.")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.sale_day[:7])
+        old = conn.execute(
+            "SELECT id, amount FROM recon_deposit_slip WHERE branch_id=? AND sale_day=?",
+            (body.branch_id, body.sale_day)).fetchone()
+        if old:
+            conn.execute("""
+                UPDATE recon_deposit_slip SET amount=?, deposit_day=?, attachment_id=?,
+                    note=?, created_by=?, created_at=datetime('now') WHERE id=?
+            """, (body.amount, body.deposit_day, body.attachment_id,
+                  body.note or None, body.created_by or "staff", old["id"]))
+            slip_id = old["id"]
+            if float(old["amount"]) != body.amount:
+                _audit(conn, "deposit_slip", slip_id, "update", body.created_by or "staff",
+                       [{"field": "amount", "old": old["amount"], "new": body.amount}])
+        else:
+            cur = conn.execute("""
+                INSERT INTO recon_deposit_slip
+                    (branch_id, sale_day, deposit_day, amount, attachment_id, note, created_by)
+                VALUES (?,?,?,?,?,?,?)
+            """, (body.branch_id, body.sale_day, body.deposit_day, body.amount,
+                  body.attachment_id, body.note or None, body.created_by or "staff"))
+            slip_id = cur.lastrowid
+            _audit(conn, "deposit_slip", slip_id, "create", body.created_by or "staff",
+                   [{"field": "amount", "old": None, "new": body.amount}])
+        conn.commit()
+    return {"id": slip_id, "sale_day": body.sale_day, "amount": body.amount}
+
+
+@app.delete("/api/deposit-slips/{slip_id}", dependencies=[Depends(require_write_token)])
+def delete_deposit_slip(slip_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT branch_id, sale_day FROM recon_deposit_slip WHERE id=?", (slip_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "deposit slip not found")
+        _assert_period_open(conn, row["branch_id"], row["sale_day"][:7])
+        conn.execute("DELETE FROM recon_deposit_slip WHERE id=?", (slip_id,))
+        _audit(conn, "deposit_slip", slip_id, "delete", "staff")
+        conn.commit()
+    return {"deleted": slip_id}
+
+
 # ── Sessions ──────────────────────────────────────────────────────────────────
 
 class SessionCreate(BaseModel):
