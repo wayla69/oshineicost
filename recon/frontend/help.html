@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>คู่มือการใช้งาน — กระทบยอด Oshinei</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --brand:#0F6E56;--brand-deep:#0a523f;--brand-soft:#e6f4ef;
+  --ok:#047857;--ok-bg:#ecfdf5;--warn:#b45309;--warn-bg:#fffbeb;
+  --err:#b91c1c;--err-bg:#fef2f2;--info:#1d4ed8;--info-bg:#eff6ff;
+  --bg:#f0f4f8;--card:#fff;--line:#e2e8f0;--line-soft:#f1f5f9;
+  --txt:#0f172a;--sub:#475569;--mut:#94a3b8;
+  --shadow:0 1px 3px rgba(15,23,42,.04),0 2px 10px rgba(15,23,42,.05)}
+*{box-sizing:border-box;margin:0}
+body{font-family:'Inter','Noto Sans Thai','Segoe UI',system-ui,sans-serif;
+  background:var(--bg);color:var(--txt);font-size:14.5px;line-height:1.65;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:920px;margin:0 auto;padding:20px 18px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:18px 22px;box-shadow:var(--shadow);margin-bottom:14px}
+.row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+h1{font-size:21px;font-weight:700;letter-spacing:-.01em}
+h2{font-size:17px;font-weight:700;letter-spacing:-.01em;color:var(--brand-deep);
+  margin:6px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--brand-soft)}
+h3{font-size:15px;font-weight:600;margin:14px 0 6px;color:var(--txt)}
+h4{font-size:13.5px;font-weight:600;margin:10px 0 4px;color:var(--sub);
+  text-transform:uppercase;letter-spacing:.04em}
+p,li{font-size:14px}
+ul,ol{padding-left:22px;margin:4px 0 8px}
+li{margin-bottom:4px}
+code,.code{font-family:'JetBrains Mono','Consolas',monospace;font-size:12.5px;
+  background:var(--line-soft);padding:1px 6px;border-radius:5px;color:var(--brand-deep)}
+a{color:var(--brand)}
+.muted{color:var(--sub);font-size:13px}
+.lbl{font-size:11.5px;color:var(--mut);font-weight:500}
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;font-weight:600;
+  padding:2px 9px;border-radius:999px;white-space:nowrap;line-height:1.55}
+.c-ok{background:var(--ok-bg);color:var(--ok)}
+.c-warn{background:var(--warn-bg);color:var(--warn)}
+.c-err{background:var(--err-bg);color:var(--err)}
+.c-mut{background:var(--line-soft);color:var(--sub)}
+.c-info{background:var(--info-bg);color:var(--info)}
+.btn{border:1px solid var(--line);background:#fff;border-radius:9px;padding:8px 15px;
+  cursor:pointer;font-size:13.5px;font-weight:500;font-family:inherit;color:var(--txt)}
+.btn:hover{background:var(--line-soft)}
+.btn-pri{background:var(--brand);color:#fff;border-color:var(--brand)}
+.btn-pri:hover{background:var(--brand-deep)}
+table{border-collapse:collapse;width:100%;margin:6px 0}
+td,th{padding:8px 10px;font-size:13px;border-bottom:1px solid var(--line-soft);
+  text-align:left;vertical-align:top}
+th{font-size:11.5px;font-weight:700;color:var(--sub);background:#fafbfc;
+  text-transform:uppercase;letter-spacing:.04em}
+.callout{background:var(--warn-bg);border-left:4px solid var(--warn);
+  padding:10px 14px;border-radius:8px;margin:8px 0;font-size:13.5px;color:#78350f}
+.callout.tip{background:var(--ok-bg);border-left-color:var(--ok);color:#064e3b}
+.callout.info{background:var(--info-bg);border-left-color:var(--info);color:#1e3a8a}
+.toc{column-count:2;column-gap:24px}
+.toc a{display:block;padding:3px 0;font-size:13.5px;text-decoration:none}
+.toc a:hover{text-decoration:underline}
+.toc .n{display:inline-block;width:22px;color:var(--mut);font-weight:600}
+.ch-flow{display:grid;grid-template-columns:auto 1fr;gap:6px 12px;
+  background:#fafbfc;border:1px solid var(--line);border-radius:9px;
+  padding:10px 14px;margin:8px 0;font-size:13px}
+.ch-flow .k{color:var(--sub);font-weight:600;white-space:nowrap}
+.qa{border-bottom:1px solid var(--line-soft);padding:12px 0}
+.qa:last-child{border-bottom:none}
+.qa .q{font-weight:600;color:var(--brand-deep);margin-bottom:4px;font-size:14px}
+.qa .a{color:var(--txt);font-size:13.5px}
+.toolbar{position:sticky;top:0;z-index:5;background:var(--bg);padding:10px 0;
+  margin:0 0 14px;border-bottom:1px solid var(--line)}
+section{scroll-margin-top:80px}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:4px;padding:0 5px;font-size:11.5px;font-family:monospace;background:#fff}
+
+@media (max-width:640px){
+  .toc{column-count:1}
+  .wrap{padding:10px 10px 40px}
+  .card{padding:14px 16px}
+}
+
+@media print{
+  body{background:#fff;color:#000;font-size:11pt;line-height:1.45}
+  .wrap{max-width:none;padding:0;margin:0}
+  .card{box-shadow:none;border:1px solid #ccc;border-radius:0;
+    margin-bottom:10px;padding:10px 14px;break-inside:avoid;page-break-inside:avoid}
+  .toolbar,.no-print{display:none !important}
+  h2{color:#000;border-bottom-color:#000;page-break-after:avoid}
+  h3,h4{page-break-after:avoid}
+  .toc{column-count:2}
+  a{color:#000;text-decoration:none}
+  table{page-break-inside:avoid}
+  thead{display:table-header-group}
+  tr{page-break-inside:avoid}
+  .callout{border:1px solid #999;background:#f5f5f5 !important;color:#000 !important}
+  .chip{border:1px solid #999;background:#fff !important;color:#000 !important}
+  section{break-before:auto}
+  section.page{page-break-before:always}
+  @page{size:A4;margin:14mm 12mm}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="toolbar no-print row">
+  <div class="row" style="gap:9px">
+    <div style="width:34px;height:34px;border-radius:9px;background:var(--brand);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-size:17px;flex:none">📖</div>
+    <div><h1 style="line-height:1.2">คู่มือการใช้งาน — กระทบยอด</h1>
+      <div class="lbl">วิธีปิดเดือนรายได้ POS ↔ เงินเข้าบัญชีจริง</div></div>
+  </div>
+  <div style="margin-left:auto" class="row">
+    <button class="btn btn-pri" onclick="window.print()" title="พิมพ์เป็นกระดาษหรือบันทึก PDF">🖨 พิมพ์ / บันทึก PDF</button>
+    <a class="btn" href="/app/" title="กลับหน้ากระทบยอด">← กลับ</a>
+  </div>
+</div>
+
+<!-- ── สารบัญ ─────────────────────────────────────────────── -->
+<div class="card">
+  <h2 style="margin-top:0">สารบัญ</h2>
+  <div class="toc">
+    <a href="#intro"><span class="n">1</span> ระบบนี้ทำอะไร ใครใช้</a>
+    <a href="#flow"><span class="n">2</span> ภาพรวมการทำงานต่อเดือน</a>
+    <a href="#screens"><span class="n">3</span> หน้าจอและเมนูทั้งหมด</a>
+    <a href="#docs"><span class="n">4</span> เอกสารที่ต้องอัปโหลด</a>
+    <a href="#channels"><span class="n">5</span> วิธีกระทบยอดแต่ละช่องทาง</a>
+    <a href="#ch-qr" style="padding-left:30px">— QR พร้อมเพย์</a>
+    <a href="#ch-cash" style="padding-left:30px">— เงินสด</a>
+    <a href="#ch-transfer" style="padding-left:30px">— เงินโอน</a>
+    <a href="#ch-credit" style="padding-left:30px">— บัตรเครดิต</a>
+    <a href="#ch-grab" style="padding-left:30px">— Grab</a>
+    <a href="#ch-lineman" style="padding-left:30px">— Line Man</a>
+    <a href="#ch-coupon" style="padding-left:30px">— คูปอง (KTC/BAY)</a>
+    <a href="#status"><span class="n">6</span> สัญลักษณ์สถานะที่เจอบ่อย</a>
+    <a href="#close"><span class="n">7</span> ส่งตรวจและปิดเดือน</a>
+    <a href="#setup"><span class="n">8</span> ตั้งค่าระบบ (สำหรับผู้จัดการ)</a>
+    <a href="#qa"><span class="n">9</span> คำถามที่พบบ่อย (Q&A)</a>
+  </div>
+</div>
+
+<!-- ── 1. ระบบนี้ทำอะไร ─────────────────────────────────────── -->
+<section id="intro" class="card">
+  <h2>1. ระบบนี้ทำอะไร ใครใช้</h2>
+  <p>หน้านี้คือเครื่องมือ <b>"กระทบยอดรายได้รายเดือน"</b> — เช็คว่าเงินที่ลูกค้าชำระผ่าน POS
+  ของแต่ละสาขา <b>เข้าบัญชีจริงครบ</b> ทุกบาทไหม ก่อนปิดงบเดือนนั้น</p>
+
+  <h4>ผู้ใช้งาน</h4>
+  <table>
+    <tr><th style="width:130px">บทบาท</th><th>ทำอะไร</th></tr>
+    <tr><td><b>Staff/บัญชี</b></td><td>อัปโหลดเอกสารธนาคาร/ค่ายบัตร/เดลิเวอรี ทุกช่องทางในเดือนนั้น, ตรวจผลต่าง, รับทราบเหตุผล แล้ว <b>กดส่งตรวจ</b></td></tr>
+    <tr><td><b>ผู้จัดการ</b></td><td>ตรวจสรุปของ staff, ใส่รหัสปิดเดือน, ส่งกลับแก้ถ้ายังไม่พอใจ</td></tr>
+    <tr><td><b>เจ้าของระบบ</b></td><td>ตั้งค่ารหัสรับเงิน / บัญชีธนาคารสาขา / MID เครื่องรูดบัตร ที่ <b>ตั้งค่าระบบ</b></td></tr>
+  </table>
+
+  <h4>หลักการสำคัญ</h4>
+  <ul>
+    <li><b>POS = ความจริงด้านการขาย</b> · <b>Statement = ความจริงด้านเงินสด</b> · ต่างกัน = ต้องอธิบายได้</li>
+    <li><b>ทุกผลต่างต้องมีเหตุผล</b> ก่อนปิดเดือน — รับทราบไม่ใช่ลบ ผลต่างยังโชว์อยู่ในไฟล์ Excel ที่ผู้จัดการเซ็น</li>
+    <li><b>ปิดเดือนแล้ว = แก้ไม่ได้</b> นอกจากผู้จัดการกด "ส่งกลับแก้"</li>
+  </ul>
+</section>
+
+<!-- ── 2. ภาพรวมการทำงาน ─────────────────────────────────────── -->
+<section id="flow" class="card">
+  <h2>2. ภาพรวมการทำงานต่อเดือน</h2>
+  <ol>
+    <li><b>ต้นเดือนถัดไป</b> ระบบดึงยอดขาย POS เดือนที่ผ่านมาจากสำนักงานใหญ่อัตโนมัติ (ทุก 06:00)</li>
+    <li><b>Staff เลือกเดือน + สาขา</b> ที่ต้องการปิด — จะเห็นว่าเหลือเอกสารอะไร, ช่องทางไหนต่าง</li>
+    <li><b>อัปโหลดเอกสาร</b> ของทุกช่องทาง (รายละเอียดในส่วนที่ <a href="#docs">4</a>)</li>
+    <li><b>ระบบจับคู่อัตโนมัติ</b> POS ↔ Statement รายวัน — เห็นทันทีว่าวันไหนต่างเท่าไร</li>
+    <li><b>ตรวจ + รับทราบผลต่างที่อธิบายได้</b> (เช่น ยอดเล็ก, เงินติดในระบบบัตร) ใส่เหตุผล</li>
+    <li><b>กดส่งตรวจ</b> — เปลี่ยนสถานะเป็น "รอผู้จัดการตรวจ"</li>
+    <li><b>ผู้จัดการตรวจ</b> ทั้งหน้าสรุป + เหตุผลที่ staff รับทราบ → ใส่รหัสปิดเดือน</li>
+    <li><b>ดาวน์โหลดไฟล์ Excel</b> สำหรับเก็บเข้าแฟ้มและส่งให้สำนักงานบัญชี</li>
+  </ol>
+  <div class="callout tip">💡 <b>ส่งตรวจไม่จำเป็นต้องเคลียร์ครบ 100%</b> — รับทราบเหตุผลครบทุกผลต่างก็ปิดได้ ระบบไม่บังคับให้ยอดต้องตรงเป๊ะ แต่บังคับให้ทุกผลต่างต้อง <b>มีคำอธิบาย</b></div>
+</section>
+
+<!-- ── 3. หน้าจอและเมนู ─────────────────────────────────────── -->
+<section id="screens" class="card">
+  <h2>3. หน้าจอและเมนูทั้งหมด</h2>
+
+  <h3>3.1 แถบบนสุด (ทุกหน้า)</h3>
+  <table>
+    <tr><th style="width:160px">ปุ่ม/เมนู</th><th>หน้าที่</th></tr>
+    <tr><td>โลโก้ ⚖ "กระทบยอดรายเดือน"</td><td>กดกลับหน้าภาพรวมทุกสาขา</td></tr>
+    <tr><td>ช่องเลือกเดือน <span class="code">YYYY-MM</span></td><td>เปลี่ยนเดือนที่กำลังตรวจ — ระบบจำค่าให้ครั้งหน้า</td></tr>
+    <tr><td>🔑 รหัส</td><td>ใส่รหัส <b>Write Token</b> สำหรับบันทึก/อัปโหลด (จำเป็นเฉพาะเซิร์ฟเวอร์จริงบน Fly)</td></tr>
+    <tr><td>ตั้งค่าระบบ ↗</td><td>ไปหน้า <a href="#setup">setup</a> — ตารางจับคู่รหัสรับเงิน, บัญชีธนาคาร, MID</td></tr>
+    <tr><td>เครื่องมือขั้นสูง ↗</td><td>ไปหน้า classic — เครื่องมือสำรอง (อัปโหลดดิบ, จับคู่รายบรรทัด, ดูคูปอง)</td></tr>
+  </table>
+
+  <h3>3.2 หน้าภาพรวมทุกสาขา (หน้าแรก)</h3>
+  <p>ตารางขนาดใหญ่ — แถว = สาขา, คอลัมน์ = ช่องทาง (QR/CASH/TRANSFER/CREDIT/GRAB/LM/COUPON)</p>
+  <ul>
+    <li>คอลัมน์ <b>ความคืบหน้า</b> — แถบสีเขียว/ส้ม/แดง บอกว่าเดือนนั้นทำไปกี่ % (จาก # วันที่ ok / วันที่มียอด)</li>
+    <li>คอลัมน์ <b>เหลือ N เรื่อง</b> — ตัวเลขที่ต้องเคลียร์ก่อนปิดเดือน</li>
+    <li>คอลัมน์ <b>สถานะ</b> — กำลังทำ / รอผู้จัดการ / ปิดเดือนแล้ว</li>
+    <li><b>คลิกแถวสาขา</b> → เข้าหน้ารายละเอียดสาขานั้น</li>
+    <li><b>คลิกช่องช่องทาง</b> → เข้าสาขานั้นแล้วเปิดการ์ดช่องทางอัตโนมัติ</li>
+  </ul>
+
+  <h3>3.3 หน้ารายละเอียดสาขา</h3>
+  <p>เปิดจากการคลิกแถวในหน้าภาพรวม ประกอบด้วย <b>4 บล็อก</b> (เรียงจากบนลงล่าง)</p>
+  <ol>
+    <li><b>เอกสารประจำเดือน</b> — chip รายการเอกสารที่ต้องอัปโหลด (เขียว = อัปโหลดแล้ว, ส้ม = ขาดวันท้าย, แดง = ยังไม่อัปโหลด)</li>
+    <li><b>ตารางช่องทาง</b> — 7 แถว ช่องทาง × คอลัมน์ POS / เงินเข้าจริง / ผลต่าง / สถานะ
+      <ul>
+        <li>คลิกแถว → กางรายวัน + ที่มา POS (รหัสรับเงิน) + ปุ่มเครื่องมือเฉพาะช่องทาง</li>
+        <li>คลิกเซลล์วัน → <b>day drill</b>: บิล POS รายใบ vs บรรทัด statement ของวันนั้น</li>
+        <li>ปุ่ม <span class="chip c-mut">🔧 จับคู่ละเอียด</span> → จับคู่บรรทัด statement ที่ยังไม่ match กับ POS ทีละบรรทัด</li>
+      </ul>
+    </li>
+    <li><b>โอนภายใน</b> (ถ้ามี) — เงินเข้าที่ระบบเดาว่าไม่ใช่ยอดขาย (เช่น สวีปบัญชี, โอนข้ามสาขา) <b>ตัดออกแล้ว</b> ดูได้ว่ามีอะไรบ้าง</li>
+    <li><b>เหลือ N เรื่องก่อนปิดเดือน</b> — รายการที่บล็อกการปิด ทุกแถวมี:
+      <ul>
+        <li><span class="chip c-mut">🔍 ดูรายการ</span> — กระโดดไปกางการ์ดช่องทางนั้นทันที</li>
+        <li><span class="chip c-mut">⬆ อัปโหลด</span> — ถ้าเป็นเอกสารที่ยังขาด</li>
+        <li><span class="chip c-mut">✓ รับทราบ + เหตุผล</span> — ยอมรับผลต่างโดยใส่เหตุผล</li>
+      </ul>
+    </li>
+  </ol>
+  <p>ด้านล่างสุด: <b>ส่งตรวจ</b> (สถานะ draft) หรือ <b>ส่งกลับแก้ / ปิดเดือน</b> (สถานะ in_review)</p>
+</section>
+
+<!-- ── 4. เอกสารที่ต้องอัปโหลด ─────────────────────────────── -->
+<section id="docs" class="card page">
+  <h2>4. เอกสารที่ต้องอัปโหลด</h2>
+  <p>ระบบจะแจ้งเฉพาะเอกสารที่ <b>สาขานั้นต้องใช้จริง</b> — ถ้าสาขาไม่มี Grab ก็ไม่ต้องอัปโหลดรายงาน Grab</p>
+
+  <table>
+    <tr>
+      <th style="width:170px">เอกสาร</th>
+      <th style="width:90px">รูปแบบไฟล์</th>
+      <th>ใช้ตรวจช่องทาง</th>
+      <th>หาได้จากไหน</th>
+    </tr>
+    <tr>
+      <td><b>สเตทเมนต์ธนาคาร</b><br><span class="lbl">KBANK / KTB / TTB / BAY / SCB</span></td>
+      <td>PDF, Excel, CSV</td>
+      <td>QR, เงินสด (ฝาก), เงินโอน, ขั้น 2 ของบัตรเครดิต (เงินเข้าสุทธิ), payout ของ Grab/LM</td>
+      <td>e-Statement จาก K Cyber / KMA / SCB Easy / Krungthai NEXT (เลือกเดือนเต็ม)</td>
+    </tr>
+    <tr>
+      <td><b>สรุปยอดบัตร (CC summary)</b><br><span class="lbl">KBANK / KTC / BAY / SCB</span></td>
+      <td>PDF</td>
+      <td>บัตรเครดิต ขั้น 1 (ยอดรูดกับยอดสรุปจากค่ายบัตร)</td>
+      <td>portal ค่ายบัตร: RTxInv (KTC), Settlement (KBANK), KEC (BAY)</td>
+    </tr>
+    <tr>
+      <td><b>สรุปคะแนน KTC</b></td>
+      <td>PDF</td>
+      <td>คูปอง — เฉพาะเมื่อสาขามียอดแลกแต้ม KTC ใน POS</td>
+      <td>เอกสารชุดเดียวกับ KTC RTxInv (จะ parse แยกออกมาเป็น KTCPOINT)</td>
+    </tr>
+    <tr>
+      <td><b>สรุปคะแนน BAY</b></td>
+      <td>PDF</td>
+      <td>คูปอง — เฉพาะเมื่อสาขามียอดแลกแต้ม BAY ใน POS</td>
+      <td>BAY Point summary</td>
+    </tr>
+    <tr>
+      <td><b>รายงาน Grab</b></td>
+      <td>Excel</td>
+      <td>Grab — ยอด gross + ค่าธรรมเนียม + payout</td>
+      <td>Grab Merchant Portal → Reports (เลือกเดือน)</td>
+    </tr>
+    <tr>
+      <td><b>รายงาน Line Man</b></td>
+      <td>Excel/CSV</td>
+      <td>Line Man — ยอด gross + ค่าธรรมเนียม + payout</td>
+      <td>LINE MAN Wongnai Partner → Reports</td>
+    </tr>
+    <tr>
+      <td><b>สลิปนำฝากเงินสด</b><br>(ถ่ายรูป + พิมพ์ยอด)</td>
+      <td>รูป/PDF + พิมพ์ยอด</td>
+      <td>เงินสด — เป็นชั้นกลางระหว่าง POS ↔ ฝากธนาคาร</td>
+      <td>สลิปกระดาษจากเคาน์เตอร์ธนาคาร (ฝากเข้าวันถัดไปก่อน 13:00)</td>
+    </tr>
+  </table>
+
+  <div class="callout info">📌 <b>เอกสารต้องเป็นของสาขาที่กำลังทำเท่านั้น</b> — ระบบเช็คชื่อ/เลขบัญชี/MID ในไฟล์ ถ้าผิดสาขาจะขึ้นแถบแดงและไม่อนุญาตให้ยืนยัน</div>
+
+  <h3>วิธีอัปโหลด</h3>
+  <ol>
+    <li>กดปุ่ม <b>⬆ อัปโหลด</b> ที่ chip เอกสารหรือในแถว todo</li>
+    <li>เลือกไฟล์ — ระบบจะอ่านล่วงหน้าแล้วโชว์ตัวอย่าง (จำนวนรายการ, ผู้ให้บริการ, สาขาที่ตรวจพบ)</li>
+    <li>ตรวจสาขา + เดือนถูกต้อง → กด <b>✓ ยืนยันบันทึก</b></li>
+    <li>ระบบ <b>คำนวณใหม่อัตโนมัติ</b> — ตารางช่องทางอัปเดตทันที</li>
+  </ol>
+  <p class="muted">ถ้าเอกสารว่าง (No Data) ยืนยันได้ ระบบจะบันทึกว่า "เดือนนี้ไม่มีรายการ" — เคลียร์ todo ของช่องทางนั้นอัตโนมัติ</p>
+</section>
+
+<!-- ── 5. ช่องทาง POS ─────────────────────────────────────── -->
+<section id="channels" class="card page">
+  <h2>5. วิธีกระทบยอดแต่ละช่องทาง POS</h2>
+  <p class="muted">ทั้ง 7 ช่องทาง มีตรรกะการจับคู่ต่างกัน — ตารางสรุปก่อน แล้วลงรายละเอียดทีละช่องทาง</p>
+
+  <table>
+    <tr>
+      <th>ช่องทาง</th><th>POS รหัสที่นับ</th><th>เทียบกับ</th><th>วิธีจับคู่</th>
+    </tr>
+    <tr><td><b>QR พร้อมเพย์</b></td><td>KNNQR, K-SHOP, ฯลฯ</td><td>statement ธนาคาร</td><td>ยอด+วัน (T+0)</td></tr>
+    <tr><td><b>เงินสด</b></td><td>CASH</td><td>สลิป → statement</td><td>3-way: POS ↔ สลิป ↔ ฝากธนาคาร (T+1)</td></tr>
+    <tr><td><b>เงินโอน</b></td><td>โอน*, BIZ TRANSFER</td><td>statement ธนาคาร</td><td>ยอด+วัน (T+0)</td></tr>
+    <tr><td><b>บัตรเครดิต</b></td><td>VISA, MC, JCB, ฯลฯ</td><td>สรุปบัตร + statement</td><td>2 ขั้น: รูด↔สรุปบัตร, สุทธิ↔เงินเข้า</td></tr>
+    <tr><td><b>Grab</b></td><td>GRAB</td><td>รายงาน Grab + statement</td><td>2 ขั้น: ยอด↔รายงาน, สุทธิ↔payout</td></tr>
+    <tr><td><b>Line Man</b></td><td>LINEMAN</td><td>รายงาน LM + statement</td><td>2 ขั้น: ยอด↔รายงาน, สุทธิ↔payout</td></tr>
+    <tr><td><b>คูปอง</b></td><td>KTCPOINT, BAYPOINT, อื่นๆ</td><td>สรุปคะแนน issuer</td><td>แต้ม↔ยอด settlement</td></tr>
+  </table>
+
+  <!-- ── QR ───────────────────────────────────────── -->
+  <h3 id="ch-qr">5.1 QR พร้อมเพย์</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>สเตทเมนต์ธนาคารที่ผูก QR (เช่น KBANK, KTB, SCB)</div>
+    <div class="k">วิธีจับคู่</div><div>ระบบจับคู่รายวัน — POS รหัส KNNQR/K-SHOP ของวันนั้น = ยอด credit จาก QR ในวันเดียวกัน</div>
+    <div class="k">ตรวจอะไร</div><div>เซลล์วันที่ขึ้นสีแดง (≠) → กดเข้าไปดูบิล POS vs บรรทัด statement</div>
+    <div class="k">ที่ผิดบ่อย</div><div>QR ยอดเล็กสแกนไม่สำเร็จ ลูกค้าจ่ายซ้ำ • Statement ติดเป็นเงินคืน • QR ของอีกบัญชีถูกบันทึกในรหัสเดียวกัน (ต้องไปแยกที่ตั้งค่า)</div>
+    <div class="k">รับทราบได้</div><div>ผลต่างเล็ก ≤ ฿100 หลังตรวจรายวันแล้ว</div>
+  </div>
+
+  <!-- ── CASH ───────────────────────────────────────── -->
+  <h3 id="ch-cash">5.2 เงินสด — 3 ทาง</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>สลิปนำฝากเงินสด (ถ่ายรูป + พิมพ์ยอด) + สเตทเมนต์ธนาคาร</div>
+    <div class="k">วิธีจับคู่</div><div>
+      <b>ขั้น 1:</b> POS เงินสดวันที่ X ↔ สลิปนำฝากที่พิมพ์ยอด (ต่างได้ไม่เกิน ±฿10)<br>
+      <b>ขั้น 2:</b> สลิป ↔ เงินเข้าธนาคารวัน X+1 (ก่อน 13:00 = วันถัดไป, หลัง 13:00 = อีกวัน หรือฝากรวม)
+    </div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว CASH → ตาราง 3 ทาง โชว์ POS / สลิป / ฝากธนาคาร / สถานะแต่ละขา</div>
+    <div class="k">วิธีบันทึกสลิป</div><div>พิมพ์ยอดในช่อง "สลิปนำฝาก" — บันทึกอัตโนมัติ · กด 📷 แนบรูปสลิปได้</div>
+    <div class="k">ที่ผิดบ่อย</div><div>ฝากรวมหลายวันในใบเดียว (ระบบรองรับ) • พิมพ์ยอดผิด • ลืมฝากวันศุกร์ เงินไปเข้าวันจันทร์</div>
+    <div class="k">รับทราบได้</div><div>สลิป-POS ต่าง ≤ ฿10 (ทอนปัดเศษ) — ระบบไม่บล็อกการปิดเดือนถ้ายังไม่ใส่สลิป แต่เงินเข้าธนาคารต้องตรง</div>
+  </div>
+
+  <!-- ── TRANSFER ───────────────────────────────────────── -->
+  <h3 id="ch-transfer">5.3 เงินโอน</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>สเตทเมนต์ธนาคารทุกใบที่รับเงินโอน (รหัส ANY = อาจเข้าได้หลายแบงก์ ต้องอัปทุกใบ)</div>
+    <div class="k">วิธีจับคู่</div><div>POS รหัสโอน + ANY ↔ บรรทัด credit ที่ไม่ใช่ QR/CC/payout — ยอด+วันตรง</div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว TRANSFER → ดู chip ธนาคารที่ใช้ตรวจ (อาจมีหลายใบ) + กริดรายวัน</div>
+    <div class="k">ที่ผิดบ่อย</div><div>ลูกค้าโอนวันเสาร์-อาทิตย์ เข้าจริงวันจันทร์ (กดเซลล์วันจันทร์ดูได้) • โอนข้ามแบงก์ ค่าธรรมเนียมหักจากยอด</div>
+    <div class="k">เครื่องมือ</div><div><b>🔧 จับคู่ละเอียด</b> — สำหรับโอนที่ระบบเดาวันไม่ออก ลากจับคู่ได้</div>
+  </div>
+
+  <!-- ── CREDIT ───────────────────────────────────────── -->
+  <h3 id="ch-credit">5.4 บัตรเครดิต — 2 ขั้น</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>สรุปยอดบัตรจากค่ายบัตร (KTC, BAY, KBANK, SCB) + สเตทเมนต์ธนาคาร</div>
+    <div class="k">วิธีจับคู่</div><div>
+      <b>ขั้น 1 — ยอดรูด ↔ สรุปบัตร (gross):</b><br>
+      &nbsp;&nbsp;ยอดรูดในเครื่อง EDC (POS) = ยอดที่ค่ายบัตรสรุป (ก่อนหักค่าธรรมเนียม + VAT)<br>
+      <b>ขั้น 2 — ยอดสุทธิ ↔ เงินเข้า:</b><br>
+      &nbsp;&nbsp;ยอดสรุป − ค่าธรรมเนียม − VAT 7% = ยอดที่ค่ายบัตรโอนเข้าบัญชี<br>
+      &nbsp;&nbsp;<b>เคส KTC พิเศษ:</b> ค่ายบัตรหักยอด settlement บัตร KTC กับ KTB statement สุทธิ
+    </div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว CREDIT → เห็น 3-way chain แยกตามค่ายบัตร แต่ละค่ายมี 2 ขั้นและสถานะของแต่ละขา</div>
+    <div class="k">ตั้งค่าครั้งแรก</div><div>ใส่อัตราค่าธรรมเนียม % ของแต่ละค่ายบัตร (ปุ่ม ✎ ค่าธรรมเนียม & VAT)</div>
+    <div class="k">ที่ผิดบ่อย</div><div>VAT 7% ที่ค่ายบัตรหักไม่เท่ากันทุกค่าย • บัตรต่างประเทศมี cross-border fee • payout ข้ามเดือน (สิ้นเดือน ↔ ต้นเดือนถัดไป)</div>
+  </div>
+
+  <!-- ── GRAB ───────────────────────────────────────── -->
+  <h3 id="ch-grab">5.5 Grab — 2 ขั้น</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>รายงาน Grab (Excel) + สเตทเมนต์ KBANK</div>
+    <div class="k">วิธีจับคู่</div><div>
+      <b>ขั้น 1:</b> POS รหัส GRAB ↔ ยอด gross ในรายงาน Grab (รายวัน)<br>
+      <b>ขั้น 2:</b> ยอดสุทธิรายวัน (หลังหักค่าธรรมเนียม + VAT) ↔ เงินเข้าบัญชี KBANK<br>
+      &nbsp;&nbsp;<b>Grab โอนวันถัดไป</b> — บางครั้ง <b>รวมหลายวันใน 1 โอน</b> ระบบจับให้
+    </div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว GRAB → ตาราง payout trace: วันขาย / ยอดสุทธิ / เงินเข้า / วันที่เงินเข้า / สถานะ</div>
+    <div class="k">ที่ผิดบ่อย</div><div>payout สิ้นเดือนตกเดือนถัดไป (ยังไม่ตรง = "รอเงินเข้า") • Grab refund บิลเก่า ขึ้นเป็นยอดลบ</div>
+  </div>
+
+  <!-- ── LINE MAN ───────────────────────────────────────── -->
+  <h3 id="ch-lineman">5.6 Line Man — 2 ขั้น</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>รายงาน LINE MAN + สเตทเมนต์ KBANK</div>
+    <div class="k">วิธีจับคู่</div><div>เหมือน Grab ทุกประการ — 2 ขั้น, payout T+1, รวมหลายวันได้</div>
+    <div class="k">ตรวจอะไร</div><div>payout trace ในการ์ด LINEMAN — สถานะ <span class="chip c-ok">✓ ตรง</span> / <span class="chip c-warn">รอเงินเข้า</span></div>
+    <div class="k">ที่ผิดบ่อย</div><div>คล้าย Grab — สิ้นเดือนตกเดือนถัดไป</div>
+  </div>
+
+  <!-- ── COUPON ───────────────────────────────────────── -->
+  <h3 id="ch-coupon">5.7 คูปอง (KTC / BAY / อื่น ๆ)</h3>
+  <div class="ch-flow">
+    <div class="k">เอกสาร</div><div>สรุปคะแนน KTC, สรุปคะแนน BAY (เฉพาะที่สาขามียอดแลก)</div>
+    <div class="k">วิธีจับคู่</div><div>POS รหัส KTCPOINT/BAYPOINT (ยอดแต้มที่แลก) ↔ ยอด settlement จาก issuer</div>
+    <div class="k">เคสพิเศษ KTC</div><div>เงิน settlement <b>ไม่ได้เข้าตรง</b> — ค่ายบัตรหักออกจากยอดเงินเข้า KTB ของบัตรเครดิต KTC แทน (โชว์ "in KTC deposit")</div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว COUPON → การ์ดแยกตาม issuer / ปุ่ม 🎟️ <b>รายละเอียดคูปอง</b> ไปหน้า classic สำหรับซีรีส์คูปองอื่น</div>
+    <div class="k">ที่ผิดบ่อย</div><div>แลกแต้มเดือนก่อน settlement มาเดือนนี้ • คูปอง 3rd-party ที่ยังไม่ตั้งค่า issuer</div>
+  </div>
+</section>
+
+<!-- ── 6. สัญลักษณ์สถานะ ─────────────────────────────────── -->
+<section id="status" class="card">
+  <h2>6. สัญลักษณ์สถานะที่เจอบ่อย</h2>
+
+  <h3>สถานะช่องทาง / วัน</h3>
+  <table>
+    <tr><th style="width:160px">สัญลักษณ์</th><th>ความหมาย</th></tr>
+    <tr><td><span class="chip c-ok">✓ ตรง</span> / <span class="chip c-ok">matched</span></td><td>POS = เงินเข้า เป๊ะ — ปิดได้</td></tr>
+    <tr><td><span class="chip c-err">ต่าง</span> / <span class="chip c-err">variance</span></td><td>มียอดต่าง — ต้องตรวจหรือรับทราบ</td></tr>
+    <tr><td><span class="chip c-warn">รอเอกสาร</span> / <span class="chip c-warn">รอเงินเข้า</span></td><td>ยังไม่อัปโหลด หรือ payout ยังไม่ถึงรอบ</td></tr>
+    <tr><td><span class="chip c-info">ตั้งค่า</span> / <span class="chip c-info">setup</span></td><td>POS มีรหัสที่ระบบยังไม่รู้ว่าใช้แบงก์ไหน — ต้องไปตั้งค่า</td></tr>
+    <tr><td><span class="chip c-mut">ไม่มีแหล่งตรวจ</span> / <span class="chip c-mut">no_source</span></td><td>ช่องทางนี้ไม่ต้องตรวจ (ไม่มียอด POS)</td></tr>
+    <tr><td><span class="chip c-mut">รับทราบแล้ว</span></td><td>มีผลต่าง แต่ staff ใส่เหตุผลแล้ว — ปิดเดือนได้</td></tr>
+  </table>
+
+  <h3>สีขอบเซลล์รายวัน</h3>
+  <table>
+    <tr><th style="width:90px">สี</th><th>ความหมาย</th></tr>
+    <tr><td><span style="border-left:4px solid #10b981;padding-left:8px">เขียว</span></td><td>วันที่ตรงทั้งหมด</td></tr>
+    <tr><td><span style="border-left:4px solid #ef4444;padding-left:8px">แดง</span></td><td>วันที่ต่าง — กดดู</td></tr>
+    <tr><td><span style="border-left:4px solid #f59e0b;padding-left:8px">ส้ม</span></td><td>รอเอกสาร / รอ payout</td></tr>
+    <tr><td><span style="border-left:4px solid #3b82f6;padding-left:8px">น้ำเงิน</span></td><td>มีรหัสที่ยังไม่ตั้งค่า</td></tr>
+  </table>
+
+  <h3>สถานะ session (เดือน)</h3>
+  <ul>
+    <li><b>กำลังทำ (draft)</b> — staff กำลังเคลียร์ตามรายการ todo</li>
+    <li><b>รอผู้จัดการตรวจ (in_review)</b> — staff กดส่งตรวจแล้ว ผู้จัดการเข้ามาดู</li>
+    <li><b>ปิดเดือนแล้ว (approved)</b> — ใส่รหัสปิดแล้ว ดาวน์โหลด Excel ได้</li>
+  </ul>
+</section>
+
+<!-- ── 7. ปิดเดือน ─────────────────────────────────────────── -->
+<section id="close" class="card">
+  <h2>7. ส่งตรวจและปิดเดือน</h2>
+
+  <h3>Staff: ส่งตรวจ</h3>
+  <ol>
+    <li>เคลียร์ list "เหลือ N เรื่อง" ให้หมด (อัปโหลด, ตั้งค่า, รับทราบ)</li>
+    <li>กด <b class="chip c-info">ส่งตรวจ</b> ที่มุมล่างขวา → สถานะเปลี่ยนเป็น "รอผู้จัดการตรวจ"</li>
+    <li>หลังส่งตรวจแล้วยังแก้ได้ <b>ถ้าผู้จัดการกด "ส่งกลับแก้"</b> ก่อนปิด</li>
+  </ol>
+
+  <h3>ผู้จัดการ: ตรวจและปิด</h3>
+  <ol>
+    <li>เข้าหน้าสาขาที่ส่งตรวจ — บนสุดจะมี <b>📋 สรุปสำหรับผู้จัดการ</b> รวมทุกช่องทาง + เหตุผลที่ staff รับทราบ</li>
+    <li>ถ้าพอใจ → กด <b class="chip c-ok">ปิดเดือน (ผู้จัดการ)</b> → ใส่รหัสปิดเดือน + ชื่อผู้อนุมัติ</li>
+    <li>ถ้ายัง → กด <b class="chip c-warn">ส่งกลับแก้</b> → กลับเป็น "กำลังทำ" staff แก้แล้วส่งใหม่</li>
+    <li>หลังปิด: ดาวน์โหลด <b>📊 Excel</b> (Summary / Categories / Daily / Discrepancies / Cash 3-way / Coupon points)</li>
+  </ol>
+
+  <div class="callout">⚠️ <b>ปิดเดือนแล้วทุกค่าจะถูกล็อก</b> ทั้งเหตุผลและการจับคู่ — กลับมาแก้ได้เฉพาะผู้จัดการกด "ส่งกลับแก้" เท่านั้น</div>
+</section>
+
+<!-- ── 8. setup ─────────────────────────────────────────── -->
+<section id="setup" class="card">
+  <h2>8. ตั้งค่าระบบ (สำหรับผู้จัดการ)</h2>
+  <p>เข้าจาก <b>ตั้งค่าระบบ ↗</b> มุมบนขวา · ปกติทำครั้งเดียวตอนตั้งสาขา + อัปเดตเมื่อเพิ่ม MID/บัญชี/รหัสรับเงิน</p>
+
+  <h3>① ตารางจับคู่รหัสรับเงิน</h3>
+  <p>แมปรหัสรับเงินใน POS (เช่น <span class="code">KNNQR</span>) ↔ <b>ประเภท</b> (QR/CASH/...) + <b>ธนาคารปลายทาง</b> + <b>นับ/ไม่นับ</b>เข้ากระทบยอด</p>
+
+  <h3>② วิธีกระทบยอดราย lane</h3>
+  <p>กำหนดวิธีจับคู่ของแต่ละคู่ "ประเภท × ธนาคาร" — เช่น (CREDIT × KTC) = 3-way settlement, (CASH × KBANK) = 3-way slip</p>
+
+  <h3>③ บัญชีธนาคารของสาขา</h3>
+  <p>เลขบัญชีของแต่ละธนาคาร — ใช้เช็คว่า statement ที่อัปโหลดเป็นของสาขานี้จริงไหม</p>
+
+  <h3>④ MID เครื่องรูดบัตร / คะแนน</h3>
+  <p>หมายเลข MID ของเครื่อง EDC แต่ละค่ายบัตร — ใช้แมปยอดในสรุปบัตรกับสาขาที่ถูกต้อง</p>
+
+  <div class="callout info">📌 พารามิเตอร์ในหน้า setup <b>ถูกล็อกด้วย Manager Token</b> — staff เปิดดูได้แต่แก้ไม่ได้</div>
+</section>
+
+<!-- ── 9. Q&A ─────────────────────────────────────────── -->
+<section id="qa" class="card page">
+  <h2>9. คำถามที่พบบ่อย (Q&amp;A)</h2>
+
+  <div class="qa">
+    <div class="q">Q1. อัปโหลดเอกสารแล้วยอดยังไม่ตรง — ทำยังไง</div>
+    <div class="a">กด <b>🔍 ดูรายการ</b> ที่ todo หรือคลิกแถวช่องทางในตาราง → กางรายวัน คลิกเซลล์วันที่แดง → ดู POS bills (ซ้าย) เทียบกับบรรทัด statement (ขวา) ทีละใบ ถ้าระบบเดาวันผิด ใช้ <b>🔧 จับคู่ละเอียด</b> ลากจับคู่</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q2. ผลต่างเล็ก ๆ (เช่น ฿5 ฿10) ตามไม่ทันต้องทำยังไง</div>
+    <div class="a">กด <b>✓ รับทราบ + เหตุผล</b> ใส่เหตุผลสั้น ๆ (เช่น "ทอนปัดเศษ") เหตุผลจะติดไปในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ ระบบไม่บังคับเคลียร์เป๊ะ แต่บังคับให้ทุกผลต่าง <b>มีคำอธิบาย</b></div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q3. ยอดเข้าตกเดือน — Grab/LM ขายสิ้นเดือน เงินเข้าต้นเดือนถัดไป</div>
+    <div class="a">ปกติ — payout trace จะขึ้นสถานะ <span class="chip c-warn">รอเงินเข้า</span> และไม่บล็อกการปิดเดือน เพราะระบบรู้ว่ารอบ payout ยังไม่ถึง · บัตรเครดิตคล้ายกัน — รูดวันที่ 30 settle เดือนถัดไป รับทราบเป็น "ยอดข้ามเดือน" ได้</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q4. อัปโหลดเอกสารผิดสาขา</div>
+    <div class="a">ระบบจะ <b>บล็อก</b> ด้วยแถบแดง "เอกสารนี้เป็นของสาขา X — ยืนยันไม่ได้" ไม่ต้องห่วงว่าจะปนกัน · ถ้าอยากเปลี่ยนไฟล์ที่อัปไปแล้ว เข้า <b>เครื่องมือขั้นสูง ↗</b> มีหน้าจัดการเอกสาร</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q5. รหัสรับเงินใหม่ใน POS — ระบบไม่รู้จัก</div>
+    <div class="a">จะขึ้น chip <span class="chip c-info">ตั้งค่า</span> ในช่องทางที่เกี่ยวข้อง + todo "ระบุธนาคารของ XXX" · ผู้จัดการเข้า <b>ตั้งค่าระบบ → ① ตารางจับคู่รหัสรับเงิน</b> เพิ่มแมปและบอกว่าเข้าธนาคารไหน</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q6. ฝากเงินสดรวมหลายวันในใบเดียว</div>
+    <div class="a">ระบบรองรับ — ตาราง 3-way จะโชว์ <b>(ฝากรวมวัน)</b> ในคอลัมน์ "ฝากเมื่อ" · พิมพ์ยอดสลิปของแต่ละวันให้ครบ ระบบจะ sum ให้ตรงกับเงินเข้าใบเดียว</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q7. เงินเข้าบัญชีที่ไม่ใช่ยอดขาย (สวีปบัญชี โอนข้ามสาขา)</div>
+    <div class="a">ระบบเดาให้ใน <b>โอนภายใน</b> (ตัดออกแล้ว) — ตรวจรายการได้ ถ้าเดาผิดเข้า <b>เครื่องมือขั้นสูง</b> ปรับ flag ได้</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q8. ปิดเดือนแล้วพบว่าผิด</div>
+    <div class="a">ผู้จัดการเข้าหน้าสาขานั้น → กด <b>ส่งกลับแก้</b> → สถานะกลับเป็น "กำลังทำ" staff แก้แล้วส่งตรวจอีกรอบ · ปิดอีกครั้งใส่รหัสเดิม</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q9. ทำไมต้องใส่ค่าธรรมเนียมบัตรเครดิตเอง</div>
+    <div class="a">อัตรา % ต่างกันตามแต่ละค่ายบัตรและประเภทบัตร (ในประเทศ/ต่างประเทศ) — ตั้งครั้งแรกแล้วใช้ต่อเดือนได้ ระบบจะคำนวณ "ยอดสุทธิที่ควรเข้า" ให้อัตโนมัติ ปุ่ม <b>✎ ค่าธรรมเนียม &amp; VAT</b> ในการ์ด CREDIT</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q10. KTC บัตร + KTC แต้ม ทำไมตรวจไม่เหมือนค่ายอื่น</div>
+    <div class="a">ตามนโยบาย KTC: ยอด <b>settlement บัตร KTC + แต้ม KTC</b> จะ <b>หัก-โอนสุทธิเข้า KTB statement</b> ใบเดียว (ไม่ได้แยก) ระบบเลยแสดงสถานะ <b>"in KTC deposit"</b> ในการ์ดคูปองและตรวจกับ KTB ฝั่งเครดิตแทน</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q11. รายงาน Excel ที่ได้หลังปิดเดือน — มีอะไรบ้าง</div>
+    <div class="a">7 sheet: <b>Summary</b> (POS รวม, statement รวม, ผลต่าง, จำนวนผลต่างที่ยังเปิด), <b>Categories</b> (ทุกช่องทาง × ธนาคาร), <b>Payout chain</b> (Grab/LM net ↔ bank), <b>Daily</b> (รายวันแยกช่องทาง), <b>Discrepancies</b> (ทุกผลต่าง + เหตุผล + ผู้รับทราบ), <b>Cash 3-way</b>, <b>Coupon points</b></div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q12. ใส่รหัสบันทึก (Write Token) แต่ยัง 403</div>
+    <div class="a">รหัสนี้ตั้งจาก env ของเซิร์ฟเวอร์ (Fly) ถ้ารหัสเพิ่งเปลี่ยน ให้กด <b>🔑 รหัส</b> ใส่ค่าใหม่ · บนเครื่องท้องถิ่นปกติไม่ต้องใส่ token ทำงานได้เลย</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q13. "เครื่องมือขั้นสูง" ใช้เมื่อไหร่</div>
+    <div class="a">หน้าหลักครอบคลุมงานปกติทั้งหมดแล้ว — เครื่องมือขั้นสูง (classic) สำรองไว้สำหรับ: อัปโหลดข้อมูลดิบ POS, ดูคูปองซีรีส์ที่ไม่ใช่ KTC/BAY, แก้การจับคู่ที่ระบบเดาผิด</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q14. ระบบดึงยอด POS มาจากไหน</div>
+    <div class="a">ระบบ sync จาก MSSQL ของ Easy POS HQ ทุก 06:00 อัตโนมัติ · เปิดดูเดือนล่าสุดได้หลัง sync รอบเช้า · ถ้าตัวเลข POS ไม่อัปเดต ติดต่อผู้ดูแลให้ trigger <b>Auto Sync Local</b> มือ</div>
+  </div>
+
+  <div class="qa">
+    <div class="q">Q15. ระบบรองรับกี่สาขา</div>
+    <div class="a">ตอนนี้ 26 สาขา (โคราช 2 inactive ตั้งแต่ 12/2025) · เพิ่มสาขาใหม่ต้องตั้งค่า: บัญชีธนาคาร + MID + รหัสรับเงิน + ผูก branch_id ใน master</div>
+  </div>
+
+</section>
+
+<div class="card no-print" style="text-align:center;color:var(--mut);font-size:12px">
+  Oshinei Reconciliation · เวอร์ชัน 2 (channel-first) · จัดทำ 2026-06-12<br>
+  <a href="/app/">← กลับหน้ากระทบยอด</a> · <a href="/app/setup.html">ตั้งค่าระบบ</a> · <a href="/app/classic.html">เครื่องมือขั้นสูง</a>
+</div>
+
+</div>
+</body>
+</html>

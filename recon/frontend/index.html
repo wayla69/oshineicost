@@ -143,6 +143,14 @@ let DATA=null, UP_DOC=null, PENDING_CH=null;
 
 /* คลิกช่องทางในหน้าภาพรวม → เข้าสาขาแล้วกางช่องทางนั้นทันที */
 function goChannel(bid,key){PENDING_CH=key;location.hash='b/'+bid;}
+function drillTodo(key){
+  if(!DATA||!DATA.channels)return;
+  const idx=DATA.channels.findIndex(c=>c.key===key);
+  if(idx<0)return;
+  const el=$('days-'+idx);
+  if(el && el.style.display==='none') toggleDays(idx);
+  setTimeout(()=>{const e=$('days-'+idx); if(e) e.scrollIntoView({behavior:'smooth',block:'center'});},50);
+}
 
 function route(){
   const m=location.hash.slice(1).match(/^b\/(\d+)/);
@@ -162,6 +170,7 @@ function header(extra){
       style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
     <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)">🔑 รหัส</button>
+    <a href="/app/help.html" style="font-size:13px" title="คู่มือการใช้งาน — ทุกเมนู ทุกเอกสาร ทุกช่องทาง + Q&A · พิมพ์ได้">📖 คู่มือ ↗</a>
     <a href="/app/setup.html" style="font-size:13px" title="ตารางจับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID">ตั้งค่าระบบ ↗</a>
     <a href="/app/classic.html" style="font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
   </div>`;
@@ -343,7 +352,9 @@ async function loadBranch(bid){
     html+=`<b style="font-size:13.5px">เหลือ ${r.todo.length} เรื่องก่อนปิดเดือน</b><div style="margin:6px 0 10px">`;
     r.todo.forEach((t,i)=>{
       const acceptable=!closed && (t.channel||t.type==='diff');
+      const drillable=t.channel && r.channels.some(c=>c.key===t.channel);
       html+=`<div class="todo-item"><span style="flex:1">• ${esc(t.label)}</span>
+        ${drillable?`<button class="btn btn-sm" title="กางช่องทางนี้ดูรายวัน + บรรทัด statement ที่ยังจับคู่ไม่ได้" onclick="drillTodo('${esc(t.channel)}')">🔍 ดูรายการ</button>`:''}
         ${t.type==='upload'&&!closed?`<button class="btn btn-sm" onclick='pickFile(${JSON.stringify(DATA.documents.find(d=>d.key===t.doc)||null)})'>⬆ อัปโหลด</button>`:''}
         ${acceptable?`<button class="btn btn-sm" onclick="acceptTodo('${esc(t.channel)}','${esc(t.label)}')">✓ รับทราบ + เหตุผล</button>`:''}
       </div>`;
