@@ -258,6 +258,21 @@ async function loadBranch(bid){
       </div></div>`;
   });
 
+  // ยอดโอนเข้าก้อนใหญ่ที่น่าจะเป็น "การโอนกันเอง" (ไม่ใช่ยอดขาย) — ตัดออกคลิกเดียว
+  const xfers=r.internal_transfer_suggestions||[];
+  if(!closed&&xfers.length){
+    const sum=xfers.reduce((a,x)=>a+x.amount,0);
+    html+=`<div class="card" style="margin-bottom:12px;background:#fffbeb;border-left:4px solid var(--warn)">
+      <div class="row"><b style="font-size:13.5px">⇄ พบยอดโอนเข้าก้อนใหญ่ที่น่าจะเป็น "การโอนกันเอง" ${xfers.length} รายการ (รวม ${fmt(sum)})</b>
+        ${xfers.length>1?`<button class="btn btn-sm" style="margin-left:auto" onclick="excludeAllXfers()">ตัดออกทั้งหมด</button>`:''}</div>
+      <div class="muted" style="margin:2px 0 8px">ยอดก้อนใหญ่ + เลขกลม + ไม่มีคำว่า "ขาย" ในรายละเอียด — ตัดออกแล้วจะไม่ถูกนำมากระทบยอด (ย้ายไปกล่อง "โอนภายใน" · ย้อนกลับได้)</div>
+      ${xfers.map(x=>`<div class="todo-item">
+        <span style="flex:1">${x.date} · <b class="mono">${fmt(x.amount)}</b>
+          <span class="lbl">${esc(x.description||'')}${x.channel?' · '+esc(x.channel):''}</span></span>
+        <button class="btn btn-sm" onclick="excludeXfer(${x.id})">ตัดออก (ไม่ใช่ยอดขาย)</button>
+      </div>`).join('')}</div>`;
+  }
+
   // การ์ดแนะนำ: ยอดอยู่ผิดช่อง (ยอดเท่ากัน ธนาคารเดียวกัน)
   if(!closed)for(let i=0;i<(r.reclass_suggestions||[]).length;i++){
     const s=r.reclass_suggestions[i];
@@ -478,6 +493,22 @@ async function acceptTodo(channel,label){
 async function unaccept(adjId){
   try{await api(`/api/lanes/adj/${adjId}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── ตัดยอดโอนกันเองออกจากการกระทบยอด (ใช้ ignore endpoint เดิม — ย้อนกลับได้) ── */
+async function excludeXfer(id,silent){
+  try{await api(`/api/bank-lines/${id}/ignore`,{method:'PATCH',
+        body:{ignored:true,note:'โอนกันเอง (ก้อนใหญ่ ไม่ใช่ยอดขาย)'}});
+      if(!silent){toast('ตัดออกแล้ว — ย้ายไปกล่องโอนภายใน');route();}}
+  catch(e){if(!silent){toast('ไม่สำเร็จ: '+e.message);hint403(e);}throw e;}
+}
+async function excludeAllXfers(){
+  const xfers=(DATA.internal_transfer_suggestions||[]);
+  if(!xfers.length)return;
+  if(!confirm(`ตัด ${xfers.length} รายการโอนกันเองออกจากการกระทบยอด? (ย้อนกลับได้ที่กล่อง "โอนภายใน")`))return;
+  try{for(const x of xfers)await excludeXfer(x.id,true);
+      toast(`ตัดออก ${xfers.length} รายการแล้ว`);route();}
+  catch(e){toast('บางรายการไม่สำเร็จ: '+e.message);route();}
 }
 
 /* ── จับคู่: การ์ดแนะนำ + เลือกเองในวัน ── */

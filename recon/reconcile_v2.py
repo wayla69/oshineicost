@@ -28,6 +28,7 @@ from .matcher import (
     payout_matching,
     point_pos_total,
     point_settlement_total,
+    suggest_internal_transfers,
     suggest_reclassifications,
     _coverage,
     _lane_cov_key,
@@ -378,6 +379,13 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     except sqlite3.OperationalError:
         reclass = []
 
+    # Large round non-sales credits that look like own-account sweeps — surfaced so
+    # staff can drop them from the lanes in one click (PATCH /api/bank-lines/id/ignore)
+    try:
+        internal_xfers = suggest_internal_transfers(conn, branch_id, period_month)
+    except sqlite3.OperationalError:
+        internal_xfers = []
+
     return {
         "branch_id": branch_id,
         "branch_name": branch["name"] if branch else str(branch_id),
@@ -388,6 +396,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         "non_revenue": _non_revenue(conn, branch_id, period_month),
         "setup_questions": setup_q,
         "reclass_suggestions": reclass,
+        "internal_transfer_suggestions": internal_xfers,
         "todo": todo,
         "progress_pct": progress,
         "can_close": not todo,

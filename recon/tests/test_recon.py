@@ -1738,3 +1738,30 @@ def test_pos_lines_without_sale_payment_is_graceful(client):
     assert r.status_code == 200
     assert r.json() == {"lines": [], "by_code": [], "by_day": [],
                         "total": 0.0, "count": 0, "truncated": False}
+
+
+# ── internal-transfer detection (large round non-sales credits) ───────────────
+
+def _add_bank_line_desc(db, credit, desc, date="2026-06-29", channel="TRANSFER"):
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'KBANK','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description)"
+              " VALUES(?,4,?,?,?,?)", (up, date, channel, credit, desc))
+    c.commit(); c.close()
+
+
+def test_internal_transfer_suggestion_and_one_click_exclude(client):
+    db = main._DB_PATH
+    _add_bank_line_desc(db, 2000000, "รับโอนเงิน")             # large+round+no sales kw → FLAG
+    _add_bank_line_desc(db, 1500000, "รับเงินจากการขาย QR")   # large+round but sales kw → skip
+    _add_bank_line_desc(db, 37502, "รับโอนเงิน")              # not round/large → skip
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    sug = r["internal_transfer_suggestions"]
+    assert [s["amount"] for s in sug] == [2000000]            # only the sweep
+    # one-click exclude → leaves suggestions, lands in the non-revenue box, reversible
+    lid = sug[0]["id"]
+    assert client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": True}).status_code == 200
+    r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert r2["internal_transfer_suggestions"] == []
+    assert r2["non_revenue"]["count"] == 1 and r2["non_revenue"]["amount"] == 2000000

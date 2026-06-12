@@ -1852,6 +1852,43 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
     return out
 
 
+# Intercompany sweeps look like any other statement credit except they're huge AND
+# round (e.g. ฿2,000,000 'รับโอนเงิน') and carry no sales descriptor — a customer's
+# transfer-for-payment never is. We SUGGEST these (never auto-exclude — staff
+# confirm, debug rule #12); the actual drop reuses PATCH /api/bank-lines/{id}/ignore
+# (reversible + audited). Verified on live data: this isolates the ฿2M lumps at
+# branches 4/26 and flags zero real QR/transfer sales.
+_INTXFER_FLOOR = 100_000      # "ก้อนใหญ่" — real customer transfers sit far below this
+_INTXFER_ROUND = 10_000       # sweeps are round to the ten-thousand; sales totals aren't
+_INTXFER_SALES_KW = ("ขาย", "qr", "payment", "settlement", "sdch", "grab", "line")
+
+
+def suggest_internal_transfers(conn, branch_id, period_month):
+    """Unmatched bank credits that look like internal/own-account transfers rather
+    than revenue — large AND round AND without a sales descriptor. Each row carries
+    the line id so the UI can one-click PATCH /api/bank-lines/{id}/ignore. Pure
+    suggestion: nothing is excluded until staff act."""
+    out = []
+    try:
+        rows = conn.execute(
+            "SELECT id, txn_date, description, channel, credit FROM recon_bank_lines "
+            "WHERE branch_id=? AND credit>0 AND match_status='unmatched' "
+            "AND strftime('%Y-%m', txn_date)=? ORDER BY credit DESC",
+            (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return out
+    for r in rows:
+        amt = float(r["credit"] or 0)
+        desc = r["description"] or ""
+        if amt < _INTXFER_FLOOR or round(amt) % _INTXFER_ROUND != 0:
+            continue
+        if any(k in desc.lower() for k in _INTXFER_SALES_KW):
+            continue
+        out.append({"id": r["id"], "date": r["txn_date"], "description": desc,
+                    "channel": r["channel"], "amount": round(amt, 2)})
+    return out
+
+
 def pos_codes_scope(conn: sqlite3.Connection, branch_id: int,
                     day: str | None = None, period_month: str | None = None):
     """POS payment codes for a branch on one day (or month), each tagged with its
