@@ -59,11 +59,14 @@ def client(tmp_path):
 # ── classification ────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("code,cat,bank", [
-    ("KNNQR", "QR", "UNKNOWN"), (" KNNQR", "QR", "UNKNOWN"), ("K-SHOP", "QR", "KBANK"),
+    # KNNQR / K-SHOP / QR code K-bank → KBank QR per the owner's requirement table
+    ("KNNQR", "QR", "KBANK"), (" KNNQR", "QR", "KBANK"), ("K-SHOP", "QR", "KBANK"),
     ("QR code K-bank", "QR", "KBANK"), ("QR PromptPay", "QR", "PROMPTPAY"),
     ("Credit กรุงไทย", "CREDIT", "KTB"), ("Credit กสิกรไทย", "CREDIT", "KBANK"),
     ("Credit KTC", "CREDIT", "KTC"), ("Cash", "CASH", "NONE"), ("CASH", "CASH", "NONE"),
     ("โอน KTB", "TRANSFER", "KTB"), ("โอน Kbank", "TRANSFER", "KBANK"),
+    # generic transfer can land in KTB OR KBANK → multi-bank sentinel
+    ("Bank Transfer", "TRANSFER", "ANY"),
     ("GB", "GRAB", "NONE"), ("LM", "LINEMAN", "NONE"), ("Coupon", "COUPON", "NONE"),
 ])
 def test_classify(code, cat, bank):
@@ -86,7 +89,11 @@ def test_seed_is_master_only_and_flags_unknown(client):
     rows = client.get("/api/payment-map").json()
     codes = {r["payment_code_norm"] for r in rows}
     assert "KNNQR" in codes and "Cash" in codes
-    assert next(r for r in rows if r["payment_code_norm"] == "KNNQR")["bank"] == "UNKNOWN"
+    # KNNQR is routed by the owner's requirement table → KBank QR rail
+    assert next(r for r in rows if r["payment_code_norm"] == "KNNQR")["bank"] == "KBANK"
+    # the 12 canonical requirement codes exist even without POS volume
+    assert "Bank Transfer" in codes
+    assert next(r for r in rows if r["payment_code_norm"] == "Bank Transfer")["bank"] == "ANY"
     # reseed is idempotent
     assert client.post("/api/payment-map/seed").json()["inserted"] == 0
 
@@ -882,10 +889,10 @@ def test_daily_cash_coverage_uses_cash_dep_only(tmp_path):
 
 def test_daily_unmapped_bank_status(tmp_path):
     """A QR code left with a non-statement bank (UNKNOWN/PROMPTPAY) → unmapped_bank."""
-    db = _make_db(tmp_path, [("KNNQR", 5000)])     # seeds as QR/UNKNOWN
+    db = _make_db(tmp_path, [("MYQR", 5000)])      # unrecognised QR code → seeds QR/UNKNOWN
     c = sqlite3.connect(db)
     c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
-    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','KNNQR',5000,0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','MYQR',5000,0)")
     c.commit(); c.close()
     main._DB_PATH = db
     with TestClient(main.app) as cl:
@@ -1174,6 +1181,9 @@ def test_map_bank_suggestions_from_documents(client):
     c = sqlite3.connect(db)
     c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
               "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # requirement seed routes KNNQR → KBANK; put it back to UNKNOWN to exercise
+    # the document-driven suggestion path for an unresolved code
+    c.execute("UPDATE recon_payment_map SET bank='UNKNOWN' WHERE payment_code_norm='KNNQR'")
     days = [("2026-06-%02d" % i, 10000 + i * 137) for i in range(1, 8)]
     c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'KNNQR',?,5)", days)
     up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
@@ -1377,3 +1387,68 @@ def test_cash_matches_next_day_credit_under_qr_label(client):
     qr_kbank = next(l for l in day10["lanes"] if l["category"] == "QR" and l["bank"] == "KBANK")
     assert qr_kbank["status"] == "matched"
     assert d["cash_summary"]["has_deposit_lines"] is True
+
+
+# ── method config: the owner's requirement table (2026-06-12) ─────────────────
+
+def test_method_config_seed_idempotent(client):
+    """Startup seeds the per-lane method table; reseeding never overwrites an
+    edited row and never duplicates."""
+    with main.get_db() as conn:
+        n1 = conn.execute("SELECT COUNT(*) FROM recon_method_config").fetchone()[0]
+        assert n1 >= 12
+        conn.execute("UPDATE recon_method_config SET lag_days=9, updated_by='staff' "
+                     "WHERE category='GRAB' AND bank='*'")
+        conn.commit()
+        r = main._seed_method_defaults(conn)
+        assert r["inserted"] == 0
+        assert conn.execute("SELECT lag_days FROM recon_method_config "
+                            "WHERE category='GRAB' AND bank='*'").fetchone()[0] == 9
+        assert conn.execute("SELECT COUNT(*) FROM recon_method_config").fetchone()[0] == n1
+
+
+def test_requirement_seed_upgrades_unknown_but_not_staff_edits(client):
+    """The requirement seed answers previously-UNKNOWN routing for seed-authored
+    rows (KNNQR → KBANK) but never touches a staff-edited row; audited."""
+    with main.get_db() as conn:
+        # simulate the pre-requirement DB state
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN', updated_by='seed' "
+                     "WHERE payment_code_norm='KNNQR'")
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN', updated_by='staff' "
+                     "WHERE payment_code_norm='K-SHOP'")
+        conn.commit()
+        r = main._seed_requirement_codes(conn)
+        conn.commit()
+        assert r["upgraded"] >= 1
+        assert conn.execute("SELECT bank FROM recon_payment_map "
+                            "WHERE payment_code_norm='KNNQR'").fetchone()[0] == "KBANK"
+        assert conn.execute("SELECT bank FROM recon_payment_map "
+                            "WHERE payment_code_norm='K-SHOP'").fetchone()[0] == "UNKNOWN"
+        assert conn.execute("SELECT COUNT(*) FROM recon_audit_log "
+                            "WHERE entity='payment_map' AND by='seed-req'").fetchone()[0] >= 1
+
+
+def test_matcher_uses_method_config_tolerance(client):
+    """CASH daily tolerance comes from recon_method_config (owner: ฿10 strict
+    absolute). A ฿30-off deposit shows 'variance' but is still traced to its
+    deposit; widening the config tolerance flips it to 'matched'."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',20000,0)")
+    c.commit(); c.close()
+    _add_bank_line(db, "KTB", "CASH_DEP", 19970, date="2026-06-11")   # ฿30 short, T+1
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+
+    days = {x["day"]: x for x in client.get(f"/api/sessions/{sid}/daily").json()["days"]}
+    lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
+    assert lane["status"] == "variance", "฿30 > strict ฿10 cash tolerance"
+    assert lane.get("deposit_date") == "2026-06-11", "deposit must still be found & traced"
+
+    with main.get_db() as conn:                       # widen via config → matched
+        conn.execute("UPDATE recon_method_config SET tol_abs_day=50 WHERE category='CASH'")
+        conn.commit()
+    days = {x["day"]: x for x in client.get(f"/api/sessions/{sid}/daily").json()["days"]}
+    lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
+    assert lane["status"] == "matched"

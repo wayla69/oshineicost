@@ -225,13 +225,57 @@ CREATE TABLE IF NOT EXISTS recon_payment_map (
     payment_code_norm TEXT NOT NULL UNIQUE,
     category          TEXT NOT NULL CHECK(category IN
                         ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
+    -- 'ANY' = the code can land in more than one bank (e.g. generic 'Bank Transfer'
+    -- → KTB or KBANK); the matcher checks both statements' residual lines.
     bank              TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN')),
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','ANY','NONE','UNKNOWN')),
     reconcile         INTEGER NOT NULL DEFAULT 1,   -- 0 = informational only (e.g. ENTERTAIN)
     notes             TEXT,
     updated_at        TEXT DEFAULT (datetime('now')),
     updated_by        TEXT
 );
+
+-- ─── Config: per-lane reconciliation method (the owner's "ตารางจับคู่" params) ──
+-- One row per (category × bank) lane; bank='*' = every bank in the category.
+-- Encodes the owner's advanced mapping table: which documents reconcile the lane
+-- (doc1 = summary/slip, doc2 = bank statement), the method, and the parameters
+-- the matcher reads (tolerance override, settlement lag, multi-day merge).
+-- NULL parameter = engine default (today's hardcoded constants).
+CREATE TABLE IF NOT EXISTS recon_method_config (
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    category         TEXT NOT NULL,             -- CASH|QR|TRANSFER|CREDIT|GRAB|LINEMAN|COUPON
+    bank             TEXT NOT NULL DEFAULT '*', -- specific bank/acquirer or '*' fallback
+    doc1             TEXT,                      -- 'deposit_slip','cc_summary','grab_report','lineman_report','points_summary'
+    doc2             TEXT,                      -- 'bank_stmt_KTB','bank_stmt_KBANK','bank_stmt_*'
+    method           TEXT NOT NULL DEFAULT 'direct'
+                       CHECK(method IN ('direct','two_stage','cash_3way','itemized','issuer_points')),
+    tol_abs          REAL,                      -- monthly tolerance override (NULL = TOL_ABS)
+    tol_abs_day      REAL,                      -- daily tolerance override (NULL = TOL_ABS_DAY)
+    lag_days         INTEGER,                   -- max settlement lag in days (NULL = engine default)
+    merge_days       INTEGER,                   -- max days merged into ONE bank credit (NULL = default)
+    fee_vat_expected INTEGER NOT NULL DEFAULT 0,-- 1 = doc carries MDR/commission fee + VAT (gross≠bank)
+    notes            TEXT,
+    updated_at       TEXT DEFAULT (datetime('now')),
+    updated_by       TEXT,
+    UNIQUE(category, bank)
+);
+
+-- ─── CASH stage-1 evidence: typed deposit slips (สลิปนำฝาก) ────────────────────
+-- Staff type the slip amount per POS sale day (cash from day D deposited D+1
+-- before 13:00). Enables the explicit 3-way: POS cash ↔ slip ↔ bank statement.
+CREATE TABLE IF NOT EXISTS recon_deposit_slip (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id     INTEGER NOT NULL REFERENCES branches(branch_id),
+    sale_day      TEXT NOT NULL,        -- POS day D the cash belongs to (YYYY-MM-DD)
+    deposit_day   TEXT,                 -- day staff deposited (normally D+1)
+    amount        REAL NOT NULL,
+    attachment_id INTEGER,              -- optional slip photo (recon_attachment.id)
+    note          TEXT,
+    created_by    TEXT,
+    created_at    TEXT DEFAULT (datetime('now')),
+    UNIQUE(branch_id, sale_day)
+);
+CREATE INDEX IF NOT EXISTS idx_rds_scope ON recon_deposit_slip(branch_id, sale_day);
 
 -- ─── Config: per-branch bank accounts (attribute bank lines → branch) ─────────
 CREATE TABLE IF NOT EXISTS recon_bank_account (

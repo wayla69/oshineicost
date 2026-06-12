@@ -129,14 +129,15 @@ def _migrate(conn):
 
 
 def _migrate_payment_bank(conn):
-    """Widen recon_payment_map.bank to allow BAY/SCB/BBL (the CHECK constraint
-    can't be ALTERed in SQLite → recreate the table once, preserving rows). Then
+    """Widen recon_payment_map.bank to allow BAY/SCB/BBL + 'ANY' (multi-bank
+    codes like the generic 'Bank Transfer' — the CHECK constraint can't be
+    ALTERed in SQLite → recreate the table once, preserving rows). Then
     future-proof the franchise-only 'Credit BAY' tender (seed_payment_map is
     master-scoped so it never picks it up)."""
     try:
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_payment_map'").fetchone()
-        if row and "'BAY'" not in (row[0] or ""):
+        if row and ("'BAY'" not in (row[0] or "") or "'ANY'" not in (row[0] or "")):
             conn.executescript("""
                 CREATE TABLE recon_payment_map__new (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -144,7 +145,7 @@ def _migrate_payment_bank(conn):
                     category TEXT NOT NULL CHECK(category IN
                         ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
                     bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN')),
+                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','ANY','NONE','UNKNOWN')),
                     reconcile INTEGER NOT NULL DEFAULT 1,
                     notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
                 );
@@ -248,17 +249,120 @@ def _migrate_attachment_to_fs(conn):
     """)
 
 
+# ── Requirement-table seeds (owner's "ตารางจับคู่รหัสรับเงิน", 2026-06) ─────────
+# Both seeds are idempotent and NEVER overwrite a staff edit (guarded on
+# updated_by/ON CONFLICT DO NOTHING). Re-runnable from /api/setup/seed-requirement.
+
+# Lane defaults encode the owner's table. Parameter values = the engine's current
+# constants (so seeding alone changes no live result) EXCEPT cash tol_abs_day=10
+# (owner decision 2026-06-12: deposit slips may differ by a few baht — pass ≤฿10
+# but keep the variance visible).
+_METHOD_DEFAULTS = [
+    # (category, bank, doc1, doc2, method, tol_abs, tol_abs_day, lag, merge, fee_vat, notes)
+    ("CASH", "*", "deposit_slip", "bank_stmt_*", "cash_3way", None, 10.0, 3, 4, 0,
+     "เงินสดของวัน D ฝากวันถัดไปก่อน 13:00 — เทียบ POS ↔ สลิปนำฝาก ↔ สเตทเมนต์ (ต่างได้หลักบาท)"),
+    ("QR", "KBANK", None, "bank_stmt_KBANK", "itemized", None, None, 1, 1, 0,
+     "QR พร้อมเพย์ (K-SHOP/KNNQR/QR code K-bank) — เงินเข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "KTB", None, "bank_stmt_KTB", "itemized", None, None, 1, 1, 0,
+     "ลูกค้าโอนเข้า KTB — เข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "KBANK", None, "bank_stmt_KBANK", "itemized", None, None, 1, 1, 0,
+     "ลูกค้าโอนเข้า KBANK — เข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "ANY", None, "bank_stmt_*", "itemized", None, None, 1, 1, 0,
+     "Bank Transfer ทั่วไป — เข้าได้ทั้ง KTB และ KBANK ตรวจกับทั้งสองสเตทเมนต์"),
+    ("CREDIT", "KBANK", "cc_summary", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "ขั้น 1: สรุปยอด KBANK ↔ สเตทเมนต์ KBANK (อาจรวมหลายวัน) · ขั้น 2: gross ก่อนค่าธรรมเนียม+VAT ↔ POS"),
+    ("CREDIT", "KTB", "cc_summary", "bank_stmt_KTB", "two_stage", None, None, 7, 4, 1,
+     "ขั้น 1: สรุปยอด KTC ↔ สเตทเมนต์ KTB (อาจรวมหลายวัน) · ขั้น 2: gross ก่อนค่าธรรมเนียม+VAT ↔ POS"),
+    ("CREDIT", "*", "cc_summary", "bank_stmt_*", "two_stage", None, None, 7, 4, 1, None),
+    ("GRAB", "*", "grab_report", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "Grab โอนเข้า KBANK วันทำการถัดไป (อาจรวม 2 วันเป็นยอดเดียว) — สรุปมีค่าคอม+VAT"),
+    ("LINEMAN", "*", "lineman_report", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "Lineman โอนเข้า KBANK วันทำการถัดไป (อาจรวม 2 วันเป็นยอดเดียว) — สรุปมีค่าคอม+VAT"),
+    ("COUPON", "KTC", "points_summary", "bank_stmt_KTB", "issuer_points", None, None, None, None, 0,
+     "แต้ม KTC — ใบสรุปคะแนนจาก KTC ↔ สเตทเมนต์ KTB (อยู่ในยอดฝากรวมของบัตร KTC)"),
+    ("COUPON", "BAY", "points_summary", "bank_stmt_KBANK", "issuer_points", None, None, None, None, 0,
+     "แต้ม BAY (กรุงศรี) — ใบสรุปคะแนนจาก BAY ↔ สเตทเมนต์ KBANK"),
+]
+
+
+def _seed_method_defaults(conn) -> dict:
+    inserted = 0
+    for row in _METHOD_DEFAULTS:
+        cur = conn.execute("""
+            INSERT INTO recon_method_config
+                (category, bank, doc1, doc2, method, tol_abs, tol_abs_day,
+                 lag_days, merge_days, fee_vat_expected, notes, updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?, 'seed')
+            ON CONFLICT(category, bank) DO NOTHING
+        """, row)
+        inserted += cur.rowcount
+    return {"inserted": inserted, "skipped": len(_METHOD_DEFAULTS) - inserted}
+
+
+# The 12 codes of the owner's table with their now-known routing. Inserted when
+# missing; existing SEED rows with an unresolved bank are upgraded (staff edits
+# are never touched — guarded on updated_by).
+_REQUIREMENT_CODES = [
+    ("CASH",            "CASH",     "NONE"),
+    ("Cash",            "CASH",     "NONE"),
+    ("Coupon",          "COUPON",   "NONE"),
+    ("Credit กสิกรไทย",  "CREDIT",   "KBANK"),
+    ("Credit กรุงไทย",   "CREDIT",   "KTB"),
+    ("GB",              "GRAB",     "NONE"),
+    ("LM",              "LINEMAN",  "NONE"),
+    ("K-SHOP",          "QR",       "KBANK"),
+    ("KNNQR",           "QR",       "KBANK"),
+    ("QR code K-bank",  "QR",       "KBANK"),
+    ("Bank Transfer",   "TRANSFER", "ANY"),
+    ("โอน KTB",         "TRANSFER", "KTB"),
+]
+_SEED_AUTHORS = ("seed", "seed-req")
+
+
+def _seed_requirement_codes(conn) -> dict:
+    """Apply the owner's routing answers to un-edited seed rows + insert any of
+    the 12 canonical codes still missing. Every change is audited."""
+    upgraded = inserted = 0
+    for code, category, bank in _REQUIREMENT_CODES:
+        old = conn.execute(
+            "SELECT id, category, bank, updated_by FROM recon_payment_map "
+            "WHERE payment_code_norm=?", (code,)).fetchone()
+        if old is None:
+            conn.execute("""
+                INSERT INTO recon_payment_map (payment_code_norm, category, bank, reconcile, updated_by)
+                VALUES (?,?,?,1,'seed-req') ON CONFLICT(payment_code_norm) DO NOTHING
+            """, (code, category, bank))
+            inserted += 1
+            continue
+        # Upgrade only seed-authored rows whose bank is still unresolved.
+        if (old["updated_by"] in _SEED_AUTHORS
+                and old["bank"] in ("UNKNOWN", "PROMPTPAY")
+                and (old["category"], old["bank"]) != (category, bank)):
+            conn.execute(
+                "UPDATE recon_payment_map SET category=?, bank=?, "
+                "updated_by='seed-req', updated_at=datetime('now') WHERE id=?",
+                (category, bank, old["id"]))
+            diffs = [{"field": "bank", "old": old["bank"], "new": bank}]
+            if old["category"] != category:
+                diffs.append({"field": "category", "old": old["category"], "new": category})
+            _audit(conn, "payment_map", old["id"], "update", "seed-req", diffs)
+            upgraded += 1
+    return {"upgraded": upgraded, "inserted": inserted}
+
+
 @app.on_event("startup")
 def startup():
     _ATTACH_DIR.mkdir(parents=True, exist_ok=True)
     with get_db() as conn:
-        conn.executescript(_SCHEMA.read_text())
+        conn.executescript(_SCHEMA.read_text(encoding="utf-8"))
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
         _migrate_lane_adj_accept(conn)  # widen adj_type CHECK for v2 'accept'
         _migrate_attachment_to_fs(conn)
         # recon_lane_adj: created by schema.sql executescript above (IF NOT EXISTS)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
+        _seed_method_defaults(conn)     # owner's per-lane method table
+        _seed_requirement_codes(conn)   # owner's 12-code routing answers
         conn.commit()
 
 
@@ -375,7 +479,7 @@ def list_branches():
 # ── Config: payment-code map ──────────────────────────────────────────────────
 
 _CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
-_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "PROMPTPAY", "NONE", "UNKNOWN"}
+_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "PROMPTPAY", "ANY", "NONE", "UNKNOWN"}
 
 
 class PaymentMapUpsert(BaseModel):

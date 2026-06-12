@@ -32,8 +32,10 @@ def normalize(code: str | None) -> str:
 def _bank_of(norm: str) -> str:
     n = norm.lower()
     if "กรุงไทย" in norm or "ktb" in n:                                  return "KTB"
+    # KNNQR / K-SHOP / QR code K-bank are all KBank QR rails per the owner's
+    # mapping table (Requirement for reconciliation app.xlsx, 2026-06).
     if "กสิกร" in norm or "kbank" in n or "k-bank" in n \
-       or "k-shop" in n or "kshop" in n:                                 return "KBANK"
+       or "k-shop" in n or "kshop" in n or "knn" in n:                   return "KBANK"
     if "ktc" in n:                                                       return "KTC"
     if "promptpay" in n or "prompt" in n:                               return "PROMPTPAY"
     return "UNKNOWN"
@@ -48,7 +50,11 @@ def classify(norm: str) -> tuple[str, str, int]:
     if "coupon" in n:                                         return "COUPON", "NONE", 1
     if "cash" in n or "เงินสด" in norm:                      return "CASH", "NONE", 1
     if "credit" in n or n == "cc":                           return "CREDIT", _bank_of(norm), 1
-    if "transfer" in n or "โอน" in norm:                     return "TRANSFER", _bank_of(norm), 1
+    if "transfer" in n or "โอน" in norm:
+        # A generic transfer code ('Bank Transfer') can land in KTB OR KBANK
+        # (owner's table) → 'ANY': the matcher checks both statements' residuals.
+        bank = _bank_of(norm)
+        return "TRANSFER", ("ANY" if bank == "UNKNOWN" else bank), 1
     if "qr" in n or "k-shop" in n or "kshop" in n \
        or "prompt" in n or "knn" in n:                       return "QR", _bank_of(norm), 1
     return "OTHER", "UNKNOWN", 0

@@ -31,6 +31,10 @@ TOL_PCT = 0.5      # %
 TOL_ABS_DAY = 50.0 # THB  — daily tolerance (smaller amounts per day)
 TOL_PCT_DAY = 1.0  # %
 
+# Engine defaults for grouped matching (overridable per lane via recon_method_config)
+DEF_CASH_MERGE, DEF_CASH_LAG = 4, 3     # cash lump deposits: ≤4 days into one credit, T+1..T+3
+DEF_PAYOUT_MERGE, DEF_PAYOUT_LAG = 4, 7 # provider payouts / CC settlements
+
 # Bank-statement channels that map to a reconcilable POS category
 _CHANNEL_CATEGORY = {"QR": "QR", "TRANSFER": "TRANSFER", "CASH_DEP": "CASH"}
 
@@ -41,7 +45,27 @@ _CATEGORY_SOURCE = {
 }
 
 
-def _within_tol(ext: float, pos: float) -> bool:
+def method_config(conn) -> dict:
+    """{(category, bank): row-dict} from recon_method_config (the owner's per-lane
+    method parameters: docs, tolerance, settlement lag, merge days). {} when the
+    table doesn't exist yet (old DB / bare test schema) → engine defaults apply."""
+    try:
+        return {(r["category"], r["bank"]): dict(r) for r in
+                conn.execute("SELECT * FROM recon_method_config")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def _cfg(cfgs: dict, category: str, bank: str | None = None) -> dict:
+    """Lane config with '*'-bank fallback."""
+    return cfgs.get((category, bank)) or cfgs.get((category, "*")) or {}
+
+
+def _within_tol(ext: float, pos: float, tol_abs: float | None = None) -> bool:
+    # An explicit lane override is a strict absolute tolerance (no % fallback):
+    # the owner sets e.g. ฿10 for cash slips and means exactly that.
+    if tol_abs is not None:
+        return abs(ext - pos) <= tol_abs
     if abs(ext - pos) <= TOL_ABS:
         return True
     return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= TOL_PCT
@@ -200,6 +224,7 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
     """
     pos, unmapped = pos_category_totals(conn, branch_id, period_month)
     ext = external_buckets(conn, branch_id, period_month)
+    cfgs = method_config(conn)
 
     # Load lane adjustments (graceful if table not yet created)
     adjs: dict = {}
@@ -229,7 +254,8 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
         ext_net  = ext_net  + adj_ext   # adj_ext is net (no fee)
 
         if pos_amt > 0 and ext_amt > 0:
-            status = "matched" if _within_tol(ext_amt, pos_amt) else "mismatch"
+            tol = _cfg(cfgs, category, bank).get("tol_abs")
+            status = "matched" if _within_tol(ext_amt, pos_amt, tol) else "mismatch"
         elif pos_amt > 0:
             status = "no_source" if category == "COUPON" else "pos_only"
         elif ext_amt > 0:
@@ -483,15 +509,21 @@ def _payout_candidate_credits(conn, branch_id, period_month, channels):
              "channel": r["channel"]} for r in rows]
 
 
-def payout_matching(conn, branch_id, period_month, max_group=4, max_lag=7):
+def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None):
     """Per-provider: group consecutive net-days to the bank credit that pays them.
     Returns {cat: {payouts:[...], net_total, payout_total, awaiting_total}}.
     Each payout row: {payout_date, amount, days:[{day,net}], group_net, combined,
     lag, status('matched'|'awaiting')}. 'awaiting' = a net-day with no matching
-    credit yet (late/month-boundary or a short payment to investigate)."""
+    credit yet (late/month-boundary or a short payment to investigate).
+    max_group/max_lag default per provider from recon_method_config
+    (merge_days/lag_days), falling back to the engine constants."""
     nets = _payout_net_by_day(conn, branch_id, period_month)
+    cfgs = method_config(conn)
     result: dict = {}
     for cat, channels in _PAYOUT_CANDIDATE_CHANNELS.items():
+        mc = _cfg(cfgs, "COUPON", "BAY") if cat == "BAYPOINT" else _cfg(cfgs, cat)
+        grp_max = max_group if max_group is not None else int(mc.get("merge_days") or DEF_PAYOUT_MERGE)
+        lag_max = max_lag if max_lag is not None else int(mc.get("lag_days") or DEF_PAYOUT_LAG)
         days = sorted((d, n) for d, n in nets.get(cat, {}).items() if n > TOL_ABS_DAY)
         credits = _payout_candidate_credits(conn, branch_id, period_month, channels)
         used: set = set()
@@ -499,14 +531,14 @@ def payout_matching(conn, branch_id, period_month, max_group=4, max_lag=7):
         while di < len(days):
             hit = None
             s = 0.0
-            for k in range(1, min(max_group, len(days) - di) + 1):
+            for k in range(1, min(grp_max, len(days) - di) + 1):
                 s = round(s + days[di + k - 1][1], 2)
                 last_day = days[di + k - 1][0]
                 for c in credits:                       # earliest unused credit that fits
                     if c["id"] in used or abs(c["amount"] - s) > TOL_ABS:
                         continue
                     lag = (_pd(c["date"]) - _pd(last_day)).days
-                    if 0 <= lag <= max_lag:
+                    if 0 <= lag <= lag_max:
                         hit = (k, c); break
                 if hit:
                     break
@@ -631,6 +663,7 @@ def credit_three_way(conn, branch_id, period_month, exclude_ids=None):
     `exclude_ids` are bank-line ids already claimed elsewhere (e.g. by cash
     matching) so they aren't double-counted as a card settlement."""
     exclude_ids = set(exclude_ids or set())
+    cfgs = method_config(conn)
     pos, _unmapped = pos_category_totals(conn, branch_id, period_month)
     pos_credit = {bank: amt for (cat, bank), amt in pos.items() if cat == "CREDIT"}
 
@@ -664,14 +697,19 @@ def credit_three_way(conn, branch_id, period_month, exclude_ids=None):
         bank = _ACQ_BANK.get(acq)
         bank_credit, used, groups = 0.0, set(), []
         if bank:
+            mc = _cfg(cfgs, "CREDIT", acq)
             credits = _credit_bank_candidates(conn, branch_id, period_month, bank,
                                               exclude_ids | bank_line_ids)
-            bank_credit, used, groups = _match_net_days_to_credits(net_day.get(acq, {}), credits)
+            bank_credit, used, groups = _match_net_days_to_credits(
+                net_day.get(acq, {}), credits,
+                max_group=int(mc.get("merge_days") or DEF_PAYOUT_MERGE),
+                max_lag=int(mc.get("lag_days") or DEF_PAYOUT_LAG))
             bank_line_ids |= used
 
+        tol = _cfg(cfgs, "CREDIT", acq).get("tol_abs")
         # POS leg: POS gross ↔ settlement gross
         if pos_gross > 0 and a["gross"] > 0:
-            pos_leg = "matched" if _within_tol(a["gross"], pos_gross) else "mismatch"
+            pos_leg = "matched" if _within_tol(a["gross"], pos_gross, tol) else "mismatch"
         elif pos_gross > 0:
             pos_leg = "pos_only"          # POS booked a card tender, no settlement doc yet
         else:
@@ -679,7 +717,7 @@ def credit_three_way(conn, branch_id, period_month, exclude_ids=None):
 
         # Bank leg: settlement net ↔ bank credit (fee already auto-pulled into net)
         if a["net"] > TOL_ABS and bank_credit > 0:
-            bank_leg = "matched" if _within_tol(bank_credit, a["net"]) else "mismatch"
+            bank_leg = "matched" if _within_tol(bank_credit, a["net"], tol) else "mismatch"
         elif a["net"] > TOL_ABS:
             bank_leg = "awaiting" if bank else "no_bank"   # net to land / no statement acct
         elif bank_credit > 0:
@@ -910,7 +948,9 @@ def run_auto_match(conn: sqlite3.Connection, session_id: int, branch_id: int, pe
 # day but the line isn't there) from an awaited document ('pending' — no statement
 # yet covers that day).
 
-def _within_tol_day(ext: float, pos: float) -> bool:
+def _within_tol_day(ext: float, pos: float, tol_abs: float | None = None) -> bool:
+    if tol_abs is not None:                     # explicit lane override: strict absolute
+        return abs(ext - pos) <= tol_abs
     if abs(ext - pos) <= TOL_ABS_DAY:
         return True
     return abs(ext - pos) / max(abs(pos), 1.0) * 100 <= TOL_PCT_DAY
@@ -1166,8 +1206,10 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag):
     return out
 
 
-def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3):
+def cash_deposit_matching(conn, branch_id, period_month, max_group=None, max_lag=None):
     """Group POS-cash days to the CASH_DEP bank credits that banked them.
+    max_group/max_lag default to the CASH lane's recon_method_config
+    (merge_days/lag_days), falling back to the engine constants.
 
     Returns {
       groups:   [{deposit_date, amount, days:[{day,pos}], group_pos, lag,
@@ -1179,6 +1221,14 @@ def cash_deposit_matching(conn, branch_id, period_month, max_group=4, max_lag=3)
       has_deposit_lines: bool,                  — False = no CASH_DEP lines AT ALL
       pos_available: bool,
     }"""
+    mc = _cfg(method_config(conn), "CASH")
+    if max_group is None:
+        max_group = int(mc.get("merge_days") or DEF_CASH_MERGE)
+    if max_lag is None:
+        max_lag = int(mc.get("lag_days") or DEF_CASH_LAG)
+    # NOTE: the group-fit search keeps the permissive default tolerance so a
+    # slightly-off lump deposit is still FOUND and traced; the owner's strict
+    # "few baht" tolerance (tol_abs_day) is applied at the day-status level.
     cash_days, available = _cash_pos_days(conn, branch_id, period_month)
     credits = _cash_dep_credits(conn, branch_id, period_month, max_lag)
     days = sorted((d, a) for d, a in cash_days.items() if a > TOL_ABS_DAY)
@@ -1251,6 +1301,7 @@ def daily_reconciliation(conn, branch_id, period_month):
         exclude_ids=set(cash["consumed_ids"]) | prev_month_consumed_ids(conn, branch_id, period_month))
     cov = _coverage(conn, branch_id, period_month)
     consumed = _manual_consumed(conn, branch_id, period_month)   # manual tick-to-match
+    cfgs = method_config(conn)                                   # per-lane tolerance overrides
 
     # Feed matched cash groups back in as per-day external amounts: each POS day
     # in a group is covered by its deposit (the group's variance lands on the
@@ -1290,10 +1341,11 @@ def daily_reconciliation(conn, branch_id, period_month):
             ext_net += cash_info["ext"]
             eb = True
 
+        lane_tol = _cfg(cfgs, cat, bank).get("tol_abs_day")
         if cons > 0 and abs(pos_eff) <= TOL_ABS_DAY and ext_amt <= TOL_ABS_DAY:
             status = "manual"                      # fully reconciled by hand
         elif eb and pos_eff != 0:                  # both sides present (pos may be a refund)
-            status = "matched" if _within_tol_day(ext_amt, pos_eff) else "variance"
+            status = "matched" if _within_tol_day(ext_amt, pos_eff, lane_tol) else "variance"
         elif eb:                                   # pos cleared/0, ext present
             status = "ext_only"
         elif cat == "COUPON":
