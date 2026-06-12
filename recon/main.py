@@ -30,6 +30,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .matcher import (
+    TOL_ABS, TOL_PCT, TOL_ABS_DAY, TOL_PCT_DAY,
     _eff_fee_vat,
     bank_statement_coverage,
     category_reconciliation,
@@ -431,6 +432,16 @@ def _require_manager(x_manager_token: str | None):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
+def require_manager_token(x_manager_token: str = Header(None)):
+    """Dependency for advanced-setup mutations (method parameters, tolerances):
+    a bad value can mass-flip lane statuses, so these need the MANAGER code —
+    ordinary code↔bank mapping stays on the staff write token (owner decision
+    2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset."""
+    expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
+    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+        raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     if not (file.filename or "").lower().endswith(_ALLOWED_EXT):
         raise HTTPException(415, "Only .xlsx/.xls/.csv/.pdf files are accepted.")
@@ -595,6 +606,230 @@ def reseed_payment_map():
     with get_db() as conn:
         result = seed_payment_map(conn)
     return result
+
+
+# ── Config: per-lane method parameters (advanced setup — manager token) ───────
+
+_METHODS = {"direct", "two_stage", "cash_3way", "itemized", "issuer_points"}
+_DOC1S   = {"deposit_slip", "cc_summary", "grab_report", "lineman_report", "points_summary"}
+_DOC2S   = {"bank_stmt_KTB", "bank_stmt_KBANK", "bank_stmt_*"}
+
+
+class MethodConfig(BaseModel):
+    category:         str
+    bank:             str = "*"
+    doc1:             str | None = None
+    doc2:             str | None = None
+    method:           str = "direct"
+    tol_abs:          float | None = None
+    tol_abs_day:      float | None = None
+    lag_days:         int | None = None
+    merge_days:       int | None = None
+    fee_vat_expected: int = 0
+    notes:            str = ""
+    updated_by:       str = ""
+
+
+def _validate_method_config(body: MethodConfig):
+    if body.category not in _CATEGORIES:
+        raise HTTPException(400, f"category must be one of {sorted(_CATEGORIES)}")
+    if body.bank != "*" and body.bank not in _BANKS:
+        raise HTTPException(400, f"bank must be '*' or one of {sorted(_BANKS)}")
+    if body.method not in _METHODS:
+        raise HTTPException(400, f"method must be one of {sorted(_METHODS)}")
+    if body.doc1 and body.doc1 not in _DOC1S:
+        raise HTTPException(400, f"doc1 must be one of {sorted(_DOC1S)}")
+    if body.doc2 and body.doc2 not in _DOC2S:
+        raise HTTPException(400, f"doc2 must be one of {sorted(_DOC2S)}")
+    # Clamp parameters server-side — a typo here must not detonate the matcher.
+    if body.tol_abs is not None and not (0 <= body.tol_abs <= 100000):
+        raise HTTPException(400, "tol_abs must be between 0 and 100000")
+    if body.tol_abs_day is not None and not (0 <= body.tol_abs_day <= 100000):
+        raise HTTPException(400, "tol_abs_day must be between 0 and 100000")
+    if body.lag_days is not None and not (0 <= body.lag_days <= 14):
+        raise HTTPException(400, "lag_days must be between 0 and 14")
+    if body.merge_days is not None and not (1 <= body.merge_days <= 7):
+        raise HTTPException(400, "merge_days must be between 1 and 7")
+
+
+@app.get("/api/method-config")
+def list_method_config():
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM recon_method_config ORDER BY category, bank")]
+
+
+@app.post("/api/method-config", dependencies=[Depends(require_manager_token)])
+def create_method_config(body: MethodConfig):
+    _validate_method_config(body)
+    with get_db() as conn:
+        try:
+            cur = conn.execute("""
+                INSERT INTO recon_method_config
+                    (category, bank, doc1, doc2, method, tol_abs, tol_abs_day,
+                     lag_days, merge_days, fee_vat_expected, notes, updated_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (body.category, body.bank, body.doc1, body.doc2, body.method,
+                  body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
+                  body.fee_vat_expected, body.notes or None, body.updated_by or "manager"))
+            _audit(conn, "method_config", cur.lastrowid, "create", body.updated_by or "manager")
+            conn.commit()
+            return {"id": cur.lastrowid}
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, f"lane {body.category}/{body.bank} already configured")
+
+
+@app.patch("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
+def update_method_config(cfg_id: int, body: MethodConfig):
+    _validate_method_config(body)
+    with get_db() as conn:
+        old = conn.execute("SELECT * FROM recon_method_config WHERE id=?", (cfg_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"method config {cfg_id} not found")
+        conn.execute("""
+            UPDATE recon_method_config
+            SET category=?, bank=?, doc1=?, doc2=?, method=?, tol_abs=?, tol_abs_day=?,
+                lag_days=?, merge_days=?, fee_vat_expected=?, notes=?,
+                updated_by=?, updated_at=datetime('now')
+            WHERE id=?
+        """, (body.category, body.bank, body.doc1, body.doc2, body.method,
+              body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
+              body.fee_vat_expected, body.notes or None,
+              body.updated_by or "manager", cfg_id))
+        diffs = [{"field": f, "old": old[f], "new": getattr(body, f)}
+                 for f in ("doc1", "doc2", "method", "tol_abs", "tol_abs_day",
+                           "lag_days", "merge_days", "fee_vat_expected")
+                 if old[f] != getattr(body, f)]
+        if diffs:
+            _audit(conn, "method_config", cfg_id, "update", body.updated_by or "manager", diffs)
+        conn.commit()
+    return {"id": cfg_id}
+
+
+@app.delete("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
+def delete_method_config(cfg_id: int):
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM recon_method_config WHERE id=?", (cfg_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"method config {cfg_id} not found")
+        _audit(conn, "method_config", cfg_id, "delete", "manager")
+        conn.commit()
+    return {"deleted": cfg_id}
+
+
+# ── Advanced setup: composed master view + requirement reseed ─────────────────
+
+# Thai label per method for the master table (the spreadsheet's กระทบยอด column)
+_METHOD_TH = {
+    "direct":        "เทียบยอดตรง POS ↔ เอกสาร",
+    "two_stage":     "2 ขั้น: สรุปยอด↔สเตทเมนต์ แล้ว gross↔POS",
+    "cash_3way":     "3 ทาง: POS ↔ สลิปนำฝาก ↔ สเตทเมนต์",
+    "itemized":      "รายตามรายการในสเตทเมนต์ (วันเดียวกัน/วันถัดไป)",
+    "issuer_points": "แต้มบัตร: ใบสรุปคะแนน ↔ สเตทเมนต์",
+}
+
+
+def _doc_presence(conn, period_month: str) -> dict:
+    """Company-wide 'is this document type in for the month?' map for the master
+    table's doc chips: {doc_key: True/False}."""
+    have: dict = {}
+    try:
+        for r in conn.execute(
+            "SELECT DISTINCT source_type, provider FROM recon_uploads "
+            "WHERE period_month=? AND status='confirmed'", (period_month,)):
+            st, prov = r["source_type"], (r["provider"] or "")
+            if st == "bank":
+                from .matcher import _provider_bank
+                have[f"bank_stmt_{_provider_bank(prov)}"] = True
+                have["bank_stmt_*"] = True
+            elif st == "credit_card":
+                have["cc_summary"] = True
+                if "POINT" in prov.upper():
+                    have["points_summary"] = True
+            elif st == "grab":
+                have["grab_report"] = True
+            elif st == "lineman":
+                have["lineman_report"] = True
+        if conn.execute("SELECT 1 FROM recon_deposit_slip WHERE substr(sale_day,1,7)=? LIMIT 1",
+                        (period_month,)).fetchone():
+            have["deposit_slip"] = True
+    except sqlite3.OperationalError:
+        pass
+    return have
+
+
+@app.get("/api/setup/master")
+def setup_master(period_month: str):
+    """Everything the advanced Setup page renders in one call: the master
+    payment-code table (the owner's 'ทุกรหัสในตารางเดียว'), joined with each
+    lane's method config + POS volume + document presence, plus the raw
+    method_configs / bank_accounts / acquirer_mids and the global tolerances."""
+    _validate_period(period_month)
+    rows = list_payment_map()          # includes pos_amount / pos_txn
+    with get_db() as conn:
+        cfgs = {(r["category"], r["bank"]): dict(r) for r in conn.execute(
+            "SELECT * FROM recon_method_config")}
+        have_docs = _doc_presence(conn, period_month)
+        accounts = [dict(r) for r in conn.execute(
+            """SELECT a.*, b.name AS branch_name FROM recon_bank_account a
+               JOIN branches b ON b.branch_id=a.branch_id ORDER BY b.name, a.bank""")]
+        mids = [dict(r) for r in conn.execute(
+            """SELECT m.*, b.name AS branch_name FROM recon_acquirer_mid m
+               JOIN branches b ON b.branch_id=m.branch_id ORDER BY b.name, m.acquirer""")]
+
+    out_rows = []
+    for r in rows:
+        mc = cfgs.get((r["category"], r["bank"])) or cfgs.get((r["category"], "*")) or {}
+        needs_bank = (r["bank"] == "UNKNOWN" or
+                      (r["bank"] == "PROMPTPAY" and r["category"] in ("QR", "TRANSFER", "CREDIT")))
+        status = ("off" if not r["reconcile"]
+                  else "needs_bank" if needs_bank
+                  else "dormant" if (r["pos_amount"] == 0 and r["pos_txn"] == 0)
+                  else "ok")
+        out_rows.append({
+            **r,
+            "method": {
+                "id":               mc.get("id"),
+                "doc1":             mc.get("doc1"),
+                "doc2":             mc.get("doc2"),
+                "method":           mc.get("method"),
+                "method_label":     _METHOD_TH.get(mc.get("method"), mc.get("method")),
+                "tol_abs":          mc.get("tol_abs"),
+                "tol_abs_day":      mc.get("tol_abs_day"),
+                "lag_days":         mc.get("lag_days"),
+                "merge_days":       mc.get("merge_days"),
+                "fee_vat_expected": mc.get("fee_vat_expected", 0),
+                "lane_bank":        mc.get("bank"),   # '*' = applies to the whole category
+            },
+            "doc_status": {
+                "doc1": (None if not mc.get("doc1")
+                         else "uploaded" if have_docs.get(mc["doc1"]) else "missing"),
+                "doc2": (None if not mc.get("doc2")
+                         else "uploaded" if have_docs.get(mc["doc2"]) else "missing"),
+            },
+            "status": status,
+        })
+    return {
+        "period_month":   period_month,
+        "rows":           out_rows,
+        "method_configs": [dict(v) for v in sorted(cfgs.values(), key=lambda x: (x["category"], x["bank"]))],
+        "bank_accounts":  accounts,
+        "acquirer_mids":  mids,
+        "globals": {"TOL_ABS": TOL_ABS, "TOL_PCT": TOL_PCT,
+                    "TOL_ABS_DAY": TOL_ABS_DAY, "TOL_PCT_DAY": TOL_PCT_DAY},
+        "manager_required": bool((os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()),
+    }
+
+
+@app.post("/api/setup/seed-requirement", dependencies=[Depends(require_manager_token)])
+def seed_requirement():
+    """Re-apply the owner's requirement table (codes + lane methods) on demand.
+    Idempotent; never overwrites staff/manager edits."""
+    with get_db() as conn:
+        codes = _seed_requirement_codes(conn)
+        methods = _seed_method_defaults(conn)
+        conn.commit()
+    return {"codes": codes, "methods": methods}
 
 
 # ── Config: bank accounts ─────────────────────────────────────────────────────

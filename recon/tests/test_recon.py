@@ -1612,3 +1612,84 @@ def test_transfer_any_matches_both_banks_no_double_count(client):
     any_lane = lanes[("TRANSFER", "ANY")]
     assert any_lane["pos_amount"] == 7000.0 and any_lane["ext_amount"] == 7000.0
     assert any_lane["status"] == "matched"
+
+
+# ── phase 3: advanced setup (master view + method-config CRUD) ────────────────
+
+def test_setup_master_joins_method_and_volume(client):
+    r = client.get("/api/setup/master", params={"period_month": "2026-06"})
+    assert r.status_code == 200
+    m = r.json()
+    rows = {x["payment_code_norm"]: x for x in m["rows"]}
+    # requirement routing + lane method joined in
+    knn = rows["KNNQR"]
+    assert knn["category"] == "QR" and knn["bank"] == "KBANK"
+    assert knn["method"]["method"] == "itemized" and knn["method"]["method_label"]
+    assert knn["pos_amount"] == 100000          # POS volume from pos_payment_month
+    cash = rows["Cash"]
+    assert cash["method"]["method"] == "cash_3way"
+    assert cash["method"]["tol_abs_day"] == 10  # owner's few-baht tolerance
+    grab = rows["GB"]
+    assert grab["method"]["fee_vat_expected"] == 1
+    # sections present
+    assert m["method_configs"] and "globals" in m
+    assert m["globals"]["TOL_ABS_DAY"] == 50.0
+
+
+def test_setup_master_marks_unknown_bank_rows(client):
+    with main.get_db() as conn:
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN' WHERE payment_code_norm='KNNQR'")
+        conn.commit()
+    m = client.get("/api/setup/master", params={"period_month": "2026-06"}).json()
+    rows = {x["payment_code_norm"]: x for x in m["rows"]}
+    assert rows["KNNQR"]["status"] == "needs_bank"
+    assert rows["Entertain"]["status"] == "off"          # reconcile=0
+    assert rows["Bank Transfer"]["status"] == "dormant"  # no POS volume in fixture
+
+
+def test_method_config_crud_and_validation(client):
+    # bad enums / out-of-range params are rejected
+    bad = {"category": "QR", "bank": "KBANK", "method": "magic"}
+    assert client.post("/api/method-config", json=bad).status_code == 400
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "direct", "lag_days": 99}).status_code == 400
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "direct", "merge_days": 0}).status_code == 400
+    # duplicate lane → 409
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "itemized"}).status_code == 409
+    # patch an existing lane + audit
+    cfgs = client.get("/api/method-config").json()
+    grab = next(c for c in cfgs if c["category"] == "GRAB")
+    r = client.patch(f"/api/method-config/{grab['id']}", json={
+        "category": "GRAB", "bank": "*", "doc1": "grab_report", "doc2": "bank_stmt_KBANK",
+        "method": "two_stage", "lag_days": 3, "merge_days": 2, "fee_vat_expected": 1})
+    assert r.status_code == 200
+    with main.get_db() as conn:
+        assert tuple(conn.execute("SELECT lag_days, merge_days FROM recon_method_config WHERE id=?",
+                                  (grab["id"],)).fetchone()) == (3, 2)
+        assert conn.execute("SELECT COUNT(*) FROM recon_audit_log "
+                            "WHERE entity='method_config' AND entity_id=?",
+                            (grab["id"],)).fetchone()[0] >= 1
+
+
+def test_method_config_requires_manager_token(client):
+    """Method parameters are manager-gated when OSHINEI_MANAGER_TOKEN is set;
+    ordinary payment-map edits stay on the staff write token."""
+    cfgs = client.get("/api/method-config").json()
+    cash = next(c for c in cfgs if c["category"] == "CASH")
+    body = {"category": "CASH", "bank": "*", "doc1": "deposit_slip", "doc2": "bank_stmt_*",
+            "method": "cash_3way", "tol_abs_day": 20}
+    os.environ["OSHINEI_MANAGER_TOKEN"] = "m-secret"
+    try:
+        assert client.patch(f"/api/method-config/{cash['id']}", json=body).status_code == 403
+        assert client.patch(f"/api/method-config/{cash['id']}", json=body,
+                            headers={"X-Manager-Token": "m-secret"}).status_code == 200
+        assert client.post("/api/setup/seed-requirement").status_code == 403
+        # staff mapping edit still open (write token unset locally)
+        pm = client.get("/api/payment-map").json()
+        knn = next(x for x in pm if x["payment_code_norm"] == "KNNQR")
+        assert client.patch(f"/api/payment-map/{knn['id']}",
+                            json={"category": "QR", "bank": "KBANK"}).status_code == 200
+    finally:
+        os.environ.pop("OSHINEI_MANAGER_TOKEN", None)
