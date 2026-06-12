@@ -269,6 +269,7 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
         pass
 
     rows = []
+    _coupon_rows = None   # lazily populated on first COUPON row, shared across iterations
     for key in sorted(set(pos) | set(ext) | set(adjs)):
         category, bank = key
         pos_base = pos.get(key, 0.0)
@@ -288,7 +289,21 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
             tol = _cfg(cfgs, category, bank).get("tol_abs")
             status = "matched" if _within_tol(ext_amt, pos_amt, tol) else "mismatch"
         elif pos_amt > 0:
-            status = "no_source" if category == "COUPON" else "pos_only"
+            if category == "COUPON":
+                # Delegate to coupon_reconciliation so category snapshots (close/export)
+                # reflect the real issuer-point status, not a permanent "no_source".
+                if _coupon_rows is None:
+                    _coupon_rows = coupon_reconciliation(conn, branch_id, period_month)
+                if not _coupon_rows:
+                    status = "no_source"
+                elif any(r["status"] == "mismatch" for r in _coupon_rows):
+                    status = "mismatch"
+                elif any(r["status"] in ("waiting_doc", "awaiting_payout") for r in _coupon_rows):
+                    status = "waiting_doc"
+                else:
+                    status = "matched"
+            else:
+                status = "pos_only"
         elif ext_amt > 0:
             status = "ext_only"
         else:
