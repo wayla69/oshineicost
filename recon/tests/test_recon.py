@@ -44,6 +44,15 @@ def _add_bank_line(db, provider, channel, credit, date="2026-06-10"):
     c.commit(); c.close()
 
 
+def _add_sale_payment(db, receipt_no, code, amount, branch_id=4):
+    """A bill-level POS tender row (sale_payment) — receipt_no starts YYYY-MM-DD."""
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS sale_payment("
+              "branch_id INT,receipt_no TEXT,payment_code TEXT,amount REAL)")
+    c.execute("INSERT INTO sale_payment VALUES(?,?,?,?)", (branch_id, receipt_no, code, amount))
+    c.commit(); c.close()
+
+
 DEMO_POS = [("KNNQR", 100000), ("K-SHOP", 50000), ("Credit กรุงไทย", 30000),
             ("Cash", 20000), ("GB", 8000), ("Coupon", 1000), ("Entertain", 500)]
 
@@ -1693,3 +1702,66 @@ def test_method_config_requires_manager_token(client):
                             json={"category": "QR", "bank": "KBANK"}).status_code == 200
     finally:
         os.environ.pop("OSHINEI_MANAGER_TOKEN", None)
+
+
+# ── POS bill-level drill (/api/v2/pos-lines) ──────────────────────────────────
+
+def test_pos_lines_drill_ties_out_and_filters(client):
+    db = main._DB_PATH
+    _add_sale_payment(db, "2026-06-10-001", "KNNQR", 6000)   # QR/KBANK
+    _add_sale_payment(db, "2026-06-10-002", "KNNQR", 4000)
+    _add_sale_payment(db, "2026-06-11-003", "KNNQR", 5000)
+    _add_sale_payment(db, "2026-06-10-004", "Cash", 2000)    # different channel
+    r = client.get("/api/v2/pos-lines",
+                   params={"branch_id": 4, "month": "2026-06", "category": "QR"}).json()
+    assert r["total"] == 15000 and r["count"] == 3           # cash excluded from QR
+    assert r["by_code"][0]["code"] == "KNNQR" and r["by_code"][0]["count"] == 3
+    # by_day rollup is exact (drives the per-code daily view)
+    assert {x["day"]: x["amount"] for x in r["by_day"]} == {"2026-06-10": 10000, "2026-06-11": 5000}
+    # day filter narrows receipts + total
+    d = client.get("/api/v2/pos-lines",
+                   params={"branch_id": 4, "month": "2026-06", "category": "QR",
+                           "day": "2026-06-10"}).json()
+    assert d["total"] == 10000 and d["count"] == 2
+    assert all(l["day"] == "2026-06-10" for l in d["lines"])
+    # code filter on another channel
+    cc = client.get("/api/v2/pos-lines",
+                    params={"branch_id": 4, "month": "2026-06", "category": "CASH",
+                            "code": "Cash"}).json()
+    assert cc["total"] == 2000 and cc["count"] == 1
+
+
+def test_pos_lines_without_sale_payment_is_graceful(client):
+    # demo DB has no sale_payment table → empty payload, never a 500
+    r = client.get("/api/v2/pos-lines",
+                   params={"branch_id": 4, "month": "2026-06", "category": "QR"})
+    assert r.status_code == 200
+    assert r.json() == {"lines": [], "by_code": [], "by_day": [],
+                        "total": 0.0, "count": 0, "truncated": False}
+
+
+# ── internal-transfer detection (large round non-sales credits) ───────────────
+
+def _add_bank_line_desc(db, credit, desc, date="2026-06-29", channel="TRANSFER"):
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'KBANK','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description)"
+              " VALUES(?,4,?,?,?,?)", (up, date, channel, credit, desc))
+    c.commit(); c.close()
+
+
+def test_internal_transfer_suggestion_and_one_click_exclude(client):
+    db = main._DB_PATH
+    _add_bank_line_desc(db, 2000000, "รับโอนเงิน")             # large+round+no sales kw → FLAG
+    _add_bank_line_desc(db, 1500000, "รับเงินจากการขาย QR")   # large+round but sales kw → skip
+    _add_bank_line_desc(db, 37502, "รับโอนเงิน")              # not round/large → skip
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    sug = r["internal_transfer_suggestions"]
+    assert [s["amount"] for s in sug] == [2000000]            # only the sweep
+    # one-click exclude → leaves suggestions, lands in the non-revenue box, reversible
+    lid = sug[0]["id"]
+    assert client.patch(f"/api/bank-lines/{lid}/ignore", json={"ignored": True}).status_code == 200
+    r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    assert r2["internal_transfer_suggestions"] == []
+    assert r2["non_revenue"]["count"] == 1 and r2["non_revenue"]["amount"] == 2000000
