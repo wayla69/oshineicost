@@ -21,12 +21,15 @@ primary_region = "sin"
   destination = "/data"
 
 # ── Dashboard service (default process group) ──────────────────────────────────
+# min_machines_running = 1 → eliminates ~7s cold-start on first hit after idle.
+# Costs ~$3/mo for the always-on shared-cpu-1x. Both services point at the same
+# single machine, so this keeps recon warm too.
 [[services]]
   internal_port        = 8080
   protocol             = "tcp"
   auto_stop_machines   = "stop"
   auto_start_machines  = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[services.ports]]
     handlers = ["http"]
@@ -41,7 +44,7 @@ primary_region = "sin"
   protocol             = "tcp"
   auto_stop_machines   = "stop"
   auto_start_machines  = true
-  min_machines_running = 0
+  min_machines_running = 1
 
   [[services.ports]]
     handlers = ["tls", "http"]
