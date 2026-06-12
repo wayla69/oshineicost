@@ -41,6 +41,7 @@ from .matcher import (
     lane_ext_lines,
     lane_lines,
     lane_pos_days,
+    pos_lane_lines,
     map_bank_suggestions,
     upload_match_stats,
     payout_matching,
@@ -1759,6 +1760,19 @@ def v2_lane(branch_id: int, month: str, category: str, bank: str, day: str | Non
         return {"category": category, "bank": bank, "day": day,
                 "count": len(lines), "total": round(sum(l["amount"] for l in lines), 2),
                 "lines": lines}
+
+
+@app.get("/api/v2/pos-lines")
+def v2_pos_lines(branch_id: int, month: str, category: str,
+                 bank: str | None = None, day: str | None = None,
+                 code: str | None = None):
+    """Bill-level POS drill: the individual receipts (sale_payment) behind a
+    channel's POS total for a day/month, grouped by payment code. Ties out to the
+    POS number shown on the channel/day card — the POS side of the day drill."""
+    _validate_period(month)
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return pos_lane_lines(conn, branch_id, month, category, bank, day, code)
 
 
 @app.get("/api/sessions/{session_id}/lane")

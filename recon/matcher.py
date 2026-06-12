@@ -1660,6 +1660,61 @@ def lane_pos_days(conn, branch_id, period_month, category, bank):
     return [{"day": d, "total": round(v, 2)} for d, v in sorted(days.items())]
 
 
+def pos_lane_lines(conn, branch_id, period_month, category, bank=None,
+                   day=None, code=None, limit=1500):
+    """Receipt-level POS tender behind a channel — the bill-by-bill POS side of a
+    lane drill. `sale_payment` is the per-receipt source (receipt_no starts with
+    YYYY-MM-DD); summing it ties out exactly to pos_payment_day / _month, so this
+    drill always reconciles to the channel/day total the staff already sees.
+
+    Filters: `day`='YYYY-MM-DD' (else whole month), `bank` (omit/ANY = every bank
+    of the category), `code` = one normalised payment code. Returns receipts plus
+    a per-code rollup; `truncated` flags when more than `limit` receipts existed."""
+    try:
+        pmap = {r["payment_code_norm"]: r for r in conn.execute(
+            "SELECT payment_code_norm, category, bank, reconcile FROM recon_payment_map")}
+    except sqlite3.OperationalError:
+        return {"lines": [], "by_code": [], "by_day": [], "total": 0.0, "count": 0, "truncated": False}
+    if day:
+        where, params = "branch_id=? AND substr(receipt_no,1,10)=?", [branch_id, day]
+    else:
+        where, params = "branch_id=? AND substr(receipt_no,1,7)=?", [branch_id, period_month]
+    try:
+        rows = conn.execute(
+            f"SELECT receipt_no, payment_code, amount FROM sale_payment "
+            f"WHERE {where} ORDER BY receipt_no", params).fetchall()
+    except sqlite3.OperationalError:        # sale_payment is sync-built; absent pre-sync
+        return {"lines": [], "by_code": [], "by_day": [], "total": 0.0, "count": 0, "truncated": False}
+
+    lines, by_code, by_day = [], {}, {}
+    for r in rows:
+        cd = normalize(r["payment_code"])
+        m = pmap.get(cd)
+        if not m or not m["reconcile"] or m["category"] != category:
+            continue
+        if bank and bank != "ANY" and m["bank"] != bank:
+            continue
+        if code and cd != code:
+            continue
+        amt = round(float(r["amount"] or 0), 2)
+        d_ = r["receipt_no"][:10]
+        agg = by_code.setdefault(cd, {"code": cd, "bank": m["bank"], "amount": 0.0, "count": 0})
+        agg["amount"] += amt
+        agg["count"] += 1
+        by_day[d_] = by_day.get(d_, 0.0) + amt
+        lines.append({"receipt_no": r["receipt_no"], "day": d_,
+                      "code": cd, "bank": m["bank"], "amount": amt})
+    by = sorted(by_code.values(), key=lambda x: -x["amount"])
+    for b in by:
+        b["amount"] = round(b["amount"], 2)
+    total = round(sum(l["amount"] for l in lines), 2)
+    # by_day is computed over EVERY matching receipt (before the line cap) so the
+    # per-day rollup stays exact even when raw receipts are truncated.
+    return {"lines": lines[:limit], "by_code": by,
+            "by_day": [{"day": d, "amount": round(v, 2)} for d, v in sorted(by_day.items())],
+            "total": total, "count": len(lines), "truncated": len(lines) > limit}
+
+
 def lane_ext_lines(conn, branch_id, period_month, category, bank):
     """Statement lines for one (category, bank) lane in a month, WITH table+id+
     match_status so the manual matcher can tick and reverse them."""

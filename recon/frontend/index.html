@@ -139,7 +139,10 @@ const CH_ST={ok:['c-ok','ตรง'],diff:['c-err','ต่าง'],waiting_doc:[
 const SES_ST={draft:'กำลังทำ',in_review:'รอผู้จัดการตรวจ',approved:'ปิดเดือนแล้ว'};
 
 let MONTH=localStorage.getItem('v2_month')||new Date().toISOString().slice(0,7);
-let DATA=null, UP_DOC=null;
+let DATA=null, UP_DOC=null, PENDING_CH=null;
+
+/* คลิกช่องทางในหน้าภาพรวม → เข้าสาขาแล้วกางช่องทางนั้นทันที */
+function goChannel(bid,key){PENDING_CH=key;location.hash='b/'+bid;}
 
 function route(){
   const m=location.hash.slice(1).match(/^b\/(\d+)/);
@@ -181,13 +184,23 @@ async function loadOverview(){
       if(!c){html+='<td style="color:var(--mut)">—</td>';continue;}
       const col=c.status==='ok'?'var(--ok)':c.status==='diff'?'var(--err)'
                :c.status==='no_source'?'var(--mut)':'var(--warn)';
-      html+=`<td class="mono" style="color:${col};font-weight:600"
-        title="POS ${fmt(c.pos)} / เข้าจริง ${fmt(c.ext)}">${c.status==='ok'?'✓':(c.variance>0?'+':'')+fmt(c.variance)}</td>`;
+      html+=`<td class="mono" style="color:${col};font-weight:600;cursor:pointer"
+        onclick="event.stopPropagation();goChannel(${b.branch_id},'${k}')"
+        title="POS ${fmt(c.pos)} / เข้าจริง ${fmt(c.ext)} — คลิกเพื่อเปิดช่องทางนี้">${c.status==='ok'?'✓':(c.variance>0?'+':'')+fmt(c.variance)}</td>`;
     }
     html+=`<td><span class="chip ${b.status==='approved'?'c-ok':'c-mut'}">${SES_ST[b.status]||b.status}</span></td></tr>`;
   }
+  // แถวรวมทุกสาขา — ผลต่างสุทธิต่อช่องทาง (กวาดตาเห็นช่องทางที่เพี้ยนทั้งเครือ)
+  const tot={}; chans.forEach(k=>tot[k]={pos:0,ext:0});
+  for(const b of ov.branches)for(const k of chans){const c=b.channels[k];if(c){tot[k].pos+=c.pos;tot[k].ext+=c.ext;}}
+  html+=`<tr style="border-top:2px solid var(--line);background:#fafafa">
+    <td><b>รวมทุกสาขา</b></td><td></td>
+    ${chans.map(k=>{const v=tot[k].ext-tot[k].pos;
+      const col=Math.abs(v)<=100?'var(--ok)':v<0?'var(--err)':'var(--warn)';
+      return `<td class="mono" style="color:${col};font-weight:700" title="POS ${fmt(tot[k].pos)} / เข้าจริง ${fmt(tot[k].ext)}">${Math.abs(v)<1?'✓':(v>0?'+':'')+fmt(v)}</td>`;}).join('')}
+    <td></td></tr>`;
   html+=`</table></div>
-  <div class="muted" style="margin-top:8px">ตัวเลขในตาราง = ผลต่าง (เข้าจริง − POS) ของเดือน · คลิกสาขาเพื่อตรวจสอบและทำงานต่อ</div>`;
+  <div class="muted" style="margin-top:8px">ตัวเลขในตาราง = ผลต่าง (เข้าจริง − POS) ของเดือน · คลิก<b>ช่องทาง</b>เพื่อเจาะดูทันที หรือคลิก<b>ชื่อสาขา</b>เพื่อตรวจทั้งสาขา</div>`;
   $('app').innerHTML=html;
 }
 
@@ -331,6 +344,13 @@ async function loadBranch(bid){
       :`<button class="btn btn-pri" onclick="setSt(${bid},'in_review')">ส่งตรวจ</button>`}
   </div></div>`;
   $('app').innerHTML=html;
+
+  // มาจากการคลิกช่องทางในหน้าภาพรวม → กางช่องทางนั้นและเลื่อนไปหา
+  if(PENDING_CH){
+    const idx=r.channels.findIndex(c=>c.key===PENDING_CH);
+    PENDING_CH=null;
+    if(idx>=0){toggleDays(idx);const el=$('days-'+idx);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}
+  }
 }
 
 function toggleNR(){const e=$('nr');e.style.display=e.style.display==='none'?'':'none';}
@@ -478,8 +498,9 @@ function toggleDays(i){
   if(el.style.display!=='none'){el.style.display='none';return;}
   const ch=DATA.channels[i];
   // ที่มาของยอด POS — แตกเป็นรหัสชำระ ให้ตรวจสอบได้ ไม่ใช่เลขลอย ๆ
-  const codes=(ch.codes||[]).map(c=>
-    `<span class="chip c-mut mono" title="${esc(c.bank)}">${esc(c.code)} ${fmt(c.amount)}</span>`).join(' ');
+  const codes=(ch.codes||[]).map((c,k)=>
+    `<button class="chip c-mut mono" title="ดูยอดรายวันของ ${esc(c.code)} (${esc(c.bank)})"
+       onclick="event.stopPropagation();toggleCodeDaily(${i},'${esc(c.code)}')">${esc(c.code)} ${fmt(c.amount)} ▾</button>`).join(' ');
   // บัตรเครดิต: วิธี 2 ขั้นตามตารางเจ้าของ — ขั้น 1: สรุปยอด↔สเตทเมนต์ · ขั้น 2: gross↔POS
   const c3=(ch.key==='CREDIT'&&ch.three_way)?`<div class="c3">${ch.three_way
     .filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0).map(r=>`
@@ -501,6 +522,7 @@ function toggleDays(i){
     `<a class="btn btn-sm" href="/app/classic.html#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง ↗</a>`:'';
   el.innerHTML=`
   ${codes||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
+  <div id="codedaily-${i}" style="padding:0 14px"></div>
   ${c3}${pt}${cash3}${cpCards}
   <div id="fees-${i}"></div>
   <div id="matcher-${i}"></div>
@@ -636,10 +658,17 @@ async function openDay(i,day){
     try{const r=await api(`/api/v2/lane?branch_id=${DATA.branch_id}&month=${MONTH}&category=${ch.key}&bank=${b}&day=${day}`);
         lines.push(...r.lines.map(l=>({...l,bank:b})));}catch(e){}
   }
+  // ฝั่ง POS รายบิล — แตกยอดขายของวันนี้เป็นใบเสร็จ (จาก sale_payment, tie-out ตรงกับ d.pos)
+  let pos=null;
+  try{pos=await api(`/api/v2/pos-lines?branch_id=${DATA.branch_id}&month=${MONTH}&category=${ch.key}&day=${day}`);}catch(e){}
   window._DAY={i,day,lines,key:ch.key};
+  const varCol=Math.abs(d.variance)<=100?'var(--ok)':'var(--err)';
   box.innerHTML=`<div class="card" style="background:#fafafa">
     <div class="row" style="margin-bottom:6px"><b style="font-size:13.5px">${day} · ${esc(ch.label)}</b>
-      <span class="lbl">POS ${fmt(d.pos)} · เข้าจริง ${fmt(d.ext)} · ต่าง ${d.variance>0?'+':''}${fmt(d.variance)}</span></div>
+      <span class="lbl">POS ${fmt(d.pos)}${pos&&pos.count?` · ${pos.count} บิล`:''} · เข้าจริง ${fmt(d.ext)} ·
+        ต่าง <span style="color:${varCol};font-weight:600">${d.variance>0?'+':''}${fmt(d.variance)}</span></span></div>
+    ${posDayHtml(pos,i)}
+    <div class="lbl" style="margin:10px 0 4px"><b>② เงินเข้าธนาคาร</b> (สเตทเมนต์) — ติ๊กเพื่อจับคู่กับยอด POS วันนี้</div>
     ${lines.length?`<table>${lines.map((l,j)=>`<tr>
       <td style="width:26px">${!DATA.closed&&l.id&&l.match_status!=='manual'?`<input type="checkbox" data-j="${j}" onchange="updMatchBar()">`:''}</td>
       <td style="text-align:left">${esc(l.ref||'')}<span class="lbl"> ${esc(l.bank)}${l.match_status==='manual'?' · จับคู่แล้ว':''}</span></td>
@@ -653,6 +682,50 @@ async function openDay(i,day){
     </div>`
     :'<div class="muted">ไม่มีบรรทัดเงินเข้าของวันนี้ (รอเอกสาร หรือยอดถูกฝากรวมวันอื่น)</div>'}
   </div>`;
+}
+
+/* ── ฝั่ง POS รายบิล: จัดกลุ่มตามรหัสชำระ คลิกขยายดูใบเสร็จรายใบ ── */
+function posDayHtml(pos,i){
+  if(!pos||!pos.count)return '<div class="lbl" style="margin:2px 0 4px"><b>① ยอดขาย POS</b> — ยังไม่มีข้อมูลรายบิล (ยังไม่ได้ sync POS)</div>';
+  const rows=pos.by_code.map((b,k)=>{
+    const recs=pos.lines.filter(l=>l.code===b.code);
+    return `<tr class="grid-ch" style="display:table-row;cursor:pointer" onclick="togglePosCode(${i},${k})">
+        <td style="text-align:left"><span class="lbl" id="poscar-${i}-${k}">▸</span> ${esc(b.code)}
+          <span class="lbl">${esc(b.bank)}</span></td>
+        <td class="mono">${fmt(b.amount)}</td><td class="lbl">${b.count} บิล</td></tr>
+      <tr id="poscode-${i}-${k}" style="display:none"><td colspan="3" style="padding:0;background:#fff">
+        <div style="max-height:180px;overflow:auto"><table>${recs.map(l=>`<tr>
+          <td style="text-align:left;font-size:12px;color:var(--sub)">${esc(l.receipt_no)}</td>
+          <td class="mono" style="font-size:12px">${fmt(l.amount)}</td></tr>`).join('')}</table></div></td></tr>`;
+  }).join('');
+  return `<div class="lbl" style="margin:2px 0 4px"><b>① ยอดขาย POS รายบิล</b> — รวม ${fmt(pos.total)}${pos.truncated?' · แสดงบางส่วน':''} (คลิกรหัสเพื่อดูใบเสร็จ)</div>
+    <div class="card" style="padding:0;box-shadow:none;max-height:240px;overflow:auto"><table>
+      <tr><th>รหัสชำระ</th><th>ยอด</th><th>จำนวนบิล</th></tr>${rows}</table></div>`;
+}
+function togglePosCode(i,k){
+  const e=$(`poscode-${i}-${k}`),car=$(`poscar-${i}-${k}`);
+  if(!e)return;
+  const show=e.style.display==='none';
+  e.style.display=show?'':'none';
+  if(car)car.textContent=show?'▾':'▸';
+}
+
+/* ── คลิกชิปรหัส POS → ยอดรายวันของรหัสนั้นทั้งเดือน (by_day ไม่ถูก truncate) ── */
+async function toggleCodeDaily(i,code){
+  const box=$('codedaily-'+i);
+  if(box.dataset.code===code){box.innerHTML='';box.dataset.code='';return;}
+  box.dataset.code=code;
+  box.innerHTML='<div class="muted" style="padding:6px 0">กำลังโหลด…</div>';
+  let r;try{r=await api(`/api/v2/pos-lines?branch_id=${DATA.branch_id}&month=${MONTH}&category=${DATA.channels[i].key}&code=${encodeURIComponent(code)}`);}
+  catch(e){box.innerHTML=`<div class="chip c-err" style="margin:6px 0">${esc(e.message)}</div>`;return;}
+  const days=r.by_day||[];
+  if(!days.length){box.innerHTML='<div class="muted" style="padding:6px 0">ไม่มียอดของรหัสนี้</div>';return;}
+  box.innerHTML=`<div class="card" style="padding:8px 10px;margin:6px 0;box-shadow:none;background:#fafafa">
+    <div class="row" style="margin-bottom:4px"><b style="font-size:13px">${esc(code)} · ยอดรายวัน</b>
+      <span class="lbl">รวม ${fmt(r.total)} · ${r.count} บิล${r.truncated?' (ใบเสร็จแสดงบางส่วน)':''}</span>
+      <a href="#" class="lbl" style="margin-left:auto" onclick="toggleCodeDaily(${i},'${esc(code)}');return false">ปิด</a></div>
+    <div style="max-height:220px;overflow:auto"><table><tr><th>วัน</th><th>ยอด</th></tr>
+    ${days.map(x=>`<tr><td>${+x.day.slice(8)}</td><td class="mono">${fmt(x.amount)}</td></tr>`).join('')}</table></div></div>`;
 }
 function updMatchBar(){
   const ck=[...document.querySelectorAll('#daylines-'+window._DAY.i+' input[type=checkbox]:checked')];
