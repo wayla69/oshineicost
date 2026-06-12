@@ -324,8 +324,9 @@ def test_buffet_food_cost_ratio_logic():
 
 
 # ---------------------------------------------------------------------------
-# R5 — _bom_unit_cost_sql (waste-BoM, cost-drivers): recipe → alias → sku_cost
-#      → 0, with BUFFET tier forced to 0. Mirrors _cogs_case but per-serving.
+# R5 — _bom_unit_cost_sql (waste-BoM, cost-drivers): sku_cost (non-zero) →
+#      recipe → alias → 0, with BUFFET tier forced to 0. Mirrors _unified_cogs_expr
+#      but per-serving (cost-management table first since 2026-06-11).
 # ---------------------------------------------------------------------------
 def test_bom_unit_cost_sql_tier_zero_and_fallback():
     con = fresh_db()
@@ -335,6 +336,43 @@ def test_bom_unit_cost_sql_tier_zero_and_fallback():
     assert uc["BUFFET"] == 0          # tier forced to 0 despite sku_cost 99
     assert uc["A0001"] == 10.0        # falls back to sku_cost
     assert uc["A0002"] in (0, None) or uc["A0002"] == 0   # uncosted → 0
+
+
+# ---------------------------------------------------------------------------
+# R6 — Cost-priority flip (2026-06-11): the Cost-Management table (sku_cost)
+#      is the source of truth. A non-zero sku_cost.unit_cost BEATS the BoM
+#      recipe; a 0/absent sku_cost falls through to the BoM. Regression for
+#      B0040 (sku_cost 13.40 vs inflated BoM 38.14 — BoM used to win).
+# ---------------------------------------------------------------------------
+def test_sku_cost_beats_bom_and_zero_falls_through():
+    con = fresh_db()
+    # A0001: sku_cost 10.0 AND a BoM recipe summing 38.0 → sku_cost must win.
+    con.execute("INSERT INTO bom_ingredients(sku_id,seq,ingredient_name,ingredient_cost)"
+                " VALUES(2,1,'scallop',38.0)")
+    # A0002: sku_cost 0 (means 'no data') AND a BoM recipe 7.5 → BoM must win.
+    con.execute("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(3, 0)")
+    con.execute("INSERT INTO bom_ingredients(sku_id,seq,ingredient_name,ingredient_cost)"
+                " VALUES(3,1,'lettuce',7.5)")
+    con.commit()
+    add_sales(con, 2, "2025-06", qty=5, ex_vat=500.0)
+    add_sales(con, 3, "2025-06", qty=2, ex_vat=100.0)
+    rows = con.execute(f"""
+        SELECT sk.sku_code AS code, SUM({main._unified_cogs_expr('ssm')}) AS cogs
+        FROM sales_sku_monthly ssm JOIN skus sk ON sk.sku_id = ssm.sku_id
+        GROUP BY sk.sku_code
+    """).fetchall()
+    cogs = {r["code"]: r["cogs"] for r in rows}
+    assert cogs["A0001"] == 5 * 10.0, "non-zero sku_cost must beat the BoM recipe"
+    assert cogs["A0002"] == 2 * 7.5,  "sku_cost=0 must fall through to the BoM"
+    # _build_sku_effective_cost must produce the SAME priority (it's the hot path).
+    main._build_sku_effective_cost(con, force=True)
+    eff = {r[0]: r[1] for r in con.execute(
+        "SELECT sku_id, recipe_cost FROM sku_effective_cost")}
+    assert eff[2] == 10.0 and eff[3] == 7.5
+    # per-serving helper agrees too
+    uc = {r["code"]: r["uc"] for r in con.execute(
+        f"SELECT s.sku_code AS code, {main._bom_unit_cost_sql('s')} AS uc FROM skus s")}
+    assert uc["A0001"] == 10.0 and uc["A0002"] == 7.5
 
 
 if __name__ == "__main__":

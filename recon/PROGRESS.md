@@ -229,3 +229,43 @@ Reviewed by an adversarial workflow (19 findings); fixed: cash coverage now filt
   uses the `GB`/`LM` payment codes instead (back to 2025-05, all masters).
 - `sales_month_summary` payment columns are 0 (col-34/40 ingest not re-run) — the
   engine relies on `pos_payment_month`, so this is moot.
+
+## 2026-06-12 — Requirement-table overhaul + advanced Setup (phases 1–5)
+
+Driven by the owner's `Requirement for reconciliation app.xlsx` ("ตารางจับคู่รหัสรับเงิน
+(ขั้นสูง — ทุกรหัสในตารางเดียว)" — 12 POS codes, each with type / bank route /
+reconciling documents / method).
+
+- **recon_method_config** — per-lane (category × bank) method params: doc1/doc2,
+  method (direct / two_stage / cash_3way / itemized / issuer_points), tolerance
+  overrides, settlement lag, merge days, fee+VAT flag. Seeded from the owner's
+  table (values = prior engine constants except cash tol ฿10); matcher reads it
+  (cash/payout/credit lag+merge, per-lane tolerances — an explicit tolerance is
+  strict absolute, no % fallback).
+- **Requirement code seeds** — KNNQR / K-SHOP / QR code K-bank → QR·KBANK,
+  โอน KTB → TRANSFER·KTB, generic Bank Transfer → TRANSFER·**ANY** (multi-bank:
+  per-bank lanes consume their statement lines first, leftover feeds the ANY
+  lane, both daily + monthly). Only seed-authored UNKNOWN rows upgrade; staff
+  edits never touched; audited as `seed-req`. Live DB had `bank='TTB'` → enum
+  widened; recreate migration now transactional.
+- **CASH 3-way** — `recon_deposit_slip` (staff type the slip amount per sale day,
+  `/api/deposit-slips` upsert) → POS ↔ slip ↔ bank deposit per day, ฿10 strict
+  tolerance with the variance kept visible; missing slip = `no_slip`
+  (informational, never blocks close). v2 CASH channel renders the table inline.
+- **COUPON = issuer points** — `coupon_reconciliation()`: KTC 2-way (point rows
+  split by MID; money rides the KTC deposit) + BAY 3-way (BAYPOINT settlement ↔
+  KBANK transfer only). v2 COUPON channel now ok/diff/waiting_doc with issuer
+  cards; points docs (สรุปคะแนน KTC/BAY) join the checklist; COUPON stays out of
+  the progress base so closed months don't reopen.
+- **Two-stage visibility** — CREDIT cards labelled ขั้น 1/ขั้น 2; GRAB/LINEMAN get
+  `payout_trace` tables (net-day groups ↔ bank credits, รวมวัน + lag chips).
+- **Advanced Setup `/app/setup.html`** — the owner's one-table view: every code's
+  category/bank/docs/method/params/POS volume/status with inline edits; lane
+  method editor + bank accounts + acquirer MIDs + global tolerances.
+  `/api/setup/master`, `/api/method-config` CRUD (clamped, audited,
+  **manager-token gated**), `/api/setup/seed-requirement`. Code↔bank mapping
+  stays on the staff write token (owner decision).
+- **Export** — month pack gains `Cash 3-way` + `Coupon points` sheets.
+- Verified against a copy of the live DB (36 codes, ฿16.4M KNNQR, real cash
+  T+1 deposits incl. the ฿14–34 daily skims the ฿50 tolerance used to hide);
+  90 tests green (82 run + 8 skipped sample-file tests).

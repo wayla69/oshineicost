@@ -59,6 +59,22 @@
       "port": 8014
     },
     {
+      "name": "recon-preview",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "recon.main:app",
+        "--port",
+        "8015"
+      ],
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "OSHINEI_DB": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\recon_verify.db"
+      },
+      "port": 8015
+    },
+    {
       "name": "recon-ux",
       "runtimeExecutable": "python",
       "runtimeArgs": [

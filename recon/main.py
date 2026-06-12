@@ -30,9 +30,12 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from .matcher import (
+    TOL_ABS, TOL_PCT, TOL_ABS_DAY, TOL_PCT_DAY,
     _eff_fee_vat,
     bank_statement_coverage,
+    cash_three_way,
     category_reconciliation,
+    coupon_reconciliation,
     daily_board,
     daily_reconciliation,
     lane_ext_lines,
@@ -129,32 +132,43 @@ def _migrate(conn):
 
 
 def _migrate_payment_bank(conn):
-    """Widen recon_payment_map.bank to allow BAY/SCB/BBL (the CHECK constraint
-    can't be ALTERed in SQLite → recreate the table once, preserving rows). Then
+    """Widen recon_payment_map.bank to allow BAY/SCB/BBL + 'ANY' (multi-bank
+    codes like the generic 'Bank Transfer' — the CHECK constraint can't be
+    ALTERed in SQLite → recreate the table once, preserving rows). Then
     future-proof the franchise-only 'Credit BAY' tender (seed_payment_map is
     master-scoped so it never picks it up)."""
     try:
         row = conn.execute(
             "SELECT sql FROM sqlite_master WHERE type='table' AND name='recon_payment_map'").fetchone()
-        if row and "'BAY'" not in (row[0] or ""):
-            conn.executescript("""
-                CREATE TABLE recon_payment_map__new (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    payment_code_norm TEXT NOT NULL UNIQUE,
-                    category TEXT NOT NULL CHECK(category IN
-                        ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
-                    bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
-                        ('KTB','KBANK','KTC','BAY','SCB','BBL','PROMPTPAY','NONE','UNKNOWN')),
-                    reconcile INTEGER NOT NULL DEFAULT 1,
-                    notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
-                );
-                INSERT INTO recon_payment_map__new
-                    (id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by)
-                    SELECT id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by
-                    FROM recon_payment_map;
-                DROP TABLE recon_payment_map;
-                ALTER TABLE recon_payment_map__new RENAME TO recon_payment_map;
-            """)
+        if row and any(f"'{b}'" not in (row[0] or "") for b in ("BAY", "ANY", "TTB")):
+            # Explicit transaction (NOT executescript): a CHECK failure mid-script
+            # must roll the whole recreate back, never leave the table half-gone.
+            # (Live data taught us this — it contained bank='TTB'.)
+            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("""
+                    CREATE TABLE recon_payment_map__new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        payment_code_norm TEXT NOT NULL UNIQUE,
+                        category TEXT NOT NULL CHECK(category IN
+                            ('CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER')),
+                        bank TEXT NOT NULL DEFAULT 'NONE' CHECK(bank IN
+                            ('KTB','KBANK','KTC','BAY','SCB','BBL','TTB','PROMPTPAY','ANY','NONE','UNKNOWN')),
+                        reconcile INTEGER NOT NULL DEFAULT 1,
+                        notes TEXT, updated_at TEXT DEFAULT (datetime('now')), updated_by TEXT
+                    )""")
+                conn.execute("""
+                    INSERT INTO recon_payment_map__new
+                        (id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by)
+                        SELECT id,payment_code_norm,category,bank,reconcile,notes,updated_at,updated_by
+                        FROM recon_payment_map""")
+                conn.execute("DROP TABLE recon_payment_map")
+                conn.execute("ALTER TABLE recon_payment_map__new RENAME TO recon_payment_map")
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
         conn.execute("""INSERT INTO recon_payment_map (payment_code_norm,category,bank,reconcile,updated_by)
             VALUES ('Credit BAY','CREDIT','BAY',1,'seed-franchise')
             ON CONFLICT(payment_code_norm) DO NOTHING""")
@@ -248,17 +262,120 @@ def _migrate_attachment_to_fs(conn):
     """)
 
 
+# ── Requirement-table seeds (owner's "ตารางจับคู่รหัสรับเงิน", 2026-06) ─────────
+# Both seeds are idempotent and NEVER overwrite a staff edit (guarded on
+# updated_by/ON CONFLICT DO NOTHING). Re-runnable from /api/setup/seed-requirement.
+
+# Lane defaults encode the owner's table. Parameter values = the engine's current
+# constants (so seeding alone changes no live result) EXCEPT cash tol_abs_day=10
+# (owner decision 2026-06-12: deposit slips may differ by a few baht — pass ≤฿10
+# but keep the variance visible).
+_METHOD_DEFAULTS = [
+    # (category, bank, doc1, doc2, method, tol_abs, tol_abs_day, lag, merge, fee_vat, notes)
+    ("CASH", "*", "deposit_slip", "bank_stmt_*", "cash_3way", None, 10.0, 3, 4, 0,
+     "เงินสดของวัน D ฝากวันถัดไปก่อน 13:00 — เทียบ POS ↔ สลิปนำฝาก ↔ สเตทเมนต์ (ต่างได้หลักบาท)"),
+    ("QR", "KBANK", None, "bank_stmt_KBANK", "itemized", None, None, 1, 1, 0,
+     "QR พร้อมเพย์ (K-SHOP/KNNQR/QR code K-bank) — เงินเข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "KTB", None, "bank_stmt_KTB", "itemized", None, None, 1, 1, 0,
+     "ลูกค้าโอนเข้า KTB — เข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "KBANK", None, "bank_stmt_KBANK", "itemized", None, None, 1, 1, 0,
+     "ลูกค้าโอนเข้า KBANK — เข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
+    ("TRANSFER", "ANY", None, "bank_stmt_*", "itemized", None, None, 1, 1, 0,
+     "Bank Transfer ทั่วไป — เข้าได้ทั้ง KTB และ KBANK ตรวจกับทั้งสองสเตทเมนต์"),
+    ("CREDIT", "KBANK", "cc_summary", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "ขั้น 1: สรุปยอด KBANK ↔ สเตทเมนต์ KBANK (อาจรวมหลายวัน) · ขั้น 2: gross ก่อนค่าธรรมเนียม+VAT ↔ POS"),
+    ("CREDIT", "KTB", "cc_summary", "bank_stmt_KTB", "two_stage", None, None, 7, 4, 1,
+     "ขั้น 1: สรุปยอด KTC ↔ สเตทเมนต์ KTB (อาจรวมหลายวัน) · ขั้น 2: gross ก่อนค่าธรรมเนียม+VAT ↔ POS"),
+    ("CREDIT", "*", "cc_summary", "bank_stmt_*", "two_stage", None, None, 7, 4, 1, None),
+    ("GRAB", "*", "grab_report", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "Grab โอนเข้า KBANK วันทำการถัดไป (อาจรวม 2 วันเป็นยอดเดียว) — สรุปมีค่าคอม+VAT"),
+    ("LINEMAN", "*", "lineman_report", "bank_stmt_KBANK", "two_stage", None, None, 7, 4, 1,
+     "Lineman โอนเข้า KBANK วันทำการถัดไป (อาจรวม 2 วันเป็นยอดเดียว) — สรุปมีค่าคอม+VAT"),
+    ("COUPON", "KTC", "points_summary", "bank_stmt_KTB", "issuer_points", None, None, None, None, 0,
+     "แต้ม KTC — ใบสรุปคะแนนจาก KTC ↔ สเตทเมนต์ KTB (อยู่ในยอดฝากรวมของบัตร KTC)"),
+    ("COUPON", "BAY", "points_summary", "bank_stmt_KBANK", "issuer_points", None, None, None, None, 0,
+     "แต้ม BAY (กรุงศรี) — ใบสรุปคะแนนจาก BAY ↔ สเตทเมนต์ KBANK"),
+]
+
+
+def _seed_method_defaults(conn) -> dict:
+    inserted = 0
+    for row in _METHOD_DEFAULTS:
+        cur = conn.execute("""
+            INSERT INTO recon_method_config
+                (category, bank, doc1, doc2, method, tol_abs, tol_abs_day,
+                 lag_days, merge_days, fee_vat_expected, notes, updated_by)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?, 'seed')
+            ON CONFLICT(category, bank) DO NOTHING
+        """, row)
+        inserted += cur.rowcount
+    return {"inserted": inserted, "skipped": len(_METHOD_DEFAULTS) - inserted}
+
+
+# The 12 codes of the owner's table with their now-known routing. Inserted when
+# missing; existing SEED rows with an unresolved bank are upgraded (staff edits
+# are never touched — guarded on updated_by).
+_REQUIREMENT_CODES = [
+    ("CASH",            "CASH",     "NONE"),
+    ("Cash",            "CASH",     "NONE"),
+    ("Coupon",          "COUPON",   "NONE"),
+    ("Credit กสิกรไทย",  "CREDIT",   "KBANK"),
+    ("Credit กรุงไทย",   "CREDIT",   "KTB"),
+    ("GB",              "GRAB",     "NONE"),
+    ("LM",              "LINEMAN",  "NONE"),
+    ("K-SHOP",          "QR",       "KBANK"),
+    ("KNNQR",           "QR",       "KBANK"),
+    ("QR code K-bank",  "QR",       "KBANK"),
+    ("Bank Transfer",   "TRANSFER", "ANY"),
+    ("โอน KTB",         "TRANSFER", "KTB"),
+]
+_SEED_AUTHORS = ("seed", "seed-req")
+
+
+def _seed_requirement_codes(conn) -> dict:
+    """Apply the owner's routing answers to un-edited seed rows + insert any of
+    the 12 canonical codes still missing. Every change is audited."""
+    upgraded = inserted = 0
+    for code, category, bank in _REQUIREMENT_CODES:
+        old = conn.execute(
+            "SELECT id, category, bank, updated_by FROM recon_payment_map "
+            "WHERE payment_code_norm=?", (code,)).fetchone()
+        if old is None:
+            conn.execute("""
+                INSERT INTO recon_payment_map (payment_code_norm, category, bank, reconcile, updated_by)
+                VALUES (?,?,?,1,'seed-req') ON CONFLICT(payment_code_norm) DO NOTHING
+            """, (code, category, bank))
+            inserted += 1
+            continue
+        # Upgrade only seed-authored rows whose bank is still unresolved.
+        if (old["updated_by"] in _SEED_AUTHORS
+                and old["bank"] in ("UNKNOWN", "PROMPTPAY")
+                and (old["category"], old["bank"]) != (category, bank)):
+            conn.execute(
+                "UPDATE recon_payment_map SET category=?, bank=?, "
+                "updated_by='seed-req', updated_at=datetime('now') WHERE id=?",
+                (category, bank, old["id"]))
+            diffs = [{"field": "bank", "old": old["bank"], "new": bank}]
+            if old["category"] != category:
+                diffs.append({"field": "category", "old": old["category"], "new": category})
+            _audit(conn, "payment_map", old["id"], "update", "seed-req", diffs)
+            upgraded += 1
+    return {"upgraded": upgraded, "inserted": inserted}
+
+
 @app.on_event("startup")
 def startup():
     _ATTACH_DIR.mkdir(parents=True, exist_ok=True)
     with get_db() as conn:
-        conn.executescript(_SCHEMA.read_text())
+        conn.executescript(_SCHEMA.read_text(encoding="utf-8"))
         _migrate(conn)
         _migrate_payment_bank(conn)   # widen bank CHECK + future-proof Credit BAY
         _migrate_lane_adj_accept(conn)  # widen adj_type CHECK for v2 'accept'
         _migrate_attachment_to_fs(conn)
         # recon_lane_adj: created by schema.sql executescript above (IF NOT EXISTS)
         seed_payment_map(conn)   # idempotent; never overwrites staff edits
+        _seed_method_defaults(conn)     # owner's per-lane method table
+        _seed_requirement_codes(conn)   # owner's 12-code routing answers
         conn.commit()
 
 
@@ -327,6 +444,16 @@ def _require_manager(x_manager_token: str | None):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการเพื่อปิดเดือน (X-Manager-Token)")
 
 
+def require_manager_token(x_manager_token: str = Header(None)):
+    """Dependency for advanced-setup mutations (method parameters, tolerances):
+    a bad value can mass-flip lane statuses, so these need the MANAGER code —
+    ordinary code↔bank mapping stays on the staff write token (owner decision
+    2026-06-12). Open locally when OSHINEI_MANAGER_TOKEN is unset."""
+    expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
+    if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
+        raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
+
+
 async def _read_upload(file: UploadFile) -> bytes:
     if not (file.filename or "").lower().endswith(_ALLOWED_EXT):
         raise HTTPException(415, "Only .xlsx/.xls/.csv/.pdf files are accepted.")
@@ -375,7 +502,7 @@ def list_branches():
 # ── Config: payment-code map ──────────────────────────────────────────────────
 
 _CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
-_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "PROMPTPAY", "NONE", "UNKNOWN"}
+_BANKS      = {"KTB", "KBANK", "KTC", "BAY", "SCB", "BBL", "TTB", "PROMPTPAY", "ANY", "NONE", "UNKNOWN"}
 
 
 class PaymentMapUpsert(BaseModel):
@@ -491,6 +618,230 @@ def reseed_payment_map():
     with get_db() as conn:
         result = seed_payment_map(conn)
     return result
+
+
+# ── Config: per-lane method parameters (advanced setup — manager token) ───────
+
+_METHODS = {"direct", "two_stage", "cash_3way", "itemized", "issuer_points"}
+_DOC1S   = {"deposit_slip", "cc_summary", "grab_report", "lineman_report", "points_summary"}
+_DOC2S   = {"bank_stmt_KTB", "bank_stmt_KBANK", "bank_stmt_*"}
+
+
+class MethodConfig(BaseModel):
+    category:         str
+    bank:             str = "*"
+    doc1:             str | None = None
+    doc2:             str | None = None
+    method:           str = "direct"
+    tol_abs:          float | None = None
+    tol_abs_day:      float | None = None
+    lag_days:         int | None = None
+    merge_days:       int | None = None
+    fee_vat_expected: int = 0
+    notes:            str = ""
+    updated_by:       str = ""
+
+
+def _validate_method_config(body: MethodConfig):
+    if body.category not in _CATEGORIES:
+        raise HTTPException(400, f"category must be one of {sorted(_CATEGORIES)}")
+    if body.bank != "*" and body.bank not in _BANKS:
+        raise HTTPException(400, f"bank must be '*' or one of {sorted(_BANKS)}")
+    if body.method not in _METHODS:
+        raise HTTPException(400, f"method must be one of {sorted(_METHODS)}")
+    if body.doc1 and body.doc1 not in _DOC1S:
+        raise HTTPException(400, f"doc1 must be one of {sorted(_DOC1S)}")
+    if body.doc2 and body.doc2 not in _DOC2S:
+        raise HTTPException(400, f"doc2 must be one of {sorted(_DOC2S)}")
+    # Clamp parameters server-side — a typo here must not detonate the matcher.
+    if body.tol_abs is not None and not (0 <= body.tol_abs <= 100000):
+        raise HTTPException(400, "tol_abs must be between 0 and 100000")
+    if body.tol_abs_day is not None and not (0 <= body.tol_abs_day <= 100000):
+        raise HTTPException(400, "tol_abs_day must be between 0 and 100000")
+    if body.lag_days is not None and not (0 <= body.lag_days <= 14):
+        raise HTTPException(400, "lag_days must be between 0 and 14")
+    if body.merge_days is not None and not (1 <= body.merge_days <= 7):
+        raise HTTPException(400, "merge_days must be between 1 and 7")
+
+
+@app.get("/api/method-config")
+def list_method_config():
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM recon_method_config ORDER BY category, bank")]
+
+
+@app.post("/api/method-config", dependencies=[Depends(require_manager_token)])
+def create_method_config(body: MethodConfig):
+    _validate_method_config(body)
+    with get_db() as conn:
+        try:
+            cur = conn.execute("""
+                INSERT INTO recon_method_config
+                    (category, bank, doc1, doc2, method, tol_abs, tol_abs_day,
+                     lag_days, merge_days, fee_vat_expected, notes, updated_by)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            """, (body.category, body.bank, body.doc1, body.doc2, body.method,
+                  body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
+                  body.fee_vat_expected, body.notes or None, body.updated_by or "manager"))
+            _audit(conn, "method_config", cur.lastrowid, "create", body.updated_by or "manager")
+            conn.commit()
+            return {"id": cur.lastrowid}
+        except sqlite3.IntegrityError:
+            raise HTTPException(409, f"lane {body.category}/{body.bank} already configured")
+
+
+@app.patch("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
+def update_method_config(cfg_id: int, body: MethodConfig):
+    _validate_method_config(body)
+    with get_db() as conn:
+        old = conn.execute("SELECT * FROM recon_method_config WHERE id=?", (cfg_id,)).fetchone()
+        if not old:
+            raise HTTPException(404, f"method config {cfg_id} not found")
+        conn.execute("""
+            UPDATE recon_method_config
+            SET category=?, bank=?, doc1=?, doc2=?, method=?, tol_abs=?, tol_abs_day=?,
+                lag_days=?, merge_days=?, fee_vat_expected=?, notes=?,
+                updated_by=?, updated_at=datetime('now')
+            WHERE id=?
+        """, (body.category, body.bank, body.doc1, body.doc2, body.method,
+              body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
+              body.fee_vat_expected, body.notes or None,
+              body.updated_by or "manager", cfg_id))
+        diffs = [{"field": f, "old": old[f], "new": getattr(body, f)}
+                 for f in ("doc1", "doc2", "method", "tol_abs", "tol_abs_day",
+                           "lag_days", "merge_days", "fee_vat_expected")
+                 if old[f] != getattr(body, f)]
+        if diffs:
+            _audit(conn, "method_config", cfg_id, "update", body.updated_by or "manager", diffs)
+        conn.commit()
+    return {"id": cfg_id}
+
+
+@app.delete("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
+def delete_method_config(cfg_id: int):
+    with get_db() as conn:
+        cur = conn.execute("DELETE FROM recon_method_config WHERE id=?", (cfg_id,))
+        if cur.rowcount == 0:
+            raise HTTPException(404, f"method config {cfg_id} not found")
+        _audit(conn, "method_config", cfg_id, "delete", "manager")
+        conn.commit()
+    return {"deleted": cfg_id}
+
+
+# ── Advanced setup: composed master view + requirement reseed ─────────────────
+
+# Thai label per method for the master table (the spreadsheet's กระทบยอด column)
+_METHOD_TH = {
+    "direct":        "เทียบยอดตรง POS ↔ เอกสาร",
+    "two_stage":     "2 ขั้น: สรุปยอด↔สเตทเมนต์ แล้ว gross↔POS",
+    "cash_3way":     "3 ทาง: POS ↔ สลิปนำฝาก ↔ สเตทเมนต์",
+    "itemized":      "รายตามรายการในสเตทเมนต์ (วันเดียวกัน/วันถัดไป)",
+    "issuer_points": "แต้มบัตร: ใบสรุปคะแนน ↔ สเตทเมนต์",
+}
+
+
+def _doc_presence(conn, period_month: str) -> dict:
+    """Company-wide 'is this document type in for the month?' map for the master
+    table's doc chips: {doc_key: True/False}."""
+    have: dict = {}
+    try:
+        for r in conn.execute(
+            "SELECT DISTINCT source_type, provider FROM recon_uploads "
+            "WHERE period_month=? AND status='confirmed'", (period_month,)):
+            st, prov = r["source_type"], (r["provider"] or "")
+            if st == "bank":
+                from .matcher import _provider_bank
+                have[f"bank_stmt_{_provider_bank(prov)}"] = True
+                have["bank_stmt_*"] = True
+            elif st == "credit_card":
+                have["cc_summary"] = True
+                if "POINT" in prov.upper():
+                    have["points_summary"] = True
+            elif st == "grab":
+                have["grab_report"] = True
+            elif st == "lineman":
+                have["lineman_report"] = True
+        if conn.execute("SELECT 1 FROM recon_deposit_slip WHERE substr(sale_day,1,7)=? LIMIT 1",
+                        (period_month,)).fetchone():
+            have["deposit_slip"] = True
+    except sqlite3.OperationalError:
+        pass
+    return have
+
+
+@app.get("/api/setup/master")
+def setup_master(period_month: str):
+    """Everything the advanced Setup page renders in one call: the master
+    payment-code table (the owner's 'ทุกรหัสในตารางเดียว'), joined with each
+    lane's method config + POS volume + document presence, plus the raw
+    method_configs / bank_accounts / acquirer_mids and the global tolerances."""
+    _validate_period(period_month)
+    rows = list_payment_map()          # includes pos_amount / pos_txn
+    with get_db() as conn:
+        cfgs = {(r["category"], r["bank"]): dict(r) for r in conn.execute(
+            "SELECT * FROM recon_method_config")}
+        have_docs = _doc_presence(conn, period_month)
+        accounts = [dict(r) for r in conn.execute(
+            """SELECT a.*, b.name AS branch_name FROM recon_bank_account a
+               JOIN branches b ON b.branch_id=a.branch_id ORDER BY b.name, a.bank""")]
+        mids = [dict(r) for r in conn.execute(
+            """SELECT m.*, b.name AS branch_name FROM recon_acquirer_mid m
+               JOIN branches b ON b.branch_id=m.branch_id ORDER BY b.name, m.acquirer""")]
+
+    out_rows = []
+    for r in rows:
+        mc = cfgs.get((r["category"], r["bank"])) or cfgs.get((r["category"], "*")) or {}
+        needs_bank = (r["bank"] == "UNKNOWN" or
+                      (r["bank"] == "PROMPTPAY" and r["category"] in ("QR", "TRANSFER", "CREDIT")))
+        status = ("off" if not r["reconcile"]
+                  else "needs_bank" if needs_bank
+                  else "dormant" if (r["pos_amount"] == 0 and r["pos_txn"] == 0)
+                  else "ok")
+        out_rows.append({
+            **r,
+            "method": {
+                "id":               mc.get("id"),
+                "doc1":             mc.get("doc1"),
+                "doc2":             mc.get("doc2"),
+                "method":           mc.get("method"),
+                "method_label":     _METHOD_TH.get(mc.get("method"), mc.get("method")),
+                "tol_abs":          mc.get("tol_abs"),
+                "tol_abs_day":      mc.get("tol_abs_day"),
+                "lag_days":         mc.get("lag_days"),
+                "merge_days":       mc.get("merge_days"),
+                "fee_vat_expected": mc.get("fee_vat_expected", 0),
+                "lane_bank":        mc.get("bank"),   # '*' = applies to the whole category
+            },
+            "doc_status": {
+                "doc1": (None if not mc.get("doc1")
+                         else "uploaded" if have_docs.get(mc["doc1"]) else "missing"),
+                "doc2": (None if not mc.get("doc2")
+                         else "uploaded" if have_docs.get(mc["doc2"]) else "missing"),
+            },
+            "status": status,
+        })
+    return {
+        "period_month":   period_month,
+        "rows":           out_rows,
+        "method_configs": [dict(v) for v in sorted(cfgs.values(), key=lambda x: (x["category"], x["bank"]))],
+        "bank_accounts":  accounts,
+        "acquirer_mids":  mids,
+        "globals": {"TOL_ABS": TOL_ABS, "TOL_PCT": TOL_PCT,
+                    "TOL_ABS_DAY": TOL_ABS_DAY, "TOL_PCT_DAY": TOL_PCT_DAY},
+        "manager_required": bool((os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()),
+    }
+
+
+@app.post("/api/setup/seed-requirement", dependencies=[Depends(require_manager_token)])
+def seed_requirement():
+    """Re-apply the owner's requirement table (codes + lane methods) on demand.
+    Idempotent; never overwrites staff/manager edits."""
+    with get_db() as conn:
+        codes = _seed_requirement_codes(conn)
+        methods = _seed_method_defaults(conn)
+        conn.commit()
+    return {"codes": codes, "methods": methods}
 
 
 # ── Config: bank accounts ─────────────────────────────────────────────────────
@@ -1053,6 +1404,80 @@ def delete_attachment(att_id: int):
     return {"deleted": att_id}
 
 
+# ── Deposit slips (สลิปนำฝาก — CASH stage-1 evidence, typed by staff) ──────────
+
+class DepositSlip(BaseModel):
+    branch_id:     int
+    sale_day:      str                  # POS day D the cash belongs to
+    amount:        float
+    deposit_day:   str | None = None    # normally D+1 (before 13:00)
+    attachment_id: int | None = None    # optional slip photo (recon_attachment)
+    note:          str = ""
+    created_by:    str = ""
+
+
+@app.get("/api/deposit-slips")
+def list_deposit_slips(branch_id: int, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT * FROM recon_deposit_slip WHERE branch_id=? AND substr(sale_day,1,7)=? "
+            "ORDER BY sale_day", (branch_id, period_month))]
+
+
+@app.post("/api/deposit-slips", dependencies=[Depends(require_write_token)])
+def upsert_deposit_slip(body: DepositSlip):
+    """One slip per (branch, sale_day) — POSTing again replaces the amount."""
+    if not _DAY_RE.match(body.sale_day or ""):
+        raise HTTPException(400, "sale_day must be in 'YYYY-MM-DD' format.")
+    if body.deposit_day and not _DAY_RE.match(body.deposit_day):
+        raise HTTPException(400, "deposit_day must be in 'YYYY-MM-DD' format.")
+    if body.amount <= 0:
+        raise HTTPException(400, "amount must be positive.")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.sale_day[:7])
+        old = conn.execute(
+            "SELECT id, amount FROM recon_deposit_slip WHERE branch_id=? AND sale_day=?",
+            (body.branch_id, body.sale_day)).fetchone()
+        if old:
+            conn.execute("""
+                UPDATE recon_deposit_slip SET amount=?, deposit_day=?, attachment_id=?,
+                    note=?, created_by=?, created_at=datetime('now') WHERE id=?
+            """, (body.amount, body.deposit_day, body.attachment_id,
+                  body.note or None, body.created_by or "staff", old["id"]))
+            slip_id = old["id"]
+            if float(old["amount"]) != body.amount:
+                _audit(conn, "deposit_slip", slip_id, "update", body.created_by or "staff",
+                       [{"field": "amount", "old": old["amount"], "new": body.amount}])
+        else:
+            cur = conn.execute("""
+                INSERT INTO recon_deposit_slip
+                    (branch_id, sale_day, deposit_day, amount, attachment_id, note, created_by)
+                VALUES (?,?,?,?,?,?,?)
+            """, (body.branch_id, body.sale_day, body.deposit_day, body.amount,
+                  body.attachment_id, body.note or None, body.created_by or "staff"))
+            slip_id = cur.lastrowid
+            _audit(conn, "deposit_slip", slip_id, "create", body.created_by or "staff",
+                   [{"field": "amount", "old": None, "new": body.amount}])
+        conn.commit()
+    return {"id": slip_id, "sale_day": body.sale_day, "amount": body.amount}
+
+
+@app.delete("/api/deposit-slips/{slip_id}", dependencies=[Depends(require_write_token)])
+def delete_deposit_slip(slip_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT branch_id, sale_day FROM recon_deposit_slip WHERE id=?", (slip_id,)).fetchone()
+        if not row:
+            raise HTTPException(404, "deposit slip not found")
+        _assert_period_open(conn, row["branch_id"], row["sale_day"][:7])
+        conn.execute("DELETE FROM recon_deposit_slip WHERE id=?", (slip_id,))
+        _audit(conn, "deposit_slip", slip_id, "delete", "staff")
+        conn.commit()
+    return {"deleted": slip_id}
+
+
 # ── Sessions ──────────────────────────────────────────────────────────────────
 
 class SessionCreate(BaseModel):
@@ -1422,6 +1847,23 @@ def _build_export(conn, session) -> bytes:
           [[d["disc_type"], d["category"], d["bank"], d["amount_external"], d["amount_pos"],
             d["variance"], d["resolution"], d["assigned_to"] or "", d["resolution_note"] or ""]
            for d in discs])
+
+    # Cash 3-way (POS ↔ typed deposit slip ↔ bank deposit) per the owner's table
+    tw = cash_three_way(conn, bid, pm)
+    sheet("Cash 3-way",
+          ["Day", "POS cash", "Slip amount", "Slip day", "Bank deposit", "Deposit date",
+           "Slip status", "Bank status", "Slip var", "Bank var"],
+          [[r["day"], r["pos_cash"], r["slip_amount"], r["slip_day"] or "", r["bank_deposit"],
+            r["deposit_date"] or "", r["slip_leg"], r["bank_leg"],
+            r["slip_variance"], r["bank_variance"]] for r in tw["rows"]])
+
+    # Coupon issuer points (KTC/BAY) — issuer_points method
+    ip = coupon_reconciliation(conn, bid, pm)
+    sheet("Coupon points",
+          ["Issuer", "POS points", "Summary gross", "Bank payout", "Variance", "Status"],
+          [[r["issuer"], r["pos_point"], r["settle_gross"],
+            ("in KTC deposit" if r["bank_in_credit"] else r["bank_payout"]),
+            r["variance"], r["status"]] for r in ip])
 
     buf = io.BytesIO()
     wb.save(buf)

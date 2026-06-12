@@ -589,7 +589,12 @@ def _autoswap_poller():
         _t.sleep(interval)
         try:
             if Path(str(DB_PATH) + ".incoming").exists():
-                _apply_incoming_live()
+                if _apply_incoming_live():
+                    # The staged DB carries whatever sku_effective_cost it was
+                    # synced with (sync_mssql doesn't rebuild it) — flush the
+                    # response cache AND force-rebuild the effective-cost lookup
+                    # so post-swap COGS reflects the current sku_cost/BoM chain.
+                    invalidate_cache()
         except Exception as e:
             print(f"[hot-swap] poller error: {e}")
 
@@ -1754,14 +1759,16 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
         if dfrom: base.append("d.day>=:df"); p["df"] = dfrom
         if dto:   base.append("d.day<=:dt"); p["dt"] = dto
         # sales_sku_daily has no `source` column (it's Easy-only), so use a daily-specific
-        # COGS expr that drops the source check but keeps buffet-tier=0 + BoM/unit_cost logic.
+        # COGS expr that drops the source check but keeps buffet-tier=0.
+        # Chain mirrors _unified_cogs_expr: cost-management (non-zero) → BoM → alias → 0.
         cogs = (f"CASE WHEN (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=d.sku_id) "
                 f"IN {_EASY_TIER_CODES_SQL} THEN 0 ELSE d.qty * COALESCE("
+                f"(SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id AND sec.recipe_cost>0), "
                 f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=d.sku_id), "
                 f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
                 f"JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id "
                 f"JOIN skus s_al ON s_al.sku_id=d.sku_id WHERE a.bom_sku_code=s_al.sku_code), "
-                f"(SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id=d.sku_id), 0) END")
+                f"0) END")
         sql = (f"SELECT {gb_select}, ROUND(SUM(d.qty),2) qty, ROUND(SUM(d.subtotal_ex_vat),2) rev, "
                f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_daily d "
                f"JOIN branches b ON b.branch_id=d.branch_id JOIN skus sk ON sk.sku_id=d.sku_id "
@@ -2616,17 +2623,20 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
 
 @app.get("/api/reports/pnl-bill-items")
 def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill to drill into")):
-    """Menu lines for a single (loss-making) bill: qty, ex-VAT revenue, BoM COGS and
-    per-line gross profit — so you can see exactly what the customer ordered that drove
-    COGS above revenue. Source: sale_bill_item, which the sync stages for LOSS bills
-    only (COGS > revenue). `synced` is False until the next sync builds that table."""
+    """Menu lines for a single (loss-making) bill: qty, per-unit cost, ex-VAT revenue,
+    COGS and per-line gross profit — so you can see exactly what the customer ordered
+    that drove COGS above revenue. Source: sale_bill_item (qty/rev staged by the sync
+    for LOSS bills only). COGS is recomputed LIVE per line as qty × sku_effective_cost
+    (cost-management table first) so the drill always reflects current costs, not the
+    snapshot frozen at sync time. `synced` is False until the next sync builds the table."""
     with get_db() as con:
         synced = con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_bill_item'").fetchone() is not None
         header = None
         hdr = con.execute(
             """SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
-                      ROUND(t.total_inc_vat/1.07) rev, ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc
+                      ROUND(t.total_inc_vat/1.07) rev, ROUND(c.cogs_bom) cogs,
+                      ROUND(COALESCE(t.discount,0) + COALESCE(t.sp_discount,0)) disc
                FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
                JOIN branches b ON b.branch_id=t.branch_id WHERE t.receipt_no=:r""",
             {"r": receipt}).fetchone()
@@ -2636,26 +2646,39 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
                       "disc": hdr["disc"] or 0}
         items = []
         if synced:
+            _build_sku_effective_cost(con, force=False)   # ensure the lookup exists
             items = [{"menu": (x["description"] or x["sku_code"] or "—").replace("(B) ", "").replace("(A) ", ""),
-                      "sku_code": x["sku_code"], "qty": x["qty"] or 0, "rev": x["rev"] or 0,
+                      "sku_code": x["sku_code"], "qty": x["qty"] or 0,
+                      "unit_cost": round(x["uc"] or 0, 2), "rev": x["rev"] or 0,
                       "cogs": x["cogs"] or 0, "margin": round((x["rev"] or 0) - (x["cogs"] or 0))}
                      for x in con.execute(
-                        """SELECT s.description, s.sku_code, ROUND(SUM(i.qty),2) qty,
-                                  ROUND(SUM(i.rev)) rev, ROUND(SUM(i.bom_cost)) cogs
+                        f"""SELECT s.description, s.sku_code, ROUND(SUM(i.qty),2) qty,
+                                  ROUND(SUM(i.rev)) rev,
+                                  CASE WHEN s.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
+                                       ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec
+                                            WHERE sec.sku_id=i.sku_id), 0) END uc,
+                                  ROUND(SUM(i.qty) * CASE WHEN s.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
+                                       ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec
+                                            WHERE sec.sku_id=i.sku_id), 0) END) cogs
                            FROM sale_bill_item i JOIN skus s ON s.sku_id=i.sku_id
                            WHERE i.receipt_no=:r GROUP BY i.sku_id ORDER BY cogs DESC, rev DESC""",
                         {"r": receipt}).fetchall()]
+            if header and items:
+                # header COGS comes from sale_bill_cogs (sync snapshot) — override with
+                # the live recomputation so the summary tiles match the line table.
+                header["cogs"] = round(sum(x["cogs"] for x in items))
     return {"receipt": receipt, "synced": synced, "header": header, "items": items}
 
 
 def _bom_unit_cost_sql(s: str = "s") -> str:
-    """Per-serving BoM unit cost for a SKU (alias `s` = skus). recipe → alias →
-    sku_cost → 0; BUFFET tier = 0 (iron rule: BoM only)."""
+    """Per-serving effective unit cost for a SKU (alias `s` = skus). sku_cost
+    (cost-management table, non-zero) → recipe → alias → 0; BUFFET tier = 0.
+    Same priority as _unified_cogs_expr (cost-management first, 2026-06-11)."""
     return (f"CASE WHEN {s}.sku_code LIKE 'BUFFET%' THEN 0 ELSE COALESCE("
+            f"(SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id={s}.sku_id),"
             f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id={s}.sku_id),"
             f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
-            f" JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code={s}.sku_code),"
-            f"(SELECT sc.unit_cost FROM sku_cost sc WHERE sc.sku_id={s}.sku_id),0) END")
+            f" JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code={s}.sku_code),0) END")
 
 
 _DTYPE_LABEL = {0: "ทานที่ร้าน", 1: "ทานที่ร้าน", 2: "เดลิเวอรี", 3: "กลับบ้าน", 4: "อื่น ๆ"}
@@ -9185,12 +9208,15 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
       1. Easy buffet TIER rows (BUFFET350/500/590/799/CHILD) → 0
          (consumption is logged on the item-level B0xxx rows; counting the tier
           too would double-count).
-      2. else if the SKU has a BoM RECIPE (direct or via bom_sku_alias)
-         → qty × recipe ingredient cost   (the trustworthy path)
-      3. else if the SKU has a sku_cost.unit_cost
-         → qty × unit_cost                 (fallback for the ~284 recipe-less
-                                            à-la-carte / beverage SKUs)
-      4. else → 0 (genuinely uncosted)
+      2. else if the SKU has a non-zero sku_cost.unit_cost (the Cost-Management
+         table, owner-maintained) → qty × unit_cost
+         (2026-06-11 priority flip: cost-management is the source of truth now
+          that the table holds real unit costs — median cost/price ≈ 0.20;
+          previously BoM won, which inflated e.g. B0040 to 38.14 vs actual 13.40)
+      3. else if the SKU has a BoM RECIPE (direct or via bom_sku_alias)
+         → qty × recipe ingredient cost
+      4. else → 0 (genuinely uncosted; sku_cost rows stored as 0 mean "no data"
+         and fall through to the BoM, never force COGS to 0)
 
     Self-contained: needs only the sales row alias <ssm> (it resolves sku_code,
     recipe, and unit_cost via correlated subqueries), so it's a true drop-in for
@@ -9215,11 +9241,11 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
         # as 0 (non-NULL) so a hit short-circuits correctly. Verified identical.
         f"  ELSE {ssm}.qty * COALESCE("
         f"    (SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id = {ssm}.sku_id), "
+        f"    (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = {ssm}.sku_id), "
         f"    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id), "
         f"    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
         f"       JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id "
         f"       JOIN skus s_al ON s_al.sku_id = {ssm}.sku_id WHERE a.bom_sku_code = s_al.sku_code), "
-        f"    (SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id = {ssm}.sku_id), "
         f"    0) "
         f"END"
     )
@@ -9228,10 +9254,10 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
 def _build_sku_effective_cost(con, force: bool = True):
     """(Re)build the per-SKU effective unit COGS lookup that backs _unified_cogs_expr.
 
-    recipe_cost = COALESCE(direct BoM recipe SUM, alias-path BoM SUM via
-    bom_sku_alias on sku_code, sku_cost.unit_cost, 0) — EXACTLY the chain the inline
-    expression used, but computed ONCE per SKU instead of as 3 correlated subqueries
-    per sales row. Pure function of skus / bom_ingredients / bom_sku_alias / sku_cost.
+    recipe_cost = COALESCE(NULLIF(sku_cost.unit_cost, 0), direct BoM recipe SUM,
+    alias-path BoM SUM via bom_sku_alias on sku_code, 0) — EXACTLY the chain the
+    inline expression uses (cost-management table first since 2026-06-11), computed
+    ONCE per SKU. Pure function of skus / bom_ingredients / bom_sku_alias / sku_cost.
     Rebuilt at startup and whenever cost/bom data changes (hooked into the full-clear
     branch of invalidate_cache), so edits reflect immediately as before.
 
@@ -9250,11 +9276,11 @@ def _build_sku_effective_cost(con, force: bool = True):
     rows = con.execute(
         """
         SELECT s.sku_id, COALESCE(
+            (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
             (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = s.sku_id),
             (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
                JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id
                WHERE a.bom_sku_code = s.sku_code),
-            (SELECT sc2.unit_cost FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
             0) AS rc
         FROM skus s
         """

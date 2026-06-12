@@ -59,11 +59,14 @@ def client(tmp_path):
 # ── classification ────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("code,cat,bank", [
-    ("KNNQR", "QR", "UNKNOWN"), (" KNNQR", "QR", "UNKNOWN"), ("K-SHOP", "QR", "KBANK"),
+    # KNNQR / K-SHOP / QR code K-bank → KBank QR per the owner's requirement table
+    ("KNNQR", "QR", "KBANK"), (" KNNQR", "QR", "KBANK"), ("K-SHOP", "QR", "KBANK"),
     ("QR code K-bank", "QR", "KBANK"), ("QR PromptPay", "QR", "PROMPTPAY"),
     ("Credit กรุงไทย", "CREDIT", "KTB"), ("Credit กสิกรไทย", "CREDIT", "KBANK"),
     ("Credit KTC", "CREDIT", "KTC"), ("Cash", "CASH", "NONE"), ("CASH", "CASH", "NONE"),
     ("โอน KTB", "TRANSFER", "KTB"), ("โอน Kbank", "TRANSFER", "KBANK"),
+    # generic transfer can land in KTB OR KBANK → multi-bank sentinel
+    ("Bank Transfer", "TRANSFER", "ANY"),
     ("GB", "GRAB", "NONE"), ("LM", "LINEMAN", "NONE"), ("Coupon", "COUPON", "NONE"),
 ])
 def test_classify(code, cat, bank):
@@ -86,7 +89,11 @@ def test_seed_is_master_only_and_flags_unknown(client):
     rows = client.get("/api/payment-map").json()
     codes = {r["payment_code_norm"] for r in rows}
     assert "KNNQR" in codes and "Cash" in codes
-    assert next(r for r in rows if r["payment_code_norm"] == "KNNQR")["bank"] == "UNKNOWN"
+    # KNNQR is routed by the owner's requirement table → KBank QR rail
+    assert next(r for r in rows if r["payment_code_norm"] == "KNNQR")["bank"] == "KBANK"
+    # the 12 canonical requirement codes exist even without POS volume
+    assert "Bank Transfer" in codes
+    assert next(r for r in rows if r["payment_code_norm"] == "Bank Transfer")["bank"] == "ANY"
     # reseed is idempotent
     assert client.post("/api/payment-map/seed").json()["inserted"] == 0
 
@@ -882,10 +889,10 @@ def test_daily_cash_coverage_uses_cash_dep_only(tmp_path):
 
 def test_daily_unmapped_bank_status(tmp_path):
     """A QR code left with a non-statement bank (UNKNOWN/PROMPTPAY) → unmapped_bank."""
-    db = _make_db(tmp_path, [("KNNQR", 5000)])     # seeds as QR/UNKNOWN
+    db = _make_db(tmp_path, [("MYQR", 5000)])      # unrecognised QR code → seeds QR/UNKNOWN
     c = sqlite3.connect(db)
     c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
-    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','KNNQR',5000,0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','MYQR',5000,0)")
     c.commit(); c.close()
     main._DB_PATH = db
     with TestClient(main.app) as cl:
@@ -1174,6 +1181,9 @@ def test_map_bank_suggestions_from_documents(client):
     c = sqlite3.connect(db)
     c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
               "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # requirement seed routes KNNQR → KBANK; put it back to UNKNOWN to exercise
+    # the document-driven suggestion path for an unresolved code
+    c.execute("UPDATE recon_payment_map SET bank='UNKNOWN' WHERE payment_code_norm='KNNQR'")
     days = [("2026-06-%02d" % i, 10000 + i * 137) for i in range(1, 8)]
     c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'KNNQR',?,5)", days)
     up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
@@ -1377,3 +1387,309 @@ def test_cash_matches_next_day_credit_under_qr_label(client):
     qr_kbank = next(l for l in day10["lanes"] if l["category"] == "QR" and l["bank"] == "KBANK")
     assert qr_kbank["status"] == "matched"
     assert d["cash_summary"]["has_deposit_lines"] is True
+
+
+# ── method config: the owner's requirement table (2026-06-12) ─────────────────
+
+def test_method_config_seed_idempotent(client):
+    """Startup seeds the per-lane method table; reseeding never overwrites an
+    edited row and never duplicates."""
+    with main.get_db() as conn:
+        n1 = conn.execute("SELECT COUNT(*) FROM recon_method_config").fetchone()[0]
+        assert n1 >= 12
+        conn.execute("UPDATE recon_method_config SET lag_days=9, updated_by='staff' "
+                     "WHERE category='GRAB' AND bank='*'")
+        conn.commit()
+        r = main._seed_method_defaults(conn)
+        assert r["inserted"] == 0
+        assert conn.execute("SELECT lag_days FROM recon_method_config "
+                            "WHERE category='GRAB' AND bank='*'").fetchone()[0] == 9
+        assert conn.execute("SELECT COUNT(*) FROM recon_method_config").fetchone()[0] == n1
+
+
+def test_requirement_seed_upgrades_unknown_but_not_staff_edits(client):
+    """The requirement seed answers previously-UNKNOWN routing for seed-authored
+    rows (KNNQR → KBANK) but never touches a staff-edited row; audited."""
+    with main.get_db() as conn:
+        # simulate the pre-requirement DB state
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN', updated_by='seed' "
+                     "WHERE payment_code_norm='KNNQR'")
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN', updated_by='staff' "
+                     "WHERE payment_code_norm='K-SHOP'")
+        conn.commit()
+        r = main._seed_requirement_codes(conn)
+        conn.commit()
+        assert r["upgraded"] >= 1
+        assert conn.execute("SELECT bank FROM recon_payment_map "
+                            "WHERE payment_code_norm='KNNQR'").fetchone()[0] == "KBANK"
+        assert conn.execute("SELECT bank FROM recon_payment_map "
+                            "WHERE payment_code_norm='K-SHOP'").fetchone()[0] == "UNKNOWN"
+        assert conn.execute("SELECT COUNT(*) FROM recon_audit_log "
+                            "WHERE entity='payment_map' AND by='seed-req'").fetchone()[0] >= 1
+
+
+def test_matcher_uses_method_config_tolerance(client):
+    """CASH daily tolerance comes from recon_method_config (owner: ฿10 strict
+    absolute). A ฿30-off deposit shows 'variance' but is still traced to its
+    deposit; widening the config tolerance flips it to 'matched'."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',20000,0)")
+    c.commit(); c.close()
+    _add_bank_line(db, "KTB", "CASH_DEP", 19970, date="2026-06-11")   # ฿30 short, T+1
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+
+    days = {x["day"]: x for x in client.get(f"/api/sessions/{sid}/daily").json()["days"]}
+    lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
+    assert lane["status"] == "variance", "฿30 > strict ฿10 cash tolerance"
+    assert lane.get("deposit_date") == "2026-06-11", "deposit must still be found & traced"
+
+    with main.get_db() as conn:                       # widen via config → matched
+        conn.execute("UPDATE recon_method_config SET tol_abs_day=50 WHERE category='CASH'")
+        conn.commit()
+    days = {x["day"]: x for x in client.get(f"/api/sessions/{sid}/daily").json()["days"]}
+    lane = next(l for l in days["2026-06-10"]["lanes"] if l["category"] == "CASH")
+    assert lane["status"] == "matched"
+
+
+# ── phase 2: coupon channel, cash 3-way, TRANSFER/ANY, payout trace ───────────
+
+def _seed_point_pos(db, series_name, series_id, amount):
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_month"
+              "(branch_id INT,period_month TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.execute("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", (series_id, series_name, ""))
+    c.execute("INSERT INTO pos_coupon_payment_month VALUES(4,'2026-06',?,?,1)", (series_id, amount))
+    c.commit(); c.close()
+
+
+def test_coupon_channel_reconciles_ktc_points(client):
+    """COUPON channel leaves no_source when the issuer's point summary is in:
+    POS KTC-point coupons ↔ KTC-Point settlement rows (split by MID) → ok."""
+    db = main._DB_PATH
+    _seed_point_pos(db, "แลกคะแนน KTC 699 คะแนนลด 80 บาท", 1, 160)
+    c = sqlite3.connect(db)
+    c.execute("INSERT INTO recon_acquirer_mid(branch_id,acquirer,merchant_id,terminal_id,active)"
+              " VALUES(4,'KTCPOINT','662','',1)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTC','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,"
+              "mdr_fee,vat_amount,net_amount,merchant_id) VALUES(?,4,'2026-06-03','KTC',160,0,0,160,'662')", (up,))
+    c.commit(); c.close()
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cp = next(ch for ch in r["channels"] if ch["key"] == "COUPON")
+    assert cp["status"] == "ok", cp
+    ip = {x["issuer"]: x for x in cp["issuer_points"]}
+    assert ip["KTC"]["pos_point"] == 160 and ip["KTC"]["settle_gross"] == 160
+    assert ip["KTC"]["status"] == "matched" and ip["KTC"]["bank_in_credit"] is True
+
+
+def test_coupon_without_points_doc_is_waiting(client):
+    """POS shows point coupons but no summary uploaded → waiting_doc + the
+    points doc appears in the checklist (uploadable, acceptable)."""
+    _seed_point_pos(main._DB_PATH, "แต้มกรุงศรี 1000 ลด 100", 7, 1700)
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cp = next(ch for ch in r["channels"] if ch["key"] == "COUPON")
+    assert cp["status"] == "waiting_doc" and "BAY" in cp["detail"]
+    doc = next(d for d in r["documents"] if d["key"] == "points_BAY")
+    assert doc["status"] == "missing" and doc["source"] == "credit_card"
+    assert doc["provider"] == "BAYPOINT" and doc["channel"] == "COUPON"
+
+
+def test_cash_three_way_with_slip(client):
+    """POS cash ↔ typed slip ↔ bank deposit. Slip ±few baht passes (≤฿10) with
+    the variance visible; a >฿10 slip shows variance; missing slip = no_slip
+    (informational, never blocks close)."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,'Cash',?,0)",
+                  [("2026-06-10", 20000), ("2026-06-11", 15000)])
+    c.commit(); c.close()
+    _add_bank_line(db, "KTB", "CASH_DEP", 19995, date="2026-06-11")  # ฿5 short — within ฿10
+    _add_bank_line(db, "KTB", "CASH_DEP", 15000, date="2026-06-12")
+
+    # slip for day 10 (฿5 off → matched with visible variance); none for day 11
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 19995,
+        "deposit_day": "2026-06-11"}).status_code == 200
+
+    from recon.matcher import cash_three_way
+    with main.get_db() as conn:
+        tw = cash_three_way(conn, 4, "2026-06")
+    rows = {r["day"]: r for r in tw["rows"]}
+    d10, d11 = rows["2026-06-10"], rows["2026-06-11"]
+    assert d10["slip_leg"] == "matched" and d10["slip_variance"] == -5.0
+    assert d10["bank_leg"] == "matched" and d10["deposit_date"] == "2026-06-11"
+    assert d11["slip_leg"] == "no_slip" and d11["bank_leg"] == "matched"
+
+    # a slip ฿30 off the POS → variance (strict ฿10)
+    client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 19970})
+    with main.get_db() as conn:
+        tw = cash_three_way(conn, 4, "2026-06")
+    assert {r["day"]: r for r in tw["rows"]}["2026-06-10"]["slip_leg"] == "variance"
+
+    # the v2 CASH channel carries the 3-way rows
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    cash_ch = next(ch for ch in r["channels"] if ch["key"] == "CASH")
+    assert len(cash_ch["cash_three_way"]) == 2
+
+
+def test_deposit_slip_endpoints_validation_and_lock(client):
+    db = main._DB_PATH
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "bad", "amount": 100}).status_code == 400
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-10", "amount": 0}).status_code == 400
+    # upsert: same day replaces
+    a = client.post("/api/deposit-slips", json={"branch_id": 4, "sale_day": "2026-06-10", "amount": 100}).json()
+    b = client.post("/api/deposit-slips", json={"branch_id": 4, "sale_day": "2026-06-10", "amount": 120}).json()
+    assert a["id"] == b["id"]
+    slips = client.get("/api/deposit-slips", params={"branch_id": 4, "period_month": "2026-06"}).json()
+    assert len(slips) == 1 and slips[0]["amount"] == 120
+    # closed month → 423
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    c = sqlite3.connect(db)
+    c.execute("UPDATE recon_discrepancies SET resolution='accepted' WHERE session_id=?", (sid,))
+    c.commit(); c.close()
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"}).status_code == 200
+    assert client.post("/api/deposit-slips", json={
+        "branch_id": 4, "sale_day": "2026-06-15", "amount": 100}).status_code == 423
+    assert client.delete(f"/api/deposit-slips/{a['id']}").status_code == 423
+
+
+def test_grab_channel_exposes_payout_trace(client):
+    """GRAB channel carries stage 2 (net-day groups <-> bank credits) so the UI
+    can render two-stage cards like CREDIT."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('grab',4,'Grab','g','2026-06',0,'confirmed')").lastrowid
+    # two net days 3000+5000 paid as ONE combined credit (8000) on the 12th
+    c.executemany("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,"
+                  "food_amount,commission_amt,vat_amount,net_payout) VALUES(?,4,?,'Completed',?,?,0,?)",
+                  [(up, "2026-06-10", 3300, 300, 3000), (up, "2026-06-11", 5500, 500, 5000)])
+    c.commit(); c.close()
+    _add_bank_line(db, "KBANK", "GRAB_PAYOUT", 8000, date="2026-06-12")
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    grab = next(ch for ch in r["channels"] if ch["key"] == "GRAB")
+    pt = grab["payout_trace"]
+    assert pt and pt["payouts"][0]["status"] == "matched"
+    assert pt["payouts"][0]["combined"] is True and len(pt["payouts"][0]["days"]) == 2
+    assert pt["payout_total"] == 8000.0
+
+
+def test_transfer_any_matches_both_banks_no_double_count(client):
+    """A generic 'Bank Transfer' code (TRANSFER/ANY) reconciles against the
+    leftover transfer credits of BOTH banks; per-bank lanes consume their own
+    lines first and never show a false surplus."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    # POS month: per-bank lane 4,000 + generic Bank Transfer 7,000 (ANY)
+    c.executemany("INSERT INTO pos_payment_month VALUES(4,'2026-06',?,?,0)",
+                  [("โอน KTB", 4000), ("Bank Transfer", 7000)])
+    c.commit(); c.close()
+    # statements: KTB transfers 9,000 (4k per-bank + 5k of ANY), KBANK 2,000 (rest of ANY)
+    _add_bank_line(db, "KTB", "TRANSFER", 9000, date="2026-06-10")
+    _add_bank_line(db, "KBANK", "TRANSFER", 2000, date="2026-06-10")
+
+    from recon.matcher import category_reconciliation
+    with main.get_db() as conn:
+        cats, _ = category_reconciliation(conn, 4, "2026-06")
+    lanes = {(x["category"], x["bank"]): x for x in cats}
+    assert lanes[("TRANSFER", "KTB")]["status"] == "matched"
+    assert lanes[("TRANSFER", "KTB")]["ext_amount"] == 4000.0   # leftover moved to ANY
+    any_lane = lanes[("TRANSFER", "ANY")]
+    assert any_lane["pos_amount"] == 7000.0 and any_lane["ext_amount"] == 7000.0
+    assert any_lane["status"] == "matched"
+
+
+# ── phase 3: advanced setup (master view + method-config CRUD) ────────────────
+
+def test_setup_master_joins_method_and_volume(client):
+    r = client.get("/api/setup/master", params={"period_month": "2026-06"})
+    assert r.status_code == 200
+    m = r.json()
+    rows = {x["payment_code_norm"]: x for x in m["rows"]}
+    # requirement routing + lane method joined in
+    knn = rows["KNNQR"]
+    assert knn["category"] == "QR" and knn["bank"] == "KBANK"
+    assert knn["method"]["method"] == "itemized" and knn["method"]["method_label"]
+    assert knn["pos_amount"] == 100000          # POS volume from pos_payment_month
+    cash = rows["Cash"]
+    assert cash["method"]["method"] == "cash_3way"
+    assert cash["method"]["tol_abs_day"] == 10  # owner's few-baht tolerance
+    grab = rows["GB"]
+    assert grab["method"]["fee_vat_expected"] == 1
+    # sections present
+    assert m["method_configs"] and "globals" in m
+    assert m["globals"]["TOL_ABS_DAY"] == 50.0
+
+
+def test_setup_master_marks_unknown_bank_rows(client):
+    with main.get_db() as conn:
+        conn.execute("UPDATE recon_payment_map SET bank='UNKNOWN' WHERE payment_code_norm='KNNQR'")
+        conn.commit()
+    m = client.get("/api/setup/master", params={"period_month": "2026-06"}).json()
+    rows = {x["payment_code_norm"]: x for x in m["rows"]}
+    assert rows["KNNQR"]["status"] == "needs_bank"
+    assert rows["Entertain"]["status"] == "off"          # reconcile=0
+    assert rows["Bank Transfer"]["status"] == "dormant"  # no POS volume in fixture
+
+
+def test_method_config_crud_and_validation(client):
+    # bad enums / out-of-range params are rejected
+    bad = {"category": "QR", "bank": "KBANK", "method": "magic"}
+    assert client.post("/api/method-config", json=bad).status_code == 400
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "direct", "lag_days": 99}).status_code == 400
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "direct", "merge_days": 0}).status_code == 400
+    # duplicate lane → 409
+    assert client.post("/api/method-config", json={
+        "category": "QR", "bank": "KBANK", "method": "itemized"}).status_code == 409
+    # patch an existing lane + audit
+    cfgs = client.get("/api/method-config").json()
+    grab = next(c for c in cfgs if c["category"] == "GRAB")
+    r = client.patch(f"/api/method-config/{grab['id']}", json={
+        "category": "GRAB", "bank": "*", "doc1": "grab_report", "doc2": "bank_stmt_KBANK",
+        "method": "two_stage", "lag_days": 3, "merge_days": 2, "fee_vat_expected": 1})
+    assert r.status_code == 200
+    with main.get_db() as conn:
+        assert tuple(conn.execute("SELECT lag_days, merge_days FROM recon_method_config WHERE id=?",
+                                  (grab["id"],)).fetchone()) == (3, 2)
+        assert conn.execute("SELECT COUNT(*) FROM recon_audit_log "
+                            "WHERE entity='method_config' AND entity_id=?",
+                            (grab["id"],)).fetchone()[0] >= 1
+
+
+def test_method_config_requires_manager_token(client):
+    """Method parameters are manager-gated when OSHINEI_MANAGER_TOKEN is set;
+    ordinary payment-map edits stay on the staff write token."""
+    cfgs = client.get("/api/method-config").json()
+    cash = next(c for c in cfgs if c["category"] == "CASH")
+    body = {"category": "CASH", "bank": "*", "doc1": "deposit_slip", "doc2": "bank_stmt_*",
+            "method": "cash_3way", "tol_abs_day": 20}
+    os.environ["OSHINEI_MANAGER_TOKEN"] = "m-secret"
+    try:
+        assert client.patch(f"/api/method-config/{cash['id']}", json=body).status_code == 403
+        assert client.patch(f"/api/method-config/{cash['id']}", json=body,
+                            headers={"X-Manager-Token": "m-secret"}).status_code == 200
+        assert client.post("/api/setup/seed-requirement").status_code == 403
+        # staff mapping edit still open (write token unset locally)
+        pm = client.get("/api/payment-map").json()
+        knn = next(x for x in pm if x["payment_code_norm"] == "KNNQR")
+        assert client.patch(f"/api/payment-map/{knn['id']}",
+                            json={"category": "QR", "bank": "KBANK"}).status_code == 200
+    finally:
+        os.environ.pop("OSHINEI_MANAGER_TOKEN", None)
