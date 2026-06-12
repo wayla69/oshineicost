@@ -762,9 +762,11 @@ def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None)
 # like a discrepancy. We split per acquirer (CREDIT·KTB / CREDIT·KBANK) because each
 # acquirer settles into its own bank account.
 
-# Acquirer → the bank account its settlement nets into. KTB/KBANK have statements;
-# KTC has no own bank account here (its bank leg, if any, rides a KTB/KBANK transfer).
-_ACQ_BANK = {"KTB": "KTB", "KBANK": "KBANK"}
+# Acquirer → the bank account its settlement nets into. KTB/KBANK acquire to their
+# own accounts; KTC (บัตรกรุงไทย / Krungthai Card) has no bank of its own — its net
+# is remitted into the branch's KTB account (the RTxInv settles to acct 'xxx KTB
+# xxx'), so its stage-1 net↔bank leg matches against the KTB statement's CC_SETTLE.
+_ACQ_BANK = {"KTB": "KTB", "KBANK": "KBANK", "KTC": "KTB"}
 
 
 def _match_net_days_to_credits(net_by_day, credits, max_group=4, max_lag=7):

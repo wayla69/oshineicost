@@ -993,6 +993,31 @@ def test_credit_three_way_full_chain(client):
     assert len(res["bank_line_ids"]) == 1
 
 
+def test_credit_ktc_net_matches_ktb_statement(client):
+    """KTC (บัตรกรุงไทย) has no bank of its own — its settlement net is remitted into
+    the branch's KTB account, so the stage-1 net↔bank leg must match the KTB
+    statement's CC_SETTLE credit (regression for _ACQ_BANK['KTC']='KTB')."""
+    from recon.matcher import credit_three_way
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTC','f','2026-06',0,'confirmed')").lastrowid
+    # KTC settlement net 9441 (gross 9669 − fee 213 − vat 15)
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,refund_amount,mdr_fee,vat_amount,net_amount)"
+              " VALUES(?,4,'2026-06-05','KTC',9669,0,213,15,9441)", (up,))
+    # …lands on the KTB account next day (KTC money rides the KTB statement)
+    bu = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'ktb','b','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,'2026-06-06','CC_SETTLE',9441)", (bu,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        res = credit_three_way(conn, 4, "2026-06")
+    ktc = next(r for r in res["rows"] if r["acquirer"] == "KTC")
+    assert ktc["bank"] == "KTB"                                   # routed to KTB account
+    assert abs(ktc["bank_credit"] - 9441) < 0.01 and ktc["bank_leg"] == "matched"
+
+
 def test_bank_statement_coverage_buckets(client):
     """Bank-first coverage: a matched QR line, an unmatched stray TRANSFER, and an
     ignored internal transfer land in the right buckets; 'excluded' is out of the
