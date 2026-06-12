@@ -275,6 +275,8 @@ _METHOD_DEFAULTS = [
     # (category, bank, doc1, doc2, method, tol_abs, tol_abs_day, lag, merge, fee_vat, notes)
     ("CASH", "*", "deposit_slip", "bank_stmt_*", "cash_3way", None, 10.0, 3, 4, 0,
      "เงินสดของวัน D ฝากวันถัดไปก่อน 13:00 — เทียบ POS ↔ สลิปนำฝาก ↔ สเตทเมนต์ (ต่างได้หลักบาท)"),
+    # itemized lanes: lag_days/merge_days seeded for display in Setup UI only —
+    # the itemized matcher uses daily exact-match, not lag/merge grouping.
     ("QR", "KBANK", None, "bank_stmt_KBANK", "itemized", None, None, 1, 1, 0,
      "QR พร้อมเพย์ (K-SHOP/KNNQR/QR code K-bank) — เงินเข้าวันเดียวกันหรือวันถัดไป แยกรายการตาม POS"),
     ("TRANSFER", "KTB", None, "bank_stmt_KTB", "itemized", None, None, 1, 1, 0,
@@ -342,15 +344,14 @@ def _seed_requirement_codes(conn) -> dict:
             "SELECT id, category, bank, updated_by FROM recon_payment_map "
             "WHERE payment_code_norm=?", (code,)).fetchone()
         if old is None:
-            conn.execute("""
+            cur = conn.execute("""
                 INSERT INTO recon_payment_map (payment_code_norm, category, bank, reconcile, updated_by)
                 VALUES (?,?,?,1,'seed-req') ON CONFLICT(payment_code_norm) DO NOTHING
             """, (code, category, bank))
-            inserted += 1
+            inserted += cur.rowcount
             continue
-        # Upgrade only seed-authored rows whose bank is still unresolved.
+        # Upgrade seed-authored rows (any bank) whose mapping differs from the canonical value.
         if (old["updated_by"] in _SEED_AUTHORS
-                and old["bank"] in ("UNKNOWN", "PROMPTPAY")
                 and (old["category"], old["bank"]) != (category, bank)):
             conn.execute(
                 "UPDATE recon_payment_map SET category=?, bank=?, "
@@ -654,15 +655,11 @@ def _validate_method_config(body: MethodConfig):
         raise HTTPException(400, f"doc1 must be one of {sorted(_DOC1S)}")
     if body.doc2 and body.doc2 not in _DOC2S:
         raise HTTPException(400, f"doc2 must be one of {sorted(_DOC2S)}")
-    # Clamp parameters server-side — a typo here must not detonate the matcher.
-    if body.tol_abs is not None and not (0 <= body.tol_abs <= 100000):
-        raise HTTPException(400, "tol_abs must be between 0 and 100000")
-    if body.tol_abs_day is not None and not (0 <= body.tol_abs_day <= 100000):
-        raise HTTPException(400, "tol_abs_day must be between 0 and 100000")
-    if body.lag_days is not None and not (0 <= body.lag_days <= 14):
-        raise HTTPException(400, "lag_days must be between 0 and 14")
-    if body.merge_days is not None and not (1 <= body.merge_days <= 7):
-        raise HTTPException(400, "merge_days must be between 1 and 7")
+    # Clamp parameters server-side — a typo must not detonate the matcher.
+    if body.tol_abs     is not None: body.tol_abs     = max(0.0, min(100_000.0, body.tol_abs))
+    if body.tol_abs_day is not None: body.tol_abs_day = max(0.0, min(100_000.0, body.tol_abs_day))
+    if body.lag_days    is not None: body.lag_days    = max(0,   min(14,        body.lag_days))
+    if body.merge_days  is not None: body.merge_days  = max(1,   min(7,         body.merge_days))
 
 
 @app.get("/api/method-config")

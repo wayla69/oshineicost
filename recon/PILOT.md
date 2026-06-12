@@ -82,15 +82,22 @@ For **one branch + one month**, a human must confirm:
 
 ---
 
+## What's new since the initial pilot spec (June 2026 overhaul)
+
+- **Advanced Setup page** (`/app/setup.html`) — edit tolerance, lag, merge-days per lane; payment-code map for all 12 POS codes in one table. Method-config mutations require the manager token.
+- **Two-stage visibility** — Credit card, Grab, and Line Man cards each show ขั้น 1 (summary↔POS gross) and ขั้น 2 (net↔bank) separately so you can see exactly which leg is off.
+- **Coupon channel** — KTC / BAY point coupons now reconcile automatically (POS ↔ issuer settlement ↔ bank); status shows matched / waiting_doc / diff instead of "no source" when point data exists.
+- **Cash 3-way** — per-day slip column with ±฿10 tolerance; type the slip amount directly in the row, attach a photo with 📷.
+- **Internal-transfer exclusion** — large round bank credits (฿100k+) are flagged as likely intercompany sweeps; one click excludes them from the TRANSFER lane.
+- **TRANSFER/ANY** — "Bank Transfer" codes that can land in either KTB or KBANK are matched against both statements; both bank chips appear in the channel card.
+
 ## Known limitations (expected, not bugs)
 - **Timing:** credit-card settles T+1/T+2 and delivery payouts lag, so a sale's day
   and the statement's day can differ by 1–2 days — judge with the missing/pending split.
 - **Fees/VAT:** for Grab / Line Man / Credit Card, enter fee + VAT per line (Daily →
   Fee & VAT panel) so net ties to what hit the bank.
-- **Cash** is reconciled as one lane (POS cash has no bank); **Coupon** has no external
-  source yet (shows "no source").
-- POS data currently closes through **5 June** (1–2 day lag); later days fill in on the
-  next sync.
+- **Coupon progress** — coupon points are discounts, not bank money-in (reimbursement rides CREDIT/TRANSFER lanes), so they are excluded from the progress gauge in all statuses to avoid double-counting.
+- POS data syncs daily (1–2 day lag); later days fill in on the next sync.
 
 ## Report an issue
 When something looks wrong, note: **branch, month, source, what you expected vs what

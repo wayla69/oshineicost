@@ -1501,6 +1501,39 @@ def _seed_point_pos(db, series_name, series_id, amount):
     c.commit(); c.close()
 
 
+def test_coupon_category_reconciliation_engine_status(client):
+    """category_reconciliation (engine layer) must return matched/waiting_doc/mismatch
+    for COUPON when point data exists — not always no_source.  This is Blueprint 2.1:
+    the engine snapshot persisted at close and in Excel exports must reflect reality."""
+    import sqlite3 as _sl
+    from recon.matcher import category_reconciliation
+    db = main._DB_PATH
+    _seed_point_pos(db, "แลกคะแนน KTC 699 คะแนนลด 80 บาท", 1, 160)
+    c = _sl.connect(db); c.row_factory = _sl.Row
+    c.execute("INSERT OR IGNORE INTO recon_acquirer_mid(branch_id,acquirer,merchant_id,terminal_id,active)"
+              " VALUES(4,'KTCPOINT','662','',1)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KTC','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,"
+              "mdr_fee,vat_amount,net_amount,merchant_id) VALUES(?,4,'2026-06-03','KTC',160,0,0,160,'662')", (up,))
+    c.commit()
+    rows, _ = category_reconciliation(c, 4, "2026-06")
+    c.close()
+    coupon = next((r for r in rows if r["category"] == "COUPON"), None)
+    assert coupon is not None, "COUPON row missing from category_reconciliation"
+    assert coupon["status"] == "matched", f"expected matched, got {coupon['status']}"
+
+    # waiting_doc: POS points present but no settlement doc
+    db2 = main._DB_PATH
+    c2 = _sl.connect(db2); c2.row_factory = _sl.Row
+    _seed_point_pos(db2, "แต้มกรุงศรี 1000 ลด 100", 7, 500)
+    rows2, _ = category_reconciliation(c2, 4, "2026-06")
+    c2.close()
+    coupon2 = next((r for r in rows2 if r["category"] == "COUPON"), None)
+    assert coupon2 is not None
+    assert coupon2["status"] == "waiting_doc", f"expected waiting_doc, got {coupon2['status']}"
+
+
 def test_coupon_channel_reconciles_ktc_points(client):
     """COUPON channel leaves no_source when the issuer's point summary is in:
     POS KTC-point coupons ↔ KTC-Point settlement rows (split by MID) → ok."""
@@ -1682,13 +1715,22 @@ def test_setup_master_marks_unknown_bank_rows(client):
 
 
 def test_method_config_crud_and_validation(client):
-    # bad enums / out-of-range params are rejected
+    # bad enums are still rejected (no sensible clamp for strings)
     bad = {"category": "QR", "bank": "KBANK", "method": "magic"}
     assert client.post("/api/method-config", json=bad).status_code == 400
-    assert client.post("/api/method-config", json={
-        "category": "QR", "bank": "KBANK", "method": "direct", "lag_days": 99}).status_code == 400
-    assert client.post("/api/method-config", json={
-        "category": "QR", "bank": "KBANK", "method": "direct", "merge_days": 0}).status_code == 400
+    # out-of-range numeric params are clamped server-side (Blueprint 1.4), not rejected
+    r_lag = client.post("/api/method-config", json={
+        "category": "QR", "bank": "TTB", "method": "direct", "lag_days": 99})
+    assert r_lag.status_code in (200, 201)
+    all_cfgs = client.get("/api/method-config").json()
+    ttb = next(c for c in all_cfgs if c["category"] == "QR" and c["bank"] == "TTB")
+    assert ttb["lag_days"] == 14                    # clamped to max
+    r_merge = client.post("/api/method-config", json={
+        "category": "QR", "bank": "SCB", "method": "direct", "merge_days": 0})
+    assert r_merge.status_code in (200, 201)
+    all_cfgs2 = client.get("/api/method-config").json()
+    scb = next(c for c in all_cfgs2 if c["category"] == "QR" and c["bank"] == "SCB")
+    assert scb["merge_days"] == 1                   # clamped to min
     # duplicate lane → 409
     assert client.post("/api/method-config", json={
         "category": "QR", "bank": "KBANK", "method": "itemized"}).status_code == 409

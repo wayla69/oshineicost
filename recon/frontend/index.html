@@ -532,17 +532,20 @@ function toggleDays(i){
   const codes=(ch.codes||[]).map((c,k)=>
     `<button class="chip c-mut mono" title="ดูยอดรายวันของ ${esc(c.code)} (${esc(c.bank)})"
        onclick="event.stopPropagation();toggleCodeDaily(${i},'${esc(c.code)}')">${esc(c.code)} ${fmt(c.amount)} ▾</button>`).join(' ');
-  // บัตรเครดิต: วิธี 2 ขั้นตามตารางเจ้าของ — ขั้น 1: สรุปยอด↔สเตทเมนต์ · ขั้น 2: gross↔POS
+  // B7: TRANSFER/ANY — show chips for every bank the lane touches so staff see both statements at a glance
+  const xferBanks=ch.key==='TRANSFER'?[...new Set(ch.days.flatMap(d=>d.banks||[]))].sort():[];
+  const xferBankRow=xferBanks.length>1?`<span class="lbl">ตรวจกับ:</span> ${xferBanks.map(b=>`<span class="chip c-mut">${esc(b)}</span>`).join(' ')}`:'';
+  // บัตรเครดิต: ขั้น 1 = สรุปยอดบัตร↔POS (gross) · ขั้น 2 = ยอดสุทธิ↔เงินเข้า (สอดคล้อง GRAB/LM)
   const c3=(ch.key==='CREDIT'&&ch.three_way)?`<div class="c3">${ch.three_way
     .filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0).map(r=>`
     <div class="card"><b>บัตร ${esc(r.acquirer)}</b>
       <div class="row" style="justify-content:space-between">ยอดรูด POS <span class="mono">${fmt(r.pos_gross)}</span></div>
-      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 2</span> สรุปยอดบัตร ↔ POS</span> <span class="mono">${fmt(r.settle_gross)}</span> ${_legChip(r.pos_leg)}</div>
+      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 1</span> สรุปยอดบัตร ↔ POS</span> <span class="mono">${fmt(r.settle_gross)}</span> ${_legChip(r.pos_leg)}</div>
       <div class="row" style="justify-content:space-between">− ค่าธรรมเนียม+VAT <span class="mono">${fmt(r.settle_fee)}</span></div>
-      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 1</span> ยอดสุทธิ ↔ เงินเข้า</span> <span class="mono">${fmt(r.bank_credit)}</span> ${_legChip(r.bank_leg)}</div>
+      <div class="row" style="justify-content:space-between"><span><span class="lbl">ขั้น 2</span> ยอดสุทธิ ↔ เงินเข้า</span> <span class="mono">${fmt(r.bank_credit)}</span> ${_legChip(r.bank_leg)}</div>
     </div>`).join('')}</div>`:'';
   const pt=payoutTraceHtml(ch);
-  const cash3=cashThreeWayHtml(ch);
+  const cash3=cashThreeWayHtml(ch, i);
   const cpCards=couponCardsHtml(ch);
   const feeBtn=FEE_SOURCE[ch.key]&&!DATA.closed?
     `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
@@ -552,7 +555,7 @@ function toggleDays(i){
   const cpBtn=ch.key==='COUPON'?
     `<a class="btn btn-sm" href="/app/classic.html#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง ↗</a>`:'';
   el.innerHTML=`
-  ${codes||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
+  ${codes||xferBankRow||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${xferBankRow} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
   <div id="codedaily-${i}" style="padding:0 14px"></div>
   ${c3}${pt}${cash3}${cpCards}
   <div id="fees-${i}"></div>
@@ -591,7 +594,7 @@ function payoutTraceHtml(ch){
 }
 
 /* ── เงินสด 3 ทาง: POS ↔ สลิปนำฝาก (พิมพ์ยอด) ↔ เงินเข้าธนาคาร ── */
-function cashThreeWayHtml(ch){
+function cashThreeWayHtml(ch, chIdx){
   if(ch.key!=='CASH'||!(ch.cash_three_way||[]).length)return '';
   const SLIP_CHIP={matched:r=>`<span class="chip c-ok">✓${r.slip_variance?` ต่าง ${r.slip_variance>0?'+':''}${fmt(r.slip_variance)}`:''}</span>`,
     variance:r=>`<span class="chip c-err">ต่าง ${r.slip_variance>0?'+':''}${fmt(r.slip_variance)}</span>`,
@@ -603,20 +606,22 @@ function cashThreeWayHtml(ch){
   return `<div style="padding:6px 18px 10px">
     <div class="lbl" style="margin-bottom:4px">3 ทาง: POS เงินสด ↔ สลิปนำฝาก (พิมพ์ยอดจากสลิป) ↔ เงินเข้าธนาคาร — ฝากวันถัดไปก่อน 13:00</div>
     <div class="card" style="padding:0;box-shadow:none;max-height:300px;overflow:auto"><table>
-      <tr><th>วัน</th><th>POS เงินสด</th><th>สลิปนำฝาก</th><th>เงินเข้า</th><th>ฝากเมื่อ</th><th>สถานะเงินเข้า</th></tr>
+      <tr><th>วัน</th><th>POS เงินสด</th><th>สลิปนำฝาก</th><th>เงินเข้า</th><th>ฝากเมื่อ</th><th>สถานะเงินเข้า</th><th>📷</th></tr>
       ${ch.cash_three_way.map(r=>{
         const slipCell=DATA.closed
           ?`<span class="mono">${r.slip_amount!=null?fmt(r.slip_amount):'—'}</span>`
           :`<input class="fee-in" type="number" step="0.01" min="0" value="${r.slip_amount!=null?r.slip_amount:''}"
               placeholder="ยอดสลิป" onchange="saveSlip('${r.day}',this)">`;
+        const photoBtn=`<label class="btn btn-sm" title="แนบรูปสลิปนำฝาก" style="cursor:pointer;padding:2px 6px">📷<input type="file" accept="image/*,.pdf" style="display:none" onchange="attachSlip('${r.day}',this)"></label>`;
         return `<tr><td><b>${+r.day.slice(8)}</b></td>
           <td class="mono">${fmt(r.pos_cash)}</td>
           <td>${slipCell} ${(SLIP_CHIP[r.slip_leg]||(()=>''))(r)}</td>
           <td class="mono">${r.bank_deposit!=null?fmt(r.bank_deposit):'—'}</td>
           <td>${r.deposit_date?r.deposit_date.slice(8)+(r.deposit_combined?' <span class="lbl">(ฝากรวมวัน)</span>':''):'—'}</td>
-          <td>${(BANK_CHIP[r.bank_leg]||(()=>''))(r)}</td></tr>`;}).join('')}
+          <td>${(BANK_CHIP[r.bank_leg]||(()=>''))(r)}</td>
+          <td>${photoBtn}</td></tr>`;}).join('')}
     </table></div>
-    <div class="lbl" style="margin-top:3px">สลิปต่างจาก POS ได้ไม่เกิน ±฿10 — พิมพ์แล้วบันทึกอัตโนมัติ · ไม่ใส่สลิปไม่บล็อกการปิดเดือน · แนบรูปสลิปได้ที่ปุ่มหลักฐานในวัน</div>
+    <div class="lbl" style="margin-top:3px">สลิปต่างจาก POS ได้ไม่เกิน ±฿10 — พิมพ์แล้วบันทึกอัตโนมัติ · ไม่ใส่สลิปไม่บล็อกการปิดเดือน</div>
   </div>`;
 }
 async function saveSlip(day,input){
@@ -626,6 +631,15 @@ async function saveSlip(day,input){
   try{await api('/api/deposit-slips',{method:'POST',body:{branch_id:DATA.branch_id,sale_day:day,amount:amt}});
       toast('บันทึกสลิปแล้ว');route();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
+}
+async function attachSlip(day,input){
+  const file=input.files[0];
+  if(!file)return;
+  const fd=new FormData();
+  fd.append('branch_id',DATA.branch_id);fd.append('day',day);fd.append('file',file);
+  try{await api('/api/attachments',{method:'POST',body:fd});toast('แนบรูปสลิปแล้ว');}
+  catch(e){toast('แนบรูปไม่สำเร็จ: '+e.message);hint403(e);}
+  input.value='';
 }
 
 /* ── คูปอง: การ์ดแต้ม KTC/BAY (วิธี issuer_points ตามตารางเจ้าของ) ── */
