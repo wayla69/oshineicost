@@ -878,6 +878,31 @@ def test_cash_daily_matches_next_day_deposit(client):
     assert abs(cash_lane["variance"]) < 1.0
 
 
+def test_cash_month_boundary_deposit_counted_monthly(client):
+    """Month-boundary fix: last-day cash banked on the 1st of next month (T+1) is
+    counted in THIS month's CASH total — matching the daily 3-way view — instead
+    of being silently dropped (which made every branch under-report cash)."""
+    from recon.matcher import category_reconciliation
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "NONE"})
+    c = sqlite3.connect(db); c.row_factory = sqlite3.Row
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-30','Cash',50000,5)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # 30-June cash is physically banked on 1-July (next month, next-day rule)
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-07-01','CASH_DEP',50000,'unmatched')", (up,))
+    c.commit(); c.close()
+    with main.get_db() as conn:
+        rows, _ = category_reconciliation(conn, 4, "2026-06")
+    cash = next((r for r in rows if r["category"] == "CASH"), None)
+    assert cash is not None and abs(cash["ext_amount"] - 50000) < 1, \
+        f"July-1 deposit not counted in June CASH ext: {cash and cash['ext_amount']}"
+
+
 def test_cash_lag_skips_deposit_outside_period(client):
     """CASH_DEP on the 1st of the next month (for last-day sales) is out of scope
     for the current period and must not appear as an ext_only bucket."""

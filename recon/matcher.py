@@ -167,12 +167,14 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
     # spurious QR/transfer ext_only disappears.
     cash_ids = cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"]
     prev_ids = prev_month_consumed_ids(conn, branch_id, period_month)
+    seen_ids = set()
     for r in conn.execute("""
         SELECT l.id, l.credit, l.channel, u.provider
         FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id = l.upload_id
         WHERE l.branch_id=? AND l.credit>0 AND l.match_status!='excluded'
           AND strftime('%Y-%m', l.txn_date)=?
     """, (branch_id, period_month)):
+        seen_ids.add(r["id"])
         amt = float(r["credit"] or 0)
         if r["id"] in prev_ids:      # last month's rollover cash — not this month's revenue
             continue
@@ -184,6 +186,21 @@ def external_buckets(conn: sqlite3.Connection, branch_id: int, period_month: str
             continue
         bank = "NONE" if cat == "CASH" else _provider_bank(r["provider"])
         add((cat, bank), "recon_bank_lines", r["id"], amt, amt)
+
+    # Month-boundary fix: this month's last-day cash is banked next month (T+1), so
+    # its deposit carries a NEXT-month txn_date that the in-month query above never
+    # sees — yet the cash matcher already CLAIMED it for this month's sale days.
+    # Add those claimed-but-out-of-month deposits so the monthly CASH total matches
+    # the daily 3-way view (without this, every branch under-reports cash by ~the
+    # last day's deposit). No double-count: NEXT month skips them via prev_ids.
+    boundary_ids = [i for i in cash_ids if i not in seen_ids]
+    if boundary_ids:
+        ph = ",".join("?" * len(boundary_ids))
+        for r in conn.execute(
+            f"SELECT id, credit FROM recon_bank_lines "
+            f"WHERE id IN ({ph}) AND match_status!='excluded'", tuple(boundary_ids)):
+            amt = float(r["credit"] or 0)
+            add(("CASH", "NONE"), "recon_bank_lines", r["id"], amt, amt)
 
     # Credit-card settlement: gross vs net (after effective fee/VAT)
     pmids = _point_mids(conn, branch_id)
