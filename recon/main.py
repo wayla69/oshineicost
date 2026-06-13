@@ -2156,6 +2156,100 @@ def get_close_snapshot_file(snap_id: int):
         headers={"Content-Disposition": f"attachment; filename=\"{r['file_name']}\""})
 
 
+# ── Branch / staff error report ───────────────────────────────────────────────
+# Built from the acknowledged-variance markers (รับทราบ / recon_lane_adj accepts):
+# each is a recorded "this lane was off and here's why", with who + when. Aggregated
+# per branch (+month) it shows which branch mis-records most often + the baht at
+# stake — a fair, evidence-based input to staff evaluation.
+
+def _branch_error_report(conn, period_month: str | None = None) -> dict:
+    from collections import defaultdict
+    q = ("SELECT branch_id, period_month, category, note, created_by, created_at "
+         "FROM recon_lane_adj WHERE adj_type='accept'")
+    params: list = []
+    if period_month:
+        q += " AND period_month=?"
+        params.append(period_month)
+    accepts = conn.execute(q + " ORDER BY branch_id, period_month, category", params).fetchall()
+    bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
+
+    var_cache: dict = {}        # (branch, period) -> {channel_key: variance}
+    items = []
+    for a in accepts:
+        key = (a["branch_id"], a["period_month"])
+        if key not in var_cache:
+            try:
+                rm = reconcile_month(conn, a["branch_id"], a["period_month"])
+                var_cache[key] = {c["key"]: c["variance"] for c in rm["channels"]}
+            except Exception:
+                var_cache[key] = {}
+        items.append({
+            "branch_id":    a["branch_id"],
+            "branch_name":  bnames.get(a["branch_id"], str(a["branch_id"])),
+            "period_month": a["period_month"],
+            "category":     a["category"],
+            "variance":     round(var_cache[key].get(a["category"], 0.0), 2),
+            "reason":       a["note"] or "",
+            "by":           a["created_by"] or "",
+            "at":           a["created_at"] or "",
+        })
+
+    agg: dict = defaultdict(lambda: {"count": 0, "total_abs_variance": 0.0, "months": set()})
+    for it in items:
+        g = agg[(it["branch_id"], it["branch_name"])]
+        g["count"] += 1
+        g["total_abs_variance"] += abs(it["variance"])
+        g["months"].add(it["period_month"])
+    summary = sorted(
+        [{"branch_id": bid, "branch_name": bn, "count": v["count"],
+          "months": len(v["months"]), "total_abs_variance": round(v["total_abs_variance"], 2)}
+         for (bid, bn), v in agg.items()],
+        key=lambda x: -x["total_abs_variance"])
+    return {"period_month": period_month, "summary": summary, "items": items}
+
+
+@app.get("/api/reports/branch-errors")
+def branch_error_report(period_month: str | None = None):
+    if period_month:
+        _validate_period(period_month)
+    with get_db() as conn:
+        return _branch_error_report(conn, period_month)
+
+
+@app.get("/api/reports/branch-errors.xlsx")
+def branch_error_report_xlsx(period_month: str | None = None):
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+    if period_month:
+        _validate_period(period_month)
+    with get_db() as conn:
+        rep = _branch_error_report(conn, period_month)
+    wb = openpyxl.Workbook(); bold = Font(bold=True)
+    ws = wb.active; ws.title = "สรุปรายสาขา"
+    ws.append(["สาขา", "จำนวนครั้งที่รับทราบ", "จำนวนเดือน", "ยอดผลต่างรวม (abs)"])
+    for c in ws[1]:
+        c.font = bold
+    for s in rep["summary"]:
+        ws.append([s["branch_name"], s["count"], s["months"], s["total_abs_variance"]])
+    ws2 = wb.create_sheet("รายการ")
+    ws2.append(["สาขา", "เดือน", "ช่องทาง", "ผลต่าง", "เหตุผล", "รับทราบโดย", "เมื่อ"])
+    for c in ws2[1]:
+        c.font = bold
+    for it in rep["items"]:
+        ws2.append([it["branch_name"], it["period_month"], it["category"],
+                    it["variance"], it["reason"], it["by"], it["at"]])
+    for w in (ws, ws2):
+        for i, _h in enumerate(w[1], 1):
+            w.column_dimensions[chr(64 + i)].width = 22
+    buf = io.BytesIO(); wb.save(buf)
+    fname = f"branch_errors_{period_month or 'all'}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{fname}\""})
+
+
 # ── Discrepancies ─────────────────────────────────────────────────────────────
 
 @app.get("/api/sessions/{session_id}/discrepancies")

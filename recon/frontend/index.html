@@ -156,7 +156,9 @@ function drillTodo(key){
 }
 
 function route(){
-  const m=location.hash.slice(1).match(/^b\/(\d+)/);
+  const h=location.hash.slice(1);
+  if(h==='errors')return loadErrorReport();
+  const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
 window.addEventListener('hashchange',route);
@@ -173,6 +175,7 @@ function header(extra){
       style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
     <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)">🔑 รหัส</button>
+    <a href="#errors" style="font-size:13px" title="รายงานข้อผิดพลาดการบันทึก รายสาขา/เดือน — สำหรับประเมินพนักงาน">📊 รายงานข้อผิดพลาด</a>
     <a href="/app/help.html" style="font-size:13px" title="คู่มือการใช้งาน — ทุกเมนู ทุกเอกสาร ทุกช่องทาง + Q&A · พิมพ์ได้">📖 คู่มือ ↗</a>
     <a href="/app/setup.html" style="font-size:13px" title="ตารางจับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID">ตั้งค่าระบบ ↗</a>
     <a href="/app/classic.html" style="font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
@@ -213,6 +216,35 @@ async function loadOverview(){
     <td></td></tr>`;
   html+=`</table></div>
   <div class="muted" style="margin-top:8px">ตัวเลขในตาราง = ผลต่าง (เข้าจริง − POS) ของเดือน · คลิก<b>ช่องทาง</b>เพื่อเจาะดูทันที หรือคลิก<b>ชื่อสาขา</b>เพื่อตรวจทั้งสาขา</div>`;
+  $('app').innerHTML=html;
+}
+
+/* ── รายงานข้อผิดพลาดการบันทึก รายสาขา (สำหรับประเมินพนักงาน) ── */
+async function loadErrorReport(){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let r;try{r=await api('/api/reports/branch-errors');}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px">📊 รายงานข้อผิดพลาดการบันทึก — รายสาขา</h2>
+    <a class="btn btn-sm" style="margin-left:auto" href="/api/reports/branch-errors.xlsx">⬇ ดาวน์โหลด Excel</a></div>
+  <div class="muted" style="margin-bottom:10px">นับจากรายการ <b>"รับทราบผลต่าง"</b> ที่บันทึกไว้ (มีเหตุผล + ผู้บันทึก) — ใช้ดูว่าสาขาไหนกระทบยอดไม่ตรงบ่อย เพื่อประเมิน/โค้ชพนักงาน · ยอดผลต่าง = มูลค่าที่ยอมรับไว้</div>`;
+  if(!r.summary.length){ $('app').innerHTML=html+'<div class="card">ยังไม่มีรายการ "รับทราบผลต่าง" — รายงานจะขึ้นเมื่อมีการกดรับทราบในการกระทบยอด</div>'; return; }
+  html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>จำนวนเดือน</th><th>ยอดผลต่างรวม</th></tr>
+    ${r.summary.map(s=>`<tr>
+      <td><b>${esc(s.branch_name)}</b></td>
+      <td class="mono">${s.count}</td>
+      <td class="mono">${s.months}</td>
+      <td class="mono" style="color:var(--err);font-weight:600">${fmt(s.total_abs_variance)}</td></tr>`).join('')}
+  </table></div>
+  <h3 style="font-size:14px;margin:14px 0 6px">รายการทั้งหมด (${r.items.length})</h3>
+  <div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>เดือน</th><th>ช่องทาง</th><th>ผลต่าง</th><th style="text-align:left">เหตุผล</th><th>โดย</th><th>เมื่อ</th></tr>
+    ${r.items.map(it=>`<tr>
+      <td>${esc(it.branch_name)}</td><td class="mono">${esc(it.period_month)}</td><td>${esc(it.category)}</td>
+      <td class="mono">${fmt(it.variance)}</td><td style="text-align:left">${esc(it.reason)}</td>
+      <td>${esc(it.by)}</td><td class="lbl">${esc((it.at||'').slice(0,16))}</td></tr>`).join('')}
+  </table></div>`;
   $('app').innerHTML=html;
 }
 

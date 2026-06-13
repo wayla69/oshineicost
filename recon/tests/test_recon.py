@@ -295,6 +295,20 @@ def test_aud6_audit_log_is_append_only(client):
     c.close()
 
 
+def test_branch_error_report(client):
+    """รายงานข้อผิดพลาดรายสาขา: built from รับทราบ accepts, with an xlsx export."""
+    client.post("/api/lanes/adj", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "QR", "bank": "ALL",
+        "adj_type": "accept", "note": "พนักงานบันทึกผิดช่อง ตรวจแล้ว", "created_by": "mgr"})
+    rep = client.get("/api/reports/branch-errors").json()
+    assert any(s["branch_id"] == 4 and s["count"] >= 1 for s in rep["summary"])
+    assert any(it["category"] == "QR" and "พนักงาน" in it["reason"] and it["by"] == "mgr"
+               for it in rep["items"])
+    assert client.get("/api/reports/branch-errors?period_month=2026-06").json()["summary"]
+    x = client.get("/api/reports/branch-errors.xlsx")
+    assert x.status_code == 200 and x.content[:2] == b"PK"
+
+
 def test_aud5_close_snapshot_frozen_on_approve(client, monkeypatch):
     """AUD-5: approving a month freezes the working-paper export to a hashed file
     that can be downloaded later (immutable record of what was signed)."""
