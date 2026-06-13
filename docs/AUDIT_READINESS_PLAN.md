@@ -16,8 +16,10 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
 - ☑ Fail-closed signing secret (no dev key when `OSHINEI_AUTH=1`).
 - ☑ **Password policy: ≥ 10 chars + not the shared default**, enforced on create /
   admin-reset / self-service change (`auth.check_password_policy`, this pass).
+- ☑ Persistent login-event log (success / fail / logout / password change) →
+  recon_audit_log (see AUD-6).
 - ☐ Operational: set `OSHINEI_AUTH=1` permanently in Fly secrets; give each
-  person their own account; persistent login-event log (success/fail) — deferred.
+  person their own account.
 
 ### AUD-2 ◐ Backup + restore evidence
 - ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;
@@ -35,15 +37,17 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
 - Preparer ≠ approver enforced on session approve (`created_by` ≠ `approved_by`),
   with a test. Has teeth because the session captures `created_by`.
 
-### AUD-5 ☐ Immutable close snapshot
-- On close, auto-generate the working-paper XLSX + archive it (volume + a
-  `recon_close_snapshot` row with hash). Deferred — next pass.
+### AUD-5 ☑ Immutable close snapshot
+- On approve/close the working-paper XLSX is frozen to the volume + a
+  `recon_close_snapshot` row (SHA-256). List/download endpoints added. Best-effort
+  so a snapshot hiccup never blocks the close. Tested + deployed.
 
 ### AUD-6 ◐ Audit log integrity
 - ☑ `recon_audit_log` is **append-only** (BEFORE UPDATE/DELETE triggers RAISE
   ABORT), with a test.
+- ☑ Persistent login-event logging — login / login_fail / logout / password_change
+  written to recon_audit_log (`backend/main.py _log_auth_event`), tested.
 - ☐ Operational: weekly off-box export (rides AUD-2). Optional: hash-chain.
-- ☐ Persistent login-event logging (with AUD-1).
 
 ## Phase 3 — Medium
 
@@ -76,6 +80,8 @@ AUD-1 password policy · AUD-4 SoD · AUD-6 append-only audit log · AUD-7 toler
 disclosure · AUD-8 accept-reason + listing — plus AUD-2 backup script & AUD-9 SOPs.
 
 ## What's left
-- Code: AUD-5 close snapshot; persistent login-event logging (AUD-1/AUD-6).
+- **Code: none — all AUD code items are now done** (AUD-1,4,5,6,7,8 shipped +
+  AUD-5 close snapshot + login-event logging in this pass). Optional code extras:
+  audit-log hash-chain (AUD-6), close-snapshot UI button.
 - Operational (owner): turn AUD-2 schedule on + one restore test; AUD-3 retention;
   set `OSHINEI_AUTH=1` in Fly; quarterly access review (AUD-10); monitoring (AUD-11).
