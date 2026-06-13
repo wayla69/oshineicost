@@ -71,6 +71,7 @@ from .parsers.pdf_formats import (
 _DB_PATH    = Path(os.getenv("OSHINEI_DB", "/data/oshinei.db"))
 _SCHEMA     = Path(__file__).parent / "schema.sql"
 _ATTACH_DIR = Path(os.getenv("OSHINEI_ATTACH_DIR", str(_DB_PATH.parent / "attachments")))
+_SNAPSHOT_DIR = Path(os.getenv("OSHINEI_SNAPSHOT_DIR", str(_DB_PATH.parent / "snapshots")))
 
 app = FastAPI(title="Oshinei Revenue Reconciliation", version="1.0.0")
 # The frontend is served same-origin (/app on this service), so it needs no CORS
@@ -1767,8 +1768,20 @@ def update_session_status(
         if old_status != status:
             _audit(conn, "session", session_id, "update", approved_by or "staff",
                    [{"field": "status", "old": old_status, "new": status}])
+        # AUD-5: freeze the working paper at each sign-off transition. Best-effort —
+        # the export can be regenerated, so a snapshot hiccup must not block close.
+        snap = None
+        if status in ("approved", "closed") and old_status != status:
+            try:
+                full = conn.execute(
+                    "SELECT s.*, b.name AS branch_name FROM recon_sessions s "
+                    "JOIN branches b ON b.branch_id=s.branch_id WHERE s.session_id=?",
+                    (session_id,)).fetchone()
+                snap = _write_close_snapshot(conn, full, status, approved_by)
+            except Exception:
+                snap = None
         conn.commit()
-    return {"session_id": session_id, "status": status}
+    return {"session_id": session_id, "status": status, "snapshot": snap}
 
 
 # ── Session summary + category reconciliation ─────────────────────────────────
@@ -2092,6 +2105,55 @@ def export_session(session_id: int):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition":
                  f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(fname)}"})
+
+
+# ── Immutable close snapshot (AUD-5) ──────────────────────────────────────────
+
+def _write_close_snapshot(conn, session, status: str, by: str) -> dict:
+    """Freeze the working-paper export at sign-off so 'what management signed'
+    survives later edits: the .xlsx bytes are written to the volume and a hashed
+    row recorded. `session` must carry branch_name (join). Returns the new row."""
+    data = _build_export(conn, session)
+    ts = _dt.now().strftime("%Y%m%d-%H%M%S")
+    pm = session["period_month"]
+    rel = f"{pm}/{session['branch_id']}_{pm}_{status}_{ts}.xlsx"
+    dest = _SNAPSHOT_DIR / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    digest = hashlib.sha256(data).hexdigest()
+    cur = conn.execute(
+        "INSERT INTO recon_close_snapshot"
+        "(session_id, branch_id, period_month, status, file_name, file_path, sha256, size_bytes, created_by) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
+        (session["session_id"], session["branch_id"], pm, status,
+         Path(rel).name, rel, digest, len(data), by or "staff"))
+    _audit(conn, "close_snapshot", cur.lastrowid, "create", by or "staff",
+           [{"field": "sha256", "old": None, "new": digest}])
+    return {"id": cur.lastrowid, "sha256": digest, "size_bytes": len(data)}
+
+
+@app.get("/api/sessions/{session_id}/snapshots")
+def list_close_snapshots(session_id: int):
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(
+            "SELECT id, status, file_name, sha256, size_bytes, created_by, created_at "
+            "FROM recon_close_snapshot WHERE session_id=? ORDER BY created_at DESC",
+            (session_id,))]
+
+
+@app.get("/api/snapshots/{snap_id}/file")
+def get_close_snapshot_file(snap_id: int):
+    with get_db() as conn:
+        r = conn.execute("SELECT * FROM recon_close_snapshot WHERE id=?", (snap_id,)).fetchone()
+    if not r:
+        raise HTTPException(404, "snapshot not found")
+    p = _SNAPSHOT_DIR / r["file_path"]
+    if not p.exists():
+        raise HTTPException(404, "snapshot file missing on disk")
+    return Response(
+        content=p.read_bytes(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{r['file_name']}\""})
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────

@@ -295,6 +295,25 @@ def test_aud6_audit_log_is_append_only(client):
     c.close()
 
 
+def test_aud5_close_snapshot_frozen_on_approve(client, monkeypatch):
+    """AUD-5: approving a month freezes the working-paper export to a hashed file
+    that can be downloaded later (immutable record of what was signed)."""
+    sid = client.post("/api/sessions",
+                      json={"branch_id": 4, "period_month": "2026-06", "created_by": "alice"}
+                      ).json()["session_id"]
+    monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr")
+    r = client.patch(f"/api/sessions/{sid}/status",
+                     data={"status": "approved", "approved_by": "bob"},
+                     headers={"X-Manager-Token": "mgr"})
+    assert r.status_code == 200 and r.json().get("snapshot")
+    snaps = client.get(f"/api/sessions/{sid}/snapshots").json()
+    assert len(snaps) == 1
+    s = snaps[0]
+    assert s["status"] == "approved" and len(s["sha256"]) == 64 and s["size_bytes"] > 0
+    f = client.get(f"/api/snapshots/{s['id']}/file")
+    assert f.status_code == 200 and f.content[:2] == b"PK"      # a real .xlsx
+
+
 def test_prev_month_rollover_deposit_not_this_months_diff(client):
     """A deposit on the 1st that the PREVIOUS month's cash matcher claims (T+1
     rollover of month-end cash) must not appear as this month's QR/transfer

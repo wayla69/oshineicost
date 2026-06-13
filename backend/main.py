@@ -736,6 +736,26 @@ def _client_ip(request: Request) -> str:
     return request.client.host if request.client else "?"
 
 
+def _log_auth_event(con, action: str, username: str, ip: str = "") -> None:
+    """AUD-1/AUD-6: best-effort login-event log into the shared, append-only
+    recon_audit_log. Never breaks auth if the table is briefly unavailable (it's
+    owned by the recon app's schema; create-if-missing so the dashboard can log
+    even before recon has run)."""
+    try:
+        con.execute(
+            "CREATE TABLE IF NOT EXISTS recon_audit_log ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT NOT NULL DEFAULT (datetime('now')), "
+            "entity TEXT NOT NULL, entity_id INTEGER NOT NULL, action TEXT NOT NULL, "
+            "field TEXT, old_val TEXT, new_val TEXT, by TEXT NOT NULL DEFAULT 'staff')")
+        con.execute(
+            "INSERT INTO recon_audit_log(entity, entity_id, action, field, new_val, by) "
+            "VALUES ('auth', 0, ?, 'ip', ?, ?)",
+            (action, ip or "", (username or "").strip()))
+        con.commit()
+    except Exception:
+        pass
+
+
 @app.post("/api/auth/login", include_in_schema=False)
 def auth_login(body: _LoginBody, request: Request, response: Response):
     ip = _client_ip(request)
@@ -744,10 +764,12 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
             detail="พยายามเข้าสู่ระบบบ่อยเกินไป — รอสักครู่แล้วลองใหม่.")
     with get_db() as con:
         row = _auth.authenticate(con, body.username, body.password)
-    if not row:
-        _auth.record_login_failure(ip, body.username)
-        raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
-    _auth.clear_login_failures(ip, body.username)
+        if not row:
+            _auth.record_login_failure(ip, body.username)
+            _log_auth_event(con, "login_fail", body.username, ip)
+            raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
+        _auth.clear_login_failures(ip, body.username)
+        _log_auth_event(con, "login", row["username"], ip)
     token = _auth.make_token(row["id"], row["username"], row["role"])
     _set_session_cookie(response, request, token)
     return {"username": row["username"], "role": row["role"],
@@ -773,11 +795,17 @@ def auth_change_own_password(body: _PwChangeBody, request: Request):
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=403, detail="รหัสผ่านปัจจุบันไม่ถูกต้อง.")
+    with get_db() as con:
+        _log_auth_event(con, "password_change", payload.get("u", ""), _client_ip(request))
     return {"ok": True}
 
 
 @app.post("/api/auth/logout", include_in_schema=False)
-def auth_logout(response: Response):
+def auth_logout(request: Request, response: Response):
+    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+    if payload:
+        with get_db() as con:
+            _log_auth_event(con, "logout", payload.get("u", ""), _client_ip(request))
     response.delete_cookie(_auth.SESSION_COOKIE, path="/")
     return {"ok": True}
 

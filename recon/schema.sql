@@ -345,6 +345,24 @@ CREATE TRIGGER IF NOT EXISTS recon_audit_log_no_delete
     BEFORE DELETE ON recon_audit_log
     BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
 
+-- ─── Immutable close snapshot (AUD-5) ─────────────────────────────────────────
+-- At sign-off (approve/close) the working-paper export is frozen to a file on the
+-- volume + a hashed row here, so "what management signed" survives later edits.
+CREATE TABLE IF NOT EXISTS recon_close_snapshot (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id   INTEGER NOT NULL REFERENCES recon_sessions(session_id),
+    branch_id    INTEGER,
+    period_month TEXT,
+    status       TEXT,                 -- the transition that froze it: approved | closed
+    file_name    TEXT,
+    file_path    TEXT,                 -- relative path under SNAPSHOT_DIR on the volume
+    sha256       TEXT,                 -- of the frozen .xlsx bytes
+    size_bytes   INTEGER,
+    created_by   TEXT,
+    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rcs_session ON recon_close_snapshot(session_id);
+
 -- ─── Manual reconciliation (tick-to-match, reversible) ──────────────────────────
 -- Staff tick one-or-more POS day amounts + one-or-more statement lines that
 -- together reconcile (e.g. a lump-sum bank credit covering several days), then

@@ -54,6 +54,22 @@ def test_login_bad_password(client, app_db, auth_on):
     assert _login(c, "management1", "nope").status_code == 401
 
 
+def test_login_events_logged(client, app_db, auth_on):
+    """AUD-1/AUD-6: successful + failed logins land in the append-only
+    recon_audit_log (created on demand by the dashboard if recon hasn't yet)."""
+    import sqlite3
+    import main
+    c = _fresh(app_db)
+    assert _login(c, "operation1").status_code == 200       # success
+    _login(c, "operation1", "wrongpass")                    # failure
+    con = sqlite3.connect(main.DB_PATH)
+    rows = con.execute("SELECT action, by FROM recon_audit_log WHERE entity='auth'").fetchall()
+    con.close()
+    actions = {r[0] for r in rows}
+    assert "login" in actions and "login_fail" in actions
+    assert any(r[1] == "operation1" for r in rows)
+
+
 def test_missing_cookie_is_401(client, app_db, auth_on):
     c = _fresh(app_db)
     assert c.get("/api/sales/monthly").status_code == 401
