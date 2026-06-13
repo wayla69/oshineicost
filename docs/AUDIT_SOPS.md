@@ -32,12 +32,12 @@ Last reviewed: 2026-06-13
 
 ## 3. Backup & restore (AUD-2)
 - One SQLite file (`/data/oshinei.db`) holds all dashboard + recon data.
-- **Backup:** `backend/backup_db.py backup` runs daily (Windows Task Scheduler),
+- **Backup:** `backend/db_backup.py backup` runs daily (Windows Task Scheduler),
   writing a verified copy + manifest (row counts + SHA-256) to a OneDrive folder.
   Retention: ≥ 90 daily + 12 monthly copies. Include `/data/attachments`.
 - **Restore test (evidence):** at least quarterly, pull the live DB
   (`flyctl ssh sftp get /data/oshinei.db …`) and run
-  `python backend/backup_db.py verify --backup <file>`. Keep the PASS output as
+  `python backend/db_backup.py verify --backup <file>`. Keep the PASS output as
   evidence — auditors ask for the restore test, not just the backup.
 
 ## 4. Month-close procedure

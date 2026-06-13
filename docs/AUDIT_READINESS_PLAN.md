@@ -20,7 +20,7 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
   person their own account; persistent login-event log (success/fail) — deferred.
 
 ### AUD-2 ◐ Backup + restore evidence
-- ☑ Script delivered: `backend/backup_db.py` (verified copy + manifest;
+- ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;
   `verify` = restore test with PASS/FAIL). See SOP §3.
 - ☐ Operational: schedule daily to OneDrive, retention ≥ 90 daily + 12 monthly,
   run one `verify` and keep the evidence. Include `/data/attachments`.
