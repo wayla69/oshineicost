@@ -1093,6 +1093,39 @@ def test_c2_c4_doc_hints_and_transfer_mode(client):
             assert ch["transfer_mode"] in ("match", "exclude")
 
 
+def test_b1_bulk_upload_manifest(client):
+    """B1: many files in one pass → per-file manifest. Good is saved, the wrong-type
+    (0-row) errors, the duplicate is skipped — and a bad file doesn't roll back good ones."""
+    good = _grab_xlsx([["05/06/2026", "G1", "Completed", 5000, 1000, 4000]])
+    bad  = _grab_xlsx([["NOT-A-DATE", "G2", "Completed", 1, 0, 0]])    # parses to 0 rows
+    payload = [
+        ("files", ("good.xlsx", good, "application/octet-stream")),
+        ("files", ("bad.xlsx",  bad,  "application/octet-stream")),
+        ("files", ("good.xlsx", good, "application/octet-stream")),    # dup of #1
+    ]
+    r = client.post("/api/uploads/bulk", files=payload,
+                    data={"branch_id": "4", "period_month": "2026-06", "source_type": "grab"})
+    assert r.status_code == 200
+    j = r.json()
+    assert j["summary"]["saved"] == 1
+    assert any(m["status"] == "ok" and m["rows_saved"] == 1 for m in j["files"])
+    assert any(m["status"] == "error"   for m in j["files"])     # the 0-row file
+    assert any(m["status"] == "skipped" for m in j["files"])     # the duplicate
+    # the good upload actually persisted (bad/dup did not roll it back)
+    assert len(client.get("/api/uploads?branch_id=4&period_month=2026-06").json()) == 1
+
+
+def test_b1_infer_source_type():
+    """B1: 'auto' mode routes by filename convention; unknown names → None (reported)."""
+    from recon.main import _infer_source_type
+    assert _infer_source_type("TIV_MDR_x1136_260501.pdf") == "credit_card"
+    assert _infer_source_type("RDB003_186981_20260505.xls") == "credit_card"
+    assert _infer_source_type("3-CZDJN-20260501.pdf") == "grab"
+    assert _infer_source_type("REPORT_MAY26.csv") == "lineman"
+    assert _infer_source_type("05.69-Statement KTB CNX.pdf") == "bank"
+    assert _infer_source_type("mystery.pdf") is None
+
+
 def test_payout_chain_ties_net_to_bank(client):
     """3-way tie: provider NET → bank payout credit. No bank line → awaiting_payout;
     a short payout → mismatch + a PAYOUT discrepancy."""

@@ -1113,6 +1113,63 @@ def _detect_branch_from_rows(source_type: str, rows: list) -> dict:
         return {}
 
 
+def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
+                branch_id: int, period_month: str, provider: str = "") -> dict:
+    """Parse + validate + persist ONE document into recon_uploads + its line table.
+    Runs every guard (dedup, C3 lock, A2/C6 wrong-type, wrong-branch, A1 zero-row)
+    and raises HTTPException on any. Does NOT commit — the caller owns the
+    transaction (single commit in confirm; one commit per file in bulk)."""
+    file_hash = hashlib.sha256(raw).hexdigest()
+    dup = conn.execute("""
+        SELECT file_name, uploaded_at FROM recon_uploads
+        WHERE branch_id=? AND period_month=? AND source_type=?
+          AND file_hash=? AND status='confirmed'
+    """, (branch_id, period_month, source_type, file_hash)).fetchone()
+    if dup:
+        raise HTTPException(
+            409, f"ไฟล์นี้อัปโหลดไปแล้วสำหรับสาขา/เดือนนี้ "
+                 f"('{dup['file_name']}' เมื่อ {dup['uploaded_at']})")
+
+    prov, rows, skipped = _parse_or_422(source_type, raw, provider, filename)
+
+    # Wrong-branch guard: a document that identifies its own branch (account # /
+    # acquirer MID) and isn't the chosen one is refused (how a UBN stmt lands on UDN).
+    detected = _detect_branch_from_rows(source_type, rows)
+    det_bid = detected.get("detected_branch_id")
+    if det_bid and det_bid != branch_id:
+        raise HTTPException(
+            409, f"เอกสารนี้เป็นของสาขา '{detected.get('detected_branch_name')}' "
+                 f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก")
+
+    # Zero-row guard (A1): a non-empty file that parses to nothing is the wrong
+    # type — never save it as a silent 'confirmed, 0 rows'.
+    if not rows and not _is_empty_statement(raw, filename):
+        raise HTTPException(
+            422, "อ่านได้ 0 รายการ — น่าจะเป็นเอกสารผิดประเภทหรือรูปแบบที่ยังไม่รองรับ "
+                 "(เช่น ใบกำกับภาษีค่าธรรมเนียม แทนรายงาน settlement)")
+
+    note = "ไม่มีรายการในเอกสาร (No Data)" if (
+        not rows and _is_empty_statement(raw, filename)) else None
+    cur = conn.execute("""
+        INSERT INTO recon_uploads
+            (source_type, branch_id, provider, file_name, period_month, row_count, file_hash, status, error_msg)
+        VALUES (?,?,?,?,?,?,?,'confirmed',?)
+    """, (source_type, branch_id, prov, filename, period_month, len(rows), file_hash, note))
+    upload_id = cur.lastrowid
+    table = _LINE_TABLE[source_type]
+    for row in rows:
+        row["upload_id"] = upload_id
+        row["branch_id"] = branch_id
+        cols         = ", ".join(row.keys())
+        placeholders = ", ".join("?" * len(row))
+        conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
+                     list(row.values()))
+    _audit(conn, "upload", upload_id, "create", "staff",
+           [{"field": "file_name", "old": None, "new": filename}])
+    return {"upload_id": upload_id, "rows_saved": len(rows),
+            "skipped_rows": skipped, "provider": prov}
+
+
 @app.post("/api/uploads/{source_type}/confirm", dependencies=[Depends(require_write_token)])
 async def confirm_upload(
     source_type: SourceType,
@@ -1123,72 +1180,134 @@ async def confirm_upload(
 ):
     _validate_period(period_month)
     raw = await _read_upload(file)
-    file_hash = hashlib.sha256(raw).hexdigest()
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        _assert_period_open(conn, branch_id, period_month)
+        result = _ingest_one(conn, source_type, raw, file.filename, branch_id, period_month, provider)
+        conn.commit()
+    return result
 
+
+# ── Bulk upload (B1): many files / whole folder / zips in one pass ─────────────
+
+_MAX_BULK_FILES   = 2000
+_MAX_MEMBER_BYTES = 25 * 1024 * 1024
+
+
+def _infer_source_type(filename: str) -> str | None:
+    """Best-effort source_type from filename conventions (for 'auto' bulk). Returns
+    None when unsure → the file is reported in the manifest for manual routing,
+    never guessed into the wrong table."""
+    n = (filename or "").lower()
+    if any(k in n for k in ("rdb003", "tiv_mdr", "rtxinv", "e-tax_invoice",
+                            "_rmer", "_cc_", "kbank_cc", "settle")):
+        return "credit_card"
+    if n.startswith("3-cz") or re.match(r"^im\d{6,}", n):
+        return "grab"
+    if any(k in n for k in ("lineman", "line man", "line_man", "lmin", "lmrn",
+                            "balance-report", "report_may", "report_jun")):
+        return "lineman"
+    if "statement" in n or "stmt" in n or "_kb_" in n or "_ktb" in n:
+        return "bank"
+    return None
+
+
+def _expand_zip(zip_name: str, raw: bytes, manifest: list) -> list:
+    """Yield (member_name, bytes) for a .zip; password-locked / oversized / bad
+    members are recorded in the manifest and skipped."""
+    import io as _io
+    import zipfile as _zip
+    out = []
+    try:
+        with _zip.ZipFile(_io.BytesIO(raw)) as zf:
+            for info in zf.infolist():
+                if info.is_dir():
+                    continue
+                label = f"{zip_name}:{Path(info.filename).name}"
+                if info.file_size > _MAX_MEMBER_BYTES:
+                    manifest.append({"file": label, "status": "skipped",
+                                     "rows_saved": 0, "reason": "ไฟล์ใหญ่เกินไป"})
+                    continue
+                try:
+                    out.append((Path(info.filename).name, zf.read(info)))
+                except RuntimeError:
+                    manifest.append({"file": label, "status": "skipped", "rows_saved": 0,
+                                     "reason": "ไฟล์ใน zip ถูกล็อกด้วยรหัสผ่าน — ถอดรหัสก่อน"})
+    except Exception:
+        manifest.append({"file": zip_name, "status": "error", "rows_saved": 0,
+                         "reason": "เปิดไฟล์ zip ไม่ได้"})
+    return out
+
+
+@app.post("/api/uploads/bulk", dependencies=[Depends(require_write_token)])
+async def bulk_upload(
+    files: list[UploadFile] = File(...),
+    branch_id: int   = Form(...),
+    period_month: str = Form(...),
+    source_type: str = Form("auto"),   # a real type, or 'auto' (infer per file)
+    provider: str    = Form(""),
+):
+    """Upload many files (and/or .zip archives) in one pass. Each file runs the
+    same validated pipeline as a single confirm; the response is a per-file
+    manifest so wrong-type / locked / duplicate files surface together instead of
+    one-click-at-a-time. One commit per file → a bad file never rolls back good ones."""
+    _validate_period(period_month)
+    if source_type not in ("bank", "credit_card", "grab", "lineman", "auto"):
+        raise HTTPException(400, "source_type ต้องเป็น bank|credit_card|grab|lineman|auto")
+    if len(files) > _MAX_BULK_FILES:
+        raise HTTPException(413, f"ไฟล์มากเกินไป (สูงสุด {_MAX_BULK_FILES} ไฟล์ต่อครั้ง)")
+
+    manifest: list = []
     with get_db() as conn:
         _validate_master_branch(conn, branch_id)
         _assert_period_open(conn, branch_id, period_month)
 
-        # Double-count guard: refuse an identical file already confirmed for the
-        # same branch / month / source. Delete the old one to legitimately replace.
-        dup = conn.execute("""
-            SELECT upload_id, file_name, uploaded_at FROM recon_uploads
-            WHERE branch_id=? AND period_month=? AND source_type=?
-              AND file_hash=? AND status='confirmed'
-        """, (branch_id, period_month, source_type, file_hash)).fetchone()
-        if dup:
-            raise HTTPException(
-                409, f"Identical file already uploaded for this branch/month: "
-                     f"'{dup['file_name']}' on {dup['uploaded_at']}. "
-                     "Delete that upload first if you mean to replace it.")
+        # Flatten: each upload is either a file or a .zip to expand.
+        items: list = []
+        for f in files:
+            raw = await f.read()
+            name = f.filename or "(unnamed)"
+            if name.lower().endswith(".zip"):
+                items.extend(_expand_zip(name, raw, manifest))
+            else:
+                items.append((name, raw))
 
-        prov, rows, skipped = _parse_or_422(source_type, raw, provider, file.filename)
+        for name, raw in items:
+            ext = Path(name).suffix.lower()
+            if ext and ext not in _ALLOWED_EXT:
+                manifest.append({"file": name, "status": "skipped", "rows_saved": 0,
+                                 "reason": f"ไม่รองรับนามสกุล {ext}"}); continue
+            if not raw:
+                manifest.append({"file": name, "status": "skipped", "rows_saved": 0,
+                                 "reason": "ไฟล์ว่าง"}); continue
+            if len(raw) > _MAX_MEMBER_BYTES:
+                manifest.append({"file": name, "status": "skipped", "rows_saved": 0,
+                                 "reason": "ไฟล์ใหญ่เกินไป"}); continue
+            st = source_type if source_type != "auto" else _infer_source_type(name)
+            if not st:
+                manifest.append({"file": name, "status": "skipped", "rows_saved": 0,
+                                 "reason": "ไม่ทราบประเภทไฟล์ — เลือกช่องเองแล้วอัปโหลด"}); continue
+            try:
+                res = _ingest_one(conn, st, raw, name, branch_id, period_month, provider)
+                conn.commit()
+                manifest.append({"file": name, "source_type": st, "status": "ok",
+                                 "rows_saved": res["rows_saved"], "reason": ""})
+            except HTTPException as e:
+                conn.rollback()
+                status = "skipped" if e.status_code == 409 else "error"
+                manifest.append({"file": name, "source_type": st, "status": status,
+                                 "rows_saved": 0, "reason": str(e.detail)})
+            except Exception as e:                       # pragma: no cover
+                conn.rollback()
+                manifest.append({"file": name, "source_type": st, "status": "error",
+                                 "rows_saved": 0, "reason": f"error: {e}"})
 
-        # Wrong-branch guard: if the document identifies its own branch (bank
-        # account # / acquirer MID in the registry) and it isn't the chosen one,
-        # refuse — this is exactly how a UBN statement ends up under UDN.
-        detected = _detect_branch_from_rows(source_type, rows)
-        det_bid = detected.get("detected_branch_id")
-        if det_bid and det_bid != branch_id:
-            raise HTTPException(
-                409, f"เอกสารนี้เป็นของสาขา '{detected.get('detected_branch_name')}' "
-                     f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก — "
-                     "เปลี่ยนสาขาให้ตรงก่อนยืนยัน")
-
-        # Zero-row guard: a non-empty document that parses to nothing is almost
-        # always the WRONG FILE TYPE (a fee invoice / unsupported format), not a
-        # real upload. Saving it as 'confirmed' with row_count=0 makes the lane
-        # read "done" while it has no data to match — the worst silent failure
-        # this app can have. The one legitimate 0-row case (a real statement with
-        # no movements) is allowed through via _is_empty_statement.
-        if not rows and not _is_empty_statement(raw, file.filename):
-            raise HTTPException(
-                422, "อ่านได้ 0 รายการ — น่าจะเป็นเอกสารผิดประเภทหรือรูปแบบที่ยังไม่รองรับ "
-                     "(เช่น ใบกำกับภาษีค่าธรรมเนียม แทนรายงาน settlement). "
-                     "กรุณาตรวจไฟล์แล้วอัปโหลดใหม่")
-
-        note = "ไม่มีรายการในเอกสาร (No Data)" if (
-            not rows and _is_empty_statement(raw, file.filename)) else None
-        cur = conn.execute("""
-            INSERT INTO recon_uploads
-                (source_type, branch_id, provider, file_name, period_month, row_count, file_hash, status, error_msg)
-            VALUES (?,?,?,?,?,?,?,'confirmed',?)
-        """, (source_type, branch_id, prov, file.filename, period_month, len(rows), file_hash, note))
-        upload_id = cur.lastrowid
-
-        table = _LINE_TABLE[source_type]
-        for row in rows:
-            row["upload_id"] = upload_id
-            row["branch_id"] = branch_id
-            cols         = ", ".join(row.keys())
-            placeholders = ", ".join("?" * len(row))
-            conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
-                         list(row.values()))
-        _audit(conn, "upload", upload_id, "create", "staff",
-               [{"field": "file_name", "old": None, "new": file.filename}])
-        conn.commit()
-
-    return {"upload_id": upload_id, "rows_saved": len(rows), "skipped_rows": skipped, "provider": prov}
+    ok  = sum(1 for m in manifest if m["status"] == "ok")
+    skip = sum(1 for m in manifest if m["status"] == "skipped")
+    err = sum(1 for m in manifest if m["status"] == "error")
+    return {"summary": {"total": len(manifest), "saved": ok, "skipped": skip,
+                        "errored": err, "rows": sum(m["rows_saved"] for m in manifest)},
+            "files": manifest}
 
 
 @app.get("/api/uploads")

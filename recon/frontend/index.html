@@ -250,7 +250,12 @@ async function loadBranch(bid){
     else
       html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
   }
-  html+=`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
+  if(!closed) html+=`
+    <input type="file" id="bulk-input" multiple style="display:none" onchange="bulkUpload('bulk-input')">
+    <input type="file" id="bulk-folder-input" webkitdirectory multiple style="display:none" onchange="bulkUpload('bulk-folder-input')">
+    <button class="btn btn-sm" style="margin-left:auto" title="เลือกหลายไฟล์พร้อมกัน — ระบบแยกประเภทให้เอง (zip แตกอัตโนมัติ)" onclick="$('bulk-input').click()">⬆ หลายไฟล์</button>
+    <button class="btn btn-sm" title="เลือกทั้งโฟลเดอร์ของสาขานี้" onclick="$('bulk-folder-input').click()">📁 ทั้งโฟลเดอร์</button>`;
+  html+=`<a href="#" class="lbl"${closed?' style="margin-left:auto"':''} onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
   </div><div id="up-panel"></div><div id="docs-panel" style="display:none"></div></div>`;
 
   // คำถามตั้งค่า (unmapped codes) — ตอบจากคำแนะนำเอกสาร หรือตั้งค่าเองตรงนี้เลย
@@ -429,6 +434,36 @@ async function confirmUpload(){
   try{const r=await api(`/api/uploads/${UP_DOC.source}/confirm`,{method:'POST',body:fd});
       toast(`บันทึกแล้ว ${r.rows_saved} รายการ`);route();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── อัปโหลดหลายไฟล์/ทั้งโฟลเดอร์ในครั้งเดียว (B1) ── */
+async function bulkUpload(inputId){
+  const inp=$(inputId); const files=[...(inp.files||[])]; if(!files.length)return;
+  const panel=$('up-panel');
+  panel.innerHTML=`<div class="muted" style="margin-top:10px">กำลังอัปโหลด ${files.length} ไฟล์… (อาจใช้เวลาสักครู่)</div>`;
+  const fd=new FormData();
+  for(const f of files) fd.append('files',f);
+  fd.append('branch_id',DATA.branch_id); fd.append('period_month',MONTH); fd.append('source_type','auto');
+  let r;
+  try{ r=await api('/api/uploads/bulk',{method:'POST',body:fd}); }
+  catch(e){ panel.innerHTML=`<div class="chip c-err" style="margin-top:10px">อัปโหลดไม่สำเร็จ: ${esc(e.message)}</div>`; inp.value=''; return; }
+  const s=r.summary;
+  const stCls=x=>x==='ok'?'c-ok':x==='skipped'?'c-warn':'c-err';
+  const stTh=x=>x==='ok'?'สำเร็จ':x==='skipped'?'ข้าม':'ผิดพลาด';
+  panel.innerHTML=`<div class="card" style="margin-top:10px;background:#fafafa">
+    <div class="row"><b style="font-size:13.5px">ผลอัปโหลด ${s.total} ไฟล์</b>
+      <span class="lbl">✓ สำเร็จ ${s.saved} · ข้าม ${s.skipped} · ผิดพลาด ${s.errored} · รวม ${fmt(s.rows)} รายการ</span>
+      <button class="btn btn-sm btn-pri" style="margin-left:auto" onclick="route()">รีเฟรชหน้า</button></div>
+    <div style="max-height:340px;overflow:auto;margin-top:6px"><table style="width:100%">
+      <tr><th style="text-align:left">ไฟล์</th><th>ประเภท</th><th>สถานะ</th><th>รายการ</th><th style="text-align:left">หมายเหตุ</th></tr>
+      ${r.files.map(f=>`<tr>
+        <td style="text-align:left">${esc(f.file)}</td>
+        <td>${esc(f.source_type||'-')}</td>
+        <td><span class="chip ${stCls(f.status)}">${stTh(f.status)}</span></td>
+        <td class="mono">${f.rows_saved||''}</td>
+        <td style="text-align:left" class="lbl">${esc(f.reason||'')}</td></tr>`).join('')}
+    </table></div></div>`;
+  inp.value='';
 }
 
 /* ── แผงจัดการไฟล์ที่อัปโหลดแล้ว (ยกความสามารถหน้า Uploads เดิมเข้ามา) ── */
