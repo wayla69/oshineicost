@@ -1121,6 +1121,18 @@ async def confirm_upload(
                      f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก — "
                      "เปลี่ยนสาขาให้ตรงก่อนยืนยัน")
 
+        # Zero-row guard: a non-empty document that parses to nothing is almost
+        # always the WRONG FILE TYPE (a fee invoice / unsupported format), not a
+        # real upload. Saving it as 'confirmed' with row_count=0 makes the lane
+        # read "done" while it has no data to match — the worst silent failure
+        # this app can have. The one legitimate 0-row case (a real statement with
+        # no movements) is allowed through via _is_empty_statement.
+        if not rows and not _is_empty_statement(raw, file.filename):
+            raise HTTPException(
+                422, "อ่านได้ 0 รายการ — น่าจะเป็นเอกสารผิดประเภทหรือรูปแบบที่ยังไม่รองรับ "
+                     "(เช่น ใบกำกับภาษีค่าธรรมเนียม แทนรายงาน settlement). "
+                     "กรุณาตรวจไฟล์แล้วอัปโหลดใหม่")
+
         note = "ไม่มีรายการในเอกสาร (No Data)" if (
             not rows and _is_empty_statement(raw, file.filename)) else None
         cur = conn.execute("""

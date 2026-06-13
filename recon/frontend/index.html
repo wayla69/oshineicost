@@ -745,7 +745,14 @@ async function openDay(i,day){
 
 /* ── ฝั่ง POS รายบิล: จัดกลุ่มตามรหัสชำระ คลิกขยายดูใบเสร็จรายใบ ── */
 function posDayHtml(pos,i){
-  if(!pos||!pos.count)return '<div class="lbl" style="margin:2px 0 4px"><b>① ยอดขาย POS</b> — ยังไม่มีข้อมูลรายบิล (ยังไม่ได้ sync POS)</div>';
+  if(!pos||!pos.count){
+    // Distinguish "POS is synced but this lane genuinely has no bills today"
+    // (normal for an ext_only / internal-transfer lane) from "POS truly not
+    // synced". The old copy always said "not synced" and triggered false alarms.
+    return DATA.pos_daily_available
+      ? '<div class="lbl" style="margin:2px 0 4px"><b>① ยอดขาย POS</b> — ไม่มีบิล POS ของช่องทางนี้ในวันนี้ (เงินเข้าโดยไม่มียอดขาย POS)</div>'
+      : '<div class="lbl" style="margin:2px 0 4px"><b>① ยอดขาย POS</b> — ยังไม่ได้ sync ข้อมูล POS</div>';
+  }
   const rows=pos.by_code.map((b,k)=>{
     const recs=pos.lines.filter(l=>l.code===b.code);
     return `<tr class="grid-ch" style="display:table-row;cursor:pointer" onclick="togglePosCode(${i},${k})">

@@ -1021,6 +1021,19 @@ def test_upload_dedup_blocks_identical_file(client):
     assert client.post("/api/uploads/grab/confirm", files={"file": ("g.xlsx", data)}, data=form).status_code == 200
 
 
+def test_confirm_rejects_zero_row_nonempty_upload(client):
+    """A non-empty document that parses to 0 rows (the classic wrong-file-type:
+    a fee invoice instead of a settlement report) must be REFUSED, not silently
+    saved as confirmed — otherwise the lane reads 'done' with no data to match."""
+    bad = _grab_xlsx([["NOT-A-DATE", "G1", "Completed", 1, 0, 0]])   # row skipped → 0 rows
+    form = {"branch_id": "4", "period_month": "2026-06"}
+    r = client.post("/api/uploads/grab/confirm", files={"file": ("feeinvoice.xlsx", bad)}, data=form)
+    assert r.status_code == 422
+    assert "0 ราย" in r.json()["detail"]
+    # nothing was persisted — the lane is not silently "uploaded"
+    assert client.get("/api/uploads?branch_id=4&period_month=2026-06").json() == []
+
+
 def test_payout_chain_ties_net_to_bank(client):
     """3-way tie: provider NET → bank payout credit. No bank line → awaiting_payout;
     a short payout → mismatch + a PAYOUT discrepancy."""
