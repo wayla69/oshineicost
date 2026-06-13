@@ -361,8 +361,45 @@ def test_v2_overview_lists_master_branches(client):
     assert "Korat1" in names and "Chonburi" not in names   # master-only scope
     b = next(x for x in r["branches"] if x["branch_name"] == "Korat1")
     assert "channels" in b and "progress_pct" in b
+    # Phase 3: wrong-channel counts surface per-branch + chain-level so the inbox can
+    # flag a falsely-clean branch and show the chain reclass banner.
+    assert "reclass_count" in b and "reclass_amount" in b
+    assert r["reclass_count_total"] == sum(x["reclass_count"] for x in r["branches"])
+    assert abs(r["reclass_amount_total"] - round(sum(x["reclass_amount"] for x in r["branches"]), 2)) < 0.01
     # bad month rejected
     assert client.get("/api/v2/overview", params={"month": "2026-13"}).status_code == 400
+
+
+def test_within_daily_tol_monthly_drift_escalates_and_blocks_close(client):
+    """Control gap: a channel whose every day sits inside the daily tolerance (±฿50)
+    but whose MONTH drifts past the monthly tolerance (฿100) must escalate to 'diff',
+    raise a todo, and block ปิดเดือน — not hide under 'ตรงกันแล้ว' (the classic
+    fee-skim / under-settlement pattern)."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # Branch 5 (อุดรธานี) has no DEMO_POS baseline → isolated scenario. KNNQR → QR·KBANK.
+    # 27 days: POS 20,000 vs bank 20,030 each (+฿30/day, well within the daily tol) so
+    # every day matches and the channel would read 'ok' — but +฿810 over the month
+    # exceeds the ฿100 monthly tolerance and must escalate.
+    days = ["2026-06-%02d" % i for i in range(1, 28)]
+    c.execute("INSERT INTO pos_payment_month VALUES(5,'2026-06','KNNQR',540000,0)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(5,?,'KNNQR',20000,5)", [(d,) for d in days])
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',5,'kbank','s','2026-06',0,'confirmed')").lastrowid
+    for d in days:
+        c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+                  " VALUES(?,5,?,'QR',20030,'unmatched')", (up, d))
+    c.commit(); c.close()
+
+    r = client.get("/api/v2/reconcile?branch_id=5&month=2026-06").json()
+    qr = next(ch for ch in r["channels"] if ch["key"] == "QR")
+    assert qr["status"] == "diff", f"within-tol monthly drift must escalate to diff, got {qr['status']}"
+    assert "สะสมต่าง" in qr["detail"]          # proves the escalation path, not a per-day variance
+    assert abs(qr["variance"] - 810) < 1
+    assert r["can_close"] is False
+    assert any(t.get("channel") == "QR" and t["type"] == "diff" for t in r["todo"])
 
 
 def test_summary_freshness_flags_stale_snapshot(client):

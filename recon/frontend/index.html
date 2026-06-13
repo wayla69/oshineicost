@@ -106,6 +106,14 @@ td.mono{font-variant-numeric:tabular-nums}
 .sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box}
 .rc-reasons{display:flex;flex-direction:column;gap:7px}
 .rc-reason{justify-content:flex-start;text-align:left;background:#f8fafc;border:1px solid var(--line)}
+/* Phase 2: branch inbox drawers + problem/coin cards */
+.drawer-h{display:block;font-size:13.5px;font-weight:600;color:var(--sub)}
+.drawer-h:hover{text-decoration:none;filter:brightness(.95)}
+.drawer .grid-ch{padding:9px 14px;border-bottom:1px solid var(--line)}
+.drawer .grid-ch:last-of-type{border-bottom:none}
+.coin-card{background:var(--line-soft);border-left:4px solid var(--mut)}
+.coin-name{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+.ch-prob .grid-ch{padding-left:0}
 .fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
   font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;text-align:right}
 .fee-in:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
@@ -113,7 +121,36 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .c3{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;padding:2px 18px 14px}
 .c3 .card{padding:12px 14px;font-size:12.5px;box-shadow:none}
 .c3 .card b{font-size:13px}
+/* ── หน้าแรก: กล่องงานทั้งเครือ (Phase 3 inbox) ── */
+.ov-hero{padding:14px 18px}
+.ov-hero-line{font-size:15.5px;line-height:1.5}
+.ov-reclass{background:var(--ok-bg);border:1px solid #a7f3d0;border-left:4px solid var(--ok);font-size:14px;padding:12px 16px}
+.ov-row{display:flex;align-items:center;gap:12px;padding:13px 18px;cursor:pointer;border-bottom:1px solid var(--line-soft);transition:background .12s}
+.ov-row:hover{background:#f8fafc}
+.ov-row:last-child{border-bottom:none}
+.ov-row-main{flex:1;min-width:0}
+.ov-bname{font-size:15px;font-weight:600;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ov-sum{font-size:13px;color:var(--sub);margin-top:2px;display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.ov-mini{font-size:11px;padding:1px 8px}
+.ov-chev{color:var(--mut);font-size:20px;font-weight:600;flex:none;line-height:1}
+.ov-row-done{padding:11px 18px}
+.ov-row-done .ov-bname{font-weight:500;color:var(--sub)}
+.ov-done-toggle{display:block;padding:12px 18px;font-size:13.5px;color:var(--sub);font-weight:500}
+.ov-done-toggle:hover{text-decoration:none;background:#f8fafc}
+/* Phase 4 #1: overview manager attention bar */
+.review-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-left:4px solid var(--warn);background:var(--warn-bg)}
+.review-bar .rb-link{font-size:13px;font-weight:600}
+.review-bar .rb-link:not(:last-child)::after{content:'·';color:var(--mut);margin-left:8px;font-weight:400}
+/* Phase 4 #2: "เพิ่มเติม" bottom-sheet menu rows */
+.more-menu{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:14px;font-weight:600;background:#fff;transition:background .12s}
+.more-item:hover{background:var(--line-soft);text-decoration:none}
+.more-item .lbl{font-weight:400}
 @media (max-width:640px){
+  .ov-row{padding:11px 12px;gap:8px}
+  .ov-row .row{width:auto !important}
+  .ov-row .prog{min-width:54px}
+  .ov-hero-line{font-size:14.5px}
   .grid-ch{grid-template-columns:1fr 1fr;row-gap:5px}
   .grid-ch>span:last-child{display:none}
   .daygrid{grid-template-columns:repeat(auto-fill,minmax(68px,1fr))}
@@ -130,6 +167,13 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 const $=id=>document.getElementById(id);
 const fmt=n=>(n==null?'—':Math.round(n).toLocaleString('th-TH'));
 const progCls=p=>p>=95?'':p>=70?'p-warn':'p-err';
+const TH_MONTHS=['','มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                 'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+function monthTh(ym){            // 'YYYY-MM' -> 'พฤษภาคม 2569' (Buddhist year +543)
+  if(!ym||ym.length<7)return ym||'';
+  return (TH_MONTHS[+ym.slice(5,7)]||'')+' '+(+ym.slice(0,4)+543);
+}
+const COIN_TOL=100;             // ฿ tolerance for "coin residue"; single source of truth
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
 function tokenHdr(){const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
@@ -158,14 +202,19 @@ let DATA=null, UP_DOC=null, PENDING_CH=null;
 
 /* คลิกช่องทางในหน้าภาพรวม → เข้าสาขาแล้วกางช่องทางนั้นทันที */
 function goChannel(bid,key){PENDING_CH=key;location.hash='b/'+bid;}
-function drillTodo(key){
+/* shared drill: expand a channel's day evidence (works in any Phase-2 bucket) */
+function openEvidence(channelKey){
   if(!DATA||!DATA.channels)return;
-  const idx=DATA.channels.findIndex(c=>c.key===key);
+  const idx=DATA.channels.findIndex(c=>c.key===channelKey);
   if(idx<0)return;
   const el=$('days-'+idx);
+  // if the channel sits inside a collapsed drawer (เรียบร้อย/รอรอบ), open it first
+  const dw=el&&el.closest('[id^="dw-"]');
+  if(dw&&dw.style.display==='none') toggleDrawer(dw.id.slice(3));
   if(el && el.style.display==='none') toggleDays(idx);
   setTimeout(()=>{const e=$('days-'+idx); if(e) e.scrollIntoView({behavior:'smooth',block:'center'});},50);
 }
+function drillTodo(key){ openEvidence(key); }   // back-compat: todo card + drillReclass call this
 
 function route(){
   const h=location.hash.slice(1);
@@ -187,48 +236,130 @@ function header(extra){
       style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;box-shadow:var(--shadow)">
     ${extra||''}
     <button class="btn btn-sm" style="margin-left:auto" onclick="setToken()" title="ตั้งรหัสสำหรับบันทึกข้อมูล (จำเป็นบนเซิร์ฟเวอร์จริง)">🔑 รหัส</button>
-    <a href="#errors" style="font-size:13px" title="รายงานข้อผิดพลาดการบันทึก รายสาขา/เดือน — สำหรับประเมินพนักงาน">📊 รายงานข้อผิดพลาด</a>
-    <a href="/app/help.html" style="font-size:13px" title="คู่มือการใช้งาน — ทุกเมนู ทุกเอกสาร ทุกช่องทาง + Q&A · พิมพ์ได้">📖 คู่มือ ↗</a>
-    <a href="/app/setup.html" style="font-size:13px" title="ตารางจับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID">ตั้งค่าระบบ ↗</a>
-    <a href="/app/classic.html" style="font-size:13px" title="หน้าเดิม — เครื่องมือครบทุกอย่าง (สำรองไว้ 1 เดือน)">เครื่องมือขั้นสูง ↗</a>
+    <button class="btn btn-sm" onclick="moreMenu()" title="เมนูเพิ่มเติม — รายงาน คู่มือ ตั้งค่า เครื่องมือขั้นสูง">⋯ เพิ่มเติม</button>
   </div>`;
 }
 function setMonth(m){MONTH=m;localStorage.setItem('v2_month',m);route();}
 
-/* ── ภาพรวมทุกสาขา ── */
+// จำนวน "เรื่องที่ต้องทำ" ของสาขา = todo + คู่ผิดช่อง (กันสาขาที่ดูเหมือนครบแต่ยังมีเงินผิดช่อง)
+function branchOpen(b){return (b.todo_count||0)+(b.reclass_count||0);}
+function openSummary(b){
+  const td=b.todo_count||0, rc=b.reclass_count||0;
+  if(td===0&&rc===0)return '';
+  if(td===0&&rc>0)return rc===1?'เหลือ 1 เรื่อง: ยอดอยู่ผิดช่อง':'เหลือ '+rc+' เรื่อง: ยอดอยู่ผิดช่อง';
+  let s='เหลือ '+(td+rc)+' เรื่อง';
+  if(rc>0)s+=' · มีเงินอาจอยู่ผิดช่อง '+rc+' คู่';
+  return s;
+}
+
+/* ── ภาพรวมทุกสาขา (กล่องงานทั้งเครือ) ── */
 async function loadOverview(){
   $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
-  let ov;try{ov=await api(`/api/v2/overview?month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
-  const chans=ov.channel_order.filter(k=>ov.branches.some(b=>b.channels[k]));
-  let html=header()+`<div class="card" style="padding:0;overflow-x:auto"><table>
-    <tr><th>สาขา</th><th>ความคืบหน้า</th>${chans.map(k=>`<th>${esc(ov.channel_labels[k])}</th>`).join('')}<th>สถานะ</th></tr>`;
-  for(const b of ov.branches){
-    html+=`<tr style="cursor:pointer" onclick="location.hash='b/${b.branch_id}'">
-      <td><b>${esc(b.branch_name)}</b><div class="lbl">${b.todo_count?b.todo_count+' เรื่องค้าง':'ครบ'}</div></td>
-      <td><div class="row" style="flex-wrap:nowrap"><div class="prog ${progCls(b.progress_pct)}"><div style="width:${b.progress_pct}%"></div></div><span class="lbl mono" style="min-width:38px">${b.progress_pct}%</span></div></td>`;
-    for(const k of chans){
-      const c=b.channels[k];
-      if(!c){html+='<td style="color:var(--mut)">—</td>';continue;}
-      const col=c.status==='ok'?'var(--ok)':c.status==='diff'?'var(--err)'
-               :c.status==='no_source'?'var(--mut)':'var(--warn)';
-      html+=`<td class="mono" style="color:${col};font-weight:600;cursor:pointer"
-        onclick="event.stopPropagation();goChannel(${b.branch_id},'${k}')"
-        title="POS ${fmt(c.pos)} / เข้าจริง ${fmt(c.ext)} — คลิกเพื่อเปิดช่องทางนี้">${c.status==='ok'?'✓':(c.variance>0?'+':'')+fmt(c.variance)}</td>`;
-    }
-    html+=`<td><span class="chip ${b.status==='approved'?'c-ok':'c-mut'}">${SES_ST[b.status]||b.status}</span></td></tr>`;
+  let ov;try{ov=await api(`/api/v2/overview?month=${MONTH}`);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+
+  const branches=(ov.branches||[]).slice();
+  const totalTodo=branches.reduce((a,b)=>a+(b.todo_count||0),0);   // งานที่บล็อกการปิดเดือน (reclass เป็นคำแนะนำ ไม่บล็อก)
+  const _w=b=>Math.max(b.pos_total||0,b.ext_total||0,0);           // ถ่วงน้ำหนักด้วยฝั่งที่ใหญ่กว่า (ตรงกับ backend)
+  const wsum=branches.reduce((a,b)=>a+_w(b),0);
+  const chainPct=branches.length
+      ? Math.round( wsum>0
+          ? branches.reduce((a,b)=>a+(b.progress_pct||0)*_w(b),0)/wsum
+          : branches.reduce((a,b)=>a+(b.progress_pct||0),0)/branches.length )
+      : 100;
+  const rcCount=ov.reclass_count_total||0, rcAmt=ov.reclass_amount_total||0;
+  const open=branches.filter(b=>branchOpen(b)>0)
+      .sort((a,b)=>branchOpen(b)-branchOpen(a) || (a.progress_pct||0)-(b.progress_pct||0));
+  const done=branches.filter(b=>branchOpen(b)===0 && b.status!=='in_review')   // in_review ไม่ใช่ "เรียบร้อย" — อยู่ใน review-bar
+      .sort((a,b)=>a.branch_name.localeCompare(b.branch_name,'th'));
+  const review=branches.filter(b=>b.status==='in_review');
+
+  let html=header();
+
+  // hero line + chain progress (guard the empty-DB case: no ✓/100% over zero data)
+  if(!branches.length){
+    html+=`<div class="card ov-hero" style="margin-bottom:12px"><div class="ov-hero-line">เดือน <b>${esc(monthTh(ov.period_month))}</b></div></div>`;
+  } else {
+    html+=`<div class="card ov-hero" style="margin-bottom:12px">
+      <div class="ov-hero-line">เดือน <b>${esc(monthTh(ov.period_month))}</b>
+        ${totalTodo
+          ? `· เหลือ <b>${totalTodo}</b> เรื่อง ก่อนปิดได้ทั้งเครือ`
+          : `· <span class="chip c-ok">✓ ครบทุกสาขา พร้อมปิดทั้งเครือ</span>`}</div>
+      <div class="row" style="flex-wrap:nowrap;margin-top:9px">
+        <div class="prog ${progCls(chainPct)}"><div style="width:${chainPct}%"></div></div>
+        <span class="lbl mono" style="min-width:40px">${chainPct}%</span>
+      </div></div>`;
   }
-  // แถวรวมทุกสาขา — ผลต่างสุทธิต่อช่องทาง (กวาดตาเห็นช่องทางที่เพี้ยนทั้งเครือ)
-  const tot={}; chans.forEach(k=>tot[k]={pos:0,ext:0});
-  for(const b of ov.branches)for(const k of chans){const c=b.channels[k];if(c){tot[k].pos+=c.pos;tot[k].ext+=c.ext;}}
-  html+=`<tr style="border-top:2px solid var(--line);background:#fafafa">
-    <td><b>รวมทุกสาขา</b></td><td></td>
-    ${chans.map(k=>{const v=tot[k].ext-tot[k].pos;
-      const col=Math.abs(v)<=100?'var(--ok)':v<0?'var(--err)':'var(--warn)';
-      return `<td class="mono" style="color:${col};font-weight:700" title="POS ${fmt(tot[k].pos)} / เข้าจริง ${fmt(tot[k].ext)}">${Math.abs(v)<1?'✓':(v>0?'+':'')+fmt(v)}</td>`;}).join('')}
-    <td></td></tr>`;
-  html+=`</table></div>
-  <div class="muted" style="margin-top:8px">ตัวเลขในตาราง = ผลต่าง (เข้าจริง − POS) ของเดือน · คลิก<b>ช่องทาง</b>เพื่อเจาะดูทันที หรือคลิก<b>ชื่อสาขา</b>เพื่อตรวจทั้งสาขา</div>`;
+
+  // Phase-4 #1: manager attention bar (links into the in_review branches)
+  if(review.length){
+    html+=`<div class="card review-bar" style="margin-bottom:12px">
+      <span class="chip c-warn">⏳ รอฉันตรวจ ${review.length}</span>
+      <span class="muted">สาขาที่ส่งตรวจแล้ว รอผู้จัดการปิดเดือน —</span>
+      ${review.map(b=>`<a href="#" class="rb-link" onclick="location.hash='b/${b.branch_id}';return false">${esc(b.branch_name)}</a>`).join('')}
+    </div>`;
+  }
+
+  // chain reclass banner
+  if(rcCount>0){
+    html+=`<div class="card ov-reclass" style="margin-bottom:12px">
+      🔀 เจอเงินที่น่าจะ<b>อยู่ผิดช่อง ${rcCount} คู่</b> (รวม ฿${fmt(rcAmt)})
+      <span class="lbl"> — เปิดสาขาที่เกี่ยวข้องเพื่อยืนยันย้ายให้ถูกช่อง (กดเดียวจบ)</span></div>`;
+  }
+
+  // open branches (list, not table)
+  if(open.length){
+    html+=`<div class="card" style="padding:0;margin-bottom:12px">`;
+    for(const b of open){
+      const rc=b.reclass_count||0;
+      html+=`<div class="ov-row" onclick="location.hash='b/${b.branch_id}'">
+        <div class="ov-row-main">
+          <div class="ov-bname">${esc(b.branch_name)}
+            ${b.status==='in_review'?'<span class="chip c-warn ov-mini">รอตรวจ</span>':''}</div>
+          <div class="ov-sum">${esc(openSummary(b))}
+            ${rc>0?'<span class="chip c-warn ov-mini">🔀 ผิดช่อง '+rc+'</span>':''}</div>
+        </div>
+        <div class="row" style="flex-wrap:nowrap;flex:none;width:150px">
+          <div class="prog ${progCls(b.progress_pct)}"><div style="width:${b.progress_pct}%"></div></div>
+          <span class="lbl mono" style="min-width:34px">${b.progress_pct}%</span>
+        </div>
+        <span class="ov-chev">›</span>
+      </div>`;
+    }
+    html+=`</div>`;
+  } else if(branches.length){
+    html+=`<div class="card c-ok" style="margin-bottom:12px;background:var(--ok-bg)">
+      ✓ ทุกสาขากระทบยอดครบแล้วสำหรับเดือนนี้ — พร้อมให้ผู้จัดการปิดเดือน</div>`;
+  } else {
+    html+=`<div class="card muted" style="margin-bottom:12px">ยังไม่มีข้อมูลสาขาสำหรับเดือนนี้</div>`;
+  }
+
+  // done branches — collapsed section
+  if(done.length){
+    html+=`<div class="card" style="padding:0">
+      <a href="#" class="ov-done-toggle" onclick="toggleDone();return false" id="ov-done-toggle">
+        สาขาที่เรียบร้อยแล้ว (${done.length}) <span id="ov-done-caret">▾</span></a>
+      <div id="ov-done" style="display:none">`;
+    for(const b of done){
+      html+=`<div class="ov-row ov-row-done" onclick="location.hash='b/${b.branch_id}'">
+        <div class="ov-row-main">
+          <div class="ov-bname">${esc(b.branch_name)}</div>
+          <div class="ov-sum"><span class="chip c-ok ov-mini">✓ ${esc(SES_ST[b.status]||'ครบ')}</span></div>
+        </div>
+        <span class="ov-chev">›</span>
+      </div>`;
+    }
+    html+=`</div></div>`;
+  }
+
   $('app').innerHTML=html;
+}
+function toggleDone(){
+  const e=$('ov-done'),c=$('ov-done-caret');
+  if(!e)return;
+  const show=e.style.display==='none';
+  e.style.display=show?'':'none';
+  if(c)c.textContent=show?'▴':'▾';
 }
 
 /* ── รายงานข้อผิดพลาดการบันทึก รายสาขา (สำหรับประเมินพนักงาน) ── */
@@ -261,6 +392,27 @@ async function loadErrorReport(){
 }
 
 /* ── หน้าสาขา ── */
+/* ── Phase 2: bucket each channel for the branch inbox ── */
+function _uploadChKeys(r){      // channel keys that have a genuine missing-doc upload task
+  const keys=new Set();
+  (r.todo||[]).forEach(t=>{ if(t.type==='upload' && t.channel) keys.add(t.channel); });
+  return keys;                  // upload todos always carry .channel (reconcile_v2)
+}
+function classifyCh(ch,uploadKeys,missingStmtBanks){   // 'problem' | 'coin' | 'waiting' | 'green'
+  if(ch.accepted)return 'green';
+  if(ch.status==='no_source')return 'green';
+  if(ch.status==='setup'||ch.status==='diff')return 'problem';
+  if(ch.status==='waiting_doc'){
+    if(uploadKeys.has(ch.key))return 'problem';          // missing doc that carries this channel → act
+    // a fully-missing BANK STATEMENT backing this channel is actionable today,
+    // not "รอเงินเข้าตามรอบ" — stmt docs carry channel=None so uploadKeys misses them
+    if(missingStmtBanks&&(ch.banks||[]).some(b=>missingStmtBanks.has(b.bank)))return 'problem';
+    return 'waiting';                                     // in-transit on schedule → timing drawer
+  }
+  // COUPON variance is loyalty points, not baht — never file it as ฿ "coin residue"
+  if(ch.key!=='COUPON' && Math.abs(ch.variance)>0 && Math.abs(ch.variance)<=COIN_TOL) return 'coin';
+  return 'green';
+}
 async function loadBranch(bid){
   $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
   let r;try{r=await api(`/api/v2/reconcile?branch_id=${bid}&month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
@@ -290,12 +442,21 @@ async function loadBranch(bid){
     <b style="font-size:13.5px">เอกสาร</b>`;
   for(const d of r.documents){
     const cls=d.status==='uploaded'?'c-ok':d.status==='partial'?'c-warn':'c-err';
-    const cov=(d.status==='uploaded'&&d.coverage_to)?' · ถึง '+esc(d.coverage_to.slice(8)):'';  // C8
+    // C8 + Phase 4 #3: uploaded → "· ถึง NN"; partial → "ถึงวันที่ N — ขาด N+1–<horizon>".
+    // Cap the missing range to the reconcilable horizon (today for the current month)
+    // so an in-progress month doesn't ask staff to upload days that haven't happened.
+    const _eom=new Date(+MONTH.slice(0,4), +MONTH.slice(5,7), 0).getDate();
+    const _now=new Date();
+    const _horizon=(MONTH===_now.toISOString().slice(0,7))?Math.min(_eom,_now.getDate()):_eom;
+    const _covTo=d.coverage_to?+d.coverage_to.slice(8):0;
+    const cov=(d.status==='uploaded'&&d.coverage_to)?' · ถึง '+esc(d.coverage_to.slice(8))
+      :(d.status==='partial'&&_covTo&&_covTo<_horizon)?` · ถึงวันที่ ${_covTo} — ขาด ${_covTo+1}–${_horizon}`
+      :(d.status==='partial'&&_covTo)?` · ถึงวันที่ ${_covTo}`:'';
     const tip=d.hint?esc(d.hint):'คลิกเพื่ออัปโหลด';                                              // C2
     if(d.status==='uploaded'||closed)
       html+=`<span class="chip ${cls}" title="${tip}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}${cov}</span>`;
     else
-      html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
+      html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${cov||(d.detail?' · '+esc(d.detail):'')}</button>`;
   }
   if(!closed) html+=`
     <input type="file" id="bulk-input" multiple style="display:none" onchange="bulkUpload('bulk-input')">
@@ -341,28 +502,48 @@ async function loadBranch(bid){
 
   // (การ์ด "ยอดอยู่ผิดช่อง" ย้ายขึ้นบนสุดเป็น hero card — ดู reclassHero ด้านล่าง)
 
-  // ตาราง channel
-  html+=`<div class="card" style="padding:0;margin-bottom:12px">
-    <div class="grid-ch" style="cursor:default;background:#fafafa;border-radius:12px 12px 0 0">
-      <span class="lbl">ช่องทาง</span><span class="lbl num">ยอดขาย POS</span>
-      <span class="lbl num">เงินเข้าจริง</span><span class="lbl" style="text-align:right">สถานะ</span><span></span>
-    </div>`;
-  r.channels.forEach((ch,i)=>{
-    const acc=ch.accepted;
-    const [cls,lab]=acc?['c-mut','รับทราบแล้ว']:(CH_ST[ch.status]||['c-mut',ch.status]);
-    const varTxt=ch.ext&&Math.abs(ch.variance)>100
-      ?`<div class="lbl mono" style="color:${ch.variance<0?'var(--err)':'var(--warn)'}">${ch.variance>0?'+':''}${fmt(ch.variance)}</div>`:'';
-    html+=`<div class="grid-ch" onclick="toggleDays(${i})">
-      <div><span class="ch-name">${esc(ch.label)}</span>${ch.days_total?`<div class="lbl">${ch.days_done}/${ch.days_total} วัน ✓</div>`:''}</div>
-      <div class="num" style="color:var(--sub)">${fmt(ch.pos)}</div>
-      <div class="num">${ch.ext?fmt(ch.ext):'<span style="color:var(--mut)">—</span>'}${varTxt}</div>
-      <div style="text-align:right"><span class="chip ${cls}">${lab}</span>
-        ${acc?`<div class="lbl" title="${esc(acc.note)}">"${esc(acc.note)}" ${closed?'':`<a href="#" onclick="event.stopPropagation();unaccept(${acc.id});return false">เลิกรับทราบ</a>`}</div>`
-            :ch.detail?`<div class="lbl">${esc(ch.detail)}</div>`:''}</div>
-      <span class="lbl">▾</span></div>
-    <div id="days-${i}" style="display:none;border-bottom:1px solid var(--line)"></div>`;
-  });
-  html+=`</div>`;
+  // ── Phase 2: ช่องทาง = กล่องงานเฉพาะที่มีปัญหาจริง + ลิ้นชักเขียว/รอรอบ + เศษเหรียญ ──
+  const _upKeys=_uploadChKeys(r);
+  const _missStmt=new Set((r.documents||[]).filter(d=>d.source==='bank'&&d.status==='missing').map(d=>d.provider));
+  const _bucket={problem:[],coin:[],waiting:[],green:[]};
+  r.channels.forEach((ch,i)=>{ _bucket[classifyCh(ch,_upKeys,_missStmt)].push(i); });
+
+  // (A) การ์ดปัญหา — diff / setup / เอกสารหายจริง
+  _bucket.problem.forEach(i=>{ html+=chProblemCard(r.channels[i],i,closed); });
+
+  // (B) เศษเหรียญ ≤฿100 — รวมเป็นการ์ดเดียว กดรับทราบทั้งหมด
+  if(_bucket.coin.length && !closed){
+    const sum=_bucket.coin.reduce((a,i)=>a+Math.abs(r.channels[i].variance),0);
+    const names=_bucket.coin.map(i=>`<span class="lbl coin-name" onclick="toggleDays(${i})" title="ดูรายวันของ ${esc(r.channels[i].label)} ก่อนรับทราบ">${esc(r.channels[i].label)}</span>`).join(', ');
+    html+=`<div class="card coin-card" style="margin-bottom:12px">
+      <div class="row"><b style="font-size:13.5px">🪙 ต่างเล็กน้อยรวม ฿${fmt(sum)} จาก ${_bucket.coin.length} ช่องทาง</b>
+        <button class="btn btn-sm btn-pri" style="margin-left:auto" onclick='acceptCoinAll(${JSON.stringify(_bucket.coin)})'>✓ รับทราบทั้งหมด</button></div>
+      <div class="muted" style="margin-top:3px">${names} — ผลต่างไม่เกิน ${COIN_TOL} บาท (ปัดเศษ/ค่าธรรมเนียม) · กดชื่อช่องทางเพื่อดูรายวัน หรือกดปุ่มรับทราบทั้งหมด</div>`;
+    _bucket.coin.forEach(i=>{ html+=`<div id="days-${i}" style="display:none"></div>`; });
+    html+=`</div>`;
+  } else if(_bucket.coin.length){            // closed: read-only problem cards (still drillable)
+    _bucket.coin.forEach(i=>{ html+=chProblemCard(r.channels[i],i,closed); });
+  }
+
+  // (C) ลิ้นชัก "รอเงินเข้าตามรอบ" — ห้ามแดง
+  if(_bucket.waiting.length){
+    html+=`<div class="card drawer" style="margin-bottom:12px;background:var(--info-bg)">
+      <a href="#" class="drawer-h" onclick="toggleDrawer('wait');return false" id="dh-wait">
+        ⏳ รอเงินเข้าตามรอบ — ไม่ต้องทำอะไร (${_bucket.waiting.length}) ▾</a>
+      <div id="dw-wait" style="display:none;margin-top:8px">`;
+    _bucket.waiting.forEach(i=>{ html+=chDrawerRow(r.channels[i],i,'wait'); });
+    html+=`</div></div>`;
+  }
+
+  // (D) ลิ้นชักเขียว "เรียบร้อยแล้ว"
+  if(_bucket.green.length){
+    html+=`<div class="card drawer" style="margin-bottom:12px;background:var(--ok-bg)">
+      <a href="#" class="drawer-h" onclick="toggleDrawer('green');return false" id="dh-green">
+        ✓ เรียบร้อยแล้ว — ${_bucket.green.length} ช่องทางตรงหมด ▾</a>
+      <div id="dw-green" style="display:none;margin-top:8px">`;
+    _bucket.green.forEach(i=>{ html+=chDrawerRow(r.channels[i],i,'green'); });
+    html+=`</div></div>`;
+  }
 
   // โอนภายใน
   if(r.non_revenue.count){
@@ -421,12 +602,72 @@ async function loadBranch(bid){
   </div></div>`;
   $('app').innerHTML=html;
 
-  // มาจากการคลิกช่องทางในหน้าภาพรวม → กางช่องทางนั้นและเลื่อนไปหา
-  if(PENDING_CH){
-    const idx=r.channels.findIndex(c=>c.key===PENDING_CH);
-    PENDING_CH=null;
-    if(idx>=0){toggleDays(idx);const el=$('days-'+idx);if(el)el.scrollIntoView({behavior:'smooth',block:'center'});}
+  // มาจากการคลิกช่องทางในหน้าภาพรวม → กางช่องทางนั้นและเลื่อนไปหา (กางลิ้นชักให้ด้วย)
+  if(PENDING_CH){ const k=PENDING_CH; PENDING_CH=null; openEvidence(k); }
+}
+
+/* ── Phase 2 render helpers ── */
+function chProblemCard(ch,i,closed){
+  const acc=ch.accepted;
+  const [cls,lab]=acc?['c-mut','รับทราบแล้ว']:(CH_ST[ch.status]||['c-mut',ch.status]);
+  const dirTxt=(ch.key!=='COUPON'&&ch.status==='diff'&&Math.abs(ch.variance)>0)
+    ? (ch.variance<0?`เงินเข้าจริงน้อยกว่า POS ฿${fmt(-ch.variance)}`
+                    :`เงินเข้าจริงเกิน POS ฿${fmt(ch.variance)}`)
+    : esc(ch.detail||lab);   // COUPON (variance=แต้ม) ใช้ detail เดิม ไม่แปลงเป็นบาท
+  const side=ch.status==='diff'?'var(--err)':ch.status==='setup'?'var(--info)':'var(--warn)';
+  const bg  =ch.status==='diff'?'var(--err-bg)':ch.status==='setup'?'var(--info-bg)':'var(--warn-bg)';
+  // suppress the POS·ext subline for COUPON (its variance is points, pos/ext are gross — misleading)
+  const sub=ch.key==='COUPON'?'' :
+    `<div class="lbl mono">POS ${fmt(ch.pos)} · เงินเข้าจริง ${ch.ext?fmt(ch.ext):'—'}${ch.days_total?` · ${ch.days_done}/${ch.days_total} วัน ✓`:''}</div>`;
+  return `<div class="card ch-prob" style="margin-bottom:12px;background:${bg};border-left:4px solid ${side}">
+    <div class="row" style="cursor:pointer" onclick="toggleDays(${i})">
+      <div style="flex:1"><b style="font-size:14px">${esc(ch.label)}</b>
+        <div class="muted">${dirTxt}</div>${sub}</div>
+      <span class="chip ${cls}">${lab}</span>
+      <button class="btn btn-sm" onclick="event.stopPropagation();toggleDays(${i})">🔍 ดูรายการ ▾</button>
+    </div>
+    ${acc?`<div class="lbl" style="margin-top:4px" title="${esc(acc.note)}">"${esc(acc.note)}" ${closed?'':`<a href="#" onclick="event.stopPropagation();unaccept(${acc.id});return false">เลิกรับทราบ</a>`}</div>`:''}
+    <div id="days-${i}" style="display:none;margin-top:8px;border-top:1px solid var(--line)"></div>
+  </div>`;
+}
+function chDrawerRow(ch,i,which){
+  const acc=ch.accepted;
+  const [cls,lab]=acc?['c-mut','รับทราบแล้ว']
+    :which==='wait'?['c-warn',esc(ch.detail||'รอเงินเข้าตามรอบ')]
+    :(CH_ST[ch.status]||['c-mut',ch.status]);
+  // COUPON: pos/ext are gross discount amounts, not bank money — don't show as เงินเข้า
+  const isCoupon=ch.key==='COUPON';
+  const posCell=isCoupon?'<span class="lbl">แต้ม</span>':fmt(ch.pos);
+  const extCell=isCoupon?'<span style="color:var(--mut)">—</span>':(ch.ext?fmt(ch.ext):'<span style="color:var(--mut)">—</span>');
+  return `<div class="grid-ch" onclick="toggleDays(${i})" style="background:transparent">
+    <div><span class="ch-name" style="font-size:14px">${esc(ch.label)}</span>${ch.days_total?`<div class="lbl">${ch.days_done}/${ch.days_total} วัน ✓</div>`:''}</div>
+    <div class="num" style="color:var(--sub)">${posCell}</div>
+    <div class="num">${extCell}</div>
+    <div style="text-align:right"><span class="chip ${cls}">${lab}</span>
+      ${acc&&!DATA.closed?`<div class="lbl"><a href="#" onclick="event.stopPropagation();unaccept(${acc.id});return false">เลิกรับทราบ</a></div>`:''}</div>
+    <span class="lbl">▾</span></div>
+  <div id="days-${i}" style="display:none;border-bottom:1px solid var(--line)"></div>`;
+}
+function toggleDrawer(name){
+  const body=$('dw-'+name), h=$('dh-'+name); if(!body)return;
+  const open=body.style.display!=='none';
+  body.style.display=open?'none':'';
+  h.textContent=h.textContent.replace(open?'▴':'▾',open?'▾':'▴');
+}
+/* เศษเหรียญ ≤฿100: รับทราบทุกช่องทางในคราวเดียว (auto-reason ≥10 ตัวอักษร, AUD-8) */
+async function acceptCoinAll(idxs){
+  if(!idxs||!idxs.length)return;
+  const note=`ผลต่างเล็กน้อยไม่เกิน ${COIN_TOL} บาท (ปัดเศษ/ค่าธรรมเนียม)`;
+  if(!confirm(`รับทราบผลต่างเล็กน้อย ${idxs.length} ช่องทาง พร้อมเหตุผล "${note}"?`))return;
+  let okN=0;
+  for(const i of idxs){
+    const ch=DATA.channels[i]; if(!ch)continue;
+    try{await api('/api/lanes/adj',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+        category:ch.key,bank:'ALL',adj_pos:0,adj_ext:0,note:note,adj_type:'accept'}}); okN++; }
+    catch(e){ hint403(e); }
   }
+  toast(okN===idxs.length?`รับทราบแล้ว ${okN} ช่องทาง`:`รับทราบ ${okN}/${idxs.length} — บางช่องไม่สำเร็จ`);
+  route();
 }
 
 function toggleNR(){const e=$('nr');e.style.display=e.style.display==='none'?'':'none';}
@@ -693,6 +934,18 @@ function showSheet(html){
 }
 function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 
+/* ── Phase 4 #2: เมนู "เพิ่มเติม" — รวมลิงก์ส่วนหัวที่ใช้ไม่บ่อย ── */
+function moreMenu(){
+  showSheet(`<div class="sheet-h">เพิ่มเติม</div>
+    <div class="more-menu">
+      <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
+      <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
+      <a class="more-item" href="/app/setup.html">⚙️ ตั้งค่าระบบ ↗<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID</span></a>
+      <a class="more-item" href="/app/classic.html">🧰 เครื่องมือขั้นสูง ↗<span class="lbl">หน้าเดิม — เครื่องมือครบทุกอย่าง</span></a>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn" style="margin-left:auto" onclick="closeSheet()">ปิด</button></div>`);
+}
+
 const FEE_SOURCE={CREDIT:'credit_card',GRAB:'grab',LINEMAN:'lineman'};
 const C3_LEG={matched:['c-ok','✓ ตรง'],mismatch:['c-err','≠ ต่าง'],pos_only:['c-warn','รอสรุปยอดบัตร'],
               ext_only:['c-warn','ไม่มียอด POS'],awaiting:['c-warn','รอเงินเข้า'],no_bank:['c-mut','—'],none:['c-mut','—']};
@@ -880,6 +1133,14 @@ async function openDay(i,day){
   // ฝั่ง POS รายบิล — แตกยอดขายของวันนี้เป็นใบเสร็จ (จาก sale_payment, tie-out ตรงกับ d.pos)
   let pos=null;
   try{pos=await api(`/api/v2/pos-lines?branch_id=${DATA.branch_id}&month=${MONTH}&category=${ch.key}&day=${day}`);}catch(e){}
+  // Phase 4 #4: hint pairs — unmatched bank line equal to an unmatched POS-code amount (±฿1).
+  // Advisory chip only (no auto-tick); confirm still flows through manualMatchDay().
+  const _posAmts=(pos&&pos.by_code?pos.by_code:[]).map(b=>Math.round(b.amount));
+  const _hintJ=new Set();
+  lines.forEach((l,j)=>{
+    if(l.match_status==='manual'||l.match_status==='matched')return;
+    if(_posAmts.some(a=>Math.abs(a-Math.round(l.amount))<=1)) _hintJ.add(j);
+  });
   window._DAY={i,day,lines,key:ch.key};
   const varCol=Math.abs(d.variance)<=100?'var(--ok)':'var(--err)';
   box.innerHTML=`<div class="card" style="background:#fafafa">
@@ -890,7 +1151,7 @@ async function openDay(i,day){
     <div class="lbl" style="margin:10px 0 4px"><b>② เงินเข้าธนาคาร</b> (สเตทเมนต์) — ติ๊กเพื่อจับคู่กับยอด POS วันนี้</div>
     ${lines.length?`<table>${lines.map((l,j)=>`<tr>
       <td style="width:26px">${!DATA.closed&&l.id&&l.match_status!=='manual'?`<input type="checkbox" data-j="${j}" onchange="updMatchBar()">`:''}</td>
-      <td style="text-align:left">${esc(l.ref||'')}<span class="lbl"> ${esc(l.bank)}${l.match_status==='manual'?' · จับคู่แล้ว':''}</span></td>
+      <td style="text-align:left">${esc(l.ref||'')}<span class="lbl"> ${esc(l.bank)}${l.match_status==='manual'?' · จับคู่แล้ว':''}</span>${_hintJ.has(j)?` <span class="chip c-ok" style="font-size:11px;padding:2px 7px" title="ยอดตรงกับยอดขาย POS วันนี้ — ติ๊กแล้วกดจับคู่เพื่อยืนยัน">น่าจะคู่กัน</span>`:''}</td>
       <td>${l.date}</td>
       <td class="mono">${fmt(l.amount)}</td>
       <td style="width:90px">${!DATA.closed&&l.id?`<button class="btn btn-sm" onclick="ignoreLine(${l.id})">ตัดออก</button>`:''}</td>

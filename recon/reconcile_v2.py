@@ -311,6 +311,15 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
             status, detail = "ok", ""
         if status == "ok" and n_done:
             detail = f"{n_done}/{len(days)} วัน"
+        # Control gap: every day can sit inside the daily tolerance (±฿50) yet the
+        # MONTH drifts past the monthly tolerance (฿100) — a classic fee-skim /
+        # under-settlement pattern. Escalate to 'diff' so it raises a todo and
+        # blocks ปิดเดือน instead of hiding under 'ตรงกันแล้ว'. COUPON excluded:
+        # its variance is loyalty points, not bank money (set below at ~L333).
+        if status == "ok" and key != "COUPON" and abs(ext_amt - pos_amt) > 100:
+            status = "diff"
+            detail = (f"สะสมต่าง {ext_amt - pos_amt:+,.0f} บาท "
+                      "(ทุกวันอยู่ในเกณฑ์รายวัน แต่ยอดรวมทั้งเดือนเกิน)")
 
         ch = {"key": key, "label": label, "pos": pos_amt, "ext": ext_amt,
               "variance": round(ext_amt - pos_amt, 2), "status": status,
@@ -447,6 +456,7 @@ def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
     rows = []
     for b in branches:
         r = reconcile_month(conn, b["branch_id"], period_month)
+        _rc = r.get("reclass_suggestions") or []
         rows.append({
             "branch_id": b["branch_id"],
             "branch_name": b["name"],
@@ -456,9 +466,15 @@ def reconcile_overview(conn: sqlite3.Connection, period_month: str) -> dict:
             "pos_total": round(sum(c["pos"] for c in r["channels"]), 2),
             "ext_total": round(sum(c["ext"] for c in r["channels"]), 2),
             "non_revenue": r["non_revenue"]["amount"],
+            # Phase 3: surface wrong-channel pairs so a branch with todo_count==0 but
+            # money sitting in the wrong lane doesn't read as falsely "ครบ".
+            "reclass_count": len(_rc),
+            "reclass_amount": round(sum(s.get("amount", 0) or 0 for s in _rc), 2),
             "channels": {c["key"]: {"pos": c["pos"], "ext": c["ext"],
                                     "variance": c["variance"], "status": c["status"]}
                          for c in r["channels"]},
         })
     return {"period_month": period_month, "channel_order": [k for k, _ in CHANNELS],
-            "channel_labels": _CH_LABEL, "branches": rows}
+            "channel_labels": _CH_LABEL, "branches": rows,
+            "reclass_count_total": sum(b["reclass_count"] for b in rows),
+            "reclass_amount_total": round(sum(b["reclass_amount"] for b in rows), 2)}
