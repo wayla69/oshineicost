@@ -18,8 +18,11 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
   admin-reset / self-service change (`auth.check_password_policy`, this pass).
 - ☑ Persistent login-event log (success / fail / logout / password change) →
   recon_audit_log (see AUD-6).
-- ☐ Operational: set `OSHINEI_AUTH=1` permanently in Fly secrets; give each
-  person their own account.
+- ☑ `OSHINEI_AUTH=1` + `OSHINEI_AUTH_SECRET` ALREADY set as Fly secrets (verified
+  2026-06-13 — auth is enforced in production; all the above is live).
+- ☐ Operational: give each person their own account (the 12 seeded users share
+  the default `Oshinei@2026` with must_change=1, so each is forced to set an
+  individual password on first login — just have everyone log in once).
 
 ### AUD-2 ◐ Backup + restore evidence
 - ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;
@@ -84,4 +87,5 @@ disclosure · AUD-8 accept-reason + listing — plus AUD-2 backup script & AUD-9
   AUD-5 close snapshot + login-event logging in this pass). Optional code extras:
   audit-log hash-chain (AUD-6), close-snapshot UI button.
 - Operational (owner): turn AUD-2 schedule on + one restore test; AUD-3 retention;
-  set `OSHINEI_AUTH=1` in Fly; quarterly access review (AUD-10); monitoring (AUD-11).
+  have each user log in once to set an individual password (auth already enforced);
+  quarterly access review (AUD-10); monitoring (AUD-11).
