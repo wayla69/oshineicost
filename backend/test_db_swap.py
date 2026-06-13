@@ -1,0 +1,66 @@
+"""A3: fail-closed carry-forward — a data refresh must never wipe recon work.
+
+Run:  cd backend && python -m pytest test_db_swap.py -v
+"""
+import os
+os.environ.setdefault("OSHINEI_NO_SWAP", "1")   # no FS side effects on import
+
+import sqlite3
+import sys
+from pathlib import Path
+
+HERE = Path(__file__).parent.resolve()
+sys.path.insert(0, str(HERE))
+import main  # noqa: E402
+
+
+def _mk_live(p):
+    c = sqlite3.connect(str(p))
+    c.execute("CREATE TABLE recon_uploads(upload_id INTEGER PRIMARY KEY, file_name TEXT)")
+    c.executemany("INSERT INTO recon_uploads(file_name) VALUES(?)", [("a",), ("b",), ("c",)])
+    c.execute("CREATE TABLE app_user(id INTEGER PRIMARY KEY, name TEXT)")
+    c.execute("INSERT INTO app_user(name) VALUES('admin')")
+    c.commit(); c.close()
+
+
+def _mk_incoming(p):
+    c = sqlite3.connect(str(p))
+    c.execute("CREATE TABLE sales_transaction(id INTEGER PRIMARY KEY)")
+    c.execute("INSERT INTO sales_transaction(id) VALUES(1)")
+    c.commit(); c.close()
+
+
+def test_carry_forward_preserves_and_verifies(tmp_path):
+    """Happy path: recon_*/app_user are carried into the staged DB and verified."""
+    live, inc = tmp_path / "live.db", tmp_path / "inc.db"
+    _mk_live(live); _mk_incoming(inc)
+    safe, reason = main._carry_forward_and_verify(str(live), str(inc))
+    assert safe, reason
+    cnt = main._preserved_counts(str(inc))
+    assert cnt["recon_uploads"] == 3 and cnt["app_user"] == 1
+
+
+def test_fail_closed_on_carry_forward_error(tmp_path):
+    """A corrupt live DB → carry-forward errors → NOT safe (live must be kept)."""
+    inc = tmp_path / "inc.db"; _mk_incoming(inc)
+    bad = tmp_path / "bad.db"; bad.write_bytes(b"this is not a database")
+    safe, reason = main._carry_forward_and_verify(str(bad), str(inc))
+    assert not safe and "fail" in reason.lower()
+
+
+def test_fail_closed_on_dropped_rows(tmp_path, monkeypatch):
+    """If carry-forward silently no-ops, the verify gate still aborts the swap."""
+    live, inc = tmp_path / "live.db", tmp_path / "inc.db"
+    _mk_live(live); _mk_incoming(inc)
+    monkeypatch.setattr(main, "_carry_forward_preserved", lambda l, i: None)
+    safe, reason = main._carry_forward_and_verify(str(live), str(inc))
+    assert not safe and "drop" in reason.lower()
+
+
+def test_no_false_abort_on_fresh_install(tmp_path):
+    """Live with zero recon rows must NOT block the swap (fresh deploy)."""
+    live, inc = tmp_path / "live.db", tmp_path / "inc.db"
+    c = sqlite3.connect(str(live)); c.execute("CREATE TABLE recon_uploads(id INTEGER PRIMARY KEY)"); c.commit(); c.close()
+    _mk_incoming(inc)
+    safe, reason = main._carry_forward_and_verify(str(live), str(inc))
+    assert safe, reason

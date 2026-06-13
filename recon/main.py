@@ -59,7 +59,11 @@ from .parsers import (
     parse_lineman_report,
 )
 from .parsers.loader import to_parseable_xlsx
-from .parsers.pdf_formats import detect_and_parse as _detect_pdf_format
+from .parsers.pdf_formats import (
+    detect_and_parse as _detect_pdf_format,
+    fee_invoice_by_name as _fee_invoice_by_name,
+    fee_invoice_by_text as _fee_invoice_by_text,
+)
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
@@ -1004,8 +1008,13 @@ def _parse(source_type: SourceType, raw: bytes, provider: str, filename: str = "
 
 
 def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
+    # A2: reject a known WRONG document type up front (cheap filename check) with
+    # specific guidance on the correct file to upload — before any parse attempt.
+    byname = _fee_invoice_by_name(source_type, filename)
+    if byname:
+        raise HTTPException(422, byname)
     try:
-        return _parse(source_type, raw, provider, filename)
+        prov, rows, skipped = _parse(source_type, raw, provider, filename)
     except HTTPException:
         raise
     except Exception as exc:
@@ -1013,7 +1022,15 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
         # table for any parser to find — that's a valid empty document, not an error.
         if _is_empty_statement(raw, filename):
             return (provider or "", [], 0)
-        raise HTTPException(422, f"Parse error: {exc}")
+        # A renamed fee invoice → name it; else surface the raw parse error.
+        raise HTTPException(422, _fee_invoice_by_text(raw, filename) or f"Parse error: {exc}")
+    # Parsed but found nothing (and not a legit empty statement): if it reads like
+    # a fee invoice, say so; otherwise A1's generic 0-row guard handles it.
+    if not rows and not _is_empty_statement(raw, filename):
+        bytext = _fee_invoice_by_text(raw, filename)
+        if bytext:
+            raise HTTPException(422, bytext)
+    return prov, rows, skipped
 
 
 @app.post("/api/uploads/{source_type}/preview")

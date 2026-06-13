@@ -489,6 +489,63 @@ def is_empty_statement(raw: bytes) -> bool:
     return ("No Data" in txt or "ไม่มีรายการ" in txt or "ไม่พบรายการ" in txt)
 
 
+# ── Wrong-document-type detection (A2) ────────────────────────────────────────
+# Staff frequently upload a FEE / TAX-INVOICE document instead of the settlement
+# or transaction report a lane needs (KTC TIV_MDR instead of *-RTxInv-*, Grab IM*
+# invoice instead of the 3-CZ* report, KBANK E-TAX_INVOICE, Lineman Balance-Report).
+# Those parse to 0 rows and used to save silently — name the mistake so the
+# operator can self-correct without an engineer.
+
+_FEE_INVOICE_BY_NAME = (
+    ("tiv_mdr",        "นี่คือใบกำกับภาษีค่าธรรมเนียม (MDR) ของ KTC ไม่ใช่รายงาน settlement — "
+                       "กรุณาอัปโหลดไฟล์ชื่อ *-RTxInv-*.pdf"),
+    ("e-tax_invoice",  "นี่คือใบกำกับภาษีอิเล็กทรอนิกส์ (e-Tax invoice) ค่าธรรมเนียมบัตร "
+                       "ไม่ใช่รายงาน settlement ของผู้รับบัตร"),
+    ("e_tax_invoice",  "นี่คือใบกำกับภาษีอิเล็กทรอนิกส์ (e-Tax invoice) ค่าธรรมเนียมบัตร "
+                       "ไม่ใช่รายงาน settlement ของผู้รับบัตร"),
+    ("balance-report", "นี่คือ Balance Report ไม่ใช่รายงานยอดขาย Line Man — "
+                       "กรุณาอัปโหลดไฟล์ REPORT_*.csv หรือ REPORT_*.pdf"),
+)
+
+_GRAB_IM_RE = re.compile(r"^im\d{6,}", re.IGNORECASE)
+
+
+def fee_invoice_by_name(source_type: str, filename: str) -> str | None:
+    """Cheap filename-only check for a known wrong document type. Returns a Thai
+    message naming the correct file to upload, or None."""
+    name = (filename or "").strip().lower()
+    if not name:
+        return None
+    for needle, msg in _FEE_INVOICE_BY_NAME:
+        if needle in name:
+            return msg
+    if source_type == "grab" and _GRAB_IM_RE.match(name):
+        return ("นี่คือใบแจ้งหนี้ค่าธรรมเนียม Grab (IM) ไม่ใช่รายงานธุรกรรม — "
+                "กรุณาอัปโหลดรายงานยอดขาย Grab (ไฟล์ขึ้นต้น 3-CZ...)")
+    return None
+
+
+def fee_invoice_by_text(raw: bytes, filename: str = "") -> str | None:
+    """Backstop for renamed files: a PDF that reads like a fee tax-invoice with no
+    settlement/transaction grid. Meant to run only AFTER a parse already failed or
+    returned 0 rows, so it cannot block a document that parsed fine."""
+    if not (filename or "").lower().endswith(".pdf"):
+        return None
+    try:
+        txt = _full_text(raw)
+    except Exception:
+        return None
+    low = txt.lower()
+    has_tax_invoice = "ใบกำกับภาษี" in txt or "tax invoice" in low
+    has_fee = "mdr" in low or "ค่าธรรมเนียม" in txt or "service fee" in low
+    has_grid = ("rtxinv" in low or "settlement" in low or "รายการขาย" in txt
+                or "order id" in low)
+    if has_tax_invoice and has_fee and not has_grid:
+        return ("เอกสารนี้ดูเหมือนใบกำกับภาษีค่าธรรมเนียม ไม่ใช่รายงาน settlement/ธุรกรรม — "
+                "กรุณาตรวจสอบและอัปโหลดรายงานที่ถูกต้อง")
+    return None
+
+
 def detect_and_parse(source_type: str, raw: bytes):
     """Return (provider, rows, skipped) when `raw` is a recognised special PDF for
     this source_type, else None (caller falls back to the generic grid loader)."""

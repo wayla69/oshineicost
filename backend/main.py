@@ -178,6 +178,47 @@ def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
         live.close()
 
 
+def _preserved_counts(db_path: str) -> dict:
+    """Row counts of the locally-owned tables that MUST survive a refresh
+    (recon_* + app_user). Used to verify a staged swap won't drop any of them."""
+    counts: dict = {}
+    if not _os_db.path.exists(db_path):
+        return counts
+    c = sqlite3.connect(db_path)
+    try:
+        names = [r[0] for r in c.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND "
+            "(name LIKE 'recon\\_%' ESCAPE '\\' OR name='app_user')")]
+        for n in names:
+            try:
+                counts[n] = c.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0]
+            except sqlite3.Error:
+                pass
+    finally:
+        c.close()
+    return counts
+
+
+def _carry_forward_and_verify(live_path: str, inc_path: str) -> tuple[bool, str]:
+    """Carry preserved tables from live into the staged DB, then VERIFY nothing
+    was dropped. Returns (safe, reason). FAIL-CLOSED: any error, or any preserved
+    table ending up with fewer rows in the staged DB than live, means the caller
+    must NOT swap — protecting the only copy of staff reconciliation work from a
+    routine data refresh. (The old code swallowed carry-forward errors and swapped
+    anyway, which could silently wipe all recon uploads.)"""
+    try:
+        live_counts = _preserved_counts(live_path)
+        _carry_forward_preserved(live_path, inc_path)
+        staged_counts = _preserved_counts(inc_path)
+    except Exception as exc:
+        return False, f"carry-forward failed: {exc!r}"
+    lost = {t: (live_counts[t], staged_counts.get(t, 0))
+            for t in live_counts if staged_counts.get(t, 0) < live_counts[t]}
+    if lost:
+        return False, f"staged refresh would drop preserved rows {lost} (live,staged)"
+    return True, "ok"
+
+
 def _maybe_swap_incoming_db():
     """Apply a staged DB refresh at startup, before any connection is opened.
 
@@ -206,10 +247,12 @@ def _maybe_swap_incoming_db():
         except OSError: pass
         return
     # Carry forward reconciliation tables so a data refresh never wipes them.
-    try:
-        _carry_forward_preserved(str(DB_PATH), str(inc))
-    except Exception:
-        pass
+    # FAIL-CLOSED: if the carry-forward can't be verified, keep the live DB and
+    # leave the staged file for inspection rather than swap in a wipe.
+    safe, reason = _carry_forward_and_verify(str(DB_PATH), str(inc))
+    if not safe:
+        print(f"[db-swap] ABORTED — {reason}; live DB kept, {inc.name} left for inspection")
+        return
     # Discard stale WAL/SHM of the OLD db, then atomically replace it.
     for suf in ("-wal", "-shm"):
         try: _os_db.remove(str(DB_PATH) + suf)
@@ -555,10 +598,11 @@ def _apply_incoming_live() -> bool:
         except OSError: pass
         return False
     # Carry forward reconciliation tables so a refresh never wipes them.
-    try:
-        _carry_forward_preserved(str(DB_PATH), str(inc))
-    except Exception:
-        pass
+    # FAIL-CLOSED: don't hot-swap unless the carry-forward is verified intact.
+    safe, reason = _carry_forward_and_verify(str(DB_PATH), str(inc))
+    if not safe:
+        print(f"[hot-swap] ABORTED — {reason}; live DB kept, {inc.name} left for inspection")
+        return False
     _db_rw.acquire_write()
     try:
         with _conn_reg_lock:

@@ -1034,6 +1034,24 @@ def test_confirm_rejects_zero_row_nonempty_upload(client):
     assert client.get("/api/uploads?branch_id=4&period_month=2026-06").json() == []
 
 
+def test_a2_wrong_doc_type_named_and_rejected(client):
+    """A2: a fee-invoice file is rejected up front with guidance on the correct
+    file to upload — TIV_MDR (fee) vs RTxInv (settlement), IM (fee) vs 3-CZ, etc."""
+    from recon.parsers.pdf_formats import fee_invoice_by_name
+    assert "RTxInv" in (fee_invoice_by_name("credit_card", "TIV_MDR_x1136_260501.pdf") or "")
+    assert "3-CZ"   in (fee_invoice_by_name("grab", "IM20260501044240.pdf") or "")
+    assert "REPORT_" in (fee_invoice_by_name("lineman", "Balance-Report-2026-05-01.csv") or "")
+    assert "e-Tax"  in (fee_invoice_by_name("credit_card", "E-TAX_INVOICE_CARD_x.pdf") or "")
+    # a correct file is NOT flagged
+    assert fee_invoice_by_name("credit_card", "006_0170581195_260501-RTxInv-02.pdf") is None
+    # end-to-end: confirm refuses a TIV_MDR upload with the specific message
+    r = client.post("/api/uploads/credit_card/confirm",
+                    files={"file": ("TIV_MDR_x1136_260501.pdf", b"%PDF-1.4 dummy", "application/pdf")},
+                    data={"branch_id": "4", "period_month": "2026-06"})
+    assert r.status_code == 422 and "RTxInv" in r.json()["detail"]
+    assert client.get("/api/uploads?branch_id=4&period_month=2026-06").json() == []
+
+
 def test_payout_chain_ties_net_to_bank(client):
     """3-way tie: provider NET → bank payout credit. No bank line → awaiting_payout;
     a short payout → mismatch + a PAYOUT discrepancy."""
