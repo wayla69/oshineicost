@@ -1881,9 +1881,14 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
             "branch_id":    branch_id,
             "pos_days":   [{"day": da, "amount": round(xa, 2)}],
             "ext":        [{"table": t, "id": i, "amount": round(a, 2)} for (t, i, a) in lines],
-            # display
+            # display — raw lane string (classic.html / tests) + the components
+            # reconcile_v2 maps to plain Thai so cards never show "CASH·KBANK"
             "pos_lane": f"{ca}·{ba}",
             "ext_lane": f"{cb}·{bb}",
+            "pos_cat":  ca,    # POS-surplus lane (rung here by mistake)
+            "ext_cat":  cb,    # bank-surplus lane (where the money really is)
+            "pos_bank": ba,
+            "ext_bank": bb,
             "pos_day":  da,
             "ext_day":  db,
             "note": (f"Suggested: POS {ca}·{ba} ↔ statement {cb}·{bb}, "

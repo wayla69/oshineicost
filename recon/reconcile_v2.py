@@ -35,6 +35,7 @@ from .matcher import (
     _coverage,
     _lane_cov_key,
     _REAL_BANKS,
+    _BANK_LABEL,
 )
 
 # Channel order + Thai labels (the UI renders these verbatim)
@@ -404,6 +405,13 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         reclass = suggest_reclassifications(conn, branch_id, period_month)
     except sqlite3.OperationalError:
         reclass = []
+    # Phase 0: enrich each suggestion with plain-Thai channel + bank labels so the
+    # UI card reads "เงินสด → เงินโอน (กรุงไทย)" instead of the raw "CASH·KBANK".
+    for s in reclass:
+        s["pos_cat_th"]  = _CH_LABEL.get(s.get("pos_cat"),  s.get("pos_cat"))
+        s["ext_cat_th"]  = _CH_LABEL.get(s.get("ext_cat"),  s.get("ext_cat"))
+        s["pos_bank_th"] = _BANK_LABEL.get(s.get("pos_bank"), s.get("pos_bank"))
+        s["ext_bank_th"] = _BANK_LABEL.get(s.get("ext_bank"), s.get("ext_bank"))
 
     # Large round non-sales credits that look like own-account sweeps — surfaced so
     # staff can drop them from the lanes in one click (PATCH /api/bank-lines/id/ignore)

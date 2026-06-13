@@ -94,6 +94,18 @@ td.mono{font-variant-numeric:tabular-nums}
 .todo-item{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px dashed var(--line);font-size:13.5px}
 .todo-item:last-child{border-bottom:none}
 .sugg{background:var(--ok-bg);border:1px solid #a7f3d0;border-radius:10px;padding:11px 15px;margin-bottom:8px;font-size:13.5px}
+.hero-rc{background:#fff7ed;border:1px solid #fed7aa;border-left:4px solid var(--warn)}
+.rc-head{font-weight:700;font-size:14px;margin-bottom:4px}
+.rc-story{font-size:14.5px;line-height:1.55}
+.rc-ev{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+.rc-chip{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-size:13px}
+.rc-arrow{color:var(--mut);font-weight:700}
+.sheet-overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:flex-end;justify-content:center;z-index:60}
+.sheet-box{background:#fff;width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:18px 18px 22px;box-shadow:0 -4px 24px rgba(0,0,0,.18)}
+.sheet-h{font-weight:700;font-size:15px;margin-bottom:4px}
+.sheet-ta{width:100%;margin-top:10px;min-height:60px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:inherit;box-sizing:border-box}
+.rc-reasons{display:flex;flex-direction:column;gap:7px}
+.rc-reason{justify-content:flex-start;text-align:left;background:#f8fafc;border:1px solid var(--line)}
 .fee-in{width:92px;padding:5px 8px;border:1px solid var(--line);border-radius:7px;
   font-family:inherit;font-variant-numeric:tabular-nums;font-size:13px;text-align:right}
 .fee-in:focus{outline:2px solid var(--brand-soft);border-color:var(--brand)}
@@ -137,8 +149,8 @@ async function api(path,opts={}){
   return r.json();
 }
 
-const CH_ST={ok:['c-ok','ตรง'],diff:['c-err','ต่าง'],waiting_doc:['c-warn','รอเอกสาร'],
-              no_source:['c-mut','ไม่มีแหล่งตรวจ'],setup:['c-setup','ตั้งค่า']};
+const CH_ST={ok:['c-ok','ตรงกันแล้ว'],diff:['c-err','ยอดไม่ตรง'],waiting_doc:['c-warn','รอเอกสาร'],
+              no_source:['c-mut','ไม่ต้องตรวจ'],setup:['c-setup','รหัสใหม่ ต้องตั้งค่า']};
 const SES_ST={draft:'กำลังทำ',in_review:'รอผู้จัดการตรวจ',approved:'ปิดเดือนแล้ว'};
 
 let MONTH=localStorage.getItem('v2_month')||new Date().toISOString().slice(0,7);
@@ -270,6 +282,9 @@ async function loadBranch(bid){
 
   if(closed) html+=`<div class="card c-ok" style="margin-bottom:12px;background:#e1f5ee">🔒 เดือนนี้ปิดแล้ว — ตัวเลขถูกบันทึกถาวร แก้ไขไม่ได้ (ผู้จัดการกด "ส่งกลับแก้" ในเครื่องมือขั้นสูงหากต้องเปิดใหม่)</div>`;
 
+  // ⇄ เงินอยู่ผิดช่อง — การ์ดงาน #1 อยู่บนสุด (2 แตะ): เล่าเป็นเรื่อง + ปุ่มเดียวจบ
+  if(!closed)(r.reclass_suggestions||[]).forEach((s,i)=>{ html+=reclassHero(s,i); });
+
   // เอกสาร — chip ที่ขาดกดอัปโหลดได้เลย + แผงจัดการไฟล์ที่อัปแล้ว (ยกมาจากหน้าเดิม)
   html+=`<div class="card" style="margin-bottom:12px"><div class="row">
     <b style="font-size:13.5px">เอกสาร</b>`;
@@ -324,14 +339,7 @@ async function loadBranch(bid){
       </div>`).join('')}</div>`;
   }
 
-  // การ์ดแนะนำ: ยอดอยู่ผิดช่อง (ยอดเท่ากัน ธนาคารเดียวกัน)
-  if(!closed)for(let i=0;i<(r.reclass_suggestions||[]).length;i++){
-    const s=r.reclass_suggestions[i];
-    html+=`<div class="sugg row">💡 ยอด <b class="mono">${fmt(s.amount)}</b> วันที่ ${s.pos_day.slice(8)}
-      น่าจะเป็นคู่กัน: POS ${esc(s.pos_lane)} ↔ เอกสาร ${esc(s.ext_lane)}
-      <span class="chip ${s.confidence==='high'?'c-ok':'c-warn'}">${s.confidence==='high'?'มั่นใจสูง':'น่าจะใช่'}</span>
-      <button class="btn btn-sm btn-pri" style="margin-left:auto" onclick="applyReclass(${i})">จับคู่</button></div>`;
-  }
+  // (การ์ด "ยอดอยู่ผิดช่อง" ย้ายขึ้นบนสุดเป็น hero card — ดู reclassHero ด้านล่าง)
 
   // ตาราง channel
   html+=`<div class="card" style="padding:0;margin-bottom:12px">
@@ -567,15 +575,37 @@ async function delUpload(uid,name){
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
-/* ── รับทราบผลต่าง ── */
-async function acceptTodo(channel,label){
+/* ── รับทราบผลต่าง — เลือกเหตุผลสำเร็จรูป (แทน prompt) ── */
+const ACCEPT_REASONS=[
+  'ยอดต่างเล็กน้อย ไม่คุ้มที่จะตามเอกสาร',
+  'เศษสตางค์/ปัดเศษจากระบบ',
+  'ค่าธรรมเนียมธนาคาร/ค่ายบัตรหักก่อนโอน',
+  'เงินเข้าข้ามรอบ — วันสุดท้ายฝากเดือนถัดไป',
+  'ลูกค้าโอนผิดบัญชี/คืนเงินภายหลัง',
+];
+let _acceptCtx=null;
+function acceptTodo(channel,label){
   if(!channel||channel==='null'){toast('ข้อนี้รับทราบไม่ได้ — ต้องอัปโหลดเอกสาร');return;}
-  const note=prompt(`เหตุผลที่ยอมรับ "${label}" (จำเป็น จะแสดงในไฟล์ Excel):`);
-  if(note===null)return;
-  if(!note.trim()){toast('ต้องใส่เหตุผล');return;}
+  _acceptCtx={channel,label};
+  const opts=ACCEPT_REASONS.map((rsn,k)=>
+    `<button class="btn rc-reason" onclick="pickAcceptReason(${k})">${esc(rsn)}</button>`).join('');
+  showSheet(`<div class="sheet-h">รับทราบผลต่าง: ${esc(label)}</div>
+    <div class="lbl" style="margin-bottom:10px">เลือกเหตุผล (จะแสดงในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ) หรือพิมพ์เอง</div>
+    <div class="rc-reasons">${opts}</div>
+    <textarea id="accept-note" class="sheet-ta" placeholder="พิมพ์เหตุผลเอง (อย่างน้อย 10 ตัวอักษร)"></textarea>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn btn-pri" onclick="submitAccept()">บันทึกรับทราบ</button>
+      <button class="btn" onclick="closeSheet()">ยกเลิก</button>
+    </div>`);
+}
+function pickAcceptReason(k){const ta=$('accept-note');if(ta){ta.value=ACCEPT_REASONS[k];ta.focus();}}
+async function submitAccept(){
+  const note=(($('accept-note')||{}).value||'').trim();
+  if(note.length<10){toast('ต้องใส่เหตุผลอย่างน้อย 10 ตัวอักษร');return;}
+  const ctx=_acceptCtx;if(!ctx)return;
   try{await api('/api/lanes/adj',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
-      category:channel,bank:'ALL',adj_pos:0,adj_ext:0,note:note.trim(),adj_type:'accept'}});
-      toast('รับทราบแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+      category:ctx.channel,bank:'ALL',adj_pos:0,adj_ext:0,note:note,adj_type:'accept'}});
+      closeSheet();toast('รับทราบแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 async function unaccept(adjId){
   try{await api(`/api/lanes/adj/${adjId}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
@@ -603,8 +633,65 @@ async function applyReclass(i){
   const s=DATA.reclass_suggestions[i];
   try{await api('/api/manual',{method:'POST',body:{branch_id:s.branch_id,period_month:s.period_month,
       category:s.category,bank:s.bank,pos_days:s.pos_days,ext:s.ext,note:s.note}});
-      toast('จับคู่แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+      toast('จับคู่แล้ว — ย้ายเข้าช่องที่ถูกต้องเรียบร้อย');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
+
+/* ── เงินอยู่ผิดช่อง: hero card (§3) — เล่าเป็นเรื่อง + แตะเดียวจบ ── */
+function reclassHero(s,i){
+  const day=(s.pos_day||'').slice(8).replace(/^0/,'');
+  const amt=fmt(s.amount);
+  const posTh=esc(s.pos_cat_th||s.pos_cat||'');
+  const extTh=esc(s.ext_cat_th||s.ext_cat||'');
+  const extBank=s.ext_bank_th?` (${esc(s.ext_bank_th)})`:'';
+  const hi=s.confidence==='high';
+  const pill=hi?['c-ok','ตรงกันพอดี — มั่นใจสูง']:['c-warn','ยอดเท่ากันแต่คนละธนาคาร — น่าจะใช่'];
+  return `<div class="card hero-rc" id="rc-${i}" style="margin-bottom:12px">
+    <div class="rc-head">⇄ เงินอาจถูกบันทึกผิดช่อง</div>
+    <div class="rc-story">วันที่ <b>${day}</b> — <b>${posTh}</b> เกินมา ฿${amt} แต่ <b>${extTh}</b> ขาดไป ฿${amt} <span class="lbl">เท่ากันพอดี</span></div>
+    <div class="lbl" style="margin:4px 0 2px">น่าจะเป็นเงินก้อนเดียวกัน — เข้าบัญชีจริงเป็น<b>${extTh}</b> แต่ในเครื่อง POS กดเป็น<b>${posTh}</b></div>
+    <div class="rc-ev">
+      <span class="rc-chip">ในเครื่อง POS: ${posTh} <b class="mono">+฿${amt}</b></span>
+      <span class="rc-arrow">→</span>
+      <span class="rc-chip">เข้าบัญชีจริง: ${extTh} <b class="mono">฿${amt}</b>${extBank}</span>
+      <span class="chip ${pill[0]}" style="margin-left:auto">${pill[1]}</span>
+    </div>
+    <div class="row" style="margin-top:11px;gap:8px">
+      <button class="btn btn-pri" onclick="confirmReclass(${i})">✅ ใช่ เป็นเงินก้อนเดียวกัน</button>
+      <button class="btn btn-sm" onclick="drillReclass(${i})">🔍 ขอดูรายการ</button>
+      <a href="#" class="lbl" style="margin-left:auto" onclick="dismissReclass(${i});return false">ไม่ใช่</a>
+    </div>
+    <div id="rc-med-${i}" style="display:none;margin-top:11px;padding-top:10px;border-top:1px dashed var(--line)">
+      <div class="lbl" style="margin-bottom:7px">ยอดเท่ากันแต่คนละธนาคาร อาจบังเอิญตรงกัน — ยืนยันว่าเป็นเงินก้อนเดียวกันจริงไหม?</div>
+      <div class="row" style="gap:8px">
+        <span class="chip c-mut">เหตุผล: แคชเชียร์กดผิดช่อง</span>
+        <button class="btn btn-pri btn-sm" onclick="applyReclass(${i})">ยืนยันย้าย</button>
+        <a href="#" class="lbl" onclick="$('rc-med-${i}').style.display='none';return false">ยกเลิก</a>
+      </div>
+    </div>
+  </div>`;
+}
+function confirmReclass(i){
+  const s=DATA.reclass_suggestions[i];
+  if(s&&s.confidence!=='high'){const m=$('rc-med-'+i);if(m)m.style.display='block';return;}
+  applyReclass(i);   // มั่นใจสูง — ย้ายได้เลย ไม่ต้องถามซ้ำ
+}
+function drillReclass(i){
+  const s=DATA.reclass_suggestions[i];if(!s)return;
+  drillTodo(s.pos_cat);   // กางช่องทาง POS ที่เกินมา ดูรายวัน + บรรทัด statement
+}
+function dismissReclass(i){
+  const el=$('rc-'+i);if(el)el.style.display='none';
+}
+
+/* ── bottom sheet กลาง (ใช้กับเหตุผลรับทราบ) ── */
+function showSheet(html){
+  let o=$('sheet');
+  if(!o){o=document.createElement('div');o.id='sheet';o.className='sheet-overlay';document.body.appendChild(o);}
+  o.innerHTML=`<div class="sheet-box">${html}</div>`;
+  o.onclick=(e)=>{if(e.target===o)closeSheet();};
+  o.style.display='flex';
+}
+function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 
 const FEE_SOURCE={CREDIT:'credit_card',GRAB:'grab',LINEMAN:'lineman'};
 const C3_LEG={matched:['c-ok','✓ ตรง'],mismatch:['c-err','≠ ต่าง'],pos_only:['c-warn','รอสรุปยอดบัตร'],

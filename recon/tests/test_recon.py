@@ -414,6 +414,14 @@ def test_suggestions_wrong_channel_same_bank(client):
     s = sug[0]
     assert s["pos_lane"] == "QR·KBANK" and s["ext_lane"] == "TRANSFER·KBANK"
     assert s["bank"] == "KBANK" and abs(s["amount"] - 5000) < 0.01 and s["confidence"] == "high"
+    # Phase 0: raw lane components for the plain-Thai hero card
+    assert s["pos_cat"] == "QR" and s["ext_cat"] == "TRANSFER"
+    assert s["pos_bank"] == "KBANK" and s["ext_bank"] == "KBANK"
+    # …and reconcile_month enriches them with Thai channel + bank labels
+    rm = client.get("/api/v2/reconcile?branch_id=4&month=2026-06").json()
+    h = rm["reclass_suggestions"][0]
+    assert h["pos_cat_th"] == "QR พร้อมเพย์" and h["ext_cat_th"] == "เงินโอน"
+    assert h["ext_bank_th"] == "กสิกร"
 
     # The suggestion is itself a valid /api/manual payload → applying it succeeds.
     r = client.post("/api/manual", json={
