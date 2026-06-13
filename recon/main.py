@@ -1744,6 +1744,16 @@ def update_session_status(
         # Only stamp approval metadata when the session is actually approved;
         # moving back to draft/in_review must not record a (false) approval.
         if status == "approved":
+            # Segregation of duties (AUD-4): the person who prepared the month
+            # cannot also approve it. A classic audit finding; enforced when both
+            # identities are known.
+            prep = (conn.execute("SELECT created_by FROM recon_sessions WHERE session_id=?",
+                                  (session_id,)).fetchone()["created_by"] or "").strip().lower()
+            appr = (approved_by or "").strip().lower()
+            if prep and appr and prep == appr:
+                raise HTTPException(
+                    409, "แบ่งแยกหน้าที่ (SoD): ผู้จัดทำไม่สามารถอนุมัติงานของตัวเองได้ — "
+                         "ต้องให้ผู้อื่นเป็นผู้อนุมัติ")
             conn.execute("""
                 UPDATE recon_sessions
                 SET status=?, approved_by=?, approved_at=datetime('now')
@@ -1990,13 +2000,22 @@ def _build_export(conn, session) -> bytes:
     pos_total = round(sum(r["pos_amount"] for r in rows), 2)
     ext_total = round(sum(r["ext_amount"] for r in rows), 2)
     pending = sum(1 for d in discs if d["resolution"] == "pending")
+    # AUD-7: total variance "absorbed" by tolerance — the sum of |variance| over
+    # lanes that passed as matched. Auditors want this quantified, not invisible.
+    tol_absorbed = round(sum(abs(r["variance"]) for r in rows if r["status"] == "matched"), 2)
+    accepts = conn.execute(
+        "SELECT category, bank, note, created_by, created_at FROM recon_lane_adj "
+        "WHERE branch_id=? AND period_month=? AND adj_type='accept' ORDER BY category, bank",
+        (bid, pm)).fetchall()
     sheet("Summary",
           ["Field", "Value"],
           [["Branch", session["branch_name"]], ["Period", pm], ["Status", session["status"]],
            ["POS tender (reconcilable)", pos_total], ["External total", ext_total],
            ["Variance", round(ext_total - pos_total, 2)],
            ["Matched lanes", sum(1 for r in rows if r["status"] == "matched")],
+           ["Variance absorbed within tolerance", tol_absorbed],   # AUD-7
            ["Open discrepancies", pending],
+           ["Acknowledged variances (รับทราบ)", len(accepts)],     # AUD-8
            ["Unmapped POS codes", ", ".join(u["code"] for u in
                                             [{"code": k} for k in sorted(unmapped)]) or "—"]],
           first=True)
@@ -2023,6 +2042,13 @@ def _build_export(conn, session) -> bytes:
           [[d["disc_type"], d["category"], d["bank"], d["amount_external"], d["amount_pos"],
             d["variance"], d["resolution"], d["assigned_to"] or "", d["resolution_note"] or ""]
            for d in discs])
+
+    # AUD-8: every acknowledged variance (รับทราบ) with its reason + who/when, so
+    # the owner can sign off the list and an auditor can sample it.
+    sheet("Acknowledged variances",
+          ["Category", "Bank", "Reason (เหตุผล)", "Accepted by", "At"],
+          [[a["category"], a["bank"], a["note"] or "", a["created_by"] or "", a["created_at"] or ""]
+           for a in accepts])
 
     # Cash 3-way (POS ↔ typed deposit slip ↔ bank deposit) per the owner's table
     tw = cash_three_way(conn, bid, pm)
@@ -2934,8 +2960,10 @@ def lane_adj_upsert(body: LaneAdj):
     _validate_period(body.period_month)
     if body.adj_type not in ("off_pos", "deposit_note", "other", "accept"):
         raise HTTPException(400, "adj_type must be off_pos | deposit_note | other | accept")
-    if body.adj_type == "accept" and not (body.note or "").strip():
-        raise HTTPException(400, "การรับทราบผลต่างต้องใส่เหตุผล (note required)")
+    # AUD-8: an acknowledged variance must carry a MEANINGFUL reason (auditors
+    # sample these), not a one-character placeholder.
+    if body.adj_type == "accept" and len((body.note or "").strip()) < 10:
+        raise HTTPException(400, "การรับทราบผลต่างต้องใส่เหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)

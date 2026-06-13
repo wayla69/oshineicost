@@ -133,22 +133,22 @@ def test_admin_create_update_delete_user(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")
     # create
     assert mg.post("/api/auth/users",
-                   json={"username": "tester9", "password": "Pw@123456",
+                   json={"username": "tester9", "password": "Pw@1234567",
                          "role": "analyst"}).status_code == 200
     # the new user can log in and inherits analyst modules
     t = _fresh(app_db)
-    assert _login(t, "tester9", "Pw@123456").status_code == 200
+    assert _login(t, "tester9", "Pw@1234567").status_code == 200
     assert t.get("/api/cost/analysis").status_code == 200       # analyst → cost.analysis
     # change role to marketing → cost now denied
     assert mg.put("/api/auth/users/tester9",
                   json={"role": "marketing"}).status_code == 200
     t2 = _fresh(app_db)
-    _login(t2, "tester9", "Pw@123456")
+    _login(t2, "tester9", "Pw@1234567")
     assert t2.get("/api/cost/analysis").status_code == 403
     # deactivate → can't log in
     assert mg.put("/api/auth/users/tester9",
                   json={"active": False}).status_code == 200
-    assert _login(_fresh(app_db), "tester9", "Pw@123456").status_code == 401
+    assert _login(_fresh(app_db), "tester9", "Pw@1234567").status_code == 401
     # delete
     assert mg.delete("/api/auth/users/tester9").status_code == 200
 
@@ -280,8 +280,8 @@ def test_login_sets_httponly_samesite_cookie(client, app_db, auth_on):
 # ── #14: role/active changes take effect immediately ────────────────────────
 def test_deactivation_and_role_change_take_effect_immediately(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")
-    mg.post("/api/auth/users", json={"username": "tmp14", "password": "Temp@1234", "role": "analyst"})
-    u = _fresh(app_db); _login(u, "tmp14", "Temp@1234")
+    mg.post("/api/auth/users", json={"username": "tmp14", "password": "Temp@12345", "role": "analyst"})
+    u = _fresh(app_db); _login(u, "tmp14", "Temp@12345")
     assert u.get("/api/cost/analysis").status_code == 200          # analyst → cost ok
     mg.put("/api/auth/users/tmp14", json={"role": "marketing"})    # downgrade
     assert u.get("/api/cost/analysis").status_code == 403          # …immediately denied
@@ -297,19 +297,19 @@ def test_seeded_and_created_users_must_change(client, app_db, auth_on):
 
 def test_self_service_password_change_flow(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")
-    mg.post("/api/auth/users", json={"username": "pwuser", "password": "Temp@1234", "role": "analyst"})
+    mg.post("/api/auth/users", json={"username": "pwuser", "password": "Temp@12345", "role": "analyst"})
     u = _fresh(app_db)
-    assert _login(u, "pwuser", "Temp@1234").json()["must_change"] is True
+    assert _login(u, "pwuser", "Temp@12345").json()["must_change"] is True
     # wrong current → 403; too-short new → 400
     assert u.post("/api/auth/me/password",
-                  json={"current_password": "nope", "new_password": "NewPw@123"}).status_code == 403
+                  json={"current_password": "nope", "new_password": "NewPw@1234"}).status_code == 403
     assert u.post("/api/auth/me/password",
-                  json={"current_password": "Temp@1234", "new_password": "short"}).status_code == 400
+                  json={"current_password": "Temp@12345", "new_password": "short"}).status_code == 400
     # success clears must_change and the new password works
     assert u.post("/api/auth/me/password",
-                  json={"current_password": "Temp@1234", "new_password": "NewPw@123"}).status_code == 200
+                  json={"current_password": "Temp@12345", "new_password": "NewPw@1234"}).status_code == 200
     u2 = _fresh(app_db)
-    assert _login(u2, "pwuser", "NewPw@123").json()["must_change"] is False
+    assert _login(u2, "pwuser", "NewPw@1234").json()["must_change"] is False
     mg.delete("/api/auth/users/pwuser")
 
 

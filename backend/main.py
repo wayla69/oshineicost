@@ -764,11 +764,13 @@ def auth_change_own_password(body: _PwChangeBody, request: Request):
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if len((body.new_password or "")) < 8:
-        raise HTTPException(status_code=400, detail="รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร.")
-    with get_db() as con:
-        ok = _auth.change_own_password(con, payload.get("u", ""),
-                                       body.current_password, body.new_password)
+    try:
+        _auth.check_password_policy(body.new_password)          # AUD-1 (≥10, not the shared default)
+        with get_db() as con:
+            ok = _auth.change_own_password(con, payload.get("u", ""),
+                                           body.current_password, body.new_password)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=403, detail="รหัสผ่านปัจจุบันไม่ถูกต้อง.")
     return {"ok": True}

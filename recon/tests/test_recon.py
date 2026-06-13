@@ -255,6 +255,46 @@ def test_manager_token_gates_approve(client, monkeypatch):
                         headers={"X-Manager-Token": "mgr-1234"}).status_code == 200
 
 
+def test_aud4_sod_preparer_cannot_approve(client, monkeypatch):
+    """AUD-4 segregation of duties: the user who prepared the month cannot approve
+    their own work; a different approver is allowed."""
+    sid = client.post("/api/sessions",
+                      json={"branch_id": 4, "period_month": "2026-06", "created_by": "alice"}
+                      ).json()["session_id"]
+    monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
+    h = {"X-Manager-Token": "mgr-1234"}
+    same = client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "alice"}, headers=h)
+    assert same.status_code == 409 and "SoD" in same.json()["detail"]
+    other = client.patch(f"/api/sessions/{sid}/status",
+                         data={"status": "approved", "approved_by": "bob"}, headers=h)
+    assert other.status_code == 200
+
+
+def test_aud8_accept_requires_meaningful_reason(client):
+    """AUD-8: an acknowledged variance must carry a real reason (≥10 chars)."""
+    short = client.post("/api/lanes/adj", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "QR", "bank": "ALL",
+        "adj_type": "accept", "note": "ok"})
+    assert short.status_code == 400
+    good = client.post("/api/lanes/adj", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "QR", "bank": "ALL",
+        "adj_type": "accept", "note": "ลูกค้าโอนกดเป็นเงินสด ตรวจแล้ว"})
+    assert good.status_code == 200
+
+
+def test_aud6_audit_log_is_append_only(client):
+    """AUD-6: recon_audit_log rejects UPDATE and DELETE (tamper-evident trail)."""
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("INSERT INTO recon_audit_log(entity,entity_id,action,by) VALUES('t',1,'create','x')")
+    c.commit()
+    with pytest.raises(sqlite3.Error):
+        c.execute("UPDATE recon_audit_log SET action='tamper' WHERE entity='t'"); c.commit()
+    with pytest.raises(sqlite3.Error):
+        c.execute("DELETE FROM recon_audit_log WHERE entity='t'"); c.commit()
+    c.close()
+
+
 def test_prev_month_rollover_deposit_not_this_months_diff(client):
     """A deposit on the 1st that the PREVIOUS month's cash matcher claims (T+1
     rollover of month-end cash) must not appear as this month's QR/transfer

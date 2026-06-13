@@ -334,6 +334,17 @@ CREATE TABLE IF NOT EXISTS recon_audit_log (
 CREATE INDEX IF NOT EXISTS idx_audit_ts     ON recon_audit_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON recon_audit_log(entity, entity_id, ts DESC);
 
+-- AUD-6: append-only enforcement. The audit log is the evidentiary backbone for
+-- an auditable reconciliation, so no code path or direct DB edit may rewrite or
+-- delete an entry — only INSERT is allowed. (Re-created idempotently at startup;
+-- a DB swap drops them with the table and schema.sql restores them.)
+CREATE TRIGGER IF NOT EXISTS recon_audit_log_no_update
+    BEFORE UPDATE ON recon_audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS recon_audit_log_no_delete
+    BEFORE DELETE ON recon_audit_log
+    BEGIN SELECT RAISE(ABORT, 'audit log is append-only'); END;
+
 -- ─── Manual reconciliation (tick-to-match, reversible) ──────────────────────────
 -- Staff tick one-or-more POS day amounts + one-or-more statement lines that
 -- together reconcile (e.g. a lump-sum bank credit covering several days), then

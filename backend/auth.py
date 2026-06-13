@@ -374,6 +374,21 @@ DEFAULT_PASSWORD = "Oshinei@2026"
 
 SEED_USERS = [f"{role}{n}" for role in ROLES for n in (1, 2)]
 
+# Password policy (AUD-1): a minimum length is the single highest-value rule
+# against the weak / shared-password finding. Enforced on every path that sets a
+# password (admin create + reset, and self-service change). Seeding bypasses it
+# deliberately — the seeded default is paired with must_change=1.
+MIN_PASSWORD_LEN = 10
+
+
+def check_password_policy(password: str) -> None:
+    """Raise ValueError if the new password is too weak or is the shared default."""
+    pw = password or ""
+    if len(pw) < MIN_PASSWORD_LEN:
+        raise ValueError(f"รหัสผ่านต้องยาวอย่างน้อย {MIN_PASSWORD_LEN} ตัวอักษร")
+    if pw.strip().lower() == DEFAULT_PASSWORD.lower():
+        raise ValueError("ห้ามใช้รหัสผ่านเริ่มต้นที่แชร์กัน — กรุณาตั้งรหัสผ่านใหม่")
+
 
 def init_auth(con: sqlite3.Connection) -> None:
     con.executescript(
@@ -453,6 +468,7 @@ def list_users(con: sqlite3.Connection) -> List[Dict]:
 def create_user(con: sqlite3.Connection, username: str, password: str, role: str) -> None:
     if role not in ROLES:
         raise ValueError("invalid role")
+    check_password_policy(password)                       # AUD-1
     h = hash_password(password)
     con.execute(
         "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change) VALUES (?,?,?,?,1)",
@@ -469,6 +485,7 @@ def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] =
             raise ValueError("invalid role")
         sets.append("role = ?"); vals.append(role)
     if password:
+        check_password_policy(password)                   # AUD-1
         h = hash_password(password)
         # An admin reset hands the user a temporary password → force a change.
         sets += ["pw_hash = ?", "pw_salt = ?", "must_change = 1"]; vals += [h["hash"], h["salt"]]
@@ -488,6 +505,7 @@ def change_own_password(con: sqlite3.Connection, username: str,
     row = get_user(con, username)
     if not row or not verify_password(old_password or "", row["pw_hash"], row["pw_salt"]):
         return False
+    check_password_policy(new_password)                   # AUD-1
     h = hash_password(new_password)
     con.execute(
         "UPDATE app_user SET pw_hash = ?, pw_salt = ?, must_change = 0 WHERE username = ?",
