@@ -41,6 +41,8 @@ SMOKE = [
     ("/api/sales/menu-compare/drill",
      {"sku_code": "A0001", "a_from": "2026-05", "a_to": "2026-05", "b_from": "2026-06", "b_to": "2026-06"}),
     ("/api/sales/heavy-eaters", {}),
+    ("/api/menu/action-board", {}),
+    ("/api/menu/opportunities", {}),
 ]
 
 # Fixture periods: June (LATEST) sales are scaled 0.8 vs May (PREV).
@@ -229,3 +231,73 @@ def test_gp_identical_across_tabs(client, params):
         assert close(gp, g0),   f"GP differs: {name}={gp} vs {ref_name}={g0}"
         # internal identity: GP must be revenue − COGS on every surface
         assert close(gp, rev - cogs), f"{name}: gp {gp} != rev-cogs {rev - cogs}"
+
+
+# ── Menu Action Board ──────────────────────────────────────────────────────
+_ACTION_BUCKETS = ("feature", "market", "fix_margin", "review_cut", "needs_cost")
+
+
+def test_action_board_buckets_partition_and_shape(client):
+    d = client.get("/api/menu/action-board").json()
+    assert set(d["buckets"]) == set(_ACTION_BUCKETS)
+    assert d["counts"] == {k: len(v) for k, v in d["buckets"].items()}
+    # Every classified dish lands in EXACTLY one bucket; counts sum to total placed.
+    placed = sum(d["counts"].values())
+    assert placed == d["total_skus"], f"placed {placed} != total_skus {d['total_skus']}"
+    # No dish appears in two buckets.
+    seen = {}
+    for bucket, rows in d["buckets"].items():
+        for r in rows:
+            assert r["sku_code"] not in seen, f"{r['sku_code']} in {bucket} and {seen.get(r['sku_code'])}"
+            seen[r["sku_code"]] = bucket
+            assert r["action"] == bucket
+            assert r["reason"], "every action row carries a human reason"
+    # review_cut never holds a still-healthy (non-declining/dead) dish.
+    assert all(r["stage"] in ("declining", "dead") for r in d["buckets"]["review_cut"])
+
+
+def test_action_board_quadrants_match_engineering(client):
+    """Cross-check: the board reuses _menu_engineering_compute, so every dish's
+    quadrant MUST equal the Menu Engineering tab's — guards against drift."""
+    eng = client.get("/api/menu/engineering").json()
+    eng_quad = {i["sku_code"]: i["quadrant"] for i in eng["items"] if i.get("quadrant")}
+    board = client.get("/api/menu/action-board").json()
+    board_quad = {}
+    for rows in board["buckets"].values():
+        for r in rows:
+            if r.get("quadrant"):
+                board_quad[r["sku_code"]] = r["quadrant"]
+    assert board_quad, "no costed/quadranted dishes in fixture"
+    for code, q in eng_quad.items():
+        assert board_quad.get(code) == q, f"{code}: board {board_quad.get(code)} != engineering {q}"
+
+
+# ── Menu Opportunities ─────────────────────────────────────────────────────
+def test_opportunities_shape_and_no_cost_leak(client):
+    d = client.get("/api/menu/opportunities").json()
+    assert set(("cross_branch_gaps", "category_whitespace", "revive")) <= set(d)
+    assert all(isinstance(d[k], list) for k in ("cross_branch_gaps", "category_whitespace", "revive"))
+    # RBAC contract: this endpoint is menu.analysis-gated, so NO COGS/margin fields
+    # may leak into any row (those belong to cost.analysis).
+    forbidden = {"cogs", "margin", "margin_pct", "margin_per_unit", "unit_cost"}
+    for k in ("cross_branch_gaps", "category_whitespace", "revive"):
+        for row in d[k]:
+            assert not (forbidden & set(row)), f"cost field leaked into {k}: {row}"
+    # whitespace rows are labelled and carry per-SKU demand metrics
+    for w in d["category_whitespace"]:
+        assert w.get("label") in ("expand", "trim", "watch")
+        assert "revenue_per_sku" in w and "n_skus" in w
+
+
+# ── AI idea generator (fallback path — tests never hit the real API) ─────────
+def test_ai_ideas_fallback_without_key(client, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    r = client.post("/api/menu/ai-ideas", json={})
+    assert r.status_code == 200, r.text[:200]
+    d = r.json()
+    assert d["generated_by"].startswith("fallback")
+    assert isinstance(d["ideas"], list) and d["ideas"], "fallback must still yield ideas"
+    for idea in d["ideas"]:
+        assert idea.get("title") and "rationale" in idea and "builds_on" in idea
+
+

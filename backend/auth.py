@@ -182,6 +182,9 @@ MODULE_RULES = [
     ("GET", "/api/analysis/food_cost_trend", {"cost.analysis"}),
     ("GET", "/api/bom-cost",                 {"cost.simulator", "bom.edit", "cost.analysis"}),
     ("GET", "/api/menu/engineering",         {"cost.analysis"}),   # star/dog by margin = cost
+    ("GET", "/api/menu/action-board",        {"cost.analysis"}),   # buckets dishes by margin → cost
+    ("GET", "/api/menu/opportunities",       {"menu.analysis"}),   # qty/share/trend only, no COGS
+    ("W",   "/api/menu/ai-ideas",            {"menu.analysis"}),   # AI menu concepts (+ write-token)
     ("GET", "/api/finance/prime-cost",       {"cost.analysis", "profit.pnl"}),
     ("GET", "/api/branches/fixed-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
     ("GET", "/api/branches/labor-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
