@@ -1161,6 +1161,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="11"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="2" y1="12" x2="6" y2="12"/></svg>
     <span class="nav-label">🎯 เป้าลดต้นทุน</span>
   </div>
+  <div class="nav-item" id="nav-menuactionboard" onclick="switchTab('menuactionboard')" title="⚡ ปรับเมนู (Menu Action Board) — รวมเมนูทุกจานเป็น 4 กลุ่มสิ่งที่ควรทำ: ดันต่อ/โปรโมต · ผลักดันยอด · ปรับราคา-ลดต้นทุน · ทบทวน/ตัด">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
+    <span class="nav-label">⚡ ปรับเมนู</span>
+  </div>
+  <div class="nav-item" id="nav-menuopportunities" onclick="switchTab('menuopportunities')" title="💡 โอกาสเมนู (Menu Opportunities) — เมนูที่สาขาอื่นขายดีแต่สาขานี้ยังไม่มี · หมวดที่ยังขยายได้ · เมนูที่เคยขายดีควรรื้อฟื้น + ✨ สร้างไอเดียด้วย AI">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0012 2z"/></svg>
+    <span class="nav-label">💡 โอกาสเมนู</span>
+  </div>
 
   <!-- ═══ GROUP 4: 💵 สาขา & กำไร (branch GP, P&L, per-bill, benchmark) ═══ -->
   <div class="nav-section">💵 สาขา &amp; กำไร</div>
@@ -1912,6 +1920,60 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🚀 สิ่งที่ควรทำต่อไป (Auto-generated from data)</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">วิเคราะห์จากข้อมูลจริง — ลำดับความสำคัญสูงสุดก่อน</p>
     <div id="mce2Actions" class="space-y-2 mt-2"></div>
+  </div>
+</div>
+
+<!-- ══ ⚡ ปรับเมนู (Menu Action Board) ══ -->
+<div id="tab-menuactionboard" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #6366f1">
+    <h2 class="text-base font-bold" style="color:#4338ca">⚡ ปรับเมนู — สิ่งที่ควรทำกับแต่ละเมนู</h2>
+    <p class="text-xs text-slate-500 mt-1">รวม Menu Engineering (ดาว/ม้าแบก/ปริศนา/หมา) + วงจรชีวิตเมนู (โต/ทรงตัว/ลด/ตาย) เป็น 4 กลุ่มการตัดสินใจ — ตัวเลข quadrant ตรงกับแท็บ 🔬 Menu Engineering. <b>กลุ่ม “ทบทวน/ตัด” เป็นเพียงรายการที่ควรพิจารณา ไม่ได้ลบเมนูให้อัตโนมัติ</b></p>
+  </div>
+  <div id="mabStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
+  <div id="mabKpis" class="flex flex-wrap gap-2 mb-4"></div>
+  <div id="mabBoard" class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))"></div>
+  <div id="mabNeedsWrap" class="card p-4 mt-4" style="display:none;border-left:4px solid #94a3b8">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">ℹ️ ยังไม่มีข้อมูลต้นทุน (<span id="mabNeedsCount">0</span>)</h3>
+      <button onclick="document.getElementById('mabNeedsBody').classList.toggle('hidden')" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">แสดง/ซ่อน</button>
+    </div>
+    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เมนูเหล่านี้ยังจัดอันดับด้วยมาร์จิ้นไม่ได้ — เพิ่ม BoM/ต้นทุนเพื่อให้ปรากฏในกลุ่มจัดการ</p>
+    <div id="mabNeedsBody" class="hidden mt-2"></div>
+  </div>
+</div>
+
+<!-- ══ 💡 โอกาสเมนู (Menu Opportunities) ══ -->
+<div id="tab-menuopportunities" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fef9c3 0%,#ecfccb 100%);border-left:4px solid #ca8a04">
+    <h2 class="text-base font-bold" style="color:#854d0e">💡 โอกาสเมนู — ขยายเมนูจากข้อมูลจริง</h2>
+    <p class="text-xs text-slate-500 mt-1">อิงยอดขาย/สัดส่วน/แนวโน้มเท่านั้น (ไม่ใช้ข้อมูลต้นทุน). <b>ไม่มีการเดา “เมนูที่ควรจับคู่ขาย”</b> เพราะข้อมูลระดับใบเสร็จยังไม่ครบ — จึงเน้น 3 สัญญาณที่เชื่อถือได้</p>
+  </div>
+  <div id="oppStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
+
+  <div class="card p-5 mb-4" style="border-left:4px solid #0ea5e9">
+    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">🌍 เมนูที่สาขาอื่นขายดี แต่สาขานี้ยังขายน้อย/ไม่มี</h3>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่นิยมทั้งเครือ (ขายใน ≥5 สาขา) แต่บางสาขาขายต่ำกว่าค่ากลางมาก — โอกาสเพิ่มยอด</p>
+    <div id="oppGaps" class="overflow-x-auto"></div>
+  </div>
+
+  <div class="card p-5 mb-4" style="border-left:4px solid #8b5cf6">
+    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">📊 หมวดที่ยังขยายได้ / ควรลด</h3>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">รายได้ต่อเมนูสูง + แนวโน้มทรงตัว/โต = มีที่ว่างให้เพิ่มเมนู · หมวดที่หดตัว = ควรทบทวน</p>
+    <div id="oppWhitespace" class="overflow-x-auto"></div>
+  </div>
+
+  <div class="card p-5 mb-4" style="border-left:4px solid #f59e0b">
+    <h3 class="text-base font-bold mb-1" style="color:var(--text-primary)">⏮️ เมนูที่เคยขายดีแต่หยุดขาย (ควรรื้อฟื้น)</h3>
+    <div id="oppRevive" class="overflow-x-auto"></div>
+  </div>
+
+  <div class="card p-5 mb-4" style="border-left:4px solid #ec4899">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h3 class="text-base font-bold" style="color:var(--text-primary)">✨ สร้างไอเดียเมนู/โปรโมชันด้วย AI</h3>
+      <button id="oppAiBtn" onclick="genMenuIdeas()" class="text-xs font-semibold rounded px-3 py-1 text-white" style="background:#ec4899">✨ สร้างไอเดียด้วย AI</button>
+    </div>
+    <p class="text-[11px] mb-2" style="color:#b45309;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:6px 8px">⚠️ ไอเดียจาก AI เป็นข้อเสนอเชิงสร้างสรรค์ <b>ยังไม่ได้พิสูจน์ด้วยยอดขายจริง</b> — ใช้เป็นจุดเริ่มต้นในการระดมความคิด</p>
+    <div id="oppAiIdeas" class="space-y-2 mt-2"></div>
   </div>
 </div>
 
@@ -6291,6 +6353,7 @@ const TAB_MODULE = {
   dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
   buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
   menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
+  menuactionboard:'cost.analysis', menuopportunities:'menu.analysis',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis',
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
   simhub:'cost.simulator',
@@ -7167,14 +7230,14 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
   ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
    'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
@@ -7354,6 +7417,181 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// ⚡ Menu Action Board — Menu Engineering + lifecycle → 4 ranked action lists
+// ══════════════════════════════════════════════════════════════════════════
+const _MAB_META = {
+  feature:    { icon:'🚀', title:'ดันต่อ / จัดโปรโมชัน', sub:'ขายดี+กำไรดี → ฟีเจอร์ในโปร',           color:'#10b981', bg:'#ecfdf5' },
+  market:     { icon:'🔍', title:'ผลักดันยอด',          sub:'กำไรดีแต่ยังขายน้อย → โปรโมต/วางตำแหน่ง', color:'#0ea5e9', bg:'#eff6ff' },
+  fix_margin: { icon:'💰', title:'ปรับราคา / ลดต้นทุน',  sub:'ขายดีแต่กำไรบาง',                        color:'#f59e0b', bg:'#fffbeb' },
+  review_cut: { icon:'✂️', title:'ทบทวน / พิจารณาตัด',   sub:'ขายน้อย กำไรบาง และกำลังลด/ตาย',          color:'#ef4444', bg:'#fef2f2' },
+};
+const _MAB_QUAD  = { star:'⭐ดาว', plowhorse:'🐴ม้าแบก', puzzle:'🧩ปริศนา', dog:'🐶หมา' };
+const _MAB_STAGE = { growing:'📈โต', stable:'➖ทรงตัว', declining:'📉ลด', dead:'💀ตาย', new:'🆕ใหม่' };
+
+async function loadMenuActionBoard() {
+  const fk = _filterKey();
+  if (_tabLastKey.menuactionboard === fk) return;
+  const st = document.getElementById('mabStatus');
+  if (st) st.textContent = 'กำลังโหลด…';
+  const qp = new URLSearchParams();
+  if (getBranch())    qp.set('branch', getBranch());
+  if (getMonthFrom()) qp.set('month_from', getMonthFrom());
+  if (getMonthTo())   qp.set('month_to', getMonthTo());
+  let d;
+  try { d = await fetch(`${API}/api/menu/action-board?${qp}`).then(r => r.json()); }
+  catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  _tabLastKey.menuactionboard = fk;
+  renderActionBoard(d);
+}
+
+function _mabCard(r) {
+  const quad = _MAB_QUAD[r.quadrant] || '', stage = _MAB_STAGE[r.stage] || '';
+  return `<div class="rounded p-2" style="background:var(--bg-subtle)">
+    <div class="text-xs font-semibold" style="color:var(--text-primary)">${esc(r.description)}</div>
+    <div class="text-[10.5px] mt-0.5" style="color:var(--text-muted)">${esc(r.category || '')}</div>
+    <div class="flex flex-wrap gap-1 mt-1 text-[10px]">
+      ${quad ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,.1);color:#4f46e5">${quad}</span>` : ''}
+      ${stage ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.1);color:#059669">${stage}</span>` : ''}
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">มาร์จิ้น ${fmtP(r.margin_pct)}</span>
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">ส่วนแบ่ง ${fmtP(r.popularity_pct)}</span>
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">${fmtN(r.qty)} ชิ้น</span>
+    </div>
+    <div class="text-[10.5px] mt-1" style="color:var(--text-secondary)">${esc(r.reason || '')}</div>
+  </div>`;
+}
+
+function renderActionBoard(d) {
+  const st = document.getElementById('mabStatus');
+  if (st) st.innerHTML = `วิเคราะห์ ${fmtN(d.total_skus)} เมนู · มีข้อมูลต้นทุน ${fmtN(d.costed_skus)} เมนู · ช่วง ${esc((d.month_range || []).filter(Boolean).join(' → ') || 'ทั้งหมด')}`;
+  const order = ['feature', 'market', 'fix_margin', 'review_cut'];
+  const kpiHost = document.getElementById('mabKpis');
+  if (kpiHost) kpiHost.innerHTML = order.map(k => {
+    const m = _MAB_META[k];
+    return `<span class="text-xs px-3 py-1 rounded-full font-semibold" style="background:${m.bg};color:${m.color}">${m.icon} ${m.title}: ${fmtN(((d.buckets || {})[k] || []).length)}</span>`;
+  }).join('');
+  const board = document.getElementById('mabBoard');
+  board.innerHTML = order.map(k => {
+    const m = _MAB_META[k], rows = (d.buckets && d.buckets[k]) || [];
+    const body = rows.length ? rows.map(_mabCard).join('')
+      : `<div class="text-xs text-center py-4" style="color:var(--text-muted)">— ไม่มีเมนูในกลุ่มนี้ —</div>`;
+    return `<div class="card p-0 overflow-hidden" style="border-top:3px solid ${m.color}">
+      <div class="p-3" style="background:${m.bg}">
+        <div class="font-bold text-sm" style="color:${m.color}">${m.icon} ${m.title} <span class="font-normal">(${rows.length})</span></div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${m.sub}</div>
+      </div>
+      <div class="p-2 space-y-1" style="max-height:520px;overflow-y:auto">${body}</div>
+    </div>`;
+  }).join('');
+  const nc = (d.buckets && d.buckets.needs_cost) || [], wrap = document.getElementById('mabNeedsWrap');
+  if (nc.length) {
+    wrap.style.display = '';
+    document.getElementById('mabNeedsCount').textContent = nc.length;
+    document.getElementById('mabNeedsBody').innerHTML = nc.slice(0, 200).map(r =>
+      `<div class="text-xs py-0.5 flex justify-between gap-2 border-b" style="border-color:var(--border)"><span>${esc(r.description)}</span><span style="color:var(--text-muted)">${fmtN(r.qty)} ชิ้น · ${fmt(r.revenue)} ฿</span></div>`).join('');
+  } else { wrap.style.display = 'none'; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 💡 Menu Opportunities — cross-branch gaps · category whitespace · revive · AI
+// ══════════════════════════════════════════════════════════════════════════
+async function loadMenuOpportunities() {
+  const fk = _filterKey();
+  if (_tabLastKey.menuopportunities === fk) return;
+  const st = document.getElementById('oppStatus');
+  if (st) st.textContent = 'กำลังโหลด…';
+  const qp = new URLSearchParams();
+  if (getBranch())    qp.set('branch', getBranch());
+  if (getMonthFrom()) qp.set('month_from', getMonthFrom());
+  if (getMonthTo())   qp.set('month_to', getMonthTo());
+  let d;
+  try { d = await fetch(`${API}/api/menu/opportunities?${qp}`).then(r => r.json()); }
+  catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  _tabLastKey.menuopportunities = fk;
+  renderOpportunities(d);
+}
+
+const _oppEmpty = msg => `<div class="text-xs text-center py-4" style="color:var(--text-muted)">${esc(msg)}</div>`;
+
+function renderOpportunities(d) {
+  const st = document.getElementById('oppStatus');
+  if (st) st.innerHTML = `ช่วง ${esc((d.month_range || []).filter(Boolean).join(' → ') || 'ทั้งหมด')}${getBranch() ? ` · สาขา ${esc(getBranch())}` : ' · ทุกสาขา'}`;
+
+  const gaps = d.cross_branch_gaps || [];
+  document.getElementById('oppGaps').innerHTML = gaps.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+      <th class="py-1.5 pr-2 text-right">สาขานี้</th><th class="py-1.5 pr-2 text-right">ทั้งเครือ</th>
+      <th class="py-1.5 pr-2 text-right">โอกาสเพิ่ม (ชิ้น)</th><th class="py-1.5">หมายเหตุ</th></tr></thead>
+    <tbody>${gaps.map(g => `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2 font-semibold">${esc(g.branch)}</td><td class="py-1 pr-2">${esc(g.description)}</td>
+      <td class="py-1 pr-2" style="color:var(--text-muted)">${esc(g.category)}</td>
+      <td class="py-1 pr-2 text-right">${fmtN(g.branch_qty)}</td><td class="py-1 pr-2 text-right">${fmtN(g.chain_qty)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:#0ea5e9">+${fmtN(g.potential_qty)}</td>
+      <td class="py-1" style="color:var(--text-muted)">${esc(g.note)}</td></tr>`).join('')}</tbody></table>`
+    : _oppEmpty('ไม่พบช่องว่างเด่น (ต้องเป็นเมนูที่ขายใน ≥5 สาขา) — ลองเลือกทุกสาขา/ขยายช่วงเดือน');
+
+  const ws = d.category_whitespace || [];
+  const wlabel = { expand: ['ขยายได้', '#059669', '#ecfdf5'], trim: ['ควรลด', '#dc2626', '#fef2f2'], watch: ['เฝ้าดู', '#64748b', '#f1f5f9'] };
+  document.getElementById('oppWhitespace').innerHTML = ws.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">หมวด</th><th class="py-1.5 pr-2 text-right">#เมนู</th>
+      <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">รายได้/เมนู</th>
+      <th class="py-1.5 pr-2 text-right">แนวโน้ม</th><th class="py-1.5 pr-2">คำแนะนำ</th></tr></thead>
+    <tbody>${ws.map(w => { const L = wlabel[w.label] || wlabel.watch; return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2 font-semibold">${esc(w.category)}</td><td class="py-1 pr-2 text-right">${fmtN(w.n_skus)}</td>
+      <td class="py-1 pr-2 text-right">${fmt(w.revenue)}</td><td class="py-1 pr-2 text-right">${fmt(w.revenue_per_sku)}</td>
+      <td class="py-1 pr-2 text-right">${fmtM(w.slope_pct)}</td>
+      <td class="py-1 pr-2"><span class="px-1.5 py-0.5 rounded text-[10px]" style="background:${L[2]};color:${L[1]}">${L[0]}</span> <span style="color:var(--text-muted)">${esc(w.reason || '')}</span></td></tr>`; }).join('')}</tbody></table>`
+    : _oppEmpty('ไม่มีข้อมูลหมวด');
+
+  const rv = d.revive || [];
+  document.getElementById('oppRevive').innerHTML = rv.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+      <th class="py-1.5 pr-2 text-right">เคยขาย/เดือน</th><th class="py-1.5 pr-2 text-right">รวม</th>
+      <th class="py-1.5">ขายครั้งสุดท้าย</th></tr></thead>
+    <tbody>${rv.map(r => `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2">${esc(r.description)}</td><td class="py-1 pr-2" style="color:var(--text-muted)">${esc(r.category)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:#f59e0b">${fmtN(r.avg_monthly_when_alive)}</td>
+      <td class="py-1 pr-2 text-right">${fmtN(r.total_qty)}</td><td class="py-1">${esc(r.last_active_month || '—')}</td></tr>`).join('')}</tbody></table>`
+    : _oppEmpty('ไม่มีเมนูที่หยุดขายในช่วงนี้');
+
+  const ai = document.getElementById('oppAiIdeas');   // filters changed → clear stale AI ideas
+  if (ai) { ai.innerHTML = ''; delete ai.dataset.generated; }
+}
+
+async function genMenuIdeas() {
+  const btn = document.getElementById('oppAiBtn'), host = document.getElementById('oppAiIdeas');
+  if (!host) return;
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ กำลังสร้าง…';
+  host.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังให้ AI ช่วยคิด…</div>';
+  const body = {};
+  if (getBranch())    body.branch = getBranch();
+  if (getMonthFrom()) body.month_from = getMonthFrom();
+  if (getMonthTo())   body.month_to = getMonthTo();
+  let d;
+  try {
+    d = await fetch(`${API}/api/menu/ai-ideas`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).then(r => r.json());
+  } catch (e) {
+    host.innerHTML = `<div class="text-xs" style="color:#dc2626">สร้างไอเดียไม่สำเร็จ</div>`;
+    btn.disabled = false; btn.textContent = old; return;
+  }
+  const ideas = d.ideas || [];
+  const src = d.generated_by === 'claude' ? 'AI (Claude)' : 'สร้างจากข้อมูล (ยังไม่ได้ตั้งค่า AI key)';
+  host.dataset.generated = '1';
+  host.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ที่มา: ${esc(src)}</div>` + (ideas.length ? ideas.map((it, i) => `
+    <div class="rounded p-3" style="background:var(--bg-subtle);border-left:3px solid #ec4899">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${i + 1}. ${esc(it.title)}</div>
+      <div class="text-xs mt-1" style="color:var(--text-secondary)">${esc(it.rationale || '')}</div>
+      ${it.builds_on && it.builds_on !== 'none' ? `<div class="text-[10px] mt-1" style="color:var(--text-muted)">อิงสัญญาณ: ${esc(it.builds_on)}</div>` : ''}
+    </div>`).join('') : `<div class="text-xs" style="color:var(--text-muted)">ไม่มีไอเดีย</div>`);
+  btn.disabled = false; btn.textContent = old;
+}
+
 function loadActiveTab() {
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
@@ -7393,6 +7631,8 @@ function loadActiveTab() {
   if (activeTab === 'simhub')      loadSimhub();
   if (activeTab === 'menucompare')    loadMenuCompare();
   if (activeTab === 'menuefficiency') loadMCE();
+  if (activeTab === 'menuactionboard') loadMenuActionBoard();
+  if (activeTab === 'menuopportunities') loadMenuOpportunities();
   if (activeTab === 'coverage')       loadCostCoverage();
   if (activeTab === 'pnlbranch')   loadPnlBranch();
   if (activeTab === 'more')        loadMoreAnalytics();
