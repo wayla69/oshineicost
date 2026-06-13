@@ -169,6 +169,33 @@ def _pdf_to_xlsx(raw: bytes) -> bytes:
     return _rows_to_xlsx(all_rows)
 
 
+# ── Encryption / password detection (C3) ─────────────────────────────────────
+
+def is_encrypted_upload(raw: bytes, filename: str = "") -> str | None:
+    """Return a Thai 'locked with a password' message if the upload is an
+    encrypted Office file, password-protected zip, or encrypted PDF — else None.
+    These otherwise fail opaquely or as a silent 0-row parse (e.g. the 39/48
+    password-protected Krungsri RDB003 archives)."""
+    if not raw:
+        return None
+    name = (filename or "").lower()
+    # Office encryption wraps the document in an OLE compound file whose payload
+    # is an 'EncryptedPackage' stream (true for encrypted .xlsx/.xls/.doc).
+    if raw[:8] == b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1":
+        head = raw[:8192]
+        if b"EncryptedPackage" in head or b"E\x00n\x00c\x00r\x00y\x00p\x00t\x00e\x00d" in head:
+            return "ไฟล์ Excel นี้ถูกล็อกด้วยรหัสผ่าน — กรุณาถอดรหัสผ่านก่อนอัปโหลด"
+    # A zip whose first local-file-header sets general-purpose bit 0 = encrypted
+    # entry (a password-protected .zip/.xlsx member).
+    if raw[:2] == b"PK" and len(raw) > 8 and (raw[6] & 0x01):
+        return "ไฟล์นี้ถูกล็อกด้วยรหัสผ่าน — กรุณาถอดรหัส (unzip) ก่อนอัปโหลด"
+    # Password-protected PDF: /Encrypt in the trailer region (checked near the
+    # end to avoid false positives from the string appearing in a content stream).
+    if name.endswith(".pdf") and b"/Encrypt" in raw[-3072:]:
+        return "ไฟล์ PDF นี้ถูกล็อกด้วยรหัสผ่าน — กรุณาถอดรหัสก่อนอัปโหลด"
+    return None
+
+
 # ── Public API ───────────────────────────────────────────────────────────────
 
 def to_parseable_xlsx(raw: bytes, filename: str) -> bytes:

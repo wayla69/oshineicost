@@ -243,10 +243,12 @@ async function loadBranch(bid){
     <b style="font-size:13.5px">เอกสาร</b>`;
   for(const d of r.documents){
     const cls=d.status==='uploaded'?'c-ok':d.status==='partial'?'c-warn':'c-err';
+    const cov=(d.status==='uploaded'&&d.coverage_to)?' · ถึง '+esc(d.coverage_to.slice(8)):'';  // C8
+    const tip=d.hint?esc(d.hint):'คลิกเพื่ออัปโหลด';                                              // C2
     if(d.status==='uploaded'||closed)
-      html+=`<span class="chip ${cls}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</span>`;
+      html+=`<span class="chip ${cls}" title="${tip}">${d.status==='uploaded'?'✓ ':''}${esc(d.label)}${d.detail?' · '+esc(d.detail):''}${cov}</span>`;
     else
-      html+=`<button class="chip ${cls}" title="คลิกเพื่ออัปโหลด" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
+      html+=`<button class="chip ${cls}" title="${tip}" onclick='pickFile(${JSON.stringify(d)})'>⬆ ${esc(d.label)}${d.detail?' · '+esc(d.detail):''}</button>`;
   }
   html+=`<a href="#" class="lbl" style="margin-left:auto" onclick="toggleDocs();return false" id="docs-toggle">จัดการไฟล์ ▾</a>
   </div><div id="up-panel"></div><div id="docs-panel" style="display:none"></div></div>`;
@@ -404,13 +406,17 @@ async function previewUpload(){
   try{p=await api(`/api/uploads/${UP_DOC.source}/preview`,{method:'POST',body:fd});}
   catch(e){panel.innerHTML=`<div class="chip c-err" style="margin-top:10px">อ่านไฟล์ไม่ได้: ${esc(e.message)}</div>`;return;}
   const wrongBranch=p.detected_branch_id&&p.detected_branch_id!==DATA.branch_id;
+  const zeroRow=p.row_count===0&&!p.empty_statement;            // A1/C7: nothing usable parsed
+  const block=wrongBranch||zeroRow;                              // can't confirm these
   panel.innerHTML=`<div class="card" style="margin-top:10px;background:#fafafa">
     <div class="row"><b style="font-size:13.5px">${esc(UP_DOC.label)}</b>
-      <span class="lbl">${esc(f.name)} · ${p.row_count} รายการ${p.skipped_rows?` (ข้าม ${p.skipped_rows})`:''} · ${esc(p.provider||'')}</span></div>
+      <span class="lbl">${esc(f.name)} · ตรวจพบ: ${esc(p.provider||'ไม่ระบุ')} · ${p.row_count} รายการ${p.skipped_rows?` (ข้าม ${p.skipped_rows})`:''}</span></div>
     ${p.empty_statement?`<div class="chip c-warn" style="margin-top:6px">เอกสารว่าง (No Data) — ยืนยันได้ ระบบจะบันทึกว่าเดือนนี้ไม่มีรายการ</div>`:''}
+    ${zeroRow?`<div class="chip c-err" style="margin-top:6px">⚠ อ่านได้ 0 รายการ — น่าจะเป็นไฟล์ผิดประเภท/รูปแบบที่ยังไม่รองรับ ยืนยันไม่ได้</div>`:''}
+    ${(p.generic_fallback&&!zeroRow)?`<div class="chip c-warn" style="margin-top:6px">อ่านแบบทั่วไป (ไม่รู้จักรูปแบบเฉพาะของผู้ให้บริการ) — โปรดตรวจตัวเลขก่อนยืนยัน</div>`:''}
     ${wrongBranch?`<div class="chip c-err" style="margin-top:6px">⚠ เอกสารนี้เป็นของสาขา ${esc(p.detected_branch_name)} — ยืนยันไม่ได้</div>`:''}
     <div class="row" style="margin-top:10px">
-      <button class="btn btn-pri" ${wrongBranch?'disabled':''} onclick="confirmUpload()">✓ ยืนยันบันทึก</button>
+      <button class="btn btn-pri" ${block?'disabled':''} onclick="confirmUpload()">✓ ยืนยันบันทึก</button>
       <button class="btn" onclick="$('up-panel').innerHTML=''">ยกเลิก</button>
     </div></div>`;
 }

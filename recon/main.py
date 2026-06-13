@@ -58,11 +58,12 @@ from .parsers import (
     parse_grab_report,
     parse_lineman_report,
 )
-from .parsers.loader import to_parseable_xlsx
+from .parsers.loader import to_parseable_xlsx, is_encrypted_upload as _is_encrypted_upload
 from .parsers.pdf_formats import (
     detect_and_parse as _detect_pdf_format,
     fee_invoice_by_name as _fee_invoice_by_name,
     fee_invoice_by_text as _fee_invoice_by_text,
+    unsupported_bank_pdf_message as _unsupported_bank_pdf_message,
 )
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
@@ -1007,7 +1008,20 @@ def _parse(source_type: SourceType, raw: bytes, provider: str, filename: str = "
     return prov, rows, skipped
 
 
+def _specific_failure_message(source_type: SourceType, raw: bytes, filename: str) -> str | None:
+    """The most specific actionable message for an upload that failed/parsed empty:
+    a renamed fee invoice (A2), or an unsupported bank's statement PDF (C6)."""
+    msg = _fee_invoice_by_text(raw, filename)
+    if not msg and source_type == "bank":
+        msg = _unsupported_bank_pdf_message(raw, filename)
+    return msg
+
+
 def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: str = ""):
+    # C3: a password-locked file can't be type-detected or parsed — say so first.
+    locked = _is_encrypted_upload(raw, filename)
+    if locked:
+        raise HTTPException(422, locked)
     # A2: reject a known WRONG document type up front (cheap filename check) with
     # specific guidance on the correct file to upload — before any parse attempt.
     byname = _fee_invoice_by_name(source_type, filename)
@@ -1022,14 +1036,14 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
         # table for any parser to find — that's a valid empty document, not an error.
         if _is_empty_statement(raw, filename):
             return (provider or "", [], 0)
-        # A renamed fee invoice → name it; else surface the raw parse error.
-        raise HTTPException(422, _fee_invoice_by_text(raw, filename) or f"Parse error: {exc}")
-    # Parsed but found nothing (and not a legit empty statement): if it reads like
-    # a fee invoice, say so; otherwise A1's generic 0-row guard handles it.
+        raise HTTPException(422, _specific_failure_message(source_type, raw, filename)
+                            or f"Parse error: {exc}")
+    # Parsed but found nothing (and not a legit empty statement): give the most
+    # specific message we can; otherwise A1's generic 0-row guard handles it.
     if not rows and not _is_empty_statement(raw, filename):
-        bytext = _fee_invoice_by_text(raw, filename)
-        if bytext:
-            raise HTTPException(422, bytext)
+        msg = _specific_failure_message(source_type, raw, filename)
+        if msg:
+            raise HTTPException(422, msg)
     return prov, rows, skipped
 
 
@@ -1054,6 +1068,9 @@ async def preview_upload(
         "preview":      rows[:50],
         "columns":      list(rows[0].keys()) if rows else [],
         "empty_statement": _is_empty_statement(raw, file.filename) if not rows else False,
+        # C7: warn when no format-specific extractor matched and the generic grid
+        # was used (its debit/credit split can be wrong) — operator should eyeball.
+        "generic_fallback": str(prov).strip().lower() in ("", "generic", "none"),
         **detected,                # detected_branch_id / detected_branch_name / detected_key
     }
 

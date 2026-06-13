@@ -17,7 +17,9 @@ is taken by run-match at month close (ส่งตรวจ → ปิดเด�
 """
 from __future__ import annotations
 
+import calendar
 import sqlite3
+from datetime import date
 
 from .matcher import (
     category_reconciliation,
@@ -74,15 +76,24 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
 
     docs = []
 
+    # C8: compare coverage against POS's latest day; when POS isn't synced
+    # (last_pos_day absent) fall back to the calendar end of month (capped at
+    # today for an in-progress month) so a half-uploaded statement reads
+    # 'partial' instead of silently 'uploaded'.
+    y, mo = int(period_month[:4]), int(period_month[5:7])
+    eom = f"{period_month}-{calendar.monthrange(y, mo)[1]:02d}"
+    cmp_day = last_pos_day or min(eom, date.today().isoformat())
+
     def add(key, label, cov_key):
         mx = cov.get(cov_key)
         if not mx:
             status, detail = "missing", "ยังไม่ได้อัปโหลด"
-        elif last_pos_day and mx < last_pos_day:
+        elif mx < cmp_day:
             status, detail = "partial", f"มีถึงวันที่ {mx[-2:]}"
         else:
             status, detail = "uploaded", ""
-        docs.append({"key": key, "label": label, "status": status, "detail": detail})
+        docs.append({"key": key, "label": label, "status": status,
+                     "detail": detail, "coverage_to": mx})       # C8
 
     for b in sorted(pos_banks):
         add(f"stmt_{b}", f"สเตทเมนต์ {b}", ("bank", b))
@@ -110,20 +121,28 @@ def _doc_checklist(conn, branch_id, period_month, monthly_rows, cov):
     # Upload metadata so the v2 UI can open the right uploader from the chip:
     # source_type + provider hint, and which channel an "accept" would clear
     # (a whole missing statement is never acceptable — nothing reconciles without it)
+    # C2: an inline hint naming the file to upload, so staff don't grab a fee
+    # invoice (which parses to nothing) instead of the settlement/sales report.
     for d in docs:
         k = d["key"]
         if k.startswith("stmt_"):
-            d.update(source="bank", provider=k[5:], channel=None)
+            d.update(source="bank", provider=k[5:], channel=None,
+                     hint="สเตทเมนต์ธนาคาร (ไฟล์ Excel/CSV ดีที่สุด; PDF รองรับ KBANK/KTB)")
         elif k.startswith("cc_"):
-            d.update(source="credit_card", provider=k[3:], channel="CREDIT")
+            d.update(source="credit_card", provider=k[3:], channel="CREDIT",
+                     hint="สรุป settlement บัตร — KTC ใช้ไฟล์ *-RTxInv-* (ไม่ใช่ TIV_MDR); "
+                          "Krungsri ใช้ RDB003")
         elif k.startswith("points_"):
             # KTC/BAY point summaries upload through the credit_card parser
             # (they parse as KTCPOINT/BAYPOINT settlement rows)
-            d.update(source="credit_card", provider=k[7:] + "POINT", channel="COUPON")
+            d.update(source="credit_card", provider=k[7:] + "POINT", channel="COUPON",
+                     hint="ไฟล์สรุปคะแนนจากผู้ออกบัตร (KTC / BAY)")
         elif k == "grab":
-            d.update(source="grab", provider="GRAB", channel="GRAB")
+            d.update(source="grab", provider="GRAB", channel="GRAB",
+                     hint="รายงานยอดขาย Grab (ไฟล์ขึ้นต้น 3-CZ... ไม่ใช่ IM)")
         else:
-            d.update(source="lineman", provider="LINEMAN", channel="LINEMAN")
+            d.update(source="lineman", provider="LINEMAN", channel="LINEMAN",
+                     hint="รายงานยอดขาย Line Man (REPORT_*.csv/pdf ไม่ใช่ Balance-Report)")
     return docs
 
 
@@ -314,6 +333,13 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         if key == "CASH":
             # 3-way rows: POS cash ↔ typed deposit slip ↔ bank deposit group
             ch["cash_three_way"] = daily["cash_summary"].get("three_way", [])
+        if key == "TRANSFER":
+            # C4: per-branch treatment without a config table. A branch that rings
+            # a POS transfer code (pos_amt>0, e.g. CNX) should MATCH transfers; a
+            # branch with no transfer code books them elsewhere, so its bank
+            # transfers are EXCLUDE-mode (auto/interbank, or customer transfer
+            # rung as cash). Lets the UI guide "จับคู่" vs "ตัดออก" automatically.
+            ch["transfer_mode"] = "match" if pos_amt > 0 else "exclude"
         channels.append(ch)
 
     # Progress is money-weighted, not day-counted: 27 days of ฿1k transfer noise

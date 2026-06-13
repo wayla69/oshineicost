@@ -1829,10 +1829,15 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
     for ca, ba, da, xa in sorted(pos_surplus, key=lambda t: -t[3]):
         if (ca, ba, da) in used_pos:
             continue
-        # Best opposite lane: same bank, different category, closest day, equal amount.
+        # Best opposite lane: different category, closest day, equal amount.
+        # Normally the bank must match, BUT the single most common misclassification
+        # — a customer transfer rung in POS as Cash — pairs a CASH lane (bank='NONE')
+        # with a TRANSFER statement line (bank='KTB'/'KBANK'). When either side is
+        # CASH we match on amount+day only (C5); such cross-bank ties are 'med'.
         best = None
         for cb, bb, db, xb in ext_surplus:
-            if bb != ba or cb == ca or (cb, bb, db) in used_ext:
+            cash_involved = (ca == "CASH" or cb == "CASH")
+            if (bb != ba and not cash_involved) or cb == ca or (cb, bb, db) in used_ext:
                 continue
             gap = abs((_d(da) - _d(db)).days)
             if gap > max_day_gap or abs(xa - xb) > TOL_ABS_DAY:
@@ -1842,6 +1847,7 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
         if not best:
             continue
         gap, cb, bb, db, xb = best
+        same_bank = (bb == ba)
         lines = _pick_ext_lines(conn, branch_id, period_month, cb, bb, db, xb)
         if not lines:
             continue
@@ -1850,7 +1856,7 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
         out.append({
             "bank":       ba,
             "amount":     round(xa, 2),
-            "confidence": "high" if gap == 0 else "med",
+            "confidence": "high" if (gap == 0 and same_bank) else "med",
             "day_gap":    gap,
             # ready-to-POST /api/manual payload
             "category":     ca,           # record the match under the POS lane

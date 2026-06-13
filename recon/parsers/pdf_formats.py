@@ -546,6 +546,28 @@ def fee_invoice_by_text(raw: bytes, filename: str = "") -> str | None:
     return None
 
 
+def unsupported_bank_pdf_message(raw: bytes, filename: str = "") -> str | None:
+    """A bank-statement-shaped PDF from a bank we have no specific extractor for
+    (only KBANK/KTB are supported). Meant to run only AFTER a parse failed or
+    returned 0 rows, so a statement the generic grid CAN read isn't blocked —
+    better a clear 'unsupported bank' than silently garbled debit/credit rows (C6)."""
+    if not (filename or "").lower().endswith(".pdf"):
+        return None
+    try:
+        if _looks_like_kbank_statement(raw) or _looks_like_ktb_statement(raw):
+            return None                       # supported → not our case
+        txt = _full_text(raw)
+    except Exception:
+        return None
+    low = txt.lower()
+    looks_stmt = bool(_extract_account(txt)) or "statement" in low \
+        or "รายการเดินบัญชี" in txt or "ยอดยกมา" in txt or "เงินเข้า" in txt
+    if looks_stmt:
+        return ("ยังไม่รองรับ statement ของธนาคารนี้ (รองรับ KBANK/KTB เท่านั้น) — "
+                "กรุณาอัปโหลดไฟล์ Excel/CSV ของ statement แทน")
+    return None
+
+
 def detect_and_parse(source_type: str, raw: bytes):
     """Return (provider, rows, skipped) when `raw` is a recognised special PDF for
     this source_type, else None (caller falls back to the generic grid loader)."""

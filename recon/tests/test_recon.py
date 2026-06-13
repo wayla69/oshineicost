@@ -1052,6 +1052,47 @@ def test_a2_wrong_doc_type_named_and_rejected(client):
     assert client.get("/api/uploads?branch_id=4&period_month=2026-06").json() == []
 
 
+def test_c3_encryption_detection():
+    """C3: password-locked Office/PDF/zip uploads are named, not parsed to garbage."""
+    from recon.parsers.loader import is_encrypted_upload
+    ole = b"\xD0\xCF\x11\xE0\xA1\xB1\x1A\xE1" + b"\x00" * 80 + b"EncryptedPackage" + b"\x00" * 40
+    assert "รหัสผ่าน" in (is_encrypted_upload(ole, "x.xls") or "")
+    pdf = b"%PDF-1.4\n" + b"x" * 80 + b"\n/Encrypt 5 0 R\ntrailer\n"     # /Encrypt in trailer
+    assert "รหัสผ่าน" in (is_encrypted_upload(pdf, "s.pdf") or "")
+    assert is_encrypted_upload(b"date,amount\n1,2\n", "a.csv") is None   # plain → fine
+    assert is_encrypted_upload(b"%PDF-1.4 plain content, no encryption", "b.pdf") is None
+
+
+def test_c6_unsupported_bank_message_guard():
+    """C6: helper only fires on PDFs (a non-pdf upload is never misflagged)."""
+    from recon.parsers.pdf_formats import unsupported_bank_pdf_message
+    assert unsupported_bank_pdf_message(b"anything", "x.csv") is None
+
+
+def test_c7_preview_generic_fallback(client):
+    """C7: preview flags when the generic grid was used (no specific extractor)."""
+    generic = ("วันที่,รายการ,รายการถอน,รายการฝาก,ยอดคงเหลือ\n"
+               "01/06/2569,QR,0,100,100\n").encode("utf-8-sig")
+    p = client.post("/api/uploads/bank/preview", files={"file": ("x.csv", generic)},
+                    data={"branch_id": "4", "period_month": "2026-06"}).json()
+    assert p["generic_fallback"] is True
+    kbank = ("Kasikorn Bank\nวันที่,รายการ,รายการถอน,รายการฝาก,ยอดคงเหลือ\n"
+             "01/06/2569,QR,0,100,100\n").encode("utf-8-sig")
+    p2 = client.post("/api/uploads/bank/preview", files={"file": ("k.csv", kbank)},
+                     data={"branch_id": "4", "period_month": "2026-06"}).json()
+    assert p2["generic_fallback"] is False
+
+
+def test_c2_c4_doc_hints_and_transfer_mode(client):
+    """C2: every doc chip carries an expected-file hint. C4: a TRANSFER channel
+    carries a per-branch transfer_mode."""
+    r = client.get("/api/v2/reconcile?branch_id=4&month=2026-06").json()
+    assert r["documents"] and all("hint" in d for d in r["documents"])
+    for ch in r["channels"]:
+        if ch["key"] == "TRANSFER":
+            assert ch["transfer_mode"] in ("match", "exclude")
+
+
 def test_payout_chain_ties_net_to_bank(client):
     """3-way tie: provider NET → bank payout credit. No bank line → awaiting_payout;
     a short payout → mismatch + a PAYOUT discrepancy."""
