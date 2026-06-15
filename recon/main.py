@@ -49,8 +49,9 @@ from .matcher import (
     pos_codes_scope,
     run_auto_match,
     suggest_reclassifications,
+    _BANK_LABEL,
 )
-from .reconcile_v2 import reconcile_month, reconcile_overview
+from .reconcile_v2 import reconcile_month, reconcile_overview, _CH_LABEL
 from .seed_payment_map import seed_payment_map
 from .parsers import (
     parse_bank_statement,
@@ -2248,6 +2249,233 @@ def branch_error_report_xlsx(period_month: str | None = None):
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename=\"{fname}\""})
+
+
+# ── Wrong-channel mis-entry report (รายงานเงินบันทึกผิดช่อง) ────────────────────
+# A "เงินอาจถูกบันทึกผิดช่อง" suggestion, once confirmed, becomes a manual match:
+#   • category      = the POS lane the cashier rang the money into BY MISTAKE
+#   • matched lines = the statement entries showing where the money ACTUALLY landed
+# So every such match is a logged correction (with reason + who + when). We surface
+# them per branch as a สรุป + an acknowledgment sheet the branch signs and fixes.
+
+# bank statement channel codes → our category vocabulary
+_BANK_CH_TO_CAT = {
+    "QR": "QR", "TRANSFER": "TRANSFER", "CASH_DEP": "CASH",
+    "CC_SETTLE": "CREDIT", "GRAB_PAYOUT": "GRAB", "LINEMAN_PAYOUT": "LINEMAN",
+}
+_EXT_TABLE_CAT = {
+    "recon_cc_lines": "CREDIT", "recon_grab_lines": "GRAB",
+    "recon_lineman_lines": "LINEMAN",
+}
+
+
+def _real_channel_of_match(conn, match_id: int) -> str | None:
+    """Where the money actually landed, inferred from the matched statement lines
+    (dominant channel by baht). None when no lines are attached."""
+    cats: dict = {}
+    for ln in conn.execute(
+        "SELECT ext_table, ext_id, amount FROM recon_manual_match_line WHERE match_id=?",
+        (match_id,)):
+        tbl = ln["ext_table"]; amt = abs(float(ln["amount"] or 0))
+        if tbl == "recon_bank_lines":
+            row = conn.execute("SELECT channel FROM recon_bank_lines WHERE id=?",
+                               (ln["ext_id"],)).fetchone()
+            cat = _BANK_CH_TO_CAT.get((row["channel"] or "") if row else "", "OTHER")
+        else:
+            cat = _EXT_TABLE_CAT.get(tbl, "OTHER")
+        cats[cat] = cats.get(cat, 0.0) + amt
+    return max(cats, key=cats.get) if cats else None
+
+
+def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
+    from collections import defaultdict
+    q = ("SELECT match_id, branch_id, category, bank, period_month, pos_amount, "
+         "ext_amount, pos_days, note, matched_by, matched_at FROM recon_manual_match")
+    params: list = []
+    if period_month:
+        q += " WHERE period_month=?"; params.append(period_month)
+    rows = conn.execute(q + " ORDER BY branch_id, matched_at", params).fetchall()
+    bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
+
+    items = []
+    for m in rows:
+        to_cat = _real_channel_of_match(conn, m["match_id"])
+        from_cat = m["category"]
+        # only true mis-entries: money landed in a DIFFERENT channel than it was rung
+        if not to_cat or to_cat == from_cat:
+            continue
+        try:
+            days = sorted({d.get("day") for d in json.loads(m["pos_days"] or "[]") if d.get("day")})
+        except Exception:
+            days = []
+        amount = round(max(float(m["pos_amount"] or 0), float(m["ext_amount"] or 0)), 2)
+        items.append({
+            "match_id":     m["match_id"],
+            "branch_id":    m["branch_id"],
+            "branch_name":  bnames.get(m["branch_id"], str(m["branch_id"])),
+            "period_month": m["period_month"],
+            "days":         days,
+            "from_cat":     from_cat,  "from_th": _CH_LABEL.get(from_cat, from_cat),
+            "to_cat":       to_cat,    "to_th":   _CH_LABEL.get(to_cat, to_cat),
+            "to_bank_th":   _BANK_LABEL.get(m["bank"], "") if m["bank"] in _BANK_LABEL else "",
+            "amount":       amount,
+            "reason":       m["note"] or "",
+            "by":           m["matched_by"] or "",
+            "at":           m["matched_at"] or "",
+        })
+
+    agg: dict = defaultdict(lambda: {"count": 0, "total": 0.0, "months": set()})
+    for it in items:
+        g = agg[(it["branch_id"], it["branch_name"])]
+        g["count"] += 1; g["total"] += it["amount"]; g["months"].add(it["period_month"])
+    summary = sorted(
+        [{"branch_id": bid, "branch_name": bn, "count": v["count"],
+          "months": len(v["months"]), "total": round(v["total"], 2)}
+         for (bid, bn), v in agg.items()],
+        key=lambda x: -x["total"])
+    return {"period_month": period_month, "summary": summary, "items": items,
+            "total_count": len(items),
+            "total_amount": round(sum(it["amount"] for it in items), 2)}
+
+
+@app.get("/api/reports/wrong-channel")
+def wrong_channel_report(period_month: str | None = None):
+    if period_month:
+        _validate_period(period_month)
+    with get_db() as conn:
+        return _wrong_channel_report(conn, period_month)
+
+
+@app.get("/api/reports/wrong-channel.xlsx")
+def wrong_channel_report_xlsx(period_month: str | None = None):
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+    if period_month:
+        _validate_period(period_month)
+    with get_db() as conn:
+        rep = _wrong_channel_report(conn, period_month)
+    wb = openpyxl.Workbook(); bold = Font(bold=True)
+    ws = wb.active; ws.title = "สรุปรายสาขา"
+    ws.append(["สาขา", "จำนวนครั้ง", "จำนวนเดือน", "ยอดรวม (บาท)"])
+    for c in ws[1]:
+        c.font = bold
+    for s in rep["summary"]:
+        ws.append([s["branch_name"], s["count"], s["months"], s["total"]])
+    ws2 = wb.create_sheet("รายการ")
+    ws2.append(["สาขา", "เดือน", "วันที่", "บันทึกผิดเป็น", "ที่จริงเข้า", "ยอด (บาท)",
+                "เหตุผล / หมายเหตุ", "ยืนยันโดย", "เมื่อ"])
+    for c in ws2[1]:
+        c.font = bold
+    for it in rep["items"]:
+        to_th = it["to_th"] + (f" ({it['to_bank_th']})" if it["to_bank_th"] else "")
+        ws2.append([it["branch_name"], it["period_month"], ", ".join(it["days"]),
+                    it["from_th"], to_th, it["amount"], it["reason"], it["by"],
+                    (it["at"] or "")[:16]])
+    ws.column_dimensions["A"].width = 22
+    for col, w in zip("ABCDEFGHI", (22, 10, 22, 16, 18, 14, 40, 16, 18)):
+        ws2.column_dimensions[col].width = w
+    buf = io.BytesIO(); wb.save(buf)
+    fname = f"wrong_channel_{period_month or 'all'}.xlsx"
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{fname}\""})
+
+
+@app.get("/api/reports/wrong-channel.print")
+def wrong_channel_report_print(period_month: str | None = None,
+                               branch_id: int | None = None):
+    """Print-to-PDF acknowledgment sheet — one signed page per branch listing the
+    wrong-channel corrections, for staff to รับทราบ + commit to fix."""
+    if period_month:
+        _validate_period(period_month)
+    with get_db() as conn:
+        rep = _wrong_channel_report(conn, period_month)
+    items = rep["items"]
+    if branch_id:
+        items = [it for it in items if it["branch_id"] == branch_id]
+
+    # group items by branch (preserve summary order: biggest exposure first)
+    order = [s["branch_id"] for s in rep["summary"]]
+    by_branch: dict = {}
+    for it in items:
+        by_branch.setdefault(it["branch_id"], []).append(it)
+    bids = [b for b in order if b in by_branch] or list(by_branch)
+
+    import html as _html
+
+    def _m(v):
+        return f"{float(v or 0):,.0f}"
+
+    def _esc(s):
+        return _html.escape(str(s or ""))
+
+    css = """<style>
+      @page{size:A4;margin:14mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:19px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:4px}
+      h2{font-size:15px;margin:18px 0 8px;border-left:4px solid #ea580c;padding-left:8px}
+      .muted{color:#64748b;font-size:11px} .right{text-align:right} .mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
+      table{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:11.5px}
+      th,td{padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
+      th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0}
+      tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
+      .arr{color:#ea580c;font-weight:700} .amt{font-weight:600}
+      .ack{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:12px;line-height:1.6}
+      .sign{display:flex;gap:40px;margin-top:30px} .sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
+      .toolbar{max-width:900px;margin:0 auto 14px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .empty{max-width:900px;margin:40px auto;text-align:center;color:#64748b}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0;page-break-after:always}}
+    </style>"""
+
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+             "<title>รายงานเงินบันทึกผิดช่อง</title>", css, "</head><body>",
+             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+
+    if not bids:
+        parts.append("<div class='empty'>ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้ว"
+                     f"{' สำหรับเดือน ' + _esc(period_month) if period_month else ''} — "
+                     "รายงานจะขึ้นเมื่อมีการกดยืนยัน “ใช่ เป็นเงินก้อนเดียวกัน” ในหน้ากระทบยอด</div>")
+    period_label = period_month or "ทุกเดือน"
+    for bid in bids:
+        rows = by_branch[bid]
+        bn = rows[0]["branch_name"]
+        tot = sum(r["amount"] for r in rows)
+        parts.append("<div class='sheet'>")
+        parts.append(f"<h1>รายงานเงินบันทึกผิดช่อง — สาขา{_esc(bn)}</h1>")
+        parts.append(f"<div class='sub'>งวด {_esc(period_label)} · {len(rows)} รายการ · "
+                     f"มูลค่ารวม ฿{_m(tot)}</div>")
+        parts.append("<h2>รายการที่บันทึกผิดช่อง</h2>")
+        parts.append("<table><thead><tr><th>วันที่</th><th>บันทึกผิดเป็น</th>"
+                     "<th>ที่จริงเข้า</th><th class='right'>ยอด (บาท)</th>"
+                     "<th>เหตุผล / หมายเหตุ</th><th>ยืนยันโดย</th></tr></thead><tbody>")
+        for r in rows:
+            to_th = _esc(r["to_th"]) + (f" ({_esc(r['to_bank_th'])})" if r["to_bank_th"] else "")
+            days = ", ".join(d[8:].lstrip("0") for d in r["days"]) or "—"
+            parts.append(
+                f"<tr><td>{days}</td><td>{_esc(r['from_th'])}</td>"
+                f"<td><span class='arr'>→</span> {to_th}</td>"
+                f"<td class='right mono amt'>{_m(r['amount'])}</td>"
+                f"<td>{_esc(r['reason'] or '—')}</td>"
+                f"<td class='muted'>{_esc(r['by'] or '—')}<br>{_esc((r['at'] or '')[:16])}</td></tr>")
+        parts.append(f"</tbody><tfoot><tr><td colspan='3'>รวม</td>"
+                     f"<td class='right mono'>{_m(tot)}</td><td colspan='2'></td></tr></tfoot></table>")
+        parts.append(
+            "<div class='ack'>ข้าพเจ้าในนามสาขา <b>รับทราบ</b> ว่ารายการข้างต้นเกิดจากการบันทึก"
+            "ช่องทางการรับเงินผิดในเครื่อง POS และ <b>รับว่าจะแก้ไข</b>ขั้นตอนการกดรับเงินให้ถูกต้อง "
+            "เพื่อไม่ให้เกิดซ้ำในรอบถัดไป (ยอดเงินรวมถูกต้อง ไม่มีเงินขาด — เป็นการลงผิดช่องเท่านั้น)</div>")
+        parts.append("<div class='sign'>"
+                     "<div>ผู้จัดการสาขา (เซ็นรับทราบ)</div>"
+                     "<div>แคชเชียร์ / ผู้บันทึก</div>"
+                     "<div>ฝ่ายบัญชี / ผู้ตรวจสอบ</div></div>")
+        parts.append("</div>")
+
+    parts.append("</body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────

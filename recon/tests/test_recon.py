@@ -471,6 +471,42 @@ def test_suggestions_wrong_channel_same_bank(client):
     assert client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"] == []
 
 
+def test_wrong_channel_report(client):
+    """Confirming a wrong-channel suggestion (POS QR·KBANK vs TRANSFER·KBANK bank
+    line) logs a manual match; the report surfaces it as one mis-entry — money rang
+    in QR but actually landed in TRANSFER — with the per-branch summary + sign sheet."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['K-SHOP']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','K-SHOP',5000)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('bank',4,'kbank','f','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,match_status)"
+              " VALUES(?,4,'2026-06-10','TRANSFER',5000,'unmatched')", (up,))
+    c.commit(); c.close()
+
+    s = client.get("/api/suggestions?branch_id=4&period_month=2026-06").json()["suggestions"][0]
+    client.post("/api/manual", json={
+        "branch_id": s["branch_id"], "period_month": s["period_month"],
+        "category": s["category"], "bank": s["bank"],
+        "pos_days": s["pos_days"], "ext": s["ext"],
+        "note": "แคชเชียร์กดเป็น QR แต่จริง ๆ เป็นเงินโอน", "matched_by": "ผู้จัดการ"})
+
+    rep = client.get("/api/reports/wrong-channel?period_month=2026-06").json()
+    assert rep["total_count"] == 1 and abs(rep["total_amount"] - 5000) < 0.01
+    assert len(rep["summary"]) == 1 and rep["summary"][0]["branch_id"] == 4
+    it = rep["items"][0]
+    assert it["from_th"] == "QR พร้อมเพย์" and it["to_th"] == "เงินโอน"
+    assert it["amount"] == 5000 and it["days"] == ["2026-06-10"]
+    assert it["by"] == "ผู้จัดการ"
+    # Excel + printable acknowledgment sheet both render
+    assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06").status_code == 200
+    pr = client.get("/api/reports/wrong-channel.print?period_month=2026-06")
+    assert pr.status_code == 200 and "รับทราบ" in pr.text and "เงินโอน" in pr.text
+
+
 def test_suggestions_ignores_cross_bank(client):
     """A same-amount opposite imbalance across DIFFERENT banks must NOT be
     suggested (operator chose same-bank-only)."""

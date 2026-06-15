@@ -219,6 +219,7 @@ function drillTodo(key){ openEvidence(key); }   // back-compat: todo card + dril
 function route(){
   const h=location.hash.slice(1);
   if(h==='errors')return loadErrorReport();
+  if(h==='wrong')return loadWrongChannel();
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -387,6 +388,46 @@ async function loadErrorReport(){
       <td>${esc(it.branch_name)}</td><td class="mono">${esc(it.period_month)}</td><td>${esc(it.category)}</td>
       <td class="mono">${fmt(it.variance)}</td><td style="text-align:left">${esc(it.reason)}</td>
       <td>${esc(it.by)}</td><td class="lbl">${esc((it.at||'').slice(0,16))}</td></tr>`).join('')}
+  </table></div>`;
+  $('app').innerHTML=html;
+}
+
+/* ── รายงานเงินบันทึกผิดช่อง (log + ใบเซ็นรับทราบส่งสาขา) ── */
+async function loadWrongChannel(){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let r;try{r=await api(`/api/reports/wrong-channel?period_month=${MONTH}`);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const pm=`?period_month=${MONTH}`;
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px">⇄ รายงานเงินบันทึกผิดช่อง — ${esc(monthTh(MONTH))}</h2>
+    <a class="btn btn-sm btn-pri" style="margin-left:auto" href="/api/reports/wrong-channel.print${pm}" target="_blank">🖨️ ใบเซ็นรับทราบ (พิมพ์/PDF)</a>
+    <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">⬇ Excel</a></div>
+  <div class="muted" style="margin-bottom:10px">รายการที่ยืนยันแล้วว่า <b>"เป็นเงินก้อนเดียวกัน"</b> ในหน้ากระทบยอด — เงินเข้าบัญชีถูกต้องครบ แต่ในเครื่อง POS กดผิดช่องทาง · ใช้เป็นหลักฐาน log + <b>ใบให้สาขาเซ็นรับทราบและแก้ไข</b> · ยอดรวมไม่ได้หาย เป็นการลงผิดช่องเท่านั้น</div>`;
+  if(!r.items.length){ $('app').innerHTML=html+'<div class="card">ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้วสำหรับเดือนนี้ — รายงานจะขึ้นเมื่อมีการกด "✅ ใช่ เป็นเงินก้อนเดียวกัน" ในการ์ดเงินผิดช่อง</div>'; return; }
+  html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:24px;flex-wrap:wrap">
+    <div><div class="lbl">จำนวนรายการ</div><div style="font-size:20px;font-weight:700">${r.total_count}</div></div>
+    <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">฿${fmt(r.total_amount)}</div></div>
+    <div><div class="lbl">สาขาที่เกี่ยวข้อง</div><div style="font-size:20px;font-weight:700">${r.summary.length}</div></div>
+  </div>`;
+  html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>ยอดรวม</th><th>ใบเซ็นรับทราบ</th></tr>
+    ${r.summary.map(s=>`<tr>
+      <td><b>${esc(s.branch_name)}</b></td>
+      <td class="mono">${s.count}</td>
+      <td class="mono" style="color:var(--warn);font-weight:600">${fmt(s.total)}</td>
+      <td><a class="lbl" href="/api/reports/wrong-channel.print${pm}&branch_id=${s.branch_id}" target="_blank">🖨️ พิมพ์เฉพาะสาขานี้</a></td></tr>`).join('')}
+  </table></div>
+  <h3 style="font-size:14px;margin:14px 0 6px">รายการทั้งหมด (${r.items.length})</h3>
+  <div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>วันที่</th><th>บันทึกผิดเป็น</th><th>ที่จริงเข้า</th><th>ยอด</th><th style="text-align:left">เหตุผล/หมายเหตุ</th><th>โดย</th></tr>
+    ${r.items.map(it=>{
+      const days=(it.days||[]).map(d=>(+d.slice(8))).join(', ')||'—';
+      const toTh=esc(it.to_th)+(it.to_bank_th?` (${esc(it.to_bank_th)})`:'');
+      return `<tr>
+        <td>${esc(it.branch_name)}</td><td class="mono">${days}</td>
+        <td>${esc(it.from_th)}</td><td><span style="color:var(--warn)">→</span> ${toTh}</td>
+        <td class="mono">${fmt(it.amount)}</td><td style="text-align:left">${esc(it.reason||'—')}</td>
+        <td class="lbl">${esc(it.by||'—')}</td></tr>`;}).join('')}
   </table></div>`;
   $('app').innerHTML=html;
 }
@@ -938,6 +979,7 @@ function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 function moreMenu(){
   showSheet(`<div class="sheet-h">เพิ่มเติม</div>
     <div class="more-menu">
+      <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
       <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
       <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
       <a class="more-item" href="/app/setup.html">⚙️ ตั้งค่าระบบ ↗<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID</span></a>
