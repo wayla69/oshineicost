@@ -3546,6 +3546,185 @@ def daily_report(day: str, branch_id: int | None = None):
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
+# ── Monthly matching audit (รายงานการจับคู่รายวันทั้งเดือน) ────────────────────
+# One printable sheet per branch: every day × channel with POS vs document, the
+# variance, and the match status — so the owner/auditor can confirm the whole month
+# reconciled correctly in one pass. Deep line-level evidence stays in /api/daily-report.
+
+_MATCH_CH_TH = {"QR": "QR พร้อมเพย์", "CASH": "เงินสด", "TRANSFER": "เงินโอน",
+                "CREDIT": "บัตรเครดิต", "GRAB": "Grab", "LINEMAN": "Line Man", "COUPON": "คูปอง"}
+# status → (Thai label, css class, bucket)  bucket: ok | issue | wait | none
+_MATCH_ST = {
+    "matched":       ("✓ ตรง",            "m-ok",   "ok"),
+    "manual":        ("✓ จับคู่มือ",       "m-ok",   "ok"),
+    "variance":      ("✗ ต่าง",           "m-err",  "issue"),
+    "missing":       ("✗ ขาดเอกสาร",      "m-err",  "issue"),
+    "ext_only":      ("เกินเอกสาร",        "m-warn", "issue"),
+    "pending":       ("รอเอกสารตามรอบ",    "m-wait", "wait"),
+    "unmapped_bank": ("ยังไม่ตั้งธนาคาร",  "m-info", "issue"),
+    "no_source":     ("ไม่มีแหล่งอ้างอิง",  "m-mut",  "none"),
+}
+
+
+def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> str:
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.0f}"
+
+    if branch_id:
+        brs = conn.execute("SELECT branch_id, name FROM branches WHERE branch_id=?",
+                           (branch_id,)).fetchall()
+    else:
+        brs = conn.execute("SELECT branch_id, name FROM branches ORDER BY name").fetchall()
+
+    css = """<style>
+      @page{size:A4;margin:13mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:11.5px;margin:0;padding:22px;background:#f8fafc}
+      .sheet{background:#fff;max-width:1000px;margin:0 auto 18px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:12px}
+      .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 14px}
+      .kpi{border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;min-width:96px}
+      .kpi .l{font-size:10px;color:#64748b} .kpi .v{font-size:16px;font-weight:700}
+      .kpi.ok .v{color:#166534} .kpi.issue .v{color:#b91c1c} .kpi.wait .v{color:#92610e}
+      table{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}
+      th,td{padding:4px 8px;border-bottom:1px solid #eef2f7;text-align:right}
+      th{color:#64748b;font-size:9.5px;text-transform:uppercase;border-bottom:1.5px solid #e2e8f0;background:#f8fafc;position:sticky;top:0}
+      td:first-child,th:first-child,td.l,th.l{text-align:left}
+      .mono{font-variant-numeric:tabular-nums}
+      tr.daystart td{border-top:2px solid #cbd5e1}
+      tr.issue{background:#fef2f2} tr.wait{background:#fffbeb}
+      .day{font-weight:700;color:#334155}
+      .badge{padding:1px 7px;border-radius:99px;font-size:9.5px;font-weight:700;white-space:nowrap}
+      .m-ok{background:#dcfce7;color:#166534}.m-err{background:#fee2e2;color:#b91c1c}
+      .m-warn{background:#ffedd5;color:#9a3412}.m-wait{background:#fef9c3;color:#854d0e}
+      .m-info{background:#dbeafe;color:#1e40af}.m-mut{background:#f1f5f9;color:#475569}
+      .neg{color:#b91c1c} .legend{font-size:10px;color:#64748b;margin:2px 0 10px}
+      h2{font-size:13px;margin:18px 0 6px;border-left:4px solid #ea580c;padding-left:8px}
+      .sign{display:flex;gap:40px;margin-top:26px}.sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
+      .toolbar{max-width:1000px;margin:0 auto 12px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .ok-all{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;color:#166534;font-size:12px;margin:8px 0}
+      .empty{color:#64748b;font-size:12px;padding:10px 0}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0;page-break-after:always}th{position:static}}
+    </style>"""
+
+    def th_date(d):
+        try:
+            return f"{int(d[8:])}"
+        except Exception:
+            return d
+
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+             "<title>รายงานการจับคู่รายวัน</title>", css, "</head><body>",
+             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+
+    for b in brs:
+        bid, bname = b["branch_id"], b["name"]
+        try:
+            d = daily_reconciliation(conn, bid, period_month)
+        except Exception:
+            d = {"pos_daily_available": False, "days": []}
+        parts.append("<div class='sheet'>")
+        parts.append(f"<h1>รายงานการจับคู่รายวัน — สาขา{esc(bname)}</h1>")
+        parts.append(f"<div class='sub'>เดือน {esc(period_month)} · ตรวจสอบว่าทุกช่องทางในแต่ละวันจับคู่กับเอกสารถูกต้อง</div>")
+        if not d.get("pos_daily_available"):
+            parts.append("<div class='empty'>ยังไม่มีข้อมูล POS รายวันสำหรับเดือนนี้ — ต้องซิงก์ข้อมูลก่อน</div></div>")
+            continue
+
+        # active lanes only (POS or document present)
+        rows, n_ok, n_issue, n_wait = [], 0, 0, 0
+        tot_pos = tot_ext = tot_absvar = 0.0
+        prev_day = None
+        for day in d["days"]:
+            day_lanes = [l for l in day["lanes"]
+                         if abs(l["pos"]) > 0.005 or abs(l["ext"]) > 0.005]
+            for i, l in enumerate(day_lanes):
+                lab, cls, bucket = _MATCH_ST.get(l["status"], (l["status"], "m-mut", "none"))
+                if bucket == "ok": n_ok += 1
+                elif bucket == "issue": n_issue += 1
+                elif bucket == "wait": n_wait += 1
+                tot_pos += l["pos"]; tot_ext += l["ext"]; tot_absvar += abs(l["variance"])
+                trcls = (" daystart" if i == 0 else "") + (f" {bucket}" if bucket in ("issue", "wait") else "")
+                daycell = f"<span class='day'>{th_date(day['day'])}</span>" if i == 0 else ""
+                bank = "" if l["bank"] in ("NONE", "ANY") else esc(l["bank"])
+                rows.append(
+                    f"<tr class='{trcls.strip()}'>"
+                    f"<td class='l'>{daycell}</td>"
+                    f"<td class='l'>{esc(_MATCH_CH_TH.get(l['category'], l['category']))}</td>"
+                    f"<td class='l'>{bank}</td>"
+                    f"<td class='mono'>{m(l['pos'])}</td>"
+                    f"<td class='mono'>{m(l['ext'])}</td>"
+                    f"<td class='mono{' neg' if abs(l['variance'])>0.5 else ''}'>{m(l['variance'])}</td>"
+                    f"<td class='l'><span class='badge {cls}'>{esc(lab)}</span></td></tr>")
+        total_lanes = n_ok + n_issue + n_wait
+
+        parts.append("<div class='kpis'>")
+        parts.append(f"<div class='kpi ok'><div class='l'>จับคู่ตรง</div><div class='v'>{n_ok}/{total_lanes}</div></div>")
+        parts.append(f"<div class='kpi issue'><div class='l'>ต้องตรวจ (ต่าง/ขาด)</div><div class='v'>{n_issue}</div></div>")
+        parts.append(f"<div class='kpi wait'><div class='l'>รอเอกสารตามรอบ</div><div class='v'>{n_wait}</div></div>")
+        parts.append(f"<div class='kpi'><div class='l'>POS รวม</div><div class='v mono'>{m(tot_pos)}</div></div>")
+        parts.append(f"<div class='kpi'><div class='l'>เอกสาร/เงินเข้ารวม</div><div class='v mono'>{m(tot_ext)}</div></div>")
+        parts.append(f"<div class='kpi'><div class='l'>ผลต่างสะสม (abs)</div><div class='v mono'>{m(tot_absvar)}</div></div>")
+        parts.append("</div>")
+
+        if n_issue == 0 and total_lanes:
+            parts.append("<div class='ok-all'>✓ ทุกช่องทางที่มียอดในเดือนนี้จับคู่กับเอกสารครบ ไม่มีรายการที่ต้องตรวจ"
+                         + (f" (มี {n_wait} รายการรอเอกสารเข้าตามรอบ — ปกติ)" if n_wait else "") + "</div>")
+        parts.append("<div class='legend'>สถานะ: <b>✓ ตรง/จับคู่มือ</b> = ยอด POS ตรงกับเอกสาร · "
+                     "<b>✗ ต่าง/ขาดเอกสาร</b> = ต้องตรวจ · <b>เกินเอกสาร</b> = มีเงินเข้าเกินยอด POS · "
+                     "<b>รอเอกสารตามรอบ</b> = ยังไม่ถึงรอบเงินเข้า (ไม่ใช่ปัญหา) · ผลต่าง = เอกสาร − POS</div>")
+
+        if not rows and not d["days"]:
+            parts.append("<div class='empty'>ไม่มีรายการในเดือนนี้</div>")
+        parts.append("<table><thead><tr><th class='l'>วันที่</th><th class='l'>ช่องทาง</th>"
+                     "<th class='l'>ธนาคาร</th><th>ยอด POS</th><th>เอกสาร/เงินเข้า</th>"
+                     "<th>ผลต่าง</th><th class='l'>สถานะการจับคู่</th></tr></thead><tbody>")
+        parts.extend(rows)
+        parts.append("</tbody></table>")
+
+        # hand-confirmed matches (reclass corrections) — the human overrides, with reason
+        mm = conn.execute(
+            "SELECT category, bank, pos_amount, ext_amount, note, matched_by, matched_at "
+            "FROM recon_manual_match WHERE branch_id=? AND period_month=? ORDER BY matched_at",
+            (bid, period_month)).fetchall()
+        if mm:
+            parts.append("<h2>การจับคู่ด้วยมือ (เจ้าหน้าที่ยืนยันเอง) — มีเหตุผลกำกับ</h2>")
+            parts.append("<table><thead><tr><th class='l'>ช่องทาง</th><th class='l'>ธนาคาร</th>"
+                         "<th>ยอด POS</th><th>เอกสาร</th><th class='l'>เหตุผล/หมายเหตุ</th>"
+                         "<th class='l'>โดย</th></tr></thead><tbody>")
+            for r in mm:
+                parts.append(
+                    f"<tr><td class='l'>{esc(_MATCH_CH_TH.get(r['category'], r['category']))}</td>"
+                    f"<td class='l'>{esc(r['bank'] or '—')}</td>"
+                    f"<td class='mono'>{m(r['pos_amount'])}</td><td class='mono'>{m(r['ext_amount'])}</td>"
+                    f"<td class='l'>{esc(r['note'] or '—')}</td>"
+                    f"<td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
+            parts.append("</tbody></table>")
+
+        parts.append("<div class='sign'><div>ผู้จัดทำ (กระทบยอด)</div>"
+                     "<div>ผู้ตรวจสอบ</div><div>ผู้อนุมัติ</div></div>")
+        parts.append("</div>")
+
+    parts.append("</body></html>")
+    return "".join(parts)
+
+
+@app.get("/api/monthly-report")
+def monthly_matching_report(period_month: str, branch_id: int | None = None):
+    """Print-to-PDF monthly matching audit: every day × channel with POS vs document,
+    variance, and match status — confirm the whole month reconciled. Omit branch_id
+    for an all-branches pack (one page each)."""
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    if branch_id:
+        with get_db() as conn:
+            _validate_master_branch(conn, branch_id)
+    with get_db() as conn:
+        html = _monthly_matching_html(conn, period_month, branch_id)
+    return Response(content=html, media_type="text/html; charset=utf-8")
+
+
 # ── Transaction-level drill-down (mapped / unmapped codes + statement lines) ───
 
 @app.get("/api/drill")

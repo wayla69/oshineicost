@@ -501,6 +501,7 @@ async function loadBranch(bid){
     <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${SES_ST[st]}</span>
     ${closed?`<span class="lbl">โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))}</span>`:''}
     ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
+    <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}" target="_blank" title="รายงานการจับคู่ทุกช่องทาง ไล่รายวันทั้งเดือน — ตรวจว่าจับคู่ถูกครบ · พิมพ์ PDF ได้">🖨️ ตรวจการจับคู่รายวัน</a>
     <div class="row" style="margin-left:auto;flex-wrap:nowrap">
       <div class="prog ${progCls(r.progress_pct)}" style="width:140px;flex:none"><div style="width:${r.progress_pct}%"></div></div>
       <span style="font-size:14px;font-weight:600" class="mono">${r.progress_pct}%</span>
@@ -1013,6 +1014,7 @@ function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 function moreMenu(){
   showSheet(`<div class="sheet-h">เพิ่มเติม</div>
     <div class="more-menu">
+      <a class="more-item" href="/api/monthly-report?period_month=${MONTH}" target="_blank">🖨️ รายงานการจับคู่รายวัน (ทุกสาขา)<span class="lbl">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · พิมพ์ PDF</span></a>
       <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
       <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
       <a class="more-item" href="/api/statement-codes.html" target="_blank">📖 พจนานุกรมรหัสในสเตทเมนต์<span class="lbl">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</span></a>

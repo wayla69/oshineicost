@@ -535,6 +535,33 @@ def test_statement_code_dictionary(client):
     assert h.status_code == 200 and "SDCH" in h.text and "รอตรวจ" in h.text
 
 
+def test_monthly_matching_report(client):
+    """Monthly matching audit renders per-branch day×channel rows with status, plus
+    a manager pack (all branches), and rejects a bad period."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','KNNQR',50000,9)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'kbank','s','2026-06',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) "
+              "VALUES(?,4,'2026-06-10','QR',50000)", (up,))
+    c.commit(); c.close()
+
+    r = client.get("/api/monthly-report?branch_id=4&period_month=2026-06")
+    assert r.status_code == 200
+    assert "รายงานการจับคู่รายวัน" in r.text
+    assert "QR พร้อมเพย์" in r.text and "สถานะการจับคู่" in r.text
+    assert "ตรง" in r.text                       # the matched QR lane shows ✓ ตรง
+    # all-branches manager pack
+    assert client.get("/api/monthly-report?period_month=2026-06").status_code == 200
+    # validation
+    assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
+
+
 def test_statement_code_override(client):
     """Manager remaps a statement code (SDCH → CASH_DEP): it wins over the parser,
     re-classifies existing bank lines, shows as overridden, and reverts cleanly."""
