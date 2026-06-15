@@ -556,8 +556,11 @@ def test_monthly_matching_report(client):
     assert "รายงานการจับคู่รายวัน" in r.text
     assert "QR พร้อมเพย์" in r.text and "สถานะการจับคู่" in r.text
     assert "ตรง" in r.text                       # the matched QR lane shows ✓ ตรง
-    # all-branches manager pack
-    assert client.get("/api/monthly-report?period_month=2026-06").status_code == 200
+    # all-branches manager pack = the 5 master branches only (franchise excluded)
+    pack = client.get("/api/monthly-report?period_month=2026-06")
+    assert pack.status_code == 200
+    assert "Korat1" in pack.text and "อุดรธานี" in pack.text     # master branches present
+    assert "Chonburi" not in pack.text                            # franchise branch excluded
     # validation
     assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
 

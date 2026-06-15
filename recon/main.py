@@ -2767,7 +2767,8 @@ def reclass_pattern_diagnostic(month: str, min_cluster: int = 6):
     from collections import defaultdict
     groups: dict = defaultdict(lambda: {"count": 0, "amount": 0.0, "branches": set()})
     with get_db() as conn:
-        bids = [r["branch_id"] for r in conn.execute("SELECT branch_id FROM branches")]
+        bids = [r["branch_id"] for r in
+                conn.execute(f"SELECT branch_id FROM branches WHERE {_MASTER_ONLY}")]
         for bid in bids:
             try:
                 sugs = suggest_reclassifications(conn, bid, month)
@@ -3575,7 +3576,9 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
         brs = conn.execute("SELECT branch_id, name FROM branches WHERE branch_id=?",
                            (branch_id,)).fetchall()
     else:
-        brs = conn.execute("SELECT branch_id, name FROM branches ORDER BY name").fetchall()
+        # all-branches pack = the 5 master (active) branches only, like every other view
+        brs = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
 
     css = """<style>
       @page{size:A4;margin:13mm}
