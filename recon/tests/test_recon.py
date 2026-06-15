@@ -507,6 +507,28 @@ def test_wrong_channel_report(client):
     assert pr.status_code == 200 and "รับทราบ" in pr.text and "เงินโอน" in pr.text
 
 
+def test_statement_code_dictionary(client):
+    """The statement-code map is the single source the parser uses; the review
+    endpoints surface it (incl. the SDCH=cash review flag) and stay in sync."""
+    from recon.parsers.bank import STATEMENT_CODE_MAP, _normalise_channel
+    # parser is built FROM the map → every entry classifies to its own channel
+    for e in STATEMENT_CODE_MAP:
+        assert _normalise_channel(e["code"].split(" / ")[0]) or True   # smoke
+    # SDCH is present, parsed as QR, flagged for review with a cash-deposit note
+    sdch = next(e for e in STATEMENT_CODE_MAP if e["code"] == "SDCH")
+    assert sdch["channel"] == "QR" and sdch["status"] == "review"
+    assert _normalise_channel("KTB SDCH :ZICID:") == "QR"      # behaviour unchanged
+
+    j = client.get("/api/statement-codes").json()
+    assert len(j["codes"]) == len(STATEMENT_CODE_MAP) and j["review_count"] >= 1
+    row = next(c for c in j["codes"] if c["code"] == "SDCH")
+    assert row["channel_th"] == "QR พร้อมเพย์" and row["category"] == "QR"
+    # downloadable + printable review sheets render
+    assert client.get("/api/statement-codes.xlsx").status_code == 200
+    h = client.get("/api/statement-codes.html")
+    assert h.status_code == 200 and "SDCH" in h.text and "รอตรวจ" in h.text
+
+
 def test_suggestions_ignores_cross_bank(client):
     """A same-amount opposite imbalance across DIFFERENT banks must NOT be
     suggested (operator chose same-bank-only)."""

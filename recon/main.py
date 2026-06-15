@@ -59,6 +59,7 @@ from .parsers import (
     parse_grab_report,
     parse_lineman_report,
 )
+from .parsers.bank import STATEMENT_CODE_MAP
 from .parsers.loader import to_parseable_xlsx, is_encrypted_upload as _is_encrypted_upload
 from .parsers.pdf_formats import (
     detect_and_parse as _detect_pdf_format,
@@ -2476,6 +2477,128 @@ def wrong_channel_report_print(period_month: str | None = None,
 
     parts.append("</body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+# ── Statement-code dictionary (รหัสในสเตทเมนต์ → ความหมาย → ช่องทาง) ────────────
+# Surfaces parsers.bank.STATEMENT_CODE_MAP (the single source the parser uses) so the
+# team can review every abbreviation and flag wrong meanings (the SDCH=cash case).
+
+# parser channel → (recon category, plain-Thai label)
+_PARSE_CH_TH = {
+    "QR":             ("QR",      "QR พร้อมเพย์"),
+    "TRANSFER":       ("TRANSFER", "เงินโอน"),
+    "CASH_DEP":       ("CASH",    "เงินสด (ฝากเข้าบัญชี)"),
+    "CC_SETTLE":      ("CREDIT",  "บัตรเครดิต (settlement)"),
+    "GRAB_PAYOUT":    ("GRAB",    "Grab (เงินโอนยอด)"),
+    "LINEMAN_PAYOUT": ("LINEMAN", "Line Man (เงินโอนยอด)"),
+    "FEE":            ("—",       "ค่าธรรมเนียม (ไม่ใช่รายได้)"),
+    "OTHER":          ("—",       "อื่น ๆ / ไม่จัดประเภท"),
+}
+
+
+def _statement_codes() -> list[dict]:
+    out = []
+    for e in STATEMENT_CODE_MAP:
+        cat, ch_th = _PARSE_CH_TH.get(e["channel"], (e["channel"], e["channel"]))
+        out.append({**e, "category": cat, "channel_th": ch_th})
+    return out
+
+
+@app.get("/api/statement-codes")
+def statement_codes():
+    return {"codes": _statement_codes(),
+            "review_count": sum(1 for c in _statement_codes() if c["status"] == "review")}
+
+
+@app.get("/api/statement-codes.xlsx")
+def statement_codes_xlsx():
+    import io
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill
+    wb = openpyxl.Workbook(); bold = Font(bold=True)
+    warn = PatternFill("solid", fgColor="FFF3CD")
+    ws = wb.active; ws.title = "รหัสในสเตทเมนต์"
+    ws.append(["รหัส / คำสำคัญ", "ชนิด", "ธนาคาร", "ความหมาย (ไทย)", "ระบบจัดเป็นช่องทาง",
+               "สถานะ", "หมายเหตุระบบ", "ทีมยืนยัน (✓/✗)", "ความเห็น/แก้ไขของทีม"])
+    for c in ws[1]:
+        c.font = bold
+    for c in _statement_codes():
+        kind = "รหัสธนาคาร" if c["kind"] == "code" else "คำทั่วไป"
+        st = "✅ ยืนยันแล้ว" if c["status"] == "confirmed" else "⚠️ รอตรวจ"
+        r = [c["code"], kind, c["bank"], c["meaning_th"], c["channel_th"], st, c["note"], "", ""]
+        ws.append(r)
+        if c["status"] == "review":
+            for cell in ws[ws.max_row]:
+                cell.fill = warn
+    for col, w in zip("ABCDEFGHI", (30, 12, 8, 46, 24, 14, 50, 14, 36)):
+        ws.column_dimensions[col].width = w
+    buf = io.BytesIO(); wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=\"statement_codes.xlsx\""})
+
+
+@app.get("/api/statement-codes.html")
+def statement_codes_html():
+    """Printable / shareable review sheet of every statement code the parser knows,
+    grouped by channel, with a column for the team to confirm or correct."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    codes = _statement_codes()
+    review_n = sum(1 for c in codes if c["status"] == "review")
+    css = """<style>
+      @page{size:A4 landscape;margin:12mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
+      .sheet{background:#fff;max-width:1100px;margin:0 auto;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:20px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:14px}
+      table{width:100%;border-collapse:collapse;font-size:11.5px}
+      th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
+      th{color:#475569;font-size:10.5px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
+      code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-family:ui-monospace,monospace;font-weight:600}
+      .badge{padding:1px 8px;border-radius:99px;font-size:10px;font-weight:600;white-space:nowrap}
+      .b-ok{background:#dcfce7;color:#166534} .b-warn{background:#fef3c7;color:#854d0e}
+      .b-code{background:#e0e7ff;color:#3730a3} .b-kw{background:#f1f5f9;color:#475569}
+      tr.review{background:#fffbeb} .note{color:#64748b;font-size:11px}
+      .fill{color:#cbd5e1} .toolbar{max-width:1100px;margin:0 auto 14px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;text-decoration:none}
+      .lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.6}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none}}
+    </style>"""
+    rows = []
+    for c in codes:
+        kind = ('<span class="badge b-code">รหัสธนาคาร</span>' if c["kind"] == "code"
+                else '<span class="badge b-kw">คำทั่วไป</span>')
+        st = ('<span class="badge b-ok">✅ ยืนยันแล้ว</span>' if c["status"] == "confirmed"
+              else '<span class="badge b-warn">⚠️ รอตรวจ</span>')
+        rows.append(
+            f'<tr class="{ "review" if c["status"]=="review" else "" }">'
+            f'<td><code>{esc(c["code"])}</code></td><td>{kind}</td><td>{esc(c["bank"])}</td>'
+            f'<td>{esc(c["meaning_th"])}{("<div class=note>"+esc(c["note"])+"</div>") if c["note"] else ""}</td>'
+            f'<td>{esc(c["channel_th"])}</td><td>{st}</td>'
+            f'<td class="fill">▢ ใช่ &nbsp; ▢ ไม่ใช่</td><td class="fill">…………………………</td></tr>')
+    html = (
+        "<!doctype html><html lang='th'><head><meta charset='utf-8'>"
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>"
+        "<title>พจนานุกรมรหัสในสเตทเมนต์</title>" + css + "</head><body>"
+        "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"
+        "<div class='sheet'>"
+        "<h1>พจนานุกรมรหัสในสเตทเมนต์ธนาคาร</h1>"
+        f"<div class='sub'>ระบบใช้ตารางนี้แยกประเภทรายการในสเตทเมนต์อัตโนมัติ · {len(codes)} รายการ · "
+        f"<b>{review_n} รายการรอทีมตรวจ</b></div>"
+        "<div class='lead'>ช่วยตรวจ <b>คอลัมน์ \"ความหมาย\" กับ \"ระบบจัดเป็นช่องทาง\"</b> ว่าตรงกับความจริงไหม "
+        "โดยเฉพาะแถวสีเหลือง (⚠️ รอตรวจ) ที่เป็นรหัสเฉพาะของธนาคาร เช่น <code>SDCH</code> "
+        "(เจ้าของยืนยันว่า = นำเงินสดไปฝาก ไม่ใช่ QR) · ทำเครื่องหมายในช่อง \"ทีมยืนยัน\" แล้วเขียนสิ่งที่ถูกต้องในช่องสุดท้าย</div>"
+        "<table><thead><tr><th>รหัส / คำสำคัญ</th><th>ชนิด</th><th>ธนาคาร</th>"
+        "<th>ความหมาย</th><th>ระบบจัดเป็นช่องทาง</th><th>สถานะ</th>"
+        "<th>ทีมยืนยัน</th><th>ที่ถูกต้องคือ</th></tr></thead><tbody>"
+        + "".join(rows) +
+        "</tbody></table>"
+        "<div style='margin-top:22px;display:flex;gap:50px'>"
+        "<div style='border-top:1px solid #94a3b8;padding-top:5px;flex:1;text-align:center;font-size:11px;color:#475569'>ผู้ตรวจสอบ (ทีมบัญชี)</div>"
+        "<div style='border-top:1px solid #94a3b8;padding-top:5px;flex:1;text-align:center;font-size:11px;color:#475569'>วันที่</div>"
+        "</div></div></body></html>")
+    return Response(content=html, media_type="text/html; charset=utf-8")
 
 
 # ── Discrepancies ─────────────────────────────────────────────────────────────

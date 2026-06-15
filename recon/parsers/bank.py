@@ -21,26 +21,68 @@ import openpyxl
 
 # ── Channel normalisation ──────────────────────────────────────────────────────
 
+# ── Statement-code dictionary (SINGLE SOURCE OF TRUTH) ─────────────────────────
+# Every bank-statement abbreviation / keyword the parser recognises, what it MEANS,
+# and which channel it is classified as. This table BOTH drives `_normalise_channel`
+# (so the parser can never drift from the documentation) AND is surfaced to the team
+# for review at /api/statement-codes[.html/.xlsx]. Order = first-match priority.
+#
+# status: "confirmed" = meaning verified · "review" = needs the team to confirm
+#   (esp. bank-specific codes whose plain meaning isn't obvious from the description).
+#
+# fields: pattern (regex, case-insensitive) · channel · code (display) · kind
+#   ('code'=bank abbreviation / 'keyword'=generic word) · bank · meaning_th · status · note
+STATEMENT_CODE_MAP: list[dict] = [
+    {"pattern": r"promptpay|พร้อมเพย์|QR|QR CODE", "channel": "QR",
+     "code": "QR / PromptPay / พร้อมเพย์", "kind": "keyword", "bank": "*",
+     "meaning_th": "รับชำระผ่าน QR พร้อมเพย์", "status": "confirmed", "note": ""},
+    {"pattern": r"SDCH", "channel": "QR",
+     "code": "SDCH", "kind": "code", "bank": "KTB",
+     "meaning_th": "นำเงินสดไปฝากที่เคาน์เตอร์กรุงไทย (Same-Day Clearing House)",
+     "status": "review",
+     "note": "พาร์สเป็น QR แต่ความหมายจริง = เงินฝากสด (เจ้าของยืนยัน 2026-06-15). "
+             "ตัวจับคู่เงินสดเคลมคืนเป็นเงินฝาก T+1 อยู่แล้ว — ทีมช่วยยืนยันว่าทุกบรรทัด SDCH เป็นเงินฝากสดจริง"},
+    {"pattern": r"โอน|transfer|trf|สั่งจ่าย", "channel": "TRANSFER",
+     "code": "โอน / Transfer / TRF", "kind": "keyword", "bank": "*",
+     "meaning_th": "เงินโอนเข้าบัญชี", "status": "confirmed", "note": ""},
+    {"pattern": r"IORSDT", "channel": "TRANSFER",
+     "code": "IORSDT", "kind": "code", "bank": "KTB",
+     "meaning_th": "รับโอนระหว่างธนาคาร (interbank credit) ผ่าน KTB", "status": "review",
+     "note": "บางบรรทัดเป็นโอนภายใน/ไม่ใช่รายได้ — ทีมยืนยันว่าเป็นยอดขายหรือไม่"},
+    {"pattern": r"NBSDT", "channel": "TRANSFER",
+     "code": "NBSDT", "kind": "code", "bank": "KTB",
+     "meaning_th": "รับโอนระหว่างธนาคารผ่าน KTB", "status": "review",
+     "note": "เช่นเดียวกับ IORSDT — บางส่วนอาจไม่ใช่รายได้ ทีมช่วยตรวจ"},
+    {"pattern": r"ฝาก|deposit|cash dep", "channel": "CASH_DEP",
+     "code": "ฝาก / Deposit / Cash Dep", "kind": "keyword", "bank": "*",
+     "meaning_th": "ฝากเงินสดเข้าบัญชี", "status": "confirmed", "note": ""},
+    {"pattern": r"ค่าธรรมเนียม|fee|charge", "channel": "FEE",
+     "code": "ค่าธรรมเนียม / Fee / Charge", "kind": "keyword", "bank": "*",
+     "meaning_th": "ค่าธรรมเนียมธนาคาร (หักออก ไม่ใช่รายได้)", "status": "confirmed", "note": ""},
+    {"pattern": r"edcsettle|credit card settle|SD Single credit", "channel": "CC_SETTLE",
+     "code": "EDC Settle / SD Single credit", "kind": "keyword", "bank": "*",
+     "meaning_th": "เงินโอนยอดบัตรเครดิตจากเครื่อง EDC / acquirer", "status": "confirmed", "note": ""},
+    {"pattern": r"SDCK", "channel": "CC_SETTLE",
+     "code": "SDCK", "kind": "code", "bank": "KTB",
+     "meaning_th": "เคลียริงยอดบัตรเครดิตผ่าน KTB (SDCK :ZICID:)", "status": "review",
+     "note": "คนละตัวกับ SDCH (เงินสด) — ทีมยืนยันว่าเป็นยอดบัตรเครดิตจริง"},
+    {"pattern": r"รับเงินจากการขาย", "channel": "CC_SETTLE",
+     "code": "รับเงินจากการขาย", "kind": "keyword", "bank": "KTB",
+     "meaning_th": "KTB EDC settlement (ข้อความ 'รับเงินจากการขาย')", "status": "confirmed", "note": ""},
+    {"pattern": r"alipay|wechat|อาลีเพย์", "channel": "QR",
+     "code": "Alipay / WeChat", "kind": "keyword", "bank": "*",
+     "meaning_th": "กระเป๋าเงินดิจิทัลต่างชาติ (จัดอยู่กลุ่ม QR)", "status": "confirmed", "note": ""},
+    {"pattern": r"grab|แกร็บ", "channel": "GRAB_PAYOUT",
+     "code": "Grab", "kind": "keyword", "bank": "*",
+     "meaning_th": "เงินโอนยอดขาย Grab", "status": "confirmed", "note": ""},
+    {"pattern": r"line man|lineman|ไลน์แมน", "channel": "LINEMAN_PAYOUT",
+     "code": "Line Man", "kind": "keyword", "bank": "*",
+     "meaning_th": "เงินโอนยอดขาย Line Man", "status": "confirmed", "note": ""},
+]
+
+# Built from the dictionary above so the parser and the review doc never diverge.
 _CHANNEL_PATTERNS: list[tuple[re.Pattern, str]] = [
-    # Generic / multi-bank
-    # SDCH = KTB Same-Day Clearing House (PromptPay/QR settlement)
-    (re.compile(r"promptpay|พร้อมเพย์|QR|QR CODE|SDCH", re.I), "QR"),
-    # IORSDT / NBSDT = KTB interbank credit transfers received
-    (re.compile(r"โอน|transfer|trf|สั่งจ่าย|IORSDT|NBSDT", re.I), "TRANSFER"),
-    (re.compile(r"ฝาก|deposit|cash dep", re.I),                "CASH_DEP"),
-    (re.compile(r"ค่าธรรมเนียม|fee|charge", re.I),            "FEE"),
-    # KTB CC settlement descriptions:
-    #   SD Single credit = single-day EDC/acquirer payout
-    #   SDCK :ZICID:     = KTB credit-card settlement via clearing (distinct from SDCH=QR)
-    #   รับเงินจากการขาย  = Thai "received from sales" — KTB EDC settlement
-    (re.compile(
-        r"edcsettle|credit card settle|SD Single credit|SDCK|รับเงินจากการขาย",
-        re.I
-    ), "CC_SETTLE"),
-    # Digital wallet payouts (Alipay, WeChat Pay)
-    (re.compile(r"alipay|wechat|อาลีเพย์", re.I),              "QR"),
-    (re.compile(r"grab|แกร็บ", re.I),                          "GRAB_PAYOUT"),
-    (re.compile(r"line man|lineman|ไลน์แมน", re.I),            "LINEMAN_PAYOUT"),
+    (re.compile(e["pattern"], re.I), e["channel"]) for e in STATEMENT_CODE_MAP
 ]
 
 
