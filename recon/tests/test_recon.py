@@ -567,6 +567,11 @@ def test_monthly_matching_report(client):
     assert pack.status_code == 200
     assert "Korat1" in pack.text and "อุดรธานี" in pack.text     # master branches present
     assert "Chonburi" not in pack.text                            # franchise branch excluded
+    # on-page branch picker present, listing the master branches (not the franchise)
+    assert "<select" in pack.text and "ทุกสาขา" in pack.text
+    assert "<option value='4'" in pack.text and "Chonburi" not in pack.text
+    # per-branch view still works
+    assert client.get("/api/monthly-report?period_month=2026-06&branch_id=4").status_code == 200
     # validation
     assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
 

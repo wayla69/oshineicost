@@ -3582,6 +3582,9 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
         # all-branches pack = the 5 master (active) branches only, like every other view
         brs = conn.execute(
             f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    # master list drives the on-page branch picker (always all 5, regardless of filter)
+    master = conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
 
     css = """<style>
       @page{size:A4;margin:13mm}
@@ -3620,10 +3623,21 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
         except Exception:
             return d
 
+    # on-page branch picker (hidden when printing) — choose 1 of the 5 or all
+    bopts = (f"<option value=''{'' if branch_id else ' selected'}>ทุกสาขา (5 สาขาหลัก)</option>"
+             + "".join(f"<option value='{b['branch_id']}'"
+                       f"{' selected' if branch_id == b['branch_id'] else ''}>{esc(b['name'])}</option>"
+                       for b in master))
+    picker = (f"<select onchange=\"location.href='?period_month={period_month}'"
+              f"+(this.value?'&branch_id='+this.value:'')\" "
+              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;"
+              "font:inherit;margin-right:8px'>" + bopts + "</select>")
+
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>รายงานการจับคู่รายวัน</title>", css, "</head><body>",
-             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+             "<div class='toolbar'>" + picker
+             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
 
     for b in brs:
         bid, bname = b["branch_id"], b["name"]
