@@ -1448,6 +1448,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
     </div>
 
+    <!-- Movers ↔ revenue: how yesterday's menu-mix shift moved food sales -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">🔗 เมนูขยับ ↔ ยอดขาย <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· การสลับเมนูเมื่อวานกระทบรายได้อาหารยังไง (เทียบรายได้/วันเฉลี่ย 21 วันต่อเมนู)</span></h2>
+      <div id="home-movers-revenue" class="mt-2"></div>
+    </div>
+
     <!-- Branch leaderboard + this-month daily pace -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5">
@@ -2944,6 +2950,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- Summary cards -->
   <div id="gpbSummary" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
 
+  <!-- Narrative page summary — plain-Thai read of the GP picture across branches -->
+  <div class="card p-4 mb-4">
+    <h2 class="section-title mb-2">📝 สรุปอ่านง่าย — ภาพรวม GP รายสาขา</h2>
+    <div id="gpbNarrative"></div>
+  </div>
+
   <!-- Per-branch GP% boxes (latest month + MoM progression) -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
@@ -4160,6 +4172,11 @@ body.dark .skeleton-kpi { border-color: var(--border); }
      TAB 2 — MENU ANALYSIS
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-menu" class="hidden">
+  <!-- Sales-direction narrative: do menu movements line up with what's actually selling? -->
+  <div class="card p-4 mb-4">
+    <h2 class="section-title mb-2">📝 วิเคราะห์กับยอดขาย — เมนูที่ขยับ ไปทางเดียวกับยอดไหม <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· บุฟเฟต์ (รายได้หลัก) · ชุดราคา · à-la-carte · เทรนด์เมื่อวาน</span></h2>
+    <div id="menuSalesNarrative"></div>
+  </div>
 
   <!-- 🔍 Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
   <div class="card p-4 mb-4">
@@ -7638,7 +7655,7 @@ function loadActiveTab() {
   cache = {};  // clear tab cache on filter change
   if (activeTab === 'overall')     loadOverall();
   if (activeTab === 'action')      loadActionCenter();
-  if (activeTab === 'menu')        loadMenuSubtab();
+  if (activeTab === 'menu')      { loadMenuSubtab(); renderMenuSalesNarrative(); }
   if (activeTab === 'trend')       loadTrend();
   if (activeTab === 'cost')        loadCostAnalysis();
   if (activeTab === 'profit')      loadProfitAnalysis();
@@ -15726,6 +15743,7 @@ async function loadGpBranch() {
     _gpbData = data;
     document.getElementById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
     _gpbRenderSummary(data);
+    _gpbRenderNarrative(data);
     _gpbRenderBoxes();
     _gpbRenderTable();
     _gpbRenderBarChart();
@@ -15755,6 +15773,34 @@ function _gpbRenderSummary(data) {
     card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#8b5cf6'),
     card('Food Cost %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
   ].join('');
+}
+
+// 📝 Plain-Thai narrative summarising the GP picture across branches (page read).
+function _gpbRenderNarrative(data) {
+  const el = document.getElementById('gpbNarrative'); if (!el) return;
+  const g = data.grand_total || {};
+  const lo = data.target_lo, hi = data.target_hi;
+  const rows = (data.rows || []).map(r => {
+    const rev = r.total_revenue || 0, cogs = r.total_cogs || 0;
+    return { branch: r.branch, rev, gpp: rev ? (rev - cogs) / rev * 100 : null, fc: rev ? cogs / rev * 100 : null };
+  }).filter(r => r.rev > 0 && r.gpp != null);
+  if (!rows.length) { el.innerHTML = '<p class="text-xs text-slate-400 italic">ไม่มีข้อมูลพอจะสรุป</p>'; return; }
+  const byGp = [...rows].sort((a, b) => b.gpp - a.gpp);
+  const best = byGp[0], worst = byGp[byGp.length - 1];
+  const overFc = rows.filter(r => r.fc > hi);             // food cost over target = margin risk
+  const inBand = rows.filter(r => r.fc >= lo && r.fc <= hi);
+  const gap = best.gpp - worst.gpp;
+  const fcCol = (g.food_cost_pct > hi) ? '#dc2626' : (g.food_cost_pct < lo) ? '#0ea5e9' : '#059669';
+  const fmtB = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
+  const lines = [
+    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? '#059669' : '#dc2626'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${fcCol}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
+    `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
+    overFc.length
+      ? `⚠️ <b style="color:#dc2626">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
+      : `✅ ทุกสาขา Food Cost อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
+    `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
+  ];
+  el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
 }
 
 function _gpbRenderBoxes() {
@@ -16468,7 +16514,7 @@ async function loadHome() {
       fetch(`${API}/api/analysis/anomalies`).then(r => r.json()).catch(() => ({ insights: [] })),
       fetch(`${API}/api/sales/daily?${sdp}`).then(r => r.json()).catch(() => null),
       fetch(`${API}/api/home/leak-watch?${gp}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/home/menu-movers?${gp}`).then(r => r.json()).catch(() => null),
+      fetch(`${API}/api/home/menu-movers?${gp}&limit=15`).then(r => r.json()).catch(() => null),
       fetch(`${API}/api/analysis/hourly?${hp}`).then(r => r.json()).catch(() => null),
       fetch(`${API}/api/sales/daily?${dayp}`).then(r => r.json()).catch(() => null),
     ]);
@@ -16484,6 +16530,7 @@ async function loadHome() {
     renderHomeForecast(fc);
     renderHomeLeakWatch(leak);
     renderHomeMenuMovers(movers);
+    renderHomeMoversRevenue(movers);
     renderHomePeakHours(hourly, brief.yesterday);
     renderHomeTrend7(trend7);
 
@@ -16725,23 +16772,125 @@ function renderHomeMenuMovers(m) {
     const d = x.delta_ph100;
     const main = `${arrow} ${d >= 0 ? '+' : ''}${d} จาน/100หัว`;
     const ctx = x.is_new
-      ? `(${fmtN(x.today)} จานวันนี้)`
-      : `(วันนี้ ${x.ph100} vs ปกติ ${x.avg_ph100}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct}%` : ''})`;
-    return `<div class="flex items-center justify-between gap-2 py-1">
-      <span class="text-xs truncate" style="color:var(--text-primary)">${tag}${esc(x.menu)}</span>
-      <span class="text-xs whitespace-nowrap tabular-nums" style="color:${col}">${main} <span style="color:var(--text-muted)">${ctx}</span></span>
+      ? `${fmtN(x.today)} จานวันนี้`
+      : `วันนี้ ${x.ph100} vs ปกติ ${x.avg_ph100}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct}%` : ''}`;
+    // Revenue tie-in: ฿ change vs the trailing avg day for this menu — shows whether a
+    // per-head move actually moved money. Colored to match the direction.
+    const revTxt = (x.rev_delta != null)
+      ? ` · <span style="color:${col};font-weight:600">฿${x.rev_delta >= 0 ? '+' : ''}${fmtN(x.rev_delta)}</span>`
+      : '';
+    // Two-line row: name + headline delta on line 1 (name truncates via min-w-0 so
+    // it yields space and never collides with the nowrap delta), muted context on
+    // line 2. Fixes the overlap from cramming name + delta + context on one line.
+    return `<div class="py-1 border-b" style="border-color:var(--border)">
+      <div class="flex items-baseline justify-between gap-2">
+        <span class="text-xs font-medium truncate min-w-0" style="color:var(--text-primary)" title="${esc(x.menu)}">${tag}${esc(x.menu)}</span>
+        <span class="text-xs font-semibold whitespace-nowrap tabular-nums" style="color:${col}">${main}</span>
+      </div>
+      <div class="text-[10px] tabular-nums" style="color:var(--text-muted)">${ctx}${revTxt}</div>
     </div>`;
   };
   el.innerHTML = `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-1">
     <div>
-      <p class="text-[11px] font-semibold uppercase tracking-wide mb-1" style="color:#059669">▲ ขายพุ่ง</p>
-      ${up.length ? up.map(x => row(x, true)).join('') : '<p class="text-xs text-slate-400 italic py-1">—</p>'}
+      <p class="text-[11px] font-semibold uppercase tracking-wide mb-1" style="color:#059669">▲ ขายพุ่ง <span style="color:var(--text-muted)">(${up.length})</span></p>
+      <div style="max-height:360px;overflow-y:auto;padding-right:4px">
+        ${up.length ? up.map(x => row(x, true)).join('') : '<p class="text-xs text-slate-400 italic py-1">—</p>'}
+      </div>
     </div>
     <div>
-      <p class="text-[11px] font-semibold uppercase tracking-wide mb-1" style="color:#dc2626">▼ ขายตก</p>
-      ${down.length ? down.map(x => row(x, false)).join('') : '<p class="text-xs text-slate-400 italic py-1">—</p>'}
+      <p class="text-[11px] font-semibold uppercase tracking-wide mb-1" style="color:#dc2626">▼ ขายตก <span style="color:var(--text-muted)">(${down.length})</span></p>
+      <div style="max-height:360px;overflow-y:auto;padding-right:4px">
+        ${down.length ? down.map(x => row(x, false)).join('') : '<p class="text-xs text-slate-400 italic py-1">—</p>'}
+      </div>
     </div>
   </div>`;
+}
+
+// 🔗 Movers ↔ sales: do the dish movements line up with how the BUFFET PACKAGE (the
+// real revenue driver) sold, which price-tier moved, and the à-la-carte trend.
+function renderHomeMoversRevenue(m) {
+  const el = document.getElementById('home-movers-revenue'); if (!el) return;
+  const s = m && m.sales, b = s && s.buffet;
+  if (!s || !b) { el.innerHTML = '<p class="text-xs text-slate-400 py-3 italic">ยังไม่มีข้อมูลยอดขายพอจะวิเคราะห์</p>'; return; }
+  const pct = (t, a) => (a ? Math.round((t - a) / a * 100) : null);
+  const sgn = v => (v == null ? '—' : (v >= 0 ? '+' : '') + v + '%');
+  const col = v => (v == null ? 'var(--text-muted)' : (v >= 0 ? '#059669' : '#dc2626'));
+  const covP = pct(b.covers_today, b.covers_avg);   // buffet covers vs avg
+  const revP = pct(b.rev_today, b.rev_avg);          // buffet revenue vs avg
+  const ppcP = pct(b.ppc_today, b.ppc_avg);          // avg ฿/cover = price-tier proxy
+  const alaP = pct(s.alacarte_today, s.alacarte_avg);
+  const upN = (m.up || []).length, downN = (m.down || []).length;
+  const dishDir = upN > downN ? 'พุ่ง' : (downN > upN ? 'ตก' : 'ทรงตัว');
+  const box = (label, val, c, sub) => `
+    <div class="rounded-lg p-3" style="border:1px solid var(--border);background:var(--bg-input)">
+      <div class="text-[11px] mb-0.5" style="color:var(--text-muted)">${label}</div>
+      <div class="text-lg font-bold tabular-nums" style="color:${c}">${val}</div>
+      ${sub ? `<div class="text-[10px] mt-0.5" style="color:var(--text-muted)">${sub}</div>` : ''}
+    </div>`;
+  // ── narrative: align dish movement with buffet package + price tier + à-la-carte ──
+  const lines = [];
+  if (revP != null) {
+    const dir = revP >= 0 ? 'โตขึ้น' : 'ลดลง';
+    lines.push(`ยอด<b>บุฟเฟต์</b>เมื่อวาน${dir} <b style="color:${col(revP)}">${sgn(revP)}</b> (โต๊ะ ${sgn(covP)} · เทียบเฉลี่ย 21 วัน) — เป็นรายได้หลักของร้าน`);
+  }
+  if (ppcP != null) {
+    lines.push(ppcP >= 0
+      ? `ราคาเฉลี่ย/หัว <b style="color:#059669">${sgn(ppcP)}</b> → ลูกค้าเลือก<b>ชุดราคาสูงขึ้น</b> (มื้อเย็น/พรีเมียมมากขึ้น)`
+      : `ราคาเฉลี่ย/หัว <b style="color:#dc2626">${sgn(ppcP)}</b> → mix เอียงไป<b>ชุดราคาถูกลง</b> (กลางวัน/เด็กมากขึ้น)`);
+  }
+  // do the per-head dish movers go the SAME way as buffet covers?
+  if (covP != null) {
+    const same = (covP >= 0 && upN >= downN) || (covP < 0 && downN >= upN);
+    lines.push(same
+      ? `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#059669">สอดคล้อง</b>กับทิศทางโต๊ะบุฟเฟต์ — ลูกค้ามากขึ้นก็กินเมนูเด่นมากขึ้นตามคาด`
+      : `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#d97706">สวนทาง</b>กับโต๊ะบุฟเฟต์ — การเปลี่ยนเป็นเรื่องรสนิยม/ความนิยมเมนู ไม่ใช่แค่จำนวนลูกค้า`);
+  }
+  if (alaP != null)
+    lines.push(`เมนู<b>à-la-carte</b> (สั่งแยกจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${col(alaP)}">${sgn(alaP)}</b> — ส่วนเสริมรายได้นอกบุฟเฟต์`);
+  el.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+      ${box('🍽️ โต๊ะบุฟเฟต์เมื่อวาน', fmtN(b.covers_today), col(covP), `เฉลี่ย ${fmtN(b.covers_avg)} · <span style="color:${col(covP)}">${sgn(covP)}</span>`)}
+      ${box('💰 รายได้บุฟเฟต์', '฿' + fmtN(b.rev_today), col(revP), `เฉลี่ย ฿${fmtN(b.rev_avg)} · <span style="color:${col(revP)}">${sgn(revP)}</span>`)}
+      ${box('🏷️ ราคาเฉลี่ย/หัว (ชุดราคา)', '฿' + fmtN(b.ppc_today), col(ppcP), `เฉลี่ย ฿${fmtN(b.ppc_avg)} · <span style="color:${col(ppcP)}">${sgn(ppcP)}</span>`)}
+      ${box('🍤 à-la-carte อาหาร', '฿' + fmtN(s.alacarte_today), col(alaP), `เฉลี่ย ฿${fmtN(s.alacarte_avg)} · <span style="color:${col(alaP)}">${sgn(alaP)}</span>`)}
+    </div>
+    <div class="text-xs rounded-lg p-3 space-y-1" style="background:var(--bg-subtle,rgba(0,0,0,0.03));color:var(--text-primary)">
+      ${lines.map(t => `<div>• ${t}</div>`).join('')}
+    </div>`;
+}
+
+// 📝 Menu Analysis tab: narrative tying menu movements to what actually sold —
+// buffet package direction, price-tier shift, à-la-carte trend, and top movers.
+async function renderMenuSalesNarrative() {
+  const el = document.getElementById('menuSalesNarrative'); if (!el) return;
+  el.innerHTML = '<p class="text-xs text-slate-400 italic py-1">กำลังวิเคราะห์…</p>';
+  const p = new URLSearchParams(); if (getBranch()) p.set('branch', getBranch()); p.set('limit', '15');
+  let m; try { m = await fetch(`${API}/api/home/menu-movers?${p}`).then(r => r.json()); }
+  catch (e) { el.innerHTML = '<p class="text-xs text-red-400">โหลดไม่สำเร็จ</p>'; return; }
+  const s = m && m.sales, b = s && s.buffet;
+  if (!s || !b) { el.innerHTML = '<p class="text-xs text-slate-400 italic py-1">ยังไม่มีข้อมูลพอจะวิเคราะห์ (เลือกช่วง/สาขาที่มียอด)</p>'; return; }
+  const pct = (t, a) => (a ? Math.round((t - a) / a * 100) : null);
+  const sgn = v => (v == null ? '—' : (v >= 0 ? '+' : '') + v + '%');
+  const c = v => (v == null ? 'var(--text-muted)' : (v >= 0 ? '#059669' : '#dc2626'));
+  const covP = pct(b.covers_today, b.covers_avg), revP = pct(b.rev_today, b.rev_avg);
+  const ppcP = pct(b.ppc_today, b.ppc_avg), alaP = pct(s.alacarte_today, s.alacarte_avg);
+  const up = m.up || [], down = m.down || [];
+  const dishDir = up.length > down.length ? 'พุ่ง' : (down.length > up.length ? 'ตก' : 'ทรงตัว');
+  const names = arr => arr.slice(0, 3).map(x => esc(x.menu)).join(', ') || '—';
+  const lines = [];
+  if (revP != null) lines.push(`ยอด<b>บุฟเฟต์</b> (${m.date}) ${revP >= 0 ? 'โต' : 'ลด'} <b style="color:${c(revP)}">${sgn(revP)}</b> · โต๊ะ ${sgn(covP)} เทียบเฉลี่ย 21 วัน — เป็นรายได้หลักของร้าน`);
+  if (ppcP != null) lines.push(ppcP >= 0
+    ? `ราคาเฉลี่ย/หัว <b style="color:#059669">${sgn(ppcP)}</b> → ลูกค้าเลือก<b>ชุดราคาสูงขึ้น</b> (มื้อเย็น/พรีเมียม)`
+    : `ราคาเฉลี่ย/หัว <b style="color:#dc2626">${sgn(ppcP)}</b> → mix เอียงไป<b>ชุดราคาถูกลง</b> (กลางวัน/เด็ก)`);
+  if (covP != null) {
+    const same = (covP >= 0 && up.length >= down.length) || (covP < 0 && down.length >= up.length);
+    lines.push(same
+      ? `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#059669">ไปทางเดียวกัน</b>กับยอดบุฟเฟต์ — สอดคล้องกับจำนวนลูกค้า`
+      : `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#d97706">สวนทาง</b>กับยอดบุฟเฟต์ — เป็นเรื่องรสนิยม/ความนิยม ไม่ใช่แค่จำนวนลูกค้า`);
+  }
+  if (alaP != null) lines.push(`เมนู<b>à-la-carte</b> (สั่งจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${c(alaP)}">${sgn(alaP)}</b>`);
+  lines.push(`📈 เทรนด์เมื่อวาน — มาแรง: <b style="color:#059669">${names(up)}</b> · แผ่วลง: <b style="color:#dc2626">${names(down)}</b>`);
+  el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
 }
 
 // ⏰ Yesterday's revenue by hour — peak + quietest open hour.

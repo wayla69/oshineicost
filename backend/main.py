@@ -11575,31 +11575,68 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
               JOIN categories c ON c.category_id=sk.category_id
               WHERE {_FOOD_CATEGORY_FILTER}),
             today AS (
-              SELECT d.sku_id, SUM(d.qty) q
+              SELECT d.sku_id, SUM(d.qty) q, SUM(d.subtotal_ex_vat) rev
               FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
               WHERE d.day=:focus {bf} GROUP BY d.sku_id),
             histday AS (
-              SELECT d.day, d.sku_id, SUM(d.qty) daily
+              SELECT d.day, d.sku_id, SUM(d.qty) daily, SUM(d.subtotal_ex_vat) drev
               FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
               WHERE d.day>=:ws AND d.day<:focus {bf}
               GROUP BY d.day, d.sku_id),
             hist AS (
-              SELECT hd.sku_id, AVG(hd.daily * 1.0 / cust.c) avg_ph, COUNT(*) n
+              SELECT hd.sku_id, AVG(hd.daily * 1.0 / cust.c) avg_ph, AVG(hd.drev) avg_rev, COUNT(*) n
               FROM histday hd JOIN cust ON cust.day=hd.day
               WHERE cust.c > 0
               GROUP BY hd.sku_id)
             SELECT s.description, s.sku_code,
-                   COALESCE(t.q,0) today, COALESCE(h.avg_ph,0) avg_ph, COALESCE(h.n,0) n
+                   COALESCE(t.q,0) today, COALESCE(h.avg_ph,0) avg_ph, COALESCE(h.n,0) n,
+                   COALESCE(t.rev,0) rev_today, COALESCE(h.avg_rev,0) rev_avg
             FROM hist h
             LEFT JOIN today t ON t.sku_id=h.sku_id
             JOIN skus s ON s.sku_id=h.sku_id
             WHERE h.n >= 10 AND h.sku_id IN (SELECT sku_id FROM food)
             UNION
-            SELECT s.description, s.sku_code, t.q today, 0 avg_ph, 0 n
+            SELECT s.description, s.sku_code, t.q today, 0 avg_ph, 0 n,
+                   t.rev rev_today, 0 rev_avg
             FROM today t JOIN skus s ON s.sku_id=t.sku_id
             WHERE t.sku_id NOT IN (SELECT sku_id FROM hist WHERE n >= 10)
               AND t.sku_id IN (SELECT sku_id FROM food)
         """, p).fetchall()
+        # total food revenue in scope today — denominator for the movers' revenue share
+        frow = con.execute(f"""
+            SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            WHERE d.day=:focus {bf}
+              AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
+                               JOIN categories c ON c.category_id=sk.category_id
+                               WHERE {_FOOD_CATEGORY_FILTER})""", p).fetchone()
+        today_food_rev = (frow["rev"] if frow else 0) or 0
+        # Buffet PACKAGE sales (the real revenue driver for buffet dishes, which carry
+        # no line revenue): covers + revenue + avg price/cover, focus day vs trailing avg.
+        bp = con.execute(f"""
+            SELECT COALESCE(SUM(CASE WHEN d.day=:focus THEN d.subtotal_ex_vat END),0) rev_t,
+                   COALESCE(SUM(CASE WHEN d.day=:focus THEN d.qty END),0) cov_t,
+                   COALESCE(SUM(CASE WHEN d.day<:focus THEN d.subtotal_ex_vat END),0) rev_h,
+                   COALESCE(SUM(CASE WHEN d.day<:focus THEN d.qty END),0) cov_h,
+                   COUNT(DISTINCT CASE WHEN d.day<:focus THEN d.day END) hdays
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id JOIN skus s ON s.sku_id=d.sku_id
+            WHERE d.day>=:ws AND d.day<=:focus AND s.sku_code LIKE 'BUFFET%' {bf}""", p).fetchone()
+        hd = (bp["hdays"] or 1) if bp else 1
+        buf = {
+            "rev_today": round(bp["rev_t"]), "rev_avg": round(bp["rev_h"] / hd),
+            "covers_today": round(bp["cov_t"]), "covers_avg": round(bp["cov_h"] / hd),
+            "ppc_today": round(bp["rev_t"] / bp["cov_t"]) if bp["cov_t"] else 0,
+            "ppc_avg": round(bp["rev_h"] / bp["cov_h"]) if bp["cov_h"] else 0,
+        } if bp else None
+        # à-la-carte food revenue trailing daily average (today = today_food_rev)
+        af = con.execute(f"""
+            SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev, COUNT(DISTINCT d.day) hdays
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            WHERE d.day>=:ws AND d.day<:focus {bf}
+              AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
+                               JOIN categories c ON c.category_id=sk.category_id
+                               WHERE {_FOOD_CATEGORY_FILTER})""", p).fetchone()
+        ala_avg = round((af["rev"] or 0) / (af["hdays"] or 1)) if af else 0
     up, down = [], []
     for r in rows:
         today = r["today"] or 0
@@ -11608,11 +11645,14 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
         name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
         today_ph = today / today_c
         ph100 = round(today_ph * 100, 2)   # plates per 100 customers today
+        rev_today = round(r["rev_today"] or 0)                 # this menu's revenue today
+        rev_delta = round((r["rev_today"] or 0) - (r["rev_avg"] or 0))  # vs trailing avg day
         if n < 10:
             # new / no-history item: only an UP mover, and only if it has real presence
             if today >= max(min_qty, 20):
                 up.append({"menu": name, "today": round(today), "ph100": ph100, "avg_ph100": 0,
-                           "delta_ph100": ph100, "pct": None, "is_new": True})
+                           "delta_ph100": ph100, "pct": None, "is_new": True,
+                           "rev_today": rev_today, "rev_delta": rev_today})
             continue
         if avg_ph <= 0 or today < min_qty:
             continue
@@ -11621,15 +11661,27 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
         if delta100 >= min_ph and ratio >= 1.5:
             up.append({"menu": name, "today": round(today), "ph100": ph100,
                        "avg_ph100": round(avg_ph * 100, 2), "delta_ph100": round(delta100, 2),
-                       "pct": round((ratio - 1) * 100), "is_new": False})
+                       "pct": round((ratio - 1) * 100), "is_new": False,
+                       "rev_today": rev_today, "rev_delta": rev_delta})
         elif delta100 <= -min_ph and ratio <= 0.5:
             down.append({"menu": name, "today": round(today), "ph100": ph100,
                          "avg_ph100": round(avg_ph * 100, 2), "delta_ph100": round(delta100, 2),
-                         "pct": round((ratio - 1) * 100), "is_new": False})
+                         "pct": round((ratio - 1) * 100), "is_new": False,
+                         "rev_today": rev_today, "rev_delta": rev_delta})
     up.sort(key=lambda s: -s["delta_ph100"])
     down.sort(key=lambda s: s["delta_ph100"])
+    up_lim, down_lim = up[:limit], down[:limit]
+    # Revenue relationship: how the displayed menu-mix shift moved food revenue.
+    rev_up = round(sum(x["rev_delta"] for x in up_lim))      # extra ฿ from rising menus
+    rev_down = round(sum(x["rev_delta"] for x in down_lim))  # ฿ lost from falling menus (<=0)
+    top_gain = max(up_lim, key=lambda s: s["rev_delta"], default=None)
+    top_loss = min(down_lim, key=lambda s: s["rev_delta"], default=None)
     return {"date": focus, "window_days": 21, "min_ph": min_ph, "today_customers": today_c,
-            "up": up[:limit], "down": down[:limit]}
+            "up": up_lim, "down": down_lim,
+            "today_food_rev": round(today_food_rev),
+            "rev_up_delta": rev_up, "rev_down_delta": rev_down, "rev_net_delta": rev_up + rev_down,
+            "top_gain": top_gain, "top_loss": top_loss,
+            "sales": {"buffet": buf, "alacarte_today": round(today_food_rev), "alacarte_avg": ala_avg}}
 
 
 # ---------------------------------------------------------------------------
