@@ -1029,6 +1029,7 @@ function moreMenu(){
   showSheet(`<div class="sheet-h">เพิ่มเติม</div>
     <div class="more-menu">
       <a class="more-item" href="/api/monthly-report?period_month=${MONTH}" target="_blank">🖨️ รายงานการจับคู่รายวัน (ทุกสาขา)<span class="lbl">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · พิมพ์ PDF</span></a>
+      <a class="more-item" href="/api/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank">📥 ติดตามเอกสารที่ยังขาด<span class="lbl">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ · พิมพ์ PDF</span></a>
       <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
       <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
       <a class="more-item" href="/api/statement-codes.html" target="_blank">📖 พจนานุกรมรหัสในสเตทเมนต์<span class="lbl">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</span></a>

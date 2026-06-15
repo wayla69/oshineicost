@@ -572,6 +572,20 @@ def test_monthly_matching_report(client):
     assert "<option value='4'" in pack.text and "Chonburi" not in pack.text
     # per-branch view still works
     assert client.get("/api/monthly-report?period_month=2026-06&branch_id=4").status_code == 200
+
+
+def test_outstanding_docs_report(client):
+    """The follow-up report lists per-branch missing documents (works for any month)
+    and renders a printable sheet with a month + branch picker."""
+    j = client.get("/api/reports/outstanding-docs?period_month=2026-06").json()
+    assert "branches" in j and "grand_total" in j and j["period_month"] == "2026-06"
+    h = client.get("/api/reports/outstanding-docs.print?period_month=2026-06")
+    assert h.status_code == 200
+    assert "รายงานติดตามเอกสารที่ยังขาด" in h.text
+    assert "<input type='month'" in h.text and "<select" in h.text   # month + branch picker
+    # works for a different month too (monthly follow-up) + validates input
+    assert client.get("/api/reports/outstanding-docs?period_month=2026-05").status_code == 200
+    assert client.get("/api/reports/outstanding-docs?period_month=2026-13").status_code == 400
     # validation
     assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
 

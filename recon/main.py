@@ -3745,6 +3745,163 @@ def monthly_matching_report(period_month: str, branch_id: int | None = None):
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
+# ── Outstanding-documents follow-up (รายงานติดตามเอกสารที่ขาด รายสาขา/เดือน) ────
+# "Which documents does each branch still need to upload this month, and how much
+# money is waiting on each?" — works for ANY period so the team can chase month-to-month.
+
+def _doc_channel(label: str) -> str | None:
+    """Map a required-document label to the channel it backs (for the baht-at-stake)."""
+    l = (label or "")
+    if "บัตร" in l:                                   return "CREDIT"
+    if "Grab" in l or "แกร็บ" in l:                   return "GRAB"
+    if "Line Man" in l or "ไลน์แมน" in l or "LM" in l.upper(): return "LINEMAN"
+    if "คะแนน" in l or "คูปอง" in l:                 return "COUPON"
+    if "สเตทเมนต์" in l or "statement" in l.lower():  return "BANK"   # backs QR/CASH/TRANSFER
+    return None
+
+
+def _outstanding_docs_report(conn, period_month: str, branch_id: int | None = None) -> dict:
+    from collections import defaultdict
+    if branch_id:
+        masters = conn.execute("SELECT branch_id, name FROM branches WHERE branch_id=?",
+                               (branch_id,)).fetchall()
+    else:
+        masters = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+
+    branches, grand = [], 0.0
+    for b in masters:
+        try:
+            rm = reconcile_month(conn, b["branch_id"], period_month)
+        except Exception:
+            continue
+        chmap = {c["key"]: c for c in rm.get("channels", [])}
+        miss = defaultdict(list)            # channel -> [missing/partial doc labels]
+        for doc in rm.get("documents", []):
+            if doc.get("status") in ("missing", "partial"):
+                miss[_doc_channel(doc["label"])].append(
+                    {"label": doc["label"], "status": doc["status"]})
+
+        rows = []
+        for key, docs in miss.items():
+            if key == "BANK":               # statements back several lanes; report at branch level
+                continue
+            c = chmap.get(key, {})
+            unmatched = round(max(0.0, float(c.get("pos", 0)) - float(c.get("ext", 0))), 2)
+            rows.append({"channel": key, "channel_th": _MATCH_CH_TH.get(key, key),
+                         "unmatched": unmatched,
+                         "docs": [d["label"] for d in docs],
+                         "doc_status": "partial" if any(d["status"] == "partial" for d in docs) else "missing"})
+        # missing bank statements (rare — usually uploaded) listed separately
+        bank_missing = [d["label"] for d in miss.get("BANK", [])]
+        rows.sort(key=lambda r: -r["unmatched"])
+        branch_total = round(sum(r["unmatched"] for r in rows), 2)
+        grand += branch_total
+        if rows or bank_missing:
+            branches.append({"branch_id": b["branch_id"], "branch_name": b["name"],
+                             "progress_pct": rm.get("progress_pct"),
+                             "rows": rows, "bank_missing": bank_missing,
+                             "branch_total": branch_total})
+    branches.sort(key=lambda x: -x["branch_total"])
+    return {"period_month": period_month, "branches": branches,
+            "grand_total": round(grand, 2)}
+
+
+@app.get("/api/reports/outstanding-docs")
+def outstanding_docs_report(period_month: str, branch_id: int | None = None):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _outstanding_docs_report(conn, period_month, branch_id)
+
+
+@app.get("/api/reports/outstanding-docs.print")
+def outstanding_docs_report_print(period_month: str, branch_id: int | None = None):
+    """Print-to-PDF follow-up sheet: per branch, the documents still missing this month
+    + the baht waiting on each. Month + branch picker on the page (hidden when printing)."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        rep = _outstanding_docs_report(conn, period_month, branch_id)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+
+    css = """<style>
+      @page{size:A4;margin:14mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:22px;background:#f8fafc}
+      .sheet{background:#fff;max-width:920px;margin:0 auto 16px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:19px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:6px}
+      h2{font-size:14px;margin:16px 0 6px;border-left:4px solid #ea580c;padding-left:8px}
+      table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 6px}
+      th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:right}
+      th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
+      td:first-child,th:first-child,td.l,th.l{text-align:left}
+      .mono{font-variant-numeric:tabular-nums} .big{color:#b91c1c;font-weight:700}
+      tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
+      .chk{width:16px;height:16px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;vertical-align:middle}
+      .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}
+      .none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;color:#166534;font-size:12px}
+      .toolbar{max-width:920px;margin:0 auto 12px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px}
+      .sign{display:flex;gap:40px;margin-top:22px}.sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0}}
+    </style>"""
+
+    bopts = (f"<option value=''{'' if branch_id else ' selected'}>ทุกสาขา (5 สาขาหลัก)</option>"
+             + "".join(f"<option value='{b['branch_id']}'"
+                       f"{' selected' if branch_id == b['branch_id'] else ''}>{esc(b['name'])}</option>"
+                       for b in master))
+    bsuffix = f"&branch_id={branch_id}" if branch_id else ""
+    month_oc = "location.href='?period_month='+this.value+'" + bsuffix + "'"
+    sel_oc = (f"location.href='?period_month={period_month}'"
+              "+(this.value?'&branch_id='+this.value:'')")
+    picker = (f"<input type='month' value='{esc(period_month)}' class='ctl' onchange=\"{month_oc}\">"
+              f"<select class='ctl' onchange=\"{sel_oc}\">" + bopts + "</select>")
+
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+             "<title>ติดตามเอกสารที่ขาด</title>", css, "</head><body>",
+             "<div class='toolbar'>" + picker
+             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+             "<div class='sheet'>",
+             f"<h1>รายงานติดตามเอกสารที่ยังขาด — งวด {esc(period_month)}</h1>",
+             f"<div class='sub'>เอกสารที่แต่ละสาขายังต้องอัปโหลด + ยอดเงินที่รอเอกสารนั้นจับคู่ · "
+             f"รวมเงินที่รอเอกสารทั้งหมด <b class='big'>฿{m(rep['grand_total'])}</b></div>"]
+
+    if not rep["branches"]:
+        parts.append("<div class='none'>✓ ทุกสาขาอัปเอกสารครบสำหรับงวดนี้ — ไม่มีเอกสารค้าง</div>")
+    for b in rep["branches"]:
+        parts.append(f"<h2>{esc(b['branch_name'])} — เหลือเอกสารคิดเป็นเงิน ฿{m(b['branch_total'])}"
+                     + (f" · ความคืบหน้า {b['progress_pct']}%" if b.get('progress_pct') is not None else "") + "</h2>")
+        if b["rows"]:
+            parts.append("<table><thead><tr><th class='l'>อัปแล้ว</th><th class='l'>ช่องทาง</th>"
+                         "<th class='l'>เอกสารที่ต้องอัปโหลด</th><th>ยอดที่รอจับคู่ (บาท)</th></tr></thead><tbody>")
+            for r in b["rows"]:
+                docs = " · ".join(esc(x) for x in r["docs"])
+                st = " <span class='partial'>(อัปบางส่วน)</span>" if r["doc_status"] == "partial" else ""
+                parts.append(f"<tr><td class='l'><span class='chk'></span></td>"
+                             f"<td class='l'>{esc(r['channel_th'])}</td>"
+                             f"<td class='l'>{docs}{st}</td>"
+                             f"<td class='mono{' big' if r['unmatched']>20000 else ''}'>{m(r['unmatched'])}</td></tr>")
+            parts.append(f"</tbody><tfoot><tr><td colspan='3' class='l'>รวมเงินที่รอเอกสาร</td>"
+                         f"<td class='mono'>{m(b['branch_total'])}</td></tr></tfoot></table>")
+        if b["bank_missing"]:
+            parts.append("<div class='lead'>⚠ สเตทเมนต์ธนาคารที่ยังขาด: "
+                         + " · ".join(esc(x) for x in b["bank_missing"])
+                         + " (จำเป็นต่อ QR/เงินสด/เงินโอน)</div>")
+        parts.append("<div class='sign'><div>ผู้รับผิดชอบสาขา</div><div>วันที่อัปครบ</div></div>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
 # ── UAT sign-off sheet (เอกสารทดสอบ + รับรองการใช้งาน) ─────────────────────────
 # Printable acceptance-test checklist with a usage narrative beside each case, for the
 # team to walk through, mark pass/fail, and sign off before going fully live.
