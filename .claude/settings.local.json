@@ -116,7 +116,11 @@
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Monthly: {len\\(d\\)} months'\\)\")",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'Quarterly: {len\\(d\\)} quarters, labels={[r[\\\\\"period_month\\\\\"] for r in d]}'\\)\")",
       "PowerShell(\\(Get-Content \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Daiki\\\\2026\\\\Cost Analysis\\\\index.html\" | Measure-Object -Line\\).Lines)",
-      "Bash(wc -l \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Jiancha\\\\Sales Dashboard\\\\V2\\\\JC_Dashboard V.2.html\" \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Daiki\\\\2026\\\\Cost Analysis\\\\index.html\")"
+      "Bash(wc -l \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Jiancha\\\\Sales Dashboard\\\\V2\\\\JC_Dashboard V.2.html\" \"C:\\\\Users\\\\ASUS\\\\OneDrive\\\\Daiki\\\\2026\\\\Cost Analysis\\\\index.html\")",
+      "mcp__visualize__read_me",
+      "mcp__visualize__show_widget",
+      "Bash(python -m pytest recon/tests/test_recon.py -q)",
+      "Bash(python -c \"import recon.tests.test_recon; print\\('end of file ok'\\)\")"
     ]
   }
 }

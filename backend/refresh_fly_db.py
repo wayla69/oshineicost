@@ -30,6 +30,15 @@ import argparse, gzip, http.cookiejar, json, os, shutil, sqlite3, subprocess, sy
 import urllib.request, urllib.error
 from pathlib import Path
 
+# Force UTF-8 stdout/stderr so the ✓/✗/… status glyphs don't raise
+# UnicodeEncodeError on a Windows cp1252 console (which would crash AFTER a
+# successful verify and report a false non-zero exit). No-op on UTF-8 consoles.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 HERE = Path(__file__).parent.resolve()
 
 

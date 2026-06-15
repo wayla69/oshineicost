@@ -51,6 +51,7 @@ MENU_FILE = "เมนูทุกสาขา May 26_raw.xlsx"          # month
 # POS-export full name -> live-DB canonical short name.
 # Only the 11 that differ; the other 15 match exactly and need no entry.
 BRANCH_ALIAS = {
+    # ── CSV-export names (original ingest_may26_update path) ──
     "OSHINEI ชลบุรี":            "ชลบุรี",
     "Oshinei ระยอง":            "ระยอง",
     "ขอนแก่น (1)":              "ขอนแก่น",
@@ -62,6 +63,19 @@ BRANCH_ALIAS = {
     "ร้าน Oshinei สาขา อยุธยา":  "อยุธยา",
     "ลพบุรี (1)":               "ลพบุรี",
     "เพชรบูรณ์ (1)":            "เพชรบูรณ์",
+    # ── MSSQL Branch.BranchName variants (sync_mssql path). The live POS uses an
+    #    "OSHINEI " prefix (+ "(1)"/"1" suffix) on several branches that the CSV
+    #    export did not — without these, sync_mssql silently dropped them into
+    #    skipped_rev and the dashboard showed them as zero (2026-06: ขอนแก่น et al).
+    "OSHINEI ขอนแก่น (1)":      "ขอนแก่น",
+    "OSHINEI โคราช2":           "โคราช2",
+    "OSHINEI ฉะเชิงเทรา":       "ฉะเชิงเทรา",
+    "OSHINEI นครสวรรค์":        "นครสวรรค์",
+    "OSHINEI บุรีรัมย์ (1)":     "บุรีรัมย์",
+    "OSHINEI เพชรบูรณ์ (1)":    "เพชรบูรณ์",
+    "OSHINEI มุกดาหาร1":        "มุกดาหาร",
+    "OSHINEI ลพบุรี (1)":       "ลพบุรี",
+    "OSHINEI ศรีสะเกษ":         "ศรีสะเกษ",
 }
 
 CURATED = rr.CURATED
