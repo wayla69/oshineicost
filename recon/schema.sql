@@ -435,3 +435,16 @@ CREATE TABLE IF NOT EXISTS recon_lane_adj (
     UNIQUE(branch_id, period_month, category, bank)
 );
 CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);
+
+-- ─── Statement-code overrides (manager-editable remap of bank abbreviations) ──
+-- Lets a manager fix a mis-classified statement code (e.g. the SDCH=cash case, or a
+-- non-revenue IORSDT → OTHER) from the app WITHOUT a code change + redeploy. Takes
+-- precedence over parsers.bank.STATEMENT_CODE_MAP; applied at upload time and re-run
+-- over existing recon_bank_lines when saved. code is stored uppercased.
+CREATE TABLE IF NOT EXISTS recon_statement_code_map (
+    code        TEXT PRIMARY KEY,        -- statement abbreviation / keyword (UPPER)
+    channel     TEXT NOT NULL,           -- QR/TRANSFER/CASH_DEP/CC_SETTLE/GRAB_PAYOUT/LINEMAN_PAYOUT/FEE/OTHER
+    note        TEXT,
+    updated_by  TEXT,
+    updated_at  TEXT DEFAULT (datetime('now'))
+);

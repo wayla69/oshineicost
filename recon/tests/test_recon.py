@@ -535,6 +535,56 @@ def test_statement_code_dictionary(client):
     assert h.status_code == 200 and "SDCH" in h.text and "รอตรวจ" in h.text
 
 
+def test_statement_code_override(client):
+    """Manager remaps a statement code (SDCH → CASH_DEP): it wins over the parser,
+    re-classifies existing bank lines, shows as overridden, and reverts cleanly."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # two SDCH lines parsed as QR (the bug), one unrelated QR line
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description) "
+              "VALUES(?,4,'2026-06-02','QR',5000,'KTB SDCH :ZICID:')", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description) "
+              "VALUES(?,4,'2026-06-03','QR',6000,'SDCH deposit')", (up,))
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description) "
+              "VALUES(?,4,'2026-06-03','QR',7000,'QR พร้อมเพย์')", (up,))
+    c.commit(); c.close()
+
+    # override SDCH → CASH_DEP (manager-gated; open when no token set in tests)
+    r = client.post("/api/statement-codes/override",
+                    json={"code": "sdch", "channel": "CASH_DEP", "note": "เงินฝากสด", "by": "mgr"})
+    assert r.status_code == 200 and r.json()["lines_reclassified"] == 2
+
+    with main.get_db() as conn:
+        chans = {row["credit"]: row["channel"] for row in conn.execute(
+            "SELECT credit, channel FROM recon_bank_lines WHERE upload_id=?", (up,))}
+    assert chans[5000] == "CASH_DEP" and chans[6000] == "CASH_DEP"   # SDCH lines remapped
+    assert chans[7000] == "QR"                                       # genuine QR untouched
+
+    j = client.get("/api/statement-codes").json()
+    sdch = next(c for c in j["codes"] if c["code"] == "SDCH")
+    assert sdch["overridden"] and sdch["effective_channel"] == "CASH_DEP"
+    assert j["override_count"] >= 1
+
+    # revert → SDCH lines fall back to the parser's QR classification
+    r = client.delete("/api/statement-codes/override/SDCH")
+    assert r.status_code == 200
+    with main.get_db() as conn:
+        back = {row["credit"]: row["channel"] for row in conn.execute(
+            "SELECT credit, channel FROM recon_bank_lines WHERE upload_id=?", (up,))}
+    assert back[5000] == "QR" and back[6000] == "QR"
+
+
+def test_reclass_pattern_diagnostic(client):
+    """The structural-pattern guard flags a flood of identical cross-bank reclass
+    suggestions (the SDCH fingerprint) across branches."""
+    j = client.get("/api/diagnostics/reclass-pattern?month=2026-06&min_cluster=2").json()
+    assert "clusters" in j and "flagged" in j and "warning" in j
+    # with no/low data the guard simply reports nothing flagged (no false alarm)
+    assert isinstance(j["clusters"], list)
+
+
 def test_suggestions_ignores_cross_bank(client):
     """A same-amount opposite imbalance across DIFFERENT banks must NOT be
     suggested (operator chose same-bank-only)."""

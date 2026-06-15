@@ -59,7 +59,7 @@ from .parsers import (
     parse_grab_report,
     parse_lineman_report,
 )
-from .parsers.bank import STATEMENT_CODE_MAP
+from .parsers.bank import STATEMENT_CODE_MAP, _normalise_channel
 from .parsers.loader import to_parseable_xlsx, is_encrypted_upload as _is_encrypted_upload
 from .parsers.pdf_formats import (
     detect_and_parse as _detect_pdf_format,
@@ -1160,9 +1160,12 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
     """, (source_type, branch_id, prov, filename, period_month, len(rows), file_hash, note))
     upload_id = cur.lastrowid
     table = _LINE_TABLE[source_type]
+    overrides = _statement_code_overrides(conn) if source_type == "bank" else {}
     for row in rows:
         row["upload_id"] = upload_id
         row["branch_id"] = branch_id
+        if overrides and "channel" in row:       # manager remaps win over the parser
+            row["channel"] = _override_channel(row.get("description"), row.get("channel"), overrides)
         cols         = ", ".join(row.keys())
         placeholders = ", ".join("?" * len(row))
         conn.execute(f"INSERT INTO {table} ({cols}) VALUES ({placeholders})",
@@ -2636,18 +2639,166 @@ _PARSE_CH_TH = {
 }
 
 
-def _statement_codes() -> list[dict]:
-    out = []
+_OVERRIDE_CHANNELS = {"QR", "TRANSFER", "CASH_DEP", "CC_SETTLE",
+                      "GRAB_PAYOUT", "LINEMAN_PAYOUT", "FEE", "OTHER"}
+
+
+def _statement_code_overrides(conn) -> dict:
+    """{CODE(upper): channel} — manager remaps that win over the hardcoded map."""
+    try:
+        return {r["code"].upper(): r["channel"]
+                for r in conn.execute("SELECT code, channel FROM recon_statement_code_map")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+def _override_channel(description: str | None, base_channel: str | None, overrides: dict) -> str | None:
+    """Override wins when its code is a substring of the line description (longest code
+    first); otherwise the parser's base channel stands."""
+    if overrides:
+        d = (description or "").upper()
+        hits = [(code, ch) for code, ch in overrides.items() if code and code in d]
+        if hits:
+            return max(hits, key=lambda x: len(x[0]))[1]
+    return base_channel
+
+
+def _reapply_statement_overrides(conn, code: str) -> int:
+    """Re-classify stored bank lines whose description contains `code`, from the
+    parser base + current overrides. Used on save (apply) and delete (revert)."""
+    overrides = _statement_code_overrides(conn)
+    like = f"%{code.upper()}%"
+    rows = conn.execute(
+        "SELECT id, description FROM recon_bank_lines "
+        "WHERE UPPER(COALESCE(description,'')) LIKE ?", (like,)).fetchall()
+    n = 0
+    for r in rows:
+        base = _normalise_channel(r["description"])
+        newch = _override_channel(r["description"], base, overrides)
+        conn.execute("UPDATE recon_bank_lines SET channel=? WHERE id=?", (newch, r["id"]))
+        n += 1
+    return n
+
+
+def _statement_codes(conn=None) -> list[dict]:
+    overrides = _statement_code_overrides(conn) if conn is not None else {}
+    out, matched = [], set()
     for e in STATEMENT_CODE_MAP:
         cat, ch_th = _PARSE_CH_TH.get(e["channel"], (e["channel"], e["channel"]))
-        out.append({**e, "category": cat, "channel_th": ch_th})
+        eff, ov_code = e["channel"], None
+        for code, ch in overrides.items():       # an override whose code is in this entry's pattern
+            if code in e["pattern"].upper():
+                eff, ov_code = ch, code; matched.add(code)
+        eff_cat, eff_th = _PARSE_CH_TH.get(eff, (eff, eff))
+        out.append({**e, "category": cat, "channel_th": ch_th,
+                    "effective_channel": eff, "effective_channel_th": eff_th,
+                    "effective_category": eff_cat,
+                    "overridden": eff != e["channel"], "override_code": ov_code})
+    for code, ch in overrides.items():           # codes the team added that aren't in the base map
+        if code not in matched:
+            eff_cat, eff_th = _PARSE_CH_TH.get(ch, (ch, ch))
+            out.append({"pattern": code, "code": code, "kind": "code", "bank": "*",
+                        "meaning_th": "(เพิ่มโดยทีม)", "status": "confirmed", "note": "",
+                        "channel": ch, "category": eff_cat, "channel_th": eff_th,
+                        "effective_channel": ch, "effective_channel_th": eff_th,
+                        "effective_category": eff_cat, "overridden": True, "override_code": code})
     return out
+
+
+class CodeOverride(BaseModel):
+    code: str
+    channel: str
+    note: str | None = None
+    by: str | None = None
 
 
 @app.get("/api/statement-codes")
 def statement_codes():
-    return {"codes": _statement_codes(),
-            "review_count": sum(1 for c in _statement_codes() if c["status"] == "review")}
+    with get_db() as conn:
+        codes = _statement_codes(conn)
+    return {"codes": codes,
+            "review_count": sum(1 for c in codes if c["status"] == "review"),
+            "override_count": sum(1 for c in codes if c["overridden"]),
+            "channel_options": sorted(_OVERRIDE_CHANNELS)}
+
+
+@app.post("/api/statement-codes/override", dependencies=[Depends(require_manager_token)])
+def set_statement_override(body: CodeOverride):
+    code = (body.code or "").strip().upper()
+    if not code:
+        raise HTTPException(400, "ต้องระบุรหัส")
+    if body.channel not in _OVERRIDE_CHANNELS:
+        raise HTTPException(400, f"ช่องทางต้องเป็นหนึ่งใน {sorted(_OVERRIDE_CHANNELS)}")
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO recon_statement_code_map (code, channel, note, updated_by, updated_at) "
+            "VALUES (?,?,?,?,datetime('now')) "
+            "ON CONFLICT(code) DO UPDATE SET channel=excluded.channel, note=excluded.note, "
+            "updated_by=excluded.updated_by, updated_at=datetime('now')",
+            (code, body.channel, body.note or "", body.by or "manager"))
+        n = _reapply_statement_overrides(conn, code)
+        _audit(conn, "statement_code", 0, "override", body.by or "manager",
+               [{"field": code, "old": None, "new": body.channel}])
+        conn.commit()
+    return {"code": code, "channel": body.channel, "lines_reclassified": n}
+
+
+@app.delete("/api/statement-codes/override/{code}", dependencies=[Depends(require_manager_token)])
+def del_statement_override(code: str):
+    code_u = (code or "").strip().upper()
+    with get_db() as conn:
+        conn.execute("DELETE FROM recon_statement_code_map WHERE code=?", (code_u,))
+        n = _reapply_statement_overrides(conn, code_u)   # revert lines to base classification
+        _audit(conn, "statement_code", 0, "revert", "manager",
+               [{"field": code_u, "old": None, "new": None}])
+        conn.commit()
+    return {"code": code_u, "removed": True, "lines_reclassified": n}
+
+
+# ── Reclass-pattern guard (catch a misclassified statement code early) ─────────
+# The SDCH bug showed up as a flood of identical wrong-channel suggestions: same
+# from→to, same day-gap, cross-bank, one direction — a structural fingerprint, not
+# scattered human error. This diagnostic clusters live suggestions and flags those
+# that look systematic, so the next mis-mapped code is caught before staff "confirm".
+
+@app.get("/api/diagnostics/reclass-pattern")
+def reclass_pattern_diagnostic(month: str, min_cluster: int = 6):
+    _validate_period(month)
+    from collections import defaultdict
+    groups: dict = defaultdict(lambda: {"count": 0, "amount": 0.0, "branches": set()})
+    with get_db() as conn:
+        bids = [r["branch_id"] for r in conn.execute("SELECT branch_id FROM branches")]
+        for bid in bids:
+            try:
+                sugs = suggest_reclassifications(conn, bid, month)
+            except Exception:
+                sugs = []
+            for s in sugs:
+                k = (s.get("pos_cat"), s.get("ext_cat"), s.get("day_gap"),
+                     s.get("pos_bank") == s.get("ext_bank"))
+                g = groups[k]
+                g["count"] += 1; g["amount"] += s.get("amount", 0) or 0; g["branches"].add(bid)
+    clusters = []
+    for (fr, to, gap, same), g in groups.items():
+        clusters.append({
+            "from_cat": fr, "from_th": _CH_LABEL.get(fr, fr),
+            "to_cat": to,   "to_th": _CH_LABEL.get(to, to),
+            "day_gap": gap, "same_bank": same,
+            "count": g["count"], "amount": round(g["amount"], 2), "branches": len(g["branches"]),
+            # systematic smell: many identical cross-bank pairs across branches
+            "suspicious": g["count"] >= min_cluster and not same and len(g["branches"]) >= 2,
+        })
+    clusters.sort(key=lambda x: -x["count"])
+    flagged = [c for c in clusters if c["suspicious"]]
+    warning = None
+    if flagged:
+        t = flagged[0]
+        warning = (f"พบ {t['count']} คู่รูปแบบเดียวกัน ({t['from_th']} → {t['to_th']}, "
+                   f"ห่าง {t['day_gap']} วัน, คนละธนาคาร) ใน {t['branches']} สาขา — "
+                   "ดูเป็นรูปแบบของระบบมากกว่าคนกดผิด อาจมีรหัสสเตทเมนต์จัดประเภทผิด (เช่นเคส SDCH) "
+                   "ควรตรวจ “พจนานุกรมรหัสในสเตทเมนต์” ก่อนให้สาขายืนยัน")
+    return {"month": month, "min_cluster": min_cluster,
+            "clusters": clusters, "flagged": flagged, "warning": warning}
 
 
 @app.get("/api/statement-codes.xlsx")
@@ -2662,10 +2813,14 @@ def statement_codes_xlsx():
                "สถานะ", "หมายเหตุระบบ", "ทีมยืนยัน (✓/✗)", "ความเห็น/แก้ไขของทีม"])
     for c in ws[1]:
         c.font = bold
-    for c in _statement_codes():
+    with get_db() as conn:
+        codes = _statement_codes(conn)
+    for c in codes:
         kind = "รหัสธนาคาร" if c["kind"] == "code" else "คำทั่วไป"
-        st = "✅ ยืนยันแล้ว" if c["status"] == "confirmed" else "⚠️ รอตรวจ"
-        r = [c["code"], kind, c["bank"], c["meaning_th"], c["channel_th"], st, c["note"], "", ""]
+        st = ("✏️ ทีมแก้แล้ว" if c["overridden"]
+              else "✅ ยืนยันแล้ว" if c["status"] == "confirmed" else "⚠️ รอตรวจ")
+        ch_th = c.get("effective_channel_th", c["channel_th"])
+        r = [c["code"], kind, c["bank"], c["meaning_th"], ch_th, st, c["note"], "", ""]
         ws.append(r)
         if c["status"] == "review":
             for cell in ws[ws.max_row]:
@@ -2685,7 +2840,8 @@ def statement_codes_html():
     grouped by channel, with a column for the team to confirm or correct."""
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
-    codes = _statement_codes()
+    with get_db() as conn:
+        codes = _statement_codes(conn)
     review_n = sum(1 for c in codes if c["status"] == "review")
     css = """<style>
       @page{size:A4 landscape;margin:12mm}
@@ -2698,6 +2854,7 @@ def statement_codes_html():
       code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-family:ui-monospace,monospace;font-weight:600}
       .badge{padding:1px 8px;border-radius:99px;font-size:10px;font-weight:600;white-space:nowrap}
       .b-ok{background:#dcfce7;color:#166534} .b-warn{background:#fef3c7;color:#854d0e}
+      .b-edit{background:#dbeafe;color:#1e40af}
       .b-code{background:#e0e7ff;color:#3730a3} .b-kw{background:#f1f5f9;color:#475569}
       tr.review{background:#fffbeb} .note{color:#64748b;font-size:11px}
       .fill{color:#cbd5e1} .toolbar{max-width:1100px;margin:0 auto 14px;text-align:right}
@@ -2709,13 +2866,17 @@ def statement_codes_html():
     for c in codes:
         kind = ('<span class="badge b-code">รหัสธนาคาร</span>' if c["kind"] == "code"
                 else '<span class="badge b-kw">คำทั่วไป</span>')
-        st = ('<span class="badge b-ok">✅ ยืนยันแล้ว</span>' if c["status"] == "confirmed"
+        st = ('<span class="badge b-edit">✏️ ทีมแก้แล้ว</span>' if c["overridden"]
+              else '<span class="badge b-ok">✅ ยืนยันแล้ว</span>' if c["status"] == "confirmed"
               else '<span class="badge b-warn">⚠️ รอตรวจ</span>')
+        ch_th = c.get("effective_channel_th", c["channel_th"])
+        ch_cell = (f'{esc(ch_th)} <span class="note">(เดิม {esc(c["channel_th"])})</span>'
+                   if c["overridden"] else esc(ch_th))
         rows.append(
-            f'<tr class="{ "review" if c["status"]=="review" else "" }">'
+            f'<tr class="{ "review" if c["status"]=="review" and not c["overridden"] else "" }">'
             f'<td><code>{esc(c["code"])}</code></td><td>{kind}</td><td>{esc(c["bank"])}</td>'
             f'<td>{esc(c["meaning_th"])}{("<div class=note>"+esc(c["note"])+"</div>") if c["note"] else ""}</td>'
-            f'<td>{esc(c["channel_th"])}</td><td>{st}</td>'
+            f'<td>{ch_cell}</td><td>{st}</td>'
             f'<td class="fill">▢ ใช่ &nbsp; ▢ ไม่ใช่</td><td class="fill">…………………………</td></tr>')
     html = (
         "<!doctype html><html lang='th'><head><meta charset='utf-8'>"

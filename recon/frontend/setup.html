@@ -256,7 +256,56 @@ function render(){
   </table></div>
   <div class="muted" style="margin-top:6px">MID แบบ KTCPOINT / BAYPOINT ใช้แยกแถวแต้มออกจากใบสรุปบัตร — จำเป็นต่อช่องทางคูปอง (แต้ม KTC/BAY)</div></div>`;
 
+  // ⑤ statement-code remap (manager-editable) — filled async by loadCodes()
+  html+=`<div class="card"><div class="row" style="margin-bottom:6px">
+    <h2 style="margin:0">⑤ รหัสในสเตทเมนต์ → ช่องทาง</h2>
+    <a href="/api/statement-codes.html" target="_blank" class="lbl" style="margin-left:auto">🖨️ พิมพ์ใบให้ทีมตรวจ</a></div>
+    <div class="muted" style="margin-bottom:8px">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้รหัสผู้จัดการ</div>
+    <div id="codes-body" class="muted">กำลังโหลด…</div></div>`;
+
   $('app').innerHTML=html;
+  loadCodes();
+}
+
+/* ── ⑤ statement-code remap — manager-gated ── */
+const PARSE_CH_TH={QR:'QR พร้อมเพย์',TRANSFER:'เงินโอน',CASH_DEP:'เงินสด (ฝากเข้าบัญชี)',
+  CC_SETTLE:'บัตรเครดิต',GRAB_PAYOUT:'Grab',LINEMAN_PAYOUT:'Line Man',
+  FEE:'ค่าธรรมเนียม (ไม่ใช่รายได้)',OTHER:'ไม่นับ / ไม่ใช่รายได้'};
+let CODES=null, CODE_OPTS=[];
+async function loadCodes(){
+  const b=$('codes-body'); if(!b)return;
+  let j;try{j=await api('/api/statement-codes');}
+  catch(e){b.innerHTML='โหลดไม่สำเร็จ: '+esc(e.message);return;}
+  CODES=j.codes; CODE_OPTS=j.channel_options||Object.keys(PARSE_CH_TH);
+  b.innerHTML=`<div class="scroll"><table>
+    <tr><th>รหัส / คำ</th><th>ความหมาย</th><th>ระบบจัดเป็น</th><th>แก้เป็น</th><th></th></tr>
+    ${CODES.map((c,i)=>{
+      const eff=c.effective_channel;
+      const badge=c.overridden?'<span class="chip c-ok">✏️ ทีมแก้แล้ว</span>'
+        :c.status==='review'?'<span class="chip c-warn">⚠ รอตรวจ</span>':'<span class="chip c-mut">✓</span>';
+      return `<tr>
+        <td class="mono">${esc(c.code)}<br>${badge}</td>
+        <td class="lbl">${esc(c.meaning_th)}</td>
+        <td>${esc(c.effective_channel_th||c.channel_th)}${c.overridden?` <span class="lbl">(เดิม ${esc(c.channel_th)})</span>`:''}</td>
+        <td><select id="cc-${i}">${CODE_OPTS.map(o=>`<option value="${o}" ${o===eff?'selected':''}>${esc(PARSE_CH_TH[o]||o)}</option>`).join('')}</select></td>
+        <td><button class="btn btn-sm btn-pri" onclick="saveCode(${i})">บันทึก</button>
+          ${c.overridden?` <button class="btn btn-sm" onclick="revertCode('${esc((c.override_code||c.code))}')">คืนค่าเดิม</button>`:''}</td>
+      </tr>`;}).join('')}
+  </table></div>`;
+}
+async function saveCode(i){
+  const c=CODES[i]; const ch=$('cc-'+i).value;
+  const token=(c.override_code||c.code||'').toString().split(/[\s/|]/)[0];
+  if(!token){toast('ไม่พบรหัส');return;}
+  try{const r=await mgrApi('/api/statement-codes/override',{method:'POST',
+        body:{code:token,channel:ch,note:c.meaning_th||'',by:'manager'}});
+      toast(`บันทึก ${token} → ${PARSE_CH_TH[ch]||ch} (แก้ ${r.lines_reclassified} บรรทัด)`);loadCodes();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function revertCode(code){
+  try{const r=await mgrApi('/api/statement-codes/override/'+encodeURIComponent(code),{method:'DELETE'});
+      toast(`คืนค่าเดิม ${code} (แก้ ${r.lines_reclassified} บรรทัด)`);loadCodes();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
 /* ── แก้รหัส (payment map) — สิทธิ์พนักงาน ── */

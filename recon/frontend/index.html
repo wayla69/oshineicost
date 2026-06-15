@@ -354,6 +354,25 @@ async function loadOverview(){
   }
 
   $('app').innerHTML=html;
+  checkReclassPattern();
+}
+// B: warn (manager) when reclass suggestions look systematic (a mis-mapped statement
+// code) rather than scattered human error — the SDCH fingerprint. Non-blocking.
+async function checkReclassPattern(){
+  let d;try{d=await api(`/api/diagnostics/reclass-pattern?month=${MONTH}`);}catch(e){return;}
+  if(!d||!d.warning)return;
+  const app=$('app');if(!app)return;
+  const bar=document.createElement('div');
+  bar.className='card c-warn';bar.style.cssText='margin-bottom:12px;border-left:4px solid var(--warn)';
+  bar.innerHTML=`<div class="row" style="align-items:flex-start;gap:8px">
+    <span style="font-size:18px">🔎</span>
+    <div><b>รูปแบบน่าสงสัย — อาจไม่ใช่คนกดผิด</b>
+      <div class="lbl" style="margin-top:2px;line-height:1.5">${esc(d.warning)}</div>
+      <a href="/api/statement-codes.html" target="_blank" class="lbl" style="font-weight:600">→ เปิดพจนานุกรมรหัสในสเตทเมนต์</a></div>
+  </div>`;
+  // insert just under the header (first child after the header row)
+  const hdr=app.querySelector('.row');
+  if(hdr&&hdr.nextSibling)app.insertBefore(bar,hdr.nextSibling);else app.insertBefore(bar,app.firstChild);
 }
 function toggleDone(){
   const e=$('ov-done'),c=$('ov-done-caret');
