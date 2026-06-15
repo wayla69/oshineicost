@@ -1829,7 +1829,15 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
     if not available:
         return []
     consumed = _manual_consumed(conn, branch_id, period_month)
-    ext = _external_buckets_daily(conn, branch_id, period_month)   # excludes manual lines
+    # Exclude the bank lines the cash matcher already claimed as cash deposits, exactly
+    # like daily_reconciliation does. KTB posts next-day cash deposits under 'SDCH',
+    # which the parser labels QR; without this they resurface here as a phantom QR
+    # surplus and get mis-suggested as "cash booked as QR" (the inverse of the truth —
+    # the cash is real, just deposited T+1). See [[sdch-statement-codes]].
+    cash = cash_deposit_matching(conn, branch_id, period_month)
+    ext = _external_buckets_daily(
+        conn, branch_id, period_month,
+        exclude_ids=set(cash["consumed_ids"]) | prev_month_consumed_ids(conn, branch_id, period_month))
 
     # Net imbalance per (category, bank, day): POS-surplus vs external-surplus.
     pos_surplus, ext_surplus = [], []

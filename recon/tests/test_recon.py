@@ -1806,6 +1806,41 @@ def test_cash_matches_next_day_credit_under_qr_label(client):
     assert d["cash_summary"]["has_deposit_lines"] is True
 
 
+def test_reclass_ignores_sdch_cash_claimed_as_qr(client):
+    """REGRESSION: KTB posts a next-day cash deposit under 'SDCH' (parsed as QR).
+    The cash matcher claims it, so suggest_reclassifications must NOT resurface it
+    as a phantom QR surplus and propose 'cash booked as QR' — the money is real cash,
+    just deposited T+1. (This produced 117 false reclass cards in 2026-05 live data.)"""
+    from recon.matcher import suggest_reclassifications, daily_reconciliation, cash_deposit_matching
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "KTB"})
+
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-10','Cash',92520,7)")   # POS cash day D
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'ktb','s','2026-06',0,'confirmed')").lastrowid
+    # the same cash, deposited next day, posted under SDCH (parsed as QR·KTB)
+    c.execute("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit,description,match_status) "
+              "VALUES(?,4,'2026-06-11','QR',92520,'SDCH',  'unmatched')", (up,))
+    c.commit(); c.close()
+
+    with main.get_db() as conn:
+        # the cash matcher genuinely claims the SDCH line (precondition)
+        cash = cash_deposit_matching(conn, 4, "2026-06")
+        assert cash["consumed_ids"], "cash matcher should claim the next-day SDCH lump"
+        # …so the reclass engine must emit NO 'cash → QR' suggestion
+        sug = suggest_reclassifications(conn, 4, "2026-06")
+        assert sug == [], f"SDCH cash deposit must not be suggested as a reclass, got {sug}"
+        # and the day view doesn't show it as a QR·KTB ext_only either
+        d = daily_reconciliation(conn, 4, "2026-06")
+        day10 = next(x for x in d["days"] if x["day"] == "2026-06-10")
+        cash_lane = next(l for l in day10["lanes"] if l["category"] == "CASH")
+        assert cash_lane["status"] == "matched"
+
+
 # ── method config: the owner's requirement table (2026-06-12) ─────────────────
 
 def test_method_config_seed_idempotent(client):
