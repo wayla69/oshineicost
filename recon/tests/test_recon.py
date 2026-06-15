@@ -562,6 +562,20 @@ def test_monthly_matching_report(client):
     assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
 
 
+def test_uat_signoff_sheet(client):
+    """Printable UAT sign-off renders all test cases + sign-off, prefills the month,
+    and rejects a bad period."""
+    r = client.get("/api/uat-signoff?period_month=2026-05")
+    assert r.status_code == 200
+    t = r.text
+    assert "UAT Sign-off" in t and "การลงนามรับรอง" in t
+    assert "TC-01" in t and "TC-10" in t          # all cases rendered
+    assert "ขั้นตอนทดสอบ" in t and "ผลที่คาดหวัง" in t and "☐ ผ่าน" in t
+    assert "2026-05" in t                          # month prefilled
+    assert client.get("/api/uat-signoff").status_code == 200          # no month is fine
+    assert client.get("/api/uat-signoff?period_month=2026-13").status_code == 400
+
+
 def test_statement_code_override(client):
     """Manager remaps a statement code (SDCH → CASH_DEP): it wins over the parser,
     re-classifies existing bank lines, shows as overridden, and reverts cleanly."""

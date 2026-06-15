@@ -3725,6 +3725,241 @@ def monthly_matching_report(period_month: str, branch_id: int | None = None):
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
+# ── UAT sign-off sheet (เอกสารทดสอบ + รับรองการใช้งาน) ─────────────────────────
+# Printable acceptance-test checklist with a usage narrative beside each case, for the
+# team to walk through, mark pass/fail, and sign off before going fully live.
+
+_UAT_CASES = [
+    {"id": "TC-01", "title": "หน้าแรก — กล่องงานทุกสาขา + แบนเนอร์เตือนรูปแบบน่าสงสัย",
+     "role": "ทุกคน",
+     "narrative": "หน้าแรกคืออินบ็อกซ์รวมทุกสาขา เรียงสาขาที่ยังมีงานค้างขึ้นก่อน บอกชัดว่า “เหลือกี่เรื่อง” "
+                  "และมีแถบ “รอฉันตรวจ” สำหรับผู้จัดการ ถ้าระบบจับได้ว่าการ์ดเงินผิดช่องมีรูปแบบซ้ำผิดปกติ "
+                  "(อาจเกิดจากรหัสในสเตทเมนต์ตั้งผิด ไม่ใช่คนกดผิด) จะมีแบนเนอร์ 🔎 เตือนผู้จัดการให้ไปตรวจพจนานุกรมรหัสก่อน",
+     "steps": ["เปิด /app/ เลือกเดือนที่ทดสอบ (มุมขวาบน)",
+               "ดูรายการสาขา — สาขาที่มีงานค้างขึ้นก่อน สาขาเรียบร้อยยุบใน “เรียบร้อยแล้ว”",
+               "สังเกตแถบสรุปด้านบน (ความคืบหน้าทั้งเครือ / เงินที่อาจผิดช่อง)"],
+     "expected": "เห็นรายการสาขาพร้อม “เหลือ N เรื่อง”, กดเข้าสาขาได้, (ถ้ามี) แบนเนอร์เตือนแสดงพร้อมลิงก์ไปพจนานุกรมรหัส"},
+    {"id": "TC-02", "title": "หน้าสาขา — ช่องทางรับเงิน + อัปโหลดเอกสาร",
+     "role": "เจ้าหน้าที่กระทบยอด",
+     "narrative": "เข้าสาขาแล้วระบบแยกช่องทางเป็น “ต้องทำ” (ส้ม/แดง), “เศษเหรียญ ≤฿100” (รวบกดทีเดียว), "
+                  "“รอเงินเข้าตามรอบ” (ปกติ) และ “เรียบร้อยแล้ว” (ยุบไว้) แถบเอกสารบอกว่าอัปครบหรือยัง — ป้ายแดง = ยังขาด "
+                  "กดที่ป้ายเพื่ออัปได้เลย หรือ “⬆ หลายไฟล์ / 📁 ทั้งโฟลเดอร์” ให้ระบบแยกประเภทไฟล์เอง",
+     "steps": ["กดเข้าสาขาที่ทดสอบ",
+               "ที่แถบเอกสาร กดป้ายที่ยังขาด (แดง) เลือกไฟล์จริงของเดือนนั้น",
+               "รอประมวลผล — ป้ายเปลี่ยนเป็น ✓ และช่องทางอัปเดตทันที",
+               "ลอง “⬆ หลายไฟล์” เลือกหลายไฟล์พร้อมกัน"],
+     "expected": "อัปโหลดสำเร็จ, ป้ายเป็น ✓ พร้อมช่วงวันที่, ช่องทางที่ตรงเลื่อนไป “เรียบร้อย”, ระบบแยกประเภทไฟล์ถูกต้อง"},
+    {"id": "TC-03", "title": "การ์ด “เงินอาจถูกบันทึกผิดช่อง” (จับคู่ข้ามช่องทาง)",
+     "role": "เจ้าหน้าที่กระทบยอด",
+     "narrative": "เมื่อระบบเจอช่องทางหนึ่ง “เกินมา” และอีกช่องทาง “ขาดไป” เป็นยอดเท่ากันในวันใกล้กัน จะขึ้นการ์ดเล่าเป็นเรื่องว่า "
+                  "“น่าจะเป็นเงินก้อนเดียวกัน — POS กดเป็นเงินสด แต่จริง ๆ เข้าเป็น QR” กด “✅ ใช่ เป็นเงินก้อนเดียวกัน” "
+                  "ระบบย้ายเข้าช่องที่ถูก (ยอดรวมไม่หาย) ไม่แน่ใจกด “🔍 ขอดูรายการ” ดูบรรทัดจริงก่อน",
+     "steps": ["หาการ์ด “⇄ เงินอาจถูกบันทึกผิดช่อง” (ถ้ามี)",
+               "กด “🔍 ขอดูรายการ” ตรวจว่าเป็นเงินก้อนเดียวกันจริง",
+               "ถ้าใช่ กด “✅ ใช่ เป็นเงินก้อนเดียวกัน”",
+               "ตรวจว่ายอดย้ายเข้าช่องที่ถูก การ์ดหายไป"],
+     "expected": "เห็นรายละเอียดเมื่อขอดู, ยืนยันแล้วยอดย้ายช่องถูก ยอดรวมวันไม่เปลี่ยน, บันทึกเป็น “การจับคู่ด้วยมือ”"},
+    {"id": "TC-04", "title": "รับทราบผลต่าง (Accept Variance) พร้อมเหตุผล",
+     "role": "เจ้าหน้าที่กระทบยอด",
+     "narrative": "บางช่องทางมีผลต่างเล็กน้อยที่อธิบายได้ (เช่น ค่าธรรมเนียมปัดเศษ) กด “รับทราบผลต่าง” แล้วเลือก/พิมพ์เหตุผล "
+                  "(อย่างน้อย 10 ตัวอักษร) ระบบเคลียร์งานนั้นโดยไม่แก้ตัวเลข และเก็บหลักฐานว่าใครรับทราบ เพราะอะไร เมื่อไร",
+     "steps": ["หาช่องทางที่มีผลต่างเล็กน้อยอธิบายได้",
+               "กด “รับทราบผลต่าง” เลือก/พิมพ์เหตุผล ยืนยัน",
+               "ตรวจว่างานถูกเคลียร์ และมีบันทึกผู้รับทราบ + เวลา"],
+     "expected": "เหตุผลสั้นเกิน (<10) ระบบเตือน, ครบแล้วเคลียร์ได้, ตัวเลขไม่เปลี่ยน, มีหลักฐาน"},
+    {"id": "TC-05", "title": "ส่งตรวจ → ปิดเดือน (สองชั้น + รหัสผู้จัดการ)",
+     "role": "เจ้าหน้าที่ (ส่งตรวจ) + ผู้จัดการ (ปิดเดือน)",
+     "narrative": "การปิดเดือนแยกสองชั้น — เจ้าหน้าที่กด “ส่งตรวจ” เมื่อทำครบ ผู้จัดการตรวจสรุปแล้วกด “ปิดเดือน” "
+                  "(ต้องใส่รหัสผู้จัดการ) ปิดแล้วตัวเลขล็อกถาวรแก้ไม่ได้ (เปิดใหม่ผ่าน “ส่งกลับแก้”) ป้องกันแก้ย้อนหลังไม่มีอนุมัติ",
+     "steps": ["ทำสาขาให้เรียบร้อย กด “ส่งตรวจ” → สถานะ “รอผู้จัดการตรวจ”",
+               "(ผู้จัดการ) เปิดสาขา เห็นสรุป กด “ปิดเดือน”",
+               "ระบบถามรหัสผู้จัดการ — ผิด=ไม่ผ่าน, ถูก=ปิดได้",
+               "ลองแก้หลังปิด — ต้องแก้ไม่ได้"],
+     "expected": "ส่งตรวจได้, ปิดเดือนต้องใช้รหัสผู้จัดการ, ปิดแล้วล็อก, แสดงผู้ปิด + เวลา"},
+    {"id": "TC-06", "title": "รายงานเงินบันทึกผิดช่อง + ใบเซ็นรับทราบ + แนวทางพัฒนาสาขา",
+     "role": "ฝ่ายบัญชี / ผู้จัดการ",
+     "narrative": "รายการที่ยืนยันว่ากดผิดช่อง (TC-03) ถูกเก็บเป็น log และออกเป็นรายงานให้สาขาเซ็นรับทราบ + แก้ไข มีส่วนช่วยพัฒนา: "
+                  "กราฟแนวโน้มรายเดือน (ดีขึ้น/แย่ลง) + เป้าหมายเดือนหน้า, ช่องที่สับสนบ่อย, คำแนะนำเฉพาะจุด (ยอดเงินไม่หาย เป็นการลงผิดช่อง)",
+     "steps": ["เมนู ⋯ เพิ่มเติม → “⇄ รายงานเงินบันทึกผิดช่อง”",
+               "ตรวจสรุปต่อสาขา + การ์ดแนวทางพัฒนา (เป้า/ช่องสับสน/คำแนะนำ)",
+               "กด “🖨️ ใบเซ็นรับทราบ (พิมพ์/PDF)” ตรวจ ① แนวโน้ม ② ช่องสับสน ③ คำแนะนำ + ข้อความรับทราบ + ช่องเซ็น 3 คน",
+               "กด “⬇ Excel” + ลอง “พิมพ์เฉพาะสาขานี้”"],
+     "expected": "รายงานแสดงรายการจริง, ใบพิมพ์ครบ 3 ส่วน + ช่องเซ็น, Excel โหลดได้, พิมพ์ PDF ได้"},
+    {"id": "TC-07", "title": "พจนานุกรมรหัสในสเตทเมนต์ + ผู้จัดการแก้รหัสเอง",
+     "role": "ฝ่ายบัญชี (ตรวจ) + ผู้จัดการ (แก้)",
+     "narrative": "สเตทเมนต์มีรหัสย่อที่ระบบใช้แยกประเภทอัตโนมัติ (เช่น SDCH, IORSDT) บางรหัสอาจถูกตีความผิด พจนานุกรมให้ทีมตรวจว่า "
+                  "แปลถูกไหม (รหัสที่ยังไม่ยืนยันขึ้น “⚠ รอตรวจ”) ถ้าผิด ผู้จัดการแก้เองได้ในตั้งค่า เลือกช่องทางที่ถูก "
+                  "(มีตัวเลือก “ไม่นับ/ไม่ใช่รายได้”) มีผลทันทีกับข้อมูลเดิม + ไฟล์ใหม่ ไม่ต้องรอทีมพัฒนา",
+     "steps": ["เมนู ⋯ → “📖 พจนานุกรมรหัสในสเตทเมนต์” ตรวจความหมาย/ช่องทาง (พิมพ์ใบให้ทีมตรวจได้)",
+               "ไป setup.html → ส่วน ⑤ “รหัสในสเตทเมนต์ → ช่องทาง”",
+               "เลือกรหัส (เช่น SDCH) เปลี่ยนช่องทาง กด “บันทึก” → ระบบถามรหัสผู้จัดการ",
+               "ตรวจว่าขึ้น “✏️ ทีมแก้แล้ว” + จำนวนบรรทัดที่ปรับ, แล้วกด “คืนค่าเดิม”"],
+     "expected": "ดูพจนานุกรมได้, แก้รหัสต้องใช้รหัสผู้จัดการ, แก้แล้วมีผล + นับบรรทัด, คืนค่าเดิมได้"},
+    {"id": "TC-08", "title": "รายงานการจับคู่รายวันทั้งเดือน (ตรวจการจับคู่ + พิมพ์ PDF)",
+     "role": "ฝ่ายบัญชี / ผู้ตรวจสอบ",
+     "narrative": "เพื่อมั่นใจว่าจับคู่ถูกครบทั้งเดือน รายงานนี้ไล่ทุกวัน × ทุกช่องทางในใบเดียว แสดง POS เทียบเอกสาร, ผลต่าง, สถานะ "
+                  "(✓ ตรง / ✗ ต่าง / ขาดเอกสาร / รอเอกสารตามรอบ) แถวที่ต้องตรวจขึ้นสีแดง ด้านบนมีสรุป “จับคู่ตรง X/Y” "
+                  "ถ้าครบมีแบนเนอร์ “✓ ทุกช่องทางจับคู่ครบ” ท้ายใบมีช่องเซ็น 3 คน",
+     "steps": ["หน้าสาขา → กด “🖨️ ตรวจการจับคู่รายวัน”",
+               "ตรวจ KPI (จับคู่ตรง/ต้องตรวจ/รอเอกสาร/POS รวม/เอกสารรวม/ผลต่างสะสม)",
+               "ไล่ตาราง — ต่าง/ขาดเอกสารแดง, รอเอกสารเหลือง, ตรง=✓",
+               "กด “🖨️ พิมพ์ / บันทึก PDF”; ลองเมนู ⋯ → “รายงานการจับคู่รายวัน (ทุกสาขา)”"],
+     "expected": "แสดงทุกวัน × ช่องทางพร้อมสถานะถูกต้อง, KPI ตรงข้อมูล, แถวปัญหาเด่น, พิมพ์ PDF ได้, แพ็กทุกสาขาแยกหน้า"},
+    {"id": "TC-09", "title": "รายงานหลักฐานรายวัน (ระดับบรรทัด) — เผื่อตรวจลึก",
+     "role": "ฝ่ายบัญชี / ผู้ตรวจสอบ",
+     "narrative": "เมื่ออยากดูบรรทัดจริงของวันใดวันหนึ่ง (รายการธนาคาร, ยอดบัตร, Grab/LM, ค่าธรรมเนียม+VAT, การจับคู่ด้วยมือพร้อมเหตุผล) "
+                  "ใช้รายงานหลักฐานรายวัน — เชิงลึกที่สุดต่อ 1 วัน ใช้คู่กับ TC-08 (ภาพรวมชี้จุด → เจาะวันที่มีปัญหา)",
+     "steps": ["เปิด …:8443/api/daily-report?day=YYYY-MM-DD (เว้น branch_id = ทุกสาขา, ใส่ &branch_id=NN = สาขาเดียว)",
+               "ตรวจว่ามีรายการธนาคาร/บัตร/Grab/LM + การจับคู่ด้วยมือ + ค่าธรรมเนียม/VAT",
+               "พิมพ์ PDF"],
+     "expected": "เห็นหลักฐานระดับบรรทัดของวันนั้น, พิมพ์ได้"},
+    {"id": "TC-10", "title": "สิทธิ์การเข้าถึง (รหัส admin / manager)",
+     "role": "ผู้ดูแลระบบ / ผู้จัดการ",
+     "narrative": "ระบบกันการแก้ไขโดยไม่ได้รับอนุญาต 2 ชั้น — รหัสบันทึก (admin) สำหรับอัปโหลด/บันทึก และรหัสผู้จัดการ "
+                  "สำหรับปิดเดือน + แก้รหัสสเตทเมนต์ ทั้งคู่บังคับบนเซิร์ฟเวอร์จริง (เครื่องทดสอบเปิดให้สะดวก)",
+     "steps": ["ลองอัปโหลด/บันทึกโดยยังไม่กรอกรหัส → ระบบถามรหัส (ผิด=ไม่ผ่าน, ถูก=ผ่าน)",
+               "ลองปิดเดือน/แก้รหัสสเตทเมนต์โดยไม่มีรหัสผู้จัดการ → ไม่ผ่าน, ใส่ถูก → ผ่าน"],
+     "expected": "รหัสผิดถูกปฏิเสธ, รหัสถูกทำงานได้, สิทธิ์ admin/manager แยกชัดเจน"},
+]
+
+
+def _uat_signoff_html(period_month: str | None) -> str:
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    pm = esc(period_month) if period_month else "____________"
+    BL = "______________"                       # write-in blank
+    css = """<style>
+      @page{size:A4;margin:15mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12.5px;line-height:1.55;margin:0;padding:22px;background:#f8fafc}
+      .sheet{background:#fff;max-width:920px;margin:0 auto 18px;padding:28px 32px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:21px;margin:0 0 4px} h2{font-size:15.5px;margin:20px 0 8px;border-left:4px solid #ea580c;padding-left:9px}
+      h3{font-size:13.5px;margin:0 0 4px} .sub{color:#64748b;font-size:12px}
+      table{width:100%;border-collapse:collapse;margin:6px 0 12px;font-size:12px}
+      th,td{padding:6px 9px;border:1px solid #e2e8f0;text-align:left;vertical-align:top}
+      th{background:#f8fafc;color:#475569;font-size:11px;font-weight:700}
+      ol,ul{margin:4px 0 4px 18px;padding:0} li{margin:2px 0}
+      .tc{border:1px solid #e5e7eb;border-radius:10px;padding:13px 16px;margin:11px 0;page-break-inside:avoid}
+      .tc-h{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:5px}
+      .tc-id{font-weight:700;color:#ea580c;font-size:14px} .tc-title{font-weight:700;font-size:13.5px}
+      .role{background:#eff6ff;color:#1e40af;border-radius:99px;padding:1px 9px;font-size:10.5px;font-weight:600;white-space:nowrap}
+      .narr{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:8px 12px;margin:6px 0;font-size:12px;line-height:1.55}
+      .narr b.k{color:#9a3412}
+      .lab{font-size:11px;color:#64748b;font-weight:700;margin-top:6px}
+      .exp{font-size:12px}
+      .result{display:flex;gap:18px;flex-wrap:wrap;align-items:center;margin-top:9px;padding-top:8px;border-top:1px dashed #e2e8f0;font-size:12px}
+      .chk{font-size:13px} .fill{color:#94a3b8}
+      .sign{margin-top:8px} .sign td{height:34px}
+      .note{background:#f1f5f9;border-radius:8px;padding:9px 13px;font-size:12px;margin:8px 0}
+      .toolbar{max-width:920px;margin:0 auto 14px;text-align:right}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .mut{color:#64748b;font-size:11.5px}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0}.sheet+.sheet{page-break-before:always}}
+    </style>"""
+
+    p = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+         "<title>UAT Sign-off — ระบบกระทบยอด</title>", css, "</head><body>",
+         "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+
+    # Sheet 1 — header, participants, prerequisites, happy path
+    p.append("<div class='sheet'>")
+    p.append("<h1>เอกสารทดสอบและรับรองการใช้งาน (UAT Sign-off)</h1>")
+    p.append("<div class='sub'>ระบบกระทบยอดรายเดือน Oshinei · เวอร์ชัน 2026-06-15</div>")
+    p.append("<h2>1. ข้อมูลเอกสาร</h2><table>"
+             f"<tr><th style='width:38%'>URL ทดสอบ</th><td>oshinei-dashboard.fly.dev:8443/app/</td></tr>"
+             f"<tr><th>เดือนที่ทดสอบ</th><td>{pm}</td></tr>"
+             f"<tr><th>สาขาที่ทดสอบ</th><td>{BL}</td></tr>"
+             f"<tr><th>วันที่ทดสอบ</th><td>{BL}</td></tr></table>")
+    p.append("<h2>2. ผู้เข้าร่วมทดสอบ</h2><table>"
+             "<tr><th style='width:38%'>บทบาท</th><th>ชื่อ-สกุล</th></tr>"
+             "<tr><td>เจ้าหน้าที่กระทบยอด</td><td></td></tr>"
+             "<tr><td>ผู้จัดการ</td><td></td></tr>"
+             "<tr><td>ฝ่ายบัญชี / ผู้ตรวจสอบ</td><td></td></tr></table>")
+    p.append("<h2>3. สิ่งที่ต้องเตรียม</h2><ul>"
+             "<li><b>รหัสบันทึก (admin)</b> — กรอกผ่านปุ่ม 🔑 รหัส · <b>รหัสผู้จัดการ</b> — ระบบถามตอนปิดเดือน/แก้รหัส (ขอจากเจ้าของระบบ)</li>"
+             "<li>เอกสารตัวอย่างของเดือนที่ทดสอบ: สเตทเมนต์ KTB/KBANK, สรุปยอดบัตร, รายงาน Grab/Line Man, สลิปนำฝากเงินสด</li>"
+             "<li>เบราว์เซอร์รุ่นใหม่ + เครื่องพิมพ์/Save as PDF · ข้อมูล POS ของเดือนนั้นถูกซิงก์แล้ว</li></ul>")
+    p.append("<h2>4. ภาพรวมขั้นตอน 1 เดือน (อ่านก่อนเริ่ม)</h2>")
+    p.append("<div class='narr'>ระบบเปรียบ “ยอดที่ POS บันทึก” กับ “เงินที่เข้าบัญชี/เอกสารจริง” ของแต่ละ<b class='k'>ช่องทางรับเงิน</b> "
+             "ไล่เป็นรายวันทั้งเดือน เพื่อมั่นใจว่าเงินเข้าครบจริง ไม่ตกหล่น/บันทึกผิดช่อง</div>")
+    p.append("<ol>"
+             "<li>เปิดหน้าแรก → เห็นทุกสาขาเป็นกล่องงาน</li>"
+             "<li>เข้าสาขา → ช่องทางที่ “ยังไม่ตรง” ขึ้นก่อน + บอกว่าขาดเอกสารอะไร</li>"
+             "<li>อัปโหลดเอกสารที่ขาด</li>"
+             "<li>ระบบจับคู่อัตโนมัติทันที (ไม่มีปุ่ม Run Match)</li>"
+             "<li>ถ้ามี “เงินอาจถูกบันทึกผิดช่อง” → ยืนยันปุ่มเดียว</li>"
+             "<li>ผลต่างที่อธิบายได้ → “รับทราบผลต่าง” พร้อมเหตุผล</li>"
+             "<li>เจ้าหน้าที่ “ส่งตรวจ” → ผู้จัดการ “ปิดเดือน” (ล็อกถาวร)</li>"
+             "<li>ออกรายงานเก็บหลักฐาน / ให้สาขาเซ็น / ตรวจการจับคู่</li></ol>")
+    p.append("<div class='note'>วิธีบันทึกผล: ทำตาม “ขั้นตอน” → เทียบ “ผลที่คาดหวัง” → ทำเครื่องหมาย ☑ ผ่าน หรือ ☒ ไม่ผ่าน "
+             "ถ้าไม่ผ่านบันทึกในช่องหมายเหตุ + ลงเลขที่ปัญหาในตารางบันทึกปัญหา (ท้ายเอกสาร)</div>")
+    p.append("</div>")
+
+    # Sheet 2 — test cases
+    p.append("<div class='sheet'>")
+    p.append("<h2>5. รายการทดสอบ + คำอธิบายการใช้งาน</h2>")
+    for c in _UAT_CASES:
+        p.append("<div class='tc'>")
+        p.append(f"<div class='tc-h'><span class='tc-id'>{esc(c['id'])}</span>"
+                 f"<span class='tc-title'>{esc(c['title'])}</span>"
+                 f"<span class='role'>{esc(c['role'])}</span></div>")
+        p.append(f"<div class='narr'>📖 {esc(c['narrative'])}</div>")
+        p.append("<div class='lab'>ขั้นตอนทดสอบ</div><ol>")
+        for s in c["steps"]:
+            p.append(f"<li>{esc(s)}</li>")
+        p.append("</ol>")
+        p.append(f"<div class='lab'>ผลที่คาดหวัง</div><div class='exp'>{esc(c['expected'])}</div>")
+        p.append("<div class='result'>"
+                 "<span class='chk'>☐ ผ่าน &nbsp; ☐ ไม่ผ่าน</span>"
+                 f"<span class='fill'>ผู้ทดสอบ: {BL}</span>"
+                 f"<span class='fill'>วันที่: __________</span>"
+                 f"<span class='fill'>หมายเหตุ: {BL}</span></div>")
+        p.append("</div>")
+    p.append("</div>")
+
+    # Sheet 3 — issue log + sign-off + quick reference
+    p.append("<div class='sheet'>")
+    p.append("<h2>6. บันทึกปัญหาที่พบ (Issue Log)</h2><table>"
+             "<tr><th style='width:8%'>#</th><th style='width:10%'>TC</th><th>รายละเอียดปัญหา</th>"
+             "<th style='width:16%'>ความรุนแรง</th><th style='width:14%'>สถานะ</th></tr>"
+             + "".join("<tr><td></td><td></td><td></td><td></td><td></td></tr>" for _ in range(4))
+             + "</table>")
+    p.append("<h2>7. สรุปผลและการลงนามรับรอง</h2>")
+    p.append(f"<p>ผลการทดสอบโดยรวม: จำนวนผ่าน {BL} / {len(_UAT_CASES)} รายการ</p>")
+    p.append("<p><b>มติการรับรอง</b> (เลือกหนึ่ง):</p><ul style='list-style:none;margin-left:0'>"
+             "<li>☐ <b>รับรองให้ใช้งานจริง</b> (Accepted) — ผ่านทุกข้อสำคัญ</li>"
+             "<li>☐ <b>รับรองแบบมีเงื่อนไข</b> — ใช้งานได้ แต่ต้องแก้ข้อ ______ ภายใน ______</li>"
+             "<li>☐ <b>ยังไม่รับรอง</b> (Rejected) — มีปัญหาสำคัญข้อ ______</li></ul>")
+    p.append("<table class='sign'>"
+             "<tr><th style='width:30%'>บทบาท</th><th>ชื่อ-สกุล</th><th>ลายเซ็น</th><th style='width:16%'>วันที่</th></tr>"
+             "<tr><td>เจ้าหน้าที่กระทบยอด</td><td></td><td></td><td></td></tr>"
+             "<tr><td>ผู้จัดการ</td><td></td><td></td><td></td></tr>"
+             "<tr><td>ฝ่ายบัญชี / ผู้ตรวจสอบ</td><td></td><td></td><td></td></tr>"
+             "<tr><td>เจ้าของระบบ (อนุมัติ)</td><td></td><td></td><td></td></tr></table>")
+    p.append("<h2>ภาคผนวก — ทางลัด</h2><table>"
+             "<tr><th style='width:46%'>อยากทำอะไร</th><th>ไปที่</th></tr>"
+             "<tr><td>ดูภาพรวมทุกสาขา / ทำสาขา</td><td>/app/</td></tr>"
+             "<tr><td>ตั้งค่า / แก้รหัสสเตทเมนต์</td><td>/app/setup.html (ส่วน ⑤)</td></tr>"
+             "<tr><td>รายงานเงินผิดช่อง + ใบเซ็น</td><td>⋯ เพิ่มเติม → ⇄ รายงานเงินบันทึกผิดช่อง</td></tr>"
+             "<tr><td>ตรวจการจับคู่ทั้งเดือน (PDF)</td><td>หน้าสาขา → 🖨️ ตรวจการจับคู่รายวัน</td></tr>"
+             "<tr><td>หลักฐานรายวันระดับบรรทัด</td><td>/api/daily-report?day=YYYY-MM-DD</td></tr>"
+             "<tr><td>พจนานุกรมรหัส</td><td>⋯ เพิ่มเติม → 📖 พจนานุกรมรหัสในสเตทเมนต์</td></tr>"
+             "<tr><td>คู่มือเต็ม</td><td>/app/help.html</td></tr></table>")
+    p.append("<div class='mut'>สถานะการจับคู่: ✓ ตรง = POS ตรงเอกสาร · ✗ ต่าง = ยอดไม่ตรงต้องตรวจ · ขาดเอกสาร = POS มีแต่เอกสารไม่มา · "
+             "เกินเอกสาร = เงินเข้าเกิน POS · รอเอกสารตามรอบ = ยังไม่ถึงรอบ (ปกติ) · ผลต่าง = เอกสาร − POS</div>")
+    p.append("</div></body></html>")
+    return "".join(p)
+
+
+@app.get("/api/uat-signoff")
+def uat_signoff(period_month: str | None = None):
+    """Printable UAT sign-off checklist (usage narrative + pass/fail + signatures)."""
+    if period_month and not _PERIOD_RE.match(period_month):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    return Response(content=_uat_signoff_html(period_month),
+                    media_type="text/html; charset=utf-8")
+
+
 # ── Transaction-level drill-down (mapped / unmapped codes + statement lines) ───
 
 @app.get("/api/drill")
