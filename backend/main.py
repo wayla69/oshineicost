@@ -2261,6 +2261,7 @@ def sales_daily(
 
 
 @app.get("/api/home/branch-scorecard")
+@ttl_cache
 def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head,
     7-day sparkline, vs trailing-7-day average %, vs same-weekday-last-week %, and
@@ -11295,6 +11296,7 @@ def analysis_hour_detail(
 # /api/home/brief  — Daily Brief summary
 # ---------------------------------------------------------------------------
 @app.get("/api/home/brief")
+@ttl_cache
 def home_brief(branch: Optional[str] = Query(None)):
     """Yesterday vs target + MTD + recent anomalies + top/bottom branch."""
     with get_db() as con:
@@ -11467,6 +11469,7 @@ def home_brief(branch: Optional[str] = Query(None)):
 # /api/home/leak-watch  — daily money-leak radar for the Daily Brief
 # ---------------------------------------------------------------------------
 @app.get("/api/home/leak-watch")
+@ttl_cache
 def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
                     group: Optional[str] = Query(None)):
     """One focus day's money-leak signals (default = latest day) for the Daily Brief:
@@ -11530,6 +11533,7 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
 # /api/home/menu-movers  — yesterday's biggest menu movers UP and DOWN (by impact)
 # ---------------------------------------------------------------------------
 @app.get("/api/home/menu-movers")
+@ttl_cache
 def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
                      group: Optional[str] = Query(None), limit: int = Query(6, ge=1, le=30),
                      min_ph: float = Query(0.5, ge=0.0), min_qty: int = Query(10, ge=1)):
