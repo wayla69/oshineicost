@@ -68,6 +68,114 @@ def connect_mssql():
         user=os.environ["OSH_USER"], password=os.environ["OSH_PWD"],
         database=os.environ["OSH_DB"], login_timeout=15, timeout=600)
 
+
+class ResilientCursor:
+    """A pymssql cursor that survives dropped connections.
+
+    WHY: the sync runs many heavy server-side aggregates over ONE long-lived
+    connection to the remote HQ MSSQL (over the internet). Any network blip, VPN
+    hiccup, or server-side connection reset surfaces as 'DBPROCESS is dead or not
+    enabled' (DB-Lib error 20047) — and with a plain cursor that aborts the whole
+    multi-minute sync at whatever query happened to be running. That's why the
+    sync 'fails often': it has zero tolerance for a single transient drop.
+
+    This wrapper transparently re-opens the connection and retries the failed
+    query a few times, so a transient drop no longer kills the run. It caches the
+    result set on execute(), so every existing `mc.execute(...); mc.fetchall()` /
+    `mc.fetchone()` call site keeps working unchanged."""
+
+    _TRANSIENT = ("20047", "20003", "20006", "20009", "DBPROCESS is dead",
+                  "is dead or not enabled", "unable to connect", "Communication link",
+                  "timed out", "Adaptive Server", "Net-Lib", "connection")
+
+    # Seconds to wait before each reconnect attempt. Patient on purpose: a real HQ
+    # outage (the 20047-drop seen in the field is followed by 20009 'unable to
+    # connect' for the whole window — i.e. the network/VPN/server is genuinely down
+    # for 10-30s, not a 1s blip). This schedule keeps trying for ~4 min total so the
+    # sync rides out a VPN reconnect / router reboot / brief SQL restart instead of
+    # dying. If the source is down LONGER than this, no client retry can help — that
+    # is an infrastructure problem (VPN/internet stability to HQ, or HQ SQL maintenance
+    # landing in the sync window).
+    _BACKOFFS = (5, 10, 20, 40, 60, 60, 60)
+
+    def __init__(self, connect_fn):
+        self._connect = connect_fn
+        self._conn = None
+        self._cur = None
+        self._rows = []
+        # DO NOT connect eagerly here. The HQ link over the public internet
+        # FLAPS (a probe connects in 0.4s, then the next connect 2s later times
+        # out with 10060 → 20009 'Adaptive Server unavailable'). An eager
+        # connect in __init__ has NO retry, so a single bad instant kills the
+        # whole sync before it starts (field failure 2026-06-15). Connect lazily
+        # on the first execute(), which opens through the backoff-retry loop and
+        # rides out the flap.
+
+    def _open(self):
+        self._conn = self._connect()
+        self._cur = self._conn.cursor(as_dict=True)
+
+    def _drop(self):
+        try:
+            if self._conn:
+                self._conn.close()
+        except Exception:
+            pass
+        self._conn = None
+        self._cur = None
+
+    @classmethod
+    def _is_transient(cls, e):
+        try:
+            import pymssql
+            if isinstance(e, (pymssql.OperationalError, pymssql.InterfaceError)):
+                return True
+        except Exception:
+            pass
+        msg = str(e).lower()
+        return any(tok.lower() in msg for tok in cls._TRANSIENT)
+
+    def execute(self, sql, params=None):
+        import time
+        attempt = 0
+        while True:
+            try:
+                # Always ensure a live connection BEFORE running — a dropped/failed
+                # reconnect leaves _conn=None and is rebuilt here, so we never burn a
+                # retry on a known-dead cursor (the bug in the first version).
+                if self._conn is None or self._cur is None:
+                    self._open()
+                if params is None:
+                    self._cur.execute(sql)
+                else:
+                    self._cur.execute(sql, params)
+                self._rows = self._cur.fetchall()
+                return
+            except Exception as e:
+                # _open() failing (server still unreachable) is itself transient → keep
+                # backing off through the whole schedule before giving up.
+                if attempt >= len(self._BACKOFFS) or not self._is_transient(e):
+                    raise
+                wait = self._BACKOFFS[attempt]
+                attempt += 1
+                print(f"        ⚠ MSSQL connection lost ({str(e)[:70]}) — "
+                      f"reconnecting & retrying in {wait}s "
+                      f"[{attempt}/{len(self._BACKOFFS)}]", flush=True)
+                self._drop()          # force a fresh reconnect on the next loop
+                time.sleep(wait)
+
+    def fetchall(self):
+        return self._rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def close(self):
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
 def short_name(mssql_name: str) -> str:
     n = (mssql_name or "").strip()
     return BRANCH_ALIAS.get(n, n)
@@ -106,12 +214,52 @@ def apply_local_swap():
         return False
 
 
+def _month_windows(since):
+    """Calendar-month [lo, hi) windows from `since` up to and including the current
+    month. The first window honours the exact `since` day; the rest start on the
+    1st. Each window's `hi` is the first day of the next month (exclusive)."""
+    import datetime
+    parts = since[:10].split("-")
+    start = datetime.date(int(parts[0]), int(parts[1]), 1)
+    today = datetime.date.today()
+    last = datetime.date(today.year, today.month, 1)
+    wins, cur = [], start
+    while cur <= last:
+        nxt = datetime.date(cur.year + cur.month // 12, cur.month % 12 + 1, 1)
+        lo = since[:10] if cur == start else cur.isoformat()
+        wins.append((lo, nxt.isoformat()))
+        cur = nxt
+    return wins
+
+
+def _chunk(mc, sql_tmpl, windows, col="s.SaleDate"):
+    """Run `sql_tmpl` once per month window and concatenate the rows. `sql_tmpl`
+    must contain a single `{RANGE}` token, replaced with
+    `<col> >= %s AND <col> < %s`, with the window bounds passed as params.
+
+    WHY: the killer queries scan SaleItem/Sale over the WHOLE history (15M+ rows)
+    in one multi-minute server-side aggregate. A single transient MSSQL drop
+    (err 20047) mid-scan aborts the entire query, and ResilientCursor must re-run
+    it from scratch — expensive and likely to hit another drop. Bounding each
+    query to ONE month keeps it short (~30s), so a drop costs at most one cheap
+    month-retry instead of the whole scan. Every chunked query GROUPs BY a date
+    expression (or is keyed by a single-dated Sale), so the per-month result sets
+    are disjoint and concatenation is identical to the full-range query."""
+    pred = f"{col} >= %s AND {col} < %s"
+    out = []
+    for lo, hi in windows:
+        mc.execute(sql_tmpl.replace("{RANGE}", pred), (lo, hi))
+        out.extend(mc.fetchall())
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="2025-01-01", help="sync sales on/after this date")
     ap.add_argument("--apply-local", action="store_true",
                     help="after reconcile, swap .incoming into the live local oshinei.db")
     args = ap.parse_args()
+    windows = _month_windows(args.since)   # per-month chunking of the heavy aggregates
 
     if not DB.exists():
         sys.exit(f"current DB not found: {DB}")
@@ -122,6 +270,15 @@ def main():
     shutil.copy2(DB, INCOMING)
 
     sq = sqlite3.connect(str(INCOMING)); sq.row_factory = sqlite3.Row
+    # idempotent column adds — mirror backend/main.py startup migration so a sync
+    # against an older oshinei.db doesn't fail with "no column named …".
+    st_cols = {r[1] for r in sq.execute("PRAGMA table_info(sales_transaction)").fetchall()}
+    if st_cols and "discount_reason_id" not in st_cols:
+        sq.execute("ALTER TABLE sales_transaction ADD COLUMN discount_reason_id INTEGER")
+    if st_cols and "coupon_series_id" not in st_cols:
+        sq.execute("ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER")
+    if st_cols and "print_times" not in st_cols:
+        sq.execute("ALTER TABLE sales_transaction ADD COLUMN print_times INTEGER DEFAULT 0")
     # natural-key maps from the EXISTING (preserved) tables
     name2bid = {r["name"]: r["branch_id"] for r in sq.execute("SELECT branch_id,name FROM branches")}
     code2sid = {r["sku_code"]: r["sku_id"] for r in sq.execute("SELECT sku_id,sku_code FROM skus")}
@@ -130,7 +287,7 @@ def main():
     max_cid = sq.execute("SELECT COALESCE(MAX(category_id),0) m FROM categories").fetchone()["m"]
 
     print("[2/6] connect MSSQL + load Branch / Items / ItemCategory")
-    ms = connect_mssql(); mc = ms.cursor(as_dict=True)
+    mc = ResilientCursor(connect_mssql)   # auto-reconnects on dropped connection (err 20047)
     mc.execute("SELECT BranchId, BranchName FROM Branch")
     bid_map = {}                       # MSSQL BranchId → sqlite branch_id
     unmatched_branches = []
@@ -154,8 +311,8 @@ def main():
     print(f"      branches mapped={len(bid_map)} (unmatched/skipped={len(unmatched_branches)}: {unmatched_branches[:6]})")
     print(f"      items pre-mapped={len(item_map)} of {len(itemid2code)}")
 
-    print("[3/6] aggregate sales_sku_monthly (server-side GROUP BY)")
-    mc.execute(f"""
+    print(f"[3/6] aggregate sales_sku_monthly (server-side GROUP BY · {len(windows)} monthly chunks)")
+    skum_rows = _chunk(mc, f"""
         SELECT si.BranchId AS bid, si.ItemId AS iid,
                CONVERT(char(7), s.SaleDate, 126) AS ym,
                SUM(CAST(si.Qty AS float))            AS qty,
@@ -163,12 +320,12 @@ def main():
                SUM(CAST(ISNULL(si.Tax,0) AS float))  AS tax
         FROM SaleItem si
         JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-        WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(7), s.SaleDate, 126)
-    """, (args.since,))
+    """, windows)
     skum = []
     skipped_rev = 0.0
-    for r in mc.fetchall():
+    for r in skum_rows:
         bid = bid_map.get(r["bid"])
         if bid is None:
             skipped_rev += (r["sub_exvat"] or 0); continue
@@ -193,42 +350,47 @@ def main():
     drink_ids = [c for c, b in cat_bucket.items() if b == "drink"]
     other_ids = [c for c, b in cat_bucket.items() if b == "other"]
     def inlist(ids): return "(" + ",".join(str(int(i)) for i in ids) + ")" if ids else "(-1)"
-    mc.execute(f"""
+    split_rows = _chunk(mc, f"""
         SELECT si.SaleId AS sid, si.BranchId AS bid,
           SUM(CASE WHEN si.CategoryId IN {inlist(drink_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) AS drink,
           SUM(CASE WHEN si.CategoryId IN {inlist(other_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) AS other,
           SUM(CASE WHEN si.CategoryId NOT IN {inlist(drink_ids + other_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) AS food
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-        WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        WHERE {SALE_FILTER} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.SaleId, si.BranchId
-    """, (args.since,))
-    split = {(r["bid"], r["sid"]): (r["food"] or 0, r["drink"] or 0, r["other"] or 0) for r in mc.fetchall()}
+    """, windows)
+    split = {(r["bid"], r["sid"]): (r["food"] or 0, r["drink"] or 0, r["other"] or 0) for r in split_rows}
 
     # coupon series applied per sale (keep the largest-discount coupon per bill)
-    mc.execute(f"""SELECT c.SaleId AS sid, c.BranchId AS bid, c.CouponSeriesId AS cs,
+    coupon_rows = _chunk(mc, f"""SELECT c.SaleId AS sid, c.BranchId AS bid, c.CouponSeriesId AS cs,
                  SUM(CAST(ISNULL(c.DiscountAmount,0) AS float)) AS amt
                  FROM CouponCardOutsideSystemUsed c
                  JOIN Sale s ON s.SaleId=c.SaleId AND s.BranchId=c.BranchId
-                 WHERE {SALE_FILTER} AND s.SaleDate >= %s
-                 GROUP BY c.SaleId, c.BranchId, c.CouponSeriesId""", (args.since,))
+                 WHERE {SALE_FILTER} AND {{RANGE}}
+                 GROUP BY c.SaleId, c.BranchId, c.CouponSeriesId""", windows)
     sale_coupon = {}   # (bid,sid) -> coupon_series_id with the biggest discount
-    for r in mc.fetchall():
+    for r in coupon_rows:
         k = (r["bid"], r["sid"]); cur = sale_coupon.get(k)
         if cur is None or (r["amt"] or 0) > cur[1]:
             sale_coupon[k] = (r["cs"], r["amt"] or 0)
 
-    mc.execute(f"""
+    # PrintTimes is optional — older Easy POS schemas don't have it. Probe once and degrade to 0.
+    mc.execute("SELECT 1 AS ok FROM INFORMATION_SCHEMA.COLUMNS "
+               "WHERE TABLE_NAME='Sale' AND COLUMN_NAME='PrintTimes'")
+    has_ptimes = bool(mc.fetchall())
+    ptimes_expr = "ISNULL(s.PrintTimes, 0)" if has_ptimes else "0"
+    tx_rows = _chunk(mc, f"""
         SELECT s.BranchId AS bid, s.SaleId AS sid, s.SaleNum AS num, s.SaleDate AS dt,
                s.NumOfCust AS cust, CAST(s.Discount AS float) AS disc, s.DiscountReasonId AS rid,
                CAST(ISNULL(s.ServiceChargeAmount,0) AS float) AS svc,
                CAST(ISNULL(s.TipsAmount,0) AS float) AS tip, CAST(s.Total AS float) AS total,
                LTRIM(RTRIM(COALESCE(u.Username,''))) AS cashier,
-               ISNULL(s.PrintTimes, 0) AS ptimes
+               {ptimes_expr} AS ptimes
         FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
-        WHERE {SALE_FILTER} AND s.SaleDate >= %s
-    """, (args.since,))
+        WHERE {SALE_FILTER} AND {{RANGE}}
+    """, windows)
     txr = []
-    for r in mc.fetchall():
+    for r in tx_rows:
         bid = bid_map.get(r["bid"])
         if bid is None:
             continue
@@ -250,10 +412,10 @@ def main():
     print(f"      inserted {len(txr):,} transactions")
 
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")
-    stage_reports(sq, mc, args.since, bid_map, item_map, name2bid)
+    stage_reports(sq, mc, args.since, bid_map, item_map, name2bid, windows)
 
     sq.commit()
-    ms.close()
+    mc.close()
 
     # Optimize after the bulk rebuild: refresh query-planner stats + compact the
     # file (house rule: VACUUM+ANALYZE after a bulk mutate). Autocommit so VACUUM
@@ -277,13 +439,17 @@ def main():
         print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
         print("       python refresh_fly_db.py --db oshinei.db.incoming")
 
-def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
+def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     """Stage POS report data into pos_* tables — server-side aggregates only.
     IRON RULE: NO POS cost is staged. We keep quantities / revenue / counts /
     timings; all COGS valuation is done later from our BoM."""
     F = SALE_FILTER
 
-    def run(sql, params=None):
+    def run(sql, params=None, col=None):
+        # col set → per-month chunked (sql must contain {RANGE}); keeps each heavy
+        # scan short so a transient MSSQL drop costs one cheap month-retry.
+        if col is not None:
+            return _chunk(mc, sql, windows, col)
         mc.execute(sql, params or (since,)); return mc.fetchall()
 
     # ── pos_void: cancelled/void items (qty + sale price; cost via BoM later) ──
@@ -291,7 +457,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                      "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
     rows = run(f"""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
-                 FROM CancelSaleItem WHERE CancelDate >= %s GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""")
+                 FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""", col="CancelDate")
     sq.executemany("INSERT INTO pos_void VALUES(?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], item_map.get(r["iid"]), r["rid"], round(r["q"] or 0,2), round(r["ext"] or 0,2))
          for r in rows if bid_map.get(r["bid"])])
@@ -303,7 +469,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     rows = run(f"""SELECT st.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, st.StaffId sid, st.StaffName nm,
                  SUM(CAST(st.Qty AS float)) q
                  FROM SaleItemStaff st JOIN Sale s ON s.SaleId=st.SaleId AND s.BranchId=st.BranchId
-                 WHERE {F} AND s.SaleDate >= %s GROUP BY st.BranchId, CONVERT(char(7),s.SaleDate,126), st.StaffId, st.StaffName""")
+                 WHERE {F} AND {{RANGE}} GROUP BY st.BranchId, CONVERT(char(7),s.SaleDate,126), st.StaffId, st.StaffName""", col="s.SaleDate")
     sq.executemany("INSERT INTO pos_staff_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["sid"], r["nm"], round(r["q"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_staff_month: {len(rows)} groups")
@@ -314,7 +480,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, p.PaymentCode pc,
                  SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
-                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(7),s.SaleDate,126), p.PaymentCode""")
+                 WHERE {F} AND {{RANGE}} AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(7),s.SaleDate,126), p.PaymentCode""", col="s.SaleDate")
     sq.executemany("INSERT INTO pos_payment_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_payment_month: {len(rows)} groups")
@@ -328,7 +494,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, p.PaymentCode pc,
                  SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
-                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), p.PaymentCode""")
+                 WHERE {F} AND {{RANGE}} AND ISNULL(p.Active,1)=1 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), p.PaymentCode""", col="s.SaleDate")
     sq.executemany("INSERT INTO pos_payment_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_ppd ON pos_payment_day(branch_id, day)")
@@ -346,8 +512,8 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
         rows = run(f"""SELECT p.BranchId bid, CONVERT({conv},s.SaleDate,126) g, p.CouponSeriesId csid,
                      SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                      FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
-                     WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1 AND p.PaymentCode='Coupon'
-                     GROUP BY p.BranchId, CONVERT({conv},s.SaleDate,126), p.CouponSeriesId""")
+                     WHERE {F} AND {{RANGE}} AND ISNULL(p.Active,1)=1 AND p.PaymentCode='Coupon'
+                     GROUP BY p.BranchId, CONVERT({conv},s.SaleDate,126), p.CouponSeriesId""", col="s.SaleDate")
         sq.executemany(f"INSERT INTO {tbl} VALUES(?,?,?,?,?)",
             [(bid_map.get(r["bid"]), r["g"], r["csid"], round(r["amt"] or 0, 2), r["n"])
              for r in rows if bid_map.get(r["bid"])])
@@ -365,8 +531,8 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, s.SaleNum num, s.SaleId sid,
                  p.PaymentCode pc, SUM(CAST(p.Amount AS float)) amt
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
-                 WHERE {F} AND s.SaleDate >= %s AND ISNULL(p.Active,1)=1
-                 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""")
+                 WHERE {F} AND {{RANGE}} AND ISNULL(p.Active,1)=1
+                 GROUP BY p.BranchId, CONVERT(char(10),s.SaleDate,126), s.SaleNum, s.SaleId, p.PaymentCode""", col="s.SaleDate")
     sq.executemany("INSERT INTO sale_payment VALUES(?,?,?,?)",
         [(bid_map.get(r["bid"]), f'{r["d"]}-{r["num"]}-{r["sid"]}', _norm_paycode(r["pc"]), round(r["amt"] or 0, 2))
          for r in rows if bid_map.get(r["bid"])])
@@ -378,8 +544,8 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                      "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")
     rows = run(f"""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
                  CAST(AVG(CASE WHEN EndTime>StartTime THEN DATEDIFF(minute,StartTime,EndTime)*1.0 END) AS float) avgmin
-                 FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND StartTime >= %s
-                 GROUP BY BranchId, CONVERT(char(10),StartTime,126)""")
+                 FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND {{RANGE}}
+                 GROUP BY BranchId, CONVERT(char(10),StartTime,126)""", col="StartTime")
     sq.executemany("INSERT INTO pos_table_turn_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["tabs"], r["cust"] or 0, round(r["avgmin"] or 0,1)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_table_turn_day: {len(rows)} groups")
@@ -393,8 +559,8 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
     rows = run(f"""SELECT s.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym,
                  ISNULL(s.DeliveryType,0) dt, ISNULL(s.OrderChannel,0) oc,
                  COUNT(*) bills, SUM(s.NumOfCust) cust, SUM(CAST(s.Total AS float)) total
-                 FROM Sale s WHERE {F} AND s.SaleDate >= %s
-                 GROUP BY s.BranchId, CONVERT(char(7),s.SaleDate,126), ISNULL(s.DeliveryType,0), ISNULL(s.OrderChannel,0)""")
+                 FROM Sale s WHERE {F} AND {{RANGE}}
+                 GROUP BY s.BranchId, CONVERT(char(7),s.SaleDate,126), ISNULL(s.DeliveryType,0), ISNULL(s.OrderChannel,0)""", col="s.SaleDate")
     sq.executemany("INSERT INTO pos_channel_month VALUES(?,?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["dt"], r["oc"], r["bills"], r["cust"] or 0, round(r["total"] or 0,2))
          for r in rows if bid_map.get(r["bid"])])
@@ -405,7 +571,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                      "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
     rows = run(f"""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
-                 FROM CouponCardOutsideSystemUsed WHERE UsedDate >= %s GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""")
+                 FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_coupon_month: {len(rows)} groups")
@@ -415,7 +581,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                      "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
     drows = run(f"""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
-                 FROM CouponCardOutsideSystemUsed WHERE UsedDate >= %s GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""")
+                 FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_pcd ON pos_coupon_day(coupon_series_id, day)")
@@ -439,7 +605,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                  CAST(AVG(CASE WHEN si.CookedTime IS NOT NULL AND si.CookedTime>si.InsertDate THEN DATEDIFF(second,si.InsertDate,si.CookedTime)*1.0 END) AS float) avgsec,
                  SUM(CASE WHEN si.CookedTime IS NOT NULL THEN 1 ELSE 0 END) cooked
                  FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-                 WHERE {F} AND s.SaleDate >= %s GROUP BY si.BranchId, CONVERT(char(7),s.SaleDate,126)""")
+                 WHERE {F} AND {{RANGE}} GROUP BY si.BranchId, CONVERT(char(7),s.SaleDate,126)""", col="s.SaleDate")
     sq.executemany("INSERT INTO pos_kitchen_month VALUES(?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], round(r["avgsec"] or 0,1), r["cooked"] or 0) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_kitchen_month: {len(rows)} groups")
@@ -456,14 +622,13 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
         dly_since = (_dt.date(y, m, d) - _dt.timedelta(days=120)).isoformat()
     sq.executescript("DROP TABLE IF EXISTS sales_sku_daily; CREATE TABLE sales_sku_daily("
                      "branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);")
-    mc.execute(f"""
+    drows = _chunk(mc, f"""
         SELECT si.BranchId bid, si.ItemId iid, CONVERT(char(10), s.SaleDate, 126) d,
                SUM(CAST(si.Qty AS float)) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(10), s.SaleDate, 126)
-    """, (dly_since,))
-    drows = mc.fetchall()
+    """, _month_windows(dly_since))
     sq.executemany("INSERT INTO sales_sku_daily VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), round(r["qty"] or 0,2), round(r["rev"] or 0,2))
          for r in drows if bid_map.get(r["bid"]) and item_map.get(r["iid"])])
@@ -504,17 +669,17 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid):
                   FROM skus s""")
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
-    mc.execute(f"""
+    bill_rows = _chunk(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
                si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
-        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= %s
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
-    """, (bill_since,))
+    """, _month_windows(bill_since))
     bills = {}
     lines = []   # (receipt_no, sku_id, qty, rev, bom_cost) — per-menu-line detail, kept for the loss-bill drill
-    for r in mc.fetchall():
+    for r in bill_rows:
         bid = bid_map.get(r["bid"])
         if bid is None:
             continue
@@ -707,7 +872,8 @@ def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
     def one(con, q, p=()):
         return con.execute(q, p).fetchone()[0]
-    checks = []   # (name, old, new, mode) — mode: 'strict' = |Δ|<2%; 'nodrop' = Δ ≥ -2% (growth OK)
+    checks = []   # (name, old, new, mode) — mode: 'strict' = |Δ|<2%; 'nodrop' = Δ ≥ -2% (growth OK);
+                  #                                  'info'/'note' = printed only, never gates
     # The synced db's latest month is the LIVE current month, which legitimately
     # GROWS between syncs as new days finalize. So we can't strict-compare it —
     # an incremental daily sync would always trip a 2% drift gate mid-month.
@@ -731,14 +897,35 @@ def reconcile(sq):
     lvb_old = one(cur, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (syn_max,))
     checks.append((f"LIVE bills {syn_max} (growth OK)", lvb_old, lvb_new, 'nodrop'))
 
-    # SETTLED month anchor — strict integrity check (should be identical run-to-run)
+    # SETTLED month anchor — strict integrity check (should be identical run-to-run).
+    # BUT restrict the strict comparison to branches that ALREADY had data in the
+    # CURRENT db for the anchor month ("shared" branches). A newly-mapped branch
+    # (e.g. a fixed BRANCH_ALIAS bringing back a branch that sync_mssql had been
+    # silently dropping into skipped_rev — 2026-06: ขอนแก่น + 8 others) legitimately
+    # ADDS revenue to a settled month; that is not corruption and must not gate.
+    # The shared-branch subset still strict-catches real history loss / drift, and a
+    # branch that DISAPPEARS (was in current, now gone) drops the subset → fails.
     if anchor:
-        a_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (anchor,)) or 0
-        a_old = one(cur, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=?", (anchor,)) or 0
-        checks.append((f"SETTLED rev {anchor} (ex-VAT)", a_old, a_new, 'strict'))
-        ab_new = one(sq, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (anchor,))
-        ab_old = one(cur, "SELECT COUNT(*) FROM sales_transaction WHERE substr(sold_at,1,7)=?", (anchor,))
-        checks.append((f"SETTLED bills {anchor}", ab_old, ab_new, 'strict'))
+        existing_bids = [r[0] for r in cur.execute(
+            "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month=?", (anchor,)).fetchall()]
+        bid_in = "(" + ",".join(str(int(b)) for b in existing_bids) + ")" if existing_bids else "(-1)"
+        a_new = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
+        a_old = one(cur, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
+        checks.append((f"SETTLED rev {anchor} (shared branches)", a_old, a_new, 'strict'))
+        ab_new = one(sq, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
+        ab_old = one(cur, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
+        checks.append((f"SETTLED bills {anchor} (shared branches)", ab_old, ab_new, 'strict'))
+        # Revenue from branches NEW to this settled month (present in synced, absent
+        # from current) — reported for visibility; never gates. A large value here is
+        # expected right after a BRANCH_ALIAS fix and disappears on the next sync.
+        added_rev = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id NOT IN {bid_in}", (anchor,)) or 0
+        if added_rev:
+            added_names = [r["name"] for r in sq.execute(
+                f"SELECT DISTINCT b.name FROM sales_sku_monthly m JOIN branches b ON b.branch_id=m.branch_id "
+                f"WHERE m.period_month=? AND m.branch_id NOT IN {bid_in} AND b.name!='ALL'", (anchor,)).fetchall()]
+            print(f"    [branch-add] settled {anchor}: +฿{added_rev:,.0f} from {len(added_names)} newly-mapped "
+                  f"branch(es): {', '.join(added_names[:12])}")
+            checks.append((f"SETTLED rev {anchor} ADDED branches", 0, added_rev, 'note'))
 
     # Ubon Apr 2026 receipts ex-VAT — fixed historical anchor (must never move)
     ub_new = one(sq, "SELECT ROUND(SUM(total_inc_vat)/1.07,0) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE b.name='อุบลราชธานี' AND substr(t.sold_at,1,7)='2026-04'") or 0
@@ -757,6 +944,8 @@ def reconcile(sq):
             passed = abs(d) < 2.0
         elif mode == 'nodrop':
             passed = d >= -2.0          # growth is fine; only a real drop fails
+        elif mode == 'note':            # added-branch revenue — informational, always shown ✓
+            passed = True
         else:  # info — buffet near-zero, never gates
             passed = (abs(new) < (lv_old or 1) * 0.002)
         if mode in ('strict', 'nodrop') and not passed:
