@@ -411,37 +411,51 @@ async function loadErrorReport(){
   $('app').innerHTML=html;
 }
 
-/* ── รายงานเงินบันทึกผิดช่อง (log + ใบเซ็นรับทราบส่งสาขา) ── */
+/* ── รายงานเงินบันทึกผิดช่อง (log + ใบเซ็นรับทราบส่งสาขา) — เลือกสาขาได้ ── */
+let WC=null, WC_BR='all';
 async function loadWrongChannel(){
+  WC=null;
   $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
-  let r;try{r=await api(`/api/reports/wrong-channel?period_month=${MONTH}`);}
+  try{WC=await api(`/api/reports/wrong-channel?period_month=${MONTH}`);}
   catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
-  const pm=`?period_month=${MONTH}`;
-  let html=header()+`<div class="row" style="margin-bottom:6px">
-    <h2 style="font-size:16px">⇄ รายงานเงินบันทึกผิดช่อง — ${esc(monthTh(MONTH))}</h2>
-    <a class="btn btn-sm btn-pri" style="margin-left:auto" href="/api/reports/wrong-channel.print${pm}" target="_blank">🖨️ ใบเซ็นรับทราบ (พิมพ์/PDF)</a>
-    <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">⬇ Excel</a></div>
-  <div class="muted" style="margin-bottom:10px">รายการที่ยืนยันแล้วว่า <b>"เป็นเงินก้อนเดียวกัน"</b> ในหน้ากระทบยอด — เงินเข้าบัญชีถูกต้องครบ แต่ในเครื่อง POS กดผิดช่องทาง · ใช้เป็นหลักฐาน log + <b>ใบให้สาขาเซ็นรับทราบและแก้ไข</b> · ยอดรวมไม่ได้หาย เป็นการลงผิดช่องเท่านั้น</div>`;
-  if(!r.items.length){ $('app').innerHTML=html+'<div class="card">ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้วสำหรับเดือนนี้ — รายงานจะขึ้นเมื่อมีการกด "✅ ใช่ เป็นเงินก้อนเดียวกัน" ในการ์ดเงินผิดช่อง</div>'; return; }
-  html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:24px;flex-wrap:wrap">
-    <div><div class="lbl">จำนวนรายการ</div><div style="font-size:20px;font-weight:700">${r.total_count}</div></div>
-    <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">฿${fmt(r.total_amount)}</div></div>
-    <div><div class="lbl">สาขาที่เกี่ยวข้อง</div><div style="font-size:20px;font-weight:700">${r.summary.length}</div></div>
-  </div>`;
+  if(WC_BR!=='all' && !WC.summary.some(s=>s.branch_id===WC_BR))WC_BR='all';   // selected branch absent this month
+  renderWrongChannel();
+}
+function setWcBranch(v){WC_BR=(v==='all'?'all':+v);renderWrongChannel();}
+function renderWrongChannel(){
+  const all=WC_BR==='all';
+  const summary=all?WC.summary:WC.summary.filter(s=>s.branch_id===WC_BR);
+  const items  =all?WC.items  :WC.items.filter(it=>it.branch_id===WC_BR);
+  const amt=items.reduce((a,it)=>a+(it.amount||0),0);
+  const pm=`?period_month=${MONTH}`+(all?'':`&branch_id=${WC_BR}`);
+  const brOpts=`<option value="all">ทุกสาขา (${WC.summary.length})</option>`+
+    WC.summary.map(s=>`<option value="${s.branch_id}" ${s.branch_id===WC_BR?'selected':''}>${esc(s.branch_name)} (${s.count})</option>`).join('');
   const dirChip=d=>d==='down'?'<span class="chip c-ok ov-mini">✓ ดีขึ้น</span>'
     :d==='up'?'<span class="chip c-warn ov-mini">▲ ผิดมากขึ้น</span>'
     :'<span class="chip c-mut ov-mini">— ทรงตัว</span>';
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px">⇄ รายงานเงินบันทึกผิดช่อง — ${esc(monthTh(MONTH))}</h2>
+    <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
+    <a class="btn btn-sm btn-pri" href="/api/reports/wrong-channel.print${pm}" target="_blank">🖨️ ใบเซ็นรับทราบ (พิมพ์/PDF)</a>
+    <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">⬇ Excel</a></div>
+  <div class="muted" style="margin-bottom:10px">รายการที่ยืนยันแล้วว่า <b>"เป็นเงินก้อนเดียวกัน"</b> ในหน้ากระทบยอด — เงินเข้าบัญชีถูกต้องครบ แต่ในเครื่อง POS กดผิดช่องทาง · ใช้เป็นหลักฐาน log + <b>ใบให้สาขาเซ็นรับทราบและแก้ไข</b> · ยอดรวมไม่ได้หาย เป็นการลงผิดช่องเท่านั้น</div>`;
+  if(!items.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้ว${all?'สำหรับเดือนนี้':'ของสาขานี้'} — รายงานจะขึ้นเมื่อมีการกด "✅ ใช่ เป็นเงินก้อนเดียวกัน" ในการ์ดเงินผิดช่อง</div>`; return; }
+  html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:24px;flex-wrap:wrap">
+    <div><div class="lbl">จำนวนรายการ</div><div style="font-size:20px;font-weight:700">${items.length}</div></div>
+    <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">฿${fmt(amt)}</div></div>
+    <div><div class="lbl">${all?'สาขาที่เกี่ยวข้อง':'สาขา'}</div><div style="font-size:20px;font-weight:700">${all?summary.length:esc(summary[0].branch_name)}</div></div>
+  </div>`;
   html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
     <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>ยอดรวม</th><th>แนวโน้ม</th><th>ใบเซ็นรับทราบ</th></tr>
-    ${r.summary.map(s=>`<tr>
+    ${summary.map(s=>`<tr>
       <td><b>${esc(s.branch_name)}</b></td>
       <td class="mono">${s.count}</td>
       <td class="mono" style="color:var(--warn);font-weight:600">${fmt(s.total)}</td>
       <td>${dirChip(s.direction)}</td>
-      <td><a class="lbl" href="/api/reports/wrong-channel.print${pm}&branch_id=${s.branch_id}" target="_blank">🖨️ พิมพ์เฉพาะสาขานี้</a></td></tr>`).join('')}
+      <td><a class="lbl" href="/api/reports/wrong-channel.print?period_month=${MONTH}&branch_id=${s.branch_id}" target="_blank">🖨️ พิมพ์เฉพาะสาขานี้</a></td></tr>`).join('')}
   </table></div>
   <h3 style="font-size:14px;margin:14px 0 6px">แนวทางพัฒนารายสาขา</h3>
-  ${r.summary.map(s=>`<div class="card" style="margin-bottom:10px">
+  ${summary.map(s=>`<div class="card" style="margin-bottom:10px">
     <div class="row" style="margin-bottom:6px">
       <b>${esc(s.branch_name)}</b> ${dirChip(s.direction)}
       <span class="lbl" style="margin-left:auto">🎯 เป้าเดือนหน้า ≤ ${s.target} ครั้ง (เดือนนี้ ${s.count})</span></div>
@@ -451,10 +465,10 @@ async function loadWrongChannel(){
     ${(s.tips||[]).length?`<ul style="margin:2px 0 0;padding-left:18px;font-size:13px;line-height:1.55">
       ${s.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
   </div>`).join('')}
-  <h3 style="font-size:14px;margin:14px 0 6px">รายการทั้งหมด (${r.items.length})</h3>
+  <h3 style="font-size:14px;margin:14px 0 6px">รายการทั้งหมด (${items.length})</h3>
   <div class="card" style="padding:0;overflow-x:auto"><table>
     <tr><th>สาขา</th><th>วันที่</th><th>บันทึกผิดเป็น</th><th>ที่จริงเข้า</th><th>ยอด</th><th style="text-align:left">เหตุผล/หมายเหตุ</th><th>โดย</th></tr>
-    ${r.items.map(it=>{
+    ${items.map(it=>{
       const days=(it.days||[]).map(d=>(+d.slice(8))).join(', ')||'—';
       const toTh=esc(it.to_th)+(it.to_bank_th?` (${esc(it.to_bank_th)})`:'');
       return `<tr>

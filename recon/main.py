@@ -2397,10 +2397,13 @@ def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
             "target": target, "patterns": patterns, "tips": _coaching_tips(cat_pairs)}
 
 
-def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
+def _wrong_channel_report(conn, period_month: str | None = None,
+                          branch_id: int | None = None) -> dict:
     from collections import defaultdict
     items = _wrong_channel_items(conn, period_month)
-    all_items = _wrong_channel_items(conn, None)        # for cross-month trend
+    if branch_id:                                       # optional single-branch filter
+        items = [it for it in items if it["branch_id"] == branch_id]
+    all_items = _wrong_channel_items(conn, None)        # for cross-month trend (per-branch inside)
 
     agg: dict = defaultdict(lambda: {"count": 0, "total": 0.0, "months": set()})
     for it in items:
@@ -2421,22 +2424,22 @@ def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
 
 
 @app.get("/api/reports/wrong-channel")
-def wrong_channel_report(period_month: str | None = None):
+def wrong_channel_report(period_month: str | None = None, branch_id: int | None = None):
     if period_month:
         _validate_period(period_month)
     with get_db() as conn:
-        return _wrong_channel_report(conn, period_month)
+        return _wrong_channel_report(conn, period_month, branch_id)
 
 
 @app.get("/api/reports/wrong-channel.xlsx")
-def wrong_channel_report_xlsx(period_month: str | None = None):
+def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | None = None):
     import io
     import openpyxl
     from openpyxl.styles import Font
     if period_month:
         _validate_period(period_month)
     with get_db() as conn:
-        rep = _wrong_channel_report(conn, period_month)
+        rep = _wrong_channel_report(conn, period_month, branch_id)
     wb = openpyxl.Workbook(); bold = Font(bold=True)
     ws = wb.active; ws.title = "สรุปรายสาขา"
     ws.append(["สาขา", "จำนวนครั้ง", "จำนวนเดือน", "ยอดรวม (บาท)"])
@@ -2458,7 +2461,7 @@ def wrong_channel_report_xlsx(period_month: str | None = None):
     for col, w in zip("ABCDEFGHI", (22, 10, 22, 16, 18, 14, 40, 16, 18)):
         ws2.column_dimensions[col].width = w
     buf = io.BytesIO(); wb.save(buf)
-    fname = f"wrong_channel_{period_month or 'all'}.xlsx"
+    fname = f"wrong_channel_{period_month or 'all'}{('_b'+str(branch_id)) if branch_id else ''}.xlsx"
     return Response(
         content=buf.getvalue(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
