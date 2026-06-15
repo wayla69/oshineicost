@@ -7757,10 +7757,106 @@ def _fetch_market_news():
         return [], "unavailable"
 
 
+_MARKET_QUOTES_CACHE = {"ts": 0.0, "items": None}
+_MARKET_QUOTES_TTL = 30 * 60   # 30 min — intraday but not real-time
+
+def _yahoo_quote(symbol):
+    """(price, prev_close) for a Yahoo Finance symbol via its public chart API,
+    or (None, None) on any failure. Used for live FX / gold / oil quotes."""
+    import urllib.request as _u, json as _j
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
+    req = _u.Request(url, headers={"User-Agent": "Mozilla/5.0 (OshineiDashboard)"})
+    with _u.urlopen(req, timeout=6) as resp:
+        d = _j.loads(resp.read())
+    meta = d["chart"]["result"][0]["meta"]
+    return meta.get("regularMarketPrice"), meta.get("chartPreviousClose")
+
+def _fetch_market_quotes():
+    """Live macro quotes — FX (USD/JPY/RMB vs THB), oil (WTI/Brent) and gold — from
+    Yahoo Finance, cached 30 min. Gives the owner a macro/cost picture: import cost via
+    FX (esp. JPY for Japanese ingredients), energy/transport via oil, inflation via gold.
+    NOTE on source: the owner asked for investing.com, but investing.com has no public
+    API and Cloudflare-blocks datacenter IPs (the Fly host), so a scrape would be fragile
+    and break silently. Yahoo Finance tracks the same global spot rates and is reliable.
+    Each symbol is fetched independently so one hiccup can't blank the whole strip.
+    Never raises; degrades to last-known/empty gracefully. Returns (items, status)."""
+    import time as _t
+    now = _t.time()
+    cache = _MARKET_QUOTES_CACHE
+    if cache["items"] is not None and (now - cache["ts"]) < _MARKET_QUOTES_TTL:
+        return cache["items"], "ok"
+
+    def q(sym, tries=3):
+        # Yahoo occasionally returns an empty/garbled body for a single symbol;
+        # a quick retry almost always succeeds, so the important quotes (USD/THB)
+        # don't silently drop out of the strip.
+        for _ in range(tries):
+            try:
+                r = _yahoo_quote(sym)
+                if r and r[0]:
+                    return r
+            except Exception:
+                pass
+            _t.sleep(0.4)
+        return (None, None)
+
+    usdthb, usdthb_prev = q("THB=X")
+    jpythb, jpythb_prev = q("JPYTHB=X")   # THB per 1 JPY
+    cnythb, cnythb_prev = q("CNYTHB=X")   # THB per 1 CNY (RMB)
+    gold,   gold_prev   = q("GC=F")
+    wti,    wti_prev    = q("CL=F")
+    brent,  brent_prev  = q("BZ=F")
+
+    def chg(p, pv):
+        return round((p - pv) / pv * 100, 1) if (p and pv) else None
+
+    items = []
+    if usdthb:
+        c = chg(usdthb, usdthb_prev)
+        sub = "อัตราแลกเปลี่ยน"
+        if c is not None:
+            sub = "เงินบาทอ่อนค่า — นำเข้าแพงขึ้น" if c > 0 else "เงินบาทแข็งค่า — นำเข้าถูกลง" if c < 0 else "ทรงตัว"
+        items.append({"label": "USD/THB", "value": f"{usdthb:.2f}", "change_pct": c, "sub": sub})
+    if jpythb:
+        c = chg(jpythb, jpythb_prev)   # ratio change is the same whether per-1 or per-100 yen
+        sub = "เยน vs บาท"
+        if c is not None:
+            sub = "เยนแข็ง — วัตถุดิบญี่ปุ่นแพงขึ้น" if c > 0 else "เยนอ่อน — วัตถุดิบญี่ปุ่นถูกลง" if c < 0 else "ทรงตัว"
+        items.append({"label": "JPY/THB (100¥)", "value": f"{jpythb * 100:.2f}", "change_pct": c, "sub": sub})
+    if cnythb:
+        c = chg(cnythb, cnythb_prev)
+        items.append({"label": "CNY/THB (หยวน)", "value": f"{cnythb:.2f}", "change_pct": c, "sub": "หยวน vs บาท · นักท่องเที่ยว/นำเข้าจีน"})
+    if gold:
+        c = chg(gold, gold_prev)
+        thb_baht = gold * usdthb * (15.244 / 31.1035) if usdthb else None   # THB per 1 baht-weight
+        items.append({"label": "ทองคำ (Gold)", "value": f"${gold:,.0f}/oz", "change_pct": c,
+                      "sub": f"~฿{thb_baht:,.0f}/บาททอง" if thb_baht else "ราคาทองโลก · เครื่องชี้เงินเฟ้อ"})
+    if wti:
+        c = chg(wti, wti_prev)
+        items.append({"label": "น้ำมัน WTI", "value": f"${wti:.1f}/บาร์เรล", "change_pct": c,
+                      "sub": "ต้นทุนพลังงาน/ขนส่ง"})
+    if brent:
+        c = chg(brent, brent_prev)
+        items.append({"label": "น้ำมัน Brent", "value": f"${brent:.1f}/บาร์เรล", "change_pct": c,
+                      "sub": "อ้างอิงราคาน้ำมันโลก"})
+    # Only cache a set that has the USD/THB anchor — never let a partial fetch
+    # (e.g. a Yahoo hiccup that dropped the key quotes) overwrite a good cache.
+    if items and usdthb:
+        cache["items"] = items
+        cache["ts"] = now
+        return items, "ok"
+    if cache["items"]:
+        return cache["items"], "stale"
+    if items:
+        return items, "ok"          # first run, partial — better than nothing
+    return [], "unavailable"
+
+
 @app.get("/api/market")
 def api_market():
-    """Curated market/industry context + a live (server-fetched) news strip."""
+    """Curated market/industry context + live (server-fetched) news + macro quotes."""
     news, status = _fetch_market_news()
+    quotes, qstatus = _fetch_market_quotes()
     return {
         "as_of": MARKET_AS_OF,
         "macro": MARKET_MACRO,
@@ -7769,6 +7865,8 @@ def api_market():
         "sources": MARKET_SOURCES,
         "news": news,
         "news_status": status,
+        "quotes": quotes,
+        "quotes_status": qstatus,
     }
 
 
@@ -11363,6 +11461,227 @@ def home_brief(branch: Optional[str] = Query(None)):
         "food_cost_pct_mtd": food_cost_pct_mtd,
         "mtd_bom_cost": mtd_bom_cost,
     }
+
+
+# ---------------------------------------------------------------------------
+# /api/home/leak-watch  — daily money-leak radar for the Daily Brief
+# ---------------------------------------------------------------------------
+@app.get("/api/home/leak-watch")
+def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                    group: Optional[str] = Query(None)):
+    """One focus day's money-leak signals (default = latest day) for the Daily Brief:
+      · heavy_discount — bills discounted >=30% of the (reconstructed) pre-discount base, incl. free bills
+      · cash_heavy     — the subset paid mostly in CASH (the classic skim flag — no card/transfer trail)
+      · reprinted      — discounted bills printed more than once (re-print abuse)
+      · zero_gross     — discount-only / zeroed bills (gross <= 0)
+    All from sales_transaction at date grain. Void/cancelled bills live in pos_cancel_bill
+    (month-grain only) and are intentionally not folded in here."""
+    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    with get_db() as con:
+        maxd = con.execute(
+            "SELECT DATE(MAX(sold_at)) FROM sales_transaction WHERE source='Easy'"
+        ).fetchone()[0]
+        if not maxd:
+            return {"date": None}
+        focus = (date or maxd)[:10]
+        bf = ""; p: dict = {"focus": focus}
+        if branch:
+            bf += " AND b.name=:branch"; p["branch"] = branch
+        if group:
+            bf += " AND COALESCE(b.branch_type,'master')=:grp"; p["grp"] = group
+        where = f"WHERE DATE(st.sold_at)=:focus AND st.source='Easy' AND b.name!='ALL'{bf}"
+        heavy = con.execute(f"""
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} AND st.discount>0 AND {base}>0 AND st.discount*1.0/{base} >= 0.30
+            GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
+        dom_cte = """WITH dom AS (
+            SELECT branch_id, receipt_no,
+                   CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END AS code,
+                   ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
+            FROM sale_payment)"""
+        cash_heavy = con.execute(f"""{dom_cte}
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
+            {where} AND d.code='Cash' AND st.discount>0 AND {base}>0 AND st.discount*1.0/{base} >= 0.30
+            GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
+        reprint = con.execute(f"""
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} AND st.discount>0 AND COALESCE(st.print_times,0)>1
+            GROUP BY b.name ORDER BY bills DESC""", p).fetchall()
+        zero = con.execute(f"""
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} AND st.discount>0 AND {base} <= 0
+            GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
+
+    def pack(rows):
+        L = [dict(r) for r in rows]
+        return {"bills": sum(r["bills"] for r in L),
+                "baht": sum(r["baht"] or 0 for r in L),
+                "by_branch": L}
+    return {"date": focus, "heavy_discount": pack(heavy), "cash_heavy": pack(cash_heavy),
+            "reprinted": pack(reprint), "zero_gross": pack(zero)}
+
+
+# ---------------------------------------------------------------------------
+# /api/home/menu-movers  — yesterday's biggest menu movers UP and DOWN (by impact)
+# ---------------------------------------------------------------------------
+@app.get("/api/home/menu-movers")
+def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                     group: Optional[str] = Query(None), limit: int = Query(6, ge=1, le=30),
+                     min_ph: float = Query(0.5, ge=0.0), min_qty: int = Query(10, ge=1)):
+    """Biggest menu movers UP and DOWN on one day, measured PER HEAD (plates per 100
+    customers) vs the trailing 21-day average — owner wants per-head, not totals, because it
+    strips out the traffic confound: +plates can just mean +customers, but a per-head rise
+    means each customer genuinely chose it more. Ranked by absolute per-100-head change.
+    A mover must clear ALL of: min_qty plates today (real presence), a meaningful ratio
+    (>=1.5x up / <=0.5x down), and min_ph plates/100-head of swing (impact floor — keeps a
+    slow/busy day from reading every menu as a mover, and big-%/no-impact items out).
+    Qty only from sales_sku_daily; customers from sales_transaction (no cost — iron rule)."""
+    import datetime as _dt
+    with get_db() as con:
+        maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        if not maxd:
+            return {"date": None, "up": [], "down": []}
+        focus = (date or maxd)[:10]
+        fy, fm, fd = (int(x) for x in focus.split("-"))
+        ws = (_dt.date(fy, fm, fd) - _dt.timedelta(days=21)).isoformat()
+        bf = ""; p: dict = {"focus": focus, "ws": ws}
+        if branch:
+            bf += " AND b.name=:branch"; p["branch"] = branch
+        if group:
+            bf += " AND COALESCE(b.branch_type,'master')=:grp"; p["grp"] = group
+        # customers per day in scope — the denominator for per-head
+        today_c_row = con.execute(f"""
+            SELECT SUM(st.customer_count) c
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE st.source='Easy' AND b.name!='ALL' AND DATE(st.sold_at)=:focus {bf}""", p).fetchone()
+        today_c = (today_c_row["c"] if today_c_row else 0) or 0
+        if not today_c:
+            return {"date": focus, "up": [], "down": [], "today_customers": 0}
+        p["tc"] = today_c
+        rows = con.execute(f"""
+            WITH cust AS (
+              SELECT DATE(st.sold_at) day, SUM(st.customer_count) c
+              FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+              WHERE st.source='Easy' AND b.name!='ALL'
+                AND DATE(st.sold_at)>=:ws AND DATE(st.sold_at)<:focus {bf}
+              GROUP BY day),
+            food AS (
+              SELECT sk.sku_id FROM skus sk
+              JOIN categories c ON c.category_id=sk.category_id
+              WHERE {_FOOD_CATEGORY_FILTER}),
+            today AS (
+              SELECT d.sku_id, SUM(d.qty) q, SUM(d.subtotal_ex_vat) rev
+              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              WHERE d.day=:focus {bf} GROUP BY d.sku_id),
+            histday AS (
+              SELECT d.day, d.sku_id, SUM(d.qty) daily, SUM(d.subtotal_ex_vat) drev
+              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              WHERE d.day>=:ws AND d.day<:focus {bf}
+              GROUP BY d.day, d.sku_id),
+            hist AS (
+              SELECT hd.sku_id, AVG(hd.daily * 1.0 / cust.c) avg_ph, AVG(hd.drev) avg_rev, COUNT(*) n
+              FROM histday hd JOIN cust ON cust.day=hd.day
+              WHERE cust.c > 0
+              GROUP BY hd.sku_id)
+            SELECT s.description, s.sku_code,
+                   COALESCE(t.q,0) today, COALESCE(h.avg_ph,0) avg_ph, COALESCE(h.n,0) n,
+                   COALESCE(t.rev,0) rev_today, COALESCE(h.avg_rev,0) rev_avg
+            FROM hist h
+            LEFT JOIN today t ON t.sku_id=h.sku_id
+            JOIN skus s ON s.sku_id=h.sku_id
+            WHERE h.n >= 10 AND h.sku_id IN (SELECT sku_id FROM food)
+            UNION
+            SELECT s.description, s.sku_code, t.q today, 0 avg_ph, 0 n,
+                   t.rev rev_today, 0 rev_avg
+            FROM today t JOIN skus s ON s.sku_id=t.sku_id
+            WHERE t.sku_id NOT IN (SELECT sku_id FROM hist WHERE n >= 10)
+              AND t.sku_id IN (SELECT sku_id FROM food)
+        """, p).fetchall()
+        # total food revenue in scope today — denominator for the movers' revenue share
+        frow = con.execute(f"""
+            SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            WHERE d.day=:focus {bf}
+              AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
+                               JOIN categories c ON c.category_id=sk.category_id
+                               WHERE {_FOOD_CATEGORY_FILTER})""", p).fetchone()
+        today_food_rev = (frow["rev"] if frow else 0) or 0
+        # Buffet PACKAGE sales (the real revenue driver for buffet dishes, which carry
+        # no line revenue): covers + revenue + avg price/cover, focus day vs trailing avg.
+        bp = con.execute(f"""
+            SELECT COALESCE(SUM(CASE WHEN d.day=:focus THEN d.subtotal_ex_vat END),0) rev_t,
+                   COALESCE(SUM(CASE WHEN d.day=:focus THEN d.qty END),0) cov_t,
+                   COALESCE(SUM(CASE WHEN d.day<:focus THEN d.subtotal_ex_vat END),0) rev_h,
+                   COALESCE(SUM(CASE WHEN d.day<:focus THEN d.qty END),0) cov_h,
+                   COUNT(DISTINCT CASE WHEN d.day<:focus THEN d.day END) hdays
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id JOIN skus s ON s.sku_id=d.sku_id
+            WHERE d.day>=:ws AND d.day<=:focus AND s.sku_code LIKE 'BUFFET%' {bf}""", p).fetchone()
+        hd = (bp["hdays"] or 1) if bp else 1
+        buf = {
+            "rev_today": round(bp["rev_t"]), "rev_avg": round(bp["rev_h"] / hd),
+            "covers_today": round(bp["cov_t"]), "covers_avg": round(bp["cov_h"] / hd),
+            "ppc_today": round(bp["rev_t"] / bp["cov_t"]) if bp["cov_t"] else 0,
+            "ppc_avg": round(bp["rev_h"] / bp["cov_h"]) if bp["cov_h"] else 0,
+        } if bp else None
+        # à-la-carte food revenue trailing daily average (today = today_food_rev)
+        af = con.execute(f"""
+            SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev, COUNT(DISTINCT d.day) hdays
+            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            WHERE d.day>=:ws AND d.day<:focus {bf}
+              AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
+                               JOIN categories c ON c.category_id=sk.category_id
+                               WHERE {_FOOD_CATEGORY_FILTER})""", p).fetchone()
+        ala_avg = round((af["rev"] or 0) / (af["hdays"] or 1)) if af else 0
+    up, down = [], []
+    for r in rows:
+        today = r["today"] or 0
+        avg_ph = r["avg_ph"] or 0          # avg plates per customer (trailing)
+        n = r["n"] or 0
+        name = (r["description"] or r["sku_code"] or "").replace("(B) ", "").replace("(A) ", "")
+        today_ph = today / today_c
+        ph100 = round(today_ph * 100, 2)   # plates per 100 customers today
+        rev_today = round(r["rev_today"] or 0)                 # this menu's revenue today
+        rev_delta = round((r["rev_today"] or 0) - (r["rev_avg"] or 0))  # vs trailing avg day
+        if n < 10:
+            # new / no-history item: only an UP mover, and only if it has real presence
+            if today >= max(min_qty, 20):
+                up.append({"menu": name, "today": round(today), "ph100": ph100, "avg_ph100": 0,
+                           "delta_ph100": ph100, "pct": None, "is_new": True,
+                           "rev_today": rev_today, "rev_delta": rev_today})
+            continue
+        if avg_ph <= 0 or today < min_qty:
+            continue
+        ratio = today_ph / avg_ph
+        delta100 = (today_ph - avg_ph) * 100      # per-100-head swing (the impact metric)
+        if delta100 >= min_ph and ratio >= 1.5:
+            up.append({"menu": name, "today": round(today), "ph100": ph100,
+                       "avg_ph100": round(avg_ph * 100, 2), "delta_ph100": round(delta100, 2),
+                       "pct": round((ratio - 1) * 100), "is_new": False,
+                       "rev_today": rev_today, "rev_delta": rev_delta})
+        elif delta100 <= -min_ph and ratio <= 0.5:
+            down.append({"menu": name, "today": round(today), "ph100": ph100,
+                         "avg_ph100": round(avg_ph * 100, 2), "delta_ph100": round(delta100, 2),
+                         "pct": round((ratio - 1) * 100), "is_new": False,
+                         "rev_today": rev_today, "rev_delta": rev_delta})
+    up.sort(key=lambda s: -s["delta_ph100"])
+    down.sort(key=lambda s: s["delta_ph100"])
+    up_lim, down_lim = up[:limit], down[:limit]
+    # Revenue relationship: how the displayed menu-mix shift moved food revenue.
+    rev_up = round(sum(x["rev_delta"] for x in up_lim))      # extra ฿ from rising menus
+    rev_down = round(sum(x["rev_delta"] for x in down_lim))  # ฿ lost from falling menus (<=0)
+    top_gain = max(up_lim, key=lambda s: s["rev_delta"], default=None)
+    top_loss = min(down_lim, key=lambda s: s["rev_delta"], default=None)
+    return {"date": focus, "window_days": 21, "min_ph": min_ph, "today_customers": today_c,
+            "up": up_lim, "down": down_lim,
+            "today_food_rev": round(today_food_rev),
+            "rev_up_delta": rev_up, "rev_down_delta": rev_down, "rev_net_delta": rev_up + rev_down,
+            "top_gain": top_gain, "top_loss": top_loss,
+            "sales": {"buffet": buf, "alacarte_today": round(today_food_rev), "alacarte_avg": ala_avg}}
 
 
 # ---------------------------------------------------------------------------
