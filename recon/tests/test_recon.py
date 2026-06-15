@@ -501,8 +501,14 @@ def test_wrong_channel_report(client):
     assert it["from_th"] == "QR พร้อมเพย์" and it["to_th"] == "เงินโอน"
     assert it["amount"] == 5000 and it["days"] == ["2026-06-10"]
     assert it["by"] == "ผู้จัดการ"
-    # Excel + printable acknowledgment sheet both render
+    # branch filter: matching branch keeps the item, a different branch returns none
+    f4 = client.get("/api/reports/wrong-channel?period_month=2026-06&branch_id=4").json()
+    assert f4["total_count"] == 1 and f4["summary"][0]["branch_id"] == 4
+    f9 = client.get("/api/reports/wrong-channel?period_month=2026-06&branch_id=999").json()
+    assert f9["total_count"] == 0 and f9["summary"] == []
+    # Excel + printable acknowledgment sheet both render (+ filtered xlsx)
     assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06").status_code == 200
+    assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06&branch_id=4").status_code == 200
     pr = client.get("/api/reports/wrong-channel.print?period_month=2026-06")
     assert pr.status_code == 200 and "รับทราบ" in pr.text and "เงินโอน" in pr.text
     # self-improvement coaching sections: trend, confusion patterns, tips
@@ -556,8 +562,11 @@ def test_monthly_matching_report(client):
     assert "รายงานการจับคู่รายวัน" in r.text
     assert "QR พร้อมเพย์" in r.text and "สถานะการจับคู่" in r.text
     assert "ตรง" in r.text                       # the matched QR lane shows ✓ ตรง
-    # all-branches manager pack
-    assert client.get("/api/monthly-report?period_month=2026-06").status_code == 200
+    # all-branches manager pack = the 5 master branches only (franchise excluded)
+    pack = client.get("/api/monthly-report?period_month=2026-06")
+    assert pack.status_code == 200
+    assert "Korat1" in pack.text and "อุดรธานี" in pack.text     # master branches present
+    assert "Chonburi" not in pack.text                            # franchise branch excluded
     # validation
     assert client.get("/api/monthly-report?period_month=2026-13").status_code == 400
 
