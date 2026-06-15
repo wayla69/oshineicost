@@ -2288,8 +2288,8 @@ def _real_channel_of_match(conn, match_id: int) -> str | None:
     return max(cats, key=cats.get) if cats else None
 
 
-def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
-    from collections import defaultdict
+def _wrong_channel_items(conn, period_month: str | None = None) -> list[dict]:
+    """Confirmed wrong-channel mis-entries (true cross-channel manual matches)."""
     q = ("SELECT match_id, branch_id, category, bank, period_month, pos_amount, "
          "ext_amount, pos_days, note, matched_by, matched_at FROM recon_manual_match")
     params: list = []
@@ -2297,13 +2297,11 @@ def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
         q += " WHERE period_month=?"; params.append(period_month)
     rows = conn.execute(q + " ORDER BY branch_id, matched_at", params).fetchall()
     bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
-
     items = []
     for m in rows:
         to_cat = _real_channel_of_match(conn, m["match_id"])
         from_cat = m["category"]
-        # only true mis-entries: money landed in a DIFFERENT channel than it was rung
-        if not to_cat or to_cat == from_cat:
+        if not to_cat or to_cat == from_cat:        # only true cross-channel mis-entries
             continue
         try:
             days = sorted({d.get("day") for d in json.loads(m["pos_days"] or "[]") if d.get("day")})
@@ -2324,16 +2322,96 @@ def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
             "by":           m["matched_by"] or "",
             "at":           m["matched_at"] or "",
         })
+    return items
+
+
+# Concrete coaching guidance per (rung-as → really-was) channel confusion. Plain Thai,
+# phrased as "what to do next time", so the sheet helps the branch improve — not blame.
+_TIP_BY_PAIR = {
+    ("CASH", "QR"):       "ลูกค้าสแกนจ่าย QR แต่ถูกกดเป็นเงินสด — เวลารับ QR ให้กดปุ่ม “QR พร้อมเพย์” และดูยอดเด้งบนแอป/สลิปให้ตรงก่อนกดยืนยัน",
+    ("QR", "CASH"):       "เงินสดถูกกดเป็น QR — รับเงินสดให้กดปุ่ม “เงินสด” ทุกครั้ง อย่ากดค้างจากบิลก่อน",
+    ("CASH", "TRANSFER"): "เงินโอนเข้าบัญชีถูกกดเป็นเงินสด — ถ้าลูกค้าโอน ให้กดปุ่ม “เงินโอน” และยืนยันยอดเข้าบัญชีก่อนส่งของ",
+    ("TRANSFER", "CASH"): "เงินสดถูกกดเป็นเงินโอน — รับเงินสดให้กดปุ่ม “เงินสด”",
+    ("QR", "TRANSFER"):   "QR กับเงินโอนสลับกัน — QR = สแกนคิวอาร์, เงินโอน = โอนเข้าเลขบัญชี เลือกปุ่มให้ตรงวิธีจ่ายจริง",
+    ("TRANSFER", "QR"):   "เงินโอนกับ QR สลับกัน — ตรวจว่าลูกค้าสแกน QR หรือโอนเข้าบัญชี แล้วเลือกปุ่มให้ตรง",
+    ("CASH", "CREDIT"):   "ยอดรูดบัตรถูกกดเป็นเงินสด — รูดบัตรให้กดปุ่ม “บัตรเครดิต”",
+    ("CREDIT", "CASH"):   "เงินสดถูกกดเป็นบัตรเครดิต — รับเงินสดให้กดปุ่ม “เงินสด”",
+}
+
+
+def _coaching_tips(cat_pairs) -> list[str]:
+    """One concrete tip per confusion pattern (most frequent first) + a closing habit."""
+    tips, seen = [], set()
+    for (fr, to), _n in cat_pairs.most_common():
+        t = _TIP_BY_PAIR.get((fr, to)) or (
+            f"ช่องทาง {_CH_LABEL.get(fr, fr)} → {_CH_LABEL.get(to, to)}: "
+            "ก่อนกดยืนยันรับเงิน ตรวจว่าวิธีจ่ายของลูกค้าตรงกับปุ่มที่กด")
+        if t not in seen:
+            seen.add(t); tips.append(t)
+    tips.append("ทุกสิ้นวัน ตรวจยอดแต่ละช่องทางใน POS เทียบกับเงินเข้าจริงก่อนปิดยอด — จับผิดได้ตั้งแต่วันนั้น")
+    return tips
+
+
+def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
+                                 all_items: list | None = None) -> dict:
+    """Self-improvement metrics for one branch: monthly trend, next-month target,
+    confusion patterns, and coaching tips."""
+    from collections import defaultdict, Counter
+    if all_items is None:
+        all_items = _wrong_channel_items(conn, None)
+    mine = [it for it in all_items if it["branch_id"] == branch_id]
+
+    by_m: dict = defaultdict(lambda: {"count": 0, "amount": 0.0})
+    for it in mine:
+        g = by_m[it["period_month"]]; g["count"] += 1; g["amount"] += it["amount"]
+    months = sorted(by_m)
+    if period_month:
+        months = [m for m in months if m <= period_month]
+    trend = [{"month": m, "count": by_m[m]["count"], "amount": round(by_m[m]["amount"], 2)}
+             for m in months[-6:]]
+
+    scope = [it for it in mine if (not period_month or it["period_month"] == period_month)]
+    pat: dict = defaultdict(lambda: {"count": 0, "amount": 0.0})
+    for it in scope:
+        g = pat[(it["from_th"], it["to_th"])]; g["count"] += 1; g["amount"] += it["amount"]
+    patterns = sorted(
+        [{"from_th": k[0], "to_th": k[1], "count": v["count"], "amount": round(v["amount"], 2)}
+         for k, v in pat.items()], key=lambda x: (-x["count"], -x["amount"]))
+    cat_pairs = Counter((it["from_cat"], it["to_cat"]) for it in scope)
+
+    cur = len(scope)
+    prev = trend[-2]["count"] if len(trend) >= 2 and trend[-1]["month"] == period_month else None
+    if prev is None:
+        direction = "flat"
+    elif cur < prev:
+        direction = "down"          # ดีขึ้น (น้อยลง)
+    elif cur > prev:
+        direction = "up"            # แย่ลง
+    else:
+        direction = "flat"
+    target = max(0, cur // 2)       # ตั้งเป้าลดลงราวครึ่งหนึ่งของเดือนนี้
+    return {"trend": trend, "current": cur, "prev": prev, "direction": direction,
+            "target": target, "patterns": patterns, "tips": _coaching_tips(cat_pairs)}
+
+
+def _wrong_channel_report(conn, period_month: str | None = None) -> dict:
+    from collections import defaultdict
+    items = _wrong_channel_items(conn, period_month)
+    all_items = _wrong_channel_items(conn, None)        # for cross-month trend
 
     agg: dict = defaultdict(lambda: {"count": 0, "total": 0.0, "months": set()})
     for it in items:
         g = agg[(it["branch_id"], it["branch_name"])]
         g["count"] += 1; g["total"] += it["amount"]; g["months"].add(it["period_month"])
-    summary = sorted(
-        [{"branch_id": bid, "branch_name": bn, "count": v["count"],
-          "months": len(v["months"]), "total": round(v["total"], 2)}
-         for (bid, bn), v in agg.items()],
-        key=lambda x: -x["total"])
+    summary = []
+    for (bid, bn), v in agg.items():
+        detail = _wrong_channel_branch_detail(conn, bid, period_month, all_items)
+        summary.append({"branch_id": bid, "branch_name": bn, "count": v["count"],
+                        "months": len(v["months"]), "total": round(v["total"], 2),
+                        "trend": detail["trend"], "direction": detail["direction"],
+                        "target": detail["target"], "patterns": detail["patterns"],
+                        "tips": detail["tips"]})
+    summary.sort(key=lambda x: -x["total"])
     return {"period_month": period_month, "summary": summary, "items": items,
             "total_count": len(items),
             "total_amount": round(sum(it["amount"] for it in items), 2)}
@@ -2405,12 +2483,22 @@ def wrong_channel_report_print(period_month: str | None = None,
     bids = [b for b in order if b in by_branch] or list(by_branch)
 
     import html as _html
+    _TH_MO = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+              "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
 
     def _m(v):
         return f"{float(v or 0):,.0f}"
 
     def _esc(s):
         return _html.escape(str(s or ""))
+
+    def _mth(ym):
+        try:
+            y, mo = ym.split("-"); return f"{_TH_MO[int(mo)]} {(int(y) + 543) % 100:02d}"
+        except Exception:
+            return ym
+
+    detail_by = {s["branch_id"]: s for s in rep["summary"]}
 
     css = """<style>
       @page{size:A4;margin:14mm}
@@ -2424,6 +2512,16 @@ def wrong_channel_report_print(period_month: str | None = None,
       th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0}
       tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
       .arr{color:#ea580c;font-weight:700} .amt{font-weight:600}
+      .pill{display:inline-block;padding:1px 9px;border-radius:99px;font-size:11px;font-weight:600}
+      .p-ok{background:#dcfce7;color:#166534}.p-up{background:#fee2e2;color:#b91c1c}.p-flat{background:#f1f5f9;color:#475569}
+      .trend{display:flex;gap:6px;align-items:flex-end;margin:8px 0 4px;height:64px}
+      .tb{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;font-size:10px;color:#64748b}
+      .tb .bar{width:60%;min-height:3px;background:#fdba74;border-radius:3px 3px 0 0}
+      .tb.cur .bar{background:#ea580c}
+      .target{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 13px;margin:6px 0;font-size:12px}
+      .tips{margin:6px 0 2px;padding-left:0;list-style:none}
+      .tips li{position:relative;padding:5px 0 5px 24px;font-size:12px;line-height:1.5;border-bottom:1px dashed #eef2f7}
+      .tips li::before{content:'💡';position:absolute;left:0;top:4px}
       .ack{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:12px;line-height:1.6}
       .sign{display:flex;gap:40px;margin-top:30px} .sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       .toolbar{max-width:900px;margin:0 auto 14px;text-align:right}
@@ -2465,6 +2563,48 @@ def wrong_channel_report_print(period_month: str | None = None,
                 f"<td class='muted'>{_esc(r['by'] or '—')}<br>{_esc((r['at'] or '')[:16])}</td></tr>")
         parts.append(f"</tbody><tfoot><tr><td colspan='3'>รวม</td>"
                      f"<td class='right mono'>{_m(tot)}</td><td colspan='2'></td></tr></tfoot></table>")
+
+        det = detail_by.get(bid, {})
+        # ① แนวโน้มรายเดือน + เป้าหมาย
+        trend = det.get("trend") or []
+        if trend:
+            mx = max((t["count"] for t in trend), default=0) or 1
+            dirn = det.get("direction", "flat")
+            badge = ({"down": ("p-ok", "✓ ดีขึ้น (ผิดน้อยลง)"),
+                      "up": ("p-up", "▲ ผิดมากขึ้น — ต้องระวัง"),
+                      "flat": ("p-flat", "— ทรงตัว")}).get(dirn, ("p-flat", "—"))
+            parts.append(f"<h2>① แนวโน้มการกดผิดช่อง <span class='pill {badge[0]}'>{badge[1]}</span></h2>")
+            parts.append("<div class='trend'>")
+            for t in trend:
+                cur = "cur" if t["month"] == period_month else ""
+                h = int(8 + 52 * t["count"] / mx)
+                parts.append(f"<div class='tb {cur}'><b>{t['count']}</b>"
+                             f"<div class='bar' style='height:{h}px'></div>{_esc(_mth(t['month']))}</div>")
+            parts.append("</div>")
+            tg = det.get("target", 0)
+            parts.append(f"<div class='target'>🎯 <b>เป้าหมายเดือนถัดไป: ไม่เกิน {tg} ครั้ง</b> "
+                         f"(เดือนนี้ {det.get('current', len(rows))} ครั้ง) — "
+                         "ตั้งเป้าลดลงครึ่งหนึ่ง โดยตรวจปุ่มรับเงินให้ตรงทุกบิล</div>")
+        # ② ช่องที่สับสนบ่อย
+        patterns = det.get("patterns") or []
+        if patterns:
+            parts.append("<h2>② ช่องทางที่สับสนบ่อย (จุดที่ต้องระวัง)</h2>")
+            parts.append("<table><thead><tr><th>กดผิดเป็น</th><th>ที่จริงคือ</th>"
+                         "<th class='right'>จำนวนครั้ง</th><th class='right'>ยอดรวม</th></tr></thead><tbody>")
+            for p in patterns:
+                parts.append(f"<tr><td>{_esc(p['from_th'])}</td>"
+                             f"<td><span class='arr'>→</span> {_esc(p['to_th'])}</td>"
+                             f"<td class='right mono amt'>{p['count']}</td>"
+                             f"<td class='right mono'>{_m(p['amount'])}</td></tr>")
+            parts.append("</tbody></table>")
+        # ③ คำแนะนำสำหรับสาขา (โค้ช)
+        tips = det.get("tips") or []
+        if tips:
+            parts.append("<h2>③ คำแนะนำเพื่อพัฒนา</h2><ul class='tips'>")
+            for t in tips:
+                parts.append(f"<li>{_esc(t)}</li>")
+            parts.append("</ul>")
+
         parts.append(
             "<div class='ack'>ข้าพเจ้าในนามสาขา <b>รับทราบ</b> ว่ารายการข้างต้นเกิดจากการบันทึก"
             "ช่องทางการรับเงินผิดในเครื่อง POS และ <b>รับว่าจะแก้ไข</b>ขั้นตอนการกดรับเงินให้ถูกต้อง "

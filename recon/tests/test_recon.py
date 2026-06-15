@@ -505,6 +505,12 @@ def test_wrong_channel_report(client):
     assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06").status_code == 200
     pr = client.get("/api/reports/wrong-channel.print?period_month=2026-06")
     assert pr.status_code == 200 and "รับทราบ" in pr.text and "เงินโอน" in pr.text
+    # self-improvement coaching sections: trend, confusion patterns, tips
+    s0 = rep["summary"][0]
+    assert s0["direction"] in ("up", "down", "flat") and "target" in s0
+    assert s0["patterns"] and s0["patterns"][0]["from_th"] == "QR พร้อมเพย์"
+    assert s0["tips"], "each branch gets at least one coaching tip"
+    assert "แนวโน้ม" in pr.text and "คำแนะนำ" in pr.text and "เป้าหมาย" in pr.text
 
 
 def test_statement_code_dictionary(client):

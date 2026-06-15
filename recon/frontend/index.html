@@ -409,14 +409,29 @@ async function loadWrongChannel(){
     <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">฿${fmt(r.total_amount)}</div></div>
     <div><div class="lbl">สาขาที่เกี่ยวข้อง</div><div style="font-size:20px;font-weight:700">${r.summary.length}</div></div>
   </div>`;
+  const dirChip=d=>d==='down'?'<span class="chip c-ok ov-mini">✓ ดีขึ้น</span>'
+    :d==='up'?'<span class="chip c-warn ov-mini">▲ ผิดมากขึ้น</span>'
+    :'<span class="chip c-mut ov-mini">— ทรงตัว</span>';
   html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
-    <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>ยอดรวม</th><th>ใบเซ็นรับทราบ</th></tr>
+    <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>ยอดรวม</th><th>แนวโน้ม</th><th>ใบเซ็นรับทราบ</th></tr>
     ${r.summary.map(s=>`<tr>
       <td><b>${esc(s.branch_name)}</b></td>
       <td class="mono">${s.count}</td>
       <td class="mono" style="color:var(--warn);font-weight:600">${fmt(s.total)}</td>
+      <td>${dirChip(s.direction)}</td>
       <td><a class="lbl" href="/api/reports/wrong-channel.print${pm}&branch_id=${s.branch_id}" target="_blank">🖨️ พิมพ์เฉพาะสาขานี้</a></td></tr>`).join('')}
   </table></div>
+  <h3 style="font-size:14px;margin:14px 0 6px">แนวทางพัฒนารายสาขา</h3>
+  ${r.summary.map(s=>`<div class="card" style="margin-bottom:10px">
+    <div class="row" style="margin-bottom:6px">
+      <b>${esc(s.branch_name)}</b> ${dirChip(s.direction)}
+      <span class="lbl" style="margin-left:auto">🎯 เป้าเดือนหน้า ≤ ${s.target} ครั้ง (เดือนนี้ ${s.count})</span></div>
+    ${(s.patterns||[]).length?`<div class="lbl" style="margin-bottom:3px">ช่องที่สับสนบ่อย:</div>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-bottom:7px">
+      ${s.patterns.map(p=>`<span class="chip c-warn ov-mini">${esc(p.from_th)} → ${esc(p.to_th)} · ${p.count} ครั้ง</span>`).join('')}</div>`:''}
+    ${(s.tips||[]).length?`<ul style="margin:2px 0 0;padding-left:18px;font-size:13px;line-height:1.55">
+      ${s.tips.map(t=>`<li>${esc(t)}</li>`).join('')}</ul>`:''}
+  </div>`).join('')}
   <h3 style="font-size:14px;margin:14px 0 6px">รายการทั้งหมด (${r.items.length})</h3>
   <div class="card" style="padding:0;overflow-x:auto"><table>
     <tr><th>สาขา</th><th>วันที่</th><th>บันทึกผิดเป็น</th><th>ที่จริงเข้า</th><th>ยอด</th><th style="text-align:left">เหตุผล/หมายเหตุ</th><th>โดย</th></tr>
