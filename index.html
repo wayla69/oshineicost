@@ -6862,12 +6862,6 @@ function colorForHour(h) {
   if (h >= 17 && h <= 21) return SEMANTIC.dinner;
   return SEMANTIC.late;
 }
-function colorForDow(label) {
-  return /sat|sun/i.test(label) ? SEMANTIC.discount : SEMANTIC.revenue;
-}
-function colorForBranchGroup(type) {
-  return type === 'franchise' ? SEMANTIC.franchise : SEMANTIC.master;
-}
 // Rank-tier colors (top tier emerald → middle indigo → bottom amber)
 function colorForRank(idx, total) {
   const t = idx / Math.max(1, total - 1);
@@ -7866,143 +7860,8 @@ function renderTimeHeatmap(hourly) {
     </div>`).join('');
 }
 
-async function loadBranchCompare() {
-  loadHealthScores();  // also load branch health alongside
-  const url = `${API}/api/analysis/branches${qp()}`;
-  const data = await fetch(url).then(r => r.json());
-  if (!data.length) return;
 
-  const maxRev = Math.max(...data.map(d => d.revenue), 1);
-  document.getElementById('branchCards').innerHTML = data.map((b, i) => {
-    const c = colorForRank(i, data.length);
-    return `
-    <div class="card p-4" style="border-left:4px solid ${c}">
-      <p class="text-xs font-semibold text-slate-500 mb-1">${esc(b.branch)}</p>
-      <p class="text-xl font-bold" style="color:${c}">${fmt(b.revenue)}</p>
-      <div class="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-        <div class="h-full rounded-full transition-all" style="width:${(b.revenue/maxRev*100).toFixed(1)}%;background:${c}"></div>
-      </div>
-      <div class="mt-2 grid grid-cols-2 gap-x-2 text-xs text-slate-500">
-        <span>${fmtN(b.tx_count)} tx</span>
-        <span>${fmtN(b.avg_ticket)} avg</span>
-        <span>${fmtN(b.customer_count)} cust</span>
-        <span class="${b.discount_rate > 12 ? 'text-red-500 font-semibold' : ''}">${fmtP(b.discount_rate)} disc</span>
-      </div>
-    </div>`;
-  }).join('');
 
-  mkChart('chartBranchCompare', {
-    type: 'bar',
-    data: {
-      labels: data.map(d => d.branch),
-      datasets: [{
-        label: 'รายได้', data: data.map(d => d.revenue),
-        backgroundColor: data.map(d => colorForBranch(d.branch)), borderRadius: 6,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false }, datalabels: { display: false },
-        tooltip: { callbacks: { label: ctx => ` ${fmtN(ctx.raw)} · click to dive in` } } },
-      scales: {
-        x: { grid: { display: false }, ticks: { color: '#64748b', font: { size: 11 } } },
-        y: { grid: { color: '#f1f5f9' }, ticks: { color: '#94a3b8', font: { size: 10 }, callback: v => fmt(v) } },
-      },
-    },
-  });
-}
-
-async function loadCashiers() {
-  const data = await fetch(`${API}/api/analysis/cashiers${qp({limit:30})}`).then(r => r.json());
-  if (!data.length) return;
-
-  document.getElementById('cashierPodium').innerHTML = data.slice(0,3).map((c, i) => `
-    <div class="card p-4 text-center" style="border-left:4px solid ${['#f59e0b','#94a3b8','#cd7f32'][i]}">
-      <div class="text-2xl mb-1">${['🥇','🥈','🥉'][i]}</div>
-      <p class="font-semibold text-slate-700 text-sm truncate">${esc(c.cashier)}</p>
-      <p class="text-xl font-bold text-indigo-700 mt-1">${fmt(c.revenue)}</p>
-      <p class="text-xs text-slate-500 mt-1">${fmtN(c.tx_count)} tx · ${fmtN(c.avg_ticket)} avg</p>
-      <p class="text-xs mt-0.5 ${c.discount_rate > 10 ? 'text-red-500' : 'text-slate-400'}">${fmtP(c.discount_rate)} disc rate</p>
-    </div>
-  `).join('');
-
-  document.getElementById('cashierBody').innerHTML = data.map((r, i) => `
-    <tr class="border-t border-slate-100">
-      <td class="py-2 pr-3 text-slate-400">${i+1}</td>
-      <td class="py-2 pr-3 font-medium text-slate-700">${esc(r.cashier)}</td>
-      <td class="py-2 pr-3 text-right font-semibold">${fmtN(r.revenue)}</td>
-      <td class="py-2 pr-3 text-right text-slate-500">${fmtN(r.tx_count)}</td>
-      <td class="py-2 pr-3 text-right text-slate-500">${fmtN(r.avg_ticket)}</td>
-      <td class="py-2 pr-3 text-right">
-        <span class="${r.discount_rate > 15 ? 'text-red-600 font-bold' : r.discount_rate > 8 ? 'text-amber-600' : 'text-slate-400'}">${fmtP(r.discount_rate)}</span>
-      </td>
-      <td class="py-2 text-right text-slate-500">${fmtN(r.total_discount)}</td>
-    </tr>
-  `).join('');
-}
-
-async function loadDiscounts() {
-  const data = await fetch(`${API}/api/analysis/discounts${qp()}`).then(r => r.json());
-  const o = data.overall || {};
-  const rate = o.total_tx ? (o.discount_tx / o.total_tx * 100).toFixed(1) : 0;
-
-  document.getElementById('discountSummary').innerHTML = [
-    { label: 'Discounted Transactions', value: fmtN(o.discount_tx),        sub: `of ${fmtN(o.total_tx)} total` },
-    { label: 'Discount Rate',           value: rate + '%',                  sub: 'of all transactions' },
-    { label: 'Total Discount Given',    value: fmtN(o.total_discount), sub: 'sum given to customers' },
-    { label: 'Avg Discount / Tx',       value: fmtN(o.avg_discount),   sub: 'when discount applied' },
-  ].map(k => `
-    <div class="card p-4">
-      <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">${k.label}</p>
-      <p class="text-2xl font-bold text-slate-700">${k.value}</p>
-      <p class="text-xs text-slate-400 mt-0.5">${k.sub}</p>
-    </div>
-  `).join('');
-
-  mkChart('chartDiscountTrend', {
-    type: 'line',
-    data: {
-      labels: data.trend.map(d => fmtMonth(d.period_month)),
-      datasets: [
-        { label:'Disc Rate %', data: data.trend.map(d => d.rate),
-          borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,0.08)', fill:true,
-          borderWidth:2, pointRadius:3, tension:0.3, yAxisID:'yRate' },
-        { label:'Total ส่วนลด', data: data.trend.map(d => d.total_discount),
-          borderColor:'#f59e0b', borderWidth:1.5, pointRadius:2,
-          tension:0.3, borderDash:[4,3], yAxisID:'yAmt' },
-      ],
-    },
-    options: {
-      responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{labels:{color:'#64748b',font:{size:11}}}, datalabels:{display:false} },
-      scales:{
-        x:    { grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
-        yRate:{ position:'left',  grid:{color:'#f1f5f9'}, ticks:{color:'#ef4444',font:{size:10},callback:v=>v+'%'} },
-        yAmt: { position:'right', grid:{display:false},   ticks:{color:'#f59e0b',font:{size:10},callback:v=>fmt(v)} },
-      },
-    },
-  });
-
-  document.getElementById('discountBranchBody').innerHTML = data.by_branch.map(r => `
-    <tr class="border-t border-slate-100">
-      <td class="py-2 pr-3 text-sm text-slate-700">${esc(r.branch)}</td>
-      <td class="py-2 pr-3 text-right text-sm ${r.rate > 12 ? 'text-red-600 font-bold' : r.rate > 7 ? 'text-amber-600' : 'text-slate-500'}">${fmtP(r.rate)}</td>
-      <td class="py-2 text-right text-sm text-slate-500">${fmtN(r.avg_discount)}</td>
-    </tr>
-  `).join('');
-
-  document.getElementById('discountCashierBody').innerHTML = data.top_cashiers.map((r, i) => `
-    <tr class="border-t border-slate-100">
-      <td class="py-2 pr-3 text-slate-400">${i+1}</td>
-      <td class="py-2 pr-3 font-medium text-slate-700">${esc(r.cashier)}</td>
-      <td class="py-2 pr-3 text-xs text-slate-500">${esc(r.branch||'—')}</td>
-      <td class="py-2 pr-3 text-right font-semibold text-red-600">${fmtN(r.total_discount)}</td>
-      <td class="py-2 pr-3 text-right ${r.rate > 12 ? 'text-red-500 font-bold' : 'text-amber-600'}">${fmtP(r.rate)}</td>
-      <td class="py-2 pr-3 text-right text-slate-500">${fmtN(r.discount_tx)}</td>
-      <td class="py-2 text-right text-slate-400">${fmtN(r.avg_discount)}</td>
-    </tr>
-  `).join('');
-}
 
 
 // ── Connection health ──────────────────────────────────────────
@@ -11314,9 +11173,6 @@ async function downloadCostTemplate() {
 }
 
 // Kept for backward compat (modal ↓ Template button)
-async function downloadTemplate() {
-  return downloadCostTemplate();
-}
 
 // ════════════════════════════════════════════════════════════════
 // PHASE 8 — MONTHLY COST OVERRIDES
@@ -14150,20 +14006,6 @@ function exportTable(tableId, filename = 'export.csv') {
   downloadCSV(rows.join('\n'), filename);
 }
 
-function exportJSON(data, filename = 'export.csv') {
-  if (!data || !data.length) return alert('No data to export');
-  const keys = Object.keys(data[0]);
-  const rows = [keys.join(',')];
-  data.forEach(r => {
-    rows.push(keys.map(k => {
-      let v = r[k];
-      if (v == null) return '';
-      v = String(v).replace(/"/g, '""');
-      return /[,"\n]/.test(v) ? `"${v}"` : v;
-    }).join(','));
-  });
-  downloadCSV(rows.join('\n'), filename);
-}
 
 function downloadCSV(text, filename) {
   const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8;' });
@@ -15542,33 +15384,6 @@ function renderWhatIf() {
 // ════════════════════════════════════════════════════════════════
 function renderAIBlankState() {
   document.getElementById('aiCommentary').innerHTML = '<p class="text-slate-400 italic">Click "Generate commentary" to produce a plain-English summary of the current filters.</p>';
-}
-async function generateAICommentary() {
-  const btn = document.getElementById('aiBtn');
-  const box = document.getElementById('aiCommentary');
-  btn.disabled = true; const oldTxt = btn.textContent; btn.textContent = 'Generating…';
-  try {
-    const summary = await fetch(`${API}/api/summary${qp()}`).then(r=>r.json());
-    // Build a clean numeric summary (Pydantic Dict[str,float] rejects null values)
-    const cleanSummary = {};
-    Object.entries(summary).forEach(([k,v]) => { if (typeof v === 'number' && !isNaN(v)) cleanSummary[k] = v; });
-    if (getMonthTo()) {
-      const yoy = await fetch(`${API}/api/analysis/yoy?month_from=${getMonthTo()}&month_to=${getMonthTo()}`).then(r=>r.json()).catch(()=>[]);
-      if (yoy[0] && yoy[0].yoy_pct != null) cleanSummary.revenue_delta_pct = yoy[0].yoy_pct;
-    }
-    const body = {
-      period_label: (getMonthFrom()||'all-time')+' → '+(getMonthTo()||'latest')+(getBranch()?' · '+getBranch():'')+(getGroup()?' ('+getGroup()+')':''),
-      summary: cleanSummary,
-    };
-    const r = await fetch(`${API}/api/ai/commentary`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-    const data = await r.json();
-    box.innerHTML = `
-      <p class="mb-2"><span class="text-xs font-mono px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">${data.source}</span></p>
-      <p class="text-slate-700 whitespace-pre-line" style="color:var(--text-primary)">${data.text}</p>
-    `;
-  } catch(e) {
-    box.innerHTML = `<p class="text-red-500">Error: ${e.message}</p>`;
-  } finally { btn.disabled = false; btn.textContent = oldTxt; }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -19816,19 +19631,6 @@ async function loadUpgradeSimulator() {
 // ════════════════════════════════════════════════════════════════
 
 // ── 1. GP Calendar ───────────────────────────────────────────────────────
-function _gpColor(pct) {
-  if (pct == null) return '#e2e8f0';
-  if (pct >= 55)  return '#065f46';
-  if (pct >= 45)  return '#059669';
-  if (pct >= 35)  return '#34d399';
-  if (pct >= 25)  return '#a7f3d0';
-  if (pct >= 0)   return '#d1fae5';
-  return '#fee2e2';
-}
-function _gpTextColor(pct) {
-  if (pct == null) return '#94a3b8';
-  return pct >= 35 ? '#ffffff' : '#064e3b';
-}
 
 async function loadGpCalendar() {
   const branch = getBranch();
@@ -19913,42 +19715,6 @@ async function loadGpCalendar() {
 }
 
 // ── 2. Branch × Tier Matrix ──────────────────────────────────────────────
-async function loadBranchTierMatrix() {
-  const params = new URLSearchParams();
-  if (getMonthFrom()) params.set('month_from', getMonthFrom());
-  if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const rows = await fetch(`${API}/api/buffet/branch-tier-matrix?${params}`).then(r=>r.json()).catch(()=>[]);
-  if (!rows.length) return;
-
-  const maxRev = Math.max(...rows.map(r=>r.total_revenue||0));
-  mkChart('chartBranchTierMatrix', {
-    type: 'bubble',
-    data: {
-      datasets: rows.map((r,i) => ({
-        label: r.branch,
-        data: [{ x: r.premium_pct||0, y: r.avg_gp_per_cover||0, r: Math.max(6, Math.sqrt((r.total_revenue||0)/maxRev)*40) }],
-        backgroundColor: ['#4f46e5','#10b981','#f97316','#0891b2','#8b5cf6','#ec4899','#f59e0b','#ef4444'][i%8] + 'bb',
-        borderColor:     ['#4f46e5','#10b981','#f97316','#0891b2','#8b5cf6','#ec4899','#f59e0b','#ef4444'][i%8],
-        borderWidth: 1.5,
-      }))
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position:'right', labels:{ font:{size:10}, boxWidth:10 } },
-        datalabels: { display:false },
-        tooltip: { callbacks: { label: ctx => {
-          const r = rows[ctx.datasetIndex];
-          return [`${r.branch}`, `Premium%: ${(r.premium_pct||0).toFixed(1)}%`, `GP/cover: ${fmt(r.avg_gp_per_cover||0)}`, `Revenue: ${fmt(r.total_revenue||0)}`];
-        }}}
-      },
-      scales: {
-        x: { title:{display:true,text:'% Premium Cover (590+)',font:{size:11}}, ticks:{callback:v=>v+'%',font:{size:10}}, min:0, max:100 },
-        y: { title:{display:true,text:'GP per Cover ()',font:{size:11}}, ticks:{callback:v=>fmt(v),font:{size:10}}, beginAtZero:true },
-      }
-    }
-  });
-}
 
 // ── 3. Child/Adult Cover Trend ───────────────────────────────────────────
 async function loadChildTrend() {
@@ -22153,18 +21919,6 @@ let _timeflowMetric = 'revenue';
 let _tfOpenFrom = 10, _tfOpenTo = 22;  // default open hours; updated from hourly_open data
 let _timeGranularity = 'daily';  // daily|weekly|monthly for Branch Ops → Time tab
 
-function setTimeGranularity(g) {
-  _timeGranularity = g;
-  ['daily','weekly','monthly'].forEach(v => {
-    const btn = document.getElementById(`timeGranBtn-${v}`);
-    if (!btn) return;
-    if (v === g) { btn.className = 'px-3 py-1.5 bg-indigo-600 text-white transition-colors'; }
-    else         { btn.className = 'px-3 py-1.5 bg-white text-slate-600 hover:bg-indigo-50 transition-colors border-l border-slate-200'; }
-  });
-  // Clear cache so next load fetches fresh data
-  delete _tabLastKey.opsTime;
-  loadTimeAnalysis();
-}
 let _timeflowData = [];
 
 function setTimeflowMetric(m) {
