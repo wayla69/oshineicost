@@ -516,6 +516,7 @@ async function loadBranch(bid){
     ${closed?`<span class="lbl">โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))}</span>`:''}
     ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}" target="_blank" title="รายงานการจับคู่ทุกช่องทาง ไล่รายวันทั้งเดือน — ตรวจว่าจับคู่ถูกครบ · พิมพ์ PDF ได้">🖨️ ตรวจการจับคู่รายวัน</a>
+    <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}&detail=1" target="_blank" title="ฉบับละเอียดสำหรับผู้ตรวจสอบ — เพิ่มหลักฐานระดับบรรทัด: รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, ค่าธรรมเนียม, การจับคู่มือ">📑 ฉบับตรวจสอบ (ละเอียด)</a>
     <div class="row" style="margin-left:auto;flex-wrap:nowrap">
       <div class="prog ${progCls(r.progress_pct)}" style="width:140px;flex:none"><div style="width:${r.progress_pct}%"></div></div>
       <span style="font-size:14px;font-weight:600" class="mono">${r.progress_pct}%</span>

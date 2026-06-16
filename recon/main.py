@@ -3570,7 +3570,124 @@ _MATCH_ST = {
 }
 
 
-def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> str:
+def _audit_detail_html(conn, branch_id: int, period_month: str) -> str:
+    """Audit-grade evidence for ONE branch+month so an auditor can trace every baht:
+    POS composition (codes), credit settlement by acquirer (gross/fee/VAT/net), every
+    bank credit line (date/description/ref), Grab/LM payout, and manual matches."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+    P = []
+
+    # 1) POS composition — every payment code, its channel + acquirer/bank
+    try:
+        codes = pos_codes_scope(conn, branch_id, period_month=period_month)
+    except sqlite3.OperationalError:
+        codes = []
+    if codes:
+        P.append("<h2>① ที่มาของยอด POS (รายรหัสรับเงิน)</h2>")
+        P.append("<table><thead><tr><th class='l'>รหัสรับเงิน</th><th class='l'>ช่องทาง</th>"
+                 "<th class='l'>ธนาคาร/ผู้รับบัตร</th><th>จำนวนรายการ</th><th>ยอด (บาท)</th></tr></thead><tbody>")
+        tot = 0.0
+        for c in sorted(codes, key=lambda x: (x["category"] or "zz", -x["amount"])):
+            tot += c["amount"]
+            ch = _MATCH_CH_TH.get(c["category"], c["category"] or "—")
+            bk = _BANK_LABEL.get(c["bank"], c["bank"] or "—")
+            P.append(f"<tr><td class='l mono'>{esc(c['code'])}</td><td class='l'>{esc(ch)}</td>"
+                     f"<td class='l'>{esc(bk)}</td><td class='mono'>{c['txn_count']:,}</td>"
+                     f"<td class='mono'>{m(c['amount'])}</td></tr>")
+        P.append(f"</tbody><tfoot><tr><td colspan='4' class='l'>รวม POS</td>"
+                 f"<td class='mono'>{m(tot)}</td></tr></tfoot></table>")
+
+    # 2) Credit settlement by acquirer (the document that backs the CREDIT lane)
+    cc = conn.execute(
+        "SELECT acquirer, COUNT(*) n, SUM(COALESCE(gross_amount,0)) g, SUM(COALESCE(mdr_fee,0)) f, "
+        "SUM(COALESCE(vat_amount,0)) v, SUM(COALESCE(net_amount,0)) net "
+        "FROM recon_cc_lines WHERE branch_id=? AND substr(settlement_date,1,7)=? GROUP BY acquirer",
+        (branch_id, period_month)).fetchall()
+    if cc:
+        P.append("<h2>② สรุปยอดบัตรเครดิต ตามผู้รับบัตร (acquirer)</h2>")
+        P.append("<table><thead><tr><th class='l'>ผู้รับบัตร</th><th>จำนวนแบตช์</th><th>ยอดเต็ม</th>"
+                 "<th>ค่าธรรมเนียม</th><th>VAT</th><th>สุทธิ (เข้าบัญชี)</th></tr></thead><tbody>")
+        for r in cc:
+            P.append(f"<tr><td class='l'>{esc(_BANK_LABEL.get(r['acquirer'], r['acquirer'] or '—'))}</td>"
+                     f"<td class='mono'>{r['n']:,}</td><td class='mono'>{m(r['g'])}</td>"
+                     f"<td class='mono'>{m(r['f'])}</td><td class='mono'>{m(r['v'])}</td>"
+                     f"<td class='mono'>{m(r['net'])}</td></tr>")
+        P.append("</tbody></table>")
+
+    # 3) Every bank credit line — the actual money received (grouped by channel)
+    bl = conn.execute(
+        "SELECT txn_date, description, channel, ref_no, account_no, COALESCE(credit,0) credit "
+        "FROM recon_bank_lines WHERE branch_id=? AND substr(txn_date,1,7)=? AND credit>0 "
+        "ORDER BY channel, txn_date", (branch_id, period_month)).fetchall()
+    if bl:
+        P.append("<h2>③ รายการเงินเข้าบัญชีธนาคาร (ทุกบรรทัด)</h2>")
+        P.append("<table><thead><tr><th class='l'>วันที่</th><th class='l'>ช่องทาง</th>"
+                 "<th class='l'>รายละเอียด</th><th class='l'>อ้างอิง</th><th class='l'>บัญชี</th>"
+                 "<th>เงินเข้า (บาท)</th></tr></thead><tbody>")
+        tot = 0.0
+        for r in bl:
+            tot += float(r["credit"])
+            cat = _BANK_CH_TO_CAT.get((r["channel"] or "").upper())
+            ch = _MATCH_CH_TH.get(cat, r["channel"] or "—")
+            P.append(f"<tr><td class='l mono'>{esc(r['txn_date'])}</td><td class='l'>{esc(ch)}</td>"
+                     f"<td class='l'>{esc((r['description'] or '')[:48])}</td>"
+                     f"<td class='l mono'>{esc(r['ref_no'] or '—')}</td>"
+                     f"<td class='l mono'>{esc(r['account_no'] or '—')}</td>"
+                     f"<td class='mono'>{m(r['credit'])}</td></tr>")
+        P.append(f"</tbody><tfoot><tr><td colspan='5' class='l'>รวมเงินเข้า</td>"
+                 f"<td class='mono'>{m(tot)}</td></tr></tfoot></table>")
+
+    # 4) Grab / Line Man payout summary (gross → fee+VAT → net). Note the VAT column
+    # differs: grab='vat_amount', lineman='vat_on_commission'.
+    for tbl, label, vatcol in (("recon_grab_lines", "Grab", "vat_amount"),
+                               ("recon_lineman_lines", "Line Man", "vat_on_commission")):
+        try:
+            gr = conn.execute(
+                f"SELECT COUNT(*) n, SUM(COALESCE(food_amount,0)) g, SUM(COALESCE(commission_amt,0)) f, "
+                f"SUM(COALESCE({vatcol},0)) v, SUM(COALESCE(net_payout,0)) net "
+                f"FROM {tbl} WHERE branch_id=? AND substr(order_date,1,7)=? AND order_status='Completed'",
+                (branch_id, period_month)).fetchone()
+        except sqlite3.OperationalError:
+            gr = None
+        if gr and gr["n"]:
+            P.append(f"<h2>④ {esc(label)} — สรุปออเดอร์สำเร็จ</h2>")
+            P.append("<table><thead><tr><th>จำนวนออเดอร์</th><th>ยอดอาหาร</th><th>ค่าคอมมิชชั่น</th>"
+                     "<th>VAT</th><th>สุทธิ (payout)</th></tr></thead><tbody>")
+            P.append(f"<tr><td class='mono'>{gr['n']:,}</td><td class='mono'>{m(gr['g'])}</td>"
+                     f"<td class='mono'>{m(gr['f'])}</td><td class='mono'>{m(gr['v'])}</td>"
+                     f"<td class='mono'>{m(gr['net'])}</td></tr></tbody></table>")
+
+    # 5) Manual matches — every hand correction, with reason + who
+    mm = conn.execute(
+        "SELECT category, bank, COALESCE(pos_amount,0) p, COALESCE(ext_amount,0) e, pos_days, note, matched_by "
+        "FROM recon_manual_match WHERE branch_id=? AND period_month=? ORDER BY matched_at",
+        (branch_id, period_month)).fetchall()
+    if mm:
+        P.append("<h2>⑤ การจับคู่ด้วยมือ (พร้อมเหตุผล)</h2>")
+        P.append("<table><thead><tr><th class='l'>ช่องทาง</th><th class='l'>ธนาคาร</th><th class='l'>วันที่</th>"
+                 "<th>POS</th><th>เอกสาร</th><th class='l'>เหตุผล</th><th class='l'>โดย</th></tr></thead><tbody>")
+        for r in mm:
+            try:
+                days = ", ".join(x.get("day", "")[8:] for x in json.loads(r["pos_days"] or "[]"))
+            except Exception:
+                days = ""
+            P.append(f"<tr><td class='l'>{esc(_MATCH_CH_TH.get(r['category'], r['category']))}</td>"
+                     f"<td class='l'>{esc(r['bank'] or '—')}</td><td class='l mono'>{esc(days)}</td>"
+                     f"<td class='mono'>{m(r['p'])}</td><td class='mono'>{m(r['e'])}</td>"
+                     f"<td class='l'>{esc(r['note'] or '—')}</td><td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
+        P.append("</tbody></table>")
+
+    if not P:
+        return "<div class='empty'>ไม่มีข้อมูลหลักฐานสำหรับเดือนนี้</div>"
+    return ("<div style='margin-top:14px;border-top:2px solid #ea580c;padding-top:6px'>"
+            "<h2 style='border:0;padding:0;color:#9a3412'>📑 หลักฐานประกอบ (สำหรับผู้ตรวจสอบ) — "
+            "ตรวจทานได้ทุกบรรทัด</h2>" + "".join(P) + "</div>")
+
+
+def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
+                           detail: bool = False) -> str:
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
     def m(v):  return f"{float(v or 0):,.0f}"
@@ -3708,7 +3825,7 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
             "SELECT category, bank, pos_amount, ext_amount, note, matched_by, matched_at "
             "FROM recon_manual_match WHERE branch_id=? AND period_month=? ORDER BY matched_at",
             (bid, period_month)).fetchall()
-        if mm:
+        if mm and not detail:        # in detail mode the audit pack (⑤) lists these in full
             parts.append("<h2>การจับคู่ด้วยมือ (เจ้าหน้าที่ยืนยันเอง) — มีเหตุผลกำกับ</h2>")
             parts.append("<table><thead><tr><th class='l'>ช่องทาง</th><th class='l'>ธนาคาร</th>"
                          "<th>ยอด POS</th><th>เอกสาร</th><th class='l'>เหตุผล/หมายเหตุ</th>"
@@ -3722,6 +3839,9 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
                     f"<td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
             parts.append("</tbody></table>")
 
+        if detail:                   # audit-grade line-level evidence for this branch
+            parts.append(_audit_detail_html(conn, bid, period_month))
+
         parts.append("<div class='sign'><div>ผู้จัดทำ (กระทบยอด)</div>"
                      "<div>ผู้ตรวจสอบ</div><div>ผู้อนุมัติ</div></div>")
         parts.append("</div>")
@@ -3731,17 +3851,19 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None) -> st
 
 
 @app.get("/api/monthly-report")
-def monthly_matching_report(period_month: str, branch_id: int | None = None):
+def monthly_matching_report(period_month: str, branch_id: int | None = None,
+                            detail: int = 0):
     """Print-to-PDF monthly matching audit: every day × channel with POS vs document,
     variance, and match status — confirm the whole month reconciled. Omit branch_id
-    for an all-branches pack (one page each)."""
+    for an all-branches pack (one page each). detail=1 appends audit-grade line-level
+    evidence (POS codes, credit-by-acquirer, every bank line, payouts, manual matches)."""
     if not _PERIOD_RE.match(period_month or ""):
         raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
     if branch_id:
         with get_db() as conn:
             _validate_master_branch(conn, branch_id)
     with get_db() as conn:
-        html = _monthly_matching_html(conn, period_month, branch_id)
+        html = _monthly_matching_html(conn, period_month, branch_id, detail=bool(detail))
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
@@ -3782,14 +3904,33 @@ def _outstanding_docs_report(conn, period_month: str, branch_id: int | None = No
                 miss[_doc_channel(doc["label"])].append(
                     {"label": doc["label"], "status": doc["status"]})
 
+        # POS composition (for the detailed per-acquirer / per-code breakdown of what's waiting)
+        try:
+            codes = pos_codes_scope(conn, b["branch_id"], period_month=period_month)
+        except sqlite3.OperationalError:
+            codes = []
+        by_ch = defaultdict(list)
+        for cd in codes:
+            if cd["category"] and cd["amount"] > 0:
+                by_ch[cd["category"]].append(cd)
+
         rows = []
         for key, docs in miss.items():
             if key == "BANK":               # statements back several lanes; report at branch level
                 continue
             c = chmap.get(key, {})
             unmatched = round(max(0.0, float(c.get("pos", 0)) - float(c.get("ext", 0))), 2)
+            # detail: for CREDIT split by acquirer (which settlement to chase); else by POS code
+            agg = defaultdict(lambda: {"amount": 0.0, "txn": 0})
+            for cd in by_ch.get(key, []):
+                k = (_BANK_LABEL.get(cd["bank"], cd["bank"]) if key == "CREDIT"
+                     else cd["code"])
+                agg[k]["amount"] += cd["amount"]; agg[k]["txn"] += cd["txn_count"]
+            breakdown = sorted(
+                ({"label": k, "amount": round(v["amount"], 2), "txn": v["txn"]}
+                 for k, v in agg.items()), key=lambda x: -x["amount"])
             rows.append({"channel": key, "channel_th": _MATCH_CH_TH.get(key, key),
-                         "unmatched": unmatched,
+                         "unmatched": unmatched, "breakdown": breakdown,
                          "docs": [d["label"] for d in docs],
                          "doc_status": "partial" if any(d["status"] == "partial" for d in docs) else "missing"})
         # missing bank statements (rare — usually uploaded) listed separately
@@ -3844,6 +3985,7 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
       th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
       td:first-child,th:first-child,td.l,th.l{text-align:left}
       .mono{font-variant-numeric:tabular-nums} .big{color:#b91c1c;font-weight:700}
+      .muted{color:#64748b;font-size:11px} tr.sub td{border-bottom:1px dashed #f1f5f9;padding:3px 9px}
       tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
       .chk{width:16px;height:16px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;vertical-align:middle}
       .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}
@@ -3888,9 +4030,17 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
                 docs = " · ".join(esc(x) for x in r["docs"])
                 st = " <span class='partial'>(อัปบางส่วน)</span>" if r["doc_status"] == "partial" else ""
                 parts.append(f"<tr><td class='l'><span class='chk'></span></td>"
-                             f"<td class='l'>{esc(r['channel_th'])}</td>"
+                             f"<td class='l'><b>{esc(r['channel_th'])}</b></td>"
                              f"<td class='l'>{docs}{st}</td>"
                              f"<td class='mono{' big' if r['unmatched']>20000 else ''}'>{m(r['unmatched'])}</td></tr>")
+                # detailed breakdown: per acquirer (CREDIT) or per POS code — so the team
+                # knows exactly which document to get and the expected amount it should total
+                for d in r.get("breakdown", []):
+                    note = ("เอกสารต้องมียอดราว ฿" + m(d["amount"])) if r["channel"] == "CREDIT" else ""
+                    parts.append(
+                        f"<tr class='sub'><td></td><td class='l muted'>↳ {esc(d['label'])}</td>"
+                        f"<td class='l muted'>{esc(note)} <span class='muted'>({d['txn']:,} รายการ)</span></td>"
+                        f"<td class='mono muted'>{m(d['amount'])}</td></tr>")
             parts.append(f"</tbody><tfoot><tr><td colspan='3' class='l'>รวมเงินที่รอเอกสาร</td>"
                          f"<td class='mono'>{m(b['branch_total'])}</td></tr></tfoot></table>")
         if b["bank_missing"]:

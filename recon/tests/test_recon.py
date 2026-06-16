@@ -572,6 +572,11 @@ def test_monthly_matching_report(client):
     assert "<option value='4'" in pack.text and "Chonburi" not in pack.text
     # per-branch view still works
     assert client.get("/api/monthly-report?period_month=2026-06&branch_id=4").status_code == 200
+    # detail=1 appends the auditor evidence pack (POS codes + line-level sections)
+    det = client.get("/api/monthly-report?period_month=2026-06&branch_id=4&detail=1")
+    assert det.status_code == 200
+    assert "หลักฐานประกอบ (สำหรับผู้ตรวจสอบ)" in det.text
+    assert "ที่มาของยอด POS" in det.text and "KNNQR" in det.text   # POS code traced
 
 
 def test_outstanding_docs_report(client):
