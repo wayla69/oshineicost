@@ -12,8 +12,6 @@ Supported:
 
 from __future__ import annotations
 import io
-import re
-from typing import Any
 import openpyxl
 from .bank import _to_float, _parse_thai_date, _blank
 
