@@ -259,7 +259,8 @@ function render(){
   // ⑤ statement-code remap (manager-editable) — filled async by loadCodes()
   html+=`<div class="card"><div class="row" style="margin-bottom:6px">
     <h2 style="margin:0">⑤ รหัสในสเตทเมนต์ → ช่องทาง</h2>
-    <a href="/api/statement-codes.html" target="_blank" class="lbl" style="margin-left:auto">🖨️ พิมพ์ใบให้ทีมตรวจ</a></div>
+    <a href="/api/statement-codes.html" target="_blank" class="lbl" style="margin-left:auto">🖨️ พิมพ์ใบให้ทีมตรวจ</a>
+    <a href="/api/statement-codes.xlsx" class="lbl" style="margin-left:12px">⬇ Excel</a></div>
     <div class="muted" style="margin-bottom:8px">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้รหัสผู้จัดการ</div>
     <div id="codes-body" class="muted">กำลังโหลด…</div></div>`;
 

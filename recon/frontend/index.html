@@ -311,14 +311,24 @@ async function loadOverview(){
   // open branches (list, not table)
   if(open.length){
     html+=`<div class="card" style="padding:0;margin-bottom:12px">`;
+    const chLabels=ov.channel_labels||{};
     for(const b of open){
       const rc=b.reclass_count||0;
+      // คลิกช่องทางที่ยังไม่ตรง → เด้งเข้าสาขา + เปิดหลักฐานช่องนั้น (goChannel)
+      const probCh=Object.entries(b.channels||{})
+        .filter(([k,c])=>['diff','waiting_doc','setup'].includes(c.status));
+      const chChips=probCh.map(([k,c])=>{
+        const tip=c.status==='waiting_doc'?'รอ/ขาดเอกสาร':c.status==='setup'?'ต้องตั้งค่า':'มีผลต่าง';
+        return `<span class="chip c-warn ov-mini" style="cursor:pointer"
+          onclick="event.stopPropagation();goChannel(${b.branch_id},'${k}')"
+          title="${tip} — กดเพื่อดูช่องทางนี้ในสาขา">${esc(chLabels[k]||k)} ›</span>`;}).join(' ');
       html+=`<div class="ov-row" onclick="location.hash='b/${b.branch_id}'">
         <div class="ov-row-main">
           <div class="ov-bname">${esc(b.branch_name)}
             ${b.status==='in_review'?'<span class="chip c-warn ov-mini">รอตรวจ</span>':''}</div>
           <div class="ov-sum">${esc(openSummary(b))}
             ${rc>0?'<span class="chip c-warn ov-mini">🔀 ผิดช่อง '+rc+'</span>':''}</div>
+          ${chChips?`<div class="ov-sum" style="margin-top:4px;gap:5px">${chChips}</div>`:''}
         </div>
         <div class="row" style="flex-wrap:nowrap;flex:none;width:150px">
           <div class="prog ${progCls(b.progress_pct)}"><div style="width:${b.progress_pct}%"></div></div>
