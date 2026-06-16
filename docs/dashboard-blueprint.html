@@ -5,15 +5,59 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Dashboard Blueprint — ธุรกิจใหม่</title>
 
-  <!-- Design tokens (same source of truth as main dashboard) -->
-  <link rel="stylesheet" href="/docs/ui-kit/tokens.css">
+  <!-- Design tokens (inlined for self-contained sharing) -->
+  <style>
+    :root {
+      --bg-page:    #f0f4f8;
+      --bg-card:    #ffffff;
+      --bg-input:   #ffffff;
+      --bg-subtle:  #f8fafc;
+      --bg-sidebar: #0c1525;
+      --bg-topbar:  #ffffff;
+      --bg-hover:   #eef2ff;
+      --text-primary:   #0f172a;
+      --text-secondary: #475569;
+      --text-muted:     #94a3b8;
+      --border:     #e2e8f0;
+      --border-soft:#f1f5f9;
+      --indigo:     #4f46e5;
+      --indigo-mid: #6366f1;
+      --indigo-soft:#eef2ff;
+      --shadow-xs:  0 1px 2px rgba(15,23,42,0.05);
+      --shadow-sm:  0 1px 3px rgba(15,23,42,0.04), 0 2px 8px rgba(15,23,42,0.06);
+      --shadow-md:  0 4px 8px rgba(15,23,42,0.05), 0 12px 24px rgba(15,23,42,0.08);
+      --shadow-lg:  0 12px 32px rgba(15,23,42,0.12), 0 4px 10px rgba(15,23,42,0.05);
+      --shadow-card: 0 1px 3px rgba(15,23,42,0.04), 0 2px 10px rgba(15,23,42,0.05);
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 16px;
+    }
+    body.dark {
+      --bg-page:    #080e1c;
+      --bg-card:    #0f1a2e;
+      --bg-input:   #131f35;
+      --bg-subtle:  #111828;
+      --bg-sidebar: #060d1a;
+      --bg-topbar:  #0f1a2e;
+      --bg-hover:   #1e2a4a;
+      --text-primary:   #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted:     #475569;
+      --border:     #1e2d45;
+      --border-soft:#131f35;
+      --indigo:     #818cf8;
+      --indigo-mid: #6366f1;
+      --indigo-soft:#1c2060;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.2), 0 2px 10px rgba(0,0,0,0.15);
+    }
+  </style>
 
-  <!-- Tailwind CSS -->
-  <script src="/vendor/tailwind.js"></script>
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Chart.js -->
-  <script src="/vendor/chart.umd.min.js"></script>
-  <script src="/vendor/chartjs-plugin-annotation.min.js"></script>
+  <!-- Chart.js + annotation plugin (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 
   <!-- Google Fonts: Prompt (Thai headings) + Sarabun (Thai body) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
