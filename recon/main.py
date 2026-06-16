@@ -3570,6 +3570,78 @@ _MATCH_ST = {
 }
 
 
+def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
+    """Monthly receipts by channel (gross → fee → VAT → net) + a draft accounting
+    journal entry, so the books tie to what actually came in. Fee/VAT use the effective
+    (manual-override-aware) figures."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+
+    # fee channels: per-line effective fee/VAT from the document tables
+    spec = [("CREDIT",  "recon_cc_lines",      "settlement_date", "gross_amount", "mdr_fee",        "vat_amount", ""),
+            ("GRAB",    "recon_grab_lines",    "order_date",      "food_amount",  "commission_amt", "vat_amount", " AND order_status='Completed'"),
+            ("LINEMAN", "recon_lineman_lines", "order_date",      "food_amount",  "commission_amt", "vat_on_commission", " AND order_status='Completed'")]
+    rows = []   # (channel, gross, fee, vat, net)
+    for ch, tbl, dcol, gcol, fcol, vcol, extra in spec:
+        try:
+            lines = conn.execute(
+                f"SELECT * FROM {tbl} WHERE branch_id=? AND substr({dcol},1,7)=?{extra}",
+                (branch_id, period_month)).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        g = f = v = 0.0
+        for r in lines:
+            g += float(r[gcol] or 0)
+            fee, vat = _eff_fee_vat(r, fcol, vcol)
+            f += fee; v += vat
+        if g > 0.005:
+            rows.append((ch, g, f, v, g - f - v))
+
+    # no-fee channels (cash / QR / transfer / coupon): money received = POS, no fee/VAT
+    try:
+        rm = reconcile_month(conn, branch_id, period_month)
+        for c in rm.get("channels", []):
+            if c["key"] in ("CASH", "QR", "TRANSFER", "COUPON") and float(c.get("pos", 0)) > 0.005:
+                g = float(c["pos"]); rows.append((c["key"], g, 0.0, 0.0, g))
+    except Exception:
+        pass
+    if not rows:
+        return ""
+
+    order = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5, "COUPON": 6}
+    rows.sort(key=lambda r: order.get(r[0], 9))
+    G = sum(r[1] for r in rows); F = sum(r[2] for r in rows); V = sum(r[3] for r in rows); N = sum(r[4] for r in rows)
+    out_vat = round(G * 7 / 107, 2)            # output VAT estimate if prices are VAT-inclusive
+
+    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
+         "<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินทั้งเดือน · ค่าธรรมเนียม · VAT</h2>",
+         "<table><thead><tr><th class='l'>ช่องทาง</th><th>ยอดรับเต็ม</th><th>ค่าธรรมเนียม</th>"
+         "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
+    for ch, g, f, v, n in rows:
+        P.append(f"<tr><td class='l'>{esc(_MATCH_CH_TH.get(ch, ch))}</td>"
+                 f"<td class='mono'>{m(g)}</td><td class='mono'>{m(f)}</td>"
+                 f"<td class='mono'>{m(v)}</td><td class='mono'>{m(n)}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{m(G)}</td>"
+             f"<td class='mono'>{m(F)}</td><td class='mono'>{m(V)}</td><td class='mono'>{m(N)}</td></tr></tfoot></table>")
+
+    # draft journal entry (money-received basis)
+    P.append("<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน)</h2>")
+    P.append("<table><thead><tr><th class='l'>บัญชี</th><th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
+    je = [("เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("ค่าธรรมเนียมรับชำระเงิน", F, 0),
+          ("ภาษีซื้อ – VAT ค่าธรรมเนียม", V, 0), ("รายได้จากการขาย (ยอดรับเต็ม)", 0, G)]
+    for acc, dr, cr in je:
+        P.append(f"<tr><td class='l'>{esc(acc)}</td><td class='mono'>{m(dr) if dr else ''}</td>"
+                 f"<td class='mono'>{m(cr) if cr else ''}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{m(N + F + V)}</td>"
+             f"<td class='mono'>{m(G)}</td></tr></tfoot></table>")
+    P.append("<div class='legend'>หมายเหตุ: VAT ในตารางคือ <b>ภาษีซื้อ</b>จากค่าธรรมเนียมรับชำระ (บัตร/เดลิเวอรี) · "
+             f"หากราคาขายรวม VAT แล้ว <b>ภาษีขาย (output) โดยประมาณ = ฿{m(out_vat)}</b> (7/107 ของยอดรับเต็ม) "
+             "ซึ่งฝ่ายบัญชีแยกออกจากรายได้ตามเกณฑ์ ex-VAT · ตัวเลขนี้เป็นร่างตามข้อมูลกระทบยอด ฝ่ายบัญชีปรับตามผังบัญชีจริง</div>")
+    P.append("</div>")
+    return "".join(P)
+
+
 def _audit_detail_html(conn, branch_id: int, period_month: str) -> str:
     """Audit-grade evidence for ONE branch+month so an auditor can trace every baht:
     POS composition (codes), credit settlement by acquirer (gross/fee/VAT/net), every
@@ -3838,6 +3910,9 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
                     f"<td class='l'>{esc(r['note'] or '—')}</td>"
                     f"<td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
             parts.append("</tbody></table>")
+
+        # monthly receipts roll-up + fees/VAT + draft journal entry (accounting tie-out)
+        parts.append(_monthly_finance_html(conn, bid, period_month))
 
         if detail:                   # audit-grade line-level evidence for this branch
             parts.append(_audit_detail_html(conn, bid, period_month))

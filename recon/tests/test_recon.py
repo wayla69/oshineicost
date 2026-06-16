@@ -562,6 +562,9 @@ def test_monthly_matching_report(client):
     assert "รายงานการจับคู่รายวัน" in r.text
     assert "QR พร้อมเพย์" in r.text and "สถานะการจับคู่" in r.text
     assert "ตรง" in r.text                       # the matched QR lane shows ✓ ตรง
+    # monthly receipts + fees/VAT + draft accounting entry
+    assert "สรุปการรับเงินทั้งเดือน" in r.text and "ร่างการบันทึกบัญชี" in r.text
+    assert "เดบิต (Dr)" in r.text and "รายได้จากการขาย" in r.text
     # all-branches manager pack = the 5 master branches only (franchise excluded)
     pack = client.get("/api/monthly-report?period_month=2026-06")
     assert pack.status_code == 200
