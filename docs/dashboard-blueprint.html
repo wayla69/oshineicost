@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard Blueprint — ธุรกิจใหม่</title>
+
+  <!-- Design tokens (inlined for self-contained sharing) -->
+  <style>
+    :root {
+      --bg-page:    #f0f4f8;
+      --bg-card:    #ffffff;
+      --bg-input:   #ffffff;
+      --bg-subtle:  #f8fafc;
+      --bg-sidebar: #0c1525;
+      --bg-topbar:  #ffffff;
+      --bg-hover:   #eef2ff;
+      --text-primary:   #0f172a;
+      --text-secondary: #475569;
+      --text-muted:     #94a3b8;
+      --border:     #e2e8f0;
+      --border-soft:#f1f5f9;
+      --indigo:     #4f46e5;
+      --indigo-mid: #6366f1;
+      --indigo-soft:#eef2ff;
+      --shadow-xs:  0 1px 2px rgba(15,23,42,0.05);
+      --shadow-sm:  0 1px 3px rgba(15,23,42,0.04), 0 2px 8px rgba(15,23,42,0.06);
+      --shadow-md:  0 4px 8px rgba(15,23,42,0.05), 0 12px 24px rgba(15,23,42,0.08);
+      --shadow-lg:  0 12px 32px rgba(15,23,42,0.12), 0 4px 10px rgba(15,23,42,0.05);
+      --shadow-card: 0 1px 3px rgba(15,23,42,0.04), 0 2px 10px rgba(15,23,42,0.05);
+      --r-sm: 8px;
+      --r-md: 12px;
+      --r-lg: 16px;
+    }
+    body.dark {
+      --bg-page:    #080e1c;
+      --bg-card:    #0f1a2e;
+      --bg-input:   #131f35;
+      --bg-subtle:  #111828;
+      --bg-sidebar: #060d1a;
+      --bg-topbar:  #0f1a2e;
+      --bg-hover:   #1e2a4a;
+      --text-primary:   #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted:     #475569;
+      --border:     #1e2d45;
+      --border-soft:#131f35;
+      --indigo:     #818cf8;
+      --indigo-mid: #6366f1;
+      --indigo-soft:#1c2060;
+      --shadow-card: 0 1px 3px rgba(0,0,0,0.2), 0 2px 10px rgba(0,0,0,0.15);
+    }
+  </style>
+
+  <!-- Tailwind CSS (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Chart.js + annotation plugin (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+  <!-- Google Fonts: Prompt (Thai headings) + Sarabun (Thai body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <style>
+    /* ── Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Sarabun', system-ui, sans-serif;
+      font-size: 14px;
+      background: var(--bg-page);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background .2s, color .2s;
+    }
+
+    /* ── Layout Shell ─────────────────────────────────────── */
+    #shell {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      grid-template-rows: 52px 1fr;
+      grid-template-areas:
+        "topbar  topbar"
+        "sidebar content";
+      min-height: 100vh;
+    }
+
+    /* ── Top Bar ──────────────────────────────────────────── */
+    #topbar {
+      grid-area: topbar;
+      background: var(--bg-topbar);
+      border-bottom: 1px solid var(--border);
+      box-shadow: var(--shadow-xs);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+
+    .topbar-brand {
+      font-family: 'Prompt', sans-serif;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--indigo);
+      margin-right: 8px;
+      white-space: nowrap;
+    }
+
+    .topbar-divider {
+      width: 1px;
+      height: 24px;
+      background: var(--border);
+    }
+
+    .topbar-spacer { flex: 1; }
+
+    /* Period picker */
+    .period-select {
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--r-sm);
+      padding: 5px 10px;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    /* Icon button */
+    .icon-btn {
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      border-radius: var(--r-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-input);
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background .15s;
+    }
+    .icon-btn:hover { background: var(--bg-hover); }
+
+    /* Avatar */
+    .avatar {
+      width: 32px; height: 32px;
+      border-radius: 50%;
+      background: var(--indigo);
+      color: #fff;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    /* ── Sidebar ──────────────────────────────────────────── */
+    #sidebar {
+      grid-area: sidebar;
+      background: var(--bg-sidebar);
+      border-right: 1px solid rgba(255,255,255,0.06);
+      padding: 16px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      overflow-y: auto;
+      position: sticky;
+      top: 52px;
+      height: calc(100vh - 52px);
+    }
+
+    .nav-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.3);
+      padding: 12px 8px 4px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: var(--r-sm);
+      color: rgba(255,255,255,0.55);
+      font-size: 13.5px;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      text-decoration: none;
+    }
+    .nav-item:hover {
+      background: rgba(255,255,255,0.07);
+      color: rgba(255,255,255,0.9);
+    }
+    .nav-item.active {
+      background: var(--indigo);
+      color: #fff;
+    }
+    .nav-item svg { flex-shrink: 0; opacity: 0.8; }
+
+    .nav-badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.12);
+      color: rgba(255,255,255,0.7);
+      font-size: 10px;
+      font-weight: 600;
+      padding: 1px 6px;
+      border-radius: 10px;
+    }
+
+    /* ── Main Content ─────────────────────────────────────── */
+    #content {
+      grid-area: content;
+      padding: 24px;
+      overflow-y: auto;
+    }
+
+    /* ── Page Header ──────────────────────────────────────── */
+    .page-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+    .page-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 20px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+    }
+    .page-subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* ── KPI Cards ────────────────────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card);
+      padding: 20px;
+    }
+
+    .kpi-label {
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .kpi-value {
+      font-family: 'Prompt', sans-serif;
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-primary);
+      line-height: 1;
+    }
+    .kpi-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .kpi-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 7px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .kpi-badge.up   { background: #dcfce7; color: #15803d; }
+    .kpi-badge.down { background: #fee2e2; color: #b91c1c; }
+    .kpi-badge.neutral { background: var(--indigo-soft); color: var(--indigo); }
+    .kpi-compare { color: var(--text-muted); }
+
+    /* ── Cards (generic) ──────────────────────────────────── */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--r-lg);
+      box-shadow: var(--shadow-card);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-soft);
+    }
+
+    .card-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+
+    .card-body {
+      padding: 20px;
+    }
+
+    /* ── 2-column grid for charts ─────────────────────────── */
+    .chart-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-grid-equal {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-canvas-wrap {
+      position: relative;
+      height: 260px;
+    }
+
+    /* ── Tab bar (in-page) ────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: color .15s, border-color .15s;
+      margin-bottom: -1px;
+    }
+    .tab-btn.active {
+      color: var(--indigo);
+      border-bottom-color: var(--indigo);
+    }
+    .tab-btn:hover:not(.active) { color: var(--text-primary); }
+
+    /* ── Table ────────────────────────────────────────────── */
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .data-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-subtle);
+    }
+    .data-table th.r,
+    .data-table td.r { text-align: right; font-variant-numeric: tabular-nums; }
+    .data-table td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--border-soft);
+      color: var(--text-primary);
+    }
+    .data-table tbody tr:last-child td { border-bottom: none; }
+    .data-table tbody tr:hover td { background: var(--bg-subtle); }
+
+    /* ── Status badges ────────────────────────────────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11.5px;
+      font-weight: 600;
+    }
+    .badge-green  { background: #dcfce7; color: #15803d; }
+    .badge-yellow { background: #fef9c3; color: #a16207; }
+    .badge-red    { background: #fee2e2; color: #b91c1c; }
+    .badge-blue   { background: var(--indigo-soft); color: var(--indigo); }
+    .badge-gray   { background: var(--bg-subtle); color: var(--text-secondary); }
+
+    /* ── Alert / notification row ─────────────────────────── */
+    .alert-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: var(--r-md);
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    .alert-row.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .alert-row.info    { background: var(--indigo-soft); border: 1px solid #c7d2fe; color: #3730a3; }
+    .alert-row.error   { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+
+    /* ── Mini trend spark ─────────────────────────────────── */
+    .spark-wrap { height: 40px; width: 100%; }
+
+    /* ── Section label ────────────────────────────────────── */
+    .section-title {
+      font-family: 'Prompt', sans-serif;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+    }
+
+    /* ── Button ───────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      border-radius: var(--r-sm);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: opacity .15s, background .15s;
+      border: none;
+    }
+    .btn-primary  { background: var(--indigo); color: #fff; }
+    .btn-primary:hover { opacity: .88; }
+    .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--text-primary); }
+    .btn-ghost:hover { background: var(--bg-hover); }
+
+    /* ── Dark-mode toggle ─────────────────────────────────── */
+    body.dark .kpi-badge.up    { background: #14532d; color: #4ade80; }
+    body.dark .kpi-badge.down  { background: #450a0a; color: #f87171; }
+    body.dark .alert-row.warning { background: #422006; border-color: #713f12; color: #fde68a; }
+    body.dark .alert-row.info    { background: var(--indigo-soft); border-color: #3730a3; color: #a5b4fc; }
+
+    /* ── Blueprint annotation (remove in production) ──────── */
+    .blueprint-label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--indigo);
+      background: var(--indigo-soft);
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+<div id="shell">
+
+  <!-- ╔══════════════════════════════════════════════╗ -->
+  <!-- ║  TOP BAR                                      ║ -->
+  <!-- ╚══════════════════════════════════════════════╝ -->
+  <header id="topbar">
+    <span class="topbar-brand">BIZ NAME</span>
+    <div class="topbar-divider"></div>
+
+    <!-- Period selector -->
+    <select class="period-select" id="periodSelect">
+      <option>มิ.ย. 2569</option>
+      <option>พ.ค. 2569</option>
+      <option>เม.ย. 2569</option>
+    </select>
+
+    <!-- Branch / segment filter -->
+    <select class="period-select" id="branchSelect">
+      <option value="">ทุกสาขา</option>
+      <option value="1">สาขา A</option>
+      <option value="2">สาขา B</option>
+    </select>
+
+    <div class="topbar-spacer"></div>
+
+    <!-- Actions -->
+    <button class="btn btn-ghost" style="font-size:12px;" onclick="exportReport()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      Export
+    </button>
+
+    <!-- Dark mode toggle -->
+    <button class="icon-btn" id="darkToggle" title="Dark mode" onclick="toggleDark()">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+      </svg>
+    </button>
+
+    <!-- User avatar -->
+    <div class="avatar" title="ตั้งค่า">US</div>
+  </header>
+
+  <!-- ╔══════════════════════════════════════════════╗ -->
+  <!-- ║  SIDEBAR NAV                                  ║ -->
+  <!-- ╚══════════════════════════════════════════════╝ -->
+  <nav id="sidebar">
+
+    <!-- SECTION 1 — Overview -->
+    <div class="nav-section-label">ภาพรวม</div>
+
+    <a class="nav-item active" data-page="overview" href="#overview">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+        <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+      </svg>
+      Dashboard
+    </a>
+
+    <a class="nav-item" data-page="daily" href="#daily">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      รายวัน
+    </a>
+
+    <!-- SECTION 2 — Revenue -->
+    <div class="nav-section-label">รายได้</div>
+
+    <a class="nav-item" data-page="revenue" href="#revenue">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      ยอดขาย
+    </a>
+
+    <a class="nav-item" data-page="products" href="#products">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/>
+        <line x1="7" y1="7" x2="7.01" y2="7"/>
+      </svg>
+      สินค้า / เมนู
+    </a>
+
+    <a class="nav-item" data-page="channels" href="#channels">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+      </svg>
+      ช่องทาง
+      <span class="nav-badge">NEW</span>
+    </a>
+
+    <!-- SECTION 3 — Cost & Profit -->
+    <div class="nav-section-label">ต้นทุน & กำไร</div>
+
+    <a class="nav-item" data-page="cost" href="#cost">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
+      </svg>
+      ต้นทุน (COGS)
+    </a>
+
+    <a class="nav-item" data-page="profit" href="#profit">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/>
+        <polyline points="17 6 23 6 23 12"/>
+      </svg>
+      กำไร (P&L)
+    </a>
+
+    <!-- SECTION 4 — Operations -->
+    <div class="nav-section-label">ปฏิบัติการ</div>
+
+    <a class="nav-item" data-page="branches" href="#branches">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        <polyline points="9 22 9 12 15 12 15 22"/>
+      </svg>
+      สาขา
+    </a>
+
+    <a class="nav-item" data-page="staff" href="#staff">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+        <circle cx="9" cy="7" r="4"/>
+        <path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
+      </svg>
+      พนักงาน
+    </a>
+
+    <!-- SECTION 5 — Admin -->
+    <div class="nav-section-label">ระบบ</div>
+
+    <a class="nav-item" data-page="reports" href="#reports">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+        <polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+        <polyline points="10 9 9 9 8 9"/>
+      </svg>
+      รายงาน
+    </a>
+
+    <a class="nav-item" data-page="settings" href="#settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/>
+      </svg>
+      ตั้งค่า
+    </a>
+
+  </nav>
+
+  <!-- ╔══════════════════════════════════════════════╗ -->
+  <!-- ║  MAIN CONTENT — Page: overview               ║ -->
+  <!-- ╚══════════════════════════════════════════════╝ -->
+  <main id="content">
+
+    <!-- PAGE: OVERVIEW ─────────────────────────────────── -->
+    <div id="page-overview">
+
+      <!-- Page header -->
+      <div class="page-header">
+        <div>
+          <div class="page-title">ภาพรวมธุรกิจ</div>
+          <div class="page-subtitle">มิถุนายน 2569 · ทุกสาขา · อัปเดตล่าสุด 10 นาทีที่แล้ว</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span class="blueprint-label">ZONE A — KPI ROW</span>
+          <button class="btn btn-primary" onclick="refreshData()">รีเฟรช</button>
+        </div>
+      </div>
+
+      <!-- ── ZONE A: KPI Row (4–6 cards) ─────────────────── -->
+      <!--
+        BLUEPRINT NOTE:
+        • 4–6 cards max; each = one "north star" metric
+        • Label: what it measures (UPPERCASE, muted)
+        • Value: big, bold, tabular numerals
+        • Badge: MoM or YoY delta
+        • Compare text: vs. prior period
+      -->
+      <div class="kpi-grid">
+
+        <div class="kpi-card">
+          <div class="kpi-label">รายได้รวม</div>
+          <div class="kpi-value" id="kpiRevenue">฿0</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge up">▲ 8.3%</span>
+            <span class="kpi-compare">vs เดือนก่อน</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">ต้นทุนสินค้า (COGS)</div>
+          <div class="kpi-value" id="kpiCogs">฿0</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge down">▲ 2.1%</span>
+            <span class="kpi-compare">vs เดือนก่อน</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">กำไรขั้นต้น (GP)</div>
+          <div class="kpi-value" id="kpiGp">฿0</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge up">▲ 12.4%</span>
+            <span class="kpi-compare">vs เดือนก่อน</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">GP Margin</div>
+          <div class="kpi-value" id="kpiMargin">0%</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge neutral">เป้า 65%</span>
+            <span class="kpi-compare">เดือนนี้</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">จำนวนบิล / ลูกค้า</div>
+          <div class="kpi-value" id="kpiBills">0</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge up">▲ 5.7%</span>
+            <span class="kpi-compare">vs เดือนก่อน</span>
+          </div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">เฉลี่ยต่อบิล</div>
+          <div class="kpi-value" id="kpiAvgBill">฿0</div>
+          <div class="kpi-meta">
+            <span class="kpi-badge up">▲ 2.5%</span>
+            <span class="kpi-compare">vs เดือนก่อน</span>
+          </div>
+        </div>
+
+      </div><!-- /kpi-grid -->
+
+      <!-- ── ZONE B: Alert / Action Items ────────────────── -->
+      <!--
+        BLUEPRINT NOTE:
+        • Show only when there are actionable items
+        • Max 3 alerts per page load
+        • Types: warning (ต้องทำ), info (ข้อมูล), error (ปัญหา)
+        • Include CTA link
+      -->
+      <div style="margin-bottom:24px;">
+        <div class="section-title">รายการที่ต้องดำเนินการ <span class="blueprint-label">ZONE B — ALERTS</span></div>
+        <div class="alert-row warning">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+            <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+          <div>
+            <strong>สาขา B</strong> ยังไม่ได้อัปโหลดรายงานธนาคารเดือน พ.ค. 2569 — <a href="#recon" style="color:inherit;text-decoration:underline;">ไปที่ Reconcile</a>
+          </div>
+        </div>
+        <div class="alert-row info">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+          <div>ต้นทุนเมนู <strong>"สเต็กเนื้อ"</strong> ยังไม่ได้กำหนด BOM — กำไรคำนวณจาก unit cost แทน</div>
+        </div>
+      </div>
+
+      <!-- ── ZONE C: Main Charts (2 + 1 layout) ──────────── -->
+      <!--
+        BLUEPRINT NOTE:
+        • Left (2/3 width): trend over time (line/bar)
+        • Right (1/3 width): breakdown / donut
+        • Always show legend + Y-axis label
+      -->
+      <div class="section-title" style="margin-bottom:12px;">แนวโน้ม & สัดส่วน <span class="blueprint-label">ZONE C — CHARTS</span></div>
+      <div class="chart-grid" style="margin-bottom:24px;">
+
+        <!-- Main trend chart -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">รายได้รายเดือน (12 เดือนล่าสุด)</span>
+            <div style="display:flex;gap:6px;">
+              <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setChartView('revenue')">รายได้</button>
+              <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px;" onclick="setChartView('gp')">GP</button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="chart-canvas-wrap">
+              <canvas id="trendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- Breakdown donut -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">สัดส่วนช่องทาง</span>
+          </div>
+          <div class="card-body">
+            <div class="chart-canvas-wrap" style="height:200px;">
+              <canvas id="channelDonut"></canvas>
+            </div>
+            <!-- Legend -->
+            <div id="donutLegend" style="margin-top:12px;display:flex;flex-direction:column;gap:6px;font-size:12px;"></div>
+          </div>
+        </div>
+
+      </div><!-- /chart-grid -->
+
+      <!-- ── ZONE D: Secondary Charts (equal columns) ───── -->
+      <div class="section-title" style="margin-bottom:12px;">รายละเอียดเพิ่มเติม <span class="blueprint-label">ZONE D — SUB CHARTS</span></div>
+      <div class="chart-grid-equal">
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">ต้นทุน vs รายได้ รายเดือน</span></div>
+          <div class="card-body">
+            <div class="chart-canvas-wrap">
+              <canvas id="cogsTrendChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><span class="card-title">GP % รายสาขา</span></div>
+          <div class="card-body">
+            <div class="chart-canvas-wrap">
+              <canvas id="branchGpChart"></canvas>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /chart-grid-equal -->
+
+      <!-- ── ZONE E: Data Table ──────────────────────────── -->
+      <!--
+        BLUEPRINT NOTE:
+        • Top 10–20 rows; add pagination if >50
+        • Numbers right-aligned with tabular-nums
+        • Sortable headers (add onclick handlers)
+        • Last row = totals (bold)
+      -->
+      <div class="card" style="margin-bottom:24px;">
+        <div class="card-header">
+          <span class="card-title">สรุปรายสาขา <span class="blueprint-label">ZONE E — TABLE</span></span>
+          <button class="btn btn-ghost" style="font-size:12px;" onclick="exportTable()">
+            Export CSV
+          </button>
+        </div>
+
+        <!-- In-table tabs -->
+        <div style="padding:0 20px;">
+          <div class="tab-bar">
+            <div class="tab-btn active" onclick="switchTab(this,'monthly')">รายเดือน</div>
+            <div class="tab-btn" onclick="switchTab(this,'quarterly')">รายไตรมาส</div>
+            <div class="tab-btn" onclick="switchTab(this,'ytd')">YTD</div>
+          </div>
+        </div>
+
+        <div style="overflow-x:auto;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>สาขา</th>
+                <th class="r">รายได้</th>
+                <th class="r">COGS</th>
+                <th class="r">GP (฿)</th>
+                <th class="r">GP%</th>
+                <th class="r">บิล</th>
+                <th class="r">เฉลี่ย/บิล</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody id="branchTableBody">
+              <!-- rows injected by JS -->
+            </tbody>
+            <tfoot>
+              <tr style="font-weight:700;background:var(--bg-subtle);">
+                <td>รวมทุกสาขา</td>
+                <td class="r" id="totalRevenue">-</td>
+                <td class="r" id="totalCogs">-</td>
+                <td class="r" id="totalGp">-</td>
+                <td class="r" id="totalMargin">-</td>
+                <td class="r" id="totalBills">-</td>
+                <td class="r" id="totalAvg">-</td>
+                <td></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div><!-- /table card -->
+
+    </div><!-- /page-overview -->
+
+    <!-- ── OTHER PAGES (hidden by default) ────────────────── -->
+    <!-- Each page section follows the same ZONE A–E pattern   -->
+    <!-- Uncomment and develop each page as needed             -->
+
+    <!--
+    <div id="page-revenue"  style="display:none">
+      ZONE A: KPI (Revenue, Units Sold, Avg Price, Conversion)
+      ZONE B: Alerts (missing data, anomalies)
+      ZONE C: Revenue trend + category donut
+      ZONE D: Top products table + channel bar chart
+      ZONE E: SKU-level table with margin highlight
+    </div>
+
+    <div id="page-cost" style="display:none">
+      ZONE A: KPI (COGS total, COGS%, Waste %, Ingredient spend)
+      ZONE C: COGS trend + ingredient breakdown donut
+      ZONE D: BOM coverage % + unit cost history
+      ZONE E: Ingredient cost table sortable by impact
+    </div>
+
+    <div id="page-profit" style="display:none">
+      ZONE A: KPI (GP, GP%, EBITDA estimate, Net margin)
+      ZONE C: Waterfall chart (Revenue → COGS → GP → Expenses → Net)
+      ZONE D: Profit trend line + branch comparison bar
+      ZONE E: P&L summary table (revenue, cogs, payroll, utilities, etc.)
+    </div>
+
+    <div id="page-branches" style="display:none">
+      ZONE A: Per-branch KPI cards (replaces summary row)
+      ZONE C: Branch rank chart (horizontal bar) + heatmap by day×branch
+      ZONE E: Branch detail table with drilldown
+    </div>
+    -->
+
+  </main><!-- /content -->
+</div><!-- /shell -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     JAVASCRIPT — DATA LAYER + CHART SETUP
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+/* ── 0. Config ─────────────────────────────────────────────── */
+const API_BASE = '';          // Set to your backend URL, e.g. 'https://api.yourbiz.com'
+const CURRENCY = 'THB';
+const fmt = n => '฿' + Number(n).toLocaleString('th-TH', {maximumFractionDigits:0});
+const pct = n => Number(n).toFixed(1) + '%';
+
+/* ── 1. Dark mode ──────────────────────────────────────────── */
+function toggleDark() {
+  document.body.classList.toggle('dark');
+  localStorage.setItem('theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+  rerenderCharts();
+}
+if (localStorage.getItem('theme') === 'dark') document.body.classList.add('dark');
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/* ── 2. Sidebar navigation ─────────────────────────────────── */
+document.querySelectorAll('.nav-item[data-page]').forEach(el => {
+  el.addEventListener('click', e => {
+    e.preventDefault();
+    const page = el.dataset.page;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    el.classList.add('active');
+    document.querySelectorAll('[id^="page-"]').forEach(p => p.style.display = 'none');
+    const target = document.getElementById('page-' + page);
+    if (target) target.style.display = '';
+  });
+});
+
+/* ── 3. Mock data (replace with real API calls) ────────────── */
+/*
+  BLUEPRINT: Replace these with fetch() calls to your FastAPI endpoints.
+  Pattern:
+    const data = await fetch(`${API_BASE}/api/overview?month=${currentMonth}`).then(r => r.json());
+*/
+const MOCK = {
+  kpi: {
+    revenue: 3_450_000,
+    cogs:    1_207_500,
+    gp:      2_242_500,
+    margin:  65.0,
+    bills:   4_820,
+    avgBill: 715,
+  },
+  trend: {
+    labels: ['ก.ค.68','ส.ค.68','ก.ย.68','ต.ค.68','พ.ย.68','ธ.ค.68','ม.ค.69','ก.พ.69','มี.ค.69','เม.ย.69','พ.ค.69','มิ.ย.69'],
+    revenue: [2800000,3100000,2950000,3200000,3400000,4100000,3000000,2800000,3100000,3300000,3250000,3450000],
+    gp:      [1820000,2015000,1918000,2080000,2210000,2665000,1950000,1820000,2015000,2145000,2113000,2243000],
+  },
+  channels: [
+    { name:'เงินสด',   value:35, color:'#4f46e5' },
+    { name:'โอนธนาคาร',value:28, color:'#0ea5e9' },
+    { name:'บัตรเครดิต',value:22, color:'#10b981' },
+    { name:'QR Code',  value:12, color:'#f59e0b' },
+    { name:'อื่นๆ',    value:3,  color:'#6b7280' },
+  ],
+  branches: [
+    { name:'สาขา A', revenue:1200000, cogs:420000, bills:1800, status:'ok' },
+    { name:'สาขา B', revenue:980000,  cogs:357000, bills:1420, status:'warn' },
+    { name:'สาขา C', revenue:830000,  cogs:299000, bills:1200, status:'ok' },
+    { name:'สาขา D', revenue:440000,  cogs:131500, bills:400,  status:'ok' },
+  ],
+};
+
+/* ── 4. Render KPI cards ───────────────────────────────────── */
+function renderKPIs(d) {
+  document.getElementById('kpiRevenue').textContent = fmt(d.revenue);
+  document.getElementById('kpiCogs').textContent    = fmt(d.cogs);
+  document.getElementById('kpiGp').textContent      = fmt(d.gp);
+  document.getElementById('kpiMargin').textContent  = pct(d.margin);
+  document.getElementById('kpiBills').textContent   = d.bills.toLocaleString('th-TH');
+  document.getElementById('kpiAvgBill').textContent = fmt(d.avgBill);
+}
+
+/* ── 5. Render branch table ────────────────────────────────── */
+function renderTable(branches) {
+  const tbody = document.getElementById('branchTableBody');
+  let totRev=0, totCogs=0, totBills=0;
+  tbody.innerHTML = branches.map(b => {
+    const gp = b.revenue - b.cogs;
+    const margin = gp / b.revenue * 100;
+    const avg = b.revenue / b.bills;
+    totRev+=b.revenue; totCogs+=b.cogs; totBills+=b.bills;
+    const badge = b.status==='ok'
+      ? '<span class="badge badge-green">ปกติ</span>'
+      : '<span class="badge badge-yellow">ตรวจสอบ</span>';
+    return `<tr>
+      <td style="font-weight:500">${b.name}</td>
+      <td class="r">${fmt(b.revenue)}</td>
+      <td class="r">${fmt(b.cogs)}</td>
+      <td class="r">${fmt(gp)}</td>
+      <td class="r" style="color:${margin>=60?'#15803d':'#b91c1c'}">${pct(margin)}</td>
+      <td class="r">${b.bills.toLocaleString('th-TH')}</td>
+      <td class="r">${fmt(avg)}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+
+  const totGp = totRev - totCogs;
+  document.getElementById('totalRevenue').textContent = fmt(totRev);
+  document.getElementById('totalCogs').textContent    = fmt(totCogs);
+  document.getElementById('totalGp').textContent      = fmt(totGp);
+  document.getElementById('totalMargin').textContent  = pct(totGp/totRev*100);
+  document.getElementById('totalBills').textContent   = totBills.toLocaleString('th-TH');
+  document.getElementById('totalAvg').textContent     = fmt(totRev/totBills);
+}
+
+/* ── 6. Charts ─────────────────────────────────────────────── */
+let trendChart, channelChart, cogsChart, branchChart;
+
+function getChartColors() {
+  return {
+    text:   cssVar('--text-secondary') || '#475569',
+    grid:   cssVar('--border')         || '#e2e8f0',
+    indigo: cssVar('--indigo')         || '#4f46e5',
+  };
+}
+
+function initCharts() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = "'Sarabun', system-ui, sans-serif";
+  Chart.defaults.font.size   = 12;
+  const c = getChartColors();
+
+  /* Trend line + bar */
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: {
+      labels: MOCK.trend.labels,
+      datasets: [
+        {
+          label: 'รายได้',
+          data: MOCK.trend.revenue,
+          backgroundColor: c.indigo + '33',
+          borderColor: c.indigo,
+          borderWidth: 2,
+          borderRadius: 4,
+          order: 2,
+        },
+        {
+          label: 'GP',
+          data: MOCK.trend.gp,
+          type: 'line',
+          borderColor: '#10b981',
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          tension: 0.3,
+          order: 1,
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: c.text } } },
+      scales: {
+        x: { ticks: { color: c.text }, grid: { color: c.grid } },
+        y: {
+          ticks: { color: c.text, callback: v => '฿' + (v/1e6).toFixed(1) + 'M' },
+          grid: { color: c.grid }
+        }
+      }
+    }
+  });
+
+  /* Channel donut */
+  channelChart = new Chart(document.getElementById('channelDonut'), {
+    type: 'doughnut',
+    data: {
+      labels: MOCK.channels.map(x => x.name),
+      datasets: [{
+        data: MOCK.channels.map(x => x.value),
+        backgroundColor: MOCK.channels.map(x => x.color),
+        borderWidth: 0,
+        hoverOffset: 4,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '68%',
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  /* Donut legend */
+  document.getElementById('donutLegend').innerHTML = MOCK.channels.map(x =>
+    `<div style="display:flex;align-items:center;gap:6px;">
+       <span style="width:10px;height:10px;border-radius:50%;background:${x.color};flex-shrink:0;"></span>
+       <span style="flex:1;color:var(--text-secondary);">${x.name}</span>
+       <strong>${x.value}%</strong>
+     </div>`
+  ).join('');
+
+  /* COGS vs Revenue stacked */
+  cogsChart = new Chart(document.getElementById('cogsTrendChart'), {
+    type: 'bar',
+    data: {
+      labels: MOCK.trend.labels.slice(-6),
+      datasets: [
+        {
+          label: 'COGS',
+          data: MOCK.trend.revenue.slice(-6).map(v => v * 0.35),
+          backgroundColor: '#f87171',
+          borderRadius: 4,
+          stack: 'a',
+        },
+        {
+          label: 'GP',
+          data: MOCK.trend.gp.slice(-6),
+          backgroundColor: '#4ade80',
+          borderRadius: 4,
+          stack: 'a',
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: c.text } } },
+      scales: {
+        x: { ticks: { color: c.text }, grid: { color: c.grid }, stacked: true },
+        y: {
+          ticks: { color: c.text, callback: v => '฿' + (v/1e6).toFixed(1) + 'M' },
+          grid: { color: c.grid }, stacked: true
+        }
+      }
+    }
+  });
+
+  /* Branch GP bar */
+  const bData = MOCK.branches.map(b => ((b.revenue - b.cogs) / b.revenue * 100));
+  branchChart = new Chart(document.getElementById('branchGpChart'), {
+    type: 'bar',
+    data: {
+      labels: MOCK.branches.map(b => b.name),
+      datasets: [{
+        label: 'GP%',
+        data: bData,
+        backgroundColor: bData.map(v => v >= 60 ? '#4ade80' : '#f87171'),
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        annotation: {
+          annotations: {
+            target: {
+              type: 'line',
+              scaleID: 'x',
+              value: 65,
+              borderColor: c.indigo,
+              borderWidth: 2,
+              borderDash: [4, 4],
+              label: { display: true, content: 'เป้า 65%', color: c.indigo, position: 'start' }
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ticks: { color: c.text, callback: v => v+'%' }, grid: { color: c.grid }, min: 0, max: 100 },
+        y: { ticks: { color: c.text }, grid: { display: false } }
+      }
+    }
+  });
+}
+
+function rerenderCharts() {
+  [trendChart, channelChart, cogsChart, branchChart].forEach(ch => ch && ch.destroy());
+  initCharts();
+}
+
+/* ── 7. Tab switching (in-table) ───────────────────────────── */
+function switchTab(el, view) {
+  el.closest('.tab-bar').querySelectorAll('.tab-btn').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  /* TODO: re-fetch table data for `view` period */
+}
+
+/* ── 8. Actions (stubs) ────────────────────────────────────── */
+function exportReport() { alert('TODO: call /api/reports/export'); }
+function exportTable()  { alert('TODO: call /api/reports/branches/csv'); }
+function refreshData()  { alert('TODO: re-fetch all KPI + chart data'); }
+function setChartView(v){ console.log('Switch chart view:', v); }
+
+/* ── 9. Init ───────────────────────────────────────────────── */
+renderKPIs(MOCK.kpi);
+renderTable(MOCK.branches);
+initCharts();
+</script>
+
+<!--
+═══════════════════════════════════════════════════════════════
+  DASHBOARD BLUEPRINT — ZONE GUIDE
+═══════════════════════════════════════════════════════════════
+
+  SHELL (grid-template):
+  ┌──────────────────────────────────────────┐
+  │  TOPBAR  (brand | filters | actions)     │  h=52px
+  ├──────────┬───────────────────────────────┤
+  │          │  PAGE HEADER (title, subtitle)│
+  │ SIDEBAR  ├───────────────────────────────┤
+  │ 220px    │  ZONE A — KPI Row (4–6 cards) │
+  │          ├───────────────────────────────┤
+  │  nav     │  ZONE B — Alerts (0–3 items)  │
+  │  items   ├───────────────────────────────┤
+  │  grouped │  ZONE C — Main Charts         │
+  │  by      │    (2/3 trend + 1/3 donut)    │
+  │  section ├───────────────────────────────┤
+  │          │  ZONE D — Sub Charts (50/50)  │
+  │          ├───────────────────────────────┤
+  │          │  ZONE E — Data Table + tabs   │
+  └──────────┴───────────────────────────────┘
+
+  DESIGN TOKENS (from /docs/ui-kit/tokens.css):
+    --bg-page / --bg-card / --bg-sidebar / --bg-topbar
+    --text-primary / --text-secondary / --text-muted
+    --border / --border-soft
+    --indigo / --indigo-mid / --indigo-soft
+    --shadow-xs / --shadow-sm / --shadow-card
+    --r-sm (8px) / --r-md (12px) / --r-lg (16px)
+
+  COMPONENTS AVAILABLE:
+    .kpi-card        — metric card with delta badge
+    .card + .card-header + .card-body  — generic container
+    .kpi-badge.up / .down / .neutral   — delta pill
+    .badge-green / -yellow / -red / -blue / -gray — status
+    .alert-row.warning / .info / .error — action alerts
+    .tab-bar + .tab-btn.active          — in-page tabs
+    .data-table                         — sortable data grid
+    .btn-primary / .btn-ghost           — action buttons
+    .icon-btn                           — icon-only button
+    .chart-canvas-wrap                  — Chart.js container
+
+  PAGE PATTERN (replicate for each page):
+    1. Page header (title, subtitle, actions)
+    2. KPI row (4-6 cards specific to that page)
+    3. Alerts (page-specific warnings)
+    4. Primary chart (full-width or 2/3 + 1/3)
+    5. Secondary charts (side by side)
+    6. Detail table (with tabs for time range)
+
+  API INTEGRATION:
+    Replace MOCK.* objects with:
+      const data = await fetch(`${API_BASE}/api/<endpoint>`).then(r=>r.json())
+    Add loading skeleton: set kpi values to '...' while fetching.
+    Add error handling: show .alert-row.error on network failure.
+
+═══════════════════════════════════════════════════════════════
+-->
+
+</body>
+</html>
