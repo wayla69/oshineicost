@@ -1016,9 +1016,6 @@ function renderTable(branches) {
 /* ── 6. Charts ─────────────────────────────────────────────── */
 let trendChart, channelChart, cogsChart, branchChart;
 
-Chart.defaults.font.family = "'Sarabun', system-ui, sans-serif";
-Chart.defaults.font.size   = 12;
-
 function getChartColors() {
   return {
     text:   cssVar('--text-secondary') || '#475569',
@@ -1028,6 +1025,9 @@ function getChartColors() {
 }
 
 function initCharts() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = "'Sarabun', system-ui, sans-serif";
+  Chart.defaults.font.size   = 12;
   const c = getChartColors();
 
   /* Trend line + bar */
