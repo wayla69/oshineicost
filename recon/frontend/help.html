@@ -245,7 +245,7 @@ section{scroll-margin-top:80px}
     </tr>
     <tr>
       <td><b>สเตทเมนต์ธนาคาร</b><br><span class="lbl">KBANK / KTB / TTB / BAY / SCB</span></td>
-      <td>PDF, Excel, CSV</td>
+      <td>Excel/CSV (แนะนำ), PDF</td>
       <td>QR, เงินสด (ฝาก), เงินโอน, ขั้น 2 ของบัตรเครดิต (เงินเข้าสุทธิ), payout ของ Grab/LM</td>
       <td>e-Statement จาก K Cyber / KMA / SCB Easy / Krungthai NEXT (เลือกเดือนเต็ม)</td>
     </tr>
@@ -274,10 +274,10 @@ section{scroll-margin-top:80px}
       <td>Grab Merchant Portal → Reports (เลือกเดือน)</td>
     </tr>
     <tr>
-      <td><b>รายงาน Line Man</b></td>
+      <td><b>รายงาน Line Man</b><br><span class="lbl">รายงานยอดขาย หรือ Balance-Report</span></td>
       <td>Excel/CSV</td>
       <td>Line Man — ยอด gross + ค่าธรรมเนียม + payout</td>
-      <td>LINE MAN Wongnai Partner → Reports</td>
+      <td>LINE MAN Wongnai Partner → Reports (รองรับทั้งรายงานยอดขาย และไฟล์ Balance-Report-*.xlsx)</td>
     </tr>
     <tr>
       <td><b>สลิปนำฝากเงินสด</b><br>(ถ่ายรูป + พิมพ์ยอด)</td>
@@ -288,6 +288,11 @@ section{scroll-margin-top:80px}
   </table>
 
   <div class="callout info">📌 <b>เอกสารต้องเป็นของสาขาที่กำลังทำเท่านั้น</b> — ระบบเช็คชื่อ/เลขบัญชี/MID ในไฟล์ ถ้าผิดสาขาจะขึ้นแถบแดงและไม่อนุญาตให้ยืนยัน</div>
+
+  <div class="callout">🔍 <b>สเตทเมนต์ KTB — แนะนำดาวน์โหลดเป็น Excel/CSV</b> จะแม่นยำที่สุด · ถ้าใช้ PDF: ไฟล์ที่มีตัวอักษรอ่านได้ปกติ
+    แต่ไฟล์ที่ "ไม่มีตัวอักษร" (สแกน หรือไฟล์จากการกด <b>Print to PDF</b> ที่แปลงตัวเลขเป็นรูป) ระบบจะอ่านด้วย <b>OCR</b>
+    แล้ว <b>ตรวจยอดคงเหลืออัตโนมัติ</b> (ยอดก่อนหน้า ± จำนวนเงิน = ยอดคงเหลือ) — ถ้าตัวเลขเพี้ยนจะ <b>ปฏิเสธ</b> ไม่บันทึก
+    เลขที่ผิด · เมื่อใช้ OCR จะมี chip <b>"🔍 อ่านด้วย OCR — โปรดตรวจยอดก่อนยืนยัน"</b> ให้ทวนยอดรวมกับท้ายสเตทเมนต์ก่อนกดยืนยัน</div>
 
   <h3>วิธีอัปโหลด</h3>
   <ol>
