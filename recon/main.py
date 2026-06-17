@@ -4774,13 +4774,13 @@ def get_audit_log(
                 ORDER BY ts DESC, id DESC LIMIT ?
             """, (session_id, session_id, cap)).fetchall()
         else:
-            filters: list[str] = []
+            filters: list[str] = ["entity != 'auth'"]
             params:  list      = []
             if entity:
                 filters.append("entity=?");    params.append(entity)
             if entity_id:
                 filters.append("entity_id=?"); params.append(entity_id)
-            where = ("WHERE " + " AND ".join(filters)) if filters else ""
+            where = "WHERE " + " AND ".join(filters)
             rows = conn.execute(f"""
                 SELECT * FROM recon_audit_log {where}
                 ORDER BY ts DESC, id DESC LIMIT ?
