@@ -4553,7 +4553,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
        style="background:linear-gradient(135deg,#4338ca 0%,#7c3aed 55%,#9333ea 100%)">
     <div class="flex items-start justify-between flex-wrap gap-4">
       <div>
-        <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Invisible Consulting · Oshinei Enterprise</p>
+        <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
         <h1 class="text-3xl font-bold leading-tight">Sales &amp; Cost Analysis Report</h1>
         <p id="rptPeriod" class="text-sm opacity-90 mt-2">—</p>
         <p id="rptBranch" class="text-sm opacity-90">—</p>
@@ -10307,13 +10307,21 @@ async function loadReport() {
   const _rowFor = mm => (Array.isArray(trend) && trend.find(r => r.period_month === mm))
                      || (Array.isArray(trendFull) && trendFull.find(r => r.period_month === mm)) || null;
   const _prevMonthStr = mm => { if (!mm) return null; let [y,m]=mm.split('-').map(Number); m-=1; if(m<1){m=12;y-=1;} return `${y}-${String(m).padStart(2,'0')}`; };
-  // mLast = last complete month (fallback: last row in trend if window unknown).
-  let mLast = completeMonth ? (_rowFor(completeMonth) || {period_month: completeMonth}) : (trend[trend.length-1] || {});
+  // Headline month: use the user's filter selection when explicitly set;
+  // fall back to last-complete-month only when no period is chosen.
+  const _filterHeadMonth = monthTo || monthFrom || null;
+  const _useFilterMonth  = _filterHeadMonth && _filterHeadMonth !== completeMonth;
+  let mLast = _useFilterMonth
+    ? (_rowFor(_filterHeadMonth) || {period_month: _filterHeadMonth})
+    : (completeMonth ? (_rowFor(completeMonth) || {period_month: completeMonth}) : (trend[trend.length-1] || {}));
   let mPrev = _rowFor(_prevMonthStr(mLast.period_month));
   if (!mPrev && trend.length >= 2 && !completeMonth) mPrev = trend[trend.length-2];
-  // Partial (MTD) month, for a separate note — never as the headline MoM base.
+  // Partial (MTD) month, for a separate note.
   const mPartial = partialMonth ? _rowFor(partialMonth) : null;
-  const mLastLabel = mLast.period_month ? fmtMonth(mLast.period_month) : '—';
+  const _isMtdHeadline = mLast.period_month && mLast.period_month === partialMonth;
+  const mLastLabel = mLast.period_month
+    ? fmtMonth(mLast.period_month) + (_isMtdHeadline ? ' (MTD)' : '')
+    : '—';
   const pctDelta = (cur, prev) => (prev && prev > 0) ? ((cur - prev) / prev * 100) : null;
   const momChip = p => p == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
