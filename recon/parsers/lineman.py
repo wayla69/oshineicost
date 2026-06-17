@@ -31,15 +31,103 @@ _NET_COLS      = ["ยอดเงินสุทธิ", "net payout", "net amo
 _PAYOUT_COLS   = ["วันที่ชำระเงิน", "payout date", "payment date", "วันที่โอน"]
 
 
+# ── Balance Report (LINE MAN settlement export, English headers) ──────────────
+# A different LINE MAN export than the Thai-header order report above. One file
+# per day, columns:
+#   business_id | store_id | restaurant_name | branch_name | order_id |
+#   capture_time(date) | capture_time(time) | payment_method |
+#   cash_amount | e_payment_amount | fee | other_cost | vat | net_amount
+# fee / other_cost / vat arrive NEGATIVE (deductions). The settlement identity is
+#   cash + e_payment + fee + other_cost + vat = net_amount
+# so gross order value = cash + e_payment and net_amount is what LINE MAN settles
+# to the bank. This is the financial report that reconciles against the deposit.
+_BALANCE_SIG = ("e_payment_amount", "net_amount", "business_id")
+
+
+def _header_index(header_row) -> dict[str, int]:
+    """Map normalised header text → column index for an English Balance Report."""
+    idx: dict[str, int] = {}
+    for j, c in enumerate(header_row):
+        key = str(c).strip().lower() if c is not None else ""
+        if key and key not in idx:
+            idx[key] = j
+    return idx
+
+
+def _is_balance_report(header_row) -> bool:
+    keys = {str(c).strip().lower() for c in header_row if c is not None}
+    return all(sig in keys for sig in _BALANCE_SIG)
+
+
+def _parse_balance_report(rows: list, header_row: int) -> tuple[list[dict], int]:
+    idx = _header_index(rows[header_row])
+
+    def col(*names):
+        for n in names:
+            if n in idx:
+                return idx[n]
+        return None
+
+    c_date     = col("capture_time", "capture_t") or next(
+        (j for k, j in idx.items() if k.startswith("capture")), None)
+    c_order    = col("order_id")
+    c_merchant = col("restaurant_name", "branch_name")
+    c_pay      = col("payment_method")
+    c_cash     = col("cash_amount")
+    c_epay     = col("e_payment_amount")
+    c_fee      = col("fee")
+    c_other    = col("other_cost")
+    c_vat      = col("vat")
+    c_net      = col("net_amount")
+
+    results, skipped = [], 0
+    for row in rows[header_row + 1:]:
+        raw_date = row[c_date] if c_date is not None and c_date < len(row) else None
+        order_date = _parse_thai_date(raw_date)
+        if not order_date:
+            if not _blank(raw_date):
+                skipped += 1
+            continue
+
+        def g(c):
+            return _to_float(row[c]) if c is not None and c < len(row) else 0.0
+
+        cash, epay = g(c_cash), g(c_epay)
+        fee, other, vat, net = g(c_fee), g(c_other), g(c_vat), g(c_net)
+        gross = cash + epay
+        results.append({
+            "order_date":        order_date,
+            "order_id":          str(row[c_order] or "").strip() if c_order is not None else "",
+            "merchant_name":     str(row[c_merchant] or "").strip() if c_merchant is not None else "",
+            "order_status":      "Refunded" if net < 0 else "Completed",
+            "food_amount":       gross,
+            "delivery_fee":      0.0,
+            "commission_rate":   round(abs(fee) / gross, 4) if gross else 0.0,
+            "commission_amt":    abs(fee),          # fee arrives negative
+            "vat_on_commission": abs(vat),          # VAT on the commission, negative
+            "promo_deduct":      abs(other),        # other_cost deductions
+            "net_payout":        net,
+            "payout_date":       order_date,        # Balance Report = settled same period
+        })
+    return results, skipped
+
+
 def parse_lineman_report(file_bytes: bytes) -> tuple[list[dict], int]:
     """
-    Parse LINE MAN Wongnai financial/order report Excel.
+    Parse LINE MAN Wongnai financial/order report Excel. Accepts both the Thai-
+    header order report and the English-header Balance Report (settlement export).
     Returns (rows, skipped) — rows match recon_lineman_lines columns; skipped
     counts data rows dropped for an unparseable order date.
     """
     wb = openpyxl.load_workbook(io.BytesIO(file_bytes), read_only=True, data_only=True)
     ws = wb.active
     rows = list(ws.iter_rows(values_only=True))
+
+    # Balance Report: detect its English signature header anywhere in the first
+    # few rows and parse positionally (gross = cash + e_payment, fee/vat negative).
+    for i, row in enumerate(rows[:5]):
+        if _is_balance_report(row):
+            return _parse_balance_report(rows, i)
 
     col: dict[str, int] = {}
     header_row = None

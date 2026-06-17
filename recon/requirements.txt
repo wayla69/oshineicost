@@ -5,3 +5,6 @@ openpyxl>=3.1.2
 xlrd>=2.0.1            # read legacy BIFF .xls (Krungsri RDB003 settlements)
 python-multipart>=0.0.9
 pdfplumber>=0.11.0
+pypdfium2>=4.30.0      # render no-text PDF pages to images for OCR
+pytesseract>=0.3.10    # OCR fallback for image/Print-to-PDF KTB statements
+Pillow>=10.0.0         # image handling for the OCR pipeline

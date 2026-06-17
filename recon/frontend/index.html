@@ -801,6 +801,7 @@ async function previewUpload(){
     ${p.empty_statement?`<div class="chip c-warn" style="margin-top:6px">เอกสารว่าง (No Data) — ยืนยันได้ ระบบจะบันทึกว่าเดือนนี้ไม่มีรายการ</div>`:''}
     ${zeroRow?`<div class="chip c-err" style="margin-top:6px">⚠ อ่านได้ 0 รายการ — น่าจะเป็นไฟล์ผิดประเภท/รูปแบบที่ยังไม่รองรับ ยืนยันไม่ได้</div>`:''}
     ${(p.generic_fallback&&!zeroRow)?`<div class="chip c-warn" style="margin-top:6px">อ่านแบบทั่วไป (ไม่รู้จักรูปแบบเฉพาะของผู้ให้บริการ) — โปรดตรวจตัวเลขก่อนยืนยัน</div>`:''}
+    ${p.ocr_used?`<div class="chip c-warn" style="margin-top:6px">🔍 อ่านด้วย OCR (ไฟล์ PDF ไม่มีตัวอักษร) — ยอดผ่านการตรวจสอบยอดคงเหลือแล้ว แต่โปรดตรวจยอดรวมอีกครั้งก่อนยืนยัน</div>`:''}
     ${wrongBranch?`<div class="chip c-err" style="margin-top:6px">⚠ เอกสารนี้เป็นของสาขา ${esc(p.detected_branch_name)} — ยืนยันไม่ได้</div>`:''}
     <div class="row" style="margin-top:10px">
       <button class="btn btn-pri" ${block?'disabled':''} onclick="confirmUpload()">✓ ยืนยันบันทึก</button>

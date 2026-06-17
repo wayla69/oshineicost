@@ -1,9 +1,11 @@
 # Oshinei Dashboard + Reconciliation — FastAPI + SQLite, deployed on Fly.io
 FROM python:3.12-slim
 
-# System libs needed by matplotlib/reportlab
+# System libs needed by matplotlib/reportlab, plus Tesseract (+ Thai language
+# pack) for the OCR fallback that reads no-text-layer KTB statement PDFs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libfreetype6 libjpeg62-turbo libpng16-16 \
+        tesseract-ocr tesseract-ocr-tha \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

@@ -1374,7 +1374,8 @@ def test_a2_wrong_doc_type_named_and_rejected(client):
     from recon.parsers.pdf_formats import fee_invoice_by_name
     assert "RTxInv" in (fee_invoice_by_name("credit_card", "TIV_MDR_x1136_260501.pdf") or "")
     assert "3-CZ"   in (fee_invoice_by_name("grab", "IM20260501044240.pdf") or "")
-    assert "REPORT_" in (fee_invoice_by_name("lineman", "Balance-Report-2026-05-01.csv") or "")
+    # LINE MAN Balance-Report is a SUPPORTED settlement export now — never rejected
+    assert fee_invoice_by_name("lineman", "Balance-Report-2026-05-01.xlsx") is None
     assert "e-Tax"  in (fee_invoice_by_name("credit_card", "E-TAX_INVOICE_CARD_x.pdf") or "")
     # a correct file is NOT flagged
     assert fee_invoice_by_name("credit_card", "006_0170581195_260501-RTxInv-02.pdf") is None
@@ -1384,6 +1385,69 @@ def test_a2_wrong_doc_type_named_and_rejected(client):
                     data={"branch_id": "4", "period_month": "2026-06"})
     assert r.status_code == 422 and "RTxInv" in r.json()["detail"]
     assert client.get("/api/uploads?branch_id=4&period_month=2026-06").json() == []
+
+
+def _balance_report_xlsx(rows):
+    """LINE MAN Balance-Report (English settlement export). Note the header splits
+    'capture_time' across two cells exactly as the real export does."""
+    import datetime as _dt
+    wb = openpyxl.Workbook(); ws = wb.active
+    ws.append(["business_id", "store_id", "restaurant_name", "branch_name",
+               "order_id", "capture_t", "ime", "payment_method",
+               "cash_amount", "e_payment_amount", "fee", "other_cost", "vat", "net_amount"])
+    for r in rows:
+        ws.append(r)
+    buf = io.BytesIO(); wb.save(buf); return buf.getvalue()
+
+
+def test_lineman_balance_report_parsed(client):
+    """LINE MAN Balance-Report-*.xlsx is the supported settlement export: gross =
+    cash + e_payment, fee/vat arrive negative, net_amount is the bank settlement.
+    Must parse (not be rejected as a wrong doc type)."""
+    import datetime as _dt
+    from recon.parsers.lineman import parse_lineman_report
+    raw = _balance_report_xlsx([
+        ["154718iL", "", "โอชิเน Oshinei อุบลราชธานี", "อุบลราชธานี",
+         "LMF-260501-721909390", _dt.datetime(2026, 5, 1), _dt.time(12, 8, 5),
+         "CASH_COLLECTION", 0, 846.75, -102.88, 0, -7.2, 736.67],
+    ])
+    rows, skipped = parse_lineman_report(raw)
+    assert skipped == 0 and len(rows) == 1
+    r = rows[0]
+    assert r["order_date"] == "2026-05-01"
+    assert r["food_amount"] == 846.75          # cash + e_payment
+    assert r["commission_amt"] == 102.88       # abs(fee)
+    assert r["vat_on_commission"] == 7.2       # abs(vat)
+    assert r["net_payout"] == 736.67
+    # end-to-end confirm saves it (filename carries 'balance-report' — once rejected)
+    r2 = client.post("/api/uploads/lineman/confirm",
+                     files={"file": ("Balance-Report-2026-05-01.xlsx", raw)},
+                     data={"branch_id": "4", "period_month": "2026-05"})
+    assert r2.status_code == 200 and r2.json()["rows_saved"] == 1
+
+
+_OCR_KTB_TEXT = """รายการเดินบัญชีเงินฝาก ธนาคารกรุงไทย
+เลขที่บัญชี 017-0-58113-6
+ยอดคงเหลือยกมา 4,348,525.57
+01/06/2026 12:16 SDCH 35,491.00 0.00 4,384,016.57 -
+01/06/2026 23:00 SD Single credit to 0170581136 53,179.88 0.00 4,437,196.45 -
+02/06/2026 12:20 SDCH 24,553.00 0.00 4,461,749.45 -
+"""
+
+
+def test_ocr_ktb_text_parse_and_balance_chain():
+    """OCR safety net: parse recovered KTB text and validate the running-balance
+    chain. A clean read reconciles; a single corrupted balance breaks the chain."""
+    from recon.parsers.ocr import _parse_ktb_ocr, _balance_chain_ok, _seed_opening_balance
+    rows, skipped = _parse_ktb_ocr(_OCR_KTB_TEXT)
+    assert len(rows) == 3 and skipped == 0
+    assert rows[0]["credit"] == 35491.0 and rows[0]["balance"] == 4384016.57
+    opening = _seed_opening_balance(_OCR_KTB_TEXT.splitlines())
+    assert opening == 4348525.57
+    assert _balance_chain_ok(rows, opening) is True
+    # corrupt one balance (simulate an OCR misread) → chain must FAIL → rejected
+    rows[1]["balance"] = 4_437_196.99
+    assert _balance_chain_ok(rows, opening) is False
 
 
 def test_c3_encryption_detection():

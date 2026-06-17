@@ -503,8 +503,8 @@ _FEE_INVOICE_BY_NAME = (
                        "ไม่ใช่รายงาน settlement ของผู้รับบัตร"),
     ("e_tax_invoice",  "นี่คือใบกำกับภาษีอิเล็กทรอนิกส์ (e-Tax invoice) ค่าธรรมเนียมบัตร "
                        "ไม่ใช่รายงาน settlement ของผู้รับบัตร"),
-    ("balance-report", "นี่คือ Balance Report ไม่ใช่รายงานยอดขาย Line Man — "
-                       "กรุณาอัปโหลดไฟล์ REPORT_*.csv หรือ REPORT_*.pdf"),
+    # NOTE: LINE MAN "Balance-Report-*.xlsx" is a SUPPORTED settlement export
+    # (parsed by lineman._parse_balance_report) — it must NOT be rejected here.
 )
 
 _GRAB_IM_RE = re.compile(r"^im\d{6,}", re.IGNORECASE)
@@ -591,4 +591,16 @@ def detect_and_parse(source_type: str, raw: bytes):
     except Exception:
         # Any extractor failure → let the generic path try.
         return None
+
+    # OCR fallback for a bank PDF with NO text layer (scanned / "Print to PDF"
+    # vector outlines). Kept OUTSIDE the swallow above so an OCR balance-chain
+    # rejection surfaces as its own clear message instead of becoming None.
+    if source_type == "bank":
+        try:
+            has_text = bool(_full_text(raw).strip())
+        except Exception:
+            has_text = True
+        if not has_text:
+            from .ocr import attempt_ocr_bank      # lazy: avoids circular import
+            return attempt_ocr_bank(raw)           # tuple, None, or raises ValueError
     return None

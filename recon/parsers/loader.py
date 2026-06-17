@@ -149,8 +149,11 @@ def _pdf_to_xlsx(raw: bytes) -> bytes:
         ) from exc
 
     all_rows: list[list] = []
+    any_text = False               # did the page expose ANY selectable text?
     with pdfplumber.open(io.BytesIO(raw)) as pdf:
         for page in pdf.pages:
+            if (page.extract_text() or "").strip():
+                any_text = True
             tables = page.extract_tables() or []
             if tables:
                 for tbl in tables:
@@ -160,11 +163,19 @@ def _pdf_to_xlsx(raw: bytes) -> bytes:
             else:
                 all_rows.extend(_text_lines_to_rows(page))
 
-    if not all_rows:
+    # A PDF with no text layer still exposes its ruled grid to extract_tables(),
+    # so all_rows comes back full of EMPTY cells (the digits are pixels or vector
+    # outlines, not text). Two common causes: a scanned/image PDF, OR a file made
+    # with "Microsoft Print to PDF" which flattens Thai fonts to vector curves.
+    # Detect that — no selectable text anywhere, or every extracted cell blank —
+    # and give the actionable message instead of letting a domain parser fail
+    # later with a misleading "could not find date column".
+    has_content = any(str(c).strip() for row in all_rows for c in row)
+    if not all_rows or not any_text or not has_content:
         raise ValueError(
-            "No tabular data could be extracted from this PDF. It may be a "
-            "scanned image (needs OCR) or an unsupported layout — please upload "
-            "the Excel/CSV export instead."
+            "อ่านไฟล์ PDF นี้ไม่ได้ — ไม่มีตัวอักษรให้อ่าน (เป็นไฟล์สแกน หรือ PDF ที่ได้จากการ "
+            "'Print to PDF' ซึ่งแปลงตัวเลขเป็นรูปภาพ) กรุณาดาวน์โหลด statement เป็นไฟล์ "
+            "Excel/CSV จากระบบธนาคาร (เช่น KTB Corporate Online) แล้วอัปโหลดแทน"
         )
     return _rows_to_xlsx(all_rows)
 

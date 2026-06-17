@@ -239,6 +239,28 @@ def _parse_bbl(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
     })
 
 
+# ── KTB ───────────────────────────────────────────────────────────────────────
+
+def _parse_ktb(ws: openpyxl.worksheet.worksheet.Worksheet) -> list[dict]:
+    """Krungthai Bank statement (PDF or xlsx).
+
+    Column layout from KTB online banking:
+      วันที่/เวลา | รายการ | รายละเอียด | หมายเลขเช็ค | ถอนเงิน/ฝากเงิน | ภาษี | ยอดคงเหลือ | ช่องทาง
+
+    The ถอนเงิน/ฝากเงิน column is combined — positive values are credits (deposits).
+    We map it to credit only; debit defaults to 0 (KTB accounts here receive
+    settlement inflows only). desc → รายการ captures statement codes (SDCH /
+    IORSDT / NBSDT) needed for channel normalisation.
+    """
+    return _parse_generic(ws, {
+        "date":    ["วันที่", "date"],
+        "desc":    ["รายการ", "description", "รายละเอียด"],
+        "credit":  ["ถอนเงิน/ฝากเงิน", "ฝากเงิน", "ฝาก", "deposit", "credit"],
+        "balance": ["ยอดคงเหลือ", "balance"],
+        "ref":     ["หมายเลขเช็ค", "cheque", "ref"],
+    })
+
+
 # ── Generic fallback ──────────────────────────────────────────────────────────
 
 def _parse_generic(
@@ -290,7 +312,7 @@ _PROVIDER_PARSERS = {
     "kbank": _parse_kbank,
     "scb":   _parse_scb,
     "bbl":   _parse_bbl,
-    "ktb":   _parse_generic,
+    "ktb":   _parse_ktb,
     "ttb":   _parse_generic,
 }
 

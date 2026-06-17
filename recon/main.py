@@ -1074,6 +1074,9 @@ async def preview_upload(
         # C7: warn when no format-specific extractor matched and the generic grid
         # was used (its debit/credit split can be wrong) — operator should eyeball.
         "generic_fallback": str(prov).strip().lower() in ("", "generic", "none"),
+        # OCR fallback used (no-text KTB PDF): amounts passed the balance-chain
+        # self-check, but the operator should still eyeball the total before close.
+        "ocr_used": "ocr" in str(prov).strip().lower(),
         **detected,                # detected_branch_id / detected_branch_name / detected_key
     }
 
