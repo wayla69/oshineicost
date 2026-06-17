@@ -113,6 +113,16 @@ def _parse_thai_date(raw: Any) -> str | None:
     if not raw:
         return None
     s = str(raw).strip()
+    # ISO date or datetime, e.g. "2026-06-05" / "2026-06-05 12:46:38.379"
+    # (LINE MAN Balance-Report CSV writes capture_time as a string with time +
+    # fractional seconds). fromisoformat accepts the space/'T' separator and ms.
+    try:
+        d = datetime.fromisoformat(s.replace("T", " "))
+        if d.year > 2500:                       # Thai Buddhist Era
+            d = d.replace(year=d.year - 543)
+        return d.strftime("%Y-%m-%d")
+    except ValueError:
+        pass
     for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%Y-%m-%d"):
         try:
             d = datetime.strptime(s, fmt)

@@ -1426,6 +1426,33 @@ def test_lineman_balance_report_parsed(client):
     assert r2.status_code == 200 and r2.json()["rows_saved"] == 1
 
 
+def test_lineman_balance_report_csv_datetime(client):
+    """The CSV export differs from the xlsx: capture_time is a STRING with time +
+    fractional seconds ('2026-06-05 12:46:38.379') and has a 'detail' column. The
+    date parser must read the ISO datetime (else every row is skipped → 0 rows →
+    'LINE MAN update ไม่ได้'). Columns are name-mapped so the extra 'detail' is fine."""
+    csv = (
+        "business_id,store_id,restaurant_name,branch_name,order_id,capture_time,"
+        "detail,payment_method,cash_amount,e_payment_amount,fee,other_cost,vat,net_amount\n"
+        "285452El,,โอชิเน Oshinei โคราช ,โคราช,LMF-260605-816608937,"
+        "2026-06-05 12:46:38.379,Delivery Order,CASH_COLLECTION,0.00,129.00,-15.67,0.00,-1.10,112.23\n"
+    ).encode("utf-8")
+    r = client.post("/api/uploads/lineman/confirm",
+                    files={"file": ("Balance-Report-2026-06-05.csv", csv)},
+                    data={"branch_id": "4", "period_month": "2026-06"})
+    assert r.status_code == 200 and r.json()["rows_saved"] == 1
+
+
+def test_parse_thai_date_iso_datetime():
+    """ISO date and datetime (with/without fractional seconds, BE year) all resolve."""
+    from recon.parsers.bank import _parse_thai_date
+    assert _parse_thai_date("2026-06-05") == "2026-06-05"
+    assert _parse_thai_date("2026-06-05 12:46:38.379") == "2026-06-05"
+    assert _parse_thai_date("2026-06-05T09:00:00") == "2026-06-05"
+    assert _parse_thai_date("2569-06-05 00:00:00") == "2026-06-05"   # Buddhist year
+    assert _parse_thai_date("05/06/2026") == "2026-06-05"            # slash form still works
+
+
 _OCR_KTB_TEXT = """รายการเดินบัญชีเงินฝาก ธนาคารกรุงไทย
 เลขที่บัญชี 017-0-58113-6
 ยอดคงเหลือยกมา 4,348,525.57
