@@ -15762,6 +15762,10 @@ _PERF_INDEXES = (
     # (Hourly reuses the existing idx_tx_src_hour, so no separate index is needed.)
     "CREATE INDEX IF NOT EXISTS idx_tx_ym_dow_cov ON sales_transaction"
     "(strftime('%Y-%m', sold_at), strftime('%w', sold_at), sold_at, total_inc_vat, customer_count)",
+    # sale_payment lookup by receipt — needed by discount_bills correlated subqueries
+    # (dominant payment code + payment count per receipt). Without this index SQLite
+    # does a full table scan for every row in the result set → O(n * |sale_payment|).
+    "CREATE INDEX IF NOT EXISTS idx_sp_receipt ON sale_payment(branch_id, receipt_no, amount)",
 )
 
 
