@@ -707,6 +707,55 @@ def test_payout_matching_combines_consecutive_days(client):
     assert p["amount"] == 300 and p["payout_date"] == "2026-06-09"
 
 
+def _add_lineman_net(db, day, net, branch_id=4, status="Completed"):
+    """A LINE MAN completed-order net-day (food=net, no fee/VAT for simplicity)."""
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('lineman',?,'LINE MAN','lm',?,0,'confirmed')",
+                   (branch_id, day[:7])).lastrowid
+    c.execute("INSERT INTO recon_lineman_lines(upload_id,branch_id,order_date,order_status,"
+              "food_amount,commission_amt,vat_on_commission,promo_deduct,net_payout)"
+              " VALUES(?,?,?,?,?,0,0,0,?)", (up, branch_id, day, status, net, net))
+    c.commit(); c.close()
+
+
+def test_lineman_under_threshold_pays_next_month_first(client):
+    """LINE MAN's ฿500 transfer rule: a whole month whose net never reaches ฿500
+    is swept on the 1st of NEXT month, and tiny sub-฿50 days still accumulate
+    toward it. The earning month must TIE to that next-month transfer (matched,
+    not a permanent 'awaiting'), and the carried transfer must NOT be double-
+    counted as a surplus in the following month."""
+    from recon.matcher import payout_matching
+    db = main._DB_PATH
+    # June: 40 + 30 + 410 = 480 net (< ฿500), last sale on the 20th (early)
+    _add_lineman_net(db, "2026-06-10", 40)
+    _add_lineman_net(db, "2026-06-11", 30)
+    _add_lineman_net(db, "2026-06-20", 410)
+    # the ฿480 residual is remitted on 1 July (next month, month-end sweep)
+    _add_bank_line(db, "kbank", "LINEMAN_PAYOUT", 480, date="2026-07-01")
+
+    with main.get_db() as conn:
+        june = payout_matching(conn, 4, "2026-06")["LINEMAN"]
+    assert june["net_total"] == 480                       # sub-฿50 days included
+    assert june["awaiting_total"] == 0                    # not a permanent 'รอเงินเข้า'
+    assert june["payout_total"] == 480
+    assert len(june["payouts"]) == 1
+    p = june["payouts"][0]
+    assert p["status"] == "matched" and p["amount"] == 480
+    assert p["payout_date"] == "2026-07-01"               # swept on the 1st of next month
+    assert [x["day"] for x in p["days"]] == ["2026-06-10", "2026-06-11", "2026-06-20"]
+
+    # July has its own ฿600 net paid on the 2nd — the carried 1-July sweep must NOT
+    # be re-claimed by July (no false surplus): July payout_total = its own 600 only.
+    _add_lineman_net(db, "2026-07-15", 600)
+    _add_bank_line(db, "kbank", "LINEMAN_PAYOUT", 600, date="2026-07-16")
+    with main.get_db() as conn:
+        july = payout_matching(conn, 4, "2026-07")["LINEMAN"]
+    assert july["payout_total"] == 600                    # only July's own transfer
+    july_credit_dates = {p["payout_date"] for p in july["payouts"] if p["status"] == "matched"}
+    assert "2026-07-01" not in july_credit_dates          # carried sweep de-duped
+
+
 def test_bay_point_parses_and_ties_to_bank():
     """BAY Point (Krungsri loyalty reimbursement) parses under credit_card as a
     BAYPOINT settlement, is kept OUT of the POS-credit lanes, and ties 2-way to

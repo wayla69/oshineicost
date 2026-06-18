@@ -35,6 +35,14 @@ TOL_PCT_DAY = 1.0  # %
 DEF_CASH_MERGE, DEF_CASH_LAG = 4, 3     # cash lump deposits: ≤4 days into one credit, T+1..T+3
 DEF_PAYOUT_MERGE, DEF_PAYOUT_LAG = 4, 7 # provider payouts / CC settlements
 
+# LINE MAN settles on a balance THRESHOLD (฿500), not a daily T+1 schedule: small
+# days accumulate until the balance crosses ฿500, and a whole month that never
+# reaches ฿500 is remitted on the 1st of the NEXT month. So LINE MAN's payout
+# grouping must be able to span a full month and reach the credit that lands just
+# after the month boundary (mirrors the cash matcher's next-month window).
+LINEMAN_PAYOUT_THRESHOLD = 500.0
+DEF_LINEMAN_MERGE, DEF_LINEMAN_LAG = 31, 7
+
 # Bank-statement channels that map to a reconcilable POS category
 _CHANNEL_CATEGORY = {"QR": "QR", "TRANSFER": "TRANSFER", "CASH_DEP": "CASH"}
 
@@ -700,7 +708,18 @@ def _cc_acquirer(row, point_mids):
     return row["acquirer"] or _provider_acquirer(row["provider"]) if "provider" in row.keys() else row["acquirer"]
 
 
-def _payout_candidate_credits(conn, branch_id, period_month, channels):
+def _payout_candidate_credits(conn, branch_id, period_month, channels, max_lag=0, exclude_ids=None):
+    """Bank credits that could be a provider payout for this month. The window is
+    the month PLUS the first `max_lag` days of the NEXT month, because a payout for
+    the month's last (or — when under the ฿500 threshold — its whole) net lands on
+    the 1st of next month (mirrors `_cash_dep_credits`). `exclude_ids` drops credits
+    the previous month's matcher already claimed (the carried boundary transfer),
+    so the same credit is never counted in two months."""
+    exclude_ids = exclude_ids or set()
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    month_start = date(y, m, 1).isoformat()
+    nm_y, nm_m = (y + 1, 1) if m == 12 else (y, m + 1)
+    next_cutoff = (date(nm_y, nm_m, 1) + timedelta(days=max(0, max_lag))).isoformat()
     ph = ",".join("?" * len(channels))
     try:
         rows = conn.execute(f"""
@@ -708,32 +727,72 @@ def _payout_candidate_credits(conn, branch_id, period_month, channels):
             FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
             WHERE l.branch_id=? AND l.credit>0 AND l.channel IN ({ph})
               AND l.match_status!='excluded'
-              AND strftime('%Y-%m',l.txn_date)=?
+              AND l.txn_date>=? AND l.txn_date<?
             ORDER BY l.txn_date, l.id
-        """, (branch_id, *channels, period_month)).fetchall()
+        """, (branch_id, *channels, month_start, next_cutoff)).fetchall()
     except sqlite3.OperationalError:
         return []
     return [{"id": r["id"], "date": r["txn_date"], "amount": float(r["credit"] or 0),
-             "channel": r["channel"], "bank": _provider_bank(r["provider"])} for r in rows]
+             "channel": r["channel"], "bank": _provider_bank(r["provider"])}
+            for r in rows if r["id"] not in exclude_ids]
 
 
-def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None):
+def _prev_payout_consumed_ids(conn, branch_id, period_month) -> dict:
+    """{cat: {credit_id,...}} — bank credits dated IN this month that the PREVIOUS
+    month's payout matcher already claimed (a payout for last month's net that
+    landed on the 1st–few of this month, e.g. an under-฿500 LINE MAN month paid on
+    the 1st). Mirrors `prev_month_consumed_ids` for cash so the carried transfer
+    isn't matched twice and never shows as a next-month surplus. Recursion-safe:
+    the prev-month call runs with _dedup_prev=False (it only looks forward)."""
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+    out: dict = {}
+    try:
+        pm = payout_matching(conn, branch_id, prev, _dedup_prev=False)
+    except sqlite3.OperationalError:
+        return out
+    for cat, r in pm.items():
+        ids = {p["credit_id"] for p in r["payouts"]
+               if p.get("status") == "matched" and p.get("credit_id")
+               and (p.get("payout_date") or "")[:7] == period_month}
+        if ids:
+            out[cat] = ids
+    return out
+
+
+def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None,
+                    _dedup_prev=True):
     """Per-provider: group consecutive net-days to the bank credit that pays them.
     Returns {cat: {payouts:[...], net_total, payout_total, awaiting_total}}.
-    Each payout row: {payout_date, amount, days:[{day,net}], group_net, combined,
-    lag, status('matched'|'awaiting')}. 'awaiting' = a net-day with no matching
-    credit yet (late/month-boundary or a short payment to investigate).
+    Each payout row: {payout_date, amount, credit_id, days:[{day,net}], group_net,
+    combined, lag, status('matched'|'awaiting')}. 'awaiting' = net with no matching
+    credit yet: a late/month-boundary payout, a short payment to investigate, or —
+    for LINE MAN — net still under the ฿500 transfer threshold and accumulating.
     max_group/max_lag default per provider from recon_method_config
-    (merge_days/lag_days), falling back to the engine constants."""
+    (merge_days/lag_days). LINE MAN settles on a balance threshold, so it defaults
+    to a full-month merge window reaching into the first lag-days of next month (the
+    under-฿500 month is remitted on the 1st), and counts every earning day (no
+    daily noise floor) so sub-฿50 days still accumulate toward the ฿500 transfer."""
     nets = _payout_net_by_day(conn, branch_id, period_month)
     cfgs = method_config(conn)
+    prev_consumed = _prev_payout_consumed_ids(conn, branch_id, period_month) if _dedup_prev else {}
+    y0, m0 = int(period_month[:4]), int(period_month[5:7])
+    nm_start = date(y0 + 1, 1, 1) if m0 == 12 else date(y0, m0 + 1, 1)
     result: dict = {}
     for cat, channels in _PAYOUT_CANDIDATE_CHANNELS.items():
         mc = _cfg(cfgs, "COUPON", "BAY") if cat == "BAYPOINT" else _cfg(cfgs, cat)
-        grp_max = max_group if max_group is not None else int(mc.get("merge_days") or DEF_PAYOUT_MERGE)
-        lag_max = max_lag if max_lag is not None else int(mc.get("lag_days") or DEF_PAYOUT_LAG)
-        days = sorted((d, n) for d, n in nets.get(cat, {}).items() if n > TOL_ABS_DAY)
-        credits = _payout_candidate_credits(conn, branch_id, period_month, channels)
+        grp_def, lag_def = ((DEF_LINEMAN_MERGE, DEF_LINEMAN_LAG) if cat == "LINEMAN"
+                            else (DEF_PAYOUT_MERGE, DEF_PAYOUT_LAG))
+        grp_max = max_group if max_group is not None else int(mc.get("merge_days") or grp_def)
+        lag_max = max_lag if max_lag is not None else int(mc.get("lag_days") or lag_def)
+        # LINE MAN accumulates sub-฿50 days toward the ฿500 threshold, so every
+        # earning day must take part in the grouping; daily providers keep the
+        # noise floor that suppresses rounding-size rows.
+        floor = 0.0 if cat == "LINEMAN" else TOL_ABS_DAY
+        days = sorted((d, n) for d, n in nets.get(cat, {}).items() if n > floor)
+        credits = _payout_candidate_credits(conn, branch_id, period_month, channels,
+                                            max_lag=lag_max,
+                                            exclude_ids=prev_consumed.get(cat))
         if cat == "BAYPOINT":
             # BAY reimburses points into KBANK only (owner's table) — don't let
             # the amount-match grab a coincidental KTB transfer.
@@ -750,7 +809,16 @@ def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None)
                     if c["id"] in used or abs(c["amount"] - s) > TOL_ABS:
                         continue
                     lag = (_pd(c["date"]) - _pd(last_day)).days
-                    if 0 <= lag <= lag_max:
+                    if lag < 0:
+                        continue
+                    cap = lag_max
+                    if cat == "LINEMAN":
+                        # Month-end sweep: an under-฿500 residual is remitted on the
+                        # 1st of next month no matter how early the last sale fell, so
+                        # also allow the lag measured from month-end (not just from the
+                        # last earning day) within lag_max.
+                        cap = max(lag_max, (nm_start - _pd(last_day)).days + lag_max)
+                    if lag <= cap:
                         hit = (k, c); break
                 if hit:
                     break
@@ -760,6 +828,7 @@ def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None)
                 grp = days[di:di + k]
                 payouts.append({
                     "payout_date": c["date"], "amount": round(c["amount"], 2),
+                    "credit_id": c["id"],
                     "days": [{"day": d, "net": round(n, 2)} for d, n in grp],
                     "group_net": round(sum(n for _, n in grp), 2),
                     "combined": k > 1, "lag": (_pd(c["date"]) - _pd(grp[-1][0])).days,
@@ -768,7 +837,7 @@ def payout_matching(conn, branch_id, period_month, max_group=None, max_lag=None)
                 di += k
             else:
                 d, n = days[di]
-                payouts.append({"payout_date": None, "amount": 0.0,
+                payouts.append({"payout_date": None, "amount": 0.0, "credit_id": None,
                                 "days": [{"day": d, "net": round(n, 2)}], "group_net": round(n, 2),
                                 "combined": False, "lag": None, "status": "awaiting"})
                 di += 1
