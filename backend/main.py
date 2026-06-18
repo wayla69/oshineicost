@@ -11787,6 +11787,16 @@ def report_management(
             label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
             comp_label = "previous week (Mon–Sun)"
         has_prev = ps.isoformat() >= mind
+        # YoY window — same calendar period a year earlier (daily = same date; weekly =
+        # 52 weeks back to keep the Mon–Sun alignment). Dropped if it predates the data.
+        def _minus_year(d):
+            try:    return d.replace(year=d.year - 1)
+            except ValueError: return d.replace(year=d.year - 1, day=28)   # Feb 29
+        if period == "daily":
+            ys = ye = _minus_year(fdate)
+        else:
+            ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
+        has_yoy = ys.isoformat() >= mind
 
         # ---- headline totals for an arbitrary [s,e] range -----------------
         def agg(s, e):
@@ -11814,6 +11824,12 @@ def report_management(
             headline["bills_wow_pct"] = pct(cur["bills"], prev["bills"])
             headline["rph_wow_pct"]   = pct(cur["rev_per_head"] or 0, prev["rev_per_head"]) if prev["rev_per_head"] else None
             headline["ticket_wow_pct"]= pct(cur["avg_ticket"] or 0, prev["avg_ticket"]) if prev["avg_ticket"] else None
+        yoy = agg(ys, ye) if has_yoy else None
+        if yoy:
+            headline["yoy"] = yoy
+            headline["rev_yoy_pct"]  = pct(cur["revenue"], yoy["revenue"])
+            headline["cust_yoy_pct"] = pct(cur["customers"], yoy["customers"])
+            headline["rph_yoy_pct"]  = pct(cur["rev_per_head"] or 0, yoy["rev_per_head"]) if yoy["rev_per_head"] else None
 
         # ---- branch league table -----------------------------------------
         def by_branch(s, e):
@@ -11977,6 +11993,19 @@ def report_management(
             "top": cost_top, "risers": cost_up, "savers": cost_down,
         }
 
+        # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
+        gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
+        gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
+        gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
+                       if (cmp_ok and prev and prev["revenue"]) else None)
+        gp = {
+            "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
+            "gp": gp_cur, "gp_pct": gp_pct,
+            "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
+            "gp_pct_prev": gp_prev_pct,
+            "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
+        }
+
         # ---- food cost % (BoM) + month pace, anchored on the period's month ----
         cur_month = ref_anchor.strftime("%Y-%m")
         mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
@@ -12051,6 +12080,83 @@ def report_management(
                 trend.append({"label": f"{d.day} {MON[d.month-1]}", "start": d.isoformat(),
                               "revenue": rev_by.get(d.isoformat(), 0)})
 
+        # ---- peak hours & dayparts (revenue + covers by hour over the period) ----
+        hr_rows = con.execute(f"""
+            SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
+                   ROUND(SUM(st.total_inc_vat)/1.07,2) rev,
+                   COALESCE(SUM(st.customer_count),0) cust, COUNT(*) bills
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY hr ORDER BY hr""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+        hourly = [{"hour": r["hr"], "revenue": r["rev"] or 0, "covers": r["cust"] or 0, "bills": r["bills"]} for r in hr_rows]
+        def _daypart(hh):
+            if 11 <= hh <= 14: return "Lunch"
+            if 17 <= hh <= 22: return "Dinner"
+            return "Other"
+        dp: dict = {}
+        for r in hourly:
+            d2 = dp.setdefault(_daypart(r["hour"]), {"name": _daypart(r["hour"]), "revenue": 0, "covers": 0})
+            d2["revenue"] += r["revenue"]; d2["covers"] += r["covers"]
+        tot_hr_rev = sum(r["revenue"] for r in hourly) or 0
+        dayparts = []
+        for k in ("Lunch", "Dinner", "Other"):
+            if k in dp:
+                d2 = dp[k]
+                d2["pct"] = round(d2["revenue"]/tot_hr_rev*100, 1) if tot_hr_rev else None
+                d2["revenue"] = round(d2["revenue"]); dayparts.append(d2)
+        ph = max(hourly, key=lambda r: r["revenue"], default=None)
+        peak = {"hourly": hourly, "dayparts": dayparts,
+                "peak_hour": ({"hour": ph["hour"], "revenue": round(ph["revenue"])} if ph and ph["revenue"] else None)}
+        if period != "daily":      # which day of the week drove the week
+            dow_rows = con.execute(f"""
+                SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
+                       ROUND(SUM(st.total_inc_vat)/1.07,2) rev, COALESCE(SUM(st.customer_count),0) cust
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+            dm = {r["w"]: r for r in dow_rows}
+            by_day = []
+            for i, nm in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
+                r = dm.get((i + 1) % 7)      # %w: 0=Sun..6=Sat → Mon-first
+                by_day.append({"dow": nm, "revenue": round(r["rev"] or 0) if r else 0,
+                               "covers": (r["cust"] or 0) if r else 0})
+            bd = max(by_day, key=lambda d: d["revenue"], default=None)
+            peak["by_day"] = by_day
+            peak["best_day"] = bd["dow"] if bd and bd["revenue"] else None
+
+        # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
+        table = {"available": False}
+        try:
+            if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_table_turn_day'").fetchone():
+                tt_base = ["b.name!='ALL'"]; tparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
+                if branch:
+                    tt_base.append("b.name=:branch"); tparams["branch"] = branch
+                _group_filter(tt_base, tparams, group)
+                tw2 = " AND ".join(tt_base)
+                tot = con.execute(f"""
+                    SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                           ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                    FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {tw2} AND t.day BETWEEN :s AND :e""", tparams).fetchone()
+                brows = con.execute(f"""
+                    SELECT b.name branch, COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                           ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                    FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                    WHERE {tw2} AND t.day BETWEEN :s AND :e
+                    GROUP BY b.name HAVING SUM(t.tabs)>0
+                    ORDER BY SUM(t.customers)*1.0/SUM(t.tabs) DESC""", tparams).fetchall()
+                tabs = tot["tabs"] or 0; tcust = tot["cust"] or 0
+                if tabs:
+                    table = {
+                        "available": True, "tables": tabs, "covers": tcust,
+                        "covers_per_table": round(tcust/tabs, 2), "avg_turn_min": tot["avg_turn"],
+                        "by_branch": [{"branch": r["branch"], "tables": r["tabs"], "covers": r["cust"],
+                                       "covers_per_table": round((r["cust"] or 0)/r["tabs"], 2) if r["tabs"] else None,
+                                       "avg_turn_min": r["avg_turn"]} for r in brows][:12],
+                    }
+        except Exception:
+            table = {"available": False}
+
     # ---- auto-generated action items (English, severity-ordered) ---------
     pword = "day" if period == "daily" else "week"
     actions = []
@@ -12083,6 +12189,9 @@ def report_management(
         actions.append({"sev": "low",
             "text": f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
                     f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost."})
+    if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
+        actions.append({"sev": "med",
+            "text": f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%."})
     sev_rank = {"high": 0, "med": 1, "low": 2}
     actions.sort(key=lambda a: sev_rank.get(a["sev"], 9))
     actions = actions[:7]
@@ -12097,6 +12206,7 @@ def report_management(
         "focus": focus,
         "range": [cs.isoformat(), ce.isoformat()],
         "comp_range": [ps.isoformat(), pe.isoformat()] if has_prev else None,
+        "yoy_range": [ys.isoformat(), ye.isoformat()] if has_yoy else None,
         "partial": partial,
         "selected_week": selected_week,
         "weeks": weeks,
@@ -12104,11 +12214,15 @@ def report_management(
         "latest_day": maxd,
         "branch_scope": branch or ("Group: " + group if group else "All branches"),
         "has_prev": has_prev,
+        "has_yoy": has_yoy,
         "headline": headline,
         "branches": branches,
+        "gp": gp,
         "leak": leak,
         "menu": menu_out,
         "pace": pace,
+        "peak": peak,
+        "table": table,
         "trend": trend,
         "actions": actions,
     }
@@ -12168,19 +12282,21 @@ def report_management_xlsx(
     ws.append(["Compared with", j.get("comp_label", "")])
     ws.append(["Latest data day", j.get("latest_day", "")])
     ws.append([])
-    header(ws, ["Headline metric", "Value", "vs prev %"])
-    for name, val, wow in [
-        ("Net Sales (ex-VAT)", H.get("revenue"),     H.get("rev_wow_pct")),
-        ("Customers (covers)", H.get("customers"),    H.get("cust_wow_pct")),
-        ("Bills",              H.get("bills"),        H.get("bills_wow_pct")),
-        ("Spend / Head",       H.get("rev_per_head"), H.get("rph_wow_pct")),
-        ("Avg Ticket",         H.get("avg_ticket"),   H.get("ticket_wow_pct")),
-        ("Discounts",          H.get("discount"),     None),
+    G = j.get("gp", {}) or {}
+    header(ws, ["Headline metric", "Value", "vs prev %", "YoY %"])
+    for name, val, wow, yoy in [
+        ("Net Sales (ex-VAT)", H.get("revenue"),     H.get("rev_wow_pct"),    H.get("rev_yoy_pct")),
+        ("Gross Profit",       G.get("gp"),          None,                    None),
+        ("Customers (covers)", H.get("customers"),    H.get("cust_wow_pct"),   H.get("cust_yoy_pct")),
+        ("Spend / Head",       H.get("rev_per_head"), H.get("rph_wow_pct"),    H.get("rph_yoy_pct")),
+        ("Avg Ticket",         H.get("avg_ticket"),   H.get("ticket_wow_pct"), None),
+        ("Bills",              H.get("bills"),        H.get("bills_wow_pct"),  None),
+        ("Discounts",          H.get("discount"),     None,                    None),
     ]:
-        ws.append([name, val, pdelta(wow)])
+        ws.append([name, val, pdelta(wow), pdelta(yoy)])
         ws.cell(ws.max_row, 2).number_format = NUM
-        if wow is not None:
-            ws.cell(ws.max_row, 3).number_format = PCT
+        if wow is not None: ws.cell(ws.max_row, 3).number_format = PCT
+        if yoy is not None: ws.cell(ws.max_row, 4).number_format = PCT
     ws.append([])
     header(ws, ["Pacing & cost (" + str(P.get("month", "")) + ")", "Value"])
     complete = P.get("month_complete")
@@ -12189,7 +12305,8 @@ def report_management_xlsx(
         (("Month total" if complete else "Projected month-end"), P.get("projected"), NUM),
         ("Revenue target", P.get("target"), NUM),
         ("Projection vs target", pdelta(P.get("proj_vs_target_pct")), PCT),
-        ("Food cost % (BoM)", pdelta(P.get("food_cost_pct")), PCT),
+        ("Food cost % (BoM, MTD)", pdelta(P.get("food_cost_pct")), PCT),
+        ("Gross margin % (this period)", pdelta(G.get("gp_pct")), PCT),
     ]:
         ws.append([name, val]); ws.cell(ws.max_row, 2).number_format = fmt
     autofit(ws)
@@ -12249,7 +12366,46 @@ def report_management_xlsx(
         ws.cell(ws.max_row, 3).number_format = NUM
     autofit(ws)
 
-    # Sheet 6 — Action Items
+    # Sheet 6 — Peak Hours & Dayparts
+    PK = j.get("peak", {}) or {}
+    ws = wb.create_sheet("Peak & Dayparts")
+    header(ws, ["Daypart", "Revenue", "% of revenue", "Covers"])
+    for d in PK.get("dayparts", []):
+        ws.append([d.get("name"), d.get("revenue"), pdelta(d.get("pct")), d.get("covers")])
+        ws.cell(ws.max_row, 2).number_format = NUM; ws.cell(ws.max_row, 3).number_format = PCT
+    ws.append([])
+    if PK.get("peak_hour"):
+        ws.append(["Busiest hour", f"{PK['peak_hour']['hour']:02d}:00", PK["peak_hour"]["revenue"]])
+        ws.cell(ws.max_row, 3).number_format = NUM
+    if PK.get("best_day"):
+        ws.append(["Busiest day", PK["best_day"]])
+    ws.append([])
+    if PK.get("by_day"):
+        header(ws, ["Day of week", "Revenue", "Covers"])
+        for d in PK["by_day"]:
+            ws.append([d["dow"], d["revenue"], d["covers"]]); ws.cell(ws.max_row, 2).number_format = NUM
+    else:
+        header(ws, ["Hour", "Revenue", "Covers", "Bills"])
+        for hrow in PK.get("hourly", []):
+            ws.append([f"{hrow['hour']:02d}:00", hrow["revenue"], hrow["covers"], hrow["bills"]])
+            ws.cell(ws.max_row, 2).number_format = NUM
+    autofit(ws)
+
+    # Sheet 7 — Table Turnover (only when available)
+    TB = j.get("table", {}) or {}
+    if TB.get("available"):
+        ws = wb.create_sheet("Table Turnover")
+        ws.append(["Covers / table", TB.get("covers_per_table")])
+        ws.append(["Avg turn (min)", TB.get("avg_turn_min")])
+        ws.append(["Tables used", TB.get("tables")])
+        ws.append(["Total covers", TB.get("covers")])
+        ws.append([])
+        header(ws, ["Branch", "Tables", "Covers", "Covers/Table", "Avg turn (min)"])
+        for b in TB.get("by_branch", []):
+            ws.append([b["branch"], b["tables"], b["covers"], b["covers_per_table"], b["avg_turn_min"]])
+        autofit(ws)
+
+    # Sheet — Action Items
     ws = wb.create_sheet("Action Items")
     header(ws, ["Severity", "Action"])
     for a in j.get("actions", []):

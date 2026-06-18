@@ -7808,21 +7808,26 @@ function renderMgtReport(j) {
   const sec = (title, inner, accent = '#0f766e') =>
     `<div class="card p-6" style="border-top:3px solid ${accent}">
        <h2 class="text-base font-bold mb-4 pb-2" style="color:${accent};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</div>`;
-  const kpi = (title, value, sub, w) =>
+  // w = WoW delta, y = YoY delta (both optional). When given, a second line shows
+  // "WoW ▲x% · YoY ▲y%" so management sees week-over-week AND year-over-year at a glance.
+  const kpi = (title, value, sub, w, y) =>
     `<div class="rounded-xl p-4" style="background:var(--bg-card);border:1px solid var(--border)">
        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
        <p class="text-2xl font-bold text-slate-800">${value}</p>
-       <p class="text-xs text-slate-500 mt-1">${sub || ''} ${w !== undefined ? wow(w) : ''}</p>
+       <p class="text-xs text-slate-500 mt-1">${sub || ''}</p>
+       ${(w !== undefined || y != null) ? `<p class="text-[11px] mt-1 flex items-center gap-1 flex-wrap">${w !== undefined ? '<span class="text-slate-400">WoW</span>' + wow(w) : ''}${(w !== undefined && y != null) ? '<span class="text-slate-300">·</span>' : ''}${y != null ? '<span class="text-slate-400">YoY</span>' + wow(y) : ''}</p>` : ''}
      </div>`;
 
-  // §1 — Headline KPIs
-  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-      ${kpi('Net Sales (ex-VAT)', baht(H.revenue),     compShort,  H.rev_wow_pct)}
-      ${kpi('Customers',          num(H.customers),    'covers',   H.cust_wow_pct)}
-      ${kpi('Bills',              num(H.bills),        'receipts', H.bills_wow_pct)}
-      ${kpi('Spend / Head',       baht(H.rev_per_head),'per cover',H.rph_wow_pct)}
-      ${kpi('Avg Ticket',         baht(H.avg_ticket),  'per bill', H.ticket_wow_pct)}
-      ${kpi('Discounts',          baht(H.discount),    (H.discount_pct != null ? H.discount_pct.toFixed(1) + '% of sales' : ''))}
+  // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
+  const G = j.gp || {};
+  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+      ${kpi('Net Sales (ex-VAT)', baht(H.revenue),      compShort,  H.rev_wow_pct, H.rev_yoy_pct)}
+      ${kpi('Gross Profit',       baht(G.gp),           (G.gp_pct != null ? G.gp_pct.toFixed(0) + '% margin · after food cost' : 'after food cost'))}
+      ${kpi('Customers',          num(H.customers),     'covers',   H.cust_wow_pct, H.cust_yoy_pct)}
+      ${kpi('Spend / Head',       baht(H.rev_per_head), 'per cover',H.rph_wow_pct,  H.rph_yoy_pct)}
+      ${kpi('Avg Ticket',         baht(H.avg_ticket),   'per bill', H.ticket_wow_pct)}
+      ${kpi('Bills',              num(H.bills),         'receipts', H.bills_wow_pct)}
+      ${kpi('Discounts',          baht(H.discount),     (H.discount_pct != null ? H.discount_pct.toFixed(1) + '% of sales' : ''))}
     </div>`;
 
   // §2 — Month pacing & food cost (full month for a past period, MTD for the current one)
@@ -7909,44 +7914,242 @@ function renderMgtReport(j) {
       <div><p class="text-xs font-semibold text-slate-500 mb-1">Cost / Head Falling ${compShort}</p>${listM(M.savers, noCmp)}</div>
     </div>`;
 
+  // §8 — Peak Hours & Dayparts
+  const PK = j.peak || {};
+  const dpColor = { Lunch: '#f59e0b', Dinner: '#6366f1', Other: '#94a3b8' };
+  const hh = n => String(n).padStart(2, '0') + ':00';
+  const miniBars = (items, valKey, lblKey, hi) => {
+    const mx = Math.max(...items.map(i => i[valKey] || 0), 1);
+    return `<div class="flex items-end gap-1" style="height:104px">${items.map(i =>
+      `<div class="flex-1 flex flex-col items-center justify-end" title="${baht(i[valKey])}">
+         <div class="w-full rounded-t" style="height:${Math.max(3, (i[valKey] || 0) / mx * 80)}px;background:${hi(i) ? '#0284c7' : '#cbd5e1'}"></div>
+         <span class="text-[9px] text-slate-500 mt-1">${i[lblKey]}</span></div>`).join('')}</div>`;
+  };
+  const dpBars = (PK.dayparts || []).map(d => `
+    <div class="mb-2">
+      <div class="flex justify-between text-xs mb-0.5"><span class="font-medium text-slate-600">${d.name}</span>
+        <span class="text-slate-500">${baht(d.revenue)}${d.pct != null ? ' · ' + d.pct.toFixed(0) + '%' : ''} · ${num(d.covers)} covers</span></div>
+      <div class="h-2 rounded-full" style="background:var(--bg-subtle)"><div class="h-2 rounded-full" style="width:${d.pct || 0}%;background:${dpColor[d.name] || '#0891b2'}"></div></div>
+    </div>`).join('');
+  const peakHourTxt = PK.peak_hour ? `Busiest hour: <b>${hh(PK.peak_hour.hour)}</b> (${baht(PK.peak_hour.revenue)})` : '';
+  const bestDayTxt  = PK.best_day ? `Busiest day: <b>${PK.best_day}</b>` : '';
+  const rightPanel = (!isDaily && (PK.by_day || []).length)
+    ? `<p class="text-xs font-semibold text-slate-500 mb-1">By day of week</p>${miniBars(PK.by_day, 'revenue', 'dow', d => d.dow === PK.best_day)}`
+    : ((PK.hourly || []).length ? `<p class="text-xs font-semibold text-slate-500 mb-1">By hour</p>${miniBars(PK.hourly.filter(x => x.revenue > 0), 'revenue', 'hour', x => PK.peak_hour && x.hour === PK.peak_hour.hour)}` : '');
+  const peakHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div><p class="text-xs font-semibold text-slate-500 mb-2">Daypart split (revenue)</p>${dpBars || '<p class="text-sm text-slate-400">No data.</p>'}
+        <p class="text-xs text-slate-500 mt-2">${peakHourTxt}${peakHourTxt && bestDayTxt ? ' · ' : ''}${bestDayTxt}</p></div>
+      <div>${rightPanel}</div>
+    </div>`;
+
+  // §9 — Table Turnover & Occupancy (only when the data exists)
+  const TB = j.table || {};
+  let tableHtml = '';
+  if (TB.available) {
+    const km = (t, v, s) => `<div class="rounded-xl p-4" style="background:var(--bg-card);border:1px solid var(--border)">
+        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${t}</p><p class="text-2xl font-bold text-slate-800">${v}</p>
+        <p class="text-xs text-slate-500 mt-1">${s || ''}</p></div>`;
+    const trows = (TB.by_branch || []).map(b => `<tr class="border-b border-slate-50">
+        <td class="py-2 pl-1">${b.branch}</td>
+        <td class="py-2 text-right">${num(b.tables)}</td>
+        <td class="py-2 text-right">${num(b.covers)}</td>
+        <td class="py-2 text-right font-semibold">${b.covers_per_table != null ? b.covers_per_table.toFixed(2) : '—'}</td>
+        <td class="py-2 text-right pr-1">${b.avg_turn_min != null ? Math.round(b.avg_turn_min) + ' min' : '—'}</td></tr>`).join('');
+    tableHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        ${km('Covers / Table', TB.covers_per_table != null ? TB.covers_per_table.toFixed(2) : '—', 'turns per table')}
+        ${km('Avg Turn Time', TB.avg_turn_min != null ? Math.round(TB.avg_turn_min) + ' min' : '—', 'per table session')}
+        ${km('Tables Used', num(TB.tables), 'table sessions')}
+        ${km('Total Covers', num(TB.covers), 'guests seated')}
+      </div>
+      <div class="overflow-x-auto"><table class="w-full text-sm">
+        <thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+          <th class="text-left py-2 pl-1">Branch</th><th class="text-right py-2">Tables</th><th class="text-right py-2">Covers</th>
+          <th class="text-right py-2">Covers/Table</th><th class="text-right py-2 pr-1">Avg Turn</th>
+        </tr></thead><tbody>${trows}</tbody></table></div>`;
+  }
+
   // §7 — Action items
   const sevColor = { high: '#dc2626', med: '#d97706', low: '#10b981' };
   const acts = (j.actions || []).map(a => `<li class="flex items-start gap-2 text-sm py-1">
       <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${a.text}</span></li>`).join('');
 
+  // ── Executive Summary — auto-written ~10-paragraph overview of everything ──
+  const para   = t => '<p class="mb-2">' + t + '</p>';
+  const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
+  const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
+  const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
+  const compW  = isDaily ? 'the same weekday last week' : 'the previous week';
+  const pNoun  = isDaily ? 'day' : 'week';
+  const brs    = j.branches || [];
+  const ex     = [];
+
+  // 1 — Overview (+ Gross Profit + YoY)
+  const scope = (j.branch_scope || '').toLowerCase() === 'all branches' ? 'the chain' : j.branch_scope;
+  const Gx = j.gp || {};
+  const gpClause = Gx.gp_pct != null ? ' — a gross profit of <b>' + baht(Gx.gp) + '</b> (<b>' + Gx.gp_pct.toFixed(0) + '%</b> margin after food cost)' : '';
+  const ovYoY = (H.rev_yoy_pct != null) ? ' Year-on-year, net sales are ' + moved(H.rev_yoy_pct, 'up', 'down', 'flat') + ' ' + mag(H.rev_yoy_pct) + '.' : '';
+  const ovVs  = H.rev_wow_pct != null
+    ? 'Net sales ' + moved(H.rev_wow_pct, 'rose', 'fell', 'were flat') + ' ' + mag(H.rev_wow_pct) + ' versus ' + compW + '.' + ovYoY
+    : 'There is no comparable prior ' + pNoun + ' in the data yet.' + ovYoY;
+  ex.push('<b>Overview.</b> For ' + j.label + ', ' + scope + ' booked net sales of <b>' + baht(H.revenue) +
+          '</b> (ex-VAT) from <b>' + num(H.customers) + '</b> covers across <b>' + num(H.bills) + '</b> bills' + gpClause + '. ' + ovVs);
+
+  // 2 — Revenue quality (+ peak / dayparts / table turnover)
+  const driver = (Math.abs(H.rph_wow_pct || 0) > Math.abs(H.cust_wow_pct || 0)) ? 'spend per guest' : 'customer traffic';
+  const rqVs = H.cust_wow_pct != null
+    ? ' Covers ' + moved(H.cust_wow_pct, 'rose', 'fell', 'held') + ' ' + mag(H.cust_wow_pct) +
+      ' while spend per head ' + moved(H.rph_wow_pct, 'rose', 'fell', 'held') + ' ' + mag(H.rph_wow_pct) +
+      ', so the shift was driven mainly by <b>' + driver + '</b>.'
+    : '';
+  const PKx = j.peak || {};
+  const peakS = PKx.peak_hour ? ' Trade peaked around <b>' + String(PKx.peak_hour.hour).padStart(2, '0') + ':00</b>' + (PKx.best_day ? ', and <b>' + PKx.best_day + '</b> was the busiest day' : '') + '.' : '';
+  const TBx = j.table || {};
+  const tableS = TBx.available && TBx.covers_per_table != null ? ' Tables turned <b>' + TBx.covers_per_table.toFixed(2) + '</b> covers each' + (TBx.avg_turn_min != null ? ' (avg ' + Math.round(TBx.avg_turn_min) + ' min/turn)' : '') + '.' : '';
+  ex.push('<b>Revenue quality.</b> Guests spent <b>' + baht(H.rev_per_head) + '</b> per head on average and the typical bill was <b>' + baht(H.avg_ticket) + '</b>.' + rqVs + peakS + tableS);
+
+  // 3 — Branches
+  if (brs.length) {
+    const best = brs[0], worst = brs[brs.length - 1];
+    const upN = brs.filter(b => b.wow_pct != null && b.wow_pct > 0).length;
+    const dnN = brs.filter(b => b.wow_pct != null && b.wow_pct < 0).length;
+    const mvs = brs.filter(b => b.wow_pct != null).slice().sort((a, b) => Math.abs(b.wow_pct) - Math.abs(a.wow_pct));
+    const mv  = (j.has_prev && mvs.length) ? '; the biggest swing was <b>' + mvs[0].branch + '</b> at ' + signed(mvs[0].wow_pct) : '';
+    const sh  = best.share_pct != null ? ' (' + best.share_pct.toFixed(0) + '% of the chain)' : '';
+    const cmp = j.has_prev ? ' ' + upN + ' grew and ' + dnN + ' declined vs ' + compW + mv + '.' : '';
+    ex.push('<b>Branches.</b> Of ' + brs.length + ' branch' + (brs.length > 1 ? 'es' : '') + ', <b>' + best.branch + '</b> led with ' +
+            baht(best.revenue) + sh + ', while <b>' + worst.branch + '</b> trailed at ' + baht(worst.revenue) + '.' + cmp);
+  }
+
+  // 4 — Month pace
+  if (P.mtd_revenue != null) {
+    const tgt  = P.target
+      ? ' — ' + (P.proj_vs_target_pct != null ? '<b>' + P.proj_vs_target_pct.toFixed(0) + '%</b> of the ' + baht(P.target) + ' target' : 'against a ' + baht(P.target) + ' target')
+      : ' (no revenue target set)';
+    const proj = mc ? 'That is the final total for ' + P.month : 'At the current run-rate the month should close near <b>' + baht(P.projected) + '</b>';
+    const lead = mc ? 'The month' : 'Month-to-date (' + P.month + ')';
+    ex.push('<b>Month pace.</b> ' + lead + ' stands at <b>' + baht(P.mtd_revenue) + '</b> over ' + (P.mtd_days || 0) +
+            ' day' + ((P.mtd_days || 0) === 1 ? '' : 's') + '. ' + proj + tgt + '.');
+  }
+
+  // 5 — Food cost
+  if (P.food_cost_pct != null) {
+    const fc = P.food_cost_pct;
+    const v  = fc >= 38 ? 'above the ~35% benchmark — margins are under pressure'
+             : fc <= 33 ? 'comfortably within the ~35% benchmark — healthy margins'
+             : 'around the ~35% benchmark';
+    ex.push('<b>Food cost.</b> Food cost is running at <b>' + fc.toFixed(1) + '%</b> of sales (BoM basis) for ' + P.month + ', ' + v + '.');
+  }
+
+  // 6 — Discount-risk radar
+  const h = L.heavy_discount || {}, chk = L.cash_heavy || {}, rp = L.reprinted || {}, zg = L.zero_gross || {};
+  const cashTxt = chk.unavailable ? '' : ', of which <b>' + (chk.bills || 0) + '</b> were paid mostly in cash (' + baht(chk.baht || 0) + ') — the classic skim flag';
+  ex.push('<b>Discount-risk radar.</b> ' + (h.bills || 0) + ' bill' + (h.bills === 1 ? '' : 's') + ' were discounted ≥30% (' + baht(h.baht || 0) + ')' + cashTxt +
+          '. ' + (rp.bills || 0) + ' discounted bill' + (rp.bills === 1 ? '' : 's') + ' were reprinted more than once and ' + (zg.bills || 0) + ' were zero-gross (free / discount-only).');
+
+  // 7 — Discount discipline
+  const dd = H.discount_pct != null ? ', about <b>' + H.discount_pct.toFixed(1) + '%</b> of net sales — ' + (H.discount_pct > 5 ? 'elevated; worth reviewing approval limits' : 'within a normal range') : '';
+  ex.push('<b>Discount discipline.</b> Total discounts were <b>' + baht(H.discount) + '</b>' + dd + '.');
+
+  // 8 — Menu cost per head
+  const mtop = (M.top || [])[0], mris = (M.risers || [])[0], msav = (M.savers || [])[0];
+  const mPrev = M.total_cph_prev != null ? ' (was ฿' + M.total_cph_prev.toFixed(2) + ')' : '';
+  const mTopT = mtop ? ' <b>' + mtop.menu + '</b> carries the most cost per guest (฿' + (mtop.cost_per_head || 0).toFixed(2) + '/head).' : '';
+  const mRisT = mris ? ' <b>' + mris.menu + '</b> climbed the most (+฿' + Math.abs(mris.delta).toFixed(2) + '/head) — a margin watch-point.' : '';
+  const mSavT = msav ? ' <b>' + msav.menu + '</b> eased the most.' : '';
+  ex.push('<b>Menu cost per head.</b> Food cost per guest averaged <b>฿' + (M.total_cph != null ? M.total_cph.toFixed(2) : '—') + '</b>' + mPrev + '.' + mTopT + mRisT + mSavT);
+
+  // 9 — Trend
+  const trv = (j.trend || []).map(t => t.revenue || 0);
+  if (trv.length >= 3) {
+    const avg = trv.reduce((a, b) => a + b, 0) / trv.length, last = trv[trv.length - 1];
+    const td  = last > avg * 1.05 ? 'rising' : last < avg * 0.95 ? 'softening' : 'holding steady';
+    ex.push('<b>Trend.</b> Across the last ' + trv.length + ' ' + (isDaily ? 'days' : 'weeks') + ', revenue is <b>' + td +
+            '</b> — the latest ' + pNoun + ' sits ' + (last >= avg ? 'above' : 'below') + ' the period average.');
+  }
+
+  // 10 — Bottom line
+  const tone = H.rev_wow_pct == null ? 'A baseline will firm up as more periods accumulate'
+             : H.rev_wow_pct >= 2 ? 'Momentum is positive'
+             : H.rev_wow_pct <= -5 ? 'Sales need attention'
+             : 'Performance is steady';
+  const acts3 = (j.actions || []).filter(a => a.sev !== 'low').slice(0, 3).map(a => a.text);
+  const actsT = acts3.length ? ' Priority actions: ' + acts3.join(' ') : ' No critical issues are flagged this ' + pNoun + '.';
+  ex.push('<b>Bottom line.</b> ' + tone + '.' + actsT);
+
+  const execSummary = '<div class="card p-6" style="border-top:3px solid #0f172a">'
+    + '<h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">📋 Executive Summary</h2>'
+    + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div></div>';
+
   const body = document.getElementById('mgtRptBody');
   if (!body) return;
   body.innerHTML =
-      sec('1. Headline — ' + (isDaily ? 'Latest Day' : 'Selected Week'), kpis, '#0f766e')
+      execSummary
+    + sec('1. Headline — ' + (isDaily ? 'Latest Day' : 'Selected Week'), kpis, '#0f766e')
     + sec('2. Action Items', `<ul class="space-y-0.5">${acts}</ul>`, '#d97706')
     + sec('3. ' + (mc ? 'Month' : 'Month-to-Date') + ' Pacing & Cost', pace, '#4f46e5')
     + sec('4. Revenue Trend (last 8 ' + (isDaily ? 'days' : 'weeks') + ')', trend, '#0891b2')
     + sec('5. Branch League Table', branchTbl, '#7c3aed')
     + sec('6. Money-Leak Radar', leak, '#dc2626')
     + sec('7. Menu Cost / Head (by dish)', menu, '#059669')
+    + sec('8. Peak Hours & Dayparts', peakHtml, '#0284c7')
+    + (tableHtml ? sec('9. Table Turnover & Occupancy', tableHtml, '#9333ea') : '')
     + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${(j.pace && j.pace.month) || 'the period month'}. Latest data day: ${j.latest_day || '—'}.</p>`;
 
-  // Trend chart (after the canvas exists in the DOM)
+  // Trend chart (after the canvas exists in the DOM) — clean, gradient, value-labelled
+  const trData = j.trend || [];
+  const lastIdx = trData.length - 1;
+  const fmtM = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
+  const barGrad = (ctx, latest) => {
+    const a = ctx.chart.chartArea;
+    if (!a) return latest ? '#0891b2' : '#5eead4';
+    const g = ctx.chart.ctx.createLinearGradient(0, a.bottom, 0, a.top);
+    if (latest) { g.addColorStop(0, '#0e7490'); g.addColorStop(1, '#22d3ee'); }
+    else        { g.addColorStop(0, '#14b8a6'); g.addColorStop(1, '#99f6e4'); }
+    return g;
+  };
   mkChart('mgtTrendChart', {
     type: 'bar',
     data: {
-      labels: (j.trend || []).map(t => t.label),
+      labels: trData.map(t => t.label),
       datasets: [{
         label: 'Net Sales (ex-VAT)',
-        data: (j.trend || []).map(t => t.revenue),
-        backgroundColor: (j.trend || []).map((t, i) => i === (j.trend.length - 1) ? '#0891b2' : '#94a3b8'),
-        borderRadius: 4,
+        data: trData.map(t => t.revenue),
+        backgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
+        hoverBackgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
+        borderRadius: 8,
+        categoryPercentage: 0.66, barPercentage: 0.88,
       }],
     },
     options: {
       responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 24 } },
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: c => '฿' + Math.round(c.parsed.y).toLocaleString('en-US') } },
+        tooltip: {
+          backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: false,
+          callbacks: { label: c => 'Net Sales: ฿' + Math.round(c.parsed.y).toLocaleString('en-US') },
+        },
+        datalabels: {
+          anchor: 'end', align: 'end', offset: 0, clamp: true,
+          color: ctx => ctx.dataIndex === lastIdx ? '#0e7490' : '#64748b',
+          font: ctx => ({ size: ctx.dataIndex === lastIdx ? 11.5 : 10, weight: '700' }),
+          formatter: v => v ? fmtM(v) : '',
+        },
       },
       scales: {
-        y: { beginAtZero: true, ticks: { callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v } },
-        x: { ticks: { maxRotation: 0, autoSkip: true } },
+        y: {
+          beginAtZero: true, grace: '14%',
+          border: { display: false },
+          grid: { color: 'rgba(148,163,184,0.16)', drawTicks: false },
+          maxTicksLimit: 5,
+          ticks: { color: '#94a3b8', font: { size: 10 }, padding: 8,
+                   callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v },
+        },
+        x: {
+          border: { display: false },
+          grid: { display: false },
+          ticks: { color: '#475569', font: { size: 11, weight: '600' }, maxRotation: 0, autoSkip: true },
+        },
       },
     },
   });

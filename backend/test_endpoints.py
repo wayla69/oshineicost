@@ -74,6 +74,13 @@ def test_management_report_daily_and_weekly(client):
     # §7 is now food cost PER HEAD by dish (not revenue movers)
     assert d["menu"]["basis"] == "cost_per_head"
     assert all("cost_per_head" in m for m in d["menu"]["top"])
+    # gross profit (revenue − period food COGS) is coherent
+    assert d["gp"]["gp"] == d["headline"]["revenue"] - d["gp"]["food_cost"]
+    assert 0 < d["gp"]["gp_pct"] <= 100
+    # peak / dayparts present; table block present (available flag at least)
+    assert isinstance(d["peak"]["dayparts"], list) and d["peak"]["peak_hour"]
+    assert "available" in d["table"]
+    assert "has_yoy" in d
 
     w = client.get("/api/reports/management", params={"period": "weekly"}).json()
     assert w["period"] == "weekly"
