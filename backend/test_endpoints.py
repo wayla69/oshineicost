@@ -62,6 +62,7 @@ def test_endpoint_200(client, path, params):
 
 
 def test_management_report_daily_and_weekly(client):
+    import datetime as _dt
     d = client.get("/api/reports/management", params={"period": "daily"}).json()
     assert d["available"] and d["period"] == "daily"
     assert d["headline"]["revenue"] > 0 and d["headline"]["bills"] >= 1
@@ -70,12 +71,23 @@ def test_management_report_daily_and_weekly(client):
     assert d["pace"]["food_cost_pct"] is not None
     assert len(d["trend"]) == 8
     assert isinstance(d["actions"], list) and d["actions"]
+    # §7 is now food cost PER HEAD by dish (not revenue movers)
+    assert d["menu"]["basis"] == "cost_per_head"
+    assert all("cost_per_head" in m for m in d["menu"]["top"])
 
     w = client.get("/api/reports/management", params={"period": "weekly"}).json()
     assert w["period"] == "weekly"
-    # the week (Jun 1–3 in the fixture) covers more days than the single focus day
-    assert w["headline"]["revenue"] >= d["headline"]["revenue"]
     assert abs(sum(b["revenue"] for b in w["branches"]) - w["headline"]["revenue"]) < 1.0
+    # FULL weeks only: never partial; range is a Mon–Sun 7-day window
+    assert w["partial"] is False
+    assert w["selected_week"] == w["range"][0]
+    cs = _dt.date.fromisoformat(w["range"][0]); ce = _dt.date.fromisoformat(w["range"][1])
+    assert cs.weekday() == 0 and (ce - cs).days == 6
+    # picker carries selectable completed weeks, and an explicit pick round-trips
+    assert isinstance(w["weeks"], list) and len(w["weeks"]) >= 1
+    pick = w["weeks"][-1]["start"]
+    w2 = client.get("/api/reports/management", params={"period": "weekly", "week": pick}).json()
+    assert w2["selected_week"] == pick
 
 
 def test_cost_drivers_has_total_and_mom(client):

@@ -4567,9 +4567,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <button onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
       </div>
     </div>
-    <div class="no-print mt-5 inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
-      <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
-      <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
+    <div class="no-print mt-5 flex flex-wrap items-center gap-3">
+      <div class="inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
+        <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
+        <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
+      </div>
+      <select id="mgtWeekPicker" onchange="onMgtWeekChange(this.value)"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+              style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
     </div>
   </div>
 
@@ -7682,6 +7687,7 @@ async function genMenuIdeas() {
 // (branch + group filter only); the global period range is ignored.
 // ════════════════════════════════════════════════════════════════
 let mgtPeriod = 'daily';
+let mgtWeek = null;          // selected week (Monday ISO date); null = latest completed week
 
 function _mgtToggleUI() {
   const on  = 'background:#fff;color:#0f172a';
@@ -7690,10 +7696,32 @@ function _mgtToggleUI() {
   const w = document.getElementById('mgtTabWeekly');
   if (d) d.setAttribute('style', mgtPeriod === 'daily'  ? on : off);
   if (w) w.setAttribute('style', mgtPeriod === 'weekly' ? on : off);
+  // week picker is weekly-only; hide it in daily mode
+  const wp = document.getElementById('mgtWeekPicker');
+  if (wp && mgtPeriod !== 'weekly') wp.classList.add('hidden');
+}
+
+function renderMgtWeekPicker(j) {
+  const sel = document.getElementById('mgtWeekPicker');
+  if (!sel) return;
+  if (j.period !== 'weekly' || !(j.weeks && j.weeks.length)) {
+    sel.classList.add('hidden'); sel.innerHTML = ''; return;
+  }
+  sel.innerHTML = j.weeks.map(w =>
+    `<option value="${w.start}"${w.start === j.selected_week ? ' selected' : ''}>Week: ${w.label}</option>`
+  ).join('');
+  sel.classList.remove('hidden');
+}
+
+function onMgtWeekChange(v) {
+  mgtWeek = v || null;
+  _tabLastKey.mgtreport = null;     // force a refetch for the chosen week
+  loadMgtReport();
 }
 
 function setMgtPeriod(p) {
   mgtPeriod = (p === 'weekly') ? 'weekly' : 'daily';
+  mgtWeek = null;                   // reset to the latest completed week on mode switch
   _tabLastKey.mgtreport = null;     // force a refetch for the new period
   _mgtToggleUI();
   loadMgtReport();
@@ -7702,7 +7730,7 @@ function setMgtPeriod(p) {
 function printMgtReport() { try { window.print(); } catch (e) {} }
 
 async function loadMgtReport() {
-  const _fk = _filterKey() + '|' + mgtPeriod;
+  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '');
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
   _mgtToggleUI();
@@ -7710,6 +7738,7 @@ async function loadMgtReport() {
   if (body) body.innerHTML = '<div class="text-center text-slate-400 py-10 text-sm">Loading…</div>';
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
+  if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   let j;
@@ -7741,6 +7770,7 @@ function renderMgtReport(j) {
   try { setTxt('mgtGenDate', new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })); }
   catch (e) { setTxt('mgtGenDate', new Date().toString()); }
   _mgtToggleUI();
+  renderMgtWeekPicker(j);
 
   const H = j.headline || {};
   const sec = (title, inner) =>
@@ -7762,14 +7792,15 @@ function renderMgtReport(j) {
       ${kpi('Discounts',          baht(H.discount),    (H.discount_pct != null ? H.discount_pct.toFixed(1) + '% of sales' : ''))}
     </div>`;
 
-  // §2 — Month pacing & food cost
+  // §2 — Month pacing & food cost (full month for a past period, MTD for the current one)
   const P = j.pace || {};
   const pvt = P.proj_vs_target_pct;
+  const mc = P.month_complete;
   const pace = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      ${kpi('MTD Net Sales', baht(P.mtd_revenue), (P.mtd_days || 0) + ' days so far')}
-      ${kpi('Projected Month-End', baht(P.projected), 'run-rate')}
-      ${kpi('Revenue Target', baht(P.target), (pvt != null ? 'projection ' + pvt.toFixed(0) + '% of target' : 'no target set'))}
-      ${kpi('Food Cost % (MTD)', (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), 'BoM basis')}
+      ${kpi(mc ? 'Month Net Sales' : 'MTD Net Sales', baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? ' days' : ' days so far'))}
+      ${kpi(mc ? 'Month Total' : 'Projected Month-End', baht(P.projected), mc ? 'actual' : 'run-rate')}
+      ${kpi('Revenue Target', baht(P.target), (pvt != null ? (mc ? 'actual ' : 'projection ') + pvt.toFixed(0) + '% of target' : 'no target set'))}
+      ${kpi('Food Cost %' + (mc ? '' : ' (MTD)'), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), 'BoM basis')}
     </div>`;
 
   // §3 — Revenue trend
@@ -7814,19 +7845,35 @@ function renderMgtReport(j) {
       ${leakCard('Zero-Gross Bills', L.zero_gross, 'Discount-only / free bills')}
     </div>`;
 
-  // §6 — Menu movers
+  // §6 — Menu cost per head (food COGS / cover, by dish), like วิเคราะห์เมนู
   const M = j.menu || {};
-  const liRev = (x, signed) => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-50 text-sm">
+  const cnum = v => (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const cph  = v => (v == null) ? '—' : '฿' + cnum(v);
+  const liTop = x => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-50 text-sm">
       <span class="truncate">${x.menu}</span>
-      <span class="font-semibold whitespace-nowrap" ${signed ? `style="color:${x.delta >= 0 ? '#059669' : '#dc2626'}"` : ''}>${signed ? (x.delta >= 0 ? '+' : '−') + baht(Math.abs(x.delta)) : baht(x.revenue)}</span>
+      <span class="font-semibold whitespace-nowrap">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-400">/head</span></span>
     </li>`;
-  const list = (arr, signed, empty) => (arr && arr.length)
-    ? `<ul>${arr.map(x => liRev(x, signed)).join('')}</ul>`
-    : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
-  const menu = `<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-      <div><p class="text-xs font-semibold text-slate-500 mb-1">Top Sellers (by revenue)</p>${list(M.top_sellers, false, 'No data.')}</div>
-      <div><p class="text-xs font-semibold text-slate-500 mb-1">Biggest Gainers ${compShort}</p>${list(M.gainers, true, j.has_prev ? 'None.' : 'No comparison period.')}</div>
-      <div><p class="text-xs font-semibold text-slate-500 mb-1">Biggest Decliners ${compShort}</p>${list(M.decliners, true, j.has_prev ? 'None.' : 'No comparison period.')}</div>
+  // rising food cost/head = margin risk (red); falling = good (green)
+  const liMove = x => {
+    const up = x.delta >= 0;
+    return `<li class="py-1.5 border-b border-slate-50 text-sm">
+      <div class="flex items-center justify-between gap-3">
+        <span class="truncate">${x.menu}</span>
+        <span class="font-semibold whitespace-nowrap" style="color:${up ? '#dc2626' : '#059669'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}<span class="text-[11px]">/head</span></span>
+      </div>
+      <div class="text-[11px] text-slate-400">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct.toFixed(0)}%` : ''}</div>
+    </li>`;
+  };
+  const listT = (arr, empty) => (arr && arr.length) ? `<ul>${arr.map(liTop).join('')}</ul>` : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
+  const listM = (arr, empty) => (arr && arr.length) ? `<ul>${arr.map(liMove).join('')}</ul>` : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
+  const totLine = (M.total_cph != null)
+    ? `<p class="text-xs text-slate-500 mb-3">Total food cost / head: <b>${cph(M.total_cph)}</b>${M.total_cph_prev != null ? ` (was ${cph(M.total_cph_prev)}${M.total_cph_delta != null ? `, ${M.total_cph_delta >= 0 ? '+' : '−'}฿${cnum(Math.abs(M.total_cph_delta))}` : ''})` : ''} · over ${num(M.covers)} covers</p>`
+    : '';
+  const noCmp = j.has_prev ? 'None.' : 'No comparison period.';
+  const menu = totLine + `<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Highest Cost / Head</p>${listT(M.top, 'No data.')}</div>
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Cost / Head Rising ${compShort}</p>${listM(M.risers, noCmp)}</div>
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Cost / Head Falling ${compShort}</p>${listM(M.savers, noCmp)}</div>
     </div>`;
 
   // §7 — Action items
@@ -7837,14 +7884,14 @@ function renderMgtReport(j) {
   const body = document.getElementById('mgtRptBody');
   if (!body) return;
   body.innerHTML =
-      sec('1. Headline — ' + (isDaily ? 'Yesterday' : 'This Week'), kpis)
+      sec('1. Headline — ' + (isDaily ? 'Latest Day' : 'Selected Week'), kpis)
     + sec('2. Action Items', `<ul class="space-y-0.5">${acts}</ul>`)
-    + sec('3. Month-to-Date Pacing & Cost', pace)
+    + sec('3. ' + (mc ? 'Month' : 'Month-to-Date') + ' Pacing & Cost', pace)
     + sec('4. Revenue Trend (last 8 ' + (isDaily ? 'days' : 'weeks') + ')', trend)
     + sec('5. Branch League Table', branchTbl)
     + sec('6. Money-Leak Radar', leak)
-    + sec('7. Menu Movers', menu)
-    + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Food cost % is the month-to-date BoM figure. Latest data day: ${j.latest_day || '—'}.</p>`;
+    + sec('7. Menu Cost / Head (by dish)', menu)
+    + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${(j.pace && j.pace.month) || 'the period month'}. Latest data day: ${j.latest_day || '—'}.</p>`;
 
   // Trend chart (after the canvas exists in the DOM)
   mkChart('mgtTrendChart', {

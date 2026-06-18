@@ -11696,16 +11696,19 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
 def report_management(
     period: str = Query("daily"),            # 'daily' | 'weekly'
     date:   Optional[str] = Query(None),     # focus day (default = latest day in data)
+    week:   Optional[str] = Query(None),     # weekly: any date in the wanted FULL week (default = last completed week)
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
 ):
-    """One-glance management summary for a single day or a single week.
+    """One-glance management summary for a single day or a single COMPLETE week.
 
     Mirrors the proven idioms used across the dashboard so the numbers tie out:
       · revenue = SUM(total_inc_vat)/1.07  (ex-VAT, the reconciled accounting basis)
-      · current-vs-prior is WoW-fair (same weekday last week / same #days last week)
-      · food-cost % is the month-to-date BoM figure (_cogs_case — tier-safe)
+      · current-vs-prior is WoW-fair (same weekday last week / full prior week)
+      · food-cost % is the BoM figure for the period's month (_cogs_case — tier-safe)
       · money-leak signals reuse the Daily-Brief leak definitions (heavy/cash/reprint/zero)
+    Weekly reports cover only FULL Mon–Sun weeks; the response carries the list of
+    selectable completed weeks (`weeks`) and the chosen one (`selected_week`).
     Everything is English-labelled and shaped for a printable management report."""
     import datetime as _dt, calendar as _cal
     if period not in ("daily", "weekly"):
@@ -11738,23 +11741,57 @@ def report_management(
         fdate = _dt.date(fy, fm, fd)
 
         # ---- period bounds + WoW-fair comparison window -------------------
+        latest_day = _dt.date.fromisoformat(maxd)
+        weeks: list = []
+        selected_week = None
         if period == "daily":
             cs = ce = fdate
             ps = pe = fdate - _dt.timedelta(days=7)
             days_in_period = 1
             partial = False
+            ref_anchor = fdate
             label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
             comp_label = "same weekday last week"
         else:
-            wk_mon = fdate - _dt.timedelta(days=fdate.weekday())
-            wk_sun = wk_mon + _dt.timedelta(days=6)
-            cs, ce = wk_mon, min(wk_sun, fdate)
-            days_in_period = (ce - cs).days + 1
-            partial = ce < wk_sun
+            # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
+            # have data — most recent first, cap 26 — so the picker and the default
+            # both come from real, finished weeks (never the current partial week).
+            mon_expr = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+            monrows = con.execute(
+                f"SELECT DISTINCT {mon_expr} mon FROM sales_transaction st "
+                f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
+            for m in sorted((r["mon"] for r in monrows if r["mon"]), reverse=True):
+                md = _dt.date.fromisoformat(m)
+                sun = md + _dt.timedelta(days=6)
+                if sun <= latest_day:
+                    weeks.append({"start": m, "end": sun.isoformat(),
+                                  "label": f"{dlabel(md)} – {dlabel(sun)}"})
+                if len(weeks) >= 26:
+                    break
+            # Default = most recent completed week WITH data; fall back to the calendar
+            # week before the latest day if there is no fully-completed week yet.
+            cur_mon = latest_day - _dt.timedelta(days=latest_day.weekday())
+            default_mon = (_dt.date.fromisoformat(weeks[0]["start"]) if weeks
+                           else cur_mon - _dt.timedelta(days=7))
+            sel_mon = default_mon
+            if week:
+                try:
+                    wd = _dt.date.fromisoformat(week[:10])
+                    cand = wd - _dt.timedelta(days=wd.weekday())          # snap to that week's Monday
+                    if (cand + _dt.timedelta(days=6)) <= latest_day:      # never an incomplete week
+                        sel_mon = cand
+                except Exception:
+                    pass
+            cs = sel_mon
+            ce = sel_mon + _dt.timedelta(days=6)
+            days_in_period = 7
+            partial = False
+            ref_anchor = ce
             ps = cs - _dt.timedelta(days=7)
-            pe = ps + _dt.timedelta(days=days_in_period - 1)
-            label = f"Week of {dlabel(cs)} – {dlabel(wk_sun)} (Mon–Sun)"
-            comp_label = "previous week (same days)"
+            pe = cs - _dt.timedelta(days=1)
+            selected_week = cs.isoformat()
+            label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
+            comp_label = "previous week (Mon–Sun)"
         has_prev = ps.isoformat() >= mind
 
         # ---- headline totals for an arbitrary [s,e] range -----------------
@@ -11860,7 +11897,11 @@ def report_management(
         leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
                 "reprinted": reprint, "zero_gross": zero}
 
-        # ---- menu: top food sellers + biggest revenue movers -------------
+        # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
+        # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:
+        #   cost/head = (dish COGS over the period) / (covers in scope), current vs the
+        #   comparison period. COGS uses the app's effective unit cost (sku_effective_cost
+        #   → non-zero sku_cost fallback) — the same basis as _unified_cogs_expr.
         food_sub = (f"(SELECT sk.sku_id FROM skus sk JOIN categories c "
                     f"ON c.category_id=sk.category_id WHERE {_FOOD_CATEGORY_FILTER})")
         sb = ["b.name!='ALL'"]; sp: dict = {}
@@ -11868,10 +11909,12 @@ def report_management(
             sb.append("b.name=:branch"); sp["branch"] = branch
         _group_filter(sb, sp, group)
         sw = " AND ".join(sb)
-        def menu_map(s, e):
+        _eff_cost = ("COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id),"
+                     " (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=d.sku_id), 0)")
+        def menu_cost_map(s, e):
             rows = con.execute(f"""
                 SELECT d.sku_id, s.description, s.sku_code,
-                       SUM(d.qty) qty, SUM(d.subtotal_ex_vat) rev
+                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
                 FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
                 JOIN skus s ON s.sku_id=d.sku_id
                 WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
@@ -11879,31 +11922,66 @@ def report_management(
             return {r["sku_id"]: r for r in rows}
         def clean(nm):
             return (nm or "").replace("(A) ", "").replace("(B) ", "").strip()
+        covers_cur  = cur["customers"] or 0
+        covers_prev = (prev["customers"] or 0) if prev else 0
         try:
-            cur_m  = menu_map(cs, ce)
-            prev_m = menu_map(ps, pe) if has_prev else {}
+            cur_m  = menu_cost_map(cs, ce)
+            prev_m = menu_cost_map(ps, pe) if has_prev else {}
         except Exception:
             cur_m, prev_m = {}, {}
-        top_sellers = sorted(
-            [{"menu": clean(r["description"] or r["sku_code"]),
-              "qty": round(r["qty"] or 0), "revenue": round(r["rev"] or 0)}
-             for r in cur_m.values() if (r["rev"] or 0) > 0],
-            key=lambda x: -x["revenue"])[:8]
-        movers = []
-        if prev_m:
-            for sid, r in cur_m.items():
-                crev = r["rev"] or 0
-                prev_rev = (prev_m[sid]["rev"] if sid in prev_m else 0) or 0
-                if crev <= 0 and prev_rev <= 0:
+        def cph(cost, covers): return round(cost / covers, 2) if covers else None
+        cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
+        menu_rows = []
+        for sid, r in cur_m.items():
+            cost_cur  = r["cost"] or 0
+            cost_prev = (prev_m[sid]["cost"] if sid in prev_m else 0) or 0
+            c_cur  = cph(cost_cur, covers_cur)
+            c_prev = cph(cost_prev, covers_prev)
+            if not c_cur and not c_prev:
+                continue
+            menu_rows.append({
+                "menu": clean(r["description"] or r["sku_code"]),
+                "qty": round(r["qty"] or 0), "cost": round(cost_cur),
+                "cost_per_head": c_cur,
+                "cost_per_head_prev": c_prev if cmp_ok else None,
+                "delta": round((c_cur or 0) - (c_prev or 0), 2) if cmp_ok else None,
+                "pct": pct(c_cur or 0, c_prev or 0) if cmp_ok else None,
+            })
+        # dishes that carried cost last period but none now → cost/head fell to 0
+        if cmp_ok:
+            for sid, r in prev_m.items():
+                if sid in cur_m:
                     continue
-                movers.append({"menu": clean(r["description"] or r["sku_code"]),
-                               "revenue": round(crev), "prev_revenue": round(prev_rev),
-                               "delta": round(crev - prev_rev), "pct": pct(crev, prev_rev)})
-        gainers   = sorted([m for m in movers if m["delta"] > 0], key=lambda x: -x["delta"])[:6]
-        decliners = sorted([m for m in movers if m["delta"] < 0], key=lambda x: x["delta"])[:6]
+                c_prev = cph(r["cost"] or 0, covers_prev)
+                if not c_prev:
+                    continue
+                menu_rows.append({
+                    "menu": clean(r["description"] or r["sku_code"]),
+                    "qty": 0, "cost": 0, "cost_per_head": 0.0,
+                    "cost_per_head_prev": c_prev,
+                    "delta": round(-c_prev, 2), "pct": -100.0,
+                })
+        cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
+                            key=lambda x: -(x["cost_per_head"] or 0))[:8]
+        cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
+                            key=lambda x: -x["delta"])[:6]
+        cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
+                            key=lambda x: x["delta"])[:6]
+        tot_cur_cost  = sum((r["cost"] or 0) for r in cur_m.values())
+        tot_prev_cost = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
+        total_cph      = cph(tot_cur_cost, covers_cur)
+        total_cph_prev = cph(tot_prev_cost, covers_prev) if cmp_ok else None
+        menu_out = {
+            "basis": "cost_per_head",
+            "covers": covers_cur, "covers_prev": covers_prev if has_prev else None,
+            "total_cph": total_cph, "total_cph_prev": total_cph_prev,
+            "total_cph_delta": (round((total_cph or 0) - (total_cph_prev or 0), 2)
+                                if (total_cph is not None and total_cph_prev is not None) else None),
+            "top": cost_top, "risers": cost_up, "savers": cost_down,
+        }
 
-        # ---- food cost % (month-to-date BoM) + month pace ----------------
-        cur_month = focus[:7]
+        # ---- food cost % (BoM) + month pace, anchored on the period's month ----
+        cur_month = ref_anchor.strftime("%Y-%m")
         mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
         if branch:
             mb.append("b.name=:branch"); mp["branch"] = branch
@@ -11925,8 +12003,10 @@ def report_management(
         mtd_days = mtd_row["days"] or 0
         bom_cost = bom_row["cost"] if bom_row else None
         food_cost_pct = round(bom_cost/mtd_rev*100, 1) if bom_cost and mtd_rev else None
-        days_total = _cal.monthrange(fy, fm)[1]
-        days_elapsed = fd
+        days_total = _cal.monthrange(ref_anchor.year, ref_anchor.month)[1]
+        # MTD up to the latest data for the current month; a full (past) month otherwise.
+        days_elapsed = latest_day.day if cur_month == maxd[:7] else days_total
+        month_complete = days_elapsed >= days_total
         projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
         tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
         if branch:
@@ -11940,7 +12020,7 @@ def report_management(
         target = tgt_row["tgt"] or 0
         pace = {
             "month": cur_month, "mtd_revenue": mtd_rev, "mtd_days": mtd_days,
-            "days_elapsed": days_elapsed, "days_total": days_total,
+            "days_elapsed": days_elapsed, "days_total": days_total, "month_complete": month_complete,
             "projected": projected, "target": target or None,
             "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
             "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
@@ -11954,7 +12034,7 @@ def report_management(
                 trend.append({"label": dlabel(d), "start": d.isoformat(), "revenue": agg(d, d)["revenue"]})
                 d = d - _dt.timedelta(days=1)
             else:
-                e = min(d + _dt.timedelta(days=6), fdate)
+                e = d + _dt.timedelta(days=6)        # full Mon–Sun week (weekly is always complete)
                 trend.append({"label": f"{d.day} {MON[d.month-1]}", "start": d.isoformat(),
                               "revenue": agg(d, e)["revenue"]})
                 d = d - _dt.timedelta(days=7)
@@ -11981,11 +12061,17 @@ def report_management(
             "text": f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse."})
     if food_cost_pct is not None and food_cost_pct >= 38:
         actions.append({"sev": "med",
-            "text": f"Food cost {food_cost_pct:.0f}% MTD — above the ~35% target."})
+            "text": f"Food cost {food_cost_pct:.0f}% — above the ~35% target."})
     if projected and target and projected < target * 0.95:
         gap = (1 - projected/target) * 100
+        word = "Month total" if month_complete else "Month-end projection"
         actions.append({"sev": "med",
-            "text": f"Month-end projection ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
+            "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
+    if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
+        m0 = cost_up[0]
+        actions.append({"sev": "low",
+            "text": f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
+                    f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost."})
     sev_rank = {"high": 0, "med": 1, "low": 2}
     actions.sort(key=lambda a: sev_rank.get(a["sev"], 9))
     actions = actions[:7]
@@ -12001,6 +12087,8 @@ def report_management(
         "range": [cs.isoformat(), ce.isoformat()],
         "comp_range": [ps.isoformat(), pe.isoformat()] if has_prev else None,
         "partial": partial,
+        "selected_week": selected_week,
+        "weeks": weeks,
         "days_in_period": days_in_period,
         "latest_day": maxd,
         "branch_scope": branch or ("Group: " + group if group else "All branches"),
@@ -12008,7 +12096,7 @@ def report_management(
         "headline": headline,
         "branches": branches,
         "leak": leak,
-        "menu": {"top_sellers": top_sellers, "gainers": gainers, "decliners": decliners},
+        "menu": menu_out,
         "pace": pace,
         "trend": trend,
         "actions": actions,
