@@ -159,6 +159,11 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .db-tbl th,.db-tbl td{padding:6px 16px}
 .db-tbl tfoot td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:600;background:var(--line-soft)}
 .db-disc{color:var(--warn)}
+.dash-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+.dash-empty{opacity:.55}
+.mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
+.mv-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.mv-tbl td{padding:5px 6px;border-top:1px solid var(--line-soft)}
 @media (max-width:640px){
   .ov-row{padding:11px 12px;gap:8px}
   .ov-row .row{width:auto !important}
@@ -234,6 +239,7 @@ function route(){
   if(h==='errors')return loadErrorReport();
   if(h==='wrong')return loadWrongChannel();
   if(h==='daybook')return loadDaybook();
+  if(h==='dashboard')return loadDashboard();
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -526,9 +532,10 @@ function renderWrongChannel(){
     ${items.map(it=>{
       const days=(it.days||[]).map(d=>(+d.slice(8))).join(', ')||'—';
       const toTh=esc(it.to_th)+(it.to_bank_th?` (${esc(it.to_bank_th)})`:'');
+      const srcTag=it.source==='move'?` <span class="chip c-mut ov-mini">ย้ายด้วยมือ</span>`:'';
       return `<tr>
         <td>${esc(it.branch_name)}</td><td class="mono">${days}</td>
-        <td>${esc(it.from_th)}</td><td><span style="color:var(--warn)">→</span> ${toTh}</td>
+        <td>${esc(it.from_th)}${srcTag}</td><td><span style="color:var(--warn)">→</span> ${toTh}</td>
         <td class="mono">${fmt(it.amount)}</td><td style="text-align:left">${esc(it.reason||'—')}</td>
         <td class="lbl">${esc(it.by||'—')}</td></tr>`;}).join('')}
   </table></div>`;
@@ -588,6 +595,59 @@ function renderDaybook(){
   $('app').innerHTML=html;
 }
 
+/* ── 📊 Dashboard รายได้ตามช่องทางรายวัน (ทุกสาขาในวันเดียว · เลือกวันจากปฏิทิน) ── */
+let DASH=null, DASH_DAY=(new Date()).toISOString().slice(0,10);
+const CH_COLOR={CASH:'#0f6e56',QR:'#2563eb',TRANSFER:'#0891b2',CREDIT:'#7c3aed',
+                GRAB:'#16a34a',LINEMAN:'#ea580c',COUPON:'#ca8a04',DISCOUNT:'#dc2626'};
+async function loadDashboard(){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let r;
+  try{ r=await api(`/api/daily-dashboard?day=${DASH_DAY}`); }
+  catch(e){ $('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
+  DASH=r; renderDashboard();
+}
+function setDashDay(v){ if(!v)return; DASH_DAY=v; loadDashboard(); }
+function dashBranchCard(b){
+  const t=b.totals||{};
+  if(!(b.channels||[]).length)
+    return `<div class="card db-card dash-empty"><div class="db-head"><div class="db-date">${esc(b.name)}</div>
+      <div class="db-net lbl">— ไม่มีรายได้วันนี้</div></div></div>`;
+  const row=c=>`<tr>
+    <td><span class="dash-dot" style="background:${CH_COLOR[c.ch]||'#94a3b8'}"></span>${esc(c.ch_th)}</td>
+    <td class="mono">${fmt2(c.gross)}</td>
+    <td class="mono db-disc">${dbDed(c.discount)}</td>
+    <td class="mono"><b>${fmt2(c.net)}</b></td></tr>`;
+  return `<div class="card db-card">
+    <div class="db-head"><div class="db-date">${esc(b.name)}</div>
+      <div class="db-net">฿${fmt2(t.net)}</div></div>
+    <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>สุทธิ</th></tr></thead>
+      <tbody>${b.channels.map(row).join('')}</tbody>
+      <tfoot><tr><td>รวมสาขา</td><td class="mono">${fmt2(t.gross)}</td>
+        <td class="mono db-disc">${dbDed(t.discount)}</td><td class="mono"><b>${fmt2(t.net)}</b></td></tr></tfoot>
+    </table></div>`;
+}
+function renderDashboard(){
+  const r=DASH, g=r.grand_totals||{};
+  const brs=(r.branches||[]).slice().sort((a,b)=>((b.totals||{}).net||0)-((a.totals||{}).net||0));
+  const active=brs.filter(b=>(b.channels||[]).length);
+  let html=header()+`<div class="row" style="margin-bottom:6px;align-items:center">
+    <h2 style="font-size:16px">📊 รายได้ตามช่องทาง — รายวัน (ทุกสาขา)</h2>
+    <input type="date" value="${esc(DASH_DAY)}" onchange="setDashDay(this.value)" title="เลือกวันจากปฏิทิน"
+      style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+  </div>
+  <div class="muted" style="margin-bottom:12px">เลือกวันจากปฏิทิน → เห็นรายได้แยกช่องทางของทุกสาขาในวันนั้น · บันทึก <b>ยอดเต็ม</b> แล้วแยกบรรทัด <b>ส่วนลด</b> · คูปอง KTC/BAY (แต้ม) นับเป็นเงินรับจริง — คูปองส่วนลดอื่น (ผู้สูงอายุ/เด็ก/ฯลฯ) เป็นยอดหัก</div>`;
+  if(!active.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายได้ของวันที่ ${esc(DASH_DAY)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS ของวันนั้นก่อน</div>`; return; }
+  html+=`<div class="card db-sum">
+    <div><div class="lbl">ยอดเต็มรวมทุกสาขา</div><b>฿${fmt2(g.gross)}</b></div>
+    <div><div class="lbl">ส่วนลดรวม</div><b class="db-disc">฿${fmt2(g.discount)}</b></div>
+    <div><div class="lbl">ค่าธรรมเนียม</div><b>฿${fmt2(g.fee)}</b></div>
+    <div><div class="lbl">VAT</div><b>฿${fmt2(g.vat)}</b></div>
+    <div><div class="lbl">สุทธิเข้าบัญชีรวม</div><b>฿${fmt2(g.net)}</b></div>
+    <div style="margin-left:auto;align-self:center" class="lbl">${active.length}/${brs.length} สาขามีรายได้</div></div>`;
+  html+=`<div class="db-grid">${brs.map(dashBranchCard).join('')}</div>`;
+  $('app').innerHTML=html;
+}
+
 /* ── หน้าสาขา ── */
 /* ── Phase 2: bucket each channel for the branch inbox ── */
 function _uploadChKeys(r){      // channel keys that have a genuine missing-doc upload task
@@ -614,6 +674,7 @@ async function loadBranch(bid){
   $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
   let r;try{r=await api(`/api/v2/reconcile?branch_id=${bid}&month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
   DATA=r;
+  try{DATA.moves=await api(`/api/channel-move?branch_id=${bid}&period_month=${MONTH}`);}catch(e){DATA.moves=[];}
   const ses=r.session,st=(ses&&ses.status)||'draft';
   const closed=st==='approved';
   DATA.closed=closed;
@@ -776,6 +837,9 @@ async function loadBranch(bid){
     </div>`;
   }
 
+  // ⇄ บันทึกผิดช่อง (ย้ายช่อง) — กระทบสองยอดพร้อมกัน
+  html+=channelMovePanel(bid,closed);
+
   // สิ่งที่เหลือ (พร้อมปุ่มรับทราบ) + ปุ่มสถานะ
   html+=`<div class="card">`;
   if(r.todo.length){
@@ -789,7 +853,7 @@ async function loadBranch(bid){
         ${acceptable?`<button class="btn btn-sm" onclick="acceptTodo('${esc(t.channel)}','${esc(t.label)}')">✓ รับทราบ + เหตุผล</button>`:''}
       </div>`;
     });
-    html+=`</div><div class="muted">"รับทราบ" = ยอมรับผลต่างโดยใส่เหตุผล (เช่น ยอดเล็ก ไม่คุ้มตามเอกสาร) — เหตุผลจะติดไปในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ</div>`;
+    html+=`</div><div class="muted">"รับทราบ" = ยอมรับผลต่างโดยใส่เหตุผลจริง (เช่น ผลต่างจากค่าธรรมเนียมที่กระทบยอดแล้ว) — เหตุผลจะติดไปในไฟล์ Excel ให้ผู้จัดการเห็นตอนอนุมัติ</div>`;
   } else {
     html+=`<span class="chip c-ok">✓ ครบทุกช่องทาง พร้อมปิดเดือน</span>`;
   }
@@ -1018,7 +1082,7 @@ async function delUpload(uid,name){
 
 /* ── รับทราบผลต่าง — เลือกเหตุผลสำเร็จรูป (แทน prompt) ── */
 const ACCEPT_REASONS=[
-  'ยอดต่างเล็กน้อย ไม่คุ้มที่จะตามเอกสาร',
+  'ผลต่างจากค่าธรรมเนียม/ปัดเศษ ที่กระทบยอดแล้ว — ทบทวนซ้ำเดือนหน้า',
   'เศษสตางค์/ปัดเศษจากระบบ',
   'ค่าธรรมเนียมธนาคาร/ค่ายบัตรหักก่อนโอน',
   'เงินเข้าข้ามรอบ — วันสุดท้ายฝากเดือนถัดไป',
@@ -1051,6 +1115,76 @@ async function submitAccept(){
 async function unaccept(adjId){
   try{await api(`/api/lanes/adj/${adjId}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── ⇄ บันทึกผิดช่อง (ย้ายช่อง) — ย้ายยอดที่บันทึกผิดไปช่องที่ถูก กระทบสองยอดพร้อมกัน ── */
+const CH_LABELS={CASH:'เงินสด',QR:'QR พร้อมเพย์',TRANSFER:'เงินโอน',CREDIT:'บัตรเครดิต',
+                 GRAB:'Grab',LINEMAN:'Line Man',COUPON:'คูปอง'};
+function chLaneLabel(cat,bank){
+  const base=CH_LABELS[cat]||cat;
+  return (bank&&bank!=='NONE'&&bank!=='ALL')?`${base}·${bank}`:base;
+}
+function _moveLaneOpts(){
+  const opts=[];
+  (DATA.channels||[]).forEach(c=>{
+    const banks=(c.banks&&c.banks.length)?c.banks:[{bank:'NONE'}];
+    banks.forEach(b=>opts.push({cat:c.key,bank:b.bank||'NONE',label:chLaneLabel(c.key,b.bank)}));
+  });
+  return opts;
+}
+function channelMovePanel(bid,closed){
+  const moves=(DATA.moves||[]);
+  let body='';
+  if(moves.length) body=`<table class="mv-tbl"><tbody>`+moves.map(m=>`<tr>
+      <td>${esc(chLaneLabel(m.from_category,m.from_bank))} <span class="lbl">→</span> ${esc(chLaneLabel(m.to_category,m.to_bank))}</td>
+      <td class="mono">฿${fmt2(m.amount)}</td>
+      <td class="lbl">${esc(m.note||'')}</td>
+      <td style="text-align:right">${closed?'':`<button class="btn btn-sm" onclick="undoMove(${m.id})">↩ ยกเลิก</button>`}</td>
+    </tr>`).join('')+`</tbody></table>`;
+  return `<div class="card" style="margin-bottom:12px">
+    <div class="row"><b style="font-size:13.5px">⇄ บันทึกผิดช่อง (ย้ายช่อง)</b>
+      ${closed?'':`<button class="btn btn-sm btn-pri" style="margin-left:auto" onclick="showChannelMove(${bid})">+ บันทึกผิดช่อง</button>`}</div>
+    <div class="muted" style="margin:4px 0 ${moves.length?'8px':'0'}">ยอดถูกบันทึกผิดช่อง (เช่น QR แต่กดเป็นเงินสด)? ย้ายไปช่องที่ถูก — โปรแกรมจะลดช่องผิด+เพิ่มช่องถูกพร้อมกัน · ย้อนกลับได้</div>
+    ${body}</div>`;
+}
+function showChannelMove(bid,presetFrom,presetTo){
+  const opts=_moveLaneOpts();
+  if(opts.length<2){toast('ต้องมีช่องทางอย่างน้อย 2 ช่องในเดือนนี้ก่อน');return;}
+  window._mvOpts=opts; window._mvBid=bid;
+  const pf=presetFrom?opts.findIndex(o=>o.cat===presetFrom):-1;
+  const pt=presetTo?opts.findIndex(o=>o.cat===presetTo):-1;
+  const optHtml=sel=>opts.map((o,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(o.label)}</option>`).join('');
+  showSheet(`<div class="sheet-h">⇄ บันทึกผิดช่อง — ย้ายยอดไปช่องที่ถูก</div>
+    <div class="lbl" style="margin-bottom:8px">โปรแกรมจะกระทบทั้งสองช่องพร้อมกัน (ลดช่องผิด เพิ่มช่องถูก) · ย้อนกลับได้</div>
+    <div class="row" style="gap:10px;align-items:flex-end;flex-wrap:wrap">
+      <div><div class="lbl">จากช่อง (บันทึกผิด)</div><select id="mv-from" class="mv-sel">${optHtml(pf)}</select></div>
+      <div style="align-self:flex-end;font-size:20px;padding-bottom:4px">→</div>
+      <div><div class="lbl">ไปช่อง (ที่ถูก)</div><select id="mv-to" class="mv-sel">${optHtml(pt)}</select></div>
+      <div><div class="lbl">จำนวนเงิน (฿)</div><input id="mv-amt" type="number" min="0" step="0.01" class="mv-sel" placeholder="0.00"></div>
+    </div>
+    <textarea id="mv-note" class="sheet-ta" placeholder="เหตุผล/หมายเหตุ (เช่น ลูกค้าสแกน QR แต่พนักงานกดเป็นเงินสด)"></textarea>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn btn-pri" onclick="submitMove()">บันทึกการย้าย</button>
+      <button class="btn" onclick="closeSheet()">ยกเลิก</button>
+    </div>`);
+}
+async function submitMove(){
+  const opts=window._mvOpts||[], bid=window._mvBid;
+  const f=opts[+(($('mv-from')||{}).value)], t=opts[+(($('mv-to')||{}).value)];
+  const amt=parseFloat((($('mv-amt')||{}).value)||'0');
+  const note=(($('mv-note')||{}).value||'').trim();
+  if(!f||!t){toast('เลือกช่องไม่ถูกต้อง');return;}
+  if(f.cat===t.cat&&f.bank===t.bank){toast('ช่องต้นทางและปลายทางต้องไม่ใช่ช่องเดียวกัน');return;}
+  if(!(amt>0)){toast('ใส่จำนวนเงินมากกว่า 0');return;}
+  try{await api('/api/channel-move',{method:'POST',body:{branch_id:bid,period_month:MONTH,
+      from_category:f.cat,from_bank:f.bank,to_category:t.cat,to_bank:t.bank,amount:amt,note:note}});
+    closeSheet();toast('ย้ายช่องแล้ว — กระทบสองยอดเรียบร้อย');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
+}
+async function undoMove(id){
+  if(!confirm('ยกเลิกการย้ายช่องนี้? (ยอดจะกลับไปช่องเดิม)'))return;
+  try{await api(`/api/channel-move/${id}`,{method:'DELETE'});toast('ยกเลิกการย้ายแล้ว');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
 }
 
 /* ── ตัดยอดโอนกันเองออกจากการกระทบยอด (ใช้ ignore endpoint เดิม — ย้อนกลับได้) ── */
@@ -1139,6 +1273,7 @@ function moreMenu(){
   showSheet(`<div class="sheet-h">เพิ่มเติม</div>
     <div class="more-menu">
       <a class="more-item" href="/api/monthly-report?period_month=${MONTH}" target="_blank">🖨️ รายงานการจับคู่รายวัน (ทุกสาขา)<span class="lbl">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · พิมพ์ PDF</span></a>
+      <a class="more-item" href="#dashboard" onclick="closeSheet()">📊 รายได้ตามช่องทาง รายวัน (Dashboard)<span class="lbl">เลือกวันจากปฏิทิน · เห็นทุกสาขาแยกช่องทางในวันเดียว + ยอดรวม</span></a>
       <a class="more-item" href="#daybook" onclick="closeSheet()">📅 สรุปบัญชีรายวัน (รายใบ)<span class="lbl">แต่ละวัน = 1 ใบ · ยอดเต็ม/ส่วนลดแยกบรรทัด · เลือกสาขา · พิมพ์ PDF</span></a>
       <a class="more-item" href="/api/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank">📥 ติดตามเอกสารที่ยังขาด<span class="lbl">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ · พิมพ์ PDF</span></a>
       <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
