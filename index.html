@@ -1239,6 +1239,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
     <span class="nav-label">📄 รายงาน</span>
   </div>
+  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
+    <span class="nav-label">📊 Management Report</span>
+  </div>
   <div class="nav-item" id="nav-settings" onclick="switchTab('settings')" title="Settings · Targets, costs, branches, hours, prefs">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
     <span class="nav-label">ตั้งค่า</span>
@@ -4546,6 +4550,34 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 <!-- ══════════════════════════════════════════════════════════════════════════
      TAB 4 — ANALYSIS REPORT
 ══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-mgtreport" class="hidden">
+
+  <!-- Management report cover band -->
+  <div class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+       style="background:linear-gradient(135deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)">
+    <div class="flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
+        <h1 class="text-3xl font-bold leading-tight">Management Summary Report</h1>
+        <p id="mgtPeriodLabel" class="text-sm opacity-90 mt-2">—</p>
+        <p id="mgtBranchLabel" class="text-sm opacity-90">—</p>
+      </div>
+      <div class="text-right text-xs opacity-90">
+        <div class="mb-3">Generated: <span id="mgtGenDate">—</span></div>
+        <button onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+      </div>
+    </div>
+    <div class="no-print mt-5 inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
+      <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
+      <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
+    </div>
+  </div>
+
+  <div id="mgtRptBody" class="space-y-5">
+    <div class="text-center text-slate-400 py-10 text-sm">Loading…</div>
+  </div>
+</div>
+
 <div id="tab-report" class="hidden">
 
   <!-- Report cover band -->
@@ -6412,7 +6444,7 @@ const TAB_MODULE = {
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
   cancelbill:'ops.posextra', closetime:'ops.posextra',
-  report:'report.export', settings:'system.settings',
+  report:'report.export', mgtreport:'report.export', settings:'system.settings',
 };
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
@@ -7273,13 +7305,13 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', mgtreport:'Management Report (Daily & Weekly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
-  ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','ops','settings',
+  ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','mgtreport','ops','settings',
    'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','pnlbill','opsreport',
    'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
@@ -7302,7 +7334,7 @@ function switchTab(name) {
   // Daily Brief is fixed to "yesterday + month-to-date" — it ignores the period
   // range entirely (only the branch filter applies). Hide the period controls and
   // the Quick-load bar here so they don't look broken when they have no effect.
-  const hidePeriod = (name === 'home');
+  const hidePeriod = (name === 'home' || name === 'mgtreport');
   document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('invisible', hidePeriod);
   document.getElementById('dateRangePickers')?.classList.toggle('invisible', hidePeriod);
   document.getElementById('monthRangePickers')?.classList.toggle('invisible', hidePeriod);
@@ -7644,6 +7676,202 @@ async function genMenuIdeas() {
   btn.disabled = false; btn.textContent = old;
 }
 
+// ════════════════════════════════════════════════════════════════
+// MANAGEMENT REPORT — Daily & Weekly summary (English, printable)
+// Backed by /api/reports/management. Fixed to the latest day/week
+// (branch + group filter only); the global period range is ignored.
+// ════════════════════════════════════════════════════════════════
+let mgtPeriod = 'daily';
+
+function _mgtToggleUI() {
+  const on  = 'background:#fff;color:#0f172a';
+  const off = 'background:transparent;color:#fff';
+  const d = document.getElementById('mgtTabDaily');
+  const w = document.getElementById('mgtTabWeekly');
+  if (d) d.setAttribute('style', mgtPeriod === 'daily'  ? on : off);
+  if (w) w.setAttribute('style', mgtPeriod === 'weekly' ? on : off);
+}
+
+function setMgtPeriod(p) {
+  mgtPeriod = (p === 'weekly') ? 'weekly' : 'daily';
+  _tabLastKey.mgtreport = null;     // force a refetch for the new period
+  _mgtToggleUI();
+  loadMgtReport();
+}
+
+function printMgtReport() { try { window.print(); } catch (e) {} }
+
+async function loadMgtReport() {
+  const _fk = _filterKey() + '|' + mgtPeriod;
+  if (_tabLastKey.mgtreport === _fk) return;
+  _tabLastKey.mgtreport = _fk;
+  _mgtToggleUI();
+  const body = document.getElementById('mgtRptBody');
+  if (body) body.innerHTML = '<div class="text-center text-slate-400 py-10 text-sm">Loading…</div>';
+  const qs = new URLSearchParams();
+  qs.set('period', mgtPeriod);
+  if (getBranch()) qs.set('branch', getBranch());
+  if (getGroup())  qs.set('group',  getGroup());
+  let j;
+  try { j = await fetch(`${API}/api/reports/management?${qs}`).then(r => r.json()); }
+  catch (e) {
+    if (body) body.innerHTML = '<div class="card p-6 text-sm text-rose-600">Failed to load the report.</div>';
+    return;
+  }
+  if (!j || !j.available) {
+    if (body) body.innerHTML = '<div class="card p-6 text-sm text-slate-500">No sales data yet — upload or sync data first.</div>';
+    return;
+  }
+  renderMgtReport(j);
+}
+
+function renderMgtReport(j) {
+  const baht = n => (n == null) ? '—' : '฿' + Math.round(n).toLocaleString('en-US');
+  const num  = n => (n == null) ? '—' : Math.round(n).toLocaleString('en-US');
+  const wow  = p => (p == null)
+    ? '<span class="text-slate-400 text-xs">—</span>'
+    : `<span class="text-xs font-semibold" style="color:${p >= 0 ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+  const isDaily = j.period === 'daily';
+  const compShort = isDaily ? 'vs last week' : 'vs prev week';
+
+  // Header band labels
+  const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
+  setTxt('mgtPeriodLabel', (isDaily ? 'Daily report · ' : 'Weekly report · ') + j.label + (j.partial ? '  (week-to-date)' : ''));
+  setTxt('mgtBranchLabel', 'Scope: ' + j.branch_scope + '   ·   compared with ' + j.comp_label);
+  try { setTxt('mgtGenDate', new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })); }
+  catch (e) { setTxt('mgtGenDate', new Date().toString()); }
+  _mgtToggleUI();
+
+  const H = j.headline || {};
+  const sec = (title, inner) =>
+    `<div class="card p-6"><h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">${title}</h2>${inner}</div>`;
+  const kpi = (title, value, sub, w) =>
+    `<div class="rounded-xl p-4" style="background:var(--bg-card);border:1px solid var(--border)">
+       <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
+       <p class="text-2xl font-bold text-slate-800">${value}</p>
+       <p class="text-xs text-slate-500 mt-1">${sub || ''} ${w !== undefined ? wow(w) : ''}</p>
+     </div>`;
+
+  // §1 — Headline KPIs
+  const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      ${kpi('Net Sales (ex-VAT)', baht(H.revenue),     compShort,  H.rev_wow_pct)}
+      ${kpi('Customers',          num(H.customers),    'covers',   H.cust_wow_pct)}
+      ${kpi('Bills',              num(H.bills),        'receipts', H.bills_wow_pct)}
+      ${kpi('Spend / Head',       baht(H.rev_per_head),'per cover',H.rph_wow_pct)}
+      ${kpi('Avg Ticket',         baht(H.avg_ticket),  'per bill', H.ticket_wow_pct)}
+      ${kpi('Discounts',          baht(H.discount),    (H.discount_pct != null ? H.discount_pct.toFixed(1) + '% of sales' : ''))}
+    </div>`;
+
+  // §2 — Month pacing & food cost
+  const P = j.pace || {};
+  const pvt = P.proj_vs_target_pct;
+  const pace = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      ${kpi('MTD Net Sales', baht(P.mtd_revenue), (P.mtd_days || 0) + ' days so far')}
+      ${kpi('Projected Month-End', baht(P.projected), 'run-rate')}
+      ${kpi('Revenue Target', baht(P.target), (pvt != null ? 'projection ' + pvt.toFixed(0) + '% of target' : 'no target set'))}
+      ${kpi('Food Cost % (MTD)', (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), 'BoM basis')}
+    </div>`;
+
+  // §3 — Revenue trend
+  const trend = `<div style="height:240px"><canvas id="mgtTrendChart"></canvas></div>`;
+
+  // §4 — Branch league table
+  const brRows = (j.branches || []).map((b, i) => `<tr class="border-b border-slate-50">
+      <td class="py-2 pl-1">${i === 0 ? '🥇 ' : ''}${b.branch}</td>
+      <td class="py-2 text-right font-semibold">${baht(b.revenue)}</td>
+      <td class="py-2 text-right">${num(b.customers)}</td>
+      <td class="py-2 text-right">${baht(b.rev_per_head)}</td>
+      <td class="py-2 text-right">${b.share_pct != null ? b.share_pct.toFixed(1) + '%' : '—'}</td>
+      <td class="py-2 text-right pr-1">${wow(b.wow_pct)}</td>
+    </tr>`).join('');
+  const branchTbl = `<div class="overflow-x-auto"><table class="w-full text-sm">
+      <thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
+        <th class="text-left py-2 pl-1">Branch</th><th class="text-right py-2">Net Sales</th>
+        <th class="text-right py-2">Covers</th><th class="text-right py-2">Spend/Head</th>
+        <th class="text-right py-2">Share</th><th class="text-right py-2 pr-1">${compShort}</th>
+      </tr></thead><tbody>${brRows || '<tr><td class="py-3 text-slate-400" colspan="6">No branch data.</td></tr>'}</tbody>
+    </table></div>`;
+
+  // §5 — Money-leak radar
+  const L = j.leak || {};
+  const leakCard = (title, o, hint) => {
+    o = o || {};
+    if (o.unavailable) return `<div class="rounded-xl p-4 opacity-60" style="border:1px solid var(--border)">
+        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
+        <p class="text-sm text-slate-400">n/a — no payment detail</p></div>`;
+    const bad = (o.bills || 0) > 0;
+    const top = (o.by_branch || []).slice(0, 2).map(x => x.branch).join(', ');
+    return `<div class="rounded-xl p-4" style="border:1px solid var(--border);border-left:3px solid ${bad ? '#dc2626' : '#10b981'}">
+        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
+        <p class="text-xl font-bold ${bad ? 'text-rose-600' : 'text-slate-700'}">${num(o.bills || 0)} <span class="text-xs font-normal text-slate-400">bills</span></p>
+        <p class="text-xs text-slate-500">${baht(o.baht || 0)}${top ? ' · ' + top : ''}</p>
+        <p class="text-[11px] text-slate-400 mt-1">${hint}</p></div>`;
+  };
+  const leak = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      ${leakCard('Heavy Discounts', L.heavy_discount, 'Bills discounted ≥30%')}
+      ${leakCard('Cash-Heavy Discounts', L.cash_heavy, 'Discounted & paid mostly cash')}
+      ${leakCard('Reprinted Bills', L.reprinted, 'Discounted bills printed >1×')}
+      ${leakCard('Zero-Gross Bills', L.zero_gross, 'Discount-only / free bills')}
+    </div>`;
+
+  // §6 — Menu movers
+  const M = j.menu || {};
+  const liRev = (x, signed) => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-50 text-sm">
+      <span class="truncate">${x.menu}</span>
+      <span class="font-semibold whitespace-nowrap" ${signed ? `style="color:${x.delta >= 0 ? '#059669' : '#dc2626'}"` : ''}>${signed ? (x.delta >= 0 ? '+' : '−') + baht(Math.abs(x.delta)) : baht(x.revenue)}</span>
+    </li>`;
+  const list = (arr, signed, empty) => (arr && arr.length)
+    ? `<ul>${arr.map(x => liRev(x, signed)).join('')}</ul>`
+    : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
+  const menu = `<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Top Sellers (by revenue)</p>${list(M.top_sellers, false, 'No data.')}</div>
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Biggest Gainers ${compShort}</p>${list(M.gainers, true, j.has_prev ? 'None.' : 'No comparison period.')}</div>
+      <div><p class="text-xs font-semibold text-slate-500 mb-1">Biggest Decliners ${compShort}</p>${list(M.decliners, true, j.has_prev ? 'None.' : 'No comparison period.')}</div>
+    </div>`;
+
+  // §7 — Action items
+  const sevColor = { high: '#dc2626', med: '#d97706', low: '#10b981' };
+  const acts = (j.actions || []).map(a => `<li class="flex items-start gap-2 text-sm py-1">
+      <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${a.text}</span></li>`).join('');
+
+  const body = document.getElementById('mgtRptBody');
+  if (!body) return;
+  body.innerHTML =
+      sec('1. Headline — ' + (isDaily ? 'Yesterday' : 'This Week'), kpis)
+    + sec('2. Action Items', `<ul class="space-y-0.5">${acts}</ul>`)
+    + sec('3. Month-to-Date Pacing & Cost', pace)
+    + sec('4. Revenue Trend (last 8 ' + (isDaily ? 'days' : 'weeks') + ')', trend)
+    + sec('5. Branch League Table', branchTbl)
+    + sec('6. Money-Leak Radar', leak)
+    + sec('7. Menu Movers', menu)
+    + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Food cost % is the month-to-date BoM figure. Latest data day: ${j.latest_day || '—'}.</p>`;
+
+  // Trend chart (after the canvas exists in the DOM)
+  mkChart('mgtTrendChart', {
+    type: 'bar',
+    data: {
+      labels: (j.trend || []).map(t => t.label),
+      datasets: [{
+        label: 'Net Sales (ex-VAT)',
+        data: (j.trend || []).map(t => t.revenue),
+        backgroundColor: (j.trend || []).map((t, i) => i === (j.trend.length - 1) ? '#0891b2' : '#94a3b8'),
+        borderRadius: 4,
+      }],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => '฿' + Math.round(c.parsed.y).toLocaleString('en-US') } },
+      },
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v } },
+        x: { ticks: { maxRotation: 0, autoSkip: true } },
+      },
+    },
+  });
+}
+
 function loadActiveTab() {
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
@@ -7656,6 +7884,7 @@ function loadActiveTab() {
   if (activeTab === 'pnl')         loadPnlTab();
   if (activeTab === 'compare')     initCompare();
   if (activeTab === 'report')      loadReport();
+  if (activeTab === 'mgtreport')   loadMgtReport();
   if (activeTab === 'ops')         loadOpsSubtab();
   if (activeTab === 'settings')    loadSettingsSubtab();
   if (activeTab === 'home')        loadHome();

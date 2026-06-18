@@ -43,6 +43,11 @@ SMOKE = [
     ("/api/sales/heavy-eaters", {}),
     ("/api/menu/action-board", {}),
     ("/api/menu/opportunities", {}),
+    # ── management summary report (daily & weekly) ──
+    ("/api/reports/management", {}),
+    ("/api/reports/management", {"period": "weekly"}),
+    ("/api/reports/management", {"period": "daily", "branch": "BranchA"}),
+    ("/api/reports/management", {"period": "weekly", "group": "master"}),
 ]
 
 # Fixture periods: June (LATEST) sales are scaled 0.8 vs May (PREV).
@@ -54,6 +59,23 @@ def test_endpoint_200(client, path, params):
     r = client.get(path, params=params)
     assert r.status_code == 200, f"{path} -> {r.status_code}: {r.text[:200]}"
     r.json()  # must be valid JSON
+
+
+def test_management_report_daily_and_weekly(client):
+    d = client.get("/api/reports/management", params={"period": "daily"}).json()
+    assert d["available"] and d["period"] == "daily"
+    assert d["headline"]["revenue"] > 0 and d["headline"]["bills"] >= 1
+    # branch league must sum to the chain headline (no buffet double-count, ex-VAT basis)
+    assert abs(sum(b["revenue"] for b in d["branches"]) - d["headline"]["revenue"]) < 1.0
+    assert d["pace"]["food_cost_pct"] is not None
+    assert len(d["trend"]) == 8
+    assert isinstance(d["actions"], list) and d["actions"]
+
+    w = client.get("/api/reports/management", params={"period": "weekly"}).json()
+    assert w["period"] == "weekly"
+    # the week (Jun 1–3 in the fixture) covers more days than the single focus day
+    assert w["headline"]["revenue"] >= d["headline"]["revenue"]
+    assert abs(sum(b["revenue"] for b in w["branches"]) - w["headline"]["revenue"]) < 1.0
 
 
 def test_cost_drivers_has_total_and_mom(client):
