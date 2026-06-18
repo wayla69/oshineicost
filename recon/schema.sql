@@ -436,6 +436,28 @@ CREATE TABLE IF NOT EXISTS recon_lane_adj (
 );
 CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);
 
+-- ─── Manual cross-channel MOVE (booked-in-wrong-channel correction) ───────────
+-- Staff/manager declares that ฿amount was booked under the WRONG channel and
+-- actually belongs in another (e.g. a QR sale rung up as CASH). The move shifts the
+-- amount on the POS side OUT of (from_category,from_bank) and INTO (to_category,
+-- to_bank), correcting BOTH lanes at once (กระทบสองยอดพร้อมกัน). Applied at
+-- read-time in category_reconciliation/daily_reconciliation; fully reversible by
+-- deleting the row. No UNIQUE constraint — many moves coexist; identity is the id.
+CREATE TABLE IF NOT EXISTS recon_channel_move (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id     INTEGER NOT NULL REFERENCES branches(branch_id),
+    period_month  TEXT    NOT NULL,
+    from_category TEXT    NOT NULL,
+    from_bank     TEXT    NOT NULL DEFAULT 'NONE',
+    to_category   TEXT    NOT NULL,
+    to_bank       TEXT    NOT NULL DEFAULT 'NONE',
+    amount        REAL    NOT NULL,
+    note          TEXT,
+    created_by    TEXT,
+    created_at    TEXT    DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_rcm_scope ON recon_channel_move(branch_id, period_month);
+
 -- ─── Per-day acknowledged variances (reconcile BY DATE) ───────────────────────
 -- Staff reconcile a channel day-by-day: each differing day is either fixed/matched
 -- or acknowledged here with a reason. One row per (branch × period × category × day).

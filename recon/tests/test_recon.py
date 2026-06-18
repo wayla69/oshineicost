@@ -191,14 +191,14 @@ def test_v2_accept_clears_todo_and_allows_close(client):
         assert client.post("/api/lanes/adj", json={
             "branch_id": 4, "period_month": "2026-06", "category": key,
             "bank": "ALL", "adj_pos": 0, "adj_ext": 0,
-            "note": "ยอดเล็ก ไม่คุ้มตามเอกสาร", "adj_type": "accept",
+            "note": "ผลต่างจากค่าธรรมเนียมที่กระทบยอดแล้ว", "adj_type": "accept",
         }).status_code == 200
 
     r1 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
     assert len(r1["todo"]) < todo0
     acc = {c["key"]: c["accepted"] for c in r1["channels"]}
     for key in blocked:
-        assert acc[key] and "ยอดเล็ก" in acc[key]["note"]
+        assert acc[key] and "ค่าธรรมเนียม" in acc[key]["note"]
 
     # accept does NOT distort the numbers (zero-amount marker only)
     ch0 = {c["key"]: c for c in r0["channels"]}
@@ -217,7 +217,7 @@ def test_v2_accept_clears_todo_and_allows_close(client):
     assert not [d for d in discs
                 if d["category"] in blocked and d["resolution"] == "pending"]
     born_accepted = [d for d in discs if d["resolution"] == "accepted"]
-    assert born_accepted and all("ยอดเล็ก" in (d["resolution_note"] or "")
+    assert born_accepted and all("ค่าธรรมเนียม" in (d["resolution_note"] or "")
                                  for d in born_accepted)
     pending = [d for d in discs if d["resolution"] == "pending"]
     if not pending:                                  # gate passes when all accepted
@@ -2667,3 +2667,179 @@ def test_internal_transfer_suggestion_and_one_click_exclude(client):
     r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
     assert r2["internal_transfer_suggestions"] == []
     assert r2["non_revenue"]["count"] == 1 and r2["non_revenue"]["amount"] == 2000000
+
+
+# ── Feature 2: manual cross-channel MOVE (booked-in-wrong-channel) ─────────────
+
+def _seed_day(db, rows):
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT DEFAULT 0)")
+    c.executemany("INSERT INTO pos_payment_day VALUES(?,?,?,?,?)", rows)
+    c.commit(); c.close()
+
+
+def test_channel_move_offsets_two_lanes(client):
+    """A manual move shifts ฿X out of the WRONG channel and into the right one on the
+    POS side — both lane totals correct at once, daily ties to monthly, and DELETE
+    restores. Lives in `pos` (not recon_lane_adj), so accept/adj are untouched."""
+    from recon.matcher import category_reconciliation, daily_reconciliation
+    # daily agrees with the fixture's monthly Cash=20,000 / QR·KBANK=150,000
+    # (KNNQR 100,000 + K-SHOP 50,000 both map to QR·KBANK)
+    _seed_day(main._DB_PATH, [(4, "2026-06-10", "Cash", 20000, 3),
+                              (4, "2026-06-10", "KNNQR", 100000, 9),
+                              (4, "2026-06-10", "K-SHOP", 50000, 4)])
+
+    def cat_pos():
+        with main.get_db() as conn:
+            rows, _ = category_reconciliation(conn, 4, "2026-06")
+        return {(r["category"], r["bank"]): r["pos_amount"] for r in rows}
+
+    def daily_pos():
+        with main.get_db() as conn:
+            d = daily_reconciliation(conn, 4, "2026-06")
+        agg = {}
+        for day in d["days"]:
+            for l in day["lanes"]:
+                agg[l["category"]] = agg.get(l["category"], 0.0) + l["pos"]
+        return agg
+
+    base = cat_pos()
+    assert base[("CASH", "NONE")] == 20000 and base[("QR", "KBANK")] == 150000
+
+    r = client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-06", "from_category": "CASH",
+        "to_category": "QR", "to_bank": "KBANK", "amount": 5000,
+        "note": "ลูกค้าสแกน QR แต่กดเป็นเงินสด"})
+    assert r.status_code == 200
+    mv_id = r.json()["id"]
+
+    after = cat_pos()
+    assert after[("CASH", "NONE")] == 15000 and after[("QR", "KBANK")] == 155000   # both corrected
+    dp = daily_pos()
+    assert round(dp.get("CASH", 0)) == 15000 and round(dp.get("QR", 0)) == 155000  # daily ties, no drift
+
+    assert client.delete(f"/api/channel-move/{mv_id}").status_code == 200
+    restored = cat_pos()
+    assert restored[("CASH", "NONE")] == 20000 and restored[("QR", "KBANK")] == 150000
+
+    # validation: same lane / amount≤0 / unknown channel / bad period
+    bad = lambda body: client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-06", **body}).status_code
+    assert bad({"from_category": "CASH", "to_category": "CASH", "amount": 100}) == 400
+    assert bad({"from_category": "CASH", "to_category": "QR", "amount": 0}) == 400
+    assert bad({"from_category": "CASH", "to_category": "FOO", "amount": 100}) == 400
+    # over-move (more than the source lane holds) → rejected (would drive lane negative)
+    assert bad({"from_category": "CASH", "to_category": "QR", "to_bank": "KBANK",
+                "amount": 999999}) == 400
+    # source lane with no POS this month → rejected
+    assert bad({"from_category": "LINEMAN", "to_category": "QR", "to_bank": "KBANK",
+                "amount": 100}) == 400
+    # typo'd / unknown destination bank → rejected (no orphan lane)
+    assert bad({"from_category": "CASH", "to_category": "QR", "to_bank": "kbank",
+                "amount": 100}) == 400
+    assert client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-13", "from_category": "CASH",
+        "to_category": "QR", "amount": 100}).status_code == 400
+
+
+def test_channel_move_in_wrong_channel_report(client):
+    """Manual moves appear in the wrong-channel report alongside detected matches,
+    tagged source='move'; Excel + print render."""
+    assert client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-06", "from_category": "CASH",
+        "to_category": "QR", "to_bank": "KBANK", "amount": 1234, "note": "กดผิดช่อง"}
+    ).status_code == 200
+    rep = client.get("/api/reports/wrong-channel?period_month=2026-06").json()
+    moves = [it for it in rep["items"] if it.get("source") == "move"]
+    assert moves and moves[0]["amount"] == 1234
+    assert moves[0]["from_cat"] == "CASH" and moves[0]["to_cat"] == "QR"
+    assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06").status_code == 200
+    assert client.get("/api/reports/wrong-channel.print?period_month=2026-06").status_code == 200
+
+
+# ── Feature 3: daily revenue-by-channel dashboard (all branches, one day) ──────
+
+def test_daily_dashboard_per_branch_and_grand_total(client):
+    """/api/daily-dashboard returns each master branch's per-channel breakdown for one
+    day + grand totals; franchises excluded; bad day → 400; empty day → clean zero."""
+    _seed_day(main._DB_PATH, [(4, "2026-06-12", "Cash", 10000, 2),
+                              (5, "2026-06-12", "Cash", 7000, 1)])
+    j = client.get("/api/daily-dashboard?day=2026-06-12").json()
+    assert j["day"] == "2026-06-12"
+    byid = {b["branch_id"]: b for b in j["branches"]}
+    assert 4 in byid and 5 in byid and 1 not in byid          # masters only (1 = franchise)
+    cash4 = next(ch for ch in byid[4]["channels"] if ch["ch"] == "CASH")
+    assert cash4["gross"] == 10000
+    assert j["grand_totals"]["gross"] == 17000                # 10,000 + 7,000
+    assert client.get("/api/daily-dashboard?day=2026-13-99").status_code == 400
+    empty = client.get("/api/daily-dashboard?day=2026-06-28").json()
+    assert empty["grand_totals"]["gross"] == 0
+
+
+# ── Features 4/5/6: discount accounting (KTC/BAY points vs discount coupons) ───
+
+def test_point_pos_total_daily_classifies_by_series(client):
+    """Day-grain KTC+BAY point total, by series name — generic discounts excluded."""
+    from recon.matcher import point_pos_total_daily
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_day"
+              "(branch_id INT,day TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.executemany("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", [
+        (10, "แต้ม KTC แลกส่วนลด คะแนน", "KTC"),
+        (12, "โปรบัตรกรุงศรี คะแนนแลกส่วนลด", "BAY"),
+        (11, "คูปองผู้สูงอายุ", "ELDER")])
+    c.executemany("INSERT INTO pos_coupon_payment_day VALUES(4,?,?,?,1)", [
+        ("2026-06-15", 10, 300), ("2026-06-15", 12, 150),
+        ("2026-06-15", 11, 200), ("2026-06-16", 10, 100)])
+    c.commit(); c.close()
+    d = point_pos_total_daily(sqlite3.connect(main._DB_PATH), 4, "2026-06")
+    assert d.get("2026-06-15") == 450.0     # KTC 300 + BAY 150; elderly 200 excluded
+    assert d.get("2026-06-16") == 100.0
+
+
+def test_daily_finance_coupon_split_grosses_up(client):
+    """COUPON tender splits: KTC/BAY points stay as real money received; other discount
+    coupons become a ส่วนลด deduction (gross-up + offset, net 0). Day gross unchanged,
+    day net drops by the discount."""
+    _seed_day(main._DB_PATH, [(4, "2026-06-15", "Coupon", 500, 3)])
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_day"
+              "(branch_id INT,day TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.executemany("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", [
+        (10, "แต้ม KTC คะแนนแลกส่วนลด", "KTC"), (11, "คูปองผู้สูงอายุ", "ELDER")])
+    c.executemany("INSERT INTO pos_coupon_payment_day VALUES(4,?,?,?,1)", [
+        ("2026-06-15", 10, 300), ("2026-06-15", 11, 200)])
+    c.commit(); c.close()
+
+    j = client.get("/api/daily-accounts?branch_id=4&period_month=2026-06").json()
+    day = next(d for d in j["days"] if d["dom"] == 15)
+    coupon = next(ch for ch in day["channels"] if ch["ch"] == "COUPON")
+    disc = next(ch for ch in day["channels"] if ch["ch"] == "DISCOUNT")
+    assert coupon["gross"] == 300 and coupon["net"] == 300        # points = real money in
+    assert disc["gross"] == 200 and disc["discount"] == 200 and disc["net"] == 0   # discount deduction
+    assert day["totals"]["gross"] == 500                          # full price (gross) preserved
+    assert day["totals"]["discount"] == 200
+    assert day["totals"]["net"] == 300                            # net excludes the discount coupon
+
+
+def test_monthly_journal_discount_includes_nonpoint_coupon(client):
+    """Monthly receipts: REVENUE stays at full gross, the discount line includes the
+    non-point coupon, COUPON shows points only (DEMO Coupon tender = 1,000; points 300
+    → COUPON 300 + discount 700)."""
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_payment_day"
+              "(branch_id INT,day TEXT,coupon_series_id INT,amount REAL,txn_count INT)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.execute("INSERT OR REPLACE INTO coupon_series VALUES(10,'แต้ม KTC คะแนนแลกส่วนลด','KTC',1)")
+    c.execute("INSERT INTO pos_coupon_payment_day VALUES(4,'2026-06-15',10,300,2)")
+    c.commit(); c.close()
+    with main.get_db() as conn:
+        html = main._monthly_finance_html(conn, 4, "2026-06")
+    assert "ส่วนลด" in html
+    assert "300.00" in html and "700.00" in html      # COUPON points 300, discount-coupon 700

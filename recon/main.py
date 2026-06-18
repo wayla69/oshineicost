@@ -46,6 +46,7 @@ from .matcher import (
     upload_match_stats,
     payout_matching,
     payout_reconciliation,
+    point_pos_total_daily,
     pos_codes_scope,
     run_auto_match,
     suggest_reclassifications,
@@ -2326,6 +2327,7 @@ def _wrong_channel_items(conn, period_month: str | None = None) -> list[dict]:
         amount = round(max(float(m["pos_amount"] or 0), float(m["ext_amount"] or 0)), 2)
         items.append({
             "match_id":     m["match_id"],
+            "source":       "match",
             "branch_id":    m["branch_id"],
             "branch_name":  bnames.get(m["branch_id"], str(m["branch_id"])),
             "period_month": m["period_month"],
@@ -2337,6 +2339,47 @@ def _wrong_channel_items(conn, period_month: str | None = None) -> list[dict]:
             "reason":       m["note"] or "",
             "by":           m["matched_by"] or "",
             "at":           m["matched_at"] or "",
+        })
+    return items
+
+
+def _channel_move_items(conn, period_month: str | None = None,
+                        branch_id: int | None = None) -> list[dict]:
+    """Manual cross-channel MOVES (recon_channel_move), shaped like _wrong_channel_items
+    so the wrong-channel report lists hand-entered corrections alongside detected ones.
+    Tagged source='move' (the detected ones are source='match')."""
+    q = ("SELECT id, branch_id, period_month, from_category, from_bank, to_category, "
+         "to_bank, amount, note, created_by, created_at FROM recon_channel_move")
+    conds, params = [], []
+    if period_month:
+        conds.append("period_month=?"); params.append(period_month)
+    if branch_id:
+        conds.append("branch_id=?"); params.append(branch_id)
+    if conds:
+        q += " WHERE " + " AND ".join(conds)
+    try:
+        rows = conn.execute(q + " ORDER BY branch_id, created_at", params).fetchall()
+    except sqlite3.OperationalError:
+        return []
+    bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
+    items = []
+    for m in rows:
+        fc, tc = m["from_category"], m["to_category"]
+        items.append({
+            "match_id":     None,
+            "move_id":      m["id"],
+            "source":       "move",
+            "branch_id":    m["branch_id"],
+            "branch_name":  bnames.get(m["branch_id"], str(m["branch_id"])),
+            "period_month": m["period_month"],
+            "days":         [],
+            "from_cat":     fc, "from_th": _CH_LABEL.get(fc, fc),
+            "to_cat":       tc, "to_th":   _CH_LABEL.get(tc, tc),
+            "to_bank_th":   _BANK_LABEL.get(m["to_bank"], "") if m["to_bank"] in _BANK_LABEL else "",
+            "amount":       round(float(m["amount"] or 0), 2),
+            "reason":       m["note"] or "",
+            "by":           m["created_by"] or "",
+            "at":           m["created_at"] or "",
         })
     return items
 
@@ -2374,7 +2417,7 @@ def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
     confusion patterns, and coaching tips."""
     from collections import defaultdict, Counter
     if all_items is None:
-        all_items = _wrong_channel_items(conn, None)
+        all_items = _wrong_channel_items(conn, None) + _channel_move_items(conn, None)
     mine = [it for it in all_items if it["branch_id"] == branch_id]
 
     by_m: dict = defaultdict(lambda: {"count": 0, "amount": 0.0})
@@ -2413,10 +2456,11 @@ def _wrong_channel_branch_detail(conn, branch_id: int, period_month: str | None,
 def _wrong_channel_report(conn, period_month: str | None = None,
                           branch_id: int | None = None) -> dict:
     from collections import defaultdict
-    items = _wrong_channel_items(conn, period_month)
+    items = _wrong_channel_items(conn, period_month) + _channel_move_items(conn, period_month)
     if branch_id:                                       # optional single-branch filter
         items = [it for it in items if it["branch_id"] == branch_id]
-    all_items = _wrong_channel_items(conn, None)        # for cross-month trend (per-branch inside)
+    # for cross-month trend (per-branch inside) — detected matches + manual moves
+    all_items = _wrong_channel_items(conn, None) + _channel_move_items(conn, None)
 
     agg: dict = defaultdict(lambda: {"count": 0, "total": 0.0, "months": set()})
     for it in items:
@@ -2469,12 +2513,13 @@ def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> 
                       "amount": round(float(amount or 0), 2), "status": status,
                       "reason": reason or "", "by": by or "", "days": days or []})
 
-    # confirmed wrong-channel mis-entries (cross-channel manual matches)
-    for w in _wrong_channel_items(conn, period_month):
+    # confirmed wrong-channel mis-entries — detected matches + manual moves
+    for w in _wrong_channel_items(conn, period_month) + _channel_move_items(conn, period_month):
         if branch_id and w["branch_id"] != branch_id:
             continue
+        tag = " (ย้ายด้วยมือ)" if w.get("source") == "move" else ""
         add(w["branch_id"], w["branch_name"], "wrong_channel", w["from_cat"], w["from_th"],
-            f"{w['from_th']} → {w['to_th']}" + (f" ({w['to_bank_th']})" if w["to_bank_th"] else ""),
+            f"{w['from_th']} → {w['to_th']}" + (f" ({w['to_bank_th']})" if w["to_bank_th"] else "") + tag,
             w["amount"], "resolved", w["reason"], w["by"], w["days"])
 
     for bid, bn in branches:
@@ -3737,7 +3782,8 @@ def daily_report(day: str, branch_id: int | None = None):
 # reconciled correctly in one pass. Deep line-level evidence stays in /api/daily-report.
 
 _MATCH_CH_TH = {"QR": "QR พร้อมเพย์", "CASH": "เงินสด", "TRANSFER": "เงินโอน",
-                "CREDIT": "บัตรเครดิต", "GRAB": "Grab", "LINEMAN": "Line Man", "COUPON": "คูปอง"}
+                "CREDIT": "บัตรเครดิต", "GRAB": "Grab", "LINEMAN": "Line Man", "COUPON": "คูปอง",
+                "DISCOUNT": "ส่วนลด (คูปอง)"}
 # status → (Thai label, css class, bucket)  bucket: ok | issue | wait | none
 _MATCH_ST = {
     "matched":       ("✓ ตรง",            "m-ok",   "ok"),
@@ -3769,7 +3815,8 @@ _FEE_CH_SPEC = [
     ("GRAB",    "recon_grab_lines",    "order_date",      "food_amount",  "commission_amt", "vat_amount",        "promo_deduct",  " AND order_status='Completed'"),
     ("LINEMAN", "recon_lineman_lines", "order_date",      "food_amount",  "commission_amt", "vat_on_commission", "promo_deduct",  " AND order_status='Completed'"),
 ]
-_FINANCE_CH_ORDER = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5, "COUPON": 6}
+_FINANCE_CH_ORDER = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5,
+                     "COUPON": 6, "DISCOUNT": 7}
 
 
 def _daily_finance_data(conn, branch_id: int, period_month: str) -> dict:
@@ -3809,6 +3856,23 @@ def _daily_finance_data(conn, branch_id: int, period_month: str) -> dict:
         for l in day["lanes"]:
             if l["category"] in ("CASH", "QR", "TRANSFER", "COUPON") and abs(l["pos"]) > 0.005:
                 cell(day["day"], l["category"])["gross"] += l["pos"]
+
+    # Split the COUPON tender: KTC/BAY loyalty points settle as REAL money via the
+    # card issuer → keep in the COUPON line; everything else (ผู้สูงอายุ/เด็ก/อื่นๆ
+    # discount coupons) is NOT money — book the full price as revenue and the discount
+    # portion as a deduction (net 0). So revenue stays gross and net = cash actually in.
+    points_by_day = point_pos_total_daily(conn, branch_id, period_month)
+    for day in [k[0] for k in list(agg) if k[1] == "COUPON"]:
+        cp = agg[(day, "COUPON")]
+        coupon_total = cp["gross"]
+        pts = min(max(points_by_day.get(day, 0.0), 0.0), coupon_total)
+        disc = round(coupon_total - pts, 2)
+        cp["gross"] = round(pts, 2)
+        if disc > 0.005:
+            dd = cell(day, "DISCOUNT")
+            dd["gross"] += disc; dd["discount"] += disc
+        if pts <= 0.005:                       # all discount, no real coupon money — drop empty lane
+            agg.pop((day, "COUPON"), None)
 
     def dom(dstr):
         try:
@@ -3898,12 +3962,23 @@ def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
         if g > 0.005:
             rows.append((ch, g, disc, f, v, g - disc - f - v))
 
-    # no-fee channels (cash / QR / transfer / coupon): money received = POS, no fee/VAT
+    # no-fee channels (cash / QR / transfer): money received = POS, no fee/VAT.
+    # COUPON splits: KTC/BAY points = real money (kept in COUPON); other discount
+    # coupons (ผู้สูงอายุ/เด็ก/อื่นๆ) book the full price as revenue + a discount
+    # deduction (net 0) so REVENUE stays gross and the journal's discount line carries them.
     try:
         rm = reconcile_month(conn, branch_id, period_month)
+        pts_total = round(sum(point_pos_total_daily(conn, branch_id, period_month).values()), 2)
         for c in rm.get("channels", []):
-            if c["key"] in ("CASH", "QR", "TRANSFER", "COUPON") and float(c.get("pos", 0)) > 0.005:
-                g = float(c["pos"]); rows.append((c["key"], g, 0.0, 0.0, 0.0, g))
+            key = c["key"]; pos = float(c.get("pos", 0))
+            if key in ("CASH", "QR", "TRANSFER") and pos > 0.005:
+                rows.append((key, pos, 0.0, 0.0, 0.0, pos))
+            elif key == "COUPON" and pos > 0.005:
+                pts = min(max(pts_total, 0.0), pos); disc = round(pos - pts, 2)
+                if pts > 0.005:
+                    rows.append(("COUPON", round(pts, 2), 0.0, 0.0, 0.0, round(pts, 2)))
+                if disc > 0.005:
+                    rows.append(("DISCOUNT", disc, disc, 0.0, 0.0, 0.0))
     except Exception:
         pass
     if not rows:
@@ -4284,6 +4359,44 @@ def daily_accounts(period_month: str, branch_id: int | None = None):
             "days": data["days"], "totals": data["totals"]}
 
 
+def _daily_dashboard_data(conn, day: str) -> dict:
+    """Revenue by channel for ONE calendar day across ALL master branches: each branch's
+    channels (gross/discount/fee/VAT/net) for that day + per-branch totals, plus grand
+    totals across branches. Reuses _daily_finance_data so the KTC/BAY coupon split + the
+    ส่วนลด(คูปอง) deduction line are identical to the daybook and monthly report — then
+    extracts the single matching day."""
+    period_month = day[:7]
+    masters = conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    zero = {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0, "net": 0.0}
+    branches, grand = [], dict(zero)
+    for b in masters:
+        data = _daily_finance_data(conn, b["branch_id"], period_month)
+        dd = next((x for x in data["days"] if x["day"] == day), None)
+        channels = dd["channels"] if dd else []
+        totals = dd["totals"] if dd else dict(zero)
+        branches.append({"branch_id": b["branch_id"], "name": b["name"],
+                         "channels": channels, "totals": totals})
+        for k in grand:
+            grand[k] += float(totals.get(k, 0) or 0)
+    return {"day": day, "branches": branches,
+            "grand_totals": {k: round(v, 2) for k, v in grand.items()}}
+
+
+@app.get("/api/daily-dashboard")
+def daily_dashboard(day: str):
+    """Dashboard: รายได้ตามช่องทางของทุกสาขาในวันเดียว (เลือกวันจากปฏิทิน). Returns each
+    master branch's per-channel breakdown for `day` + per-branch totals + grand totals
+    across branches. Inherits the coupon split (KTC/BAY points kept as เงินรับจริง; other
+    discount coupons surfaced as a ส่วนลด deduction line) from _daily_finance_data."""
+    try:
+        _dt.strptime(day or "", "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    with get_db() as conn:
+        return _daily_dashboard_data(conn, day)
+
+
 def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -> str:
     """Printable per-day card report. Each day is a card (ใบ) with its channels at GROSS
     + discount/fee/VAT split + day total; one branch per sheet (all masters if no
@@ -4622,10 +4735,11 @@ _UAT_CASES = [
      "expected": "เห็นรายละเอียดเมื่อขอดู, ยืนยันแล้วยอดย้ายช่องถูก ยอดรวมวันไม่เปลี่ยน, บันทึกเป็น “การจับคู่ด้วยมือ”"},
     {"id": "TC-04", "title": "รับทราบผลต่าง (Accept Variance) พร้อมเหตุผล",
      "role": "เจ้าหน้าที่กระทบยอด",
-     "narrative": "บางช่องทางมีผลต่างเล็กน้อยที่อธิบายได้ (เช่น ค่าธรรมเนียมปัดเศษ) กด “รับทราบผลต่าง” แล้วเลือก/พิมพ์เหตุผล "
-                  "(อย่างน้อย 10 ตัวอักษร) ระบบเคลียร์งานนั้นโดยไม่แก้ตัวเลข และเก็บหลักฐานว่าใครรับทราบ เพราะอะไร เมื่อไร",
-     "steps": ["หาช่องทางที่มีผลต่างเล็กน้อยอธิบายได้",
-               "กด “รับทราบผลต่าง” เลือก/พิมพ์เหตุผล ยืนยัน",
+     "narrative": "บางช่องทางมีผลต่างที่อธิบายได้ด้วย “สาเหตุจริง” (เช่น ผลต่างจากค่าธรรมเนียม/ปัดเศษที่กระทบยอดแล้ว) กด "
+                  "“รับทราบผลต่าง” แล้วเลือก/พิมพ์เหตุผล (อย่างน้อย 10 ตัวอักษร — ต้องระบุสาเหตุจริง ไม่ใช่ “ยอดเล็กไม่คุ้ม”) "
+                  "ระบบเคลียร์งานนั้นโดยไม่แก้ตัวเลข และเก็บหลักฐานว่าใครรับทราบ เพราะอะไร เมื่อไร",
+     "steps": ["หาช่องทางที่มีผลต่างที่อธิบายสาเหตุได้",
+               "กด “รับทราบผลต่าง” เลือก/พิมพ์เหตุผลที่ระบุสาเหตุจริง ยืนยัน",
                "ตรวจว่างานถูกเคลียร์ และมีบันทึกผู้รับทราบ + เวลา"],
      "expected": "เหตุผลสั้นเกิน (<10) ระบบเตือน, ครบแล้วเคลียร์ได้, ตัวเลขไม่เปลี่ยน, มีหลักฐาน"},
     {"id": "TC-05", "title": "ส่งตรวจ → ปิดเดือน (สองชั้น + รหัสผู้จัดการ)",
@@ -4768,6 +4882,40 @@ _UAT_CASES = [
                "กด “🖨️ พิมพ์/PDF” → ออกเป็นแผ่นการ์ดรายวัน (เลือกสาขาเดียว หรือเว้น = ทุกสาขา หน้าละสาขา)"],
      "expected": "หน้าแสดงการ์ด 1 วัน/ใบ ครบทุกวันที่มีรายการ, ยอดเต็ม/ส่วนลดแยกบรรทัดถูกต้อง + รวมวันนี้ + รวมทั้งเดือน, "
                  "เลือกสาขาได้, รหัสบัญชีขึ้นตามที่ตั้ง, ตัวเลขตรงกับ TC-15, พิมพ์ PDF เป็นการ์ดได้"},
+    {"id": "TC-18", "title": "บันทึกผิดช่อง (ย้ายช่อง) — กระทบสองยอดพร้อมกัน",
+     "role": "เจ้าหน้าที่กระทบยอด / ผู้จัดการ",
+     "narrative": "ถ้ายอดถูกบันทึกผิดช่อง (เช่น ลูกค้าสแกน QR แต่พนักงานกดเป็นเงินสด) เจ้าหน้าที่ระบุ “ย้ายจากช่องผิด → ช่องถูก + "
+                  "จำนวนเงิน” โปรแกรมจะลดยอดช่องผิดและเพิ่มยอดช่องถูกพร้อมกันทันที (กระทบสองยอด) โดยไม่ต้องรันจับคู่ใหม่ · "
+                  "ย้อนกลับได้ (กด “↩ ยกเลิก”) · ทุกการย้ายเข้าไปอยู่ในรายงานเงินบันทึกผิดช่อง (TC-06) ติดป้าย “ย้ายด้วยมือ”",
+     "steps": ["หน้าสาขา → การ์ด “⇄ บันทึกผิดช่อง (ย้ายช่อง)” → กด “+ บันทึกผิดช่อง”",
+               "เลือก จากช่อง (ผิด) → ไปช่อง (ถูก) + ใส่จำนวนเงิน + เหตุผล กด “บันทึกการย้าย”",
+               "ตรวจว่ายอดทั้งสองช่องเปลี่ยนพร้อมกันในตารางสรุป + รายงานจับคู่รายวัน + Dashboard",
+               "กด “↩ ยกเลิก” → ยอดกลับไปช่องเดิม",
+               "เปิด ⋯ → “⇄ รายงานเงินบันทึกผิดช่อง” ตรวจว่ารายการย้ายขึ้นพร้อมป้าย “ย้ายด้วยมือ”"],
+     "expected": "ย้ายแล้วช่องผิดลด+ช่องถูกเพิ่มเท่ากัน, รายวันตรงกับรายเดือน (ไม่ทำให้ผลต่างเพี้ยน), ยกเลิกคืนค่าได้, "
+                 "เข้าช่องเดียวกัน/จำนวน≤0 ถูกปฏิเสธ, ขึ้นในรายงานพร้อมป้ายย้ายด้วยมือ"},
+    {"id": "TC-19", "title": "Dashboard รายได้ตามช่องทางรายวัน (ทุกสาขาในวันเดียว · เลือกวันปฏิทิน)",
+     "role": "ผู้จัดการ / ฝ่ายบัญชี",
+     "narrative": "หน้า Dashboard ใหม่: เลือกวันจากปฏิทิน → เห็นรายได้แยกช่องทางของ “ทุกสาขา” ในวันนั้นพร้อมกัน แต่ละสาขาเป็นการ์ด "
+                  "(เรียงตามสุทธิมากสุด) + แถบยอดรวมทุกสาขา (ยอดเต็ม/ส่วนลด/ค่าธรรมเนียม/VAT/สุทธิ) · ใช้การแยกคูปอง KTC/BAY "
+                  "(แต้ม = เงินรับจริง) ออกจากคูปองส่วนลดอื่นชุดเดียวกับหน้าบัญชีรายวัน",
+     "steps": ["เปิด ⋯ เพิ่มเติม → “📊 รายได้ตามช่องทาง รายวัน (Dashboard)”",
+               "เลือกวันจากปฏิทินมุมขวา — การ์ดทุกสาขาปรับตามวันนั้น",
+               "ตรวจการ์ดสาขา: ช่องทาง/ยอดเต็ม/ส่วนลด/สุทธิ + แถว “รวมสาขา”",
+               "ตรวจแถบยอดรวมทุกสาขา (ผลรวมของทุกการ์ด) + จำนวนสาขาที่มีรายได้",
+               "ลองเลือกวันที่ไม่มีข้อมูล → ขึ้นข้อความว่าง ไม่ error"],
+     "expected": "เลือกวันได้, ทุกสาขา (เฉพาะ master) แสดงแยกการ์ด, ยอดรวมทุกสาขาถูกต้อง, COUPON = แต้มเท่านั้น + บรรทัดส่วนลดแยก, "
+                 "วันไม่มีข้อมูลไม่ค้าง"},
+    {"id": "TC-20", "title": "บัญชีรายได้ — ยอดเต็มก่อนหักส่วนลด + ส่วนลดจากคูปอง (ไม่รวม KTC/BAY)",
+     "role": "ฝ่ายบัญชี",
+     "narrative": "การบันทึกบัญชีลง “ยอดเต็มก่อนหักคูปองส่วนลด” แล้วแยกบรรทัด “ส่วนลด” เป็นยอดหัก · ส่วนลดมาจากคูปองส่วนลด "
+                  "(ผู้สูงอายุ/เด็ก/อื่น ๆ) เท่านั้น — คูปอง KTC/BAY ที่ใช้แต้มถือเป็น “เงินรับจริง” (ค่ายบัตรจ่ายคืน) ไม่ใช่ส่วนลด · "
+                  "เห็นได้ทั้งในหน้าสรุปบัญชีรายวัน (TC-17), รายงานจับคู่รายวัน (§สรุปการรับเงิน + ร่างบัญชี), และ Dashboard (TC-19)",
+     "steps": ["เปิด “📅 สรุปบัญชีรายวัน (รายใบ)” ของสาขาที่มีคูปอง",
+               "ตรวจว่าช่อง COUPON = เฉพาะแต้ม KTC/BAY (เงินรับจริง) + มีบรรทัด “ส่วนลด (คูปอง)” แยก = ยอดหัก",
+               "ตรวจว่า ยอดเต็ม (gross) = ยอดก่อนหักส่วนลด, สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT",
+               "เปิดรายงานจับคู่รายวัน → §“💰 สรุปการรับเงิน” + “📒 ร่างบันทึกบัญชี”: รายได้ (Cr) = ยอดเต็ม, ส่วนลด (Dr) รวมคูปองส่วนลด, Dr = Cr"],
+     "expected": "ยอดเต็มไม่หักส่วนลด, ส่วนลดแยกบรรทัดมาจากคูปองส่วนลด (ไม่รวม KTC/BAY), KTC/BAY อยู่ในเงินรับจริง, สุทธิถูกต้อง, ร่างบัญชี Dr = Cr"},
 ]
 
 
@@ -5173,6 +5321,98 @@ def lane_adj_delete(adj_id: int):
         conn.execute("DELETE FROM recon_lane_adj WHERE id=?", (adj_id,))
         conn.commit()
     return {"deleted": adj_id}
+
+
+# ── Manual cross-channel MOVE (booked-in-wrong-channel correction) ───────────
+# Declare that ฿amount was rung up under the WRONG channel and actually belongs in
+# another; at read-time the move shifts the POS base OUT of (from) and INTO (to),
+# correcting BOTH lanes at once (กระทบสองยอดพร้อมกัน). Reversible by deleting the
+# row. The shift itself lives in matcher.channel_move_deltas.
+
+_MOVE_CHANNELS = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON"}
+
+
+def _norm_move_bank(category: str, bank: str | None) -> str:
+    b = (bank or "NONE").strip() or "NONE"
+    return "NONE" if category == "CASH" else b   # cash carries no bank dimension
+
+
+class ChannelMove(BaseModel):
+    branch_id:     int
+    period_month:  str
+    from_category: str
+    from_bank:     str = "NONE"
+    to_category:   str
+    to_bank:       str = "NONE"
+    amount:        float
+    note:          str | None = None
+    created_by:    str | None = None
+
+
+@app.get("/api/channel-move")
+def channel_move_list(branch_id: int, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM recon_channel_move WHERE branch_id=? AND period_month=? "
+            "ORDER BY created_at DESC, id DESC",
+            (branch_id, period_month)).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/channel-move", dependencies=[Depends(require_write_token)])
+def channel_move_create(body: ChannelMove):
+    _validate_period(body.period_month)
+    fc, tc = body.from_category, body.to_category
+    if fc not in _MOVE_CHANNELS or tc not in _MOVE_CHANNELS:
+        raise HTTPException(400, f"channel must be one of {sorted(_MOVE_CHANNELS)}")
+    fb, tb = _norm_move_bank(fc, body.from_bank), _norm_move_bank(tc, body.to_bank)
+    if (fc, fb) == (tc, tb):
+        raise HTTPException(400, "ช่องต้นทางและปลายทางต้องไม่ใช่ช่องเดียวกัน")
+    if not (body.amount and body.amount > 0):
+        raise HTTPException(400, "จำนวนเงินต้องมากกว่า 0")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.period_month)
+        # Validate against the branch's CURRENT lanes: the source must exist and hold
+        # enough POS (over-moving would drive the lane negative — the monthly view drops
+        # the row while the daily view keeps it, so the two diverge). The destination must
+        # be a real lane or a known bank (else a typo'd bank spawns an orphan pos_only lane).
+        rows, _ = category_reconciliation(conn, body.branch_id, body.period_month)
+        lanes = {(r["category"], r["bank"]): r["pos_amount"] for r in rows}
+        if (fc, fb) not in lanes:
+            raise HTTPException(400, "ช่องต้นทางไม่มียอดในเดือนนี้ — เลือกช่องที่มีรายการจริง")
+        if body.amount > lanes[(fc, fb)] + 0.5:
+            raise HTTPException(400,
+                f"ย้ายได้ไม่เกินยอดที่อยู่ในช่องต้นทาง (คงเหลือ {lanes[(fc, fb)]:,.2f})")
+        if (tc, tb) not in lanes and tb not in (set(_BANK_LABEL) | {"NONE", "ANY"}):
+            raise HTTPException(400, "ช่อง/ธนาคารปลายทางไม่ถูกต้อง")
+        cur = conn.execute(
+            "INSERT INTO recon_channel_move "
+            "(branch_id,period_month,from_category,from_bank,to_category,to_bank,amount,note,created_by) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (body.branch_id, body.period_month, fc, fb, tc, tb,
+             round(body.amount, 2), body.note, body.created_by or "staff"))
+        _audit(conn, "channel_move", cur.lastrowid, "create", body.created_by or "staff",
+               [{"field": "move", "old": f"{fc}·{fb}", "new": f"{tc}·{tb}"},
+                {"field": "amount", "old": None, "new": round(body.amount, 2)}])
+        conn.commit()
+        return {"id": cur.lastrowid, "from": [fc, fb], "to": [tc, tb],
+                "amount": round(body.amount, 2)}
+
+
+@app.delete("/api/channel-move/{move_id}", dependencies=[Depends(require_write_token)])
+def channel_move_delete(move_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT branch_id, period_month FROM recon_channel_move WHERE id=?", (move_id,)).fetchone()
+        if not row:
+            raise HTTPException(404)
+        _assert_period_open(conn, row["branch_id"], row["period_month"])
+        conn.execute("DELETE FROM recon_channel_move WHERE id=?", (move_id,))
+        _audit(conn, "channel_move", move_id, "delete", "staff")
+        conn.commit()
+    return {"deleted": move_id}
 
 
 # ── Per-day acknowledged variances (reconcile BY DATE) ───────────────────────

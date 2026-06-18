@@ -271,6 +271,31 @@ def _apply_transfer_any(pos: dict, ext: dict, key=("TRANSFER", "ANY")):
 
 # ── Reconciliation (pure compute) ─────────────────────────────────────────────
 
+def channel_move_deltas(conn, branch_id, period_month):
+    """{(category, bank): signed_amount} — manual 'booked-in-wrong-channel' moves
+    (recon_channel_move). Each move subtracts its amount from the (from_category,
+    from_bank) POS lane and adds it to the (to_category, to_bank) POS lane, so a
+    mis-entry is corrected on BOTH lanes at once. Folded into the POS base once at
+    read-time; reversible by deleting the row. {} when the table isn't there yet."""
+    out: dict = {}
+    try:
+        rows = conn.execute(
+            "SELECT from_category, from_bank, to_category, to_bank, amount "
+            "FROM recon_channel_move WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    for r in rows:
+        amt = float(r["amount"] or 0)
+        if amt == 0:
+            continue
+        fk = (r["from_category"], r["from_bank"] or "NONE")
+        tk = (r["to_category"],   r["to_bank"]   or "NONE")
+        out[fk] = out.get(fk, 0.0) - amt
+        out[tk] = out.get(tk, 0.0) + amt
+    return out
+
+
 def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_month: str):
     """Compare POS buckets to external buckets. Returns (rows, unmapped).
 
@@ -281,6 +306,12 @@ def category_reconciliation(conn: sqlite3.Connection, branch_id: int, period_mon
     ext = external_buckets(conn, branch_id, period_month)
     cfgs = method_config(conn)
     _apply_transfer_any(pos, ext)
+
+    # Manual cross-channel moves (booked-in-wrong-channel): shift the POS base out of
+    # the wrong lane and into the right one BEFORE adjustments, so both lanes correct
+    # at once. Lives in `pos` (never in recon_lane_adj) → no UNIQUE/accept collision.
+    for k, d in channel_move_deltas(conn, branch_id, period_month).items():
+        pos[k] = pos.get(k, 0.0) + d
 
     # Load lane adjustments (graceful if table not yet created)
     adjs: dict = {}
@@ -520,6 +551,38 @@ def point_pos_total(conn, branch_id, period_month, provider):
         return round(float(row[0] or 0), 2) if row else 0.0
     except sqlite3.OperationalError:
         return 0.0
+
+
+def point_pos_total_daily(conn, branch_id, period_month):
+    """Per-DAY POS amount redeemed as KTC+BAY loyalty points that month
+    ({day: amount}), classified by coupon-series NAME exactly like
+    point_pos_total (strict '%คะแนน%' per issuer, falling back to
+    คะแนน/แต้ม/point only when the strict query is empty for that issuer).
+
+    Sums BAY+KTC into one per-day figure; summed over the month it equals
+    point_pos_total(KTC)+point_pos_total(BAY). Used by the accounting split
+    that books KTC/BAY points as real 'received' money and the remainder of
+    the Coupon tender as a discount deduction. {} when the coupon-payment
+    breakdown hasn't been synced yet."""
+    out: dict = {}
+    base = ("SELECT p.day d, COALESCE(SUM(p.amount),0) amt FROM pos_coupon_payment_day p "
+            "JOIN coupon_series s ON s.coupon_series_id = p.coupon_series_id "
+            "WHERE p.branch_id=? AND substr(p.day,1,7)=? AND s.name LIKE ? ")
+    try:
+        for kw in _POINT_SERIES_KW.values():
+            rows = conn.execute(
+                base + "AND s.name LIKE '%คะแนน%' COLLATE NOCASE GROUP BY p.day",
+                (branch_id, period_month, f"%{kw}%")).fetchall()
+            if not rows:                                  # some point series say 'แต้ม' / 'point'
+                rows = conn.execute(
+                    base + "AND (s.name LIKE '%คะแนน%' OR s.name LIKE '%แต้ม%' "
+                           "OR s.name LIKE '%point%') GROUP BY p.day",
+                    (branch_id, period_month, f"%{kw}%")).fetchall()
+            for r in rows:
+                out[r[0]] = round(out.get(r[0], 0.0) + float(r[1] or 0), 2)
+    except sqlite3.OperationalError:
+        return {}
+    return out
 
 
 def _point_settlement_gross(conn, branch_id, period_month, point_acq):
@@ -1623,6 +1686,21 @@ def daily_reconciliation(conn, branch_id, period_month):
             continue
         b = ext.setdefault((kd, "CASH", "NONE"), {"amount": 0.0, "net": 0.0})
         b["amount"] += c["amount"]; b["net"] += c["amount"]
+
+    # Manual cross-channel moves (booked-in-wrong-channel): no per-day grain, so land
+    # each lane's net delta on that lane's last populated POS day (else the month's
+    # last active day). Keeps the daily rollup tied to the monthly figure (no false
+    # drift-escalation); intentionally not attributed to a specific sale.
+    mv = channel_move_deltas(conn, branch_id, period_month)
+    if mv:
+        eom = max((dy for (dy, _c, _b) in pos), default=f"{period_month}-28")
+        for (cat, bank), d in mv.items():
+            if abs(d) < 0.005:
+                continue
+            lane_days = sorted(dy for (dy, c, b) in pos
+                               if c == cat and b == bank and abs(pos[(dy, c, b)]) > 0.005)
+            tgt = lane_days[-1] if lane_days else eom
+            pos[(tgt, cat, bank)] = pos.get((tgt, cat, bank), 0.0) + d
 
     by_day = {}
     for (day, cat, bank) in set(pos) | set(ext):
