@@ -541,6 +541,103 @@ def test_statement_code_dictionary(client):
     assert h.status_code == 200 and "SDCH" in h.text and "รอตรวจ" in h.text
 
 
+def test_day_ack_clears_variance_by_date(client):
+    """Reconcile BY DATE: a per-day variance is acknowledged day-by-day. Once the
+    differing day carries a reason the channel's todo clears (residual within tol),
+    the day is flagged acked, and the reason is persisted for the close pack."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KBANK"})
+    client.patch(f"/api/payment-map/{pm['K-SHOP']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    # daily POS QR sums to the monthly QR total (KNNQR 100k + K-SHOP 50k = 150k)
+    c.executemany("INSERT INTO pos_payment_day VALUES(4,?,?,?,0)",
+                  [("2026-06-10", "KNNQR", 50000), ("2026-06-11", "KNNQR", 50000),
+                   ("2026-06-12", "K-SHOP", 50000)])
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('bank',4,'kbank','s','2026-06',0,'confirmed')").lastrowid
+    # bank QR matches on the 11th/12th but is 10,000 short on the 10th → one diff day
+    c.executemany("INSERT INTO recon_bank_lines(upload_id,branch_id,txn_date,channel,credit) VALUES(?,4,?,'QR',?)",
+                  [(up, "2026-06-10", 40000), (up, "2026-06-11", 50000), (up, "2026-06-12", 50000)])
+    c.commit(); c.close()
+
+    r = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr = next(c for c in r["channels"] if c["key"] == "QR")
+    assert qr["status"] == "diff"
+    assert any(t["type"] == "diff" and t["channel"] == "QR" for t in r["todo"])
+    dday = next(d for d in qr["days"] if abs(d["variance"]) > 0.5)
+    assert dday["day"] == "2026-06-10" and round(dday["variance"]) == -10000
+
+    res = client.post("/api/day-ack", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "QR",
+        "day": "2026-06-10", "variance": dday["variance"],
+        "note": "ลูกค้าจ่าย QR แต่ยอดเข้าน้อยกว่า ตรวจสอบกับสลิปแล้ว"})
+    assert res.status_code == 200
+
+    r2 = client.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
+    qr2 = next(c for c in r2["channels"] if c["key"] == "QR")
+    assert qr2["acked_days"] == 1 and qr2["status"] != "diff"
+    assert not any(t["type"] == "diff" and t["channel"] == "QR" for t in r2["todo"])
+    d2 = next(d for d in qr2["days"] if d["day"] == "2026-06-10")
+    assert d2.get("ack") and d2["ack"]["note"].startswith("ลูกค้าจ่าย")
+
+    # reason ≥10 chars is enforced
+    bad = client.post("/api/day-ack", json={"branch_id": 4, "period_month": "2026-06",
+        "category": "QR", "day": "2026-06-11", "variance": 0, "note": "x"})
+    assert bad.status_code == 400
+
+
+def test_all_errors_report_covers_all_types(client):
+    """รายงานเงินบันทึกผิดช่อง now returns ALL errors of the month tagged by type
+    (variance, missing document, …), not just confirmed wrong-channel mis-entries."""
+    rep = client.get("/api/reports/wrong-channel?period_month=2026-06").json()
+    assert "errors" in rep and rep["error_total_count"] > 0
+    types = {e["type"] for e in rep["errors"]}
+    assert "variance" in types          # POS channels with no money-in → variance
+    assert "missing_doc" in types       # required statements/summaries not uploaded
+    e0 = rep["errors"][0]
+    assert {"type", "type_th", "status", "branch_name", "detail"} <= set(e0)
+    assert rep["error_open_count"] >= 1
+    # xlsx + print render the broadened report
+    assert client.get("/api/reports/wrong-channel.xlsx?period_month=2026-06").status_code == 200
+    pr = client.get("/api/reports/wrong-channel.print?period_month=2026-06")
+    assert pr.status_code == 200 and "ข้อผิดพลาดทั้งหมด" in pr.text
+
+
+def test_daily_finance_and_account_map(client):
+    """รายงานการจับคู่รายวัน carries a per-day accounting breakdown (GROSS with
+    discount split out) + account code/name columns filled from recon_account_map."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-05','KNNQR',5000,2)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('grab',4,'Grab','g','2026-06',0,'confirmed')").lastrowid
+    # Grab order: gross 5,000, commission 1,000, VAT 70, promo (discount) 200
+    c.execute("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,"
+              "food_amount,commission_amt,vat_amount,promo_deduct,net_payout) "
+              "VALUES(?,4,'2026-06-05','Completed',5000,1000,70,200,3730)", (up,))
+    c.commit(); c.close()
+
+    r = client.get("/api/monthly-report?branch_id=4&period_month=2026-06")
+    assert r.status_code == 200
+    assert "สรุปบัญชีรายวัน" in r.text                       # per-day accounting section
+    assert "ยอดเต็ม" in r.text and "ส่วนลด" in r.text and "รหัสบัญชี" in r.text
+
+    # account code/name fill in later via /api/account-map (no deploy)
+    assert client.put("/api/account-map", json={
+        "slot": "GRAB", "account_code": "4100", "account_name": "รายได้เดลิเวอรี"}).status_code == 200
+    r2 = client.get("/api/monthly-report?branch_id=4&period_month=2026-06")
+    assert "4100" in r2.text and "รายได้เดลิเวอรี" in r2.text
+    am = {x["slot"]: x for x in client.get("/api/account-map").json()}
+    assert am["GRAB"]["account_code"] == "4100"
+
+
 def test_monthly_matching_report(client):
     """Monthly matching audit renders per-branch day×channel rows with status, plus
     a manager pack (all branches), and rejects a bad period."""
