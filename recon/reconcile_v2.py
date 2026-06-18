@@ -189,6 +189,21 @@ def _accepted_channels(conn, branch_id, period_month):
         return {}
 
 
+def _day_acks(conn, branch_id, period_month):
+    """Per-day acknowledged variances (reconcile BY DATE): {(category, day): rec}.
+    Staff work a channel's variance day-by-day — an ack clears that day so the
+    residual month variance shrinks. The note is the audit reason."""
+    try:
+        return {(r["category"], r["day"]):
+                {"id": r["id"], "note": r["note"], "by": r["created_by"],
+                 "at": r["created_at"], "variance": r["variance"]}
+                for r in conn.execute(
+                    "SELECT * FROM recon_day_ack WHERE branch_id=? AND period_month=?",
+                    (branch_id, period_month))}
+    except sqlite3.OperationalError:
+        return {}
+
+
 def _non_revenue(conn, branch_id, period_month):
     """Operator-flagged internal transfers (excluded bank credits) this month —
     reported apart so 'statement > POS' never hides inside the revenue lanes."""
@@ -211,6 +226,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     cov = _coverage(conn, branch_id, period_month)
     c3 = credit_three_way(conn, branch_id, period_month)
     accepted = _accepted_channels(conn, branch_id, period_month)
+    day_acks = _day_acks(conn, branch_id, period_month)
     pos_codes = _pos_codes_by_channel(conn, branch_id, period_month)
     payouts = payout_matching(conn, branch_id, period_month)     # GRAB/LM stage-2 trace
     issuer_points = coupon_reconciliation(conn, branch_id, period_month)
@@ -246,26 +262,41 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         pos_amt = round(m["pos"], 2) if m else 0.0
         ext_amt = round(m["ext"], 2) if m else 0.0
 
-        # Per-day card: one status per day (worst lane wins)
+        # Per-day card: one status per day (worst lane wins). Each day carries any
+        # per-day acknowledgement (reconcile BY DATE) so its variance stops counting.
         days = []
-        n_done = n_pending = n_issue = n_setup = 0
+        n_done = n_pending = n_issue = n_setup = n_diff_acked = 0
         for day in sorted(days_map):
             cd = days_map[day]
             sts = cd["statuses"]
+            ack = day_acks.get((key, day))
             if "unmapped_bank" in sts:
                 dst = "setup"; n_setup += 1
             elif sts & _DAY_ISSUE:
                 dst = "diff"; n_issue += 1
+                if ack:
+                    n_diff_acked += 1
             elif "pending" in sts:
                 dst = "waiting"; n_pending += 1
             elif sts & _DAY_DONE:
                 dst = "ok"; n_done += 1
             else:                                     # no_source only (coupon)
                 dst = "no_source"
-            days.append({"day": day, "pos": round(cd["pos"], 2),
-                         "ext": round(cd["ext"], 2),
-                         "variance": round(cd["ext"] - cd["pos"], 2), "status": dst,
-                         "banks": sorted(cd["banks"])})
+            d = {"day": day, "pos": round(cd["pos"], 2),
+                 "ext": round(cd["ext"], 2),
+                 "variance": round(cd["ext"] - cd["pos"], 2), "status": dst,
+                 "banks": sorted(cd["banks"])}
+            if ack:
+                d["ack"] = ack
+            days.append(d)
+        # Residual = month variance still UNexplained after per-day acks. The
+        # by-date worklist surfaces every day with a real variance (diff-status or
+        # a small daily gap that only adds up over the month); acking them shrinks
+        # the residual until it clears the monthly tolerance.
+        acked_var = round(sum(d["variance"] for d in days if d.get("ack")), 2)
+        residual  = round((ext_amt - pos_amt) - acked_var, 2)
+        open_issue_days = [d for d in days if d["status"] == "diff" and not d.get("ack")]
+        open_var_days   = [d for d in days if abs(d["variance"]) > 0.5 and not d.get("ack")]
 
         # Channel verdict + a one-line Thai explanation staff can act on
         doc_missing = []
@@ -301,30 +332,40 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
             status = "waiting_doc"
             detail = ("ขาดสรุปยอดบัตร " + ", ".join(doc_missing)) if key == "CREDIT" \
                      else f"ขาดรายงาน {label}"
-        elif n_issue:
+        elif open_issue_days:
             status = "diff"
             detail = ("เงินเข้าโดยไม่มียอดขาย POS" if pos_amt == 0
-                      else f"ต่างกัน {n_issue} วัน")
+                      else f"ต่างกัน {len(open_issue_days)} วัน"
+                           + (f" · รับทราบแล้ว {n_diff_acked} วัน" if n_diff_acked else ""))
         elif n_pending:
             status, detail = "waiting_doc", f"รอเอกสาร {n_pending} วัน"
         else:
             status, detail = "ok", ""
         if status == "ok" and n_done:
-            detail = f"{n_done}/{len(days)} วัน"
+            detail = f"{n_done}/{len(days)} วัน" + (
+                f" · รับทราบผลต่าง {n_diff_acked} วัน" if n_diff_acked else "")
         # Control gap: every day can sit inside the daily tolerance (±฿50) yet the
         # MONTH drifts past the monthly tolerance (฿100) — a classic fee-skim /
         # under-settlement pattern. Escalate to 'diff' so it raises a todo and
-        # blocks ปิดเดือน instead of hiding under 'ตรงกันแล้ว'. COUPON excluded:
-        # its variance is loyalty points, not bank money (set below at ~L333).
-        if status == "ok" and key != "COUPON" and abs(ext_amt - pos_amt) > 100:
+        # blocks ปิดเดือน instead of hiding under 'ตรงกันแล้ว'. Measured on the
+        # RESIDUAL so per-day acknowledgements (reconcile by date) clear it. COUPON
+        # excluded: its variance is loyalty points, not bank money (set below).
+        if status == "ok" and key != "COUPON" and abs(residual) > 100:
             status = "diff"
-            detail = (f"สะสมต่าง {ext_amt - pos_amt:+,.0f} บาท "
-                      "(ทุกวันอยู่ในเกณฑ์รายวัน แต่ยอดรวมทั้งเดือนเกิน)")
+            detail = (f"สะสมต่าง {residual:+,.0f} บาท "
+                      "(ทุกวันอยู่ในเกณฑ์รายวัน แต่ยอดรวมทั้งเดือนเกิน)"
+                      + (f" · รับทราบแล้ว {n_diff_acked} วัน" if n_diff_acked else ""))
 
         ch = {"key": key, "label": label, "pos": pos_amt, "ext": ext_amt,
               "variance": round(ext_amt - pos_amt, 2), "status": status,
               "detail": detail, "days": days,
               "days_done": n_done, "days_total": len(days),
+              # By-date reconciliation: residual = still-unexplained after per-day
+              # acks; counts drive the worklist + todo wording.
+              "residual": residual, "acked_var": acked_var,
+              "acked_days": n_diff_acked,
+              "open_var_days": len(open_var_days),
+              "open_issue_days": len(open_issue_days),
               "banks": m["banks"] if m else [],
               "codes": pos_codes.get(key, []),
               "accepted": accepted.get(key)}
@@ -358,7 +399,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
     # COUPON stays out of the money base in all statuses: points are discounts,
     # not bank money-in (the reimbursement rides the CREDIT/TRANSFER lanes), so
     # counting it would wrongly drag the gauge once the points doc arrives.
-    unexplained = sum(abs(ch["variance"]) for ch in channels
+    unexplained = sum(abs(ch.get("residual", ch["variance"])) for ch in channels
                       if ch["status"] != "no_source" and ch["key"] != "COUPON")
     base = sum(max(ch["pos"], ch["ext"]) for ch in channels
                if ch["status"] != "no_source" and ch["key"] != "COUPON")
@@ -394,8 +435,14 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
         if ch["accepted"]:
             continue
         if ch["status"] == "diff":
-            todo.append({"type": "diff", "channel": ch["key"],
-                         "label": f"ตรวจผลต่าง{ch['label']} {ch['variance']:+,.0f} บาท"})
+            n_open = ch.get("open_var_days", 0)
+            res = ch.get("residual", ch["variance"])
+            if n_open:
+                label = (f"ตรวจผลต่าง{ch['label']} — {n_open} วันที่ต่าง "
+                         f"(เหลือ {res:+,.0f} บาท)")
+            else:
+                label = f"ตรวจผลต่าง{ch['label']} {res:+,.0f} บาท"
+            todo.append({"type": "diff", "channel": ch["key"], "label": label})
         elif ch["status"] == "waiting_doc" and not any(
                 t["type"] == "upload" for t in todo):
             todo.append({"type": "waiting", "channel": ch["key"],

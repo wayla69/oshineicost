@@ -436,6 +436,40 @@ CREATE TABLE IF NOT EXISTS recon_lane_adj (
 );
 CREATE INDEX IF NOT EXISTS idx_rla_scope ON recon_lane_adj(branch_id, period_month);
 
+-- ─── Per-day acknowledged variances (reconcile BY DATE) ───────────────────────
+-- Staff reconcile a channel day-by-day: each differing day is either fixed/matched
+-- or acknowledged here with a reason. One row per (branch × period × category × day).
+-- variance = the day's POS↔money-in gap at the moment it was acknowledged (snapshot
+-- for the audit trail / Excel close pack). A channel's todo clears when every
+-- differing day is acknowledged (or the whole channel is accepted via recon_lane_adj).
+CREATE TABLE IF NOT EXISTS recon_day_ack (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    branch_id    INTEGER NOT NULL REFERENCES branches(branch_id),
+    period_month TEXT    NOT NULL,
+    category     TEXT    NOT NULL,
+    day          TEXT    NOT NULL,            -- 'YYYY-MM-DD'
+    variance     REAL    NOT NULL DEFAULT 0,  -- acknowledged day variance (money-in − POS)
+    note         TEXT,
+    created_by   TEXT,
+    created_at   TEXT    DEFAULT (datetime('now')),
+    UNIQUE(branch_id, period_month, category, day)
+);
+CREATE INDEX IF NOT EXISTS idx_rda_scope ON recon_day_ack(branch_id, period_month);
+
+-- ─── Chart-of-accounts mapping (slot → account code + name) ───────────────────
+-- Lets the reports carry an account code + name per channel / journal slot. Filled
+-- in later by the owner (the columns render blank until then). 'slot' is a channel
+-- key (CASH/QR/TRANSFER/CREDIT/GRAB/LINEMAN/COUPON) or a journal slot
+-- (DISCOUNT/FEE/VAT/BANK/REVENUE). Amounts are always recorded GROSS with the
+-- discount shown separately, so each can post to its own account.
+CREATE TABLE IF NOT EXISTS recon_account_map (
+    slot         TEXT PRIMARY KEY,
+    account_code TEXT,
+    account_name TEXT,
+    updated_at   TEXT DEFAULT (datetime('now')),
+    updated_by   TEXT
+);
+
 -- ─── Statement-code overrides (manager-editable remap of bank abbreviations) ──
 -- Lets a manager fix a mis-classified statement code (e.g. the SDCH=cash case, or a
 -- non-revenue IORSDT → OTHER) from the app WITHOUT a code change + redeploy. Takes

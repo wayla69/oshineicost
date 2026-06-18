@@ -443,13 +443,44 @@ function renderWrongChannel(){
   const dirChip=d=>d==='down'?'<span class="chip c-ok ov-mini">✓ ดีขึ้น</span>'
     :d==='up'?'<span class="chip c-warn ov-mini">▲ ผิดมากขึ้น</span>'
     :'<span class="chip c-mut ov-mini">— ทรงตัว</span>';
+  const errsAll=(WC.errors||[]);
+  const errs=all?errsAll:errsAll.filter(e=>e.branch_id===WC_BR);
+  const typeTh=WC.error_type_th||{};
+  const ST={open:['c-err','ค้าง'],acknowledged:['c-mut','รับทราบแล้ว'],resolved:['c-ok','แก้ไขแล้ว']};
+  const nOpen=errs.filter(e=>e.status==='open').length;
+  const errAmt=errs.reduce((a,e)=>a+Math.abs(e.amount||0),0);
   let html=header()+`<div class="row" style="margin-bottom:6px">
-    <h2 style="font-size:16px">⇄ รายงานเงินบันทึกผิดช่อง — ${esc(monthTh(MONTH))}</h2>
+    <h2 style="font-size:16px">⚠️ รายงานข้อผิดพลาดประจำเดือน — ${esc(monthTh(MONTH))}</h2>
     <select onchange="setWcBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
-    <a class="btn btn-sm btn-pri" href="/api/reports/wrong-channel.print${pm}" target="_blank">🖨️ ใบเซ็นรับทราบ (พิมพ์/PDF)</a>
+    <a class="btn btn-sm btn-pri" href="/api/reports/wrong-channel.print${pm}" target="_blank">🖨️ พิมพ์/PDF</a>
     <a class="btn btn-sm" href="/api/reports/wrong-channel.xlsx${pm}">⬇ Excel</a></div>
-  <div class="muted" style="margin-bottom:10px">รายการที่ยืนยันแล้วว่า <b>"เป็นเงินก้อนเดียวกัน"</b> ในหน้ากระทบยอด — เงินเข้าบัญชีถูกต้องครบ แต่ในเครื่อง POS กดผิดช่องทาง · ใช้เป็นหลักฐาน log + <b>ใบให้สาขาเซ็นรับทราบและแก้ไข</b> · ยอดรวมไม่ได้หาย เป็นการลงผิดช่องเท่านั้น</div>`;
-  if(!items.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้ว${all?'สำหรับเดือนนี้':'ของสาขานี้'} — รายงานจะขึ้นเมื่อมีการกด "✅ ใช่ เป็นเงินก้อนเดียวกัน" ในการ์ดเงินผิดช่อง</div>`; return; }
+  <div class="muted" style="margin-bottom:10px">ข้อผิดพลาดทุกประเภทที่พบในเดือนนี้ — ยอดต่าง, ขาดเอกสาร, เงินเข้าเกิน, เงินโอนไม่ครบ, รหัสยังไม่ตั้งธนาคาร และการบันทึกผิดช่อง · <b>ค้าง</b> = ยังต้องจัดการก่อนปิดเดือน</div>`;
+  if(!errs.length && !items.length){ $('app').innerHTML=html+`<div class="card c-ok">🎉 ไม่พบข้อผิดพลาด${all?'ในเดือนนี้':'ของสาขานี้'} — ทุกช่องทางตรง เอกสารครบ</div>`; return; }
+
+  // ── ข้อผิดพลาดทั้งหมด (ทุกประเภท) ──
+  if(errs.length){
+    const counts={};errs.forEach(e=>counts[e.type]=(counts[e.type]||0)+1);
+    const chips=Object.keys(counts).map(t=>`<span class="chip c-mut">${esc(typeTh[t]||t)}: ${counts[t]}</span>`).join(' ');
+    html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:24px;flex-wrap:wrap">
+      <div><div class="lbl">ข้อผิดพลาดทั้งหมด</div><div style="font-size:20px;font-weight:700">${errs.length}</div></div>
+      <div><div class="lbl">ค้าง (ต้องจัดการ)</div><div style="font-size:20px;font-weight:700;color:var(--err)">${nOpen}</div></div>
+      <div><div class="lbl">มูลค่ารวม (abs)</div><div style="font-size:20px;font-weight:700">฿${fmt(errAmt)}</div></div>
+      <div style="flex:1;min-width:200px;align-self:center;text-align:right">${chips}</div>
+    </div>`;
+    html+=`<div class="card" style="padding:0;overflow-x:auto;margin-bottom:14px"><table>
+      <tr><th>ประเภท</th>${all?'<th>สาขา</th>':''}<th>ช่องทาง/รหัส</th><th style="text-align:left">รายละเอียด</th><th>ยอด</th><th>สถานะ</th><th style="text-align:left">เหตุผล/หมายเหตุ</th></tr>
+      ${errs.map(e=>{const st=ST[e.status]||['c-mut',e.status];return `<tr>
+        <td>${esc(typeTh[e.type]||e.type)}</td>${all?`<td>${esc(e.branch_name)}</td>`:''}
+        <td>${esc(e.channel_th||'—')}</td><td style="text-align:left">${esc(e.detail||'')}</td>
+        <td class="mono">${e.amount?fmt(e.amount):'—'}</td>
+        <td><span class="chip ${st[0]} ov-mini">${st[1]}</span></td>
+        <td class="lbl" style="text-align:left">${esc(e.reason||'—')}</td></tr>`;}).join('')}
+    </table></div>`;
+  }
+
+  if(!items.length){ $('app').innerHTML=html; return; }   // errors shown; no wrong-channel detail
+  html+=`<h3 style="font-size:14px;margin:14px 0 6px">⇄ รายละเอียดการบันทึกผิดช่อง (${items.length})</h3>
+  <div class="muted" style="margin-bottom:8px">รายการที่ยืนยันว่า <b>"เป็นเงินก้อนเดียวกัน"</b> — เงินเข้าถูกต้องครบ แต่ POS กดผิดช่องทาง · ใบให้สาขาเซ็นรับทราบและแก้ไข</div>`;
   html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:24px;flex-wrap:wrap">
     <div><div class="lbl">จำนวนรายการ</div><div style="font-size:20px;font-weight:700">${items.length}</div></div>
     <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">฿${fmt(amt)}</div></div>
@@ -1088,17 +1119,18 @@ function toggleDays(i){
   // คูปอง: แต้ม KTC/BAY ตรวจอัตโนมัติแล้ว — ลิงก์หน้าเดิมไว้ดูคูปองซีรีส์อื่น
   const cpBtn=ch.key==='COUPON'?
     `<a class="btn btn-sm" href="/app/classic.html#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง ↗</a>`:'';
+  const worklist=dayWorklistHtml(ch,i);
   el.innerHTML=`
   ${codes||xferBankRow||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${xferBankRow} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
   <div id="codedaily-${i}" style="padding:0 14px"></div>
-  ${c3}${pt}${cash3}${cpCards}
+  ${worklist}${c3}${pt}${cash3}${cpCards}
   <div id="fees-${i}"></div>
   <div id="matcher-${i}"></div>
   <div class="daygrid">${ch.days.map(d=>`
-    <div class="daycell d-${d.status}" onclick="event.stopPropagation();openDay(${i},'${d.day}')">
-      <b>${+d.day.slice(8)}</b> <span class="lbl">${{ok:'✓',diff:'≠',waiting:'⏳',setup:'?',no_source:'·'}[d.status]||''}</span>
+    <div class="daycell d-${d.ack?'ok':d.status}" onclick="event.stopPropagation();openDay(${i},'${d.day}')">
+      <b>${+d.day.slice(8)}</b> <span class="lbl">${d.ack?'✓':({ok:'✓',diff:'≠',waiting:'⏳',setup:'?',no_source:'·'}[d.status]||'')}</span>
       <div class="mono" style="font-size:11px">${fmt(d.pos)}</div>
-      ${d.status==='diff'?`<div class="mono" style="font-size:11px;color:var(--err)">${d.variance>0?'+':''}${fmt(d.variance)}</div>`:''}
+      ${d.status==='diff'&&!d.ack?`<div class="mono" style="font-size:11px;color:var(--err)">${d.variance>0?'+':''}${fmt(d.variance)}</div>`:''}
     </div>`).join('')}</div>
   <div id="daylines-${i}" style="padding:0 12px 12px"></div>`;
   el.style.display='';
@@ -1125,6 +1157,61 @@ function payoutTraceHtml(ch){
     </table></div>
     <div class="lbl" style="margin-top:3px">สุทธิรวม ${fmt(p.net_total)} · เข้าบัญชีแล้ว ${fmt(p.payout_total)}${p.awaiting_total>0?` · รอเข้า ${fmt(p.awaiting_total)}`:''}</div>
   </div>`;
+}
+
+/* ── ตรวจผลต่าง "รายวัน": รับทราบทีละวัน (reconcile BY DATE) ── */
+function dayWorklistHtml(ch,i){
+  if(ch.key==='COUPON')return '';
+  const vdays=(ch.days||[]).filter(d=>Math.abs(d.variance)>0.5);
+  if(!vdays.length)return '';
+  const openCount=vdays.filter(d=>!d.ack).length;
+  const rows=vdays.map(d=>{
+    const acked=d.ack;
+    const chip=acked?'<span class="chip c-mut">✓ รับทราบ</span>'
+      :(d.status==='diff'?'<span class="chip c-err">≠ ต่าง</span>':'<span class="chip c-warn">ต่างเล็กน้อย</span>');
+    const act=DATA.closed?''
+      :acked?`<a href="#" onclick="event.stopPropagation();unackDay(${acked.id});return false">เลิกรับทราบ</a>`
+            :`<button class="btn btn-sm" onclick="event.stopPropagation();ackDay(${i},'${d.day}',${d.variance})">รับทราบวันนี้</button>`;
+    return `<tr${acked?' style="opacity:.65"':''}><td><b>${+d.day.slice(8)}</b></td>
+      <td class="mono">${fmt(d.pos)}</td>
+      <td class="mono">${d.ext?fmt(d.ext):'—'}</td>
+      <td class="mono" style="color:${acked?'var(--mut)':'var(--err)'}">${d.variance>0?'+':''}${fmt(d.variance)}</td>
+      <td>${chip}</td><td style="text-align:right">${act}</td></tr>
+      ${acked?`<tr style="opacity:.65"><td></td><td colspan="5" class="lbl" style="text-align:left">"${esc(acked.note||'')}"${acked.by?` — ${esc(acked.by)}`:''}</td></tr>`:''}`;
+  }).join('');
+  return `<div style="padding:6px 18px 10px">
+    <div class="lbl" style="margin-bottom:4px"><b>ตรวจผลต่างรายวัน</b> — กระทบยอดทีละวัน รับทราบพร้อมเหตุผล (ติดไปในไฟล์ Excel ให้ผู้จัดการเห็น)${openCount?` · เหลือ ${openCount} วัน`:' · ครบแล้ว'}</div>
+    <div class="card" style="padding:0;box-shadow:none;max-height:320px;overflow:auto"><table>
+      <tr><th>วัน</th><th>POS</th><th>เงินเข้า</th><th>ต่าง</th><th>สถานะ</th><th></th></tr>
+      ${rows}
+    </table></div></div>`;
+}
+let _ackDayCtx=null;
+function ackDay(i,day,variance){
+  const ch=DATA.channels[i];
+  _ackDayCtx={channel:ch.key,day,variance};
+  const opts=ACCEPT_REASONS.map((rsn,k)=>`<button class="btn rc-reason" onclick="pickAckDayReason(${k})">${esc(rsn)}</button>`).join('');
+  showSheet(`<div class="sheet-h">รับทราบผลต่างวัน ${day} — ${esc(ch.label)}</div>
+    <div class="lbl" style="margin-bottom:10px">ผลต่างวันนี้ ${variance>0?'+':''}${fmt(variance)} บาท — เลือกหรือพิมพ์เหตุผล (อย่างน้อย 10 ตัวอักษร)</div>
+    <div class="rc-reasons">${opts}</div>
+    <textarea id="ackday-note" class="sheet-ta" placeholder="พิมพ์เหตุผลเอง (อย่างน้อย 10 ตัวอักษร)"></textarea>
+    <div class="row" style="margin-top:10px;gap:8px">
+      <button class="btn btn-pri" onclick="submitAckDay()">บันทึกรับทราบ</button>
+      <button class="btn" onclick="closeSheet()">ยกเลิก</button>
+    </div>`);
+}
+function pickAckDayReason(k){const ta=$('ackday-note');if(ta){ta.value=ACCEPT_REASONS[k];ta.focus();}}
+async function submitAckDay(){
+  const note=(($('ackday-note')||{}).value||'').trim();
+  if(note.length<10){toast('ต้องใส่เหตุผลอย่างน้อย 10 ตัวอักษร');return;}
+  const ctx=_ackDayCtx;if(!ctx)return;
+  try{await api('/api/day-ack',{method:'POST',body:{branch_id:DATA.branch_id,period_month:MONTH,
+      category:ctx.channel,day:ctx.day,variance:ctx.variance,note:note}});
+      closeSheet();toast('รับทราบวันนี้แล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function unackDay(ackId){
+  try{await api(`/api/day-ack/${ackId}`,{method:'DELETE'});toast('เลิกรับทราบแล้ว');route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 
 /* ── เงินสด 3 ทาง: POS ↔ สลิปนำฝาก (พิมพ์ยอด) ↔ เงินเข้าธนาคาร ── */

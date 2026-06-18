@@ -2071,6 +2071,16 @@ def _build_export(conn, session) -> bytes:
           [[a["category"], a["bank"], a["note"] or "", a["created_by"] or "", a["created_at"] or ""]
            for a in accepts])
 
+    # Per-day acknowledged variances (reconcile BY DATE): each differing day staff
+    # cleared with a reason — the granular trail behind a channel's residual.
+    day_acks = conn.execute(
+        "SELECT category, day, variance, note, created_by, created_at FROM recon_day_ack "
+        "WHERE branch_id=? AND period_month=? ORDER BY category, day", (bid, pm)).fetchall()
+    sheet("Daily acknowledged variances",
+          ["Category", "Day", "Variance", "Reason (เหตุผล)", "Accepted by", "At"],
+          [[a["category"], a["day"], a["variance"], a["note"] or "",
+            a["created_by"] or "", a["created_at"] or ""] for a in day_acks])
+
     # Cash 3-way (POS ↔ typed deposit slip ↔ bank deposit) per the owner's table
     tw = cash_three_way(conn, bid, pm)
     sheet("Cash 3-way",
@@ -2426,12 +2436,122 @@ def _wrong_channel_report(conn, period_month: str | None = None,
             "total_amount": round(sum(it["amount"] for it in items), 2)}
 
 
+# ── All reconciliation errors of the month (superset of wrong-channel) ────────
+# The owner wants the monthly error report to cover EVERY error found, not only
+# wrong-channel mis-entries: open variances, missing documents, unmatched
+# statement credits, payout shortfalls, and unmapped POS codes — each tagged by
+# type + status (open / acknowledged / resolved) with its amount + reason.
+_ERR_TYPE_TH = {
+    "wrong_channel": "บันทึกผิดช่อง",
+    "variance":      "ยอดต่าง (POS≠เงินเข้า)",
+    "ext_only":      "เงินเข้าเกิน (ไม่มียอด POS)",
+    "missing_doc":   "ขาดเอกสาร",
+    "unmapped_code": "ยังไม่ตั้งธนาคารของรหัส",
+    "payout_short":  "เงินโอนเข้าไม่ครบ/ช้า",
+}
+
+
+def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> list[dict]:
+    """Every reconciliation error in the month across branches, tagged by type."""
+    bnames = {r["branch_id"]: r["name"] for r in conn.execute("SELECT branch_id, name FROM branches")}
+    if branch_id:
+        branches = [(branch_id, bnames.get(branch_id, str(branch_id)))]
+    else:
+        branches = [(r["branch_id"], r["name"]) for r in conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name")]
+
+    items: list[dict] = []
+
+    def add(bid, bn, typ, channel, channel_th, detail, amount, status, reason="", by="", days=None):
+        items.append({"branch_id": bid, "branch_name": bn, "period_month": period_month,
+                      "type": typ, "type_th": _ERR_TYPE_TH.get(typ, typ),
+                      "channel": channel, "channel_th": channel_th, "detail": detail,
+                      "amount": round(float(amount or 0), 2), "status": status,
+                      "reason": reason or "", "by": by or "", "days": days or []})
+
+    # confirmed wrong-channel mis-entries (cross-channel manual matches)
+    for w in _wrong_channel_items(conn, period_month):
+        if branch_id and w["branch_id"] != branch_id:
+            continue
+        add(w["branch_id"], w["branch_name"], "wrong_channel", w["from_cat"], w["from_th"],
+            f"{w['from_th']} → {w['to_th']}" + (f" ({w['to_bank_th']})" if w["to_bank_th"] else ""),
+            w["amount"], "resolved", w["reason"], w["by"], w["days"])
+
+    for bid, bn in branches:
+        try:
+            rm = reconcile_month(conn, bid, period_month)
+        except Exception:
+            continue
+        for ch in rm.get("channels", []):
+            ch_th = ch["label"]
+            acc = ch.get("accepted")
+            ext_only = ch.get("pos", 0) <= 0.5 and ch.get("ext", 0) > 0.5
+            typ = "ext_only" if ext_only else "variance"
+            if ch["status"] == "diff":
+                add(bid, bn, typ, ch["key"], ch_th, ch.get("detail", ""),
+                    ch.get("residual", ch.get("variance", 0)), "open")
+            elif acc:
+                add(bid, bn, "variance", ch["key"], ch_th, "รับทราบทั้งช่องทาง",
+                    ch.get("variance", 0), "acknowledged", acc.get("note", ""), acc.get("by", ""))
+            elif ch.get("acked_days"):
+                add(bid, bn, "variance", ch["key"], ch_th,
+                    f"รับทราบรายวัน {ch['acked_days']} วัน", ch.get("acked_var", 0), "acknowledged")
+        for d in rm.get("documents", []):
+            if d["status"] == "missing":
+                add(bid, bn, "missing_doc", d.get("channel"), d["label"],
+                    d.get("detail", "ยังไม่อัปโหลด"), 0, "open")
+        for q in rm.get("setup_questions", []):
+            add(bid, bn, "unmapped_code", None, q["code"],
+                f"รหัส {q['code']} ยังไม่ระบุธนาคาร", q.get("amount", 0), "open")
+        try:
+            for p in payout_reconciliation(conn, bid, period_month):
+                if p["status"] == "mismatch":
+                    add(bid, bn, "payout_short", p["category"],
+                        _CH_LABEL.get(p["category"], p["category"]),
+                        f"สุทธิควรได้ {p['report_net']:,.0f} · เข้าจริง {p['bank_payout']:,.0f}",
+                        p["variance"], "open")
+        except Exception:
+            pass
+
+    items.sort(key=lambda x: (x["branch_name"], x["status"] != "open", x["type"]))
+    return items
+
+
+def _all_errors_report(conn, period_month: str, branch_id: int | None = None) -> dict:
+    from collections import Counter
+    errs = _all_errors_items(conn, period_month, branch_id)
+    by_type = Counter(e["type"] for e in errs)
+    by_branch: dict = {}
+    for e in errs:
+        g = by_branch.setdefault((e["branch_id"], e["branch_name"]),
+                                 {"branch_id": e["branch_id"], "branch_name": e["branch_name"],
+                                  "count": 0, "open": 0, "amount": 0.0})
+        g["count"] += 1
+        g["open"] += 1 if e["status"] == "open" else 0
+        g["amount"] += abs(e["amount"])
+    branch_summary = sorted(by_branch.values(), key=lambda x: -x["open"])
+    for b in branch_summary:
+        b["amount"] = round(b["amount"], 2)
+    return {
+        "errors": errs,
+        "error_counts": {t: by_type.get(t, 0) for t in _ERR_TYPE_TH},
+        "error_type_th": _ERR_TYPE_TH,
+        "error_branch_summary": branch_summary,
+        "error_total_count": len(errs),
+        "error_open_count": sum(1 for e in errs if e["status"] == "open"),
+        "error_total_amount": round(sum(abs(e["amount"]) for e in errs), 2),
+    }
+
+
 @app.get("/api/reports/wrong-channel")
 def wrong_channel_report(period_month: str | None = None, branch_id: int | None = None):
     if period_month:
         _validate_period(period_month)
     with get_db() as conn:
-        return _wrong_channel_report(conn, period_month, branch_id)
+        rep = _wrong_channel_report(conn, period_month, branch_id)
+        if period_month:        # all-errors register needs a concrete month to compose
+            rep.update(_all_errors_report(conn, period_month, branch_id))
+        return rep
 
 
 @app.get("/api/reports/wrong-channel.xlsx")
@@ -2443,8 +2563,26 @@ def wrong_channel_report_xlsx(period_month: str | None = None, branch_id: int | 
         _validate_period(period_month)
     with get_db() as conn:
         rep = _wrong_channel_report(conn, period_month, branch_id)
+        all_err = _all_errors_report(conn, period_month, branch_id) if period_month else None
     wb = openpyxl.Workbook(); bold = Font(bold=True)
-    ws = wb.active; ws.title = "สรุปรายสาขา"
+    if all_err is not None:
+        # Lead sheet: EVERY error of the month (the broadened report), then the
+        # wrong-channel-specific sheets follow for the coaching detail.
+        wse = wb.active; wse.title = "ข้อผิดพลาดทั้งหมด"
+        wse.append(["สาขา", "ประเภทข้อผิดพลาด", "ช่องทาง/รหัส", "รายละเอียด",
+                    "ยอด (บาท)", "สถานะ", "เหตุผล/หมายเหตุ", "โดย"])
+        for cc in wse[1]:
+            cc.font = bold
+        _st_th = {"open": "ค้าง", "acknowledged": "รับทราบแล้ว", "resolved": "แก้ไขแล้ว"}
+        for e in all_err["errors"]:
+            wse.append([e["branch_name"], e["type_th"], e["channel_th"] or "—", e["detail"],
+                        e["amount"], _st_th.get(e["status"], e["status"]),
+                        e["reason"], e["by"]])
+        for col, w in zip("ABCDEFGH", (20, 22, 18, 34, 14, 14, 38, 14)):
+            wse.column_dimensions[col].width = w
+        ws = wb.create_sheet("บันทึกผิดช่อง — สรุปรายสาขา")
+    else:
+        ws = wb.active; ws.title = "สรุปรายสาขา"
     ws.append(["สาขา", "จำนวนครั้ง", "จำนวนเดือน", "ยอดรวม (บาท)"])
     for c in ws[1]:
         c.font = bold
@@ -2480,16 +2618,28 @@ def wrong_channel_report_print(period_month: str | None = None,
         _validate_period(period_month)
     with get_db() as conn:
         rep = _wrong_channel_report(conn, period_month)
+        all_err = _all_errors_report(conn, period_month, branch_id) if period_month else {"errors": []}
     items = rep["items"]
     if branch_id:
         items = [it for it in items if it["branch_id"] == branch_id]
 
-    # group items by branch (preserve summary order: biggest exposure first)
+    # all errors grouped by branch (the broadened report); wrong-channel items below
+    err_by_branch: dict = {}
+    err_bname: dict = {}
+    for e in all_err["errors"]:
+        err_by_branch.setdefault(e["branch_id"], []).append(e)
+        err_bname[e["branch_id"]] = e["branch_name"]
+
+    # group wrong-channel items by branch (preserve summary order: biggest first)
     order = [s["branch_id"] for s in rep["summary"]]
     by_branch: dict = {}
     for it in items:
         by_branch.setdefault(it["branch_id"], []).append(it)
-    bids = [b for b in order if b in by_branch] or list(by_branch)
+        err_bname.setdefault(it["branch_id"], it["branch_name"])
+    # one sheet per branch that has ANY error (wrong-channel or otherwise)
+    bids = [b for b in order if b in err_by_branch or b in by_branch]
+    bids += [b for b in err_by_branch if b not in bids]
+    bids += [b for b in by_branch if b not in bids]
 
     import html as _html
     _TH_MO = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
@@ -2541,23 +2691,49 @@ def wrong_channel_report_print(period_month: str | None = None,
 
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
-             "<title>รายงานเงินบันทึกผิดช่อง</title>", css, "</head><body>",
+             "<title>รายงานข้อผิดพลาดประจำเดือน</title>", css, "</head><body>",
              "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
 
     if not bids:
-        parts.append("<div class='empty'>ยังไม่มีรายการบันทึกผิดช่องที่ยืนยันแล้ว"
+        parts.append("<div class='empty'>ไม่พบข้อผิดพลาดในการกระทบยอด"
                      f"{' สำหรับเดือน ' + _esc(period_month) if period_month else ''} — "
-                     "รายงานจะขึ้นเมื่อมีการกดยืนยัน “ใช่ เป็นเงินก้อนเดียวกัน” ในหน้ากระทบยอด</div>")
+                     "ทุกช่องทางตรง ไม่มียอดต่าง เอกสารครบ และไม่มีการบันทึกผิดช่อง 🎉</div>")
     period_label = period_month or "ทุกเดือน"
+    _ST_PILL = {"open": ("p-up", "ค้าง"), "acknowledged": ("p-flat", "รับทราบแล้ว"),
+                "resolved": ("p-ok", "แก้ไขแล้ว")}
     for bid in bids:
-        rows = by_branch[bid]
-        bn = rows[0]["branch_name"]
-        tot = sum(r["amount"] for r in rows)
+        rows = by_branch.get(bid, [])
+        errs = err_by_branch.get(bid, [])
+        bn = err_bname.get(bid, str(bid))
+        n_open = sum(1 for e in errs if e["status"] == "open")
         parts.append("<div class='sheet'>")
-        parts.append(f"<h1>รายงานเงินบันทึกผิดช่อง — สาขา{_esc(bn)}</h1>")
-        parts.append(f"<div class='sub'>งวด {_esc(period_label)} · {len(rows)} รายการ · "
-                     f"มูลค่ารวม ฿{_m(tot)}</div>")
-        parts.append("<h2>รายการที่บันทึกผิดช่อง</h2>")
+        parts.append(f"<h1>รายงานข้อผิดพลาดประจำเดือน — สาขา{_esc(bn)}</h1>")
+        parts.append(f"<div class='sub'>งวด {_esc(period_label)} · ข้อผิดพลาดทั้งหมด {len(errs)} รายการ "
+                     f"(ค้าง {n_open}) · บันทึกผิดช่อง {len(rows)} รายการ</div>")
+
+        # ── ข้อผิดพลาดทั้งหมดในเดือนนี้ (ทุกประเภท) ──
+        if errs:
+            parts.append("<h2>ข้อผิดพลาดทั้งหมดในเดือนนี้ (ทุกประเภท)</h2>")
+            parts.append("<table><thead><tr><th>ประเภท</th><th>ช่องทาง/รหัส</th><th>รายละเอียด</th>"
+                         "<th class='right'>ยอด (บาท)</th><th>สถานะ</th><th>เหตุผล/หมายเหตุ</th></tr></thead><tbody>")
+            for e in errs:
+                pill = _ST_PILL.get(e["status"], ("p-flat", e["status"]))
+                parts.append(
+                    f"<tr><td>{_esc(e['type_th'])}</td><td>{_esc(e['channel_th'] or '—')}</td>"
+                    f"<td>{_esc(e['detail'])}</td>"
+                    f"<td class='right mono amt'>{_m(e['amount']) if e['amount'] else '—'}</td>"
+                    f"<td><span class='pill {pill[0]}'>{pill[1]}</span></td>"
+                    f"<td class='muted'>{_esc(e['reason'] or '—')}</td></tr>")
+            parts.append("</tbody></table>")
+
+        if not rows:                          # branch has other errors but no wrong-channel mis-entries
+            parts.append("<div class='sign'><div>ผู้จัดการสาขา</div><div>แคชเชียร์ / ผู้บันทึก</div>"
+                         "<div>ฝ่ายบัญชี / ผู้ตรวจสอบ</div></div></div>")
+            continue
+
+        tot = sum(r["amount"] for r in rows)
+        parts.append("<h2>รายการที่บันทึกผิดช่อง (รายละเอียด + แนวทางพัฒนา)</h2>")
+        parts.append(f"<div class='sub'>มูลค่ารวมบันทึกผิดช่อง ฿{_m(tot)}</div>")
         parts.append("<table><thead><tr><th>วันที่</th><th>บันทึกผิดเป็น</th>"
                      "<th>ที่จริงเข้า</th><th class='right'>ยอด (บาท)</th>"
                      "<th>เหตุผล / หมายเหตุ</th><th>ยืนยันโดย</th></tr></thead><tbody>")
@@ -3575,70 +3751,175 @@ _MATCH_ST = {
 }
 
 
-def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
-    """Monthly receipts by channel (gross → fee → VAT → net) + a draft accounting
-    journal entry, so the books tie to what actually came in. Fee/VAT use the effective
-    (manual-override-aware) figures."""
+def _account_map(conn):
+    """slot → (account_code, account_name) from recon_account_map; {} if unset.
+    Reports render blank cells for slots with no code yet (owner fills in later)."""
+    try:
+        return {r["slot"]: (r["account_code"] or "", r["account_name"] or "")
+                for r in conn.execute(
+                    "SELECT slot, account_code, account_name FROM recon_account_map")}
+    except sqlite3.OperationalError:
+        return {}
+
+
+# Channels carrying a platform fee/VAT + a separate discount line (gross from the
+# document). cols: (channel, table, date_col, gross, fee, vat, discount, extra-where)
+_FEE_CH_SPEC = [
+    ("CREDIT",  "recon_cc_lines",      "settlement_date", "gross_amount", "mdr_fee",        "vat_amount",        "refund_amount", ""),
+    ("GRAB",    "recon_grab_lines",    "order_date",      "food_amount",  "commission_amt", "vat_amount",        "promo_deduct",  " AND order_status='Completed'"),
+    ("LINEMAN", "recon_lineman_lines", "order_date",      "food_amount",  "commission_amt", "vat_on_commission", "promo_deduct",  " AND order_status='Completed'"),
+]
+_FINANCE_CH_ORDER = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5, "COUPON": 6}
+
+
+def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
+    """Per-DAY accounting breakdown so staff can record the books day by day: each
+    day × channel as GROSS, with discount/fee/VAT split out and net = gross − discount
+    − fee − VAT. Account code/name come from recon_account_map (blank until filled in).
+    This is the 'daily summary'; _monthly_finance_html keeps the month rollup."""
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
     def m(v):  return f"{float(v or 0):,.2f}"
+    def dd(d):
+        try:
+            return str(int(d[8:10]))
+        except Exception:
+            return d
+    acct = _account_map(conn)
 
-    # fee channels: per-line effective fee/VAT from the document tables
-    spec = [("CREDIT",  "recon_cc_lines",      "settlement_date", "gross_amount", "mdr_fee",        "vat_amount", ""),
-            ("GRAB",    "recon_grab_lines",    "order_date",      "food_amount",  "commission_amt", "vat_amount", " AND order_status='Completed'"),
-            ("LINEMAN", "recon_lineman_lines", "order_date",      "food_amount",  "commission_amt", "vat_on_commission", " AND order_status='Completed'")]
-    rows = []   # (channel, gross, fee, vat, net)
-    for ch, tbl, dcol, gcol, fcol, vcol, extra in spec:
+    # (day, channel) -> {gross, discount, fee, vat} from the fee-bearing documents
+    agg: dict = {}
+    def cell(day, ch):
+        return agg.setdefault((day, ch), {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0})
+    for ch, tbl, dcol, gcol, fcol, vcol, discol, extra in _FEE_CH_SPEC:
         try:
             lines = conn.execute(
                 f"SELECT * FROM {tbl} WHERE branch_id=? AND substr({dcol},1,7)=?{extra}",
                 (branch_id, period_month)).fetchall()
         except sqlite3.OperationalError:
             continue
-        g = f = v = 0.0
+        for r in lines:
+            day = (r[dcol] or "")[:10]
+            if not day:
+                continue
+            fee, vat = _eff_fee_vat(r, fcol, vcol)
+            a = cell(day, ch)
+            a["gross"] += float(r[gcol] or 0); a["fee"] += fee; a["vat"] += vat
+            a["discount"] += float(r[discol] or 0)
+
+    # POS-tender channels (cash/QR/transfer/coupon): gross = POS that day, no fee/discount.
+    try:
+        d = daily_reconciliation(conn, branch_id, period_month)
+    except Exception:
+        d = {"days": []}
+    for day in d.get("days", []):
+        for l in day["lanes"]:
+            if l["category"] in ("CASH", "QR", "TRANSFER", "COUPON") and abs(l["pos"]) > 0.005:
+                cell(day["day"], l["category"])["gross"] += l["pos"]
+
+    if not agg:
+        return ""
+
+    P = ["<h2 style='border-left-color:#0f6e56'>📅 สรุปบัญชีรายวัน (ยอดเต็ม / ส่วนลดแยกบรรทัด)</h2>",
+         "<table><thead><tr><th class='l'>วันที่</th><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th>"
+         "<th class='l'>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
+         "<th>VAT</th><th>สุทธิ</th></tr></thead><tbody>"]
+    G = D = F = V = N = 0.0
+    for day in sorted({k[0] for k in agg}):
+        chans = sorted({c for (dy, c) in agg if dy == day},
+                       key=lambda c: _FINANCE_CH_ORDER.get(c, 9))
+        for i, ch in enumerate(chans):
+            a = agg[(day, ch)]
+            net = a["gross"] - a["discount"] - a["fee"] - a["vat"]
+            G += a["gross"]; D += a["discount"]; F += a["fee"]; V += a["vat"]; N += net
+            code, name = acct.get(ch, ("", ""))
+            daycell = f"<span class='day'>{dd(day)}</span>" if i == 0 else ""
+            P.append(
+                f"<tr class='{'daystart' if i == 0 else ''}'><td class='l'>{daycell}</td>"
+                f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
+                f"<td class='l'>{esc(_MATCH_CH_TH.get(ch, ch))}</td>"
+                f"<td class='mono'>{m(a['gross'])}</td><td class='mono'>{m(a['discount'])}</td>"
+                f"<td class='mono'>{m(a['fee'])}</td><td class='mono'>{m(a['vat'])}</td>"
+                f"<td class='mono'>{m(net)}</td></tr>")
+    P.append(
+        f"</tbody><tfoot><tr><td class='l' colspan='4'>รวมทั้งเดือน</td>"
+        f"<td class='mono'>{m(G)}</td><td class='mono'>{m(D)}</td><td class='mono'>{m(F)}</td>"
+        f"<td class='mono'>{m(V)}</td><td class='mono'>{m(N)}</td></tr></tfoot></table>"
+        "<p class='legend'>ยอดเต็ม = ยอดขายก่อนหักส่วนลด/ค่าธรรมเนียม · ส่วนลด = โปรโมชัน/คืนเงิน (บันทึกแยกบรรทัด) · "
+        "สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัส/ชื่อบัญชีเติมภายหลัง</p>")
+    return "".join(P)
+
+
+def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
+    """Monthly receipts by channel (gross → discount → fee → VAT → net) + account
+    code/name + a draft journal, so the books tie to what came in. Amounts are GROSS;
+    discount is recorded separately. Fee/VAT use the effective (override-aware) figures."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+    acct = _account_map(conn)
+
+    rows = []   # (channel, gross, discount, fee, vat, net)
+    for ch, tbl, dcol, gcol, fcol, vcol, discol, extra in _FEE_CH_SPEC:
+        try:
+            lines = conn.execute(
+                f"SELECT * FROM {tbl} WHERE branch_id=? AND substr({dcol},1,7)=?{extra}",
+                (branch_id, period_month)).fetchall()
+        except sqlite3.OperationalError:
+            continue
+        g = disc = f = v = 0.0
         for r in lines:
             g += float(r[gcol] or 0)
             fee, vat = _eff_fee_vat(r, fcol, vcol)
-            f += fee; v += vat
+            f += fee; v += vat; disc += float(r[discol] or 0)
         if g > 0.005:
-            rows.append((ch, g, f, v, g - f - v))
+            rows.append((ch, g, disc, f, v, g - disc - f - v))
 
     # no-fee channels (cash / QR / transfer / coupon): money received = POS, no fee/VAT
     try:
         rm = reconcile_month(conn, branch_id, period_month)
         for c in rm.get("channels", []):
             if c["key"] in ("CASH", "QR", "TRANSFER", "COUPON") and float(c.get("pos", 0)) > 0.005:
-                g = float(c["pos"]); rows.append((c["key"], g, 0.0, 0.0, g))
+                g = float(c["pos"]); rows.append((c["key"], g, 0.0, 0.0, 0.0, g))
     except Exception:
         pass
     if not rows:
         return ""
 
-    order = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5, "COUPON": 6}
-    rows.sort(key=lambda r: order.get(r[0], 9))
-    G = sum(r[1] for r in rows); F = sum(r[2] for r in rows); V = sum(r[3] for r in rows); N = sum(r[4] for r in rows)
+    rows.sort(key=lambda r: _FINANCE_CH_ORDER.get(r[0], 9))
+    G = sum(r[1] for r in rows); D = sum(r[2] for r in rows)
+    F = sum(r[3] for r in rows); V = sum(r[4] for r in rows); N = sum(r[5] for r in rows)
     out_vat = round(G * 7 / 107, 2)            # output VAT estimate if prices are VAT-inclusive
 
-    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
-         "<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินทั้งเดือน · ค่าธรรมเนียม · VAT</h2>",
-         "<table><thead><tr><th class='l'>ช่องทาง</th><th>ยอดรับเต็ม</th><th>ค่าธรรมเนียม</th>"
-         "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
-    for ch, g, f, v, n in rows:
-        P.append(f"<tr><td class='l'>{esc(_MATCH_CH_TH.get(ch, ch))}</td>"
-                 f"<td class='mono'>{m(g)}</td><td class='mono'>{m(f)}</td>"
-                 f"<td class='mono'>{m(v)}</td><td class='mono'>{m(n)}</td></tr>")
-    P.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{m(G)}</td>"
-             f"<td class='mono'>{m(F)}</td><td class='mono'>{m(V)}</td><td class='mono'>{m(N)}</td></tr></tfoot></table>")
+    def acc_cells(slot):
+        code, name = acct.get(slot, ("", ""))
+        return f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
 
-    # draft journal entry (money-received basis)
+    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
+         "<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินทั้งเดือน · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
+         "<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th><th class='l'>ช่องทาง</th>"
+         "<th>ยอดรับเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
+         "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
+    for ch, g, disc, f, v, n in rows:
+        P.append(f"<tr>{acc_cells(ch)}<td class='l'>{esc(_MATCH_CH_TH.get(ch, ch))}</td>"
+                 f"<td class='mono'>{m(g)}</td><td class='mono'>{m(disc)}</td><td class='mono'>{m(f)}</td>"
+                 f"<td class='mono'>{m(v)}</td><td class='mono'>{m(n)}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l' colspan='3'>รวม</td><td class='mono'>{m(G)}</td>"
+             f"<td class='mono'>{m(D)}</td><td class='mono'>{m(F)}</td><td class='mono'>{m(V)}</td>"
+             f"<td class='mono'>{m(N)}</td></tr></tfoot></table>")
+
+    # draft journal entry (money-received basis) — gross revenue, discount booked apart
     P.append("<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน)</h2>")
-    P.append("<table><thead><tr><th class='l'>บัญชี</th><th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
-    je = [("เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("ค่าธรรมเนียมรับชำระเงิน", F, 0),
-          ("ภาษีซื้อ – VAT ค่าธรรมเนียม", V, 0), ("รายได้จากการขาย (ยอดรับเต็ม)", 0, G)]
-    for acc, dr, cr in je:
-        P.append(f"<tr><td class='l'>{esc(acc)}</td><td class='mono'>{m(dr) if dr else ''}</td>"
-                 f"<td class='mono'>{m(cr) if cr else ''}</td></tr>")
-    P.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{m(N + F + V)}</td>"
+    P.append("<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>บัญชี</th>"
+             "<th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
+    je = [("BANK", "เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("DISCOUNT", "ส่วนลด / โปรโมชัน", D, 0),
+          ("FEE", "ค่าธรรมเนียมรับชำระเงิน", F, 0), ("VAT", "ภาษีซื้อ – VAT ค่าธรรมเนียม", V, 0),
+          ("REVENUE", "รายได้จากการขาย (ยอดรับเต็ม)", 0, G)]
+    for slot, acc, dr, cr in je:
+        code, _name = acct.get(slot, ("", ""))
+        P.append(f"<tr><td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(acc)}</td>"
+                 f"<td class='mono'>{m(dr) if dr else ''}</td><td class='mono'>{m(cr) if cr else ''}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l' colspan='2'>รวม</td><td class='mono'>{m(N + D + F + V)}</td>"
              f"<td class='mono'>{m(G)}</td></tr></tfoot></table>")
     P.append("<div class='legend'>หมายเหตุ: VAT ในตารางคือ <b>ภาษีซื้อ</b>จากค่าธรรมเนียมรับชำระ (บัตร/เดลิเวอรี) · "
              f"หากราคาขายรวม VAT แล้ว <b>ภาษีขาย (output) โดยประมาณ = ฿{m(out_vat)}</b> (7/107 ของยอดรับเต็ม) "
@@ -3916,6 +4197,8 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
                     f"<td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
             parts.append("</tbody></table>")
 
+        # per-day accounting breakdown (the daily summary: gross + discount split)
+        parts.append(_daily_finance_html(conn, bid, period_month))
         # monthly receipts roll-up + fees/VAT + draft journal entry (accounting tie-out)
         parts.append(_monthly_finance_html(conn, bid, period_month))
 
@@ -4266,6 +4549,40 @@ _UAT_CASES = [
                "เปิดเดือนถัดไป — ตรวจว่าเงินก้อนวันที่ 1 ไม่ถูกนับเป็นยอดเกิน/รายได้ของเดือนใหม่"],
      "expected": "ยอดสะสม (รวมวันเล็ก ๆ) จับคู่กับเงินโอนก้อนเดียว, เดือนยอดน้อยผูกกับเงินโอนวันที่ 1 เดือนถัดไป = ✓ ตรง "
                  "(ไม่ค้างรอเงินเข้า), เดือนถัดไปไม่เกิดยอดเกินปลอมจากเงินก้อนเดิม"},
+    {"id": "TC-14", "title": "ตรวจผลต่างรายวัน — รับทราบทีละวัน (กระทบยอดตามวันที่)",
+     "role": "เจ้าหน้าที่กระทบยอด",
+     "narrative": "ผลต่างของช่องทาง (เช่น เงินสด / Line Man) ต้องกระทบยอด “ตามวันที่” ไม่ใช่ยอดรวมทั้งก้อน · กางช่องทางที่ต่าง "
+                  "จะมีตาราง “ตรวจผลต่างรายวัน” โชว์ทุกวันที่ต่าง กดปุ่ม “รับทราบวันนี้” ใส่เหตุผลแยกราย วัน (อย่างน้อย 10 ตัวอักษร) "
+                  "เมื่อรับทราบครบทุกวัน ช่องทางนั้นจะเคลียร์ออกจาก “เหลือ N เรื่อง” เอง · เหตุผลรายวันติดไปในไฟล์ Excel ปิดเดือน",
+     "steps": ["เปิดสาขาที่มีผลต่าง กดการ์ดช่องทางที่ขึ้น “ตรวจผลต่าง...”",
+               "ดูตาราง “ตรวจผลต่างรายวัน” — แต่ละวันที่ต่างมีปุ่ม “รับทราบวันนี้”",
+               "กดรับทราบทีละวัน ใส่เหตุผล (สั้นกว่า 10 ตัวอักษรต้องถูกปฏิเสธ)",
+               "เมื่อครบทุกวัน ตรวจว่าช่องทางหายจาก “เหลือ N เรื่อง” และวันที่รับทราบขึ้น ✓"],
+     "expected": "รับทราบแยกรายวันได้, เหตุผล <10 ตัวถูกปฏิเสธ, ครบทุกวัน → ช่องทางเคลียร์ปิดเดือนได้, "
+                 "เหตุผลรายวันอยู่ในไฟล์ Excel ปิดเดือน (ชีต Daily acknowledged variances)"},
+    {"id": "TC-15", "title": "รายงานการจับคู่รายวัน — สรุปบัญชีรายวัน (ยอดเต็ม/ส่วนลดแยก + รหัสบัญชี)",
+     "role": "ฝ่ายบัญชี",
+     "narrative": "รายงานการจับคู่รายวันมี “📅 สรุปบัญชีรายวัน” ไล่ทุกวัน × ช่องทาง บันทึกเป็น “ยอดเต็ม (gross)” โดยแยกบรรทัด "
+                  "ส่วนลด / ค่าธรรมเนียม / VAT / สุทธิ — ใช้ลงบัญชีรายวันได้ · มีคอลัมน์ รหัสบัญชี / ชื่อบัญชี (เว้นว่างก่อน "
+                  "เติมภายหลังผ่าน /api/account-map) · ส่วน “💰 สรุปการรับเงินทั้งเดือน” (ยอดเต็ม·ส่วนลด·ค่าธรรมเนียม·VAT·สุทธิ + "
+                  "ร่างบันทึกบัญชี Dr/Cr) ยังอยู่ครบเป็นสรุปทั้งเดือน",
+     "steps": ["เปิด ⋯ เพิ่มเติม → รายงานการจับคู่รายวัน (หรือหน้าสาขา → 🖨️)",
+               "ตรวจส่วน “📅 สรุปบัญชีรายวัน” — มีคอลัมน์ ยอดเต็ม / ส่วนลด แยกกัน + รหัสบัญชี/ชื่อบัญชี",
+               "(ผู้จัดการ) ตั้งรหัสบัญชีผ่าน /api/account-map แล้วรีเฟรช — รหัส/ชื่อบัญชีต้องขึ้นในรายงาน",
+               "ตรวจ “💰 สรุปการรับเงินทั้งเดือน” ว่ามีคอลัมน์ส่วนลด และร่างบัญชี Dr=Cr"],
+     "expected": "มีสรุปบัญชีรายวัน (gross + ส่วนลดแยก), คอลัมน์รหัส/ชื่อบัญชีว่างจนกว่าจะตั้งค่า แล้วขึ้นตามที่ตั้ง, "
+                 "สรุปทั้งเดือนยังครบ + ร่างบัญชีสมดุล"},
+    {"id": "TC-16", "title": "รายงานข้อผิดพลาดประจำเดือน (ทุกประเภท ไม่ใช่แค่บันทึกผิดช่อง)",
+     "role": "ฝ่ายบัญชี / ผู้จัดการ",
+     "narrative": "รายงานเดิม “เงินบันทึกผิดช่อง” ขยายเป็น “ข้อผิดพลาดประจำเดือน” รวมข้อผิดพลาดทุกชนิดของเดือน: ยอดต่าง, "
+                  "เงินเข้าเกิน (ไม่มี POS), ขาดเอกสาร, เงินโอนเข้าไม่ครบ/ช้า, รหัสยังไม่ตั้งธนาคาร และบันทึกผิดช่อง — แต่ละแถวมี "
+                  "ประเภท + สถานะ (ค้าง/รับทราบแล้ว/แก้ไขแล้ว) + เหตุผล · รายละเอียดบันทึกผิดช่อง + ใบเซ็นยังอยู่ครบเป็นส่วนท้าย",
+     "steps": ["เปิด ⋯ เพิ่มเติม → รายงานข้อผิดพลาดประจำเดือน (เลือกเดือน)",
+               "ตรวจตาราง “ข้อผิดพลาดทั้งหมด” — มีหลายประเภท ไม่ใช่แค่บันทึกผิดช่อง + สถานะ ค้าง/รับทราบ/แก้ไข",
+               "เลือกสาขาจากดรอปดาวน์ — ตารางกรองเฉพาะสาขานั้น",
+               "กด ⬇ Excel (แผ่นแรก “ข้อผิดพลาดทั้งหมด”) และ 🖨️ พิมพ์/PDF"],
+     "expected": "เห็นข้อผิดพลาดทุกประเภทของเดือน + สถานะ + เหตุผล, กรองรายสาขาได้, Excel/พิมพ์ออกได้ "
+                 "(แผ่น/หัวข้อ “ข้อผิดพลาดทั้งหมด”), รายละเอียดบันทึกผิดช่องยังอยู่ครบ"},
 ]
 
 
@@ -4670,6 +4987,113 @@ def lane_adj_delete(adj_id: int):
         conn.execute("DELETE FROM recon_lane_adj WHERE id=?", (adj_id,))
         conn.commit()
     return {"deleted": adj_id}
+
+
+# ── Per-day acknowledged variances (reconcile BY DATE) ───────────────────────
+# Staff work a channel's variance day-by-day: each differing day is either
+# fixed/matched or acknowledged here with a reason. The channel's todo clears once
+# every differing day is acknowledged (or the whole channel is accepted via
+# recon_lane_adj). The reason rides into the close Excel pack + all-errors report.
+
+class DayAck(BaseModel):
+    branch_id:    int
+    period_month: str
+    category:     str
+    day:          str
+    variance:     float = 0.0
+    note:         str | None = None
+    created_by:   str | None = None
+
+
+@app.get("/api/day-ack")
+def day_ack_list(branch_id: int, period_month: str):
+    _validate_period(period_month)
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM recon_day_ack WHERE branch_id=? AND period_month=? "
+            "ORDER BY category, day", (branch_id, period_month)).fetchall()
+        return [dict(r) for r in rows]
+
+
+@app.post("/api/day-ack", dependencies=[Depends(require_write_token)])
+def day_ack_upsert(body: DayAck):
+    _validate_period(body.period_month)
+    # Same audit-grade rule as a channel accept: a meaningful reason (≥10 chars).
+    if len((body.note or "").strip()) < 10:
+        raise HTTPException(400, "การรับทราบผลต่างรายวันต้องใส่เหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
+    if not (body.day or "").startswith(body.period_month):
+        raise HTTPException(400, "day must fall inside period_month")
+    with get_db() as conn:
+        _validate_master_branch(conn, body.branch_id)
+        _assert_period_open(conn, body.branch_id, body.period_month)
+        existing = conn.execute(
+            "SELECT id FROM recon_day_ack WHERE branch_id=? AND period_month=? "
+            "AND category=? AND day=?",
+            (body.branch_id, body.period_month, body.category, body.day)).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE recon_day_ack SET variance=?, note=?, created_by=?, "
+                "created_at=datetime('now') WHERE id=?",
+                (body.variance, body.note, body.created_by or "staff", existing["id"]))
+            row_id = existing["id"]
+        else:
+            cur = conn.execute(
+                "INSERT INTO recon_day_ack "
+                "(branch_id,period_month,category,day,variance,note,created_by) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (body.branch_id, body.period_month, body.category, body.day,
+                 body.variance, body.note, body.created_by or "staff"))
+            row_id = cur.lastrowid
+        _audit(conn, "day_ack", row_id, "accept", body.created_by or "staff",
+               [{"field": "variance", "old": None, "new": body.variance}])
+        conn.commit()
+    return {"id": row_id}
+
+
+@app.delete("/api/day-ack/{ack_id}", dependencies=[Depends(require_write_token)])
+def day_ack_delete(ack_id: int):
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT branch_id, period_month FROM recon_day_ack WHERE id=?", (ack_id,)).fetchone()
+        if not row:
+            raise HTTPException(404)
+        _assert_period_open(conn, row["branch_id"], row["period_month"])
+        conn.execute("DELETE FROM recon_day_ack WHERE id=?", (ack_id,))
+        conn.commit()
+    return {"deleted": ack_id}
+
+
+# ── Chart-of-accounts map (report account code/name per channel / journal slot) ──
+# Reports render these columns blank until the owner fills them in here (no deploy).
+
+class AccountMap(BaseModel):
+    slot:         str
+    account_code: str | None = None
+    account_name: str | None = None
+    updated_by:   str | None = None
+
+
+@app.get("/api/account-map")
+def account_map_list():
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                "SELECT slot, account_code, account_name FROM recon_account_map ORDER BY slot").fetchall()
+        except sqlite3.OperationalError:
+            return []
+        return [dict(r) for r in rows]
+
+
+@app.put("/api/account-map", dependencies=[Depends(require_write_token)])
+def account_map_upsert(body: AccountMap):
+    with get_db() as conn:
+        conn.execute(
+            "INSERT INTO recon_account_map(slot,account_code,account_name,updated_by) "
+            "VALUES(?,?,?,?) ON CONFLICT(slot) DO UPDATE SET account_code=excluded.account_code, "
+            "account_name=excluded.account_name, updated_at=datetime('now'), updated_by=excluded.updated_by",
+            (body.slot, body.account_code, body.account_name, body.updated_by or "staff"))
+        conn.commit()
+    return {"slot": body.slot}
 
 
 # ── Cross-branch overview ─────────────────────────────────────────────────────
