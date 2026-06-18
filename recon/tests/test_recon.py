@@ -638,6 +638,53 @@ def test_daily_finance_and_account_map(client):
     assert am["GRAB"]["account_code"] == "4100"
 
 
+def test_daily_accounts_cards(client):
+    """สรุปบัญชีรายวัน (รายใบ): /api/daily-accounts returns per-day cards for ONE branch —
+    each day lists channels at GROSS with discount on its own line (split from fee/VAT)
+    + a day total — plus the master-branch list; .print renders the printable cards."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-05','KNNQR',5000,2)")
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,"
+                   "period_month,row_count,status) VALUES('grab',4,'Grab','g','2026-06',0,'confirmed')").lastrowid
+    # Grab order: gross 5,000, commission 1,000, VAT 70, promo (discount) 200 → net 3,730
+    c.execute("INSERT INTO recon_grab_lines(upload_id,branch_id,order_date,order_status,"
+              "food_amount,commission_amt,vat_amount,promo_deduct,net_payout) "
+              "VALUES(?,4,'2026-06-05','Completed',5000,1000,70,200,3730)", (up,))
+    c.commit(); c.close()
+
+    j = client.get("/api/daily-accounts?branch_id=4&period_month=2026-06").json()
+    assert j["branch_id"] == 4 and any(b["branch_id"] == 4 for b in j["branches"])
+    day = next(d for d in j["days"] if d["dom"] == 5)
+    grab = next(ch for ch in day["channels"] if ch["ch"] == "GRAB")
+    assert grab["gross"] == 5000 and grab["discount"] == 200        # discount on its own line
+    assert grab["fee"] == 1000 and grab["vat"] == 70
+    assert grab["net"] == 5000 - 200 - 1000 - 70                    # 3730
+    qr = next(ch for ch in day["channels"] if ch["ch"] == "QR")
+    assert qr["gross"] == 5000 and qr["discount"] == 0             # POS tender: no fee/discount
+    assert day["totals"]["gross"] == 10000                         # 5,000 QR + 5,000 Grab
+    assert j["totals"]["net"] == day["totals"]["net"]              # one day → month == day
+
+    # omitting branch_id defaults to the first master branch
+    j0 = client.get("/api/daily-accounts?period_month=2026-06").json()
+    assert j0["branch_id"] == j0["branches"][0]["branch_id"]
+
+    # account code rides in from recon_account_map (no deploy)
+    client.put("/api/account-map", json={"slot": "GRAB", "account_code": "4100", "account_name": "รายได้เดลิเวอรี"})
+    j2 = client.get("/api/daily-accounts?branch_id=4&period_month=2026-06").json()
+    g2 = next(ch for ch in next(d for d in j2["days"] if d["dom"] == 5)["channels"] if ch["ch"] == "GRAB")
+    assert g2["code"] == "4100"
+
+    # printable per-day card report + period guard
+    p = client.get("/api/daily-accounts.print?branch_id=4&period_month=2026-06")
+    assert p.status_code == 200 and "สรุปบัญชีรายวัน" in p.text and "วันที่ 5" in p.text
+    assert client.get("/api/daily-accounts?period_month=2026-13").status_code == 400
+
+
 def test_monthly_matching_report(client):
     """Monthly matching audit renders per-branch day×channel rows with status, plus
     a manager pack (all branches), and rejects a bad period."""

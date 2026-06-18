@@ -146,6 +146,19 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .more-item{display:flex;flex-direction:column;gap:1px;padding:11px 12px;border:1px solid var(--line);border-radius:10px;color:var(--txt);font-size:14px;font-weight:600;background:#fff;transition:background .12s}
 .more-item:hover{background:var(--line-soft);text-decoration:none}
 .more-item .lbl{font-weight:400}
+/* 📅 สรุปบัญชีรายวัน (รายใบ) — daybook cards, 1 วัน = 1 ใบ */
+.db-sum{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px;padding:13px 18px}
+.db-sum .lbl{margin-bottom:2px}
+.db-sum b{font-size:18px;font-weight:700;display:block}
+.db-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.db-card{padding:0;overflow:hidden}
+.db-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--brand-soft);border-bottom:1px solid var(--line)}
+.db-date{font-weight:700;font-size:15px;color:var(--brand-deep)}
+.db-net{font-weight:700;font-size:15px}
+.db-tbl{font-size:13px}
+.db-tbl th,.db-tbl td{padding:6px 16px}
+.db-tbl tfoot td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:600;background:var(--line-soft)}
+.db-disc{color:var(--warn)}
 @media (max-width:640px){
   .ov-row{padding:11px 12px;gap:8px}
   .ov-row .row{width:auto !important}
@@ -220,6 +233,7 @@ function route(){
   const h=location.hash.slice(1);
   if(h==='errors')return loadErrorReport();
   if(h==='wrong')return loadWrongChannel();
+  if(h==='daybook')return loadDaybook();
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -518,6 +532,59 @@ function renderWrongChannel(){
         <td class="mono">${fmt(it.amount)}</td><td style="text-align:left">${esc(it.reason||'—')}</td>
         <td class="lbl">${esc(it.by||'—')}</td></tr>`;}).join('')}
   </table></div>`;
+  $('app').innerHTML=html;
+}
+
+/* ── 📅 สรุปบัญชีรายวัน (รายใบ) — 1 วัน = 1 การ์ด, เลือกทีละสาขา ── */
+let DB=null, DB_BR=null;
+const fmt2=n=>(n==null?'—':Number(n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}));
+const dbDed=n=>(Math.abs(+n||0)>0.005?'−'+fmt2(n):'—');   // ส่วนลด/ค่าธรรมเนียม/VAT แสดงเป็นยอดหัก
+async function loadDaybook(){
+  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  let r;
+  try{ r=await api(`/api/daily-accounts?period_month=${MONTH}`+(DB_BR?`&branch_id=${DB_BR}`:'')); }
+  catch(e){ $('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
+  DB=r; DB_BR=r.branch_id; renderDaybook();
+}
+function setDbBranch(v){ DB_BR=+v; loadDaybook(); }
+function dbDayCard(d){
+  const t=d.totals;
+  const row=c=>`<tr>
+    <td>${esc(c.ch_th)}${c.code?` <span class="lbl">${esc(c.code)}</span>`:''}</td>
+    <td class="mono">${fmt2(c.gross)}</td>
+    <td class="mono db-disc">${dbDed(c.discount)}</td>
+    <td class="mono">${dbDed(c.fee)}</td>
+    <td class="mono">${dbDed(c.vat)}</td>
+    <td class="mono"><b>${fmt2(c.net)}</b></td></tr>`;
+  return `<div class="card db-card">
+    <div class="db-head"><div class="db-date">วันที่ ${d.dom}</div>
+      <div class="db-net">สุทธิ ฿${fmt2(t.net)}</div></div>
+    <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th>
+      <th>ค่าธรรมเนียม</th><th>VAT</th><th>สุทธิ</th></tr></thead>
+      <tbody>${d.channels.map(row).join('')}</tbody>
+      <tfoot><tr><td>รวมวันนี้</td><td class="mono">${fmt2(t.gross)}</td>
+        <td class="mono db-disc">${dbDed(t.discount)}</td><td class="mono">${dbDed(t.fee)}</td>
+        <td class="mono">${dbDed(t.vat)}</td><td class="mono"><b>${fmt2(t.net)}</b></td></tr></tfoot>
+    </table></div>`;
+}
+function renderDaybook(){
+  const r=DB, t=r.totals||{};
+  const pm=`?period_month=${MONTH}&branch_id=${r.branch_id}`;
+  const brOpts=(r.branches||[]).map(b=>`<option value="${b.branch_id}" ${b.branch_id===r.branch_id?'selected':''}>${esc(b.name)}</option>`).join('');
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px">📅 สรุปบัญชีรายวัน (รายใบ) — ${esc(monthTh(MONTH))}</h2>
+    <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
+    <a class="btn btn-sm btn-pri" href="/api/daily-accounts.print${pm}" target="_blank">🖨️ พิมพ์/PDF</a></div>
+  <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="/app/setup.html">⚙️ ตั้งค่าระบบ</a></div>`;
+  if(!(r.days||[]).length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้ — ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน</div>`; return; }
+  html+=`<div class="card db-sum">
+    <div><div class="lbl">ยอดเต็มรวม</div><b>฿${fmt2(t.gross)}</b></div>
+    <div><div class="lbl">ส่วนลดรวม</div><b class="db-disc">฿${fmt2(t.discount)}</b></div>
+    <div><div class="lbl">ค่าธรรมเนียม</div><b>฿${fmt2(t.fee)}</b></div>
+    <div><div class="lbl">VAT</div><b>฿${fmt2(t.vat)}</b></div>
+    <div><div class="lbl">สุทธิเข้าบัญชี</div><b>฿${fmt2(t.net)}</b></div>
+    <div style="margin-left:auto;align-self:center" class="lbl">${r.days.length} ใบ (วัน)</div></div>`;
+  html+=`<div class="db-grid">${r.days.map(dbDayCard).join('')}</div>`;
   $('app').innerHTML=html;
 }
 
@@ -1072,6 +1139,7 @@ function moreMenu(){
   showSheet(`<div class="sheet-h">เพิ่มเติม</div>
     <div class="more-menu">
       <a class="more-item" href="/api/monthly-report?period_month=${MONTH}" target="_blank">🖨️ รายงานการจับคู่รายวัน (ทุกสาขา)<span class="lbl">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · พิมพ์ PDF</span></a>
+      <a class="more-item" href="#daybook" onclick="closeSheet()">📅 สรุปบัญชีรายวัน (รายใบ)<span class="lbl">แต่ละวัน = 1 ใบ · ยอดเต็ม/ส่วนลดแยกบรรทัด · เลือกสาขา · พิมพ์ PDF</span></a>
       <a class="more-item" href="/api/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank">📥 ติดตามเอกสารที่ยังขาด<span class="lbl">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ · พิมพ์ PDF</span></a>
       <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
       <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
