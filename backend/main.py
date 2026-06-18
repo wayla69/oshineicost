@@ -6699,19 +6699,19 @@ def analysis_discount_bills(
         payment_codes = []
         if has_pay:
             base_params = {k: v for k, v in params.items() if k != "payment"}
+            # dominant tender per bill via indexed lookup over only the scope's bills —
+            # not a ROW_NUMBER() window over the whole sale_payment table.
+            dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                        "FROM sale_payment sp WHERE sp.branch_id=st.branch_id AND sp.receipt_no=st.receipt_no "
+                        "ORDER BY sp.amount DESC LIMIT 1)")
             pc_rows = con.execute(
                 f"""
-                WITH dom AS (
-                  SELECT branch_id, receipt_no,
-                         CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code,
-                         ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
-                  FROM sale_payment)
-                SELECT d.code AS code, COUNT(*) AS n
-                FROM sales_transaction st
-                JOIN branches b ON b.branch_id = st.branch_id
-                JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
-                {where_base}
-                GROUP BY d.code ORDER BY n DESC
+                SELECT code, COUNT(*) AS n FROM (
+                  SELECT {dom_code} AS code
+                  FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
+                  {where_base}
+                ) WHERE code IS NOT NULL
+                GROUP BY code ORDER BY n DESC
                 """,
                 base_params,
             ).fetchall()
@@ -6954,39 +6954,31 @@ def analysis_payment_discount(
         if not con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_payment'").fetchone():
             return {"available": False, "mix": [], "heaviest": [], "cash_heavy": {},
                     "heavy_pct": int(HEAVY * 100)}
-        # dominant (largest-amount) payment code per discounted receipt, Cash-normalised
-        dom_cte = """
-            WITH dom AS (
-              SELECT branch_id, receipt_no,
-                     CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END AS code,
-                     ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
-              FROM sale_payment
-            )"""
+        # Dominant (largest-amount) payment code per discounted receipt, Cash-normalised.
+        # Computed per period bill via an indexed (branch_id, receipt_no, amount) lookup
+        # in a derived table — NOT a ROW_NUMBER() window over the entire sale_payment
+        # table (that scan made this endpoint ~700ms). bill_src yields one row per
+        # discounted bill in scope with its dominant tender; both aggregates reuse it.
+        dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                    "FROM sale_payment sp WHERE sp.branch_id=st.branch_id AND sp.receipt_no=st.receipt_no "
+                    "ORDER BY sp.amount DESC LIMIT 1)")
+        bill_src = (f"SELECT b.name AS branch, st.discount AS discount, {base} AS basev, {dom_code} AS code "
+                    f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id {where}")
         rows = con.execute(f"""
-            {dom_cte}
-            SELECT d.code AS code, COUNT(*) AS bills,
-                   ROUND(SUM(st.discount)) AS discount,
-                   ROUND(100.0 * SUM(st.discount) / NULLIF(SUM({base}), 0), 1) AS disc_pct,
-                   ROUND(AVG(st.discount)) AS avg_discount
-            FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
-            JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
-            {where}
-            GROUP BY d.code
-            ORDER BY bills DESC
-        """, params).fetchall()
+            SELECT code, COUNT(*) AS bills, ROUND(SUM(discount)) AS discount,
+                   ROUND(100.0 * SUM(discount) / NULLIF(SUM(basev), 0), 1) AS disc_pct,
+                   ROUND(AVG(discount)) AS avg_discount
+            FROM ({bill_src})
+            WHERE code IS NOT NULL
+            GROUP BY code ORDER BY bills DESC""", params).fetchall()
         mix = [dict(r) for r in rows]
 
         # cash + heavy discount, by branch (the leakage flag)
         ch_rows = con.execute(f"""
-            {dom_cte}
-            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS discount
-            FROM sales_transaction st
-            JOIN branches b ON b.branch_id = st.branch_id
-            JOIN dom d ON d.branch_id = st.branch_id AND d.receipt_no = st.receipt_no AND d.rn = 1
-            {where} AND d.code = 'Cash' AND {base} > 0 AND st.discount * 1.0 / {base} >= {HEAVY}
-            GROUP BY b.name ORDER BY discount DESC
-        """, params).fetchall()
+            SELECT branch, COUNT(*) AS bills, ROUND(SUM(discount)) AS discount
+            FROM ({bill_src})
+            WHERE code='Cash' AND basev > 0 AND discount * 1.0 / basev >= {HEAVY}
+            GROUP BY branch ORDER BY discount DESC""", params).fetchall()
         cash_heavy_branches = [dict(r) for r in ch_rows]
 
     total_bills = sum(m["bills"] for m in mix)
@@ -11498,17 +11490,19 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             {where} AND st.discount>0 AND {base}>0 AND st.discount*1.0/{base} >= 0.30
             GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
-        dom_cte = """WITH dom AS (
-            SELECT branch_id, receipt_no,
-                   CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END AS code,
-                   ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
-            FROM sale_payment)"""
-        cash_heavy = con.execute(f"""{dom_cte}
-            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
-            {where} AND d.code='Cash' AND st.discount>0 AND {base}>0 AND st.discount*1.0/{base} >= 0.30
-            GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
+        # Resolve each heavy bill's dominant tender via an indexed (branch_id, receipt_no,
+        # amount) lookup, computed in a derived table over ONLY the heavy bills (post-WHERE)
+        # — not a ROW_NUMBER() window over the entire sale_payment table.
+        dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                    "FROM sale_payment sp WHERE sp.branch_id=st.branch_id AND sp.receipt_no=st.receipt_no "
+                    "ORDER BY sp.amount DESC LIMIT 1)")
+        cash_heavy = con.execute(f"""
+            SELECT branch, COUNT(*) AS bills, ROUND(SUM(discount)) AS baht FROM (
+              SELECT b.name AS branch, st.discount AS discount, {dom_code} dc
+              FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+              {where} AND st.discount>0 AND {base}>0 AND st.discount*1.0/{base} >= 0.30
+            ) WHERE dc='Cash'
+            GROUP BY branch ORDER BY baht DESC""", p).fetchall()
         reprint = con.execute(f"""
             SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
@@ -11870,26 +11864,29 @@ def report_management(
         reprint = {**leak_total(reprint_extra), "by_branch": leak_branches(reprint_extra, "bills")}
         zero_extra    = f"AND st.discount>0 AND {lk} <= 0"
         zero    = {**leak_total(zero_extra),    "by_branch": leak_branches(zero_extra)}
-        # cash-heavy needs the dominant-tender CTE; guard a missing sale_payment table
+        # cash-heavy: of the period's heavy-discount bills (a SMALL set), how many were
+        # paid mostly in CASH. Drive FROM the heavy bills and pick each bill's dominant
+        # tender with an indexed (branch_id, receipt_no, amount) lookup — NOT a window
+        # over the entire sale_payment table (that scan made this the slowest query in
+        # the report). Reuses leak_total/leak_branches; guards a missing sale_payment.
         try:
-            dom = """WITH dom AS (
-                SELECT branch_id, receipt_no,
-                       CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code,
-                       ROW_NUMBER() OVER (PARTITION BY branch_id, receipt_no ORDER BY amount DESC) rn
-                FROM sale_payment)"""
-            cr = con.execute(f"""{dom}
-                SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
-                WHERE {where}{rcond} AND d.code='Cash' AND st.discount>0 AND {lk}>0
-                  AND st.discount*1.0/{lk} >= 0.30""", lp).fetchone()
-            cb = con.execute(f"""{dom}
-                SELECT b.name branch, COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                JOIN dom d ON d.branch_id=st.branch_id AND d.receipt_no=st.receipt_no AND d.rn=1
-                WHERE {where}{rcond} AND d.code='Cash' AND st.discount>0 AND {lk}>0
-                  AND st.discount*1.0/{lk} >= 0.30
-                GROUP BY b.name ORDER BY baht DESC LIMIT 3""", lp).fetchall()
+            # Inner query = the period's heavy-discount bills ONLY (small). The dominant
+            # tender is then resolved per heavy bill in the SELECT list (post-WHERE), so
+            # the indexed sale_payment lookup runs only for those few rows.
+            dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                        "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
+                        "ORDER BY sp.amount DESC LIMIT 1)")
+            heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
+                         f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
+                         f"WHERE {where}{rcond} AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
+            cr = con.execute(f"""
+                SELECT COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                FROM (SELECT discount, {dom_code} dc FROM ({heavy_sub}) h)
+                WHERE dc='Cash'""", lp).fetchone()
+            cb = con.execute(f"""
+                SELECT branch, COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
+                WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lp).fetchall()
             cash_heavy = {"bills": cr["bills"] or 0, "baht": cr["baht"] or 0,
                           "by_branch": [dict(r) for r in cb]}
         except Exception:
@@ -12026,19 +12023,33 @@ def report_management(
             "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
         }
 
-        # ---- trailing trend (8 periods) ----------------------------------
+        # ---- trailing trend (8 periods) — ONE grouped query, not 8 round-trips ----
         trend = []
-        d = cs
-        for _ in range(8):
-            if period == "daily":
-                trend.append({"label": dlabel(d), "start": d.isoformat(), "revenue": agg(d, d)["revenue"]})
-                d = d - _dt.timedelta(days=1)
-            else:
-                e = d + _dt.timedelta(days=6)        # full Mon–Sun week (weekly is always complete)
+        if period == "daily":
+            start = cs - _dt.timedelta(days=7)
+            rows = con.execute(f"""
+                SELECT date(st.sold_at) k, ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY k""", {**params, "s": start.isoformat(), "e": cs.isoformat()}).fetchall()
+            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+            for i in range(7, -1, -1):
+                d = cs - _dt.timedelta(days=i)
+                trend.append({"label": dlabel(d), "start": d.isoformat(),
+                              "revenue": rev_by.get(d.isoformat(), 0)})
+        else:
+            start = cs - _dt.timedelta(days=49)      # 8 full Mon–Sun weeks incl. the current one
+            mon_e = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+            rows = con.execute(f"""
+                SELECT {mon_e} k, ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
+            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+            for i in range(7, -1, -1):
+                d = cs - _dt.timedelta(days=7 * i)
                 trend.append({"label": f"{d.day} {MON[d.month-1]}", "start": d.isoformat(),
-                              "revenue": agg(d, e)["revenue"]})
-                d = d - _dt.timedelta(days=7)
-        trend.reverse()
+                              "revenue": rev_by.get(d.isoformat(), 0)})
 
     # ---- auto-generated action items (English, severity-ordered) ---------
     pword = "day" if period == "daily" else "week"
