@@ -3772,19 +3772,12 @@ _FEE_CH_SPEC = [
 _FINANCE_CH_ORDER = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, "LINEMAN": 5, "COUPON": 6}
 
 
-def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
-    """Per-DAY accounting breakdown so staff can record the books day by day: each
-    day × channel as GROSS, with discount/fee/VAT split out and net = gross − discount
-    − fee − VAT. Account code/name come from recon_account_map (blank until filled in).
-    This is the 'daily summary'; _monthly_finance_html keeps the month rollup."""
-    import html as _html
-    def esc(s): return _html.escape(str(s or ""))
-    def m(v):  return f"{float(v or 0):,.2f}"
-    def dd(d):
-        try:
-            return str(int(d[8:10]))
-        except Exception:
-            return d
+def _daily_finance_data(conn, branch_id: int, period_month: str) -> dict:
+    """Per-DAY accounting breakdown as structured data: each day → its channels, each
+    recorded at GROSS with discount/fee/VAT split out (net = gross − discount − fee −
+    VAT) + account code/name from recon_account_map (blank until filled in). Single
+    source for the table inside the monthly report (_daily_finance_html), the in-app
+    daybook cards, and the printable per-day card report ('1 วัน = 1 ใบ')."""
     acct = _account_map(conn)
 
     # (day, channel) -> {gross, discount, fee, vat} from the fee-bearing documents
@@ -3817,34 +3810,64 @@ def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
             if l["category"] in ("CASH", "QR", "TRANSFER", "COUPON") and abs(l["pos"]) > 0.005:
                 cell(day["day"], l["category"])["gross"] += l["pos"]
 
-    if not agg:
+    def dom(dstr):
+        try:
+            return int(dstr[8:10])
+        except Exception:
+            return dstr
+
+    days = []
+    tot = {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0, "net": 0.0}
+    for day in sorted({k[0] for k in agg}):
+        chans = sorted({c for (dy, c) in agg if dy == day},
+                       key=lambda c: _FINANCE_CH_ORDER.get(c, 9))
+        rows, dt = [], {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0, "net": 0.0}
+        for ch in chans:
+            a = agg[(day, ch)]
+            net = a["gross"] - a["discount"] - a["fee"] - a["vat"]
+            code, name = acct.get(ch, ("", ""))
+            rows.append({"ch": ch, "ch_th": _MATCH_CH_TH.get(ch, ch), "code": code, "name": name,
+                         "gross": round(a["gross"], 2), "discount": round(a["discount"], 2),
+                         "fee": round(a["fee"], 2), "vat": round(a["vat"], 2), "net": round(net, 2)})
+            dt["gross"] += a["gross"]; dt["discount"] += a["discount"]; dt["fee"] += a["fee"]
+            dt["vat"] += a["vat"]; dt["net"] += net
+        days.append({"day": day, "dom": dom(day), "channels": rows,
+                     "totals": {k: round(v, 2) for k, v in dt.items()}})
+        for k in tot:
+            tot[k] += dt[k]
+    return {"days": days, "totals": {k: round(v, 2) for k, v in tot.items()}}
+
+
+def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
+    """Per-day accounting breakdown rendered as the table inside the monthly report.
+    Same numbers as the daybook cards — see _daily_finance_data. The in-app section
+    (📅 สรุปบัญชีรายวัน รายใบ) renders one card per day from the same data."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+    data = _daily_finance_data(conn, branch_id, period_month)
+    if not data["days"]:
         return ""
 
     P = ["<h2 style='border-left-color:#0f6e56'>📅 สรุปบัญชีรายวัน (ยอดเต็ม / ส่วนลดแยกบรรทัด)</h2>",
          "<table><thead><tr><th class='l'>วันที่</th><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th>"
          "<th class='l'>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
          "<th>VAT</th><th>สุทธิ</th></tr></thead><tbody>"]
-    G = D = F = V = N = 0.0
-    for day in sorted({k[0] for k in agg}):
-        chans = sorted({c for (dy, c) in agg if dy == day},
-                       key=lambda c: _FINANCE_CH_ORDER.get(c, 9))
-        for i, ch in enumerate(chans):
-            a = agg[(day, ch)]
-            net = a["gross"] - a["discount"] - a["fee"] - a["vat"]
-            G += a["gross"]; D += a["discount"]; F += a["fee"]; V += a["vat"]; N += net
-            code, name = acct.get(ch, ("", ""))
-            daycell = f"<span class='day'>{dd(day)}</span>" if i == 0 else ""
+    for day in data["days"]:
+        for i, a in enumerate(day["channels"]):
+            daycell = f"<span class='day'>{day['dom']}</span>" if i == 0 else ""
             P.append(
                 f"<tr class='{'daystart' if i == 0 else ''}'><td class='l'>{daycell}</td>"
-                f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
-                f"<td class='l'>{esc(_MATCH_CH_TH.get(ch, ch))}</td>"
+                f"<td class='l mono'>{esc(a['code']) or '—'}</td><td class='l'>{esc(a['name']) or '—'}</td>"
+                f"<td class='l'>{esc(a['ch_th'])}</td>"
                 f"<td class='mono'>{m(a['gross'])}</td><td class='mono'>{m(a['discount'])}</td>"
                 f"<td class='mono'>{m(a['fee'])}</td><td class='mono'>{m(a['vat'])}</td>"
-                f"<td class='mono'>{m(net)}</td></tr>")
+                f"<td class='mono'>{m(a['net'])}</td></tr>")
+    t = data["totals"]
     P.append(
         f"</tbody><tfoot><tr><td class='l' colspan='4'>รวมทั้งเดือน</td>"
-        f"<td class='mono'>{m(G)}</td><td class='mono'>{m(D)}</td><td class='mono'>{m(F)}</td>"
-        f"<td class='mono'>{m(V)}</td><td class='mono'>{m(N)}</td></tr></tfoot></table>"
+        f"<td class='mono'>{m(t['gross'])}</td><td class='mono'>{m(t['discount'])}</td><td class='mono'>{m(t['fee'])}</td>"
+        f"<td class='mono'>{m(t['vat'])}</td><td class='mono'>{m(t['net'])}</td></tr></tfoot></table>"
         "<p class='legend'>ยอดเต็ม = ยอดขายก่อนหักส่วนลด/ค่าธรรมเนียม · ส่วนลด = โปรโมชัน/คืนเงิน (บันทึกแยกบรรทัด) · "
         "สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัส/ชื่อบัญชีเติมภายหลัง</p>")
     return "".join(P)
@@ -4230,6 +4253,154 @@ def monthly_matching_report(period_month: str, branch_id: int | None = None,
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
+# ── Daily accounting summary, one card per day (สรุปบัญชีรายวัน รายใบ) ──────────
+# Stand-alone section: the same per-day GROSS / discount-on-its-own-line breakdown that
+# the monthly report carries, but pulled out as its own browsable view — each day is a
+# card ('1 วัน = 1 ใบ'), one branch at a time, with a print-to-PDF version.
+
+@app.get("/api/daily-accounts")
+def daily_accounts(period_month: str, branch_id: int | None = None):
+    """สรุปบัญชีรายวัน (รายใบ) for ONE branch: per-day accounting where each day lists its
+    channels at GROSS with discount/fee/VAT split out + account code/name, plus a day
+    total. Returns the master-branch list so the UI can switch branches; omitting
+    branch_id defaults to the first master branch."""
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        masters = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+        branches = [{"branch_id": b["branch_id"], "name": b["name"]} for b in masters]
+        if not branches:
+            return {"period_month": period_month, "branches": [], "branch_id": None,
+                    "branch_name": None, "days": [], "totals": {}}
+        if branch_id is None:
+            branch_id = branches[0]["branch_id"]
+        else:
+            _validate_master_branch(conn, branch_id)
+        bname = next((b["name"] for b in branches if b["branch_id"] == branch_id), None)
+        data = _daily_finance_data(conn, branch_id, period_month)
+    return {"period_month": period_month, "branches": branches,
+            "branch_id": branch_id, "branch_name": bname,
+            "days": data["days"], "totals": data["totals"]}
+
+
+def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -> str:
+    """Printable per-day card report. Each day is a card (ใบ) with its channels at GROSS
+    + discount/fee/VAT split + day total; one branch per sheet (all masters if no
+    branch_id). Mirrors _daily_finance_data so screen and paper agree to the baht."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+    def neg(v):  # discount/fee/VAT print as a deduction; blank when zero
+        return f"−{m(v)}" if abs(float(v or 0)) > 0.005 else "—"
+
+    if branch_id:
+        brs = conn.execute("SELECT branch_id, name FROM branches WHERE branch_id=?",
+                           (branch_id,)).fetchall()
+    else:
+        brs = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    master = conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+
+    css = """<style>
+      @page{size:A4;margin:13mm}
+      *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:11.5px;margin:0;padding:22px;background:#f8fafc}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:14px}
+      .legend{font-size:10px;color:#64748b;margin:2px 0 14px}
+      .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+      .dc{border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;break-inside:avoid}
+      .dc-h{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#ecfdf5;border-bottom:1px solid #d1fae5}
+      .dc-date{font-weight:700;color:#0a523f;font-size:12.5px}
+      .dc-net{font-weight:700;font-size:12.5px}
+      table{width:100%;border-collapse:collapse;font-size:10.5px}
+      th,td{padding:3px 12px;border-bottom:1px solid #f1f5f9;text-align:right}
+      th{color:#64748b;font-size:9px;text-transform:uppercase;background:#fff}
+      td:first-child,th:first-child{text-align:left}
+      .mono{font-variant-numeric:tabular-nums}
+      .disc{color:#9a3412} .code{color:#94a3b8;font-size:9px}
+      tfoot td{border-top:1.4px solid #cbd5e1;border-bottom:none;font-weight:700;background:#f8fafc}
+      .mtot{margin-top:14px;border:1.5px solid #0f6e56;border-radius:9px;overflow:hidden}
+      .mtot .dc-h{background:#0f6e56;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
+      .empty{color:#64748b;font-size:12px;padding:10px 0}
+      .toolbar{max-width:900px;margin:0 auto 12px;text-align:right}
+      .btn{background:#0f6e56;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0;page-break-after:always}}
+    </style>"""
+
+    bopts = (f"<option value=''{'' if branch_id else ' selected'}>ทุกสาขา ({len(master)} สาขา)</option>"
+             + "".join(f"<option value='{b['branch_id']}'"
+                       f"{' selected' if branch_id == b['branch_id'] else ''}>{esc(b['name'])}</option>"
+                       for b in master))
+    picker = (f"<select onchange=\"location.href='?period_month={period_month}'"
+              f"+(this.value?'&branch_id='+this.value:'')\" "
+              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;"
+              "font:inherit;margin-right:8px'>" + bopts + "</select>")
+
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+             "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+             "<title>สรุปบัญชีรายวัน (รายใบ)</title>", css, "</head><body>",
+             "<div class='toolbar'>" + picker
+             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+
+    def card_table(channels, foot, foot_label):
+        rows = ["<table><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th>"
+                "<th>ค่าธรรมเนียม</th><th>VAT</th><th>สุทธิ</th></tr></thead><tbody>"]
+        for a in channels:
+            code = f" <span class='code'>{esc(a['code'])}</span>" if a.get("code") else ""
+            rows.append(
+                f"<tr><td>{esc(a['ch_th'])}{code}</td><td class='mono'>{m(a['gross'])}</td>"
+                f"<td class='mono disc'>{neg(a['discount'])}</td><td class='mono'>{neg(a['fee'])}</td>"
+                f"<td class='mono'>{neg(a['vat'])}</td><td class='mono'>{m(a['net'])}</td></tr>")
+        rows.append(
+            f"</tbody><tfoot><tr><td>{foot_label}</td><td class='mono'>{m(foot['gross'])}</td>"
+            f"<td class='mono disc'>{neg(foot['discount'])}</td><td class='mono'>{neg(foot['fee'])}</td>"
+            f"<td class='mono'>{neg(foot['vat'])}</td><td class='mono'>{m(foot['net'])}</td></tr></tfoot></table>")
+        return "".join(rows)
+
+    for b in brs:
+        data = _daily_finance_data(conn, b["branch_id"], period_month)
+        parts.append("<div class='sheet'>")
+        parts.append(f"<h1>สรุปบัญชีรายวัน — สาขา{esc(b['name'])}</h1>")
+        parts.append(f"<div class='sub'>เดือน {esc(period_month)} · แต่ละวัน = 1 ใบบันทึกบัญชี "
+                     "(บันทึกยอดเต็ม แล้วแยกบรรทัดส่วนลด)</div>")
+        if not data["days"]:
+            parts.append("<div class='empty'>ไม่มีรายการบัญชีในเดือนนี้</div></div>")
+            continue
+        parts.append("<div class='cards'>")
+        for day in data["days"]:
+            parts.append("<div class='dc'><div class='dc-h'>"
+                         f"<span class='dc-date'>วันที่ {day['dom']}</span>"
+                         f"<span class='dc-net'>สุทธิ ฿{m(day['totals']['net'])}</span></div>"
+                         + card_table(day["channels"], day["totals"], "รวมวันนี้") + "</div>")
+        parts.append("</div>")
+        parts.append("<div class='mtot'><div class='dc-h'>"
+                     "<span class='dc-date'>รวมทั้งเดือน</span>"
+                     f"<span class='dc-net'>สุทธิ ฿{m(data['totals']['net'])}</span></div>"
+                     + card_table([], data["totals"], "รวมทั้งเดือน") + "</div>")
+        parts.append("<div class='legend'>ยอดเต็ม = ยอดขายก่อนหักส่วนลด/ค่าธรรมเนียม · "
+                     "ส่วนลด/ค่าธรรมเนียม/VAT แสดงเป็นยอดหัก (−) แยกบรรทัด · "
+                     "สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่หน้าตั้งค่าระบบ</div>")
+        parts.append("</div>")  # sheet
+    parts.append("</body></html>")
+    return "".join(parts)
+
+
+@app.get("/api/daily-accounts.print")
+def daily_accounts_print(period_month: str, branch_id: int | None = None):
+    """Print-to-PDF of สรุปบัญชีรายวัน (รายใบ): one card per day. Omit branch_id for an
+    all-branches pack (one sheet each)."""
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    if branch_id:
+        with get_db() as conn:
+            _validate_master_branch(conn, branch_id)
+    with get_db() as conn:
+        html = _daily_accounts_print_html(conn, period_month, branch_id)
+    return Response(content=html, media_type="text/html; charset=utf-8")
+
+
 # ── Outstanding-documents follow-up (รายงานติดตามเอกสารที่ขาด รายสาขา/เดือน) ────
 # "Which documents does each branch still need to upload this month, and how much
 # money is waiting on each?" — works for ANY period so the team can chase month-to-month.
@@ -4583,6 +4754,20 @@ _UAT_CASES = [
                "กด ⬇ Excel (แผ่นแรก “ข้อผิดพลาดทั้งหมด”) และ 🖨️ พิมพ์/PDF"],
      "expected": "เห็นข้อผิดพลาดทุกประเภทของเดือน + สถานะ + เหตุผล, กรองรายสาขาได้, Excel/พิมพ์ออกได้ "
                  "(แผ่น/หัวข้อ “ข้อผิดพลาดทั้งหมด”), รายละเอียดบันทึกผิดช่องยังอยู่ครบ"},
+    {"id": "TC-17", "title": "สรุปบัญชีรายวัน (รายใบ) — แต่ละวัน = 1 การ์ด + เลือกสาขา + พิมพ์ PDF",
+     "role": "ฝ่ายบัญชี",
+     "narrative": "ส่วน “📅 สรุปบัญชีรายวัน” (ยอดเต็ม/ส่วนลดแยกบรรทัด) ถูกดึงออกมาเป็น “หน้าแยกของตัวเอง” และแสดงเป็น "
+                  "“การ์ดรายวัน — 1 วัน = 1 ใบบันทึกบัญชี” ดูทีละสาขา (เลือกจากดรอปดาวน์) · ด้านบนมีแถบสรุปทั้งเดือน "
+                  "(ยอดเต็มรวม·ส่วนลด·ค่าธรรมเนียม·VAT·สุทธิ·จำนวนใบ) · แต่ละการ์ดไล่ทุกช่องทางของวันนั้นเป็นยอดเต็ม "
+                  "แยกบรรทัดส่วนลด/ค่าธรรมเนียม/VAT → สุทธิ + “รวมวันนี้” · รหัสบัญชีมาจากที่ตั้งใน ตั้งค่าระบบ · "
+                  "ตัวเลขชุดเดียวกับ TC-15 (จอ ↔ กระดาษตรงกัน) มีปุ่มพิมพ์ PDF เป็นแผ่นการ์ด",
+     "steps": ["เปิด ⋯ เพิ่มเติม → “📅 สรุปบัญชีรายวัน (รายใบ)”",
+               "เลือกสาขาจากดรอปดาวน์มุมขวา — การ์ดเปลี่ยนตามสาขา (สาขาที่ไม่มีรายการขึ้นข้อความว่าง)",
+               "ตรวจการ์ดวันหนึ่ง: มี ยอดเต็ม / ส่วนลด (แยกบรรทัด) / ค่าธรรมเนียม / VAT / สุทธิ + แถว “รวมวันนี้”",
+               "เทียบยอดรวมทั้งเดือนด้านบนกับ §สรุปบัญชีรายวัน ในรายงานจับคู่ (TC-15) ว่าตรงกัน",
+               "กด “🖨️ พิมพ์/PDF” → ออกเป็นแผ่นการ์ดรายวัน (เลือกสาขาเดียว หรือเว้น = ทุกสาขา หน้าละสาขา)"],
+     "expected": "หน้าแสดงการ์ด 1 วัน/ใบ ครบทุกวันที่มีรายการ, ยอดเต็ม/ส่วนลดแยกบรรทัดถูกต้อง + รวมวันนี้ + รวมทั้งเดือน, "
+                 "เลือกสาขาได้, รหัสบัญชีขึ้นตามที่ตั้ง, ตัวเลขตรงกับ TC-15, พิมพ์ PDF เป็นการ์ดได้"},
 ]
 
 
@@ -4705,6 +4890,7 @@ def _uat_signoff_html(period_month: str | None) -> str:
              "<tr><td>ตั้งค่า / แก้รหัสสเตทเมนต์</td><td>/app/setup.html (ส่วน ⑤)</td></tr>"
              "<tr><td>รายงานเงินผิดช่อง + ใบเซ็น</td><td>⋯ เพิ่มเติม → ⇄ รายงานเงินบันทึกผิดช่อง</td></tr>"
              "<tr><td>ตรวจการจับคู่ทั้งเดือน (PDF)</td><td>หน้าสาขา → 🖨️ ตรวจการจับคู่รายวัน</td></tr>"
+             "<tr><td>สรุปบัญชีรายวัน (รายใบ — 1 วัน/การ์ด)</td><td>⋯ เพิ่มเติม → 📅 สรุปบัญชีรายวัน (รายใบ)</td></tr>"
              "<tr><td>หลักฐานรายวันระดับบรรทัด</td><td>/api/daily-report?day=YYYY-MM-DD</td></tr>"
              "<tr><td>พจนานุกรมรหัส</td><td>⋯ เพิ่มเติม → 📖 พจนานุกรมรหัสในสเตทเมนต์</td></tr>"
              "<tr><td>คู่มือเต็ม</td><td>/app/help.html</td></tr></table>")
