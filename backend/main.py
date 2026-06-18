@@ -12104,6 +12104,158 @@ def report_management(
 
 
 # ---------------------------------------------------------------------------
+# /api/reports/management.xlsx — the same Management Summary as a formatted .xlsx
+# ---------------------------------------------------------------------------
+@app.get("/api/reports/management.xlsx")
+def report_management_xlsx(
+    period: str = Query("daily"),
+    date:   Optional[str] = Query(None),
+    week:   Optional[str] = Query(None),
+    branch: Optional[str] = Query(None),
+    group:  Optional[str] = Query(None),
+):
+    """Download the Daily/Weekly Management Summary as a multi-sheet Excel file.
+    Reuses report_management() so the numbers match the on-screen report exactly."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
+    resp = report_management(period=period, date=date, week=week, branch=branch, group=group)
+    j = _json.loads(resp.body) if hasattr(resp, "body") else resp
+    if not j.get("available"):
+        raise HTTPException(status_code=404, detail="No sales data for this period")
+
+    wb = openpyxl.Workbook()
+    HDR    = Font(bold=True, color="FFFFFF")
+    BOLD   = Font(bold=True)
+    FILL_H = PatternFill("solid", fgColor="0F766E")
+    NUM, NUM2, PCT = '#,##0', '#,##0.00', '0.0%'
+    CENTER = Alignment(horizontal="center")
+    pdelta = lambda v: (v / 100.0) if v is not None else None
+
+    def header(ws, cols):
+        ws.append(cols)
+        for c in ws[ws.max_row]:
+            c.font = HDR; c.fill = FILL_H; c.alignment = CENTER
+
+    def autofit(ws):
+        for col in ws.columns:
+            mx = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(mx + 2, 52)
+
+    H = j.get("headline", {}) or {}
+    P = j.get("pace", {}) or {}
+
+    # Sheet 1 — Summary
+    ws = wb.active; ws.title = "Summary"
+    ws.append(["Oshinei — Management Summary Report"]); ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["Report", "Daily" if j["period"] == "daily" else "Weekly", j.get("label", "")])
+    ws.append(["Scope", j.get("branch_scope", "")])
+    ws.append(["Compared with", j.get("comp_label", "")])
+    ws.append(["Latest data day", j.get("latest_day", "")])
+    ws.append([])
+    header(ws, ["Headline metric", "Value", "vs prev %"])
+    for name, val, wow in [
+        ("Net Sales (ex-VAT)", H.get("revenue"),     H.get("rev_wow_pct")),
+        ("Customers (covers)", H.get("customers"),    H.get("cust_wow_pct")),
+        ("Bills",              H.get("bills"),        H.get("bills_wow_pct")),
+        ("Spend / Head",       H.get("rev_per_head"), H.get("rph_wow_pct")),
+        ("Avg Ticket",         H.get("avg_ticket"),   H.get("ticket_wow_pct")),
+        ("Discounts",          H.get("discount"),     None),
+    ]:
+        ws.append([name, val, pdelta(wow)])
+        ws.cell(ws.max_row, 2).number_format = NUM
+        if wow is not None:
+            ws.cell(ws.max_row, 3).number_format = PCT
+    ws.append([])
+    header(ws, ["Pacing & cost (" + str(P.get("month", "")) + ")", "Value"])
+    complete = P.get("month_complete")
+    for name, val, fmt in [
+        (("Month net sales" if complete else "MTD net sales"), P.get("mtd_revenue"), NUM),
+        (("Month total" if complete else "Projected month-end"), P.get("projected"), NUM),
+        ("Revenue target", P.get("target"), NUM),
+        ("Projection vs target", pdelta(P.get("proj_vs_target_pct")), PCT),
+        ("Food cost % (BoM)", pdelta(P.get("food_cost_pct")), PCT),
+    ]:
+        ws.append([name, val]); ws.cell(ws.max_row, 2).number_format = fmt
+    autofit(ws)
+
+    # Sheet 2 — Branch League
+    ws = wb.create_sheet("Branch League")
+    header(ws, ["Branch", "Net Sales", "Covers", "Spend/Head", "Share %", "vs prev %"])
+    for b in j.get("branches", []):
+        ws.append([b["branch"], b["revenue"], b["customers"], b["rev_per_head"],
+                   pdelta(b["share_pct"]), pdelta(b["wow_pct"])])
+        r = ws.max_row
+        for c in (2, 3, 4): ws.cell(r, c).number_format = NUM
+        ws.cell(r, 5).number_format = PCT; ws.cell(r, 6).number_format = PCT
+    autofit(ws)
+
+    # Sheet 3 — Money-Leak Radar
+    ws = wb.create_sheet("Money-Leak Radar")
+    header(ws, ["Signal", "Bills", "Baht", "Top branches"])
+    L = j.get("leak", {}) or {}
+    for key, lbl in [("heavy_discount", "Heavy discounts (>=30%)"),
+                     ("cash_heavy", "Cash-heavy discounts"),
+                     ("reprinted", "Reprinted bills"),
+                     ("zero_gross", "Zero-gross bills")]:
+        o = L.get(key, {}) or {}
+        tops = ", ".join(x.get("branch", "") for x in (o.get("by_branch") or [])[:3])
+        ws.append([lbl, o.get("bills", 0), o.get("baht", 0), tops])
+        ws.cell(ws.max_row, 2).number_format = NUM; ws.cell(ws.max_row, 3).number_format = NUM
+    autofit(ws)
+
+    # Sheet 4 — Menu Cost per Head
+    ws = wb.create_sheet("Menu Cost per Head")
+    M = j.get("menu", {}) or {}
+    ws.append([f"Total food cost / head: {M.get('total_cph')}  (over {M.get('covers')} covers)"])
+    ws["A1"].font = BOLD
+    ws.append([])
+    def menu_block(title, rows, signed):
+        header(ws, [title, "Cost/head", "Prev -> now", "%"] if signed else [title, "Cost/head", "Qty", ""])
+        for m in rows:
+            if signed:
+                ws.append([m["menu"], m["delta"],
+                           f"{m.get('cost_per_head_prev')} -> {m.get('cost_per_head')}", pdelta(m.get("pct"))])
+                ws.cell(ws.max_row, 2).number_format = NUM2; ws.cell(ws.max_row, 4).number_format = PCT
+            else:
+                ws.append([m["menu"], m.get("cost_per_head"), m.get("qty"), ""])
+                ws.cell(ws.max_row, 2).number_format = NUM2
+        ws.append([])
+    menu_block("Highest cost / head", M.get("top", []), False)
+    menu_block("Cost / head RISING (margin risk)", M.get("risers", []), True)
+    menu_block("Cost / head FALLING", M.get("savers", []), True)
+    autofit(ws)
+
+    # Sheet 5 — Trend
+    ws = wb.create_sheet("Trend")
+    header(ws, ["Period start", "Label", "Net Sales"])
+    for t in j.get("trend", []):
+        ws.append([t.get("start"), t.get("label"), t.get("revenue")])
+        ws.cell(ws.max_row, 3).number_format = NUM
+    autofit(ws)
+
+    # Sheet 6 — Action Items
+    ws = wb.create_sheet("Action Items")
+    header(ws, ["Severity", "Action"])
+    for a in j.get("actions", []):
+        ws.append([a.get("sev", ""), a.get("text", "")])
+    autofit(ws)
+
+    buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
+    tag = j.get("selected_week") or j.get("focus") or "report"
+    fname = f"management_{j['period']}_{tag}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={fname}"},
+    )
+
+
+# ---------------------------------------------------------------------------
 # /api/analysis/sph  — Spend-per-Head distribution
 # ---------------------------------------------------------------------------
 @app.get("/api/analysis/sph")

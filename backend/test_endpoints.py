@@ -90,6 +90,17 @@ def test_management_report_daily_and_weekly(client):
     assert w2["selected_week"] == pick
 
 
+def test_management_report_xlsx(client):
+    import io, openpyxl
+    for period in ("daily", "weekly"):
+        r = client.get("/api/reports/management.xlsx", params={"period": period})
+        assert r.status_code == 200, r.text[:200]
+        assert "spreadsheetml" in r.headers.get("content-type", "")
+        assert "attachment" in r.headers.get("content-disposition", "")
+        wb = openpyxl.load_workbook(io.BytesIO(r.content))   # must be a valid workbook
+        assert "Summary" in wb.sheetnames and "Branch League" in wb.sheetnames
+
+
 def test_cost_drivers_has_total_and_mom(client):
     d = client.get("/api/bom-cost/cost-drivers", params={"scope": "chain", "limit": 60}).json()
     assert d["items"], "no cost-driver items"

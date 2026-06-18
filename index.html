@@ -4564,6 +4564,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3">Generated: <span id="mgtGenDate">—</span></div>
+        <button onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
         <button onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
       </div>
     </div>
@@ -7728,6 +7729,15 @@ function setMgtPeriod(p) {
 }
 
 function printMgtReport() { try { window.print(); } catch (e) {} }
+
+function exportMgtReport() {
+  const qs = new URLSearchParams();
+  qs.set('period', mgtPeriod);
+  if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
+  if (getBranch()) qs.set('branch', getBranch());
+  if (getGroup())  qs.set('group',  getGroup());
+  window.location.href = `${API}/api/reports/management.xlsx?${qs}`;   // session cookie travels with it
+}
 
 async function loadMgtReport() {
   const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '');
@@ -17573,7 +17583,10 @@ function _globalEndDate() {
 function _syncExtraDate(inputId, tabKey) {
   const el = document.getElementById(inputId); if (!el) return;
   const gd = _globalEndDate();
-  if (gd && gd !== _extraLastGlobal[tabKey]) el.value = gd;
+  // Only act on a real GLOBAL change (so a manual local pick survives a same-filter
+  // reload). gd='' = "latest/all" → clear the input so the tab falls back to its own
+  // latest-day default; a concrete date snaps the tab to it.
+  if (gd !== _extraLastGlobal[tabKey]) el.value = gd;
   _extraLastGlobal[tabKey] = gd;
 }
 function _syncExtraDateRange(fromId, toId, tabKey) {
