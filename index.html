@@ -8416,6 +8416,10 @@ function setGranularity(g) {
     else                   populateMonthSelects();
   }
 
+  // Bust the per-tab guard cache so EVERY tab re-fetches for the new granularity.
+  // Without this, a guarded tab whose _filterKey() is unchanged silently keeps its
+  // stale data when you toggle Day/Week/Month.
+  Object.keys(_tabLastKey).forEach(k => delete _tabLastKey[k]);
   loadActiveTab();
 }
 
@@ -14142,6 +14146,7 @@ async function loadAnomalyBanner() {
 // 🔔 Action Center — consolidate anomalies + branch-pace (MTD-fair) into one
 // prioritized "watch today" panel with drill-through. Reuses existing endpoints.
 async function loadHeavyEaters(force) {
+  _syncExtraDateRange('heFrom', 'heTo', 'heavyeater');   // follow the global period (date range)
   const fromEl = document.getElementById('heFrom'), toEl = document.getElementById('heTo'),
         mcEl = document.getElementById('heMinCov');
   const p = new URLSearchParams();
@@ -16233,6 +16238,7 @@ function setBbomViewMode(mode) {
 
 async function loadBranchBom(force) {
   await _bbomInitFilters();
+  _syncExtraMonthRange('bbomMonthFrom', 'bbomMonthTo', 'branchbom_r');  // follow the global month range
   // Phase 16: when chain mode, send branch=ALL (backend aggregates across all active branches)
   const branch = (_bbomViewMode === 'chain') ? 'ALL' : document.getElementById('bbomBranch').value;
   const mf     = document.getElementById('bbomMonthFrom').value;
@@ -17108,6 +17114,7 @@ function dsSetGran(g) {
   loadDailySales(true);
 }
 async function loadDailySales(force) {
+  _syncExtraDate('dsDate', 'dailysales');     // follow the global period (snap to its end day)
   const dv = document.getElementById('dsDate')?.value || '';
   const _fk = _filterKey() + '|' + _dsGran + '|' + dv;
   if (!force && _tabLastKey.dailysales === _fk) return;
@@ -17215,6 +17222,7 @@ function chSetGran(g) {
   loadCostHead(true);
 }
 async function loadCostHead(force) {
+  _syncExtraDate('chDate', 'costhead');       // follow the global period (snap to its end day)
   const dv = document.getElementById('chDate')?.value || '';
   const _fk = _filterKey() + '|' + _chGran + '|' + dv;
   if (!force && _tabLastKey.costhead === _fk) return;
@@ -17287,6 +17295,7 @@ function pbSetView(v) {
   if (_pbData) renderPnlBill(_pbData);
 }
 async function loadPnlBill(force) {
+  _syncExtraDate('pbDate', 'pnlbill');        // follow the global period (snap to its end day)
   const dv = document.getElementById('pbDate')?.value || '';
   const _fk = _filterKey() + '|' + _pbGran + '|' + dv;
   if (!force && _tabLastKey.pnlbill === _fk) return;
@@ -17463,6 +17472,7 @@ async function loadOpsReport(force) {
       _opMonthsLoaded = true;
     } catch (e) {}
   }
+  _syncExtraMonth('opMonth', 'opsreport');    // follow the global period (snap to its end month)
   const mv = sel?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.opsreport === _fk) return;
@@ -17535,6 +17545,67 @@ function _syncExtraMonth(selId, tabKey) {
     sel.value = gm;
   }
   _extraLastGlobal[tabKey] = gm;
+}
+// Date variants of the same idea — snap a LOCAL single-date / date-range picker to
+// the GLOBAL period whenever the global filter changes (manual local picks still win
+// until the global changes again). Used by the day-grain report/drill tabs.
+function _lastDayOfMonth(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return `${ym}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;  // day 0 of next month
+}
+function _globalEndDate() {
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  if (g === 'daily' || g === 'weekly') {
+    const dt = document.getElementById('selDateTo')?.value;
+    const df = document.getElementById('selDateFrom')?.value;
+    if (dt) return dt;
+    if (df) return df;
+  }
+  const m = getMonthTo() || getMonthFrom() || '';
+  if (!m) return '';                              // "latest"/"all" → leave the tab's own default
+  // The latest month is still in progress, so its calendar month-end is a FUTURE,
+  // data-less day. Leave the tab on its own latest-day default for that case; only
+  // snap to month-end for a past, completed month.
+  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
+  if (months.length && m === months[months.length - 1]) return '';
+  return _lastDayOfMonth(m);
+}
+function _syncExtraDate(inputId, tabKey) {
+  const el = document.getElementById(inputId); if (!el) return;
+  const gd = _globalEndDate();
+  if (gd && gd !== _extraLastGlobal[tabKey]) el.value = gd;
+  _extraLastGlobal[tabKey] = gd;
+}
+function _syncExtraDateRange(fromId, toId, tabKey) {
+  const sf = document.getElementById(fromId), st = document.getElementById(toId);
+  if (!sf || !st) return;
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  let from = '', to = '';
+  if (g === 'daily' || g === 'weekly') {
+    from = document.getElementById('selDateFrom')?.value || '';
+    to   = document.getElementById('selDateTo')?.value   || '';
+  } else {
+    const mf = getMonthFrom(), mt = getMonthTo() || getMonthFrom();
+    if (mf) from = mf + '-01';
+    if (mt) to   = _lastDayOfMonth(mt);
+  }
+  const key = from + '|' + to;
+  if (key !== _extraLastGlobal[tabKey]) {
+    if (from) sf.value = from;
+    if (to)   st.value = to;
+  }
+  _extraLastGlobal[tabKey] = key;
+}
+function _syncExtraMonthRange(fromId, toId, tabKey) {
+  const sf = document.getElementById(fromId), st = document.getElementById(toId);
+  if (!sf || !st) return;
+  const gf = getMonthFrom() || '', gt = getMonthTo() || getMonthFrom() || '';
+  const key = gf + '|' + gt;
+  if (key !== _extraLastGlobal[tabKey]) {
+    if (gf && [...sf.options].some(o => o.value === gf)) sf.value = gf;
+    if (gt && [...st.options].some(o => o.value === gt)) st.value = gt;
+  }
+  _extraLastGlobal[tabKey] = key;
 }
 
 // 💵 เงินสดขาด/เกิน
@@ -17819,6 +17890,7 @@ async function cancelBillDrill(branch, month) {
 
 // ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)
 async function loadCloseTime(force) {
+  _syncExtraDate('ctmDate', 'closetime');     // follow the global period (snap to its end day)
   const dateSel = document.getElementById('ctmDate')?.value || '';
   const _fk = _filterKey() + '|' + dateSel;
   if (!force && _tabLastKey.closetime === _fk) return; _tabLastKey.closetime = _fk;
@@ -22915,6 +22987,7 @@ async function loadPnlBranch() {
       const opt=document.createElement('option'); opt.value=o.value; opt.textContent=o.textContent; msel.appendChild(opt);
     });
   }
+  _syncExtraMonth('pnlMonthSel', 'pnlbranch');   // follow the global period (snap to its end month)
   const pnlMonth = msel ? msel.value : '';
   const p = new URLSearchParams();
   if (getBranch())    p.set('branch', getBranch());
@@ -24498,6 +24571,17 @@ function bcFoodPctColor(p) {
 }
 
 async function loadBomCostTab() {
+  // Follow the GLOBAL month range (bcMonthFrom/To are <input type=month>, so set the
+  // value directly; a manual local pick still wins until the global range changes).
+  (function () {
+    const gf = getMonthFrom() || '', gt = getMonthTo() || '', key = gf + '|' + gt;
+    if (key !== _extraLastGlobal['bomcost_r']) {
+      const bf = document.getElementById('bcMonthFrom'), bt = document.getElementById('bcMonthTo');
+      if (bf) bf.value = gf;
+      if (bt) bt.value = gt;
+      _extraLastGlobal['bomcost_r'] = key;
+    }
+  })();
   const el = document.getElementById('bcStatus');
   if (el) el.textContent = 'กำลังโหลด...';
   try {
