@@ -596,9 +596,11 @@ function renderDaybook(){
 }
 
 /* ── 📊 Dashboard รายได้ตามช่องทางรายวัน (ทุกสาขาในวันเดียว · เลือกวันจากปฏิทิน) ── */
-let DASH=null, DASH_DAY=(new Date()).toISOString().slice(0,10);
+let DASH=null, DASH_DAY=(new Date()).toISOString().slice(0,10), DASH_MODE='acct';  // acct | pos | cmp
 const CH_COLOR={CASH:'#0f6e56',QR:'#2563eb',TRANSFER:'#0891b2',CREDIT:'#7c3aed',
                 GRAB:'#16a34a',LINEMAN:'#ea580c',COUPON:'#ca8a04',DISCOUNT:'#dc2626'};
+const _dvarCol=v=>(Math.abs(+v||0)<=1?'var(--mut)':(+v<0?'var(--err)':'var(--brand-deep)'));
+const _dvar=v=>{const n=+v||0; return Math.abs(n)<=1?'<span class="lbl">✓</span>':`<span style="color:${_dvarCol(n)}">${n>0?'+':''}${fmt2(n)}</span>`;};
 async function loadDashboard(){
   $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
   let r;
@@ -607,43 +609,83 @@ async function loadDashboard(){
   DASH=r; renderDashboard();
 }
 function setDashDay(v){ if(!v)return; DASH_DAY=v; loadDashboard(); }
+function setDashMode(m){ DASH_MODE=m; renderDashboard(); }   // client-side — data already loaded
+function _dashDot(ch){ return `<span class="dash-dot" style="background:${CH_COLOR[ch]||'#94a3b8'}"></span>`; }
 function dashBranchCard(b){
-  const t=b.totals||{};
-  if(!(b.channels||[]).length)
-    return `<div class="card db-card dash-empty"><div class="db-head"><div class="db-date">${esc(b.name)}</div>
-      <div class="db-net lbl">— ไม่มีรายได้วันนี้</div></div></div>`;
-  const row=c=>`<tr>
-    <td><span class="dash-dot" style="background:${CH_COLOR[c.ch]||'#94a3b8'}"></span>${esc(c.ch_th)}</td>
-    <td class="mono">${fmt2(c.gross)}</td>
-    <td class="mono db-disc">${dbDed(c.discount)}</td>
-    <td class="mono"><b>${fmt2(c.net)}</b></td></tr>`;
+  const empty=(rows)=>`<div class="card db-card dash-empty"><div class="db-head"><div class="db-date">${esc(b.name)}</div>
+      <div class="db-net lbl">— ไม่มีรายการวันนี้</div></div></div>`;
+  if(DASH_MODE==='acct'){
+    const t=b.totals||{};
+    if(!(b.channels||[]).length) return empty();
+    const row=c=>`<tr><td>${_dashDot(c.ch)}${esc(c.ch_th)}</td>
+      <td class="mono">${fmt2(c.gross)}</td><td class="mono db-disc">${dbDed(c.discount)}</td>
+      <td class="mono"><b>${fmt2(c.net)}</b></td></tr>`;
+    return `<div class="card db-card">
+      <div class="db-head"><div class="db-date">${esc(b.name)}</div><div class="db-net">฿${fmt2(t.net)}</div></div>
+      <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>สุทธิ</th></tr></thead>
+        <tbody>${b.channels.map(row).join('')}</tbody>
+        <tfoot><tr><td>รวมสาขา</td><td class="mono">${fmt2(t.gross)}</td>
+          <td class="mono db-disc">${dbDed(t.discount)}</td><td class="mono"><b>${fmt2(t.net)}</b></td></tr></tfoot>
+      </table></div>`;
+  }
+  // POS-sourced modes
+  const pc=b.pos_channels||[], pt=b.pos_totals||{pos:0,money:0,variance:0};
+  if(!pc.length) return empty();
+  if(DASH_MODE==='pos'){
+    const row=c=>`<tr><td>${_dashDot(c.ch)}${esc(c.ch_th)}</td><td class="mono"><b>${fmt2(c.pos)}</b></td></tr>`;
+    return `<div class="card db-card">
+      <div class="db-head"><div class="db-date">${esc(b.name)}</div><div class="db-net">฿${fmt2(pt.pos)}</div></div>
+      <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>ยอด POS</th></tr></thead>
+        <tbody>${pc.map(row).join('')}</tbody>
+        <tfoot><tr><td>รวมสาขา</td><td class="mono"><b>${fmt2(pt.pos)}</b></td></tr></tfoot>
+      </table></div>`;
+  }
+  // cmp: POS ↔ เงินเข้าจริง + ผลต่าง
+  const row=c=>`<tr><td>${_dashDot(c.ch)}${esc(c.ch_th)}</td>
+    <td class="mono">${fmt2(c.pos)}</td><td class="mono">${fmt2(c.money)}</td>
+    <td class="mono">${_dvar(c.variance)}</td></tr>`;
   return `<div class="card db-card">
-    <div class="db-head"><div class="db-date">${esc(b.name)}</div>
-      <div class="db-net">฿${fmt2(t.net)}</div></div>
-    <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>สุทธิ</th></tr></thead>
-      <tbody>${b.channels.map(row).join('')}</tbody>
-      <tfoot><tr><td>รวมสาขา</td><td class="mono">${fmt2(t.gross)}</td>
-        <td class="mono db-disc">${dbDed(t.discount)}</td><td class="mono"><b>${fmt2(t.net)}</b></td></tr></tfoot>
+    <div class="db-head"><div class="db-date">${esc(b.name)}</div><div class="db-net" style="color:${_dvarCol(pt.variance)}">ต่าง ${pt.variance>0?'+':''}${fmt2(pt.variance)}</div></div>
+    <table class="db-tbl"><thead><tr><th>ช่องทาง</th><th>POS</th><th>เงินเข้า</th><th>ต่าง</th></tr></thead>
+      <tbody>${pc.map(row).join('')}</tbody>
+      <tfoot><tr><td>รวมสาขา</td><td class="mono">${fmt2(pt.pos)}</td>
+        <td class="mono">${fmt2(pt.money)}</td><td class="mono">${_dvar(pt.variance)}</td></tr></tfoot>
     </table></div>`;
 }
 function renderDashboard(){
-  const r=DASH, g=r.grand_totals||{};
-  const brs=(r.branches||[]).slice().sort((a,b)=>((b.totals||{}).net||0)-((a.totals||{}).net||0));
-  const active=brs.filter(b=>(b.channels||[]).length);
+  const r=DASH, g=r.grand_totals||{}, pg=r.pos_grand||{pos:0,money:0,variance:0};
+  const acct=DASH_MODE==='acct';
+  const brs=(r.branches||[]).slice().sort((a,b)=> acct
+    ? (((b.totals||{}).net||0)-((a.totals||{}).net||0))
+    : (((b.pos_totals||{}).pos||0)-((a.pos_totals||{}).pos||0)));
+  const active=brs.filter(b=> acct ? (b.channels||[]).length : (b.pos_channels||[]).length);
+  const seg=(m,label)=>`<button class="btn btn-sm ${DASH_MODE===m?'btn-pri':''}" onclick="setDashMode('${m}')">${label}</button>`;
   let html=header()+`<div class="row" style="margin-bottom:6px;align-items:center">
     <h2 style="font-size:16px">📊 รายได้ตามช่องทาง — รายวัน (ทุกสาขา)</h2>
     <input type="date" value="${esc(DASH_DAY)}" onchange="setDashDay(this.value)" title="เลือกวันจากปฏิทิน"
       style="margin-left:auto;padding:6px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
   </div>
-  <div class="muted" style="margin-bottom:12px">เลือกวันจากปฏิทิน → เห็นรายได้แยกช่องทางของทุกสาขาในวันนั้น · บันทึก <b>ยอดเต็ม</b> แล้วแยกบรรทัด <b>ส่วนลด</b> · คูปอง KTC/BAY (แต้ม) นับเป็นเงินรับจริง — คูปองส่วนลดอื่น (ผู้สูงอายุ/เด็ก/ฯลฯ) เป็นยอดหัก</div>`;
-  if(!active.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายได้ของวันที่ ${esc(DASH_DAY)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS ของวันนั้นก่อน</div>`; return; }
-  html+=`<div class="card db-sum">
-    <div><div class="lbl">ยอดเต็มรวมทุกสาขา</div><b>฿${fmt2(g.gross)}</b></div>
-    <div><div class="lbl">ส่วนลดรวม</div><b class="db-disc">฿${fmt2(g.discount)}</b></div>
-    <div><div class="lbl">ค่าธรรมเนียม</div><b>฿${fmt2(g.fee)}</b></div>
-    <div><div class="lbl">VAT</div><b>฿${fmt2(g.vat)}</b></div>
-    <div><div class="lbl">สุทธิเข้าบัญชีรวม</div><b>฿${fmt2(g.net)}</b></div>
-    <div style="margin-left:auto;align-self:center" class="lbl">${active.length}/${brs.length} สาขามีรายได้</div></div>`;
+  <div class="row" style="gap:6px;margin-bottom:10px">${seg('acct','เงินเข้าจริง (บัญชี)')}${seg('pos','ยอด POS')}${seg('cmp','ประกบ POS ↔ เงินเข้า')}</div>
+  <div class="muted" style="margin-bottom:12px">${acct
+    ? 'บันทึก <b>ยอดเต็ม</b> แล้วแยกบรรทัด <b>ส่วนลด</b> · คูปอง KTC/BAY (แต้ม) นับเป็นเงินรับจริง — คูปองส่วนลดอื่น (ผู้สูงอายุ/เด็ก/ฯลฯ) เป็นยอดหัก'
+    : DASH_MODE==='pos' ? 'ยอดที่เครื่อง <b>POS บันทึก</b> แยกช่องทาง (ก่อนกระทบกับเงินเข้าจริง)'
+    : 'ประกบ <b>ยอด POS</b> กับ <b>เงินเข้าจริง</b> (เงินที่เข้าบัญชี/ค่ายบัตรตาม statement·settlement) · <b>ต่าง</b> = เงินเข้า − POS (ช่องที่ยังไม่ได้อัปเอกสารจะเข้า = 0 → ต่างติดลบเท่ายอด POS)'}</div>`;
+  if(!active.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการของวันที่ ${esc(DASH_DAY)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS ของวันนั้นก่อน</div>`; return; }
+  if(acct){
+    html+=`<div class="card db-sum">
+      <div><div class="lbl">ยอดเต็มรวมทุกสาขา</div><b>฿${fmt2(g.gross)}</b></div>
+      <div><div class="lbl">ส่วนลดรวม</div><b class="db-disc">฿${fmt2(g.discount)}</b></div>
+      <div><div class="lbl">ค่าธรรมเนียม</div><b>฿${fmt2(g.fee)}</b></div>
+      <div><div class="lbl">VAT</div><b>฿${fmt2(g.vat)}</b></div>
+      <div><div class="lbl">สุทธิเข้าบัญชีรวม</div><b>฿${fmt2(g.net)}</b></div>
+      <div style="margin-left:auto;align-self:center" class="lbl">${active.length}/${brs.length} สาขามีรายได้</div></div>`;
+  } else {
+    html+=`<div class="card db-sum">
+      <div><div class="lbl">ยอด POS รวมทุกสาขา</div><b>฿${fmt2(pg.pos)}</b></div>
+      <div><div class="lbl">เงินเข้าจริงรวม</div><b>฿${fmt2(pg.money)}</b></div>
+      <div><div class="lbl">ผลต่างรวม</div><b style="color:${_dvarCol(pg.variance)}">${pg.variance>0?'+':''}฿${fmt2(pg.variance)}</b></div>
+      <div style="margin-left:auto;align-self:center" class="lbl">${active.length}/${brs.length} สาขา</div></div>`;
+  }
   html+=`<div class="db-grid">${brs.map(dashBranchCard).join('')}</div>`;
   $('app').innerHTML=html;
 }

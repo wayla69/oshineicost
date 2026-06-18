@@ -2772,9 +2772,13 @@ def test_daily_dashboard_per_branch_and_grand_total(client):
     cash4 = next(ch for ch in byid[4]["channels"] if ch["ch"] == "CASH")
     assert cash4["gross"] == 10000
     assert j["grand_totals"]["gross"] == 17000                # 10,000 + 7,000
+    # POS↔money-in view ("ประกบ"): POS = register, money = bank-in (0, no statement) → variance = −POS
+    pcash4 = next(ch for ch in byid[4]["pos_channels"] if ch["ch"] == "CASH")
+    assert pcash4["pos"] == 10000 and pcash4["money"] == 0 and pcash4["variance"] == -10000
+    assert j["pos_grand"]["pos"] == 17000 and j["pos_grand"]["variance"] == -17000
     assert client.get("/api/daily-dashboard?day=2026-13-99").status_code == 400
     empty = client.get("/api/daily-dashboard?day=2026-06-28").json()
-    assert empty["grand_totals"]["gross"] == 0
+    assert empty["grand_totals"]["gross"] == 0 and empty["pos_grand"]["pos"] == 0
 
 
 # ── Features 4/5/6: discount accounting (KTC/BAY points vs discount coupons) ───
