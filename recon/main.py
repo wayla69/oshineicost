@@ -3819,12 +3819,14 @@ _FINANCE_CH_ORDER = {"CASH": 0, "QR": 1, "TRANSFER": 2, "CREDIT": 3, "GRAB": 4, 
                      "COUPON": 6, "DISCOUNT": 7}
 
 
-def _daily_finance_data(conn, branch_id: int, period_month: str) -> dict:
+def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> dict:
     """Per-DAY accounting breakdown as structured data: each day → its channels, each
     recorded at GROSS with discount/fee/VAT split out (net = gross − discount − fee −
     VAT) + account code/name from recon_account_map (blank until filled in). Single
     source for the table inside the monthly report (_daily_finance_html), the in-app
-    daybook cards, and the printable per-day card report ('1 วัน = 1 ใบ')."""
+    daybook cards, and the printable per-day card report ('1 วัน = 1 ใบ').
+    `daily` lets a caller pass a precomputed daily_reconciliation result so the dashboard
+    (which also needs the POS↔money side) doesn't recompute it."""
     acct = _account_map(conn)
 
     # (day, channel) -> {gross, discount, fee, vat} from the fee-bearing documents
@@ -3849,7 +3851,7 @@ def _daily_finance_data(conn, branch_id: int, period_month: str) -> dict:
 
     # POS-tender channels (cash/QR/transfer/coupon): gross = POS that day, no fee/discount.
     try:
-        d = daily_reconciliation(conn, branch_id, period_month)
+        d = daily if daily is not None else daily_reconciliation(conn, branch_id, period_month)
     except Exception:
         d = {"days": []}
     for day in d.get("days", []):
@@ -4364,23 +4366,51 @@ def _daily_dashboard_data(conn, day: str) -> dict:
     channels (gross/discount/fee/VAT/net) for that day + per-branch totals, plus grand
     totals across branches. Reuses _daily_finance_data so the KTC/BAY coupon split + the
     ส่วนลด(คูปอง) deduction line are identical to the daybook and monthly report — then
-    extracts the single matching day."""
+    extracts the single matching day. Also attaches the POS↔money-in view per channel
+    (pos_channels): what the register rang up (POS) vs what landed in the bank/settlement
+    (ext) + the variance — the reconciliation lens, from the same daily_reconciliation."""
     period_month = day[:7]
     masters = conn.execute(
         f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
     zero = {"gross": 0.0, "discount": 0.0, "fee": 0.0, "vat": 0.0, "net": 0.0}
-    branches, grand = [], dict(zero)
+    pzero = {"pos": 0.0, "money": 0.0}
+    branches, grand, pgrand = [], dict(zero), dict(pzero)
     for b in masters:
-        data = _daily_finance_data(conn, b["branch_id"], period_month)
+        bid = b["branch_id"]
+        try:
+            daily = daily_reconciliation(conn, bid, period_month)
+        except Exception:
+            daily = {"days": []}
+        data = _daily_finance_data(conn, bid, period_month, daily=daily)   # one daily compute
         dd = next((x for x in data["days"] if x["day"] == day), None)
         channels = dd["channels"] if dd else []
         totals = dd["totals"] if dd else dict(zero)
-        branches.append({"branch_id": b["branch_id"], "name": b["name"],
-                         "channels": channels, "totals": totals})
+        # POS ↔ money-in per channel for the day (sum lanes over banks)
+        day_lanes = next((x["lanes"] for x in daily.get("days", []) if x["day"] == day), [])
+        pos_agg: dict = {}
+        for l in day_lanes:
+            e = pos_agg.setdefault(l["category"], {"pos": 0.0, "money": 0.0})
+            e["pos"] += float(l.get("pos") or 0); e["money"] += float(l.get("ext") or 0)
+        pos_channels, ptot = [], dict(pzero)
+        for ch in sorted(pos_agg, key=lambda c: _FINANCE_CH_ORDER.get(c, 9)):
+            p, mny = round(pos_agg[ch]["pos"], 2), round(pos_agg[ch]["money"], 2)
+            if abs(p) <= 0.005 and abs(mny) <= 0.005:
+                continue
+            pos_channels.append({"ch": ch, "ch_th": _MATCH_CH_TH.get(ch, ch),
+                                 "pos": p, "money": mny, "variance": round(mny - p, 2)})
+            ptot["pos"] += p; ptot["money"] += mny
+        ptot = {"pos": round(ptot["pos"], 2), "money": round(ptot["money"], 2),
+                "variance": round(ptot["money"] - ptot["pos"], 2)}
+        branches.append({"branch_id": bid, "name": b["name"],
+                         "channels": channels, "totals": totals,
+                         "pos_channels": pos_channels, "pos_totals": ptot})
         for k in grand:
             grand[k] += float(totals.get(k, 0) or 0)
+        pgrand["pos"] += ptot["pos"]; pgrand["money"] += ptot["money"]
     return {"day": day, "branches": branches,
-            "grand_totals": {k: round(v, 2) for k, v in grand.items()}}
+            "grand_totals": {k: round(v, 2) for k, v in grand.items()},
+            "pos_grand": {"pos": round(pgrand["pos"], 2), "money": round(pgrand["money"], 2),
+                          "variance": round(pgrand["money"] - pgrand["pos"], 2)}}
 
 
 @app.get("/api/daily-dashboard")
@@ -4896,16 +4926,18 @@ _UAT_CASES = [
                  "เข้าช่องเดียวกัน/จำนวน≤0 ถูกปฏิเสธ, ขึ้นในรายงานพร้อมป้ายย้ายด้วยมือ"},
     {"id": "TC-19", "title": "Dashboard รายได้ตามช่องทางรายวัน (ทุกสาขาในวันเดียว · เลือกวันปฏิทิน)",
      "role": "ผู้จัดการ / ฝ่ายบัญชี",
-     "narrative": "หน้า Dashboard ใหม่: เลือกวันจากปฏิทิน → เห็นรายได้แยกช่องทางของ “ทุกสาขา” ในวันนั้นพร้อมกัน แต่ละสาขาเป็นการ์ด "
-                  "(เรียงตามสุทธิมากสุด) + แถบยอดรวมทุกสาขา (ยอดเต็ม/ส่วนลด/ค่าธรรมเนียม/VAT/สุทธิ) · ใช้การแยกคูปอง KTC/BAY "
-                  "(แต้ม = เงินรับจริง) ออกจากคูปองส่วนลดอื่นชุดเดียวกับหน้าบัญชีรายวัน",
+     "narrative": "หน้า Dashboard ใหม่: เลือกวันจากปฏิทิน → เห็นรายได้แยกช่องทางของ “ทุกสาขา” ในวันนั้นพร้อมกัน + แถบยอดรวมทุกสาขา · "
+                  "มีปุ่มสลับ 3 โหมด: (1) เงินเข้าจริง(บัญชี) — ยอดเต็ม/ส่วนลด/สุทธิ, แยกคูปอง KTC/BAY(แต้ม)=เงินรับจริง; "
+                  "(2) ยอด POS — ยอดที่เครื่อง POS บันทึกแยกช่องทาง; (3) ประกบ POS↔เงินเข้า — แต่ละช่องทางแสดง POS | เงินเข้าจริง | ต่าง "
+                  "(เงินเข้า = ยอดเข้าบัญชี/ค่ายบัตรตาม statement·settlement). สลับโหมดไม่ต้องโหลดใหม่",
      "steps": ["เปิด ⋯ เพิ่มเติม → “📊 รายได้ตามช่องทาง รายวัน (Dashboard)”",
                "เลือกวันจากปฏิทินมุมขวา — การ์ดทุกสาขาปรับตามวันนั้น",
-               "ตรวจการ์ดสาขา: ช่องทาง/ยอดเต็ม/ส่วนลด/สุทธิ + แถว “รวมสาขา”",
-               "ตรวจแถบยอดรวมทุกสาขา (ผลรวมของทุกการ์ด) + จำนวนสาขาที่มีรายได้",
+               "โหมด “เงินเข้าจริง(บัญชี)”: ตรวจ ช่องทาง/ยอดเต็ม/ส่วนลด/สุทธิ + แถว “รวมสาขา” + แถบยอดรวม",
+               "กดปุ่ม “ยอด POS”: เห็นยอดที่ POS บันทึกแยกช่องทาง",
+               "กดปุ่ม “ประกบ POS ↔ เงินเข้า”: เห็น POS | เงินเข้า | ต่าง (ช่องยังไม่อัปเอกสาร เงินเข้า=0 → ต่างติดลบเท่า POS)",
                "ลองเลือกวันที่ไม่มีข้อมูล → ขึ้นข้อความว่าง ไม่ error"],
-     "expected": "เลือกวันได้, ทุกสาขา (เฉพาะ master) แสดงแยกการ์ด, ยอดรวมทุกสาขาถูกต้อง, COUPON = แต้มเท่านั้น + บรรทัดส่วนลดแยก, "
-                 "วันไม่มีข้อมูลไม่ค้าง"},
+     "expected": "เลือกวันได้, สลับ 3 โหมดได้ไม่โหลดใหม่, ทุกสาขา (เฉพาะ master) แสดงแยกการ์ด, ยอดรวมเปลี่ยนตามโหมด, "
+                 "COUPON = แต้มเท่านั้น + บรรทัดส่วนลดแยก, ประกบ POS↔เงินเข้า + ผลต่างถูกต้อง, วันไม่มีข้อมูลไม่ค้าง"},
     {"id": "TC-20", "title": "บัญชีรายได้ — ยอดเต็มก่อนหักส่วนลด + ส่วนลดจากคูปอง (ไม่รวม KTC/BAY)",
      "role": "ฝ่ายบัญชี",
      "narrative": "การบันทึกบัญชีลง “ยอดเต็มก่อนหักคูปองส่วนลด” แล้วแยกบรรทัด “ส่วนลด” เป็นยอดหัก · ส่วนลดมาจากคูปองส่วนลด "
