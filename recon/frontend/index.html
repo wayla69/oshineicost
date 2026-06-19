@@ -668,7 +668,7 @@ function renderDaybook(){
     <h2 style="font-size:16px">📅 สรุปบัญชีรายวัน (รายใบ) — ${esc(monthTh(MONTH))}</h2>
     <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/daily-accounts.print${pm}" target="_blank">🖨️ พิมพ์/PDF</a></div>
-  <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="/app/setup.html">⚙️ ตั้งค่าระบบ</a></div>`;
+  <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="#setup">⚙️ ตั้งค่าระบบ</a></div>`;
   if(!(r.days||[]).length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้ — ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน</div>`; return; }
   html+=`<div class="card db-sum">
     <div><div class="lbl">ยอดเต็มรวม</div><b>฿${fmt2(t.gross)}</b></div>
