@@ -249,6 +249,7 @@ function route(){
   if(h==='trend')return loadTrend();
   if(h==='bankcov')return loadBankCov();
   if(h==='board')return loadBoard();
+  if(h==='coupon')return loadCoupon();
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -1347,6 +1348,7 @@ function moreMenu(){
       <a class="more-item" href="/api/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank">📥 ติดตามเอกสารที่ยังขาด<span class="lbl">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ · พิมพ์ PDF</span></a>
       <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
       <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
+      <a class="more-item" href="#coupon" onclick="closeSheet()">🎟️ วิเคราะห์คูปองซีรีส์ (Coupon Series)<span class="lbl">ส่วนลดแยกตามซีรีส์คูปอง · ทุกสาขา · ดูรายสาขา/รายวัน · MoM</span></a>
       <a class="more-item" href="/api/statement-codes.html" target="_blank">📖 พจนานุกรมรหัสในสเตทเมนต์<span class="lbl">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</span></a>
       <a class="more-item" href="/api/uat-signoff?period_month=${MONTH}" target="_blank">✅ ใบทดสอบ + รับรองการใช้งาน (UAT)<span class="lbl">เช็กลิสต์ทดสอบ + คำอธิบาย + ช่องเซ็นรับรอง · พิมพ์ PDF</span></a>
       <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
@@ -1395,9 +1397,9 @@ function toggleDays(i){
     `<button class="btn btn-sm" onclick="event.stopPropagation();loadFees(${i})">✎ ค่าธรรมเนียม & VAT</button>`:'';
   const mmBtn=!DATA.closed&&ch.key!=='COUPON'?
     `<button class="btn btn-sm" onclick="event.stopPropagation();openMatcher(${i})">🔧 จับคู่ละเอียด</button>`:'';
-  // คูปอง: แต้ม KTC/BAY ตรวจอัตโนมัติแล้ว — ลิงก์หน้าเดิมไว้ดูคูปองซีรีส์อื่น
+  // คูปอง: แต้ม KTC/BAY ตรวจอัตโนมัติแล้ว — ลิงก์วิเคราะห์คูปองซีรีส์ (in-app #coupon)
   const cpBtn=ch.key==='COUPON'?
-    `<a class="btn btn-sm" href="/app/classic.html#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง ↗</a>`:'';
+    `<a class="btn btn-sm" href="#coupon" onclick="event.stopPropagation()">🎟️ รายละเอียดคูปอง</a>`:'';
   const worklist=dayWorklistHtml(ch,i);
   el.innerHTML=`
   ${codes||xferBankRow||feeBtn||mmBtn||cpBtn?`<div class="row" style="padding:10px 14px 0">${codes?`<span class="lbl">ที่มา POS:</span> ${codes}`:''} ${xferBankRow} ${feeBtn} ${mmBtn} ${cpBtn}</div>`:''}
@@ -2316,6 +2318,205 @@ function _renderBoard(d){
         </tr></tfoot>
       </table>
     </div>`:''}`;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   § COUPON SERIES VIEW (Phase 2 consolidation)
+   Route: #coupon
+   Read-only — no backend changes. Source: pos_coupon_day via /api/coupon-series.
+   Replaces the link that previously sent users to /app/classic.html#coupon.
+   ════════════════════════════════════════════════════════════════════════ */
+
+let _CP_GRAN = 'month';          // 'month' | 'week' | 'day'
+let _CP_BID  = '';               // branch_id filter ('' = all master branches)
+let _CP_DATE = '';               // date for week/day grain
+let _CP_BRANCHES_LOADED = false; // flag so we only populate branch picker once
+
+function _cpEsc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function _cpName(r){ return r.series_name
+  ? `${_cpEsc(r.series_name)} <span class="lbl" style="font-size:11px">#${r.series_id}</span>`
+  : `Series ${r.series_id}`; }
+// MoM: more coupon discount (up) = more given away → show red; down = green
+function _cpMom(pct){
+  if(pct==null) return '<span class="chip c-mut" style="font-size:11px">ใหม่</span>';
+  const [cls,sym]=pct>0?['c-err','▲']:pct<0?['c-ok','▼']:['c-mut',''];
+  return `<span class="chip ${cls}" style="font-size:11px">${sym} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+function _cpQuery(){
+  if(_CP_GRAN==='month') return `?gran=month&period_month=${MONTH}`;
+  const d = _CP_DATE || (MONTH+'-01');
+  return `?gran=${_CP_GRAN}&day=${d}`;
+}
+
+async function loadCoupon(){
+  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+
+  // Fetch branch list for picker (master branches only — same as other diag views)
+  const branches = await _diagBranches();
+
+  let d = null;
+  const q = _cpQuery() + (_CP_BID ? `&branch_id=${_CP_BID}` : '');
+  try{ d = await api('/api/coupon-series' + q); }catch(e){}
+  d = d || {series:[], by_branch:[], total:0, total_used:0, label:MONTH};
+
+  const granLabel = {month:'เดือน',week:'อาทิตย์',day:'วัน'}[_CP_GRAN];
+
+  // Gran toggle
+  const granBtns = ['month','week','day'].map(g =>
+    `<button class="btn btn-sm${_CP_GRAN===g?' btn-pri':''}" onclick="_CP_GRAN='${g}';loadCoupon()">${{month:'เดือน',week:'สัปดาห์',day:'วัน'}[g]}</button>`
+  ).join('');
+
+  // Date picker (shown only for week/day)
+  const dateInput = _CP_GRAN !== 'month'
+    ? `<input type="date" value="${esc(_CP_DATE||MONTH+'-01')}"
+         onchange="_CP_DATE=this.value;loadCoupon()"
+         style="padding:5px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">`
+    : '';
+
+  // Branch picker
+  const branchOpts = [
+    `<option value="" ${_CP_BID===''?'selected':''}>ทุกสาขา</option>`,
+    ...branches.map(b => `<option value="${b.branch_id}" ${_CP_BID==b.branch_id?'selected':''}>${esc(b.name)}</option>`)
+  ].join('');
+  const branchPicker = `<select onchange="_CP_BID=this.value;loadCoupon()"
+    title="เลือกสาขา"
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${branchOpts}</select>`;
+
+  const tot = d.total || 0;
+  const series = d.series || [];
+
+  // Series rows
+  const seriesRows = series.length
+    ? series.map(r => `<tr style="cursor:pointer" onclick="_cpDrill(${r.series_id})" title="คลิกดูแยกรายสาขา/รายวัน">
+        <td>${_cpName(r)} <span class="lbl" style="font-size:11px">›</span></td>
+        <td class="mono" style="text-align:right">${fmt(r.used_count)}</td>
+        <td class="mono" style="text-align:right">${fmt(r.discount_amount)}</td>
+        <td style="text-align:right">${_cpMom(r.mom_pct)}</td>
+        <td class="mono" style="text-align:right;color:var(--sub)">${tot?(r.discount_amount/tot*100).toFixed(1):0}%</td>
+      </tr>`).join('')
+    : `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--mut)">ไม่มีข้อมูลคูปองในช่วงนี้</td></tr>`;
+
+  // By-branch table (when not filtered to a single branch)
+  const byBranch = d.by_branch || [];
+  const branchRows = (!_CP_BID && byBranch.length)
+    ? byBranch.map(r => `<tr>
+        <td>${esc(r.branch_name)}</td>
+        <td class="mono" style="text-align:right">${fmt(r.used_count)}</td>
+        <td class="mono" style="text-align:right">${fmt(r.discount_amount)}</td>
+      </tr>`).join('')
+    : '';
+
+  $('app').innerHTML = header() + `
+    <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px">🎟️ วิเคราะห์คูปองซีรีส์</h2>
+      <div class="row" style="gap:6px;flex-wrap:wrap;margin-left:auto">
+        ${granBtns}
+        ${dateInput}
+        ${branchPicker}
+      </div>
+    </div>
+    <div class="muted" style="margin-bottom:10px">
+      ${granLabel} · ${esc(d.label||MONTH)}
+      · ส่วนลดคูปองจาก pos_coupon_day (master สาขาเท่านั้น)
+      · คลิกซีรีส์เพื่อดูแยกรายสาขา/รายวัน
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <div class="row" style="flex-wrap:wrap;gap:16px">
+        <div><div class="lbl">ส่วนลดรวม</div><b class="mono" style="font-size:18px">${fmt(tot)}</b></div>
+        <div><div class="lbl">จำนวนใบ</div><b class="mono" style="font-size:18px">${fmt(d.total_used||0)}</b></div>
+        <div><div class="lbl">ซีรีส์</div><b style="font-size:18px">${series.length}</b></div>
+        ${d.prev_total!=null?`<div><div class="lbl">ช่วงก่อนหน้า</div><b class="mono" style="font-size:18px;color:var(--sub)">${fmt(d.prev_total)}</b></div>`:''}
+      </div>
+    </div>
+
+    <div class="card" style="padding:0;margin-bottom:12px">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line-soft)">
+        <b style="font-size:13.5px">แยกตามซีรีส์คูปอง</b>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr>
+            <th style="text-align:left">ซีรีส์</th>
+            <th style="text-align:right">จำนวนใช้</th>
+            <th style="text-align:right">มูลค่าส่วนลด</th>
+            <th style="text-align:right">MoM</th>
+            <th style="text-align:right">% รวม</th>
+          </tr></thead>
+          <tbody>${seriesRows}</tbody>
+          ${series.length?`<tfoot><tr style="background:var(--line-soft);font-weight:600">
+            <td>รวม</td><td class="mono" style="text-align:right">${fmt(d.total_used||0)}</td>
+            <td class="mono" style="text-align:right">${fmt(tot)}</td><td></td><td class="mono" style="text-align:right">100%</td>
+          </tr></tfoot>`:''}
+        </table>
+      </div>
+    </div>
+
+    <div id="cp-drill"></div>
+
+    ${branchRows?`<div class="card" style="padding:0">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--line-soft)">
+        <b style="font-size:13.5px">แยกรายสาขา (รวมทุกซีรีส์)</b>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr>
+            <th style="text-align:left">สาขา</th>
+            <th style="text-align:right">จำนวนใช้</th>
+            <th style="text-align:right">มูลค่าส่วนลด</th>
+          </tr></thead>
+          <tbody>${branchRows}</tbody>
+        </table>
+      </div>
+    </div>`:''}`;
+}
+
+async function _cpDrill(seriesId){
+  const box = $('cp-drill');
+  if(!box) return;
+  box.innerHTML = `<div class="card" style="margin-bottom:12px"><div class="muted">กำลังโหลด Series ${seriesId}…</div></div>`;
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
+
+  const q = _cpQuery() + `&series_id=${seriesId}` + (_CP_BID ? `&branch_id=${_CP_BID}` : '');
+  let d = null;
+  try{ d = await api('/api/coupon-series' + q); }catch(e){}
+
+  const brows = (d&&d.by_branch)||[];
+  const drows = (d&&d.by_day)||[];
+  const nm    = (d&&d.series&&d.series[0]&&d.series[0].series_name) ? _cpEsc(d.series[0].series_name) : '';
+  const mom   = (d&&d.series&&d.series[0]) ? d.series[0].mom_pct : null;
+
+  const subTable = (title, rows, keyFn) => rows.length ? `
+    <div style="font-weight:600;font-size:13px;margin:12px 0 6px">${title}</div>
+    <div style="overflow:auto">
+      <table>
+        <thead><tr>
+          <th style="text-align:left">รายการ</th>
+          <th style="text-align:right">จำนวนใช้</th>
+          <th style="text-align:right">มูลค่า</th>
+        </tr></thead>
+        <tbody>${rows.map(r=>`<tr>
+          <td>${esc(keyFn(r))}</td>
+          <td class="mono" style="text-align:right">${fmt(r.used_count)}</td>
+          <td class="mono" style="text-align:right">${fmt(r.discount_amount)}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : '';
+
+  box.innerHTML = `<div class="card" style="margin-bottom:12px">
+    <div class="row" style="margin-bottom:8px">
+      <div>
+        <b>🎟️ ${nm?nm+' ':''}<span class="lbl">#${seriesId}</span> · ${esc((d&&d.label)||MONTH)}</b>
+        <span class="lbl" style="margin-left:8px">รวม ${fmt((d&&d.total)||0)} · ${fmt((d&&d.total_used)||0)} ใบ · MoM ${_cpMom(mom)}</span>
+      </div>
+      <button class="btn btn-sm" style="margin-left:auto" onclick="$('cp-drill').innerHTML=''">✕ ปิด</button>
+    </div>
+    ${(brows.length||drows.length)
+      ? subTable('แยกรายสาขา', brows, r=>r.branch_name) + subTable('แยกรายวัน', drows, r=>r.day)
+      : '<div class="muted">ไม่มีข้อมูลสำหรับ series นี้</div>'}
+  </div>`;
+  box.scrollIntoView({behavior:'smooth', block:'nearest'});
 }
 
 route();

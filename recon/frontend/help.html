@@ -418,8 +418,20 @@ section{scroll-margin-top:80px}
     <div class="k">เอกสาร</div><div>สรุปคะแนน KTC, สรุปคะแนน BAY (เฉพาะที่สาขามียอดแลก)</div>
     <div class="k">วิธีจับคู่</div><div>POS รหัส KTCPOINT/BAYPOINT (ยอดแต้มที่แลก) ↔ ยอด settlement จาก issuer</div>
     <div class="k">เคสพิเศษ KTC</div><div>เงิน settlement <b>ไม่ได้เข้าตรง</b> — ค่ายบัตรหักออกจากยอดเงินเข้า KTB ของบัตรเครดิต KTC แทน (โชว์ "in KTC deposit")</div>
-    <div class="k">ตรวจอะไร</div><div>กางแถว COUPON → การ์ดแยกตาม issuer / ปุ่ม 🎟️ <b>รายละเอียดคูปอง</b> ไปหน้า classic สำหรับซีรีส์คูปองอื่น</div>
+    <div class="k">ตรวจอะไร</div><div>กางแถว COUPON → การ์ดแยกตาม issuer / ปุ่ม 🎟️ <b>รายละเอียดคูปอง</b> เปิดหน้าวิเคราะห์คูปองซีรีส์ในแอป (<code>#coupon</code>)</div>
     <div class="k">ที่ผิดบ่อย</div><div>แลกแต้มเดือนก่อน settlement มาเดือนนี้ • คูปอง 3rd-party ที่ยังไม่ตั้งค่า issuer</div>
+  </div>
+
+  <h3 id="ch-coupon-series">5.8 วิเคราะห์คูปองซีรีส์ (#coupon)</h3>
+  <p>หน้า <b>วิเคราะห์คูปองซีรีส์</b> (<code>⋯ เพิ่มเติม → 🎟️ วิเคราะห์คูปองซีรีส์</code> หรือปุ่ม <b>🎟️ รายละเอียดคูปอง</b> ในแถว COUPON)
+  ดึงข้อมูลจาก <code>pos_coupon_day</code> เดียวกับที่ร่างบัญชีใช้คำนวณส่วนลด — ยอดจึงสอดคล้องกันเสมอ</p>
+  <div class="ch-flow">
+    <div class="k">ข้อมูล</div><div>ส่วนลดคูปองแยกตาม <b>ซีรีส์</b> (coupon_series_id) · master สาขาเท่านั้น · เลือกสาขาหรือดูทุกสาขา</div>
+    <div class="k">ระดับเวลา</div><div>สลับ <b>เดือน / สัปดาห์ / วัน</b> ได้จาก gran toggle · สัปดาห์/วัน ต้องเลือกวันที่จาก date picker</div>
+    <div class="k">ตัวเลขในตาราง</div><div>จำนวนใช้ · มูลค่าส่วนลด · MoM (เทียบช่วงก่อน — ▲แดง=ส่วนลดมากขึ้น ▼เขียว=น้อยลง) · % ของรวม</div>
+    <div class="k">Drill</div><div>คลิกแถวซีรีส์ใด → แสดง <b>แยกรายสาขา</b> + <b>แยกรายวัน</b> ของซีรีส์นั้น · กด ✕ เพื่อปิด drill</div>
+    <div class="k">ความสอดคล้องบัญชี</div><div>ยอดรวมในหน้านี้อ้างอิง <code>pos_coupon_day.discount_amount</code> — ตัวเลขเดียวกับบรรทัด "ส่วนลด/โปรโมชัน" ในร่างบัญชีรายวัน</div>
+    <div class="k">หมายเหตุ</div><div>แทนที่ลิงก์เดิมที่ส่งไปหน้า classic.html (เฟส 2 consolidation, 2026-06-19) — classic.html ยังเข้าถึงได้ผ่านเมนู เครื่องมือขั้นสูง จนถึงเฟส 6</div>
   </div>
 </section>
 
