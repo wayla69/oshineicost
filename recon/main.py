@@ -5151,6 +5151,23 @@ _UAT_CASES = [
      "expected": "เปิดได้จากปุ่มในหน้าสาขา + เมนู, ยอดสรุปครบ, การ์ดแต่ละช่องทางแสดงถูกต้อง, "
                  "KTC แสดงแบบ bank_in_credit, สาขาไม่มีข้อมูลขึ้น empty state ไม่ error, "
                  "ไม่ใช้ Tailwind / classic CSS"},
+    {"id": "TC-29", "title": "Responsive Nav + Reports Hub (#reports) -- เฟส 5",
+     "role": "ทุกบทบาท",
+     "narrative": "เฟส 5 เพิ่มแถบนำทาง 4 โซน (หน้าหลัก / รายงาน / Admin / วินิจฉัย) "
+                  "แสดงเป็น top-tab บน desktop (≥641px) และ bottom-nav ตรึงด้านล่างบนมือถือ "
+                  "#reports = hub รายงานทั้งหมดแทนเมนู ⋯ ที่เคยกระจัดกระจาย "
+                  "แท็บ active เปลี่ยนตาม route ปัจจุบันอัตโนมัติ (เฟส 5 consolidation 2026-06-19)",
+     "steps": ["บนจอกว้าง: ตรวจ top-tab 4 แท็บปรากฏใต้แถบ header — หน้าหลัก / รายงาน / Admin / วินิจฉัย",
+               "กด แท็บ 'รายงาน' หรือนำทางไป #reports -> ตรวจ hub แสดง 3 กลุ่ม: งานประจำ / การตรวจสอบ / เอกสาร&เครื่องมือ",
+               "กดการ์ด 'Dashboard รายได้รายวัน' -> route #dashboard; กด back; กดการ์ด 'ผิดช่อง' -> #wrong",
+               "กดการ์ด PDF (รายงานการจับคู่รายวัน) -> เปิด tab ใหม่ ไม่ใช่ route ใน SPA",
+               "กด แท็บ 'Admin' -> นำทางไป #setup; ตรวจ active state ที่ tab Admin",
+               "กด แท็บ 'วินิจฉัย' -> #board; กด 'หน้าหลัก' -> กลับ overview",
+               "บนมือถือ (จำลอง viewport <641px): ตรวจ bottom-nav ตรึง 4 icon ด้านล่าง; top-tab ซ่อน",
+               "เปลี่ยน route ผ่าน bottom-nav -> active icon เปลี่ยนสีตาม zone"],
+     "expected": "top-tab ปรากฏบน desktop / bottom-nav บน mobile, active state ถูกต้องทุก route, "
+                 "#reports hub แสดงครบ 3 กลุ่ม, การ์ด in-app นำทาง SPA, การ์ด PDF เปิดใหม่, "
+                 "ไม่มีปุ่ม ⋯ เพิ่มเติม แล้ว, 🔑 รหัส ยังอยู่"},
     {"id": "TC-28", "title": "Setup in-app (#setup) -- ตั้งค่าระบบ (เฟส 4)",
      "role": "ผู้จัดการ / เจ้าหน้าที่กระทบยอด",
      "narrative": "หน้า #setup คือ admin panel รวม 5 ส่วน: ① ตารางจับคู่รหัสรับเงิน (payment-map) "
