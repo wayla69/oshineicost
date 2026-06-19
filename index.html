@@ -21675,7 +21675,16 @@ async function openDiscountBills(opts = {}) {
         🖨️ ${opts.reprinted_only?'ดูทั้งหมด':'เฉพาะ Reprint'}
       </button>
     </div>` : '';
-  sumEl.innerHTML = payFilter + `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
+  const curSort = opts.sort || 'discount';
+  const sortBar = `<div class="flex items-center gap-1 mb-2 flex-wrap">
+    <span class="text-xs text-slate-400 mr-1">เรียงโดย:</span>
+    ${[['date','📅 วันที่'],['discount','฿ ส่วนลด'],['pct','% ของบิล'],['total','ยอดบิล']].map(([k,lbl])=>
+      `<button onclick="openDiscountBills({..._discBillsCtx, sort:'${k}'})"
+        class="text-xs px-2.5 py-1 rounded-lg border ${curSort===k?'font-bold text-white':'text-slate-600 hover:bg-slate-50'}"
+        style="${curSort===k?'background:var(--color-primary);border-color:var(--color-primary)':'border-color:#e2e8f0'}">${lbl}</button>`
+    ).join('')}
+  </div>`;
+  sumEl.innerHTML = payFilter + sortBar + `<div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-1">
     ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)],['พิมพ์ซ้ำ (>1x)', `<span class="${(s.reprinted_bills||0)>0?'text-orange-600 font-bold':''}">${fmtN(s.reprinted_bills||0)}</span>`]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
