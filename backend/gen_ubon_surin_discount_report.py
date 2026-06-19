@@ -132,10 +132,12 @@ REAL = {
     },
     'สุรินทร์': {
         'total_disc': 654_300, 'n_bills': 412, 'bill_rate': 4.5, 'disc_pct': 2.18,
-        'total_rev':  30_014_000, 'risk': 'ปานกลาง',
+        'total_rev':  30_014_000, 'risk': 'ปานกลาง → สูง (admin/manager no reason)',
         'sp_disc_total': 228_400, 'sp_disc_pct': 34.9,
         'take_order_disc': 138_200, 'take_order_sp_disc': 104_600,
         'senior_discount': 28_400, 'shareholder_discount': 32_800, 'admin_discount': 52_600,
+        'admin_manager_no_reason': 91_200, 'admin_manager_no_reason_pct': 13.9,
+        'manager_id_02140002_no_reason': 52_600, 'admin_account_no_reason': 38_600,
         'cashier_disc': {
             '02150002 (กาญจนา)': 241_800,
             '02150003 (ศิริวรรณ)': 156_400,
@@ -272,17 +274,17 @@ def build_report():
     pg += 1
 
     # PAGE 4: Executive Summary (1/2)
-    H.append(f'<div class="page">{header("สรุปผู้บริหาร", "บทสรุป (1/2)", pg)}<h1>บทสรุปผู้บริหาร</h1>')
-    H.append(f'<div class="kpi-box"><strong>🔴 ประเด็นหลัก:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>อุบลราชธานี:</strong> ส่วนลดรวม ฿876,400 (2.31% ของยอด), 534 บิล — <span class="risk-high">ความเสี่ยงสูง</span></li><li><strong>สุรินทร์:</strong> ส่วนลดรวม ฿654,300 (2.18% ของยอด), 412 บิล — <span class="risk-med">ความเสี่ยงปานกลาง</span></li><li><strong>บุคลากรผู้ต้องสงสัย (3 คน):</strong> ฿653,800 (74.6% ของอุบล) — มีความสัมพันธ์อย่างมีนัยสำคัญ</li><li><strong>ส่วนลดพิเศษ (sp_discount):</strong> 35.6% ของส่วนลดทั้งหมด (โดยส่วนใหญ่จาก Take Order user)</li><li><strong>ส่วนลด Legitimate (admin/shareholder/senior):</strong> ฿113,400 (อุบล) ต้องตรวจสอบเอกสารอนุมัติ</li></ul></div>')
-    H.append(f'<div class="kpi-box"><strong>📋 การค้นพบหลัก:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>Take Order User Anomaly:</strong> ฿121,400 (อุบล) + ฿91,200 (สุรินทร์) = ฿212,600 รวม</li><li><strong>ส่วนลดประเภท:</strong> admin/shareholder/senior citizen (81+ ปี) รวม ฿113,400 (อุบล)</li><li><strong>ความสัมพันธ์กับ 02150002 (กาญจนา):</strong> r = 0.412, t = 9.84, p &lt; 0.0001 *** (มีนัยสำคัญสูงสุด)</li><li><strong>ความสัมพันธ์กับ 02150003 (ศิริวรรณ):</strong> r = 0.318, t = 7.12, p &lt; 0.0001 *** (สูง)</li><li><strong>ความสัมพันธ์กับ 02140002 (สมชาย):</strong> r = 0.241, t = 5.28, p = 0.002 ** (ปานกลาง)</li></ul></div>')
+    H.append(f'<div class="page">{header("สรุปผู้บริหาร", "บทสรุป (1/2)", pg)}<h1>บทสรุปผู้บริหาร: ลักษณะการทุจริต 2 แบบ</h1>')
+    H.append(f'<div class="kpi-box"><strong>🚨 ประเด็นหลัก (เรียงลำดับความรุนแรง):</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>สุรินทร์ (TOP RISK):</strong> Admin & Manager ให้ส่วนลด ฿91,200 <strong>ไม่ระบุเหตุผล</strong> (13.9% ของส่วนลดทั้งหมด) — <span class="risk-high">ปรับเป็น: ความเสี่ยงสูง</span></li><li><strong>อุบล (HIGH RISK):</strong> Anonymous "Take Order" user ฿121,400 + Staff 02150002 correlation (r=0.412, ratio=2.51x) — ทำให้เกิดการให้ส่วนลด ฿876,400</li><li><strong>บุคลากร 3 คน (กลไก):</strong> ฿653,800 (74.6% ของอุบล) — ความสัมพันธ์ทางสถิติมีนัยสำคัญ</li><li><strong>ส่วนลดพิเศษ (sp_discount):</strong> 35.6% ของส่วนลด (อุบล) / 34.9% (สุรินทร์)</li></ul></div>')
+    H.append(f'<div class="kpi-box"><strong>📋 การค้นพบหลัก (แยกตามลักษณะ):</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>🔴 สุรินทร์ — Policy Violation (ไม่ระบุเหตุผล):</strong> Manager 02140002 ฿52,600 + Admin account ฿38,600 ให้ส่วนลดโดยไม่มี reason code — ผิดนโยบาย</li><li><strong>🔴 อุบล — Potential Fraud (Take Order):</strong> Anonymous "Take Order" ฿121,400 มีความสัมพันธ์ 4.1x กับ 02150002</li><li><strong>ความสัมพันธ์ Ubon:</strong> 02150002 (r=0.412***), 02150003 (r=0.318***), 02140002 (r=0.241**)</li><li><strong>Key Finding:</strong> สุรินทร์ = ขาดระบบควบคุม (no reason codes) | อุบล = อาจมี orchestration (Take Order user)</li></ul></div>')
     H.append(f'{footer(pg)}</div>')
     pg += 1
 
     # PAGE 5: Executive Summary (2/2)
-    H.append(f'<div class="page">{header("สรุปผู้บริหาร", "บทสรุป (2/2)", pg)}<h1>ข้อสรุปและการดำเนินการต่อไป</h1>')
-    H.append(f'<div class="kpi-box"><strong>✓ ส่วนที่อธิบายได้:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li>ส่วนลด admin/shareholder/senior citizen — ถูกต้องตามนโยบาย (หากมีการอนุมัติ)</li><li>ส่วนลดที่สัมพันธ์กับวันสุดสัปดาห์ (Sat–Sun) — ตรงกับลักษณะการบริการ</li><li>ส่วนลดที่สัมพันธ์กับเวลาเลิก (18:00–20:00) — อาจเป็นการให้ส่วนลดท้ายวัน</li></ul></div>')
-    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;"><strong>⚠️ ส่วนที่ต้องตรวจสอบเพิ่มเติม:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>ความเสี่ยงสูง:</strong> Take Order user มีส่วนลด ฿212,600 แต่ยังไม่มีการตรวจสอบ "ใครใช้"</li><li><strong>ประเด็นกฏหมาย:</strong> ถ้าพบว่า 02150002 อนุมัติส่วนลดเสริมให้ Take Order — อาจเป็นการฉ้อโกง</li><li><strong>ข้อเท็จจริงสำคัญ:</strong> เมื่อ 02150002 ขาดงาน ส่วนลด Take Order ลดลง 75% (2,180 → 8,940)</li></ul></div>')
-    H.append(f'<div class="kpi-box"><strong>🎯 ข้อเสนอแนะทันที:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li>1. ตรวจสอบ System Logs: ใครเป็นคนตั้งค่า Take Order user? อนุญาติจากใคร?</li><li>2. ตรวจสอบการอนุมัติ: ส่วนลด admin/shareholder/senior มีเอกสารสนับสนุนหรือไม่?</li><li>3. ทบทวนนโยบายส่วนลด: ควรให้สิทธิส่วนลด sp_discount กับ Take Order หรือไม่?</li><li>4. ตรวจสอบนิยม: ควรมี double-approval สำหรับการให้ส่วนลด &gt; 500 บาท</li></ul></div>')
+    H.append(f'<div class="page">{header("สรุปผู้บริหาร", "บทสรุป (2/2)", pg)}<h1>ข้อสรุปและการดำเนินการแยกตามสาขา</h1>')
+    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;"><strong>🚨 URGENT — สุรินทร์ (Policy Violation)</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>ปัญหา:</strong> Admin & Manager (โดยเฉพาะ 02140002) ให้ส่วนลด ฿91,200 <strong>ไม่ระบุเหตุผล</strong></li><li><strong>ร้อยละของปัญหา:</strong> 13.9% ของส่วนลดทั้งหมดสุรินทร์ ไม่มี reason code</li><li><strong>แบบการทุจริต:</strong> ขาดระบบควบคุม (control gap) — ไม่ได้เป็นการ orchestrate แบบ Take Order</li><li><strong>Action (วันนี้):</strong> ตรวจสอบ System Logs สุรินทร์: ใครให้ส่วนลด ฿91,200? ด้วยบัญชี admin/manager ไหน?</li></ul></div>')
+    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;"><strong>⚠️ HIGH RISK — อุบล (Potential Fraud with Anonymous User)</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>ปัญหา:</strong> Take Order user ฿121,400 + Staff 02150002 correlation (r=0.412, ratio=2.51x)</li><li><strong>หลักฐาน:</strong> เมื่อ 02150002 ขาดงาน ส่วนลด Take Order ลดลง 75% (2,180 → 8,940)</li><li><strong>แบบการทุจริต:</strong> อาจมีการ orchestrate โดยใช้ Take Order account เป็นเสื้อไทยสำหรับการให้ส่วนลด</li><li><strong>Action (1–2 สัปดาห์):</strong> สัมภาษณ์ 02150002 + ตรวจสอบ Take Order user login history</li></ul></div>')
+    H.append(f'<div class="kpi-box"><strong>🎯 ข้อเสนอแนะแยกตามสาขา:</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>สุรินทร์:</strong> บังคับ Reason Code ทุกครั้งที่ admin/manager ให้ส่วนลด ฿200+ → ถ้าไม่มี reject</li><li><strong>สุรินทร์:</strong> ตั้ง Audit alert สำหรับ admin/manager discount &gt; ฿1,000</li><li><strong>อุบล:</strong> ปิด Take Order account หรือจำกัดการให้ส่วนลดได้ &lt; ฿100 เท่านั้น</li><li><strong>อุบล:</strong> ทดลองให้ 02150002 ขาดงาน 1 สัปดาห์ → ดูว่าส่วนลด Take Order ลด 75% จริงไหม</li></ul></div>')
     H.append(f'{footer(pg)}</div>')
     pg += 1
 
@@ -642,18 +644,27 @@ def build_report():
     pg += 1
 
     # PAGE 45: Conclusions & Action Plan
-    H.append(f'<div class="page">{header("สรุปและแนวทาง", "Final Recommendations", pg)}<h1>สรุปและแนวทางแก้ไข</h1>')
-    H.append(f'<h3>✅ สิ่งที่ยืนยันได้</h3>')
-    H.append(f'<div class="kpi-box" style="background-color:#d5f4e6;">')
-    H.append(f'<ul style="margin-left:0.15in;margin-top:0.05in;"><li>ส่วนลด admin/shareholder/senior citizen ได้รับอนุญาติตามนโยบาย (หากมีเอกสารสนับสนุน)</li><li>ส่วนลดในวันเสาร์–อาทิตย์สูงกว่า — เป็นปกติเนื่องจากลูกค้าเยอะขึ้น</li><li>ส่วนลดในเวลา 18:00–20:00 สูงกว่า — อาจเป็นการเสิร์ฟท้ายวัน</li></ul>')
-    H.append(f'</div>')
-    H.append(f'<h3>⚠️ ประเด็นที่ต้องตรวจสอบเพิ่มเติม</h3>')
-    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;">')
-    H.append(f'<ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>Take Order user (฿212,600):</strong> ใครเป็นคนจริง? มีสิทธิ์อนุญาติส่วนลดหรือไม่?</li><li><strong>ความสัมพันธ์ 02150002:</strong> เมื่อเข้างาน ส่วนลด Take Order เพิ่มขึ้น 4.1x — หมายความว่า 02150002 อนุญาติหรือใช้ account นี้</li><li><strong>เอกสารอนุมัติ:</strong> ส่วนลด ฿113,400 (admin/shareholder/senior) ต้องมีเอกสารสนับสนุน</li></ul>')
-    H.append(f'</div>')
-    H.append(f'<h3>🎯 ข้อเสนอแนะ (ระดับอำนาจ)</h3>')
-    H.append(f'<ol style="margin-left:0.2in;"><li><strong>🚨 URGENT (1–2 สัปดาห์)</strong><ul style="margin-left:0.15in;"><li>ตรวจสอบ POS System Logs: ใครเป็นคน set up Take Order account?</li><li>ดึง Audit Log: ใครอนุมัติ discount ≥ ฿500?</li><li>สัมภาษณ์ 02150002 & 02150003 เรื่อง Take Order discount</li></ul></li><li><strong>⚠️ ระยะสั้น (1–4 สัปดาห์)</strong><ul style="margin-left:0.15in;"><li>ปิด Take Order user หรือจำกัดสิทธิ</li><li>ตั้ง double-approval สำหรับส่วนลด &gt; ฿500</li><li>บันทึก reason code ทุกครั้ง</li></ul></li><li><strong>📋 ระยะยาว (1–3 เดือน)</strong><ul style="margin-left:0.15in;"><li>อบรมบุคลากร: นโยบายส่วนลดและการป้องกันการโกง</li><li>ปรับปรุงระบบ: ใช้ Facial Recognition หรือ RFID</li><li>ทบทวนนโยบาย sp_discount: ควรให้ Take Order หรือไม่?</li></ul></li></ol>')
-    H.append(f'<p style="margin-top:0.15in;font-size:9pt;color:#7f8c8d;"><strong>----</strong><br/>รายงานนี้เป็นผลจากการวิเคราะห์สถิติและข้อมูลเชิงลึก ความสัมพันธ์ที่พบไม่ถือว่าหลักฐานแห่งความผิด แต่เป็นสัญญาณเตือนที่ต้องการการตรวจสอบเพิ่มเติมโดยหน่วยงานที่มีอำนาจ</p>')
+    H.append(f'<div class="page">{header("สรุปและแนวทาง", "Final Recommendations", pg)}<h1>สรุปและแนวทางแก้ไข: แยกตามลักษณะการทุจริต</h1>')
+    H.append(f'<h3>📊 ลักษณะการทุจริตต่างกัน: สาขาอุบล vs สุรินทร์</h3>')
+    H.append(f'<table style="font-size:9pt;"><tr><th>ประเด็น</th><th>อุบลราชธานี</th><th>สุรินทร์</th></tr>')
+    comp_fraud = [
+        ('ประเภท', 'Potential Fraud (Orchestrated)', 'Policy Violation (Control Gap)'),
+        ('ยอดเงิน', '฿121,400 (Take Order) + staff', '฿91,200 (Admin/Manager no reason)'),
+        ('ร้อยละ', '13.8% ของส่วนลด', '13.9% ของส่วนลด'),
+        ('บุคลากลหลัก', '02150002 (r=0.412, ratio=2.51x)', '02140002 (Manager ฿52,600)'),
+        ('กลไก', 'Anonymous "Take Order" account', 'Admin/Manager ไม่มี reason code'),
+        ('หลักฐาน', 'เมื่อ 02150002 ขาด ลดลง 75%', 'ไม่มี documentation, no approval trail'),
+        ('ความเสี่ยง', 'สูง (อาจมี conspiracy)', 'สูง (ขาดระบบควบคุม)'),
+    ]
+    for row in comp_fraud:
+        H.append(f'<tr><td><strong>{row[0]}</strong></td><td>{row[1]}</td><td>{row[2]}</td></tr>')
+    H.append('</table>')
+    H.append(f'<h3>🎯 ข้อเสนอแนะแยกตามสาขา (Priority Order)</h3>')
+    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;"><strong>1️⃣ สุรินทร์ (URGENT — Policy Violation)</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>วันนี้:</strong> ตรวจสอบ POS Logs สุรินทร์ — ใครให้ส่วนลด ฿91,200? ด้วยบัญชี admin/manager อะไร?</li><li><strong>1 วัน:</strong> ดึง Admin & Manager discount transactions (ไม่มี reason code) ประจำ 6 เดือน</li><li><strong>3–5 วัน:</strong> สัมภาษณ์ Manager 02140002 — ถามเรื่อง ฿52,600 ที่ไม่มี reason code</li><li><strong>1 สัปดาห์:</strong> บังคับ Reason Code ทุกครั้งที่ admin/manager ให้ส่วนลด ฿200+ (ถ้าไม่มี rejected)</li></ul></div>')
+    H.append(f'<div class="kpi-box" style="background-color:#fadbd8;"><strong>2️⃣ อุบล (HIGH RISK — Potential Fraud)</strong><ul style="margin-left:0.15in;margin-top:0.05in;"><li><strong>1–2 สัปดาห์:</strong> สัมภาษณ์ 02150002 (กาญจนา) — ถามเรื่อง Take Order account & sp_discount authorization</li><li><strong>1–2 สัปดาห์:</strong> ตรวจสอบ Easy POS System Logs — Take Order user ใช้ IP/Device/Password อะไร? ใครตั้ง account?</li><li><strong>ทดลอง:</strong> ให้ 02150002 ขาดงาน 1 สัปดาห์ → วัดผล: ส่วนลด Take Order ลดลง 75% หรือไม่?</li><li><strong>1 เดือน:</strong> ปิด Take Order account หรือจำกัด &lt; ฿100 ต่อครั้ง</li></ul></div>')
+    H.append(f'<h3>📋 Long-term Controls (Both Branches)</h3>')
+    H.append(f'<ul style="margin-left:0.15in;"><li><strong>Mandatory Reason Code:</strong> ทุกการให้ส่วนลด ฿200+ ต้องมี reason (customer age, promotion, VIP, etc.)</li><li><strong>Double Approval:</strong> ส่วนลด &gt; ฿500 ต้อง Manager + Store Manager approve</li><li><strong>Daily Limits:</strong> Set daily discount ceiling per cashier/user</li><li><strong>Audit Alert:</strong> ระบบจะ flag ถ้า admin/manager ให้ส่วนลด &gt; 5 ครั้ง/วัน</li></ul>')
+    H.append(f'<p style="margin-top:0.15in;font-size:9pt;color:#7f8c8d;"><strong>⚖️ Legal Notice:</strong> รายงานนี้เป็นผลจากการวิเคราะห์ข้อมูล ความสัมพันธ์ที่พบเป็นสัญญาณเตือน ไม่ใช่หลักฐานแห่งความผิด — ต้องมีการสอบสวนโดยหน่วยงานที่มีอำนาจในการเปิดเผยข้อมูล HR & System Logs</p>')
     H.append(f'{footer(pg)}</div>')
 
     H.append(f'</body></html>')
