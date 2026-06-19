@@ -5151,6 +5151,24 @@ _UAT_CASES = [
      "expected": "เปิดได้จากปุ่มในหน้าสาขา + เมนู, ยอดสรุปครบ, การ์ดแต่ละช่องทางแสดงถูกต้อง, "
                  "KTC แสดงแบบ bank_in_credit, สาขาไม่มีข้อมูลขึ้น empty state ไม่ error, "
                  "ไม่ใช้ Tailwind / classic CSS"},
+    {"id": "TC-28", "title": "Setup in-app (#setup) -- ตั้งค่าระบบ (เฟส 4)",
+     "role": "ผู้จัดการ / เจ้าหน้าที่กระทบยอด",
+     "narrative": "หน้า #setup คือ admin panel รวม 5 ส่วน: ① ตารางจับคู่รหัสรับเงิน (payment-map) "
+                  "② วิธีกระทบยอดราย lane (method-config) ③ บัญชีธนาคาร ④ MIDs ⑤ รหัสสเตทเมนต์ "
+                  "แทนที่ /app/setup.html ใน เฟส 4 consolidation 2026-06-19 "
+                  "ส่วนที่ต้องรหัสผู้จัดการ: แก้ lane / seed-requirement / override statement-code",
+     "steps": ["เปิด [เพิ่มเติม] > ⚙️ ตั้งค่าระบบ -> route #setup โหลดการตั้งค่า",
+               "ตรวจ ① ตาราง payment-map: คอลัมน์รหัส POS / ประเภท / ธนาคาร / เอกสาร / วิธี / พารามิเตอร์ / ยอด / กระทบ / สถานะ",
+               "แก้ category/bank ใน dropdown ① -> toast 'บันทึก ... แล้ว' (write token)",
+               "คลิก 'แก้ไข ▸' ใน lane column -> form inline ปรากฏ -> แก้ค่า -> บันทึก (ผู้จัดการ) -> prompt รหัสผู้จัดการ",
+               "กด '+ เพิ่มบัญชี' ใน ③ -> prompt สาขา/ธนาคาร/เลขบัญชี -> toast 'เพิ่มบัญชีแล้ว'",
+               "กด '+ เพิ่ม MID' ใน ④ -> prompt สาขา/acquirer/MID -> toast 'เพิ่ม MID แล้ว'",
+               "ใน ⑤ เลือก channel ใหม่สำหรับรหัส -> กด 'บันทึก' -> prompt ผู้จัดการ -> toast 'บันทึก ... (แก้ N บรรทัด)'"],
+     "expected": "เปิดได้ใน index.html (route #setup) ไม่ redirect ไป setup.html, "
+                 "ทั้ง 5 ส่วนโหลดครบ, dropdown payment-map บันทึกได้ (write token), "
+                 "lane editor inline ปรากฏ/ซ่อนได้ (manager token), "
+                 "③④ เพิ่ม/ลบได้, ⑤ override/revert ทำงาน (manager token), "
+                 "month picker เปลี่ยนเดือนโหลดใหม่, ปุ่ม ← กลับ ออกจาก #setup"},
     {"id": "TC-27", "title": "Discrepancies Admin (#discrepancies) -- จัดการข้อแตกต่าง (เฟส 3b)",
      "role": "ผู้จัดการ / เจ้าหน้าที่กระทบยอด",
      "narrative": "หน้า #discrepancies คือ admin view สำหรับจัดการข้อแตกต่าง (ต้องมี session แล้ว) "

@@ -215,6 +215,18 @@ async function api(path,opts={}){
   if(!r.ok){let d='';try{d=(await r.json()).detail||''}catch(e){};throw new Error(d||('HTTP '+r.status));}
   return r.json();
 }
+function _mgrHdr(){const c=sessionStorage.getItem('mgr_code')||'';return c?{'X-Manager-Token':c}:{};}
+async function mgrApi(path,opts={}){
+  for(let attempt=0;attempt<2;attempt++){
+    try{return await api(path,{...opts,headers:{...(opts.headers||{}),..._mgrHdr()}});}
+    catch(e){
+      if(!String(e.message).includes('ผู้จัดการ')||attempt===1)throw e;
+      const code=prompt('การตั้งค่าขั้นสูงต้องใช้รหัสผู้จัดการ:')||'';
+      if(!code)throw new Error('ยกเลิก — ไม่ได้ใส่รหัสผู้จัดการ');
+      sessionStorage.setItem('mgr_code',code);
+    }
+  }
+}
 
 const CH_ST={ok:['c-ok','ตรงกันแล้ว'],diff:['c-err','ยอดไม่ตรง'],waiting_doc:['c-warn','รอเอกสาร'],
               no_source:['c-mut','ไม่ต้องตรวจ'],setup:['c-setup','รหัสใหม่ ต้องตั้งค่า']};
@@ -250,6 +262,7 @@ function route(){
   if(h==='bankcov')return loadBankCov();
   if(h==='board')return loadBoard();
   if(h==='coupon')return loadCoupon();
+  if(h==='setup')return loadSetup();
   if(h.startsWith('payout'))return loadPayout(h);
   if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
   const m=h.match(/^b\/(\d+)/);
@@ -1356,7 +1369,7 @@ function moreMenu(){
       <a class="more-item" href="/api/statement-codes.html" target="_blank">📖 พจนานุกรมรหัสในสเตทเมนต์<span class="lbl">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</span></a>
       <a class="more-item" href="/api/uat-signoff?period_month=${MONTH}" target="_blank">✅ ใบทดสอบ + รับรองการใช้งาน (UAT)<span class="lbl">เช็กลิสต์ทดสอบ + คำอธิบาย + ช่องเซ็นรับรอง · พิมพ์ PDF</span></a>
       <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
-      <a class="more-item" href="/app/setup.html">⚙️ ตั้งค่าระบบ ↗<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID</span></a>
+      <a class="more-item" href="#setup" onclick="closeSheet()">⚙️ ตั้งค่าระบบ<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID · รหัสสเตทเมนต์</span></a>
       <a class="more-item" href="/app/classic.html">🧰 เครื่องมือขั้นสูง ↗<span class="lbl">หน้าเดิม — เครื่องมือครบทุกอย่าง</span></a>
     </div>
     <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">บัญชี / งานสาขา (เลือกสาขาก่อนใช้)</div>
@@ -2279,7 +2292,7 @@ function _renderBoard(d){
     ? `<div class="card c-warn" style="margin-bottom:10px">
         <b>⚠ Unmapped POS codes (ไม่ถูกรวมในตาราง):</b>
         ${d.unmapped.map(u=>`<span class="chip c-warn" style="margin-left:6px">${esc(u.code)}: ${fmt(u.amount)}</span>`).join('')}
-        — <a href="/app/setup.html">ตั้งค่ารหัส</a>
+        — <a href="#setup">ตั้งค่ารหัส</a>
       </div>` : '';
 
   const emptyMsg = !d.branches.length
@@ -2896,6 +2909,335 @@ async function _discDrillDays(discId,cell){
       </table></td>`;
   }catch(e){ expTr.querySelector('td').innerHTML=`<span style="color:var(--err)">${esc(e.message)}</span>`; }
 }
+
+/* ════════════════ PHASE 4 — #setup (ตั้งค่าระบบ in-app) ════════════════ */
+const _SETUP_CATS=['CASH','QR','TRANSFER','CREDIT','GRAB','LINEMAN','COUPON','ENTERTAIN','OTHER'];
+const _SETUP_BANKS=['KTB','KBANK','KTC','BAY','SCB','BBL','TTB','PROMPTPAY','ANY','NONE','UNKNOWN'];
+const _SETUP_ST_CHIP={ok:['c-ok','✓ พร้อม'],needs_bank:['c-err','⚠ ระบุธนาคาร'],dormant:['c-mut','พักใช้ (฿0)'],off:['c-mut','ไม่กระทบยอด']};
+const _SETUP_DOC_TH={deposit_slip:'สลิปนำฝาก',cc_summary:'สรุปยอดบัตร',grab_report:'รายงาน Grab',
+  lineman_report:'รายงาน Line Man',points_summary:'สรุปคะแนน',
+  'bank_stmt_KTB':'สเตทเมนต์ KTB','bank_stmt_KBANK':'สเตทเมนต์ KBANK','bank_stmt_*':'สเตทเมนต์ธนาคาร'};
+const _SETUP_PARSE_CH_TH={QR:'QR พร้อมเพย์',TRANSFER:'เงินโอน',CASH_DEP:'เงินสด (ฝากเข้าบัญชี)',
+  CC_SETTLE:'บัตรเครดิต',GRAB_PAYOUT:'Grab',LINEMAN_PAYOUT:'Line Man',
+  FEE:'ค่าธรรมเนียม (ไม่ใช่รายได้)',OTHER:'ไม่นับ / ไม่ใช่รายได้'};
+
+let _SETUP_M=null, _SETUP_FILTER='all', _SETUP_CODES=null, _SETUP_CODE_OPTS=[];
+
+async function loadSetup(){
+  const el=$('app');
+  el.innerHTML=header()+'<div class="muted" style="padding:20px 0">กำลังโหลดการตั้งค่า…</div>';
+  try{_SETUP_M=await api(`/api/setup/master?period_month=${MONTH}`);}
+  catch(e){el.innerHTML=header()+`<div class="card" style="color:var(--err);margin-top:10px">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  _setupRender();
+}
+
+function _setupSetFilter(f){_SETUP_FILTER=f;_setupRender();}
+function _setupChangeMonth(m){MONTH=m;localStorage.setItem('v2_month',m);loadSetup();}
+
+function _setupDocChips(r){
+  const m=r.method, ds=r.doc_status||{};
+  const chips=[];
+  for(const k of ['doc1','doc2']){
+    if(!m[k])continue;
+    const up=ds[k]==='uploaded';
+    chips.push(`<span style="font-size:11px;padding:1px 7px;border-radius:6px;display:inline-block;margin:1px 2px 1px 0;background:${up?'var(--ok-bg)':'var(--warn-bg)'};color:${up?'var(--ok)':'var(--warn)'}">${up?'✓':'…'} ${esc(_SETUP_DOC_TH[m[k]]||m[k])}</span>`);
+  }
+  return chips.join('')||'<span class="lbl">—</span>';
+}
+function _setupParamTxt(m){
+  if(!m.method)return '<span class="lbl">—</span>';
+  const p=[];
+  if(m.tol_abs_day!=null)p.push(`±฿${fmt(m.tol_abs_day)}/วัน`);
+  if(m.tol_abs!=null)p.push(`±฿${fmt(m.tol_abs)}/เดือน`);
+  if(m.lag_days!=null)p.push(`เงินเข้าช้าได้ ${m.lag_days} วัน`);
+  if(m.merge_days!=null&&m.merge_days>1)p.push(`รวมได้ ${m.merge_days} วัน`);
+  if(m.fee_vat_expected)p.push('<span class="chip c-warn">มีค่าธรรมเนียม+VAT</span>');
+  return p.join(' · ')||'<span class="lbl">ค่ามาตรฐาน</span>';
+}
+
+function _setupRender(){
+  const rows=_SETUP_M.rows.filter(r=>{
+    if(_SETUP_FILTER==='attention')return r.status==='needs_bank';
+    if(_SETUP_FILTER==='active')return r.status==='ok';
+    return true;
+  });
+
+  let html=header();
+  // page title card
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row">
+    <div style="width:32px;height:32px;border-radius:8px;background:var(--brand);color:#fff;
+      display:flex;align-items:center;justify-content:center;font-size:16px;flex:none">⚙️</div>
+    <div><h2 style="margin:0;font-size:16px">ตั้งค่าระบบกระทบยอด</h2>
+      <div class="lbl">ตารางจับคู่รหัสรับเงิน · วิธีกระทบยอด · บัญชีธนาคาร · MID · รหัสสเตทเมนต์</div></div>
+    <input type="month" value="${MONTH}" onchange="_setupChangeMonth(this.value)"
+      style="padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:#fff;margin-left:auto">
+    <a href="#" onclick="location.hash='';return false" class="btn btn-sm">← กลับ</a>
+  </div></div>`;
+
+  // ① payment map
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:8px">
+    <h2 style="margin:0;font-size:15px">① ตารางจับคู่รหัสรับเงิน</h2>
+    <span class="lbl">${_SETUP_M.rows.length} รหัส · เดือน ${MONTH}</span>
+    <div class="row" style="margin-left:auto;gap:6px">
+      ${['all|ทั้งหมด','attention|⚠ ต้องระบุธนาคาร','active|ใช้งานอยู่'].map(x=>{
+        const [k,t]=x.split('|');
+        return `<button class="btn btn-sm" style="${_SETUP_FILTER===k?'background:var(--brand-soft);border-color:var(--brand)':''}" onclick="_setupSetFilter('${k}')">${t}</button>`;}).join('')}
+      <button class="btn btn-sm" onclick="_setupReseedPos()">Seed จากข้อมูล POS</button>
+      <button class="btn btn-sm" onclick="_setupSeedRequirement()" title="ใส่ค่าตามตารางเจ้าของ (ไม่ทับค่าที่แก้เอง)">ใช้ค่าตามตารางเจ้าของ</button>
+    </div></div>
+  <div style="overflow-x:auto"><table>
+    <tr><th>รหัส POS</th><th>ประเภท</th><th>ธนาคารปลายทาง</th><th>เอกสารที่ใช้ตรวจ</th>
+        <th>วิธีกระทบยอด</th><th>พารามิเตอร์</th><th style="text-align:right">ยอด POS</th>
+        <th>กระทบ</th><th>สถานะ</th></tr>
+    ${rows.map(r=>{
+      const [cls,lab]=_SETUP_ST_CHIP[r.status]||['c-mut',r.status];
+      return `<tr>
+        <td style="font-weight:600;font-family:monospace;font-size:12px">${esc(r.payment_code_norm)}</td>
+        <td><select onchange="_setupSaveMap(${r.id},this,'category')" style="font-size:12px">
+          ${_SETUP_CATS.map(c=>`<option ${c===r.category?'selected':''}>${c}</option>`).join('')}</select></td>
+        <td><select onchange="_setupSaveMap(${r.id},this,'bank')" style="font-size:12px;${r.status==='needs_bank'?'border-color:var(--err)':''}">
+          ${_SETUP_BANKS.map(b=>`<option ${b===r.bank?'selected':''}>${b}</option>`).join('')}</select></td>
+        <td>${_setupDocChips(r)}</td>
+        <td style="font-size:12px">${r.method.method?`<span title="${esc(r.method.method)}">${esc(r.method.method_label||r.method.method)}</span>
+          <div class="lbl">lane ${esc(r.category)}·${esc(r.method.lane_bank||'*')}
+          ${r.method.id?`<a href="#" onclick="_setupEditLane(${r.method.id});return false" style="font-size:11px">แก้ไข ▸</a>`:''}</div>`
+          :'<span class="lbl">—</span>'}</td>
+        <td style="font-size:12px">${_setupParamTxt(r.method)}</td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:12px" title="${r.pos_txn} รายการ">${fmt(r.pos_amount)}</td>
+        <td style="text-align:center"><input type="checkbox" ${r.reconcile?'checked':''} onchange="_setupSaveMap(${r.id},this,'reconcile')"
+             title="ติ๊กออก = ไม่นำมากระทบยอด (เช่น Entertain)"></td>
+        <td><span class="chip ${cls}" style="font-size:11px">${lab}</span></td>
+      </tr>`;}).join('')}
+  </table></div>
+  <div class="muted" style="margin-top:6px;font-size:12px">แก้ประเภท/ธนาคาร = สิทธิ์พนักงาน (🔑) · แก้วิธี/พารามิเตอร์ lane = ต้องรหัสผู้จัดการ · มีผลกับทุกรหัสใน lane เดียวกัน</div>
+  <div id="setup-lane-editor"></div></div>`;
+
+  // ② lane method configs
+  html+=`<div class="card" style="margin-bottom:12px"><h2 style="font-size:15px;margin-bottom:8px">② วิธีกระทบยอดราย lane (ประเภท × ธนาคาร)</h2>
+  <div style="overflow-x:auto"><table>
+    <tr><th>Lane</th><th>เอกสาร 1</th><th>เอกสาร 2</th><th>วิธี</th>
+        <th style="text-align:right">tol/วัน</th><th style="text-align:right">tol/เดือน</th>
+        <th style="text-align:right">lag</th><th style="text-align:right">รวมวัน</th>
+        <th>fee+VAT</th><th>หมายเหตุ</th><th></th></tr>
+    ${_SETUP_M.method_configs.map(c=>`<tr>
+      <td style="font-weight:600;font-family:monospace;font-size:12px">${esc(c.category)}·${esc(c.bank)}</td>
+      <td style="font-size:12px">${esc(_SETUP_DOC_TH[c.doc1]||c.doc1||'—')}</td>
+      <td style="font-size:12px">${esc(_SETUP_DOC_TH[c.doc2]||c.doc2||'—')}</td>
+      <td style="font-size:12px" title="${esc(c.method)}">${esc(c.method)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:12px">${c.tol_abs_day==null?'—':fmt(c.tol_abs_day)}</td>
+      <td style="text-align:right;font-variant-numeric:tabular-nums;font-size:12px">${c.tol_abs==null?'—':fmt(c.tol_abs)}</td>
+      <td style="text-align:right;font-size:12px">${c.lag_days==null?'—':c.lag_days}</td>
+      <td style="text-align:right;font-size:12px">${c.merge_days==null?'—':c.merge_days}</td>
+      <td>${c.fee_vat_expected?'<span class="chip c-warn" style="font-size:11px">มี</span>':'<span class="lbl">—</span>'}</td>
+      <td class="lbl" style="max-width:220px;font-size:12px">${esc(c.notes||'')}</td>
+      <td><button class="btn btn-sm" onclick="_setupEditLane(${c.id})">แก้ไข</button></td>
+    </tr>`).join('')}
+  </table></div>
+  <div class="muted" style="margin-top:6px;font-size:12px">tol ว่าง = ค่ากลาง (±฿${fmt(_SETUP_M.globals.TOL_ABS_DAY)}/วัน หรือ ${_SETUP_M.globals.TOL_PCT_DAY}% · ±฿${fmt(_SETUP_M.globals.TOL_ABS)}/เดือน หรือ ${_SETUP_M.globals.TOL_PCT}%) · ${_SETUP_M.manager_required?'ต้องใช้รหัสผู้จัดการ':'เซิร์ฟเวอร์นี้ยังไม่ตั้งรหัสผู้จัดการ (แก้ได้เลย)'}</div>
+  </div>`;
+
+  // ③ bank accounts
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
+    <h2 style="margin:0;font-size:15px">③ บัญชีธนาคารของสาขา</h2>
+    <button class="btn btn-sm" style="margin-left:auto" onclick="_setupAddAccount()">+ เพิ่มบัญชี</button></div>
+  <div style="overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>ธนาคาร</th><th>เลขบัญชี</th><th>ชื่อบัญชี</th><th>ใช้งาน</th><th></th></tr>
+    ${_SETUP_M.bank_accounts.map(a=>`<tr>
+      <td style="font-size:12px">${esc(a.branch_name)}</td>
+      <td style="font-size:12px">${esc(a.bank)}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(a.account_no)}</td>
+      <td style="font-size:12px">${esc(a.account_name||'')}</td>
+      <td style="font-size:12px">${a.active?'✓':'—'}</td>
+      <td><button class="btn btn-sm" style="color:var(--err)" onclick="_setupDelAccount(${a.account_id})">ลบ</button></td>
+    </tr>`).join('')||'<tr><td colspan="6" class="muted" style="padding:14px 9px">ยังไม่มีบัญชี — ระบบใช้เลขบัญชีจับเอกสารเข้าสาขาอัตโนมัติ</td></tr>'}
+  </table></div></div>`;
+
+  // ④ MIDs
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
+    <h2 style="margin:0;font-size:15px">④ MID เครื่องรูดบัตร / คะแนน</h2>
+    <button class="btn btn-sm" style="margin-left:auto" onclick="_setupAddMid()">+ เพิ่ม MID</button></div>
+  <div style="overflow-x:auto"><table>
+    <tr><th>สาขา</th><th>ผู้รับบัตร</th><th>Merchant ID</th><th>Terminal</th><th>ใช้งาน</th><th></th></tr>
+    ${_SETUP_M.acquirer_mids.map(m=>`<tr>
+      <td style="font-size:12px">${esc(m.branch_name)}</td>
+      <td style="font-size:12px">${esc(m.acquirer)}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(m.merchant_id||'')}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(m.terminal_id||'')}</td>
+      <td style="font-size:12px">${m.active?'✓':'—'}</td>
+      <td><button class="btn btn-sm" style="color:var(--err)" onclick="_setupDelMid(${m.mid_id})">ลบ</button></td>
+    </tr>`).join('')||'<tr><td colspan="6" class="muted" style="padding:14px 9px">ยังไม่มี MID</td></tr>'}
+  </table></div>
+  <div class="muted" style="margin-top:6px;font-size:12px">MID แบบ KTCPOINT / BAYPOINT ใช้แยกแถวแต้มออกจากใบสรุปบัตร — จำเป็นต่อช่องทางคูปอง (แต้ม KTC/BAY)</div></div>`;
+
+  // ⑤ statement-code remap
+  html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
+    <h2 style="margin:0;font-size:15px">⑤ รหัสในสเตทเมนต์ → ช่องทาง</h2>
+    <a href="/api/statement-codes.html" target="_blank" class="lbl" style="margin-left:auto">🖨️ พิมพ์ใบให้ทีมตรวจ</a>
+    <a href="/api/statement-codes.xlsx" class="lbl" style="margin-left:12px">⬇ Excel</a></div>
+  <div class="muted" style="margin-bottom:8px;font-size:12px">แก้การจัดประเภทรหัสในสเตทเมนต์เองได้เมื่อทีมตรวจพบว่าผิด (เช่น <b>SDCH</b>=นำเงินสดไปฝาก ไม่ใช่ QR) — มีผลทันทีทั้งข้อมูลเดิมและไฟล์ที่อัปใหม่ · ใช้ <b>OTHER</b> สำหรับรายการที่ไม่ใช่รายได้ · ต้องใช้รหัสผู้จัดการ</div>
+  <div id="setup-codes-body" class="muted">กำลังโหลด…</div></div>`;
+
+  $('app').innerHTML=html;
+  _setupLoadCodes();
+}
+
+/* ── ⑤ statement-code remap ── */
+async function _setupLoadCodes(){
+  const b=$('setup-codes-body'); if(!b)return;
+  let j;try{j=await api('/api/statement-codes');}
+  catch(e){b.innerHTML='โหลดไม่สำเร็จ: '+esc(e.message);return;}
+  _SETUP_CODES=j.codes; _SETUP_CODE_OPTS=j.channel_options||Object.keys(_SETUP_PARSE_CH_TH);
+  b.innerHTML=`<div style="overflow-x:auto"><table>
+    <tr><th>รหัส / คำ</th><th>ความหมาย</th><th>ระบบจัดเป็น</th><th>แก้เป็น</th><th></th></tr>
+    ${_SETUP_CODES.map((c,i)=>{
+      const eff=c.effective_channel;
+      const badge=c.overridden?'<span class="chip c-ok" style="font-size:11px">✏️ ทีมแก้แล้ว</span>'
+        :c.status==='review'?'<span class="chip c-warn" style="font-size:11px">⚠ รอตรวจ</span>':'<span class="chip c-mut" style="font-size:11px">✓</span>';
+      return `<tr>
+        <td style="font-family:monospace;font-size:12px">${esc(c.code)}<br>${badge}</td>
+        <td class="lbl">${esc(c.meaning_th)}</td>
+        <td style="font-size:12px">${esc(c.effective_channel_th||c.channel_th)}${c.overridden?` <span class="lbl">(เดิม ${esc(c.channel_th)})</span>`:''}</td>
+        <td><select id="setup-cc-${i}" style="font-size:12px">${_SETUP_CODE_OPTS.map(o=>`<option value="${o}" ${o===eff?'selected':''}>${esc(_SETUP_PARSE_CH_TH[o]||o)}</option>`).join('')}</select></td>
+        <td><button class="btn btn-sm btn-pri" onclick="_setupSaveCode(${i})">บันทึก</button>
+          ${c.overridden?` <button class="btn btn-sm" onclick="_setupRevertCode('${esc(c.override_code||c.code)}')">คืนค่าเดิม</button>`:''}</td>
+      </tr>`;}).join('')}
+  </table></div>`;
+}
+async function _setupSaveCode(i){
+  if(!_SETUP_CODES)return;
+  const c=_SETUP_CODES[i]; const ch=$('setup-cc-'+i).value;
+  const token=(c.override_code||c.code||'').toString().split(/[\s/|]/)[0];
+  if(!token){toast('ไม่พบรหัส');return;}
+  try{
+    const r=await mgrApi('/api/statement-codes/override',{method:'POST',
+      body:{code:token,channel:ch,note:c.meaning_th||'',by:'manager'}});
+    toast(`บันทึก ${token} → ${_SETUP_PARSE_CH_TH[ch]||ch} (แก้ ${r.lines_reclassified} บรรทัด)`);
+    _setupLoadCodes();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function _setupRevertCode(code){
+  try{
+    const r=await mgrApi('/api/statement-codes/override/'+encodeURIComponent(code),{method:'DELETE'});
+    toast(`คืนค่าเดิม ${code} (แก้ ${r.lines_reclassified} บรรทัด)`);
+    _setupLoadCodes();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── ① payment map ── */
+async function _setupSaveMap(id,el,field){
+  const r=_SETUP_M.rows.find(x=>x.id===id);
+  const body={category:r.category,bank:r.bank,reconcile:r.reconcile,notes:r.notes||''};
+  body[field]=field==='reconcile'?(el.checked?1:0):el.value;
+  try{
+    await api(`/api/payment-map/${id}`,{method:'PATCH',body});
+    toast(`บันทึก ${r.payment_code_norm} แล้ว`);
+    loadSetup();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);loadSetup();}
+}
+
+/* ── ② lane editor (inline) ── */
+function _setupEditLane(cfgId){
+  const c=_SETUP_M.method_configs.find(x=>x.id===cfgId);
+  if(!c)return;
+  const box=$('setup-lane-editor'); if(!box)return;
+  const docs1=['','deposit_slip','cc_summary','grab_report','lineman_report','points_summary'];
+  const docs2=['','bank_stmt_KTB','bank_stmt_KBANK','bank_stmt_*'];
+  const methods=['direct','two_stage','cash_3way','itemized','issuer_points'];
+  box.innerHTML=`<div class="card" style="background:#fafcff;border-color:var(--info);margin-top:10px">
+    <div class="row"><b>แก้ lane ${esc(c.category)}·${esc(c.bank)}</b>
+      <span class="chip c-setup">มีผลกับทุกรหัสใน lane นี้ · ต้องใช้รหัสผู้จัดการ</span>
+      <a href="#" class="lbl" style="margin-left:auto" onclick="$('setup-lane-editor').innerHTML='';return false">ปิด</a></div>
+    <div class="row" style="margin-top:8px;gap:14px">
+      <label class="lbl">เอกสาร 1<br><select id="sle-doc1">${docs1.map(d=>`<option value="${d}" ${d===(c.doc1||'')?'selected':''}>${d?(_SETUP_DOC_TH[d]||d):'—'}</option>`).join('')}</select></label>
+      <label class="lbl">เอกสาร 2<br><select id="sle-doc2">${docs2.map(d=>`<option value="${d}" ${d===(c.doc2||'')?'selected':''}>${d?(_SETUP_DOC_TH[d]||d):'—'}</option>`).join('')}</select></label>
+      <label class="lbl">วิธี<br><select id="sle-method">${methods.map(m=>`<option ${m===c.method?'selected':''}>${m}</option>`).join('')}</select></label>
+      <label class="lbl">tol/วัน (บาท)<br><input type="number" id="sle-tday" step="1" min="0" value="${c.tol_abs_day==null?'':c.tol_abs_day}" placeholder="ค่ากลาง" style="width:80px"></label>
+      <label class="lbl">tol/เดือน (บาท)<br><input type="number" id="sle-tmon" step="1" min="0" value="${c.tol_abs==null?'':c.tol_abs}" placeholder="ค่ากลาง" style="width:80px"></label>
+      <label class="lbl">เงินเข้าช้าได้ (วัน 0–14)<br><input type="number" id="sle-lag" step="1" min="0" max="14" value="${c.lag_days==null?'':c.lag_days}" style="width:60px"></label>
+      <label class="lbl">รวมได้กี่วัน (1–7)<br><input type="number" id="sle-merge" step="1" min="1" max="7" value="${c.merge_days==null?'':c.merge_days}" style="width:60px"></label>
+      <label class="lbl">มีค่าธรรมเนียม+VAT<br><input type="checkbox" id="sle-fee" ${c.fee_vat_expected?'checked':''}></label>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <input type="text" id="sle-notes" value="${esc(c.notes||'')}" placeholder="หมายเหตุ"
+        style="flex:1;min-width:200px;font-family:inherit;font-size:13px;padding:6px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--txt)">
+      <button class="btn btn-pri btn-sm" onclick="_setupSaveLane(${c.id})">บันทึก (ผู้จัดการ)</button>
+    </div></div>`;
+  box.scrollIntoView({behavior:'smooth',block:'center'});
+}
+async function _setupSaveLane(cfgId){
+  const c=_SETUP_M.method_configs.find(x=>x.id===cfgId);
+  const numVal=id=>{const x=$(id).value.trim();return x===''?null:+x;};
+  const body={category:c.category,bank:c.bank,
+    doc1:$('sle-doc1').value||null, doc2:$('sle-doc2').value||null,
+    method:$('sle-method').value,
+    tol_abs_day:numVal('sle-tday'), tol_abs:numVal('sle-tmon'),
+    lag_days:numVal('sle-lag'), merge_days:numVal('sle-merge'),
+    fee_vat_expected:$('sle-fee').checked?1:0,
+    notes:$('sle-notes').value};
+  try{
+    await mgrApi(`/api/method-config/${cfgId}`,{method:'PATCH',body});
+    toast('บันทึก lane แล้ว');
+    loadSetup();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── seeds ── */
+async function _setupReseedPos(){
+  try{const r=await api('/api/payment-map/seed',{method:'POST'});
+      toast(`เพิ่มรหัสใหม่ ${r.inserted} รหัส`);loadSetup();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function _setupSeedRequirement(){
+  if(!confirm('ใส่ค่าตามตารางเจ้าของ (Requirement)?\nรหัส/lane ที่แก้เองไว้จะไม่ถูกทับ'))return;
+  try{const r=await mgrApi('/api/setup/seed-requirement',{method:'POST'});
+      toast(`อัปเดต ${r.codes.upgraded+r.codes.inserted} รหัส, ${r.methods.inserted} lane`);loadSetup();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── ③ bank accounts ── */
+async function _setupAddAccount(){
+  let brs;try{brs=await api('/api/branches');}catch(e){toast(e.message);return;}
+  const pick=prompt(`สาขา? พิมพ์หมายเลข:\n${brs.map(b=>`${b.branch_id}=${b.name}`).join('  ')}`);
+  if(pick===null)return;
+  const bid=parseInt(pick.trim());
+  if(!brs.some(b=>b.branch_id===bid)){toast('หมายเลขสาขาไม่ถูกต้อง');return;}
+  const bank=prompt('ธนาคาร (KTB หรือ KBANK):','KBANK'); if(bank===null)return;
+  const no=prompt('เลขบัญชี:'); if(!no)return;
+  const name=prompt('ชื่อบัญชี (ไม่บังคับ):')||'';
+  try{
+    await api('/api/bank-accounts',{method:'POST',
+      body:{branch_id:bid,bank:bank.trim().toUpperCase(),account_no:no.trim(),account_name:name}});
+    toast('เพิ่มบัญชีแล้ว');loadSetup();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function _setupDelAccount(id){
+  if(!confirm('ลบบัญชีนี้?'))return;
+  try{await api(`/api/bank-accounts/${id}`,{method:'DELETE'});toast('ลบแล้ว');loadSetup();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+
+/* ── ④ MIDs ── */
+async function _setupAddMid(){
+  let brs;try{brs=await api('/api/branches');}catch(e){toast(e.message);return;}
+  const pick=prompt(`สาขา? พิมพ์หมายเลข:\n${brs.map(b=>`${b.branch_id}=${b.name}`).join('  ')}`);
+  if(pick===null)return;
+  const bid=parseInt(pick.trim());
+  if(!brs.some(b=>b.branch_id===bid)){toast('หมายเลขสาขาไม่ถูกต้อง');return;}
+  const acq=prompt('ผู้รับบัตร (KTB/KBANK/KTC/BAY/SCB/BBL/KTCPOINT/BAYPOINT):','KTC'); if(acq===null)return;
+  const mid=prompt('Merchant ID:')||'';
+  const term=prompt('Terminal ID (ไม่บังคับ):')||'';
+  try{
+    await api('/api/acquirer-mids',{method:'POST',
+      body:{branch_id:bid,acquirer:acq.trim().toUpperCase(),merchant_id:mid.trim(),terminal_id:term.trim()}});
+    toast('เพิ่ม MID แล้ว');loadSetup();
+  }catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+async function _setupDelMid(id){
+  if(!confirm('ลบ MID นี้?'))return;
+  try{await api(`/api/acquirer-mids/${id}`,{method:'DELETE'});toast('ลบแล้ว');loadSetup();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);}
+}
+/* ════════════════ END PHASE 4 ════════════════ */
 
 route();
 </script>

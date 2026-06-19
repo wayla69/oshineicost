@@ -574,6 +574,39 @@ KTC แสดงแบบ bank_in_credit, สาขาไม่มีข้อ�
 
 ---
 
+### TC-28 · Setup in-app (#setup) — ตั้งค่าระบบ (เฟส 4)
+**บทบาท:** ผู้จัดการ / เจ้าหน้าที่กระทบยอด
+
+**📖 การใช้งาน (narrative):** หน้า **⚙️ ตั้งค่าระบบ** (route `#setup`) รวม admin panel 5 ส่วนไว้ในแอปเดียว
+แทนที่หน้า `/app/setup.html` แยกต่างหาก — ประกอบด้วย:
+**① ตารางรหัสรับเงิน** (payment-map: category/bank/reconcile) ·
+**② วิธีกระทบยอดราย lane** (method-config: tol/lag/merge/doc/method) ·
+**③ บัญชีธนาคาร** (เพิ่ม/ลบ) ·
+**④ MIDs** (เครื่องรูดบัตร/คะแนน) ·
+**⑤ รหัสสเตทเมนต์** (statement-code override/revert)
+· สิทธิ์: แก้ ①category/bank = write token · แก้ ② lane / seed-requirement / ⑤ override = manager token
+(เฟส 4 consolidation 2026-06-19)
+
+**ขั้นตอนทดสอบ:**
+1. เปิด **⋯ เพิ่มเติม → ⚙️ ตั้งค่าระบบ** → route `#setup` โหลดทั้ง 5 ส่วน (ไม่ redirect ไป /app/setup.html)
+2. ตรวจ ① ตาราง payment-map มีคอลัมน์: รหัส POS / ประเภท / ธนาคาร / เอกสาร / วิธี / พารามิเตอร์ / ยอด / กระทบ / สถานะ
+3. แก้ category/bank dropdown ใน ① → toast "บันทึก ... แล้ว" (ต้องมี write token)
+4. คลิก "แก้ไข ▸" ใน lane column → inline editor ปรากฏ → แก้ tol → กด "บันทึก (ผู้จัดการ)" → ต้อง prompt manager token
+5. กด "+ เพิ่มบัญชี" ใน ③ → prompt สาขา/ธนาคาร/เลขบัญชี → toast "เพิ่มบัญชีแล้ว"
+6. กด "+ เพิ่ม MID" ใน ④ → prompt สาขา/acquirer/MID → toast "เพิ่ม MID แล้ว"
+7. ใน ⑤ เลือก channel ใหม่ → กด "บันทึก" → prompt manager → toast "บันทึก ... (แก้ N บรรทัด)" · กด "คืนค่าเดิม" ที่ override แล้วได้
+8. เปลี่ยน month picker → โหลด ① ใหม่ตามเดือนนั้น
+9. กดปุ่ม **← กลับ** → กลับหน้าภาพรวม
+
+**ผลที่คาดหวัง:** เปิดได้จากเมนู ⋯ (route #setup), ทั้ง 5 ส่วนโหลดครบ,
+dropdown ① บันทึกได้ (write token), lane editor inline ทำงาน (manager token),
+③④ เพิ่ม/ลบได้, ⑤ override/revert ทำงาน (manager token),
+month picker เปลี่ยนเดือนโหลดใหม่, ปุ่ม ← กลับ ทำงาน, ไม่ redirect ไป /app/setup.html
+
+**ผลการทดสอบ:** ☐ ผ่าน ☐ ไม่ผ่าน | ผู้ทดสอบ: __________ วันที่: ________ | หมายเหตุ: ________________
+
+---
+
 ### TC-27 · Discrepancies Admin (#discrepancies) — จัดการข้อแตกต่าง (เฟส 3b)
 **บทบาท:** ผู้จัดการ / เจ้าหน้าที่กระทบยอด (ต้องมี write token)
 
@@ -670,6 +703,7 @@ resolve ทีละแถวบันทึกทันที, bulk-resolve อ
 | Bank Coverage (สถานะสเตทเมนต์) | ⋯ เพิ่มเติม → วินิจฉัย → 🏦 Bank Coverage |
 | Payout Matching (เงินเข้าธนาคาร) | หน้าสาขา → 💳 เงินเข้าธนาคาร |
 | Discrepancies Admin (จัดการข้อแตกต่าง) | หน้าสาขา → ⚙️ ข้อแตกต่าง |
+| Setup in-app (ตั้งค่าระบบ) | ⋯ เพิ่มเติม → ⚙️ ตั้งค่าระบบ |
 | คู่มือเต็ม | `/app/help.html` |
 
 *สถานะการจับคู่:* **✓ ตรง** = POS ตรงเอกสาร · **✗ ต่าง** = ยอดไม่ตรง ต้องตรวจ · **ขาดเอกสาร** = POS มีแต่เอกสารไม่มา ·
