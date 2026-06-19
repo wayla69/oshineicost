@@ -250,6 +250,8 @@ function route(){
   if(h==='bankcov')return loadBankCov();
   if(h==='board')return loadBoard();
   if(h==='coupon')return loadCoupon();
+  if(h.startsWith('payout'))return loadPayout(h);
+  if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -756,6 +758,8 @@ async function loadBranch(bid){
     ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}" target="_blank" title="รายงานการจับคู่ทุกช่องทาง ไล่รายวันทั้งเดือน — ตรวจว่าจับคู่ถูกครบ · พิมพ์ PDF ได้">🖨️ ตรวจการจับคู่รายวัน</a>
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}&detail=1" target="_blank" title="ฉบับละเอียดสำหรับผู้ตรวจสอบ — เพิ่มหลักฐานระดับบรรทัด: รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, ค่าธรรมเนียม, การจับคู่มือ">📑 ฉบับตรวจสอบ (ละเอียด)</a>
+    <a class="btn btn-sm" href="#payout?bid=${bid}" title="ตรวจยอดสุทธิ ↔ เงินโอนธนาคาร แยกรายวัน — Grab, Line Man, บัตร, BAY/KTC Point · สถานะ matched/รอเข้า">💳 เงินเข้าธนาคาร</a>
+    ${ses?`<a class="btn btn-sm" href="#discrepancies?bid=${bid}" title="จัดการข้อแตกต่าง — กรอง/จัดเรียง/bulk-resolve/มอบหมาย/drill รายวัน">⚙️ ข้อแตกต่าง</a>`:''}
     <div class="row" style="margin-left:auto;flex-wrap:nowrap">
       <div class="prog ${progCls(r.progress_pct)}" style="width:140px;flex:none"><div style="width:${r.progress_pct}%"></div></div>
       <span style="font-size:14px;font-weight:600" class="mono">${r.progress_pct}%</span>
@@ -1354,6 +1358,13 @@ function moreMenu(){
       <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
       <a class="more-item" href="/app/setup.html">⚙️ ตั้งค่าระบบ ↗<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID</span></a>
       <a class="more-item" href="/app/classic.html">🧰 เครื่องมือขั้นสูง ↗<span class="lbl">หน้าเดิม — เครื่องมือครบทุกอย่าง</span></a>
+    </div>
+    <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">บัญชี / งานสาขา (เลือกสาขาก่อนใช้)</div>
+    <div class="more-menu">
+      <a class="more-item" href="${DATA&&DATA.branch_id?'#payout?bid='+DATA.branch_id:'#'}" onclick="closeSheet()"
+        ${DATA&&DATA.branch_id?'':'title="เปิดหน้าสาขาก่อน"'}>💳 ตรวจเงินเข้าธนาคาร (Payout Matching)<span class="lbl">ยอดสุทธิ ↔ เงินโอน Grab/Line Man/บัตร · แยกรายวัน · สถานะ matched/รอเข้า · KTC 2-ทาง</span></a>
+      <a class="more-item" href="${DATA&&DATA.branch_id?'#discrepancies?bid='+DATA.branch_id:'#'}" onclick="closeSheet()"
+        ${DATA&&DATA.branch_id?'':'title="เปิดหน้าสาขาก่อน"'}>⚙️ จัดการข้อแตกต่าง (Discrepancies Admin)<span class="lbl">กรอง/จัดเรียง · resolve ทีละแถว · bulk-resolve · มอบหมาย · drill รายวัน (ทีมยังใช้)</span></a>
     </div>
     <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">วินิจฉัย / Diagnostics</div>
     <div class="more-menu">
@@ -2517,6 +2528,373 @@ async function _cpDrill(seriesId){
       : '<div class="muted">ไม่มีข้อมูลสำหรับ series นี้</div>'}
   </div>`;
   box.scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   § PAYOUT MATCHING VIEW — Phase 3a consolidation
+   Route: #payout?bid=XXX  (reads MONTH global)
+   Replaces classic.html openPayoutMatch + renderPayouts for ALL categories.
+   Read-only: no backend changes. Uses /api/payout-matching (existing endpoint).
+   ════════════════════════════════════════════════════════════════════════ */
+
+const _PCAT_LBL   = {BAYPOINT:'BAY Point',KTCPOINT:'KTC Point',GRAB:'Grab',LINEMAN:'Line Man',CREDIT:'บัตรเครดิต'};
+const _PCAT_ORDER = ['CREDIT','GRAB','LINEMAN','BAYPOINT','KTCPOINT'];
+
+async function loadPayout(h){
+  const params = new URLSearchParams(h.includes('?')?h.slice(h.indexOf('?')):'');
+  const bid = parseInt(params.get('bid')||'0');
+  if(!bid){
+    $('app').innerHTML=header()+'<div class="card c-err" style="margin-top:12px">ไม่พบสาขา — กลับ <a href="#">หน้าแรก</a></div>';
+    return;
+  }
+  $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)+'<div class="muted">กำลังโหลด…</div>';
+
+  let d=null;
+  try{ d=await api(`/api/payout-matching?branch_id=${bid}&period_month=${MONTH}`); }
+  catch(e){
+    $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)
+      +`<div class="card c-err" style="margin-top:12px">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  const cats = _PCAT_ORDER.filter(c=>d&&d[c]&&(d[c].payouts||[]).length);
+  if(!cats.length){
+    $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)
+      +`<h2 style="margin:14px 0 10px">💳 ตรวจเงินเข้าธนาคาร · ${MONTH}</h2>
+        <div class="card" style="text-align:center;padding:40px;color:var(--mut)">ไม่มีข้อมูล payout ในเดือนนี้</div>`;
+    return;
+  }
+
+  let netTot=0,payTot=0,awaitTot=0;
+  cats.forEach(c=>{ const cd=d[c]; netTot+=cd.net_total||0; payTot+=cd.payout_total||0; awaitTot+=cd.awaiting_total||0; });
+
+  const cards = cats.map(cat=>{
+    const cd=d[cat];
+    const lbl=_PCAT_LBL[cat]||cat;
+
+    if(cd.bank_in_credit){
+      const pointTot=cd.pos_point_total||0, netV=cd.net_total||0;
+      const diff=netV-pointTot;
+      return `<div class="card" style="margin-bottom:10px">
+        <div class="row" style="margin-bottom:8px">
+          <b>${lbl}</b>
+          <span class="chip c-ok" style="margin-left:8px">รวมในยอดบัตร</span>
+        </div>
+        <div class="row" style="gap:24px;flex-wrap:wrap">
+          <div><div class="lbl">POS แต้ม</div><div class="mono">${fmt(pointTot)}</div></div>
+          <div><div class="lbl">ยอดสุทธิรายงาน</div><div class="mono">${fmt(netV)}</div></div>
+          <div><div class="lbl">ต่าง</div><div class="mono" style="color:${Math.abs(diff)>1?'var(--err)':'var(--ok)'}">${diff>0?'+':''}${fmt(diff)}</div></div>
+        </div>
+        <div class="lbl" style="margin-top:6px">แต้ม KTC จ่ายผ่าน KTC โดยตรง — ตรวจในยอดสรุปบัตรเครดิต KTC (ไม่มีการโอนแยก)</div>
+      </div>`;
+    }
+
+    const awaitBadge = cd.awaiting_total>0
+      ? `<span class="chip c-warn" style="margin-left:8px">รอ ${fmt(cd.awaiting_total)}</span>` : '';
+    const payRows = (cd.payouts||[]).map(p=>{
+      const dayList=p.days.map(x=>`${+x.day.slice(8)}`).join('+');
+      const netSum=(p.days||[]).reduce((a,x)=>a+(x.net||0),0);
+      if(p.status==='awaiting'){
+        return `<tr>
+          <td><span class="chip c-warn">รอเงินเข้า</span></td>
+          <td class="mono" style="text-align:right">${fmt(netSum)}</td>
+          <td style="color:var(--mut);text-align:right">—</td>
+          <td style="color:var(--mut)">—</td>
+          <td><span class="lbl">วัน ${dayList}</span></td>
+        </tr>`;
+      }
+      return `<tr>
+        <td><span class="chip c-ok">✓ ตรง</span></td>
+        <td class="mono" style="text-align:right">${fmt(netSum)}</td>
+        <td class="mono" style="text-align:right">${p.amount?fmt(p.amount):'—'}</td>
+        <td>${p.payout_date?p.payout_date.slice(5):'—'}${p.lag?` <span class="lbl">ช้า ${p.lag} วัน</span>`:''}</td>
+        <td><span class="lbl">วัน ${dayList}${p.combined?` (รวม ${p.days.length} วัน)`:''}</span></td>
+      </tr>`;
+    }).join('');
+
+    return `<div class="card" style="margin-bottom:10px">
+      <div class="row" style="margin-bottom:8px">
+        <b>${lbl}</b>${awaitBadge}
+        <span class="lbl" style="margin-left:auto">สุทธิ ${fmt(cd.net_total||0)} · เข้าแล้ว ${fmt(cd.payout_total||0)}</span>
+      </div>
+      <div style="overflow:auto">
+        <table>
+          <thead><tr>
+            <th>สถานะ</th>
+            <th style="text-align:right">ยอดสุทธิ</th>
+            <th style="text-align:right">เงินโอน</th>
+            <th>วันที่โอน</th>
+            <th>วันขาย</th>
+          </tr></thead>
+          <tbody>${payRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  $('app').innerHTML = header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`) + `
+    <h2 style="margin:14px 0 10px">💳 ตรวจเงินเข้าธนาคาร · ${MONTH}</h2>
+    <div class="card row" style="margin-bottom:14px;flex-wrap:wrap;gap:20px">
+      <div><div class="lbl">ยอดสุทธิรวม</div><div class="mono" style="font-size:18px">${fmt(netTot)}</div></div>
+      <div><div class="lbl">เข้าบัญชีแล้ว</div><div class="mono" style="font-size:18px;color:var(--ok)">${fmt(payTot)}</div></div>
+      ${awaitTot>0?`<div><div class="lbl">รอเงินเข้า</div><div class="mono" style="font-size:18px;color:var(--warn)">${fmt(awaitTot)}</div></div>`:''}
+    </div>
+    ${cards}`;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   § DISCREPANCIES ADMIN VIEW — Phase 3b consolidation
+   Route: #discrepancies?bid=XXX  (reads MONTH global)
+   Migrates classic.html loadDiscrepancies (~2915): filter/sort/bulk-resolve/
+   per-row resolve+assign/drill-per-day.  Exists ALONGSIDE dayWorklistHtml
+   (day-ack per channel in branch page) — not a replacement.
+   Write ops use api() → auto-attaches X-Upload-Token (write token).
+   ════════════════════════════════════════════════════════════════════════ */
+
+let _DISC_SID  = null;
+let _DISC_BID  = 0;
+let _DISC_DATA = [];
+let _DISC_SEL  = new Set();
+let _DISC_FLT  = {resolution:'pending',category:'',bank:''};
+let _DISC_SORT = {field:'variance',dir:-1};
+
+async function loadDiscrepancies(h){
+  const params = new URLSearchParams(h.includes('?')?h.slice(h.indexOf('?')):'');
+  _DISC_BID = parseInt(params.get('bid')||'0');
+  _DISC_FLT = {resolution:'pending',category:'',bank:''};
+  _DISC_SORT = {field:'variance',dir:-1};
+  if(!_DISC_BID){
+    $('app').innerHTML=header()+'<div class="card c-err" style="margin-top:12px">ไม่พบสาขา — กลับ <a href="#">หน้าแรก</a></div>';
+    return;
+  }
+  $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)+'<div class="muted">กำลังโหลด…</div>';
+
+  _DISC_SID = await _resolveSession(_DISC_BID, MONTH);
+  if(!_DISC_SID){
+    $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)
+      +`<div class="card" style="text-align:center;padding:48px;margin-top:14px">
+          <div style="font-size:36px;margin-bottom:10px">📭</div>
+          <div style="color:var(--mut);margin-bottom:14px">ยังไม่มี session สำหรับเดือน ${MONTH}</div>
+          <a href="#b/${_DISC_BID}" class="btn btn-pri">เปิดหน้าสาขาก่อน</a>
+        </div>`;
+    return;
+  }
+  await _discFetch();
+}
+
+async function _discFetch(){
+  if(!_DISC_SID) return;
+  let q=`/api/sessions/${_DISC_SID}/discrepancies?resolution=${_DISC_FLT.resolution||'all'}`;
+  if(_DISC_FLT.category) q+=`&category=${encodeURIComponent(_DISC_FLT.category)}`;
+  if(_DISC_FLT.bank)     q+=`&bank=${encodeURIComponent(_DISC_FLT.bank)}`;
+  try{ _DISC_DATA=await api(q); }catch(e){ _DISC_DATA=[]; }
+  _DISC_SEL.clear();
+  _discRender();
+}
+
+function _discRender(){
+  const sorted=[..._DISC_DATA].sort((a,b)=>{
+    const fa=Math.abs(a[_DISC_SORT.field]??0), fb=Math.abs(b[_DISC_SORT.field]??0);
+    return _DISC_SORT.dir*(fa<fb?-1:fa>fb?1:0);
+  });
+  const pendingN=_DISC_DATA.filter(d=>d.resolution==='pending').length;
+  const varCls=v=>Math.abs(v)>100?'var(--err)':Math.abs(v)>5?'var(--warn)':'var(--ok)';
+  const resCls=r=>r==='pending'?'c-warn':r==='accepted'?'c-ok':'c-mut';
+  const srtArrow=f=>_DISC_SORT.field===f?(_DISC_SORT.dir>0?' ▲':' ▼'):'';
+  const th=(f,lbl)=>`<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="_discSortBy('${f}')">${lbl}${srtArrow(f)}</th>`;
+
+  const rows=sorted.length?sorted.map(d=>{
+    const isPending=d.resolution==='pending';
+    const resSelect=isPending
+      ?`<select style="font-size:12px;padding:2px 5px;border:1px solid var(--line);border-radius:6px;background:#fff"
+           onchange="_discResolve(${d.id},this.value)">
+           <option value="">แก้ไข…</option>
+           <option value="accepted">✓ ยอมรับ</option>
+           <option value="adjusted">~ ปรับแล้ว</option>
+           <option value="rejected">✕ ปฏิเสธ</option>
+         </select>`
+      :`<span class="chip ${resCls(d.resolution)}" style="font-size:11px">${esc(d.resolution)}</span>`;
+    return `<tr data-disc-id="${d.id}">
+      <td style="text-align:center;padding:6px 4px 6px 10px">
+        <input type="checkbox" class="disc-chk" value="${d.id}" ${_DISC_SEL.has(d.id)?'checked':''}
+          onchange="_discToggle(${d.id},this.checked)"></td>
+      <td style="font-weight:500;white-space:nowrap">${esc(d.category||'—')}</td>
+      <td style="color:var(--sub);font-size:12px">${d.bank&&d.bank!=='NONE'?esc(d.bank):'—'}</td>
+      <td style="font-size:11px;color:var(--mut)">${esc(d.disc_type||'—')}</td>
+      <td class="mono" style="text-align:right;cursor:pointer;user-select:none;color:${varCls(d.variance||0)}"
+          onclick="_discDrillDays(${d.id},this)" title="คลิกดูแยกรายวัน">▾ ${d.variance>0?'+':''}${fmt(d.variance||0)}</td>
+      <td class="mono" style="text-align:right;color:var(--sub)">${fmt(d.amount_external||0)}</td>
+      <td class="mono" style="text-align:right">${fmt(d.amount_pos||0)}</td>
+      <td><input style="font-size:12px;padding:3px 6px;border:1px solid var(--line);border-radius:6px;background:#fff;width:90px"
+           placeholder="มอบหมาย…" value="${esc(d.assigned_to||'')}"
+           onchange="_discAssign(${d.id},this.value)"></td>
+      <td>${resSelect}</td>
+    </tr>`;
+  }).join('')
+  :`<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--mut)">
+      ไม่มีรายการ${_DISC_FLT.resolution!=='all'?' ('+_DISC_FLT.resolution+')':''}
+    </td></tr>`;
+
+  const html=`
+    <div class="row" style="margin:14px 0 10px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px">⚙️ จัดการข้อแตกต่าง · ${MONTH}</h2>
+      ${pendingN?`<span class="chip c-warn">${pendingN} รอแก้ไข</span>`:'<span class="chip c-ok">ครบแล้ว</span>'}
+      <a href="#b/${_DISC_BID}" class="btn btn-sm" style="margin-left:auto">← สาขา</a>
+    </div>
+    <div class="card" style="margin-bottom:10px;padding:10px 14px">
+      <div class="row" style="gap:8px;flex-wrap:wrap;align-items:center">
+        <span class="lbl">แสดง:</span>
+        <select style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit"
+          onchange="_DISC_FLT.resolution=this.value;_discFetch()">
+          <option value="pending" ${_DISC_FLT.resolution==='pending'?'selected':''}>รอแก้ไข</option>
+          <option value="accepted" ${_DISC_FLT.resolution==='accepted'?'selected':''}>ยอมรับแล้ว</option>
+          <option value="adjusted" ${_DISC_FLT.resolution==='adjusted'?'selected':''}>ปรับแล้ว</option>
+          <option value="rejected" ${_DISC_FLT.resolution==='rejected'?'selected':''}>ปฏิเสธ</option>
+          <option value="all" ${_DISC_FLT.resolution==='all'?'selected':''}>ทุกสถานะ</option>
+        </select>
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;width:110px"
+          placeholder="ช่องทาง…" value="${esc(_DISC_FLT.category)}"
+          oninput="_DISC_FLT.category=this.value"
+          onkeydown="if(event.key==='Enter')_discFetch()">
+        <input style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;width:90px"
+          placeholder="ธนาคาร…" value="${esc(_DISC_FLT.bank)}"
+          oninput="_DISC_FLT.bank=this.value"
+          onkeydown="if(event.key==='Enter')_discFetch()">
+        <button class="btn btn-sm" onclick="_discFetch()">ค้นหา</button>
+        ${(_DISC_FLT.category||_DISC_FLT.bank)?`<button class="btn btn-sm" onclick="_DISC_FLT.category='';_DISC_FLT.bank='';_discFetch()">✕ ล้าง</button>`:''}
+      </div>
+    </div>
+    <div class="card" style="padding:0;overflow:auto;margin-bottom:80px">
+      <table>
+        <thead><tr>
+          <th style="padding-left:10px"><input type="checkbox" id="disc-chk-all" onchange="_discToggleAll(this.checked)"></th>
+          <th style="text-align:left">ช่องทาง</th>
+          <th style="text-align:left">ธนาคาร</th>
+          <th style="text-align:left">ประเภท</th>
+          ${th('variance','ต่าง (฿)')}
+          <th style="text-align:right">เงินเข้า</th>
+          <th style="text-align:right">POS</th>
+          <th>มอบหมาย</th>
+          <th>การแก้ไข</th>
+        </tr></thead>
+        <tbody id="disc-tbody">${rows}</tbody>
+      </table>
+    </div>
+    <div id="disc-bulk-bar" style="position:fixed;bottom:0;left:0;right:0;background:var(--brand);color:#fff;padding:10px 16px;display:none;z-index:200">
+      <div class="row" style="gap:10px;max-width:900px;margin:0 auto;flex-wrap:wrap">
+        <span id="disc-bulk-count" style="font-weight:600;align-self:center"></span>
+        <button class="btn" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('accepted')">✓ ยอมรับทั้งหมด</button>
+        <button class="btn" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.3)" onclick="_discBulk('adjusted')">~ ปรับแล้ว</button>
+        <button class="btn" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2)" onclick="_discBulk('rejected')">✕ ปฏิเสธ</button>
+        <button class="btn btn-sm" style="margin-left:auto;background:rgba(0,0,0,.2);color:#fff;border:none" onclick="_discClearSel()">ยกเลิก</button>
+      </div>
+    </div>`;
+
+  $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)+html;
+  _discUpdateBulkBar();
+}
+
+function _discSortBy(field){
+  if(_DISC_SORT.field===field) _DISC_SORT.dir*=-1;
+  else { _DISC_SORT.field=field; _DISC_SORT.dir=-1; }
+  _discRender();
+}
+
+function _discToggle(id,checked){
+  if(checked) _DISC_SEL.add(id); else _DISC_SEL.delete(id);
+  _discUpdateBulkBar();
+}
+function _discToggleAll(checked){
+  document.querySelectorAll('.disc-chk').forEach(cb=>{
+    cb.checked=checked;
+    const id=+cb.value;
+    if(checked) _DISC_SEL.add(id); else _DISC_SEL.delete(id);
+  });
+  _discUpdateBulkBar();
+}
+function _discClearSel(){
+  _DISC_SEL.clear();
+  document.querySelectorAll('.disc-chk').forEach(cb=>cb.checked=false);
+  const all=$('disc-chk-all'); if(all) all.checked=false;
+  _discUpdateBulkBar();
+}
+function _discUpdateBulkBar(){
+  const bar=$('disc-bulk-bar'); if(!bar) return;
+  const cnt=$('disc-bulk-count');
+  if(_DISC_SEL.size){ bar.style.display='block'; if(cnt) cnt.textContent=`${_DISC_SEL.size} รายการที่เลือก`; }
+  else bar.style.display='none';
+}
+
+async function _discBulk(resolution){
+  if(!_DISC_SEL.size||!_DISC_SID) return;
+  const ids=[..._DISC_SEL];
+  try{
+    const r=await api(`/api/sessions/${_DISC_SID}/discrepancies/bulk-resolve`,
+      {method:'POST',body:{ids,resolution,resolved_by:'staff'}});
+    toast(`${r.updated??ids.length} รายการ → "${resolution}"`);
+    _DISC_FLT.resolution='pending';
+    await _discFetch();
+  }catch(e){ toast('ไม่สำเร็จ: '+e.message); hint403(e); }
+}
+
+async function _discResolve(id,res){
+  if(!res) return;
+  try{
+    await api(`/api/discrepancies/${id}/resolve`,{method:'PATCH',body:{resolution:res,resolved_by:'staff'}});
+    await _discFetch();
+  }catch(e){ toast('ไม่สำเร็จ: '+e.message); hint403(e); }
+}
+
+async function _discAssign(id,to){
+  try{
+    await api(`/api/discrepancies/${id}/assign`,{method:'PATCH',body:{assigned_to:to}});
+  }catch(e){ toast('บันทึกไม่สำเร็จ: '+e.message); hint403(e); }
+}
+
+async function _discDrillDays(discId,cell){
+  const tbody=$('disc-tbody'); if(!tbody) return;
+  const parentTr=cell.closest('tr');
+  const expandId=`disc-days-${discId}`;
+  const existing=document.getElementById(expandId);
+  if(existing){ existing.remove(); return; }
+
+  const colspan=parentTr.children.length;
+  const expTr=document.createElement('tr');
+  expTr.id=expandId;
+  expTr.style.background='#f8fafc';
+  expTr.innerHTML=`<td colspan="${colspan}" style="padding:10px 24px;color:var(--mut);font-size:13px">กำลังโหลด…</td>`;
+  parentTr.after(expTr);
+
+  try{
+    const r=await api(`/api/discrepancies/${discId}/days`);
+    const days=r.days||[];
+    if(!days.length){
+      expTr.querySelector('td').innerHTML='<span style="color:var(--mut)">ไม่มีข้อมูลรายวัน</span>';
+      return;
+    }
+    const dayRows=days.map(d=>{
+      const clr=Math.abs(d.variance||0)>0.5?'var(--err)':'var(--ok)';
+      const stCls=d.status==='matched'?'c-ok':d.status==='diff'?'c-err':'c-warn';
+      return `<tr style="border-top:1px solid #edf0f5">
+        <td style="padding:4px 10px;font-family:monospace;font-size:12px;color:var(--sub)">${esc(d.day)}</td>
+        <td style="padding:4px 10px;text-align:right;font-family:monospace;font-size:12px">${fmt(d.pos||0)}</td>
+        <td style="padding:4px 10px;text-align:right;font-family:monospace;font-size:12px;color:var(--sub)">${fmt(d.ext||0)}</td>
+        <td style="padding:4px 10px;text-align:right;font-family:monospace;font-size:12px;color:${clr}">${(d.variance||0)>0?'+':''}${fmt(d.variance||0)}</td>
+        <td style="padding:4px 10px"><span class="chip ${stCls}" style="font-size:11px">${esc(d.status||'—')}</span></td>
+      </tr>`;
+    }).join('');
+    expTr.innerHTML=`<td colspan="${colspan}" style="padding:0">
+      <table style="width:100%">
+        <thead><tr style="background:#f1f4f9;font-size:11px;color:var(--mut)">
+          <th style="padding:4px 10px;text-align:left;font-weight:500">วันที่</th>
+          <th style="padding:4px 10px;text-align:right;font-weight:500">POS</th>
+          <th style="padding:4px 10px;text-align:right;font-weight:500">เงินเข้า</th>
+          <th style="padding:4px 10px;text-align:right;font-weight:500">ต่าง</th>
+          <th style="padding:4px 10px;font-weight:500">สถานะ</th>
+        </tr></thead>
+        <tbody>${dayRows}</tbody>
+      </table></td>`;
+  }catch(e){ expTr.querySelector('td').innerHTML=`<span style="color:var(--err)">${esc(e.message)}</span>`; }
 }
 
 route();
