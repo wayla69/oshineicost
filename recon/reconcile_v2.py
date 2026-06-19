@@ -377,6 +377,7 @@ def reconcile_month(conn: sqlite3.Connection, branch_id: int, period_month: str)
             ch["payout_trace"] = payouts.get(key)
         if key == "COUPON":
             ch["issuer_points"] = issuer_points
+            ch["bay_payout_trace"] = payouts.get("BAYPOINT")
             if issuer_points:
                 # the channel's headline variance = the points variance (the
                 # non-point coupon remainder has no external source to differ from)

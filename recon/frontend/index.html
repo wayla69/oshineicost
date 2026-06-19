@@ -1608,15 +1608,31 @@ async function attachSlip(day,input){
 const IP_CHIP={matched:'<span class="chip c-ok">✓ ตรง</span>',mismatch:'<span class="chip c-err">≠ ต่าง</span>',
   waiting_doc:'<span class="chip c-warn">รอใบสรุปคะแนน</span>',awaiting_payout:'<span class="chip c-warn">รอเงินเข้า</span>',
   ext_only:'<span class="chip c-warn">ไม่มียอด POS</span>'};
+function bayPayoutTraceHtml(p){
+  if(!p||!(p.payouts||[]).length)return '';
+  const rows=p.payouts.map(x=>`<tr>
+    <td style="text-align:left">${x.days.map(d=>+d.day.slice(8)).join('+')}${x.combined?` <span class="chip c-mut">รวม ${x.days.length} วัน</span>`:''}</td>
+    <td class="mono">${fmt(x.group_net)}</td>
+    <td class="mono">${x.amount?fmt(x.amount):'—'}</td>
+    <td>${x.payout_date?x.payout_date.slice(5):'—'}${x.lag?` <span class="lbl">ช้า ${x.lag} วัน</span>`:''}</td>
+    <td>${x.status==='matched'?'<span class="chip c-ok">✓ ตรง</span>':'<span class="chip c-warn">รอเงินเข้า</span>'}</td>
+  </tr>`).join('');
+  return `<div class="card" style="padding:0;box-shadow:none;border-color:var(--line-soft);margin-top:6px;max-height:200px;overflow:auto"><table>
+    <tr><th>วันขาย</th><th>ยอดสรุป</th><th>เงินเข้า KBANK</th><th>วันที่</th><th>สถานะ</th></tr>
+    ${rows}</table></div>
+  <div class="lbl" style="margin-top:3px">สุทธิรวม ${fmt(p.net_total)} · เข้าบัญชีแล้ว ${fmt(p.payout_total)}${p.awaiting_total>0?` · รอเข้า ${fmt(p.awaiting_total)}`:''}</div>`;
+}
 function couponCardsHtml(ch){
   if(ch.key!=='COUPON'||!(ch.issuer_points||[]).length)return '';
+  const bayTrace=ch.bay_payout_trace||null;
   return `<div class="c3">${ch.issuer_points.map(r=>`
     <div class="card"><b>แต้มบัตร ${esc(r.issuer)}</b>
       <div class="row" style="justify-content:space-between">ใช้แต้มบน POS <span class="mono">${fmt(r.pos_point)}</span></div>
       <div class="row" style="justify-content:space-between">ใบสรุปคะแนน <span class="mono">${fmt(r.settle_gross)}</span> ${IP_CHIP[r.status]||''}</div>
       ${r.bank_in_credit
         ?'<div class="lbl">เงินคืนแต้มรวมอยู่ในยอดฝากบัตร KTC (ดูช่องบัตรเครดิต)</div>'
-        :`<div class="row" style="justify-content:space-between">เงินเข้า KBANK <span class="mono">${fmt(r.bank_payout)}</span></div>`}
+        :`<div class="row" style="justify-content:space-between">เงินเข้า KBANK <span class="mono">${fmt(r.bank_payout)}</span></div>
+          ${r.issuer==='BAY'?bayPayoutTraceHtml(bayTrace):''}`}
     </div>`).join('')}</div>`;
 }
 
