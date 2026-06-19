@@ -179,6 +179,15 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .setup-tbl select{max-width:130px;width:100%}
 .setup-tbl input[type=text],.setup-tbl input:not([type]){width:100%;min-width:90px}
 .dash-empty{opacity:.55}
+/* Stage 3: unified empty + loading states */
+.empty{text-align:center;padding:44px 24px}
+.empty .ei{font-size:38px;line-height:1;color:var(--line);margin-bottom:12px;display:inline-block}
+.empty .et{font-size:14.5px;color:var(--sub);font-weight:600;margin-bottom:5px}
+.empty .eh{font-size:12.5px;color:var(--mut);max-width:400px;margin:0 auto;line-height:1.5}
+.empty .btn{margin-top:14px}
+.loading{padding:38px 0;text-align:center;color:var(--mut);font-size:13px}
+.spin{display:inline-block;width:17px;height:17px;border:2.5px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite;vertical-align:-3px;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
 .mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
 .mv-tbl{width:100%;border-collapse:collapse;font-size:13px}
 .mv-tbl td{padding:5px 6px;border-top:1px solid var(--line-soft)}
@@ -252,6 +261,8 @@ function monthTh(ym){            // 'YYYY-MM' -> 'พฤษภาคม 2569' (B
 const COIN_TOL=100;             // ฿ tolerance for "coin residue"; single source of truth
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+function emptyState(icon,title,hint,action){return `<div class="card empty"><i class="ti ti-${icon} ei" aria-hidden="true"></i><div class="et">${title}</div>${hint?`<div class="eh">${hint}</div>`:''}${action||''}</div>`;}
+function loadingState(msg){return `<div class="loading"><span class="spin" aria-hidden="true"></span>${msg||'กำลังโหลด…'}</div>`;}
 function tokenHdr(){const t=(localStorage.getItem('oshinei_token')||'').trim();return t?{'X-Upload-Token':t}:{};}
 function setToken(){
   let t=prompt('รหัสสำหรับบันทึกข้อมูล (Write token) — เว้นว่างเพื่อล้าง:',localStorage.getItem('oshinei_token')||'');
@@ -356,7 +367,7 @@ function openSummary(b){
 
 /* ── ภาพรวมทุกสาขา (กล่องงานทั้งเครือ) ── */
 async function loadOverview(){
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   let ov;try{ov=await api(`/api/v2/overview?month=${MONTH}`);}
   catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
 
@@ -443,7 +454,7 @@ async function loadOverview(){
     html+=`<div class="card c-ok" style="margin-bottom:12px;background:var(--ok-bg)">
       ✓ ทุกสาขากระทบยอดครบแล้วสำหรับเดือนนี้ — พร้อมให้ผู้จัดการปิดเดือน</div>`;
   } else {
-    html+=`<div class="card muted" style="margin-bottom:12px">ยังไม่มีข้อมูลสาขาสำหรับเดือนนี้</div>`;
+    html+=emptyState('building-store','ยังไม่มีข้อมูลสาขาสำหรับเดือนนี้','เลือกเดือนอื่น หรือซิงก์ข้อมูล POS ของเดือนนี้ก่อน');
   }
 
   // done branches — collapsed section
@@ -495,14 +506,14 @@ function toggleDone(){
 
 /* ── รายงานข้อผิดพลาดการบันทึก รายสาขา (สำหรับประเมินพนักงาน) ── */
 async function loadErrorReport(){
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   let r;try{r=await api('/api/reports/branch-errors');}
   catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-chart-bar" aria-hidden="true"></i> รายงานข้อผิดพลาดการบันทึก — รายสาขา</h2>
     <a class="btn btn-sm" style="margin-left:auto" href="/api/reports/branch-errors.xlsx">⬇ ดาวน์โหลด Excel</a></div>
   <div class="muted" style="margin-bottom:10px">นับจากรายการ <b>"รับทราบผลต่าง"</b> ที่บันทึกไว้ (มีเหตุผล + ผู้บันทึก) — ใช้ดูว่าสาขาไหนกระทบยอดไม่ตรงบ่อย เพื่อประเมิน/โค้ชพนักงาน · ยอดผลต่าง = มูลค่าที่ยอมรับไว้</div>`;
-  if(!r.summary.length){ $('app').innerHTML=html+'<div class="card">ยังไม่มีรายการ "รับทราบผลต่าง" — รายงานจะขึ้นเมื่อมีการกดรับทราบในการกระทบยอด</div>'; return; }
+  if(!r.summary.length){ $('app').innerHTML=html+emptyState('checklist','ยังไม่มีรายการ “รับทราบผลต่าง”','รายงานจะขึ้นเมื่อมีการกดรับทราบผลต่างในการกระทบยอด'); return; }
   html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
     <tr><th>สาขา</th><th>จำนวนครั้ง</th><th>จำนวนเดือน</th><th>ยอดผลต่างรวม</th></tr>
     ${r.summary.map(s=>`<tr>
@@ -526,7 +537,7 @@ async function loadErrorReport(){
 let WC=null, WC_BR='all';
 async function loadWrongChannel(){
   WC=null;
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   try{WC=await api(`/api/reports/wrong-channel?period_month=${MONTH}`);}
   catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
   if(WC_BR!=='all' && !WC.summary.some(s=>s.branch_id===WC_BR))WC_BR='all';   // selected branch absent this month
@@ -628,7 +639,7 @@ let DB=null, DB_BR=null;
 const fmt2=n=>(n==null?'—':Number(n).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2}));
 const dbDed=n=>(Math.abs(+n||0)>0.005?'−'+fmt2(n):'—');   // ส่วนลด/ค่าธรรมเนียม/VAT แสดงเป็นยอดหัก
 async function loadDaybook(){
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   let r;
   try{ r=await api(`/api/daily-accounts?period_month=${MONTH}`+(DB_BR?`&branch_id=${DB_BR}`:'')); }
   catch(e){ $('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
@@ -682,7 +693,7 @@ function renderDaybook(){
     <select onchange="setDbBranch(this.value)" title="เลือกสาขา" style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${brOpts}</select>
     <a class="btn btn-sm btn-pri" href="/api/daily-accounts.print${pm}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
   <div class="muted" style="margin-bottom:12px">แต่ละวัน = <b>1 ใบบันทึกบัญชี</b> · บันทึกเป็น <b>ยอดเต็ม (gross)</b> แล้ว <b>แยกบรรทัดส่วนลด</b> · สุทธิ = ยอดเต็ม − ส่วนลด − ค่าธรรมเนียม − VAT · รหัสบัญชีตั้งที่ <a href="#setup"><i class="ti ti-settings" aria-hidden="true"></i> ตั้งค่าระบบ</a></div>`;
-  if(!(r.days||[]).length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้ — ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน</div>`; return; }
+  if(!(r.days||[]).length){ $('app').innerHTML=html+emptyState('calendar-off','ยังไม่มีรายการบัญชีของสาขานี้ในเดือนนี้','ต้องมีข้อมูล POS/เอกสารของเดือนนี้ก่อน'); return; }
   html+=`<div class="card db-sum">
     <div><div class="lbl">ยอดเต็มรวม</div><b>฿${fmt2(t.gross)}</b></div>
     <div><div class="lbl">ส่วนลดรวม</div><b class="db-disc">฿${fmt2(t.discount)}</b></div>
@@ -701,7 +712,7 @@ const CH_COLOR={CASH:'#0f6e56',QR:'#2563eb',TRANSFER:'#0891b2',CREDIT:'#7c3aed',
 const _dvarCol=v=>(Math.abs(+v||0)<=1?'var(--mut)':(+v<0?'var(--err)':'var(--brand-deep)'));
 const _dvar=v=>{const n=+v||0; return Math.abs(n)<=1?'<span class="lbl">✓</span>':`<span style="color:${_dvarCol(n)}">${n>0?'+':''}${fmt2(n)}</span>`;};
 async function loadDashboard(){
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   let r;
   try{ r=await api(`/api/daily-dashboard?day=${DASH_DAY}`); }
   catch(e){ $('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`; return; }
@@ -769,7 +780,7 @@ function renderDashboard(){
     ? 'บันทึก <b>ยอดเต็ม</b> แล้วแยกบรรทัด <b>ส่วนลด</b> · คูปอง KTC/BAY (แต้ม) นับเป็นเงินรับจริง — คูปองส่วนลดอื่น (ผู้สูงอายุ/เด็ก/ฯลฯ) เป็นยอดหัก'
     : DASH_MODE==='pos' ? 'ยอดที่เครื่อง <b>POS บันทึก</b> แยกช่องทาง (ก่อนกระทบกับเงินเข้าจริง)'
     : 'ประกบ <b>ยอด POS</b> กับ <b>เงินเข้าจริง</b> (เงินที่เข้าบัญชี/ค่ายบัตรตาม statement·settlement) · <b>ต่าง</b> = เงินเข้า − POS (ช่องที่ยังไม่ได้อัปเอกสารจะเข้า = 0 → ต่างติดลบเท่ายอด POS)'}</div>`;
-  if(!active.length){ $('app').innerHTML=html+`<div class="card">ยังไม่มีรายการของวันที่ ${esc(DASH_DAY)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS ของวันนั้นก่อน</div>`; return; }
+  if(!active.length){ $('app').innerHTML=html+emptyState('calendar-off',`ยังไม่มีรายการของวันที่ ${esc(DASH_DAY)}`,'เลือกวันอื่น หรือซิงก์ข้อมูล POS ของวันนั้นก่อน'); return; }
   if(acct){
     html+=`<div class="card db-sum">
       <div><div class="lbl">ยอดเต็มรวมทุกสาขา</div><b>฿${fmt2(g.gross)}</b></div>
@@ -812,7 +823,7 @@ function classifyCh(ch,uploadKeys,missingStmtBanks){   // 'problem' | 'coin' | '
   return 'green';
 }
 async function loadBranch(bid){
-  $('app').innerHTML=header()+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header()+loadingState();
   let r;try{r=await api(`/api/v2/reconcile?branch_id=${bid}&month=${MONTH}`);}catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
   DATA=r;
   try{DATA.moves=await api(`/api/channel-move?branch_id=${bid}&period_month=${MONTH}`);}catch(e){DATA.moves=[];}
@@ -1647,7 +1658,7 @@ async function saveFee(src,id,input){
 async function openDay(i,day){
   const ch=DATA.channels[i];
   const box=$('daylines-'+i);
-  box.innerHTML='<div class="muted">กำลังโหลด…</div>';
+  box.innerHTML=loadingState();
   const d=ch.days.find(x=>x.day===day);
   let lines=[];
   for(const b of d.banks){
@@ -1966,7 +1977,7 @@ function _diagBranchPicker(branches, currentBid, onchangeExpr){
 let _AUDIT_ENTITY = '';
 
 async function loadAudit(){
-  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML = header() + loadingState();
   const ACTION_CLS = {create:'c-ok', update:'c-mut', delete:'c-err'};
   const entityOpts = ['','session','discrepancy','manual_match','day_ack','channel_move','payment_map']
     .map(e => `<option value="${e}" ${_AUDIT_ENTITY===e?'selected':''}>${e||'ทุก entity'}</option>`).join('');
@@ -2016,7 +2027,7 @@ async function loadAudit(){
 let _TREND_BID = 0;
 
 async function loadTrend(){
-  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML = header() + loadingState();
   const branches = await _diagBranches();
   if(!_TREND_BID && branches.length) _TREND_BID = branches[0].branch_id;
 
@@ -2029,10 +2040,7 @@ async function loadTrend(){
         <h2 style="font-size:16px"><i class="ti ti-trending-up" aria-hidden="true"></i> Trend Heatmap — ความคืบหน้ารายวัน</h2>
         ${picker}
       </div>
-      <div class="card c-mut" style="text-align:center;padding:32px;color:var(--mut)">
-        ยังไม่มี session — เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน
-        <br><a href="#b/${_TREND_BID}" style="margin-top:8px;display:inline-block">→ เปิดหน้าสาขา</a>
-      </div>`;
+      `+emptyState('chart-grid-dots','ยังไม่มี session ของเดือนนี้','เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน แล้ว Trend จะแสดงความคืบหน้ารายวัน',`<a href="#b/${_TREND_BID}" class="btn btn-pri btn-sm">เปิดหน้าสาขา</a>`);
     return;
   }
 
@@ -2118,7 +2126,7 @@ const _BC_LEG = {matched:['c-ok','✓'],mismatch:['c-err','≠'],pos_only:['c-wa
 function _bcLegChip(st){ const [c,s]=_BC_LEG[st]||['c-mut','·']; return `<span class="chip ${c}" style="font-size:11px">${s}</span>`; }
 
 async function loadBankCov(){
-  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML = header() + loadingState();
   const branches = await _diagBranches();
   if(!_BANKCOV_BID && branches.length) _BANKCOV_BID = branches[0].branch_id;
 
@@ -2131,10 +2139,7 @@ async function loadBankCov(){
         <h2 style="font-size:16px"><i class="ti ti-building-bank" aria-hidden="true"></i> Bank Coverage — สถานะครอบคลุมสเตทเมนต์</h2>
         ${picker}
       </div>
-      <div class="card c-mut" style="text-align:center;padding:32px;color:var(--mut)">
-        ยังไม่มี session — เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน
-        <br><a href="#b/${_BANKCOV_BID}" style="display:inline-block;margin-top:8px">→ เปิดหน้าสาขา</a>
-      </div>`;
+      `+emptyState('building-bank','ยังไม่มี session ของเดือนนี้','เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน แล้วสถานะครอบคลุมสเตทเมนต์จะแสดงที่นี่',`<a href="#b/${_BANKCOV_BID}" class="btn btn-pri btn-sm">เปิดหน้าสาขา</a>`);
     return;
   }
 
@@ -2245,7 +2250,7 @@ const _BOARD_CELL = {matched:'#dcfce7',variance:'#fee2e2',pos_only:'#fef9c3',ext
 const _BOARD_FG   = {matched:'#15803d',variance:'#b91c1c',pos_only:'#854d0e',ext_only:'#854d0e',no_source:'#94a3b8',manual:'#1d4ed8'};
 
 async function loadBoard(){
-  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML = header() + loadingState();
 
   // fetch date bounds once
   if(!_BOARD_DATES){
@@ -2321,7 +2326,7 @@ function _renderBoard(d){
       </div>` : '';
 
   const emptyMsg = !d.branches.length
-    ? `<div class="card" style="text-align:center;padding:32px;color:var(--mut)">ยังไม่มีรายการวันที่ ${esc(_BOARD_DATE)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS</div>`
+    ? emptyState('calendar-off',`ยังไม่มีรายการวันที่ ${esc(_BOARD_DATE)}`,'เลือกวันอื่น หรือซิงก์ข้อมูล POS')
     : '';
 
   $('app').innerHTML = header() + `
@@ -2399,7 +2404,7 @@ function _cpQuery(){
 }
 
 async function loadCoupon(){
-  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML = header() + loadingState();
 
   // Fetch branch list for picker (master branches only — same as other diag views)
   const branches = await _diagBranches();
@@ -2585,7 +2590,7 @@ async function loadPayout(h){
     $('app').innerHTML=header()+'<div class="card c-err" style="margin-top:12px">ไม่พบสาขา — กลับ <a href="#">หน้าแรก</a></div>';
     return;
   }
-  $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)+loadingState();
 
   let d=null;
   try{ d=await api(`/api/payout-matching?branch_id=${bid}&period_month=${MONTH}`); }
@@ -2599,7 +2604,7 @@ async function loadPayout(h){
   if(!cats.length){
     $('app').innerHTML=header(`<a href="#b/${bid}" class="lbl">← สาขา</a>`)
       +`<h2 style="margin:14px 0 10px"><i class="ti ti-credit-card" aria-hidden="true"></i> ตรวจเงินเข้าธนาคาร · ${MONTH}</h2>
-        <div class="card" style="text-align:center;padding:40px;color:var(--mut)">ไม่มีข้อมูล payout ในเดือนนี้</div>`;
+        `+emptyState('cash-banknote-off','ไม่มีข้อมูล payout ในเดือนนี้','ยังไม่มีเงินโอนเข้าธนาคารที่ต้องตรวจสำหรับสาขา/เดือนนี้');
     return;
   }
 
@@ -2705,16 +2710,12 @@ async function loadDiscrepancies(h){
     $('app').innerHTML=header()+'<div class="card c-err" style="margin-top:12px">ไม่พบสาขา — กลับ <a href="#">หน้าแรก</a></div>';
     return;
   }
-  $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)+'<div class="muted">กำลังโหลด…</div>';
+  $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)+loadingState();
 
   _DISC_SID = await _resolveSession(_DISC_BID, MONTH);
   if(!_DISC_SID){
     $('app').innerHTML=header(`<a href="#b/${_DISC_BID}" class="lbl">← สาขา</a>`)
-      +`<div class="card" style="text-align:center;padding:48px;margin-top:14px">
-          <div style="font-size:36px;margin-bottom:10px"><i class="ti ti-mailbox" aria-hidden="true"></i></div>
-          <div style="color:var(--mut);margin-bottom:14px">ยังไม่มี session สำหรับเดือน ${MONTH}</div>
-          <a href="#b/${_DISC_BID}" class="btn btn-pri">เปิดหน้าสาขาก่อน</a>
-        </div>`;
+      +emptyState('adjustments-off',`ยังไม่มี session สำหรับเดือน ${MONTH}`,'เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน แล้วจัดการข้อแตกต่างได้ที่นี่',`<a href="#b/${_DISC_BID}" class="btn btn-pri btn-sm">เปิดหน้าสาขาก่อน</a>`);
     return;
   }
   await _discFetch();
