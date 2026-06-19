@@ -47,6 +47,7 @@ from .matcher import (
     payout_matching,
     payout_reconciliation,
     point_pos_total_daily,
+    coupon_discount_total_daily,
     pos_codes_scope,
     run_auto_match,
     suggest_reclassifications,
@@ -3885,6 +3886,16 @@ def _daily_finance_data(conn, branch_id: int, period_month: str, daily=None) -> 
         if pts <= 0.005:                       # all discount, no real coupon money — drop empty lane
             agg.pop((day, "COUPON"), None)
 
+    # Bill-level coupon discounts (ส่วนลดเด็ก / ผู้สูงอายุ / วันเกิด …) reduce the bill;
+    # the customer then pays the NET via cash/QR/card. They are NOT a payment tender, so
+    # without this they're invisible here and ส่วนลด shows 0. Book revenue at GROSS and
+    # the discount on its own line (net 0) — same shape as the coupon-points remainder.
+    for day, cdisc in coupon_discount_total_daily(conn, branch_id, period_month).items():
+        if cdisc > 0.005:
+            dd = cell(day, "DISCOUNT")
+            dd["gross"] += cdisc
+            dd["discount"] += cdisc
+
     def dom(dstr):
         try:
             return int(dstr[8:10])
@@ -3992,6 +4003,19 @@ def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
                     rows.append(("DISCOUNT", disc, disc, 0.0, 0.0, 0.0))
     except Exception:
         pass
+
+    # Bill-level coupon discounts (ส่วนลดเด็ก/ผู้สูงอายุ/วันเกิด …) from pos_coupon_day —
+    # not a payment tender, so otherwise missing here. Gross up revenue + book the discount
+    # (net 0), merged into the single ส่วนลด row so month and per-day journals agree.
+    coupon_disc = round(sum(coupon_discount_total_daily(conn, branch_id, period_month).values()), 2)
+    if coupon_disc > 0.005:
+        for i, r in enumerate(rows):
+            if r[0] == "DISCOUNT":
+                rows[i] = ("DISCOUNT", r[1] + coupon_disc, r[2] + coupon_disc, 0.0, 0.0, 0.0)
+                break
+        else:
+            rows.append(("DISCOUNT", coupon_disc, coupon_disc, 0.0, 0.0, 0.0))
+
     if not rows:
         return ""
 
@@ -5002,13 +5026,15 @@ _UAT_CASES = [
      "narrative": "รายงานการจับคู่รายวันมี “📅 สรุปบัญชีรายวัน” ไล่ทุกวัน × ช่องทาง บันทึกเป็น “ยอดเต็ม (gross)” โดยแยกบรรทัด "
                   "ส่วนลด / ค่าธรรมเนียม / VAT / สุทธิ — ใช้ลงบัญชีรายวันได้ · มีคอลัมน์ รหัสบัญชี / ชื่อบัญชี (เว้นว่างก่อน "
                   "เติมภายหลังผ่าน /api/account-map) · ส่วน “💰 สรุปการรับเงินทั้งเดือน” (ยอดเต็ม·ส่วนลด·ค่าธรรมเนียม·VAT·สุทธิ + "
-                  "ร่างบันทึกบัญชี Dr/Cr) ยังอยู่ครบเป็นสรุปทั้งเดือน",
+                  "ร่างบันทึกบัญชี Dr/Cr) ยังอยู่ครบเป็นสรุปทั้งเดือน · บรรทัด “ส่วนลด” รวม <b>ส่วนลดบนบิล (เด็ก/ผู้สูงอายุ/วันเกิด ฯลฯ)</b> "
+                  "จาก pos_coupon_day ด้วย — ไม่ใช่แค่ส่วนลดที่จ่ายผ่านคูปอง (แต้ม KTC/BAY ไม่นับซ้ำ)",
      "steps": ["เปิด ⋯ เพิ่มเติม → รายงานการจับคู่รายวัน (หรือหน้าสาขา → 🖨️)",
                "ตรวจส่วน “📅 สรุปบัญชีรายวัน” — มีคอลัมน์ ยอดเต็ม / ส่วนลด แยกกัน + รหัสบัญชี/ชื่อบัญชี",
+               "สาขาที่ใช้คูปองเด็ก/ผู้สูงอายุเยอะ (เช่น อุดรธานี): ตรวจว่าบรรทัด “ส่วนลด” มียอด ไม่ใช่ 0",
                "(ผู้จัดการ) ตั้งรหัสบัญชีผ่าน /api/account-map แล้วรีเฟรช — รหัส/ชื่อบัญชีต้องขึ้นในรายงาน",
                "ตรวจ “💰 สรุปการรับเงินทั้งเดือน” ว่ามีคอลัมน์ส่วนลด และร่างบัญชี Dr=Cr"],
-     "expected": "มีสรุปบัญชีรายวัน (gross + ส่วนลดแยก), คอลัมน์รหัส/ชื่อบัญชีว่างจนกว่าจะตั้งค่า แล้วขึ้นตามที่ตั้ง, "
-                 "สรุปทั้งเดือนยังครบ + ร่างบัญชีสมดุล"},
+     "expected": "มีสรุปบัญชีรายวัน (gross + ส่วนลดแยก), ส่วนลดบนบิล (เด็ก/ผู้สูงอายุ) ปรากฏในบรรทัดส่วนลด (ไม่เป็น 0 ผิดปกติ), "
+                 "คอลัมน์รหัส/ชื่อบัญชีว่างจนกว่าจะตั้งค่า แล้วขึ้นตามที่ตั้ง, สรุปทั้งเดือนยังครบ + ร่างบัญชีสมดุล"},
     {"id": "TC-16", "title": "รายงานข้อผิดพลาดประจำเดือน (ทุกประเภท ไม่ใช่แค่บันทึกผิดช่อง)",
      "role": "ฝ่ายบัญชี / ผู้จัดการ",
      "narrative": "รายงานเดิม “เงินบันทึกผิดช่อง” ขยายเป็น “ข้อผิดพลาดประจำเดือน” รวมข้อผิดพลาดทุกชนิดของเดือน: ยอดต่าง, "

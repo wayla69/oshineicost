@@ -585,6 +585,29 @@ def point_pos_total_daily(conn, branch_id, period_month):
     return out
 
 
+def coupon_discount_total_daily(conn, branch_id, period_month):
+    """Per-DAY total of bill-level coupon DISCOUNTS ({day: amount}) from
+    pos_coupon_day.discount_amount — the child / elderly / birthday / staff
+    discounts that reduce the bill, after which the customer pays the NET via
+    cash/QR/card. These never appear in the Coupon payment tender, so the
+    accounting draft would otherwise show ส่วนลด = 0 even where discounts are huge.
+
+    EXCLUDES point-redemption series (คะแนน / แต้ม / point): those settle as real
+    issuer money via the Coupon tender (booked as revenue, not a discount), so
+    counting them here would double up. {} when pos_coupon_day isn't synced yet."""
+    try:
+        rows = conn.execute(
+            "SELECT p.day d, COALESCE(SUM(p.discount_amount),0) amt "
+            "FROM pos_coupon_day p JOIN coupon_series s ON s.coupon_series_id=p.coupon_series_id "
+            "WHERE p.branch_id=? AND substr(p.day,1,7)=? "
+            "AND s.name NOT LIKE '%คะแนน%' AND s.name NOT LIKE '%แต้ม%' "
+            "AND s.name NOT LIKE '%point%' COLLATE NOCASE "
+            "GROUP BY p.day", (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        return {}
+    return {r[0]: round(float(r[1] or 0), 2) for r in rows if (r[1] or 0)}
+
+
 def _point_settlement_gross(conn, branch_id, period_month, point_acq):
     """Gross of the acquirer-settlement rows whose MID is a point MID (e.g. the
     KTC Point rows inside the KTC RTxInv), via recon_acquirer_mid."""

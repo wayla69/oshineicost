@@ -2901,3 +2901,38 @@ def test_monthly_journal_discount_includes_nonpoint_coupon(client):
         html = main._monthly_finance_html(conn, 4, "2026-06")
     assert "ส่วนลด" in html
     assert "300.00" in html and "700.00" in html      # COUPON points 300, discount-coupon 700
+
+
+def test_accounting_includes_bill_level_coupon_discount(client):
+    """Bill-level coupon discounts (เด็ก/ผู้สูงอายุ) live in pos_coupon_day, NOT the
+    Coupon tender — they must still surface as a ส่วนลด line that grosses up revenue
+    (net unchanged). Point-redemption series in that table are excluded (no double count)."""
+    _seed_day(main._DB_PATH, [(4, "2026-06-20", "Cash", 10000, 1)])
+    c = sqlite3.connect(main._DB_PATH)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_coupon_day"
+              "(branch_id INT,day TEXT,coupon_series_id INT,used_count INT,discount_amount REAL)")
+    c.execute("CREATE TABLE IF NOT EXISTS coupon_series"
+              "(coupon_series_id INTEGER PRIMARY KEY,name TEXT,code TEXT,active INT)")
+    c.executemany("INSERT OR REPLACE INTO coupon_series VALUES(?,?,?,1)", [
+        (20, "ส่วนลดเด็กสูงน้อยกว่า 110", "CHILD"),
+        (21, "แลกคะแนน KTC 699 คะแนนลด 80 บาท", "KTC")])     # point series → must be excluded
+    c.executemany("INSERT INTO pos_coupon_day VALUES(4,'2026-06-20',?,1,?)", [
+        (20, 1500), (21, 80)])
+    c.commit(); c.close()
+
+    j = client.get("/api/daily-accounts?branch_id=4&period_month=2026-06").json()
+    day = next(d for d in j["days"] if d["dom"] == 20)
+    cash = next(ch for ch in day["channels"] if ch["ch"] == "CASH")
+    disc = next(ch for ch in day["channels"] if ch["ch"] == "DISCOUNT")
+    assert cash["gross"] == 10000 and cash["net"] == 10000        # cash received unchanged
+    assert disc["gross"] == 1500 and disc["discount"] == 1500 and disc["net"] == 0   # 80 pt excluded
+    assert day["totals"]["gross"] == 11500                        # revenue grossed up by the discount
+    assert day["totals"]["discount"] == 1500
+    assert day["totals"]["net"] == 10000
+    # je_accounts present so the daybook can render the per-day Dr/Cr journal
+    assert "DISCOUNT" in j["je_accounts"]
+    # the monthly journal merges it into the single ส่วนลด line: DEMO Coupon tender 1,000
+    # (no points → 1,000 discount) + the 1,500 bill-level coupon discount = 2,500.00
+    with main.get_db() as conn:
+        html = main._monthly_finance_html(conn, 4, "2026-06")
+    assert "ส่วนลด" in html and "2,500.00" in html
