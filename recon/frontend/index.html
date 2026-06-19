@@ -150,13 +150,15 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .db-sum{display:flex;gap:26px;flex-wrap:wrap;margin-bottom:14px;padding:13px 18px}
 .db-sum .lbl{margin-bottom:2px}
 .db-sum b{font-size:18px;font-weight:700;display:block}
-.db-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:12px}
+.db-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:12px}
 .db-card{padding:0;overflow:hidden}
 .db-head{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--brand-soft);border-bottom:1px solid var(--line)}
 .db-date{font-weight:700;font-size:15px;color:var(--brand-deep)}
 .db-net{font-weight:700;font-size:15px}
-.db-tbl{font-size:13px}
-.db-tbl th,.db-tbl td{padding:6px 16px}
+.db-tbl{font-size:12.5px;width:100%}
+.db-tbl th,.db-tbl td{padding:5px 9px;white-space:nowrap}
+.db-tbl td:first-child,.db-tbl th:first-child{white-space:normal;padding-left:14px}
+.db-tbl td:last-child,.db-tbl th:last-child{padding-right:14px}
 .db-tbl tfoot td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:600;background:var(--line-soft)}
 .db-disc{color:var(--warn)}
 .db-je{border-top:1px solid var(--line);background:var(--brand-soft)}
