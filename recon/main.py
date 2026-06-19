@@ -23,7 +23,7 @@ from pathlib import Path
 from datetime import datetime as _dt, timedelta as _td
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
@@ -127,6 +127,9 @@ _MIGRATIONS = {
                             ("fee_vat_by", "TEXT"), ("fee_vat_at", "TEXT")],
     "recon_discrepancies": [("category", "TEXT"), ("bank", "TEXT"), ("assigned_to", "TEXT")],
     "recon_uploads":       [("file_hash", "TEXT")],
+    # Ties the frozen working paper to the exact source documents (name + sha256) that
+    # produced it, so a later upload delete/replace can't silently break the chain.
+    "recon_close_snapshot": [("source_manifest", "TEXT")],
 }
 
 
@@ -466,6 +469,37 @@ def require_manager_token(x_manager_token: str = Header(None)):
     expected = (os.environ.get("OSHINEI_MANAGER_TOKEN") or "").strip()
     if expected and not hmac.compare_digest((x_manager_token or "").strip(), expected):
         raise HTTPException(403, "ต้องใช้รหัสผู้จัดการ (X-Manager-Token) สำหรับการตั้งค่าขั้นสูง")
+
+
+# ── Trusted actor identity (control gap fix 2026-06-19) ───────────────────────
+# Recon shares the machine + DB + signing secret with the dashboard and answers on
+# the SAME domain (different port → cookies are not port-scoped), so the dashboard's
+# signed session cookie reaches us too. Derive the acting username from it SERVER-SIDE
+# instead of trusting the client-supplied created_by/matched_by/approved_by — that
+# makes the audit "by" tamper-resistant when login is in use. Falls back to the
+# client value (then "staff") when there is no valid session, so open/local mode and
+# the test suite are unchanged.
+try:
+    from backend.auth import parse_token as _parse_session, SESSION_COOKIE as _SESSION_COOKIE
+except Exception:                                    # recon can also run standalone
+    _parse_session, _SESSION_COOKIE = None, "oshinei_session"
+
+
+def _actor(request, fallback=None, default="staff"):
+    """Authenticated username from the signed session cookie, else the client-supplied
+    fallback, else `default`. Pass default='' for identity fields that must stay blank
+    when the actor is unknown (e.g. SoD compares created_by vs approved_by — two blanks
+    must NOT read as the same person). Never raises."""
+    if _parse_session is not None and request is not None:
+        try:
+            tok = request.cookies.get(_SESSION_COOKIE)
+            if tok:
+                payload = _parse_session(tok)
+                if payload and payload.get("u"):
+                    return str(payload["u"])
+        except Exception:
+            pass
+    return (str(fallback).strip() if fallback else "") or default
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -1426,16 +1460,19 @@ def upload_lines(upload_id: int, limit: int = 300):
 
 
 @app.delete("/api/uploads/{upload_id}", dependencies=[Depends(require_write_token)])
-def delete_upload(upload_id: int):
+def delete_upload(upload_id: int, request: Request):
     with get_db() as conn:
         up = conn.execute(
-            "SELECT branch_id, period_month, file_name FROM recon_uploads WHERE upload_id=?",
-            (upload_id,)).fetchone()
+            "SELECT branch_id, period_month, file_name, file_hash FROM recon_uploads "
+            "WHERE upload_id=?", (upload_id,)).fetchone()
         if up:
             _assert_period_open(conn, up["branch_id"], up["period_month"])
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
-        _audit(conn, "upload", upload_id, "delete", "staff",
-               [{"field": "file_name", "old": up["file_name"] if up else None, "new": None}])
+        # Record the file hash too, so a deleted source document stays traceable in the
+        # audit log (it may be referenced by an earlier close snapshot's manifest).
+        _audit(conn, "upload", upload_id, "delete", _actor(request, None),
+               [{"field": "file_name", "old": up["file_name"] if up else None, "new": None},
+                {"field": "file_hash", "old": (up["file_hash"] if up else None), "new": None}])
         conn.commit()
     return {"deleted": upload_id}
 
@@ -1671,7 +1708,7 @@ class SessionCreate(BaseModel):
 
 
 @app.post("/api/sessions", dependencies=[Depends(require_write_token)])
-def create_session(body: SessionCreate):
+def create_session(body: SessionCreate, request: Request):
     _validate_period(body.period_month)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
@@ -1679,7 +1716,7 @@ def create_session(body: SessionCreate):
             cur = conn.execute("""
                 INSERT INTO recon_sessions (branch_id, period_month, notes, created_by)
                 VALUES (?,?,?,?)
-            """, (body.branch_id, body.period_month, body.notes, body.created_by))
+            """, (body.branch_id, body.period_month, body.notes, _actor(request, body.created_by, default="")))
             conn.commit()
             return {"session_id": cur.lastrowid}
         except sqlite3.IntegrityError:
@@ -1736,8 +1773,10 @@ def run_match(session_id: int):
 @app.patch("/api/sessions/{session_id}/status", dependencies=[Depends(require_write_token)])
 def update_session_status(
     session_id:  int,
+    request:     Request,
     status:      str = Form(...),
     approved_by: str = Form(""),
+    reason:      str = Form(""),
     x_manager_token: str = Header(None),
 ):
     valid = {"draft", "in_review", "approved", "closed"}
@@ -1745,12 +1784,23 @@ def update_session_status(
         raise HTTPException(400, f"status must be one of {valid}")
     if status in ("approved", "closed"):
         _require_manager(x_manager_token)
+    actor = _actor(request, approved_by, default="")        # blank when unknown → SoD-safe
     with get_db() as conn:
         old_row = conn.execute(
             "SELECT status FROM recon_sessions WHERE session_id=?", (session_id,)).fetchone()
         if not old_row:
             raise HTTPException(404, f"session {session_id} not found")
         old_status = old_row["status"]
+        # Reopen gate (control fix 2026-06-19): unlocking an already-signed-off month
+        # (approved/closed → draft/in_review) is sensitive — require the MANAGER code +
+        # a logged reason, just like approval. The next re-approval re-freezes a fresh
+        # snapshot, so the working paper always matches the final figures.
+        reopening = old_status in ("approved", "closed") and status not in ("approved", "closed")
+        if reopening:
+            _require_manager(x_manager_token)
+            if len((reason or "").strip()) < 10:
+                raise HTTPException(
+                    400, "การเปิดงวดที่ปิดแล้วต้องระบุเหตุผล (อย่างน้อย 10 ตัวอักษร)")
         # Approval gate: don't let a month be signed off while issues are open.
         if status in ("approved", "closed"):
             pending = conn.execute(
@@ -1769,7 +1819,7 @@ def update_session_status(
             # identities are known.
             prep = (conn.execute("SELECT created_by FROM recon_sessions WHERE session_id=?",
                                   (session_id,)).fetchone()["created_by"] or "").strip().lower()
-            appr = (approved_by or "").strip().lower()
+            appr = (actor or "").strip().lower()
             if prep and appr and prep == appr:
                 raise HTTPException(
                     409, "แบ่งแยกหน้าที่ (SoD): ผู้จัดทำไม่สามารถอนุมัติงานของตัวเองได้ — "
@@ -1778,15 +1828,17 @@ def update_session_status(
                 UPDATE recon_sessions
                 SET status=?, approved_by=?, approved_at=datetime('now')
                 WHERE session_id=?
-            """, (status, approved_by, session_id))
+            """, (status, actor, session_id))
         else:
             conn.execute(
                 "UPDATE recon_sessions SET status=? WHERE session_id=?",
                 (status, session_id),
             )
         if old_status != status:
-            _audit(conn, "session", session_id, "update", approved_by or "staff",
-                   [{"field": "status", "old": old_status, "new": status}])
+            diffs = [{"field": "status", "old": old_status, "new": status}]
+            if reopening:
+                diffs.append({"field": "reopen_reason", "old": None, "new": reason.strip()})
+            _audit(conn, "session", session_id, "update", actor or "staff", diffs)
         # AUD-5: freeze the working paper at each sign-off transition. Best-effort —
         # the export can be regenerated, so a snapshot hiccup must not block close.
         snap = None
@@ -1796,7 +1848,7 @@ def update_session_status(
                     "SELECT s.*, b.name AS branch_name FROM recon_sessions s "
                     "JOIN branches b ON b.branch_id=s.branch_id WHERE s.session_id=?",
                     (session_id,)).fetchone()
-                snap = _write_close_snapshot(conn, full, status, approved_by)
+                snap = _write_close_snapshot(conn, full, status, actor)
             except Exception:
                 snap = None
         conn.commit()
@@ -2150,12 +2202,22 @@ def _write_close_snapshot(conn, session, status: str, by: str) -> dict:
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(data)
     digest = hashlib.sha256(data).hexdigest()
+    # Source-document manifest: name + sha256 of every confirmed upload that fed this
+    # period, frozen alongside the working paper so the inputs are provable later.
+    manifest = json.dumps([
+        {"file": u["file_name"], "sha256": u["file_hash"],
+         "type": u["source_type"], "provider": u["provider"]}
+        for u in conn.execute(
+            "SELECT file_name, file_hash, source_type, provider FROM recon_uploads "
+            "WHERE branch_id=? AND period_month=? AND status='confirmed' "
+            "ORDER BY source_type, file_name", (session["branch_id"], pm))],
+        ensure_ascii=False)
     cur = conn.execute(
         "INSERT INTO recon_close_snapshot"
-        "(session_id, branch_id, period_month, status, file_name, file_path, sha256, size_bytes, created_by) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
+        "(session_id, branch_id, period_month, status, file_name, file_path, sha256, size_bytes, created_by, source_manifest) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?)",
         (session["session_id"], session["branch_id"], pm, status,
-         Path(rel).name, rel, digest, len(data), by or "staff"))
+         Path(rel).name, rel, digest, len(data), by or "staff", manifest))
     _audit(conn, "close_snapshot", cur.lastrowid, "create", by or "staff",
            [{"field": "sha256", "old": None, "new": digest}])
     return {"id": cur.lastrowid, "sha256": digest, "size_bytes": len(data)}
@@ -5040,10 +5102,16 @@ def _recon_certificate(conn, branch_id, period_month):
     reg = _override_register(conn, period_month, branch_id)
     ack_rows = [x for x in reg["rows"] if x["kind_key"] in ("day_ack", "lane_adj")]
     snap = conn.execute(
-        "SELECT status, sha256, created_at, file_name FROM recon_close_snapshot "
+        "SELECT status, sha256, created_at, file_name, source_manifest FROM recon_close_snapshot "
         "WHERE session_id=(SELECT session_id FROM recon_sessions "
         "                  WHERE branch_id=? AND period_month=?) "
         "ORDER BY id DESC LIMIT 1", (branch_id, period_month)).fetchone()
+    snap_d = dict(snap) if snap else None
+    if snap_d:
+        try:
+            snap_d["source_doc_count"] = len(json.loads(snap_d.get("source_manifest") or "[]"))
+        except Exception:
+            snap_d["source_doc_count"] = 0
     return {"branch_id": branch_id, "branch_name": r["branch_name"],
         "period_month": period_month, "session": r.get("session") or {},
         "progress_pct": r["progress_pct"], "todo_count": len(r["todo"]),
@@ -5054,7 +5122,7 @@ def _recon_certificate(conn, branch_id, period_month):
         "ack_count": len(ack_rows),
         "ack_amount": round(sum(abs(x["amount"]) for x in ack_rows), 2),
         "override_count": reg["count"], "override_missing_reason": reg["missing_reason"],
-        "snapshot": dict(snap) if snap else None}
+        "snapshot": snap_d}
 
 
 # ── JSON endpoints (drive the in-app views) ───────────────────────────────────
@@ -5285,7 +5353,8 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None):
         appd = esc((sess.get("approved_at") or "")[:16] or "—")
         snap = c["snapshot"]
         snap_line = (f"<div>หลักฐานแช่แข็ง (SHA-256): <b class='mono'>{esc(snap['sha256'][:16])}…</b> "
-                     f"· {esc((snap['created_at'] or '')[:16])}</div>" if snap else
+                     f"· {esc((snap['created_at'] or '')[:16])} · "
+                     f"ผูกเอกสารต้นทาง {snap.get('source_doc_count', 0)} ไฟล์</div>" if snap else
                      "<div class='muted'>ยังไม่มีหลักฐานแช่แข็ง (อนุมัติงวดเพื่อสร้าง snapshot)</div>")
         out = [f"<div class='sheet{'' if first else ' pageb'}'>",
             f"<h1>ใบรับรองการกระทบยอด (Reconciliation Certificate)</h1>",
@@ -5896,6 +5965,22 @@ _UAT_CASES = [
                "ยืนยันแฟรนไชส์ไม่โผล่ทั้งสองรายงาน + canary อุดร 2026-05-01 ฿35,511.48 ไม่เปลี่ยน"],
      "expected": "ปิดเดือนแสดงสถานะ/ผู้อนุมัติ/snapshot ครบ, Write-off รวม+แยกเหตุผล/สาขา+เน้นเกินเกณฑ์ถูกต้อง, "
                  "พิมพ์ PDF ได้, เฉพาะสาขาหลัก, ไม่แตะตัวเลขบัญชี"},
+    {"id": "TC-33", "title": "การควบคุมภายในของการแก้ไข — เหตุผลบังคับ / เปิดงวด / ตัวตนจริง / manifest",
+     "role": "ผู้จัดการ / ผู้สอบบัญชี",
+     "narrative": "ปิดช่องโหว่เชิงโครงสร้างตามหลักการควบคุมภายใน (2026-06-19): "
+                  "(1) ทุกการแก้ด้วยมือต้องมีเหตุผล >=10 ตัวอักษร — ย้ายช่อง/ปรับ lane/รับทราบผลต่าง "
+                  "(จับคู่ด้วยมือถ้าไม่ใส่ ระบบเติมเหตุผลมาตรฐาน); (2) เปิดงวดที่ปิดแล้ว (ส่งกลับแก้) "
+                  "ต้องใช้รหัสผู้จัดการ + ระบุเหตุผล บันทึก audit; (3) ระบุตัวตนผู้ทำจริงจากบัญชีล็อกอิน "
+                  "(ไม่เชื่อค่าที่หน้าเว็บส่ง) ทั้งการแก้และอนุมัติ; (4) snapshot ปิดงวดผูกรายชื่อ+SHA-256 "
+                  "ของเอกสารต้นทางทุกไฟล์",
+     "steps": ["ลองย้ายช่องโดยไม่ใส่เหตุผล (หรือ <10 ตัวอักษร) -> ระบบปฏิเสธ; ใส่เหตุผลชัดเจน -> ผ่าน",
+               "ปิดงวด (ผู้จัดการ) แล้วลอง 'ส่งกลับแก้' โดยไม่ใส่รหัสผู้จัดการ -> ถูกปฏิเสธ; "
+               "ใส่รหัส+เหตุผล -> เปิดได้ และมีบันทึกใน audit log",
+               "ถ้าล็อกอิน dashboard ไว้ -> ตรวจ audit log/ผู้อนุมัติว่าเป็นชื่อบัญชีจริง ไม่ใช่ 'staff'",
+               "เปิดใบรับรองการกระทบยอดของงวดที่ปิดแล้ว -> บรรทัดหลักฐานแช่แข็งแสดง 'ผูกเอกสารต้นทาง N ไฟล์'",
+               "ยืนยัน 134 tests เขียว + canary อุดร 2026-05-01 ฿35,511.48 ไม่เปลี่ยน"],
+     "expected": "แก้ด้วยมือไม่มีเหตุผลถูกปฏิเสธ, เปิดงวดต้องรหัสผู้จัดการ+เหตุผล, ตัวตนจริงถูกบันทึก, "
+                 "ใบรับรองแสดงจำนวนเอกสารต้นทางที่ผูก, ไม่กระทบตรรกะบัญชี/การกระทบยอด"},
     {"id": "TC-29", "title": "Responsive Nav + Reports Hub (#reports) -- เฟส 5",
      "role": "ทุกบทบาท",
      "narrative": "เฟส 5 เพิ่มแถบนำทาง 4 โซน (หน้าหลัก / รายงาน / Admin / วินิจฉัย) "
@@ -6240,10 +6325,15 @@ def manual_list(branch_id: int, category: str, bank: str, period_month: str):
 
 
 @app.post("/api/manual", dependencies=[Depends(require_write_token)])
-def manual_create(body: ManualMatch):
+def manual_create(body: ManualMatch, request: Request):
     _validate_period(body.period_month)
     if not body.pos_days or not body.ext:
         raise HTTPException(400, "Tick at least one POS day and one statement line.")
+    # Every manual match carries a reason for the audit trail; one-tap matches (e.g. the
+    # reclass suggestions) pass their own note, and anything still blank is stamped with
+    # a system reason rather than rejected (keeps the one-click flow working).
+    note = (body.note or "").strip() or "(จับคู่ด้วยมือ — ตามรายการที่ตรงกัน)"
+    actor = _actor(request, body.matched_by)
     pos_amount = round(sum(float(x.get("amount") or 0) for x in body.pos_days), 2)
     ext_amount = round(sum(float(x.get("amount") or 0) for x in body.ext), 2)
     with get_db() as conn:
@@ -6275,7 +6365,7 @@ def manual_create(body: ManualMatch):
             VALUES (?,?,?,?,?,?,?,?,?,?)
         """, (body.branch_id, body.category, body.bank, body.period_month,
               pos_amount, ext_amount, round(ext_amount - pos_amount, 2),
-              json.dumps(body.pos_days), body.note, body.matched_by or "staff"))
+              json.dumps(body.pos_days), note, actor))
         mid = cur.lastrowid
         for e in body.ext:
             tbl = e.get("table")
@@ -6285,7 +6375,7 @@ def manual_create(body: ManualMatch):
             conn.execute("INSERT INTO recon_manual_match_line (match_id, ext_table, ext_id, amount) "
                          "VALUES (?,?,?,?)", (mid, tbl, eid, float(e.get("amount") or 0)))
             conn.execute(f"UPDATE {tbl} SET match_status='manual' WHERE id=?", (eid,))
-        _audit(conn, "manual_match", mid, "create", body.matched_by or "staff",
+        _audit(conn, "manual_match", mid, "create", actor,
                [{"field": "match", "old": None,
                  "new": f"POS {pos_amount:.0f} ↔ EXT {ext_amount:.0f} (var {ext_amount-pos_amount:.0f})"}])
         conn.commit()
@@ -6340,14 +6430,16 @@ def lane_adj_list(branch_id: int, period_month: str):
 
 
 @app.post("/api/lanes/adj", dependencies=[Depends(require_write_token)])
-def lane_adj_upsert(body: LaneAdj):
+def lane_adj_upsert(body: LaneAdj, request: Request):
     _validate_period(body.period_month)
     if body.adj_type not in ("off_pos", "deposit_note", "other", "accept"):
         raise HTTPException(400, "adj_type must be off_pos | deposit_note | other | accept")
-    # AUD-8: an acknowledged variance must carry a MEANINGFUL reason (auditors
-    # sample these), not a one-character placeholder.
-    if body.adj_type == "accept" and len((body.note or "").strip()) < 10:
-        raise HTTPException(400, "การรับทราบผลต่างต้องใส่เหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
+    # AUD-8 (widened 2026-06-19): EVERY lane adjustment is a manual override of the
+    # reconciliation and must carry a MEANINGFUL reason (auditors sample these), not a
+    # one-character placeholder — not just adj_type='accept'.
+    if len((body.note or "").strip()) < 10:
+        raise HTTPException(400, "การปรับปรุง lane ต้องระบุเหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
+    actor = _actor(request, body.created_by)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)
@@ -6360,7 +6452,7 @@ def lane_adj_upsert(body: LaneAdj):
                 "UPDATE recon_lane_adj SET adj_pos=?, adj_ext=?, note=?, adj_type=?, "
                 "created_by=?, created_at=datetime('now') WHERE id=?",
                 (body.adj_pos, body.adj_ext, body.note, body.adj_type,
-                 body.created_by or "staff", existing["id"]))
+                 actor, existing["id"]))
             row_id = existing["id"]
         else:
             cur = conn.execute(
@@ -6368,8 +6460,7 @@ def lane_adj_upsert(body: LaneAdj):
                 "(branch_id,period_month,category,bank,adj_pos,adj_ext,note,adj_type,created_by) "
                 "VALUES (?,?,?,?,?,?,?,?,?)",
                 (body.branch_id, body.period_month, body.category, body.bank,
-                 body.adj_pos, body.adj_ext, body.note, body.adj_type,
-                 body.created_by or "staff"))
+                 body.adj_pos, body.adj_ext, body.note, body.adj_type, actor))
             row_id = cur.lastrowid
         conn.commit()
     return {"id": row_id, "adj_pos": body.adj_pos, "adj_ext": body.adj_ext}
@@ -6426,8 +6517,13 @@ def channel_move_list(branch_id: int, period_month: str):
 
 
 @app.post("/api/channel-move", dependencies=[Depends(require_write_token)])
-def channel_move_create(body: ChannelMove):
+def channel_move_create(body: ChannelMove, request: Request):
     _validate_period(body.period_month)
+    # A cross-channel move is a management override of what the POS recorded — it must
+    # carry a meaningful reason for the audit trail (auditors sample these).
+    if len((body.note or "").strip()) < 10:
+        raise HTTPException(400, "การย้ายช่องต้องระบุเหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
+    actor = _actor(request, body.created_by)
     fc, tc = body.from_category, body.to_category
     if fc not in _MOVE_CHANNELS or tc not in _MOVE_CHANNELS:
         raise HTTPException(400, f"channel must be one of {sorted(_MOVE_CHANNELS)}")
@@ -6457,8 +6553,8 @@ def channel_move_create(body: ChannelMove):
             "(branch_id,period_month,from_category,from_bank,to_category,to_bank,amount,note,created_by) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
             (body.branch_id, body.period_month, fc, fb, tc, tb,
-             round(body.amount, 2), body.note, body.created_by or "staff"))
-        _audit(conn, "channel_move", cur.lastrowid, "create", body.created_by or "staff",
+             round(body.amount, 2), body.note, actor))
+        _audit(conn, "channel_move", cur.lastrowid, "create", actor,
                [{"field": "move", "old": f"{fc}·{fb}", "new": f"{tc}·{tb}"},
                 {"field": "amount", "old": None, "new": round(body.amount, 2)}])
         conn.commit()
@@ -6507,13 +6603,14 @@ def day_ack_list(branch_id: int, period_month: str):
 
 
 @app.post("/api/day-ack", dependencies=[Depends(require_write_token)])
-def day_ack_upsert(body: DayAck):
+def day_ack_upsert(body: DayAck, request: Request):
     _validate_period(body.period_month)
     # Same audit-grade rule as a channel accept: a meaningful reason (≥10 chars).
     if len((body.note or "").strip()) < 10:
         raise HTTPException(400, "การรับทราบผลต่างรายวันต้องใส่เหตุผลที่ชัดเจน (อย่างน้อย 10 ตัวอักษร)")
     if not (body.day or "").startswith(body.period_month):
         raise HTTPException(400, "day must fall inside period_month")
+    actor = _actor(request, body.created_by)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.period_month)
@@ -6525,7 +6622,7 @@ def day_ack_upsert(body: DayAck):
             conn.execute(
                 "UPDATE recon_day_ack SET variance=?, note=?, created_by=?, "
                 "created_at=datetime('now') WHERE id=?",
-                (body.variance, body.note, body.created_by or "staff", existing["id"]))
+                (body.variance, body.note, actor, existing["id"]))
             row_id = existing["id"]
         else:
             cur = conn.execute(
@@ -6533,9 +6630,9 @@ def day_ack_upsert(body: DayAck):
                 "(branch_id,period_month,category,day,variance,note,created_by) "
                 "VALUES (?,?,?,?,?,?,?)",
                 (body.branch_id, body.period_month, body.category, body.day,
-                 body.variance, body.note, body.created_by or "staff"))
+                 body.variance, body.note, actor))
             row_id = cur.lastrowid
-        _audit(conn, "day_ack", row_id, "accept", body.created_by or "staff",
+        _audit(conn, "day_ack", row_id, "accept", actor,
                [{"field": "variance", "old": None, "new": body.variance}])
         conn.commit()
     return {"id": row_id}

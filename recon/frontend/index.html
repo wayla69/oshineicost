@@ -1335,6 +1335,7 @@ async function submitMove(){
   if(!f||!t){toast('เลือกช่องไม่ถูกต้อง');return;}
   if(f.cat===t.cat&&f.bank===t.bank){toast('ช่องต้นทางและปลายทางต้องไม่ใช่ช่องเดียวกัน');return;}
   if(!(amt>0)){toast('ใส่จำนวนเงินมากกว่า 0');return;}
+  if(note.length<10){toast('กรุณาระบุเหตุผลการย้ายช่อง (อย่างน้อย 10 ตัวอักษร)');const ta=$('mv-note');if(ta)ta.focus();return;}
   try{await api('/api/channel-move',{method:'POST',body:{branch_id:bid,period_month:MONTH,
       from_category:f.cat,from_bank:f.bank,to_category:t.cat,to_bank:t.bank,amount:amt,note:note}});
     closeSheet();toast('ย้ายช่องแล้ว — กระทบสองยอดเรียบร้อย');route();}
@@ -3269,7 +3270,7 @@ async function loadCertificate(){
       <td></td><td class="mono"><b>${c.residual_total>0?'+':''}${fmt(c.residual_total)}</b></td><td></td></tr>
   </table></div>
   <div class="card" style="padding:14px 18px">
-    <div class="lbl" style="margin-bottom:8px">${c.snapshot?`หลักฐานแช่แข็ง (SHA-256): <span class="mono">${esc((c.snapshot.sha256||'').slice(0,16))}…</span> · ${esc((c.snapshot.created_at||'').slice(0,16))}`:'<span style="color:var(--warn)">ยังไม่มีหลักฐานแช่แข็ง — อนุมัติงวดเพื่อสร้าง snapshot</span>'}</div>
+    <div class="lbl" style="margin-bottom:8px">${c.snapshot?`หลักฐานแช่แข็ง (SHA-256): <span class="mono">${esc((c.snapshot.sha256||'').slice(0,16))}…</span> · ${esc((c.snapshot.created_at||'').slice(0,16))} · ผูกเอกสารต้นทาง ${c.snapshot.source_doc_count||0} ไฟล์`:'<span style="color:var(--warn)">ยังไม่มีหลักฐานแช่แข็ง — อนุมัติงวดเพื่อสร้าง snapshot</span>'}</div>
     <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:6px">
       <div><div class="lbl">ผู้จัดทำ</div><div style="font-weight:600">${esc(sess.created_by||'—')}</div></div>
       <div><div class="lbl">ผู้สอบทาน / อนุมัติ</div><div style="font-weight:600">${esc(sess.approved_by||'—')}</div></div>

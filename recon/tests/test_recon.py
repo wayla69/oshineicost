@@ -1913,7 +1913,12 @@ def test_approval_gate_and_period_lock(client):
         client.patch(f"/api/discrepancies/{d['id']}/resolve", json={"resolution": "accepted", "resolved_by": "t"})
     assert client.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 200
     assert client.post(f"/api/sessions/{sid}/run-match").status_code == 423        # locked
-    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
+    # Reopen gate (control fix): unlocking a signed-off month needs a reason (≥10 chars)
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "in_review"}).status_code == 400            # no reason
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "in_review", "reason": "เปิดเพื่อแก้เอกสารเพิ่มเติม"}
+                        ).status_code == 200
     assert client.post(f"/api/sessions/{sid}/run-match").status_code == 200        # reopened
 
 
@@ -2800,9 +2805,15 @@ def test_channel_move_offsets_two_lanes(client):
 def test_channel_move_in_wrong_channel_report(client):
     """Manual moves appear in the wrong-channel report alongside detected matches,
     tagged source='move'; Excel + print render."""
+    # A move now requires a meaningful reason (≥10 chars) — control fix 2026-06-19
     assert client.post("/api/channel-move", json={
         "branch_id": 4, "period_month": "2026-06", "from_category": "CASH",
-        "to_category": "QR", "to_bank": "KBANK", "amount": 1234, "note": "กดผิดช่อง"}
+        "to_category": "QR", "to_bank": "KBANK", "amount": 1234, "note": "สั้น"}
+    ).status_code == 400
+    assert client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-06", "from_category": "CASH",
+        "to_category": "QR", "to_bank": "KBANK", "amount": 1234,
+        "note": "ลูกค้าสแกน QR แต่พนักงานกดเป็นเงินสด"}
     ).status_code == 200
     rep = client.get("/api/reports/wrong-channel?period_month=2026-06").json()
     moves = [it for it in rep["items"] if it.get("source") == "move"]
@@ -3027,3 +3038,38 @@ def test_ic_close_register_and_accepted_variance(client):
                "accepted-variance.print?period_month=2026-06&threshold=1000"):
         r = client.get("/api/reports/" + ep)
         assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+
+
+def test_ic_structural_control_fixes(client, monkeypatch):
+    """Control hardening 2026-06-19: every override needs a reason; reopening a
+    signed-off month needs the manager code + reason; close snapshot freezes a
+    source-document manifest."""
+    # (1) a non-accept lane adjustment now requires a meaningful reason (≥10 chars)
+    base = {"branch_id": 4, "period_month": "2026-06", "category": "QR", "bank": "KTB",
+            "adj_pos": 100, "adj_type": "off_pos"}
+    assert client.post("/api/lanes/adj", json={**base, "note": "x"}).status_code == 400
+    assert client.post("/api/lanes/adj",
+                       json={**base, "note": "ยอด QR นอกระบบ POS สแกนเข้าบัญชีตรง"}
+                       ).status_code == 200
+
+    # (2) reopen gate: unlocking an approved month needs the manager code + a reason
+    sid = client.post("/api/sessions",
+                      json={"branch_id": 5, "period_month": "2026-06", "created_by": "alice"}
+                      ).json()["session_id"]
+    monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
+    h = {"X-Manager-Token": "mgr-1234"}
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "bob"}, headers=h
+                        ).status_code == 200
+    assert client.patch(f"/api/sessions/{sid}/status",                    # no manager token
+                        data={"status": "in_review", "reason": "ขอแก้ไขเอกสารบางส่วน"}
+                        ).status_code == 403
+    assert client.patch(f"/api/sessions/{sid}/status",                    # token but no reason
+                        data={"status": "in_review"}, headers=h).status_code == 400
+    assert client.patch(f"/api/sessions/{sid}/status",                    # token + reason → ok
+                        data={"status": "in_review", "reason": "ขอแก้ไขเอกสารบางส่วน"},
+                        headers=h).status_code == 200
+
+    # (3) the close snapshot froze a source-document manifest (column flows to the cert)
+    cert = client.get("/api/reports/recon-certificate?branch_id=5&period_month=2026-06").json()
+    assert cert["snapshot"] is not None and "source_doc_count" in cert["snapshot"]

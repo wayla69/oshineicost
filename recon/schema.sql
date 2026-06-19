@@ -359,7 +359,8 @@ CREATE TABLE IF NOT EXISTS recon_close_snapshot (
     sha256       TEXT,                 -- of the frozen .xlsx bytes
     size_bytes   INTEGER,
     created_by   TEXT,
-    created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    source_manifest TEXT             -- JSON [{file,sha256,type,provider}] of the source docs frozen with this snapshot
 );
 CREATE INDEX IF NOT EXISTS idx_rcs_session ON recon_close_snapshot(session_id);
 
