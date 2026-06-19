@@ -2936,3 +2936,57 @@ def test_accounting_includes_bill_level_coupon_discount(client):
     with main.get_db() as conn:
         html = main._monthly_finance_html(conn, 4, "2026-06")
     assert "ส่วนลด" in html and "2,500.00" in html
+
+
+# ── Internal-control reports: override register / aging / certificate ──────────
+
+def test_ic_override_register_excludes_franchise_and_flags_missing_reason(client):
+    """Override register pulls every manual intervention for master branches only,
+    flags rows with no reason, and supports a branch filter."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    # master branch 4 — three kinds of override (one with NO reason)
+    c.execute("INSERT INTO recon_channel_move(branch_id,period_month,from_category,"
+              "from_bank,to_category,to_bank,amount,note,created_by) "
+              "VALUES(4,'2026-06','CASH','NONE','QR','KBANK',1000,'rang up wrong','staffA')")
+    c.execute("INSERT INTO recon_day_ack(branch_id,period_month,category,day,variance,"
+              "note,created_by) VALUES(4,'2026-06','QR','2026-06-05',12.5,"
+              "'bank fee diff explained','staffA')")
+    c.execute("INSERT INTO recon_lane_adj(branch_id,period_month,category,bank,adj_pos,"
+              "adj_ext,note,adj_type,created_by) "
+              "VALUES(4,'2026-06','CASH','NONE',500,0,'','other','staffA')")  # no reason
+    # franchise branch 1 — MUST be excluded (master-only scope)
+    c.execute("INSERT INTO recon_channel_move(branch_id,period_month,from_category,"
+              "from_bank,to_category,to_bank,amount,note,created_by) "
+              "VALUES(1,'2026-06','CASH','NONE','QR','KBANK',999,'franchise','x')")
+    c.commit(); c.close()
+
+    j = client.get("/api/reports/override-register?period_month=2026-06").json()
+    assert all(r["branch_id"] != 1 for r in j["rows"])          # franchise excluded
+    assert j["count"] == 3
+    assert {r["kind_key"] for r in j["rows"]} == {"channel_move", "day_ack", "lane_adj"}
+    assert j["missing_reason"] == 1                              # the empty-note lane_adj
+    # branch filter narrows to one master branch
+    assert client.get(
+        "/api/reports/override-register?period_month=2026-06&branch_id=4").json()["count"] == 3
+
+
+def test_ic_certificate_and_aging_and_print(client):
+    """Certificate totals per channel + aging buckets + all three print sheets render."""
+    cert = client.get("/api/reports/recon-certificate?branch_id=4&period_month=2026-06").json()
+    assert cert["branch_name"] == "Korat1"
+    assert any(ch["key"] == "CASH" for ch in cert["channels"])
+    # POS total ties to the sum of channel POS legs
+    assert abs(cert["pos_total"] - round(sum(ch["pos"] for ch in cert["channels"]), 2)) < 0.01
+
+    ag = client.get("/api/reports/open-items-aging?period_month=2026-06&lookback=1").json()
+    assert set(ag["buckets"]) == {"0-7", "8-30", ">30"}
+    assert ag["count"] == sum(ag["buckets"].values())
+
+    for ep in ("override-register.print", "open-items-aging.print",
+               "recon-certificate.print"):
+        r = client.get(f"/api/reports/{ep}?period_month=2026-06")
+        assert r.status_code == 200
+        assert "text/html" in r.headers["content-type"]
+    # bad period rejected
+    assert client.get("/api/reports/override-register?period_month=2026").status_code == 400

@@ -4872,6 +4872,472 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
+# ════════════════════════════════════════════════════════════════════════════
+#  Internal-control reports (Big4 audit evidence) — all READ-ONLY.
+#  #1 Management-override register · #2 Reconciliation sign-off certificate ·
+#  #3 Open-items aging.  None of these mutate state or touch accounting/recon
+#  logic; they only READ the existing reversible-adjustment tables and
+#  reconcile_month(). Master-branch (company-owned) scope only.
+# ════════════════════════════════════════════════════════════════════════════
+
+_IC_BANK_TH = {"KTB": "กรุงไทย", "KBANK": "กสิกร", "KTC": "KTC", "BAY": "กรุงศรี",
+               "SCB": "ไทยพาณิชย์", "BBL": "กรุงเทพ", "TTB": "ทีทีบี",
+               "PROMPTPAY": "พร้อมเพย์", "ANY": "ทุกธนาคาร", "NONE": "—", "ALL": "ทุกช่อง"}
+_IC_SESS_TH = {"draft": "ร่าง (ยังไม่สอบทาน)", "in_review": "รอสอบทาน",
+               "approved": "อนุมัติแล้ว", "closed": "ปิดงวดแล้ว"}
+_IC_CHST_TH = {"ok": "ตรงกัน", "diff": "มีผลต่าง", "waiting_doc": "รอเอกสาร",
+               "no_source": "ไม่มีคู่เทียบ", "setup": "รอตั้งค่า"}
+
+
+def _ic_lane_th(cat, bank):
+    base = _CH_LABEL.get(cat, cat or "—")
+    if bank and bank not in ("NONE", "ALL", "ANY", "", None):
+        return f"{base}·{_IC_BANK_TH.get(bank, bank)}"
+    return base
+
+
+def _override_register(conn, period_month, branch_id=None):
+    """Every manual intervention (management override) in the month across master
+    branches: manual tick-to-match, cross-channel move, lane adjustment, and per-day
+    acknowledged variance — the four reversible tables. One normalized row each:
+    branch · when · who · kind · lane · amount · reason. Read-only."""
+    bmap = {r["branch_id"]: r["name"] for r in conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
+
+    def keep(bid):
+        return (bid in bmap) and (branch_id is None or bid == branch_id)
+
+    rows = []
+    for r in conn.execute("SELECT * FROM recon_manual_match WHERE period_month=?",
+                          (period_month,)):
+        if not keep(r["branch_id"]):
+            continue
+        rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
+            "at": r["matched_at"], "by": r["matched_by"] or "—",
+            "kind": "จับคู่ด้วยมือ", "kind_key": "manual_match",
+            "lane": _ic_lane_th(r["category"], r["bank"]),
+            "amount": round(float(r["ext_amount"] or 0), 2),
+            "detail": (f"POS {float(r['pos_amount'] or 0):,.0f} ↔ เงินเข้า "
+                       f"{float(r['ext_amount'] or 0):,.0f} "
+                       f"(ต่าง {float(r['variance'] or 0):+,.0f})"),
+            "reason": r["note"] or ""})
+    for r in conn.execute("SELECT * FROM recon_channel_move WHERE period_month=?",
+                          (period_month,)):
+        if not keep(r["branch_id"]):
+            continue
+        rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
+            "at": r["created_at"], "by": r["created_by"] or "—",
+            "kind": "ย้ายช่อง", "kind_key": "channel_move",
+            "lane": (f"{_ic_lane_th(r['from_category'], r['from_bank'])} → "
+                     f"{_ic_lane_th(r['to_category'], r['to_bank'])}"),
+            "amount": round(float(r["amount"] or 0), 2),
+            "detail": f"ย้าย {float(r['amount'] or 0):,.0f} บาท",
+            "reason": r["note"] or ""})
+    _adj_kind = {"accept": "รับทราบผลต่าง (ทั้งช่อง)", "off_pos": "เพิ่มยอด POS",
+                 "deposit_note": "บันทึกเงินฝาก", "other": "ปรับปรุงอื่น ๆ"}
+    for r in conn.execute("SELECT * FROM recon_lane_adj WHERE period_month=?",
+                          (period_month,)):
+        if not keep(r["branch_id"]):
+            continue
+        amt = float(r["adj_pos"] or 0) + float(r["adj_ext"] or 0)
+        det = ((f"POS +{float(r['adj_pos'] or 0):,.0f}" if r["adj_pos"] else "")
+               + (f" เงินเข้า +{float(r['adj_ext'] or 0):,.0f}" if r["adj_ext"] else "")).strip()
+        rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
+            "at": r["created_at"], "by": r["created_by"] or "—",
+            "kind": _adj_kind.get(r["adj_type"], "ปรับปรุง"), "kind_key": "lane_adj",
+            "lane": _ic_lane_th(r["category"], r["bank"]),
+            "amount": round(amt, 2),
+            "detail": det or "รับทราบผลต่างทั้งช่องให้ปิดงวดได้",
+            "reason": r["note"] or ""})
+    for r in conn.execute("SELECT * FROM recon_day_ack WHERE period_month=?",
+                          (period_month,)):
+        if not keep(r["branch_id"]):
+            continue
+        rows.append({"branch_id": r["branch_id"], "branch_name": bmap[r["branch_id"]],
+            "at": r["created_at"], "by": r["created_by"] or "—",
+            "kind": "รับทราบผลต่างรายวัน", "kind_key": "day_ack",
+            "lane": f"{_CH_LABEL.get(r['category'], r['category'])} · {r['day']}",
+            "amount": round(float(r["variance"] or 0), 2),
+            "detail": f"วันที่ {r['day']} ต่าง {float(r['variance'] or 0):+,.0f} บาท",
+            "reason": r["note"] or ""})
+    rows.sort(key=lambda x: (x["at"] or ""), reverse=True)
+    for r in rows:
+        r["has_reason"] = bool((r["reason"] or "").strip())
+    return {"period_month": period_month, "branch_id": branch_id,
+            "rows": rows, "count": len(rows),
+            "total_abs_amount": round(sum(abs(r["amount"]) for r in rows), 2),
+            "missing_reason": sum(0 if r["has_reason"] else 1 for r in rows)}
+
+
+def _ic_period_end(m):
+    import calendar
+    from datetime import date
+    y, mo = int(m[:4]), int(m[5:7])
+    return date(y, mo, calendar.monthrange(y, mo)[1])
+
+
+def _ic_prev_month(m, k):
+    y, mo = int(m[:4]), int(m[5:7])
+    idx = y * 12 + (mo - 1) - k
+    return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
+
+
+def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
+    """Open (unresolved) reconciling items, aged from period-end to today, for the
+    selected month + `lookback` prior months. Skips approved/closed (locked) sessions —
+    those are signed off, not open. Each item = one reconcile_month todo. Read-only."""
+    from datetime import date
+    today = date.today()
+    months = [period_month] + [_ic_prev_month(period_month, k)
+                               for k in range(1, lookback + 1)]
+    branches = [(r["branch_id"], r["name"]) for r in conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name")
+        if (branch_id is None or r["branch_id"] == branch_id)]
+    items = []
+    for m in months:
+        pend = _ic_period_end(m)
+        age = max(0, (today - pend).days)
+        bucket = "0-7" if age <= 7 else ("8-30" if age <= 30 else ">30")
+        for bid, bname in branches:
+            sess = conn.execute(
+                "SELECT status FROM recon_sessions WHERE branch_id=? AND period_month=?",
+                (bid, m)).fetchone()
+            if sess and sess["status"] in ("approved", "closed"):
+                continue
+            try:
+                r = reconcile_month(conn, bid, m)
+            except Exception:
+                continue
+            for t in r["todo"]:
+                items.append({"branch_id": bid, "branch_name": bname,
+                    "period_month": m, "age_days": age, "bucket": bucket,
+                    "type": t.get("type"), "label": t.get("label"),
+                    "channel": t.get("channel")})
+    items.sort(key=lambda x: (-x["age_days"], x["branch_name"]))
+    buckets = {"0-7": 0, "8-30": 0, ">30": 0}
+    for it in items:
+        buckets[it["bucket"]] += 1
+    return {"as_of": today.isoformat(), "period_month": period_month,
+            "lookback": lookback, "months": months,
+            "items": items, "count": len(items), "buckets": buckets}
+
+
+def _recon_certificate(conn, branch_id, period_month):
+    """Sign-off certificate data for one branch-month: per-channel POS vs money-in
+    with residual after acknowledgements, preparer/reviewer + approval date, the
+    frozen working-paper snapshot hash, and the count of manual overrides. Read-only."""
+    r = reconcile_month(conn, branch_id, period_month)
+    chs = r["channels"]
+    rows, resid_total = [], 0.0
+    for c in chs:
+        resid = c.get("residual", c.get("variance", 0)) or 0
+        if c["key"] != "COUPON":          # COUPON variance is loyalty points, not baht
+            resid_total += resid
+        rows.append({"key": c["key"], "label": c["label"],
+            "pos": c["pos"], "ext": c["ext"], "variance": c.get("variance", 0),
+            "residual": resid, "status": c["status"],
+            "accepted": bool(c.get("accepted")), "detail": c.get("detail", "")})
+    reg = _override_register(conn, period_month, branch_id)
+    ack_rows = [x for x in reg["rows"] if x["kind_key"] in ("day_ack", "lane_adj")]
+    snap = conn.execute(
+        "SELECT status, sha256, created_at, file_name FROM recon_close_snapshot "
+        "WHERE session_id=(SELECT session_id FROM recon_sessions "
+        "                  WHERE branch_id=? AND period_month=?) "
+        "ORDER BY id DESC LIMIT 1", (branch_id, period_month)).fetchone()
+    return {"branch_id": branch_id, "branch_name": r["branch_name"],
+        "period_month": period_month, "session": r.get("session") or {},
+        "progress_pct": r["progress_pct"], "todo_count": len(r["todo"]),
+        "channels": rows,
+        "pos_total": round(sum(c["pos"] for c in chs), 2),
+        "ext_total": round(sum(c["ext"] for c in chs), 2),
+        "residual_total": round(resid_total, 2),
+        "ack_count": len(ack_rows),
+        "ack_amount": round(sum(abs(x["amount"]) for x in ack_rows), 2),
+        "override_count": reg["count"], "override_missing_reason": reg["missing_reason"],
+        "snapshot": dict(snap) if snap else None}
+
+
+# ── JSON endpoints (drive the in-app views) ───────────────────────────────────
+@app.get("/api/reports/override-register")
+def override_register_api(period_month: str, branch_id: int | None = None):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _override_register(conn, period_month, branch_id)
+
+
+@app.get("/api/reports/open-items-aging")
+def open_items_aging_api(period_month: str, branch_id: int | None = None,
+                         lookback: int = 2):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _open_items_aging(conn, period_month, branch_id, max(0, min(6, lookback)))
+
+
+@app.get("/api/reports/recon-certificate")
+def recon_certificate_api(branch_id: int, period_month: str):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        _validate_master_branch(conn, branch_id)
+        return _recon_certificate(conn, branch_id, period_month)
+
+
+# ── Shared print CSS (matches the outstanding-docs sheet look) ────────────────
+def _ic_print_css(accent):
+    return ("<style>@page{size:A4;margin:14mm}"
+        "*{box-sizing:border-box}"
+        "body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;"
+        "font-size:12px;margin:0;padding:22px;background:#f8fafc}"
+        ".sheet{background:#fff;max-width:960px;margin:0 auto 16px;padding:24px 28px;"
+        "border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}"
+        "h1{font-size:19px;margin:0 0 2px}.sub{color:#64748b;font-size:12px;margin-bottom:8px}"
+        f"h2{{font-size:14px;margin:16px 0 6px;border-left:4px solid {accent};padding-left:8px}}"
+        "table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 8px}"
+        "th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:right}"
+        "th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}"
+        "td:first-child,th:first-child,td.l,th.l{text-align:left}"
+        ".mono{font-variant-numeric:tabular-nums}.muted{color:#64748b;font-size:11px}"
+        ".big{color:#b91c1c;font-weight:700}.ok{color:#047857}.warn{color:#b45309}"
+        "tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}"
+        f".lead{{background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {accent};"
+        "border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}"
+        ".none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;"
+        "color:#166534;font-size:12px}"
+        ".chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:600}"
+        ".c-ok{background:#ecfdf5;color:#047857}.c-warn{background:#fef3c7;color:#92610e}"
+        ".c-err{background:#fef2f2;color:#b91c1c}.c-mut{background:#f1f5f9;color:#475569}"
+        ".toolbar{max-width:960px;margin:0 auto 12px;text-align:right}"
+        f".btn{{background:{accent};color:#fff;border:0;border-radius:8px;padding:9px 18px;"
+        "font-size:13px;cursor:pointer}"
+        ".ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px}"
+        ".sign{display:flex;gap:40px;margin-top:26px}"
+        ".sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;"
+        "font-size:11px;color:#475569}"
+        ".kv{display:flex;flex-wrap:wrap;gap:6px 26px;margin:8px 0}"
+        ".kv div{font-size:12px}.kv b{color:#0f172a}"
+        "@media print{body{background:#fff;padding:0}.toolbar{display:none}"
+        ".sheet{box-shadow:none;border-radius:0;max-width:none;margin:0}"
+        ".pageb{page-break-before:always}}</style>")
+
+
+def _ic_picker(period_month, branch_id, master, esc, all_label="ทุกสาขา (สาขาหลัก)",
+               extra=""):
+    bopts = (f"<option value=''{'' if branch_id else ' selected'}>{all_label}</option>"
+             + "".join(f"<option value='{b['branch_id']}'"
+                       f"{' selected' if branch_id == b['branch_id'] else ''}>"
+                       f"{esc(b['name'])}</option>" for b in master))
+    bsuffix = f"&branch_id={branch_id}" if branch_id else ""
+    month_oc = f"location.href='?period_month='+this.value+'{bsuffix}{extra}'"
+    sel_oc = (f"location.href='?period_month={period_month}'"
+              f"+(this.value?'&branch_id='+this.value:'')+'{extra}'")
+    return (f"<input type='month' value='{esc(period_month)}' class='ctl' onchange=\"{month_oc}\">"
+            f"<select class='ctl' onchange=\"{sel_oc}\">" + bopts + "</select>")
+
+
+@app.get("/api/reports/override-register.print")
+def override_register_print(period_month: str, branch_id: int | None = None):
+    """Print-to-PDF management-override register: every manual match / move / lane
+    adjustment / day-acknowledgement in the month, with who·when·reason — the log a
+    Big4 auditor pulls first. Rows with no reason are flagged."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v): return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        reg = _override_register(conn, period_month, branch_id)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc)
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>ทะเบียนการปรับปรุงด้วยมือ</title>", _ic_print_css("#4f46e5"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>ทะเบียนการปรับปรุงด้วยมือ (Management Override Register) — งวด {esc(period_month)}</h1>",
+        f"<div class='sub'>ทุกรายการที่คนแก้ไขด้วยมือในเดือนนี้: จับคู่เอง · ย้ายช่อง · "
+        f"รับทราบผลต่าง · ปรับปรุง lane — รวม <b>{reg['count']}</b> รายการ คิดเป็นเงิน "
+        f"<b>฿{m(reg['total_abs_amount'])}</b>"
+        + (f" · <span class='big'>{reg['missing_reason']} รายการไม่มีเหตุผลกำกับ</span>"
+           if reg["missing_reason"] else " · ทุกรายการมีเหตุผลกำกับ ✓") + "</div>"]
+    if reg["missing_reason"]:
+        parts.append("<div class='lead'>⚠ รายการที่ไม่มีเหตุผล (เน้นสีแดง) คือจุดที่ผู้สอบบัญชี"
+                     "จะตั้งคำถาม — ควรให้ผู้บันทึกกลับไปใส่เหตุผลทุกครั้งที่แก้ด้วยมือ</div>")
+    if not reg["rows"]:
+        parts.append("<div class='none'>✓ ไม่มีการปรับปรุงด้วยมือในงวดนี้ — ระบบจับคู่อัตโนมัติทั้งหมด</div>")
+    else:
+        parts.append("<table><thead><tr><th class='l'>วันเวลา</th><th class='l'>สาขา</th>"
+            "<th class='l'>ประเภท</th><th class='l'>ช่องทาง / รายการ</th><th>จำนวน (บาท)</th>"
+            "<th class='l'>โดย</th><th class='l'>เหตุผล</th></tr></thead><tbody>")
+        for r in reg["rows"]:
+            rsn = (esc(r["reason"]) if r["has_reason"]
+                   else "<span class='big'>— ไม่ระบุเหตุผล —</span>")
+            parts.append(f"<tr><td class='l muted'>{esc((r['at'] or '')[:16])}</td>"
+                f"<td class='l'>{esc(r['branch_name'])}</td>"
+                f"<td class='l'>{esc(r['kind'])}</td>"
+                f"<td class='l'>{esc(r['lane'])}<div class='muted'>{esc(r['detail'])}</div></td>"
+                f"<td class='mono'>{m(abs(r['amount']))}</td>"
+                f"<td class='l'>{esc(r['by'])}</td>"
+                f"<td class='l'>{rsn}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้สอบทาน (ผู้จัดการ)</div><div>วันที่</div></div>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/reports/open-items-aging.print")
+def open_items_aging_print(period_month: str, branch_id: int | None = None,
+                           lookback: int = 2):
+    """Print-to-PDF aging of open reconciling items (งวดที่เลือก + ย้อนหลัง),
+    bucketed 0-7 / 8-30 / >30 days from period-end. Stale items (>30d) flagged."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    lookback = max(0, min(6, lookback))
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        ag = _open_items_aging(conn, period_month, branch_id, lookback)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc, extra=f"&lookback={lookback}")
+    b = ag["buckets"]
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>อายุรายการค้าง</title>", _ic_print_css("#b45309"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>อายุรายการค้าง (Aging of Open Items) — ณ {esc(ag['as_of'])}</h1>",
+        f"<div class='sub'>รายการกระทบยอดที่ยังไม่ปิด นับอายุจากสิ้นงวด · "
+        f"ตรวจงวด {esc(period_month)} ย้อนหลัง {lookback} เดือน "
+        f"(ไม่รวมงวดที่อนุมัติ/ปิดแล้ว) · รวม <b>{ag['count']}</b> รายการ</div>",
+        "<div class='kv'>"
+        f"<div>0–7 วัน: <b class='ok'>{b['0-7']}</b></div>"
+        f"<div>8–30 วัน: <b class='warn'>{b['8-30']}</b></div>"
+        f"<div>เกิน 30 วัน: <b class='big'>{b['>30']}</b></div></div>"]
+    if b[">30"]:
+        parts.append("<div class='lead'>⚠ มีรายการค้างเกิน 30 วัน — ตามหลักการควบคุมภายใน "
+                     "รายการกระทบยอดควรเคลียร์ภายในรอบถัดไป ของที่ค้างนานต้องมีคำอธิบาย/แผนปิด</div>")
+    if not ag["items"]:
+        parts.append("<div class='none'>✓ ไม่มีรายการค้าง — ทุกงวดที่ตรวจปิดครบหรืออยู่ในเกณฑ์</div>")
+    else:
+        parts.append("<table><thead><tr><th class='l'>อายุ (วัน)</th><th class='l'>ช่วง</th>"
+            "<th class='l'>งวด</th><th class='l'>สาขา</th><th class='l'>ประเภท</th>"
+            "<th class='l'>รายการที่ต้องทำ</th></tr></thead><tbody>")
+        _bk_chip = {"0-7": "c-ok", "8-30": "c-warn", ">30": "c-err"}
+        _ty_th = {"upload": "อัปโหลดเอกสาร", "setup": "ตั้งค่า", "diff": "ตรวจผลต่าง",
+                  "waiting": "รอเอกสาร"}
+        for it in ag["items"]:
+            parts.append(f"<tr><td class='l mono'>{it['age_days']}</td>"
+                f"<td class='l'><span class='chip {_bk_chip[it['bucket']]}'>{esc(it['bucket'])}</span></td>"
+                f"<td class='l muted'>{esc(it['period_month'])}</td>"
+                f"<td class='l'>{esc(it['branch_name'])}</td>"
+                f"<td class='l'>{esc(_ty_th.get(it['type'], it['type']))}</td>"
+                f"<td class='l'>{esc(it['label'])}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้จัดทำ</div><div>ผู้สอบทาน</div><div>วันที่</div></div>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/reports/recon-certificate.print")
+def recon_certificate_print(period_month: str, branch_id: int | None = None):
+    """Print-to-PDF reconciliation sign-off certificate — one signed sheet per branch:
+    per-channel POS vs money-in, residual after acknowledgements, preparer/reviewer +
+    approval date, frozen working-paper hash, override count. No branch_id = all
+    master branches, each on its own page."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v): return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+            targets = [branch_id]
+        else:
+            targets = [b["branch_id"] for b in master]
+        certs = [_recon_certificate(conn, bid, period_month) for bid in targets]
+    picker = _ic_picker(period_month, branch_id, master, esc,
+                        all_label="ทุกสาขา (พิมพ์ทีละหน้า)")
+
+    def sheet(c, first):
+        sess = c["session"] or {}
+        st = sess.get("status") or "draft"
+        st_th = _IC_SESS_TH.get(st, st)
+        st_chip = ("c-ok" if st in ("approved", "closed")
+                   else "c-warn" if st == "in_review" else "c-mut")
+        prep = esc(sess.get("created_by") or "—")
+        rev = esc(sess.get("approved_by") or "—")
+        appd = esc((sess.get("approved_at") or "")[:16] or "—")
+        snap = c["snapshot"]
+        snap_line = (f"<div>หลักฐานแช่แข็ง (SHA-256): <b class='mono'>{esc(snap['sha256'][:16])}…</b> "
+                     f"· {esc((snap['created_at'] or '')[:16])}</div>" if snap else
+                     "<div class='muted'>ยังไม่มีหลักฐานแช่แข็ง (อนุมัติงวดเพื่อสร้าง snapshot)</div>")
+        out = [f"<div class='sheet{'' if first else ' pageb'}'>",
+            f"<h1>ใบรับรองการกระทบยอด (Reconciliation Certificate)</h1>",
+            f"<div class='sub'>สาขา <b>{esc(c['branch_name'])}</b> · งวด <b>{esc(c['period_month'])}</b> "
+            f"· สถานะ <span class='chip {st_chip}'>{esc(st_th)}</span> "
+            f"· กระทบยอดแล้ว {c['progress_pct']}%</div>",
+            "<div class='kv'>"
+            f"<div>POS รวม: <b>฿{m(c['pos_total'])}</b></div>"
+            f"<div>เงินเข้าจริงรวม: <b>฿{m(c['ext_total'])}</b></div>"
+            f"<div>ผลต่างคงเหลือ (หลังรับทราบ): <b class='{'big' if abs(c['residual_total'])>100 else 'ok'}'>"
+            f"฿{m(c['residual_total'])}</b></div>"
+            f"<div>รายการรับทราบ: <b>{c['ack_count']}</b> (฿{m(c['ack_amount'])})</div>"
+            f"<div>แก้ด้วยมือทั้งหมด: <b>{c['override_count']}</b> รายการ</div></div>",
+            "<table><thead><tr><th class='l'>ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th>"
+            "<th>ผลต่าง</th><th>คงเหลือ</th><th class='l'>สถานะ</th></tr></thead><tbody>"]
+        for ch in c["channels"]:
+            stx = "c-ok" if ch["status"] == "ok" else ("c-mut" if ch["status"] == "no_source"
+                  else "c-warn" if ch["status"] == "waiting_doc" else "c-err")
+            stl = ("รับทราบแล้ว" if ch["accepted"] else _IC_CHST_TH.get(ch["status"], ch["status"]))
+            resid = ch["residual"]
+            rcls = "" if abs(resid) <= 1 or ch["key"] == "COUPON" else (" big" if abs(resid) > 100 else " warn")
+            rtxt = "—" if ch["key"] == "COUPON" else f"{resid:+,.0f}"
+            out.append(f"<tr><td class='l'><b>{esc(ch['label'])}</b></td>"
+                f"<td class='mono'>{m(ch['pos'])}</td><td class='mono'>{m(ch['ext'])}</td>"
+                f"<td class='mono'>{ch['variance']:+,.0f}</td>"
+                f"<td class='mono{rcls}'>{rtxt}</td>"
+                f"<td class='l'><span class='chip {stx}'>{esc(stl)}</span></td></tr>")
+        out.append(f"</tbody><tfoot><tr><td class='l'>รวม</td>"
+            f"<td class='mono'>{m(c['pos_total'])}</td><td class='mono'>{m(c['ext_total'])}</td>"
+            f"<td></td><td class='mono'>{c['residual_total']:+,.0f}</td><td></td></tr></tfoot></table>")
+        out.append("<div class='lead'>" + snap_line + "</div>")
+        out.append("<div class='sub' style='margin-top:14px'>ข้าพเจ้าขอรับรองว่าการกระทบยอด"
+            "รายได้และเงินรับของสาขา/งวดข้างต้นถูกต้องและครบถ้วน ผลต่างที่คงเหลือได้รับการ"
+            "ตรวจสอบและรับทราบตามเหตุผลที่บันทึกไว้ในทะเบียนการปรับปรุง</div>")
+        out.append("<div class='sign'>"
+            f"<div>ผู้จัดทำ<br><b>{prep}</b></div>"
+            f"<div>ผู้สอบทาน/อนุมัติ<br><b>{rev}</b></div>"
+            f"<div>วันที่อนุมัติ<br><b>{appd}</b></div></div>")
+        out.append("</div>")
+        return "".join(out)
+
+    body = "".join(sheet(c, i == 0) for i, c in enumerate(certs)) or \
+        "<div class='sheet'><div class='none'>ไม่มีข้อมูลสาขาสำหรับงวดนี้</div></div>"
+    html_doc = ("<!doctype html><html lang='th'><head><meta charset='utf-8'>"
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>"
+        "<title>ใบรับรองการกระทบยอด</title>" + _ic_print_css("#0F6E56") + "</head><body>"
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"
+        + body + "</body></html>")
+    return Response(content=html_doc, media_type="text/html; charset=utf-8")
+
+
 # ── UAT sign-off sheet (เอกสารทดสอบ + รับรองการใช้งาน) ─────────────────────────
 # Printable acceptance-test checklist with a usage narrative beside each case, for the
 # team to walk through, mark pass/fail, and sign off before going fully live.
@@ -5165,6 +5631,22 @@ _UAT_CASES = [
                "ยืนยัน 130 tests เขียว + canary อุดร 2026-05-01 ส่วนลด ฿35,511.48 ไม่เปลี่ยน"],
      "expected": "classic.html -> 404, ไม่มีลิงก์ classic หลงเหลือ, ทุกฟีเจอร์เดิมเข้าถึงได้จากนำทาง 4 โซน, "
                  "ไม่มีหน้าจอกำพร้า, คู่มืออัปเดต, เทสต์เขียว, ตัวเลขบัญชีไม่ถดถอย"},
+    {"id": "TC-31", "title": "รายงานเพื่อการควบคุมภายใน / ถูกตรวจสอบ (Audit & Controls)",
+     "role": "ผู้จัดการ / ผู้สอบบัญชี",
+     "narrative": "กลุ่มรายงานใหม่ในหน้า 📊 รายงาน สำหรับการควบคุมภายในและการถูกตรวจโดยผู้สอบบัญชี "
+                  "ทุกตัวอ่านอย่างเดียว (ไม่แก้ตัวเลข/ตรรกะบัญชี) เปิดในแอป + พิมพ์ PDF ได้ ขอบเขตสาขาหลัก: "
+                  "(1) ใบรับรองการกระทบยอด — POS↔เงินเข้า↔ผลต่างคงเหลือ แยกช่องทาง + ผู้จัดทำ/ผู้สอบทาน/วันอนุมัติ "
+                  "+ เลข SHA-256 ของงบที่ปิด; (2) ทะเบียนการปรับปรุงด้วยมือ — ทุกการแก้มือ ใคร·เมื่อ·เหตุผล "
+                  "รายการไม่มีเหตุผลถูกเน้นแดง; (3) อายุรายการค้าง — แยกช่วง 0-7/8-30/เกิน 30 วันนับจากสิ้นงวด "
+                  "(เพิ่ม 2026-06-19 — ปิดช่องว่างตามหลัก Big4/COSO)",
+     "steps": ["เปิด #reports -> กลุ่ม 'การควบคุมภายใน / Audit & Controls' เห็น 3 การ์ด",
+               "เปิด #certificate เลือกสาขา -> เห็นตารางช่องทาง + ผลต่างคงเหลือ + ช่องผู้จัดทำ/ผู้สอบทาน; "
+               "กด 'พิมพ์สาขานี้' และ 'พิมพ์ทุกสาขา' -> ได้ PDF (แต่ละสาขาขึ้นหน้าใหม่)",
+               "เปิด #override -> ทุกการแก้มือของเดือนพร้อมเหตุผล; รายการไม่มีเหตุผลขึ้นสีแดง + ตัวนับ; พิมพ์ PDF ได้",
+               "เปิด #aging -> ตัวเลขสรุป 3 ช่วงอายุ + ตารางรายการค้าง (งวดที่อนุมัติ/ปิดแล้วไม่นับ); พิมพ์ PDF ได้",
+               "ยืนยันสาขาแฟรนไชส์ไม่โผล่ในทั้ง 3 รายงาน + canary อุดร 2026-05-01 ส่วนลด ฿35,511.48 ไม่เปลี่ยน"],
+     "expected": "3 รายงานเปิดในแอป + พิมพ์ PDF ได้, ใบรับรองมีช่องเซ็น+SHA-256, ทะเบียนเน้นรายการไร้เหตุผล, "
+                 "อายุแยก 3 ช่วงถูกต้อง, เฉพาะสาขาหลัก, ไม่แตะตัวเลขบัญชี"},
     {"id": "TC-29", "title": "Responsive Nav + Reports Hub (#reports) -- เฟส 5",
      "role": "ทุกบทบาท",
      "narrative": "เฟส 5 เพิ่มแถบนำทาง 4 โซน (หน้าหลัก / รายงาน / Admin / วินิจฉัย) "

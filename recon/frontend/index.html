@@ -328,6 +328,9 @@ function route(){
   if(h==='bankcov')return loadBankCov();
   if(h==='board')return loadBoard();
   if(h==='coupon')return loadCoupon();
+  if(h==='override')return loadOverrideRegister();
+  if(h==='aging')return loadAging();
+  if(h==='certificate')return loadCertificate();
   if(h==='setup')return loadSetup();
   if(h.startsWith('payout'))return loadPayout(h);
   if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
@@ -3058,6 +3061,34 @@ function loadReports(){
     </a>
   </div>
 
+  <div class="lbl" style="margin:0 0 6px 2px;font-weight:700;letter-spacing:.03em">การควบคุมภายใน / Audit &amp; Controls</div>
+  <div class="rpt-grid" style="margin-bottom:16px">
+    <a class="rpt-item" href="#certificate">
+      <span class="rpt-icon"><i class="ti ti-certificate" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">ใบรับรองการกระทบยอด</div>
+        <div class="rpt-desc">รายสาขา/เดือน · POS vs เงินเข้า · ผู้จัดทำ/ผู้สอบทาน · พิมพ์เซ็น</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
+    <a class="rpt-item" href="#override">
+      <span class="rpt-icon"><i class="ti ti-writing" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">ทะเบียนการปรับปรุงด้วยมือ</div>
+        <div class="rpt-desc">ทุกการแก้ด้วยมือ · ใคร·เมื่อ·เหตุผล · รายการแรกที่ผู้สอบขอ</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
+    <a class="rpt-item" href="#aging">
+      <span class="rpt-icon"><i class="ti ti-hourglass-high" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">อายุรายการค้าง</div>
+        <div class="rpt-desc">รายการยังไม่ปิด แยกช่วงอายุ 0-7 / 8-30 / เกิน 30 วัน</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
+  </div>
+
   <div class="lbl" style="margin:0 0 6px 2px;font-weight:700;letter-spacing:.03em">เอกสาร & เครื่องมือ / Docs & Tools</div>
   <div class="rpt-grid" style="margin-bottom:16px">
     <a class="rpt-item" href="${pfx}/statement-codes.html" target="_blank" rel="noopener">
@@ -3086,6 +3117,149 @@ function loadReports(){
     </a>
   </div>`;
 }
+/* ════════════════════════════════════════════════════════════════════════
+   § Internal-control reports (audit evidence) — READ-ONLY, frontend-only
+   Routes: #override (ทะเบียนปรับปรุงด้วยมือ) · #aging (อายุรายการค้าง)
+           #certificate (ใบรับรองการกระทบยอด).  No backend logic touched.
+   ════════════════════════════════════════════════════════════════════════ */
+function _icBranchSel(brs,sel,fn,includeAll){
+  const all=includeAll===false?'':`<option value="">ทุกสาขา</option>`;
+  return `<select onchange="${fn}(this.value)" title="เลือกสาขา"
+    style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+    ${all}${brs.map(b=>`<option value="${b.branch_id}" ${String(sel)===String(b.branch_id)?'selected':''}>${esc(b.name)}</option>`).join('')}</select>`;
+}
+
+/* #override — ทะเบียนการปรับปรุงด้วยมือ (Management Override Register) */
+let _OVR_BR='';
+function setOvrBranch(v){_OVR_BR=v||'';loadOverrideRegister();}
+async function loadOverrideRegister(){
+  $('app').innerHTML=header()+loadingState();
+  const q=`?period_month=${MONTH}${_OVR_BR?`&branch_id=${_OVR_BR}`:''}`;
+  let brs,r;
+  try{[brs,r]=await Promise.all([api('/api/branches'),api('/api/reports/override-register'+q)]);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-writing" aria-hidden="true"></i> ทะเบียนการปรับปรุงด้วยมือ — ${esc(monthTh(MONTH))}</h2>
+    ${_icBranchSel(brs,_OVR_BR,'setOvrBranch')}
+    <a class="btn btn-sm btn-pri" href="/api/reports/override-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+  <div class="muted" style="margin-bottom:10px">ทุกการแก้ไขด้วยมือในเดือนนี้ (จับคู่เอง · ย้ายช่อง · รับทราบผลต่าง · ปรับ lane) พร้อมผู้ทำ · เวลา · เหตุผล — รายการแรกที่ผู้สอบบัญชีขอดู · รายการไม่มีเหตุผลถูกเน้นแดง</div>`;
+  if(!r.rows.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีการปรับปรุงด้วยมือ','ระบบจับคู่อัตโนมัติทั้งหมดในเดือนนี้');return;}
+  const warn=r.missing_reason?`<span class="chip c-err">${r.missing_reason} รายการไม่มีเหตุผล</span>`:`<span class="chip c-ok">ทุกรายการมีเหตุผล ✓</span>`;
+  html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:28px;flex-wrap:wrap;align-items:center">
+    <div><div class="lbl">รวมรายการ</div><div style="font-size:20px;font-weight:700">${r.count}</div></div>
+    <div><div class="lbl">มูลค่ารวม</div><div style="font-size:20px;font-weight:700">${fmt(r.total_abs_amount)}</div></div>
+    <div>${warn}</div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th style="text-align:left">เวลา</th><th style="text-align:left">สาขา</th><th style="text-align:left">ประเภท</th><th style="text-align:left">ช่องทาง / รายการ</th><th>จำนวน</th><th style="text-align:left">โดย</th><th style="text-align:left">เหตุผล</th></tr>
+    ${r.rows.map(x=>`<tr>
+      <td class="lbl" style="text-align:left">${esc((x.at||'').slice(0,16))}</td>
+      <td style="text-align:left">${esc(x.branch_name)}</td>
+      <td style="text-align:left">${esc(x.kind)}</td>
+      <td style="text-align:left">${esc(x.lane)}<div class="lbl">${esc(x.detail)}</div></td>
+      <td class="mono">${fmt(Math.abs(x.amount))}</td>
+      <td style="text-align:left">${esc(x.by)}</td>
+      <td style="text-align:left">${x.has_reason?esc(x.reason):'<span style="color:var(--err);font-weight:600">— ไม่ระบุ —</span>'}</td></tr>`).join('')}
+  </table></div>`;
+  $('app').innerHTML=html;
+}
+
+/* #aging — อายุรายการค้าง (Aging of Open Items) */
+let _AGE_BR='';
+function setAgeBranch(v){_AGE_BR=v||'';loadAging();}
+async function loadAging(){
+  $('app').innerHTML=header()+loadingState();
+  const q=`?period_month=${MONTH}${_AGE_BR?`&branch_id=${_AGE_BR}`:''}`;
+  let brs,r;
+  try{[brs,r]=await Promise.all([api('/api/branches'),api('/api/reports/open-items-aging'+q+'&lookback=2')]);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const b=r.buckets;
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-hourglass-high" aria-hidden="true"></i> อายุรายการค้าง — ณ ${esc(r.as_of)}</h2>
+    ${_icBranchSel(brs,_AGE_BR,'setAgeBranch')}
+    <a class="btn btn-sm btn-pri" href="/api/reports/open-items-aging.print${q}&lookback=2" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+  <div class="muted" style="margin-bottom:10px">รายการกระทบยอดที่ยังไม่ปิด นับอายุจากสิ้นงวด · ตรวจ ${esc(MONTH)} ย้อนหลัง 2 เดือน (ไม่รวมงวดที่อนุมัติ/ปิดแล้ว) — ของค้างเกิน 30 วันต้องมีคำอธิบาย</div>
+  <div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:32px;flex-wrap:wrap">
+    <div><div class="lbl">0–7 วัน</div><div style="font-size:20px;font-weight:700;color:var(--ok)">${b['0-7']}</div></div>
+    <div><div class="lbl">8–30 วัน</div><div style="font-size:20px;font-weight:700;color:var(--warn)">${b['8-30']}</div></div>
+    <div><div class="lbl">เกิน 30 วัน</div><div style="font-size:20px;font-weight:700;color:var(--err)">${b['>30']}</div></div></div>`;
+  if(!r.items.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีรายการค้าง','ทุกงวดที่ตรวจปิดครบหรืออยู่ในเกณฑ์ที่รับทราบแล้ว');return;}
+  const bkChip={'0-7':'c-ok','8-30':'c-warn','>30':'c-err'};
+  const tyTh={upload:'อัปโหลดเอกสาร',setup:'ตั้งค่า',diff:'ตรวจผลต่าง',waiting:'รอเอกสาร'};
+  html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th>อายุ</th><th style="text-align:left">ช่วง</th><th style="text-align:left">งวด</th><th style="text-align:left">สาขา</th><th style="text-align:left">ประเภท</th><th style="text-align:left">รายการที่ต้องทำ</th></tr>
+    ${r.items.map(it=>`<tr>
+      <td class="mono">${it.age_days}</td>
+      <td style="text-align:left"><span class="chip ${bkChip[it.bucket]}">${esc(it.bucket)} วัน</span></td>
+      <td class="lbl" style="text-align:left">${esc(it.period_month)}</td>
+      <td style="text-align:left">${esc(it.branch_name)}</td>
+      <td style="text-align:left">${esc(tyTh[it.type]||it.type||'')}</td>
+      <td style="text-align:left">${esc(it.label)}</td></tr>`).join('')}
+  </table></div>`;
+  $('app').innerHTML=html;
+}
+
+/* #certificate — ใบรับรองการกระทบยอด (Reconciliation Sign-off Certificate) */
+let _CERT_BR=null;
+function setCertBranch(v){_CERT_BR=v?+v:null;loadCertificate();}
+async function loadCertificate(){
+  $('app').innerHTML=header()+loadingState();
+  let brs;
+  try{brs=await api('/api/branches');}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  if(!brs.length){$('app').innerHTML=header()+emptyState('certificate','ไม่มีสาขา','');return;}
+  if(_CERT_BR===null)_CERT_BR=brs[0].branch_id;
+  let c;
+  try{c=await api(`/api/reports/recon-certificate?branch_id=${_CERT_BR}&period_month=${MONTH}`);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const sess=c.session||{}, st=sess.status||'draft';
+  const stTh={draft:'ร่าง (ยังไม่สอบทาน)',in_review:'รอสอบทาน',approved:'อนุมัติแล้ว',closed:'ปิดงวดแล้ว'};
+  const stChip=(st==='approved'||st==='closed')?'c-ok':(st==='in_review'?'c-warn':'c-mut');
+  const chStTh={ok:'ตรงกัน',diff:'มีผลต่าง',waiting_doc:'รอเอกสาร',no_source:'ไม่มีคู่เทียบ',setup:'รอตั้งค่า'};
+  const chStCls={ok:'c-ok',diff:'c-err',waiting_doc:'c-warn',no_source:'c-mut',setup:'c-warn'};
+  const residCls=Math.abs(c.residual_total)>100?'color:var(--err);font-weight:700':'color:var(--ok);font-weight:700';
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-certificate" aria-hidden="true"></i> ใบรับรองการกระทบยอด — ${esc(monthTh(MONTH))}</h2>
+    ${_icBranchSel(brs,_CERT_BR,'setCertBranch',false)}
+    <a class="btn btn-sm btn-pri" href="/api/reports/recon-certificate.print?period_month=${MONTH}&branch_id=${_CERT_BR}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์สาขานี้</a>
+    <a class="btn btn-sm" href="/api/reports/recon-certificate.print?period_month=${MONTH}" target="_blank">พิมพ์ทุกสาขา</a></div>
+  <div class="card" style="padding:14px 18px;margin-bottom:12px">
+    <div class="row" style="align-items:baseline;gap:10px"><b style="font-size:15px">${esc(c.branch_name)}</b>
+      <span class="chip ${stChip}">${esc(stTh[st]||st)}</span>
+      <span class="lbl">กระทบยอดแล้ว ${c.progress_pct}%${c.todo_count?` · เหลือ ${c.todo_count} เรื่อง`:''}</span></div>
+    <div style="display:flex;gap:30px;flex-wrap:wrap;margin-top:10px">
+      <div><div class="lbl">POS รวม</div><div style="font-size:18px;font-weight:700">${fmt(c.pos_total)}</div></div>
+      <div><div class="lbl">เงินเข้าจริงรวม</div><div style="font-size:18px;font-weight:700">${fmt(c.ext_total)}</div></div>
+      <div><div class="lbl">ผลต่างคงเหลือ (หลังรับทราบ)</div><div style="font-size:18px;${residCls}">${c.residual_total>0?'+':''}${fmt(c.residual_total)}</div></div>
+      <div><div class="lbl">รายการรับทราบ</div><div style="font-size:18px;font-weight:700">${c.ack_count} <span class="lbl">(${fmt(c.ack_amount)})</span></div></div>
+      <div><div class="lbl">แก้ด้วยมือทั้งหมด</div><div style="font-size:18px;font-weight:700">${c.override_count}</div></div>
+    </div></div>
+  <div class="card" style="padding:0;overflow-x:auto;margin-bottom:12px"><table>
+    <tr><th style="text-align:left">ช่องทาง</th><th>POS</th><th>เงินเข้าจริง</th><th>ผลต่าง</th><th>คงเหลือ</th><th style="text-align:left">สถานะ</th></tr>
+    ${c.channels.map(ch=>{
+      const isCp=ch.key==='COUPON';
+      const rtxt=isCp?'<span class="lbl">—</span>':`${ch.residual>0?'+':''}${fmt(ch.residual)}`;
+      const rcls=(!isCp&&Math.abs(ch.residual)>100)?'color:var(--err);font-weight:600':'';
+      const lab=ch.accepted?'รับทราบแล้ว':(chStTh[ch.status]||ch.status);
+      const cls=ch.accepted?'c-mut':(chStCls[ch.status]||'c-mut');
+      return `<tr><td style="text-align:left"><b>${esc(ch.label)}</b></td>
+        <td class="mono">${fmt(ch.pos)}</td><td class="mono">${fmt(ch.ext)}</td>
+        <td class="mono">${ch.variance>0?'+':''}${fmt(ch.variance)}</td>
+        <td class="mono" style="${rcls}">${rtxt}</td>
+        <td style="text-align:left"><span class="chip ${cls}">${esc(lab)}</span></td></tr>`;}).join('')}
+    <tr style="border-top:2px solid var(--line)"><td style="text-align:left"><b>รวม</b></td>
+      <td class="mono"><b>${fmt(c.pos_total)}</b></td><td class="mono"><b>${fmt(c.ext_total)}</b></td>
+      <td></td><td class="mono"><b>${c.residual_total>0?'+':''}${fmt(c.residual_total)}</b></td><td></td></tr>
+  </table></div>
+  <div class="card" style="padding:14px 18px">
+    <div class="lbl" style="margin-bottom:8px">${c.snapshot?`หลักฐานแช่แข็ง (SHA-256): <span class="mono">${esc((c.snapshot.sha256||'').slice(0,16))}…</span> · ${esc((c.snapshot.created_at||'').slice(0,16))}`:'<span style="color:var(--warn)">ยังไม่มีหลักฐานแช่แข็ง — อนุมัติงวดเพื่อสร้าง snapshot</span>'}</div>
+    <div style="display:flex;gap:40px;flex-wrap:wrap;margin-top:6px">
+      <div><div class="lbl">ผู้จัดทำ</div><div style="font-weight:600">${esc(sess.created_by||'—')}</div></div>
+      <div><div class="lbl">ผู้สอบทาน / อนุมัติ</div><div style="font-weight:600">${esc(sess.approved_by||'—')}</div></div>
+      <div><div class="lbl">วันที่อนุมัติ</div><div style="font-weight:600">${esc((sess.approved_at||'').slice(0,16)||'—')}</div></div>
+    </div></div>`;
+  $('app').innerHTML=html;
+}
+
 /* ════════════════ END PHASE 5 ════════════════ */
 
 /* ════════════════ PHASE 4 — #setup (ตั้งค่าระบบ in-app) ════════════════ */
