@@ -167,6 +167,14 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .db-je[open]>summary{border-bottom:1px solid var(--line)}
 .db-je .db-tbl tfoot td{background:transparent}
 .dash-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
+/* Admin/Setup tables — left-read, top-aligned so tall multi-line rows don't float */
+.setup-scroll{overflow-x:auto}
+.setup-tbl{width:100%;min-width:780px;font-size:12px}
+.setup-tbl th,.setup-tbl td{text-align:left;vertical-align:top;padding:7px 9px;line-height:1.35}
+.setup-tbl th{white-space:nowrap}
+.setup-tbl td:first-child,.setup-tbl th:first-child{white-space:nowrap}
+.setup-tbl select{max-width:130px;width:100%}
+.setup-tbl input[type=text],.setup-tbl input:not([type]){width:100%;min-width:90px}
 .dash-empty{opacity:.55}
 .mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
 .mv-tbl{width:100%;border-collapse:collapse;font-size:13px}
@@ -3135,7 +3143,7 @@ function _setupRender(){
       <button class="btn btn-sm" onclick="_setupReseedPos()">Seed จากข้อมูล POS</button>
       <button class="btn btn-sm" onclick="_setupSeedRequirement()" title="ใส่ค่าตามตารางเจ้าของ (ไม่ทับค่าที่แก้เอง)">ใช้ค่าตามตารางเจ้าของ</button>
     </div></div>
-  <div style="overflow-x:auto"><table>
+  <div class="setup-scroll"><table class="setup-tbl">
     <tr><th>รหัส POS</th><th>ประเภท</th><th>ธนาคารปลายทาง</th><th>เอกสารที่ใช้ตรวจ</th>
         <th>วิธีกระทบยอด</th><th>พารามิเตอร์</th><th style="text-align:right">ยอด POS</th>
         <th>กระทบ</th><th>สถานะ</th></tr>
@@ -3164,7 +3172,7 @@ function _setupRender(){
 
   // ② lane method configs
   html+=`<div class="card" style="margin-bottom:12px"><h2 style="font-size:15px;margin-bottom:8px">② วิธีกระทบยอดราย lane (ประเภท × ธนาคาร)</h2>
-  <div style="overflow-x:auto"><table>
+  <div class="setup-scroll"><table class="setup-tbl">
     <tr><th>Lane</th><th>เอกสาร 1</th><th>เอกสาร 2</th><th>วิธี</th>
         <th style="text-align:right">tol/วัน</th><th style="text-align:right">tol/เดือน</th>
         <th style="text-align:right">lag</th><th style="text-align:right">รวมวัน</th>
@@ -3190,7 +3198,7 @@ function _setupRender(){
   html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
     <h2 style="margin:0;font-size:15px">③ บัญชีธนาคารของสาขา</h2>
     <button class="btn btn-sm" style="margin-left:auto" onclick="_setupAddAccount()">+ เพิ่มบัญชี</button></div>
-  <div style="overflow-x:auto"><table>
+  <div class="setup-scroll"><table class="setup-tbl">
     <tr><th>สาขา</th><th>ธนาคาร</th><th>เลขบัญชี</th><th>ชื่อบัญชี</th><th>ใช้งาน</th><th></th></tr>
     ${_SETUP_M.bank_accounts.map(a=>`<tr>
       <td style="font-size:12px">${esc(a.branch_name)}</td>
@@ -3206,7 +3214,7 @@ function _setupRender(){
   html+=`<div class="card" style="margin-bottom:12px"><div class="row" style="margin-bottom:6px">
     <h2 style="margin:0;font-size:15px">④ MID เครื่องรูดบัตร / คะแนน</h2>
     <button class="btn btn-sm" style="margin-left:auto" onclick="_setupAddMid()">+ เพิ่ม MID</button></div>
-  <div style="overflow-x:auto"><table>
+  <div class="setup-scroll"><table class="setup-tbl">
     <tr><th>สาขา</th><th>ผู้รับบัตร</th><th>Merchant ID</th><th>Terminal</th><th>ใช้งาน</th><th></th></tr>
     ${_SETUP_M.acquirer_mids.map(m=>`<tr>
       <td style="font-size:12px">${esc(m.branch_name)}</td>
@@ -3237,7 +3245,7 @@ async function _setupLoadCodes(){
   let j;try{j=await api('/api/statement-codes');}
   catch(e){b.innerHTML='โหลดไม่สำเร็จ: '+esc(e.message);return;}
   _SETUP_CODES=j.codes; _SETUP_CODE_OPTS=j.channel_options||Object.keys(_SETUP_PARSE_CH_TH);
-  b.innerHTML=`<div style="overflow-x:auto"><table>
+  b.innerHTML=`<div class="setup-scroll"><table class="setup-tbl">
     <tr><th>รหัส / คำ</th><th>ความหมาย</th><th>ระบบจัดเป็น</th><th>แก้เป็น</th><th></th></tr>
     ${_SETUP_CODES.map((c,i)=>{
       const eff=c.effective_channel;
