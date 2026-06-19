@@ -61,7 +61,8 @@ from .parsers import (
     parse_lineman_report,
 )
 from .parsers.bank import STATEMENT_CODE_MAP, _normalise_channel
-from .parsers.loader import to_parseable_xlsx, is_encrypted_upload as _is_encrypted_upload
+from .parsers.loader import (to_parseable_xlsx, is_encrypted_upload as _is_encrypted_upload,
+                             unlock_pdf as _unlock_pdf)
 from .parsers.pdf_formats import (
     detect_and_parse as _detect_pdf_format,
     fee_invoice_by_name as _fee_invoice_by_name,
@@ -418,6 +419,7 @@ RECON_START_DAY   = RECON_START_MONTH + "-01"
 MAX_UPLOAD_BYTES = 15 * 1024 * 1024          # 15 MB
 _ALLOWED_EXT     = (".xlsx", ".xls", ".csv", ".pdf")
 _PERIOD_RE       = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+_DAY_RE          = re.compile(r"^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$")
 
 
 def _accepted_tokens() -> dict:
@@ -1025,7 +1027,14 @@ def _parse_or_422(source_type: SourceType, raw: bytes, provider: str, filename: 
     # C3: a password-locked file can't be type-detected or parsed — say so first.
     locked = _is_encrypted_upload(raw, filename)
     if locked:
-        raise HTTPException(422, locked)
+        # KTB ships each branch a statement PDF locked with that branch's account
+        # number. Try the configured passwords to unlock, then parse the decrypted
+        # copy (file_hash above stays on the original bytes). Reject only if none fit.
+        unlocked = _unlock_pdf(raw)
+        if unlocked is not None:
+            raw = unlocked
+        else:
+            raise HTTPException(422, locked)
     # A2: reject a known WRONG document type up front (cheap filename check) with
     # specific guidance on the correct file to upload — before any parse attempt.
     byname = _fee_invoice_by_name(source_type, filename)
@@ -4028,6 +4037,62 @@ def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
     return "".join(P)
 
 
+def _day_finance_html(conn, branch_id: int, day: str) -> str:
+    """Receipts summary + draft journal entry (Dr/Cr) for ONE calendar day, so the day's
+    accounting can be posted straight into the daily books. Same gross → discount → fee →
+    VAT → net split (incl. the KTC/BAY coupon-points vs discount-coupon handling) as the
+    monthly journal — see _monthly_finance_html — but scoped to a single day via
+    _daily_finance_data so screen, monthly report and paper all tie to the baht."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v):  return f"{float(v or 0):,.2f}"
+    acct = _account_map(conn)
+    data = _daily_finance_data(conn, branch_id, day[:7])
+    dd = next((x for x in data["days"] if x["day"] == day), None)
+    if not dd or not dd["channels"]:
+        return ("<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน) — "
+                f"วันที่ {esc(day)}</h2><div class='empty'>ไม่มีรายการรับเงินในวันนี้</div>")
+    chans = dd["channels"]; t = dd["totals"]
+    G, D, F, V, N = t["gross"], t["discount"], t["fee"], t["vat"], t["net"]
+    out_vat = round(G * 7 / 107, 2)
+
+    def acc_cells(slot):
+        code, name = acct.get(slot, ("", ""))
+        return f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
+
+    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
+         f"<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินวันที่ {esc(day)} · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
+         "<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th><th class='l'>ช่องทาง</th>"
+         "<th>ยอดรับเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
+         "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
+    for a in chans:
+        P.append(f"<tr>{acc_cells(a['ch'])}<td class='l'>{esc(a['ch_th'])}</td>"
+                 f"<td class='mono'>{m(a['gross'])}</td><td class='mono'>{m(a['discount'])}</td><td class='mono'>{m(a['fee'])}</td>"
+                 f"<td class='mono'>{m(a['vat'])}</td><td class='mono'>{m(a['net'])}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l' colspan='3'>รวม</td><td class='mono'>{m(G)}</td>"
+             f"<td class='mono'>{m(D)}</td><td class='mono'>{m(F)}</td><td class='mono'>{m(V)}</td>"
+             f"<td class='mono'>{m(N)}</td></tr></tfoot></table>")
+
+    # draft journal entry for THIS day (money-received basis) — gross revenue, discount apart
+    P.append(f"<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน) — วันที่ {esc(day)}</h2>")
+    P.append("<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>บัญชี</th>"
+             "<th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
+    je = [("BANK", "เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("DISCOUNT", "ส่วนลด / โปรโมชัน", D, 0),
+          ("FEE", "ค่าธรรมเนียมรับชำระเงิน", F, 0), ("VAT", "ภาษีซื้อ – VAT ค่าธรรมเนียม", V, 0),
+          ("REVENUE", "รายได้จากการขาย (ยอดรับเต็ม)", 0, G)]
+    for slot, acc, dr, cr in je:
+        code, _name = acct.get(slot, ("", ""))
+        P.append(f"<tr><td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(acc)}</td>"
+                 f"<td class='mono'>{m(dr) if dr else ''}</td><td class='mono'>{m(cr) if cr else ''}</td></tr>")
+    P.append(f"</tbody><tfoot><tr><td class='l' colspan='2'>รวม</td><td class='mono'>{m(N + D + F + V)}</td>"
+             f"<td class='mono'>{m(G)}</td></tr></tfoot></table>")
+    P.append("<div class='legend'>หมายเหตุ: VAT ในตารางคือ <b>ภาษีซื้อ</b>จากค่าธรรมเนียมรับชำระ (บัตร/เดลิเวอรี) · "
+             f"หากราคาขายรวม VAT แล้ว <b>ภาษีขาย (output) โดยประมาณ = ฿{m(out_vat)}</b> (7/107 ของยอดรับเต็ม) "
+             "ซึ่งฝ่ายบัญชีแยกออกจากรายได้ตามเกณฑ์ ex-VAT · ตัวเลขนี้เป็นร่างตามข้อมูลกระทบยอด ฝ่ายบัญชีปรับตามผังบัญชีจริง</div>")
+    P.append("</div>")
+    return "".join(P)
+
+
 def _audit_detail_html(conn, branch_id: int, period_month: str) -> str:
     """Audit-grade evidence for ONE branch+month so an auditor can trace every baht:
     POS composition (codes), credit settlement by acquirer (gross/fee/VAT/net), every
@@ -4145,7 +4210,7 @@ def _audit_detail_html(conn, branch_id: int, period_month: str) -> str:
 
 
 def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
-                           detail: bool = False) -> str:
+                           detail: bool = False, day_sel: str | None = None) -> str:
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
     def m(v):  return f"{float(v or 0):,.0f}"
@@ -4198,20 +4263,34 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
         except Exception:
             return d
 
+    # query-string fragments preserved when a control changes (so detail/day/branch stick)
+    _detail_q = "&detail=1" if detail else ""
+    _day_q = f"&day={day_sel}" if day_sel else ""
+    _br_q = f"&branch_id={branch_id}" if branch_id else ""
+
     # on-page branch picker (hidden when printing) — choose 1 of the 5 or all
     bopts = (f"<option value=''{'' if branch_id else ' selected'}>ทุกสาขา (5 สาขาหลัก)</option>"
              + "".join(f"<option value='{b['branch_id']}'"
                        f"{' selected' if branch_id == b['branch_id'] else ''}>{esc(b['name'])}</option>"
                        for b in master))
     picker = (f"<select onchange=\"location.href='?period_month={period_month}'"
-              f"+(this.value?'&branch_id='+this.value:'')\" "
+              f"+(this.value?'&branch_id='+this.value:'')+'{_detail_q}{_day_q}'\" "
               "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;"
               "font:inherit;margin-right:8px'>" + bopts + "</select>")
+    # date filter — pick ONE day to post that day's accounting; clear to view the whole month
+    daypick = (f"<input type='date' value='{esc(day_sel or '')}' "
+               f"min='{period_month}-01' max='{period_month}-31' title='เลือกวันเดียว' "
+               f"onchange=\"location.href='?period_month={period_month}{_br_q}{_detail_q}'"
+               "+(this.value?'&day='+this.value:'')\" "
+               "style='padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px'>")
+    clear = (f"<a href='?period_month={period_month}{_br_q}{_detail_q}' "
+             "style='margin-right:10px;font-size:12px;color:#0f6e56'>↺ ทั้งเดือน</a>"
+             if day_sel else "")
 
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>รายงานการจับคู่รายวัน</title>", css, "</head><body>",
-             "<div class='toolbar'>" + picker
+             "<div class='toolbar'>" + picker + daypick + clear
              + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
 
     for b in brs:
@@ -4222,7 +4301,11 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
             d = {"pos_daily_available": False, "days": []}
         parts.append("<div class='sheet'>")
         parts.append(f"<h1>รายงานการจับคู่รายวัน — สาขา{esc(bname)}</h1>")
-        parts.append(f"<div class='sub'>เดือน {esc(period_month)} · ตรวจสอบว่าทุกช่องทางในแต่ละวันจับคู่กับเอกสารถูกต้อง</div>")
+        if day_sel:
+            parts.append(f"<div class='sub'>เฉพาะวันที่ <b>{esc(day_sel)}</b> · "
+                         "สำหรับนำการบันทึกบัญชีของวันนี้เข้าระบบบัญชีรายวัน</div>")
+        else:
+            parts.append(f"<div class='sub'>เดือน {esc(period_month)} · ตรวจสอบว่าทุกช่องทางในแต่ละวันจับคู่กับเอกสารถูกต้อง</div>")
         if not d.get("pos_daily_available"):
             parts.append("<div class='empty'>ยังไม่มีข้อมูล POS รายวันสำหรับเดือนนี้ — ต้องซิงก์ข้อมูลก่อน</div></div>")
             continue
@@ -4232,6 +4315,8 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
         tot_pos = tot_ext = tot_absvar = 0.0
         prev_day = None
         for day in d["days"]:
+            if day_sel and day["day"] != day_sel:   # date filter — one day only
+                continue
             day_lanes = [l for l in day["lanes"]
                          if abs(l["pos"]) > 0.005 or abs(l["ext"]) > 0.005]
             for i, l in enumerate(day_lanes):
@@ -4297,12 +4382,16 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
                     f"<td class='l'>{esc(r['matched_by'] or '—')}</td></tr>")
             parts.append("</tbody></table>")
 
-        # per-day accounting breakdown (the daily summary: gross + discount split)
-        parts.append(_daily_finance_html(conn, bid, period_month))
-        # monthly receipts roll-up + fees/VAT + draft journal entry (accounting tie-out)
-        parts.append(_monthly_finance_html(conn, bid, period_month))
+        if day_sel:
+            # date-filtered: just that one day's receipts + its own draft journal (Dr/Cr)
+            parts.append(_day_finance_html(conn, bid, day_sel))
+        else:
+            # per-day accounting breakdown (the daily summary: gross + discount split)
+            parts.append(_daily_finance_html(conn, bid, period_month))
+            # monthly receipts roll-up + fees/VAT + draft journal entry (accounting tie-out)
+            parts.append(_monthly_finance_html(conn, bid, period_month))
 
-        if detail:                   # audit-grade line-level evidence for this branch
+        if detail and not day_sel:   # audit-grade line-level evidence for this branch (month-wide)
             parts.append(_audit_detail_html(conn, bid, period_month))
 
         parts.append("<div class='sign'><div>ผู้จัดทำ (กระทบยอด)</div>"
@@ -4315,18 +4404,24 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
 
 @app.get("/api/monthly-report")
 def monthly_matching_report(period_month: str, branch_id: int | None = None,
-                            detail: int = 0):
+                            detail: int = 0, day: str | None = None):
     """Print-to-PDF monthly matching audit: every day × channel with POS vs document,
     variance, and match status — confirm the whole month reconciled. Omit branch_id
     for an all-branches pack (one page each). detail=1 appends audit-grade line-level
-    evidence (POS codes, credit-by-acquirer, every bank line, payouts, manual matches)."""
+    evidence (POS codes, credit-by-acquirer, every bank line, payouts, manual matches).
+    day=YYYY-MM-DD (within period_month) scopes the report to one calendar day and shows
+    that day's own draft journal entry (Dr/Cr) so it can be posted to the daily books."""
     if not _PERIOD_RE.match(period_month or ""):
         raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    if day is not None:
+        if not _DAY_RE.match(day) or day[:7] != period_month:
+            raise HTTPException(400, "day must be 'YYYY-MM-DD' within period_month.")
     if branch_id:
         with get_db() as conn:
             _validate_master_branch(conn, branch_id)
     with get_db() as conn:
-        html = _monthly_matching_html(conn, period_month, branch_id, detail=bool(detail))
+        html = _monthly_matching_html(conn, period_month, branch_id,
+                                      detail=bool(detail), day_sel=day)
     return Response(content=html, media_type="text/html; charset=utf-8")
 
 
@@ -4356,9 +4451,13 @@ def daily_accounts(period_month: str, branch_id: int | None = None):
             _validate_master_branch(conn, branch_id)
         bname = next((b["name"] for b in branches if b["branch_id"] == branch_id), None)
         data = _daily_finance_data(conn, branch_id, period_month)
+        acct = _account_map(conn)
+        # account codes/names for the per-day draft journal (Dr/Cr) the UI renders per card
+        je_accounts = {s: list(acct.get(s, ("", "")))
+                       for s in ("BANK", "DISCOUNT", "FEE", "VAT", "REVENUE")}
     return {"period_month": period_month, "branches": branches,
             "branch_id": branch_id, "branch_name": bname,
-            "days": data["days"], "totals": data["totals"]}
+            "days": data["days"], "totals": data["totals"], "je_accounts": je_accounts}
 
 
 def _daily_dashboard_data(conn, day: str) -> dict:
@@ -4436,6 +4535,24 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
     def m(v):  return f"{float(v or 0):,.2f}"
     def neg(v):  # discount/fee/VAT print as a deduction; blank when zero
         return f"−{m(v)}" if abs(float(v or 0)) > 0.005 else "—"
+    acct = _account_map(conn)
+
+    def journal_block(t):  # per-day draft journal (Dr/Cr) for posting to the daily books
+        def code(slot):
+            c = acct.get(slot, ("", ""))[0]
+            return f" <span class='code'>{esc(c)}</span>" if c else ""
+        rows = [f"<tr><td>เงินสด/ธนาคาร (สุทธิ){code('BANK')}</td><td class='mono'>{m(t['net'])}</td><td class='mono'>—</td></tr>"]
+        if abs(float(t.get("discount") or 0)) > 0.005:
+            rows.append(f"<tr><td>ส่วนลด/โปรโมชัน{code('DISCOUNT')}</td><td class='mono'>{m(t['discount'])}</td><td class='mono'>—</td></tr>")
+        if abs(float(t.get("fee") or 0)) > 0.005:
+            rows.append(f"<tr><td>ค่าธรรมเนียมรับชำระเงิน{code('FEE')}</td><td class='mono'>{m(t['fee'])}</td><td class='mono'>—</td></tr>")
+        if abs(float(t.get("vat") or 0)) > 0.005:
+            rows.append(f"<tr><td>ภาษีซื้อ–VAT ค่าธรรมเนียม{code('VAT')}</td><td class='mono'>{m(t['vat'])}</td><td class='mono'>—</td></tr>")
+        rows.append(f"<tr><td>รายได้จากการขาย (เต็ม){code('REVENUE')}</td><td class='mono'>—</td><td class='mono'>{m(t['gross'])}</td></tr>")
+        dtot = float(t["net"]) + float(t["discount"]) + float(t["fee"]) + float(t["vat"])
+        return ("<table class='je'><thead><tr><th>ร่างบันทึกบัญชี (Dr/Cr)</th><th>เดบิต</th><th>เครดิต</th></tr></thead><tbody>"
+                + "".join(rows)
+                + f"</tbody><tfoot><tr><td>รวม</td><td class='mono'>{m(dtot)}</td><td class='mono'>{m(t['gross'])}</td></tr></tfoot></table>")
 
     if branch_id:
         brs = conn.execute("SELECT branch_id, name FROM branches WHERE branch_id=?",
@@ -4464,6 +4581,7 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
       .mono{font-variant-numeric:tabular-nums}
       .disc{color:#9a3412} .code{color:#94a3b8;font-size:9px}
       tfoot td{border-top:1.4px solid #cbd5e1;border-bottom:none;font-weight:700;background:#f8fafc}
+      table.je{border-top:1px solid #d1fae5} table.je th{background:#ecfdf5;color:#0a523f}
       .mtot{margin-top:14px;border:1.5px solid #0f6e56;border-radius:9px;overflow:hidden}
       .mtot .dc-h{background:#0f6e56;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
       .empty{color:#64748b;font-size:12px;padding:10px 0}
@@ -4516,7 +4634,8 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
             parts.append("<div class='dc'><div class='dc-h'>"
                          f"<span class='dc-date'>วันที่ {day['dom']}</span>"
                          f"<span class='dc-net'>สุทธิ ฿{m(day['totals']['net'])}</span></div>"
-                         + card_table(day["channels"], day["totals"], "รวมวันนี้") + "</div>")
+                         + card_table(day["channels"], day["totals"], "รวมวันนี้")
+                         + journal_block(day["totals"]) + "</div>")
         parts.append("</div>")
         parts.append("<div class='mtot'><div class='dc-h'>"
                      "<span class='dc-date'>รวมทั้งเดือน</span>"
@@ -4806,15 +4925,18 @@ _UAT_CASES = [
                   "(✓ ตรง / ✗ ต่าง / ขาดเอกสาร / รอเอกสารตามรอบ) แถวที่ต้องตรวจขึ้นสีแดง ด้านบนมีสรุป “จับคู่ตรง X/Y” "
                   "ถ้าครบมีแบนเนอร์ “✓ ทุกช่องทางจับคู่ครบ” · ท้ายใบมี “💰 สรุปการรับเงินทั้งเดือน + ค่าธรรมเนียม/VAT + "
                   "📒 ร่างการบันทึกบัญชี (Dr/Cr)” และช่องเซ็น 3 คน · ปุ่ม “📑 ฉบับตรวจสอบ (ละเอียด)” เพิ่มหลักฐานระดับบรรทัด "
-                  "(รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, การจับคู่ด้วยมือ) สำหรับ auditor",
+                  "(รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, การจับคู่ด้วยมือ) สำหรับ auditor · "
+                  "มี “📆 ช่องเลือกวัน (filter by date)” บนหัวรายงาน — เลือกวันเดียวแล้วรายงานย่อเหลือเฉพาะวันนั้น "
+                  "พร้อมร่างบันทึกบัญชี (Dr/Cr) ของวันนั้นโดยตรง สำหรับนำไปลงบัญชีรายวัน",
      "steps": ["หน้าสาขา → กด “🖨️ ตรวจการจับคู่รายวัน”",
                "ตรวจ KPI (จับคู่ตรง/ต้องตรวจ/รอเอกสาร/POS รวม/เอกสารรวม/ผลต่างสะสม)",
                "ไล่ตาราง — ต่าง/ขาดเอกสารแดง, รอเอกสารเหลือง, ตรง=✓",
                "เลื่อนลงดู “💰 สรุปการรับเงิน + ค่าธรรมเนียม/VAT” และ “📒 ร่างบันทึกบัญชี” ว่ายอดตรง (Dr = Cr)",
+               "เลือกวันเดียวที่ “📆 ช่องเลือกวัน” → รายงานเหลือเฉพาะวันนั้น + ร่างบันทึกบัญชี (Dr/Cr) ของวันนั้น แล้วกด “↺ ทั้งเดือน” เพื่อกลับ",
                "กด “📑 ฉบับตรวจสอบ (ละเอียด)” → ตรวจหลักฐานระดับบรรทัด (รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า)",
                "กด “🖨️ พิมพ์ / บันทึก PDF”; ลองเมนู ⋯ → “รายงานการจับคู่รายวัน (ทุกสาขา)”"],
      "expected": "ทุกวัน × ช่องทางสถานะถูกต้อง, KPI ตรงข้อมูล, สรุปรับเงิน/ค่าธรรมเนียม/VAT ถูก + ร่างบัญชี Dr=Cr, "
-                 "ฉบับละเอียดมีหลักฐานครบทุกบรรทัด, พิมพ์ PDF ได้, แพ็กทุกสาขาแยกหน้า"},
+                 "เลือกวันแล้วย่อเหลือวันเดียว + ร่างบัญชีของวันนั้นถูกต้อง, ฉบับละเอียดมีหลักฐานครบทุกบรรทัด, พิมพ์ PDF ได้, แพ็กทุกสาขาแยกหน้า"},
     {"id": "TC-09", "title": "รายงานติดตามเอกสารที่ยังขาด (ตามงานรายเดือน)",
      "role": "ฝ่ายบัญชี / ผู้จัดการ",
      "narrative": "ใช้ไล่ตามเอกสารที่แต่ละสาขายังไม่อัป + ยอดเงินที่รอเอกสารนั้นจับคู่ · เลือกเดือน + สาขาได้บนหน้า → ใช้ตามงานทุกเดือน · "
@@ -4904,14 +5026,16 @@ _UAT_CASES = [
                   "“การ์ดรายวัน — 1 วัน = 1 ใบบันทึกบัญชี” ดูทีละสาขา (เลือกจากดรอปดาวน์) · ด้านบนมีแถบสรุปทั้งเดือน "
                   "(ยอดเต็มรวม·ส่วนลด·ค่าธรรมเนียม·VAT·สุทธิ·จำนวนใบ) · แต่ละการ์ดไล่ทุกช่องทางของวันนั้นเป็นยอดเต็ม "
                   "แยกบรรทัดส่วนลด/ค่าธรรมเนียม/VAT → สุทธิ + “รวมวันนี้” · รหัสบัญชีมาจากที่ตั้งใน ตั้งค่าระบบ · "
+                  "แต่ละการ์ดมีปุ่มพับ “📒 ร่างบันทึกบัญชีวันนี้ (Dr/Cr)” กางออกดูคู่เดบิต/เครดิตของวันนั้น (มีในฉบับพิมพ์ PDF ด้วย) · "
                   "ตัวเลขชุดเดียวกับ TC-15 (จอ ↔ กระดาษตรงกัน) มีปุ่มพิมพ์ PDF เป็นแผ่นการ์ด",
      "steps": ["เปิด ⋯ เพิ่มเติม → “📅 สรุปบัญชีรายวัน (รายใบ)”",
                "เลือกสาขาจากดรอปดาวน์มุมขวา — การ์ดเปลี่ยนตามสาขา (สาขาที่ไม่มีรายการขึ้นข้อความว่าง)",
                "ตรวจการ์ดวันหนึ่ง: มี ยอดเต็ม / ส่วนลด (แยกบรรทัด) / ค่าธรรมเนียม / VAT / สุทธิ + แถว “รวมวันนี้”",
+               "กางปุ่ม “📒 ร่างบันทึกบัญชีวันนี้ (Dr/Cr)” → เดบิต (เงินสด/ธนาคารสุทธิ·ส่วนลด·ค่าธรรมเนียม·VAT) = เครดิต (รายได้เต็มยอด)",
                "เทียบยอดรวมทั้งเดือนด้านบนกับ §สรุปบัญชีรายวัน ในรายงานจับคู่ (TC-15) ว่าตรงกัน",
-               "กด “🖨️ พิมพ์/PDF” → ออกเป็นแผ่นการ์ดรายวัน (เลือกสาขาเดียว หรือเว้น = ทุกสาขา หน้าละสาขา)"],
+               "กด “🖨️ พิมพ์/PDF” → ออกเป็นแผ่นการ์ดรายวัน (เลือกสาขาเดียว หรือเว้น = ทุกสาขา หน้าละสาขา) มีร่างบัญชี Dr/Cr ในทุกการ์ด"],
      "expected": "หน้าแสดงการ์ด 1 วัน/ใบ ครบทุกวันที่มีรายการ, ยอดเต็ม/ส่วนลดแยกบรรทัดถูกต้อง + รวมวันนี้ + รวมทั้งเดือน, "
-                 "เลือกสาขาได้, รหัสบัญชีขึ้นตามที่ตั้ง, ตัวเลขตรงกับ TC-15, พิมพ์ PDF เป็นการ์ดได้"},
+                 "ร่างบันทึกบัญชี Dr/Cr ต่อวันสมดุล (Dr=Cr), เลือกสาขาได้, รหัสบัญชีขึ้นตามที่ตั้ง, ตัวเลขตรงกับ TC-15, พิมพ์ PDF เป็นการ์ดได้"},
     {"id": "TC-18", "title": "บันทึกผิดช่อง (ย้ายช่อง) — กระทบสองยอดพร้อมกัน",
      "role": "เจ้าหน้าที่กระทบยอด / ผู้จัดการ",
      "narrative": "ถ้ายอดถูกบันทึกผิดช่อง (เช่น ลูกค้าสแกน QR แต่พนักงานกดเป็นเงินสด) เจ้าหน้าที่ระบุ “ย้ายจากช่องผิด → ช่องถูก + "

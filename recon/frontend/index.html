@@ -159,6 +159,11 @@ input[type=month],select,input[type=text],#mm-note{font-family:inherit;font-size
 .db-tbl th,.db-tbl td{padding:6px 16px}
 .db-tbl tfoot td{border-top:1.5px solid var(--line);border-bottom:none;font-weight:600;background:var(--line-soft)}
 .db-disc{color:var(--warn)}
+.db-je{border-top:1px solid var(--line);background:var(--brand-soft)}
+.db-je>summary{cursor:pointer;padding:8px 16px;font-size:12.5px;font-weight:600;color:var(--brand-deep);user-select:none}
+.db-je>summary:hover{background:var(--line-soft)}
+.db-je[open]>summary{border-bottom:1px solid var(--line)}
+.db-je .db-tbl tfoot td{background:transparent}
 .dash-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle}
 .dash-empty{opacity:.55}
 .mv-sel{padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit}
@@ -554,6 +559,24 @@ async function loadDaybook(){
   DB=r; DB_BR=r.branch_id; renderDaybook();
 }
 function setDbBranch(v){ DB_BR=+v; loadDaybook(); }
+/* ร่างบันทึกบัญชี (Dr/Cr) ของวันนั้น — เอาไปลงบัญชีรายวันได้เลย */
+function dbJournal(t){
+  const A=(DB&&DB.je_accounts)||{};
+  const code=s=>(A[s]&&A[s][0])?` <span class="lbl">${esc(A[s][0])}</span>`:'';
+  const dr=(s,label,v)=>`<tr><td>${label}${code(s)}</td><td class="mono">${fmt2(v)}</td><td class="mono">—</td></tr>`;
+  const lines=[dr('BANK','เงินสด/ธนาคาร (สุทธิ)',t.net)];
+  if(Math.abs(+t.discount||0)>0.005)lines.push(dr('DISCOUNT','ส่วนลด/โปรโมชัน',t.discount));
+  if(Math.abs(+t.fee||0)>0.005)     lines.push(dr('FEE','ค่าธรรมเนียมรับชำระเงิน',t.fee));
+  if(Math.abs(+t.vat||0)>0.005)     lines.push(dr('VAT','ภาษีซื้อ–VAT ค่าธรรมเนียม',t.vat));
+  lines.push(`<tr><td>รายได้จากการขาย (เต็ม)${code('REVENUE')}</td><td class="mono">—</td><td class="mono">${fmt2(t.gross)}</td></tr>`);
+  const dtot=(+t.net||0)+(+t.discount||0)+(+t.fee||0)+(+t.vat||0);
+  return `<details class="db-je">
+    <summary>📒 ร่างบันทึกบัญชีวันนี้ (Dr/Cr)</summary>
+    <table class="db-tbl"><thead><tr><th>บัญชี</th><th>เดบิต</th><th>เครดิต</th></tr></thead>
+      <tbody>${lines.join('')}</tbody>
+      <tfoot><tr><td>รวม</td><td class="mono"><b>${fmt2(dtot)}</b></td><td class="mono"><b>${fmt2(t.gross)}</b></td></tr></tfoot>
+    </table></details>`;
+}
 function dbDayCard(d){
   const t=d.totals;
   const row=c=>`<tr>
@@ -572,7 +595,7 @@ function dbDayCard(d){
       <tfoot><tr><td>รวมวันนี้</td><td class="mono">${fmt2(t.gross)}</td>
         <td class="mono db-disc">${dbDed(t.discount)}</td><td class="mono">${dbDed(t.fee)}</td>
         <td class="mono">${dbDed(t.vat)}</td><td class="mono"><b>${fmt2(t.net)}</b></td></tr></tfoot>
-    </table></div>`;
+    </table>${dbJournal(t)}</div>`;
 }
 function renderDaybook(){
   const r=DB, t=r.totals||{};

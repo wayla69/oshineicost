@@ -28,6 +28,8 @@ backend/reingest_out.txt
 backend/.env
 *.env
 !*.env.example
+# Bank-statement PDF unlock passwords (KTB per-branch lock) — Fly secret in prod
+recon/.pdf_passwords.txt
 
 # ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/

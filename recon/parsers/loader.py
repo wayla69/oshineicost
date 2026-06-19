@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import csv
 import io
+import os
+import re
 from typing import Iterable
 
 import openpyxl
@@ -204,6 +206,66 @@ def is_encrypted_upload(raw: bytes, filename: str = "") -> str | None:
     # end to avoid false positives from the string appearing in a content stream).
     if name.endswith(".pdf") and b"/Encrypt" in raw[-3072:]:
         return "ไฟล์ PDF นี้ถูกล็อกด้วยรหัสผ่าน — กรุณาถอดรหัสก่อนอัปโหลด"
+    return None
+
+
+# ── Password-locked PDF auto-unlock (KTB ships per-branch encrypted statements) ──
+_PDF_PW_ENV  = "RECON_PDF_PASSWORDS"
+_PDF_PW_FILE = os.path.join(os.path.dirname(__file__), os.pardir, ".pdf_passwords.txt")
+
+
+def pdf_passwords() -> list[str]:
+    """Candidate passwords for unlocking encrypted bank-statement PDFs. KTB hands
+    each branch a statement PDF locked with that branch's account number. Sourced
+    (in order) from the ``RECON_PDF_PASSWORDS`` env var then a local
+    ``.pdf_passwords.txt`` backup — both ``CODE:password`` or bare ``password``
+    tokens, separated by comma / newline / semicolon. Kept OUT of git: set the env
+    var as a Fly secret in production, with the local file as the offline backup."""
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(token: str) -> None:
+        token = (token or "").split("#", 1)[0].strip()
+        if not token:
+            return
+        pw = token.split(":", 1)[1].strip() if ":" in token else token
+        if pw and pw not in seen:
+            seen.add(pw)
+            out.append(pw)
+
+    for token in re.split(r"[,;\n]", os.environ.get(_PDF_PW_ENV, "")):
+        add(token)
+    try:
+        with open(_PDF_PW_FILE, encoding="utf-8") as fh:
+            for line in fh:
+                add(line)
+    except OSError:
+        pass
+    return out
+
+
+def unlock_pdf(raw: bytes, passwords: list[str] | None = None) -> bytes | None:
+    """If ``raw`` is an encrypted PDF, return a DECRYPTED copy (no ``/Encrypt``) using
+    the first candidate password that opens it — so every downstream parser reads it
+    without a password. Returns None if no password fits or pikepdf is unavailable.
+    Decryption preserves the original bytes for hashing/dedup (the caller keeps those)."""
+    if not raw or raw[:5] != b"%PDF-":
+        return None
+    try:
+        import pikepdf
+    except ImportError:
+        return None
+    pws = passwords if passwords is not None else pdf_passwords()
+    for pw in pws:
+        try:
+            with pikepdf.open(io.BytesIO(raw), password=pw) as pdf:
+                buf = io.BytesIO()
+                pdf.save(buf)
+                return buf.getvalue()
+        except pikepdf.PasswordError:
+            continue
+        except Exception:
+            continue
     return None
 
 

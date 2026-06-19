@@ -679,9 +679,13 @@ def test_daily_accounts_cards(client):
     g2 = next(ch for ch in next(d for d in j2["days"] if d["dom"] == 5)["channels"] if ch["ch"] == "GRAB")
     assert g2["code"] == "4100"
 
-    # printable per-day card report + period guard
+    # je_accounts rides along for the per-day Dr/Cr draft journal the daybook renders
+    assert set(j["je_accounts"]) == {"BANK", "DISCOUNT", "FEE", "VAT", "REVENUE"}
+
+    # printable per-day card report + period guard + per-day draft journal (Dr/Cr)
     p = client.get("/api/daily-accounts.print?branch_id=4&period_month=2026-06")
     assert p.status_code == 200 and "สรุปบัญชีรายวัน" in p.text and "วันที่ 5" in p.text
+    assert "ร่างบันทึกบัญชี (Dr/Cr)" in p.text and "เดบิต" in p.text
     assert client.get("/api/daily-accounts?period_month=2026-13").status_code == 400
 
 
@@ -724,6 +728,19 @@ def test_monthly_matching_report(client):
     assert det.status_code == 200
     assert "หลักฐานประกอบ (สำหรับผู้ตรวจสอบ)" in det.text
     assert "ที่มาของยอด POS" in det.text and "KNNQR" in det.text   # POS code traced
+
+    # day filter — scopes the report to one calendar day + its own draft journal (Dr/Cr)
+    day = client.get("/api/monthly-report?period_month=2026-06&branch_id=4&day=2026-06-10")
+    assert day.status_code == 200
+    assert "เฉพาะวันที่" in day.text and "2026-06-10" in day.text
+    assert "ร่างการบันทึกบัญชี (รับชำระเงิน) — วันที่ 2026-06-10" in day.text
+    assert "<input type='date'" in day.text                       # on-page date picker
+    assert "ทั้งเดือน" in day.text                                 # clear-filter link
+    # the whole-month roll-up is replaced by the single-day view
+    assert "สรุปการรับเงินทั้งเดือน" not in day.text
+    # day must be a valid date inside the period_month
+    assert client.get("/api/monthly-report?period_month=2026-06&day=2026-07-01").status_code == 400
+    assert client.get("/api/monthly-report?period_month=2026-06&day=bad").status_code == 400
 
 
 def test_outstanding_docs_report(client):
@@ -1679,6 +1696,43 @@ def test_c3_encryption_detection():
     assert "รหัสผ่าน" in (is_encrypted_upload(pdf, "s.pdf") or "")
     assert is_encrypted_upload(b"date,amount\n1,2\n", "a.csv") is None   # plain → fine
     assert is_encrypted_upload(b"%PDF-1.4 plain content, no encryption", "b.pdf") is None
+
+
+def test_pdf_password_list_parsing(monkeypatch):
+    """RECON_PDF_PASSWORDS is parsed into bare passwords: 'CODE:pw' → 'pw', comma /
+    newline / semicolon separated, comments and dups stripped. The local-file backup
+    is isolated here so the test only reflects the env var."""
+    from recon.parsers import loader
+    monkeypatch.setattr(loader, "_PDF_PW_FILE", "/no/such/file.txt")
+    monkeypatch.setenv("RECON_PDF_PASSWORDS",
+                       "CNX:0505562007318, KR1:0345559002213\nbarepw; KR1:0505562007318  # dup pw")
+    pws = loader.pdf_passwords()
+    assert pws == ["0505562007318", "0345559002213", "barepw"]   # order kept, deduped
+    monkeypatch.delenv("RECON_PDF_PASSWORDS")
+    assert loader.pdf_passwords() == []                          # no env + no file → empty
+
+
+def test_pdf_auto_unlock_with_password():
+    """An encrypted PDF is decrypted by unlock_pdf when a candidate password fits, and
+    the result is no longer flagged as locked; a wrong password yields None."""
+    pytest.importorskip("reportlab")
+    pikepdf = pytest.importorskip("pikepdf")
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    from recon.parsers.loader import is_encrypted_upload, unlock_pdf
+
+    plain = io.BytesIO()
+    c = canvas.Canvas(plain, pagesize=A4); c.drawString(72, 800, "KTB STATEMENT 1,234.56"); c.save()
+    locked = io.BytesIO()
+    with pikepdf.open(io.BytesIO(plain.getvalue())) as pdf:
+        pdf.save(locked, encryption=pikepdf.Encryption(user="testpw123", owner="testpw123"))
+    enc = locked.getvalue()
+
+    assert is_encrypted_upload(enc, "ktb.pdf")                   # detected as locked
+    assert unlock_pdf(enc, passwords=["nope", "wrong"]) is None  # no password fits
+    out = unlock_pdf(enc, passwords=["nope", "testpw123"])       # right one in the list
+    assert out is not None and is_encrypted_upload(out, "ktb.pdf") is None
+    assert unlock_pdf(b"not a pdf", passwords=["testpw123"]) is None
 
 
 def test_c6_unsupported_bank_message_guard():
