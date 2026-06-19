@@ -2990,3 +2990,40 @@ def test_ic_certificate_and_aging_and_print(client):
         assert "text/html" in r.headers["content-type"]
     # bad period rejected
     assert client.get("/api/reports/override-register?period_month=2026").status_code == 400
+
+
+def test_ic_close_register_and_accepted_variance(client):
+    """Close register reflects session status/approver (master-only); accepted-variance
+    sums acknowledged write-offs, groups by reason+branch, flags over-threshold."""
+    db = main._DB_PATH
+    c = sqlite3.connect(db)
+    c.execute("INSERT INTO recon_sessions(branch_id,period_month,status,created_by,"
+              "approved_by,approved_at) VALUES(4,'2026-06','closed','prep','mgr',"
+              "'2026-07-02 09:00')")
+    c.execute("INSERT INTO recon_day_ack(branch_id,period_month,category,day,variance,"
+              "note,created_by) VALUES(4,'2026-06','QR','2026-06-03',1500,"
+              "'rounding fee explained ok','staffA')")
+    c.execute("INSERT INTO recon_lane_adj(branch_id,period_month,category,bank,adj_pos,"
+              "adj_ext,note,adj_type,created_by) VALUES(4,'2026-06','CASH','NONE',0,0,"
+              "'cash short minor','accept','staffB')")
+    # franchise branch 1 — excluded from both reports
+    c.execute("INSERT INTO recon_day_ack(branch_id,period_month,category,day,variance,"
+              "note,created_by) VALUES(1,'2026-06','QR','2026-06-03',9999,'franchise','x')")
+    c.commit(); c.close()
+
+    cr = client.get("/api/reports/close-register?period_month=2026-06&months=3").json()
+    assert all(r["branch_id"] != 1 for r in cr["rows"])          # franchise excluded
+    assert len(cr["months"]) == 3 and "2026-06" in cr["months"]
+    row4 = next(r for r in cr["rows"] if r["branch_id"] == 4 and r["period_month"] == "2026-06")
+    assert row4["status"] == "closed" and row4["approved_by"] == "mgr"
+
+    av = client.get("/api/reports/accepted-variance?period_month=2026-06&threshold=1000").json()
+    assert all(it["branch_id"] != 1 for it in av["items"])       # franchise excluded
+    assert any(abs(it["amount"]) == 1500 for it in av["items"])
+    assert av["over_count"] >= 1                                  # the 1,500 > 1,000
+    assert av["by_reason"] and av["by_branch"]
+
+    for ep in ("close-register.print?period_month=2026-06&months=3",
+               "accepted-variance.print?period_month=2026-06&threshold=1000"):
+        r = client.get("/api/reports/" + ep)
+        assert r.status_code == 200 and "text/html" in r.headers["content-type"]

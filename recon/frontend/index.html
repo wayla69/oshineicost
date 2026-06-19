@@ -331,6 +331,8 @@ function route(){
   if(h==='override')return loadOverrideRegister();
   if(h==='aging')return loadAging();
   if(h==='certificate')return loadCertificate();
+  if(h==='closereg')return loadCloseRegister();
+  if(h==='accepted')return loadAcceptedVariance();
   if(h==='setup')return loadSetup();
   if(h.startsWith('payout'))return loadPayout(h);
   if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
@@ -3087,6 +3089,22 @@ function loadReports(){
         <span class="rpt-badge">in-app</span>
       </div>
     </a>
+    <a class="rpt-item" href="#closereg">
+      <span class="rpt-icon"><i class="ti ti-calendar-check" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">ทะเบียนการปิดเดือน</div>
+        <div class="rpt-desc">ทุกสาขา × 6 เดือน · ปิด/อนุมัติ/ยังเปิด · ใครเซ็น · มีหลักฐานไหม</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
+    <a class="rpt-item" href="#accepted">
+      <span class="rpt-icon"><i class="ti ti-receipt-off" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">สรุปผลต่างที่รับทราบ</div>
+        <div class="rpt-desc">Write-off แยกตามเหตุผล·สาขา · เน้นรายการเกินเกณฑ์</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
   </div>
 
   <div class="lbl" style="margin:0 0 6px 2px;font-weight:700;letter-spacing:.03em">เอกสาร & เครื่องมือ / Docs & Tools</div>
@@ -3257,6 +3275,89 @@ async function loadCertificate(){
       <div><div class="lbl">ผู้สอบทาน / อนุมัติ</div><div style="font-weight:600">${esc(sess.approved_by||'—')}</div></div>
       <div><div class="lbl">วันที่อนุมัติ</div><div style="font-weight:600">${esc((sess.approved_at||'').slice(0,16)||'—')}</div></div>
     </div></div>`;
+  $('app').innerHTML=html;
+}
+
+/* #closereg — ทะเบียนการปิดเดือน (Close Register) */
+let _CLR_BR='';
+function setClrBranch(v){_CLR_BR=v||'';loadCloseRegister();}
+async function loadCloseRegister(){
+  $('app').innerHTML=header()+loadingState();
+  const q=`?period_month=${MONTH}&months=6${_CLR_BR?`&branch_id=${_CLR_BR}`:''}`;
+  let brs,r;
+  try{[brs,r]=await Promise.all([api('/api/branches'),api('/api/reports/close-register'+q)]);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const stTh={draft:'ร่าง',in_review:'รอสอบทาน',approved:'อนุมัติแล้ว',closed:'ปิดงวดแล้ว'};
+  const stCls={draft:'c-mut',in_review:'c-warn',approved:'c-ok',closed:'c-ok'};
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-calendar-check" aria-hidden="true"></i> ทะเบียนการปิดเดือน — 6 เดือนล่าสุด</h2>
+    ${_icBranchSel(brs,_CLR_BR,'setClrBranch')}
+    <a class="btn btn-sm btn-pri" href="/api/reports/close-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+  <div class="muted" style="margin-bottom:10px">สถานะการปิดงวดของทุกสาขาหลัก · ใครอนุมัติ · เมื่อไหร่ · กระทบยอดแล้วกี่ % · มีหลักฐานแช่แข็งหรือยัง — <b>ยังไม่ปิดรวม ${r.open_total} สาขา-เดือน</b></div>`;
+  if(!r.rows.length){$('app').innerHTML=html+emptyState('calendar','ไม่มีข้อมูลช่วงนี้','');return;}
+  for(const mth of r.months){
+    const mr=r.month_rollup[mth];if(!mr)continue;
+    const rows=r.rows.filter(x=>x.period_month===mth);
+    html+=`<div class="card" style="padding:12px 16px;margin-bottom:10px">
+      <div class="row" style="align-items:baseline;gap:10px;margin-bottom:6px"><b style="font-size:14px">${esc(mth)}</b>
+        <span class="lbl">ปิดแล้ว ${mr.closed} · อนุมัติ ${mr.approved} · <span style="color:var(--warn)">ยังเปิด ${mr.open}</span> / ${mr.total} สาขา</span></div>
+      <div style="overflow-x:auto"><table>
+        <tr><th style="text-align:left">สาขา</th><th style="text-align:left">สถานะ</th><th>กระทบยอด</th><th>คงค้าง</th><th style="text-align:left">ผู้อนุมัติ</th><th style="text-align:left">วันที่</th><th>หลักฐาน</th></tr>
+        ${rows.map(x=>`<tr>
+          <td style="text-align:left"><b>${esc(x.branch_name)}</b></td>
+          <td style="text-align:left"><span class="chip ${stCls[x.status]||'c-mut'}">${esc(stTh[x.status]||x.status)}</span></td>
+          <td class="mono">${x.progress_pct}%</td>
+          <td class="mono">${x.todo_count||''}</td>
+          <td style="text-align:left">${esc(x.approved_by||'—')}</td>
+          <td class="lbl" style="text-align:left">${esc((x.approved_at||'').slice(0,16)||'—')}</td>
+          <td>${x.has_snapshot?'<span style="color:var(--ok)">✔</span>':'—'}</td></tr>`).join('')}
+      </table></div></div>`;
+  }
+  $('app').innerHTML=html;
+}
+
+/* #accepted — สรุปผลต่างที่รับทราบ (Accepted-Variance / Write-off) */
+let _AV_BR='', _AV_TH=1000;
+function setAvBranch(v){_AV_BR=v||'';loadAcceptedVariance();}
+function setAvTh(v){const n=parseFloat(v);if(!isNaN(n)&&n>=0){_AV_TH=n;loadAcceptedVariance();}}
+async function loadAcceptedVariance(){
+  $('app').innerHTML=header()+loadingState();
+  const q=`?period_month=${MONTH}&threshold=${_AV_TH}${_AV_BR?`&branch_id=${_AV_BR}`:''}`;
+  let brs,s;
+  try{[brs,s]=await Promise.all([api('/api/branches'),api('/api/reports/accepted-variance'+q)]);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-receipt-off" aria-hidden="true"></i> สรุปผลต่างที่รับทราบ (Write-off) — ${esc(monthTh(MONTH))}</h2>
+    ${_icBranchSel(brs,_AV_BR,'setAvBranch')}
+    <a class="btn btn-sm btn-pri" href="/api/reports/accepted-variance.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+  <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
+    <span class="muted">ยอดผลต่างที่ “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · เกณฑ์เน้นต่อรายการ</span>
+    <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;font:inherit" title="เกณฑ์ (บาท/รายการ)">
+    <span class="muted">บาท</span></div>`;
+  if(!s.items.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีผลต่างที่รับทราบในงวดนี้','ทุกช่องทางตรงตามจริง');return;}
+  const over=s.over_count?`<span class="chip c-err">เกินเกณฑ์ ${s.over_count} รายการ</span>`:`<span class="chip c-ok">ไม่มีรายการเกินเกณฑ์ ✓</span>`;
+  html+=`<div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:30px;flex-wrap:wrap;align-items:center">
+    <div><div class="lbl">ยอดรับทราบรวม</div><div style="font-size:20px;font-weight:700;color:var(--err)">${fmt(s.grand_total_abs)}</div></div>
+    <div><div class="lbl">จำนวนรายการ</div><div style="font-size:20px;font-weight:700">${s.count}</div></div>
+    <div>${over}</div></div>
+  <div class="c2" style="margin-bottom:12px">
+    <div class="card"><b>แยกตามเหตุผล</b><div style="overflow-x:auto;margin-top:6px"><table>
+      <tr><th style="text-align:left">เหตุผล</th><th>ครั้ง</th><th>ยอดรวม</th></tr>
+      ${s.by_reason.map(r=>`<tr><td style="text-align:left">${esc(r.reason)}</td><td class="mono">${r.count}</td><td class="mono">${fmt(r.total_abs)}</td></tr>`).join('')}
+    </table></div></div>
+    <div class="card"><b>แยกตามสาขา</b><div style="overflow-x:auto;margin-top:6px"><table>
+      <tr><th style="text-align:left">สาขา</th><th>ครั้ง</th><th>ยอดรวม</th></tr>
+      ${s.by_branch.map(r=>`<tr><td style="text-align:left"><b>${esc(r.branch_name)}</b></td><td class="mono">${r.count}</td><td class="mono">${fmt(r.total_abs)}</td></tr>`).join('')}
+    </table></div></div></div>
+  <div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th style="text-align:left">สาขา</th><th style="text-align:left">ช่องทาง / วัน</th><th>ยอด</th><th style="text-align:left">เหตุผล</th><th style="text-align:left">โดย</th></tr>
+    ${s.items.map(it=>{const big=Math.abs(it.amount)>s.threshold;return `<tr>
+      <td style="text-align:left">${esc(it.branch_name)}</td>
+      <td style="text-align:left">${esc(it.scope)}</td>
+      <td class="mono" style="${big?'color:var(--err);font-weight:700':''}">${it.amount>0?'+':''}${fmt(it.amount)}</td>
+      <td style="text-align:left">${it.reason?esc(it.reason):'<span style="color:var(--err)">— ไม่ระบุ —</span>'}</td>
+      <td style="text-align:left">${esc(it.by)}</td></tr>`;}).join('')}
+  </table></div>`;
   $('app').innerHTML=html;
 }
 

@@ -5338,6 +5338,242 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None):
     return Response(content=html_doc, media_type="text/html; charset=utf-8")
 
 
+# ── #4 Close register + #5 Accepted-variance summary (audit evidence) ─────────
+
+def _close_register(conn, period_month, months=6, branch_id=None):
+    """Cross-branch × multi-month close monitoring: status (draft/in_review/approved/
+    closed), %reconciled, todo count, approver + approval date, and whether the frozen
+    working-paper snapshot exists. Read-only; reuses reconcile_overview per month."""
+    months = max(1, min(12, months))
+    win = list(dict.fromkeys(
+        [period_month] + [_ic_prev_month(period_month, k) for k in range(1, months)]))
+    ph = ",".join("?" * len(win))
+    sess = {(r["branch_id"], r["period_month"]): dict(r) for r in conn.execute(
+        "SELECT branch_id, period_month, approved_by, approved_at "
+        f"FROM recon_sessions WHERE period_month IN ({ph})", win)}
+    snaps = {(r["branch_id"], r["period_month"]) for r in conn.execute(
+        f"SELECT branch_id, period_month FROM recon_close_snapshot WHERE period_month IN ({ph})", win)}
+    rows, roll = [], {}
+    for mth in win:
+        ov = reconcile_overview(conn, mth)
+        for b in ov["branches"]:
+            if branch_id and b["branch_id"] != branch_id:
+                continue
+            s = sess.get((b["branch_id"], mth), {})
+            st = b.get("status") or "draft"
+            rows.append({"period_month": mth, "branch_id": b["branch_id"],
+                "branch_name": b["branch_name"], "status": st,
+                "progress_pct": b["progress_pct"], "todo_count": b["todo_count"],
+                "approved_by": s.get("approved_by"), "approved_at": s.get("approved_at"),
+                "has_snapshot": (b["branch_id"], mth) in snaps})
+            r = roll.setdefault(mth, {"closed": 0, "approved": 0, "open": 0, "total": 0})
+            r["total"] += 1
+            r["closed" if st == "closed" else "approved" if st == "approved" else "open"] += 1
+    return {"period_month": period_month, "months": win, "rows": rows,
+            "month_rollup": roll,
+            "open_total": sum(1 for r in rows if r["status"] not in ("approved", "closed"))}
+
+
+def _accepted_variance_summary(conn, period_month, branch_id=None, threshold=1000.0):
+    """Write-off view: every ACKNOWLEDGED variance (recon_lane_adj accept = whole channel,
+    recon_day_ack = per day) for the month, grouped by branch and by reason, with the
+    grand total accepted and items over a policy threshold flagged. Read-only."""
+    from collections import defaultdict
+    bmap = {r["branch_id"]: r["name"] for r in conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
+
+    def keep(bid):
+        return bid in bmap and (branch_id is None or bid == branch_id)
+
+    items, var_cache = [], {}
+    for a in conn.execute(
+            "SELECT branch_id, period_month, category, bank, note, created_by, created_at "
+            "FROM recon_lane_adj WHERE adj_type='accept' AND period_month=?", (period_month,)):
+        if not keep(a["branch_id"]):
+            continue
+        key = (a["branch_id"], a["period_month"])
+        if key not in var_cache:
+            try:
+                var_cache[key] = {c["key"]: c.get("residual", c["variance"])
+                                  for c in reconcile_month(conn, a["branch_id"], a["period_month"])["channels"]}
+            except Exception:
+                var_cache[key] = {}
+        items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
+            "scope": _ic_lane_th(a["category"], a["bank"]), "channel": a["category"],
+            "amount": round(var_cache[key].get(a["category"], 0.0), 2),
+            "reason": a["note"] or "", "by": a["created_by"] or "—",
+            "at": a["created_at"] or "", "source": "channel"})
+    for a in conn.execute(
+            "SELECT branch_id, category, day, variance, note, created_by, created_at "
+            "FROM recon_day_ack WHERE period_month=?", (period_month,)):
+        if not keep(a["branch_id"]):
+            continue
+        items.append({"branch_id": a["branch_id"], "branch_name": bmap[a["branch_id"]],
+            "scope": f"{_CH_LABEL.get(a['category'], a['category'])} · {a['day']}",
+            "channel": a["category"], "amount": round(float(a["variance"] or 0), 2),
+            "reason": a["note"] or "", "by": a["created_by"] or "—",
+            "at": a["created_at"] or "", "source": "day"})
+    items.sort(key=lambda x: -abs(x["amount"]))
+    by_branch = defaultdict(lambda: {"count": 0, "total_abs": 0.0})
+    by_reason = defaultdict(lambda: {"count": 0, "total_abs": 0.0})
+    for it in items:
+        gb = by_branch[(it["branch_id"], it["branch_name"])]
+        gb["count"] += 1
+        gb["total_abs"] += abs(it["amount"])
+        gr = by_reason[(it["reason"].strip() or "ไม่ระบุเหตุผล")]
+        gr["count"] += 1
+        gr["total_abs"] += abs(it["amount"])
+    over = [it for it in items if abs(it["amount"]) > threshold]
+    return {"period_month": period_month, "threshold": threshold,
+        "items": items, "count": len(items),
+        "grand_total_abs": round(sum(abs(it["amount"]) for it in items), 2),
+        "by_branch": sorted([{"branch_id": k[0], "branch_name": k[1], "count": v["count"],
+                              "total_abs": round(v["total_abs"], 2)} for k, v in by_branch.items()],
+                            key=lambda x: -x["total_abs"]),
+        "by_reason": sorted([{"reason": k, "count": v["count"],
+                              "total_abs": round(v["total_abs"], 2)} for k, v in by_reason.items()],
+                            key=lambda x: -x["total_abs"]),
+        "over_threshold": over, "over_count": len(over)}
+
+
+@app.get("/api/reports/close-register")
+def close_register_api(period_month: str, months: int = 6, branch_id: int | None = None):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _close_register(conn, period_month, months, branch_id)
+
+
+@app.get("/api/reports/accepted-variance")
+def accepted_variance_api(period_month: str, branch_id: int | None = None,
+                          threshold: float = 1000.0):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _accepted_variance_summary(conn, period_month, branch_id, max(0.0, threshold))
+
+
+@app.get("/api/reports/close-register.print")
+def close_register_print(period_month: str, months: int = 6, branch_id: int | None = None):
+    """Print-to-PDF close register: which branch-months are closed / approved / still
+    open, who signed off + when, %reconciled, and whether the frozen snapshot exists."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    months = max(1, min(12, months))
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        reg = _close_register(conn, period_month, months, branch_id)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc, extra=f"&months={months}")
+    st_chip = {"closed": "c-ok", "approved": "c-ok", "in_review": "c-warn",
+               "draft": "c-mut"}
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>ทะเบียนการปิดเดือน</title>", _ic_print_css("#1d4ed8"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>ทะเบียนการปิดเดือน (Close Register) — {esc(months)} เดือนล่าสุดถึง {esc(period_month)}</h1>",
+        f"<div class='sub'>สถานะการปิดงวดของทุกสาขาหลัก · ใครอนุมัติ · เมื่อไหร่ · กระทบยอดแล้วกี่ % · "
+        f"มีหลักฐานแช่แข็งหรือยัง · <b>ยังไม่ปิดรวม {reg['open_total']}</b> สาขา-เดือน</div>"]
+    if not reg["rows"]:
+        parts.append("<div class='none'>ไม่มีข้อมูลสาขาสำหรับช่วงนี้</div>")
+    for mth in reg["months"]:
+        mr = reg["month_rollup"].get(mth)
+        if not mr:
+            continue
+        parts.append(f"<h2>{esc(mth)} — ปิดแล้ว {mr['closed']} · อนุมัติ {mr['approved']} · "
+                     f"<span class='warn'>ยังเปิด {mr['open']}</span> / {mr['total']} สาขา</h2>")
+        parts.append("<table><thead><tr><th class='l'>สาขา</th><th class='l'>สถานะ</th>"
+            "<th>กระทบยอด</th><th>คงค้าง</th><th class='l'>ผู้อนุมัติ</th>"
+            "<th class='l'>วันที่อนุมัติ</th><th class='l'>หลักฐาน</th></tr></thead><tbody>")
+        for r in [x for x in reg["rows"] if x["period_month"] == mth]:
+            parts.append(f"<tr><td class='l'><b>{esc(r['branch_name'])}</b></td>"
+                f"<td class='l'><span class='chip {st_chip.get(r['status'], 'c-mut')}'>"
+                f"{esc(_IC_SESS_TH.get(r['status'], r['status']))}</span></td>"
+                f"<td class='mono'>{r['progress_pct']}%</td>"
+                f"<td class='mono'>{r['todo_count'] or ''}</td>"
+                f"<td class='l'>{esc(r['approved_by'] or '—')}</td>"
+                f"<td class='l muted'>{esc((r['approved_at'] or '')[:16] or '—')}</td>"
+                f"<td class='l'>{'✔' if r['has_snapshot'] else '—'}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้สอบทาน</div><div>วันที่</div></div>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+@app.get("/api/reports/accepted-variance.print")
+def accepted_variance_print(period_month: str, branch_id: int | None = None,
+                            threshold: float = 1000.0):
+    """Print-to-PDF accepted-variance (write-off) summary: total baht acknowledged,
+    grouped by reason and by branch, with single items over the policy threshold flagged."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    def m(v): return f"{float(v or 0):,.0f}"
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    threshold = max(0.0, threshold)
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        s = _accepted_variance_summary(conn, period_month, branch_id, threshold)
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc,
+                        extra=f"&threshold={int(threshold)}")
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>สรุปผลต่างที่รับทราบ</title>", _ic_print_css("#b91c1c"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>สรุปผลต่างที่รับทราบ (Accepted-Variance / Write-off) — งวด {esc(period_month)}</h1>",
+        f"<div class='sub'>ยอดผลต่างที่ถูก “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · "
+        f"รวม <b class='big'>฿{m(s['grand_total_abs'])}</b> จาก <b>{s['count']}</b> รายการ · "
+        f"เกินเกณฑ์ ฿{m(threshold)}/รายการ: <b class='big'>{s['over_count']}</b> รายการ</div>"]
+    if not s["items"]:
+        parts.append("<div class='none'>✓ ไม่มีผลต่างที่รับทราบในงวดนี้ — ทุกช่องทางตรงตามจริง</div>")
+    else:
+        if s["over_threshold"]:
+            parts.append(f"<div class='lead'>⚠ มี {s['over_count']} รายการที่รับทราบเกิน "
+                         f"฿{m(threshold)} ต่อรายการ — ผู้สอบบัญชีจะขอหลักฐาน/การอนุมัติเพิ่มเป็นพิเศษ</div>")
+        parts.append("<h2>แยกตามเหตุผล</h2><table><thead><tr><th class='l'>เหตุผล</th>"
+            "<th>จำนวนครั้ง</th><th>ยอดรวม (บาท)</th></tr></thead><tbody>")
+        for r in s["by_reason"]:
+            parts.append(f"<tr><td class='l'>{esc(r['reason'])}</td><td class='mono'>{r['count']}</td>"
+                         f"<td class='mono'>{m(r['total_abs'])}</td></tr>")
+        parts.append(f"</tbody><tfoot><tr><td class='l'>รวม</td><td class='mono'>{s['count']}</td>"
+                     f"<td class='mono'>{m(s['grand_total_abs'])}</td></tr></tfoot></table>")
+        parts.append("<h2>แยกตามสาขา</h2><table><thead><tr><th class='l'>สาขา</th>"
+            "<th>จำนวนครั้ง</th><th>ยอดรวม (บาท)</th></tr></thead><tbody>")
+        for r in s["by_branch"]:
+            parts.append(f"<tr><td class='l'><b>{esc(r['branch_name'])}</b></td>"
+                         f"<td class='mono'>{r['count']}</td><td class='mono'>{m(r['total_abs'])}</td></tr>")
+        parts.append("</tbody></table>")
+        parts.append("<h2>รายการทั้งหมด (เรียงยอดมากสุด)</h2><table><thead><tr>"
+            "<th class='l'>สาขา</th><th class='l'>ช่องทาง / วัน</th><th>ยอด</th>"
+            "<th class='l'>เหตุผล</th><th class='l'>โดย</th></tr></thead><tbody>")
+        for it in s["items"]:
+            big = " big" if abs(it["amount"]) > threshold else ""
+            parts.append(f"<tr><td class='l'>{esc(it['branch_name'])}</td>"
+                f"<td class='l'>{esc(it['scope'])}</td>"
+                f"<td class='mono{big}'>{it['amount']:+,.0f}</td>"
+                f"<td class='l'>{esc(it['reason']) or '<span class=\"big\">— ไม่ระบุ —</span>'}</td>"
+                f"<td class='l'>{esc(it['by'])}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("<div class='sign'><div>ผู้จัดทำ</div><div>ผู้สอบทาน (ผู้จัดการ)</div><div>วันที่</div></div>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
 # ── UAT sign-off sheet (เอกสารทดสอบ + รับรองการใช้งาน) ─────────────────────────
 # Printable acceptance-test checklist with a usage narrative beside each case, for the
 # team to walk through, mark pass/fail, and sign off before going fully live.
@@ -5647,6 +5883,19 @@ _UAT_CASES = [
                "ยืนยันสาขาแฟรนไชส์ไม่โผล่ในทั้ง 3 รายงาน + canary อุดร 2026-05-01 ส่วนลด ฿35,511.48 ไม่เปลี่ยน"],
      "expected": "3 รายงานเปิดในแอป + พิมพ์ PDF ได้, ใบรับรองมีช่องเซ็น+SHA-256, ทะเบียนเน้นรายการไร้เหตุผล, "
                  "อายุแยก 3 ช่วงถูกต้อง, เฉพาะสาขาหลัก, ไม่แตะตัวเลขบัญชี"},
+    {"id": "TC-32", "title": "ทะเบียนการปิดเดือน + สรุปผลต่างที่รับทราบ (Audit & Controls #2)",
+     "role": "ผู้จัดการ / ผู้สอบบัญชี",
+     "narrative": "อีกสองรายงานควบคุมภายในในหน้า 📊 รายงาน อ่านอย่างเดียว สาขาหลัก: "
+                  "(1) ทะเบียนการปิดเดือน — มุมมองข้ามทุกสาขา × 6 เดือนล่าสุด: ปิด/อนุมัติ/ยังเปิด + "
+                  "ผู้อนุมัติ·วันที่ + %กระทบยอด + มี snapshot ไหม (control dashboard ว่ามีงวดไหนค้าง); "
+                  "(2) สรุปผลต่างที่รับทราบ/Write-off — รวมยอดที่รับทราบปล่อยผ่าน (ช่อง+รายวัน) แยกตามเหตุผล+สาขา "
+                  "ตั้งเกณฑ์ต่อรายการได้ เน้นแดงรายการเกินเกณฑ์ (เพิ่ม 2026-06-19)",
+     "steps": ["เปิด #reports -> กลุ่มควบคุมภายในเห็นการ์ด 'ทะเบียนการปิดเดือน' + 'สรุปผลต่างที่รับทราบ'",
+               "เปิด #closereg -> เห็นทุกสาขา×6เดือน สถานะ/ผู้อนุมัติ/วันที่/% /หลักฐาน + ตัวนับ 'ยังไม่ปิด'; พิมพ์ PDF ได้",
+               "เปิด #accepted -> ยอดรับทราบรวม + ตารางแยกเหตุผล/สาขา + รายการ; เปลี่ยนเกณฑ์ (เช่น 500) แล้วตัวเลขเกินเกณฑ์ปรับตาม; พิมพ์ PDF ได้",
+               "ยืนยันแฟรนไชส์ไม่โผล่ทั้งสองรายงาน + canary อุดร 2026-05-01 ฿35,511.48 ไม่เปลี่ยน"],
+     "expected": "ปิดเดือนแสดงสถานะ/ผู้อนุมัติ/snapshot ครบ, Write-off รวม+แยกเหตุผล/สาขา+เน้นเกินเกณฑ์ถูกต้อง, "
+                 "พิมพ์ PDF ได้, เฉพาะสาขาหลัก, ไม่แตะตัวเลขบัญชี"},
     {"id": "TC-29", "title": "Responsive Nav + Reports Hub (#reports) -- เฟส 5",
      "role": "ทุกบทบาท",
      "narrative": "เฟส 5 เพิ่มแถบนำทาง 4 โซน (หน้าหลัก / รายงาน / Admin / วินิจฉัย) "
