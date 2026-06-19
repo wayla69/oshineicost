@@ -142,7 +142,12 @@ section{scroll-margin-top:80px}
     <a href="#close"><span class="n">7</span> ส่งตรวจและปิดเดือน</a>
     <a href="#setup"><span class="n">8</span> ตั้งค่าระบบ (สำหรับผู้จัดการ)</a>
     <a href="#more"><span class="n">9</span> รายงานและเครื่องมือเพิ่มเติม</a>
-    <a href="#qa"><span class="n">10</span> คำถามที่พบบ่อย (Q&A)</a>
+    <a href="#diagnostics"><span class="n">10</span> เครื่องมือวินิจฉัย (Diagnostics)</a>
+    <a href="#diag-board" style="padding-left:30px">— Daily Board</a>
+    <a href="#diag-audit" style="padding-left:30px">— Audit Log</a>
+    <a href="#diag-trend" style="padding-left:30px">— Trend Heatmap</a>
+    <a href="#diag-bankcov" style="padding-left:30px">— Bank Coverage</a>
+    <a href="#qa"><span class="n">11</span> คำถามที่พบบ่อย (Q&A)</a>
   </div>
 </div>
 
@@ -625,9 +630,52 @@ section{scroll-margin-top:80px}
   <p class="note">ผ่าน <code>/api/daily-dashboard?day=YYYY-MM-DD</code> (คืนทั้งฝั่งบัญชีและฝั่ง POS↔เงินเข้าในครั้งเดียว สลับโหมดไม่ต้องโหลดใหม่) · แสดงเฉพาะสาขาหลัก (master) · วันที่ไม่มีข้อมูลขึ้นข้อความว่าง</p>
 </section>
 
-<!-- ── 10. Q&A ─────────────────────────────────────────── -->
+<!-- ── 10. วินิจฉัย / Diagnostics ─────────────────────────── -->
+<section id="diagnostics" class="card page">
+  <h2>10. เครื่องมือวินิจฉัย (Diagnostics)</h2>
+  <p>เปิดได้จาก <b>⋯ เพิ่มเติม → ส่วน "วินิจฉัย / Diagnostics"</b> — ใช้สำหรับตรวจสอบเชิงลึก ไม่ใช่งานประจำวัน</p>
+
+  <h3 id="diag-board">10.1 Daily Board — ตารางข้ามสาขาในวันเดียว (<code>#board</code>)</h3>
+  <p>มุมมอง <b>ทุกสาขา × ทุกช่องทาง</b> ใน <b>วันเดียวกัน</b> — เห็นสถานะทั้งเครือในหน้าเดียว</p>
+  <ul>
+    <li><b>เลือกวัน</b> ด้วยปฏิทินมุมขวา หรือกดปุ่ม ◀ ▶ ไปวันก่อน/หลัง</li>
+    <li>แต่ละเซลล์ = ยอด POS ช่องทางนั้น สีเขียว = ตรงแล้ว · สีแดง = ต่าง · สีเหลือง = ขาดเอกสาร</li>
+    <li>แถบสรุปด้านบน: POS รวม · เงินเข้าจริงรวม · ผลต่าง · จำนวนสาขาที่รายงาน</li>
+    <li>ปุ่ม <b>🖨️ PDF ทุกสาขา</b> ออกรายงานหลักฐานรายวันทุกสาขาเป็น PDF</li>
+    <li>ถ้ามีรหัส POS ที่ยังไม่ตั้งค่า จะขึ้นแบนเนอร์เตือนพร้อมลิงก์ไปตั้งค่า</li>
+  </ul>
+
+  <h3 id="diag-audit">10.2 Audit Log — ประวัติการแก้ไข (<code>#audit</code>)</h3>
+  <p>บันทึก <b>ทุกการเปลี่ยนแปลงในระบบ</b> โดยอัตโนมัติ — ใครแก้อะไร เมื่อไร ค่าเดิม → ใหม่</p>
+  <ul>
+    <li>แสดง 200 รายการล่าสุด · <b>กรองด้วย entity</b> (session, discrepancy, manual_match, day_ack, channel_move, payment_map) ได้จาก dropdown มุมขวา</li>
+    <li>ใช้สำหรับ: ตรวจว่าใครปิดเดือน · ติดตามการแก้รหัส payment map · หา root cause เมื่อตัวเลขเปลี่ยนโดยไม่คาดคิด</li>
+  </ul>
+
+  <h3 id="diag-trend">10.3 Trend Heatmap — ความคืบหน้ารายวัน (<code>#trend</code>)</h3>
+  <p>ปฏิทินสีแสดง <b>% lane match รายวัน</b> ของสาขาที่เลือก — เห็นแนวโน้มการกระทบยอดทั้งเดือนในแผนที่สีเดียว</p>
+  <ul>
+    <li><b>เลือกสาขา</b> จาก dropdown — ระบบดึง session ที่มีอยู่ของเดือนนั้นให้อัตโนมัติ</li>
+    <li>ถ้ายังไม่มี session (ยังไม่เริ่มกระทบยอด) จะขึ้นข้อความแนะนำให้เปิดหน้าสาขาก่อน</li>
+    <li>สีเขียว = lane match ≥99% · สีเหลือง = 60–98% · สีแดง = &lt;60% · เทา = ไม่มีข้อมูล</li>
+    <li>ตารางสรุปรายสัปดาห์ (W1–W4) แสดง POS รวม · เงินเข้า · % lane match · % coverage</li>
+  </ul>
+
+  <h3 id="diag-bankcov">10.4 Bank Coverage — สถานะครอบคลุมสเตทเมนต์ (<code>#bankcov</code>)</h3>
+  <p>ตรวจทุกบรรทัดในสเตทเมนต์ธนาคาร ว่า <b>กระทบยอดครบ / ยังรอ / ตัดออก</b></p>
+  <ul>
+    <li><b>เลือกสาขา</b> จาก dropdown — ใช้ session ของเดือนที่กำลังดูอยู่</li>
+    <li>แถบสรุปด้านบน: X/Y ตรงแล้ว · % match · ยอดตรง · ยอดยังรอ · ยอดตัดออก</li>
+    <li>ปุ่มกรอง <b>⌛ ยังรอ / ✓ ตรงแล้ว / ⊘ ตัดออก / ทั้งหมด</b> คัดแสดงเฉพาะสถานะที่ต้องการ (ค่าเริ่มต้นขึ้น "ยังรอ" เมื่อมีงาน)</li>
+    <li>ส่วน <b>3 ขั้นบัตรเครดิต</b> (แยกราย acquirer): POS gross ↔ สรุปยอดบัตร (ขั้น 1) ↔ เงินเข้าธนาคาร (ขั้น 2) พร้อมสถานะแต่ละขั้น</li>
+    <li>chip รายช่องทาง (เงินสด/QR/บัตร/Grab/LINE MAN) แสดงสัดส่วน matched/ทั้งหมด</li>
+  </ul>
+  <p class="note">ต้องมีสเตทเมนต์ธนาคารอัปโหลดแล้ว ถึงจะมีข้อมูลแสดง — ถ้าหน้าว่าง ให้อัปสเตทเมนต์ในหน้าสาขาก่อน</p>
+</section>
+
+<!-- ── 11. Q&A ─────────────────────────────────────────── -->
 <section id="qa" class="card page">
-  <h2>10. คำถามที่พบบ่อย (Q&amp;A)</h2>
+  <h2>11. คำถามที่พบบ่อย (Q&amp;A)</h2>
 
   <div class="qa">
     <div class="q">Q1. อัปโหลดเอกสารแล้วยอดยังไม่ตรง — ทำยังไง</div>
@@ -707,7 +755,7 @@ section{scroll-margin-top:80px}
 </section>
 
 <div class="card no-print" style="text-align:center;color:var(--mut);font-size:12px">
-  Oshinei Reconciliation · เวอร์ชัน 2 (channel-first) · ปรับปรุง 2026-06-15<br>
+  Oshinei Reconciliation · เวอร์ชัน 2 (channel-first) · ปรับปรุง 2026-06-19<br>
   <a href="/app/">← กลับหน้ากระทบยอด</a> · <a href="/app/setup.html">ตั้งค่าระบบ</a> · <a href="/app/classic.html">เครื่องมือขั้นสูง</a>
 </div>
 

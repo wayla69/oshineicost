@@ -245,6 +245,10 @@ function route(){
   if(h==='wrong')return loadWrongChannel();
   if(h==='daybook')return loadDaybook();
   if(h==='dashboard')return loadDashboard();
+  if(h==='audit')return loadAudit();
+  if(h==='trend')return loadTrend();
+  if(h==='bankcov')return loadBankCov();
+  if(h==='board')return loadBoard();
   const m=h.match(/^b\/(\d+)/);
   if(m)loadBranch(+m[1]);else loadOverview();
 }
@@ -1349,6 +1353,13 @@ function moreMenu(){
       <a class="more-item" href="/app/setup.html">⚙️ ตั้งค่าระบบ ↗<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID</span></a>
       <a class="more-item" href="/app/classic.html">🧰 เครื่องมือขั้นสูง ↗<span class="lbl">หน้าเดิม — เครื่องมือครบทุกอย่าง</span></a>
     </div>
+    <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">วินิจฉัย / Diagnostics</div>
+    <div class="more-menu">
+      <a class="more-item" href="#board" onclick="closeSheet()">🗓️ Daily Board — ตารางข้ามสาขาในวันเดียว<span class="lbl">ทุกสาขา × ช่องทาง สถานะ matched/variance/ขาด · เลือกวัน · ดาวน์โหลดรายงาน PDF</span></a>
+      <a class="more-item" href="#audit" onclick="closeSheet()">📋 Audit Log — ประวัติการแก้ไข<span class="lbl">ทุกการเปลี่ยนแปลง · กรองตาม entity · ใครแก้อะไรเมื่อไร</span></a>
+      <a class="more-item" href="#trend" onclick="closeSheet()">📈 Trend Heatmap — ความคืบหน้ารายวัน<span class="lbl">ปฏิทินสีตาม lane-match% รายสาขา/เดือน · สัปดาห์ + รายวัน</span></a>
+      <a class="more-item" href="#bankcov" onclick="closeSheet()">🏦 Bank Coverage — สถานะครอบคลุมสเตทเมนต์<span class="lbl">ทุกบรรทัดสเตทเมนต์ matched/ยังรอ/ตัดออก · 3 ขั้นบัตรเครดิต</span></a>
+    </div>
     <div class="row" style="margin-top:12px"><button class="btn" style="margin-left:auto" onclick="closeSheet()">ปิด</button></div>`);
 }
 
@@ -1862,6 +1873,449 @@ async function approveWithManagerCode(sid,who){
       if(!code)throw new Error('ยกเลิก — ไม่ได้ใส่รหัสผู้จัดการ');
     }
   }
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   § DIAGNOSTIC VIEWS (Phase 1 consolidation)
+   Routes: #audit · #trend · #bankcov · #board
+   All read-only — no backend changes.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── helpers shared by session-scoped views (#trend, #bankcov) ─────────── */
+
+// Cache of branches loaded for session-scoped pickers (master branches only).
+let _DIAG_BRANCHES = null;
+async function _diagBranches(){
+  if(_DIAG_BRANCHES) return _DIAG_BRANCHES;
+  try{ _DIAG_BRANCHES = await api('/api/branches'); }catch(e){ _DIAG_BRANCHES=[]; }
+  return _DIAG_BRANCHES;
+}
+
+// Resolve session_id for a branch+month without creating one.
+// Returns null if no session exists yet.
+async function _resolveSession(branchId, month){
+  if(!branchId) return null;
+  try{
+    const list = await api(`/api/sessions?branch_id=${branchId}&period_month=${month}`);
+    return (list && list.length) ? list[0].session_id : null;
+  }catch(e){ return null; }
+}
+
+// Render a branch picker for session-scoped diagnostic views.
+// onChange calls loadFn() after updating the branch var referenced by varSetter.
+function _diagBranchPicker(branches, currentBid, onchangeExpr){
+  const opts = branches.map(b =>
+    `<option value="${b.branch_id}" ${b.branch_id==currentBid?'selected':''}>${esc(b.name)}</option>`
+  ).join('');
+  return `<select onchange="${onchangeExpr}" title="เลือกสาขา"
+    style="padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${opts}</select>`;
+}
+
+/* ── #audit — Audit log (global, read-only) ─────────────────────────────── */
+let _AUDIT_ENTITY = '';
+
+async function loadAudit(){
+  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  const ACTION_CLS = {create:'c-ok', update:'c-mut', delete:'c-err'};
+  const entityOpts = ['','session','discrepancy','manual_match','day_ack','channel_move','payment_map']
+    .map(e => `<option value="${e}" ${_AUDIT_ENTITY===e?'selected':''}>${e||'ทุก entity'}</option>`).join('');
+
+  let q = `/api/audit?limit=200`;
+  if(_AUDIT_ENTITY) q += `&entity=${encodeURIComponent(_AUDIT_ENTITY)}`;
+  let data = [];
+  try{ data = await api(q); }catch(e){}
+
+  const rows = data.length
+    ? data.map(r => {
+        const changeHtml = r.field
+          ? `<span style="color:var(--err);text-decoration:line-through;font-size:12px">${esc(String(r.old_val??'—'))}</span>`
+            +`<span style="color:var(--mut);margin:0 4px">→</span>`
+            +`<span style="color:var(--ok);font-size:12px">${esc(String(r.new_val??'—'))}</span>`
+          : (r.old_val||r.new_val ? esc(String(r.old_val??''))+' '+esc(String(r.new_val??'')) : '—');
+        return `<tr>
+          <td class="lbl" style="white-space:nowrap">${esc(r.ts||'')}</td>
+          <td><span class="chip c-mut" style="font-size:11px">${esc(r.entity||'')}</span></td>
+          <td class="lbl">${esc(String(r.entity_id??''))}</td>
+          <td><span class="chip ${ACTION_CLS[r.action]||'c-mut'}" style="font-size:11px">${esc(r.action||'')}</span></td>
+          <td class="lbl mono">${esc(r.field??'—')}</td>
+          <td style="font-size:12px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${changeHtml}</td>
+          <td class="lbl">${esc(r.by||'')}</td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--mut)">ยังไม่มีรายการ</td></tr>`;
+
+  $('app').innerHTML = header() + `
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="font-size:16px">📋 Audit Log — ประวัติการแก้ไข</h2>
+      <select onchange="_AUDIT_ENTITY=this.value;loadAudit()" title="กรอง entity"
+        style="margin-left:auto;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">${entityOpts}</select>
+    </div>
+    <div class="muted" style="margin-bottom:10px">ทุกการเปลี่ยนแปลงในระบบ — บันทึกอัตโนมัติ · แสดงล่าสุด 200 รายการ · กรองด้วย entity ด้านขวา</div>
+    <div class="card" style="padding:0;overflow:auto">
+      <table>
+        <thead><tr>
+          <th>เวลา</th><th>Entity</th><th>ID</th><th>Action</th><th>Field</th><th>เปลี่ยนจาก → ไปเป็น</th><th>โดย</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ── #trend — Trend heatmap (session-scoped: branch dropdown) ───────────── */
+let _TREND_BID = 0;
+
+async function loadTrend(){
+  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  const branches = await _diagBranches();
+  if(!_TREND_BID && branches.length) _TREND_BID = branches[0].branch_id;
+
+  const sid = await _resolveSession(_TREND_BID, MONTH);
+  const picker = _diagBranchPicker(branches, _TREND_BID, '_TREND_BID=+this.value;loadTrend()');
+
+  if(!sid){
+    $('app').innerHTML = header() + `
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="font-size:16px">📈 Trend Heatmap — ความคืบหน้ารายวัน</h2>
+        ${picker}
+      </div>
+      <div class="card c-mut" style="text-align:center;padding:32px;color:var(--mut)">
+        ยังไม่มี session — เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน
+        <br><a href="#b/${_TREND_BID}" style="margin-top:8px;display:inline-block">→ เปิดหน้าสาขา</a>
+      </div>`;
+    return;
+  }
+
+  let data;
+  try{ data = await api(`/api/sessions/${sid}/trend`); }
+  catch(e){
+    $('app').innerHTML = header() + `<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;
+    return;
+  }
+
+  const brName = (branches.find(b=>b.branch_id==_TREND_BID)||{}).name||'';
+
+  // weekly table
+  const weekly = (data.weekly||[]);
+  const pctBar = (pct) => {
+    const col = pct>=99?'var(--ok)':pct>=60?'var(--warn)':'var(--err)';
+    return `<div style="display:flex;align-items:center;gap:8px">
+      <div class="prog ${pct>=99?'':pct>=60?'p-warn':'p-err'}" style="flex:1;min-width:80px"><div style="width:${pct}%"></div></div>
+      <span style="color:${col};font-weight:700;min-width:32px;font-size:13px">${pct}%</span>
+    </div>`;
+  };
+  const weekRows = weekly.map(w => `<tr>
+    <td style="font-weight:600">${esc(w.week)}</td>
+    <td class="mono">${fmt(w.pos)}</td>
+    <td class="mono">${fmt(w.ext)}</td>
+    <td style="min-width:160px">${pctBar(w.lane_pct)}</td>
+    <td style="min-width:160px">${pctBar(w.cov_pct)}</td>
+  </tr>`).join('');
+
+  // daily heatmap cells
+  const daily = (data.daily||[]);
+  const cells = daily.map(d => {
+    const pct = d.lane_pct;
+    const bg  = pct>=99?'#dcfce7':pct>=60?'#fef9c3':d.total_lanes?'#fee2e2':'#f1f5f9';
+    const col = pct>=99?'#15803d':pct>=60?'#854d0e':d.total_lanes?'#b91c1c':'#94a3b8';
+    const dayN = d.day.slice(8);
+    const tip = `${d.day}\nLane match: ${pct}% (${d.matched}/${d.total_lanes})\nCoverage: ${d.cov_pct}%\nPOS: ${fmt(d.pos)} | Ext: ${fmt(d.ext)}`;
+    return `<div class="daycell" title="${esc(tip)}"
+      style="background:${bg};color:${col};border-color:${bg};cursor:default;text-align:center;padding:8px 4px">
+      <b style="font-size:14px">${dayN}</b>
+      <div style="font-size:11px;margin-top:2px;font-weight:700">${pct}%</div>
+      <div class="lbl" style="font-size:10px">${d.matched}/${d.total_lanes}</div>
+    </div>`;
+  }).join('');
+
+  $('app').innerHTML = header() + `
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="font-size:16px">📈 Trend Heatmap — ความคืบหน้ารายวัน</h2>
+      ${picker}
+    </div>
+    <div class="muted" style="margin-bottom:10px">${esc(brName)} · ${MONTH} · สีเขียว=ตรงครบ สีเหลือง=ตรงบางส่วน สีแดง=ยังขาด · คลิก "เปิดหน้าสาขา" เพื่อแก้ไข</div>
+    <div class="card" style="margin-bottom:14px">
+      <div class="row" style="margin-bottom:8px">
+        <b style="font-size:13.5px">สรุปรายสัปดาห์</b>
+        <a class="btn btn-sm" style="margin-left:auto" href="#b/${_TREND_BID}">→ เปิดหน้าสาขา</a>
+      </div>
+      ${weekly.length
+        ? `<table><thead><tr>
+            <th>สัปดาห์</th><th>POS</th><th>เงินเข้า</th>
+            <th style="min-width:160px">Lane match</th>
+            <th style="min-width:160px">Coverage</th>
+           </tr></thead><tbody>${weekRows}</tbody></table>`
+        : '<div class="lbl" style="text-align:center;padding:16px">ยังไม่มีข้อมูลรายวัน</div>'}
+    </div>
+    <div class="card">
+      <b style="font-size:13.5px;display:block;margin-bottom:10px">ปฏิทินรายวัน (% lane match)</b>
+      ${daily.length
+        ? `<div class="daygrid">${cells}</div>`
+        : '<div class="lbl" style="text-align:center;padding:16px">ยังไม่มีข้อมูลรายวัน</div>'}
+    </div>`;
+}
+
+/* ── #bankcov — Bank coverage (session-scoped: branch dropdown) ─────────── */
+let _BANKCOV_BID = 0;
+let _BANKCOV_FILTER = 'unmatched';
+let _BANKCOV_DATA = null;
+
+const _BC_LANE = {CASH:'เงินสด/Cash',QR:'QR',TRANSFER:'โอน/Transfer',CREDIT:'บัตร/Credit',
+                  GRAB:'Grab',LINEMAN:'Line Man',OTHER:'อื่นๆ/Other',excluded:'ตัดออก/Ignored'};
+const _BC_LINE_ST = {matched:['c-ok','✓'],unmatched:['c-warn','⌛'],excluded:['c-mut','⊘'],informational:['c-mut','·']};
+const _BC_LEG = {matched:['c-ok','✓'],mismatch:['c-err','≠'],pos_only:['c-warn','POS'],
+                 ext_only:['c-warn','+'],awaiting:['c-warn','…'],no_bank:['c-mut','—'],none:['c-mut','·']};
+function _bcLegChip(st){ const [c,s]=_BC_LEG[st]||['c-mut','·']; return `<span class="chip ${c}" style="font-size:11px">${s}</span>`; }
+
+async function loadBankCov(){
+  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+  const branches = await _diagBranches();
+  if(!_BANKCOV_BID && branches.length) _BANKCOV_BID = branches[0].branch_id;
+
+  const sid = await _resolveSession(_BANKCOV_BID, MONTH);
+  const picker = _diagBranchPicker(branches, _BANKCOV_BID, '_BANKCOV_BID=+this.value;_BANKCOV_DATA=null;loadBankCov()');
+
+  if(!sid){
+    $('app').innerHTML = header() + `
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="font-size:16px">🏦 Bank Coverage — สถานะครอบคลุมสเตทเมนต์</h2>
+        ${picker}
+      </div>
+      <div class="card c-mut" style="text-align:center;padding:32px;color:var(--mut)">
+        ยังไม่มี session — เปิดหน้าสาขาเพื่อเริ่มกระทบยอดก่อน
+        <br><a href="#b/${_BANKCOV_BID}" style="display:inline-block;margin-top:8px">→ เปิดหน้าสาขา</a>
+      </div>`;
+    return;
+  }
+
+  if(!_BANKCOV_DATA){
+    try{ _BANKCOV_DATA = await api(`/api/sessions/${sid}/bank-coverage`); }
+    catch(e){
+      $('app').innerHTML = header() + `<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;
+      return;
+    }
+  }
+  _renderBankCov(branches, picker, sid);
+}
+
+function _renderBankCov(branches, picker, sid){
+  const d = _BANKCOV_DATA||{};
+  const tot = d.totals||{};
+  const pct = tot.pct_matched ?? 100;
+  const hCol = pct>=99?'c-ok':pct>=70?'c-warn':'c-err';
+  const brName = (branches.find(b=>b.branch_id==_BANKCOV_BID)||{}).name||'';
+
+  // filter buttons
+  const fOpts = [
+    ['unmatched',`⌛ ยังรอ`,tot.unmatched||0],
+    ['matched',`✓ ตรงแล้ว`,tot.matched||0],
+    ['excluded',`⊘ ตัดออก`,tot.excluded||0],
+    ['all','ทั้งหมด',(tot.matched||0)+(tot.unmatched||0)+(tot.excluded||0)+(tot.informational||0)]
+  ].filter(([k,,n])=>n>0||k==='all')
+   .map(([k,lbl,n])=>`<button onclick="_BANKCOV_FILTER='${k}';_renderBankCov(${JSON.stringify(branches.map(b=>({branch_id:b.branch_id,name:b.name})))},${JSON.stringify(picker)},${sid})"
+     class="btn btn-sm ${_BANKCOV_FILTER===k?'btn-pri':''}">${lbl} ${n}</button>`).join('');
+
+  // CREDIT 3-way cards
+  const line=(lbl,val)=>`<div class="row" style="justify-content:space-between;font-size:13px"><span style="color:var(--sub)">${lbl}</span><span class="mono">${fmt(val)}</span></div>`;
+  const ccRows = (d.credit_three_way||[]).filter(r=>r.pos_gross>0||r.settle_gross>0||r.bank_credit>0);
+  const ccHtml = ccRows.length ? ccRows.map(r=>`
+    <div class="card" style="margin-bottom:8px">
+      <div style="font-weight:600;margin-bottom:6px">CREDIT · ${esc(r.bank)}</div>
+      ${line('ยอดรูด POS',r.pos_gross)}
+      ${line('สรุปยอดบัตร (gross)',r.settle_gross)}
+      <div class="row" style="justify-content:space-between;font-size:12px;padding-top:4px;margin-top:4px;border-top:1px solid var(--line-soft)">
+        <span class="lbl">ขั้น 1: POS ↔ สรุปยอด</span>${_bcLegChip(r.pos_leg)}</div>
+      ${line('− ค่าธรรมเนียม+VAT',r.settle_fee)}
+      ${line('ยอดสุทธิ',r.settle_net)}
+      ${line('เงินเข้าธนาคาร',r.bank_credit)}
+      <div class="row" style="justify-content:space-between;font-size:12px;padding-top:4px;margin-top:4px;border-top:1px solid var(--line-soft)">
+        <span class="lbl">ขั้น 2: ยอดสุทธิ ↔ เงินเข้า</span>${_bcLegChip(r.bank_leg)}</div>
+      ${r.settle_gross===0&&r.pos_gross>0?`<div class="chip c-warn" style="margin-top:6px;font-size:11px">⚠ ยังไม่อัปสรุปยอดบัตร</div>`:''}
+      ${r.settle_net>100&&r.bank_credit===0?`<div class="chip c-warn" style="margin-top:6px;font-size:11px">⚠ ยังไม่พบเงินเข้าธนาคาร</div>`:''}
+    </div>`).join('')
+    : '<div class="lbl">— ไม่มีบัตรเครดิตในเดือนนี้</div>';
+
+  // per-lane chips
+  const grpHtml = Object.entries(d.groups||{})
+    .map(([k,g])=>`<span class="chip ${g.unmatched?'c-warn':'c-ok'}" style="margin-right:4px;margin-bottom:4px">${_BC_LANE[k]||k}: ${g.matched}/${g.count}</span>`)
+    .join('');
+
+  // statement lines
+  let lines = (d.lines||[]);
+  if(_BANKCOV_FILTER!=='all') lines=lines.filter(l=>l.status===_BANKCOV_FILTER);
+  const linesHtml = lines.length
+    ? lines.map(l=>{
+        const [cls,sym]=_BC_LINE_ST[l.status]||['c-mut','·'];
+        const lane=(_BC_LANE[l.category]||l.category)+(l.bank&&l.bank!=='NONE'&&l.bank!=='UNKNOWN'?'·'+l.bank:'');
+        const dim=l.status==='excluded'||l.status==='informational'?'opacity:.5':'';
+        return `<tr style="${dim}">
+          <td class="lbl" style="white-space:nowrap">${esc(l.date||'—')}</td>
+          <td class="lbl">${esc(lane)}</td>
+          <td class="lbl" style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l.ref||'')}</td>
+          <td class="mono">${fmt(l.amount)}</td>
+          <td><span class="chip ${cls}" style="font-size:11px">${sym}</span></td>
+        </tr>`;
+      }).join('')
+    : `<tr><td colspan="5" style="text-align:center;padding:24px;color:var(--mut)">${_BANKCOV_FILTER==='unmatched'?'ทุกบรรทัดตรงแล้ว ✓':'—'}</td></tr>`;
+
+  $('app').innerHTML = header() + `
+    <div class="row" style="margin-bottom:10px">
+      <h2 style="font-size:16px">🏦 Bank Coverage — สถานะครอบคลุมสเตทเมนต์</h2>
+      ${picker}
+    </div>
+    <div class="muted" style="margin-bottom:10px">${esc(brName)} · ${MONTH} · ตรวจทุกบรรทัดสเตทเมนต์ว่ากระทบยอดครบ</div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row" style="margin-bottom:8px">
+        <span class="chip ${hCol}" style="font-size:14px">${tot.matched||0}/${tot.lines_total||0} ตรงแล้ว · ${pct}%</span>
+        <div class="lbl" style="margin-left:8px">✓ ${fmt(tot.amount_matched)} · ⌛ ${fmt(tot.amount_unmatched)}${tot.excluded?` · ⊘ ${fmt(tot.amount_excluded)}`:''}</div>
+      </div>
+      <div style="flex-wrap:wrap;display:flex;gap:4px">${grpHtml||'—'}</div>
+    </div>
+    ${ccRows.length?`<div class="card" style="margin-bottom:12px">
+      <b style="font-size:13.5px;display:block;margin-bottom:8px">3-ขั้นบัตรเครดิต (POS ↔ สรุปยอด ↔ เงินเข้า)</b>
+      ${ccHtml}</div>`:''}
+    <div class="card" style="padding:0">
+      <div class="row" style="padding:12px 16px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap;gap:6px">
+        <b style="font-size:13.5px">บรรทัดสเตทเมนต์</b>
+        <div class="row" style="margin-left:auto;gap:6px;flex-wrap:wrap">${fOpts}</div>
+      </div>
+      <div style="overflow:auto;max-height:480px">
+        <table><thead><tr>
+          <th>วันที่</th><th>ช่องทาง</th><th>อ้างอิง</th><th>จำนวน</th><th>สถานะ</th>
+        </tr></thead><tbody>${linesHtml}</tbody></table>
+      </div>
+    </div>`;
+}
+
+/* ── #board — Daily Board (global, all branches, one day) ───────────────── */
+let _BOARD_DATE = null;
+let _BOARD_DATES = null;   // {min_day, max_day} cached once
+
+const _BOARD_CELL = {matched:'#dcfce7',variance:'#fee2e2',pos_only:'#fef9c3',ext_only:'#fef9c3',no_source:'#f1f5f9',manual:'#dbeafe'};
+const _BOARD_FG   = {matched:'#15803d',variance:'#b91c1c',pos_only:'#854d0e',ext_only:'#854d0e',no_source:'#94a3b8',manual:'#1d4ed8'};
+
+async function loadBoard(){
+  $('app').innerHTML = header() + '<div class="muted">กำลังโหลด…</div>';
+
+  // fetch date bounds once
+  if(!_BOARD_DATES){
+    try{ _BOARD_DATES = await api('/api/daily-board/dates'); }catch(e){ _BOARD_DATES={}; }
+  }
+  if(!_BOARD_DATE) _BOARD_DATE = _BOARD_DATES.max_day || MONTH+'-01';
+
+  let data;
+  try{ data = await api('/api/daily-board?day='+_BOARD_DATE); }
+  catch(e){
+    $('app').innerHTML = header() + `<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;
+    return;
+  }
+  _renderBoard(data);
+}
+
+function _boardStep(delta){
+  const d = new Date((_BOARD_DATE||MONTH+'-01')+'T00:00:00');
+  d.setDate(d.getDate()+delta);
+  _BOARD_DATE = d.toISOString().slice(0,10);
+  loadBoard();
+}
+function _boardPickDate(v){ if(v){ _BOARD_DATE=v; loadBoard(); } }
+
+function _renderBoard(d){
+  const cats = d.categories||[];
+  const meta = d.column_meta||{};
+  const lbl  = c=>(meta[c]&&meta[c].label)||c;
+  const varTxt2 = v=>{ const n=+v||0; return Math.abs(n)<1?'✓':`${n>0?'+':''}${fmt(n)}`; };
+  const varCls2 = v=>{ const n=+v||0; return Math.abs(n)<1?'c-ok':n<0?'c-err':'c-warn'; };
+
+  // summary strip
+  const tot = d.totals||{};
+
+  // header row
+  const thCats = cats.map(c=>`<th>${esc(lbl(c))}</th>`).join('');
+
+  // body rows
+  const bodyRows = d.branches.map(b=>{
+    const cells = cats.map(c=>{
+      const cell = b.cells[c];
+      if(!cell) return '<td style="text-align:right;color:var(--mut)">·</td>';
+      const cm = meta[c]||{};
+      const tip = `${esc(b.branch_name)} · ${esc(lbl(c))}\nPOS ${fmt(cell.pos)} / เงินเข้า ${fmt(cell.ext)}\nต่าง ${varTxt2(cell.variance)} (${cell.status})`;
+      return `<td style="text-align:right"><span title="${tip}"
+        style="display:inline-block;min-width:60px;padding:2px 7px;border-radius:6px;cursor:default;
+               font-variant-numeric:tabular-nums;font-size:12px;font-weight:600;
+               background:${_BOARD_CELL[cell.status]||'#f1f5f9'};color:${_BOARD_FG[cell.status]||'#475569'}"
+        >${fmt(cell.pos)}</span></td>`;
+    }).join('');
+    return `<tr>
+      <td style="font-weight:500;white-space:nowrap">${esc(b.branch_name)}${b.issues?` <span class="chip c-err" style="font-size:10px">${b.issues}</span>`:''}</td>
+      ${cells}
+      <td class="mono">${fmt(b.pos_total)}</td>
+      <td class="mono" style="color:var(--sub)">${fmt(b.ext_total)}</td>
+      <td><span class="chip ${varCls2(b.variance)}" style="font-size:11px">${varTxt2(b.variance)}</span></td>
+      <td style="text-align:right;white-space:nowrap">
+        <a class="lbl" href="/api/daily-report?day=${_BOARD_DATE}&branch_id=${b.branch_id}" target="_blank" title="รายงาน PDF">📄</a>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // footer totals
+  const bc = tot.by_category||{};
+  const footCats = cats.map(c=>`<td class="mono">${fmt((bc[c]||{}).pos)}</td>`).join('');
+
+  // unmapped notice
+  const unmapped = d.unmapped&&d.unmapped.length
+    ? `<div class="card c-warn" style="margin-bottom:10px">
+        <b>⚠ Unmapped POS codes (ไม่ถูกรวมในตาราง):</b>
+        ${d.unmapped.map(u=>`<span class="chip c-warn" style="margin-left:6px">${esc(u.code)}: ${fmt(u.amount)}</span>`).join('')}
+        — <a href="/app/setup.html">ตั้งค่ารหัส</a>
+      </div>` : '';
+
+  const emptyMsg = !d.branches.length
+    ? `<div class="card" style="text-align:center;padding:32px;color:var(--mut)">ยังไม่มีรายการวันที่ ${esc(_BOARD_DATE)} — เลือกวันอื่น หรือซิงก์ข้อมูล POS</div>`
+    : '';
+
+  $('app').innerHTML = header() + `
+    <div class="row" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <h2 style="font-size:16px">🗓️ Daily Board — ทุกสาขาในวันเดียว</h2>
+      <div class="row" style="gap:6px;margin-left:auto;flex-wrap:nowrap">
+        <button class="btn btn-sm" onclick="_boardStep(-1)">◀</button>
+        <input type="date" value="${esc(_BOARD_DATE)}"
+          min="${esc(_BOARD_DATES&&_BOARD_DATES.min_day||'')}"
+          max="${esc(_BOARD_DATES&&_BOARD_DATES.max_day||'')}"
+          onchange="_boardPickDate(this.value)"
+          style="padding:5px 8px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit">
+        <button class="btn btn-sm" onclick="_boardStep(1)">▶</button>
+        <a class="btn btn-sm" href="/api/daily-report?day=${esc(_BOARD_DATE)}" target="_blank" title="รายงาน PDF ทุกสาขา">🖨️ PDF ทุกสาขา</a>
+      </div>
+    </div>
+    <div class="muted" style="margin-bottom:10px">ยอด POS ต่อช่องทาง · สี: <span style="background:#dcfce7;color:#15803d;padding:1px 6px;border-radius:4px;font-size:12px">✓ ตรง</span> <span style="background:#fee2e2;color:#b91c1c;padding:1px 6px;border-radius:4px;font-size:12px">≠ ต่าง</span> <span style="background:#fef9c3;color:#854d0e;padding:1px 6px;border-radius:4px;font-size:12px">ขาดเอกสาร</span></div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row" style="flex-wrap:wrap;gap:16px">
+        <div><div class="lbl">POS รวมทุกสาขา</div><b class="mono" style="font-size:18px">${fmt(tot.pos)}</b></div>
+        <div><div class="lbl">เงินเข้าจริง</div><b class="mono" style="font-size:18px;color:var(--sub)">${fmt(tot.ext)}</b></div>
+        <div><div class="lbl">ผลต่าง</div><b class="mono" style="font-size:18px"><span class="chip ${varCls2(tot.variance)}">${varTxt2(tot.variance)}</span></b></div>
+        <div><div class="lbl">สาขารายงาน</div><b style="font-size:18px">${tot.branches_reporting||0}${tot.branches_with_issues?` · <span style="color:var(--warn)">${tot.branches_with_issues}⚠</span>`:''}</b></div>
+      </div>
+    </div>
+    ${unmapped}
+    ${emptyMsg}
+    ${d.branches.length?`<div class="card" style="padding:0;overflow:auto">
+      <table>
+        <thead><tr>
+          <th style="text-align:left">สาขา</th>
+          ${thCats}
+          <th>POS รวม</th><th>เงินเข้า</th><th>ต่าง</th><th></th>
+        </tr></thead>
+        <tbody>${bodyRows}</tbody>
+        <tfoot><tr style="background:var(--line-soft);font-weight:600">
+          <td>รวมทุกสาขา</td>
+          ${footCats}
+          <td class="mono">${fmt(tot.pos)}</td>
+          <td class="mono" style="color:var(--sub)">${fmt(tot.ext)}</td>
+          <td><span class="chip ${varCls2(tot.variance)}" style="font-size:11px">${varTxt2(tot.variance)}</span></td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>`:''}`;
 }
 
 route();
