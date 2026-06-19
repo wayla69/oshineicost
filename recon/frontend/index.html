@@ -1398,39 +1398,8 @@ function showSheet(html){
 }
 function closeSheet(){const o=$('sheet');if(o)o.style.display='none';}
 
-/* ── Phase 4 #2: เมนู "เพิ่มเติม" — รวมลิงก์ส่วนหัวที่ใช้ไม่บ่อย ── */
-function moreMenu(){
-  showSheet(`<div class="sheet-h">เพิ่มเติม</div>
-    <div class="more-menu">
-      <a class="more-item" href="/api/monthly-report?period_month=${MONTH}" target="_blank">🖨️ รายงานการจับคู่รายวัน (ทุกสาขา)<span class="lbl">ไล่ทุกวัน × ช่องทาง · ตรวจจับคู่ถูกครบ · พิมพ์ PDF</span></a>
-      <a class="more-item" href="#dashboard" onclick="closeSheet()">📊 รายได้ตามช่องทาง รายวัน (Dashboard)<span class="lbl">เลือกวันจากปฏิทิน · เห็นทุกสาขาแยกช่องทางในวันเดียว + ยอดรวม</span></a>
-      <a class="more-item" href="#daybook" onclick="closeSheet()">📅 สรุปบัญชีรายวัน (รายใบ)<span class="lbl">แต่ละวัน = 1 ใบ · ยอดเต็ม/ส่วนลดแยกบรรทัด · เลือกสาขา · พิมพ์ PDF</span></a>
-      <a class="more-item" href="/api/reports/outstanding-docs.print?period_month=${MONTH}" target="_blank">📥 ติดตามเอกสารที่ยังขาด<span class="lbl">รายสาขา/เดือน · เอกสารต้องอัป + ยอดที่รอ · พิมพ์ PDF</span></a>
-      <a class="more-item" href="#wrong" onclick="closeSheet()">⇄ รายงานเงินบันทึกผิดช่อง<span class="lbl">สรุป + ใบเซ็นรับทราบส่งสาขา</span></a>
-      <a class="more-item" href="#errors" onclick="closeSheet()">📊 รายงานข้อผิดพลาดการบันทึก<span class="lbl">รายสาขา/เดือน — ประเมินพนักงาน</span></a>
-      <a class="more-item" href="#coupon" onclick="closeSheet()">🎟️ วิเคราะห์คูปองซีรีส์ (Coupon Series)<span class="lbl">ส่วนลดแยกตามซีรีส์คูปอง · ทุกสาขา · ดูรายสาขา/รายวัน · MoM</span></a>
-      <a class="more-item" href="/api/statement-codes.html" target="_blank">📖 พจนานุกรมรหัสในสเตทเมนต์<span class="lbl">รหัสธนาคาร → ความหมาย → ช่องทาง · ให้ทีมตรวจ</span></a>
-      <a class="more-item" href="/api/uat-signoff?period_month=${MONTH}" target="_blank">✅ ใบทดสอบ + รับรองการใช้งาน (UAT)<span class="lbl">เช็กลิสต์ทดสอบ + คำอธิบาย + ช่องเซ็นรับรอง · พิมพ์ PDF</span></a>
-      <a class="more-item" href="/app/help.html">📖 คู่มือการใช้งาน ↗<span class="lbl">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</span></a>
-      <a class="more-item" href="#setup" onclick="closeSheet()">⚙️ ตั้งค่าระบบ<span class="lbl">จับคู่รหัสรับเงิน วิธีกระทบยอด บัญชี/MID · รหัสสเตทเมนต์</span></a>
-      <a class="more-item" href="/app/classic.html">🧰 เครื่องมือขั้นสูง ↗<span class="lbl">หน้าเดิม — เครื่องมือครบทุกอย่าง</span></a>
-    </div>
-    <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">บัญชี / งานสาขา (เลือกสาขาก่อนใช้)</div>
-    <div class="more-menu">
-      <a class="more-item" href="${DATA&&DATA.branch_id?'#payout?bid='+DATA.branch_id:'#'}" onclick="closeSheet()"
-        ${DATA&&DATA.branch_id?'':'title="เปิดหน้าสาขาก่อน"'}>💳 ตรวจเงินเข้าธนาคาร (Payout Matching)<span class="lbl">ยอดสุทธิ ↔ เงินโอน Grab/Line Man/บัตร · แยกรายวัน · สถานะ matched/รอเข้า · KTC 2-ทาง</span></a>
-      <a class="more-item" href="${DATA&&DATA.branch_id?'#discrepancies?bid='+DATA.branch_id:'#'}" onclick="closeSheet()"
-        ${DATA&&DATA.branch_id?'':'title="เปิดหน้าสาขาก่อน"'}>⚙️ จัดการข้อแตกต่าง (Discrepancies Admin)<span class="lbl">กรอง/จัดเรียง · resolve ทีละแถว · bulk-resolve · มอบหมาย · drill รายวัน (ทีมยังใช้)</span></a>
-    </div>
-    <div class="lbl" style="margin:10px 0 4px 2px;font-weight:700;letter-spacing:.03em">วินิจฉัย / Diagnostics</div>
-    <div class="more-menu">
-      <a class="more-item" href="#board" onclick="closeSheet()">🗓️ Daily Board — ตารางข้ามสาขาในวันเดียว<span class="lbl">ทุกสาขา × ช่องทาง สถานะ matched/variance/ขาด · เลือกวัน · ดาวน์โหลดรายงาน PDF</span></a>
-      <a class="more-item" href="#audit" onclick="closeSheet()">📋 Audit Log — ประวัติการแก้ไข<span class="lbl">ทุกการเปลี่ยนแปลง · กรองตาม entity · ใครแก้อะไรเมื่อไร</span></a>
-      <a class="more-item" href="#trend" onclick="closeSheet()">📈 Trend Heatmap — ความคืบหน้ารายวัน<span class="lbl">ปฏิทินสีตาม lane-match% รายสาขา/เดือน · สัปดาห์ + รายวัน</span></a>
-      <a class="more-item" href="#bankcov" onclick="closeSheet()">🏦 Bank Coverage — สถานะครอบคลุมสเตทเมนต์<span class="lbl">ทุกบรรทัดสเตทเมนต์ matched/ยังรอ/ตัดออก · 3 ขั้นบัตรเครดิต</span></a>
-    </div>
-    <div class="row" style="margin-top:12px"><button class="btn" style="margin-left:auto" onclick="closeSheet()">ปิด</button></div>`);
-}
+/* moreMenu() removed in เฟส 6 (2026-06-19): the ⋯ sheet was superseded by the
+   4-zone nav (เฟส 5) + Reports Hub (#reports). All its links live there now. */
 
 const FEE_SOURCE={CREDIT:'credit_card',GRAB:'grab',LINEMAN:'lineman'};
 const C3_LEG={matched:['c-ok','✓ ตรง'],mismatch:['c-err','≠ ต่าง'],pos_only:['c-warn','รอสรุปยอดบัตร'],
@@ -3083,14 +3052,6 @@ function loadReports(){
         <div class="rpt-title">คู่มือการใช้งาน</div>
         <div class="rpt-desc">ทุกเมนู ทุกเอกสาร + Q&amp;A · พิมพ์ได้</div>
         <span class="rpt-badge ext">เปิดใหม่ ↗</span>
-      </div>
-    </a>
-    <a class="rpt-item" href="/app/classic.html" target="_blank" rel="noopener">
-      <span class="rpt-icon">🧰</span>
-      <div class="rpt-body">
-        <div class="rpt-title">เครื่องมือขั้นสูง (Legacy)</div>
-        <div class="rpt-desc">หน้าเดิม — ใช้งานระหว่างการย้ายฟีเจอร์</div>
-        <span class="rpt-badge ext">classic ↗</span>
       </div>
     </a>
   </div>`;

@@ -439,7 +439,7 @@ section{scroll-margin-top:80px}
     <div class="k">ตัวเลขในตาราง</div><div>จำนวนใช้ · มูลค่าส่วนลด · MoM (เทียบช่วงก่อน — ▲แดง=ส่วนลดมากขึ้น ▼เขียว=น้อยลง) · % ของรวม</div>
     <div class="k">Drill</div><div>คลิกแถวซีรีส์ใด → แสดง <b>แยกรายสาขา</b> + <b>แยกรายวัน</b> ของซีรีส์นั้น · กด ✕ เพื่อปิด drill</div>
     <div class="k">ความสอดคล้องบัญชี</div><div>ยอดรวมในหน้านี้อ้างอิง <code>pos_coupon_day.discount_amount</code> — ตัวเลขเดียวกับบรรทัด "ส่วนลด/โปรโมชัน" ในร่างบัญชีรายวัน</div>
-    <div class="k">หมายเหตุ</div><div>แทนที่ลิงก์เดิมที่ส่งไปหน้า classic.html (เฟส 2 consolidation, 2026-06-19) — classic.html ยังเข้าถึงได้ผ่านเมนู เครื่องมือขั้นสูง จนถึงเฟส 6</div>
+    <div class="k">หมายเหตุ</div><div>วิเคราะห์คูปองซีรีส์อยู่ในแอปหลักแล้ว (route <code>#coupon</code>) — หน้าเดิม classic.html ถูกยกเลิกใน เฟส 6 (2026-06-19)</div>
   </div>
 
   <h3 id="ch-payout">5.9 ตรวจเงินเข้าธนาคาร — Payout Matching (#payout)</h3>
@@ -796,8 +796,8 @@ section{scroll-margin-top:80px}
   </div>
 
   <div class="qa">
-    <div class="q">Q13. "เครื่องมือขั้นสูง" ใช้เมื่อไหร่</div>
-    <div class="a">หน้าหลักครอบคลุมงานปกติทั้งหมดแล้ว — เครื่องมือขั้นสูง (classic) สำรองไว้สำหรับ: อัปโหลดข้อมูลดิบ POS, ดูคูปองซีรีส์ที่ไม่ใช่ KTC/BAY, แก้การจับคู่ที่ระบบเดาผิด</div>
+    <div class="q">Q13. "เครื่องมือขั้นสูง" (classic) หายไปไหน</div>
+    <div class="a">ถูกยกเลิกใน เฟส 6 (2026-06-19) — ทุกฟีเจอร์ย้ายเข้าแอปเดียวแล้ว เข้าถึงได้จากแถบนำทาง 4 โซน: อัปโหลดเอกสาร (หน้าสาขา), คูปองซีรีส์ (<code>#coupon</code>), แก้การจับคู่ (ปุ่ม "จับคู่เอง" ในหน้าสาขา), Daily Board / Trend / Audit / Bank Coverage (โซน 🔎 วินิจฉัย และ ⚙️ Admin), ตั้งค่า (<code>#setup</code>)</div>
   </div>
 
   <div class="qa">
@@ -814,7 +814,7 @@ section{scroll-margin-top:80px}
 
 <div class="card no-print" style="text-align:center;color:var(--mut);font-size:12px">
   Oshinei Reconciliation · เวอร์ชัน 2 (channel-first) · ปรับปรุง 2026-06-19<br>
-  <a href="/app/">← กลับหน้ากระทบยอด</a> · <a href="/app/setup.html">ตั้งค่าระบบ</a> · <a href="/app/classic.html">เครื่องมือขั้นสูง</a>
+  <a href="/app/">← กลับหน้ากระทบยอด</a> · <a href="/app/#setup">ตั้งค่าระบบ</a>
 </div>
 
 </div>
