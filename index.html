@@ -3803,6 +3803,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </div>
 
 <div id="tab-discounts" style="display:none">
+  <!-- Day filter — overrides global month picker for this tab only -->
+  <div class="card p-4 mb-5 flex items-center gap-3 flex-wrap">
+    <span class="text-sm font-semibold" style="color:var(--text-main)">ดูรายวัน</span>
+    <input type="date" id="disc-day-picker" class="border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
+           oninput="_tabLastKey.discounts=null;loadDiscountsTab()">
+    <button onclick="document.getElementById('disc-day-picker').value='';_tabLastKey.discounts=null;loadDiscountsTab()"
+            class="text-xs border border-slate-200 rounded-lg px-3 py-1.5" style="color:var(--text-muted)">
+      ล้าง (กลับรายเดือน)
+    </button>
+    <span id="disc-day-note" class="text-xs hidden" style="color:#d97706">* เหตุผลส่วนลด/Alert ใช้ข้อมูลรายเดือน</span>
+  </div>
+
   <div id="disc-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
 
   <!-- Discount risk Alert Center -->
@@ -22307,20 +22319,36 @@ async function loadDiscountLeakage(params, gen) {
 }
 
 async function loadDiscountsTab() {
-  const _fk = _filterKey(); if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
+  const dayVal = (document.getElementById('disc-day-picker') || {}).value || '';
+  const _fk = _filterKey() + '|d:' + dayVal;
+  if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const gen = loadGen;
+
+  const noteEl = document.getElementById('disc-day-note');
   const params = new URLSearchParams();
-  if (getBranch())    params.set('branch', getBranch());
-  if (getMonthFrom()) params.set('month_from', getMonthFrom());
-  if (getMonthTo())   params.set('month_to', getMonthTo());
+  if (getBranch()) params.set('branch', getBranch());
+  if (dayVal) {
+    params.set('date_from', dayVal);
+    params.set('date_to', dayVal);
+    if (noteEl) noteEl.classList.remove('hidden');
+  } else {
+    if (getMonthFrom()) params.set('month_from', getMonthFrom());
+    if (getMonthTo())   params.set('month_to', getMonthTo());
+    if (noteEl) noteEl.classList.add('hidden');
+  }
 
   loadDiscountReasons(new URLSearchParams(params), gen);
   loadCouponSeries(new URLSearchParams(params), gen);
   // Per-branch leakage view is a cross-branch comparison by design → ignore the
   // branch filter, honour only the period range.
   const _leakP = new URLSearchParams();
-  if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
-  if (getMonthTo())   _leakP.set('month_to', getMonthTo());
+  if (dayVal) {
+    _leakP.set('date_from', dayVal);
+    _leakP.set('date_to', dayVal);
+  } else {
+    if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
+    if (getMonthTo())   _leakP.set('month_to', getMonthTo());
+  }
   loadDiscountLeakage(_leakP, gen);
   loadPaymentDiscount(new URLSearchParams(_leakP), gen);
   loadDiscountAlerts(new URLSearchParams(_leakP), gen);

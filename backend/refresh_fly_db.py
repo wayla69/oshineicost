@@ -50,14 +50,39 @@ def find_flyctl():
     return str(cand) if cand.exists() else None
 
 
+def _parse_token_file(path: Path) -> str | None:
+    """Return the first valid token from a token file.
+    Accepts both bare hex tokens and 'label:hex' lines (multi-user format)."""
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            _, tok = line.split(":", 1)
+            tok = tok.strip()
+            if tok:
+                return tok
+        else:
+            return line
+    return None
+
+
 def get_token(args):
     if args.token:
-        return args.token.strip()
+        tok = args.token.strip()
+        # Handle 'label:hex' passed directly — extract just the hex part
+        if ":" in tok:
+            tok = tok.split(":", 1)[1].strip()
+        return tok
     if os.environ.get("OSHINEI_SEED_TOKEN"):
         return os.environ["OSHINEI_SEED_TOKEN"].strip()
-    f = HERE / ".seed_token.txt"
-    if f.exists():
-        return f.read_text(encoding="utf-8").strip()
+    # Accept both .seed_token.txt (bare) and .seed_tokens.txt (multi-user label:hex)
+    for name in (".seed_token.txt", ".seed_tokens.txt"):
+        f = HERE / name
+        if f.exists():
+            tok = _parse_token_file(f)
+            if tok:
+                return tok
     sys.exit("No token found. Pass --token, set $OSHINEI_SEED_TOKEN, "
              "or create backend/.seed_token.txt")
 

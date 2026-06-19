@@ -675,6 +675,36 @@ def _month_range_filter(
         params["month_to"] = mt
 
 
+def _apply_period_filter(
+    filters: list, params: dict,
+    date_from: Optional[str] = None, date_to: Optional[str] = None,
+    month_from: Optional[str] = None, month_to: Optional[str] = None,
+    month: Optional[str] = None,
+    day_col: str = "DATE(st.sold_at)",
+    month_col: str = "strftime('%Y-%m', st.sold_at)",
+):
+    """Apply day-level or month-level filter depending on which params are set.
+    When date_from/date_to are present, filters by calendar date (day granularity).
+    Otherwise falls back to month-level via _month_range_filter."""
+    if date_from or date_to:
+        if date_from:
+            filters.append(f"{day_col} >= :date_from")
+            params["date_from"] = date_from
+        if date_to:
+            filters.append(f"{day_col} <= :date_to")
+            params["date_to"] = date_to
+    else:
+        _month_range_filter(filters, params, month_from, month_to, month, col=month_col)
+
+
+def _eff_month_range(date_from, date_to, month_from, month_to, month):
+    """When a date filter is active, return the month strings that cover that range
+    (for use with monthly-aggregated tables like pos_discount_month)."""
+    if date_from or date_to:
+        return (date_from[:7] if date_from else None), (date_to[:7] if date_to else None)
+    return (month_from or month), (month_to or month)
+
+
 # ---------------------------------------------------------------------------
 # Root  -  serve dashboard HTML
 # ---------------------------------------------------------------------------
@@ -6392,6 +6422,8 @@ def analysis_discounts(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
 ):
     """Discount analysis: overall summary, by branch, trend (all months), top cashiers."""
     filters = ["b.name != 'ALL'"]
@@ -6399,7 +6431,7 @@ def analysis_discounts(
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
-    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
 
     # Trend always spans all months  -  ignore the month param
@@ -6568,6 +6600,8 @@ def analysis_discount_bills(
     reprinted_only: bool            = Query(False, description="only bills printed more than once"),
     sort:           str             = Query("discount", pattern="^(discount|pct|date|total|reprints)$"),
     limit:          int             = Query(100, ge=1, le=1000),
+    date_from:      Optional[str]   = Query(None),
+    date_to:        Optional[str]   = Query(None),
 ):
     """Receipt-level drill-down of discounted bills, newest/biggest first.
 
@@ -6616,7 +6650,7 @@ def analysis_discount_bills(
         if max_pct is not None:
             filters.append(f"{base_expr} > 0 AND 100.0 * st.discount / {base_expr} < :max_pct")
             params["max_pct"] = max_pct
-    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
 
     order = {
@@ -6803,6 +6837,8 @@ def analysis_discount_leakage(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
 ):
     """Per-branch discount KPI boxes for the 'Discounts & Leakage' view, plus a
     cross-branch comparison and an 'abnormal usage' summary.
@@ -6817,8 +6853,9 @@ def analysis_discount_leakage(
     base_expr = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
     filters = ["b.name != 'ALL'"]
     params: dict = {}
-    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
+    eff_mf, eff_mt = _eff_month_range(date_from, date_to, month_from, month_to, month)
 
     with get_db() as con:
         rows = con.execute(f"""
@@ -6840,7 +6877,7 @@ def analysis_discount_leakage(
         reason_rows = []
         if reasons_staged:
             rfilters = ["b.name != 'ALL'"]; rparams: dict = {}
-            _month_range_filter(rfilters, rparams, month_from, month_to, month, col="dm.period_month")
+            _month_range_filter(rfilters, rparams, eff_mf, eff_mt, col="dm.period_month")
             reason_rows = con.execute(f"""
                 SELECT b.name AS branch, COALESCE(dm.reason_id,0) AS reason_id,
                        COALESCE(dr.reason_desc,
@@ -6933,6 +6970,8 @@ def analysis_payment_discount(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
 ):
     """Payment-method × discount cross-analysis for the Discounts tab:
       • mix       — payment-code split on discounted bills (by dominant code)
@@ -6947,7 +6986,7 @@ def analysis_payment_discount(
     HEAVY = 0.20   # discount >= 20% of the (pre-discount) bill = "heavy"
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
-    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
 
     with get_db() as con:
@@ -7015,6 +7054,8 @@ def analysis_discount_alerts(
     month:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
+    date_to:    Optional[str] = Query(None),
 ):
     """Prioritized discount-risk flags so leakage/fraud is seen without drilling:
       • cash_heavy — branches with big cash + heavy-discount (≥20%) totals
@@ -7032,8 +7073,9 @@ def analysis_discount_alerts(
           "void_min": 20000}
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
-    _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
+    _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
+    eff_mf, eff_mt = _eff_month_range(date_from, date_to, month_from, month_to, month)
     flags = []
     def thb(x): return f"{(x or 0):,.0f}"
     with get_db() as con:
@@ -7071,7 +7113,7 @@ def analysis_discount_alerts(
         # 2) untyped-reason share high, by branch (from pos_discount_month)
         if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_discount_month'").fetchone():
             rf = ["b.name!='ALL'"]; rp: dict = {}
-            _month_range_filter(rf, rp, month_from, month_to, month, col="dm.period_month")
+            _month_range_filter(rf, rp, eff_mf, eff_mt, col="dm.period_month")
             for r in con.execute(f"""
                 SELECT b.name br, ROUND(SUM(dm.amount)) tot,
                        ROUND(SUM(CASE WHEN COALESCE(dm.reason_id,0)=0 THEN dm.amount ELSE 0 END)) unty
@@ -7160,7 +7202,7 @@ def analysis_discount_alerts(
             ccols = set()
         if "discount" in ccols:
             vf = ["b.name!='ALL'"]; vp: dict = {}
-            _month_range_filter(vf, vp, month_from, month_to, month, col="cd.period_month")
+            _month_range_filter(vf, vp, eff_mf, eff_mt, col="cd.period_month")
             for r in con.execute(f"""
                 SELECT b.name br, COUNT(*) n, ROUND(SUM(cd.discount)) disc
                 FROM pos_cancel_bill_detail cd JOIN branches b ON b.branch_id=cd.branch_id

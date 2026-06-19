@@ -67,6 +67,7 @@ BRANCH_ALIAS = {
     #    "OSHINEI " prefix (+ "(1)"/"1" suffix) on several branches that the CSV
     #    export did not — without these, sync_mssql silently dropped them into
     #    skipped_rev and the dashboard showed them as zero (2026-06: ขอนแก่น et al).
+    # "OSHINEI " (space) variants:
     "OSHINEI ขอนแก่น (1)":      "ขอนแก่น",
     "OSHINEI โคราช2":           "โคราช2",
     "OSHINEI ฉะเชิงเทรา":       "ฉะเชิงเทรา",
@@ -76,6 +77,24 @@ BRANCH_ALIAS = {
     "OSHINEI มุกดาหาร1":        "มุกดาหาร",
     "OSHINEI ลพบุรี (1)":       "ลพบุรี",
     "OSHINEI ศรีสะเกษ":         "ศรีสะเกษ",
+    # "OSHINEI" (no space) variants — MSSQL renamed these 2026-06:
+    "OSHINEIอุบลราชธานี":       "อุบลราชธานี",
+    "OSHINEIนครปฐม":            "นครปฐม",
+    "OSHINEIระยอง":             "ระยอง",
+    "OSHINEIอุดรธานี":          "อุดรธานี",
+    "OSHINEIร้อยเอ็ด":          "ร้อยเอ็ด",
+    "OSHINEIเชียงราย":          "เชียงราย",
+    "OSHINEIโคราช1":            "โคราช1",
+    "OSHINEIเชียงใหม่":         "เชียงใหม่",
+    "OSHINEIพิษณุโลก":          "พิษณุโลก",
+    "OSHINEIพัทยา":             "พัทยา",
+    "OSHINEIมหาสารคาม":         "มหาสารคาม",
+    "OSHINEIรังสิต":            "รังสิต",
+    "OSHINEIสุพรรณบุรี":        "สุพรรณบุรี",
+    "OSHINEIสุรินทร์":          "สุรินทร์",
+    "OSHINEIสกลนคร":            "สกลนคร",
+    "OSHINEIนครพนม":            "นครพนม",
+    "OSHINEIอยุธยา":            "อยุธยา",
 }
 
 CURATED = rr.CURATED
