@@ -422,17 +422,16 @@ def _flush_cards(cards):
                              pct_disp, metrics[1][0], e.get("risk","ต่ำ")))
     endpage()
 
-for i in range(0, len(TRANSFORMS), 2):
-    grp = TRANSFORMS[i:i+2]
-    _flush_cards(grp)
-    for e in grp:
-        if "save_num" in e:
-            gross_save += e["save_num"]
-        else:
-            fu = e.get("from_override", _agg(e["src"])[0])
-            qty = e.get("qty_override", _agg(e["src"])[1])
-            tu = sum(c for _,_,c in e["bom"] if isinstance(c,(int,float))) if e["bom"] else 0.0
-            gross_save += qty*(fu - tu)*ANN
+# one detailed card per page (avoids PDF overflow/clipping; clean footers)
+for e in TRANSFORMS:
+    _flush_cards([e])
+    if "save_num" in e:
+        gross_save += e["save_num"]
+    else:
+        fu = e.get("from_override", _agg(e["src"])[0])
+        qty = e.get("qty_override", _agg(e["src"])[1])
+        tu = sum(c for _,_,c in e["bom"] if isinstance(c,(int,float))) if e["bom"] else 0.0
+        gross_save += qty*(fu - tu)*ANN
 
 # ---- 3.5 savings model summary ----
 page()

@@ -105,7 +105,9 @@ w('<div class="callout"><div class="ct">จุดที่ต้องเข้�
   '<p><b>Pre-rigor ไม่ได้ “เพิ่ม yield” ของปลาทั้งตัว</b> — งานวิจัยพบว่า yield การแล่ pre-rigor กับ post-rigor '
   '<b>ไม่ต่างกันอย่างมีนัยสำคัญ</b>. คันโยก yield ตัวจริงคือการซื้อเป็น <b>saku/loin (FAS)</b> (ข้อ 4.1). '
   'บทบาทของ pre-rigor คือ <b>“ล็อกต้นทุน + ลด gaping + คงความสด”</b> — '
-  'ทางที่ดีที่สุดคือสั่งเป็น <b>saku/loin ที่แล่และแช่แข็งขณะ pre-rigor (frozen-pre-rigor)</b> เพื่อได้ทั้งสองข้อ.</p></div>')
+  'ทางที่ดีที่สุดคือสั่งเป็น <b>saku/loin ที่แล่และแช่แข็งขณะ pre-rigor (frozen-pre-rigor)</b> เพื่อได้ทั้งสองข้อ. '
+  '<b>หมายเหตุ:</b> งานวิจัย pre-rigor ข้างต้นทำกับปลาตระกูล salmonid '
+  '(ครอบคลุมทั้งแซลมอนและ <b>เทราต์</b> ซึ่งเป็นวัตถุดิบจริงของเรา — ดูส่วนที่ 4.5) จึงใช้กับเทราต์ได้เช่นกัน.</p></div>')
 w('<p class="small">แหล่ง: Nofima / Einen et al., “Freezing of pre-rigor fillets of Atlantic salmon”, Aquaculture 212 (2002); '
   'tandfonline — Pre-/In-/Post-rigor filleting of Atlantic salmon; Norwegian Seafood Council; '
   'kitchencost.app/Chefs-Resources (saku yield).</p>')

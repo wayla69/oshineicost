@@ -336,7 +336,7 @@ w('<div class="meta">'
   '<b>ข้อมูลตลาด:</b> งานวิจัย/สถิติสาธารณะ (กสิกรฯ, SCB EIC, JETRO, LINE MAN Wongnai, Norwegian Seafood Council ฯลฯ)</div>')
 w('<div class="kpis">')
 w(f'<div class="k"><div class="n">{FOODPCT:.1f}%</div><div class="l">ต้นทุนอาหารบุฟเฟ่ต์<br>(เป้าหมายดี 30–45%)</div></div>')
-w(f'<div class="k"><div class="n">{SALMON_SHARE:.0f}%</div><div class="l">ต้นทุนมาจากแซลมอน<br>วัตถุดิบเดียว</div></div>')
+w(f'<div class="k"><div class="n">{SALMON_SHARE:.0f}%</div><div class="l">ต้นทุนจากปลาเนื้อส้ม<br>(เทราต์ — ดู 4.5)</div></div>')
 w(f'<div class="k"><div class="n">฿{SAVE_LO}–{SAVE_HI}M</div><div class="l">โอกาสประหยัด/ปี<br>โดยไม่ลดคุณค่าที่ลูกค้าเห็น</div></div>')
 w('</div>')
 w('<div class="meta" style="margin-top:26px;color:var(--muted);font-size:11px">20 มิถุนายน 2569 · ฉบับที่ 2 (ปรับเป็น Buffet 100% + เพิ่มงานวิจัยตลาด)</div>')
