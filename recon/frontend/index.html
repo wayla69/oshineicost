@@ -333,6 +333,7 @@ function route(){
   if(h==='certificate')return loadCertificate();
   if(h==='closereg')return loadCloseRegister();
   if(h==='accepted')return loadAcceptedVariance();
+  if(h==='auditlog')return loadAuditTrail();
   if(h==='setup')return loadSetup();
   if(h.startsWith('payout'))return loadPayout(h);
   if(h.startsWith('discrepancies'))return loadDiscrepancies(h);
@@ -841,6 +842,7 @@ async function loadBranch(bid){
     <span class="chip ${closed?'c-ok':st==='in_review'?'c-warn':'c-mut'}">${SES_ST[st]}</span>
     ${closed?`<span class="lbl">โดย ${esc(ses.approved_by||'ผู้จัดการ')} · ${esc((ses.approved_at||'').slice(0,16))}</span>`:''}
     ${ses?`<a class="btn btn-sm" href="/api/sessions/${ses.session_id}/export.xlsx">⬇ Excel</a>`:''}
+    ${closed?`<a class="btn btn-sm" href="/api/reports/recon-certificate.print?period_month=${MONTH}&branch_id=${bid}" target="_blank"><i class="ti ti-certificate" aria-hidden="true"></i> ใบรับรอง</a>`:''}
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}" target="_blank" title="รายงานการจับคู่ทุกช่องทาง ไล่รายวันทั้งเดือน — ตรวจว่าจับคู่ถูกครบ · พิมพ์ PDF ได้"><i class="ti ti-printer" aria-hidden="true"></i> ตรวจการจับคู่รายวัน</a>
     <a class="btn btn-sm" href="/api/monthly-report?branch_id=${bid}&period_month=${MONTH}&detail=1" target="_blank" title="ฉบับละเอียดสำหรับผู้ตรวจสอบ — เพิ่มหลักฐานระดับบรรทัด: รหัส POS, ยอดบัตรราย acquirer, ทุกบรรทัดเงินเข้า, ค่าธรรมเนียม, การจับคู่มือ"><i class="ti ti-files" aria-hidden="true"></i> ฉบับตรวจสอบ (ละเอียด)</a>
     <a class="btn btn-sm" href="#payout?bid=${bid}" title="ตรวจยอดสุทธิ ↔ เงินโอนธนาคาร แยกรายวัน — Grab, Line Man, บัตร, BAY/KTC Point · สถานะ matched/รอเข้า"><i class="ti ti-credit-card" aria-hidden="true"></i> เงินเข้าธนาคาร</a>
@@ -992,6 +994,10 @@ async function loadBranch(bid){
           <td class="mono" style="color:var(--sub)">${fmt(r.non_revenue.amount)}</td><td></td>
           <td style="text-align:left" class="lbl">${r.non_revenue.count} รายการ — ไม่นับเป็นยอดขาย</td></tr>`:''}
       </table>
+      <div class="row" style="margin-top:8px;gap:8px;flex-wrap:wrap">
+        <a class="btn btn-sm" href="/api/reports/override-register.print?period_month=${MONTH}&branch_id=${bid}" target="_blank"><i class="ti ti-writing" aria-hidden="true"></i> ทะเบียนการปรับปรุงด้วยมือ</a>
+        <a class="btn btn-sm" href="/api/reports/recon-certificate.print?period_month=${MONTH}&branch_id=${bid}" target="_blank"><i class="ti ti-certificate" aria-hidden="true"></i> ดูใบรับรอง (ก่อนเซ็น)</a>
+      </div>
       <div class="lbl" style="margin-top:6px">ปิดเดือนแล้วเหตุผลทั้งหมดจะติดไปในไฟล์ Excel · แก้ไขไม่ได้จนกว่าจะส่งกลับแก้</div>
     </div>`;
   }
@@ -3106,6 +3112,14 @@ function loadReports(){
         <span class="rpt-badge">in-app</span>
       </div>
     </a>
+    <a class="rpt-item" href="#auditlog">
+      <span class="rpt-icon"><i class="ti ti-history" aria-hidden="true"></i></span>
+      <div class="rpt-body">
+        <div class="rpt-title">ประวัติการแก้ไข (Audit Trail)</div>
+        <div class="rpt-desc">ใคร·เมื่อ·แก้อะไร ทุกการเปลี่ยนแปลง · เพิ่มอย่างเดียว แก้ไม่ได้</div>
+        <span class="rpt-badge">in-app</span>
+      </div>
+    </a>
   </div>
 
   <div class="lbl" style="margin:0 0 6px 2px;font-weight:700;letter-spacing:.03em">เอกสาร & เครื่องมือ / Docs & Tools</div>
@@ -3160,7 +3174,8 @@ async function loadOverrideRegister(){
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-writing" aria-hidden="true"></i> ทะเบียนการปรับปรุงด้วยมือ — ${esc(monthTh(MONTH))}</h2>
     ${_icBranchSel(brs,_OVR_BR,'setOvrBranch')}
-    <a class="btn btn-sm btn-pri" href="/api/reports/override-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+    <a class="btn btn-sm btn-pri" href="/api/reports/override-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
+    <a class="btn btn-sm" href="/api/reports/override-register.xlsx${q}">⬇ Excel</a></div>
   <div class="muted" style="margin-bottom:10px">ทุกการแก้ไขด้วยมือในเดือนนี้ (จับคู่เอง · ย้ายช่อง · รับทราบผลต่าง · ปรับ lane) พร้อมผู้ทำ · เวลา · เหตุผล — รายการแรกที่ผู้สอบบัญชีขอดู · รายการไม่มีเหตุผลถูกเน้นแดง</div>`;
   if(!r.rows.length){$('app').innerHTML=html+emptyState('checklist','ไม่มีการปรับปรุงด้วยมือ','ระบบจับคู่อัตโนมัติทั้งหมดในเดือนนี้');return;}
   const warn=r.missing_reason?`<span class="chip c-err">${r.missing_reason} รายการไม่มีเหตุผล</span>`:`<span class="chip c-ok">ทุกรายการมีเหตุผล ✓</span>`;
@@ -3195,7 +3210,8 @@ async function loadAging(){
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-hourglass-high" aria-hidden="true"></i> อายุรายการค้าง — ณ ${esc(r.as_of)}</h2>
     ${_icBranchSel(brs,_AGE_BR,'setAgeBranch')}
-    <a class="btn btn-sm btn-pri" href="/api/reports/open-items-aging.print${q}&lookback=2" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+    <a class="btn btn-sm btn-pri" href="/api/reports/open-items-aging.print${q}&lookback=2" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
+    <a class="btn btn-sm" href="/api/reports/open-items-aging.xlsx${q}&lookback=2">⬇ Excel</a></div>
   <div class="muted" style="margin-bottom:10px">รายการกระทบยอดที่ยังไม่ปิด นับอายุจากสิ้นงวด · ตรวจ ${esc(MONTH)} ย้อนหลัง 2 เดือน (ไม่รวมงวดที่อนุมัติ/ปิดแล้ว) — ของค้างเกิน 30 วันต้องมีคำอธิบาย</div>
   <div class="card" style="padding:12px 16px;margin-bottom:12px;display:flex;gap:32px;flex-wrap:wrap">
     <div><div class="lbl">0–7 วัน</div><div style="font-size:20px;font-weight:700;color:var(--ok)">${b['0-7']}</div></div>
@@ -3293,7 +3309,8 @@ async function loadCloseRegister(){
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-calendar-check" aria-hidden="true"></i> ทะเบียนการปิดเดือน — 6 เดือนล่าสุด</h2>
     ${_icBranchSel(brs,_CLR_BR,'setClrBranch')}
-    <a class="btn btn-sm btn-pri" href="/api/reports/close-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+    <a class="btn btn-sm btn-pri" href="/api/reports/close-register.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
+    <a class="btn btn-sm" href="/api/reports/close-register.xlsx${q}">⬇ Excel</a></div>
   <div class="muted" style="margin-bottom:10px">สถานะการปิดงวดของทุกสาขาหลัก · ใครอนุมัติ · เมื่อไหร่ · กระทบยอดแล้วกี่ % · มีหลักฐานแช่แข็งหรือยัง — <b>ยังไม่ปิดรวม ${r.open_total} สาขา-เดือน</b></div>`;
   if(!r.rows.length){$('app').innerHTML=html+emptyState('calendar','ไม่มีข้อมูลช่วงนี้','');return;}
   for(const mth of r.months){
@@ -3330,7 +3347,8 @@ async function loadAcceptedVariance(){
   let html=header()+`<div class="row" style="margin-bottom:6px">
     <h2 style="font-size:16px"><i class="ti ti-receipt-off" aria-hidden="true"></i> สรุปผลต่างที่รับทราบ (Write-off) — ${esc(monthTh(MONTH))}</h2>
     ${_icBranchSel(brs,_AV_BR,'setAvBranch')}
-    <a class="btn btn-sm btn-pri" href="/api/reports/accepted-variance.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a></div>
+    <a class="btn btn-sm btn-pri" href="/api/reports/accepted-variance.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
+    <a class="btn btn-sm" href="/api/reports/accepted-variance.xlsx${q}">⬇ Excel</a></div>
   <div class="row" style="margin-bottom:10px;align-items:center;gap:8px">
     <span class="muted">ยอดผลต่างที่ “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · เกณฑ์เน้นต่อรายการ</span>
     <input type="number" min="0" step="500" value="${_AV_TH}" onchange="setAvTh(this.value)" style="width:110px;padding:5px 8px;border:1px solid var(--line);border-radius:8px;font:inherit" title="เกณฑ์ (บาท/รายการ)">
@@ -3358,6 +3376,36 @@ async function loadAcceptedVariance(){
       <td class="mono" style="${big?'color:var(--err);font-weight:700':''}">${it.amount>0?'+':''}${fmt(it.amount)}</td>
       <td style="text-align:left">${it.reason?esc(it.reason):'<span style="color:var(--err)">— ไม่ระบุ —</span>'}</td>
       <td style="text-align:left">${esc(it.by)}</td></tr>`;}).join('')}
+  </table></div>`;
+  $('app').innerHTML=html;
+}
+
+/* #auditlog — ประวัติการแก้ไข (Audit Trail) */
+let _AT_BR='';
+function setAtBranch(v){_AT_BR=v||'';loadAuditTrail();}
+async function loadAuditTrail(){
+  $('app').innerHTML=header()+loadingState();
+  const q=`?period_month=${MONTH}${_AT_BR?`&branch_id=${_AT_BR}`:''}`;
+  let brs,r;
+  try{[brs,r]=await Promise.all([api('/api/branches'),api('/api/reports/audit-trail'+q)]);}
+  catch(e){$('app').innerHTML=header()+`<div class="card c-err">โหลดไม่สำเร็จ: ${esc(e.message)}</div>`;return;}
+  const actCls={'สร้าง':'c-ok','แก้ไข':'c-warn','ลบ':'c-err','รับทราบ':'c-mut'};
+  let html=header()+`<div class="row" style="margin-bottom:6px">
+    <h2 style="font-size:16px"><i class="ti ti-history" aria-hidden="true"></i> ประวัติการแก้ไข — ${esc(monthTh(MONTH))}</h2>
+    ${_icBranchSel(brs,_AT_BR,'setAtBranch')}
+    <a class="btn btn-sm btn-pri" href="/api/reports/audit-trail.print${q}" target="_blank"><i class="ti ti-printer" aria-hidden="true"></i> พิมพ์/PDF</a>
+    <a class="btn btn-sm" href="/api/reports/audit-trail.xlsx${q}">⬇ Excel</a></div>
+  <div class="muted" style="margin-bottom:10px">ทุกการเปลี่ยนแปลงที่ระบบบันทึก (ใคร·เมื่อ·แก้อะไร) — บันทึกแบบเพิ่มอย่างเดียว แก้/ลบไม่ได้ · แสดง ${r.shown} จาก ${r.count} รายการ</div>`;
+  if(!r.rows.length){$('app').innerHTML=html+emptyState('history','ไม่มีการเปลี่ยนแปลงที่บันทึกไว้','ยังไม่มีการแก้ไขในงวดนี้');return;}
+  html+=`<div class="card" style="padding:0;overflow-x:auto"><table>
+    <tr><th style="text-align:left">เวลา</th><th style="text-align:left">สาขา</th><th style="text-align:left">ประเภท</th><th style="text-align:left">การกระทำ</th><th style="text-align:left">รายละเอียด</th><th style="text-align:left">โดย</th></tr>
+    ${r.rows.map(x=>`<tr>
+      <td class="lbl" style="text-align:left">${esc((x.ts||'').slice(0,16))}</td>
+      <td style="text-align:left">${esc(x.branch_name)}</td>
+      <td style="text-align:left">${esc(x.entity_th)}</td>
+      <td style="text-align:left"><span class="chip ${actCls[x.action_th]||'c-mut'}">${esc(x.action_th)}</span></td>
+      <td style="text-align:left">${esc(x.detail)}</td>
+      <td style="text-align:left">${esc(x.by)}</td></tr>`).join('')}
   </table></div>`;
   $('app').innerHTML=html;
 }

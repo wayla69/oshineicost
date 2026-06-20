@@ -3073,3 +3073,36 @@ def test_ic_structural_control_fixes(client, monkeypatch):
     # (3) the close snapshot froze a source-document manifest (column flows to the cert)
     cert = client.get("/api/reports/recon-certificate?branch_id=5&period_month=2026-06").json()
     assert cert["snapshot"] is not None and "source_doc_count" in cert["snapshot"]
+
+
+def test_ic_audit_trail_xlsx_and_enforcement(client, monkeypatch):
+    """Audit-trail viewer (branch+month scope, franchise-excluded), all five Excel
+    exports, and the opt-in write-enforcement middleware."""
+    client.post("/api/channel-move", json={
+        "branch_id": 4, "period_month": "2026-06", "from_category": "CASH",
+        "to_category": "QR", "to_bank": "KBANK", "amount": 1000,
+        "note": "ลูกค้าสแกน QR แต่กดเป็นเงินสด"})
+    client.post("/api/day-ack", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "QR", "day": "2026-06-05",
+        "variance": 12, "note": "อธิบายผลต่างชัดเจนพอสมควร"})
+
+    at = client.get("/api/reports/audit-trail?period_month=2026-06").json()
+    assert at["count"] >= 2
+    assert all(r["branch_id"] != 1 for r in at["rows"])            # franchise excluded
+    assert client.get("/api/reports/audit-trail.print?period_month=2026-06").status_code == 200
+
+    for ep in ("audit-trail", "override-register", "open-items-aging",
+               "accepted-variance", "close-register"):
+        extra = "&months=2" if ep == "close-register" else ""
+        r = client.get(f"/api/reports/{ep}.xlsx?period_month=2026-06{extra}")
+        assert r.status_code == 200
+        assert r.content[:2] == b"PK"                              # valid .xlsx (zip)
+
+    # Enforcement middleware: OFF by default (write OK); ON → 401 without a session
+    assert client.post("/api/day-ack", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "CASH", "day": "2026-06-06",
+        "variance": 5, "note": "บันทึกผลต่างเล็กน้อย"}).status_code == 200
+    monkeypatch.setenv("RECON_ENFORCE_AUTH", "1")
+    assert client.post("/api/day-ack", json={
+        "branch_id": 4, "period_month": "2026-06", "category": "CASH", "day": "2026-06-07",
+        "variance": 5, "note": "ควรถูกบล็อกเพราะไม่ได้ล็อกอิน"}).status_code == 401

@@ -5643,6 +5643,240 @@ def accepted_variance_print(period_month: str, branch_id: int | None = None,
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
+# ── #6 Audit-trail viewer (change history) — READ-ONLY ────────────────────────
+_AUDIT_ENTITY_TH = {"session": "งวด / สถานะ", "manual_match": "จับคู่ด้วยมือ",
+    "channel_move": "ย้ายช่อง", "lane_adj": "ปรับ lane", "day_ack": "รับทราบรายวัน",
+    "upload": "เอกสารอัปโหลด", "close_snapshot": "ปิดงวด / หลักฐาน"}
+_AUDIT_ACTION_TH = {"create": "สร้าง", "update": "แก้ไข", "delete": "ลบ", "accept": "รับทราบ"}
+# entity → (parent table, primary-key column) so an audit row can be resolved to a
+# branch+period. Deleted parents drop out (their row is gone); the append-only audit
+# log itself is never mutated.
+_AUDIT_SRC = [("session", "recon_sessions", "session_id"),
+              ("manual_match", "recon_manual_match", "match_id"),
+              ("channel_move", "recon_channel_move", "id"),
+              ("lane_adj", "recon_lane_adj", "id"),
+              ("day_ack", "recon_day_ack", "id"),
+              ("upload", "recon_uploads", "upload_id"),
+              ("close_snapshot", "recon_close_snapshot", "id")]
+
+
+def _audit_trail(conn, period_month, branch_id=None, limit=400):
+    """Branch+month-scoped change history from the append-only audit log: who changed
+    what, when, across sessions/overrides/uploads/snapshots. Read-only."""
+    bmap = {r["branch_id"]: r["name"] for r in conn.execute(
+        f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY}")}
+    rows = []
+    for entity, tbl, pk in _AUDIT_SRC:
+        try:
+            cur = conn.execute(
+                f"SELECT a.ts, a.action, a.field, a.old_val, a.new_val, a.\"by\" AS by_, "
+                f"p.branch_id AS bid, p.period_month AS pm "
+                f"FROM recon_audit_log a JOIN {tbl} p ON p.{pk}=a.entity_id "
+                f"WHERE a.entity=? AND p.period_month=?", (entity, period_month))
+        except sqlite3.OperationalError:
+            continue
+        for r in cur:
+            bid = r["bid"]
+            if bid not in bmap or (branch_id is not None and bid != branch_id):
+                continue
+            if r["action"] == "update" and (r["old_val"] is not None or r["new_val"] is not None):
+                detail = f"{r['field'] or ''} {r['old_val'] or '—'} → {r['new_val'] or '—'}".strip()
+            else:
+                detail = r["new_val"] or r["field"] or ""
+            rows.append({"ts": r["ts"], "by": r["by_"] or "—", "entity": entity,
+                "entity_th": _AUDIT_ENTITY_TH.get(entity, entity),
+                "action": r["action"], "action_th": _AUDIT_ACTION_TH.get(r["action"], r["action"]),
+                "detail": detail, "branch_id": bid, "branch_name": bmap.get(bid, str(bid))})
+    rows.sort(key=lambda x: (x["ts"] or ""), reverse=True)
+    return {"period_month": period_month, "branch_id": branch_id,
+            "count": len(rows), "rows": rows[:limit], "shown": min(len(rows), limit)}
+
+
+@app.get("/api/reports/audit-trail")
+def audit_trail_api(period_month: str, branch_id: int | None = None, limit: int = 400):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        return _audit_trail(conn, period_month, branch_id, max(1, min(2000, limit)))
+
+
+@app.get("/api/reports/audit-trail.print")
+def audit_trail_print(period_month: str, branch_id: int | None = None, limit: int = 400):
+    """Print-to-PDF change history: every recorded change for the month, newest first."""
+    import html as _html
+    def esc(s): return _html.escape(str(s or ""))
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        tr = _audit_trail(conn, period_month, branch_id, max(1, min(2000, limit)))
+        master = conn.execute(
+            f"SELECT branch_id, name FROM branches WHERE {_MASTER_ONLY} ORDER BY name").fetchall()
+    picker = _ic_picker(period_month, branch_id, master, esc)
+    parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
+        "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
+        "<title>ประวัติการแก้ไข</title>", _ic_print_css("#0891b2"), "</head><body>",
+        "<div class='toolbar'>" + picker
+        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        "<div class='sheet'>",
+        f"<h1>ประวัติการแก้ไข (Audit Trail) — งวด {esc(period_month)}</h1>",
+        f"<div class='sub'>ทุกการเปลี่ยนแปลงที่ระบบบันทึกไว้ (เรียงใหม่สุดก่อน) · บันทึกแบบเพิ่มอย่างเดียว "
+        f"แก้/ลบไม่ได้ · แสดง {tr['shown']} จาก {tr['count']} รายการ</div>"]
+    if not tr["rows"]:
+        parts.append("<div class='none'>ไม่มีการเปลี่ยนแปลงที่บันทึกไว้สำหรับงวดนี้</div>")
+    else:
+        parts.append("<table><thead><tr><th class='l'>เวลา</th><th class='l'>สาขา</th>"
+            "<th class='l'>ประเภท</th><th class='l'>การกระทำ</th><th class='l'>รายละเอียด</th>"
+            "<th class='l'>โดย</th></tr></thead><tbody>")
+        for r in tr["rows"]:
+            parts.append(f"<tr><td class='l muted'>{esc((r['ts'] or '')[:16])}</td>"
+                f"<td class='l'>{esc(r['branch_name'])}</td><td class='l'>{esc(r['entity_th'])}</td>"
+                f"<td class='l'>{esc(r['action_th'])}</td><td class='l'>{esc(r['detail'])}</td>"
+                f"<td class='l'>{esc(r['by'])}</td></tr>")
+        parts.append("</tbody></table>")
+    parts.append("</div></body></html>")
+    return Response(content="".join(parts), media_type="text/html; charset=utf-8")
+
+
+# ── Excel (.xlsx) exports for the internal-control reports ────────────────────
+def _xlsx_response(sheets, fname):
+    """sheets = [(title, [headers...], [[cells...], ...]), ...] → styled .xlsx Response."""
+    import io
+    import openpyxl
+    from openpyxl.styles import Font
+    wb = openpyxl.Workbook()
+    bold = Font(bold=True)
+    first = True
+    for title, headers, body in sheets:
+        ws = wb.active if first else wb.create_sheet()
+        ws.title = title[:31]
+        first = False
+        ws.append(headers)
+        for c in ws[1]:
+            c.font = bold
+        for row in body:
+            ws.append(row)
+        for i in range(1, len(headers) + 1):
+            ws.column_dimensions[chr(64 + i)].width = 22
+    buf = io.BytesIO()
+    wb.save(buf)
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=\"{fname}\""})
+
+
+@app.get("/api/reports/override-register.xlsx")
+def override_register_xlsx(period_month: str, branch_id: int | None = None):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        reg = _override_register(conn, period_month, branch_id)
+    body = [[(r["at"] or "")[:16], r["branch_name"], r["kind"], r["lane"],
+             round(abs(r["amount"]), 2), r["by"],
+             r["reason"] if r["has_reason"] else "— ไม่ระบุเหตุผล —"] for r in reg["rows"]]
+    return _xlsx_response(
+        [("ทะเบียนการปรับปรุงด้วยมือ",
+          ["วันเวลา", "สาขา", "ประเภท", "ช่องทาง/รายการ", "จำนวน", "โดย", "เหตุผล"], body)],
+        f"override_register_{period_month}.xlsx")
+
+
+@app.get("/api/reports/open-items-aging.xlsx")
+def open_items_aging_xlsx(period_month: str, branch_id: int | None = None, lookback: int = 2):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        ag = _open_items_aging(conn, period_month, branch_id, max(0, min(6, lookback)))
+    _ty = {"upload": "อัปโหลดเอกสาร", "setup": "ตั้งค่า", "diff": "ตรวจผลต่าง", "waiting": "รอเอกสาร"}
+    body = [[it["age_days"], it["bucket"], it["period_month"], it["branch_name"],
+             _ty.get(it["type"], it["type"]), it["label"]] for it in ag["items"]]
+    return _xlsx_response(
+        [("อายุรายการค้าง",
+          ["อายุ(วัน)", "ช่วง", "งวด", "สาขา", "ประเภท", "รายการที่ต้องทำ"], body)],
+        f"open_items_aging_{period_month}.xlsx")
+
+
+@app.get("/api/reports/close-register.xlsx")
+def close_register_xlsx(period_month: str, months: int = 6, branch_id: int | None = None):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        reg = _close_register(conn, period_month, max(1, min(12, months)), branch_id)
+    body = [[r["period_month"], r["branch_name"], _IC_SESS_TH.get(r["status"], r["status"]),
+             r["progress_pct"], r["todo_count"], r["approved_by"] or "—",
+             (r["approved_at"] or "")[:16], "มี" if r["has_snapshot"] else "—"] for r in reg["rows"]]
+    return _xlsx_response(
+        [("ทะเบียนการปิดเดือน",
+          ["งวด", "สาขา", "สถานะ", "กระทบยอด%", "คงค้าง", "ผู้อนุมัติ", "วันที่อนุมัติ", "หลักฐาน"], body)],
+        f"close_register_{period_month}.xlsx")
+
+
+@app.get("/api/reports/accepted-variance.xlsx")
+def accepted_variance_xlsx(period_month: str, branch_id: int | None = None,
+                           threshold: float = 1000.0):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        s = _accepted_variance_summary(conn, period_month, branch_id, max(0.0, threshold))
+    by_reason = [[r["reason"], r["count"], r["total_abs"]] for r in s["by_reason"]]
+    by_branch = [[r["branch_name"], r["count"], r["total_abs"]] for r in s["by_branch"]]
+    items = [[it["branch_name"], it["scope"], round(it["amount"], 2), it["reason"], it["by"]]
+             for it in s["items"]]
+    return _xlsx_response([
+        ("แยกตามเหตุผล", ["เหตุผล", "จำนวนครั้ง", "ยอดรวม"], by_reason),
+        ("แยกตามสาขา", ["สาขา", "จำนวนครั้ง", "ยอดรวม"], by_branch),
+        ("รายการทั้งหมด", ["สาขา", "ช่องทาง/วัน", "ยอด", "เหตุผล", "โดย"], items)],
+        f"accepted_variance_{period_month}.xlsx")
+
+
+@app.get("/api/reports/audit-trail.xlsx")
+def audit_trail_xlsx(period_month: str, branch_id: int | None = None, limit: int = 2000):
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+        tr = _audit_trail(conn, period_month, branch_id, max(1, min(5000, limit)))
+    body = [[(r["ts"] or "")[:16], r["branch_name"], r["entity_th"], r["action_th"],
+             r["detail"], r["by"]] for r in tr["rows"]]
+    return _xlsx_response(
+        [("ประวัติการแก้ไข", ["เวลา", "สาขา", "ประเภท", "การกระทำ", "รายละเอียด", "โดย"], body)],
+        f"audit_trail_{period_month}.xlsx")
+
+
+# ── Optional login enforcement (opt-in via RECON_ENFORCE_AUTH) ────────────────
+# Recon shares the dashboard's signed session cookie (see _actor). When this flag is
+# set, WRITE requests must carry a valid session — making the actor identity provable,
+# not just best-effort. DEFAULT OFF: unset → unchanged (open/token-gated), so nothing
+# breaks until the owner turns it on (login lives on the dashboard app). Reads stay open.
+@app.middleware("http")
+async def _enforce_recon_session(request: Request, call_next):
+    if (os.environ.get("RECON_ENFORCE_AUTH", "").strip()
+            and _parse_session is not None
+            and request.method in ("POST", "PATCH", "PUT", "DELETE")
+            and request.url.path.startswith("/api/")):
+        try:
+            ok = bool(_parse_session(request.cookies.get(_SESSION_COOKIE, "") or ""))
+        except Exception:
+            ok = False
+        if not ok:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                {"detail": "ต้องเข้าสู่ระบบก่อนทำรายการ (ล็อกอินที่หน้าหลัก)"}, status_code=401)
+    return await call_next(request)
+
+
 # ── UAT sign-off sheet (เอกสารทดสอบ + รับรองการใช้งาน) ─────────────────────────
 # Printable acceptance-test checklist with a usage narrative beside each case, for the
 # team to walk through, mark pass/fail, and sign off before going fully live.
@@ -5981,6 +6215,22 @@ _UAT_CASES = [
                "ยืนยัน 134 tests เขียว + canary อุดร 2026-05-01 ฿35,511.48 ไม่เปลี่ยน"],
      "expected": "แก้ด้วยมือไม่มีเหตุผลถูกปฏิเสธ, เปิดงวดต้องรหัสผู้จัดการ+เหตุผล, ตัวตนจริงถูกบันทึก, "
                  "ใบรับรองแสดงจำนวนเอกสารต้นทางที่ผูก, ไม่กระทบตรรกะบัญชี/การกระทบยอด"},
+    {"id": "TC-34", "title": "ประวัติการแก้ไข (Audit Trail) + Excel ทุกรายงาน + ผูกเข้าปิดเดือน",
+     "role": "ผู้จัดการ / ผู้สอบบัญชี",
+     "narrative": "ส่วนขยายชุดควบคุมภายใน (2026-06-19): (1) หน้า #auditlog ไล่ทุกการเปลี่ยนแปลงในเดือน "
+                  "ใคร·เมื่อ·แก้อะไร เรียงใหม่สุดก่อน บันทึกแบบเพิ่มอย่างเดียว; (2) ทุกรายงานควบคุมภายในมีปุ่ม "
+                  "⬇ Excel; (3) หน้าสรุปผู้จัดการมีปุ่มเปิดทะเบียนการปรับปรุง + ใบรับรองของสาขานั้น และ "
+                  "เดือนที่ปิดแล้วมีปุ่มใบรับรองบนหัวสาขา; (4) option บังคับล็อกอิน env RECON_ENFORCE_AUTH "
+                  "(ค่าเริ่ม=ปิด ไม่กระทบเดิม)",
+     "steps": ["เปิด #reports -> เห็นการ์ด 'ประวัติการแก้ไข (Audit Trail)' ในกลุ่มควบคุมภายใน",
+               "เปิด #auditlog -> เห็นรายการ ใคร·เมื่อ·ประเภท·การกระทำ·รายละเอียด; เลือกสาขา + พิมพ์ PDF + ⬇ Excel ได้",
+               "ในแต่ละรายงานควบคุมภายใน กด ⬇ Excel -> ได้ไฟล์ .xlsx เปิดได้",
+               "เข้าหน้าสาขาสถานะ 'รอผู้จัดการตรวจ' -> มีปุ่มทะเบียนการปรับปรุง + ใบรับรอง (ก่อนเซ็น); "
+               "สาขาที่ปิดแล้ว -> หัวสาขามีปุ่มใบรับรอง",
+               "(ออปชัน) ตั้ง RECON_ENFORCE_AUTH=1 บน Fly -> การเขียนต้องล็อกอินก่อน (401 ถ้าไม่ล็อกอิน)",
+               "ยืนยัน 135 tests เขียว + canary อุดร 2026-05-01 ฿35,511.48 ไม่เปลี่ยน"],
+     "expected": "Audit Trail แสดงครบ+พิมพ์/Excel ได้, ทุกรายงานมี Excel, ปุ่มในหน้าผู้จัดการ/หัวสาขาทำงาน, "
+                 "enforcement ทำงานเมื่อเปิด env, เฉพาะสาขาหลัก, ไม่กระทบตัวเลขบัญชี"},
     {"id": "TC-29", "title": "Responsive Nav + Reports Hub (#reports) -- เฟส 5",
      "role": "ทุกบทบาท",
      "narrative": "เฟส 5 เพิ่มแถบนำทาง 4 โซน (หน้าหลัก / รายงาน / Admin / วินิจฉัย) "
@@ -6462,6 +6712,9 @@ def lane_adj_upsert(body: LaneAdj, request: Request):
                 (body.branch_id, body.period_month, body.category, body.bank,
                  body.adj_pos, body.adj_ext, body.note, body.adj_type, actor))
             row_id = cur.lastrowid
+        _audit(conn, "lane_adj", row_id, "update" if existing else "create", actor,
+               [{"field": body.adj_type, "old": None,
+                 "new": f"{body.category}·{body.bank} POS+{body.adj_pos:.0f}/EXT+{body.adj_ext:.0f}"}])
         conn.commit()
     return {"id": row_id, "adj_pos": body.adj_pos, "adj_ext": body.adj_ext}
 
