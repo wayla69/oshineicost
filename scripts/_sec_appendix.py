@@ -23,7 +23,7 @@ w('<table><thead><tr><th style="width:26%">หัวข้อ</th><th class="c" 
   '<th>รายละเอียด / ข้อควรระวัง</th></tr></thead><tbody>')
 _asm = [
  ("ต้นทุนต่อหน่วย/ยอดขายรายเมนู","ข้อมูลจริง","ดึงจากระบบ ERP ม.ค.–พ.ค. 2569 (26 สาขา); บางรายการต้นทุนเป็นค่าที่เจ้าของบันทึก/ประเมิน อาจไม่อัปเดตทุกเดือน.","green"),
- ("ชนิดปลา = เทราต์","ข้อมูลจัดซื้อ","วัตถุดิบจริงเป็นเทราต์ (ดู 4.5); ชื่อเมนู/ERP ยังเป็น “แซลมอน”.","green"),
+ ("ชนิดปลา = เทราต์","ข้อมูลจัดซื้อ","วัตถุดิบจริงเป็นเทราต์ (ดู 4.5); ชื่อเมนู/ERP ยังเป็น “เทราต์”.","green"),
  ("ส่วนลดเทราต์ ~10–20%","ประเมิน (ตลาด)","ค่าช่วงตลาด ขึ้นกับฤดู/แหล่ง/ผู้นำเข้า — ต้องยืนยันกับใบเสนอราคาจริง.","g"),
  ("ราคาปลา 2024–2026","ประเมิน (สาธารณะ)","ค่ารายครึ่งปี ประกอบจากแหล่งสาธารณะ (NSC/Fish Pool/SSB) ไม่ใช่ feed สด.","g"),
  ("ราคา 2H2026–1H2027","Forecast","ค่าคาดการณ์ตามมุมมองซัพพลายตึงตัว — มีความไม่แน่นอนสูง.","red"),
@@ -111,7 +111,7 @@ w('<ul>'
   'เพราะการบริโภคถูกบันทึกที่ระดับรายการ (B0xxx) แล้ว — เพื่อไม่นับซ้ำ.</li>'
   '<li><b>รายได้บุฟเฟ่ต์</b> = รายได้แพ็กเกจ (รายการ tier) ไม่รวม VAT; '
   f'<b>ต้นทุนอาหารบุฟเฟ่ต์ {FOODPCT:.1f}%</b> = ต้นทุนอาหารที่บริโภค ÷ รายได้แพ็กเกจบุฟเฟ่ต์.</li>'
-  f'<li><b>“แซลมอน {SALMON_SHARE:.0f}%”</b> = ผลรวมต้นทุนทุกเมนูที่ชื่อมีคำว่า “แซลมอ/แซลมอล” '
+  f'<li><b>“เทราต์ {SALMON_SHARE:.0f}%”</b> = ผลรวมต้นทุนทุกเมนูที่ชื่อมีคำว่า “แซลมอ/แซลมอล” '
   'หารด้วยต้นทุนอาหารบุฟเฟ่ต์ทั้งหมด.</li>'
   '</ul>')
 w('<h4>ข้อจำกัดที่ควรทราบ</h4>')
@@ -147,14 +147,14 @@ src_groups = [
    "Nation Thailand — สงครามราคา: Bonus Suki ฿219, สุกี้ตี๋น้อย ฿117 (40052505)",
    "Oishi Group — Shabushi (oishigroup.com)",
  ]),
- ("ผู้บริโภค & ดีมานด์แซลมอน (ส่วนที่ 7.4)", [
+ ("ผู้บริโภค & ดีมานด์เทราต์ (ส่วนที่ 7.4)", [
    "LINE MAN Wongnai — Restaurant Outlook 2025 (เมนู <฿500 ทนทาน; closure rate) (lmwn.com)",
    "NielsenIQ — Mid-Year Consumer Outlook (casual dining 59%) (Nation 40042834)",
    "Baramizi Lab — Future Food Business Trends 2025 (n=800) (baramizilab.co.th)",
    "SalmonBusiness — Thailand #2 Asia, Norway >73% share, +8% (salmonbusiness.com)",
-   "Norwegian Seafood Council / Koktail — 56% กินแซลมอนทุกสัปดาห์; ตลาด ฿6.5bn (koktailmagazine.com)",
+   "Norwegian Seafood Council / Koktail — 56% กินเทราต์ทุกสัปดาห์; ตลาด ฿6.5bn (koktailmagazine.com)",
  ]),
- ("แซลมอน & ราคาวัตถุดิบ", [
+ ("เทราต์ & ราคาวัตถุดิบ", [
    "Norwegian Seafood Council — 2025 record exports / Asia #2 market",
    "fishfarmingexpert, SSB (Statistics Norway), Trading Economics — salmon spot price 2025–2026",
    "SeafoodSource / Kontali / Rabobank — 2026 supply tightening outlook",
@@ -163,7 +163,7 @@ src_groups = [
    "kitchencost.app, Chefs-Resources, Reluctant Gourmet — salmon cut-yield 45–60% vs saku 90–95%",
    "Nippon.com, Japan Times/Nikkei — eel & Hokkaido scallop price pressure",
  ]),
- ("แซลมอน pre-rigor & การแช่แข็ง (ส่วนที่ 4.3)", [
+ ("เทราต์ pre-rigor & การแช่แข็ง (ส่วนที่ 4.3)", [
    "Einen et al. — “Freezing of pre-rigor fillets of Atlantic salmon”, Aquaculture 212 (2002) 129–140 (Nofima)",
    "Nofima — “How the state of rigor influences the freezing of fish” (nofima.com)",
    "ScienceDirect/LWT (2022) — “Thaw rigor in Atlantic salmon fillets, as affected by thawing rate and frozen storage time”",
@@ -177,10 +177,10 @@ src_groups = [
    "Wongnai — Oshinei รีวิวสาขา โคราช/อุดร/อุบล/ขอนแก่น/เชียงใหม่",
    "บล็อก panasm — Oshinei โคราช (ปลาไม่สดมาก/คุ้ม)",
    "TopNews — กรณีค่าปรับของเหลือ สาขาขอนแก่น (ก.ค. 2568)",
-   "Pantip — แซลมอนบุฟเฟ่ต์/Shinkanzen/เทราต์ vs แซลมอน",
+   "Pantip — เทราต์บุฟเฟ่ต์/Shinkanzen/เทราต์ vs เทราต์",
    "Hilight Kapook / Sanook / Thairath — ดราม่าค่าปรับ & ‘ห่อกลับ’ (Shabu Smile)",
    "Lemon8 — Katsu Midori / Sushiro (พอร์ชัน/เมนูใหม่หมุนเวียน)",
-   "Wongnai — Sushi Seki (แซลมอนชิ้นหนา)",
+   "Wongnai — Sushi Seki (เทราต์ชิ้นหนา)",
  ]),
  ("แนวปฏิบัติลดต้นทุน / วิศวกรรมเมนู", [
    "Toast, meez, Foodics, CrunchTime — menu engineering matrix (Stars/Plowhorses/Puzzles/Dogs)",
