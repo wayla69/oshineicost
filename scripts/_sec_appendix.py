@@ -87,7 +87,8 @@ w('<ul>'
   '(เสิร์ฟแต่รายได้ ≈ 0 = บริโภคในบุฟเฟ่ต์) และตัดหมวดเครื่องดื่ม/ค่าบริการ/เดลิเวอรี/à‑la‑carte ออก.</li>'
   '<li>ตัวเลขประหยัด/ปี เป็น <b>ค่าประเมินช่วง</b> (อนุรักษนิยม–บวก) ไม่ใช่การรับประกันผล '
   'ขึ้นกับการบังคับใช้ ราคาวัตถุดิบ และการตอบรับของลูกค้า. ควรนำร่อง+วัดผลจริงก่อนขยาย.</li>'
-  '<li>yield 55%→90% อ้างอิงงานวิจัยอุตสาหกรรม (whole vs saku) — ผลจริงขึ้นกับซัพพลายเออร์/วิธีตัดของแต่ละสาขา.</li>'
+  '<li>yield 55%→90% อ้างอิงงานวิจัยอุตสาหกรรม (whole vs saku) — ผลจริงขึ้นกับซัพพลายเออร์/วิธีตัดของแต่ละสาขา. '
+  'หมายเหตุ: <b>pre-rigor ไม่ได้เพิ่ม yield</b> แต่ช่วยล็อกต้นทุน/ลด gaping/คงความสด (ดูส่วนที่ 4.3).</li>'
   '</ul>')
 endpage()
 
@@ -127,6 +128,12 @@ src_groups = [
    "Tridge — Thailand salmon / durian / shrimp / scallop / uni wholesale",
    "kitchencost.app, Chefs-Resources, Reluctant Gourmet — salmon cut-yield 45–60% vs saku 90–95%",
    "Nippon.com, Japan Times/Nikkei — eel & Hokkaido scallop price pressure",
+ ]),
+ ("แซลมอน pre-rigor & การแช่แข็ง (ส่วนที่ 4.3)", [
+   "Einen et al. — “Freezing of pre-rigor fillets of Atlantic salmon”, Aquaculture 212 (2002) 129–140 (Nofima)",
+   "Nofima — “How the state of rigor influences the freezing of fish” (nofima.com)",
+   "ScienceDirect/LWT (2022) — “Thaw rigor in Atlantic salmon fillets, as affected by thawing rate and frozen storage time”",
+   "Tandfonline — “Effects of pre-, in-, or post-rigor filleting of live chilled Atlantic salmon” (gaping/yield)",
  ]),
  ("ต้นทุนดำเนินงาน (แรงงาน/พลังงาน)", [
    "Khaosod English / Ministry of Labour — ฿400 minimum wage (1 Jul 2025)",
