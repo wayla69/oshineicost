@@ -481,8 +481,10 @@ def require_manager_token(x_manager_token: str = Header(None)):
 # the test suite are unchanged.
 try:
     from backend.auth import parse_token as _parse_session, SESSION_COOKIE as _SESSION_COOKIE
-except Exception:                                    # recon can also run standalone
+    _AUTH_IMPORT_ERR = None
+except Exception as _e:                              # recon can also run standalone
     _parse_session, _SESSION_COOKIE = None, "oshinei_session"
+    _AUTH_IMPORT_ERR = repr(_e)
 
 
 def _actor(request, fallback=None, default="staff"):
@@ -500,6 +502,19 @@ def _actor(request, fallback=None, default="staff"):
         except Exception:
             pass
     return (str(fallback).strip() if fallback else "") or default
+
+
+@app.get("/api/_diag/auth-wiring")
+def diag_auth_wiring(request: Request):
+    """Read-only: confirms the recon process can read the dashboard session cookie
+    (so audit identity + RECON_ENFORCE_AUTH actually work in this deployment)."""
+    return {
+        "parse_session_available": _parse_session is not None,
+        "auth_import_error": _AUTH_IMPORT_ERR,
+        "enforce_flag": bool(os.environ.get("RECON_ENFORCE_AUTH", "").strip()),
+        "cookie_present": bool(request.cookies.get(_SESSION_COOKIE)),
+        "actor_seen": _actor(request, default=""),
+    }
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -5208,8 +5223,22 @@ def _ic_picker(period_month, branch_id, master, esc, all_label="ทุกสา�
             f"<select class='ctl' onchange=\"{sel_oc}\">" + bopts + "</select>")
 
 
+def _ic_signed_footer(request):
+    """A provenance line for printed control evidence: the logged-in account that
+    generated the document + a server timestamp — an electronic 'signed by' stamp."""
+    import html as _html
+    who = _actor(request, default="")
+    now = _dt.now().strftime("%Y-%m-%d %H:%M")
+    if who:
+        return ("<div class='lbl' style='margin-top:18px;color:#475569'>"
+                f"จัดทำ/พิมพ์โดย (บัญชีที่ล็อกอิน): <b>{_html.escape(who)}</b> · {now}"
+                " · ระบบกระทบยอด Oshinei</div>")
+    return ("<div class='lbl' style='margin-top:18px;color:#94a3b8'>"
+            f"พิมพ์เมื่อ {now} · (ไม่พบบัญชีที่ล็อกอิน — เปิดผ่านระบบหลังล็อกอินเพื่อบันทึกชื่อผู้จัดทำ)</div>")
+
+
 @app.get("/api/reports/override-register.print")
-def override_register_print(period_month: str, branch_id: int | None = None):
+def override_register_print(request: Request, period_month: str, branch_id: int | None = None):
     """Print-to-PDF management-override register: every manual match / move / lane
     adjustment / day-acknowledgement in the month, with who·when·reason — the log a
     Big4 auditor pulls first. Rows with no reason are flagged."""
@@ -5258,12 +5287,13 @@ def override_register_print(period_month: str, branch_id: int | None = None):
                 f"<td class='l'>{rsn}</td></tr>")
         parts.append("</tbody></table>")
     parts.append("<div class='sign'><div>ผู้สอบทาน (ผู้จัดการ)</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
     parts.append("</div></body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/reports/open-items-aging.print")
-def open_items_aging_print(period_month: str, branch_id: int | None = None,
+def open_items_aging_print(request: Request, period_month: str, branch_id: int | None = None,
                            lookback: int = 2):
     """Print-to-PDF aging of open reconciling items (งวดที่เลือก + ย้อนหลัง),
     bucketed 0-7 / 8-30 / >30 days from period-end. Stale items (>30d) flagged."""
@@ -5315,12 +5345,14 @@ def open_items_aging_print(period_month: str, branch_id: int | None = None,
                 f"<td class='l'>{esc(it['label'])}</td></tr>")
         parts.append("</tbody></table>")
     parts.append("<div class='sign'><div>ผู้จัดทำ</div><div>ผู้สอบทาน</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
     parts.append("</div></body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/reports/recon-certificate.print")
-def recon_certificate_print(period_month: str, branch_id: int | None = None):
+def recon_certificate_print(period_month: str, branch_id: int | None = None,
+                            request: Request = None):
     """Print-to-PDF reconciliation sign-off certificate — one signed sheet per branch:
     per-channel POS vs money-in, residual after acknowledgements, preparer/reviewer +
     approval date, frozen working-paper hash, override count. No branch_id = all
@@ -5393,6 +5425,7 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None):
             f"<div>ผู้จัดทำ<br><b>{prep}</b></div>"
             f"<div>ผู้สอบทาน/อนุมัติ<br><b>{rev}</b></div>"
             f"<div>วันที่อนุมัติ<br><b>{appd}</b></div></div>")
+        out.append(_ic_signed_footer(request))
         out.append("</div>")
         return "".join(out)
 
@@ -5527,7 +5560,7 @@ def accepted_variance_api(period_month: str, branch_id: int | None = None,
 
 
 @app.get("/api/reports/close-register.print")
-def close_register_print(period_month: str, months: int = 6, branch_id: int | None = None):
+def close_register_print(request: Request, period_month: str, months: int = 6, branch_id: int | None = None):
     """Print-to-PDF close register: which branch-months are closed / approved / still
     open, who signed off + when, %reconciled, and whether the frozen snapshot exists."""
     import html as _html
@@ -5575,12 +5608,13 @@ def close_register_print(period_month: str, months: int = 6, branch_id: int | No
                 f"<td class='l'>{'✔' if r['has_snapshot'] else '—'}</td></tr>")
         parts.append("</tbody></table>")
     parts.append("<div class='sign'><div>ผู้สอบทาน</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
     parts.append("</div></body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
 
 @app.get("/api/reports/accepted-variance.print")
-def accepted_variance_print(period_month: str, branch_id: int | None = None,
+def accepted_variance_print(request: Request, period_month: str, branch_id: int | None = None,
                             threshold: float = 1000.0):
     """Print-to-PDF accepted-variance (write-off) summary: total baht acknowledged,
     grouped by reason and by branch, with single items over the policy threshold flagged."""
@@ -5639,6 +5673,7 @@ def accepted_variance_print(period_month: str, branch_id: int | None = None,
                 f"<td class='l'>{esc(it['by'])}</td></tr>")
         parts.append("</tbody></table>")
     parts.append("<div class='sign'><div>ผู้จัดทำ</div><div>ผู้สอบทาน (ผู้จัดการ)</div><div>วันที่</div></div>")
+    parts.append(_ic_signed_footer(request))
     parts.append("</div></body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
@@ -5703,7 +5738,7 @@ def audit_trail_api(period_month: str, branch_id: int | None = None, limit: int 
 
 
 @app.get("/api/reports/audit-trail.print")
-def audit_trail_print(period_month: str, branch_id: int | None = None, limit: int = 400):
+def audit_trail_print(request: Request, period_month: str, branch_id: int | None = None, limit: int = 400):
     """Print-to-PDF change history: every recorded change for the month, newest first."""
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
@@ -5737,6 +5772,7 @@ def audit_trail_print(period_month: str, branch_id: int | None = None, limit: in
                 f"<td class='l'>{esc(r['action_th'])}</td><td class='l'>{esc(r['detail'])}</td>"
                 f"<td class='l'>{esc(r['by'])}</td></tr>")
         parts.append("</tbody></table>")
+    parts.append(_ic_signed_footer(request))
     parts.append("</div></body></html>")
     return Response(content="".join(parts), media_type="text/html; charset=utf-8")
 
