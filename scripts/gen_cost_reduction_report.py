@@ -33,8 +33,8 @@ BR_BEST = BR_SORTED[-1]
 BR_SPREAD = round(BR_WORST["food_cost_pct"] - BR_BEST["food_cost_pct"])
 SASHIMI_SHARE = DATA["categories"][0]["cost_share_pct"]
 SALMON_SASHIMI_SHARE = DATA["top_cost_drivers"][0]["cost_share_pct"]
-TARGET1 = 58   # near-term buffet food-cost target
-TARGET2 = 55   # stretch
+TARGET1 = 55   # near-term buffet food-cost target
+TARGET2 = 50   # goal (เป้าต้นทุน 50%)
 
 
 def b(n): return f"{round(n):,}"
@@ -292,11 +292,11 @@ def toc_sub(label): toc_entries.append(("sub", label, PAGE[0]))
 #  Savings model (annualized THB, ranges)
 # ════════════════════════════════════════════════════════════════════════
 SAVE = [
-    ("วัตถุดิบแซลมอน: เปลี่ยนวิธีตัด (saku/แช่แข็งทะเล) + ครัวกลาง + ล็อกสัญญา", 28, 45),
-    ("ดัดแปลงเมนู (Transform): ยำ / ชุดปลาดิบ / แซลมอนดอง / ของหวาน", 15, 25),
-    ("คุมพอร์ชัน + จำกัดเมนูพรีเมียม (กุ้ง/ทุเรียน/อูนิ/ปลาไหล)", 12, 20),
-    ("ลดของเสีย (ติดตามต้นทุน/วัน + เป้า <180 ก./หัว + audit การตัด)", 12, 22),
-    ("โค้ชสาขาต้นทุนสูงผิดปกติ ให้เข้าใกล้ค่ากลางเครือ", 7, 12),
+    ("วัตถุดิบแซลมอน: สั่ง pre-rigor (ล็อกต้นทุน) + เปลี่ยนวิธีตัด (saku/FAS) + ครัวกลาง", 55, 85),
+    ("ดัดแปลงเมนู (Transform 20 เมนู): ยำ/ชุดปลาดิบ/ดอง/ปรุงสุก/ข้าว/ของหวาน", 35, 55),
+    ("คุมพอร์ชัน + จำกัดเมนูพรีเมียม (กุ้ง/อูนิ/ปลาไหล/หอยเชลล์/ปู)", 18, 28),
+    ("ลดของเสีย (ติดตามต้นทุน/วัน + เป้า <180 ก./หัว + audit การตัด)", 18, 28),
+    ("โค้ชสาขาต้นทุนสูงผิดปกติ ให้เข้าใกล้ค่ากลางเครือ", 12, 20),
 ]
 SAVE_LO = sum(s[1] for s in SAVE); SAVE_HI = sum(s[2] for s in SAVE)
 SAVE_MID = (SAVE_LO + SAVE_HI) / 2
@@ -336,7 +336,7 @@ w('<div class="meta">'
   '<b>ข้อมูลตลาด:</b> งานวิจัย/สถิติสาธารณะ (กสิกรฯ, SCB EIC, JETRO, LINE MAN Wongnai, Norwegian Seafood Council ฯลฯ)</div>')
 w('<div class="kpis">')
 w(f'<div class="k"><div class="n">{FOODPCT:.1f}%</div><div class="l">ต้นทุนอาหารบุฟเฟ่ต์<br>(เป้าหมายดี 30–45%)</div></div>')
-w(f'<div class="k"><div class="n">{SALMON_SHARE:.0f}%</div><div class="l">ต้นทุนมาจากแซลมอน<br>วัตถุดิบเดียว</div></div>')
+w(f'<div class="k"><div class="n">{SALMON_SHARE:.0f}%</div><div class="l">ต้นทุนจากปลาเนื้อส้ม<br>(เทราต์ — ดู 4.5)</div></div>')
 w(f'<div class="k"><div class="n">฿{SAVE_LO}–{SAVE_HI}M</div><div class="l">โอกาสประหยัด/ปี<br>โดยไม่ลดคุณค่าที่ลูกค้าเห็น</div></div>')
 w('</div>')
 w('<div class="meta" style="margin-top:26px;color:var(--muted);font-size:11px">20 มิถุนายน 2569 · ฉบับที่ 2 (ปรับเป็น Buffet 100% + เพิ่มงานวิจัยตลาด)</div>')
