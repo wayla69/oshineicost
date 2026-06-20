@@ -12218,9 +12218,9 @@ def report_management(
     if reprint["bills"]:
         actions.append({"sev": "med",
             "text": f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse."})
-    if food_cost_pct is not None and food_cost_pct >= 38:
+    if food_cost_pct is not None and food_cost_pct >= 53:
         actions.append({"sev": "med",
-            "text": f"Food cost {food_cost_pct:.0f}% — above the ~35% target."})
+            "text": f"Food cost {food_cost_pct:.0f}% — above the ~50% target."})
     if projected and target and projected < target * 0.95:
         gap = (1 - projected/target) * 100
         word = "Month total" if month_complete else "Month-end projection"
