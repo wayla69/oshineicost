@@ -3106,3 +3106,11 @@ def test_ic_audit_trail_xlsx_and_enforcement(client, monkeypatch):
     assert client.post("/api/day-ack", json={
         "branch_id": 4, "period_month": "2026-06", "category": "CASH", "day": "2026-06-07",
         "variance": 5, "note": "ควรถูกบล็อกเพราะไม่ได้ล็อกอิน"}).status_code == 401
+    monkeypatch.delenv("RECON_ENFORCE_AUTH", raising=False)
+
+    # Auditor Pack: one ZIP bundling all control reports + a README
+    import io as _io, zipfile as _zip
+    r = client.get("/api/reports/auditor-pack.zip?period_month=2026-06")
+    assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
+    names = _zip.ZipFile(_io.BytesIO(r.content)).namelist()
+    assert len(names) == 7 and any(n.startswith("00_README") for n in names)

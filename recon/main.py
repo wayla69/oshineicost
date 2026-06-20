@@ -5855,6 +5855,61 @@ def audit_trail_xlsx(period_month: str, branch_id: int | None = None, limit: int
         f"audit_trail_{period_month}.xlsx")
 
 
+# ── Auditor Pack: one-click ZIP of all control evidence for a period ──────────
+@app.get("/api/reports/auditor-pack.zip")
+def auditor_pack_zip(period_month: str, branch_id: int | None = None):
+    """Bundle every internal-control report for the period into one ZIP to hand to the
+    auditor: sign-off certificate, override register, open-items aging, close register,
+    accepted-variance (write-off), and the audit trail — Excel + the signable HTML."""
+    import io
+    import zipfile
+    if not _PERIOD_RE.match(period_month or ""):
+        raise HTTPException(400, "period_month must be in 'YYYY-MM' format.")
+    with get_db() as conn:
+        if branch_id:
+            _validate_master_branch(conn, branch_id)
+    pm, bsuf = period_month, (f"_b{branch_id}" if branch_id else "")
+
+    def _body(resp):
+        b = resp.body
+        return b if isinstance(b, (bytes, bytearray)) else str(b).encode("utf-8")
+
+    # (filename, builder thunk) — each wrapped so one failure can't sink the pack
+    parts = [
+        (f"01_ใบรับรองการกระทบยอด_{pm}.html", lambda: recon_certificate_print(pm, branch_id)),
+        (f"02_ทะเบียนการปรับปรุงด้วยมือ_{pm}.xlsx", lambda: override_register_xlsx(pm, branch_id)),
+        (f"03_อายุรายการค้าง_{pm}.xlsx", lambda: open_items_aging_xlsx(pm, branch_id, 2)),
+        (f"04_ทะเบียนการปิดเดือน_{pm}.xlsx", lambda: close_register_xlsx(pm, 6, branch_id)),
+        (f"05_สรุปผลต่างที่รับทราบ_{pm}.xlsx", lambda: accepted_variance_xlsx(pm, branch_id, 1000.0)),
+        (f"06_ประวัติการแก้ไข_{pm}.xlsx", lambda: audit_trail_xlsx(pm, branch_id, 5000)),
+    ]
+    readme = (
+        "ชุดเอกสารผู้สอบบัญชี (Auditor Pack)\n"
+        f"งวด: {pm}{(' · สาขา ' + str(branch_id)) if branch_id else ' · ทุกสาขาหลัก'}\n"
+        "สร้างจากระบบกระทบยอดรายได้ (Oshinei recon) — อ่านอย่างเดียว ไม่แก้ตัวเลข\n\n"
+        "ในชุดนี้:\n"
+        "  01 ใบรับรองการกระทบยอด (มีช่องเซ็น + เลข SHA-256 ของงบที่ปิด)\n"
+        "  02 ทะเบียนการปรับปรุงด้วยมือ (ทุกการแก้มือ ใคร·เมื่อ·เหตุผล)\n"
+        "  03 อายุรายการค้าง (0-7/8-30/เกิน 30 วัน)\n"
+        "  04 ทะเบียนการปิดเดือน (ทุกสาขา × 6 เดือน · ใครอนุมัติ)\n"
+        "  05 สรุปผลต่างที่รับทราบ / write-off (แยกตามเหตุผล·สาขา)\n"
+        "  06 ประวัติการแก้ไข (audit trail — เพิ่มอย่างเดียว แก้ไม่ได้)\n")
+    buf = io.BytesIO()
+    failed = []
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for name, thunk in parts:
+            try:
+                z.writestr(name, _body(thunk()))
+            except Exception as e:                       # never let one report sink the pack
+                failed.append(f"{name}: {e}")
+        if failed:
+            readme += "\nหมายเหตุ — รายงานที่สร้างไม่สำเร็จ:\n  " + "\n  ".join(failed) + "\n"
+        z.writestr("00_README.txt", readme)
+    return Response(
+        content=buf.getvalue(), media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=\"auditor_pack_{pm}{bsuf}.zip\""})
+
+
 # ── Optional login enforcement (opt-in via RECON_ENFORCE_AUTH) ────────────────
 # Recon shares the dashboard's signed session cookie (see _actor). When this flag is
 # set, WRITE requests must carry a valid session — making the actor identity provable,
