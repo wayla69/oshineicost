@@ -2,93 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "oshinei-backend",
-      "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "uvicorn",
-        "main:app",
-        "--port",
-        "8010"
-      ],
-      "cwd": "${workspaceFolder}/backend",
-      "port": 8010
-    },
-    {
-      "name": "oshinei-auth",
-      "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "uvicorn",
-        "main:app",
-        "--port",
-        "8012"
-      ],
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "OSHINEI_AUTH": "1",
-        "OSHINEI_AUTH_SECRET": "local-verify-secret"
-      },
-      "port": 8012
-    },
-    {
       "name": "docs-static",
       "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "http.server",
-        "8011"
-      ],
-      "cwd": "${workspaceFolder}/docs",
-      "port": 8011
-    },
-    {
-      "name": "recon",
-      "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "uvicorn",
-        "recon.main:app",
-        "--port",
-        "8014"
-      ],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "OSHINEI_DB": "backend/oshinei.db"
-      },
-      "port": 8014
-    },
-    {
-      "name": "recon-preview",
-      "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "uvicorn",
-        "recon.main:app",
-        "--port",
-        "8015"
-      ],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "OSHINEI_DB": "C:\\Users\\ASUS\\AppData\\Local\\Temp\\recon_verify.db"
-      },
-      "port": 8015
-    },
-    {
-      "name": "recon-ux",
-      "runtimeExecutable": "python",
-      "runtimeArgs": [
-        "-m",
-        "uvicorn",
-        "recon.main:app",
-        "--port",
-        "8013"
-      ],
-      "cwd": "${workspaceFolder}",
-      "env": {
-        "OSHINEI_DB": "_uxtest.db"
-      },
-      "port": 8013
+      "runtimeArgs": ["-m", "http.server", "8745"],
+      "port": 8745
     }
   ]
 }
