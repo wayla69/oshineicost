@@ -7986,7 +7986,19 @@ function renderMgtReport(j) {
       <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${a.text}</span></li>`).join('');
 
   // ── Executive Summary — auto-written ~10-paragraph overview of everything ──
-  const para   = t => '<p class="mb-2">' + t + '</p>';
+  // Each section gets a theme colour; its lead label + bold figures are tinted
+  // so the headline numbers pop instead of reading as a wall of dark text.
+  const leadColors = {
+    'Overview':'#0f766e', 'Revenue quality':'#0891b2', 'Branches':'#7c3aed',
+    'Month pace':'#4f46e5', 'Food cost':'#d97706', 'Discount-risk radar':'#dc2626',
+    'Discount discipline':'#db2777', 'Menu cost per head':'#ca8a04',
+    'Trend':'#0284c7', 'Bottom line':'#0f172a'
+  };
+  const para   = t => {
+    const m = t.match(/^<b>([^.<]+)\.<\/b>/);
+    const c = (m && leadColors[m[1]]) || '#0f172a';
+    return '<p class="mb-2">' + t.replace(/<b>/g, '<b style="color:' + c + '">') + '</p>';
+  };
   const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
   const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
@@ -8046,10 +8058,12 @@ function renderMgtReport(j) {
   // 5 — Food cost
   if (P.food_cost_pct != null) {
     const fc = P.food_cost_pct;
-    const v  = fc >= 38 ? 'above the ~35% benchmark — margins are under pressure'
-             : fc <= 33 ? 'comfortably within the ~35% benchmark — healthy margins'
-             : 'around the ~35% benchmark';
-    ex.push('<b>Food cost.</b> Food cost is running at <b>' + fc.toFixed(1) + '%</b> of sales (BoM basis) for ' + P.month + ', ' + v + '.');
+    const fcCol = fc >= 53 ? '#dc2626' : fc <= 47 ? '#16a34a' : '#d97706';
+    const v  = fc >= 53 ? 'above the ~50% benchmark — margins are under pressure'
+             : fc <= 47 ? 'comfortably within the ~50% benchmark — healthy margins'
+             : 'around the ~50% benchmark';
+    ex.push('<b>Food cost.</b> Food cost is running at <b>' + fc.toFixed(1) + '%</b> of sales (BoM basis) for ' + P.month +
+            ', <span style="color:' + fcCol + ';font-weight:600">' + v + '</span>.');
   }
 
   // 6 — Discount-risk radar
