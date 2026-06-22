@@ -7913,12 +7913,12 @@ function renderMgtReport(j, jM, jF) {
 
   // §3 — Revenue trend (canvas for screen; HTML bars for print — canvas gradients don't print)
   const trendLegend = hasSplit
-    ? `<div class="no-print flex items-center gap-4 text-[11px] text-slate-500 mb-1">
-         <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#5eead4"></span> Total</span>
-         <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#0f766e"></span> Master</span>
-         <span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:#7c3aed"></span> Franchise</span>
+    ? `<div class="no-print flex items-center gap-4 text-[11px] text-slate-500 mb-2">
+         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#475569"></span> Total</span>
+         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#10b981"></span> Master</span>
+         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#818cf8"></span> Franchise</span>
        </div>` : '';
-  const trend = trendLegend + `<div style="height:240px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>
+  const trend = trendLegend + `<div style="height:270px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>
 <div id="mgtTrendHtml" style="display:none;align-items:flex-end;gap:3px;height:200px;padding:8px 4px 0"></div>`;
 
   // §4 — Branch league table
@@ -8255,22 +8255,27 @@ function renderMgtReport(j, jM, jF) {
   const fmtM = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
   const barGrad = (ctx, latest) => {
     const a = ctx.chart.chartArea;
-    if (!a) return latest ? '#0891b2' : '#5eead4';
+    if (!a) return latest ? '#1d4ed8' : '#dbeafe';
+    if (!latest) return '#dbeafe';
     const g = ctx.chart.ctx.createLinearGradient(0, a.bottom, 0, a.top);
-    if (latest) { g.addColorStop(0, '#0e7490'); g.addColorStop(1, '#22d3ee'); }
-    else        { g.addColorStop(0, '#14b8a6'); g.addColorStop(1, '#99f6e4'); }
+    g.addColorStop(0, '#1d4ed8');   // blue-700 — strong base
+    g.addColorStop(0.5, '#3b82f6'); // blue-500
+    g.addColorStop(1,   '#93c5fd'); // blue-300 — bright top
     return g;
   };
   const chartDatasets = hasSplit ? [
-    { label: 'Total',     data: trData.map(t => t.revenue),
-      backgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
-      borderRadius: 6, categoryPercentage: 0.85, barPercentage: 0.32 },
-    { label: 'Master',    data: trDataM.map(t => t.revenue),
-      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#0f766e' : '#14b8a6',
-      borderRadius: 6, categoryPercentage: 0.85, barPercentage: 0.32 },
-    { label: 'Franchise', data: trDataF.map(t => t.revenue),
-      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#6d28d9' : '#a78bfa',
-      borderRadius: 6, categoryPercentage: 0.85, barPercentage: 0.32 },
+    { label: 'Total',
+      data: trData.map(t => t.revenue),
+      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#1e293b' : '#94a3b8',
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
+    { label: 'Master',
+      data: trDataM.map(t => t.revenue),
+      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#059669' : '#6ee7b7',
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
+    { label: 'Franchise',
+      data: trDataF.map(t => t.revenue),
+      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#4338ca' : '#a5b4fc',
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
   ] : [{
     label: 'Net Sales (ex-VAT)', data: trData.map(t => t.revenue),
     backgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
@@ -8293,8 +8298,8 @@ function renderMgtReport(j, jM, jF) {
         datalabels: {
           display: !hasSplit,   // labels only on single-dataset view (too crowded with 3)
           anchor: 'end', align: 'end', offset: 0, clamp: true,
-          color: ctx => ctx.dataIndex === lastIdx ? '#0e7490' : '#64748b',
-          font: ctx => ({ size: ctx.dataIndex === lastIdx ? 11.5 : 10, weight: '700' }),
+          color: ctx => ctx.dataIndex === lastIdx ? '#1d4ed8' : '#94a3b8',
+          font: ctx => ({ size: ctx.dataIndex === lastIdx ? 12 : 10, weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
           formatter: v => v ? fmtM(v) : '',
         },
       },
@@ -8332,16 +8337,16 @@ function renderMgtReport(j, jM, jF) {
       const isLatest = i === lastIdx;
       const revM = trDataM[i] ? trDataM[i].revenue || 0 : 0;
       const revF = trDataF[i] ? trDataF[i].revenue || 0 : 0;
-      const totalColor = isLatest ? '#0891b2' : '#5eead4';
-      const masterColor = isLatest ? '#0f766e' : '#14b8a6';
-      const franchColor = isLatest ? '#6d28d9' : '#a78bfa';
+      const totalColor = isLatest ? '#1e293b' : '#94a3b8';
+      const masterColor = isLatest ? '#059669' : '#6ee7b7';
+      const franchColor = isLatest ? '#4338ca' : '#a5b4fc';
       const bars = hasSplit
         ? `<div style="display:flex;align-items:flex-end;width:100%;height:100%">
              ${miniBar(t.revenue||0, totalColor)}${miniBar(revM, masterColor)}${miniBar(revF, franchColor)}
            </div>`
         : miniBar(t.revenue||0, totalColor);
       return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
-        <div style="font-size:7.5px;font-weight:700;color:${isLatest?'#0e7490':'#64748b'};margin-bottom:2px;white-space:nowrap">${fmtM(t.revenue||0)}</div>
+        <div style="font-size:7.5px;font-weight:${isLatest?'800':'600'};color:${isLatest?'#1d4ed8':'#94a3b8'};margin-bottom:2px;white-space:nowrap">${fmtM(t.revenue||0)}</div>
         <div style="flex:1;width:100%;display:flex;align-items:flex-end">${bars}</div>
         <div style="font-size:7.5px;font-weight:600;color:#475569;margin-top:3px;text-align:center;line-height:1.2">${t.label||''}</div>
       </div>`;
