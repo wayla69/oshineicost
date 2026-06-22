@@ -12019,9 +12019,9 @@ def report_management(
         cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
                             key=lambda x: -(x["cost_per_head"] or 0))[:8]
         cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
-                            key=lambda x: -x["delta"])[:6]
+                            key=lambda x: -x["delta"])[:12]
         cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
-                            key=lambda x: x["delta"])[:6]
+                            key=lambda x: x["delta"])[:12]
         tot_cur_cost  = sum((r["cost"] or 0) for r in cur_m.values())
         tot_prev_cost = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
         total_cph      = cph(tot_cur_cost, covers_cur)
@@ -12119,7 +12119,8 @@ def report_management(
             rev_by = {r["k"]: r["rev"] or 0 for r in rows}
             for i in range(7, -1, -1):
                 d = cs - _dt.timedelta(days=7 * i)
-                trend.append({"label": f"{d.day} {MON[d.month-1]}", "start": d.isoformat(),
+                sun = d + _dt.timedelta(days=6)   # label with week-end Sunday (matches report header)
+                trend.append({"label": f"{sun.day} {MON[sun.month-1]}", "start": d.isoformat(),
                               "revenue": rev_by.get(d.isoformat(), 0)})
 
         # ---- peak hours & dayparts (revenue + covers by hour over the period) ----
