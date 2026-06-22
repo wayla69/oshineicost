@@ -7918,8 +7918,9 @@ function renderMgtReport(j, jM, jF) {
          <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#10b981"></span> Master</span>
          <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#818cf8"></span> Franchise</span>
        </div>` : '';
-  const trend = trendLegend + `<div style="height:270px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>
-<div id="mgtTrendHtml" style="display:none;align-items:flex-end;gap:3px;height:200px;padding:8px 4px 0"></div>`;
+  const trend = trendLegend + `<div style="height:250px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>
+<div id="mgtTrendHtml" style="display:none;align-items:flex-end;gap:3px;height:180px;padding:8px 4px 0"></div>
+<div id="mgtTrendSummary"></div>`;
 
   // §4 — Branch league table
   const brRows = (j.branches || []).map((b, i) => `<tr class="border-b border-slate-50">
@@ -8247,80 +8248,132 @@ function renderMgtReport(j, jM, jF) {
     + (tableHtml ? sec('9. Table Turnover & Occupancy', tableWithSplit, '#9333ea') : '')
     + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${(j.pace && j.pace.month) || 'the period month'}. Latest data day: ${j.latest_day || '—'}.</p>`;
 
-  // Trend chart — 3 datasets (Total / Master / Franchise) when split data available
+  // Trend chart — bar + line overlay (single) | grouped solid bars (split). No gradients.
   const trData  = j.trend  || [];
   const trDataM = hasSplit ? (jM.trend || []) : [];
   const trDataF = hasSplit ? (jF.trend || []) : [];
   const lastIdx = trData.length - 1;
   const fmtM = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
-  const barGrad = (ctx, latest) => {
-    const a = ctx.chart.chartArea;
-    if (!a) return latest ? '#1d4ed8' : '#dbeafe';
-    if (!latest) return '#dbeafe';
-    const g = ctx.chart.ctx.createLinearGradient(0, a.bottom, 0, a.top);
-    g.addColorStop(0, '#1d4ed8');   // blue-700 — strong base
-    g.addColorStop(0.5, '#3b82f6'); // blue-500
-    g.addColorStop(1,   '#93c5fd'); // blue-300 — bright top
-    return g;
-  };
+
+  // Professional solid colours
+  const C_HIST = '#93c5fd', C_CURR = '#1e40af';       // single: historical / current bar
+  const C_LINE = '#f59e0b';                            // single: trend line (amber)
+  const C_TOT_H = '#94a3b8', C_TOT_C = '#334155';     // split Total
+  const C_MST_H = '#7dd3fc', C_MST_C = '#0284c7';     // split Master (sky)
+  const C_FRN_H = '#d8b4fe', C_FRN_C = '#9333ea';     // split Franchise (purple)
+
   const chartDatasets = hasSplit ? [
     { label: 'Total',
       data: trData.map(t => t.revenue),
-      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#1e293b' : '#94a3b8',
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
+      backgroundColor: trData.map((_, i) => i === lastIdx ? C_TOT_C : C_TOT_H),
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
+      datalabels: { display: false } },
     { label: 'Master',
       data: trDataM.map(t => t.revenue),
-      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#059669' : '#6ee7b7',
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
+      backgroundColor: trDataM.map((_, i) => i === lastIdx ? C_MST_C : C_MST_H),
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
+      datalabels: { display: false } },
     { label: 'Franchise',
       data: trDataF.map(t => t.revenue),
-      backgroundColor: ctx => ctx.dataIndex === lastIdx ? '#4338ca' : '#a5b4fc',
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3 },
-  ] : [{
-    label: 'Net Sales (ex-VAT)', data: trData.map(t => t.revenue),
-    backgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
-    hoverBackgroundColor: ctx => barGrad(ctx, ctx.dataIndex === lastIdx),
-    borderRadius: 8, categoryPercentage: 0.66, barPercentage: 0.88,
-  }];
+      backgroundColor: trDataF.map((_, i) => i === lastIdx ? C_FRN_C : C_FRN_H),
+      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
+      datalabels: { display: false } },
+  ] : [
+    { type: 'bar', label: 'Net Sales',
+      data: trData.map(t => t.revenue),
+      backgroundColor: trData.map((_, i) => i === lastIdx ? C_CURR : C_HIST),
+      borderRadius: 6, categoryPercentage: 0.72, barPercentage: 0.85, order: 2,
+      datalabels: {
+        display: true, anchor: 'end', align: 'end', offset: 0, clamp: true,
+        color: ctx => ctx.dataIndex === lastIdx ? C_CURR : '#64748b',
+        font: ctx => ({ size: ctx.dataIndex === lastIdx ? 12 : 10,
+                        weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
+        formatter: v => v ? fmtM(v) : '',
+      } },
+    { type: 'line', label: 'Trend',
+      data: trData.map(t => t.revenue),
+      borderColor: C_LINE, backgroundColor: 'transparent',
+      borderWidth: 2, tension: 0.3, fill: false, order: 1,
+      pointRadius: 4, pointBackgroundColor: C_LINE,
+      pointBorderColor: '#fff', pointBorderWidth: 1.5,
+      datalabels: { display: false } },
+  ];
+
   mkChart('mgtTrendChart', {
     type: 'bar',
     data: { labels: trData.map(t => t.label), datasets: chartDatasets },
     options: {
       responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 24 } },
+      layout: { padding: { top: 28 } },
       plugins: {
         legend: { display: hasSplit, position: 'top',
-          labels: { boxWidth: 10, padding: 10, font: { size: 10 } } },
+          labels: { boxWidth: 10, padding: 12, font: { size: 10 } } },
         tooltip: {
           backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: hasSplit,
+          filter: item => item.dataset.type !== 'line',
           callbacks: { label: c => (hasSplit ? c.dataset.label + ': ' : 'Net Sales: ') + '฿' + Math.round(c.parsed.y).toLocaleString('en-US') },
         },
-        datalabels: {
-          display: !hasSplit,   // labels only on single-dataset view (too crowded with 3)
-          anchor: 'end', align: 'end', offset: 0, clamp: true,
-          color: ctx => ctx.dataIndex === lastIdx ? '#1d4ed8' : '#94a3b8',
-          font: ctx => ({ size: ctx.dataIndex === lastIdx ? 12 : 10, weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
-          formatter: v => v ? fmtM(v) : '',
-        },
+        datalabels: { display: false },  // default off; per-dataset overrides handle display
       },
       scales: {
         y: {
-          beginAtZero: true, grace: '14%',
+          beginAtZero: true, grace: '18%',
           border: { display: false },
-          grid: { color: 'rgba(148,163,184,0.16)', drawTicks: false },
+          grid: { color: 'rgba(148,163,184,0.13)', drawTicks: false },
           maxTicksLimit: 5,
           ticks: { color: '#94a3b8', font: { size: 10 }, padding: 8,
                    callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v },
         },
         x: {
           border: { display: false }, grid: { display: false },
-          ticks: { color: '#475569', font: { size: 11, weight: '600' }, maxRotation: 0, autoSkip: true },
+          ticks: {
+            color: ctx => ctx.index === lastIdx ? C_CURR : '#64748b',
+            font: ctx => ({ size: 11, weight: ctx.index === lastIdx ? '700' : '500' }),
+            maxRotation: 0, autoSkip: true,
+          },
         },
       },
     },
   });
 
-  // HTML bar chart for print — up to 3 mini-bars per week group when split is active
+  // Summary strip below chart
+  const summaryEl = document.getElementById('mgtTrendSummary');
+  if (summaryEl && trData.length) {
+    const vals   = trData.map(t => t.revenue || 0);
+    const avg8   = vals.reduce((a, b) => a + b, 0) / vals.length;
+    const maxV   = Math.max(...vals);
+    const posV   = vals.filter(v => v > 0);
+    const minV   = posV.length ? Math.min(...posV) : 0;
+    const maxT   = trData[vals.indexOf(maxV)];
+    const minIdx = vals.findIndex(v => v === minV && v > 0);
+    const minT   = minIdx >= 0 ? trData[minIdx] : null;
+    const cur    = vals[lastIdx] || 0;
+    const prv    = lastIdx > 0 ? (vals[lastIdx - 1] || 0) : 0;
+    const wowP   = prv ? ((cur - prv) / prv * 100) : null;
+    const vsAvg  = avg8 ? ((cur - avg8) / avg8 * 100) : null;
+    const ac     = d => d == null ? '#64748b' : d >= 0 ? '#16a34a' : '#dc2626';
+    const af     = d => d == null ? '—' : (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d).toFixed(1) + '%';
+    const pill   = (lbl, val, sub = '', sc = '#64748b') =>
+      `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
+         <div style="font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.06em;font-weight:600;margin-bottom:3px">${lbl}</div>
+         <div style="font-size:13px;font-weight:800;color:#1e293b;white-space:nowrap">${val}</div>
+         ${sub ? `<div style="font-size:10px;font-weight:600;color:${sc};margin-top:2px">${sub}</div>` : ''}
+       </div>`;
+    const splitRow = hasSplit && trDataM.length
+      ? pill('Master', fmtM(trDataM[lastIdx]?.revenue || 0))
+        + pill('Franchise', fmtM(trDataF[lastIdx]?.revenue || 0))
+      : '';
+    summaryEl.innerHTML =
+      `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
+         ${pill('This Week', fmtM(cur), af(wowP) + ' WoW', ac(wowP))}
+         ${pill('8-Wk Avg', fmtM(avg8), af(vsAvg) + ' vs avg', ac(vsAvg))}
+         ${pill('Best Week', fmtM(maxV), maxT ? maxT.label : '')}
+         ${pill('Weakest Week', fmtM(minV), minT ? minT.label : '')}
+         ${splitRow}
+       </div>`;
+  }
+
+  // HTML bar chart for print — solid colours, up to 3 mini-bars per week group
   const htmlChartEl = document.getElementById('mgtTrendHtml');
   if (htmlChartEl && trData.length) {
     const allRevs = [
@@ -8337,16 +8390,15 @@ function renderMgtReport(j, jM, jF) {
       const isLatest = i === lastIdx;
       const revM = trDataM[i] ? trDataM[i].revenue || 0 : 0;
       const revF = trDataF[i] ? trDataF[i].revenue || 0 : 0;
-      const totalColor = isLatest ? '#1e293b' : '#94a3b8';
-      const masterColor = isLatest ? '#059669' : '#6ee7b7';
-      const franchColor = isLatest ? '#4338ca' : '#a5b4fc';
       const bars = hasSplit
         ? `<div style="display:flex;align-items:flex-end;width:100%;height:100%">
-             ${miniBar(t.revenue||0, totalColor)}${miniBar(revM, masterColor)}${miniBar(revF, franchColor)}
+             ${miniBar(t.revenue||0, isLatest ? C_TOT_C : C_TOT_H)}
+             ${miniBar(revM, isLatest ? C_MST_C : C_MST_H)}
+             ${miniBar(revF, isLatest ? C_FRN_C : C_FRN_H)}
            </div>`
-        : miniBar(t.revenue||0, totalColor);
+        : miniBar(t.revenue||0, isLatest ? C_CURR : C_HIST);
       return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
-        <div style="font-size:7.5px;font-weight:${isLatest?'800':'600'};color:${isLatest?'#1d4ed8':'#94a3b8'};margin-bottom:2px;white-space:nowrap">${fmtM(t.revenue||0)}</div>
+        <div style="font-size:7.5px;font-weight:${isLatest?'800':'600'};color:${isLatest?C_CURR:'#94a3b8'};margin-bottom:2px;white-space:nowrap">${fmtM(t.revenue||0)}</div>
         <div style="flex:1;width:100%;display:flex;align-items:flex-end">${bars}</div>
         <div style="font-size:7.5px;font-weight:600;color:#475569;margin-top:3px;text-align:center;line-height:1.2">${t.label||''}</div>
       </div>`;
