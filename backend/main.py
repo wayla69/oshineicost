@@ -12017,7 +12017,7 @@ def report_management(
                     "delta": round(-c_prev, 2), "pct": -100.0,
                 })
         cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
-                            key=lambda x: -(x["cost_per_head"] or 0))[:8]
+                            key=lambda x: -(x["cost_per_head"] or 0))[:12]
         cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
                             key=lambda x: -x["delta"])[:12]
         cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
