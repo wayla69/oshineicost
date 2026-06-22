@@ -2690,9 +2690,9 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
                          "cust": (r["cust"] or 0) if r else 0})
         def rows_for(extra_where, limit):
             return [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
-                     "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
+                     "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"], "dwell_min": x["dwell_min"]}
                     for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND(t.total_inc_vat/1.07) rev,
-                      ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
+                      ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust, t.dwell_min,
                       ROUND((t.total_inc_vat/1.07 - c.cogs_bom)/(t.total_inc_vat/1.07)*100,1) gpp
                       {JN}{extra_where} ORDER BY gpp ASC {limit}""", params).fetchall()]
         worst = rows_for("", "LIMIT 12")
@@ -8694,6 +8694,10 @@ def _init_settings_tables():
             con.execute("ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER")
         if st_cols and "print_times" not in st_cols:
             con.execute("ALTER TABLE sales_transaction ADD COLUMN print_times INTEGER DEFAULT 0")
+        # per-bill sitting duration (open→close, minutes) — populated by sync_mssql
+        # from SaleTab. Powers the "ระยะเวลานั่ง" column on the loss-bill table.
+        if st_cols and "dwell_min" not in st_cols:
+            con.execute("ALTER TABLE sales_transaction ADD COLUMN dwell_min INTEGER")
         for k, v in [
             ("default_branch", ""),
             ("default_month",  "latest"),

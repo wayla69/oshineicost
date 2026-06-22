@@ -279,6 +279,8 @@ def main():
         sq.execute("ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER")
     if st_cols and "print_times" not in st_cols:
         sq.execute("ALTER TABLE sales_transaction ADD COLUMN print_times INTEGER DEFAULT 0")
+    if st_cols and "dwell_min" not in st_cols:
+        sq.execute("ALTER TABLE sales_transaction ADD COLUMN dwell_min INTEGER")
     # natural-key maps from the EXISTING (preserved) tables
     name2bid = {r["name"]: r["branch_id"] for r in sq.execute("SELECT branch_id,name FROM branches")}
     code2sid = {r["sku_code"]: r["sku_id"] for r in sq.execute("SELECT sku_id,sku_code FROM skus")}
@@ -374,6 +376,22 @@ def main():
         if cur is None or (r["amt"] or 0) > cur[1]:
             sale_coupon[k] = (r["cs"], r["amt"] or 0)
 
+    # per-bill sitting duration (เวลานั่ง) = first table OPEN → last table CLOSE,
+    # from SaleTab (StartTime/EndTime). A bill may span several tab rows (split/join/
+    # move) so we take MIN(StartTime)..MAX(EndTime). Cap to [0,360] min — drop tables
+    # never properly closed (~0.27% with absurd dwell, e.g. days). Avg of the kept
+    # band is ~92 min, matching pos_table_turn_day's avg_turn_min.
+    dwell_rows = _chunk(mc, """SELECT st.SaleId AS sid, st.BranchId AS bid,
+                 DATEDIFF(minute, MIN(st.StartTime), MAX(st.EndTime)) AS dwell
+                 FROM SaleTab st
+                 WHERE ISNULL(st.IsCancel,0)=0 AND st.EndTime > st.StartTime AND {RANGE}
+                 GROUP BY st.SaleId, st.BranchId""", windows, col="st.StartTime")
+    dwell_map = {}     # (bid,sid) -> dwell minutes
+    for r in dwell_rows:
+        dv = r["dwell"]
+        if dv is not None and 0 <= dv <= 360:
+            dwell_map[(r["bid"], r["sid"])] = int(dv)
+
     # PrintTimes is optional — older Easy POS schemas don't have it. Probe once and degrade to 0.
     mc.execute("SELECT 1 AS ok FROM INFORMATION_SCHEMA.COLUMNS "
                "WHERE TABLE_NAME='Sale' AND COLUMN_NAME='PrintTimes'")
@@ -402,13 +420,14 @@ def main():
         txr.append((bid, receipt, sold, r["cashier"] or "", "", r["cust"] or 0,
                     round(f, 2), round(d, 2), round(o, 2), round(r["tip"] or 0, 2),
                     0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy",
-                    (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0)))
+                    (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0),
+                    dwell_map.get((r["bid"], r["sid"]))))
     sq.execute("DELETE FROM sales_transaction")
     sq.executemany("""INSERT INTO sales_transaction
         (branch_id,receipt_no,sold_at,cashier,table_no,customer_count,food_subtotal,drink_subtotal,
          other_subtotal,tip,sp_discount,discount,service_charge,total_inc_vat,source,
-         discount_reason_id,coupon_series_id,print_times)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
+         discount_reason_id,coupon_series_id,print_times,dwell_min)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
     print(f"      inserted {len(txr):,} transactions")
 
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")

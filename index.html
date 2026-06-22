@@ -1699,7 +1699,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
           <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">บิล</th><th class="py-1.5 pr-2">สาขา</th>
           <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">COGS (BoM)</th>
           <th class="py-1.5 pr-2 text-right">ขาดทุน</th><th class="py-1.5 pr-2 text-right">ส่วนลด</th>
-          <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 text-right" id="pbLossMetric">GM%</th>
+          <th class="py-1.5 pr-2 text-right">ลูกค้า</th><th class="py-1.5 pr-2 text-right" title="เวลาตั้งแต่เปิดโต๊ะถึงปิดบิล (จาก POS)">นั่ง</th><th class="py-1.5 text-right" id="pbLossMetric">GM%</th>
         </tr></thead><tbody id="pbLoss"></tbody></table>
     </div>
   </div>
@@ -17959,8 +17959,9 @@ function renderPnlBill(d) {
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(Math.round(r.cogs - r.rev))}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cust)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.dwell_min == null ? '#cbd5e1' : r.dwell_min >= 120 ? '#f59e0b' : 'var(--text-secondary)'}">${r.dwell_min != null ? r.dwell_min + ' น.' : '—'}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
-  </tr>`).join('') || '<tr><td colspan="9" class="py-4 text-center text-slate-400">— ไม่มีบิลขาดทุน —</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="10" class="py-4 text-center text-slate-400">— ไม่มีบิลขาดทุน —</td></tr>';
 }
 
 // ══ 🛒 รายงานปฏิบัติการ (Payment · Channel · Void · Table · Promo) ══
