@@ -785,8 +785,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   }
   #tab-mgtreport table tbody tr:nth-child(even) td { background: #f1f5f9 !important; }
   /* Revenue Trend: canvas gradients don't print → show HTML fallback bar chart instead */
-  #mgtTrendHtml { display: flex !important; }
-  @page { margin: 12mm; }
+  #mgtTrendHtml {
+    display: flex !important;
+    height: 160px !important;
+    align-items: flex-end !important;
+    gap: 4px !important;
+    padding: 24px 4px 0 !important;
+  }
+  @page { size: A4 landscape; margin: 10mm; }
 }
 
 /* ════════════════════════════════════════════════════════════
