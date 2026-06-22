@@ -3554,16 +3554,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
     <div class="card p-4 lg:col-span-2">
       <div class="text-sm font-semibold text-slate-700 mb-1">🔄 อัตราหมุนโต๊ะ (Table turnover) · ทุกสาขา</div>
-      <div class="text-xs text-slate-400 mb-2">เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · แถบสั้น/เขียว = หมุนเร็ว = ดี</div>
-      <div style="max-height:300px;overflow:auto">
-        <table class="w-full text-sm">
-          <thead><tr class="text-left text-slate-400 text-xs border-b">
-            <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">นาที/รอบ</th>
-            <th class="py-1.5 pr-2" style="width:160px">เร็ว → ช้า</th>
-            <th class="py-1.5 pr-2 text-right">รอบ</th><th class="py-1.5 text-right">คน/รอบ</th></tr></thead>
-          <tbody id="more-turnover"></tbody>
-        </table>
-      </div>
+      <div class="text-xs text-slate-400 mb-3">นาที/รอบ = เวลาเฉลี่ยระหว่างบิลต่อโต๊ะต่อวัน (10-240 นาที) · <span style="color:#10b981">เขียว = หมุนเร็ว (ดี)</span> · <span style="color:#f59e0b">ส้ม = ช้า</span></div>
+      <div id="more-turnover" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2.5"></div>
     </div>
     <div class="card p-4">
       <div class="flex items-baseline justify-between">
@@ -24001,18 +23993,15 @@ async function loadMoreAnalytics() {
     const medal = i => i===0?'🥇':i===1?'🥈':i===2?'🥉':(i+1);
     document.getElementById('more-turnover').innerHTML = tbr.map((b,i)=>{
       const t = b.avg_turn_min;
-      const w = t!=null ? Math.round(100*t/maxT) : 0;
       const fast = t!=null && t<=med;
-      const col = t==null ? '#cbd5e1' : fast ? '#10b981' : '#f59e0b';
-      return `<tr class="border-b border-slate-50">
-        <td class="py-1.5 pr-2 text-slate-400">${medal(i)}</td>
-        <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
-        <td class="py-1.5 pr-2 text-right font-medium tabular-nums" style="color:${col}">${t!=null?t:'—'}</td>
-        <td class="py-1.5 pr-2"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:${col}"></div></div></td>
-        <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(b.turns)}</td>
-        <td class="py-1.5 text-right tabular-nums">${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'}</td>
-      </tr>`;
-    }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">—</td></tr>';
+      const col = t==null ? '#94a3b8' : fast ? '#10b981' : '#f59e0b';
+      const bg  = t==null ? '#f8fafc' : fast ? '#ecfdf5' : '#fffbeb';
+      return `<div class="rounded-lg p-2.5 text-center" style="background:${bg};border:1px solid ${col}33">
+        <div class="text-[11px] font-medium text-slate-500 truncate" title="${esc(b.branch)}">${medal(i)} ${esc(b.branch)}</div>
+        <div class="font-bold tabular-nums leading-tight" style="color:${col};font-size:1.35rem">${t!=null?t:'—'}<span class="text-[10px] font-normal text-slate-400"> น./รอบ</span></div>
+        <div class="text-[10px] text-slate-400 tabular-nums mt-0.5">${fmtN(b.turns)} รอบ · ${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'} คน/รอบ</div>
+      </div>`;
+    }).join('') || '<div class="col-span-full py-3 text-center text-slate-400 text-sm">—</div>';
   }
 
   // ── auto-generated highlight chips (from the three datasets above) ──
