@@ -784,13 +784,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     background: #0f766e !important; color: #fff !important; border-color: #0f766e !important;
   }
   #tab-mgtreport table tbody tr:nth-child(even) td { background: #f1f5f9 !important; }
-  /* Revenue Trend: canvas gradients don't print → show HTML fallback bar chart instead */
+  /* Revenue Trend: canvas doesn't print reliably → show HTML fallback bar chart.
+     align-items:stretch is REQUIRED — it makes each week-column fill the 200px
+     height so the bars' percentage heights resolve (flex-end would collapse them). */
   #mgtTrendHtml {
     display: flex !important;
-    height: 160px !important;
-    align-items: flex-end !important;
-    gap: 4px !important;
-    padding: 24px 4px 0 !important;
+    height: 200px !important;
+    align-items: stretch !important;
+    gap: 5px !important;
+    padding: 22px 4px 0 !important;
   }
   @page { size: A4 landscape; margin: 10mm; }
 }
@@ -7917,16 +7919,30 @@ function renderMgtReport(j, jM, jF) {
        ['Food Cost %', fcF], ['Target', baht(PF.target)]]);
   })();
 
-  // §3 — Revenue trend (canvas for screen; HTML bars for print — canvas gradients don't print)
+  // §3 — Revenue trend (canvas for screen; HTML bars for print — same solid colours)
+  // Canonical solid colours (no gradients) — single source for legend, canvas & print bars
+  const C_HIST = '#93c5fd', C_CURR = '#1e40af';       // single: historical / current bar
+  const C_LINE = '#f59e0b';                            // single: trend line (amber)
+  const C_TOT_H = '#94a3b8', C_TOT_C = '#334155';     // split Total (slate)
+  const C_MST_H = '#7dd3fc', C_MST_C = '#0284c7';     // split Master (sky)
+  const C_FRN_H = '#d8b4fe', C_FRN_C = '#9333ea';     // split Franchise (purple)
+  const _sw = c => `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${c}"></span>`;
+  const _lg = (c, t) => `<span class="flex items-center gap-1.5">${_sw(c)} ${t}</span>`;
+  const _period = isDaily ? 'day' : 'week';
   const trendLegend = hasSplit
-    ? `<div class="no-print flex items-center gap-4 text-[11px] text-slate-500 mb-2">
-         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#475569"></span> Total</span>
-         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#10b981"></span> Master</span>
-         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:#818cf8"></span> Franchise</span>
-       </div>` : '';
-  const trend = trendLegend + `<div style="height:320px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>
-<div id="mgtTrendHtml" style="display:none;align-items:flex-end;gap:3px;height:180px;padding:8px 4px 0"></div>
-<div id="mgtTrendSummary"></div>`;
+    ? `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
+         ${_lg(C_TOT_C, 'Total')}${_lg(C_MST_C, 'Master')}${_lg(C_FRN_C, 'Franchise')}
+         <span class="text-slate-400">· darker bar = latest ${_period}</span>
+       </div>`
+    : `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
+         ${_lg(C_CURR, 'Net Sales')}
+         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> Trend</span>
+         <span class="text-slate-400">· dark bar = latest ${_period}</span>
+       </div>`;
+  const trend = trendLegend
+    + `<div style="height:300px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>`
+    + `<div id="mgtTrendHtml" style="display:none"></div>`
+    + `<div id="mgtTrendSummary"></div>`;
 
   // §4 — Branch league table
   const medals = ['🥇','🥈','🥉'];
@@ -8270,13 +8286,7 @@ function renderMgtReport(j, jM, jF) {
   const trDataF = hasSplit ? (jF.trend || []) : [];
   const lastIdx = trData.length - 1;
   const fmtM = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
-
-  // Professional solid colours
-  const C_HIST = '#93c5fd', C_CURR = '#1e40af';       // single: historical / current bar
-  const C_LINE = '#f59e0b';                            // single: trend line (amber)
-  const C_TOT_H = '#94a3b8', C_TOT_C = '#334155';     // split Total
-  const C_MST_H = '#7dd3fc', C_MST_C = '#0284c7';     // split Master (sky)
-  const C_FRN_H = '#d8b4fe', C_FRN_C = '#9333ea';     // split Franchise (purple)
+  // Colours C_HIST/C_CURR/C_LINE/C_TOT_*/C_MST_*/C_FRN_* defined above (single source)
 
   const chartDatasets = hasSplit ? [
     { label: 'Total',
@@ -8322,8 +8332,7 @@ function renderMgtReport(j, jM, jF) {
       responsive: true, maintainAspectRatio: false,
       layout: { padding: { top: 28 } },
       plugins: {
-        legend: { display: hasSplit, position: 'top',
-          labels: { boxWidth: 10, padding: 12, font: { size: 10 } } },
+        legend: { display: false },   // HTML legend above handles screen + print
         tooltip: {
           backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: hasSplit,
           filter: item => item.dataset.type !== 'line',
