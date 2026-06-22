@@ -11898,6 +11898,12 @@ def report_management(
                 "wow_pct": pct(rev, p["rev"] or 0) if p else None,
             })
         branches.sort(key=lambda x: -x["revenue"])
+        prev_rank_map = {nm: i + 1 for i, (nm, _) in
+                         enumerate(sorted(prev_b.items(), key=lambda kv: -(kv[1]["rev"] or 0)))}
+        for i, b in enumerate(branches):
+            b["rank"] = i + 1
+            pr = prev_rank_map.get(b["branch"])
+            b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
 
         # ---- money-leak radar over the period ----------------------------
         lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
