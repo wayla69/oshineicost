@@ -3805,15 +3805,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </div>
 
 <div id="tab-discounts" style="display:none">
-  <!-- Day filter — overrides global month picker for this tab only -->
+  <!-- Day/range filter — overrides global month picker for this tab only -->
   <div class="card p-4 mb-5 flex items-center gap-3 flex-wrap">
-    <span class="text-sm font-semibold" style="color:var(--text-main)">ดูรายวัน</span>
-    <input type="date" id="disc-day-picker" class="border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
+    <span class="text-sm font-semibold" style="color:var(--text-main)">ดูช่วงวัน</span>
+    <input type="date" id="disc-day-from" class="border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
            oninput="_tabLastKey.discounts=null;loadDiscountsTab()">
-    <button onclick="document.getElementById('disc-day-picker').value='';_tabLastKey.discounts=null;loadDiscountsTab()"
+    <span class="text-sm" style="color:var(--text-muted)">ถึง</span>
+    <input type="date" id="disc-day-to" class="border border-slate-200 rounded-lg px-3 py-1.5 text-sm"
+           oninput="_tabLastKey.discounts=null;loadDiscountsTab()">
+    <button onclick="document.getElementById('disc-day-from').value='';document.getElementById('disc-day-to').value='';_tabLastKey.discounts=null;loadDiscountsTab()"
             class="text-xs border border-slate-200 rounded-lg px-3 py-1.5" style="color:var(--text-muted)">
       ล้าง (กลับรายเดือน)
     </button>
+    <span class="text-xs" style="color:var(--text-muted)">เว้น “ถึง” = วันเดียว · เว้นทั้งคู่ = รายเดือน</span>
     <span id="disc-day-note" class="text-xs hidden" style="color:#d97706">* เหตุผลส่วนลด/Alert ใช้ข้อมูลรายเดือน</span>
   </div>
 
@@ -21937,11 +21941,18 @@ async function openDiscountBills(opts = {}) {
   const body  = document.getElementById('discBillsBody');
   const branch     = opts.branch     !== undefined ? opts.branch     : getBranch();
   const cashier    = opts.cashier    || '';
-  const month_from = opts.month_from !== undefined ? opts.month_from : getMonthFrom();
-  const month_to   = opts.month_to   !== undefined ? opts.month_to   : getMonthTo();
+  // A day/range (date_from/date_to) takes precedence over the global month — mirrors
+  // the backend's _apply_period_filter, so a drill from a day/range KPI shows that scope.
+  const date_from = opts.date_from || '';
+  const date_to   = opts.date_to   || '';
+  const useDate    = !!(date_from || date_to);
+  const month_from = useDate ? '' : (opts.month_from !== undefined ? opts.month_from : getMonthFrom());
+  const month_to   = useDate ? '' : (opts.month_to   !== undefined ? opts.month_to   : getMonthTo());
   const p = new URLSearchParams();
   if (branch)     p.set('branch', branch);
   if (cashier)    p.set('cashier', cashier);
+  if (date_from)  p.set('date_from', date_from);
+  if (date_to)    p.set('date_to', date_to);
   if (month_from) p.set('month_from', month_from);
   if (month_to)   p.set('month_to', month_to);
   p.set('sort', opts.sort || 'discount');
@@ -21954,10 +21965,10 @@ async function openDiscountBills(opts = {}) {
   if (opts.payment)           p.set('payment', opts.payment);
   if (opts.reprinted_only)    p.set('reprinted_only', 'true');
   // remember context so the payment dropdown and reprint toggle can re-query the same drill
-  _discBillsCtx = { branch, cashier, month_from, month_to, sort: opts.sort, amount: opts.amount,
-                    min_pct: opts.min_pct, max_pct: opts.max_pct, gross_zero: opts.gross_zero,
-                    min_discount: opts.min_discount, title: opts.title, payment: opts.payment,
-                    reprinted_only: opts.reprinted_only };
+  _discBillsCtx = { branch, cashier, date_from, date_to, month_from, month_to, sort: opts.sort,
+                    amount: opts.amount, min_pct: opts.min_pct, max_pct: opts.max_pct,
+                    gross_zero: opts.gross_zero, min_discount: opts.min_discount, title: opts.title,
+                    payment: opts.payment, reprinted_only: opts.reprinted_only };
   title.textContent = '🔍 ' + (opts.title || (cashier ? `บิลส่วนลด · ${cashier}` : 'บิลส่วนลด'));
   sumEl.innerHTML = '';
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
@@ -22642,17 +22653,24 @@ async function loadDiscountLeakage(params, gen) {
 }
 
 async function loadDiscountsTab() {
-  const dayVal = (document.getElementById('disc-day-picker') || {}).value || '';
-  const _fk = _filterKey() + '|d:' + dayVal;
+  // Day/range filter: from+to → range; only one set → that single day; none → global month.
+  const fromV = (document.getElementById('disc-day-from') || {}).value || '';
+  const toV   = (document.getElementById('disc-day-to')   || {}).value || '';
+  let dFrom = '', dTo = '';
+  if (fromV && toV)   { dFrom = (fromV <= toV) ? fromV : toV; dTo = (fromV <= toV) ? toV : fromV; }
+  else if (fromV)     { dFrom = dTo = fromV; }
+  else if (toV)       { dFrom = dTo = toV; }
+  const hasDay = !!dFrom;
+  const _fk = _filterKey() + '|d:' + dFrom + '~' + dTo;
   if (_tabLastKey.discounts === _fk) return; _tabLastKey.discounts = _fk;
   const gen = loadGen;
 
   const noteEl = document.getElementById('disc-day-note');
   const params = new URLSearchParams();
   if (getBranch()) params.set('branch', getBranch());
-  if (dayVal) {
-    params.set('date_from', dayVal);
-    params.set('date_to', dayVal);
+  if (hasDay) {
+    params.set('date_from', dFrom);
+    params.set('date_to', dTo);
     if (noteEl) noteEl.classList.remove('hidden');
   } else {
     if (getMonthFrom()) params.set('month_from', getMonthFrom());
@@ -22665,9 +22683,9 @@ async function loadDiscountsTab() {
   // Per-branch leakage view is a cross-branch comparison by design → ignore the
   // branch filter, honour only the period range.
   const _leakP = new URLSearchParams();
-  if (dayVal) {
-    _leakP.set('date_from', dayVal);
-    _leakP.set('date_to', dayVal);
+  if (hasDay) {
+    _leakP.set('date_from', dFrom);
+    _leakP.set('date_to', dTo);
   } else {
     if (getMonthFrom()) _leakP.set('month_from', getMonthFrom());
     if (getMonthTo())   _leakP.set('month_to', getMonthTo());
@@ -22680,9 +22698,12 @@ async function loadDiscountsTab() {
   const o = d.overall || {};
 
   const discRate = o.total_tx ? (o.discount_tx / o.total_tx * 100).toFixed(1) : '0';
+  // Carry the tab's active day/range into the KPI drill so the bill list matches the
+  // KPI scope (not the global month). Empty when on the month fallback.
+  const drillDate = hasDay ? `date_from:'${dFrom}',date_to:'${dTo}',` : '';
   document.getElementById('disc-kpi-row').innerHTML = [
-    { label: 'Total Discounted', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% of all transactions`, color: '#ef4444', drill: "openDiscountBills({title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})" },
-    { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: "openDiscountBills({sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})" },
+    { label: 'Total Discounted', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% of all transactions`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
+    { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
     { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7c3aed' },
     { label: 'Total Transactions', value: fmtN(o.total_tx||0), sub: 'in period', color: '#64748b' },
   ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?' 🔍':''}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
