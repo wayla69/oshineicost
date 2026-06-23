@@ -1738,13 +1738,19 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
     <select id="chtMonth" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">ขอบเขต:</span>
+    <select id="chtScope" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="master">Master (เจ้าของเอง)</option>
+      <option value="franchise">แฟรนไชส์</option>
+      <option value="all">ทั้งหมด</option>
+    </select>
     <span id="chtRange" class="text-[11px]" style="color:var(--text-muted)"></span>
     <div class="ml-auto flex items-center gap-2">
       <a id="chtPrint" href="#" target="_blank" rel="noopener" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="เปิดรายงานฉบับเต็มแบบพิมพ์ได้ (HTML)">🖨️ เปิดฉบับเต็ม</a>
       <a id="chtXlsx" href="#" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="ดาวน์โหลด Excel (8 ชีต + ข้อมูลดิบ)">⬇ Excel</a>
     </div>
   </div>
-  <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุนวัตถุดิบ (COGS) ต่อหัวลูกค้า · เฉพาะ <b>สาขา Master</b> · เรียง Top 60 ตามต้นทุน/หัว · เทียบรายสาขากับภาพรวม · COGS สูตรมาตรฐานระบบ (ตัดแพ็กเกจบุฟเฟต์กันนับซ้ำ, ใช้ต้นทุนจริง sku_cost ก่อน BoM)</p>
+  <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุนวัตถุดิบ (COGS) ต่อหัวลูกค้า · เลือกขอบเขต <b>Master / แฟรนไชส์ / ทั้งหมด</b> · เรียง Top 60 ตามต้นทุน/หัว · เทียบรายสาขากับภาพรวม · COGS สูตรมาตรฐานระบบ (ตัดแพ็กเกจบุฟเฟต์กันนับซ้ำ, ใช้ต้นทุนจริง sku_cost ก่อน BoM)</p>
   <div id="chtBody"></div>
 </div>
 
@@ -18204,28 +18210,30 @@ async function loadCostHeadTop60(force) {
       _chtMonthsLoaded = true;
     } catch (e) {}
   }
-  // Month: on first open let the backend pick the latest month WITH master data (the
-  // global filter defaults to the current, still-empty month, so don't follow it blindly);
-  // after that, follow explicit picker changes + global-filter changes.
+  const scope = document.getElementById('chtScope')?.value || 'master';
+  // Month: picker-driven. On first open send nothing → backend picks the latest month
+  // WITH data, then we snap the picker to it. We deliberately do NOT follow the global
+  // period filter: it defaults to the current, still-empty month, which would force a
+  // "no data" view. The user changes month via this tab's own picker.
   const firstOpen = !(sel && sel.dataset.cbset);
-  if (!firstOpen) _syncExtraMonth('chtMonth', 'costheadtop60');
   const mv = firstOpen ? '' : (sel?.value || '');
   const keyMonth = mv || 'auto';
-  if (!force && _tabLastKey.costheadtop60 === 'm:' + keyMonth) return;
+  if (!force && _tabLastKey.costheadtop60 === 'm:' + keyMonth + '|s:' + scope) return;
   const body = document.getElementById('chtBody');
   body.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังโหลด…</p>';
-  const p = new URLSearchParams(); if (mv) p.set('month', mv);
+  const p = new URLSearchParams(); if (mv) p.set('month', mv); p.set('scope', scope);
   let d;
   try { d = await fetch(`${API}/api/reports/cost-head-top60?${p}`).then(r => r.json()); }
   catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">โหลดข้อมูลไม่สำเร็จ</p>'; return; }
-  // export links + range label follow the resolved month; snap the picker to it
+  // export links + range label follow the resolved month + scope; snap the picker to it
   const m = d.month || mv;
   if (sel) { if (d.month) sel.value = d.month; sel.dataset.cbset = '1'; }
-  _tabLastKey.costheadtop60 = 'm:' + (d.month || keyMonth);
-  document.getElementById('chtPrint').href = `${API}/api/reports/cost-head-top60.print?month=${m}`;
-  document.getElementById('chtXlsx').href  = `${API}/api/reports/cost-head-top60.xlsx?month=${m}`;
-  document.getElementById('chtRange').textContent = m ? `เดือน ${m} · ${d.branches.length} สาขา Master` : '';
-  if (!d.overview) { body.innerHTML = '<p class="text-center text-slate-400 py-10">ไม่มีข้อมูลสำหรับเดือนนี้</p>'; return; }
+  _tabLastKey.costheadtop60 = 'm:' + (d.month || keyMonth) + '|s:' + scope;
+  const sl = d.scope_label || 'Master';
+  document.getElementById('chtPrint').href = `${API}/api/reports/cost-head-top60.print?month=${m}&scope=${scope}`;
+  document.getElementById('chtXlsx').href  = `${API}/api/reports/cost-head-top60.xlsx?month=${m}&scope=${scope}`;
+  document.getElementById('chtRange').textContent = m ? `เดือน ${m} · ${d.branches.length} สาขา ${sl}` : '';
+  if (!d.overview) { body.innerHTML = `<p class="text-center text-slate-400 py-10">ไม่มีข้อมูลสำหรับเดือน ${m} (ขอบเขต ${sl})</p>`; return; }
 
   // ── formatting helpers ──
   const n0 = v => Number(v || 0).toLocaleString('en-US');
@@ -18238,7 +18246,7 @@ async function loadCostHeadTop60(force) {
 
   // ── KPI hero (overview) ──
   const kpis = [
-    { l: 'จำนวนหัวลูกค้า (รวม)', v: n0(ov.covers), sub: d.branches.length + ' สาขา Master', c: '#0e7490' },
+    { l: 'จำนวนหัวลูกค้า (รวม)', v: n0(ov.covers), sub: d.branches.length + ' สาขา ' + sl, c: '#0e7490' },
     { l: 'ต้นทุนอาหาร/หัว เฉลี่ย', v: b2(ov.cph_total), sub: 'ฐานเทียบของทุกสาขา', c: RED },
     { l: 'Food cost %', v: ov.food_pct.toFixed(1) + '%', sub: 'COGS ÷ ยอดขาย ex-VAT', c: '#7c3aed' },
     { l: 'ต้นทุนอาหารรวม', v: fmt(ov.total_cogs), sub: ov.menu_count + ' เมนูมีต้นทุน', c: '#0d9488' },
@@ -18344,7 +18352,58 @@ async function loadCostHeadTop60(force) {
     </div>
     <p class="text-[11px] mt-3" style="color:var(--text-muted)">เกณฑ์ “มีสาระสำคัญ”: Δ/หัวต่างจากภาพรวมชัดและเป็นบาท/หัวที่มีนัย (เน้นวัตถุดิบแพง). ตัวเลขจากฐานข้อมูลจริง — “สาเหตุ” เป็นสมมุติฐานเพื่อตรวจสอบ ไม่ใช่ข้อสรุปความผิด.</p></div>`;
 
-  body.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>` + rankTbl + headline + ovTable + branchHtml + action;
+  // ── charts row (canvases filled after innerHTML lands in the DOM) ──
+  const chartsRow = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">📊 ต้นทุน/หัว รายสาขา เทียบค่าเฉลี่ย</h3>
+      <div style="height:300px"><canvas id="chtChartBranch"></canvas></div></div>
+    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">🍽️ Top 12 เมนูตัวขับต้นทุน/หัว (ภาพรวม)</h3>
+      <div style="height:300px"><canvas id="chtChartMenus"></canvas></div></div>
+  </div>`;
+
+  body.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>` + chartsRow + rankTbl + headline + ovTable + branchHtml + action;
+
+  // Chart 1 — branch cost/head bars (red=above overview, green=below) + overview average line
+  const rk = A.ranked || [];
+  mkChart('chtChartBranch', {
+    type: 'bar',
+    data: {
+      labels: rk.map(b => b.name),
+      datasets: [
+        { label: 'ต้นทุน/หัว', data: rk.map(b => b.cph_total),
+          backgroundColor: rk.map(b => b.gap > 0 ? RED : GRN), borderRadius: 3, order: 2 },
+        { label: 'ค่าเฉลี่ยภาพรวม', type: 'line', data: rk.map(() => ov.cph_total),
+          borderColor: '#475569', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, order: 1 },
+      ],
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { boxWidth: 12, font: { size: 10 } } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: c => `${c.dataset.label}: ฿${q2(c.parsed.y)}` } },
+      },
+      scales: { y: { ticks: { callback: v => '฿' + v } }, x: { ticks: { font: { size: 10 } } } },
+    },
+  });
+
+  // Chart 2 — Top-12 menus by cost/head (premium = red, else teal), horizontal
+  const top12 = ov.menus.slice(0, 12);
+  mkChart('chtChartMenus', {
+    type: 'bar',
+    data: {
+      labels: top12.map(mn => mn.desc.length > 28 ? mn.desc.slice(0, 27) + '…' : mn.desc),
+      datasets: [{ label: 'ต้นทุน/หัว', data: top12.map(mn => mn.cph),
+        backgroundColor: top12.map(mn => mn.prem ? RED : '#0d9488'), borderRadius: 3 }],
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false }, datalabels: { display: false },
+        tooltip: { callbacks: { label: c => `฿${q2(c.parsed.x)}/หัว` } },
+      },
+      scales: { x: { ticks: { callback: v => '฿' + v } }, y: { ticks: { font: { size: 9.5 } } } },
+    },
+  });
 }
 
 // ══════════ 🧩 EXTRA (POS เชิงลึก) ══════════

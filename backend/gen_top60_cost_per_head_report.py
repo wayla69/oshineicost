@@ -375,8 +375,9 @@ def page(inner, foot_left, pno):
             f'<span>หน้า {pno}</span></div>{inner}</div>')
 
 
-def build_html(period, overview, branches, gen_dt, db_path):
+def build_html(period, overview, branches, gen_dt, db_path, scope_label="Master"):
     th_period = thai_month(period)
+    nbr = len(branches)
     pages = []
     pno = [0]
 
@@ -391,13 +392,13 @@ def build_html(period, overview, branches, gen_dt, db_path):
     <div class="cover"><div class="cbody">
       <div class="wm">OSHINEI ENTERPRISE · INTERNAL</div>
       <div class="kicker">รายงานวิเคราะห์ต้นทุนอาหารต่อหัว</div>
-      <h1>Top 60 เมนู — ต้นทุนต่อหัวต่อเดือน<br>สาขา Master</h1>
-      <div class="sub">ภาพรวมทุกสาขารวมกัน แล้วแยกราย 5 สาขา Master พร้อมวิเคราะห์ผลต่าง
+      <h1>Top 60 เมนู — ต้นทุนต่อหัวต่อเดือน<br>สาขา {scope_label}</h1>
+      <div class="sub">ภาพรวมทุกสาขารวมกัน แล้วแยกราย {nbr} สาขา {scope_label} พร้อมวิเคราะห์ผลต่าง
         ที่มีสาระสำคัญเทียบกับภาพรวม และแนวทางตรวจสอบ–พัฒนา–ติดตามแก้ไข</div>
       <div class="rule"></div>
       <div class="meta">
         <b>รอบข้อมูล:</b> {th_period} &nbsp;·&nbsp;
-        <b>ขอบเขต:</b> 5 สาขา Master ({", ".join(b["name"] for b in branches)})<br>
+        <b>ขอบเขต:</b> {nbr} สาขา {scope_label} ({", ".join(b["name"] for b in branches)})<br>
         <b>หน่วยวัดหลัก:</b> ต้นทุนวัตถุดิบ (COGS) ต่อหัวลูกค้า — บาท/หัว<br>
         <b>จัดทำเมื่อ:</b> {gen_dt}
       </div>
@@ -445,14 +446,14 @@ def build_html(period, overview, branches, gen_dt, db_path):
     <a id="overview"></a>
     <div class="sec-no">ส่วนที่ 1</div>
     <h2>ภาพรวมทุกสาขารวมกัน — Top 60 เมนูตามต้นทุน/หัว</h2>
-    <p class="lead">รวม 5 สาขา Master เดือน {th_period}: ลูกค้า <b>{b0(overview['covers'])}</b> หัว,
+    <p class="lead">รวม {nbr} สาขา {scope_label} เดือน {th_period}: ลูกค้า <b>{b0(overview['covers'])}</b> หัว,
     ต้นทุนอาหารรวม <b>฿{b0(overview['total_cogs'])}</b>, คิดเป็น
     <b>฿{b2(overview['cph_total'])}/หัว</b> (Food cost {pct(overview['food_pct'])} ของยอดขาย ex-VAT).
     เมนู 10 อันดับแรกกินไปแล้ว <b>{pct(top10_share)}</b> ของต้นทุนทั้งหมด และวัตถุดิบราคาแพง (จุดแดง)
     รวมกัน <b>{pct(prem_share)}</b> ของต้นทุน/หัว — นี่คือจุดที่การควบคุมให้ผลตอบแทนสูงสุด.</p>
     <div class="figrow">
       {fig('฿'+b2(overview['cph_total']),'ต้นทุน/หัว เฉลี่ย','ฐานเทียบของทุกสาขา','a')}
-      {fig(b0(overview['covers']),'จำนวนหัวลูกค้า','5 สาขารวมกัน')}
+      {fig(b0(overview['covers']),'จำนวนหัวลูกค้า',f'{nbr} สาขารวมกัน')}
       {fig(pct(top10_share),'Top 10 = สัดส่วนต้นทุน','กระจุกตัวสูง')}
       {fig(pct(prem_share),'วัตถุดิบแพง = สัดส่วน','แซลมอน/ทุเรียน/ทะเล','teal')}
     </div>
@@ -606,7 +607,7 @@ def build_html(period, overview, branches, gen_dt, db_path):
               '⬇ บันทึก / พิมพ์ PDF</button>')
     head = (f'<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
-            f'<title>Top 60 ต้นทุน/หัว สาขา Master — {th_period}</title>'
+            f'<title>Top 60 ต้นทุน/หัว สาขา {scope_label} — {th_period}</title>'
             f'<link rel="preconnect" href="https://fonts.googleapis.com">'
             f'<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700'
             f'&family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">'
@@ -622,7 +623,7 @@ def thai_month(period):
 
 
 # ── Excel export (same data pipeline as the HTML — single source of truth) ────
-def write_xlsx(path, period, overview, branches, gen_dt):
+def write_xlsx(path, period, overview, branches, gen_dt, scope_label="Master"):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Side, Border
     from openpyxl.utils import get_column_letter
@@ -726,9 +727,9 @@ def write_xlsx(path, period, overview, branches, gen_dt):
 
     # ── สรุป ─────────────────────────────────────────────────────────────
     ws = wb.active; ws.title = "สรุป"; ws.sheet_properties.tabColor = "1B2A30"
-    ws.cell(1, 1, "รายงาน Top 60 เมนู — ต้นทุนต่อหัว · สาขา Master").font = f_title
+    ws.cell(1, 1, f"รายงาน Top 60 เมนู — ต้นทุนต่อหัว · สาขา {scope_label}").font = f_title
     ws.cell(2, 1, f"รอบข้อมูล {th_period}   ·   จัดทำ {gen_dt}   ·   "
-                  f"ขอบเขต {len(branches)} สาขา Master   ·   ตัวเลขจากฐานข้อมูลจริง").font = f_sub
+                  f"ขอบเขต {len(branches)} สาขา {scope_label}   ·   ตัวเลขจากฐานข้อมูลจริง").font = f_sub
     # KPI block
     ws.cell(4, 1, "ภาพรวมทุกสาขารวมกัน").font = f_bold
     kpis = [("จำนวนหัวลูกค้า (covers)", overview["covers"], I),
