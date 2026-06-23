@@ -60,3 +60,27 @@ def test_cost_head_top60_exports(client):
     assert h.status_code == 200
     assert "text/html" in h.headers["content-type"]
     assert "ต้นทุน/หัว" in h.text
+
+
+def test_cost_head_top60_scope(client):
+    # master (default): only BranchA
+    dm = client.get("/api/reports/cost-head-top60", params={"month": "2026-05", "scope": "master"}).json()
+    assert [b["name"] for b in dm["branches"]] == ["BranchA"]
+    assert dm["overview"]["covers"] == 100
+    assert dm["scope"] == "master"
+    # franchise: only BranchB
+    df = client.get("/api/reports/cost-head-top60", params={"month": "2026-05", "scope": "franchise"}).json()
+    assert [b["name"] for b in df["branches"]] == ["BranchB"]
+    assert df["overview"]["covers"] == 100
+    assert df["scope_label"] == "แฟรนไชส์"
+    # all: both branches, covers summed
+    da = client.get("/api/reports/cost-head-top60", params={"month": "2026-05", "scope": "all"}).json()
+    assert sorted(b["name"] for b in da["branches"]) == ["BranchA", "BranchB"]
+    assert da["overview"]["covers"] == 200
+    assert da["scope_label"] == "ทุกสาขา"
+    # unknown scope falls back to master
+    db = client.get("/api/reports/cost-head-top60", params={"month": "2026-05", "scope": "bogus"}).json()
+    assert db["scope"] == "master"
+    # exports honour scope
+    x = client.get("/api/reports/cost-head-top60.xlsx", params={"month": "2026-05", "scope": "franchise"})
+    assert x.status_code == 200 and "spreadsheetml" in x.headers["content-type"]

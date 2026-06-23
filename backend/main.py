@@ -2512,19 +2512,29 @@ def _ch_is_premium(desc: str) -> bool:
     return any(k in d for k in _CH_PREMIUM_KW)
 
 
-def _cost_head_scopes(con, month: str):
+# scope → branch_type filter (active branches only). 'all' = master + franchise.
+_CH_SCOPES = {
+    "master":    "branch_type='master' AND active=1",
+    "franchise": "branch_type='franchise' AND active=1",
+    "all":       "active=1",
+}
+_CH_SCOPE_LABEL = {"master": "Master", "franchise": "แฟรนไชส์", "all": "ทุกสาขา"}
+
+
+def _cost_head_scopes(con, month: str, scope: str = "master"):
     """Build (overview, [branch,...]) scope dicts for `month`, generator-shaped so they
     can feed the standalone report's build_html/write_xlsx unchanged — but computed with
-    the LIVE _unified_cogs_expr. Returns (None, []) when no active master has data.
+    the LIVE _unified_cogs_expr. `scope` ∈ master|franchise|all selects which branches.
+    Returns (None, []) when no branch in scope has data.
 
     cost-per-head of a menu = (menu monthly COGS) ÷ (scope covers = Σ customer_count).
     Buffet TIER rows are 0-cost inside the expr (consumption is on the B0xxx item rows),
     so they drop out of the costed menu list but their package revenue is added back into
     the food-cost-% denominator (Σ subtotal_ex_vat over ALL rows)."""
     cogs = _unified_cogs_expr("ssm")
+    where = _CH_SCOPES.get(scope, _CH_SCOPES["master"])
     masters = [(r["branch_id"], r["name"]) for r in con.execute(
-        "SELECT branch_id, name FROM branches WHERE branch_type='master' AND active=1 "
-        "ORDER BY branch_id").fetchall()]
+        f"SELECT branch_id, name FROM branches WHERE {where} ORDER BY branch_id").fetchall()]
     masters = [(bid, nm) for bid, nm in masters if (con.execute(
         "SELECT COALESCE(SUM(customer_count),0) FROM sales_month_summary "
         "WHERE period_month=? AND branch_id=?", (month, bid)).fetchone()[0] or 0) > 0]
@@ -2615,15 +2625,15 @@ def _ch_gen_dt():
 
 
 def _ch_resolve_month(con, month):
-    """Default to the latest month that actually HAS master-branch covers (the latest
+    """Default to the latest month that actually HAS active-branch covers (the latest
     completed month) — not just MAX(period_month), which would land on the current,
-    still-empty month and show 'no data'."""
+    still-empty month and show 'no data'. Scope-agnostic (all scopes share data months)."""
     if month:
         return month
     r = con.execute(
         "SELECT MAX(s.period_month) FROM sales_month_summary s "
         "JOIN branches b ON b.branch_id = s.branch_id "
-        "WHERE b.branch_type='master' AND b.active=1 AND s.customer_count > 0").fetchone()
+        "WHERE b.active=1 AND s.customer_count > 0").fetchone()
     if r and r[0]:
         return r[0]
     r2 = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly").fetchone()
@@ -2632,20 +2642,24 @@ def _ch_resolve_month(con, month):
 
 @app.get("/api/reports/cost-head-top60")
 @ttl_cache
-def report_cost_head_top60(month: Optional[str] = Query(None)):
-    """Top-60 menu cost-per-head for the master branches, one month: combined overview
-    + each active master branch's FULL Top-60 with Δ/head vs the overview, plus a
-    cross-branch ranking and headline. Master-only (cross-branch benchmarking).
+def report_cost_head_top60(month: Optional[str] = Query(None),
+                           scope: str = Query("master", description="master | franchise | all")):
+    """Top-60 menu cost-per-head for one branch scope, one month: combined overview
+    + each branch's FULL Top-60 with Δ/head vs the overview, plus a cross-branch
+    ranking and headline. scope = master (default) | franchise | all.
     Companion exports: /api/reports/cost-head-top60.print (HTML) | .xlsx."""
     TOPN = 60
+    if scope not in _CH_SCOPES:
+        scope = "master"
     with get_db() as con:
         months = [r[0] for r in con.execute(
             "SELECT DISTINCT period_month FROM sales_sku_monthly ORDER BY period_month DESC").fetchall()]
         month = _ch_resolve_month(con, month)
-        overview, branches = _cost_head_scopes(con, month)
+        overview, branches = _cost_head_scopes(con, month, scope)
         if not overview:
-            return {"month": month, "months": months, "overview": None,
-                    "branches": [], "analysis": None}
+            return {"month": month, "months": months, "scope": scope,
+                    "scope_label": _CH_SCOPE_LABEL.get(scope, scope),
+                    "overview": None, "branches": [], "analysis": None}
 
         def top_rows(sc, variant):
             ov = overview["by_sku"]; cum = 0.0; out = []
@@ -2699,19 +2713,23 @@ def report_cost_head_top60(month: Optional[str] = Query(None)):
                 "hottest_excess_month": round(hot["gap"] * hot["covers"], 0),
                 "hottest_drivers": [{"desc": x["desc"], "d": x["d"]} for x in hot["highs"][:3]],
             })
-    return {"month": month, "months": months, "overview": ov_out,
-            "branches": br_out, "analysis": analysis}
+    return {"month": month, "months": months, "scope": scope,
+            "scope_label": _CH_SCOPE_LABEL.get(scope, scope),
+            "overview": ov_out, "branches": br_out, "analysis": analysis}
 
 
 @app.get("/api/reports/cost-head-top60.xlsx")
-def report_cost_head_top60_xlsx(month: Optional[str] = Query(None)):
+def report_cost_head_top60_xlsx(month: Optional[str] = Query(None),
+                                scope: str = Query("master")):
     """Excel export of the Top-60 cost-per-head report (reuses the generator's write_xlsx,
     fed the live-computed scopes — ties out with the tab)."""
     import io as _io_ch
     from fastapi.responses import StreamingResponse as _SR
+    if scope not in _CH_SCOPES:
+        scope = "master"
     with get_db() as con:
         month = _ch_resolve_month(con, month)
-        overview, branches = _cost_head_scopes(con, month)
+        overview, branches = _cost_head_scopes(con, month, scope)
     if not overview:
         raise HTTPException(status_code=404, detail="ไม่มีข้อมูลสำหรับเดือนนี้")
     try:
@@ -2719,25 +2737,30 @@ def report_cost_head_top60_xlsx(month: Optional[str] = Query(None)):
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"export module unavailable: {e}")
     buf = _io_ch.BytesIO()
-    gen.write_xlsx(buf, month, overview, branches, _ch_gen_dt())   # openpyxl save() accepts a file-like
+    gen.write_xlsx(buf, month, overview, branches, _ch_gen_dt(),
+                   scope_label=_CH_SCOPE_LABEL.get(scope, scope))   # openpyxl save() accepts a file-like
     buf.seek(0)
     return _SR(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-               headers={"Content-Disposition": f"attachment; filename=TOP60_COST_PER_HEAD_{month}.xlsx"})
+               headers={"Content-Disposition": f"attachment; filename=TOP60_COST_PER_HEAD_{scope}_{month}.xlsx"})
 
 
 @app.get("/api/reports/cost-head-top60.print")
-def report_cost_head_top60_print(month: Optional[str] = Query(None)):
+def report_cost_head_top60_print(month: Optional[str] = Query(None),
+                                 scope: str = Query("master")):
     """Full printable HTML report (the standalone generator's output, computed live)."""
+    if scope not in _CH_SCOPES:
+        scope = "master"
     with get_db() as con:
         month = _ch_resolve_month(con, month)
-        overview, branches = _cost_head_scopes(con, month)
+        overview, branches = _cost_head_scopes(con, month, scope)
     if not overview:
         raise HTTPException(status_code=404, detail="ไม่มีข้อมูลสำหรับเดือนนี้")
     try:
         gen = _load_top60_gen()
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"export module unavailable: {e}")
-    html_out = gen.build_html(month, overview, branches, _ch_gen_dt(), "live")
+    html_out = gen.build_html(month, overview, branches, _ch_gen_dt(), "live",
+                              scope_label=_CH_SCOPE_LABEL.get(scope, scope))
     return Response(content=html_out, media_type="text/html; charset=utf-8")
 
 
