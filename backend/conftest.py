@@ -85,6 +85,16 @@ def _build_db(path: str):
         inc = round(ex * 1.07, 2)
         cx.execute("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source)"
                    " VALUES(?,?,?,?,?,?,?, 'Easy')", (bid, mo, sid, qty, ex, round(inc - ex, 2), inc))
+    # monthly summary (covers) — backs cost-per-head style endpoints (covers = customer_count)
+    con.execute("CREATE TABLE IF NOT EXISTS sales_month_summary(branch_id INT, period_month TEXT, "
+                "gross_sales REAL, refunds REAL, discounts REAL, voided REAL, net_sales REAL, cash REAL, "
+                "credit_card REAL, transfer REAL, qr REAL, coupon REAL, customer_count INTEGER, "
+                "transaction_count INTEGER, source TEXT)")
+    for mo, scale in ((PREV_MONTH, 1.0), (LATEST_MONTH, 0.8)):
+        for bid in (1, 2):
+            cx.execute("INSERT INTO sales_month_summary(branch_id,period_month,net_sales,customer_count,"
+                       "transaction_count,source) VALUES(?,?,?,?,?, 'Easy')",
+                       (bid, mo, 15000 * scale, int(round(100 * scale)), int(round(25 * scale))))
     # daily sku (recent window) + transactions + per-bill cogs
     for mo in (PREV_MONTH, LATEST_MONTH):
         for d in DAYS:

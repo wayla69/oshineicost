@@ -2495,6 +2495,252 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
             "prev_range": [ps.isoformat(), pe.isoformat()], "branches": out, "total": total}
 
 
+# ── Top-60 menu cost-per-head · MASTER branches (overview → per-branch → variance) ──
+# Powers the "💸 Top 60 ต้นทุน/หัว · สาขา Master" report tab. COGS via the LIVE
+# _unified_cogs_expr (same source of truth as the rest of the app), so the in-app
+# tab, the printable HTML, and the Excel all tie out. Master-only by design — the
+# whole point is cross-branch benchmarking against the combined overview.
+_CH_PREMIUM_KW = [
+    "แซลมอน", "ทุเรียน", "หอยเชลล์", "กุ้ง", "ปู", "ทูน่า", "อูนิ", "ไข่ปลา",
+    "ไข่หอยเม่น", "คาเวียร์", "ปลาดิบ", "ซาชิมิ", "ดอง", "เนื้อ", "วากิว",
+    "โอโทโร่", "ชูโทโร่", "อิคุระ", "หอยนางรม", "สเต็ก", "ออส", "ปลาไหล", "อูนางิ",
+]
+
+
+def _ch_is_premium(desc: str) -> bool:
+    d = desc or ""
+    return any(k in d for k in _CH_PREMIUM_KW)
+
+
+def _cost_head_scopes(con, month: str):
+    """Build (overview, [branch,...]) scope dicts for `month`, generator-shaped so they
+    can feed the standalone report's build_html/write_xlsx unchanged — but computed with
+    the LIVE _unified_cogs_expr. Returns (None, []) when no active master has data.
+
+    cost-per-head of a menu = (menu monthly COGS) ÷ (scope covers = Σ customer_count).
+    Buffet TIER rows are 0-cost inside the expr (consumption is on the B0xxx item rows),
+    so they drop out of the costed menu list but their package revenue is added back into
+    the food-cost-% denominator (Σ subtotal_ex_vat over ALL rows)."""
+    cogs = _unified_cogs_expr("ssm")
+    masters = [(r["branch_id"], r["name"]) for r in con.execute(
+        "SELECT branch_id, name FROM branches WHERE branch_type='master' AND active=1 "
+        "ORDER BY branch_id").fetchall()]
+    masters = [(bid, nm) for bid, nm in masters if (con.execute(
+        "SELECT COALESCE(SUM(customer_count),0) FROM sales_month_summary "
+        "WHERE period_month=? AND branch_id=?", (month, bid)).fetchone()[0] or 0) > 0]
+    if not masters:
+        return None, []
+
+    def covers(ids):
+        ph = ",".join("?" * len(ids))
+        return int(con.execute(
+            f"SELECT COALESCE(SUM(customer_count),0) FROM sales_month_summary "
+            f"WHERE period_month=? AND branch_id IN ({ph})", [month, *ids]).fetchone()[0] or 0)
+
+    def revenue(ids):
+        ph = ",".join("?" * len(ids))
+        return float(con.execute(
+            f"SELECT COALESCE(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly "
+            f"WHERE period_month=? AND branch_id IN ({ph})", [month, *ids]).fetchone()[0] or 0)
+
+    def menus(ids):
+        ph = ",".join("?" * len(ids))
+        rows = con.execute(
+            f"""SELECT ssm.sku_id AS sku_id, sk.sku_code AS code, sk.description AS desc,
+                       ROUND(SUM(ssm.qty),0) AS qty, ROUND(SUM({cogs}),2) AS cogs
+                FROM sales_sku_monthly ssm
+                JOIN skus sk ON sk.sku_id = ssm.sku_id
+                WHERE ssm.period_month=? AND ssm.branch_id IN ({ph})
+                GROUP BY ssm.sku_id HAVING SUM({cogs}) > 0
+                ORDER BY cogs DESC""", [month, *ids]).fetchall()
+        return [dict(r) for r in rows]
+
+    def scope(name, ids):
+        cv = covers(ids); ms = menus(ids)
+        tc = sum(m["cogs"] for m in ms); tr = revenue(ids)
+        for m in ms:
+            m["cph"] = (m["cogs"] / cv) if cv else 0.0
+            m["qph"] = (m["qty"] / cv) if cv else 0.0
+            m["share"] = (m["cogs"] / tc) if tc else 0.0
+            m["rev"] = 0.0
+        return {"name": name, "branch_ids": ids, "covers": cv, "menus": ms,
+                "total_cogs": tc, "total_rev": tr,
+                "cph_total": (tc / cv) if cv else 0.0,
+                "food_pct": (tc / tr * 100) if tr else 0.0,
+                "by_sku": {m["sku_id"]: m for m in ms}}
+
+    all_ids = [bid for bid, _ in masters]
+    overview = scope("ภาพรวมทุกสาขา", all_ids)
+    branches = [scope(nm, [bid]) for bid, nm in masters]
+    return overview, branches
+
+
+def _cost_head_deviation(scope, overview):
+    """Per-menu contribution to (branch cph − overview cph), most-positive / most-negative."""
+    ov = overview["by_sku"]
+    union = set(scope["by_sku"]) | set(ov)
+    items = []
+    for sid in union:
+        b = scope["by_sku"].get(sid); o = ov.get(sid)
+        src = b or o
+        b_cph = b["cph"] if b else 0.0
+        o_cph = o["cph"] if o else 0.0
+        items.append({"code": src["code"], "desc": src["desc"],
+                      "prem": _ch_is_premium(src["desc"]),
+                      "b_cph": b_cph, "o_cph": o_cph, "d": b_cph - o_cph})
+    items.sort(key=lambda x: x["d"])
+    lows = [x for x in items if x["d"] < 0][:8]
+    highs = [x for x in items if x["d"] > 0][-8:][::-1]
+    return highs, lows
+
+
+def _load_top60_gen():
+    """Lazy-import the standalone report generator (presentation only: build_html /
+    write_xlsx). Kept out of module import so the JSON tab endpoint never depends on it."""
+    import importlib, sys as _sys, os as _os2
+    bd = _os2.path.dirname(_os2.path.abspath(__file__))
+    if bd not in _sys.path:
+        _sys.path.insert(0, bd)
+    return importlib.import_module("gen_top60_cost_per_head_report")
+
+
+_CH_TH_MONTHS = ["", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+                 "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
+
+
+def _ch_gen_dt():
+    import datetime as _dt
+    d = _dt.date.today()
+    return f"{d.day} {_CH_TH_MONTHS[d.month]} {d.year + 543}"
+
+
+def _ch_resolve_month(con, month):
+    """Default to the latest month that actually HAS master-branch covers (the latest
+    completed month) — not just MAX(period_month), which would land on the current,
+    still-empty month and show 'no data'."""
+    if month:
+        return month
+    r = con.execute(
+        "SELECT MAX(s.period_month) FROM sales_month_summary s "
+        "JOIN branches b ON b.branch_id = s.branch_id "
+        "WHERE b.branch_type='master' AND b.active=1 AND s.customer_count > 0").fetchone()
+    if r and r[0]:
+        return r[0]
+    r2 = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly").fetchone()
+    return r2[0] if r2 else None
+
+
+@app.get("/api/reports/cost-head-top60")
+@ttl_cache
+def report_cost_head_top60(month: Optional[str] = Query(None)):
+    """Top-60 menu cost-per-head for the master branches, one month: combined overview
+    + each active master branch's FULL Top-60 with Δ/head vs the overview, plus a
+    cross-branch ranking and headline. Master-only (cross-branch benchmarking).
+    Companion exports: /api/reports/cost-head-top60.print (HTML) | .xlsx."""
+    TOPN = 60
+    with get_db() as con:
+        months = [r[0] for r in con.execute(
+            "SELECT DISTINCT period_month FROM sales_sku_monthly ORDER BY period_month DESC").fetchall()]
+        month = _ch_resolve_month(con, month)
+        overview, branches = _cost_head_scopes(con, month)
+        if not overview:
+            return {"month": month, "months": months, "overview": None,
+                    "branches": [], "analysis": None}
+
+        def top_rows(sc, variant):
+            ov = overview["by_sku"]; cum = 0.0; out = []
+            for i, m in enumerate(sc["menus"][:TOPN], 1):
+                cum += m["share"]
+                row = {"rank": i, "code": m["code"], "desc": m["desc"],
+                       "prem": _ch_is_premium(m["desc"]), "qty": m["qty"],
+                       "qph": round(m["qph"], 2), "cogs": round(m["cogs"], 2),
+                       "cph": round(m["cph"], 2), "share": round(m["share"] * 100, 1),
+                       "cum": round(cum * 100, 1)}
+                if variant:
+                    o = ov.get(m["sku_id"]); o_cph = o["cph"] if o else None
+                    d = m["cph"] - (o_cph or 0.0)
+                    row["o_cph"] = round(o_cph, 2) if o_cph is not None else None
+                    row["d"] = round(d, 2)
+                    row["dp"] = round(d / o_cph * 100, 0) if (o_cph and o_cph > 0) else None
+                out.append(row)
+            return out
+
+        def scope_head(sc, variant):
+            h = {"name": sc["name"], "covers": sc["covers"],
+                 "cph_total": round(sc["cph_total"], 2), "food_pct": round(sc["food_pct"], 1),
+                 "total_cogs": round(sc["total_cogs"], 2), "total_rev": round(sc["total_rev"], 2),
+                 "menu_count": len(sc["menus"]), "menus": top_rows(sc, variant)}
+            if variant:
+                h["branch_id"] = sc["branch_ids"][0]
+                h["gap"] = round(sc["cph_total"] - overview["cph_total"], 2)
+                highs, lows = _cost_head_deviation(sc, overview)
+                pack = lambda x: {"code": x["code"], "desc": x["desc"], "prem": x["prem"],
+                                  "b_cph": round(x["b_cph"], 2), "o_cph": round(x["o_cph"], 2),
+                                  "d": round(x["d"], 2)}
+                h["highs"] = [pack(x) for x in highs[:6]]
+                h["lows"] = [pack(x) for x in lows[:6]]
+                h["drivers"] = " · ".join(f'{x["desc"][:20]} {x["d"]:+.1f}' for x in highs[:3])
+            return h
+
+        ov_out = scope_head(overview, False)
+        br_out = [scope_head(b, True) for b in branches]
+        ranked = sorted(br_out, key=lambda b: b["cph_total"], reverse=True)
+        analysis = {
+            "overview_cph": round(overview["cph_total"], 2),
+            "ranked": [{"name": b["name"], "covers": b["covers"], "cph_total": b["cph_total"],
+                        "gap": b["gap"], "food_pct": b["food_pct"], "total_cogs": b["total_cogs"],
+                        "drivers": b["drivers"]} for b in ranked],
+        }
+        if ranked:
+            hot = ranked[0]
+            analysis.update({
+                "hottest": hot["name"], "hottest_gap": hot["gap"],
+                "hottest_covers": hot["covers"],
+                "hottest_excess_month": round(hot["gap"] * hot["covers"], 0),
+                "hottest_drivers": [{"desc": x["desc"], "d": x["d"]} for x in hot["highs"][:3]],
+            })
+    return {"month": month, "months": months, "overview": ov_out,
+            "branches": br_out, "analysis": analysis}
+
+
+@app.get("/api/reports/cost-head-top60.xlsx")
+def report_cost_head_top60_xlsx(month: Optional[str] = Query(None)):
+    """Excel export of the Top-60 cost-per-head report (reuses the generator's write_xlsx,
+    fed the live-computed scopes — ties out with the tab)."""
+    import io as _io_ch
+    from fastapi.responses import StreamingResponse as _SR
+    with get_db() as con:
+        month = _ch_resolve_month(con, month)
+        overview, branches = _cost_head_scopes(con, month)
+    if not overview:
+        raise HTTPException(status_code=404, detail="ไม่มีข้อมูลสำหรับเดือนนี้")
+    try:
+        gen = _load_top60_gen()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"export module unavailable: {e}")
+    buf = _io_ch.BytesIO()
+    gen.write_xlsx(buf, month, overview, branches, _ch_gen_dt())   # openpyxl save() accepts a file-like
+    buf.seek(0)
+    return _SR(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+               headers={"Content-Disposition": f"attachment; filename=TOP60_COST_PER_HEAD_{month}.xlsx"})
+
+
+@app.get("/api/reports/cost-head-top60.print")
+def report_cost_head_top60_print(month: Optional[str] = Query(None)):
+    """Full printable HTML report (the standalone generator's output, computed live)."""
+    with get_db() as con:
+        month = _ch_resolve_month(con, month)
+        overview, branches = _cost_head_scopes(con, month)
+    if not overview:
+        raise HTTPException(status_code=404, detail="ไม่มีข้อมูลสำหรับเดือนนี้")
+    try:
+        gen = _load_top60_gen()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"export module unavailable: {e}")
+    html_out = gen.build_html(month, overview, branches, _ch_gen_dt(), "live")
+    return Response(content=html_out, media_type="text/html; charset=utf-8")
+
+
 @app.get("/api/overall/latest-month-mtd")
 def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """Fair month-to-date comparison for the latest (possibly incomplete) month:
