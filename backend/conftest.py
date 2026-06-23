@@ -26,9 +26,14 @@ DAYS = ["01", "02", "03"]   # both months have 1..3; June is partial (cutoff=3)
 def _build_db(path: str):
     con = sqlite3.connect(path)
     con.executescript((HERE / "schema.sql").read_text(encoding="utf-8"))
-    # Columns the real prod DB has but the trimmed schema.sql may lack.
+    # Columns the real prod DB has but the trimmed schema.sql may lack. These are added
+    # at runtime by the sync / init_db migrations (sales_transaction.dwell_min etc.); the
+    # fixture mirrors them so endpoints that reference the columns directly still resolve.
     for ddl in ("ALTER TABLE skus ADD COLUMN business_type TEXT",
-                "ALTER TABLE skus ADD COLUMN active INTEGER DEFAULT 1"):
+                "ALTER TABLE skus ADD COLUMN active INTEGER DEFAULT 1",
+                "ALTER TABLE sales_transaction ADD COLUMN dwell_min INTEGER",
+                "ALTER TABLE sales_transaction ADD COLUMN discount_reason_id INTEGER",
+                "ALTER TABLE sales_transaction ADD COLUMN coupon_series_id INTEGER"):
         try: con.execute(ddl)
         except sqlite3.OperationalError: pass
     # Tables created at runtime by sync (not in schema.sql).
