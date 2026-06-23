@@ -12327,11 +12327,13 @@ def report_management(
             table = {"available": False}
 
         # ---- payment channels for the scope (how the branches got paid) ------
-        # Tender mix over the period [cs, ce] from pos_payment_day, by payment code
-        # with each code's % of the scope's total. Powers §10 (rendered for the
-        # MASTER group in the all-branches split view). Daily table → degrades to
-        # unavailable if a pre-sync DB lacks it.
-        payment = {"available": False, "channels": [], "total": 0}
+        # Tender mix over the period [cs, ce] from pos_payment_day: the scope total by
+        # payment code (`channels`, each with % of scope total — defines the §10 matrix
+        # column order) AND a per-branch breakdown (`by_branch`, each branch's own channel
+        # mix). Powers §10, rendered for the MASTER group broken out per branch in the
+        # all-branches split view. Daily table → degrades to unavailable if a pre-sync DB
+        # lacks it.
+        payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
         try:
             if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_payment_day'").fetchone():
                 pp_base = ["b.name!='ALL'"]; pparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
@@ -12340,18 +12342,31 @@ def report_management(
                 _group_filter(pp_base, pparams, group)
                 pw = " AND ".join(pp_base)
                 prows = con.execute(f"""
-                    SELECT pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n
+                    SELECT b.name branch, pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n
                     FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
                     WHERE {pw} AND pp.day BETWEEN :s AND :e
-                    GROUP BY pp.payment_code ORDER BY amount DESC""", pparams).fetchall()
+                    GROUP BY b.name, pp.payment_code""", pparams).fetchall()
                 ptot = sum((r["amount"] or 0) for r in prows)
                 if ptot > 0:
-                    payment = {"available": True, "total": round(ptot),
-                               "channels": [{"code": r["code"] or "—", "amount": r["amount"] or 0,
-                                             "pct": round((r["amount"] or 0) / ptot * 100, 1),
-                                             "txns": r["n"] or 0} for r in prows]}
+                    agg: dict = {}; bdata: dict = {}
+                    for r in prows:
+                        code = r["code"] or "—"; amt = r["amount"] or 0
+                        agg[code] = agg.get(code, 0) + amt
+                        bd = bdata.setdefault(r["branch"], {"branch": r["branch"], "total": 0, "ch": {}})
+                        bd["ch"][code] = {"amount": round(amt), "txns": r["n"] or 0}
+                        bd["total"] += amt
+                    channels = [{"code": c, "amount": round(a), "pct": round(a / ptot * 100, 1)}
+                                for c, a in sorted(agg.items(), key=lambda kv: -kv[1])]
+                    by_branch = []
+                    for bd in bdata.values():
+                        bt = bd["total"] or 1
+                        chans = {c: {"amount": v["amount"], "txns": v["txns"], "pct": round(v["amount"] / bt * 100, 1)}
+                                 for c, v in bd["ch"].items()}
+                        by_branch.append({"branch": bd["branch"], "total": round(bd["total"]), "channels": chans})
+                    by_branch.sort(key=lambda x: -x["total"])
+                    payment = {"available": True, "total": round(ptot), "channels": channels, "by_branch": by_branch}
         except Exception:
-            payment = {"available": False, "channels": [], "total": 0}
+            payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
 
     # ---- auto-generated action items (English, severity-ordered) ---------
     pword = "day" if period == "daily" else "week"
