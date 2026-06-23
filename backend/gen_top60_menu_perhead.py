@@ -164,12 +164,12 @@ ol li,ul li{margin:4px 0}
 .printbtn{position:fixed;top:14px;right:14px;background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:13px;cursor:pointer;font-family:inherit;z-index:9}
 @media print{
   .printbtn{display:none}
-  body{font-size:10.5px}
+  body{font-size:12px}
   .page{padding:0;max-width:none}
   h2{break-after:avoid}
-  table{font-size:9.1px}
-  th{font-size:8.8px}
-  @page{size:A4;margin:11mm 9mm}
+  table{font-size:10.5px}
+  th{font-size:10px}
+  @page{size:A3 landscape;margin:8mm 8mm}
   thead{display:table-header-group}
 }
 """
@@ -444,10 +444,38 @@ def render(D):
 </div></body></html>"""
 
 
+def to_pdf(html_path, pdf_path):
+    """Render the HTML to PDF via headless Chrome (Playwright), A3 landscape.
+    Page size/margins come from the report's @page CSS (prefer_css_page_size)."""
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        sys.exit("[error] ต้องติดตั้ง Playwright ก่อนใช้ --pdf:  pip install playwright && playwright install chromium")
+    url = "file:///" + str(html_path).replace("\\", "/")
+    with sync_playwright() as p:
+        try:
+            browser = p.chromium.launch(channel="chrome", headless=True)
+        except Exception:
+            browser = p.chromium.launch(headless=True)   # bundled chromium fallback
+        page = browser.new_page()
+        page.goto(url, wait_until="networkidle", timeout=60000)
+        try:
+            page.evaluate("() => document.fonts && document.fonts.ready")
+            page.wait_for_timeout(800)                   # let Thai web fonts settle
+        except Exception:
+            pass
+        page.emulate_media(media="print")
+        page.pdf(path=str(pdf_path), prefer_css_page_size=True, print_background=True,
+                 landscape=True, format="A3",
+                 margin={"top": "0", "bottom": "0", "left": "0", "right": "0"})
+        browser.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--month', default=DEFAULT_MONTH, help="YYYY-MM (default 2026-05)")
     ap.add_argument('--out', default=None, help="output HTML path")
+    ap.add_argument('--pdf', action='store_true', help="also render a PDF (A3 landscape) next to the HTML")
     args = ap.parse_args()
 
     D = build(args.month)
@@ -459,6 +487,10 @@ def main():
     out.write_text(render(D), encoding='utf-8')
     print(f"✓ wrote {out}  ({out.stat().st_size:,} bytes) · "
           f"{len(D['EW_branches'])} branches · {D['COV']:,} covers")
+    if args.pdf:
+        pdf = out.with_suffix(".pdf")
+        to_pdf(out, pdf)
+        print(f"✓ wrote {pdf}  ({pdf.stat().st_size:,} bytes) · A3 landscape")
 
 
 if __name__ == '__main__':
