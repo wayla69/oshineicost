@@ -12326,6 +12326,33 @@ def report_management(
         except Exception:
             table = {"available": False}
 
+        # ---- payment channels for the scope (how the branches got paid) ------
+        # Tender mix over the period [cs, ce] from pos_payment_day, by payment code
+        # with each code's % of the scope's total. Powers §10 (rendered for the
+        # MASTER group in the all-branches split view). Daily table → degrades to
+        # unavailable if a pre-sync DB lacks it.
+        payment = {"available": False, "channels": [], "total": 0}
+        try:
+            if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_payment_day'").fetchone():
+                pp_base = ["b.name!='ALL'"]; pparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
+                if branch:
+                    pp_base.append("b.name=:branch"); pparams["branch"] = branch
+                _group_filter(pp_base, pparams, group)
+                pw = " AND ".join(pp_base)
+                prows = con.execute(f"""
+                    SELECT pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n
+                    FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
+                    WHERE {pw} AND pp.day BETWEEN :s AND :e
+                    GROUP BY pp.payment_code ORDER BY amount DESC""", pparams).fetchall()
+                ptot = sum((r["amount"] or 0) for r in prows)
+                if ptot > 0:
+                    payment = {"available": True, "total": round(ptot),
+                               "channels": [{"code": r["code"] or "—", "amount": r["amount"] or 0,
+                                             "pct": round((r["amount"] or 0) / ptot * 100, 1),
+                                             "txns": r["n"] or 0} for r in prows]}
+        except Exception:
+            payment = {"available": False, "channels": [], "total": 0}
+
     # ---- auto-generated action items (English, severity-ordered) ---------
     pword = "day" if period == "daily" else "week"
     actions = []
@@ -12392,6 +12419,7 @@ def report_management(
         "pace": pace,
         "peak": peak,
         "table": table,
+        "payment": payment,
         "trend": trend,
         "actions": actions,
     }
