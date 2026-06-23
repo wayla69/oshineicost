@@ -11978,6 +11978,24 @@ def report_management(
         leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
                 "reprinted": reprint, "zero_gross": zero,
                 "total": leak_total("AND st.discount>0")}
+        # Per-MASTER-branch discount follow-up: amount + % of that branch's ex-VAT sales
+        # + bill count, for the period. Master (company-owned) stores are the owner's own
+        # money leak — franchise discounts are the franchisee's cost — so this is the line
+        # to action on. Honours the report's branch/period scope; always master-only.
+        mb_rows = con.execute(f"""
+            SELECT b.name branch,
+                   ROUND(SUM(st.total_inc_vat)/1.07) sales,
+                   ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
+                   SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where}{rcond} AND COALESCE(b.branch_type,'master')='master'
+            GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
+            ORDER BY disc DESC""", lp).fetchall()
+        leak["by_master_branch"] = [
+            {"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
+             "bills": r["bills"] or 0,
+             "pct": round((r["disc"] or 0) / r["sales"] * 100, 1) if r["sales"] else None}
+            for r in mb_rows]
 
         # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
         # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:
