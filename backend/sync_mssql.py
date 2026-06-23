@@ -397,6 +397,25 @@ def main():
                "WHERE TABLE_NAME='Sale' AND COLUMN_NAME='PrintTimes'")
     has_ptimes = bool(mc.fetchall())
     ptimes_expr = "ISNULL(s.PrintTimes, 0)" if has_ptimes else "0"
+
+    # One-shot schema probe: does the Sale table carry a DISTINCT discount-approver
+    # (manager-PIN) column, separate from UserId (the bill owner we already stage as
+    # `cashier`)? Read-only — just logs. If a column like ApproveUserId / DiscountUserId
+    # / ManagerId exists we can stage it and surface a "ผู้อนุมัติ" column in the drill;
+    # if not, per-bill approver simply isn't recorded by this POS.
+    try:
+        mc.execute("""SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                      WHERE TABLE_NAME='Sale' AND (
+                        COLUMN_NAME LIKE '%Approv%'      OR COLUMN_NAME LIKE '%Authoriz%' OR
+                        COLUMN_NAME LIKE '%Manager%'     OR COLUMN_NAME LIKE '%DiscountUser%' OR
+                        COLUMN_NAME LIKE '%DiscountBy%'  OR COLUMN_NAME LIKE '%PermitUser%' OR
+                        COLUMN_NAME LIKE '%VoidUser%')""")
+        _appr = [r["COLUMN_NAME"] for r in mc.fetchall()]
+        print(f"      [probe] Sale discount-approver candidate columns: {_appr}" if _appr
+              else "      [probe] Sale has NO distinct discount-approver column "
+                   "(only UserId = bill owner) — per-bill approver not available in this POS")
+    except Exception as _e:
+        print(f"      [probe] approver-column probe skipped: {_e}")
     tx_rows = _chunk(mc, f"""
         SELECT s.BranchId AS bid, s.SaleId AS sid, s.SaleNum AS num, s.SaleDate AS dt,
                s.NumOfCust AS cust, CAST(s.Discount AS float) AS disc, s.DiscountReasonId AS rid,
@@ -718,22 +737,50 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
     print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
 
-    # ── sale_bill_item: per-receipt MENU LINES for LOSS bills only (COGS > revenue) ──
-    #    Powers the "บิลขาดทุน" menu drill-down. Scoped to loss bills (~3% of bills)
-    #    to keep the DB light — NOT a full per-bill line table. Loss test uses the
-    #    SAME revenue basis as the per-bill P&L endpoint (total_inc_vat/1.07 from the
-    #    sales_transaction just staged above) so the set matches the loss table exactly.
+    # ── sale_bill_item: per-receipt MENU LINES for LOSS bills (31d) + DISCOUNT bills ──
+    #    Powers the per-bill P&L drill (🧾 P&L ต่อบิล) reached from the บิลขาดทุน table
+    #    AND from clicking any row in the บิลส่วนลด drill. Two line sources, de-duped:
+    #      · LOSS bills in the rolling 31-day window (COGS > revenue) — the existing
+    #        "บิลขาดทุน" scope, from `lines` already pulled above.
+    #      · ALL DISCOUNT bills across the FULL synced history (Sale.Discount>0) — so a
+    #        manager can open the P&L of any discounted bill, not just recent loss ones.
+    #    Discount bills are ~7–8% of bills; this keeps the table bounded (NOT every bill).
     #    rev = SUM(ExtendedPrice) treated ex-VAT (consistent with sales_sku_daily);
     #    bom_cost = qty × per-SKU BoM unit cost (BUFFET tier = 0; IRON RULE: BoM only).
     revmap = {row["receipt_no"]: (row["t"] or 0) / 1.07 for row in
               sq.execute("SELECT receipt_no, total_inc_vat t FROM sales_transaction WHERE total_inc_vat>0")}
     loss_set = {rc for rc, v in bills.items() if v[2] > revmap.get(rc, float("inf"))}
+    # de-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount
+    # would otherwise emit the same line twice → double-count in the P&L SUM.
+    item_rows = {(ln[0], ln[1]): ln for ln in lines if ln[0] in loss_set}
+    # full-history per-line pull for discount bills (same shape/grouping as bill_rows).
+    disc_line_rows = _chunk(mc, f"""
+        SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
+               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               SUM(CAST(si.ExtendedPrice AS float)) rev
+        FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+        WHERE {F} AND ISNULL(si.Active,1)=1 AND s.Discount>0 AND {{RANGE}}
+        GROUP BY s.SaleId, s.BranchId, s.SaleNum, CONVERT(char(10),s.SaleDate,126), si.ItemId
+    """, windows)
+    disc_bill_set = set()
+    for r in disc_line_rows:
+        if bid_map.get(r["bid"]) is None:
+            continue
+        sid_local = item_map.get(r["iid"])
+        if sid_local is None:
+            continue
+        qty = r["qty"] or 0
+        c = costmap.get(sid_local, 0.0)
+        rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
+        disc_bill_set.add(rcpt)
+        item_rows[(rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
+                                        round(r["rev"] or 0, 2), round(qty * c, 4))
     sq.executescript("DROP TABLE IF EXISTS sale_bill_item; CREATE TABLE sale_bill_item("
                      "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL);")
-    loss_lines = [ln for ln in lines if ln[0] in loss_set]
-    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", loss_lines)
+    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", list(item_rows.values()))
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbi ON sale_bill_item(receipt_no)")
-    print(f"        sale_bill_item: {len(loss_lines)} lines across {len(loss_set)} loss bills")
+    print(f"        sale_bill_item: {len(item_rows)} lines across "
+          f"{len(loss_set | disc_bill_set)} bills ({len(loss_set)} loss + {len(disc_bill_set)} discount)")
 
     # ── Extra POS-deep-dive tables (separate "Extra" report group) ──
     stage_extra(sq, mc, since, bid_map, item_map)

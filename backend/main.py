@@ -2738,11 +2738,17 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
         synced = con.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_bill_item'").fetchone() is not None
         header = None
+        # Header comes from sales_transaction (always present) so the drill works for
+        # ANY bill — discounted, loss, or normal — not only the loss bills that have a
+        # sale_bill_cogs snapshot. cogs_bom is LEFT-joined (NULL when outside the
+        # rolling per-bill-COGS window); when menu lines exist it is overridden below
+        # with the live line sum.
         hdr = con.execute(
             """SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
                       ROUND(t.total_inc_vat/1.07) rev, ROUND(c.cogs_bom) cogs,
                       ROUND(COALESCE(t.discount,0) + COALESCE(t.sp_discount,0)) disc
-               FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
+               FROM sales_transaction t
+               LEFT JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
                JOIN branches b ON b.branch_id=t.branch_id WHERE t.receipt_no=:r""",
             {"r": receipt}).fetchone()
         if hdr:
@@ -11559,6 +11565,13 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             {where} AND st.discount>0 AND {base} <= 0
             GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
+        # ALL discounted bills for the focus day — the reconciling total the abnormal
+        # subsets above are carved from (ties out with the Discounts menu for the day).
+        total = con.execute(f"""
+            SELECT b.name AS branch, COUNT(*) AS bills, ROUND(SUM(st.discount)) AS baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            {where} AND st.discount>0
+            GROUP BY b.name ORDER BY baht DESC""", p).fetchall()
 
     def pack(rows):
         L = [dict(r) for r in rows]
@@ -11566,7 +11579,7 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
                 "baht": sum(r["baht"] or 0 for r in L),
                 "by_branch": L}
     return {"date": focus, "heavy_discount": pack(heavy), "cash_heavy": pack(cash_heavy),
-            "reprinted": pack(reprint), "zero_gross": pack(zero)}
+            "reprinted": pack(reprint), "zero_gross": pack(zero), "total": pack(total)}
 
 
 # ---------------------------------------------------------------------------
@@ -11959,8 +11972,12 @@ def report_management(
                           "by_branch": [dict(r) for r in cb]}
         except Exception:
             cash_heavy = {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
+        # ALL discounted bills in the period (every branch in scope) — the reconciling
+        # total so the radar's abnormal-only subsets read against the full figure and
+        # tie out with the Discounts menu (both = SUM(Sale.Discount) over the same scope).
         leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
-                "reprinted": reprint, "zero_gross": zero}
+                "reprinted": reprint, "zero_gross": zero,
+                "total": leak_total("AND st.discount>0")}
 
         # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
         # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:
