@@ -134,6 +134,27 @@ def test_ops_void_carries_bom_cost(client):
     assert d["void_total"]["bom_cost"] >= 0
 
 
+def test_ops_daily_range_follows_dates(client):
+    # Month (default) path unchanged — monthly scope, void from the monthly pos_void table.
+    m = client.get("/api/reports/ops").json()
+    assert m["daily"] is False and m["month"] and m["payment"]
+    assert m["void_pending"] is False and m["channel_pending"] is False
+    # Date range → DAILY tables. Payment/Promo/Table have daily data; the Void/Channel daily
+    # tables aren't staged in the fixture (mirrors a freshly-deployed, not-yet-resynced prod)
+    # → those two sections degrade to empty + *_pending True instead of erroring.
+    d = client.get("/api/reports/ops", params={"date_from": "2026-06-01", "date_to": "2026-06-03"}).json()
+    assert d["daily"] is True and d["date_from"] == "2026-06-01" and d["date_to"] == "2026-06-03"
+    assert d["month"] is None
+    pay = {p["code"]: p["amount"] for p in d["payment"]}
+    assert pay.get("Cash") == 30000 and pay.get("Credit") == 15000      # 3 days x (10000 / 5000)
+    assert d["promo"] and d["table"]["tabs"]                            # promo + table daily present
+    assert d["void"] == [] and d["void_pending"] is True               # void daily not staged yet
+    assert d["channel"] == [] and d["channel_pending"] is True
+    # a single-day range scopes to one day (1/3 of the 3-day Cash total)
+    one = client.get("/api/reports/ops", params={"date_from": "2026-06-02", "date_to": "2026-06-02"}).json()
+    assert {p["code"]: p["amount"] for p in one["payment"]}.get("Cash") == 10000
+
+
 def test_simulator_base_all_menus(client):
     d = client.get("/api/bom-cost/simulator-base", params={"limit": 2000}).json()
     assert d["skus"], "no menus"

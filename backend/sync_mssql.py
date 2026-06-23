@@ -501,6 +501,19 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
          for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_void: {len(rows)} groups")
 
+    # ── pos_void_day: same voids per DAY (powers the by-day Operations report) ──
+    # Mirror of pos_void grouped by char(10) CancelDate instead of char(7).
+    sq.executescript("DROP TABLE IF EXISTS pos_void_day; CREATE TABLE pos_void_day("
+                     "branch_id INT, day TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
+    vdrows = run(f"""SELECT BranchId bid, ItemId iid, CONVERT(char(10),CancelDate,126) d, ReasonId rid,
+                 SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
+                 FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(10),CancelDate,126), ReasonId""", col="CancelDate")
+    sq.executemany("INSERT INTO pos_void_day VALUES(?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), r["rid"], round(r["q"] or 0,2), round(r["ext"] or 0,2))
+         for r in vdrows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_pvd ON pos_void_day(branch_id, day)")
+    print(f"        pos_void_day: {len(vdrows)} groups")
+
     # ── pos_staff_month: items served per staff (upsell/performance) ──
     sq.executescript("DROP TABLE IF EXISTS pos_staff_month; CREATE TABLE pos_staff_month("
                      "branch_id INT, period_month TEXT, staff_id INT, staff_name TEXT, item_qty REAL);")
@@ -603,6 +616,21 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
         [(bid_map.get(r["bid"]), r["ym"], r["dt"], r["oc"], r["bills"], r["cust"] or 0, round(r["total"] or 0,2))
          for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_channel_month: {len(rows)} groups")
+
+    # ── pos_channel_day: same channel mix per DAY (powers the by-day Operations report) ──
+    # Mirror of pos_channel_month grouped by char(10) SaleDate instead of char(7).
+    sq.executescript("DROP TABLE IF EXISTS pos_channel_day; CREATE TABLE pos_channel_day("
+                     "branch_id INT, day TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL);")
+    cdrows = run(f"""SELECT s.BranchId bid, CONVERT(char(10),s.SaleDate,126) d,
+                 ISNULL(s.DeliveryType,0) dt, ISNULL(s.OrderChannel,0) oc,
+                 COUNT(*) bills, SUM(s.NumOfCust) cust, SUM(CAST(s.Total AS float)) total
+                 FROM Sale s WHERE {F} AND {{RANGE}}
+                 GROUP BY s.BranchId, CONVERT(char(10),s.SaleDate,126), ISNULL(s.DeliveryType,0), ISNULL(s.OrderChannel,0)""", col="s.SaleDate")
+    sq.executemany("INSERT INTO pos_channel_day VALUES(?,?,?,?,?,?,?)",
+        [(bid_map.get(r["bid"]), r["d"], r["dt"], r["oc"], r["bills"], r["cust"] or 0, round(r["total"] or 0,2))
+         for r in cdrows if bid_map.get(r["bid"])])
+    sq.execute("CREATE INDEX IF NOT EXISTS ix_pchd ON pos_channel_day(branch_id, day)")
+    print(f"        pos_channel_day: {len(cdrows)} groups")
 
     # ── pos_coupon_month: promo / coupon usage ──
     sq.executescript("DROP TABLE IF EXISTS pos_coupon_month; CREATE TABLE pos_coupon_month("

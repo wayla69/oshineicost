@@ -110,6 +110,16 @@ def _build_db(path: str):
         cx.execute("INSERT INTO pos_cashcount_day VALUES(1,?, ?, 100000, 250, 60, 500, 200)",
                    (f"{LATEST_MONTH}-{d}", -1500 if d == "01" else 0))
     cx.execute("INSERT INTO pos_coupon_month VALUES(1,?, 5, 40, 4000)", (LATEST_MONTH,))
+    # Daily Payment/Promo tables exist in prod (every sync) → power the by-day ops report.
+    # Void/Channel DAILY tables are added by a LATER sync, so the fixture omits them on
+    # purpose → a date-range request exercises the graceful-degrade (*_pending) path.
+    cx.execute("CREATE TABLE IF NOT EXISTS pos_payment_day(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT)")
+    cx.execute("CREATE TABLE IF NOT EXISTS pos_coupon_day(branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL)")
+    for d in DAYS:
+        day = f"{LATEST_MONTH}-{d}"
+        cx.execute("INSERT INTO pos_payment_day VALUES(1,?, 'Cash', 10000, 30)", (day,))
+        cx.execute("INSERT INTO pos_payment_day VALUES(1,?, 'Credit', 5000, 12)", (day,))
+        cx.execute("INSERT INTO pos_coupon_day VALUES(1,?, 5, 4, 400)", (day,))
     cx.execute("INSERT INTO pos_customer_type_month VALUES(1,?, 'ลูกค้าทั่วไป', 5000, 400000)", (LATEST_MONTH,))
     cx.execute("INSERT INTO pos_customer_type_month VALUES(1,?, 'Grab', 50, 12000)", (LATEST_MONTH,))
     cx.execute("INSERT INTO pos_modifier VALUES(1, 3, 'รับไข่', 300, 300)")

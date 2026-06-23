@@ -7112,6 +7112,20 @@ function mkChart(id, config) {
   return chartInstances[id];
 }
 
+// Centered moving-average smoother → a "trend curve" over a short series (the 8-day /
+// 8-week revenue trend). The window clamps at the edges so the first/last points stay
+// anchored to real data rather than drifting. Pure function of the input array.
+function movingAvg(values, win = 3) {
+  const n = values.length, half = Math.floor(win / 2);
+  return values.map((_, i) => {
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+      sum += values[j] || 0; cnt++;
+    }
+    return cnt ? sum / cnt : 0;
+  });
+}
+
 function injectDiveBtn(chartId, canvas) {
   if (chartId.startsWith('zoom-') || chartId.startsWith('drill')) return; // skip modal charts
   const wrap = canvas.parentElement;
@@ -7925,18 +7939,35 @@ function renderMgtReport(j, jM, jF) {
   const _sw = c => `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${c}"></span>`;
   const _lg = (c, t) => `<span class="flex items-center gap-1.5">${_sw(c)} ${t}</span>`;
   const _period = isDaily ? 'day' : 'week';
+  // Split → 3 separate charts (one per series), each self-labelled, so the legend only
+  // carries the shared hints. Single → one chart with the amber moving-average trend line.
   const trendLegend = hasSplit
     ? `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
-         ${_lg(C_TOT_C, 'Total')}${_lg(C_MST_C, 'Master')}${_lg(C_FRN_C, 'Franchise')}
+         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> curve = moving-average trend</span>
          <span class="text-slate-400">· darker bar = latest ${_period}</span>
        </div>`
     : `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
          ${_lg(C_CURR, 'Net Sales')}
-         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> Trend</span>
+         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> Trend (moving avg)</span>
          <span class="text-slate-400">· dark bar = latest ${_period}</span>
        </div>`;
-  const trend = trendLegend
-    + `<div style="height:300px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>`
+  // One mini-card per series in split mode (title + latest value + its own canvas).
+  const _trendCard = (id, title, color) =>
+    `<div style="background:#fafbfc;border:1px solid #eef2f7;border-radius:12px;padding:10px 12px 6px">
+       <div class="flex items-center justify-between mb-1">
+         <span class="flex items-center gap-1.5 text-xs font-bold text-slate-600">${_sw(color)} ${title}</span>
+         <span id="${id}Latest" class="text-xs font-extrabold" style="color:${color}"></span>
+       </div>
+       <div style="height:170px"><canvas id="${id}"></canvas></div>
+     </div>`;
+  const trendCanvas = hasSplit
+    ? `<div class="grid grid-cols-1 lg:grid-cols-3 gap-3 no-print">
+         ${_trendCard('mgtTrendTotal', 'Total', C_TOT_C)}
+         ${_trendCard('mgtTrendMaster', 'Master', C_MST_C)}
+         ${_trendCard('mgtTrendFranchise', 'Franchise', C_FRN_C)}
+       </div>`
+    : `<div style="height:300px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>`;
+  const trend = trendLegend + trendCanvas
     + `<div id="mgtTrendHtml" style="display:none"></div>`
     + `<div id="mgtTrendSummary"></div>`;
 
@@ -8314,7 +8345,8 @@ function renderMgtReport(j, jM, jF) {
     + (tableHtml ? sec('9. Table Turnover & Occupancy', tableWithSplit, '#9333ea') : '')
     + `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${(j.pace && j.pace.month) || 'the period month'}. Latest data day: ${j.latest_day || '—'}.</p>`;
 
-  // Trend chart — bar + line overlay (single) | grouped solid bars (split). No gradients.
+  // Trend chart(s). Split → 3 separate bar charts (Total/Master/Franchise), each with an
+  // amber moving-average trend curve. Single → one bar chart + the same MA trend curve.
   const trData  = j.trend  || [];
   const trDataM = hasSplit ? (jM.trend || []) : [];
   const trDataF = hasSplit ? (jF.trend || []) : [];
@@ -8322,78 +8354,89 @@ function renderMgtReport(j, jM, jF) {
   const fmtM = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
   // Colours C_HIST/C_CURR/C_LINE/C_TOT_*/C_MST_*/C_FRN_* defined above (single source)
 
-  const chartDatasets = hasSplit ? [
-    { label: 'Total',
-      data: trData.map(t => t.revenue),
-      backgroundColor: trData.map((_, i) => i === lastIdx ? C_TOT_C : C_TOT_H),
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
-      datalabels: { display: false } },
-    { label: 'Master',
-      data: trDataM.map(t => t.revenue),
-      backgroundColor: trDataM.map((_, i) => i === lastIdx ? C_MST_C : C_MST_H),
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
-      datalabels: { display: false } },
-    { label: 'Franchise',
-      data: trDataF.map(t => t.revenue),
-      backgroundColor: trDataF.map((_, i) => i === lastIdx ? C_FRN_C : C_FRN_H),
-      borderRadius: 5, categoryPercentage: 0.82, barPercentage: 0.3,
-      datalabels: { display: false } },
-  ] : [
-    { type: 'bar', label: 'Net Sales',
-      data: trData.map(t => t.revenue),
-      backgroundColor: trData.map((_, i) => i === lastIdx ? C_CURR : C_HIST),
-      borderRadius: 6, categoryPercentage: 0.72, barPercentage: 0.85, order: 2,
-      datalabels: {
-        display: true, anchor: 'end', align: 'end', offset: 0, clamp: true,
-        color: ctx => ctx.dataIndex === lastIdx ? C_CURR : '#64748b',
-        font: ctx => ({ size: ctx.dataIndex === lastIdx ? 12 : 10,
-                        weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
-        formatter: v => v ? fmtM(v) : '',
-      } },
-    { type: 'line', label: 'Trend',
-      data: trData.map(t => t.revenue),
-      borderColor: C_LINE, backgroundColor: 'transparent',
-      borderWidth: 2, tension: 0.3, fill: false, order: 1,
-      pointRadius: 4, pointBackgroundColor: C_LINE,
-      pointBorderColor: '#fff', pointBorderWidth: 1.5,
-      datalabels: { display: false } },
-  ];
-
-  mkChart('mgtTrendChart', {
-    type: 'bar',
-    data: { labels: trData.map(t => t.label), datasets: chartDatasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      layout: { padding: { top: 28 } },
-      plugins: {
-        legend: { display: false },   // HTML legend above handles screen + print
-        tooltip: {
-          backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: hasSplit,
-          filter: item => item.dataset.type !== 'line',
-          callbacks: { label: c => (hasSplit ? c.dataset.label + ': ' : 'Net Sales: ') + '฿' + Math.round(c.parsed.y).toLocaleString('en-US') },
-        },
-        datalabels: { display: false },  // default off; per-dataset overrides handle display
+  // Shared chart options (scales/tooltip) — currC highlights the latest bar + its x label.
+  const trendOpts = (li, currC, padTop = 18) => ({
+    responsive: true, maintainAspectRatio: false,
+    layout: { padding: { top: padTop } },
+    plugins: {
+      legend: { display: false },   // HTML legend above handles screen + print
+      tooltip: {
+        backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: false,
+        filter: item => item.dataset.type !== 'line',
+        callbacks: { label: c => '฿' + Math.round(c.parsed.y).toLocaleString('en-US') },
       },
-      scales: {
-        y: {
-          beginAtZero: true, grace: '18%',
-          border: { display: false },
-          grid: { color: 'rgba(148,163,184,0.13)', drawTicks: false },
-          maxTicksLimit: 5,
-          ticks: { color: '#94a3b8', font: { size: 10 }, padding: 8,
-                   callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v },
-        },
-        x: {
-          border: { display: false }, grid: { display: false },
-          ticks: {
-            color: ctx => ctx.index === lastIdx ? C_CURR : '#64748b',
-            font: ctx => ({ size: 11, weight: ctx.index === lastIdx ? '700' : '500' }),
-            maxRotation: 0, autoSkip: true,
-          },
+      datalabels: { display: false },
+    },
+    scales: {
+      y: {
+        beginAtZero: true, grace: '18%',
+        border: { display: false },
+        grid: { color: 'rgba(148,163,184,0.13)', drawTicks: false },
+        maxTicksLimit: 5,
+        ticks: { color: '#94a3b8', font: { size: 10 }, padding: 8,
+                 callback: v => v >= 1e6 ? (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? (v / 1e3).toFixed(0) + 'K' : v },
+      },
+      x: {
+        border: { display: false }, grid: { display: false },
+        ticks: {
+          color: ctx => ctx.index === li ? currC : '#64748b',
+          font: ctx => ({ size: 10, weight: ctx.index === li ? '700' : '500' }),
+          maxRotation: 0, autoSkip: true,
         },
       },
     },
   });
+
+  if (hasSplit) {
+    // One chart per series — solid bars (darker = latest) + amber moving-average curve.
+    const mkTrend = (id, data, histC, currC) => {
+      const vals = data.map(t => t.revenue || 0);
+      const li = vals.length - 1;
+      const lt = document.getElementById(id + 'Latest');
+      if (lt) lt.textContent = fmtM(vals[li] || 0);
+      mkChart(id, {
+        type: 'bar',
+        data: { labels: data.map(t => t.label), datasets: [
+          { type: 'bar', label: 'Net Sales', data: vals,
+            backgroundColor: vals.map((_, i) => i === li ? currC : histC),
+            borderRadius: 5, categoryPercentage: 0.8, barPercentage: 0.74, order: 2,
+            datalabels: { display: false } },
+          { type: 'line', label: 'Trend', data: movingAvg(vals, 3),
+            borderColor: C_LINE, backgroundColor: 'transparent',
+            borderWidth: 2, tension: 0.35, fill: false, order: 1,
+            pointRadius: 0, datalabels: { display: false } },
+        ] },
+        options: trendOpts(li, currC),
+      });
+    };
+    mkTrend('mgtTrendTotal',     trData,  C_TOT_H, C_TOT_C);
+    mkTrend('mgtTrendMaster',    trDataM, C_MST_H, C_MST_C);
+    mkTrend('mgtTrendFranchise', trDataF, C_FRN_H, C_FRN_C);
+  } else {
+    const vals = trData.map(t => t.revenue || 0);
+    mkChart('mgtTrendChart', {
+      type: 'bar',
+      data: { labels: trData.map(t => t.label), datasets: [
+        { type: 'bar', label: 'Net Sales', data: vals,
+          backgroundColor: vals.map((_, i) => i === lastIdx ? C_CURR : C_HIST),
+          borderRadius: 6, categoryPercentage: 0.72, barPercentage: 0.85, order: 2,
+          datalabels: {
+            display: true, anchor: 'end', align: 'end', offset: 0, clamp: true,
+            color: ctx => ctx.dataIndex === lastIdx ? C_CURR : '#64748b',
+            font: ctx => ({ size: ctx.dataIndex === lastIdx ? 12 : 10,
+                            weight: ctx.dataIndex === lastIdx ? '800' : '600' }),
+            formatter: v => v ? fmtM(v) : '',
+          } },
+        { type: 'line', label: 'Trend', data: movingAvg(vals, 3),
+          borderColor: C_LINE, backgroundColor: 'transparent',
+          borderWidth: 2, tension: 0.35, fill: false, order: 1,
+          pointRadius: 3, pointBackgroundColor: C_LINE,
+          pointBorderColor: '#fff', pointBorderWidth: 1.5,
+          datalabels: { display: false } },
+      ] },
+      options: trendOpts(lastIdx, C_CURR, 28),
+    });
+  }
 
   // Summary strip below chart
   const summaryEl = document.getElementById('mgtTrendSummary');
@@ -8432,36 +8475,34 @@ function renderMgtReport(j, jM, jF) {
        </div>`;
   }
 
-  // HTML bar chart for print — solid colours, up to 3 mini-bars per week group
+  // HTML bar chart for print (canvas doesn't render in PDF). Split → 3 separate labelled
+  // mini-charts side by side (mirrors the 3 on-screen charts); single → one row. Solid
+  // colours so print-color-adjust keeps them visible.
   const htmlChartEl = document.getElementById('mgtTrendHtml');
   if (htmlChartEl && trData.length) {
-    const allRevs = [
-      ...trData.map(t => t.revenue || 0),
-      ...trDataM.map(t => t.revenue || 0),
-      ...trDataF.map(t => t.revenue || 0),
-    ];
-    const maxRev = Math.max(...allRevs, 1);
-    const miniBar = (rev, color) => {
-      const pct = Math.max(4, (rev / maxRev * 100));
-      return `<div style="flex:1;height:${pct.toFixed(1)}%;background:${color};border-radius:3px 3px 0 0;min-height:4px;margin:0 1px"></div>`;
+    const _printChart = (data, histC, currC, title) => {
+      const vals = data.map(t => t.revenue || 0);
+      const mx = Math.max(...vals, 1);
+      const li = vals.length - 1;
+      const bars = data.map((t, i) => {
+        const isL = i === li;
+        const pct = Math.max(4, (vals[i] / mx * 100));
+        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
+            <div style="font-size:6.5px;font-weight:${isL?'800':'600'};color:${isL?currC:'#94a3b8'};white-space:nowrap">${fmtM(vals[i])}</div>
+            <div style="flex:1;width:100%;display:flex;align-items:flex-end"><div style="flex:1;height:${pct.toFixed(1)}%;background:${isL?currC:histC};border-radius:2px 2px 0 0;min-height:3px;margin:0 1px"></div></div>
+            <div style="font-size:6px;font-weight:600;color:#475569;text-align:center;line-height:1.1">${t.label||''}</div>
+          </div>`;
+      }).join('');
+      return `<div style="flex:1;min-width:0;display:flex;flex-direction:column">
+          ${title ? `<div style="font-size:8px;font-weight:800;color:${currC};text-align:center;margin-bottom:1px">${title}</div>` : ''}
+          <div style="flex:1;display:flex;align-items:flex-end">${bars}</div>
+        </div>`;
     };
-    htmlChartEl.innerHTML = trData.map((t, i) => {
-      const isLatest = i === lastIdx;
-      const revM = trDataM[i] ? trDataM[i].revenue || 0 : 0;
-      const revF = trDataF[i] ? trDataF[i].revenue || 0 : 0;
-      const bars = hasSplit
-        ? `<div style="display:flex;align-items:flex-end;width:100%;height:100%">
-             ${miniBar(t.revenue||0, isLatest ? C_TOT_C : C_TOT_H)}
-             ${miniBar(revM, isLatest ? C_MST_C : C_MST_H)}
-             ${miniBar(revF, isLatest ? C_FRN_C : C_FRN_H)}
-           </div>`
-        : miniBar(t.revenue||0, isLatest ? C_CURR : C_HIST);
-      return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
-        <div style="font-size:7.5px;font-weight:${isLatest?'800':'600'};color:${isLatest?C_CURR:'#94a3b8'};margin-bottom:2px;white-space:nowrap">${fmtM(t.revenue||0)}</div>
-        <div style="flex:1;width:100%;display:flex;align-items:flex-end">${bars}</div>
-        <div style="font-size:7.5px;font-weight:600;color:#475569;margin-top:3px;text-align:center;line-height:1.2">${t.label||''}</div>
-      </div>`;
-    }).join('');
+    htmlChartEl.innerHTML = hasSplit
+      ? _printChart(trData,  C_TOT_H, C_TOT_C, 'Total')
+        + _printChart(trDataM, C_MST_H, C_MST_C, 'Master')
+        + _printChart(trDataF, C_FRN_H, C_FRN_C, 'Franchise')
+      : _printChart(trData, C_HIST, C_CURR, '');
   }
 }
 
@@ -18027,18 +18068,32 @@ async function loadOpsReport(force) {
       _opMonthsLoaded = true;
     } catch (e) {}
   }
-  _syncExtraMonth('opMonth', 'opsreport');    // follow the global period (snap to its end month)
-  const mv = sel?.value || '';
-  const _fk = _filterKey() + '|' + mv;
+  // Follow the global period filter: in Day/Week granularity pass the global date range
+  // (→ backend aggregates the daily tables); in Month granularity use the month picker.
+  const gran = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  let useDate = (gran === 'daily' || gran === 'weekly');
+  let dateFrom = '', dateTo = '';
+  if (useDate) {
+    dateFrom = document.getElementById('selDateFrom')?.value || '';
+    dateTo   = document.getElementById('selDateTo')?.value   || '';
+    if (!dateFrom && !dateTo) useDate = false;   // no concrete range (latest/all) → month fallback
+  }
+  let mv = '';
+  if (!useDate) { _syncExtraMonth('opMonth', 'opsreport'); mv = sel?.value || ''; }
+  if (sel) { sel.disabled = useDate; sel.style.opacity = useDate ? '0.45' : '1'; }   // month picker inert in day/week mode
+  const _fk = _filterKey() + '|' + (useDate ? (dateFrom + '~' + dateTo) : mv);
   if (!force && _tabLastKey.opsreport === _fk) return;
   _tabLastKey.opsreport = _fk;
   const p = new URLSearchParams();
-  if (mv) p.set('month', mv);
+  if (useDate) { if (dateFrom) p.set('date_from', dateFrom); if (dateTo) p.set('date_to', dateTo); }
+  else if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch());
   let d;
   try { d = await fetch(`${API}/api/reports/ops?${p}`).then(r => r.json()); } catch (e) { return; }
-  if (d.month && sel && !sel.value) sel.value = d.month;
-  document.getElementById('opRange').textContent = d.month ? `เดือน ${d.month}` : '';
+  if (!useDate && d.month && sel && !sel.value) sel.value = d.month;
+  document.getElementById('opRange').textContent = d.daily
+    ? (d.date_from === d.date_to ? `วันที่ ${d.date_from}` : `${d.date_from} → ${d.date_to}`)
+    : (d.month ? `เดือน ${d.month}` : '');
   const tbl = d.table || {};
   const payTot = (d.payment || []).reduce((a, b) => a + (b.amount || 0), 0);
   document.getElementById('opKpis').innerHTML = [
@@ -18062,12 +18117,16 @@ async function loadOpsReport(force) {
       <div><p class="text-xs font-semibold" style="color:var(--text-primary)">${esc(x.label)}</p>
         <p class="text-[10.5px]" style="color:var(--text-muted)">${fmtN(x.bills)} บิล · ${fmtN(x.customers)} คน · ${(x.bills / ctot * 100).toFixed(1)}%</p></div>
       <p class="text-sm font-bold tabular-nums" style="color:var(--indigo)">${fmt(x.revenue)}</p>
-    </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
+    </div>`).join('') || (d.channel_pending
+      ? '<p class="text-amber-600 text-center py-4 text-xs">ช่องทางขายรายวันจะแสดงหลัง sync รอบถัดไป</p>'
+      : '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>');
   document.getElementById('opVoid').innerHTML = (d.void || []).map(x => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
     <td class="py-1.5 pr-2">${esc(x.menu)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.qty)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(x.value)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(x.bom_cost)}</td></tr>`).join('')
-    || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+    || (d.void_pending
+      ? '<tr><td colspan="4" class="py-4 text-center text-amber-600 text-xs">Void รายวันจะแสดงหลัง sync รอบถัดไป</td></tr>'
+      : '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>');
   document.getElementById('opPromo').innerHTML = (d.promo || []).map(x => `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
     <td class="py-1.5 pr-2">${esc(x.name || ('Series ' + x.series))}${x.code && x.code !== x.name ? ` <span class="text-[10px] text-slate-400">${esc(x.code)}</span>` : ''}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.uses)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#f59e0b">${fmt(x.discount)}</td></tr>`).join('')
@@ -21872,19 +21931,24 @@ async function openBillItems(row = {}) {
   const body  = document.getElementById('billItemsBody');
   title.textContent = '🧾 เมนูที่สั่ง · ' + (row.receipt || '');
   const renderSummary = (rw) => {
-    const rev = rw.rev || 0, disc = rw.disc || 0, cogs = rw.cogs || 0;
-    const netRev  = rev - disc;                       // ex-VAT revenue actually received (after bill discount)
-    const lossNet = Math.round(cogs - netRev);        // true loss = COGS − net revenue
+    // rw.rev = total_inc_vat / 1.07. Sale.Total is POST-discount, so this is ALREADY the
+    // NET ex-VAT revenue actually received — not the pre-discount value. Pre-discount =
+    // net + discount. Gross profit = net − COGS (the SAME definition as บิลขาดทุน / buffet
+    // economics). Do NOT subtract the discount again — that double-counted the markdown
+    // and overstated every bill's loss by exactly the discount amount.
+    const net = rw.rev || 0, disc = rw.disc || 0, cogs = rw.cogs || 0;
+    const gross = net + disc;                          // reconstructed pre-discount ex-VAT
+    const gp    = Math.round(net - cogs);              // gross profit; negative = loss
     sumEl.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-1">
     ${[
       ['สาขา', esc(rw.branch || '—')],
       ['ลูกค้า', fmtN(rw.cust || 0)],
-      ['รายได้ก่อนลด', fmt(rev)],
+      ['รายได้ก่อนลด', fmt(gross)],
       ['ส่วนลดบิล', disc ? `<span style="color:#f59e0b">−${fmt(disc)}</span>` : '—'],
-      ['รายได้สุทธิ', `<span style="color:#4f46e5">${fmt(netRev)}</span>`],
+      ['รายได้สุทธิ', `<span style="color:#4f46e5">${fmt(net)}</span>`],
       ['COGS (BoM)', fmt(cogs)],
-      [lossNet >= 0 ? 'ขาดทุนสุทธิ' : 'กำไรขั้นต้น',
-       `<span style="color:${lossNet >= 0 ? '#ef4444' : '#10b981'}">${fmt(Math.abs(lossNet))}</span>`],
+      [gp >= 0 ? 'กำไรขั้นต้น' : 'ขาดทุนสุทธิ',
+       `<span style="color:${gp >= 0 ? '#10b981' : '#ef4444'}">${fmt(Math.abs(gp))}</span>`],
     ].map(([k, v]) => `<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-base font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>`;
   };
@@ -22022,6 +22086,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     <th class="py-2 pr-3 text-right">ยอดก่อนลด</th>
     <th class="py-2 pr-3 text-right">ส่วนลด</th>
     <th class="py-2 pr-3 text-right">จ่ายจริง</th>
+    <th class="py-2 pr-3 text-right" title="กำไร/ขาดทุนขั้นต้นรายบิล = รายได้สุทธิ (จ่ายจริง ÷ 1.07) − ทุนอาหาร BoM · เขียว = กำไร · แดง = ขาดทุน · — = ยังไม่มีต้นทุนรายบิล (รอ sync)">กำไร/ขาดทุน</th>
     <th class="py-2 pr-3">วิธีจ่าย</th>
     <th class="py-2 pr-3 text-right">% ของบิล</th>
     <th class="py-2 text-right" title="จำนวนครั้งที่พิมพ์ใบเสร็จ (Easy POS PrintTimes)">🖨️ พิมพ์</th>
@@ -22040,10 +22105,22 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
     const printCell = pt > 1
       ? `<span class="font-bold text-red-600" title="พิมพ์ซ้ำ ${pt} ครั้ง — ตรวจสอบ">${pt}x 🚩</span>`
       : (pt === 1 ? `<span class="text-slate-400">1x</span>` : `<span class="text-slate-300">—</span>`);
+    // Per-bill P&L cell. Net ex-VAT revenue = จ่ายจริง ÷ 1.07 (total_inc_vat is already
+    // post-discount), so gross profit = net − BoM COGS — identical to the drill's tile and
+    // to บิลขาดทุน GP. cogs_bom is NULL until the next sync stages this bill's lines → "—".
+    const plCell = (() => {
+      if (b.cogs_bom == null)
+        return '<span class="text-slate-300" title="ยังไม่มีต้นทุนรายบิลของบิลนี้ — จะปรากฏหลัง sync รอบถัดไป">—</span>';
+      const net = Math.round((b.total_inc_vat || 0) / 1.07);
+      const pl  = net - Math.round(b.cogs_bom);
+      const col = pl < 0 ? '#ef4444' : '#10b981';
+      return `<span class="font-semibold" style="color:${col}" title="รายได้สุทธิ ${fmtN(net)} − ทุน BoM ${fmtN(Math.round(b.cogs_bom))}">${pl < 0 ? '−' : '+'}${fmtN(Math.abs(pl))}</span>`;
+    })();
     // Click a row → open the per-bill P&L (เมนูที่สั่ง + ทุน/กำไรรายบิล). Server re-derives
     // the header; these values just seed the summary before the fetch resolves.
     const pnlRow = JSON.stringify({ receipt: b.receipt_no, branch: b.branch,
       rev: Math.round((b.total_inc_vat || 0) / 1.07), disc: b.discount || 0,
+      cogs: b.cogs_bom != null ? Math.round(b.cogs_bom) : 0,
       cust: b.customer_count || 0 }).replace(/'/g, '&#39;');
     return `<tr class="border-b border-slate-100 cursor-pointer hover:bg-indigo-50/50 ${pt>1?'bg-orange-50':hot?'bg-red-50':''}" title="คลิกดู P&amp;L รายบิล — เมนูที่สั่ง · ทุน · กำไรขั้นต้น" onclick='openBillItems(${pnlRow})'>
       <td class="py-1.5 pr-3 font-mono text-slate-600">${esc(b.receipt_no||'—')}</td>
@@ -22055,6 +22132,7 @@ function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
       <td class="py-1.5 pr-3 text-right text-slate-600">${fmtN(base)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold ${hot?'text-red-600':'text-amber-600'}">${fmtN(b.discount||0)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${fmtN(b.total_inc_vat||0)}</td>
+      <td class="py-1.5 pr-3 text-right">${plCell}</td>
       <td class="py-1.5 pr-3 text-slate-600">${payCell}</td>
       <td class="py-1.5 pr-3 text-right">${b.disc_pct!=null?b.disc_pct.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 text-right">${printCell}</td></tr>`;

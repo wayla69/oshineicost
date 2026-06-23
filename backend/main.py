@@ -2795,9 +2795,20 @@ def _bom_unit_cost_sql(s: str = "s") -> str:
 _DTYPE_LABEL = {0: "ทานที่ร้าน", 1: "ทานที่ร้าน", 2: "เดลิเวอรี", 3: "กลับบ้าน", 4: "อื่น ๆ"}
 
 @app.get("/api/reports/ops")
-def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Query(None)):
+def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+                date_from: Optional[str] = Query(None, description="YYYY-MM-DD; when given the report aggregates DAILY tables over [date_from, date_to]"),
+                date_to: Optional[str] = Query(None, description="YYYY-MM-DD; range end (defaults to date_from when only one is given)")):
     """Ops/sales-side report: payment mix, channel mix, void, table turnover, promo
-    — from the staged pos_* tables. Revenue/qty only (no cost). Latest month default."""
+    — from the staged pos_* tables. Revenue/qty only (no cost).
+
+    Scope follows the caller's period filter: when a date range (date_from/date_to) is
+    supplied the report aggregates the DAILY tables over [date_from, date_to]
+    (pos_payment_day / pos_coupon_day / pos_table_turn_day by day, plus pos_void_day /
+    pos_channel_day); otherwise it uses the MONTHLY tables for `month` (latest month by
+    default — unchanged behaviour). The daily Void / Channel tables are newer than the
+    others, so they degrade to empty until the next sync stages them (Payment / Promo /
+    Table per-day work immediately — their daily tables already populate every sync)."""
+    daily = bool(date_from or date_to)
     with get_db() as con:
         bid = None
         if branch:
@@ -2805,44 +2816,91 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
             bid = row["branch_id"] if row else -1
         def bf(col="branch_id"):
             return (f" AND {col}=:bid", {"bid": bid}) if bid is not None else ("", {})
-        mrow = con.execute("SELECT MAX(period_month) m FROM pos_payment_month").fetchone()
-        mon = month or (mrow["m"] if mrow else None)
-        if not mon:
-            return {"month": None, "payment": [], "channel": [], "void": [], "table": {}, "promo": []}
         bfc, bp = bf()
+        # Which staged tables exist — daily Void/Channel are added by a later sync, so a
+        # daily request degrades those sections to empty until then (not a 500).
+        tabs = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('pos_payment_day','pos_channel_day','pos_void_day','pos_coupon_day','pos_table_turn_day')")}
+
+        if daily:
+            d1 = date_from or date_to
+            d2 = date_to or date_from
+            dscope = {"d1": d1, "d2": d2}
+            def dwhere(alias=""):                      # date predicate (col `day` on *_day tables)
+                a = f"{alias}." if alias else ""
+                return f"{a}day BETWEEN :d1 AND :d2"
+            pay_tbl, ch_tbl, void_tbl, cpn_tbl = "pos_payment_day", "pos_channel_day", "pos_void_day", "pos_coupon_day"
+            scope = {"month": None, "date_from": d1, "date_to": d2, "daily": True}
+        else:
+            mrow = con.execute("SELECT MAX(period_month) m FROM pos_payment_month").fetchone()
+            mon = month or (mrow["m"] if mrow else None)
+            if not mon:
+                return {"month": None, "date_from": None, "date_to": None, "daily": False,
+                        "payment": [], "channel": [], "void": [],
+                        "void_total": {"value": 0, "qty": 0, "bom_cost": 0}, "table": {}, "promo": []}
+            dscope = {"m": mon}
+            def dwhere(alias=""):                      # date predicate (col `period_month`)
+                a = f"{alias}." if alias else ""
+                return f"{a}period_month=:m"
+            pay_tbl, ch_tbl, void_tbl, cpn_tbl = "pos_payment_month", "pos_channel_month", "pos_void", "pos_coupon_month"
+            scope = {"month": mon, "date_from": None, "date_to": None, "daily": False}
+
+        prm = {**dscope, **bp}
+        # In daily mode a *_day table may not be staged yet → degrade that section to empty.
+        def _ok(tbl):
+            return (not daily) or (tbl in tabs)
+
         payment = [dict(r) for r in con.execute(
-            f"SELECT payment_code code, ROUND(SUM(amount)) amount, SUM(txn_count) n FROM pos_payment_month "
-            f"WHERE period_month=:m{bfc} GROUP BY payment_code ORDER BY amount DESC", {"m": mon, **bp}).fetchall()]
-        ch = con.execute(f"SELECT delivery_type dt, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
-                         f"FROM pos_channel_month WHERE period_month=:m{bfc} GROUP BY delivery_type", {"m": mon, **bp}).fetchall()
-        channel = [{"label": _DTYPE_LABEL.get(r["dt"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
+            f"SELECT payment_code code, ROUND(SUM(amount)) amount, SUM(txn_count) n FROM {pay_tbl} "
+            f"WHERE {dwhere()}{bfc} GROUP BY payment_code ORDER BY amount DESC", prm).fetchall()] if _ok(pay_tbl) else []
+
+        channel = []
+        if _ok(ch_tbl):
+            ch = con.execute(f"SELECT delivery_type dtype, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
+                             f"FROM {ch_tbl} WHERE {dwhere()}{bfc} GROUP BY delivery_type", prm).fetchall()
+            channel = [{"label": _DTYPE_LABEL.get(r["dtype"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
+
         _uc = _bom_unit_cost_sql("s")
-        void = [dict(r) for r in con.execute(
-            f"SELECT COALESCE(s.description,s.sku_code) menu, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.ext_price)) value, "
-            f"ROUND(SUM(v.qty * ({_uc}))) bom_cost "
-            f"FROM pos_void v JOIN skus s ON s.sku_id=v.sku_id WHERE v.period_month=:m{bfc} "
-            f"GROUP BY v.sku_id ORDER BY bom_cost DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
-        vt = con.execute(
-            f"SELECT ROUND(SUM(v.ext_price)) total, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.qty * ({_uc}))) bom_cost "
-            f"FROM pos_void v JOIN skus s ON s.sku_id=v.sku_id WHERE v.period_month=:m{bfc}", {"m": mon, **bp}).fetchone()
-        # table turnover (daily table → month avg)
+        void, vt = [], None
+        if _ok(void_tbl):
+            void = [dict(r) for r in con.execute(
+                f"SELECT COALESCE(s.description,s.sku_code) menu, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.ext_price)) value, "
+                f"ROUND(SUM(v.qty * ({_uc}))) bom_cost "
+                f"FROM {void_tbl} v JOIN skus s ON s.sku_id=v.sku_id WHERE {dwhere('v')}{bfc} "
+                f"GROUP BY v.sku_id ORDER BY bom_cost DESC LIMIT 12", prm).fetchall()]
+            vt = con.execute(
+                f"SELECT ROUND(SUM(v.ext_price)) total, ROUND(SUM(v.qty)) qty, ROUND(SUM(v.qty * ({_uc}))) bom_cost "
+                f"FROM {void_tbl} v JOIN skus s ON s.sku_id=v.sku_id WHERE {dwhere('v')}{bfc}", prm).fetchone()
+
+        # table turnover (always the daily table; range = day BETWEEN, month = substr match)
         tbf, tbp = bf()
-        tt = con.execute(f"SELECT ROUND(AVG(avg_turn_min),0) avg_min, SUM(tabs) tabs, SUM(customers) cust "
-                         f"FROM pos_table_turn_day WHERE substr(day,1,7)=:m{tbf} AND avg_turn_min>0", {"m": mon, **tbp}).fetchone()
-        table = {"avg_turn_min": tt["avg_min"], "tabs": tt["tabs"] or 0, "customers": tt["cust"] or 0}
-        _has_cs = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_series'").fetchone()
-        _cs_join = "LEFT JOIN coupon_series cs ON cs.coupon_series_id=cm.coupon_series_id" if _has_cs else ""
-        _cs_name = "COALESCE(NULLIF(TRIM(cs.name),''),'Series '||cm.coupon_series_id)" if _has_cs else "'Series '||cm.coupon_series_id"
-        _cs_code = "cs.code" if _has_cs else "NULL"
-        promo = [dict(r) for r in con.execute(
-            f"SELECT cm.coupon_series_id series, {_cs_name} name, {_cs_code} code, "
-            f"SUM(cm.used_count) uses, ROUND(SUM(cm.discount_amount)) discount "
-            f"FROM pos_coupon_month cm {_cs_join} WHERE cm.period_month=:m{bfc} "
-            f"GROUP BY cm.coupon_series_id ORDER BY discount DESC LIMIT 12", {"m": mon, **bp}).fetchall()]
-    return {"month": mon, "payment": payment, "channel": channel, "void": void,
+        table = {"avg_turn_min": None, "tabs": 0, "customers": 0}
+        if "pos_table_turn_day" in tabs:
+            tcond = "day BETWEEN :d1 AND :d2" if daily else "substr(day,1,7)=:m"
+            tt = con.execute(f"SELECT ROUND(AVG(avg_turn_min),0) avg_min, SUM(tabs) tabs, SUM(customers) cust "
+                             f"FROM pos_table_turn_day WHERE {tcond}{tbf} AND avg_turn_min>0", {**dscope, **tbp}).fetchone()
+            table = {"avg_turn_min": tt["avg_min"], "tabs": tt["tabs"] or 0, "customers": tt["cust"] or 0}
+
+        promo = []
+        if _ok(cpn_tbl):
+            _has_cs = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coupon_series'").fetchone()
+            _cs_join = "LEFT JOIN coupon_series cs ON cs.coupon_series_id=cm.coupon_series_id" if _has_cs else ""
+            _cs_name = "COALESCE(NULLIF(TRIM(cs.name),''),'Series '||cm.coupon_series_id)" if _has_cs else "'Series '||cm.coupon_series_id"
+            _cs_code = "cs.code" if _has_cs else "NULL"
+            promo = [dict(r) for r in con.execute(
+                f"SELECT cm.coupon_series_id series, {_cs_name} name, {_cs_code} code, "
+                f"SUM(cm.used_count) uses, ROUND(SUM(cm.discount_amount)) discount "
+                f"FROM {cpn_tbl} cm {_cs_join} WHERE {dwhere('cm')}{bfc} "
+                f"GROUP BY cm.coupon_series_id ORDER BY discount DESC LIMIT 12", prm).fetchall()]
+    return {**scope, "payment": payment, "channel": channel, "void": void,
             "void_total": {"value": (vt["total"] or 0) if vt else 0, "qty": (vt["qty"] or 0) if vt else 0,
                            "bom_cost": (vt["bom_cost"] or 0) if vt else 0},
-            "table": table, "promo": promo}
+            "table": table, "promo": promo,
+            # daily Void/Channel tables aren't staged yet → tell the UI to show a "after next
+            # sync" hint instead of a bare "no data" for those two sections in day/range mode.
+            "void_pending": bool(daily and "pos_void_day" not in tabs),
+            "channel_pending": bool(daily and "pos_channel_day" not in tabs)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -6673,13 +6731,35 @@ def analysis_discount_bills(
         # sync_mssql). Tables/columns may be absent on a DB synced before they
         # existed → degrade gracefully (NULL / 0).
         tabs = {r[0] for r in con.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('pos_discount_reason','coupon_series','sale_payment')")}
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN "
+            "('pos_discount_reason','coupon_series','sale_payment','sale_bill_item','sale_bill_cogs')")}
         stcols = {r[1] for r in con.execute("PRAGMA table_info(sales_transaction)")}
         has_type = {"discount_reason_id", "coupon_series_id"} <= stcols
         join_r = " LEFT JOIN pos_discount_reason dr ON dr.reason_id = st.discount_reason_id" if ("pos_discount_reason" in tabs and has_type) else ""
         join_c = " LEFT JOIN coupon_series cs ON cs.coupon_series_id = st.coupon_series_id" if ("coupon_series" in tabs and has_type) else ""
         sel_r = "dr.reason_desc" if join_r else "NULL"
         sel_c = "cs.name" if join_c else "NULL"
+        # Per-bill BoM COGS → powers the กำไร/ขาดทุน (P&L) column in the table and seeds
+        # the per-bill P&L drill. SAME source & priority as /reports/pnl-bill-items: the
+        # LIVE sum of sale_bill_item menu lines (qty × effective unit cost, BUFFET tier=0)
+        # when those lines exist (ALL discount bills, full synced history), else the
+        # rolling 31-day sale_bill_cogs snapshot. NULL when neither is present (pre-sync)
+        # → the column shows "—". Note: net revenue is total_inc_vat/1.07 (Sale.Total is
+        # ALREADY post-discount), so the client renders P&L = net − COGS — the same
+        # definition as บิลขาดทุน GP, NOT net − discount.
+        if "sale_bill_item" in tabs:
+            _build_sku_effective_cost(con, force=False)   # ensure the unit-cost lookup exists
+            _live_cogs = (f"(SELECT SUM(i.qty * CASE WHEN s2.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0 "
+                          f"ELSE COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec "
+                          f"WHERE sec.sku_id=i.sku_id),0) END) "
+                          f"FROM sale_bill_item i JOIN skus s2 ON s2.sku_id=i.sku_id "
+                          f"WHERE i.receipt_no=st.receipt_no)")
+        else:
+            _live_cogs = "NULL"
+        _snap_cogs = ("(SELECT c.cogs_bom FROM sale_bill_cogs c WHERE c.receipt_no=st.receipt_no)"
+                      if "sale_bill_cogs" in tabs else "NULL")
+        sel_cogs = (f"ROUND(COALESCE({_live_cogs}, {_snap_cogs}))"
+                    if (_live_cogs != "NULL" or _snap_cogs != "NULL") else "NULL")
         # Payment method per receipt. A bill can split across codes → show the
         # DOMINANT (largest-amount) code; payment_n = how many distinct codes.
         has_pay = "sale_payment" in tabs
@@ -6708,7 +6788,8 @@ def analysis_discount_bills(
                    ROUND(100.0 * st.discount / NULLIF({base_expr}, 0), 1) AS disc_pct,
                    {sel_r} AS reason_desc, {sel_c} AS coupon_name,
                    {sel_pay} AS payment_code, {sel_payn} AS payment_n,
-                   COALESCE(st.print_times, 0) AS print_times
+                   COALESCE(st.print_times, 0) AS print_times,
+                   {sel_cogs} AS cogs_bom
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {join_r}{join_c}
