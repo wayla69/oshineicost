@@ -8223,8 +8223,38 @@ function renderMgtReport(j, jM, jF) {
     + '<h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">📋 Executive Summary</h2>'
     + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div></div>';
 
+  // §6 — per-MASTER-branch discount + % of sales (the company-owned follow-up line).
+  // Independent of the master/franchise split; shows whenever master branches are in scope.
+  const masterBranchDisc = (() => {
+    const MB = L.by_master_branch || [];
+    if (!MB.length) return '';
+    const pctCol = p => p == null ? '#94a3b8' : p >= 8 ? '#dc2626' : p >= 4 ? '#d97706' : '#475569';
+    const pctTxt = p => p == null ? '—' : p.toFixed(1) + '%';
+    const tot = MB.reduce((a, b) => ({ disc: a.disc + (b.disc||0), bills: a.bills + (b.bills||0), sales: a.sales + (b.sales||0) }), { disc:0, bills:0, sales:0 });
+    const totPct = tot.sales ? tot.disc / tot.sales * 100 : null;
+    const rows = MB.map(b => `<tr class="border-b border-slate-50">
+        <td class="py-1.5 pr-3">${b.branch}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums font-semibold">${baht(b.disc)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums font-bold" style="color:${pctCol(b.pct)}">${pctTxt(b.pct)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums text-slate-400">${num(b.sales)}</td>
+        <td class="py-1.5 text-right tabular-nums text-slate-400">${num(b.bills)}</td></tr>`).join('');
+    return `<div class="mt-4 pt-3 border-t border-slate-100">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-2">Discounts by master branch · % of sales <span class="normal-case text-slate-300">(company-owned — the follow-up)</span></p>
+      <table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b border-slate-200">
+        <th class="py-1.5 pr-3">Branch</th><th class="py-1.5 pr-3 text-right">Discount</th>
+        <th class="py-1.5 pr-3 text-right">% of sales</th><th class="py-1.5 pr-3 text-right">Sales (ex-VAT)</th>
+        <th class="py-1.5 text-right">Disc. bills</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr class="border-t-2 border-slate-200 font-bold">
+        <td class="py-1.5 pr-3">All master</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums">${baht(tot.disc)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums" style="color:${pctCol(totPct)}">${pctTxt(totPct)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${num(tot.sales)}</td>
+        <td class="py-1.5 text-right tabular-nums text-slate-500">${num(tot.bills)}</td></tr></tfoot></table></div>`;
+  })();
+
   // §6 split — Money-Leak
-  const leakWithSplit = leak + (() => {
+  const leakWithSplit = leak + masterBranchDisc + (() => {
     if (!hasSplit) return '';
     const lkRow = (lx, key) => {
       const o = (lx.leak || {})[key] || {};
