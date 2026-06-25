@@ -12692,6 +12692,7 @@ def report_management(
         "weeks": weeks,
         "days_in_period": days_in_period,
         "latest_day": maxd,
+        "min_day": mind,
         "branch_scope": branch or ("Group: " + group if group else "All branches"),
         "has_prev": has_prev,
         "has_yoy": has_yoy,

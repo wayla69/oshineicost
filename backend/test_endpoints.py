@@ -81,6 +81,12 @@ def test_management_report_daily_and_weekly(client):
     assert isinstance(d["peak"]["dayparts"], list) and d["peak"]["peak_hour"]
     assert "available" in d["table"]
     assert "has_yoy" in d
+    # day picker bounds: min_day/latest_day frame the selectable range, focus defaults to latest
+    assert d["min_day"] <= d["latest_day"] and d["focus"] == d["latest_day"]
+    # an explicit daily date round-trips and focuses that day
+    pday = d["min_day"]
+    d2 = client.get("/api/reports/management", params={"period": "daily", "date": pday}).json()
+    assert d2["available"] and d2["focus"] == pday
 
     w = client.get("/api/reports/management", params={"period": "weekly"}).json()
     assert w["period"] == "weekly"
