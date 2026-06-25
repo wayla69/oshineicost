@@ -4636,6 +4636,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
         <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
       </div>
+      <input id="mgtDayPicker" type="date" onchange="onMgtDayChange(this.value)"
+             class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+             style="background:rgba(255,255,255,0.92);color:#0f172a" />
       <select id="mgtWeekPicker" onchange="onMgtWeekChange(this.value)"
               class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
               style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
@@ -7766,6 +7769,7 @@ async function genMenuIdeas() {
 // ════════════════════════════════════════════════════════════════
 let mgtPeriod = 'daily';
 let mgtWeek = null;          // selected week (Monday ISO date); null = latest completed week
+let mgtDay = null;           // selected day (ISO date); null = latest day in data
 
 function _mgtToggleUI() {
   const on  = 'background:#fff;color:#0f172a';
@@ -7774,9 +7778,23 @@ function _mgtToggleUI() {
   const w = document.getElementById('mgtTabWeekly');
   if (d) d.setAttribute('style', mgtPeriod === 'daily'  ? on : off);
   if (w) w.setAttribute('style', mgtPeriod === 'weekly' ? on : off);
-  // week picker is weekly-only; hide it in daily mode
+  // week picker is weekly-only; day picker is daily-only
   const wp = document.getElementById('mgtWeekPicker');
   if (wp && mgtPeriod !== 'weekly') wp.classList.add('hidden');
+  const dp = document.getElementById('mgtDayPicker');
+  if (dp && mgtPeriod !== 'daily') dp.classList.add('hidden');
+}
+
+// Show the day picker (daily mode) bounded to the available data range, with the
+// focused day pre-selected. Mirrors renderMgtWeekPicker for the weekly view.
+function renderMgtDayPicker(j) {
+  const dp = document.getElementById('mgtDayPicker');
+  if (!dp) return;
+  if (j.period !== 'daily') { dp.classList.add('hidden'); return; }
+  if (j.latest_day) dp.max = j.latest_day;
+  if (j.min_day)    dp.min = j.min_day;
+  dp.value = (j.focus || j.latest_day || '').slice(0, 10);
+  dp.classList.remove('hidden');
 }
 
 function renderMgtWeekPicker(j) {
@@ -7797,9 +7815,16 @@ function onMgtWeekChange(v) {
   loadMgtReport();
 }
 
+function onMgtDayChange(v) {
+  mgtDay = v || null;
+  _tabLastKey.mgtreport = null;     // force a refetch for the chosen day
+  loadMgtReport();
+}
+
 function setMgtPeriod(p) {
   mgtPeriod = (p === 'weekly') ? 'weekly' : 'daily';
   mgtWeek = null;                   // reset to the latest completed week on mode switch
+  mgtDay = null;                    // reset to the latest day on mode switch
   _tabLastKey.mgtreport = null;     // force a refetch for the new period
   _mgtToggleUI();
   loadMgtReport();
@@ -7811,13 +7836,14 @@ function exportMgtReport() {
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
   if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
+  if (mgtPeriod === 'daily'  && mgtDay)  qs.set('date', mgtDay);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   window.location.href = `${API}/api/reports/management.xlsx?${qs}`;   // session cookie travels with it
 }
 
 async function loadMgtReport() {
-  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '');
+  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '');
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
   _mgtToggleUI();
@@ -7826,6 +7852,7 @@ async function loadMgtReport() {
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
   if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
+  if (mgtPeriod === 'daily'  && mgtDay)  qs.set('date', mgtDay);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   // Fire master & franchise splits in parallel — only when no specific branch/type filter is active
@@ -7889,6 +7916,7 @@ function renderMgtReport(j, jM, jF) {
   catch (e) { setTxt('mgtGenDate', new Date().toString()); }
   _mgtToggleUI();
   renderMgtWeekPicker(j);
+  renderMgtDayPicker(j);
 
   const H = j.headline || {};
   // Each section carries a distinct accent (top bar + heading) so the report reads
