@@ -12272,62 +12272,83 @@ def report_management(
             pr = prev_rank_map.get(b["branch"])
             b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
 
-        # ---- money-leak radar over the period ----------------------------
+        # ---- money-leak radar over the period (+ last-period comparison) ----
+        # leak_total/cash_heavy_total take an explicit [s,e] window so the SAME signal
+        # can be measured for the current period AND the comparison period (last week /
+        # same weekday last week) — the §6 cards then show a WoW delta.
         lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
-        lp = {**params, "s": cs.isoformat(), "e": ce.isoformat()}
-        rcond = " AND date(st.sold_at) BETWEEN :s AND :e"
-        def leak_total(extra):
+        def leak_total(extra, s, e):
             r = con.execute(f"""
                 SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where}{rcond} {extra}""", lp).fetchone()
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}""",
+                {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
             return {"bills": r["bills"] or 0, "baht": r["baht"] or 0}
         def leak_branches(extra, by="baht"):
             rows = con.execute(f"""
                 SELECT b.name branch, COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where}{rcond} {extra}
-                GROUP BY b.name ORDER BY {by} DESC LIMIT 3""", lp).fetchall()
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}
+                GROUP BY b.name ORDER BY {by} DESC LIMIT 3""",
+                {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
             return [dict(r) for r in rows]
-        heavy_extra   = f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30"
-        heavy   = {**leak_total(heavy_extra),   "by_branch": leak_branches(heavy_extra)}
-        reprint_extra = "AND st.discount>0 AND COALESCE(st.print_times,0)>1"
-        reprint = {**leak_total(reprint_extra), "by_branch": leak_branches(reprint_extra, "bills")}
-        zero_extra    = f"AND st.discount>0 AND {lk} <= 0"
-        zero    = {**leak_total(zero_extra),    "by_branch": leak_branches(zero_extra)}
         # cash-heavy: of the period's heavy-discount bills (a SMALL set), how many were
         # paid mostly in CASH. Drive FROM the heavy bills and pick each bill's dominant
         # tender with an indexed (branch_id, receipt_no, amount) lookup — NOT a window
         # over the entire sale_payment table (that scan made this the slowest query in
-        # the report). Reuses leak_total/leak_branches; guards a missing sale_payment.
-        try:
-            # Inner query = the period's heavy-discount bills ONLY (small). The dominant
-            # tender is then resolved per heavy bill in the SELECT list (post-WHERE), so
-            # the indexed sale_payment lookup runs only for those few rows.
-            dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
-                        "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
-                        "ORDER BY sp.amount DESC LIMIT 1)")
-            heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
-                         f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
-                         f"WHERE {where}{rcond} AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
-            cr = con.execute(f"""
-                SELECT COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
-                FROM (SELECT discount, {dom_code} dc FROM ({heavy_sub}) h)
-                WHERE dc='Cash'""", lp).fetchone()
-            cb = con.execute(f"""
-                SELECT branch, COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
-                FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
-                WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lp).fetchall()
-            cash_heavy = {"bills": cr["bills"] or 0, "baht": cr["baht"] or 0,
-                          "by_branch": [dict(r) for r in cb]}
-        except Exception:
-            cash_heavy = {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
+        # the report). Guards a missing sale_payment.
+        def cash_heavy_total(s, e, with_branches=False):
+            try:
+                dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                            "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
+                            "ORDER BY sp.amount DESC LIMIT 1)")
+                heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
+                             f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
+                             f"WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e "
+                             f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
+                lpe = {**params, "s": s.isoformat(), "e": e.isoformat()}
+                cr = con.execute(f"""
+                    SELECT COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                    FROM (SELECT discount, {dom_code} dc FROM ({heavy_sub}) h)
+                    WHERE dc='Cash'""", lpe).fetchone()
+                out = {"bills": cr["bills"] or 0, "baht": cr["baht"] or 0}
+                if with_branches:
+                    cb = con.execute(f"""
+                        SELECT branch, COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                        FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
+                        WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lpe).fetchall()
+                    out["by_branch"] = [dict(r) for r in cb]
+                return out
+            except Exception:
+                return {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
+        # WoW helper — attaches prev figures + % deltas onto a leak card.
+        def _leak_wow(cur_o, prev_o):
+            return {"prev_bills": prev_o["bills"], "prev_baht": prev_o["baht"],
+                    "bills_wow": pct(cur_o["bills"], prev_o["bills"]),
+                    "baht_wow":  pct(cur_o["baht"],  prev_o["baht"])}
+
+        heavy_extra   = f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30"
+        reprint_extra = "AND st.discount>0 AND COALESCE(st.print_times,0)>1"
+        zero_extra    = f"AND st.discount>0 AND {lk} <= 0"
+        all_extra     = "AND st.discount>0"
+        heavy   = {**leak_total(heavy_extra, cs, ce),   "by_branch": leak_branches(heavy_extra)}
+        reprint = {**leak_total(reprint_extra, cs, ce), "by_branch": leak_branches(reprint_extra, "bills")}
+        zero    = {**leak_total(zero_extra, cs, ce),    "by_branch": leak_branches(zero_extra)}
+        cash_heavy = cash_heavy_total(cs, ce, with_branches=True)
+        ltot       = leak_total(all_extra, cs, ce)
+        if has_prev:
+            heavy.update(  _leak_wow(heavy,   leak_total(heavy_extra,   ps, pe)))
+            reprint.update(_leak_wow(reprint, leak_total(reprint_extra, ps, pe)))
+            zero.update(   _leak_wow(zero,    leak_total(zero_extra,    ps, pe)))
+            ltot.update(   _leak_wow(ltot,    leak_total(all_extra,     ps, pe)))
+            ch_prev = cash_heavy_total(ps, pe)
+            if not cash_heavy.get("unavailable") and not ch_prev.get("unavailable"):
+                cash_heavy.update(_leak_wow(cash_heavy, ch_prev))
         # ALL discounted bills in the period (every branch in scope) — the reconciling
         # total so the radar's abnormal-only subsets read against the full figure and
         # tie out with the Discounts menu (both = SUM(Sale.Discount) over the same scope).
         leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
-                "reprinted": reprint, "zero_gross": zero,
-                "total": leak_total("AND st.discount>0")}
+                "reprinted": reprint, "zero_gross": zero, "total": ltot}
         # Per-MASTER-branch discount follow-up: amount + % of that branch's ex-VAT sales
         # + bill count, for the period. Master (company-owned) stores are the owner's own
         # money leak — franchise discounts are the franchisee's cost — so this is the line
@@ -12338,9 +12359,9 @@ def report_management(
                    ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
                    SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where}{rcond} AND COALESCE(b.branch_type,'master')='master'
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND COALESCE(b.branch_type,'master')='master'
             GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
-            ORDER BY disc DESC""", lp).fetchall()
+            ORDER BY disc DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
         leak["by_master_branch"] = [
             {"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
              "bills": r["bills"] or 0,
@@ -12488,6 +12509,47 @@ def report_management(
             "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
             "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
         }
+        # ---- §3 weekly bars (this month) + last-month comparison --------------
+        # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
+        # that week's in-month revenue), for a small weekly trend bar in §3.
+        mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+        wk_rows = con.execute(f"""
+            SELECT {mon_e3} k, ROUND(SUM(st.total_inc_vat)/1.07) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+            GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
+        pace["weekly"] = [{"label": f"{_dt.date.fromisoformat(r['k']).day} {MON[_dt.date.fromisoformat(r['k']).month-1]}",
+                           "start": r["k"], "revenue": r["rev"] or 0} for r in wk_rows]
+        # `prev_month`: previous calendar month — full total, the SAME-elapsed-days MTD
+        # (fair MTD-vs-MTD when the current month is partial) and its BoM food-cost %.
+        pm_first   = ref_anchor.replace(day=1) - _dt.timedelta(days=1)
+        prev_month = pm_first.strftime("%Y-%m")
+        pm_full = con.execute(f"""
+            SELECT ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month""",
+            {**params, "month": prev_month}).fetchone()
+        pm_mtd = con.execute(f"""
+            SELECT ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+              AND CAST(strftime('%d', st.sold_at) AS INT) <= :d""",
+            {**params, "month": prev_month, "d": days_elapsed}).fetchone()
+        pm_bom = con.execute(f"""
+            SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+            FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+            LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+            JOIN branches b ON b.branch_id=s.branch_id
+            WHERE {mw}""", {**mp, "month": prev_month}).fetchone()
+        pm_rev_full = (pm_full["rev"] or 0) if pm_full else 0
+        pm_rev_mtd  = (pm_mtd["rev"] or 0) if pm_mtd else 0
+        pm_cost     = pm_bom["cost"] if pm_bom else None
+        pace["prev_month"] = {
+            "month": prev_month, "revenue_full": pm_rev_full, "revenue_mtd": pm_rev_mtd,
+            "food_cost_pct": round(pm_cost/pm_rev_full*100, 1) if (pm_cost and pm_rev_full) else None,
+        }
+        pace["mom_pct"]             = pct(mtd_rev, pm_rev_mtd)          # MTD vs same-elapsed last month
+        pace["food_cost_pct_prev"] = pace["prev_month"]["food_cost_pct"]
 
         # ---- trailing trend (8 periods) — ONE grouped query, not 8 round-trips ----
         trend = []
@@ -12543,8 +12605,26 @@ def report_management(
                 d2["pct"] = round(d2["revenue"]/tot_hr_rev*100, 1) if tot_hr_rev else None
                 d2["revenue"] = round(d2["revenue"]); dayparts.append(d2)
         ph = max(hourly, key=lambda r: r["revenue"], default=None)
-        peak = {"hourly": hourly, "dayparts": dayparts,
+        peak = {"hourly": hourly, "dayparts": dayparts, "total_rev": round(tot_hr_rev),
                 "peak_hour": ({"hour": ph["hour"], "revenue": round(ph["revenue"])} if ph and ph["revenue"] else None)}
+        # last-period comparison — daypart revenue, scope total and the peak hour, so §8
+        # can show a WoW delta against the same weekday last week / the previous week.
+        if has_prev:
+            ph_rows = con.execute(f"""
+                SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
+                       ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY hr""", {**params, "s": ps.isoformat(), "e": pe.isoformat()}).fetchall()
+            pdp: dict = {}
+            for r in ph_rows:
+                nm = _daypart(r["hr"]); pdp[nm] = pdp.get(nm, 0) + (r["rev"] or 0)
+            pphr = max(ph_rows, key=lambda r: r["rev"] or 0, default=None)
+            peak["prev"] = {
+                "dayparts":  {k: round(v) for k, v in pdp.items()},
+                "total_rev": round(sum((r["rev"] or 0) for r in ph_rows)),
+                "peak_hour": ({"hour": pphr["hr"], "revenue": round(pphr["rev"])} if pphr and pphr["rev"] else None),
+            }
         if period != "daily":      # which day of the week drove the week
             dow_rows = con.execute(f"""
                 SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
@@ -12592,6 +12672,19 @@ def report_management(
                                        "covers_per_table": round((r["cust"] or 0)/r["tabs"], 2) if r["tabs"] else None,
                                        "avg_turn_min": r["avg_turn"]} for r in brows][:12],
                     }
+                    if has_prev:      # last-period turnover for the §9 WoW deltas
+                        pt = con.execute(f"""
+                            SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                                   ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                            FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                            WHERE {tw2} AND t.day BETWEEN :ps AND :pe""",
+                            {**tparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchone()
+                        ptabs = pt["tabs"] or 0; pcust = pt["cust"] or 0
+                        table["prev"] = {
+                            "tables": ptabs, "covers": pcust,
+                            "covers_per_table": round(pcust/ptabs, 2) if ptabs else None,
+                            "avg_turn_min": pt["avg_turn"],
+                        }
         except Exception:
             table = {"available": False}
 
@@ -12634,6 +12727,22 @@ def report_management(
                         by_branch.append({"branch": bd["branch"], "total": round(bd["total"]), "channels": chans})
                     by_branch.sort(key=lambda x: -x["total"])
                     payment = {"available": True, "total": round(ptot), "channels": channels, "by_branch": by_branch}
+                    if has_prev:      # last-period tender mix for the §10 WoW deltas
+                        pprev = con.execute(f"""
+                            SELECT pp.payment_code code, ROUND(SUM(pp.amount)) amount
+                            FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
+                            WHERE {pw} AND pp.day BETWEEN :ps AND :pe
+                            GROUP BY pp.payment_code""",
+                            {**pparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchall()
+                        pby = {(r["code"] or "—"): (r["amount"] or 0) for r in pprev}
+                        ptot_prev = sum(pby.values())
+                        payment["prev"] = {
+                            "total": round(ptot_prev),
+                            "by_code": {k: round(v) for k, v in pby.items()},
+                            "channels": {c["code"]: {"amount": round(pby.get(c["code"], 0)),
+                                                     "pct": round(pby.get(c["code"], 0) / ptot_prev * 100, 1) if ptot_prev else None}
+                                         for c in channels},
+                        }
         except Exception:
             payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
 

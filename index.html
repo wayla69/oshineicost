@@ -784,15 +784,39 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     background: #0f766e !important; color: #fff !important; border-color: #0f766e !important;
   }
   #tab-mgtreport table tbody tr:nth-child(even) td { background: #f1f5f9 !important; }
-  /* Revenue Trend: canvas doesn't print reliably → show HTML fallback bar chart.
-     align-items:stretch is REQUIRED — it makes each week-column fill the 200px
-     height so the bars' percentage heights resolve (flex-end would collapse them). */
+
+  /* ── Fit the report neatly onto each A4 page ──
+     A4-landscape gives only ~190 mm (~540 pt) of usable HEIGHT. The on-screen card
+     paddings/fonts are sized for a wide monitor, so each tall section landed on its
+     own page and `break-inside: avoid` left ~half of every page blank (14 pages, mostly
+     white). Compact the paddings, fonts and gaps so 2–3 sections pack onto each page. */
+  .content-area { padding: 0 !important; }                    /* @page margin already insets the report */
+  #tab-mgtreport { font-size: 10.5px !important; line-height: 1.35 !important; }
+  #tab-mgtreport .space-y-5 > * + * { margin-top: 9px !important; }   /* gap between sections */
+  #tab-mgtreport .card { padding: 11px 13px !important; margin-bottom: 0 !important; }
+  #tab-mgtreport h1 { font-size: 18px !important; }
+  #tab-mgtreport h2 { font-size: 12.5px !important; margin-bottom: 8px !important; padding-bottom: 4px !important; }
+  #tab-mgtreport h3 { font-size: 11px !important; margin-top: 8px !important; }
+  /* Cover band: shrink so page 1 also carries the Executive Summary instead of sitting blank. */
+  #tab-mgtreport > div:first-child { padding: 14px 20px !important; margin-bottom: 9px !important; }
+  #tab-mgtreport .text-3xl { font-size: 18px !important; }
+  #tab-mgtreport .text-2xl { font-size: 15px !important; }
+  #tab-mgtreport .text-xl  { font-size: 13px !important; }
+  #tab-mgtreport .rounded-xl { padding: 7px 9px !important; }        /* KPI / stat tiles */
+  #tab-mgtreport .p-4 { padding: 7px 9px !important; }
+  #tab-mgtreport table { font-size: 9.5px !important; }
+  #tab-mgtreport table th, #tab-mgtreport table td { padding-top: 2px !important; padding-bottom: 2px !important; }
+  #tab-mgtreport ul li { padding-top: 2px !important; padding-bottom: 2px !important; }
+
+  /* Revenue Trend: canvas doesn't print reliably → show the SVG fallback chart(s),
+     which carry the y-axis, bars and amber moving-average curve. The SVGs are sized
+     by their own viewBox (width:100%, height:auto), so the row only needs to lay the
+     cards out — no fixed height / stretch (those were for the old flex-bar version). */
   #mgtTrendHtml {
     display: flex !important;
-    height: 200px !important;
-    align-items: stretch !important;
-    gap: 5px !important;
-    padding: 22px 4px 0 !important;
+    gap: 8px !important;
+    align-items: flex-start !important;
+    padding-top: 4px !important;
   }
   @page { size: A4 landscape; margin: 10mm; }
 }
@@ -7907,6 +7931,12 @@ function renderMgtReport(j, jM, jF) {
        </div></div>`;
   const isDaily = j.period === 'daily';
   const compShort = isDaily ? 'vs last week' : 'vs prev week';
+  // WoW badge straight from current/prev values (the §6/§8/§9/§10 sections whose
+  // backend supplies a prev figure rather than a precomputed %). prev=0 → "—".
+  const wowVal = (cur, prev) => (prev == null) ? '' : wow(prev ? (cur - prev) / prev * 100 : null);
+  // Compact "vs last week" comparison line for a card (prev value + WoW badge).
+  const cmpLine = (label, prevTxt, badge) => (prevTxt == null) ? '' :
+    `<p class="text-[10px] mt-1 text-slate-400 flex items-center gap-1 flex-wrap"><span>${compShort}:</span><span class="text-slate-500">${prevTxt}</span>${badge || ''}</p>`;
 
   // Header band labels
   const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
@@ -7960,15 +7990,51 @@ function renderMgtReport(j, jM, jF) {
   })();
 
   // §2 — Month pacing & food cost (full month for a past period, MTD for the current one)
+  // + weekly net-sales bars for the month and a last-month comparison (MoM).
   const P = j.pace || {};
   const pvt = P.proj_vs_target_pct;
   const mc = P.month_complete;
+  const PMx = P.prev_month || {};
+  const _fmtMc = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
+  // Weekly net-sales bars for the period's month (SVG → screen + print), with a dashed
+  // amber line at last month's average revenue per week — the "compare with last month".
+  const weeklyBars = (() => {
+    const wk = P.weekly || [];
+    if (!wk.length) return '';
+    const vals = wk.map(w => w.revenue || 0);
+    const prevAvg = (PMx.revenue_full && wk.length) ? PMx.revenue_full / wk.length : null;
+    const mx = Math.max(...vals, prevAvg || 0, 1);
+    const W = 900, H = 190, padL = 46, padR = 12, padT = 18, padB = 18, n = wk.length;
+    const plotW = W - padL - padR, plotH = H - padT - padB, yMax = mx * 1.14 || 1;
+    const xc = i => padL + (i + 0.5) * (plotW / n), yc = v => padT + plotH * (1 - v / yMax);
+    const bw = Math.min(120, (plotW / n) * 0.5), li = n - 1;
+    let grid = '', ylab = '';
+    for (let k = 0; k <= 4; k++) { const vv = yMax * k / 4, yy = yc(vv);
+      grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${W - padR}" y2="${yy.toFixed(1)}" stroke="#e8edf3" stroke-width="0.6"/>`;
+      ylab += `<text x="${padL - 4}" y="${(yy + 3).toFixed(1)}" text-anchor="end" font-size="9" fill="#94a3b8">${_fmtMc(vv).replace('฿', '')}</text>`; }
+    const bars = vals.map((v, i) => { const by = yc(v), bh = Math.max(0.6, padT + plotH - by);
+      return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i === li ? '#4f46e5' : '#c7d2fe'}"/>`; }).join('');
+    const vlab = vals.map((v, i) => `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? '#4f46e5' : '#64748b'}">${_fmtMc(v)}</text>`).join('');
+    const xlab = wk.map((w, i) => `<text x="${xc(i).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#475569">${w.label}</text>`).join('');
+    let ref = '';
+    if (prevAvg != null) { const ry = yc(prevAvg);
+      ref = `<line x1="${padL}" y1="${ry.toFixed(1)}" x2="${W - padR}" y2="${ry.toFixed(1)}" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="5 4"/>`
+          + `<text x="${W - padR}" y="${(ry - 3).toFixed(1)}" text-anchor="end" font-size="8.5" font-weight="700" fill="#d97706">last-month avg/wk ${_fmtMc(prevAvg)}</text>`; }
+    return `<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-1">Weekly net sales — ${P.month || ''} <span class="text-slate-400 font-normal">(darker = latest week · dashed = last month average per week)</span></p>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">${grid}${ylab}${bars}${ref}${vlab}${xlab}</svg></div>`;
+  })();
+  const momBadge = (P.mom_pct != null) ? ' · MoM ' + wow(P.mom_pct) : '';
+  const fcPrevTxt = (P.food_cost_pct_prev != null) ? ' · last month ' + P.food_cost_pct_prev.toFixed(1) + '%' : '';
+  const lastMonthCaption = PMx.month
+    ? `<p class="text-[11px] text-slate-500 mt-2">Last month (${PMx.month}): <b>${baht(PMx.revenue_full)}</b> total · <b>${baht(PMx.revenue_mtd)}</b> over the same ${P.days_elapsed || 0} day${(P.days_elapsed || 0) === 1 ? '' : 's'}` +
+      `${P.mom_pct != null ? ` — this month is <b style="color:${P.mom_pct >= 0 ? '#059669' : '#dc2626'}">${P.mom_pct >= 0 ? '+' : '−'}${Math.abs(P.mom_pct).toFixed(1)}%</b> vs the same days last month` : ''}.</p>`
+    : '';
   const pace = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-      ${kpi(mc ? 'Month Net Sales' : 'MTD Net Sales', baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? ' days' : ' days so far'))}
+      ${kpi(mc ? 'Month Net Sales' : 'MTD Net Sales', baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? ' days' : ' days so far') + momBadge)}
       ${kpi(mc ? 'Month Total' : 'Projected Month-End', baht(P.projected), mc ? 'actual' : 'run-rate')}
       ${kpi('Revenue Target', baht(P.target), (pvt != null ? (mc ? 'actual ' : 'projection ') + pvt.toFixed(0) + '% of target' : 'no target set'))}
-      ${kpi('Food Cost %' + (mc ? '' : ' (MTD)'), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), 'BoM basis')}
-    </div>` + (() => {
+      ${kpi('Food Cost %' + (mc ? '' : ' (MTD)'), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), 'BoM basis' + fcPrevTxt)}
+    </div>` + lastMonthCaption + weeklyBars + (() => {
     if (!hasSplit) return '';
     const PM = jM.pace || {}, PF = jF.pace || {};
     const fcM = PM.food_cost_pct != null ? PM.food_cost_pct.toFixed(1) + '%' : '—';
@@ -7996,12 +8062,12 @@ function renderMgtReport(j, jM, jF) {
   // carries the shared hints. Single → one chart with the amber moving-average trend line.
   const trendLegend = hasSplit
     ? `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
-         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> curve = moving-average trend</span>
+         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> curve = moving-average trend</span>
          <span class="text-slate-400">· darker bar = latest ${_period}</span>
        </div>`
     : `<div class="flex flex-wrap items-center gap-4 text-[11px] text-slate-500 mb-2">
          ${_lg(C_CURR, 'Net Sales')}
-         <span class="flex items-center gap-1.5 no-print"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> Trend (moving avg)</span>
+         <span class="flex items-center gap-1.5"><span style="display:inline-block;width:16px;height:2px;background:${C_LINE}"></span> Trend (moving avg)</span>
          <span class="text-slate-400">· dark bar = latest ${_period}</span>
        </div>`;
   // One mini-card per series in split mode (title + latest value + its own canvas).
@@ -8060,10 +8126,15 @@ function renderMgtReport(j, jM, jF) {
         <p class="text-sm text-slate-400">n/a — no payment detail</p></div>`;
     const bad = (o.bills || 0) > 0;
     const top = (o.by_branch || []).slice(0, 2).map(x => x.branch).join(', ');
+    // last-week comparison: prev bill count + WoW on bills (badge) and baht
+    const cmp = (o.prev_bills != null)
+      ? `<p class="text-[10px] mt-1 text-slate-400 flex items-center gap-1 flex-wrap"><span>${compShort}:</span><span class="text-slate-500">${num(o.prev_bills)} bills</span>${wow(o.bills_wow)}<span class="text-slate-300">·</span><span class="text-slate-500">${baht(o.prev_baht)}</span>${wow(o.baht_wow)}</p>`
+      : '';
     return `<div class="rounded-xl p-4" style="border:1px solid var(--border);border-left:3px solid ${bad ? '#dc2626' : '#10b981'}">
         <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
         <p class="text-xl font-bold ${bad ? 'text-rose-600' : 'text-slate-700'}">${num(o.bills || 0)} <span class="text-xs font-normal text-slate-400">bills</span></p>
         <p class="text-xs text-slate-500">${baht(o.baht || 0)}${top ? ' · ' + top : ''}</p>
+        ${cmp}
         <p class="text-[11px] text-slate-400 mt-1">${hint}</p></div>`;
   };
   // Reconciling total: ALL discounted bills this period (the cards below are the
@@ -8072,7 +8143,7 @@ function renderMgtReport(j, jM, jF) {
   const lt = L.total || {};
   const leakTotalBanner = `<div class="rounded-xl p-3 mb-3 flex items-center justify-between flex-wrap gap-1" style="border:1px solid var(--border);background:#f8fafc">
       <span class="text-[11px] uppercase tracking-wide text-slate-400">Total Discounts · this ${isDaily ? 'day' : 'week'} <span class="normal-case text-slate-300">(all discounted bills — ties to the Discounts page)</span></span>
-      <span class="text-sm"><b class="text-slate-700">${baht(lt.baht || 0)}</b> <span class="text-slate-400">· ${num(lt.bills || 0)} bills</span></span>
+      <span class="text-sm flex items-center gap-1"><b class="text-slate-700">${baht(lt.baht || 0)}</b> <span class="text-slate-400">· ${num(lt.bills || 0)} bills</span>${lt.prev_baht != null ? `<span class="text-slate-300">·</span><span class="text-[11px] text-slate-400">${compShort}</span>${wow(lt.baht_wow)}` : ''}</span>
     </div>`;
   const leak = leakTotalBanner + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       ${leakCard('Heavy Discounts', L.heavy_discount, 'Bills discounted ≥30%')}
@@ -8123,30 +8194,48 @@ function renderMgtReport(j, jM, jF) {
          <div class="w-full rounded-t" style="height:${Math.max(3, (i[valKey] || 0) / mx * 80)}px;background:${hi(i) ? '#0284c7' : '#cbd5e1'}"></div>
          <span class="text-[9px] text-slate-500 mt-1">${i[lblKey]}</span></div>`).join('')}</div>`;
   };
-  const dpBars = (PK.dayparts || []).map(d => `
+  // per-daypart revenue carries a WoW badge vs the same daypart last week/period
+  const PKprev = (PK.prev || {}).dayparts || {};
+  const dpBars = (PK.dayparts || []).map(d => {
+    const pv = PKprev[d.name];
+    return `
     <div class="mb-2">
       <div class="flex justify-between text-xs mb-0.5"><span class="font-medium text-slate-600">${d.name}</span>
-        <span class="text-slate-500">${baht(d.revenue)}${d.pct != null ? ' · ' + d.pct.toFixed(0) + '%' : ''} · ${num(d.covers)} covers</span></div>
+        <span class="text-slate-500">${baht(d.revenue)}${d.pct != null ? ' · ' + d.pct.toFixed(0) + '%' : ''} · ${num(d.covers)} covers ${pv != null ? wowVal(d.revenue, pv) : ''}</span></div>
       <div class="h-2 rounded-full" style="background:var(--bg-subtle)"><div class="h-2 rounded-full" style="width:${d.pct || 0}%;background:${dpColor[d.name] || '#0891b2'}"></div></div>
-    </div>`).join('');
-  const peakHourTxt = PK.peak_hour ? `Busiest hour: <b>${hh(PK.peak_hour.hour)}</b> (${baht(PK.peak_hour.revenue)})` : '';
-  const bestDayTxt  = PK.best_day ? `Busiest day: <b>${PK.best_day}</b>` : '';
-  const rightPanel = (!isDaily && (PK.by_day || []).length)
-    ? `<p class="text-xs font-semibold text-slate-500 mb-1">By day of week</p>${miniBars(PK.by_day, 'revenue', 'dow', d => d.dow === PK.best_day)}`
-    : ((PK.hourly || []).length ? `<p class="text-xs font-semibold text-slate-500 mb-1">By hour</p>${miniBars(PK.hourly.filter(x => x.revenue > 0), 'revenue', 'hour', x => PK.peak_hour && x.hour === PK.peak_hour.hour)}` : '');
-  const peakHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div><p class="text-xs font-semibold text-slate-500 mb-2">Daypart split (revenue)</p>${dpBars || '<p class="text-sm text-slate-400">No data.</p>'}
-        <p class="text-xs text-slate-500 mt-2">${peakHourTxt}${peakHourTxt && bestDayTxt ? ' · ' : ''}${bestDayTxt}</p></div>
-      <div>${rightPanel}</div>
     </div>`;
+  }).join('');
+  // total-revenue WoW + peak-hour WoW for the §8 summary line
+  const PKp = PK.prev || {};
+  const peakTotTxt = (PK.total_rev != null)
+    ? `Total: <b>${baht(PK.total_rev)}</b>${PKp.total_rev != null ? ' ' + wowVal(PK.total_rev, PKp.total_rev) : ''}`
+    : '';
+  const peakHourTxt = PK.peak_hour ? `Busiest hour: <b>${hh(PK.peak_hour.hour)}</b> (${baht(PK.peak_hour.revenue)})${PKp.peak_hour ? ' ' + wowVal(PK.peak_hour.revenue, PKp.peak_hour.revenue) : ''}` : '';
+  const bestDayTxt  = PK.best_day ? `Busiest day: <b>${PK.best_day}</b>` : '';
+  // Right panel mirrors the Daily report: always the hourly breakdown (weekly hourly
+  // is the week's covers/revenue summed by hour-of-day — same shape as daily).
+  const rightPanel = (PK.hourly || []).length
+    ? `<p class="text-xs font-semibold text-slate-500 mb-1">By hour</p>${miniBars(PK.hourly.filter(x => x.revenue > 0), 'revenue', 'hour', x => PK.peak_hour && x.hour === PK.peak_hour.hour)}`
+    : '';
+  // Weekly keeps its extra day-of-week insight, shown as a full-width row BENEATH the
+  // daily-style 2-column grid so the core Peak-Hours layout still matches the Daily report.
+  const byDayRow = (!isDaily && (PK.by_day || []).length)
+    ? `<div class="mt-4 pt-3 border-t border-slate-100"><p class="text-xs font-semibold text-slate-500 mb-1">By day of week</p>${miniBars(PK.by_day, 'revenue', 'dow', d => d.dow === PK.best_day)}</div>`
+    : '';
+  const peakHtml = `<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div><p class="text-xs font-semibold text-slate-500 mb-2">Daypart split (revenue) <span class="font-normal text-slate-400">· small % = ${compShort}</span></p>${dpBars || '<p class="text-sm text-slate-400">No data.</p>'}
+        <p class="text-xs text-slate-500 mt-2">${peakTotTxt}${peakTotTxt && (peakHourTxt || bestDayTxt) ? ' · ' : ''}${peakHourTxt}${peakHourTxt && bestDayTxt ? ' · ' : ''}${bestDayTxt}</p></div>
+      <div>${rightPanel}</div>
+    </div>${byDayRow}`;
 
   // §9 — Table Turnover & Occupancy (only when the data exists)
   const TB = j.table || {};
   let tableHtml = '';
   if (TB.available) {
-    const km = (t, v, s) => `<div class="rounded-xl p-4" style="background:var(--bg-card);border:1px solid var(--border)">
+    const TBp = TB.prev || {};
+    const km = (t, v, s, w) => `<div class="rounded-xl p-4" style="background:var(--bg-card);border:1px solid var(--border)">
         <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${t}</p><p class="text-2xl font-bold text-slate-800">${v}</p>
-        <p class="text-xs text-slate-500 mt-1">${s || ''}</p></div>`;
+        <p class="text-xs text-slate-500 mt-1 flex items-center gap-1 flex-wrap">${s || ''}${w ? `<span class="text-slate-300">·</span><span class="text-[10px] text-slate-400">${compShort}</span>${w}` : ''}</p></div>`;
     const trows = (TB.by_branch || []).map(b => `<tr class="border-b border-slate-50">
         <td class="py-2 pl-1">${b.branch}</td>
         <td class="py-2 text-right">${num(b.tables)}</td>
@@ -8154,10 +8243,10 @@ function renderMgtReport(j, jM, jF) {
         <td class="py-2 text-right font-semibold">${b.covers_per_table != null ? b.covers_per_table.toFixed(2) : '—'}</td>
         <td class="py-2 text-right pr-1">${b.avg_turn_min != null ? Math.round(b.avg_turn_min) + ' min' : '—'}</td></tr>`).join('');
     tableHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-        ${km('Covers / Table', TB.covers_per_table != null ? TB.covers_per_table.toFixed(2) : '—', 'turns per table')}
-        ${km('Avg Turn Time', TB.avg_turn_min != null ? Math.round(TB.avg_turn_min) + ' min' : '—', 'per table session')}
-        ${km('Tables Used', num(TB.tables), 'table sessions')}
-        ${km('Total Covers', num(TB.covers), 'guests seated')}
+        ${km('Covers / Table', TB.covers_per_table != null ? TB.covers_per_table.toFixed(2) : '—', 'turns per table', TBp.covers_per_table != null ? wowVal(TB.covers_per_table, TBp.covers_per_table) : '')}
+        ${km('Avg Turn Time', TB.avg_turn_min != null ? Math.round(TB.avg_turn_min) + ' min' : '—', 'per table session', TBp.avg_turn_min != null ? wowVal(TB.avg_turn_min, TBp.avg_turn_min) : '')}
+        ${km('Tables Used', num(TB.tables), 'table sessions', TBp.tables != null ? wowVal(TB.tables, TBp.tables) : '')}
+        ${km('Total Covers', num(TB.covers), 'guests seated', TBp.covers != null ? wowVal(TB.covers, TBp.covers) : '')}
       </div>
       <div class="overflow-x-auto"><table class="w-full text-sm">
         <thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
@@ -8412,11 +8501,15 @@ function renderMgtReport(j, jM, jF) {
         <td class="py-1.5 pr-3 font-medium text-slate-700">${esc(br.branch)}</td>${cells}
         <td class="py-1.5 pl-2 text-right tabular-nums font-semibold text-slate-800">${baht(br.total)}</td></tr>`;
     }).join('');
+    // last-period tender mix → per-channel + grand-total WoW in the footer
+    const _payPrev = _payPD.prev || {};
+    const _prevCh  = _payPrev.channels || {};
     const foot = `<tr class="border-t-2 border-slate-200">
       <td class="py-1.5 pr-3 font-bold text-slate-500">ทั้งหมด</td>
-      ${cols.map(c => `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${colColor[c.code]}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%</td>`).join('')}
-      <td class="py-1.5 pl-2 text-right tabular-nums font-bold text-slate-800">${baht(_payPD.total)}</td></tr>`;
-    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} branches · ${cols.length} channels · total <b>${baht(_payPD.total)}</b> · ${isDaily ? 'this day' : 'this week'} · % = สัดส่วนของแต่ละสาขา (ตัวหนา = ช่องทางหลัก)</p>
+      ${cols.map(c => { const pv = (_prevCh[c.code] || {}).amount;
+        return `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${colColor[c.code]}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%${pv != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(c.amount, pv)}</div>` : ''}</td>`; }).join('')}
+      <td class="py-1.5 pl-2 text-right tabular-nums font-bold text-slate-800">${baht(_payPD.total)}${_payPrev.total != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(_payPD.total, _payPrev.total)}</div>` : ''}</td></tr>`;
+    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} branches · ${cols.length} channels · total <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? 'this day' : 'this week'} · % = สัดส่วนของแต่ละสาขา (ตัวหนา = ช่องทางหลัก · เลขเล็กในแถวรวม = ${compShort})</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">${th}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table></div>`;
   })();
@@ -8557,12 +8650,17 @@ function renderMgtReport(j, jM, jF) {
       ? pill('Master', fmtM(trDataM[lastIdx]?.revenue || 0))
         + pill('Franchise', fmtM(trDataF[lastIdx]?.revenue || 0))
       : '';
+    // Period-aware labels — Day in daily mode, Week in weekly mode (so the two
+    // reports stay consistent and the daily strip no longer mislabels days as weeks).
+    const _pN  = isDaily ? 'Day' : 'Week';
+    const _pAv = isDaily ? '8-Day Avg' : '8-Wk Avg';
+    const _pDl = isDaily ? ' DoD' : ' WoW';
     summaryEl.innerHTML =
       `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
-         ${pill('This Week', fmtM(cur), af(wowP) + ' WoW', ac(wowP))}
-         ${pill('8-Wk Avg', fmtM(avg8), af(vsAvg) + ' vs avg', ac(vsAvg))}
-         ${pill('Best Week', fmtM(maxV), maxT ? maxT.label : '')}
-         ${pill('Weakest Week', fmtM(minV), minT ? minT.label : '')}
+         ${pill('This ' + _pN, fmtM(cur), af(wowP) + _pDl, ac(wowP))}
+         ${pill(_pAv, fmtM(avg8), af(vsAvg) + ' vs avg', ac(vsAvg))}
+         ${pill('Best ' + _pN, fmtM(maxV), maxT ? maxT.label : '')}
+         ${pill('Weakest ' + _pN, fmtM(minV), minT ? minT.label : '')}
          ${splitRow}
        </div>`;
   }
@@ -8572,29 +8670,59 @@ function renderMgtReport(j, jM, jF) {
   // colours so print-color-adjust keeps them visible.
   const htmlChartEl = document.getElementById('mgtTrendHtml');
   if (htmlChartEl && trData.length) {
-    const _printChart = (data, histC, currC, title) => {
+    // SVG chart for print — vector renders crisply & deterministically in the PDF
+    // (Chart.js canvas does not print reliably). Mirrors the on-screen mini-cards:
+    // y-axis gridlines + labels, bars (latest = darker) and the amber moving-average
+    // trend curve. `wide` = the single full-width chart (specific branch/group); else
+    // one of the three compact split charts (Total / Master / Franchise).
+    const _printChart = (data, histC, currC, title, wide) => {
       const vals = data.map(t => t.revenue || 0);
-      const mx = Math.max(...vals, 1);
-      const li = vals.length - 1;
-      const bars = data.map((t, i) => {
-        const isL = i === li;
-        const pct = Math.max(4, (vals[i] / mx * 100));
-        return `<div style="display:flex;flex-direction:column;align-items:center;flex:1;min-width:0">
-            <div style="font-size:6.5px;font-weight:${isL?'800':'600'};color:${isL?currC:'#94a3b8'};white-space:nowrap">${fmtM(vals[i])}</div>
-            <div style="flex:1;width:100%;display:flex;align-items:flex-end"><div style="flex:1;height:${pct.toFixed(1)}%;background:${isL?currC:histC};border-radius:2px 2px 0 0;min-height:3px;margin:0 1px"></div></div>
-            <div style="font-size:6px;font-weight:600;color:#475569;text-align:center;line-height:1.1">${t.label||''}</div>
-          </div>`;
+      const n   = vals.length || 1;
+      const mx  = Math.max(...vals, 1);
+      const li  = vals.length - 1;
+      const ma  = movingAvg(vals, 3);
+      const W = wide ? 900 : 320, H = wide ? 230 : 178;
+      const padL = wide ? 44 : 30, padR = 8, padT = wide ? 16 : 10, padB = 16;
+      const plotW = W - padL - padR, plotH = H - padT - padB;
+      const yMax = (mx * 1.12) || 1;
+      const xc = i => padL + (i + 0.5) * (plotW / n);
+      const yc = v => padT + plotH * (1 - v / yMax);
+      const bw = (plotW / n) * 0.6;
+      const fs = wide ? 9 : 5.5;
+      let grid = '', ylab = '';
+      const ticks = 4;
+      for (let k = 0; k <= ticks; k++) {
+        const vv = yMax * k / ticks, yy = yc(vv);
+        grid += `<line x1="${padL}" y1="${yy.toFixed(1)}" x2="${(W - padR).toFixed(1)}" y2="${yy.toFixed(1)}" stroke="#e8edf3" stroke-width="0.6"/>`;
+        ylab += `<text x="${(padL - 3).toFixed(1)}" y="${(yy + fs * 0.36).toFixed(1)}" text-anchor="end" font-size="${fs}" fill="#94a3b8">${fmtM(vv).replace('฿', '')}</text>`;
+      }
+      const bars = vals.map((v, i) => {
+        const by = yc(v), bh = Math.max(0.6, padT + plotH - by);
+        return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="1.5" fill="${i === li ? currC : histC}"/>`;
       }).join('');
-      return `<div style="flex:1;min-width:0;display:flex;flex-direction:column">
-          ${title ? `<div style="font-size:8px;font-weight:800;color:${currC};text-align:center;margin-bottom:1px">${title}</div>` : ''}
-          <div style="flex:1;display:flex;align-items:flex-end">${bars}</div>
-        </div>`;
+      // Per-bar value labels only in the roomy wide chart (matches on-screen datalabels);
+      // the compact split charts show the latest value in the header instead.
+      const vlab = wide ? vals.map((v, i) =>
+        `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 3).toFixed(1)}" text-anchor="middle" font-size="8.5" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? currC : '#64748b'}">${fmtM(v)}</text>`).join('') : '';
+      const xlab = data.map((t, i) => `<text x="${xc(i).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle" font-size="${fs}" font-weight="700" fill="${i === li ? currC : '#475569'}">${t.label || ''}</text>`).join('');
+      const pts = ma.map((v, i) => v == null ? null : `${xc(i).toFixed(1)},${yc(v).toFixed(1)}`).filter(Boolean).join(' ');
+      const maLine = pts ? `<polyline points="${pts}" fill="none" stroke="#f59e0b" stroke-width="${wide ? 2.2 : 1.6}" stroke-linejoin="round" stroke-linecap="round"/>` : '';
+      const hdr = title
+        ? `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+             <span style="font-size:8px;font-weight:800;color:#475569">${title}</span>
+             <span style="font-size:8px;font-weight:800;color:${currC}">${fmtM(vals[li] || 0)}</span></div>`
+        : '';
+      return `<div style="flex:1;min-width:0;background:#fafbfc;border:1px solid #eef2f7;border-radius:8px;padding:6px 8px">
+          ${hdr}
+          <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">
+            ${grid}${ylab}${bars}${maLine}${vlab}${xlab}
+          </svg></div>`;
     };
     htmlChartEl.innerHTML = hasSplit
-      ? _printChart(trData,  C_TOT_H, C_TOT_C, 'Total')
-        + _printChart(trDataM, C_MST_H, C_MST_C, 'Master')
-        + _printChart(trDataF, C_FRN_H, C_FRN_C, 'Franchise')
-      : _printChart(trData, C_HIST, C_CURR, '');
+      ? _printChart(trData,  C_TOT_H, C_TOT_C, 'Total', false)
+        + _printChart(trDataM, C_MST_H, C_MST_C, 'Master', false)
+        + _printChart(trDataF, C_FRN_H, C_FRN_C, 'Franchise', false)
+      : _printChart(trData, C_HIST, C_CURR, '', true);
   }
 }
 
