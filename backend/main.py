@@ -12102,6 +12102,7 @@ def report_management(
     week:   Optional[str] = Query(None),     # weekly: any date in the wanted FULL week (default = last completed week)
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
+    lang:   str = Query("en"),               # 'en' | 'th' — language for labels, comp_label & action items
 ):
     """One-glance management summary for a single day or a single COMPLETE week.
 
@@ -12116,8 +12117,13 @@ def report_management(
     import datetime as _dt, calendar as _cal
     if period not in ("daily", "weekly"):
         period = "daily"
-    MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-    DOW = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
+    th = (lang == "th")          # localise labels / comp_label / action items
+    if th:
+        MON = ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+        DOW = ["วันจันทร์","วันอังคาร","วันพุธ","วันพฤหัสบดี","วันศุกร์","วันเสาร์","วันอาทิตย์"]
+    else:
+        MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+        DOW = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
     def dlabel(d): return f"{d.day} {MON[d.month-1]} {d.year}"
 
     base = ["st.source='Easy'", "b.name!='ALL'"]
@@ -12153,8 +12159,12 @@ def report_management(
             days_in_period = 1
             partial = False
             ref_anchor = fdate
-            label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
-            comp_label = "same weekday last week"
+            if th:
+                label = f"{DOW[fdate.weekday()]} {dlabel(fdate)}"
+                comp_label = "วันเดียวกันสัปดาห์ก่อน"
+            else:
+                label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
+                comp_label = "same weekday last week"
         else:
             # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
             # have data — most recent first, cap 26 — so the picker and the default
@@ -12193,8 +12203,12 @@ def report_management(
             ps = cs - _dt.timedelta(days=7)
             pe = cs - _dt.timedelta(days=1)
             selected_week = cs.isoformat()
-            label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
-            comp_label = "previous week (Mon–Sun)"
+            if th:
+                label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)} (จ.–อา.)"
+                comp_label = "สัปดาห์ก่อนหน้า (จ.–อา.)"
+            else:
+                label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
+                comp_label = "previous week (Mon–Sun)"
         has_prev = ps.isoformat() >= mind
         # YoY window — same calendar period a year earlier (daily = same date; weekly =
         # 52 weeks back to keep the Mon–Sun alignment). Dropped if it predates the data.
@@ -12746,50 +12760,73 @@ def report_management(
         except Exception:
             payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
 
-    # ---- auto-generated action items (English, severity-ordered) ---------
-    pword = "day" if period == "daily" else "week"
+    # ---- auto-generated action items (localised, severity-ordered) -------
+    pword = ("วัน" if period == "daily" else "สัปดาห์") if th else ("day" if period == "daily" else "week")
     actions = []
     if prev and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
         actions.append({"sev": "high",
-            "text": f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% vs last {pword} — investigate drivers."})
+            "text": (f"ยอดขายรวมทั้งเครือลดลง {abs(headline['rev_wow_pct']):.0f}% เทียบ{pword}ก่อน — ตรวจสอบสาเหตุ"
+                     if th else
+                     f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% vs last {pword} — investigate drivers.")})
     for r in branches:
         if r["wow_pct"] is not None and r["wow_pct"] <= -25 and r["revenue"] > 0:
             actions.append({"sev": "high",
-                "text": f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% vs last {pword} (฿{r['revenue']:,.0f})."})
+                "text": (f"{r['branch']} ยอดขายลดลง {abs(r['wow_pct']):.0f}% เทียบ{pword}ก่อน (฿{r['revenue']:,.0f})"
+                         if th else
+                         f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% vs last {pword} (฿{r['revenue']:,.0f}).")})
     if cash_heavy.get("bills"):
         actions.append({"sev": "high",
-            "text": f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}) — review for skim risk."})
+            "text": (f"{cash_heavy['bills']} บิลส่วนลดที่จ่ายด้วยเงินสดเป็นหลัก (฿{cash_heavy['baht']:,.0f}) — ตรวจสอบความเสี่ยงเงินขาด"
+                     if th else
+                     f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}) — review for skim risk.")})
     if heavy["bills"]:
         actions.append({"sev": "med",
-            "text": f"{heavy['bills']} bills discounted ≥30% (฿{heavy['baht']:,.0f}) this {pword}."})
+            "text": (f"{heavy['bills']} บิลให้ส่วนลด ≥30% (฿{heavy['baht']:,.0f}) ใน{pword}นี้"
+                     if th else
+                     f"{heavy['bills']} bills discounted ≥30% (฿{heavy['baht']:,.0f}) this {pword}.")})
     if reprint["bills"]:
         actions.append({"sev": "med",
-            "text": f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse."})
+            "text": (f"{reprint['bills']} บิลส่วนลดถูกพิมพ์ซ้ำมากกว่า 1 ครั้ง — อาจมีการพิมพ์ซ้ำผิดปกติ"
+                     if th else
+                     f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse.")})
     if food_cost_pct is not None and food_cost_pct >= 53:
         actions.append({"sev": "med",
-            "text": f"Food cost {food_cost_pct:.0f}% — above the ~50% target."})
+            "text": (f"ต้นทุนอาหาร {food_cost_pct:.0f}% — สูงกว่าเป้า ~50%"
+                     if th else
+                     f"Food cost {food_cost_pct:.0f}% — above the ~50% target.")})
     if projected and target and projected < target * 0.95:
         gap = (1 - projected/target) * 100
-        word = "Month total" if month_complete else "Month-end projection"
-        actions.append({"sev": "med",
-            "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
+        if th:
+            word = "ยอดรวมทั้งเดือน" if month_complete else "ประมาณการสิ้นเดือน"
+            actions.append({"sev": "med",
+                "text": f"{word} ฿{projected:,.0f} ต่ำกว่าเป้า ฿{target:,.0f} อยู่ {gap:.0f}%"})
+        else:
+            word = "Month total" if month_complete else "Month-end projection"
+            actions.append({"sev": "med",
+                "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
     if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
         m0 = cost_up[0]
         actions.append({"sev": "low",
-            "text": f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
-                    f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost."})
+            "text": (f"{m0['menu']} ต้นทุนต่อหัวเพิ่มขึ้น ฿{m0['delta']:.2f} เทียบ{pword}ก่อน "
+                     f"(฿{m0['cost_per_head']:.2f}/หัว) — ตรวจสอบการตักเสิร์ฟ / ต้นทุนวัตถุดิบ"
+                     if th else
+                     f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
+                     f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost.")})
     if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
         actions.append({"sev": "med",
-            "text": f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%."})
+            "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"
+                     if th else
+                     f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%.")})
     sev_rank = {"high": 0, "med": 1, "low": 2}
     actions.sort(key=lambda a: sev_rank.get(a["sev"], 9))
     actions = actions[:7]
     if not actions:
-        actions = [{"sev": "low", "text": "No critical issues flagged for this period."}]
+        actions = [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]
 
     return {
         "available": True,
         "period": period,
+        "lang": ("th" if th else "en"),
         "label": label,
         "comp_label": comp_label,
         "focus": focus,
