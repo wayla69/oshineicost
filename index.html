@@ -7934,6 +7934,13 @@ function renderMgtReport(j, jM, jF) {
   // WoW badge straight from current/prev values (the §6/§8/§9/§10 sections whose
   // backend supplies a prev figure rather than a precomputed %). prev=0 → "—".
   const wowVal = (cur, prev) => (prev == null) ? '' : wow(prev ? (cur - prev) / prev * 100 : null);
+  // Inverted-sentiment badge for "lower is better" metrics (e.g. avg turn time):
+  // the arrow still shows the real direction, but a RISE is red (worse) and a FALL
+  // is green (better) — the opposite of wow()'s default colouring.
+  const wowInv = p => (p == null)
+    ? '<span class="text-slate-400 text-xs">—</span>'
+    : `<span class="text-xs font-semibold" style="color:${p <= 0 ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+  const wowValInv = (cur, prev) => (prev == null) ? '' : wowInv(prev ? (cur - prev) / prev * 100 : null);
   // Compact "vs last week" comparison line for a card (prev value + WoW badge).
   const cmpLine = (label, prevTxt, badge) => (prevTxt == null) ? '' :
     `<p class="text-[10px] mt-1 text-slate-400 flex items-center gap-1 flex-wrap"><span>${compShort}:</span><span class="text-slate-500">${prevTxt}</span>${badge || ''}</p>`;
@@ -8088,7 +8095,8 @@ function renderMgtReport(j, jM, jF) {
     : `<div style="height:300px" class="no-print"><canvas id="mgtTrendChart"></canvas></div>`;
   const trend = trendLegend + trendCanvas
     + `<div id="mgtTrendHtml" style="display:none"></div>`
-    + `<div id="mgtTrendSummary"></div>`;
+    + `<div id="mgtTrendSummary"></div>`
+    + `<div id="mgtTrendAnalysis"></div>`;
 
   // §4 — Branch league table
   const medals = ['🥇','🥈','🥉'];
@@ -8244,7 +8252,7 @@ function renderMgtReport(j, jM, jF) {
         <td class="py-2 text-right pr-1">${b.avg_turn_min != null ? Math.round(b.avg_turn_min) + ' min' : '—'}</td></tr>`).join('');
     tableHtml = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
         ${km('Covers / Table', TB.covers_per_table != null ? TB.covers_per_table.toFixed(2) : '—', 'turns per table', TBp.covers_per_table != null ? wowVal(TB.covers_per_table, TBp.covers_per_table) : '')}
-        ${km('Avg Turn Time', TB.avg_turn_min != null ? Math.round(TB.avg_turn_min) + ' min' : '—', 'per table session', TBp.avg_turn_min != null ? wowVal(TB.avg_turn_min, TBp.avg_turn_min) : '')}
+        ${km('Avg Turn Time', TB.avg_turn_min != null ? Math.round(TB.avg_turn_min) + ' min' : '—', 'per table session · faster = better', TBp.avg_turn_min != null ? wowValInv(TB.avg_turn_min, TBp.avg_turn_min) : '')}
         ${km('Tables Used', num(TB.tables), 'table sessions', TBp.tables != null ? wowVal(TB.tables, TBp.tables) : '')}
         ${km('Total Covers', num(TB.covers), 'guests seated', TBp.covers != null ? wowVal(TB.covers, TBp.covers) : '')}
       </div>
@@ -8663,6 +8671,42 @@ function renderMgtReport(j, jM, jF) {
          ${pill('Weakest ' + _pN, fmtM(minV), minT ? minT.label : '')}
          ${splitRow}
        </div>`;
+
+    // ── Auto-written trend analysis (below the chart) ──────────────────────
+    const analysisEl = document.getElementById('mgtTrendAnalysis');
+    if (analysisEl && trData.length >= 2) {
+      const noun = isDaily ? 'day' : 'week', nounP = isDaily ? 'days' : 'weeks';
+      const dir = vsAvg == null ? 'holding steady' : vsAvg > 5 ? 'rising' : vsAvg < -5 ? 'softening' : 'holding steady';
+      const dirCol = vsAvg == null ? '#64748b' : vsAvg > 5 ? '#16a34a' : vsAvg < -5 ? '#dc2626' : '#d97706';
+      // latest same-direction run at the tail of the series
+      let streak = 0, sdir = 0;
+      for (let i = vals.length - 1; i > 0; i--) {
+        const d = vals[i] - vals[i - 1], s = d > 0 ? 1 : d < 0 ? -1 : 0;
+        if (s === 0) break;
+        if (sdir === 0) { sdir = s; streak = 1; } else if (s === sdir) streak++; else break;
+      }
+      const rises = vals.slice(1).filter((v, i) => v > vals[i]).length;
+      const ma = movingAvg(vals, 3);
+      const maNow = ma[ma.length - 1], maPrev = ma[Math.max(0, ma.length - 4)];
+      const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'upward' : maNow < maPrev * 0.98 ? 'downward' : 'flat') : 'flat';
+      const peakGap = maxV ? (cur - maxV) / maxV * 100 : null;
+      const s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${dirCol}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${ac(vsAvg)}">${vsAvg != null ? (vsAvg >= 0 ? '+' : '') + vsAvg.toFixed(1) + '%' : '—'}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
+      const streakTxt = streak >= 2 ? ` The latest run is <b style="color:${sdir > 0 ? '#16a34a' : '#dc2626'}">${streak} ${nounP} ${sdir > 0 ? 'up' : 'down'}</b> in a row;` : '';
+      const maClause = `the 3-${noun} moving-average trend is <b>${maTrend}</b> (${rises} of ${vals.length - 1} ${nounP} rose ${noun}-over-${noun}).`;
+      const s2 = streakTxt ? `${streakTxt} ${maClause}` : ` ${maClause.charAt(0).toUpperCase()}${maClause.slice(1)}`;
+      let s3 = '';
+      if (hasSplit && trDataM.length && trDataF.length) {
+        const mv = trDataM.map(t => t.revenue || 0), fv = trDataF.map(t => t.revenue || 0);
+        const mAvg = mv.reduce((a, b) => a + b, 0) / mv.length, fAvg = fv.reduce((a, b) => a + b, 0) / fv.length;
+        const mVs = mAvg ? (mv[mv.length - 1] - mAvg) / mAvg * 100 : null;
+        const fVs = fAvg ? (fv[fv.length - 1] - fAvg) / fAvg * 100 : null;
+        const word = v => v == null ? 'flat' : v > 3 ? 'above' : v < -3 ? 'below' : 'near';
+        s3 = ` Master is running <b style="color:${(mVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(mVs)} its average</b> and franchise <b style="color:${(fVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(fVs)} its average</b>.`;
+      }
+      analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border-left:3px solid ${dirCol};border-radius:8px">
+        <p style="font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#94a3b8;font-weight:700;margin-bottom:3px">Trend analysis</p>
+        <p style="font-size:11.5px;line-height:1.55;color:#334155">${s1}${s2}${s3}</p></div>`;
+    }
   }
 
   // HTML bar chart for print (canvas doesn't render in PDF). Split → 3 separate labelled
