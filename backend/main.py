@@ -23,8 +23,10 @@ from pydantic import BaseModel
 
 try:                                   # works as `backend.main:app`
     from . import auth as _auth
+    from . import month_summary as _month_summary
 except ImportError:                     # …and as `main:app` from inside backend/
     import auth as _auth                # role-based authentication (backend/auth.py)
+    import month_summary as _month_summary   # sales_month_summary self-heal (backend/month_summary.py)
 
 # ---------------------------------------------------------------------------
 # Response cache  (TTL-based, keyed on function name + query-param values)
@@ -2670,19 +2672,32 @@ def _ch_gen_dt():
 
 
 def _ch_resolve_month(con, month):
-    """Default to the latest month that actually HAS active-branch covers (the latest
-    completed month) — not just MAX(period_month), which would land on the current,
-    still-empty month and show 'no data'. Scope-agnostic (all scopes share data months)."""
+    """Default to the latest month with active-branch covers, EXCLUDING the current
+    (in-progress) calendar month.
+
+    Not plain MAX(period_month): now that sales_month_summary is backfilled for
+    live-synced months, a handful of sales on the 1st create a summary row for the
+    brand-new month — defaulting to it would open the report on a near-empty
+    sliver. Exclude the current Thai calendar month (UTC+7) so the report opens on
+    the newest month with a meaningful full picture. Scope-agnostic."""
     if month:
         return month
+    # Current calendar month in Thai time (POS local); '+7 hours' aligns UTC 'now'.
+    cur_ym = con.execute("SELECT strftime('%Y-%m','now','+7 hours')").fetchone()[0]
     r = con.execute(
         "SELECT MAX(s.period_month) FROM sales_month_summary s "
         "JOIN branches b ON b.branch_id = s.branch_id "
-        "WHERE b.active=1 AND s.customer_count > 0").fetchone()
+        "WHERE b.active=1 AND s.customer_count > 0 AND s.period_month < ?",
+        (cur_ym,)).fetchone()
     if r and r[0]:
         return r[0]
-    r2 = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly").fetchone()
-    return r2[0] if r2 else None
+    r2 = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly "
+                     "WHERE period_month < ?", (cur_ym,)).fetchone()
+    if r2 and r2[0]:
+        return r2[0]
+    # Fallback: nothing before the current month → latest available anywhere.
+    r3 = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly").fetchone()
+    return r3[0] if r3 else None
 
 
 @app.get("/api/reports/cost-head-top60")
@@ -17137,6 +17152,7 @@ def _bom_startup():
     _apply_cost_patches()
     _sku_cost_monthly_ensure()
     _perf_startup()
+    _month_summary_backfill()
     # Auth tables + seed the 12 default users (idempotent; no-op once seeded).
     try:
         with get_db() as con:
@@ -17202,6 +17218,25 @@ def _perf_startup():
             _build_sku_effective_cost(con, force=True)
     except Exception as e:
         print(f"[perf startup] failed: {e}")
+
+
+def _month_summary_backfill():
+    """Self-heal sales_month_summary for live-synced months (see month_summary.py).
+
+    The live sync writes sales_transaction but not sales_month_summary, so a
+    live-synced-only month has real data yet 0 summary rows — breaking the Top-60
+    cost-per-head report and /api/analysis/compare. Running the shared roll-up
+    here fixes the currently-live DB on the next deploy (no sync needed) and keeps
+    the invariant holding. Conservative: only fills months missing from the
+    summary; existing Excel rows are untouched. Resilient — never blocks startup."""
+    try:
+        with get_db() as con:
+            n = _month_summary.backfill(con)
+            con.commit()
+            if n:
+                print(f"[month-summary] backfilled {n} live-synced (branch, month) rows")
+    except Exception as e:
+        print(f"[month-summary backfill] failed: {e}")
 
 
 # Benchmarks for ingredient-type mix (used by UI)

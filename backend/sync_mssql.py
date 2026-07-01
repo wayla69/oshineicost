@@ -42,6 +42,7 @@ def load_env():
 load_env()
 
 from ingest_may26_update import BRANCH_ALIAS   # MSSQL/full name → short DB name
+import month_summary                            # sales_month_summary roll-up (backend/month_summary.py)
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
 
@@ -451,6 +452,14 @@ def main():
 
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")
     stage_reports(sq, mc, args.since, bid_map, item_map, name2bid, windows)
+
+    # sales_month_summary is written only by the Excel ingest, never by this sync,
+    # so live-synced-only months would have 0 counts/gross/discounts in every
+    # reader that trusts it (Top-60 cost/head, /api/analysis/compare, ...). Roll it
+    # up from the just-synced sales_transaction for any month missing a summary row
+    # (existing Excel rows untouched). See backend/month_summary.py.
+    n_ms = month_summary.backfill(sq)
+    print(f"[4b/6] sales_month_summary: backfilled {n_ms} live-synced (branch, month) rows")
 
     sq.commit()
     mc.close()
