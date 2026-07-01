@@ -2236,6 +2236,20 @@ def sales_daily(
             f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where}", params).fetchone()[0]
         if not maxd:
             return {"gran": gran, "focus": None, "branches": [], "total": {}, "trend": [], "anomalies": []}
+        # Default focus must skip a not-yet-fully-synced trailing month, else the
+        # latest "month" is a 3-branch sliver -> -100% MoM for the unsynced branches.
+        if not date:
+            _pm = _partial_months(con)
+            if maxd[:7] in _pm:
+                _mp = {f"_pm{i}": m for i, m in enumerate(_pm)}
+                _ph = ",".join(f":{k}" for k in _mp)
+                _rd = con.execute(
+                    f"SELECT MAX(date(t.sold_at)) FROM sales_transaction t "
+                    f"JOIN branches b ON b.branch_id=t.branch_id WHERE {where} "
+                    f"AND strftime('%Y-%m', t.sold_at) NOT IN ({_ph})",
+                    {**params, **_mp}).fetchone()[0]
+                if _rd:
+                    maxd = _rd
         focus = (date or maxd)[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
@@ -7949,8 +7963,19 @@ def analysis_anomalies(
     import calendar as _cal
     mtd_note = ""
     with get_db() as con:
-        maxday = con.execute(
-            "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
+        partial_months = _partial_months(con)
+        # Base the MTD clamp on the latest FULLY-synced month, not a trailing sliver:
+        # a complete latest month is then compared full-vs-full (real declines still
+        # surface) while a partial current month is excluded from the series entirely.
+        if partial_months:
+            _mp = {f"_pm{i}": m for i, m in enumerate(partial_months)}
+            _ph = ",".join(f":{k}" for k in _mp)
+            maxday = con.execute(
+                f"SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy' "
+                f"AND strftime('%Y-%m', sold_at) NOT IN ({_ph})", _mp).fetchone()[0]
+        else:
+            maxday = con.execute(
+                "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
         day_clause = ""
         if maxday:
             _y, _m, _d = (int(x) for x in maxday.split("-"))
@@ -7991,16 +8016,19 @@ def analysis_anomalies(
         rev_by_month[r["month"]] = (rev_by_month.get(r["month"]) or 0) + (r["revenue"] or 0)
     monthly_combined = [{"month": m, "revenue": v} for m, v in sorted(rev_by_month.items())]
 
-    # Branch growth rows (Easy)
+    # Branch growth rows (Easy) — drop not-yet-synced trailing months so a partial
+    # current month cannot fake a -100% MoM for branches that have not synced yet.
     bgrowth_map: dict = {}
     for r in bgrowth_easy:
+        if r["month"] in partial_months:
+            continue
         bgrowth_map.setdefault(r["branch"], {})[r["month"]] = (r["revenue"] or 0)
     bgrowth = [
         {"branch": br, "month": mo, "revenue": rev}
         for br, months in bgrowth_map.items()
         for mo, rev in sorted(months.items())
     ]
-    monthly = monthly_combined
+    monthly = [m for m in monthly_combined if m["month"] not in partial_months]
 
     # Revenue MoM — use threshold param as sensitivity (fix D10)
     _thr = threshold
@@ -8079,6 +8107,7 @@ def analysis_anomalies(
             (r["month"], r["bom_cost"], r["revenue"])
             for r in cost_monthly_rows
             if r["bom_cost"] and r["revenue"] and r["revenue"] > 0
+            and r["month"] not in partial_months
         ]
         for i in range(1, len(cost_series)):
             m, bc, rev   = cost_series[i]
@@ -8642,6 +8671,9 @@ def analysis_forecast(
         from calendar import monthrange
         d = _dt.strptime(latest["d"], "%Y-%m-%d")
         period = d.strftime("%Y-%m")
+        if period in _partial_months(con):
+            # current month not fully synced (few branches) -> run-rate is meaningless
+            return {"available": False, "reason": "current month not fully synced yet"}
         params["period"] = period
         filters_p = filters + ["strftime('%Y-%m', st.sold_at) = :period"]
         where_p = "WHERE " + " AND ".join(filters_p)
@@ -9724,6 +9756,38 @@ def cost_analysis(
 # PROFIT ANALYSIS  -  joins sales_sku_monthly x sku_cost to compute COGS + GP
 # ============================================================================
 
+# A month whose chain-wide active-branch coverage is far below the recent norm is
+# a not-yet-fully-synced sliver (e.g. the 1st of a new month, before the nightly
+# sync has fanned out to every branch). Reports must NOT headline such a month: it
+# yields nonsense next-month forecasts, false "revenue dip" anomalies, and -100%
+# MoM for the branches that simply have not synced yet. A month must carry at
+# least this fraction of the recent peak branch-count to count as "reportable".
+COVERAGE_MIN_RATIO = 0.6
+
+
+def _partial_months(con, source: str = "Easy") -> set:
+    """Trailing 'YYYY-MM' months whose chain-wide active-branch coverage is below
+    COVERAGE_MIN_RATIO of the recent peak. Only strips from the tail (stops at the
+    first well-covered month), so a genuinely low mid-series month is untouched."""
+    rows = con.execute(
+        "SELECT strftime('%Y-%m', sold_at) AS m, COUNT(DISTINCT branch_id) AS nb "
+        "FROM sales_transaction WHERE source = ? GROUP BY m ORDER BY m",
+        (source,),
+    ).fetchall()
+    if not rows:
+        return set()
+    peak = max(r[1] for r in rows[-6:])
+    if peak <= 0:
+        return set()
+    bad = set()
+    for r in reversed(rows):
+        if r[1] < COVERAGE_MIN_RATIO * peak:
+            bad.add(r[0])
+        else:
+            break
+    return bad
+
+
 def _profit_filters(branch, group, month_from, month_to, month):
     """Common WHERE-builder for profit endpoints. Returns (where_sql, params)."""
     filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
@@ -10434,10 +10498,10 @@ def buffet_performance(
     c_rev_ex      = float(crow["rev_ex"] or 0)
     c_rev_inc     = float(crow["rev_inc"] or 0)
     c_cogs        = float(crow["cogs"] or 0)
-    c_costed_rev  = float(crow["costed_rev_ex"] or 0)
-    c_gp          = c_costed_rev - c_cogs
-    c_gp_pct      = (c_gp   / c_costed_rev * 100) if c_costed_rev > 0 else None
-    c_food_pct    = (c_cogs / c_costed_rev * 100) if c_costed_rev > 0 else None
+    c_costed_rev  = float(crow["costed_rev_ex"] or 0)   # coverage diagnostic only
+    c_gp          = c_rev_ex - c_cogs
+    c_gp_pct      = (c_gp   / c_rev_ex * 100) if c_rev_ex > 0 else None
+    c_food_pct    = (c_cogs / c_rev_ex * 100) if c_rev_ex > 0 else None
 
     # Real pax = customer_count from sales_transaction (the trustworthy headcount),
     # not the tier-row qty which only counts buffet covers sold.
@@ -11169,13 +11233,21 @@ def _pnl_sku_query(where: str, params: dict) -> str:
 
 
 def _add_gp_fields(rows_out: list) -> list:
-    """In-place: compute gross_profit, margin_pct, mom_pct."""
+    """In-place: compute gross_profit, margin_pct, mom_pct.
+
+    GP uses the FULL ex-VAT revenue base (revenue_ex_vat) so GP == the row's
+    displayed revenue - COGS and reconciles across every P&L / Profit / BoM tab
+    (2026-07 base-unification; previously used costed_rev_ex, which understated
+    GP vs the Profit tab by the uncosted-revenue share). costed_rev_ex is kept
+    on the row purely as a cost-coverage diagnostic.
+    """
     prev_gp = None
     for d in rows_out:
-        gp = (d.get("costed_rev_ex") or 0) - (d.get("cogs") or 0)
+        rev = (d.get("revenue_ex_vat") if d.get("revenue_ex_vat") is not None
+               else d.get("revenue")) or 0
+        gp = rev - (d.get("cogs") or 0)
         d["gross_profit"] = round(gp, 2)
-        costed = d.get("costed_rev_ex") or 0
-        d["margin_pct"] = round(gp / costed * 100, 2) if costed > 0 else None
+        d["margin_pct"] = round(gp / rev * 100, 2) if rev > 0 else None
         d["mom_pct"] = round((gp - prev_gp) / prev_gp * 100, 1) if (prev_gp and prev_gp > 0) else None
         prev_gp = gp if gp else prev_gp
     return rows_out
@@ -11272,10 +11344,10 @@ def pnl_branches_deep(
     out = []
     for r in sku_rows:
         d = dict(r)
-        gp = (d.get("costed_rev_ex") or 0) - (d.get("cogs") or 0)
+        rev = (d.get("revenue_ex_vat") or 0)
+        gp = rev - (d.get("cogs") or 0)
         d["gross_profit"] = round(gp, 2)
-        costed = d.get("costed_rev_ex") or 0
-        d["margin_pct"] = round(gp / costed * 100, 2) if costed > 0 else None
+        d["margin_pct"] = round(gp / rev * 100, 2) if rev > 0 else None
         tx = tx_map.get(d["branch"], {})
         tx_count = tx.get("tx_count") or 0
         d["tx_count"]   = tx_count
@@ -11386,10 +11458,10 @@ def pnl_branch_detail(
         bill_buckets.append({"label": label, "count": count})
 
     # Compute blended margin from monthly data
-    total_costed_rev = sum((d.get("costed_rev_ex") or 0) for d in monthly_out)
+    total_rev        = sum((d.get("revenue_ex_vat") or 0) for d in monthly_out)
     total_cogs       = sum((d.get("cogs") or 0) for d in monthly_out)
-    total_gp         = total_costed_rev - total_cogs
-    margin_frac      = (total_gp / total_costed_rev) if total_costed_rev > 0 else 0
+    total_gp         = total_rev - total_cogs
+    margin_frac      = (total_gp / total_rev) if total_rev > 0 else 0
 
     profit_buckets = []
     PBUCKETS = [(None, 0), (0, 50), (50, 100), (100, 200), (200, 400), (400, 700), (700, None)]
@@ -16382,9 +16454,9 @@ def _mpack_collect(month: str) -> dict:
     # Derive
     def _enrich(s):
         rev = s["revenue"]; cogs = s["cogs"]; cr = s["costed_rev"]
-        s["gp"]            = cr - cogs
-        s["gp_pct"]        = (s["gp"]/cr*100) if cr > 0 else None
-        s["food_cost_pct"] = (cogs/cr*100)    if cr > 0 else None
+        s["gp"]            = rev - cogs
+        s["gp_pct"]        = (s["gp"]/rev*100) if rev > 0 else None
+        s["food_cost_pct"] = (cogs/rev*100)    if rev > 0 else None
         return s
     summary_cur   = _enrich(summary_cur)
     summary_prior = _enrich(summary_prior)
@@ -16405,9 +16477,9 @@ def _mpack_collect(month: str) -> dict:
         rev = float(r["revenue"] or 0)
         cogs = float(r["cogs"] or 0)
         cr   = float(r["costed_rev"] or 0)
-        gp   = cr - cogs
-        gp_p = (gp/cr*100)   if cr > 0 else None
-        fc_p = (cogs/cr*100) if cr > 0 else None
+        gp   = rev - cogs
+        gp_p = (gp/rev*100)   if rev > 0 else None
+        fc_p = (cogs/rev*100) if rev > 0 else None
         if fc_p is None:
             status = "no-data"
         elif fc_p > target_hi:
@@ -18012,10 +18084,10 @@ def branch_bom_analysis(
     revenue_ex    = float(totals_row["revenue_ex"]    or 0)
     revenue_inc   = float(totals_row["pos_total_inc_vat_diagnostic"] or 0)
     cogs          = float(totals_row["cogs"]          or 0)
-    costed_rev_ex = float(totals_row["costed_rev_ex"] or 0)
-    gp            = costed_rev_ex - cogs
-    gp_pct        = (gp   / costed_rev_ex * 100) if costed_rev_ex > 0 else None
-    food_pct      = (cogs / costed_rev_ex * 100) if costed_rev_ex > 0 else None
+    costed_rev_ex = float(totals_row["costed_rev_ex"] or 0)   # coverage diagnostic
+    gp            = revenue_ex - cogs
+    gp_pct        = (gp   / revenue_ex * 100) if revenue_ex > 0 else None
+    food_pct      = (cogs / revenue_ex * 100) if revenue_ex > 0 else None
 
     # period
     months_list   = [r["m"] for r in trend_rows]
@@ -18026,9 +18098,9 @@ def branch_bom_analysis(
         m_cogs      = float(r["cogs"] or 0)
         m_costed    = float(r["costed_rev_ex"] or 0)
         m_rev       = float(r["revenue_ex"] or 0)
-        m_gp        = m_costed - m_cogs
-        m_gp_pct    = (m_gp   / m_costed * 100) if m_costed > 0 else None
-        m_food_pct  = (m_cogs / m_costed * 100) if m_costed > 0 else None
+        m_gp        = m_rev - m_cogs
+        m_gp_pct    = (m_gp   / m_rev * 100) if m_rev > 0 else None
+        m_food_pct  = (m_cogs / m_rev * 100) if m_rev > 0 else None
         monthly_trend.append({
             "month":         r["m"],
             "revenue":       round(m_rev, 2),
@@ -18173,9 +18245,9 @@ def branch_bom_analysis(
 
         for k in sorted(buckets.keys()):
             v   = buckets[k]
-            bgp = v["costed"] - v["cogs"]
-            gpp = (bgp / v["costed"] * 100) if v["costed"] > 0 else None
-            fcp = (v["cogs"] / v["costed"] * 100) if v["costed"] > 0 else None
+            bgp = v["rev"] - v["cogs"]
+            gpp = (bgp / v["rev"] * 100) if v["rev"] > 0 else None
+            fcp = (v["cogs"] / v["rev"] * 100) if v["rev"] > 0 else None
             trend.append({
                 "bucket":        k,
                 "revenue":       round(v["rev"],   2),
@@ -18440,21 +18512,21 @@ def bom_cost_overview(
 
     revenue_ex    = float(tot["revenue_ex"]    or 0) + svc_total
     cogs          = float(tot["cogs"]          or 0)
-    costed_rev_ex = float(tot["costed_rev_ex"] or 0) + svc_total   # service = pure revenue, no COGS
-    gp            = costed_rev_ex - cogs
-    gp_pct        = (gp   / costed_rev_ex * 100) if costed_rev_ex > 0 else None
-    food_pct      = (cogs / costed_rev_ex * 100) if costed_rev_ex > 0 else None
+    costed_rev_ex = float(tot["costed_rev_ex"] or 0) + svc_total   # coverage diagnostic only
+    gp            = revenue_ex - cogs
+    gp_pct        = (gp   / revenue_ex * 100) if revenue_ex > 0 else None
+    food_pct      = (cogs / revenue_ex * 100) if revenue_ex > 0 else None
 
     heatmap = []
     for r in hmap:
         rev    = float(r["rev"]    or 0)
         c      = float(r["cogs"]   or 0)
         costed = float(r["costed"] or 0)
-        fc     = (c / costed * 100) if costed > 0 else None
+        fc     = (c / rev * 100) if rev > 0 else None
         heatmap.append({
             "branch": r["branch"], "month": r["m"],
             "revenue": round(rev, 2), "cogs": round(c, 2),
-            "gp": round(costed - c, 2),
+            "gp": round(rev - c, 2),
             "food_cost_pct": round(fc, 1) if fc is not None else None,
         })
 
@@ -18490,7 +18562,8 @@ def bom_cost_overview(
         c      = float(r["cogs"]   or 0)
         svc    = svc_by_branch.get(r["branch"], 0.0)
         costed = float(r["costed"] or 0) + svc
-        fc     = (c / costed * 100) if costed > 0 else None
+        full   = float(r["rev"] or 0) + svc
+        fc     = (c / full * 100) if full > 0 else None
         branches_out.append({
             "branch": r["branch"],
             "revenue": round(float(r["rev"] or 0) + svc, 2),
@@ -18720,7 +18793,7 @@ def bom_cost_branch_foodcost_mom(
             s["prev_qty"] = float(r["qty"] or 0)
 
     def _fc(v):
-        return (v["cogs"] / v["costed"] * 100) if v.get("costed", 0) > 0 else None
+        return (v["cogs"] / v["rev"] * 100) if v.get("rev", 0) > 0 else None
 
     out = []
     for branch, d in agg.items():
@@ -18852,14 +18925,14 @@ def bom_cost_compare(
         rev    = float(r["rev"]    or 0)
         c      = float(r["cogs"]   or 0)
         costed = float(r["costed"] or 0)
-        gp     = costed - c
+        gp     = rev - c
         out[r["branch"]].update({
             "revenue":        round(rev, 2),
             "cogs":           round(c, 2),
             "costed_revenue": round(costed, 2),
             "gp":             round(gp, 2),
-            "gp_pct":         round(gp / costed * 100, 1) if costed > 0 else None,
-            "food_cost_pct":  round(c / costed * 100, 1) if costed > 0 else None,
+            "gp_pct":         round(gp / rev * 100, 1) if rev > 0 else None,
+            "food_cost_pct":  round(c / rev * 100, 1) if rev > 0 else None,
             "uncosted_skus":  int(r["uncosted_skus"] or 0),
         })
 
@@ -18960,9 +19033,9 @@ def bom_cost_simulator_base(
             "revenue":        round(revenue, 2),
             "cogs":           round(cogs, 2),
             "costed_revenue": round(costed, 2),
-            "gp":             round(costed - cogs, 2),
-            "gp_pct":         round((costed - cogs) / costed * 100, 1) if costed > 0 else None,
-            "food_cost_pct":  round(cogs / costed * 100, 1) if costed > 0 else None,
+            "gp":             round(revenue - cogs, 2),
+            "gp_pct":         round((revenue - cogs) / revenue * 100, 1) if revenue > 0 else None,
+            "food_cost_pct":  round(cogs / revenue * 100, 1) if revenue > 0 else None,
         },
         "skus": [{
             "sku_id":            r["sku_id"],
