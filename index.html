@@ -1215,6 +1215,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 002-2V2M5 11v11M11 2v20M11 12h3a2 2 0 002-2V5a3 3 0 00-3-3"/></svg>
     <span class="nav-label">🍽️ ความต้องการพิเศษ</span>
   </div>
+  <!-- ═══ GROUP 4: 🎯 ปรับปรุงเมนู (menu optimization & action boards) ═══ -->
+  <div class="nav-section">🎯 ปรับปรุงเมนู</div>
   <div class="nav-item" id="nav-menuefficiency" onclick="switchTab('menuefficiency')" title="🎯 เมนูเสิร์ฟเยอะ × ต้นทุน — เป้าหมายลดต้นทุนพร้อมวัตถุดิบที่ควรโจมตีก่อน">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="11"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="2" y1="12" x2="6" y2="12"/></svg>
     <span class="nav-label">🎯 เป้าลดต้นทุน</span>
@@ -1228,7 +1230,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">💡 โอกาสเมนู</span>
   </div>
 
-  <!-- ═══ GROUP 4: 💵 สาขา & กำไร (branch GP, P&L, per-bill, benchmark) ═══ -->
+  <!-- ═══ GROUP 5: 💵 สาขา & กำไร (branch GP, P&L, per-bill, benchmark) ═══ -->
   <div class="nav-section">💵 สาขา &amp; กำไร</div>
   <div class="nav-item" id="nav-gpbranch" onclick="switchTab('gpbranch')" title="GP รายสาขา · Gross Profit per branch (unified BoM COGS)">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
@@ -1252,7 +1254,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">🏆 Benchmark สาขา</span>
   </div>
 
-  <!-- ═══ GROUP 5: 👤 พนักงาน & ส่วนลด (staff, ops, cash, discounts) ═══ -->
+  <!-- ═══ GROUP 6: 👤 พนักงาน & ส่วนลด (staff, ops, cash, discounts) ═══ -->
   <div class="nav-section">👤 พนักงาน &amp; ส่วนลด</div>
   <div class="nav-item" id="nav-opsreport" onclick="switchTab('opsreport')" title="รายงานปฏิบัติการ · การชำระเงิน, ช่องทางขาย, การยกเลิก/Void, โต๊ะหมุนเวียน, โปรโมชัน">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
@@ -1279,7 +1281,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">🗑️ บิลยกเลิก/ลบ</span>
   </div>
 
-  <!-- ═══ GROUP 6: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
+  <!-- ═══ GROUP 7: 📄 รายงาน (exportable management summaries) ═══ -->
+  <div class="nav-section">📄 รายงาน</div>
+  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="รายงาน · Exportable summary">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    <span class="nav-label">📄 รายงาน</span>
+  </div>
+  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
+    <span class="nav-label">📊 Management Report</span>
+  </div>
+
+  <!-- ═══ GROUP 8: ⚙️ เครื่องมือ (Tools & Settings) ═══ -->
   <div class="nav-section">⚙️ เครื่องมือ</div>
   <div class="nav-item" id="nav-pricezone" onclick="switchTab('pricezone')" title="ประวัติแก้ราคา (governance) + โซนโต๊ะรายสาขา">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
@@ -1292,14 +1305,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div class="nav-item" id="nav-manual" onclick="switchTab('manual')" title="คู่มือการใช้งาน · How to use each tab, hard rules, common workflows">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
     <span class="nav-label">📖 คู่มือ</span>
-  </div>
-  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="รายงาน · Exportable summary">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span class="nav-label">📄 รายงาน</span>
-  </div>
-  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
-    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
-    <span class="nav-label">📊 Management Report</span>
   </div>
   <div class="nav-item" id="nav-settings" onclick="switchTab('settings')" title="Settings · Targets, costs, branches, hours, prefs">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
