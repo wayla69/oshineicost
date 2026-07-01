@@ -11757,13 +11757,22 @@ async function loadReport() {
   const _rowFor = mm => (Array.isArray(trend) && trend.find(r => r.period_month === mm))
                      || (Array.isArray(trendFull) && trendFull.find(r => r.period_month === mm)) || null;
   const _prevMonthStr = mm => { if (!mm) return null; let [y,m]=mm.split('-').map(Number); m-=1; if(m<1){m=12;y-=1;} return `${y}-${String(m).padStart(2,'0')}`; };
-  // Headline month: use the user's filter selection when explicitly set;
-  // fall back to last-complete-month only when no period is chosen.
+  // Headline month — never lead with the in-progress (partial) month by default: a
+  // partial month vs a full prior month reads as a false ~-100% MoM across every
+  // section. Mirrors the Management Report's "anchor on the latest COMPLETE period"
+  // guard. Rules:
+  //   • user pinned ONLY the current month (from==to==partial) → honour it, flagged (MTD)
+  //   • an explicit month that isn't the partial one          → use it
+  //   • otherwise (no filter, or a range ending on the partial month, e.g. the
+  //     default YTD range) → fall back to the last COMPLETE month
   const _filterHeadMonth = monthTo || monthFrom || null;
-  const _useFilterMonth  = _filterHeadMonth && _filterHeadMonth !== completeMonth;
-  let mLast = _useFilterMonth
-    ? (_rowFor(_filterHeadMonth) || {period_month: _filterHeadMonth})
-    : (completeMonth ? (_rowFor(completeMonth) || {period_month: completeMonth}) : (trend[trend.length-1] || {}));
+  const _explicitPartialOnly = partialMonth && monthFrom === partialMonth && monthTo === partialMonth;
+  const _headMonth = _explicitPartialOnly ? partialMonth
+    : (_filterHeadMonth && _filterHeadMonth !== partialMonth) ? _filterHeadMonth
+    : (completeMonth || _filterHeadMonth || null);
+  let mLast = _headMonth
+    ? (_rowFor(_headMonth) || {period_month: _headMonth})
+    : (trend[trend.length-1] || {});
   let mPrev = _rowFor(_prevMonthStr(mLast.period_month));
   if (!mPrev && trend.length >= 2 && !completeMonth) mPrev = trend[trend.length-2];
   // Partial (MTD) month, for a separate note.
