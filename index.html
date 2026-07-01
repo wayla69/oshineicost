@@ -4689,6 +4689,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <h1 class="text-3xl font-bold leading-tight">Sales &amp; Cost Analysis Report</h1>
         <p id="rptPeriod" class="text-sm opacity-90 mt-2">—</p>
         <p id="rptBranch" class="text-sm opacity-90">—</p>
+        <!-- Scope: overview (all) / master only / franchise only. Report-local —
+             drives the `group` param on every report query without touching the
+             global top-bar filter. -->
+        <div id="rptScopeSel" class="no-print mt-3 inline-flex rounded-lg overflow-hidden text-xs font-semibold"
+             style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22)">
+          <button type="button" data-scope=""          onclick="setReportScope('')"          class="px-3.5 py-1.5 transition-colors">ภาพรวม · ทั้งหมด</button>
+          <button type="button" data-scope="master"    onclick="setReportScope('master')"    class="px-3.5 py-1.5 transition-colors">🏢 Master</button>
+          <button type="button" data-scope="franchise" onclick="setReportScope('franchise')" class="px-3.5 py-1.5 transition-colors">🤝 Franchise</button>
+        </div>
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3">Generated: <span id="rptDate">—</span></div>
@@ -11625,8 +11634,42 @@ async function printReport() {
   } finally { _printing = false; }
 }
 
+// Analysis Report scope: '' = overview (all branches), 'master' / 'franchise' =
+// that branch group only. Report-local (independent of the global top-bar group
+// filter) so the user can flip all/master/franchise from inside the report.
+let reportScope = '';
+function _rptScopeLabel(sc) {
+  return sc === 'master' ? '🏢 เฉพาะสาขา Master'
+       : sc === 'franchise' ? '🤝 เฉพาะแฟรนไชส์'
+       : 'ภาพรวมทุกกลุ่ม (Master + Franchise)';
+}
+// Force `group` on a query string to the current report scope (overriding any
+// global group), or strip it entirely for the overview.
+function _rptScopeQp(qs) {
+  const u = new URLSearchParams((qs || '').replace(/^\?/, ''));
+  if (reportScope) u.set('group', reportScope); else u.delete('group');
+  const s = u.toString();
+  return s ? '?' + s : '';
+}
+function _rptScopeHighlight() {
+  document.querySelectorAll('#rptScopeSel button').forEach(b => {
+    const on = (b.dataset.scope || '') === reportScope;
+    b.style.background = on ? 'rgba(255,255,255,0.95)' : 'transparent';
+    b.style.color      = on ? '#4338ca' : '#fff';
+  });
+}
+function setReportScope(sc) {
+  reportScope = sc || '';
+  _rptScopeHighlight();
+  _tabLastKey.report = null;   // bust the per-tab cache so the report reloads
+  loadReport();
+}
+
 async function loadReport() {
-  const _fk = _filterKey(); if (_tabLastKey.report === _fk) return; _tabLastKey.report = _fk;
+  // Include scope in the cache key so switching all/master/franchise reloads.
+  const _fk = _filterKey() + '|scope=' + reportScope;
+  if (_tabLastKey.report === _fk) return; _tabLastKey.report = _fk;
+  _rptScopeHighlight();
   const branch = getBranch();
   const month  = getMonth();
   const monthFrom = getMonthFrom();
@@ -11634,7 +11677,8 @@ async function loadReport() {
 
   // Header
   document.getElementById('rptPeriod').textContent = monthFrom ? (`${fmtMonth(monthFrom)} → ${fmtMonth(monthTo || monthFrom)}`) : (month ? fmtMonth(month) : 'All Months');
-  document.getElementById('rptBranch').textContent = branch ? 'Branch: ' + branch : 'All Branches';
+  document.getElementById('rptBranch').textContent =
+    (branch ? 'Branch: ' + branch : 'All Branches') + ' · ' + _rptScopeLabel(reportScope);
   document.getElementById('rptDate').textContent   = new Date().toLocaleDateString('th-TH');
 
   // Sticky section nav — clickable chips that scroll to each §
@@ -11648,7 +11692,9 @@ async function loadReport() {
         class="px-2.5 py-1 rounded-lg hover:bg-indigo-50 text-slate-500 hover:text-indigo-700 transition-colors cursor-pointer">
         <span class="text-slate-300 font-mono">${i+1}</span> ${t}</a>`).join('');
 
-  const qpStr = qp();
+  // Every report query is forced to the current scope (all / master / franchise)
+  // via _rptScopeQp, independent of the global top-bar group filter.
+  const qpStr = _rptScopeQp(qp());
   // Fetch all in parallel
   // Compute prior-month params for MoM cost comparison
   const _curTo   = monthTo   || monthFrom || '';
@@ -11660,7 +11706,7 @@ async function loadReport() {
     const priorP = new URLSearchParams();
     if (branch) priorP.set('branch', branch);
     priorP.set('month_from', pp); priorP.set('month_to', pp);
-    priorQpStr = '?' + priorP.toString();
+    priorQpStr = _rptScopeQp('?' + priorP.toString());
   }
 
   const [
@@ -11674,7 +11720,7 @@ async function loadReport() {
   ] = await _poolAll([
     () => fetch(`${API}/api/summary${qpStr}`).then(r=>r.json()),
     () => fetch(`${API}/api/sales/monthly${qpStr}`).then(r=>r.json()),
-    () => fetch(`${API}/api/sales/skus${qp({limit:15})}`).then(r=>r.json()),
+    () => fetch(`${API}/api/sales/skus${_rptScopeQp(qp({limit:15}))}`).then(r=>r.json()),
     () => fetch(`${API}/api/sales/category${qpStr}`).then(r=>r.json()),
     () => fetch(`${API}/api/analysis/persona${qpStr}`).then(r=>r.json()),
     () => fetch(`${API}/api/analysis/branches${qpStr}`).then(r=>r.json()).catch(()=>[]),
@@ -11685,9 +11731,9 @@ async function loadReport() {
     () => fetch(`${API}/api/analysis/dow${qpStr}`).then(r=>r.json()).catch(()=>[]),
     () => fetch(`${API}/api/analysis/discounts${qpStr}`).then(r=>r.json()).catch(()=>[]),
     () => fetch(`${API}/api/analysis/anomalies${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/analysis/forecast${branch?'?branch='+encodeURIComponent(branch):''}`).then(r=>r.json()).catch(()=>({available:false})),
-    () => fetch(`${API}/api/analysis/forecast_branches${getGroup()?'?group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
-    () => fetch(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).then(r=>r.json()).catch(()=>null),
+    () => fetch(`${API}/api/analysis/forecast${_rptScopeQp(branch?'?branch='+encodeURIComponent(branch):'')}`).then(r=>r.json()).catch(()=>({available:false})),
+    () => fetch(`${API}/api/analysis/forecast_branches${reportScope?'?group='+reportScope:''}`).then(r=>r.json()).catch(()=>({available:false})),
+    () => fetch(`${API}/api/sales/top_ordered${_rptScopeQp(qp({limit:60, sort:'cogs'}))}`).then(r=>r.json()).catch(()=>null),
   ], 4);
 
   // Full monthly history (branch/group only, no month-range) so MoM/YTD framing
@@ -11695,12 +11741,11 @@ async function loadReport() {
   // `trend` has 1 row and every MoM chip collapses to "—".
   const _fullP = new URLSearchParams();
   if (branch) _fullP.set('branch', branch);
-  if (typeof getGroup === 'function' && getGroup()) _fullP.set('group', getGroup());
-  const _fullQp = _fullP.toString() ? '?' + _fullP.toString() : '';
+  const _fullQp = _rptScopeQp(_fullP.toString() ? '?' + _fullP.toString() : '');
   const trendFull = await fetch(`${API}/api/sales/monthly${_fullQp}`).then(r=>r.json()).catch(()=>trend);
-  // Per-branch monthly revenue (all branches, full history) → powers §3 ranking
+  // Per-branch monthly revenue (scoped, full history) → powers §3 ranking
   // movement, per-branch MoM, and YTD sparklines.
-  const branchMonthlyRaw = await fetch(`${API}/api/gp/by-branch-month`).then(r=>r.json()).catch(()=>({rows:[]}));
+  const branchMonthlyRaw = await fetch(`${API}/api/gp/by-branch-month${_rptScopeQp('')}`).then(r=>r.json()).catch(()=>({rows:[]}));
   // Data window → the report must NOT headline a PARTIAL trailing month (e.g. data
   // through Jun-03) vs a full prior month (a misleading ~-90% MoM). Lead with the
   // last COMPLETE month; surface the partial month separately as MTD.
