@@ -6434,7 +6434,7 @@ def analysis_compare(
             p["s"] = f"{period}-01"; p["e"] = f"{period}-{mtd_cut:02d}"
             r = con.execute(f"""
                 SELECT ROUND(SUM(st.total_inc_vat)/1.07, 2) revenue, COUNT(*) tx_count,
-                       SUM(st.customer_count) customer_count, ROUND(AVG(st.total_inc_vat), 2) avg_ticket
+                       SUM(st.customer_count) customer_count, ROUND(AVG(st.total_inc_vat) / 1.07, 2) avg_ticket
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE b.name!='ALL' AND st.source='Easy'
                   AND date(st.sold_at) BETWEEN :s AND :e {branch_filter}""", p).fetchone()
@@ -6461,7 +6461,7 @@ def analysis_compare(
             f"""
             SELECT COUNT(*) AS tx_count,
                    SUM(customer_count) AS customer_count,
-                   ROUND(AVG(total_inc_vat), 2) AS avg_ticket
+                   ROUND(AVG(total_inc_vat) / 1.07, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE b.name != 'ALL' AND strftime('%Y-%m', st.sold_at) = :period
@@ -11271,7 +11271,7 @@ def pnl_monthly(
             SELECT strftime('%Y-%m', st.sold_at) AS period_month,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND(AVG(st.total_inc_vat), 2) AS avg_ticket
+                   ROUND(AVG(st.total_inc_vat) / 1.07, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}
@@ -11333,7 +11333,7 @@ def pnl_branches_deep(
             SELECT b.name AS branch,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND(AVG(st.total_inc_vat), 2) AS avg_ticket
+                   ROUND(AVG(st.total_inc_vat) / 1.07, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}
