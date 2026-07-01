@@ -1185,6 +1185,45 @@ def data_window():
             "last_complete_month": last_complete, "partial_month": partial}
 
 
+def _txn_fallback_counts(con, months, branch, group, source):
+    """tx_count/customer_count for specific months, straight from sales_transaction.
+
+    sales_month_summary is only populated by the manual Excel-ingest scripts —
+    the live MSSQL sync (sync_mssql.py) writes sales_sku_monthly/sales_transaction
+    but never rebuilds sales_month_summary. A month that has only ever been
+    live-synced (e.g. the current/most-recent month) shows real revenue but a
+    NULL/zero tx_count and customer_count without this fallback. Restricted to
+    the specific missing months so it doesn't reintroduce the full-table scan
+    the month-summary rollup was added to avoid.
+    """
+    if not months:
+        return {}
+    filters = ["b.name != 'ALL'", "strftime('%Y-%m', st.sold_at) IN ({})".format(
+        ",".join(f":m{i}" for i in range(len(months))))]
+    params = {f"m{i}": mo for i, mo in enumerate(months)}
+    if branch:
+        filters.append("b.name = :branch")
+        params["branch"] = branch
+    _group_filter(filters, params, group)
+    if source:
+        filters.append("st.source = :source")
+        params["source"] = source
+    where = "WHERE " + " AND ".join(filters)
+    rows = con.execute(
+        f"""
+        SELECT strftime('%Y-%m', st.sold_at) AS period_month,
+               COUNT(*)               AS tx_count,
+               SUM(st.customer_count) AS customer_count
+        FROM sales_transaction st
+        JOIN branches b ON b.branch_id = st.branch_id
+        {where}
+        GROUP BY period_month
+        """,
+        params,
+    ).fetchall()
+    return {r["period_month"]: dict(r) for r in rows}
+
+
 @app.get("/api/sales/monthly")
 @ttl_cache
 def sales_monthly(
@@ -1349,7 +1388,10 @@ def sales_monthly(
                 """,
                 params_y,
             ).fetchall()
-        tx_map_y = {r["period_month"]: dict(r) for r in tx_rows_y}
+            tx_map_y = {r["period_month"]: dict(r) for r in tx_rows_y}
+            missing_y = [r["period_month"] for r in rows
+                         if not (tx_map_y.get(r["period_month"], {}).get("tx_count"))]
+            tx_map_y.update(_txn_fallback_counts(con, missing_y, branch, group, None))
         out = []
         for r in rows:
             tx = tx_map_y.get(r["period_month"], {})
@@ -1424,7 +1466,10 @@ def sales_monthly(
             params_tx,
         ).fetchall()
 
-    tx_map = {r["period_month"]: dict(r) for r in tx_rows}
+        tx_map = {r["period_month"]: dict(r) for r in tx_rows}
+        missing = [mo for mo in {r["period_month"] for r in sku_rows}
+                   if not (tx_map.get(mo, {}).get("tx_count"))]
+        tx_map.update(_txn_fallback_counts(con, missing, branch, group, source))
 
     all_months = sorted(r["period_month"] for r in sku_rows)
     sku_map = {r["period_month"]: dict(r) for r in sku_rows}
