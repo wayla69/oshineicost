@@ -4756,7 +4756,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
       <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">โปรไฟล์รายสาขา — จุดเด่น/ผิดปกติเทียบเครือ</h3>
       <p class="text-xs text-slate-400 mb-3">เทียบแต่ละสาขากับค่ากลาง (median) ของทั้งเครือ · แสดงเฉพาะจุดที่ต่างชัด (เกิน ±20%)</p>
-      <div id="rptBranchProfile" class="grid grid-cols-1 md:grid-cols-2 gap-3"></div>
+      <div id="rptBranchProfile"></div>
     </div>
 
     <!-- §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (same view as Menu tab; shared renderer) -->
@@ -11952,27 +11952,65 @@ async function loadReport() {
     const median = arr => { const s=[...arr].sort((x,y)=>x-y); const n=s.length; return n%2?s[(n-1)/2]:(s[n/2-1]+s[n/2])/2; };
     const med = { aov:median(rows.map(r=>r.aov)), disc:median(rows.map(r=>r.disc)), cpb:median(rows.map(r=>r.cpb)), rev:median(rows.map(r=>r.rev)) };
     const dev = (v,m) => m ? (v-m)/m*100 : 0;
-    const flag = (label, d, goodHigh) => {
-      if (Math.abs(d) < 20) return null;
-      const high = d > 0;
-      // color: green if "good" direction, red if bad
-      const good = goodHigh==null ? null : (high === goodHigh);
-      const color = good==null ? '#475569' : (good ? '#059669' : '#dc2626');
-      return `<span class="px-1.5 py-0.5 rounded text-[11px]" style="background:${color}14;color:${color}">${label} ${high?'▲':'▼'}${Math.abs(d).toFixed(0)}%</span>`;
+    const CAP = 60; // % deviation that maxes out the bar track
+    const devColor = (d, goodHigh) => {
+      if (Math.abs(d) < 20) return '#cbd5e1';
+      const good = goodHigh==null ? null : ((d>0) === goodHigh);
+      return good==null ? '#64748b' : (good ? '#059669' : '#dc2626');
     };
-    el.innerHTML = rows.sort((a,b)=>b.rev-a.rev).map(r => {
-      const chips = [
-        flag('AOV', dev(r.aov,med.aov), true),
-        flag('ส่วนลด', dev(r.disc,med.disc), false),
-        flag('คน/บิล', dev(r.cpb,med.cpb), null),
-        flag('รายได้', dev(r.rev,med.rev), true),
-      ].filter(Boolean);
-      const body = chips.length ? chips.join(' ') : '<span class="text-[11px] text-slate-400">ใกล้เคียงค่ากลางเครือทุกด้าน</span>';
-      return `<div class="p-3 rounded-lg bg-slate-50">
-        <p class="text-sm font-semibold text-slate-700 mb-1">${esc(r.branch)}</p>
-        <div class="flex flex-wrap gap-1.5">${body}</div>
-      </div>`;
-    }).join('');
+    // diverging mini-bar centered on the network median, ±CAP% maps to the half-track
+    const bar = (d, goodHigh) => {
+      const flagged = Math.abs(d) >= 20;
+      const color = devColor(d, goodHigh);
+      const w = (Math.min(Math.abs(d), CAP) / CAP * 50).toFixed(1);
+      const side = d > 0
+        ? `left:50%;width:${w}%;border-radius:0 3px 3px 0`
+        : `right:50%;width:${w}%;border-radius:3px 0 0 3px`;
+      const label = flagged ? `${d>0?'+':'-'}${Math.abs(d).toFixed(0)}%` : '—';
+      return `<div class="flex items-center gap-2 justify-end" title="${d>=0?'+':''}${d.toFixed(1)}% vs median">
+          <span class="text-[11px] tabular-nums w-10 text-right" style="color:${color}">${label}</span>
+          <div class="relative w-14 h-2.5 bg-slate-100 rounded shrink-0">
+            <div class="absolute top-0 left-1/2 w-px h-full bg-slate-300"></div>
+            <div class="absolute top-0 h-full" style="${side};background:${color}"></div>
+          </div>
+        </div>`;
+    };
+    const highlight = (label, d, goodHigh) => {
+      if (Math.abs(d) < 20) return null;
+      const color = devColor(d, goodHigh);
+      return `<span class="px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap" style="background:${color}14;color:${color}">${label} ${d>0?'▲':'▼'}${Math.abs(d).toFixed(0)}%</span>`;
+    };
+    const scored = rows.map(r => ({
+      ...r, dAov: dev(r.aov,med.aov), dDisc: dev(r.disc,med.disc), dCpb: dev(r.cpb,med.cpb), dRev: dev(r.rev,med.rev),
+    })).sort((a,b) => b.rev - a.rev);
+    el.innerHTML = `<div class="overflow-x-auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left text-slate-400 border-b border-slate-100">
+          <th class="py-1.5 pr-3">สาขา</th>
+          <th class="py-1.5 pr-3 text-right">AOV</th>
+          <th class="py-1.5 pr-3 text-right">ส่วนลด</th>
+          <th class="py-1.5 pr-3 text-right">คน/บิล</th>
+          <th class="py-1.5 pr-3 text-right">รายได้</th>
+          <th class="py-1.5 pl-2">จุดเด่น</th>
+        </tr></thead>
+        <tbody>${scored.map(r => {
+          const chips = [
+            highlight('AOV', r.dAov, true),
+            highlight('ส่วนลด', r.dDisc, false),
+            highlight('คน/บิล', r.dCpb, null),
+            highlight('รายได้', r.dRev, true),
+          ].filter(Boolean);
+          return `<tr class="border-t border-slate-50 hover:bg-slate-50">
+            <td class="py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap">${esc(r.branch)}</td>
+            <td class="py-1.5 pr-3">${bar(r.dAov, true)}</td>
+            <td class="py-1.5 pr-3">${bar(r.dDisc, false)}</td>
+            <td class="py-1.5 pr-3">${bar(r.dCpb, null)}</td>
+            <td class="py-1.5 pr-3">${bar(r.dRev, true)}</td>
+            <td class="py-1.5 pl-2"><div class="flex flex-wrap gap-1">${chips.length?chips.join(''):'<span class="text-[11px] text-slate-300">ใกล้เคียงค่ากลาง</span>'}</div></td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table></div>
+      <p class="text-[11px] text-slate-400 mt-2">แถบ = ระยะห่างจากค่ากลาง (median) ของเครือ ณ ค่ากลาง (เส้นแบ่งกลาง) · 🟢เขียว = ทิศทางดี · 🔴แดง = ทิศทางแย่ · เทา = ต่างกันแต่ไม่มีทิศทางดี/แย่ชัดเจน</p>`;
   })();
 
   // ── §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (reuses the Menu tab's renderer so the
@@ -12018,15 +12056,22 @@ async function loadReport() {
     const fdAbs = persona.food_drink_split || {};
     const fdTot = (fdAbs.food_abs||0)+(fdAbs.drink_abs||0)+(fdAbs.other_abs||0);
     const fdSeg = (lbl,val,color)=>{ const p = fdTot? val/fdTot*100:0; return p<0.5?'':`<div style="width:${p}%;background:${color}" class="h-full flex items-center justify-center text-[10px] text-white font-semibold" title="${lbl} ${p.toFixed(1)}%">${p>=8?p.toFixed(0)+'%':''}</div>`; };
-    const rows = ps.map(p=>{
+    const PS_COLORS = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ef4444','#a855f7','#14b8a6','#f97316'];
+    const psSorted = [...ps].sort((a,b)=>(a.size||0)-(b.size||0));
+    const rows = psSorted.map((p,i)=>{
       const sharePct = p.tx_count/totTx*100, w = p.tx_count/maxTx*100;
-      return `<tr class="border-t border-slate-50">
-        <td class="py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap">${p.label} คน</td>
-        <td class="py-1.5 pr-3" style="width:42%"><div class="bg-slate-100 rounded-full h-3"><div style="width:${w.toFixed(0)}%;background:#6366f1;height:100%;border-radius:9999px"></div></div></td>
+      const color = PS_COLORS[i % PS_COLORS.length];
+      const headDelta = o.avg_per_head ? ((p.avg_per_head||0)-o.avg_per_head)/o.avg_per_head*100 : null;
+      const headChip = headDelta==null ? '<span class="text-slate-300">—</span>'
+        : `<span style="color:${headDelta>=0?'#059669':'#dc2626'}">${headDelta>=0?'▲':'▼'}${Math.abs(headDelta).toFixed(0)}%</span>`;
+      return `<tr class="border-t border-slate-50 hover:bg-slate-50">
+        <td class="py-1.5 pr-3 font-medium text-slate-700 whitespace-nowrap"><span class="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style="background:${color}"></span>${p.label} คน</td>
+        <td class="py-1.5 pr-3" style="width:32%"><div class="bg-slate-100 rounded-full h-3"><div style="width:${w.toFixed(0)}%;background:${color};height:100%;border-radius:9999px"></div></div></td>
         <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(p.tx_count)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums font-semibold">${sharePct.toFixed(1)}%</td>
         <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmtN(p.avg_bill||0)}</td>
-        <td class="py-1.5 text-right tabular-nums text-slate-500">${fmtN(p.avg_per_head||0)}</td>
+        <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmtN(p.avg_per_head||0)}</td>
+        <td class="py-1.5 text-right tabular-nums text-[11px]">${headChip}</td>
       </tr>`;
     }).join('');
     el.innerHTML = `
@@ -12040,10 +12085,19 @@ async function loadReport() {
           <p class="text-[11px] text-slate-400 mt-0.5">${s}</p></div>`).join('')}
       </div>
       <p class="text-xs font-semibold text-slate-600 mb-1">การกระจายขนาดกลุ่มลูกค้า — สัดส่วนบิล · ยอด/บิล · ยอด/หัว</p>
-      <table class="text-xs w-full mb-4"><thead><tr class="text-left text-slate-400">
-        <th class="pb-1 pr-3">กลุ่ม</th><th class="pb-1 pr-3">สัดส่วนบิล</th><th class="pb-1 pr-3 text-right">บิล</th>
-        <th class="pb-1 pr-3 text-right">% บิล</th><th class="pb-1 pr-3 text-right">ยอด/บิล</th><th class="pb-1 text-right">ยอด/หัว</th>
-      </tr></thead><tbody>${rows}</tbody></table>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div class="lg:col-span-2 overflow-x-auto">
+          <table class="text-xs w-full"><thead><tr class="text-left text-slate-400">
+            <th class="pb-1 pr-3">กลุ่ม</th><th class="pb-1 pr-3">สัดส่วนบิล</th><th class="pb-1 pr-3 text-right">บิล</th>
+            <th class="pb-1 pr-3 text-right">% บิล</th><th class="pb-1 pr-3 text-right">ยอด/บิล</th><th class="pb-1 pr-3 text-right">ยอด/หัว</th>
+            <th class="pb-1 text-right">vs เฉลี่ย/หัว</th>
+          </tr></thead><tbody>${rows}</tbody></table>
+        </div>
+        <div>
+          <p class="text-[11px] text-slate-400 mb-1 text-center">สัดส่วนบิลตามขนาดกลุ่ม</p>
+          <div style="position:relative;height:170px"><canvas id="rptPartyDonut"></canvas></div>
+        </div>
+      </div>
       <p class="text-xs font-semibold text-slate-600 mb-1">โครงสร้างยอดขาย</p>
       <div class="rounded-lg overflow-hidden border border-slate-200 flex" style="height:30px">
         ${fdSeg('บุฟเฟ่ต์ & อื่นๆ', fdAbs.other_abs||0, '#6366f1')}
@@ -12051,6 +12105,34 @@ async function loadReport() {
         ${fdSeg('Drink', fdAbs.drink_abs||0, '#f59e0b')}
       </div>
       <p class="text-[11px] text-slate-400 mt-1">🟦 บุฟเฟ่ต์&อื่นๆ ${fdTot?((fdAbs.other_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟩 Food ${fdTot?((fdAbs.food_abs||0)/fdTot*100).toFixed(1):'—'}% · 🟧 Drink ${fdTot?((fdAbs.drink_abs||0)/fdTot*100).toFixed(1):'—'}%</p>`;
+    if (typeof Chart !== 'undefined') {
+      const donutCanvas = document.getElementById('rptPartyDonut');
+      if (chartInstances.rptPartyDonut) { try { chartInstances.rptPartyDonut.destroy(); } catch(e){} }
+      if (donutCanvas) {
+        chartInstances.rptPartyDonut = new Chart(donutCanvas, {
+          type: 'doughnut',
+          data: {
+            labels: psSorted.map(p => p.label + ' คน'),
+            datasets: [{
+              data: psSorted.map(p => p.tx_count||0),
+              backgroundColor: psSorted.map((_,i) => PS_COLORS[i % PS_COLORS.length]),
+              borderWidth: 2, borderColor: '#fff',
+            }],
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, cutout: '55%',
+            plugins: {
+              legend: { position: 'bottom', labels: { color:'#334155', font:{size:10}, boxWidth:10, padding:8 } },
+              datalabels: { color:'#fff', font:{weight:'bold', size:10}, formatter: (v,ctx) => { const tot = ctx.chart.data.datasets[0].data.reduce((a,b)=>a+b,0); return tot ? (v/tot*100).toFixed(0)+'%' : ''; } },
+              tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtN(ctx.parsed)} บิล` } },
+            },
+          },
+        });
+        // report data loads async after switchTab's own resize sweep already ran,
+        // so this chart can be born inside a not-yet-laid-out panel — nudge once.
+        setTimeout(() => { try { chartInstances.rptPartyDonut.resize(); } catch(e){} }, 60);
+      }
+    }
   })();
 
   // ── §6 Time & Operations
@@ -12152,17 +12234,52 @@ async function loadReport() {
       </div>
       <div>
         <p class="text-xs font-semibold text-slate-600 mb-2">Revenue by Day of Week (avg/day)</p>
+        <div style="position:relative;height:140px" class="mb-3"><canvas id="rptDowChart"></canvas></div>
         <table class="text-xs w-full">
-          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">วัน</th><th class="py-1 text-right">Avg/วัน</th><th class="py-1 text-right">Share</th></tr></thead>
-          <tbody>${[...dowSorted].sort((a,b)=>(b.avg_revenue||0)-(a.avg_revenue||0)).map(d=>`
+          <thead><tr class="text-slate-400 border-b border-slate-100"><th class="py-1 text-left">วัน</th><th class="py-1 text-right">Avg/วัน</th><th class="py-1 text-right">Share</th><th class="py-1 text-right">vs เฉลี่ยสัปดาห์</th></tr></thead>
+          <tbody>${[...dowSorted].sort((a,b)=>(b.avg_revenue||0)-(a.avg_revenue||0)).map(d=>{
+            const avgOfWk = dowTotal/7;
+            const dd = avgOfWk ? ((d.avg_revenue||0)-avgOfWk)/avgOfWk*100 : 0;
+            return `
             <tr class="border-t border-slate-50 ${d.dow===peakDow?.dow?'bg-cyan-50':''}">
-              <td class="py-1 font-medium">${DOW_LABELS_RPT[d.dow]||'—'}</td>
+              <td class="py-1 font-medium">${d.dow===peakDow?.dow?'🔥 ':''}${DOW_LABELS_RPT[d.dow]||'—'}</td>
               <td class="py-1 text-right font-medium">${fmtN(d.avg_revenue||0)}</td>
               <td class="py-1 text-right text-slate-500">${((d.avg_revenue||0)/dowTotal*100).toFixed(1)}%</td>
-            </tr>`).join('')}</tbody>
+              <td class="py-1 text-right" style="color:${dd>=0?'#059669':'#dc2626'}">${dd>=0?'▲':'▼'}${Math.abs(dd).toFixed(0)}%</td>
+            </tr>`; }).join('')}</tbody>
         </table>
       </div>
     </div>`;
+  if (typeof Chart !== 'undefined') {
+    const dowCanvas = document.getElementById('rptDowChart');
+    if (chartInstances.rptDowChart) { try { chartInstances.rptDowChart.destroy(); } catch(e){} }
+    if (dowCanvas) {
+      chartInstances.rptDowChart = new Chart(dowCanvas, {
+        type: 'bar',
+        data: {
+          labels: dowSorted.map(d => DOW_LABELS_RPT[d.dow] || '—'),
+          datasets: [{
+            data: dowSorted.map(d => d.avg_revenue || 0),
+            backgroundColor: dowSorted.map(d => d.dow === peakDow?.dow ? '#0891b2' : '#c7d2fe'),
+            borderRadius: 4,
+          }],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            datalabels: { display: false },
+            tooltip: { callbacks: { label: ctx => fmtN(ctx.parsed.y) + '/วัน' } },
+          },
+          scales: {
+            x: { ticks: { color:'#64748b', font:{size:11} }, grid: { display:false } },
+            y: { ticks: { color:'#94a3b8', font:{size:10}, callback: v => fmtN(v) }, grid: { color:'#f1f5f9' } },
+          },
+        },
+      });
+      setTimeout(() => { try { chartInstances.rptDowChart.resize(); } catch(e){} }, 60);
+    }
+  }
 
   // ── §8 Cost Contribution — latest month, per-branch selectable, real MoM Δ
   _rptLastMonth = mLast.period_month || getMonthTo() || getMonthFrom() || '';
@@ -12327,6 +12444,10 @@ async function loadReport() {
         : card('เทียบเป้า', 'ตั้งเป้า →', 'ยังไม่ได้ตั้งเป้าเดือนนี้', '#6366f1', "switchTab('settings')"));
     // Scenario best / base / worst from the confidence band
     const vsPrior = v => prior ? `${v>=prior?'+':''}${((v-prior)/prior*100).toFixed(1)}% vs เดือนก่อน` : '';
+    const scLo = forecast.lo, scHi = forecast.hi, scBase = forecast.projected;
+    const scRange = (scHi - scLo) || 1;
+    const scBasePct = Math.min(100, Math.max(0, (scBase - scLo) / scRange * 100));
+    const scPriorPct = (prior != null && prior >= scLo && prior <= scHi) ? (prior - scLo) / scRange * 100 : null;
     scenEl.innerHTML = `<h3 class="text-sm font-bold text-slate-600 mb-2">สถานการณ์จำลอง (Scenario)</h3>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
         ${[
@@ -12338,6 +12459,18 @@ async function loadReport() {
           <p class="text-xl font-bold text-slate-800">${fmtN(v)}</p>
           <p class="text-[11px] text-slate-500 mt-0.5">${vsPrior(v)}</p>
           <p class="text-[11px] text-slate-400 mt-1">${assume}</p></div>`).join('')}
+      </div>
+      <div class="mt-4 px-1">
+        <p class="text-[11px] text-slate-400 mb-2">ตำแหน่งของคาดการณ์ฐาน (Base) ภายในช่วงความเชื่อมั่น</p>
+        <div class="relative h-2.5 rounded-full" style="background:linear-gradient(90deg,#dc262633,#4f46e533,#05966933)">
+          ${scPriorPct != null ? `<div class="absolute top-1/2 -translate-y-1/2 w-0.5 h-5 bg-slate-500" style="left:${scPriorPct.toFixed(1)}%" title="เดือนก่อน ${fmtN(prior)}"></div>` : ''}
+          <div class="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full border-2 border-white shadow" style="left:calc(${scBasePct.toFixed(1)}% - 7px);background:#4f46e5" title="ฐาน ${fmtN(scBase)}"></div>
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+          <span>🔴 แย่สุด ${fmtN(scLo)}</span>
+          ${scPriorPct != null ? `<span>| เดือนก่อน ${fmtN(prior)}</span>` : ''}
+          <span>🟢 ดีสุด ${fmtN(scHi)}</span>
+        </div>
       </div>`;
   } else { scEl.innerHTML = ''; scenEl.innerHTML = ''; }
 
