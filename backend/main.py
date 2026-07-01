@@ -12205,7 +12205,21 @@ def report_management(
         mind = (rng["lo"] if rng else None) or "9999-99-99"
         if not maxd:
             return {"available": False, "period": period}
-        focus = (date or maxd)[:10]
+        # Never DEFAULT the daily report onto the in-progress current day: its handful
+        # of early sales read as a chain-wide ~-100% collapse across every section.
+        # With no explicit date, anchor on the latest COMPLETE day (strictly before
+        # Thai 'today', UTC+7). An explicitly-requested today is honoured but flagged
+        # partial below. Mirrors the weekly guard, which never picks the open week.
+        today_th = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
+        if date:
+            focus = date[:10]
+        else:
+            _cd = con.execute(
+                f"SELECT MAX(date(st.sold_at)) d FROM sales_transaction st "
+                f"JOIN branches b ON b.branch_id=st.branch_id "
+                f"WHERE {where} AND date(st.sold_at) < :t",
+                {**params, "t": today_th}).fetchone()
+            focus = ((_cd["d"] if _cd and _cd["d"] else maxd))[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
 
@@ -12217,7 +12231,7 @@ def report_management(
             cs = ce = fdate
             ps = pe = fdate - _dt.timedelta(days=7)
             days_in_period = 1
-            partial = False
+            partial = (focus == today_th)   # in-progress current day (explicit date=today)
             ref_anchor = fdate
             if th:
                 label = f"{DOW[fdate.weekday()]} {dlabel(fdate)}"
@@ -12270,13 +12284,12 @@ def report_management(
                 label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
                 comp_label = "previous week (Mon–Sun)"
         has_prev = ps.isoformat() >= mind
-        # YoY window — same calendar period a year earlier (daily = same date; weekly =
-        # 52 weeks back to keep the Mon–Sun alignment). Dropped if it predates the data.
-        def _minus_year(d):
-            try:    return d.replace(year=d.year - 1)
-            except ValueError: return d.replace(year=d.year - 1, day=28)   # Feb 29
+        # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
+        # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
+        # same-calendar-date YoY would drift (e.g. Sat→Fri) and distort the comparison.
+        # Dropped if it predates the data.
         if period == "daily":
-            ys = ye = _minus_year(fdate)
+            ys = ye = fdate - _dt.timedelta(days=364)
         else:
             ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
         has_yoy = ys.isoformat() >= mind
@@ -12551,6 +12564,19 @@ def report_management(
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id
             WHERE {mw}""", mp).fetchone()
+        # sales_sku_monthly is not populated for the in-progress (live-synced-only)
+        # month, so the month food-cost % would go blank for a current-month report.
+        # Fall back to sales_sku_daily (same tier-safe COGS expr; a wrapped subquery
+        # supplies the `source` column the expr expects). [[sync_no_month_summary]]
+        if not (bom_row and bom_row["cost"]):
+            mw_daily = mw.replace("s.period_month=:month", "strftime('%Y-%m', s.day)=:month")
+            bom_row = con.execute(f"""
+                SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+                FROM (SELECT *, 'Easy' AS source FROM sales_sku_daily) s
+                JOIN skus sk ON sk.sku_id=s.sku_id
+                LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+                JOIN branches b ON b.branch_id=s.branch_id
+                WHERE {mw_daily}""", mp).fetchone()
         mtd_row = con.execute(f"""
             SELECT ROUND(SUM(st.total_inc_vat)/1.07,2) rev,
                    COUNT(DISTINCT date(st.sold_at))    days
@@ -12926,6 +12952,7 @@ def report_management_xlsx(
     week:   Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
+    lang:   str = Query("en"),               # match the on-screen language
 ):
     """Download the Daily/Weekly Management Summary as a multi-sheet Excel file.
     Reuses report_management() so the numbers match the on-screen report exactly."""
@@ -12936,7 +12963,7 @@ def report_management_xlsx(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
     # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
-    resp = report_management(period=period, date=date, week=week, branch=branch, group=group)
+    resp = report_management(period=period, date=date, week=week, branch=branch, group=group, lang=lang)
     j = _json.loads(resp.body) if hasattr(resp, "body") else resp
     if not j.get("available"):
         raise HTTPException(status_code=404, detail="No sales data for this period")

@@ -114,6 +114,36 @@ def test_management_report_xlsx(client):
         assert "Summary" in wb.sheetnames and "Branch League" in wb.sheetnames
 
 
+def test_management_daily_never_defaults_to_current_partial_day(client):
+    """Regression: the daily report must NOT default to the in-progress current day
+    (its handful of today's sales would read as a chain-wide ~-100% collapse).
+    Default anchors on the latest COMPLETE day; an explicit today is flagged partial."""
+    import datetime as _dt
+    today = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).date().isoformat()  # Thai 'today'
+    d = client.get("/api/reports/management", params={"period": "daily"}).json()
+    assert d["available"]
+    assert d["focus"] < today, f"daily default focus {d['focus']} must be before today {today}"
+    assert d["partial"] is False
+    # An explicitly-requested current day is honoured but flagged partial so the UI
+    # can annotate it and the WoW/GP chips are not read as a real collapse.
+    dt = client.get("/api/reports/management", params={"period": "daily", "date": today}).json()
+    assert dt["partial"] is True
+
+
+def test_management_xlsx_honours_language(client):
+    """Regression: the Excel export must match the on-screen language (was always EN)."""
+    import io, openpyxl
+    def summary_text(lang):
+        r = client.get("/api/reports/management.xlsx", params={"period": "weekly", "lang": lang})
+        assert r.status_code == 200
+        ws = openpyxl.load_workbook(io.BytesIO(r.content))["Summary"]
+        return "\n".join(str(c.value) for row in ws.iter_rows() for c in row if c.value is not None)
+    en, th = summary_text("en"), summary_text("th")
+    assert en and th and en != th, "xlsx Summary should differ by language"
+    assert any("฀" <= ch <= "๿" for ch in th), "Thai export should contain Thai text"
+    assert not any("฀" <= ch <= "๿" for ch in en), "English export should not contain Thai text"
+
+
 def test_cost_drivers_has_total_and_mom(client):
     d = client.get("/api/bom-cost/cost-drivers", params={"scope": "chain", "limit": 60}).json()
     assert d["items"], "no cost-driver items"

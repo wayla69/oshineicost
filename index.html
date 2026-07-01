@@ -7881,6 +7881,7 @@ function exportMgtReport() {
   if (mgtPeriod === 'daily'  && mgtDay)  qs.set('date', mgtDay);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
+  qs.set('lang', mgtLang);                                             // export in the on-screen language
   window.location.href = `${API}/api/reports/management.xlsx?${qs}`;   // session cookie travels with it
 }
 
@@ -7931,7 +7932,7 @@ async function loadMgtReport() {
 // on the client is keyed here so the EN ⇄ ไทย toggle re-skins the whole report.
 const MGT_I18N = {
   en: {
-    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', wtd:'  (week-to-date)',
+    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', wtd:'  (week-to-date)', dtd:'  (so far today — partial)',
     scope:'Scope: ', comparedWith:'   ·   compared with ', allBranches:'All branches', groupPfx:'Group: ',
     title:'Management Summary Report', generated:'Generated:', exportExcel:'📊 Export Excel',
     printPdf:'🖨️ Print / Export PDF', daily:'Daily', weekly:'Weekly', loading:'Loading…',
@@ -8002,7 +8003,7 @@ const MGT_I18N = {
     numLocale:'en-US',
   },
   th: {
-    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', wtd:'  (ถึงปัจจุบันในสัปดาห์)',
+    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', wtd:'  (ถึงปัจจุบันในสัปดาห์)', dtd:'  (เฉพาะวันนี้ — ยังไม่ครบวัน)',
     scope:'ขอบเขต: ', comparedWith:'   ·   เทียบกับ ', allBranches:'ทุกสาขา', groupPfx:'กลุ่ม: ',
     title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'📊 ส่งออก Excel',
     printPdf:'🖨️ พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', loading:'กำลังโหลด…',
@@ -8113,7 +8114,7 @@ function renderMgtReport(j, jM, jF) {
 
   // Header band labels
   const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
-  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : T.weeklyReport) + j.label + (j.partial ? T.wtd : ''));
+  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : T.weeklyReport) + j.label + (j.partial ? (isDaily ? T.dtd : T.wtd) : ''));
   setTxt('mgtBranchLabel', T.scope + scopeLabel(j.branch_scope) + T.comparedWith + j.comp_label);
   // Static cover-band chrome (title / brand / buttons) follows the language toggle too.
   setTxt('mgtTitle', T.title);
@@ -8282,7 +8283,7 @@ function renderMgtReport(j, jM, jF) {
   const brRows = (j.branches || []).map((b, i) => `<tr class="border-b border-slate-50">
       <td class="py-2 pl-1 text-slate-400 font-mono text-xs w-5 text-center">${b.rank || (i+1)}</td>
       <td class="py-2 w-7 text-center">${mvBadge(b.rank_change)}</td>
-      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${b.branch}</td>
+      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}</td>
       <td class="py-2 text-right font-semibold">${baht(b.revenue)}</td>
       <td class="py-2 text-right">${num(b.customers)}</td>
       <td class="py-2 text-right">${baht(b.rev_per_head)}</td>
@@ -8338,7 +8339,7 @@ function renderMgtReport(j, jM, jF) {
   const cnum = v => (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cph  = v => (v == null) ? '—' : '฿' + cnum(v);
   const liTop = x => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-50 text-sm">
-      <span class="truncate">${x.menu}</span>
+      <span class="truncate">${esc(x.menu)}</span>
       <span class="font-semibold whitespace-nowrap">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-400">${T.perHead}</span></span>
     </li>`;
   // rising food cost/head = margin risk (red); falling = good (green)
@@ -8346,7 +8347,7 @@ function renderMgtReport(j, jM, jF) {
     const up = x.delta >= 0;
     return `<li class="py-1.5 border-b border-slate-50 text-sm">
       <div class="flex items-center justify-between gap-3">
-        <span class="truncate">${x.menu}</span>
+        <span class="truncate">${esc(x.menu)}</span>
         <span class="font-semibold whitespace-nowrap" style="color:${up ? '#dc2626' : '#059669'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}<span class="text-[11px]">${T.perHead}</span></span>
       </div>
       <div class="text-[11px] text-slate-400">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct.toFixed(0)}%` : ''}</div>
@@ -8418,7 +8419,7 @@ function renderMgtReport(j, jM, jF) {
         <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${t}</p><p class="text-2xl font-bold text-slate-800">${v}</p>
         <p class="text-xs text-slate-500 mt-1 flex items-center gap-1 flex-wrap">${s || ''}${w ? `<span class="text-slate-300">·</span><span class="text-[10px] text-slate-400">${compShort}</span>${w}` : ''}</p></div>`;
     const trows = (TB.by_branch || []).map(b => `<tr class="border-b border-slate-50">
-        <td class="py-2 pl-1">${b.branch}</td>
+        <td class="py-2 pl-1">${esc(b.branch)}</td>
         <td class="py-2 text-right">${num(b.tables)}</td>
         <td class="py-2 text-right">${num(b.covers)}</td>
         <td class="py-2 text-right font-semibold">${b.covers_per_table != null ? b.covers_per_table.toFixed(2) : '—'}</td>
@@ -8439,7 +8440,7 @@ function renderMgtReport(j, jM, jF) {
   // §7 — Action items
   const sevColor = { high: '#dc2626', med: '#d97706', low: '#10b981' };
   const acts = (j.actions || []).map(a => `<li class="flex items-start gap-2 text-sm py-1">
-      <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${a.text}</span></li>`).join('');
+      <span class="mt-0.5" style="color:${sevColor[a.sev] || '#64748b'}">●</span><span>${esc(a.text)}</span></li>`).join('');
   const actsWithSplit = `<ul class="space-y-0.5">${acts}</ul>` + (() => {
     if (!hasSplit) return '';
     const fmtActs = jx => {
@@ -8447,7 +8448,7 @@ function renderMgtReport(j, jM, jF) {
       if (!items.length) return `<p class="text-xs text-slate-400 py-1">${T.noCritical}</p>`;
       return `<ul class="space-y-0.5">${items.map(a =>
         `<li class="flex items-start gap-1.5 text-xs py-0.5">
-           <span style="color:${sevColor[a.sev]||'#64748b'}">●</span><span>${a.text}</span></li>`
+           <span style="color:${sevColor[a.sev]||'#64748b'}">●</span><span>${esc(a.text)}</span></li>`
       ).join('')}</ul>`;
     };
     return `<div class="mt-4 pt-3 border-t border-slate-100">
@@ -8528,17 +8529,17 @@ function renderMgtReport(j, jM, jF) {
     const dnN = brs.filter(b => b.wow_pct != null && b.wow_pct < 0).length;
     const mvs = brs.filter(b => b.wow_pct != null).slice().sort((a, b) => Math.abs(b.wow_pct) - Math.abs(a.wow_pct));
     if (isTH) {
-      const mv  = (j.has_prev && mvs.length) ? ' โดยสาขาที่เปลี่ยนแปลงมากสุดคือ <b>' + mvs[0].branch + '</b> ที่ ' + signed(mvs[0].wow_pct) : '';
+      const mv  = (j.has_prev && mvs.length) ? ' โดยสาขาที่เปลี่ยนแปลงมากสุดคือ <b>' + esc(mvs[0].branch) +'</b> ที่ ' + signed(mvs[0].wow_pct) : '';
       const sh  = best.share_pct != null ? ' (' + best.share_pct.toFixed(0) + '% ของทั้งเครือ)' : '';
       const cmp = j.has_prev ? ' ' + upN + ' สาขาเติบโตและ ' + dnN + ' สาขาลดลงเทียบ' + compW + mv : '';
-      ex.push({c:'#7c3aed', lead:'สาขา', body:'จาก ' + brs.length + ' สาขา <b>' + best.branch + '</b> นำด้วย ' +
-              baht(best.revenue) + sh + ' ขณะที่ <b>' + worst.branch + '</b> ต่ำสุดที่ ' + baht(worst.revenue) + cmp});
+      ex.push({c:'#7c3aed', lead:'สาขา', body:'จาก ' + brs.length + ' สาขา <b>' + esc(best.branch) +'</b> นำด้วย ' +
+              baht(best.revenue) + sh + ' ขณะที่ <b>' + esc(worst.branch) +'</b> ต่ำสุดที่ ' + baht(worst.revenue) + cmp});
     } else {
-      const mv  = (j.has_prev && mvs.length) ? '; the biggest swing was <b>' + mvs[0].branch + '</b> at ' + signed(mvs[0].wow_pct) : '';
+      const mv  = (j.has_prev && mvs.length) ? '; the biggest swing was <b>' + esc(mvs[0].branch) +'</b> at ' + signed(mvs[0].wow_pct) : '';
       const sh  = best.share_pct != null ? ' (' + best.share_pct.toFixed(0) + '% of the chain)' : '';
       const cmp = j.has_prev ? ' ' + upN + ' grew and ' + dnN + ' declined vs ' + compW + mv + '.' : '';
-      ex.push({c:'#7c3aed', lead:'Branches.', body:'Of ' + brs.length + ' branch' + (brs.length > 1 ? 'es' : '') + ', <b>' + best.branch + '</b> led with ' +
-              baht(best.revenue) + sh + ', while <b>' + worst.branch + '</b> trailed at ' + baht(worst.revenue) + '.' + cmp});
+      ex.push({c:'#7c3aed', lead:'Branches.', body:'Of ' + brs.length + ' branch' + (brs.length > 1 ? 'es' : '') + ', <b>' + esc(best.branch) +'</b> led with ' +
+              baht(best.revenue) + sh + ', while <b>' + esc(worst.branch) +'</b> trailed at ' + baht(worst.revenue) + '.' + cmp});
     }
   }
 
@@ -8606,15 +8607,15 @@ function renderMgtReport(j, jM, jF) {
   const mtop = (M.top || [])[0], mris = (M.risers || [])[0], msav = (M.savers || [])[0];
   if (isTH) {
     const mPrev = M.total_cph_prev != null ? ' (เดิม ฿' + M.total_cph_prev.toFixed(2) + ')' : '';
-    const mTopT = mtop ? ' <b>' + mtop.menu + '</b> มีต้นทุนต่อหัวสูงสุด (฿' + (mtop.cost_per_head || 0).toFixed(2) + '/หัว)' : '';
-    const mRisT = mris ? ' <b>' + mris.menu + '</b> เพิ่มขึ้นมากสุด (+฿' + Math.abs(mris.delta).toFixed(2) + '/หัว) — จุดเฝ้าระวังอัตรากำไร' : '';
-    const mSavT = msav ? ' <b>' + msav.menu + '</b> ลดลงมากสุด' : '';
+    const mTopT = mtop ? ' <b>' + esc(mtop.menu) +'</b> มีต้นทุนต่อหัวสูงสุด (฿' + (mtop.cost_per_head || 0).toFixed(2) + '/หัว)' : '';
+    const mRisT = mris ? ' <b>' + esc(mris.menu) +'</b> เพิ่มขึ้นมากสุด (+฿' + Math.abs(mris.delta).toFixed(2) + '/หัว) — จุดเฝ้าระวังอัตรากำไร' : '';
+    const mSavT = msav ? ' <b>' + esc(msav.menu) +'</b> ลดลงมากสุด' : '';
     ex.push({c:'#ca8a04', lead:'ต้นทุนเมนูต่อหัว', body:'ต้นทุนอาหารต่อหัวเฉลี่ย <b>฿' + (M.total_cph != null ? M.total_cph.toFixed(2) : '—') + '</b>' + mPrev + mTopT + mRisT + mSavT});
   } else {
     const mPrev = M.total_cph_prev != null ? ' (was ฿' + M.total_cph_prev.toFixed(2) + ')' : '';
-    const mTopT = mtop ? ' <b>' + mtop.menu + '</b> carries the most cost per guest (฿' + (mtop.cost_per_head || 0).toFixed(2) + '/head).' : '';
-    const mRisT = mris ? ' <b>' + mris.menu + '</b> climbed the most (+฿' + Math.abs(mris.delta).toFixed(2) + '/head) — a margin watch-point.' : '';
-    const mSavT = msav ? ' <b>' + msav.menu + '</b> eased the most.' : '';
+    const mTopT = mtop ? ' <b>' + esc(mtop.menu) +'</b> carries the most cost per guest (฿' + (mtop.cost_per_head || 0).toFixed(2) + '/head).' : '';
+    const mRisT = mris ? ' <b>' + esc(mris.menu) +'</b> climbed the most (+฿' + Math.abs(mris.delta).toFixed(2) + '/head) — a margin watch-point.' : '';
+    const mSavT = msav ? ' <b>' + esc(msav.menu) +'</b> eased the most.' : '';
     ex.push({c:'#ca8a04', lead:'Menu cost per head.', body:'Food cost per guest averaged <b>฿' + (M.total_cph != null ? M.total_cph.toFixed(2) : '—') + '</b>' + mPrev + '.' + mTopT + mRisT + mSavT});
   }
 
@@ -8665,7 +8666,7 @@ function renderMgtReport(j, jM, jF) {
     const tot = MB.reduce((a, b) => ({ disc: a.disc + (b.disc||0), bills: a.bills + (b.bills||0), sales: a.sales + (b.sales||0) }), { disc:0, bills:0, sales:0 });
     const totPct = tot.sales ? tot.disc / tot.sales * 100 : null;
     const rows = MB.map(b => `<tr class="border-b border-slate-50">
-        <td class="py-1.5 pr-3">${b.branch}</td>
+        <td class="py-1.5 pr-3">${esc(b.branch)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums font-semibold">${baht(b.disc)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums font-bold" style="color:${pctCol(b.pct)}">${pctTxt(b.pct)}</td>
         <td class="py-1.5 pr-3 text-right tabular-nums text-slate-400">${num(b.sales)}</td>
