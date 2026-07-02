@@ -1287,9 +1287,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <!-- ═══ GROUP 7: 📄 รายงาน (exportable management summaries) ═══ -->
   <div class="nav-section">📄 รายงาน</div>
-  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="รายงาน · Exportable summary">
+  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="Monthly Report (รายงานประจำเดือน) · Exportable summary">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span class="nav-label">📄 รายงาน</span>
+    <span class="nav-label">📄 Monthly Report</span>
   </div>
   <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
@@ -4736,7 +4736,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
-        <h1 class="text-3xl font-bold leading-tight">Sales &amp; Cost Analysis Report</h1>
+        <h1 class="text-3xl font-bold leading-tight">Monthly Report <span class="text-lg font-medium opacity-80">· รายงานประจำเดือน</span></h1>
         <p id="rptPeriod" class="text-sm opacity-90 mt-2">—</p>
         <p id="rptBranch" class="text-sm opacity-90">—</p>
         <!-- Scope: overview (all) / master only / franchise only. Report-local —
@@ -4912,6 +4912,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ลักษณะส่วนลดรายสาขา (Discount nature) · เทียบเดือนก่อน</h3>
       <p class="text-xs text-slate-400 mb-2">แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p>
       <div id="rptDiscountComposition" class="overflow-x-auto text-sm"></div>
+
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">🏷️ Tier ราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
+      <p class="text-xs text-slate-400 mb-2" id="rptTierNote">คนทาน สัดส่วน และต้นทุน/หัว แยกตามราคาบุฟเฟ่ต์บนบิล (ไม่รวม VAT) — เดือนที่รายงานเทียบช่วงก่อนหน้าความยาวเท่ากัน</p>
+      <div id="rptTierBlock" class="overflow-x-auto text-sm"></div>
     </div>
 
     <!-- §10 Forecasts & Action Items -->
@@ -5752,7 +5756,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">📑 Analysis Report — รายเดือน</p>
+        <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
         เลิกใช้ยอดสะสมที่ทำให้เข้าใจผิด → ทุก section นำด้วย<b>เดือนล่าสุด + MoM/YoY + YTD</b>. §8 เลือก<b>รายสาขา</b>ได้ + แสดง <b>Top 60</b> เมนู + %สะสม + ยอดรวม + MoM Δ จริง. §3 มี<b>โปรไฟล์รายสาขา</b> (เด่น/ผิดปกติเทียบเครือ). §9 มี<b>ลักษณะส่วนลดรายสาขา</b>เทียบเดือนก่อน.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
@@ -5853,7 +5857,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 รายงาน</b> (export pack) · <b>📖 คู่มือ</b> (หน้านี้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 Monthly Report</b> (export pack รายเดือน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
@@ -8060,6 +8064,11 @@ const MGT_I18N = {
     s4pre:'4. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4post:')',
     s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
     s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
+    s11:'11. Buffet Price Tiers — Guests & Cost/Head',
+    tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
+    tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
+    tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
+    tierNote:'Tier = adult buffet menu price on the bill (ex-VAT) · promo = non-standard price (discount/promotion) · guests count buffet bills only, so the total can sit slightly under headline covers · Cost/Head = BoM food cost',
     dow:{Mon:'Mon',Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'},
     numLocale:'en-US',
   },
@@ -8121,6 +8130,11 @@ const MGT_I18N = {
     s4pre:'4. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4post:')',
     s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
+    s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
+    tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
+    tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
+    tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
+    tierNote:'Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · โปรฯ = ราคานอกมาตรฐาน (ส่วนลด/โปรโมชัน) · นับเฉพาะบิลบุฟเฟ่ต์ ยอดรวมจึงต่ำกว่าจำนวนหัวรวมเล็กน้อย · ต้นทุน/หัว = ต้นทุนอาหารอิงสูตร BoM',
     dow:{Mon:'จ.',Tue:'อ.',Wed:'พ.',Thu:'พฤ.',Fri:'ศ.',Sat:'ส.',Sun:'อา.'},
     numLocale:'en-US',
   },
@@ -8834,6 +8848,35 @@ function renderMgtReport(j, jM, jF) {
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table></div>`;
   })();
 
+  // §11 — Buffet price tiers (guests, share & cost/head per adult buffet price).
+  // Hidden when the tier fact tables don't cover this window (j.tier == null).
+  const tierHtml = (() => {
+    const TD = j.tier;
+    if (!TD || !(TD.rows || []).length) return '';
+    const dPrev = (cur, prev) => {
+      if (cur == null || prev == null) return '';
+      const d = cur - prev;
+      return `<div class="text-[8.5px] font-normal leading-none mt-0.5" style="color:${d > 0 ? '#dc2626' : d < 0 ? '#059669' : '#64748b'}">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
+    };
+    const rows = TD.rows.map(r => `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-3 font-semibold text-slate-700">${esc(r.label)}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${num(r.pax)}${r.pax_prev != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(r.pax, r.pax_prev)}</div>` : ''}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.share != null ? r.share.toFixed(1) + '%' : '—'}${r.share_prev != null ? `<div class="text-[8.5px] text-slate-400 leading-none mt-0.5">${T.was} ${r.share_prev.toFixed(1)}%</div>` : ''}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.rev_head != null ? baht(r.rev_head) : '—'}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.cogs_head != null ? baht(r.cogs_head) : '—'}${dPrev(r.cogs_head, r.cogs_head_prev)}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums font-semibold">${r.gp_head != null ? baht(r.gp_head) : '—'}</td>
+      <td class="py-1.5 pl-2 text-right tabular-nums">${r.food_pct != null ? r.food_pct.toFixed(1) + '%' : '—'}</td></tr>`).join('');
+    const mix = (TD.mix_effect != null && Math.abs(TD.mix_effect) >= 0.5)
+      ? `<p class="text-[11px] mt-2 font-medium" style="color:${TD.mix_effect < 0 ? '#dc2626' : '#059669'}">${TD.mix_effect < 0 ? T.tierMixDown : T.tierMixUp}${TD.mix_effect >= 0 ? '+' : ''}${TD.mix_effect.toFixed(2)} ${isTH ? 'บาท/หัว' : 'THB/head'} <span class="text-slate-400 font-normal">${compShort}</span></p>` : '';
+    return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
+      <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
+        <th class="text-left py-1.5 pr-3">${T.tierCol}</th><th class="text-right py-1.5 px-2">${T.tierGuests}</th>
+        <th class="text-right py-1.5 px-2">${T.tierShare}</th><th class="text-right py-1.5 px-2">${T.tierRevHead}</th>
+        <th class="text-right py-1.5 px-2">${T.tierCostHead}</th><th class="text-right py-1.5 px-2">${T.tierGpHead}</th>
+        <th class="text-right py-1.5 pl-2">${T.tierFood}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${mix}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>`;
+  })();
+
   const body = document.getElementById('mgtRptBody');
   if (!body) return;
   const footMonth = (j.pace && j.pace.month) || (isTH ? 'เดือนนั้น' : 'the period month');
@@ -8852,6 +8895,7 @@ function renderMgtReport(j, jM, jF) {
     + sec(T.s8, peakWithSplit, '#0284c7')
     + (tableHtml ? sec(T.s9, tableWithSplit, '#9333ea') : '')
     + (payHtml ? sec(T.s10 + _payScope, payHtml, '#0d9488') : '')
+    + (tierHtml ? sec(T.s11, tierHtml, '#b45309') : '')
     + footnote;
 
   // Trend chart(s). Split → 3 separate bar charts (Total/Master/Franchise), each with an
@@ -11638,6 +11682,53 @@ async function renderReportCost(branch) {
   }
 }
 
+// §9 Buffet price-tier block — reuses /api/reports/price-tier for the report's
+// headline month (A = that month, B = auto previous same-length window). Hidden
+// with a note when the tier fact tables don't cover the month.
+async function renderReportTier(month) {
+  const block = document.getElementById('rptTierBlock');
+  const note = document.getElementById('rptTierNote');
+  if (!block) return;
+  if (!month) { block.innerHTML = '<p class="text-xs text-slate-400">ไม่มีเดือนข้อมูล</p>'; return; }
+  block.innerHTML = '<p class="text-xs text-slate-400 py-2">กำลังโหลด…</p>';
+  const [y, m] = month.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const p = new URLSearchParams({ date_from: `${month}-01`, date_to: `${month}-${String(lastDay).padStart(2, '0')}`,
+                                  scope: reportScope || 'all' });
+  let d;
+  try { d = await fetch(`${API}/api/reports/price-tier?${p}`).then(r => r.json()); }
+  catch (e) { block.innerHTML = '<p class="text-xs text-slate-400">โหลดข้อมูล Tier ไม่สำเร็จ</p>'; return; }
+  if (!d.ready || d.error || !(d.tiers || []).length) {
+    block.innerHTML = `<p class="text-xs text-slate-400">${esc(d.error || d.hint || 'ไม่มีข้อมูล Tier สำหรับเดือนนี้')}</p>`;
+    return;
+  }
+  if (note) note.textContent =
+    `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
+  const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
+  const paxD = v => v == null ? '—' : `<span style="color:${v >= 0 ? '#059669' : '#dc2626'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+  const rows = d.tiers.map(x => `<tr class="border-t border-slate-100">
+    <td class="py-2 pr-4 font-semibold">${esc(x.label)}</td>
+    <td class="py-2 pr-4 text-right">${fmtN(x.a.pax)}</td>
+    <td class="py-2 pr-4 text-right">${paxD(x.d_pax_pct)}</td>
+    <td class="py-2 pr-4 text-right">${x.a.share ?? '—'}%<span class="text-[10px] text-slate-400"> (${x.d_share_pp != null ? (x.d_share_pp > 0 ? '+' : '') + x.d_share_pp : '—'}pp)</span></td>
+    <td class="py-2 pr-4 text-right">${x.a.rev_head != null ? '฿' + fmtN(x.a.rev_head) : '—'}</td>
+    <td class="py-2 pr-4 text-right">${x.a.cogs_head != null ? '฿' + fmtN(x.a.cogs_head) : '—'}<span class="text-[10px]"> (${sgn(x.d_cogs_head)})</span></td>
+    <td class="py-2 pr-4 text-right font-semibold">${x.a.gp_head != null ? '฿' + fmtN(x.a.gp_head) : '—'}</td>
+    <td class="py-2 text-right">${x.a.food_pct ?? '—'}%</td></tr>`).join('');
+  const mix = (d.mix_effect != null && Math.abs(d.mix_effect) >= 1)
+    ? `<p class="text-xs mt-2 font-medium" style="color:${d.mix_effect < 0 ? '#dc2626' : '#059669'}">${d.mix_effect < 0 ? 'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix กดรายได้/หัวลง ฿' + Math.abs(d.mix_effect).toFixed(2) : 'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix เพิ่มรายได้/หัว ฿' + d.mix_effect.toFixed(2)}</p>` : '';
+  const bullets = (d.insights || []).slice(0, 4).map(t => `<li>💡 ${esc(t)}</li>`).join('');
+  block.innerHTML = `<table class="text-sm text-slate-700 w-full">
+      <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+        <th class="py-2 pr-4">Tier</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
+        <th class="py-2 pr-4 text-right">Δ คนทาน</th><th class="py-2 pr-4 text-right">สัดส่วน (Δpp)</th>
+        <th class="py-2 pr-4 text-right">รายได้/หัว</th><th class="py-2 pr-4 text-right">ต้นทุน/หัว (Δ)</th>
+        <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
+    <p class="text-[11px] text-slate-400 mt-2">ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
+}
+
 // Run async thunks with bounded concurrency, preserving input order. Used by the
 // Analysis Report so it doesn't fire all ~16 queries at once (that put too many
 // heavy queries on the small host simultaneously and OOM-killed it). Rejects if
@@ -12404,6 +12495,7 @@ async function loadReport() {
     csel.value = want;
   }
   await renderReportCost(getBranch() || '');
+  renderReportTier(_rptLastMonth);   // §9 tier block — async, non-blocking
 
   // ── §9 Pricing & Discounts
   const discOverall = (discounts && discounts.overall) ? discounts.overall : {};

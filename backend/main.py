@@ -13163,6 +13163,71 @@ def report_management(
             "top": cost_top, "risers": cost_up, "savers": cost_down,
         }
 
+        # ---- buffet price-tier split (tier-dimensioned menu_fact_*; optional) ----
+        # Same current-vs-comparison windows as the headline. None (section hidden)
+        # when the fact tables are missing/old schema or the window predates their
+        # coverage. pax here counts BUFFET bills only (menu_fact universe), so the
+        # total can sit slightly under the headline covers.
+        tier_out = None
+        try:
+            if con.execute("SELECT 1 FROM pragma_table_info('menu_fact_total') "
+                           "WHERE name='tier'").fetchone():
+                t_bids = [r[0] for r in con.execute(
+                    f"SELECT b.branch_id FROM branches b WHERE {sw}", sp)]
+                t_ph = ",".join("?" * len(t_bids))
+
+                def tier_sum(s, e):
+                    out = {}
+                    for t, nb2, px, cg, rv in con.execute(
+                            f"""SELECT tier, SUM(bills), SUM(pax), SUM(cogs), SUM(rev)
+                                FROM menu_fact_total
+                                WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                                GROUP BY tier""",
+                            [s.isoformat(), e.isoformat()] + t_bids):
+                        out[str(t or "promo")] = {"bills": nb2 or 0, "pax": px or 0.0,
+                                                  "cogs": cg or 0.0, "rev": rv or 0.0}
+                    return out
+                TC = tier_sum(cs, ce)
+                TP = tier_sum(ps, pe) if has_prev else {}
+                pax_c = sum(v["pax"] for v in TC.values())
+                pax_p = sum(v["pax"] for v in TP.values())
+                if pax_c > 0:
+                    TLBL = ({"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"} if th else
+                            {"promo": "Promo/other price", "child": "Child-only/other"})
+                    rows_t = []
+                    for t in _PT_ORDER:
+                        vc0 = TC.get(t); vp = TP.get(t)
+                        if not vc0 and not vp:
+                            continue
+                        vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
+                        pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
+                        rows_t.append({
+                            "tier": t, "label": TLBL.get(t, f"฿{int(t):,}" if t.isdigit() else t),
+                            "pax": round(pxc), "pax_prev": round(pxp) if has_prev else None,
+                            "d_pax_pct": pct(pxc, pxp) if (has_prev and pxp) else None,
+                            "share": round(pxc / pax_c * 100, 1),
+                            "share_prev": round(pxp / pax_p * 100, 1) if pax_p else None,
+                            "rev_head": round(vc["rev"] / pxc, 2) if pxc else None,
+                            "cogs_head": round(vc["cogs"] / pxc, 2) if pxc else None,
+                            "cogs_head_prev": round(vp["cogs"] / pxp, 2) if (vp and pxp) else None,
+                            "gp_head": round((vc["rev"] - vc["cogs"]) / pxc, 2) if pxc else None,
+                            "food_pct": round(vc["cogs"] / vc["rev"] * 100, 1) if vc["rev"] else None,
+                        })
+                    # mix effect on rev/head: current tier mix priced at the comparison
+                    # period's per-tier rev/head, vs its blended rev/head — isolates
+                    # "customers moved tier" from "tiers themselves changed".
+                    mix_eff = None
+                    rev_p = sum(v["rev"] for v in TP.values())
+                    if pax_c and pax_p and rev_p:
+                        at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
+                                      for t in TC if TP.get(t, {}).get("pax", 0) > 0)
+                        mix_eff = round(at_prev - rev_p / pax_p, 2)
+                    tier_out = {"rows": rows_t, "pax": round(pax_c),
+                                "pax_prev": round(pax_p) if has_prev else None,
+                                "mix_effect": mix_eff}
+        except Exception:
+            tier_out = None
+
         # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
         gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
         gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
@@ -13562,6 +13627,7 @@ def report_management(
         "peak": peak,
         "table": table,
         "payment": payment,
+        "tier": tier_out,
         "trend": trend,
         "actions": actions,
     }
@@ -13743,6 +13809,28 @@ def report_management_xlsx(
         header(ws, ["Branch", "Tables", "Covers", "Covers/Table", "Avg turn (min)"])
         for b in TB.get("by_branch", []):
             ws.append([b["branch"], b["tables"], b["covers"], b["covers_per_table"], b["avg_turn_min"]])
+        autofit(ws)
+
+    # Sheet — Buffet Price Tiers (only when the tier fact tables cover the window)
+    TIER = j.get("tier") or {}
+    if TIER.get("rows"):
+        ws = wb.create_sheet("Price Tiers")
+        ws.append([f"Buffet guests by price tier: {TIER.get('pax')}"
+                   + (f"  (prev {TIER.get('pax_prev')})" if TIER.get("pax_prev") is not None else "")])
+        ws["A1"].font = BOLD
+        if TIER.get("mix_effect") is not None:
+            ws.append([f"Tier-mix effect on spend/head vs comparison period: {TIER['mix_effect']:+.2f} THB"])
+        ws.append([])
+        header(ws, ["Tier", "Guests", "Guests prev", "vs prev %", "Share %",
+                    "Rev/Head", "Cost/Head", "Cost/Head prev", "GP/Head", "Food %"])
+        for r in TIER["rows"]:
+            ws.append([r["label"], r["pax"], r.get("pax_prev"), pdelta(r.get("d_pax_pct")),
+                       pdelta(r.get("share")), r.get("rev_head"), r.get("cogs_head"),
+                       r.get("cogs_head_prev"), r.get("gp_head"), pdelta(r.get("food_pct"))])
+            rw = ws.max_row
+            for c in (2, 3): ws.cell(rw, c).number_format = NUM
+            for c in (6, 7, 8, 9): ws.cell(rw, c).number_format = NUM2
+            for c in (4, 5, 10): ws.cell(rw, c).number_format = PCT
         autofit(ws)
 
     # Sheet — Action Items
