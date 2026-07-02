@@ -41,6 +41,9 @@ jobs:
           python-version: "3.12"
       - name: Install deps
         run: |
+          # FreeSerif (Thai-capable TTF) — the parser tests synthesize Thai
+          # bank-statement PDFs with it and skip when it's absent.
+          sudo apt-get update -q && sudo apt-get install -y -q fonts-freefont-ttf
           python -m pip install --upgrade pip
           pip install -r recon/requirements-dev.txt
       - name: Run recon tests (with coverage)
