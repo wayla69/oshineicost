@@ -44,6 +44,11 @@ TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
               'BUFFETCHILD', 'BUFFETCHILDFREE', 'B01', 'B02', 'B07', 'B11')
 HC_COST = 30.0   # unit BoM cost >= this = "เมนูต้นทุนสูง" (high-cost consumption metric)
 VAT = 1.07
+# Buffet price tiers (adult BUFFET line ExtendedPrice = ex-VAT menu price; customers
+# pay +7%). Bills whose adult unit price is none of these (line-level discounts,
+# promo pricing) fall in 'promo'; bills with no adult cover = 'child'.
+PRICE_TIERS = (350, 590, 649, 689, 799, 999)
+TIER_TOL = 3.0   # ฿ tolerance around a canonical price
 
 # Ingredient groups: slug -> (thai label, SQL LIKE patterns on skus.description,
 # extra exact sku_codes). Only (B)-prefixed buffet menus + whitelisted codes join
@@ -96,14 +101,29 @@ def main():
     args = ap.parse_args()
 
     sq = sqlite3.connect(args.db)
+    # schema v2 (+tier): if an old (no-tier) table exists, drop and force a full
+    # rebuild — the daily 40-day window would otherwise leave pre-window days
+    # missing from the new schema.
+    old = [r[1] for r in sq.execute(
+        "SELECT * FROM pragma_table_info('menu_fact_day')")]
+    if old and "tier" not in old:
+        print("      schema v1→v2 (+tier): dropping menu_fact tables → full rebuild")
+        sq.executescript("DROP TABLE IF EXISTS menu_fact_day; DROP TABLE IF EXISTS menu_fact_total;")
+        old = []
+    # empty table (fresh DB, or an interrupted migration run) → the default 40-day
+    # window would silently leave history missing; widen to the analysis epoch.
+    if (not old or not sq.execute("SELECT 1 FROM menu_fact_total LIMIT 1").fetchone()) \
+            and args.d_from > "2026-01-01":
+        args.d_from = "2026-01-01"
+        print(f"      empty/new fact table → widened window to {args.d_from} → {args.d_to}")
     sq.executescript("""
       CREATE TABLE IF NOT EXISTS menu_fact_total(
-        branch_id INT, day TEXT, bills INT, pax REAL, cogs REAL, rev REAL, hc REAL,
-        PRIMARY KEY(branch_id, day));
+        branch_id INT, day TEXT, tier TEXT, bills INT, pax REAL, cogs REAL, rev REAL, hc REAL,
+        PRIMARY KEY(branch_id, day, tier));
       CREATE TABLE IF NOT EXISTS menu_fact_day(
-        branch_id INT, day TEXT, ent TEXT, bills INT, pax REAL, qty REAL,
+        branch_id INT, day TEXT, tier TEXT, ent TEXT, bills INT, pax REAL, qty REAL,
         ent_cogs REAL, ent_hc REAL, cogs REAL, rev REAL, hc REAL,
-        PRIMARY KEY(branch_id, day, ent));
+        PRIMARY KEY(branch_id, day, tier, ent));
       CREATE INDEX IF NOT EXISTS ix_mfd_ent ON menu_fact_day(ent, day);
       CREATE TABLE IF NOT EXISTS menu_fact_meta(
         ent TEXT PRIMARY KEY, label TEXT, kind TEXT, unit_cost REAL, members TEXT);
@@ -166,11 +186,18 @@ def main():
     def inlist(ids): return "(" + ",".join(str(int(i)) for i in ids) + ")"
     cost_sql = ",".join(f"({i},{rc:.6f})" for i, rc in cost_vals)
     grp_sql = ",".join(f"({i},'{slug}')" for i, slug in grp_vals)
+    adult_ids = code2iids.get("BUFFET", [])
+    tier_case = ("CASE WHEN ISNULL(aq, 0) <= 0 THEN 'child' "
+                 + " ".join(f"WHEN ABS(aext / aq - {p}) <= {TIER_TOL} THEN '{p}'"
+                            for p in PRICE_TIERS)
+                 + " ELSE 'promo' END")
 
     BILL_CTE = f"""
-WITH bill AS (
+WITH bill0 AS (
   SELECT s.SaleId sid, s.BranchId bid, CONVERT(char(10), s.SaleDate, 126) d,
     ISNULL(s.NumOfCust, 0) pax, CAST(ISNULL(s.Total, 0) AS float) / {VAT} net,
+    SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.Qty AS float) ELSE 0 END) aq,
+    SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) aext,
     SUM(CAST(si.Qty AS float) * ISNULL(c.cost, 0)) cogs,
     SUM(CASE WHEN c.cost >= {HC_COST} THEN CAST(si.Qty AS float) * c.cost ELSE 0 END) hc
   FROM Sale s
@@ -181,9 +208,10 @@ WITH bill AS (
            ISNULL(s.NumOfCust, 0), CAST(ISNULL(s.Total, 0) AS float)
   HAVING SUM(CASE WHEN si.ItemId IN {inlist(tier_ids)} THEN 1 ELSE 0 END) > 0
      AND ISNULL(s.NumOfCust, 0) BETWEEN 1 AND 40
-)"""
+),
+bill AS (SELECT sid, bid, d, pax, net, cogs, hc, {tier_case} tier FROM bill0)"""
 
-    Q_TOTAL = BILL_CTE + "SELECT bid, d, COUNT(*), SUM(pax), SUM(cogs), SUM(net), SUM(hc) FROM bill GROUP BY bid, d"
+    Q_TOTAL = BILL_CTE + "SELECT bid, d, tier, COUNT(*), SUM(pax), SUM(cogs), SUM(net), SUM(hc) FROM bill GROUP BY bid, d, tier"
     Q_ITEM = BILL_CTE + f""",
 x AS (SELECT si2.SaleId sid, si2.BranchId bid, si2.ItemId iid,
         SUM(CAST(si2.Qty AS float)) q,
@@ -194,10 +222,10 @@ x AS (SELECT si2.SaleId sid, si2.BranchId bid, si2.ItemId iid,
       LEFT JOIN (VALUES {cost_sql}) c2(ItemId, cost) ON c2.ItemId = si2.ItemId
       WHERE {SALE_FILTER} AND ISNULL(si2.Active, 1) = 1 AND s.SaleDate >= %s AND s.SaleDate < %s
       GROUP BY si2.SaleId, si2.BranchId, si2.ItemId)
-SELECT x.iid, b.bid, b.d, COUNT(*), SUM(b.pax), SUM(x.q), SUM(x.qc), SUM(x.qh),
+SELECT x.iid, b.bid, b.d, b.tier, COUNT(*), SUM(b.pax), SUM(x.q), SUM(x.qc), SUM(x.qh),
        SUM(b.cogs), SUM(b.net), SUM(b.hc)
 FROM bill b JOIN x ON x.sid = b.sid AND x.bid = b.bid
-GROUP BY x.iid, b.bid, b.d"""
+GROUP BY x.iid, b.bid, b.d, b.tier"""
     Q_GROUP = BILL_CTE + f""",
 x AS (SELECT si2.SaleId sid, si2.BranchId bid, g.grp,
         SUM(CAST(si2.Qty AS float)) q,
@@ -209,10 +237,10 @@ x AS (SELECT si2.SaleId sid, si2.BranchId bid, g.grp,
       LEFT JOIN (VALUES {cost_sql}) c2(ItemId, cost) ON c2.ItemId = si2.ItemId
       WHERE {SALE_FILTER} AND ISNULL(si2.Active, 1) = 1 AND s.SaleDate >= %s AND s.SaleDate < %s
       GROUP BY si2.SaleId, si2.BranchId, g.grp)
-SELECT x.grp, b.bid, b.d, COUNT(*), SUM(b.pax), SUM(x.q), SUM(x.qc), SUM(x.qh),
+SELECT x.grp, b.bid, b.d, b.tier, COUNT(*), SUM(b.pax), SUM(x.q), SUM(x.qc), SUM(x.qh),
        SUM(b.cogs), SUM(b.net), SUM(b.hc)
 FROM bill b JOIN x ON x.sid = b.sid AND x.bid = b.bid
-GROUP BY x.grp, b.bid, b.d"""
+GROUP BY x.grp, b.bid, b.d, b.tier"""
 
     def run_retry(q, params, tag):
         nonlocal mc
@@ -237,25 +265,25 @@ GROUP BY x.grp, b.bid, b.d"""
         for r in run_retry(Q_TOTAL, (lo, hi), "totals"):
             b = bid_map.get(int(r[0]))
             if b:
-                tot_rows.append((b, r[1], int(r[2]), float(r[3] or 0), float(r[4] or 0), float(r[5] or 0), float(r[6] or 0)))
+                tot_rows.append((b, r[1], r[2], int(r[3]), float(r[4] or 0), float(r[5] or 0), float(r[6] or 0), float(r[7] or 0)))
         for r in run_retry(Q_ITEM, (lo, hi) * 2, "per-item"):
             b = bid_map.get(int(r[1]))
             code = iid2code.get(int(r[0]))
             sid = code2sid.get(code) if code else None
             if b and sid:
-                ent_rows.append((b, r[2], f"s:{sid}", int(r[3]), float(r[4] or 0), float(r[5] or 0),
-                                 float(r[6] or 0), float(r[7] or 0), float(r[8] or 0), float(r[9] or 0), float(r[10] or 0)))
+                ent_rows.append((b, r[2], r[3], f"s:{sid}", int(r[4]), float(r[5] or 0), float(r[6] or 0),
+                                 float(r[7] or 0), float(r[8] or 0), float(r[9] or 0), float(r[10] or 0), float(r[11] or 0)))
         for r in run_retry(Q_GROUP, (lo, hi) * 2, "groups"):
             b = bid_map.get(int(r[1]))
             if b:
-                ent_rows.append((b, r[2], f"g:{r[0]}", int(r[3]), float(r[4] or 0), float(r[5] or 0),
-                                 float(r[6] or 0), float(r[7] or 0), float(r[8] or 0), float(r[9] or 0), float(r[10] or 0)))
+                ent_rows.append((b, r[2], r[3], f"g:{r[0]}", int(r[4]), float(r[5] or 0), float(r[6] or 0),
+                                 float(r[7] or 0), float(r[8] or 0), float(r[9] or 0), float(r[10] or 0), float(r[11] or 0)))
 
     print(f"[3/4] write SQLite: {len(tot_rows):,} total rows · {len(ent_rows):,} entity rows")
     sq.execute("DELETE FROM menu_fact_total WHERE day >= ? AND day < ?", (args.d_from, args.d_to))
     sq.execute("DELETE FROM menu_fact_day WHERE day >= ? AND day < ?", (args.d_from, args.d_to))
-    sq.executemany("INSERT OR REPLACE INTO menu_fact_total VALUES (?,?,?,?,?,?,?)", tot_rows)
-    sq.executemany("INSERT OR REPLACE INTO menu_fact_day VALUES (?,?,?,?,?,?,?,?,?,?,?)", ent_rows)
+    sq.executemany("INSERT OR REPLACE INTO menu_fact_total VALUES (?,?,?,?,?,?,?,?)", tot_rows)
+    sq.executemany("INSERT OR REPLACE INTO menu_fact_day VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", ent_rows)
 
     print("[4/4] refresh meta")
     sq.execute("DELETE FROM menu_fact_meta")

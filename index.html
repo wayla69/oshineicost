@@ -1802,6 +1802,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <option value="master">Master (เจ้าของเอง)</option>
       <option value="franchise">แฟรนไชส์</option>
     </select>
+    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ (ราคาหน้าเมนู ไม่รวม VAT)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุก Tier ราคา</option>
+      <option value="350">Tier 350</option>
+      <option value="590">Tier 590</option>
+      <option value="649">Tier 649</option>
+      <option value="689">Tier 689</option>
+      <option value="799">Tier 799</option>
+      <option value="999">Tier 999</option>
+      <option value="promo">ราคาโปร/ส่วนลด</option>
+    </select>
     <span id="miCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
   </div>
   <p class="text-[11px] mb-3" style="color:var(--text-muted)">เทียบบิลบุฟเฟ่ต์ที่<b>มี</b> vs <b>ไม่มี</b> วัตถุดิบ/เมนูที่เลือก (ต่อหัว · คุมความต่างสาขา×วัน) จากข้อมูลบิลจริง POS/MSSQL · "เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · ต้นทุน BoM ตัดแพ็กเกจบุฟเฟ่ต์กันนับซ้ำ · อัปเดตข้อมูลด้วย <code>python backend/build_menu_fact.py</code> หลัง sync</p>
@@ -18931,10 +18941,11 @@ async function loadMenuImpact(force) {
   if (!ent) { body.innerHTML = '<p class="text-center text-slate-400 py-10">เลือกวัตถุดิบ/เมนูก่อน</p>'; return; }
   const df = document.getElementById('miFrom').value, dt2 = document.getElementById('miTo').value;
   const scope = document.getElementById('miScope').value;
-  const key = `${ent}|${df}|${dt2}|${scope}`;
+  const tier = document.getElementById('miTier').value;
+  const key = `${ent}|${df}|${dt2}|${scope}|${tier}`;
   if (!force && _tabLastKey.menuimpact === key) return;
   body.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังวิเคราะห์…</p>';
-  const p = new URLSearchParams({ ent, scope });
+  const p = new URLSearchParams({ ent, scope, tier });
   if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
   let d;
   try { d = await fetch(`${API}/api/reports/menu-impact?${p}`).then(r => r.json()); }
@@ -18972,6 +18983,25 @@ async function loadMenuImpact(force) {
     return t;
   })();
   const trm = d.trend_month || [];
+  const TIER_TH2 = { '350':'350', '590':'590', '649':'649', '689':'689', '799':'799', '999':'999', 'promo':'โปร/ส่วนลด', 'child':'เด็กล้วน' };
+  const tierRows = (d.tiers || []).map(t => `<tr class="border-t border-slate-100">
+    <td class="py-1 pr-2 font-semibold">Tier ${TIER_TH2[t.tier] || t.tier}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${n0(t.bills)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${(t.pen * 100).toFixed(1)}%</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${t.qty_head_takers ?? '-'}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${b1(t.ecogs_head_takers)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${(t.d_other_cogs || 0) < 0 ? GRN : RED}">${t.d_other_cogs == null ? '-' : sg(t.d_other_cogs)}</td>
+    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(t.d_gp || 0) >= 0 ? GRN : RED}">${t.d_gp == null ? '-' : sg(t.d_gp)}</td></tr>`).join('');
+  const tierCard = (d.tiers || []).length < 2 ? '' : `
+    <div class="card p-5 overflow-x-auto mb-5">
+      <h2 class="section-title mb-1">เจาะตาม Tier ราคาบุฟเฟ่ต์ — ใครสั่ง/กินเยอะ และผลต่อต้นทุน-กำไร</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนู (ไม่รวม VAT — ลูกค้าจ่าย +7%) อ่านจากบรรทัดแพ็กเกจในบิลจริง · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)</p>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">บิลใน Tier</th><th class="py-1.5 pr-2 text-right">% สั่ง</th>
+        <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนตัวเอง/หัว</th>
+        <th class="py-1.5 pr-2 text-right">Δ ต้นทุนเมนูอื่น/หัว</th><th class="py-1.5 text-right">Δ GP/หัว</th></tr></thead>
+      <tbody>${tierRows}</tbody></table>
+    </div>`;
   const brRows = (d.branches || []).map(b => `<tr class="border-t border-slate-100">
     <td class="py-1 pr-2 font-semibold">${esc(b.name)}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${n0(b.bills)}</td>
@@ -19001,6 +19031,7 @@ async function loadMenuImpact(force) {
         <div style="height:280px"><canvas id="miChart"></canvas></div>
       </div>
     </div>
+    ${tierCard}
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายสาขา — ใครขาย/ใครกินเยอะ และผลต่อต้นทุนเมนูอื่น</h2>
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">

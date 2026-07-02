@@ -2766,17 +2766,27 @@ def menu_impact_entities():
                 "hc_cost": float(state.get("hc_cost") or 30), "groups": groups, "skus": skus[:400]}
 
 
+_MI_TIER_ORDER = ("350", "590", "649", "689", "799", "999", "promo", "child")
+
+
 @app.get("/api/reports/menu-impact")
 @ttl_cache
 def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<slug>"),
                 date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
-                scope: str = Query("all", description="master | franchise | all")):
-    """เลือกวัตถุดิบ/เมนู + ช่วงเวลา → เทียบบิลที่มี vs ไม่มี (ต่อหัว, คุมสาขา×วัน)."""
+                scope: str = Query("all", description="master | franchise | all"),
+                tier: str = Query("all", description="all | 350|590|649|689|799|999|promo|child")):
+    """เลือกวัตถุดิบ/เมนู + ช่วงเวลา (+Tier ราคาบุฟเฟ่ต์) → เทียบบิลที่มี vs ไม่มี
+    (ต่อหัว, คุมสาขา×วัน×tier)."""
     if scope not in _MI_SCOPE_LABEL:
         scope = "all"
     with get_db() as con:
         if not _mi_ready(con):
             return {"ready": False, "hint": "รัน python backend/build_menu_fact.py ก่อนใช้งานแท็บนี้"}
+        # tier column arrived in fact-schema v2 — degrade gracefully on a v1 DB
+        has_tier = bool(con.execute(
+            "SELECT 1 FROM pragma_table_info('menu_fact_total') WHERE name='tier'").fetchone())
+        if tier != "all" and (tier not in _MI_TIER_ORDER or not has_tier):
+            tier = "all"
         lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
         if not lo:
             return {"ready": False, "hint": "ตารางข้อมูลว่าง — รัน build_menu_fact.py"}
@@ -2788,23 +2798,32 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
             return {"ready": True, "error": f"ไม่รู้จัก entity {ent}"}
         bids = _mi_branch_ids(con, scope)
         ph = ",".join("?" * len(bids))
+        tier_col = "f.tier" if has_tier else "''"
+        tier_col_t = "tier" if has_tier else "''"
+        join_tier = "AND t.tier = f.tier" if has_tier else ""
+        tier_where_f = "AND f.tier = ?" if tier != "all" else ""
+        tier_where_t = "AND tier = ?" if tier != "all" else ""
+        tp1 = [tier] if tier != "all" else []
         f = con.execute(
-            f"""SELECT f.branch_id, f.day, f.bills, f.pax, f.qty, f.ent_cogs, f.ent_hc,
+            f"""SELECT f.branch_id, f.day, {tier_col}, f.bills, f.pax, f.qty, f.ent_cogs, f.ent_hc,
                        f.cogs, f.rev, f.hc,
                        t.bills, t.pax, t.cogs, t.rev, t.hc
                 FROM menu_fact_day f JOIN menu_fact_total t
-                  ON t.branch_id = f.branch_id AND t.day = f.day
-                WHERE f.ent = ? AND f.day BETWEEN ? AND ? AND f.branch_id IN ({ph})""",
-            [ent, date_from, date_to] + bids).fetchall()
+                  ON t.branch_id = f.branch_id AND t.day = f.day {join_tier}
+                WHERE f.ent = ? AND f.day BETWEEN ? AND ? AND f.branch_id IN ({ph}) {tier_where_f}""",
+            [ent, date_from, date_to] + bids + tp1).fetchall()
         tot = con.execute(
-            f"""SELECT branch_id, day, bills, pax, cogs, rev, hc FROM menu_fact_total
-                WHERE day BETWEEN ? AND ? AND branch_id IN ({ph})""",
-            [date_from, date_to] + bids).fetchall()
+            f"""SELECT branch_id, day, {tier_col_t}, bills, pax, cogs, rev, hc FROM menu_fact_total
+                WHERE day BETWEEN ? AND ? AND branch_id IN ({ph}) {tier_where_t}""",
+            [date_from, date_to] + bids + tp1).fetchall()
         bname = dict(con.execute("SELECT branch_id, name FROM branches").fetchall())
 
     T = {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0, "hc": 0.0}
-    for _b, _d, nb, px, cg, rv, hc in tot:
+    tot_tier = {}
+    for _b, _d, tr_, nb, px, cg, rv, hc in tot:
         T["bills"] += nb; T["pax"] += px; T["cogs"] += cg; T["rev"] += rv; T["hc"] += hc
+        tt = tot_tier.setdefault(tr_, {"bills": 0, "pax": 0.0})
+        tt["bills"] += nb; tt["pax"] += px
     if T["pax"] <= 0:
         return {"ready": True, "error": "ไม่มีข้อมูลบิลบุฟเฟ่ต์ในช่วง/ขอบเขตที่เลือก",
                 "coverage": [lo, hi]}
@@ -2814,13 +2833,16 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
     wsum = {k: 0.0 for k in ("cogs_w", "cogs_o", "oth_w", "oth_o", "hc_w", "hc_o",
                              "rev_w", "rev_o", "gp_w", "gp_o")}
     wt = 0.0
-    by_branch, by_month, by_day = {}, {}, {}
+    by_branch, by_month, by_day, by_tier = {}, {}, {}, {}
     for r in f:
-        (bid, day, nb, px, q, ec, eh, cg, rv, hc, tb, tp, tc, tr, th) = r
+        (bid, day, tr_, nb, px, q, ec, eh, cg, rv, hc, tb, tp, tc, trv, th) = r
         W["bills"] += nb; W["pax"] += px; W["qty"] += q; W["ecogs"] += ec
         bb = by_branch.setdefault(bid, {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0,
                                         "d_oth": 0.0, "w": 0.0})
         bb["bills"] += nb; bb["pax"] += px; bb["qty"] += q; bb["ecogs"] += ec
+        tb_ = by_tier.setdefault(tr_, {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0,
+                                       "d_oth": 0.0, "d_gp": 0.0, "w": 0.0})
+        tb_["bills"] += nb; tb_["pax"] += px; tb_["qty"] += q; tb_["ecogs"] += ec
         for key, dct in ((day[:7], by_month), (day, by_day)):
             m = dct.setdefault(key, {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0})
             m["bills"] += nb; m["pax"] += px; m["qty"] += q; m["ecogs"] += ec
@@ -2829,13 +2851,16 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
             continue
         w = px * opx / (px + opx)
         wt += w
-        oc, orv, ohc = tc - cg, tr - rv, th - hc
+        oc, orv, ohc = tc - cg, trv - rv, th - hc
         wsum["cogs_w"] += w * cg / px;             wsum["cogs_o"] += w * oc / opx
         wsum["oth_w"] += w * (cg - ec) / px;       wsum["oth_o"] += w * oc / opx
         wsum["hc_w"] += w * (hc - eh) / px;        wsum["hc_o"] += w * ohc / opx
         wsum["rev_w"] += w * rv / px;              wsum["rev_o"] += w * orv / opx
         wsum["gp_w"] += w * (rv - cg) / px;        wsum["gp_o"] += w * (orv - oc) / opx
         bb["d_oth"] += w * ((cg - ec) / px - oc / opx); bb["w"] += w
+        tb_["d_oth"] += w * ((cg - ec) / px - oc / opx)
+        tb_["d_gp"] += w * ((rv - cg) / px - (orv - oc) / opx)
+        tb_["w"] += w
 
     if wt <= 0:
         return {"ready": True, "error": "ข้อมูลไม่พอสำหรับเทียบมี/ไม่มี (ทุกวันมีหรือไม่มีทั้งหมด)",
@@ -2848,7 +2873,7 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
     trend_m = [{"ym": k, "pen": v["bills"], "qty": v["qty"], "ecogs": v["ecogs"]}
                for k, v in sorted(by_month.items())]
     tot_m, tot_d = {}, {}
-    for b, d, nb, px, cg, rv, hc in tot:
+    for b, d, tr_, nb, px, cg, rv, hc in tot:
         for key, dct in ((d[:7], tot_m), (d, tot_d)):
             m = dct.setdefault(key, {"bills": 0, "pax": 0.0})
             m["bills"] += nb; m["pax"] += px
@@ -2872,8 +2897,27 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
          "d_other_cogs": round(v["d_oth"] / v["w"], 2) if v["w"] > 0 else None}
         for b, v in by_branch.items()), key=lambda r: -(r["ecogs"] or 0))
     rd = lambda x, nd=2: round(x, nd)
+    # per-tier breakdown (only meaningful when looking across all tiers)
+    tiers_out = []
+    if has_tier:
+        for tr_ in _MI_TIER_ORDER:
+            v = by_tier.get(tr_)
+            tt = tot_tier.get(tr_)
+            if not v or not tt or not tt["bills"]:
+                continue
+            tiers_out.append({
+                "tier": tr_, "bills": tt["bills"], "bills_with": v["bills"],
+                "pen": rd(v["bills"] / tt["bills"], 4),
+                "qty": rd(v["qty"], 0),
+                "qty_head_takers": rd(v["qty"] / v["pax"]) if v["pax"] else None,
+                "ecogs_head_takers": rd(v["ecogs"] / v["pax"]) if v["pax"] else None,
+                "ecogs": rd(v["ecogs"], 0),
+                "d_other_cogs": rd(v["d_oth"] / v["w"]) if v["w"] > 0 else None,
+                "d_gp": rd(v["d_gp"] / v["w"]) if v["w"] > 0 else None,
+            })
     return {
-        "ready": True, "ent": ent, "label": label, "kind": kind,
+        "ready": True, "ent": ent, "label": label, "kind": kind, "has_tier": has_tier,
+        "tier": tier, "tiers": tiers_out,
         "unit_cost": rd(unit_cost or 0), "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
         "members": [m for m in (members or "").split(",") if m] if kind == "group" else None,
         "coverage": [lo, hi], "date_from": date_from, "date_to": date_to,
