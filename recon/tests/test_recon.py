@@ -917,6 +917,32 @@ def test_lineman_under_threshold_pays_next_month_first(client):
     assert "2026-07-01" not in july_credit_dates          # carried sweep de-duped
 
 
+def test_payout_reconciliation_excludes_carried_sweep(client):
+    """Regression (skim-masking): payout_reconciliation must not count a carried-over
+    payout as THIS month's remittance. A LINE MAN month swept on the 1st of next
+    month lands as a tagged credit dated in the next month; the old naive bank-total
+    added it to next month's payout, inflating the received amount so a real short
+    payment reconciled as 'matched'. The carried tagged credit must be subtracted so
+    the shortfall surfaces as a mismatch."""
+    from recon.matcher import payout_reconciliation
+    db = main._DB_PATH
+    # June residual B480 (<B500) swept on 1 July as a tagged LINEMAN_PAYOUT credit.
+    _add_lineman_net(db, "2026-06-20", 480)
+    _add_bank_line(db, "kbank", "LINEMAN_PAYOUT", 480, date="2026-07-01")
+    # July earns B620 but only B100 is actually remitted (a B520 short payment).
+    _add_lineman_net(db, "2026-07-15", 620)
+    _add_bank_line(db, "kbank", "LINEMAN_PAYOUT", 100, date="2026-07-16")
+
+    with main.get_db() as conn:
+        july = {r["category"]: r for r in payout_reconciliation(conn, 4, "2026-07")}
+    lm = july["LINEMAN"]
+    assert lm["report_net"] == 620
+    # bank_payout must be July's OWN B100, NOT B580 (100 + the carried 480 sweep).
+    assert lm["bank_payout"] == 100, f"carried sweep leaked in: {lm['bank_payout']}"
+    assert lm["status"] == "mismatch"            # the B520 shortfall is exposed,
+    assert abs(lm["variance"] + 520) < 0.01      # not masked as 'matched'
+
+
 def test_bay_point_parses_and_ties_to_bank():
     """BAY Point (Krungsri loyalty reimbursement) parses under credit_card as a
     BAYPOINT settlement, is kept OUT of the POS-credit lanes, and ties 2-way to

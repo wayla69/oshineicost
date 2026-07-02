@@ -423,6 +423,38 @@ def _bank_payout_totals(conn, branch_id, period_month):
     return out
 
 
+def _prev_payout_carried_amounts(conn, branch_id, period_month) -> dict:
+    """{cat: baht} — amount of the PREVIOUS month's matched payouts whose bank credit
+    is dated IN this month AND sits in a TAGGED payout channel (so it is what
+    _bank_payout_totals counts). Subtracting it stops last month's payout — e.g. an
+    under-B500 LINE MAN residual swept on the 1st — from being double-counted as this
+    month's payout, which could otherwise reconcile a real shortfall as 'matched'.
+    Reuses _prev_payout_consumed_ids (same carried credit ids) and keeps only the
+    tagged-channel ones, since a carry that landed as a plain TRANSFER was never in
+    _bank_payout_totals to begin with."""
+    out: dict = {}
+    try:
+        ids_by_cat = _prev_payout_consumed_ids(conn, branch_id, period_month)
+    except sqlite3.OperationalError:
+        return out
+    for cat, ids in ids_by_cat.items():
+        if not ids:
+            continue
+        ph = ",".join("?" * len(ids))
+        try:
+            row = conn.execute(
+                f"SELECT COALESCE(SUM(credit),0) FROM recon_bank_lines "
+                f"WHERE id IN ({ph}) "
+                f"AND channel IN ('GRAB_PAYOUT','LINEMAN_PAYOUT','CC_SETTLE')",
+                tuple(ids)).fetchone()
+        except sqlite3.OperationalError:
+            continue
+        amt = round(float(row[0] or 0), 2)
+        if amt > 0:
+            out[cat] = amt
+    return out
+
+
 def payout_reconciliation(conn, branch_id, period_month):
     """Tie provider NET (should-remit) to the bank payout credit. Returns rows
     [{category, report_net, bank_payout, variance, status}]. status:
@@ -431,12 +463,20 @@ def payout_reconciliation(conn, branch_id, period_month):
       awaiting_payout   — net>0 but no bank payout line yet (informational: the
                           provider settles a few days later — not yet a gap)
       ext_only          — a bank payout line with no provider report behind it."""
+    # Compare provider NET to the bank payout TOTAL (so a short payment shows up as a
+    # mismatch), but subtract any tagged payout credit that last month's matcher
+    # already claimed and that merely landed on the 1st-few of this month (e.g. the
+    # LINE MAN under-B500 sweep). Without this, that carried credit is double-counted
+    # and can hide a real shortfall as "matched".
     nets = _report_net_by_category(conn, branch_id, period_month)
     pays = _bank_payout_totals(conn, branch_id, period_month)
+    carried = _prev_payout_carried_amounts(conn, branch_id, period_month)
     rows = []
     for cat in sorted(set(nets) | set(pays)):
         net = round(nets.get(cat, 0.0), 2)
-        pay = round(pays.get(cat, 0.0), 2)
+        pay = round(pays.get(cat, 0.0) - carried.get(cat, 0.0), 2)
+        if pay < 0:
+            pay = 0.0
         if net > 0 and pay > 0:
             status = "matched" if _within_tol(pay, net) else "mismatch"
         elif net > 0:
