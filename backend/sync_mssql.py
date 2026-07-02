@@ -259,6 +259,8 @@ def main():
     ap.add_argument("--since", default="2025-01-01", help="sync sales on/after this date")
     ap.add_argument("--apply-local", action="store_true",
                     help="after reconcile, swap .incoming into the live local oshinei.db")
+    ap.add_argument("--no-menu-fact", action="store_true",
+                    help="skip the menu_fact_* refresh (🧪 วิเคราะห์วัตถุดิบ tab data)")
     args = ap.parse_args()
     windows = _month_windows(args.since)   # per-month chunking of the heavy aggregates
 
@@ -479,6 +481,25 @@ def main():
     if not ok:
         print("[6/6] ⚠ RECONCILE FAILED — .incoming built but NOT safe to push. Investigate.")
         sys.exit(3)
+
+    # ── [5b/6] refresh menu_fact_* in the .incoming (🧪 วิเคราะห์วัตถุดิบ tab) ──
+    # Rebuilds the last ~40 days (builder default) so the tab stays current on
+    # every daily sync; older days ride along via the DB file copy in step 1.
+    # NON-FATAL by design: a fact-build hiccup must never block the sales sync —
+    # the tab just shows slightly stale coverage until the next run.
+    if not args.no_menu_fact:
+        print("[5b/6] refresh menu_fact_* (build_menu_fact.py --db .incoming)")
+        try:
+            import subprocess
+            env = dict(os.environ, PYTHONIOENCODING="utf-8")
+            rc = subprocess.run(
+                [sys.executable, str(HERE / "build_menu_fact.py"), "--db", str(INCOMING)],
+                timeout=2400, env=env).returncode
+            if rc:
+                print(f"      ⚠ menu-fact build exited rc={rc} — tab data stays at previous coverage")
+        except Exception as e:
+            print(f"      ⚠ menu-fact build skipped: {e}")
+
     if args.apply_local:
         print("[6/6] reconciled → applying to local oshinei.db")
         apply_local_swap()
