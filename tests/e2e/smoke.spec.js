@@ -43,3 +43,28 @@ test('every tab renders with no console errors', async ({ page }) => {
   if (errors.length) console.log('Console errors:\n' + errors.join('\n'));
   expect(errors, `console errors:\n${errors.join('\n')}`).toHaveLength(0);
 });
+
+// Beyond "no console errors": the API must serve real data and the dashboard
+// must render real (non-zero) figures from it — a blank-but-error-free page
+// used to pass the smoke.
+test('API serves data and headline figures actually render', async ({ page, request }) => {
+  const r = await request.get('/api/summary');
+  expect(r.ok(), '/api/summary should respond 200').toBeTruthy();
+  const summary = await r.json();
+  expect(summary.revenue, 'served revenue must be > 0').toBeGreaterThan(0);
+
+  const months = await (await request.get('/api/months')).json();
+  expect(Array.isArray(months) ? months.length : Object.keys(months).length,
+         'at least one data month').toBeGreaterThan(0);
+
+  await page.goto('/', { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => typeof window.switchTab === 'function', null, { timeout: 30_000 });
+  await page.evaluate(() => window.switchTab('overall'));
+  await page.waitForTimeout(1200);
+  const text = await page.evaluate(() => {
+    const el = document.getElementById('tab-overall');
+    return el ? el.innerText : '';
+  });
+  // a real figure (2+ digit number, optionally comma-grouped) — not just labels
+  expect(text, 'overall tab should show non-zero figures').toMatch(/[1-9][\d,]{1,}/);
+});
