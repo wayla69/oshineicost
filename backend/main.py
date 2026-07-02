@@ -2714,6 +2714,197 @@ def _ch_resolve_month(con, month):
     return r3[0] if r3 else None
 
 
+# ---------------------------------------------------------------------------
+# 🧪 Menu Impact (วิเคราะห์วัตถุดิบ) — with/without per-head analysis of one menu
+# SKU or ingredient group over a chosen date range. Powered by the pre-aggregated
+# menu_fact_day / menu_fact_total tables (built from live MSSQL bill-level data
+# by backend/build_menu_fact.py — run it after each sync to keep coverage fresh).
+# Stratified by branch x day so branch mix / calendar mix can't fake the effect.
+# ---------------------------------------------------------------------------
+_MI_SCOPE_LABEL = {"master": "Master (เจ้าของเอง)", "franchise": "แฟรนไชส์", "all": "ทั้งหมด"}
+
+
+def _mi_branch_ids(con, scope: str):
+    if scope in ("master", "franchise"):
+        return [r[0] for r in con.execute(
+            "SELECT branch_id FROM branches WHERE branch_type=?", (scope,))]
+    return [r[0] for r in con.execute("SELECT branch_id FROM branches")]
+
+
+def _mi_ready(con) -> bool:
+    return bool(con.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='menu_fact_total'").fetchone())
+
+
+@app.get("/api/reports/menu-impact/entities")
+@ttl_cache
+def menu_impact_entities():
+    """Selector list for the tab: ingredient groups + individual menu SKUs that
+    actually sold inside the fact coverage, plus coverage/build info."""
+    with get_db() as con:
+        if not _mi_ready(con):
+            return {"ready": False, "groups": [], "skus": [], "coverage": None,
+                    "hint": "ยังไม่มีตารางข้อมูล — รัน python backend/build_menu_fact.py ก่อน"}
+        lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
+        state = dict(con.execute("SELECT k, v FROM menu_fact_state").fetchall())
+        qty = dict(con.execute("SELECT ent, SUM(qty) FROM menu_fact_day GROUP BY ent").fetchall())
+        groups, skus = [], []
+        for ent, label, kind, unit_cost, members in con.execute(
+                "SELECT ent, label, kind, unit_cost, members FROM menu_fact_meta"):
+            q = qty.get(ent) or 0
+            if q <= 0:
+                continue
+            row = {"ent": ent, "label": label, "cost": round(unit_cost or 0, 2),
+                   "qty": round(q)}
+            if kind == "group":
+                row["n_members"] = len([m for m in (members or "").split(",") if m])
+                groups.append(row)
+            else:
+                skus.append(row)
+        skus.sort(key=lambda r: -r["qty"])
+        return {"ready": True, "coverage": [lo, hi], "last_build": state.get("last_build"),
+                "hc_cost": float(state.get("hc_cost") or 30), "groups": groups, "skus": skus[:400]}
+
+
+@app.get("/api/reports/menu-impact")
+@ttl_cache
+def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<slug>"),
+                date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                scope: str = Query("all", description="master | franchise | all")):
+    """เลือกวัตถุดิบ/เมนู + ช่วงเวลา → เทียบบิลที่มี vs ไม่มี (ต่อหัว, คุมสาขา×วัน)."""
+    if scope not in _MI_SCOPE_LABEL:
+        scope = "all"
+    with get_db() as con:
+        if not _mi_ready(con):
+            return {"ready": False, "hint": "รัน python backend/build_menu_fact.py ก่อนใช้งานแท็บนี้"}
+        lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
+        if not lo:
+            return {"ready": False, "hint": "ตารางข้อมูลว่าง — รัน build_menu_fact.py"}
+        date_from = date_from or lo
+        date_to = date_to or hi
+        meta = con.execute("SELECT label, kind, unit_cost, members FROM menu_fact_meta WHERE ent=?",
+                           (ent,)).fetchone()
+        if not meta:
+            return {"ready": True, "error": f"ไม่รู้จัก entity {ent}"}
+        bids = _mi_branch_ids(con, scope)
+        ph = ",".join("?" * len(bids))
+        f = con.execute(
+            f"""SELECT f.branch_id, f.day, f.bills, f.pax, f.qty, f.ent_cogs, f.ent_hc,
+                       f.cogs, f.rev, f.hc,
+                       t.bills, t.pax, t.cogs, t.rev, t.hc
+                FROM menu_fact_day f JOIN menu_fact_total t
+                  ON t.branch_id = f.branch_id AND t.day = f.day
+                WHERE f.ent = ? AND f.day BETWEEN ? AND ? AND f.branch_id IN ({ph})""",
+            [ent, date_from, date_to] + bids).fetchall()
+        tot = con.execute(
+            f"""SELECT branch_id, day, bills, pax, cogs, rev, hc FROM menu_fact_total
+                WHERE day BETWEEN ? AND ? AND branch_id IN ({ph})""",
+            [date_from, date_to] + bids).fetchall()
+        bname = dict(con.execute("SELECT branch_id, name FROM branches").fetchall())
+
+    T = {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0, "hc": 0.0}
+    for _b, _d, nb, px, cg, rv, hc in tot:
+        T["bills"] += nb; T["pax"] += px; T["cogs"] += cg; T["rev"] += rv; T["hc"] += hc
+    if T["pax"] <= 0:
+        return {"ready": True, "error": "ไม่มีข้อมูลบิลบุฟเฟ่ต์ในช่วง/ขอบเขตที่เลือก",
+                "coverage": [lo, hi]}
+
+    # with-set summary + stratified with/without (stratum = branch x day)
+    W = {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0}
+    wsum = {k: 0.0 for k in ("cogs_w", "cogs_o", "oth_w", "oth_o", "hc_w", "hc_o",
+                             "rev_w", "rev_o", "gp_w", "gp_o")}
+    wt = 0.0
+    by_branch, by_month, by_day = {}, {}, {}
+    for r in f:
+        (bid, day, nb, px, q, ec, eh, cg, rv, hc, tb, tp, tc, tr, th) = r
+        W["bills"] += nb; W["pax"] += px; W["qty"] += q; W["ecogs"] += ec
+        bb = by_branch.setdefault(bid, {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0,
+                                        "d_oth": 0.0, "w": 0.0})
+        bb["bills"] += nb; bb["pax"] += px; bb["qty"] += q; bb["ecogs"] += ec
+        for key, dct in ((day[:7], by_month), (day, by_day)):
+            m = dct.setdefault(key, {"bills": 0, "pax": 0.0, "qty": 0.0, "ecogs": 0.0})
+            m["bills"] += nb; m["pax"] += px; m["qty"] += q; m["ecogs"] += ec
+        opx, onb = tp - px, tb - nb
+        if px <= 0 or opx <= 0 or onb <= 0:
+            continue
+        w = px * opx / (px + opx)
+        wt += w
+        oc, orv, ohc = tc - cg, tr - rv, th - hc
+        wsum["cogs_w"] += w * cg / px;             wsum["cogs_o"] += w * oc / opx
+        wsum["oth_w"] += w * (cg - ec) / px;       wsum["oth_o"] += w * oc / opx
+        wsum["hc_w"] += w * (hc - eh) / px;        wsum["hc_o"] += w * ohc / opx
+        wsum["rev_w"] += w * rv / px;              wsum["rev_o"] += w * orv / opx
+        wsum["gp_w"] += w * (rv - cg) / px;        wsum["gp_o"] += w * (orv - oc) / opx
+        bb["d_oth"] += w * ((cg - ec) / px - oc / opx); bb["w"] += w
+
+    if wt <= 0:
+        return {"ready": True, "error": "ข้อมูลไม่พอสำหรับเทียบมี/ไม่มี (ทุกวันมีหรือไม่มีทั้งหมด)",
+                "coverage": [lo, hi]}
+    for k in wsum:
+        wsum[k] /= wt
+    # mix-adjusted: high-cost consumption expected if it scaled with total "other" appetite
+    exp_hc = wsum["hc_o"] * (wsum["oth_w"] / wsum["oth_o"]) if wsum["oth_o"] > 0 else None
+    label, kind, unit_cost, members = meta
+    trend_m = [{"ym": k, "pen": v["bills"], "qty": v["qty"], "ecogs": v["ecogs"]}
+               for k, v in sorted(by_month.items())]
+    tot_m, tot_d = {}, {}
+    for b, d, nb, px, cg, rv, hc in tot:
+        for key, dct in ((d[:7], tot_m), (d, tot_d)):
+            m = dct.setdefault(key, {"bills": 0, "pax": 0.0})
+            m["bills"] += nb; m["pax"] += px
+    for row in trend_m:
+        tm = tot_m.get(row["ym"], {"bills": 0, "pax": 0.0})
+        row["pen"] = round(row["pen"] / tm["bills"], 4) if tm["bills"] else None
+        row["qty_head"] = round(row["qty"] / tm["pax"], 3) if tm["pax"] else None
+        row["ecogs_head"] = round(row["ecogs"] / tm["pax"], 2) if tm["pax"] else None
+        row["qty"] = round(row["qty"]); row["ecogs"] = round(row["ecogs"])
+    trend_d = []
+    for k in sorted(tot_d):
+        v = by_day.get(k, {"bills": 0, "qty": 0.0, "ecogs": 0.0})
+        td = tot_d[k]
+        trend_d.append({"day": k,
+                        "pen": round(v["bills"] / td["bills"], 4) if td["bills"] else None,
+                        "qty_head": round(v["qty"] / td["pax"], 3) if td["pax"] else None})
+    branches_out = sorted((
+        {"branch_id": b, "name": bname.get(b, str(b)), "bills": v["bills"],
+         "qty": round(v["qty"]), "ecogs": round(v["ecogs"]),
+         "qty_head_takers": round(v["qty"] / v["pax"], 2) if v["pax"] else None,
+         "d_other_cogs": round(v["d_oth"] / v["w"], 2) if v["w"] > 0 else None}
+        for b, v in by_branch.items()), key=lambda r: -(r["ecogs"] or 0))
+    rd = lambda x, nd=2: round(x, nd)
+    return {
+        "ready": True, "ent": ent, "label": label, "kind": kind,
+        "unit_cost": rd(unit_cost or 0), "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
+        "members": [m for m in (members or "").split(",") if m] if kind == "group" else None,
+        "coverage": [lo, hi], "date_from": date_from, "date_to": date_to,
+        "totals": {"bills": T["bills"], "pax": rd(T["pax"], 0), "cogs_head": rd(T["cogs"] / T["pax"]),
+                   "rev_head": rd(T["rev"] / T["pax"]), "hc_head": rd(T["hc"] / T["pax"])},
+        "summary": {
+            "pen_bills": rd(W["bills"] / T["bills"], 4), "bills_with": W["bills"],
+            "qty": rd(W["qty"], 0), "ecogs": rd(W["ecogs"], 0),
+            "ecogs_share": rd(W["ecogs"] / T["cogs"], 4) if T["cogs"] else None,
+            "qty_head_takers": rd(W["qty"] / W["pax"]) if W["pax"] else None,
+            "ecogs_head_takers": rd(W["ecogs"] / W["pax"]) if W["pax"] else None,
+            "ecogs_head_all": rd(W["ecogs"] / T["pax"]),
+        },
+        "compare": {   # per-head, stratified branch x day, harmonic-pax weights
+            "cogs": {"with": rd(wsum["cogs_w"]), "without": rd(wsum["cogs_o"]),
+                     "diff": rd(wsum["cogs_w"] - wsum["cogs_o"])},
+            "other_cogs": {"with": rd(wsum["oth_w"]), "without": rd(wsum["oth_o"]),
+                           "diff": rd(wsum["oth_w"] - wsum["oth_o"])},
+            "hc_other": {"with": rd(wsum["hc_w"]), "without": rd(wsum["hc_o"]),
+                         "diff": rd(wsum["hc_w"] - wsum["hc_o"])},
+            "rev": {"with": rd(wsum["rev_w"]), "without": rd(wsum["rev_o"]),
+                    "diff": rd(wsum["rev_w"] - wsum["rev_o"])},
+            "gp": {"with": rd(wsum["gp_w"]), "without": rd(wsum["gp_o"]),
+                   "diff": rd(wsum["gp_w"] - wsum["gp_o"])},
+            "hc_expected_prop": rd(exp_hc) if exp_hc is not None else None,
+            "hc_rel_saving": rd(wsum["hc_w"] - exp_hc) if exp_hc is not None else None,
+        },
+        "trend_month": trend_m, "trend_day": trend_d, "branches": branches_out,
+    }
+
+
 @app.get("/api/reports/cost-head-top60")
 @ttl_cache
 def report_cost_head_top60(month: Optional[str] = Query(None),

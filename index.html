@@ -1194,6 +1194,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="14" width="3" height="3"/></svg>
     <span class="nav-label">🏅 Top60 ต้นทุน/หัว</span>
   </div>
+  <div class="nav-item" id="nav-menuimpact" onclick="switchTab('menuimpact')" title="🧪 วิเคราะห์วัตถุดิบ (Menu Impact) — เลือกวัตถุดิบ/เมนู + ช่วงเวลา → เทียบบิลที่มี vs ไม่มี (ต้นทุน/หัว, การกินเมนูแพง, GP) จากข้อมูลบิลจริง MSSQL">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6L4.5 19a2 2 0 001.8 3h11.4a2 2 0 001.8-3L14 9V3"/><path d="M6.5 15h11"/></svg>
+    <span class="nav-label">🧪 วิเคราะห์วัตถุดิบ</span>
+  </div>
   <div class="nav-item" id="nav-heavyeater" style="display:none" onclick="switchTab('heavyeater')" title="🍽️ ต่อหัว & นักกินหนัก · เศรษฐศาสตร์ต่อคน + การกระจาย COGS/หัว + บิลขาดทุน · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>
     <span class="nav-label">🍽️ นักกินหนัก</span>
@@ -1781,6 +1785,27 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
   <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุนวัตถุดิบ (COGS) ต่อหัวลูกค้า · เลือกขอบเขต <b>Master / แฟรนไชส์ / ทั้งหมด</b> · เรียง Top 60 ตามต้นทุน/หัว · เทียบรายสาขากับภาพรวม · COGS สูตรมาตรฐานระบบ (ตัดแพ็กเกจบุฟเฟต์กันนับซ้ำ, ใช้ต้นทุนจริง sku_cost ก่อน BoM)</p>
   <div id="chtBody"></div>
+</div>
+
+<!-- ══ 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) ══ -->
+<div id="tab-menuimpact" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">วัตถุดิบ/เมนู:</span>
+    <input id="miSearch" placeholder="🔍 ค้นหาเมนู…" oninput="miFilterOptions()" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);width:130px">
+    <select id="miEnt" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:290px"></select>
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">ช่วง:</span>
+    <input type="date" id="miFrom" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs" style="color:var(--text-muted)">→</span>
+    <input type="date" id="miTo" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="miScope" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุกสาขา</option>
+      <option value="master">Master (เจ้าของเอง)</option>
+      <option value="franchise">แฟรนไชส์</option>
+    </select>
+    <span id="miCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+  </div>
+  <p class="text-[11px] mb-3" style="color:var(--text-muted)">เทียบบิลบุฟเฟ่ต์ที่<b>มี</b> vs <b>ไม่มี</b> วัตถุดิบ/เมนูที่เลือก (ต่อหัว · คุมความต่างสาขา×วัน) จากข้อมูลบิลจริง POS/MSSQL · "เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · ต้นทุน BoM ตัดแพ็กเกจบุฟเฟ่ต์กันนับซ้ำ · อัปเดตข้อมูลด้วย <code>python backend/build_menu_fact.py</code> หลัง sync</p>
+  <div id="miBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
 </div>
 
 <!-- ══ 🧩 EXTRA: 💵 เงินสดขาด/เกิน (CashCount) ══ -->
@@ -6550,6 +6575,7 @@ const TAB_MODULE = {
   menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
   menuactionboard:'cost.analysis', menuopportunities:'menu.analysis',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis', costheadtop60:'cost.analysis',
+  menuimpact:'cost.analysis',
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
   simhub:'cost.simulator',
   gpbranch:'profit.pnl', pnlbranch:'profit.pnl', pnlbill:'profit.pnl', profit:'profit.pnl', benchmark:'profit.pnl',
@@ -7433,14 +7459,14 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', mgtreport:'Management Report (Daily & Weekly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', mgtreport:'Management Report (Daily & Weekly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
   ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','mgtreport','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','costheadtop60','pnlbill','opsreport',
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','costheadtop60','menuimpact','pnlbill','opsreport',
    'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater'].forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
@@ -9080,6 +9106,7 @@ function loadActiveTab() {
   if (activeTab === 'dailysales')  loadDailySales();
   if (activeTab === 'costhead')    loadCostHead();
   if (activeTab === 'costheadtop60') loadCostHeadTop60();
+  if (activeTab === 'menuimpact') loadMenuImpact();
   if (activeTab === 'pnlbill')     loadPnlBill();
   if (activeTab === 'opsreport')   loadOpsReport();
   if (activeTab === 'cashctl')     loadCashCtl();
@@ -18869,6 +18896,137 @@ async function loadOpsReport(force) {
 
 // ══════════ 🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม) ══════════
 let _chtMonthsLoaded = false;
+// ══ 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) ═══════════════════════════════════════
+let _miEnts = null, _miChart = null;
+function miFilterOptions() {
+  const q = (document.getElementById('miSearch').value || '').trim().toLowerCase();
+  const sel = document.getElementById('miEnt');
+  if (!_miEnts) return;
+  const cur = sel.value;
+  const g = _miEnts.groups.map(e =>
+    `<option value="${e.ent}">🧺 ${esc(e.label)} (${e.n_members} เมนู)</option>`).join('');
+  const s = _miEnts.skus
+    .filter(e => !q || e.label.toLowerCase().includes(q))
+    .slice(0, 250)
+    .map(e => `<option value="${e.ent}">${esc(e.label)} · ฿${e.cost}</option>`).join('');
+  sel.innerHTML = `<optgroup label="กลุ่มวัตถุดิบ">${g}</optgroup><optgroup label="เมนูรายตัว (Top ตามยอดขาย)">${s}</optgroup>`;
+  if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
+}
+async function loadMenuImpact(force) {
+  const body = document.getElementById('miBody');
+  if (!_miEnts) {
+    try { _miEnts = await fetch(`${API}/api/reports/menu-impact/entities`).then(r => r.json()); }
+    catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">โหลดรายการเมนูไม่สำเร็จ</p>'; return; }
+    if (!_miEnts.ready) {
+      body.innerHTML = `<p class="text-center text-slate-400 py-10">${esc(_miEnts.hint || 'ยังไม่มีข้อมูล')}</p>`;
+      _miEnts = null; return;
+    }
+    miFilterOptions();
+    const sel = document.getElementById('miEnt');
+    if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+    const [lo, hi] = _miEnts.coverage || [null, null];
+    const fEl = document.getElementById('miFrom'), tEl = document.getElementById('miTo');
+    if (lo && !fEl.value) { fEl.value = lo; fEl.min = lo; tEl.min = lo; }
+    if (hi && !tEl.value) { tEl.value = hi; fEl.max = hi; tEl.max = hi; }
+    document.getElementById('miCoverage').textContent =
+      `ข้อมูล ${lo} → ${hi} · อัปเดต ${_miEnts.last_build || '-'}`;
+  }
+  const ent = document.getElementById('miEnt').value;
+  if (!ent) { body.innerHTML = '<p class="text-center text-slate-400 py-10">เลือกวัตถุดิบ/เมนูก่อน</p>'; return; }
+  const df = document.getElementById('miFrom').value, dt2 = document.getElementById('miTo').value;
+  const scope = document.getElementById('miScope').value;
+  const key = `${ent}|${df}|${dt2}|${scope}`;
+  if (!force && _tabLastKey.menuimpact === key) return;
+  body.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังวิเคราะห์…</p>';
+  const p = new URLSearchParams({ ent, scope });
+  if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
+  let d;
+  try { d = await fetch(`${API}/api/reports/menu-impact?${p}`).then(r => r.json()); }
+  catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">วิเคราะห์ไม่สำเร็จ</p>'; return; }
+  _tabLastKey.menuimpact = key;
+  if (!d.ready || d.error) {
+    body.innerHTML = `<p class="text-center text-slate-400 py-10">${esc(d.error || d.hint || 'ไม่มีข้อมูล')}</p>`; return;
+  }
+  const n0 = v => Number(v || 0).toLocaleString('en-US');
+  const b1 = v => '฿' + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 1 });
+  const sg = v => (v > 0 ? '+' : '') + Number(v || 0).toLocaleString('en-US', { maximumFractionDigits: 1 });
+  const RED = '#b0472d', GRN = '#1f7a4d';
+  const S = d.summary, C = d.compare;
+  const kpis = [
+    { l: 'สั่งใน % ของบิล', v: (S.pen_bills * 100).toFixed(1) + '%', sub: n0(S.bills_with) + ' บิล / ' + n0(d.totals.bills) + ' บิล', c: '#0e7490' },
+    { l: 'ปริมาณ/หัว (เฉพาะบิลที่สั่ง)', v: Number(S.qty_head_takers || 0).toFixed(2), sub: 'รวม ' + n0(S.qty) + ' หน่วย', c: '#7c3aed' },
+    { l: 'ต้นทุนของตัวมันเอง/หัว (บิลที่สั่ง)', v: b1(S.ecogs_head_takers), sub: 'รวม ' + b1(S.ecogs) + ' = ' + ((S.ecogs_share || 0) * 100).toFixed(1) + '% ของ COGS ทั้งหมด', c: RED },
+    { l: 'Δ GP/หัว (มี − ไม่มี)', v: sg(C.gp.diff), sub: 'GP มี ' + b1(C.gp.with) + ' vs ไม่มี ' + b1(C.gp.without), c: C.gp.diff >= 0 ? GRN : RED },
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  const cmpRow = (l, o, inv) => {
+    const col = (inv ? o.diff < 0 : o.diff > 0) ? GRN : RED;
+    return `<tr class="border-t border-slate-100"><td class="py-1.5 pr-2">${l}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b1(o.with)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b1(o.without)}</td>
+      <td class="py-1.5 text-right tabular-nums font-bold" style="color:${col}">${sg(o.diff)}</td></tr>`;
+  };
+  const mixLine = C.hc_rel_saving == null ? '' :
+    `<p class="text-[11px] mt-2" style="color:var(--text-muted)">ปรับสัดส่วนตามการกินรวม (mix-adjusted): การกินเมนูแพงควรอยู่ที่ ${b1(C.hc_expected_prop)}/หัว
+     จริง ${b1(C.hc_other.with)} → <b style="color:${C.hc_rel_saving < 0 ? GRN : RED}">${C.hc_rel_saving < 0 ? 'ช่วยเบรกเมนูแพง ' : 'ไม่ช่วยเบรก (กินเพิ่ม) '}${sg(C.hc_rel_saving)}/หัว</b></p>`;
+  const verdict = (() => {
+    const own = S.ecogs_head_takers || 0, rel = C.hc_rel_saving;
+    let t = `<b>${esc(d.label)}</b> เพิ่มต้นทุน ${b1(own)}/หัวในบิลที่สั่ง (${((S.pen_bills || 0) * 100).toFixed(1)}% ของบิล)`;
+    if (rel != null) t += rel < -1 ? ` แต่ช่วยลดการกินเมนูแพงเชิงสัดส่วน ${b1(-rel)}/หัว` : rel > 1 ? ` และมากับการกินเมนูแพงเพิ่ม ${b1(rel)}/หัว` : ' ผลต่อเมนูแพงเป็นกลาง';
+    t += C.gp.diff >= 0 ? ` · บิลที่สั่งให้ GP/หัวสูงกว่า ${b1(C.gp.diff)} — เชิงกำไรถือว่ารับได้` : ` · บิลที่สั่งให้ GP/หัวต่ำกว่า ${b1(-C.gp.diff)} — ควรทบทวนพอร์ชัน/ต้นทุน`;
+    return t;
+  })();
+  const trm = d.trend_month || [];
+  const brRows = (d.branches || []).map(b => `<tr class="border-t border-slate-100">
+    <td class="py-1 pr-2 font-semibold">${esc(b.name)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${n0(b.bills)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${n0(b.qty)}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${b.qty_head_takers ?? '-'}</td>
+    <td class="py-1 pr-2 text-right tabular-nums">${b1(b.ecogs)}</td>
+    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(b.d_other_cogs || 0) < 0 ? GRN : RED}">${b.d_other_cogs == null ? '-' : sg(b.d_other_cogs)}</td></tr>`).join('');
+  body.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <div class="card p-5">
+        <h2 class="section-title mb-1">เทียบต่อหัว: บิลที่มี vs ไม่มี (คุมสาขา×วัน)</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">${esc(d.label)} · ${d.date_from} → ${d.date_to} · ${esc(d.scope_label)}${d.kind === 'group' ? ' · ' + (d.members || []).length + ' เมนูในกลุ่ม' : ' · ต้นทุน ฿' + d.unit_cost + '/หน่วย'}</p>
+        <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">฿/หัว</th><th class="py-1.5 pr-2 text-right">บิลที่มี</th><th class="py-1.5 pr-2 text-right">บิลที่ไม่มี</th><th class="py-1.5 text-right">ต่าง</th></tr></thead><tbody>
+          ${cmpRow('ต้นทุนรวมทั้งบิล', C.cogs, true)}
+          ${cmpRow('ต้นทุนเมนูอื่น (ไม่รวมตัวมันเอง)', C.other_cogs, true)}
+          ${cmpRow('การกินเมนูแพง (≥฿30) ไม่รวมตัวมันเอง', C.hc_other, true)}
+          ${cmpRow('รายได้ (ex-VAT)', C.rev, false)}
+          ${cmpRow('กำไรขั้นต้น (GP)', C.gp, false)}
+        </tbody></table>
+        ${mixLine}
+        <div class="mt-3 p-3 rounded text-xs" style="background:var(--bg-subtle);border-left:4px solid ${C.gp.diff >= 0 ? GRN : RED}">${verdict}</div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title mb-3">แนวโน้มรายเดือน — ปริมาณ/หัว & % บิลที่สั่ง</h2>
+        <div style="height:280px"><canvas id="miChart"></canvas></div>
+      </div>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายสาขา — ใครขาย/ใครกินเยอะ และผลต่อต้นทุนเมนูอื่น</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">บิลที่สั่ง</th><th class="py-1.5 pr-2 text-right">จำนวน</th>
+        <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
+        <th class="py-1.5 text-right">Δ ต้นทุนเมนูอื่น/หัว</th></tr></thead><tbody>${brRows}</tbody></table>
+      <p class="text-[11px] mt-2" style="color:var(--text-muted)">Δ ต้นทุนเมนูอื่น/หัว = บิลที่มีรายการนี้ กินเมนูอื่นแพงขึ้น/ถูกลงเท่าไร (คุมรายวันภายในสาขา) · เขียว = ช่วยลด</p>
+    </div>`;
+  if (_miChart) { _miChart.destroy(); _miChart = null; }
+  const ctx = document.getElementById('miChart');
+  if (ctx && trm.length) {
+    _miChart = new Chart(ctx, { data: {
+        labels: trm.map(r => r.ym),
+        datasets: [
+          { type: 'bar', label: 'ปริมาณ/หัว', data: trm.map(r => r.qty_head), backgroundColor: 'rgba(31,122,77,.55)', yAxisID: 'y' },
+          { type: 'line', label: '% บิลที่สั่ง', data: trm.map(r => r.pen == null ? null : r.pen * 100), borderColor: '#b0472d', backgroundColor: '#b0472d', tension: .25, yAxisID: 'y1' }]},
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { title: { display: true, text: 'ชิ้น/หัว' } },
+                  y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '% บิล' } } } } });
+  }
+}
+
 async function loadCostHeadTop60(force) {
   const sel = document.getElementById('chtMonth');
   if (!_chtMonthsLoaded && sel) {
