@@ -20,6 +20,8 @@ sys.path.insert(0, str(HERE))
 
 # Latest day is mid-month → the MTD (equal-period) path is exercised.
 LATEST_MONTH, PREV_MONTH = "2026-06", "2026-05"
+# A third, monthly-only month so ≥3-point series exist (forecast endpoints).
+EARLY_MONTH = "2026-04"
 DAYS = ["01", "02", "03"]   # both months have 1..3; June is partial (cutoff=3)
 
 
@@ -38,7 +40,15 @@ def _build_db(path: str):
         except sqlite3.OperationalError: pass
     # Tables created at runtime by sync (not in schema.sql).
     con.executescript("""
-      CREATE TABLE IF NOT EXISTS bom_sku_alias(bom_sku_code TEXT, resolved_sku_id INTEGER);
+      CREATE TABLE IF NOT EXISTS bom_sku_alias(bom_sku_code TEXT PRIMARY KEY,
+                                               resolved_sku_id INTEGER NOT NULL REFERENCES skus(sku_id),
+                                               match_method TEXT, confidence REAL, notes TEXT);
+      CREATE TABLE IF NOT EXISTS sale_payment(branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL);
+      CREATE TABLE IF NOT EXISTS closed_hours(branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
+                                              dow INTEGER NOT NULL, hour_from INTEGER NOT NULL DEFAULT 0,
+                                              hour_to INTEGER NOT NULL DEFAULT 23,
+                                              is_closed INTEGER NOT NULL DEFAULT 0,
+                                              PRIMARY KEY (branch_id, dow));
       CREATE TABLE IF NOT EXISTS sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
       CREATE TABLE IF NOT EXISTS sale_bill_cogs(receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);
       CREATE TABLE IF NOT EXISTS pos_payment_month(branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT);
@@ -74,7 +84,7 @@ def _build_db(path: str):
     # monthly sales: both months, both branches. Tier carries revenue (cost 0),
     # B item carries cost (rev 0), A item carries rev + cost.
     rows = []
-    for mo, scale in ((PREV_MONTH, 1.0), (LATEST_MONTH, 0.8)):  # June lower → MoM down
+    for mo, scale in ((EARLY_MONTH, 1.0), (PREV_MONTH, 1.0), (LATEST_MONTH, 0.8)):  # June lower → MoM down
         for bid in (1, 2):
             rows += [
                 (bid, mo, 1, 100 * scale, 10000 * scale),   # BUFFET tier: rev 10000, cost 0
@@ -90,7 +100,7 @@ def _build_db(path: str):
                 "gross_sales REAL, refunds REAL, discounts REAL, voided REAL, net_sales REAL, cash REAL, "
                 "credit_card REAL, transfer REAL, qr REAL, coupon REAL, customer_count INTEGER, "
                 "transaction_count INTEGER, source TEXT)")
-    for mo, scale in ((PREV_MONTH, 1.0), (LATEST_MONTH, 0.8)):
+    for mo, scale in ((EARLY_MONTH, 1.0), (PREV_MONTH, 1.0), (LATEST_MONTH, 0.8)):
         for bid in (1, 2):
             cx.execute("INSERT INTO sales_month_summary(branch_id,period_month,net_sales,customer_count,"
                        "transaction_count,source) VALUES(?,?,?,?,?, 'Easy')",
@@ -108,6 +118,8 @@ def _build_db(path: str):
                            " VALUES(?,?,?,?,?,?,?,?,?,?, 'Easy')",
                            (bid, rcpt, f"{day}T12:00:00", 4, 900, 100, 0, 20, 50, 1070.0))
                 cx.execute("INSERT INTO sale_bill_cogs VALUES(?,?,?,?)", (rcpt, bid, day, 520.0))
+                # every bill settles in cash — sale_payment joins 1:1 on receipt_no (mirrors sync)
+                cx.execute("INSERT INTO sale_payment VALUES(?,?,?,?)", (bid, rcpt, "Cash", 1070.0))
     # staged pos_* (latest month)
     cx.execute("INSERT INTO pos_payment_month VALUES(1,?, 'Credit', 50000, 120)", (LATEST_MONTH,))
     cx.execute("INSERT INTO pos_payment_month VALUES(1,?, 'Cash', 30000, 90)", (LATEST_MONTH,))

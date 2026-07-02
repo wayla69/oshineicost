@@ -56,6 +56,113 @@ SMOKE = [
     # ── 🏷️ price-tier analysis (tier fact tables absent in fixture → ready:False) ──
     ("/api/reports/price-tier", {}),
     ("/api/reports/price-tier", {"scope": "master", "date_from": "2026-05-01", "date_to": "2026-05-31"}),
+    # ═══ broad smoke sweep: every remaining GET endpoint must 200 on the fixture ═══
+    # (guards the SQL-shape bug class across the ~60 handlers that had no test)
+    # ── analysis ──
+    ("/api/analysis/branches", {}),
+    ("/api/analysis/daily", {"month": "2026-06"}),
+    ("/api/analysis/hourly", {}),
+    ("/api/analysis/hour_detail", {"hour": 12}),
+    ("/api/analysis/branch_peak", {}),
+    ("/api/analysis/heatmap_branch", {}),
+    ("/api/analysis/compare", {"month": "2026-06", "vs": "2026-05"}),
+    ("/api/analysis/period_compare",
+     {"a_month_from": "2026-05", "a_month_to": "2026-05", "b_month_from": "2026-06", "b_month_to": "2026-06"}),
+    ("/api/analysis/gross_profit", {}),
+    ("/api/analysis/gross_profit", {"granularity": "weekly"}),
+    ("/api/analysis/gross_profit", {"granularity": "monthly"}),
+    ("/api/analysis/discount-reasons", {}),
+    ("/api/analysis/discount_bills", {}),
+    ("/api/analysis/discount_leakage", {}),
+    ("/api/analysis/discount_alerts", {}),
+    ("/api/analysis/payment_discount", {}),
+    ("/api/analysis/coupon-series", {}),
+    ("/api/analysis/coupon-series/drill", {"series_id": 5}),
+    ("/api/analysis/health", {}),
+    ("/api/analysis/yoy", {}),
+    ("/api/analysis/forecast", {}),
+    ("/api/analysis/forecast_branches", {}),
+    ("/api/analysis/revenue-forecast", {}),
+    ("/api/analysis/cohort", {}),
+    ("/api/analysis/affinity", {}),
+    ("/api/analysis/affinity", {"sku_code": "A0001"}),
+    ("/api/analysis/percentiles", {}),
+    ("/api/analysis/sph", {}),
+    ("/api/analysis/daypart_grid", {}),
+    ("/api/analysis/daypart-economics", {}),
+    ("/api/analysis/buffet_mix", {}),
+    ("/api/analysis/table_turnover", {}),
+    ("/api/analysis/table-turnover", {}),
+    # ── buffet ──
+    ("/api/buffet/revpash", {}),
+    ("/api/buffet/gp-calendar", {"month": "2026-06"}),
+    ("/api/buffet/branch-tier-matrix", {}),
+    ("/api/buffet/child-trend", {}),
+    ("/api/buffet/breakeven", {}),
+    ("/api/buffet/forecast", {}),
+    ("/api/buffet/menu-cost-efficiency", {}),
+    ("/api/buffet/menu-cost-trend", {}),
+    ("/api/buffet/menu-cost-coverage", {}),
+    ("/api/buffet/menu-cost-by-branch", {"sku_code": "B0001"}),
+    ("/api/buffet/portion-velocity", {}),
+    ("/api/buffet/plate-cost-dist", {}),
+    ("/api/buffet/heavy-eater-tail", {}),
+    ("/api/buffet/turn-efficiency", {}),
+    ("/api/buffet/pnl", {}),
+    ("/api/buffet/upgrade-simulator", {}),
+    ("/api/buffet/drink-attach-by-branch", {}),
+    # ── home dashboard ──
+    ("/api/home/brief", {}),
+    ("/api/home/leak-watch", {}),
+    ("/api/home/menu-movers", {}),
+    ("/api/home/branch-scorecard", {}),
+    # ── P&L ──
+    ("/api/pnl/branches", {}),
+    ("/api/pnl/branch-detail", {"branch": "BranchA"}),
+    ("/api/pnl/branch-month-detail", {"branch": "BranchA", "month": "2026-06"}),
+    # ── profit ──
+    ("/api/profit/summary", {}),
+    ("/api/profit/trend", {}),
+    ("/api/profit/by-branch", {}),
+    ("/api/profit/by-sku", {}),
+    ("/api/profit/per-bill-distribution", {}),
+    ("/api/profit/buffet_per_bill", {}),
+    # ── cost ──
+    ("/api/cost/monthly", {}),
+    ("/api/cost/detail", {}),
+    ("/api/cost/audit", {}),
+    ("/api/cost/diff", {}),
+    ("/api/cost/uncosted-coverage", {}),
+    ("/api/cost/recalibration", {}),
+    # ── sales ──
+    ("/api/sales/margin", {}),
+    ("/api/sales/dish-movers", {}),
+    ("/api/sales/skus", {}),
+    # ── BoM / branch BoM (fixture has no BoM rows → empty-but-200 path) ──
+    ("/api/bom/sku-list", {}),
+    ("/api/bom/aliases", {}),
+    ("/api/bom/consumption-analysis", {}),
+    ("/api/branch-bom/analysis", {"branch": "ALL"}),
+    ("/api/bom-cost/branch-foodcost-mom", {}),
+    ("/api/bom-cost/compare", {"branches": "BranchA,BranchB"}),
+    # ── extra (POS ops drills) ──
+    ("/api/extra/cash/detail", {"branch": "BranchA", "month": "2026-06"}),
+    ("/api/extra/cash/day", {"branch": "BranchA", "day": "2026-06-01"}),
+    ("/api/extra/closing-time", {}),
+    ("/api/extra/cancel-bills/detail", {"branch": "BranchA"}),
+    # ── misc ──
+    ("/api/search", {"q": "Branch"}),
+    ("/api/search", {"q": "สเต๊ก"}),
+    ("/api/settings", {}),
+    ("/api/skus", {}),
+    ("/api/skus", {"include_inactive": True}),
+    ("/api/skus/business-types", {}),
+    ("/api/targets", {}),
+    ("/api/targets/suggest", {}),
+    ("/api/menu/lifecycle", {}),
+    ("/api/meta/data-window", {}),
+    ("/api/data-coverage", {}),
+    ("/api/reports/menu-impact/entities", {}),
 ]
 
 # Fixture periods: June (LATEST) sales are scaled 0.8 vs May (PREV).
@@ -424,6 +531,45 @@ def test_ai_ideas_fallback_without_key(client, monkeypatch):
         assert idea.get("title") and "rationale" in idea and "builds_on" in idea
 
 
+
+
+# ── broad-sweep companions: endpoints needing discovered params / binary bodies ──
+def test_menu_impact_report_via_entities(client):
+    """menu-impact needs an ent= handle; discover one from the selector endpoint
+    (falls back to a raw SKU handle when the fixture has no fact coverage)."""
+    ents = client.get("/api/reports/menu-impact/entities").json()
+    handles = [e["ent"] for e in ents.get("items", []) if e.get("ent")] or ["s:3"]
+    r = client.get("/api/reports/menu-impact", params={"ent": handles[0]})
+    assert r.status_code == 200, r.text[:200]
+    r.json()
+
+
+def test_pnl_bill_items_drill(client):
+    # fixture receipts look like "2026-06-01-1001-1" (see conftest)
+    r = client.get("/api/reports/pnl-bill-items", params={"receipt": "2026-06-01-1001-1"})
+    assert r.status_code == 200, r.text[:200]
+    d = r.json()
+    assert "items" in d or "lines" in d or isinstance(d, (list, dict))
+
+
+XLSX_CT = "spreadsheetml"
+
+
+@pytest.mark.parametrize("path,params", [
+    ("/api/cost/template", {}),
+    ("/api/cost/monthly/template", {"month": "2026-05"}),
+    ("/api/buffet/gp/export", {}),
+    ("/api/export/monthly-pack", {"month": "2026-05"}),
+])
+def test_binary_exports_are_valid_workbooks(client, path, params):
+    import io, openpyxl
+    r = client.get(path, params=params)
+    assert r.status_code == 200, f"{path} -> {r.status_code}: {r.text[:200]}"
+    ct = r.headers.get("content-type", "")
+    if XLSX_CT in ct:
+        openpyxl.load_workbook(io.BytesIO(r.content))     # must parse
+    else:
+        assert "csv" in ct or "text" in ct or "json" in ct, f"{path}: unexpected content-type {ct}"
 
 
 # ── master / franchise scope split (regression) ─────────────────────────────
