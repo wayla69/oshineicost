@@ -1287,9 +1287,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 
   <!-- ═══ GROUP 7: 📄 รายงาน (exportable management summaries) ═══ -->
   <div class="nav-section">📄 รายงาน</div>
-  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="รายงาน · Exportable summary">
+  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="Monthly Report (รายงานประจำเดือน) · Exportable summary">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span class="nav-label">📄 รายงาน</span>
+    <span class="nav-label">📄 Monthly Report</span>
   </div>
   <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
@@ -1816,6 +1816,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
   <p class="text-[11px] mb-3" style="color:var(--text-muted)">เทียบบิลบุฟเฟ่ต์ที่<b>มี</b> vs <b>ไม่มี</b> วัตถุดิบ/เมนูที่เลือก (ต่อหัว · คุมความต่างสาขา×วัน) จากข้อมูลบิลจริง POS/MSSQL · "เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · ต้นทุน BoM ตัดแพ็กเกจบุฟเฟ่ต์กันนับซ้ำ · อัปเดตข้อมูลด้วย <code>python backend/build_menu_fact.py</code> หลัง sync</p>
   <div id="miBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
+
+  <!-- ── 🏷️ วิเคราะห์ Tier ราคาขาย (บุฟเฟ่ต์ผู้ใหญ่) — ใช้ช่วง+ขอบเขตจากตัวเลือกด้านบน ── -->
+  <div class="mt-8 pt-4" style="border-top:2px dashed var(--border)">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">🏷️ วิเคราะห์ Tier ราคาขาย (บุฟเฟ่ต์ผู้ใหญ่)</h2>
+      <span id="ptRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">แบ่งบิลตามราคาบุฟเฟ่ต์ผู้ใหญ่ (ex-VAT เช่น ฿799/฿689/฿649/฿590) · ช่วงที่เลือก (A) เทียบช่วงก่อนหน้าความยาวเท่ากัน (B) อัตโนมัติ · จำนวนคนทาน, การทาน Top-30 เมนูต้นทุน, เทรนด์ และข้อเสนอแนะ</p>
+    <div id="ptBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
+  </div>
 </div>
 
 <!-- ══ 🧩 EXTRA: 💵 เงินสดขาด/เกิน (CashCount) ══ -->
@@ -4726,7 +4736,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <div class="flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
-        <h1 class="text-3xl font-bold leading-tight">Sales &amp; Cost Analysis Report</h1>
+        <h1 class="text-3xl font-bold leading-tight">Monthly Report <span class="text-lg font-medium opacity-80">· รายงานประจำเดือน</span></h1>
         <p id="rptPeriod" class="text-sm opacity-90 mt-2">—</p>
         <p id="rptBranch" class="text-sm opacity-90">—</p>
         <!-- Scope: overview (all) / master only / franchise only. Report-local —
@@ -4902,6 +4912,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ลักษณะส่วนลดรายสาขา (Discount nature) · เทียบเดือนก่อน</h3>
       <p class="text-xs text-slate-400 mb-2">แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p>
       <div id="rptDiscountComposition" class="overflow-x-auto text-sm"></div>
+
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">🏷️ Tier ราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
+      <p class="text-xs text-slate-400 mb-2" id="rptTierNote">คนทาน สัดส่วน และต้นทุน/หัว แยกตามราคาบุฟเฟ่ต์บนบิล (ไม่รวม VAT) — เดือนที่รายงานเทียบช่วงก่อนหน้าความยาวเท่ากัน</p>
+      <div id="rptTierBlock" class="overflow-x-auto text-sm"></div>
     </div>
 
     <!-- §10 Forecasts & Action Items -->
@@ -5742,7 +5756,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">📑 Analysis Report — รายเดือน</p>
+        <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
         เลิกใช้ยอดสะสมที่ทำให้เข้าใจผิด → ทุก section นำด้วย<b>เดือนล่าสุด + MoM/YoY + YTD</b>. §8 เลือก<b>รายสาขา</b>ได้ + แสดง <b>Top 60</b> เมนู + %สะสม + ยอดรวม + MoM Δ จริง. §3 มี<b>โปรไฟล์รายสาขา</b> (เด่น/ผิดปกติเทียบเครือ). §9 มี<b>ลักษณะส่วนลดรายสาขา</b>เทียบเดือนก่อน.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
@@ -5843,7 +5857,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 รายงาน</b> (export pack) · <b>📖 คู่มือ</b> (หน้านี้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 Monthly Report</b> (export pack รายเดือน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
@@ -8050,6 +8064,11 @@ const MGT_I18N = {
     s4pre:'4. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4post:')',
     s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
     s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
+    s11:'11. Buffet Price Tiers — Guests & Cost/Head',
+    tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
+    tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
+    tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
+    tierNote:'Tier = adult buffet menu price on the bill (ex-VAT) · promo = non-standard price (discount/promotion) · guests count buffet bills only, so the total can sit slightly under headline covers · Cost/Head = BoM food cost',
     dow:{Mon:'Mon',Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'},
     numLocale:'en-US',
   },
@@ -8111,6 +8130,11 @@ const MGT_I18N = {
     s4pre:'4. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4post:')',
     s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
+    s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
+    tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
+    tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
+    tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
+    tierNote:'Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · โปรฯ = ราคานอกมาตรฐาน (ส่วนลด/โปรโมชัน) · นับเฉพาะบิลบุฟเฟ่ต์ ยอดรวมจึงต่ำกว่าจำนวนหัวรวมเล็กน้อย · ต้นทุน/หัว = ต้นทุนอาหารอิงสูตร BoM',
     dow:{Mon:'จ.',Tue:'อ.',Wed:'พ.',Thu:'พฤ.',Fri:'ศ.',Sat:'ส.',Sun:'อา.'},
     numLocale:'en-US',
   },
@@ -8824,6 +8848,35 @@ function renderMgtReport(j, jM, jF) {
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table></div>`;
   })();
 
+  // §11 — Buffet price tiers (guests, share & cost/head per adult buffet price).
+  // Hidden when the tier fact tables don't cover this window (j.tier == null).
+  const tierHtml = (() => {
+    const TD = j.tier;
+    if (!TD || !(TD.rows || []).length) return '';
+    const dPrev = (cur, prev) => {
+      if (cur == null || prev == null) return '';
+      const d = cur - prev;
+      return `<div class="text-[8.5px] font-normal leading-none mt-0.5" style="color:${d > 0 ? '#dc2626' : d < 0 ? '#059669' : '#64748b'}">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
+    };
+    const rows = TD.rows.map(r => `<tr class="border-t border-slate-100">
+      <td class="py-1.5 pr-3 font-semibold text-slate-700">${esc(r.label)}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${num(r.pax)}${r.pax_prev != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(r.pax, r.pax_prev)}</div>` : ''}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.share != null ? r.share.toFixed(1) + '%' : '—'}${r.share_prev != null ? `<div class="text-[8.5px] text-slate-400 leading-none mt-0.5">${T.was} ${r.share_prev.toFixed(1)}%</div>` : ''}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.rev_head != null ? baht(r.rev_head) : '—'}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums">${r.cogs_head != null ? baht(r.cogs_head) : '—'}${dPrev(r.cogs_head, r.cogs_head_prev)}</td>
+      <td class="py-1.5 px-2 text-right tabular-nums font-semibold">${r.gp_head != null ? baht(r.gp_head) : '—'}</td>
+      <td class="py-1.5 pl-2 text-right tabular-nums">${r.food_pct != null ? r.food_pct.toFixed(1) + '%' : '—'}</td></tr>`).join('');
+    const mix = (TD.mix_effect != null && Math.abs(TD.mix_effect) >= 0.5)
+      ? `<p class="text-[11px] mt-2 font-medium" style="color:${TD.mix_effect < 0 ? '#dc2626' : '#059669'}">${TD.mix_effect < 0 ? T.tierMixDown : T.tierMixUp}${TD.mix_effect >= 0 ? '+' : ''}${TD.mix_effect.toFixed(2)} ${isTH ? 'บาท/หัว' : 'THB/head'} <span class="text-slate-400 font-normal">${compShort}</span></p>` : '';
+    return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
+      <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
+        <th class="text-left py-1.5 pr-3">${T.tierCol}</th><th class="text-right py-1.5 px-2">${T.tierGuests}</th>
+        <th class="text-right py-1.5 px-2">${T.tierShare}</th><th class="text-right py-1.5 px-2">${T.tierRevHead}</th>
+        <th class="text-right py-1.5 px-2">${T.tierCostHead}</th><th class="text-right py-1.5 px-2">${T.tierGpHead}</th>
+        <th class="text-right py-1.5 pl-2">${T.tierFood}</th></tr></thead><tbody>${rows}</tbody></table></div>
+      ${mix}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>`;
+  })();
+
   const body = document.getElementById('mgtRptBody');
   if (!body) return;
   const footMonth = (j.pace && j.pace.month) || (isTH ? 'เดือนนั้น' : 'the period month');
@@ -8842,6 +8895,7 @@ function renderMgtReport(j, jM, jF) {
     + sec(T.s8, peakWithSplit, '#0284c7')
     + (tableHtml ? sec(T.s9, tableWithSplit, '#9333ea') : '')
     + (payHtml ? sec(T.s10 + _payScope, payHtml, '#0d9488') : '')
+    + (tierHtml ? sec(T.s11, tierHtml, '#b45309') : '')
     + footnote;
 
   // Trend chart(s). Split → 3 separate bar charts (Total/Master/Franchise), each with an
@@ -11628,6 +11682,53 @@ async function renderReportCost(branch) {
   }
 }
 
+// §9 Buffet price-tier block — reuses /api/reports/price-tier for the report's
+// headline month (A = that month, B = auto previous same-length window). Hidden
+// with a note when the tier fact tables don't cover the month.
+async function renderReportTier(month) {
+  const block = document.getElementById('rptTierBlock');
+  const note = document.getElementById('rptTierNote');
+  if (!block) return;
+  if (!month) { block.innerHTML = '<p class="text-xs text-slate-400">ไม่มีเดือนข้อมูล</p>'; return; }
+  block.innerHTML = '<p class="text-xs text-slate-400 py-2">กำลังโหลด…</p>';
+  const [y, m] = month.split('-').map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  const p = new URLSearchParams({ date_from: `${month}-01`, date_to: `${month}-${String(lastDay).padStart(2, '0')}`,
+                                  scope: reportScope || 'all' });
+  let d;
+  try { d = await fetch(`${API}/api/reports/price-tier?${p}`).then(r => r.json()); }
+  catch (e) { block.innerHTML = '<p class="text-xs text-slate-400">โหลดข้อมูล Tier ไม่สำเร็จ</p>'; return; }
+  if (!d.ready || d.error || !(d.tiers || []).length) {
+    block.innerHTML = `<p class="text-xs text-slate-400">${esc(d.error || d.hint || 'ไม่มีข้อมูล Tier สำหรับเดือนนี้')}</p>`;
+    return;
+  }
+  if (note) note.textContent =
+    `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
+  const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
+  const paxD = v => v == null ? '—' : `<span style="color:${v >= 0 ? '#059669' : '#dc2626'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+  const rows = d.tiers.map(x => `<tr class="border-t border-slate-100">
+    <td class="py-2 pr-4 font-semibold">${esc(x.label)}</td>
+    <td class="py-2 pr-4 text-right">${fmtN(x.a.pax)}</td>
+    <td class="py-2 pr-4 text-right">${paxD(x.d_pax_pct)}</td>
+    <td class="py-2 pr-4 text-right">${x.a.share ?? '—'}%<span class="text-[10px] text-slate-400"> (${x.d_share_pp != null ? (x.d_share_pp > 0 ? '+' : '') + x.d_share_pp : '—'}pp)</span></td>
+    <td class="py-2 pr-4 text-right">${x.a.rev_head != null ? '฿' + fmtN(x.a.rev_head) : '—'}</td>
+    <td class="py-2 pr-4 text-right">${x.a.cogs_head != null ? '฿' + fmtN(x.a.cogs_head) : '—'}<span class="text-[10px]"> (${sgn(x.d_cogs_head)})</span></td>
+    <td class="py-2 pr-4 text-right font-semibold">${x.a.gp_head != null ? '฿' + fmtN(x.a.gp_head) : '—'}</td>
+    <td class="py-2 text-right">${x.a.food_pct ?? '—'}%</td></tr>`).join('');
+  const mix = (d.mix_effect != null && Math.abs(d.mix_effect) >= 1)
+    ? `<p class="text-xs mt-2 font-medium" style="color:${d.mix_effect < 0 ? '#dc2626' : '#059669'}">${d.mix_effect < 0 ? 'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix กดรายได้/หัวลง ฿' + Math.abs(d.mix_effect).toFixed(2) : 'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix เพิ่มรายได้/หัว ฿' + d.mix_effect.toFixed(2)}</p>` : '';
+  const bullets = (d.insights || []).slice(0, 4).map(t => `<li>💡 ${esc(t)}</li>`).join('');
+  block.innerHTML = `<table class="text-sm text-slate-700 w-full">
+      <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+        <th class="py-2 pr-4">Tier</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
+        <th class="py-2 pr-4 text-right">Δ คนทาน</th><th class="py-2 pr-4 text-right">สัดส่วน (Δpp)</th>
+        <th class="py-2 pr-4 text-right">รายได้/หัว</th><th class="py-2 pr-4 text-right">ต้นทุน/หัว (Δ)</th>
+        <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
+    <p class="text-[11px] text-slate-400 mt-2">ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
+}
+
 // Run async thunks with bounded concurrency, preserving input order. Used by the
 // Analysis Report so it doesn't fire all ~16 queries at once (that put too many
 // heavy queries on the small host simultaneously and OOM-killed it). Rejects if
@@ -12394,6 +12495,7 @@ async function loadReport() {
     csel.value = want;
   }
   await renderReportCost(getBranch() || '');
+  renderReportTier(_rptLastMonth);   // §9 tier block — async, non-blocking
 
   // ── §9 Pricing & Discounts
   const discOverall = (discounts && discounts.overall) ? discounts.overall : {};
@@ -18923,6 +19025,7 @@ function miFilterOptions() {
   if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
 async function loadMenuImpact(force) {
+  loadPriceTier(force);   // 🏷️ tier section shares the same range/scope pickers
   const body = document.getElementById('miBody');
   if (!_miEnts) {
     try { _miEnts = await fetch(`${API}/api/reports/menu-impact/entities`).then(r => r.json()); }
@@ -19055,6 +19158,141 @@ async function loadMenuImpact(force) {
       options: { responsive: true, maintainAspectRatio: false,
         scales: { y: { title: { display: true, text: 'ชิ้น/หัว' } },
                   y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '% บิล' } } } } });
+  }
+}
+
+// ── 🏷️ วิเคราะห์ Tier ราคาขาย (section of the 🧪 tab) ───────────────────────
+let _ptChartMix = null, _ptChartCogs = null, _ptSeq = 0;
+async function loadPriceTier(force) {
+  const body = document.getElementById('ptBody');
+  if (!body) return;
+  const df = document.getElementById('miFrom').value, dt2 = document.getElementById('miTo').value;
+  const scope = document.getElementById('miScope').value;
+  const key = `${df}|${dt2}|${scope}`;
+  if (!force && _tabLastKey.pricetier === key) return;
+  const seq = ++_ptSeq;   // drop stale responses when loads overlap
+  body.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังวิเคราะห์ Tier…</p>';
+  const p = new URLSearchParams({ scope });
+  if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
+  let d;
+  try { d = await fetch(`${API}/api/reports/price-tier?${p}`).then(r => r.json()); }
+  catch (e) { if (seq === _ptSeq) body.innerHTML = '<p class="text-center text-rose-500 py-10">วิเคราะห์ Tier ไม่สำเร็จ</p>'; return; }
+  if (seq !== _ptSeq) return;
+  _tabLastKey.pricetier = key;
+  if (!d.ready || d.error) {
+    body.innerHTML = `<p class="text-center text-slate-400 py-10">${esc(d.error || d.hint || 'ไม่มีข้อมูล')}</p>`;
+    document.getElementById('ptRange').textContent = ''; return;
+  }
+  const n0 = v => Number(v || 0).toLocaleString('en-US');
+  const b1 = v => v == null ? '-' : '฿' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 });
+  const sg = (v, suf = '') => v == null ? '-' : (v > 0 ? '+' : '') + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + suf;
+  const RED = '#b0472d', GRN = '#1f7a4d';
+  const dc = (v, inv) => v == null ? 'var(--text-muted)' : (inv ? v < 0 : v > 0) ? GRN : RED;
+  const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
+  const tcolor = {}; d.tier_keys.forEach((t, i) => tcolor[t] = PAL[i % PAL.length]);
+  const modeLbl = d.mode === 'prev' ? 'ช่วงก่อนหน้า' : 'ครึ่งแรกของช่วง (ประวัติไม่พอ)';
+  document.getElementById('ptRange').textContent =
+    `A: ${d.a_range[0]} → ${d.a_range[1]} · เทียบ B (${modeLbl}): ${d.b_range[0]} → ${d.b_range[1]} · ${d.scope_label}`;
+
+  const B = d.blend;
+  const kpi = (l, v, dv, sub, inv) => `<div class="card p-4" style="border-top:3px solid ${dc(dv, inv)}">
+    <p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p>
+    <p class="text-2xl font-bold" style="color:var(--text-primary)">${v}</p>
+    <p class="text-[11px] font-semibold" style="color:${dc(dv, inv)}">${sub}</p></div>`;
+  const dd = (a, b) => (a != null && b != null) ? a - b : null;
+  const kpis =
+    kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${n0(B.pax_b)} คน)`, false) +
+    kpi('รายได้/หัว (ex-VAT)', b1(B.rev_head_a), dd(B.rev_head_a, B.rev_head_b), `B: ${b1(B.rev_head_b)} · Δ ${sg(dd(B.rev_head_a, B.rev_head_b))}`, false) +
+    kpi('ต้นทุนอาหาร/หัว', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
+    kpi('Food cost %', (B.food_pct_a ?? '-') + '%', dd(B.food_pct_a, B.food_pct_b), `B: ${B.food_pct_b ?? '-'}% · Δ ${sg(dd(B.food_pct_a, B.food_pct_b), ' pp')}`, true);
+
+  const tierRows = d.tiers.map(x => `<tr class="border-t border-slate-100">
+    <td class="py-1.5 pr-2 font-bold" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">${esc(x.label)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.a.pax)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.b.pax)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${dc(x.d_pax_pct)}">${sg(x.d_pax_pct, '%')}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${x.a.share ?? '-'}%<span class="text-[10px]" style="color:${dc(x.d_share_pp)}"> (${sg(x.d_share_pp)})</span></td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${x.a.pax_bill ?? '-'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.rev_head)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.cogs_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_cogs_head, true)}"> (${sg(x.d_cogs_head)})</span></td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.hc_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_hc_head, true)}"> (${sg(x.d_hc_head)})</span></td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${b1(x.a.gp_head)}</td>
+    <td class="py-1.5 text-right tabular-nums">${x.a.food_pct ?? '-'}%</td></tr>`).join('');
+
+  const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">💡 ${esc(t)}</li>`).join('') || '<li>—</li>';
+  const acts = (d.actions || []).map((a, i) => `<li style="margin:.45em 0"><b>${i + 1}. ${esc(a.title)}</b><br><span style="color:var(--text-secondary)">${esc(a.detail)}</span></li>`).join('');
+
+  const tl = t => (d.tier_labels || {})[t] || t;
+  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>ชิ้น/หัว (Δ%)</th>`).join('');
+  const topRows = (d.top30 || []).map((r, i) => {
+    const cells = d.tier_keys.map(t => {
+      const c = r.tiers[t] || {};
+      return `<td class="py-1 pr-2 text-right tabular-nums">${c.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
+    }).join('');
+    return `<tr class="border-t border-slate-100">
+      <td class="py-1 pr-1 text-slate-400">${i + 1}</td>
+      <td class="py-1 pr-2 font-semibold">${esc(r.label)}</td>
+      <td class="py-1 pr-2 text-right tabular-nums">${b1(r.unit_cost)}</td>
+      <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.cogs_head)}</td>
+      <td class="py-1 pr-2 text-right tabular-nums">${r.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
+      ${cells}</tr>`;
+  }).join('');
+
+  body.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
+    <div class="card p-5 mb-5 overflow-x-auto">
+      <h2 class="section-title mb-3">Tier ราคา — คนทาน & ต้นทุน/หัว (A เทียบ B)</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">คนทาน A</th><th class="py-1.5 pr-2 text-right">คนทาน B</th>
+        <th class="py-1.5 pr-2 text-right">Δ คนทาน</th><th class="py-1.5 pr-2 text-right">สัดส่วน (Δpp)</th>
+        <th class="py-1.5 pr-2 text-right">คน/บิล</th><th class="py-1.5 pr-2 text-right">รายได้/หัว</th>
+        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
+        <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">Food%</th>
+      </tr></thead><tbody>${tierRows}</tbody></table>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่</p>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
+      <div class="card p-5" style="border-left:4px solid var(--indigo,#6366f1)"><h2 class="section-title mb-3">✅ สิ่งที่ต้องปรับปรุงและพัฒนา</h2><ol class="text-xs" style="list-style:none;padding:0;margin:0">${acts}</ol></div>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์สัดส่วนคนทานตาม Tier (รายเดือน)</h2><div style="height:280px"><canvas id="ptChartMix"></canvas></div></div>
+      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier (รายเดือน)</h2><div style="height:280px"><canvas id="ptChartCogs"></canvas></div></div>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h2 class="section-title mb-0">Top-${(d.top30 || []).length} เมนูหลักในต้นทุน — การทานต่อหัวแยกตาม Tier (A, วงเล็บ = Δ% เทียบ B)</h2>
+        <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
+      <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-1">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
+        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">ชิ้น/หัว รวม (Δ%)</th>${tierTh}
+      </tr></thead><tbody>${topRows}</tbody></table>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น)</p>
+    </div>`;
+
+  if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }
+  if (_ptChartCogs) { _ptChartCogs.destroy(); _ptChartCogs = null; }
+  const trm = d.trend_month || [];
+  if (trm.length) {
+    const labels = trm.map(r => r.ym);
+    const dsMix = d.tier_keys.map(t => ({
+      label: tl(t),
+      data: trm.map(r => r.tiers[t]?.share ?? 0),
+      backgroundColor: tcolor[t], stack: 's' }));
+    _ptChartMix = new Chart(document.getElementById('ptChartMix'), {
+      type: 'bar', data: { labels, datasets: dsMix },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '% ของคนทาน' } } },
+        plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
+    const dsCogs = d.tier_keys.filter(t => t !== 'child').map(t => ({
+      label: tl(t),
+      data: trm.map(r => r.tiers[t]?.cogs_head ?? null),
+      borderColor: tcolor[t], backgroundColor: tcolor[t], tension: .25, spanGaps: true }));
+    _ptChartCogs = new Chart(document.getElementById('ptChartCogs'), {
+      type: 'line', data: { labels, datasets: dsCogs },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { title: { display: true, text: '฿/หัว' } } } } });
   }
 }
 
