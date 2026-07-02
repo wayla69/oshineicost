@@ -19130,7 +19130,8 @@ async function loadPriceTier(force) {
   const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">💡 ${esc(t)}</li>`).join('') || '<li>—</li>';
   const acts = (d.actions || []).map((a, i) => `<li style="margin:.45em 0"><b>${i + 1}. ${esc(a.title)}</b><br><span style="color:var(--text-secondary)">${esc(a.detail)}</span></li>`).join('');
 
-  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${t === '0' ? 'อื่นๆ' : '฿' + Number(t).toLocaleString()}<br>ชิ้น/หัว (Δ%)</th>`).join('');
+  const tl = t => (d.tier_labels || {})[t] || t;
+  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>ชิ้น/หัว (Δ%)</th>`).join('');
   const topRows = (d.top30 || []).map((r, i) => {
     const cells = d.tier_keys.map(t => {
       const c = r.tiers[t] || {};
@@ -19156,7 +19157,7 @@ async function loadPriceTier(force) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">Food%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · อื่นๆ = tier สัดส่วน &lt;1% + บิลไม่มีบรรทัดบุฟเฟ่ต์ผู้ใหญ่</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
@@ -19184,7 +19185,7 @@ async function loadPriceTier(force) {
   if (trm.length) {
     const labels = trm.map(r => r.ym);
     const dsMix = d.tier_keys.map(t => ({
-      label: t === '0' ? 'อื่นๆ' : '฿' + Number(t).toLocaleString(),
+      label: tl(t),
       data: trm.map(r => r.tiers[t]?.share ?? 0),
       backgroundColor: tcolor[t], stack: 's' }));
     _ptChartMix = new Chart(document.getElementById('ptChartMix'), {
@@ -19192,8 +19193,8 @@ async function loadPriceTier(force) {
       options: { responsive: true, maintainAspectRatio: false,
         scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '% ของคนทาน' } } },
         plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
-    const dsCogs = d.tier_keys.filter(t => t !== '0').map(t => ({
-      label: '฿' + Number(t).toLocaleString(),
+    const dsCogs = d.tier_keys.filter(t => t !== 'child').map(t => ({
+      label: tl(t),
       data: trm.map(r => r.tiers[t]?.cogs_head ?? null),
       borderColor: tcolor[t], backgroundColor: tcolor[t], tension: .25, spanGaps: true }));
     _ptChartCogs = new Chart(document.getElementById('ptChartCogs'), {

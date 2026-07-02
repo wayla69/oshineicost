@@ -2951,25 +2951,32 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 
 # ---------------------------------------------------------------------------
 # 🏷️ Price-tier analysis (วิเคราะห์ Tier ราคาขายบุฟเฟ่ต์) — section of the 🧪 tab.
-# Powered by menu_fact_tier_total / menu_fact_tier_day (build_menu_fact.py):
-# each buffet bill carries tier = dominant adult-buffet price ex-VAT (799/689/…).
-# Compares the chosen range A against the SAME-LENGTH window right before it
-# (or, if history is too short, the first half vs second half of the range).
+# Reads the tier-dimensioned menu_fact_total / menu_fact_day fact tables
+# (schema v2, build_menu_fact.py): every buffet bill carries tier = canonical
+# adult-buffet price ex-VAT ('350'…'999'), 'promo' (non-canonical price) or
+# 'child' (no adult cover). Compares the chosen range A against the SAME-LENGTH
+# window right before it (or the first vs second half of the range when there
+# is not enough history before it).
 # ---------------------------------------------------------------------------
 _PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
-_PT_MIN_SHARE = 0.01    # tiers below 1% pax share fold into "อื่นๆ"
+_PT_ORDER = ("999", "799", "689", "649", "590", "350", "promo", "child")
+_PT_LABEL = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
+
+
+def _pt_label(t):
+    return _PT_LABEL.get(t, f"฿{int(t):,}" if str(t).isdigit() else str(t))
 
 
 def _pt_sum_tiers(con, ph, bids, d_from, d_to):
-    """{tier: {bills,pax,cogs,rev,hc}} over a window."""
+    """{tier: {bills,pax,cogs,rev,hc}} over a window (v2 fact tables)."""
     out = {}
     for t, nb, px, cg, rv, hc in con.execute(
             f"""SELECT tier, SUM(bills), SUM(pax), SUM(cogs), SUM(rev), SUM(hc)
-                FROM menu_fact_tier_total
+                FROM menu_fact_total
                 WHERE day BETWEEN ? AND ? AND branch_id IN ({ph}) GROUP BY tier""",
             [d_from, d_to] + bids):
-        out[int(t or 0)] = {"bills": nb or 0, "pax": px or 0.0, "cogs": cg or 0.0,
-                            "rev": rv or 0.0, "hc": hc or 0.0}
+        out[str(t or "promo")] = {"bills": nb or 0, "pax": px or 0.0, "cogs": cg or 0.0,
+                                  "rev": rv or 0.0, "hc": hc or 0.0}
     return out
 
 
@@ -2995,13 +3002,14 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     if scope not in _MI_SCOPE_LABEL:
         scope = "all"
     with get_db() as con:
-        if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
-                           "AND name='menu_fact_tier_total'").fetchone():
+        has_tier = _mi_ready(con) and bool(con.execute(
+            "SELECT 1 FROM pragma_table_info('menu_fact_total') WHERE name='tier'").fetchone())
+        if not has_tier:
             return {"ready": False,
-                    "hint": "ยังไม่มีข้อมูล Tier — รัน python backend/build_menu_fact.py --only tier ก่อน"}
-        lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_tier_total").fetchone()
+                    "hint": "ยังไม่มีข้อมูล Tier (fact schema v2) — รัน python backend/build_menu_fact.py ก่อน"}
+        lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
         if not lo:
-            return {"ready": False, "hint": "ตารางข้อมูล Tier ว่าง — รัน build_menu_fact.py --only tier"}
+            return {"ready": False, "hint": "ตารางข้อมูลว่าง — รัน build_menu_fact.py"}
         a_from = max(date_from or lo, lo)
         a_to = min(date_to or hi, hi)
         if a_from > a_to:
@@ -3022,39 +3030,26 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
 
         bids = _mi_branch_ids(con, scope)
         ph = ",".join("?" * len(bids))
-        TA = _pt_sum_tiers(con, ph, bids, a_from, a_to)
-        TB = _pt_sum_tiers(con, ph, bids, b_from, b_to)
-        pax_a = sum(v["pax"] for v in TA.values())
-        pax_b = sum(v["pax"] for v in TB.values())
+        FA = _pt_sum_tiers(con, ph, bids, a_from, a_to)
+        FB = _pt_sum_tiers(con, ph, bids, b_from, b_to)
+        pax_a = sum(v["pax"] for v in FA.values())
+        pax_b = sum(v["pax"] for v in FB.values())
         if pax_a <= 0:
             return {"ready": True, "error": "ไม่มีข้อมูลบิลบุฟเฟ่ต์ในช่วง/ขอบเขตที่เลือก",
                     "coverage": [lo, hi]}
+        tier_keys = [t for t in _PT_ORDER
+                     if FA.get(t, {}).get("pax", 0) > 0 or FB.get(t, {}).get("pax", 0) > 0]
 
-        # tier buckets: keep price points with ≥1% pax share in A or B, rest → 0 (อื่นๆ)
-        keep = sorted({t for t in set(TA) | set(TB) if t > 0 and (
-            (TA.get(t, {}).get("pax", 0) / pax_a if pax_a else 0) >= _PT_MIN_SHARE or
-            (TB.get(t, {}).get("pax", 0) / pax_b if pax_b else 0) >= _PT_MIN_SHARE)}, reverse=True)
-        bucket = lambda t: t if t in keep else 0
-
-        def fold(tt):
-            out = {}
-            for t, v in tt.items():
-                m = out.setdefault(bucket(t), {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0, "hc": 0.0})
-                for k in m:
-                    m[k] += v[k]
-            return out
-        FA, FB = fold(TA), fold(TB)
-
-        # per costed SKU x tier for both windows (for the Top-30 matrix + drivers)
+        # per costed menu SKU x tier for both windows (groups g:* excluded — they
+        # would double-count their member SKUs in the Top-30 ranking)
         def ent_rows(d1, d2):
             out = {}
             for ent, t, q, ec in con.execute(
-                    f"""SELECT ent, tier, SUM(qty), SUM(ent_cogs) FROM menu_fact_tier_day
-                        WHERE day BETWEEN ? AND ? AND branch_id IN ({ph}) GROUP BY ent, tier""",
+                    f"""SELECT ent, tier, SUM(qty), SUM(ent_cogs) FROM menu_fact_day
+                        WHERE day BETWEEN ? AND ? AND branch_id IN ({ph}) AND ent LIKE 's:%'
+                        GROUP BY ent, tier""",
                     [d1, d2] + bids):
-                b = bucket(int(t or 0))
-                e = out.setdefault(ent, {})
-                m = e.setdefault(b, {"qty": 0.0, "ecogs": 0.0})
+                m = out.setdefault(ent, {}).setdefault(str(t or "promo"), {"qty": 0.0, "ecogs": 0.0})
                 m["qty"] += q or 0.0
                 m["ecogs"] += ec or 0.0
             return out
@@ -3066,16 +3061,14 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         trend = {}
         for ym, t, px, cg, rv in con.execute(
                 f"""SELECT substr(day,1,7), tier, SUM(pax), SUM(cogs), SUM(rev)
-                    FROM menu_fact_tier_total WHERE branch_id IN ({ph})
+                    FROM menu_fact_total WHERE branch_id IN ({ph})
                     GROUP BY substr(day,1,7), tier""", bids):
-            m = trend.setdefault(ym, {}).setdefault(bucket(int(t or 0)),
+            m = trend.setdefault(ym, {}).setdefault(str(t or "promo"),
                                                     {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
             m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
 
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
     pct = lambda c, p: round((c - p) / p * 100, 1) if p else None
-    tier_keys = keep + ([0] if 0 in FA or 0 in FB else [])
-    tlabel = lambda t: f"฿{t:,}" if t else "อื่นๆ"
 
     tiers = []
     for t in tier_keys:
@@ -3085,7 +3078,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         A["share"] = rd(va["pax"] / pax_a * 100, 1) if pax_a else None
         B["share"] = rd(vb["pax"] / pax_b * 100, 1) if pax_b else None
         tiers.append({
-            "tier": t, "label": tlabel(t), "a": A, "b": B,
+            "tier": t, "label": _pt_label(t), "a": A, "b": B,
             "d_pax_pct": pct(va["pax"], vb["pax"]),
             "d_share_pp": rd((A["share"] or 0) - (B["share"] or 0), 1) if A["share"] is not None and B["share"] is not None else None,
             "d_cogs_head": rd(A["cogs_head"] - B["cogs_head"]) if A["cogs_head"] is not None and B["cogs_head"] is not None else None,
@@ -3101,7 +3094,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         label, uc = meta.get(ent, (ent, 0.0))
         qa = sum(m["qty"] for m in per.values()); ca = sum(m["ecogs"] for m in per.values())
         perB = EB.get(ent, {})
-        qb = sum(m["qty"] for m in perB.values()); cb = sum(m["ecogs"] for m in perB.values())
+        qb = sum(m["qty"] for m in perB.values())
         row = {"ent": ent, "label": label, "unit_cost": rd(uc or 0),
                "qty": rd(qa, 0), "ecogs": rd(ca, 0),
                "qty_head": rd(qa / pax_a, 3) if pax_a else None,
@@ -3111,8 +3104,8 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         for t in tier_keys:
             qha = per.get(t, {}).get("qty", 0.0) / paxA[t] if paxA[t] else None
             qhb = perB.get(t, {}).get("qty", 0.0) / paxB[t] if paxB[t] else None
-            row["tiers"][str(t)] = {"qty_head": rd(qha, 3) if qha is not None else None,
-                                    "d_pct": pct(qha or 0, qhb) if qhb else None}
+            row["tiers"][t] = {"qty_head": rd(qha, 3) if qha is not None else None,
+                               "d_pct": pct(qha or 0, qhb) if qhb else None}
         top30.append(row)
 
     # ── monthly trend payload ──
@@ -3121,10 +3114,10 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         mt = trend[ym]
         tot_px = sum(v["pax"] for v in mt.values())
         trend_month.append({"ym": ym, "tiers": {
-            str(t): {"pax": rd(v["pax"], 0),
-                     "share": rd(v["pax"] / tot_px * 100, 1) if tot_px else None,
-                     "cogs_head": rd(v["cogs"] / v["pax"]) if v["pax"] else None,
-                     "rev_head": rd(v["rev"] / v["pax"]) if v["pax"] else None}
+            t: {"pax": rd(v["pax"], 0),
+                "share": rd(v["pax"] / tot_px * 100, 1) if tot_px else None,
+                "cogs_head": rd(v["cogs"] / v["pax"]) if v["pax"] else None,
+                "rev_head": rd(v["rev"] / v["pax"]) if v["pax"] else None}
             for t, v in mt.items()}})
 
     # ── blended per-head + mix effect ──
@@ -3153,7 +3146,9 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         insights.append(f"จำนวนคนทานรวม {blend['pax_a']:,.0f} คน "
                         f"{'เพิ่มขึ้น' if up else 'ลดลง'} {abs(blend['d_pax_pct'])}% เทียบ{period_word} "
                         f"({blend['pax_b']:,.0f} คน)")
-    real_tiers = [x for x in tiers if x["tier"] > 0 and x["d_pax_pct"] is not None]
+    # tier-level pax insights: canonical price tiers only (promo/child mix with
+    # price-list changes and would mislead the "กู้ยอด" framing)
+    real_tiers = [x for x in tiers if str(x["tier"]).isdigit() and x["d_pax_pct"] is not None]
     if real_tiers:
         gain = max(real_tiers, key=lambda x: x["d_pax_pct"])
         lose = min(real_tiers, key=lambda x: x["d_pax_pct"])
@@ -3168,6 +3163,10 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                 "detail": f"คนทานลดลง {abs(lose['d_pax_pct'])}% เทียบ{period_word} "
                                           f"(เหลือ {lose['a']['pax']:,} คน) — ตรวจสาขาหลักที่ขาย tier นี้, "
                                           f"จัดโปรวันธรรมดา/ช่วง off-peak เฉพาะ tier, และเช็คว่าราคา/คู่แข่งในพื้นที่เปลี่ยนหรือไม่"})
+    promo = next((x for x in tiers if x["tier"] == "promo"), None)
+    if promo and promo["d_share_pp"] is not None and abs(promo["d_share_pp"]) >= 2:
+        insights.append(f"สัดส่วนบิลราคาโปรโมชัน/นอกราคามาตรฐาน {promo['b']['share']}% → {promo['a']['share']}% "
+                        f"({'+' if promo['d_share_pp'] > 0 else ''}{promo['d_share_pp']} pp)")
     if mix_effect is not None and abs(mix_effect) >= 1:
         if mix_effect < 0:
             insights.append(f"ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix อย่างเดียวกดรายได้/หัวลง {fb(-mix_effect)}")
@@ -3179,10 +3178,10 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             insights.append(f"ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix อย่างเดียวเพิ่มรายได้/หัว {fb(mix_effect)}")
     for x in real_tiers:
         if x["d_cogs_head"] is not None and x["d_cogs_head"] >= 3:
-            drivers = sorted((r for r in top30 if r["tiers"].get(str(x["tier"]), {}).get("d_pct")),
-                             key=lambda r: -(r["tiers"][str(x["tier"])]["d_pct"] or 0))[:3]
-            dtxt = ", ".join(f"{r['label']} (+{r['tiers'][str(x['tier'])]['d_pct']}%)" for r in drivers
-                             if (r["tiers"][str(x["tier"])]["d_pct"] or 0) > 0)
+            drivers = sorted((r for r in top30 if r["tiers"].get(x["tier"], {}).get("d_pct")),
+                             key=lambda r: -(r["tiers"][x["tier"]]["d_pct"] or 0))[:3]
+            dtxt = ", ".join(f"{r['label']} (+{r['tiers'][x['tier']]['d_pct']}%)" for r in drivers
+                             if (r["tiers"][x["tier"]]["d_pct"] or 0) > 0)
             insights.append(f"ต้นทุน/หัว tier {x['label']} เพิ่ม {fb(x['d_cogs_head'])} "
                             f"({fb(x['b']['cogs_head'])} → {fb(x['a']['cogs_head'])})"
                             + (f" — ตัวดัน: {dtxt}" if dtxt else ""))
@@ -3223,7 +3222,8 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             "coverage": [lo, hi], "mode": mode,
             "a_range": [a_from, a_to], "b_range": [b_from, b_to],
             "blend": blend, "mix_effect": mix_effect,
-            "tiers": tiers, "tier_keys": [str(t) for t in tier_keys],
+            "tiers": tiers, "tier_keys": tier_keys,
+            "tier_labels": {t: _pt_label(t) for t in tier_keys},
             "top30": top30, "trend_month": trend_month,
             "insights": insights, "actions": actions}
 

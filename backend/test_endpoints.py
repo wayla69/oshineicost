@@ -53,7 +53,7 @@ SMOKE = [
     ("/api/analysis/discount_composition", {"month_from": "2026-05", "month_to": "2026-06", "group": "franchise"}),
     ("/api/buffet/performance", {"group": "master"}),
     ("/api/bom-cost/overview", {"group": "franchise"}),
-    # ── 🏷️ price-tier analysis (menu_fact_tier_* absent in fixture → ready:False) ──
+    # ── 🏷️ price-tier analysis (tier fact tables absent in fixture → ready:False) ──
     ("/api/reports/price-tier", {}),
     ("/api/reports/price-tier", {"scope": "master", "date_from": "2026-05-01", "date_to": "2026-05-31"}),
 ]
@@ -70,7 +70,7 @@ def test_endpoint_200(client, path, params):
 
 
 def test_price_tier_graceful_without_fact_tables(client):
-    # fixture DB has no menu_fact_tier_* tables → must degrade to ready:False, not 500
+    # fixture DB has no tier-dimensioned menu_fact tables → degrade to ready:False, not 500
     d = client.get("/api/reports/price-tier").json()
     assert d["ready"] is False and "hint" in d
 
