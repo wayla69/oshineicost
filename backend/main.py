@@ -6396,6 +6396,7 @@ def upload_file(
     suffix = _Path(filename).suffix or ".txt"
 
     tmp_path = None
+    tmp_dir = None
     try:
         # Stream to disk with a hard size cap (anti disk-fill DoS).
         total = 0
@@ -6413,12 +6414,16 @@ def upload_file(
                 tmp.write(chunk)
             tmp_path = _Path(tmp.name)
 
-        # Rename the temp file to match original name so pattern matching works.
-        # Guard: the target MUST stay inside the temp directory.
-        # Include unique tmp stem to avoid collision when two uploads of the same
-        # filename arrive concurrently (fix C11).
-        named_path = tmp_path.parent / f"{tmp_path.stem}_{filename}"
-        if named_path.resolve().parent != tmp_path.parent.resolve():
+        # Rename the temp file to match the original name so pattern matching
+        # works. Guard: the target MUST stay inside the temp directory. A
+        # per-upload unique DIRECTORY keeps concurrent same-name uploads safe
+        # (fix C11) while preserving the exact filename — the previous
+        # stem-prefix approach broke upload_data.classify(), whose
+        # startswith("ES1_") checks never matched a prefixed name, so raw
+        # .xlsx uploads were always rejected as unknown files.
+        tmp_dir = _Path(tempfile.mkdtemp(prefix="easy_upload_"))
+        named_path = tmp_dir / filename
+        if named_path.resolve().parent != tmp_dir.resolve():
             raise HTTPException(status_code=400, detail="Invalid filename")
         tmp_path.rename(named_path)
         tmp_path = named_path
@@ -6496,6 +6501,11 @@ def upload_file(
         if tmp_path and tmp_path.exists():
             try:
                 tmp_path.unlink()
+            except Exception:
+                pass
+        if tmp_dir and tmp_dir.exists():
+            try:
+                tmp_dir.rmdir()
             except Exception:
                 pass
 

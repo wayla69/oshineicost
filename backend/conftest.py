@@ -44,6 +44,11 @@ def _build_db(path: str):
                                                resolved_sku_id INTEGER NOT NULL REFERENCES skus(sku_id),
                                                match_method TEXT, confidence REAL, notes TEXT);
       CREATE TABLE IF NOT EXISTS sale_payment(branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL);
+      CREATE TABLE IF NOT EXISTS closed_hours(branch_id INTEGER NOT NULL REFERENCES branches(branch_id),
+                                              dow INTEGER NOT NULL, hour_from INTEGER NOT NULL DEFAULT 0,
+                                              hour_to INTEGER NOT NULL DEFAULT 23,
+                                              is_closed INTEGER NOT NULL DEFAULT 0,
+                                              PRIMARY KEY (branch_id, dow));
       CREATE TABLE IF NOT EXISTS sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
       CREATE TABLE IF NOT EXISTS sale_bill_cogs(receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);
       CREATE TABLE IF NOT EXISTS pos_payment_month(branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT);
