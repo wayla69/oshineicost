@@ -7982,6 +7982,7 @@ const MGT_I18N = {
     discByMaster:'Discounts by master branch · % of sales', companyFollow:'(company-owned — the follow-up)',
     discount:'Discount', salesExVat:'Sales (ex-VAT)', discBills:'Disc. bills', allMaster:'All master',
     heavyDisc30:'Heavy Discounts ≥30%', cashHeavyShort:'Cash-Heavy', reprintShort:'Reprinted Bills', zeroShort:'Zero-Gross',
+    discTotalShort:'Total Discounts (all bills)',
     // §7 menu
     totFoodHead:'Total food cost / head: ', was:'was', overCovers:' covers', perHead:'/head',
     none:'None.', noCompPeriod:'No comparison period.', highestCostHead:'Highest Cost / Head',
@@ -8049,6 +8050,7 @@ const MGT_I18N = {
     discByMaster:'ส่วนลดรายสาขาบริษัท · % ของยอดขาย', companyFollow:'(สาขาบริษัท — ประเด็นติดตาม)',
     discount:'ส่วนลด', salesExVat:'ยอดขาย (ไม่รวม VAT)', discBills:'บิลส่วนลด', allMaster:'รวมสาขาบริษัท',
     heavyDisc30:'ส่วนลดหนัก ≥30%', cashHeavyShort:'จ่ายเงินสด', reprintShort:'บิลพิมพ์ซ้ำ', zeroShort:'ยอดศูนย์',
+    discTotalShort:'ส่วนลดรวม (ทุกบิล)',
     totFoodHead:'ต้นทุนอาหารต่อหัวรวม: ', was:'เดิม', overCovers:' หัว', perHead:'/หัว',
     none:'ไม่มี', noCompPeriod:'ไม่มีช่วงเปรียบเทียบ', highestCostHead:'ต้นทุนต่อหัวสูงสุด',
     costHeadRising:'ต้นทุนต่อหัวเพิ่มขึ้น ', costHeadFalling:'ต้นทุนต่อหัวลดลง ', noData:'ไม่มีข้อมูล',
@@ -8708,9 +8710,11 @@ function renderMgtReport(j, jM, jF) {
       return o.unavailable ? '—' : `${num(o.bills||0)} ${T.bills} · ${baht(o.baht||0)}`;
     };
     return splitPanel(
-      [[T.heavyDisc30, lkRow(jM,'heavy_discount')], [T.cashHeavyShort, lkRow(jM,'cash_heavy')],
+      [[T.discTotalShort, lkRow(jM,'total')],
+       [T.heavyDisc30, lkRow(jM,'heavy_discount')], [T.cashHeavyShort, lkRow(jM,'cash_heavy')],
        [T.reprintShort, lkRow(jM,'reprinted')], [T.zeroShort, lkRow(jM,'zero_gross')]],
-      [[T.heavyDisc30, lkRow(jF,'heavy_discount')], [T.cashHeavyShort, lkRow(jF,'cash_heavy')],
+      [[T.discTotalShort, lkRow(jF,'total')],
+       [T.heavyDisc30, lkRow(jF,'heavy_discount')], [T.cashHeavyShort, lkRow(jF,'cash_heavy')],
        [T.reprintShort, lkRow(jF,'reprinted')], [T.zeroShort, lkRow(jF,'zero_gross')]]);
   })();
 
