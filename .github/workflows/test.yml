@@ -27,7 +27,9 @@ jobs:
         env:
           OSHINEI_NO_SWAP: "1"   # never touch a real DB during import
         run: |
-          python -m pytest -q --cov=main --cov=sync_mssql --cov-report=term-missing
+          python -m pytest -q --cov=main --cov=sync_mssql --cov=auth \
+            --cov=upload_data --cov=reingest_raw_2026 --cov=ingest_easy \
+            --cov=month_summary --cov-report=term-missing
 
   recon:
     runs-on: ubuntu-latest
