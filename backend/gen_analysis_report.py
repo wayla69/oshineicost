@@ -95,21 +95,21 @@ def svg_line(series, color, fill, height=230, width=960, fmt=thb_m, y_suffix="",
             f'{dots}{xlabels}</svg>')
 
 # ── main ────────────────────────────────────────────────────────────────────
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--api", default="http://127.0.0.1:8010")
-    ap.add_argument("--date", default=None)
-    args = ap.parse_args()
-    api = args.api.rstrip("/")
-    gen_date = args.date or "2026-06-02"
+def build(api, gen_date, group, scope_label, out_name):
+    """Build one analysis-report HTML for a branch scope.
 
-    profit   = fetch(api, "/api/profit/summary")
-    gpb      = fetch(api, "/api/gp/by-branch-month")
-    buf      = fetch(api, "/api/buffet/performance")["kpis"]
-    buf_ft   = fetch(api, "/api/buffet/performance")["food_cost_trend"]
-    me       = fetch(api, "/api/cost/analysis")
-    bom      = fetch(api, "/api/bom-cost/overview")
-    cats     = fetch(api, "/api/sales/category")
+    group ∈ {None, 'master', 'franchise'}: None = whole chain (overview);
+    otherwise only that branch group. Every API call is scoped identically so the
+    three reports (overview / master / franchise) reconcile with the dashboard's
+    own master/franchise filter."""
+    gq = f"?group={group}" if group else ""
+    profit   = fetch(api, "/api/profit/summary" + gq)
+    gpb      = fetch(api, "/api/gp/by-branch-month" + gq)
+    buf      = fetch(api, "/api/buffet/performance" + gq)["kpis"]
+    buf_ft   = fetch(api, "/api/buffet/performance" + gq)["food_cost_trend"]
+    me       = fetch(api, "/api/cost/analysis" + gq)
+    bom      = fetch(api, "/api/bom-cost/overview" + gq)
+    cats     = fetch(api, "/api/sales/category" + gq)
 
     grand = gpb["grand_total"]
     branches = sorted(gpb["rows"], key=lambda r: -(r.get("total_revenue") or 0))
@@ -236,9 +236,9 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
 
     # Cover
     A(f"""<div class="cover"><div class="wrap" style="padding:0">
-  <div class="eyebrow">Invisible Consulting · Enterprise ERP Analytics</div>
+  <div class="eyebrow">Invisible Consulting · Enterprise ERP Analytics · {scope_label}</div>
   <h1>Oshinei Enterprise<br>รายงานวิเคราะห์ธุรกิจ</h1>
-  <div class="sub">เครือบุฟเฟ่ต์ปลาแซลมอน · {len(branches)} สาขา · ข้อมูล Easy POS · วิเคราะห์แบบเดือนต่อเดือน (MoM)</div>
+  <div class="sub">เครือบุฟเฟ่ต์ปลาแซลมอน · ขอบเขต: <b>{scope_label}</b> · {len(branches)} สาขา · ข้อมูล Easy POS · วิเคราะห์แบบเดือนต่อเดือน (MoM)</div>
   <div class="meta">
     <div><b>{thb_m(last_mt['revenue'])}</b>รายได้เดือนล่าสุด · {latest_month}<br>{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</div>
     <div><b>{pct(last_mt['margin_pct'])}</b>GP เดือนล่าสุด<br>{mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}</div>
@@ -444,10 +444,35 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
 
     out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs")
     os.makedirs(out_dir, exist_ok=True)
-    out = os.path.join(out_dir, "BUSINESS_ANALYSIS_2026-06.html")
+    out = os.path.join(out_dir, out_name)
     with open(out, "w", encoding="utf-8") as f:
         f.write("".join(H))
     print("Wrote", out, f"({os.path.getsize(out)//1024} KiB)")
+
+
+# scope → (group, cover label, output filename)
+_SCOPES = {
+    "all":       (None,        "ภาพรวมทุกกลุ่ม (Master + Franchise)", "BUSINESS_ANALYSIS_2026-06.html"),
+    "master":    ("master",    "เฉพาะสาขา Master",                     "BUSINESS_ANALYSIS_2026-06_master.html"),
+    "franchise": ("franchise", "เฉพาะแฟรนไชส์ (Franchise)",            "BUSINESS_ANALYSIS_2026-06_franchise.html"),
+}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--api", default="http://127.0.0.1:8010")
+    ap.add_argument("--date", default=None)
+    ap.add_argument("--scope", default="all", choices=["all", "master", "franchise", "everything"],
+                    help="'everything' = overview + master + franchise (default builds overview only "
+                         "unless 'everything').")
+    args = ap.parse_args()
+    api = args.api.rstrip("/")
+    gen_date = args.date or "2026-06-02"
+
+    scopes = ["all", "master", "franchise"] if args.scope == "everything" else [args.scope]
+    for sc in scopes:
+        group, label, out_name = _SCOPES[sc]
+        build(api, gen_date, group, label, out_name)
 
 
 if __name__ == "__main__":

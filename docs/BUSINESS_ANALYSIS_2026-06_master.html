@@ -1,0 +1,177 @@
+<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Oshinei Enterprise — Business Analysis Report · 2025-07 – 2026-06</title>
+<style>
+:root{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#4f46e5;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}
+*{box-sizing:border-box}
+body{font-family:"Sarabun","Segoe UI",-apple-system,Roboto,sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.55;font-size:15px}
+.wrap{max-width:1080px;margin:0 auto;padding:0 24px 80px}
+.cover{background:linear-gradient(135deg,#312e81 0%,#4f46e5 55%,#7c3aed 100%);color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}
+.cover .eyebrow{text-transform:uppercase;letter-spacing:3px;font-size:12px;opacity:.85;font-weight:600}
+.cover h1{font-size:36px;margin:8px 0 4px;font-weight:800;line-height:1.15}
+.cover .sub{opacity:.9;font-size:16px}
+.cover .meta{margin-top:20px;display:flex;gap:28px;flex-wrap:wrap;font-size:13px;opacity:.92}
+.cover .meta b{display:block;font-size:20px;font-weight:700;opacity:1}
+section{background:#fff;border:1px solid var(--line);border-radius:16px;padding:30px 32px;margin-bottom:24px;box-shadow:0 1px 3px rgba(15,23,42,.04)}
+h2.sec{font-size:22px;margin:0 0 4px;font-weight:800}
+h2.sec .num{color:var(--indigo);font-weight:800;margin-right:10px}
+.sec-sub{color:var(--mut);font-size:13px;margin:0 0 20px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px}
+.kpi{border:1px solid var(--line);border-radius:12px;padding:16px;background:linear-gradient(180deg,#fff,#fcfcff)}
+.kpi .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut);font-weight:600}
+.kpi .val{font-size:26px;font-weight:800;margin:4px 0 2px}
+.kpi .sub{font-size:12px;color:var(--mut)}
+.callout{border-left:4px solid var(--indigo);background:#eef2ff;border-radius:0 10px 10px 0;padding:14px 18px;margin:14px 0;font-size:14px}
+.callout.warn{border-color:var(--am);background:#fffbeb}
+.callout.good{border-color:var(--em);background:#ecfdf5}
+.callout.risk{border-color:var(--rd);background:#fef2f2}
+.callout b{font-weight:700}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{text-align:right;padding:8px 10px;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);font-weight:700;border-bottom:2px solid var(--line)}
+tbody tr:hover{background:#fafbff}
+tfoot td{font-weight:800;border-top:2px solid var(--line);background:#f8fafc}
+.bar-wrap{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.bar{height:9px;border-radius:5px}
+.bar-lbl{font-variant-numeric:tabular-nums;min-width:54px;text-align:right}
+.pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.chart{width:100%;height:auto;display:block;margin:6px 0}
+.chart .grid{stroke:#eef2f6;stroke-width:1}
+.chart .target{stroke:var(--em);stroke-width:1.4;stroke-dasharray:4 4}
+.chart .ytick{fill:#94a3b8;font-size:11px;text-anchor:end}
+.chart .tlbl{fill:var(--em);font-size:11px;text-anchor:end;font-weight:700}
+.chart .xtick{fill:#94a3b8;font-size:10px;text-anchor:middle}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:22px}
+.rec{border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px;position:relative}
+.rec .tag{position:absolute;top:-10px;left:16px;font-size:11px;font-weight:800;padding:2px 10px;border-radius:999px;color:#fff}
+.rec h4{margin:6px 0 6px;font-size:16px}
+.rec .impact{font-size:13px;color:var(--em);font-weight:700}
+.rec ol{margin:8px 0 0;padding-left:20px;font-size:13px;color:#334155}
+.muted{color:var(--mut);font-size:12px}
+.toc{columns:2;font-size:13px;gap:30px}
+.toc a{color:var(--indigo);text-decoration:none;display:block;padding:3px 0}
+footer{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}
+@media print{body{background:#fff;font-size:11.5px}.cover{border-radius:0}section{break-inside:avoid;box-shadow:none;border-color:#ddd}.no-print{display:none}}
+@media(max-width:740px){.grid2{grid-template-columns:1fr}.toc{columns:1}}
+</style></head><body><div class="cover"><div class="wrap" style="padding:0">
+  <div class="eyebrow">Invisible Consulting · Enterprise ERP Analytics · เฉพาะสาขา Master</div>
+  <h1>Oshinei Enterprise<br>รายงานวิเคราะห์ธุรกิจ</h1>
+  <div class="sub">เครือบุฟเฟ่ต์ปลาแซลมอน · ขอบเขต: <b>เฉพาะสาขา Master</b> · 5 สาขา · ข้อมูล Easy POS · วิเคราะห์แบบเดือนต่อเดือน (MoM)</div>
+  <div class="meta">
+    <div><b>฿18.9M</b>รายได้เดือนล่าสุด · 2026-06<br><span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span></div>
+    <div><b>47.3%</b>GP เดือนล่าสุด<br><span class="mom" style="color:var(--em);font-weight:700">▲ +3.9 จุด MoM</span></div>
+    <div><b>5</b>สาขาที่มียอดขายเดือนนี้</div>
+    <div><b>2025-07 – 2026-06</b>ช่วงข้อมูล (12 เดือน)</div>
+    <div><b>2026-06-02</b>วันที่ออกรายงาน</div>
+  </div>
+</div></div><div class="wrap"><section class="no-print"><h2 class="sec"><span class="num">»</span>สารบัญ</h2>
+    <div class="toc">
+      <a href="#s1">1 · บทสรุปผู้บริหาร (Executive Summary)</a>
+      <a href="#s2">2 · ดัชนีชี้วัดหลัก (Scorecard)</a>
+      <a href="#s3">3 · รายได้และการเติบโต</a>
+      <a href="#s4">4 · ผลการดำเนินงานรายสาขา</a>
+      <a href="#s5">5 · เศรษฐศาสตร์บุฟเฟ่ต์</a>
+      <a href="#s6">6 · วิเคราะห์เมนูและมาร์จิ้น</a>
+      <a href="#s7">7 · ความเสี่ยงด้านวัตถุดิบ</a>
+      <a href="#s8">8 · ข้อเสนอเชิงกลยุทธ์</a>
+      <a href="#s9">9 · คุณภาพข้อมูลและระเบียบวิธี</a>
+    </div></section><section id="s1"><h2 class="sec"><span class="num">1</span>บทสรุปผู้บริหาร</h2>
+    <p class="sec-sub">วิเคราะห์แบบเดือนต่อเดือน (MoM) — โฟกัสเดือนล่าสุดและการเปลี่ยนแปลงเทียบเดือนก่อน</p>
+    <p>เดือนล่าสุด <b>2026-06</b> เครือ Oshinei ทำรายได้ <b>฿18.9M</b> (ก่อน VAT)
+    <span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span> · กำไรขั้นต้น <b>฿8.9M</b>
+    ที่มาร์จิ้น <b>47.3%</b> <span class="mom" style="color:var(--em);font-weight:700">▲ +3.9 จุด MoM</span>
+    (food cost 52.7% <span class="mom" style="color:var(--em);font-weight:700">▼ -3.9 จุด MoM</span>) จาก 5 สาขาที่เปิดขายในเดือนนี้ ·
+    ค่าเฉลี่ย 3 เดือนล่าสุด ~<b>฿24.6M</b>/เดือน</p>
+    <div class="callout good">📈 <b>โมเมนตัมรายเดือน</b> — รายได้ ฿29.8M → ฿18.9M (<span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span>); จุดสูงสุดอยู่เดือน <b>2026-05</b> ที่ ฿29.8M</div>
+    <div class="callout">🍱 <b>บุฟเฟ่ต์คือหัวใจ (89.9% ของรายได้)</b> — food cost บุฟเฟ่ต์เดือนล่าสุด 61.1% <span class="mom" style="color:var(--em);font-weight:700">▼ -3.6 จุด MoM</span> (เทรนด์รายเดือนในข้อ 5)</div>
+    <div class="callout risk">🐟 <b>ความเสี่ยงกระจุกตัว: ปลาแซลมอน = 39.3% ของต้นทุนวัตถุดิบ</b> (฿54.5M, รวมทั้งช่วง) — วัตถุดิบเดียวกำหนดกำไรของทั้งธุรกิจ ราคาผันผวน = ความเสี่ยงสูงสุด</div>
+    <div class="callout warn">🏪 <b>ช่องว่างระหว่างสาขาเดือน 2026-06 กว้าง 7.0 จุด</b> (GP 44.2% – 51.2%) — ยกสาขาล่างขึ้นสู่ค่ากลาง 40% = โอกาสกำไรเพิ่ม ~฿0.0M/เดือน (~฿0.0M/ปี)</div>
+    </section><section id="s2"><h2 class="sec"><span class="num">2</span>ดัชนีชี้วัดหลัก — เดือนล่าสุด (2026-06)</h2>
+    <p class="sec-sub">เทียบเดือนก่อน (MoM) · COGS สูตรเดียว (BoM → sku_cost) · รายได้ใช้ subtotal_ex_vat · ตัวเลขที่ไม่มีอนุกรมรายเดือนแสดงเป็นค่าเฉลี่ย/เดือน</p>
+    <div class="kpis">
+      <div class="kpi"><div class="lbl">รายได้ (ex-VAT)</div><div class="val">฿18.9M</div><div class="sub"><span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span></div></div>
+      <div class="kpi"><div class="lbl">กำไรขั้นต้น</div><div class="val" style="color:var(--em)">฿8.9M</div><div class="sub">47.3% · <span class="mom" style="color:var(--em);font-weight:700">▲ +3.9 จุด MoM</span></div></div>
+      <div class="kpi"><div class="lbl">Food Cost</div><div class="val" style="color:var(--am)">52.7%</div><div class="sub"><span class="mom" style="color:var(--em);font-weight:700">▼ -3.9 จุด MoM</span> · เป้า 55–70%</div></div>
+      <div class="kpi"><div class="lbl">ใบเสร็จ/เดือน (เฉลี่ย)</div><div class="val">12,359</div><div class="sub">฿1,687/บิล</div></div>
+      <div class="kpi"><div class="lbl">ลูกค้า/เดือน (เฉลี่ย)</div><div class="val">33,429</div><div class="sub">2.71/บิล</div></div>
+      <div class="kpi"><div class="lbl">กำไร/บิล</div><div class="val" style="color:var(--em)">฿752</div><div class="sub">เฉลี่ยทั้งช่วง</div></div>
+      <div class="kpi"><div class="lbl">สาขาเปิดขายเดือนนี้</div><div class="val">5</div><div class="sub">จากทั้งหมด 5</div></div>
+      <div class="kpi"><div class="lbl">ความครอบคลุมต้นทุน</div><div class="val">74.4%</div><div class="sub">ของจำนวนเสิร์ฟ</div></div>
+    </div></section><section id="s3"><h2 class="sec"><span class="num">3</span>รายได้และกำไรรายเดือน (MoM)</h2>
+    <p class="sec-sub">รายได้รายเดือน (ex-VAT) · 2025-07 – 2026-06</p>
+    <svg viewBox="0 0 960 230" class="chart" preserveAspectRatio="xMidYMid meet"><line x1="56" y1="190.0" x2="944" y2="190.0" class="grid"/><text x="48" y="194.0" class="ytick">฿0.2M</text><line x1="56" y1="147.0" x2="944" y2="147.0" class="grid"/><text x="48" y="151.0" class="ytick">฿8.4M</text><line x1="56" y1="104.0" x2="944" y2="104.0" class="grid"/><text x="48" y="108.0" class="ytick">฿16.6M</text><line x1="56" y1="61.0" x2="944" y2="61.0" class="grid"/><text x="48" y="65.0" class="ytick">฿24.8M</text><line x1="56" y1="18.0" x2="944" y2="18.0" class="grid"/><text x="48" y="22.0" class="ytick">฿33.0M</text><polygon points="56,190 56.0,173.4 136.7,46.1 217.5,98.6 298.2,90.3 378.9,101.3 459.6,91.9 540.4,50.1 621.1,57.7 701.8,85.9 782.5,60.1 863.3,34.6 944.0,91.9 944.0,190" fill="rgba(79,70,229,.10)"/><polyline points="56.0,173.4 136.7,46.1 217.5,98.6 298.2,90.3 378.9,101.3 459.6,91.9 540.4,50.1 621.1,57.7 701.8,85.9 782.5,60.1 863.3,34.6 944.0,91.9" fill="none" stroke="#4f46e5" stroke-width="2.5"/><circle cx="56.0" cy="173.4" r="3" fill="#4f46e5"/><circle cx="136.7" cy="46.1" r="3" fill="#4f46e5"/><circle cx="217.5" cy="98.6" r="3" fill="#4f46e5"/><circle cx="298.2" cy="90.3" r="3" fill="#4f46e5"/><circle cx="378.9" cy="101.3" r="3" fill="#4f46e5"/><circle cx="459.6" cy="91.9" r="3" fill="#4f46e5"/><circle cx="540.4" cy="50.1" r="3" fill="#4f46e5"/><circle cx="621.1" cy="57.7" r="3" fill="#4f46e5"/><circle cx="701.8" cy="85.9" r="3" fill="#4f46e5"/><circle cx="782.5" cy="60.1" r="3" fill="#4f46e5"/><circle cx="863.3" cy="34.6" r="3" fill="#4f46e5"/><circle cx="944.0" cy="91.9" r="3" fill="#4f46e5"/><text x="56.0" y="218" class="xtick">25-07</text><text x="136.7" y="218" class="xtick">25-08</text><text x="217.5" y="218" class="xtick">25-09</text><text x="298.2" y="218" class="xtick">25-10</text><text x="378.9" y="218" class="xtick">25-11</text><text x="459.6" y="218" class="xtick">25-12</text><text x="540.4" y="218" class="xtick">26-01</text><text x="621.1" y="218" class="xtick">26-02</text><text x="701.8" y="218" class="xtick">26-03</text><text x="782.5" y="218" class="xtick">26-04</text><text x="863.3" y="218" class="xtick">26-05</text><text x="944.0" y="218" class="xtick">26-06</text></svg>
+    <p>เดือนล่าสุด <b>2026-06</b> รายได้ <b>฿18.9M</b>
+    <span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span> เทียบเดือนก่อน (฿29.8M);
+    จุดสูงสุดอยู่เดือน <b>2026-05</b> ที่ ฿29.8M · ค่าเฉลี่ย 3 เดือนล่าสุด ~฿24.6M/เดือน</p>
+    <p class="sec-sub" style="margin:14px 0 2px">มาร์จิ้นกำไรขั้นต้นรายเดือน (%)</p>
+    <svg viewBox="0 0 960 230" class="chart" preserveAspectRatio="xMidYMid meet"><line x1="56" y1="190.0" x2="944" y2="190.0" class="grid"/><text x="48" y="194.0" class="ytick">41%</text><line x1="56" y1="147.0" x2="944" y2="147.0" class="grid"/><text x="48" y="151.0" class="ytick">42%</text><line x1="56" y1="104.0" x2="944" y2="104.0" class="grid"/><text x="48" y="108.0" class="ytick">44%</text><line x1="56" y1="61.0" x2="944" y2="61.0" class="grid"/><text x="48" y="65.0" class="ytick">46%</text><line x1="56" y1="18.0" x2="944" y2="18.0" class="grid"/><text x="48" y="22.0" class="ytick">48%</text><polygon points="56,190 56.0,59.1 136.7,130.2 217.5,79.9 298.2,68.0 378.9,57.7 459.6,61.2 540.4,155.6 621.1,173.4 701.8,75.4 782.5,46.5 863.3,126.0 944.0,34.6 944.0,190" fill="rgba(16,185,129,.10)"/><polyline points="56.0,59.1 136.7,130.2 217.5,79.9 298.2,68.0 378.9,57.7 459.6,61.2 540.4,155.6 621.1,173.4 701.8,75.4 782.5,46.5 863.3,126.0 944.0,34.6" fill="none" stroke="#10b981" stroke-width="2.5"/><circle cx="56.0" cy="59.1" r="3" fill="#10b981"/><circle cx="136.7" cy="130.2" r="3" fill="#10b981"/><circle cx="217.5" cy="79.9" r="3" fill="#10b981"/><circle cx="298.2" cy="68.0" r="3" fill="#10b981"/><circle cx="378.9" cy="57.7" r="3" fill="#10b981"/><circle cx="459.6" cy="61.2" r="3" fill="#10b981"/><circle cx="540.4" cy="155.6" r="3" fill="#10b981"/><circle cx="621.1" cy="173.4" r="3" fill="#10b981"/><circle cx="701.8" cy="75.4" r="3" fill="#10b981"/><circle cx="782.5" cy="46.5" r="3" fill="#10b981"/><circle cx="863.3" cy="126.0" r="3" fill="#10b981"/><circle cx="944.0" cy="34.6" r="3" fill="#10b981"/><text x="56.0" y="218" class="xtick">25-07</text><text x="136.7" y="218" class="xtick">25-08</text><text x="217.5" y="218" class="xtick">25-09</text><text x="298.2" y="218" class="xtick">25-10</text><text x="378.9" y="218" class="xtick">25-11</text><text x="459.6" y="218" class="xtick">25-12</text><text x="540.4" y="218" class="xtick">26-01</text><text x="621.1" y="218" class="xtick">26-02</text><text x="701.8" y="218" class="xtick">26-03</text><text x="782.5" y="218" class="xtick">26-04</text><text x="863.3" y="218" class="xtick">26-05</text><text x="944.0" y="218" class="xtick">26-06</text></svg>
+    <p>มาร์จิ้นเดือนล่าสุด <b>47.3%</b>
+    <span class="mom" style="color:var(--em);font-weight:700">▲ +3.9 จุด MoM</span> เทียบเดือนก่อน (43.4%)</p>
+    </section><section id="s4"><h2 class="sec"><span class="num">4</span>ผลการดำเนินงานรายสาขา — เดือนล่าสุด (2026-06)</h2>
+    <p class="sec-sub">เรียงตามรายได้เดือนล่าสุด · 5 สาขาที่เปิดขายเดือนนี้ · MoM = เทียบ 2026-05 · COGS แบบ BoM</p>
+    <div class="grid2" style="margin-bottom:16px">
+      <div class="callout good">🏆 <b>GP สูงสุด (เดือนนี้):</b> สุรินทร์ (51.2%), อุบลราชธานี (50.4%), โคราช1 (47.3%)</div>
+      <div class="callout warn">⚠️ <b>GP ต่ำสุด (เดือนนี้):</b> เชียงใหม่ (44.2%), อุดรธานี (44.8%), โคราช1 (47.3%)</div>
+    </div>
+    <table><thead><tr><th>สาขา</th><th>รายได้ (เดือน)</th><th>กำไรขั้นต้น</th><th>GP%</th><th>Food%</th><th>รายได้ MoM</th></tr></thead>
+    <tbody><tr><td>อุดรธานี</td><td><div class="bar-wrap"><div class="bar" style="width:160px;background:#4f46e5"></div><span class="bar-lbl">฿4.8M</span></div></td><td>฿2.1M</td><td><b>44.8%</b></td><td style='color:var(--em);font-weight:700'>55.2%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -33.2% MoM</span></td></tr><tr><td>อุบลราชธานี</td><td><div class="bar-wrap"><div class="bar" style="width:155px;background:#4f46e5"></div><span class="bar-lbl">฿4.6M</span></div></td><td>฿2.3M</td><td><b>50.4%</b></td><td style='color:var(--em);font-weight:700'>49.6%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -37.3% MoM</span></td></tr><tr><td>โคราช1</td><td><div class="bar-wrap"><div class="bar" style="width:129px;background:#4f46e5"></div><span class="bar-lbl">฿3.9M</span></div></td><td>฿1.8M</td><td><b>47.3%</b></td><td style='color:var(--em);font-weight:700'>52.7%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -37.5% MoM</span></td></tr><tr><td>เชียงใหม่</td><td><div class="bar-wrap"><div class="bar" style="width:116px;background:#4f46e5"></div><span class="bar-lbl">฿3.5M</span></div></td><td>฿1.5M</td><td><b>44.2%</b></td><td style='color:var(--em);font-weight:700'>55.8%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -38.8% MoM</span></td></tr><tr><td>สุรินทร์</td><td><div class="bar-wrap"><div class="bar" style="width:71px;background:#4f46e5"></div><span class="bar-lbl">฿2.1M</span></div></td><td>฿1.1M</td><td><b>51.2%</b></td><td style='color:var(--em);font-weight:700'>48.8%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span></td></tr></tbody>
+    <tfoot><tr><td>รวมเดือน 2026-06 (5 สาขา)</td><td style="text-align:right">฿18.9M</td><td>฿8.9M</td><td>47.3%</td><td>52.7%</td><td><span class="mom" style="color:var(--rd);font-weight:700">▼ -36.6% MoM</span></td></tr></tfoot>
+    </table>
+    <div class="callout">💡 <b>โอกาสจากการยกระดับสาขา (ฐานเดือนล่าสุด):</b> หากทุกสาขาที่ GP ต่ำกว่า 40% ขยับขึ้นถึง 40%
+    จะเพิ่มกำไรขั้นต้น ~<b>฿0.0M/เดือน</b> (~฿0.0M/ปี) โดยไม่ต้องเพิ่มยอดขาย — ถ่ายทอด best practice จากสาขาเก่งเดือนนี้ (สุรินทร์, อุบลราชธานี) สู่สาขาอ่อน</div>
+    </section><section id="s5"><h2 class="sec"><span class="num">5</span>เศรษฐศาสตร์บุฟเฟ่ต์</h2>
+    <p class="sec-sub">หัวใจของธุรกิจ — 89.9% ของรายได้ทั้งเครือ</p>
+    <div class="kpis" style="margin-bottom:18px">
+      <div class="kpi"><div class="lbl">ลูกค้า/เดือน (เฉลี่ย)</div><div class="val">33,429</div><div class="sub">2.71 คน/บิล</div></div>
+      <div class="kpi"><div class="lbl">ผู้ใหญ่ / เด็ก</div><div class="val">97/3</div><div class="sub">เด็ก 2.7%</div></div>
+      <div class="kpi"><div class="lbl">Food Cost บุฟเฟ่ต์ (เดือนล่าสุด)</div><div class="val" style="color:var(--am)">61.1%</div><div class="sub"><span class="mom" style="color:var(--em);font-weight:700">▼ -3.6 จุด MoM</span></div></div>
+      <div class="kpi"><div class="lbl">เครื่องดื่ม (attach)</div><div class="val">~80%</div><div class="sub">ของบิลสั่งดื่ม · 5.6% ของรายได้</div></div>
+    </div>
+    <p class="sec-sub" style="margin-bottom:2px">แนวโน้ม Food Cost บุฟเฟ่ต์รายเดือน (เป้า 55–70%)</p>
+    <svg viewBox="0 0 960 230" class="chart" preserveAspectRatio="xMidYMid meet"><line x1="56" y1="190.0" x2="944" y2="190.0" class="grid"/><text x="48" y="194.0" class="ytick">59%</text><line x1="56" y1="147.0" x2="944" y2="147.0" class="grid"/><text x="48" y="151.0" class="ytick">62%</text><line x1="56" y1="104.0" x2="944" y2="104.0" class="grid"/><text x="48" y="108.0" class="ytick">65%</text><line x1="56" y1="61.0" x2="944" y2="61.0" class="grid"/><text x="48" y="65.0" class="ytick">68%</text><line x1="56" y1="18.0" x2="944" y2="18.0" class="grid"/><text x="48" y="22.0" class="ytick">71%</text><line x1="56" y1="104.0" x2="944" y2="104.0" class="target"/><text x="944" y="99.0" class="tlbl">เป้า 65%</text><polygon points="56,190 56.0,54.1 124.3,51.3 192.6,49.9 260.9,56.8 329.2,148.4 397.5,117.9 465.8,130.4 534.2,116.5 602.5,62.4 670.8,65.2 739.1,131.7 807.4,151.2 875.7,108.2 944.0,158.1 944.0,190" fill="rgba(236,72,153,.10)"/><polyline points="56.0,54.1 124.3,51.3 192.6,49.9 260.9,56.8 329.2,148.4 397.5,117.9 465.8,130.4 534.2,116.5 602.5,62.4 670.8,65.2 739.1,131.7 807.4,151.2 875.7,108.2 944.0,158.1" fill="none" stroke="#ec4899" stroke-width="2.5"/><circle cx="56.0" cy="54.1" r="3" fill="#ec4899"/><circle cx="124.3" cy="51.3" r="3" fill="#ec4899"/><circle cx="192.6" cy="49.9" r="3" fill="#ec4899"/><circle cx="260.9" cy="56.8" r="3" fill="#ec4899"/><circle cx="329.2" cy="148.4" r="3" fill="#ec4899"/><circle cx="397.5" cy="117.9" r="3" fill="#ec4899"/><circle cx="465.8" cy="130.4" r="3" fill="#ec4899"/><circle cx="534.2" cy="116.5" r="3" fill="#ec4899"/><circle cx="602.5" cy="62.4" r="3" fill="#ec4899"/><circle cx="670.8" cy="65.2" r="3" fill="#ec4899"/><circle cx="739.1" cy="131.7" r="3" fill="#ec4899"/><circle cx="807.4" cy="151.2" r="3" fill="#ec4899"/><circle cx="875.7" cy="108.2" r="3" fill="#ec4899"/><circle cx="944.0" cy="158.1" r="3" fill="#ec4899"/><text x="56.0" y="218" class="xtick">25-05</text><text x="124.3" y="218" class="xtick">25-06</text><text x="192.6" y="218" class="xtick">25-07</text><text x="260.9" y="218" class="xtick">25-08</text><text x="329.2" y="218" class="xtick">25-09</text><text x="397.5" y="218" class="xtick">25-10</text><text x="465.8" y="218" class="xtick">25-11</text><text x="534.2" y="218" class="xtick">25-12</text><text x="602.5" y="218" class="xtick">26-01</text><text x="670.8" y="218" class="xtick">26-02</text><text x="739.1" y="218" class="xtick">26-03</text><text x="807.4" y="218" class="xtick">26-04</text><text x="875.7" y="218" class="xtick">26-05</text><text x="944.0" y="218" class="xtick">26-06</text></svg>
+    <div class="callout good">✅ ต้นทุนอาหารบุฟเฟ่ต์รายเดือนปรับลดจาก <b>68.6% (2025-05) → 61.1% (2026-06)</b> · เดือนล่าสุด <span class="mom" style="color:var(--em);font-weight:700">▼ -3.6 จุด MoM</span> — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
+    <div class="callout warn">🥤 <b>เครื่องดื่มเป็นโอกาสที่ยังไม่ถูกใช้เต็มที่</b> — ~80% ของบิลสั่งเครื่องดื่ม แต่คิดเป็นเพียง 5.6% ของรายได้ การดันเครื่องดื่มมาร์จิ้นสูง (เครื่องดื่มพิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</div>
+    </section><section id="s6"><h2 class="sec"><span class="num">6</span>วิเคราะห์เมนูและมาร์จิ้น</h2>
+    <p class="sec-sub">à-la-carte 329 เมนู · จัดกลุ่มได้ 133 เมนูที่มีข้อมูลต้นทุน
+    · <b>ข้อมูลรวมทั้งช่วง 2025-07 – 2026-06</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
+    <div class="kpis" style="margin-bottom:18px">
+      <div class="kpi"><div class="lbl">⭐ ดาวเด่น</div><div class="val" style="color:var(--em)">33</div><div class="sub">ขายดี+กำไรดี</div></div>
+      <div class="kpi"><div class="lbl">🐴 ม้างาน</div><div class="val" style="color:var(--am)">34</div><div class="sub">ขายดี กำไรบาง</div></div>
+      <div class="kpi"><div class="lbl">🔮 เพชรในตม</div><div class="val" style="color:var(--indigo)">34</div><div class="sub">กำไรดี ขายน้อย</div></div>
+      <div class="kpi"><div class="lbl">🐕 ตัวถ่วง</div><div class="val" style="color:var(--rd)">32</div><div class="sub">พิจารณาถอด</div></div>
+    </div>
+    <p class="sec-sub" style="margin-bottom:2px">เมนูดาวเด่น (à-la-carte) — รายได้สูงสุด</p>
+    <table><thead><tr><th>เมนู</th><th>จำนวนขาย</th><th>รายได้</th><th>มาร์จิ้น</th></tr></thead><tbody><tr><td>(A) ยำแซลมอนน้ำปลาร้า</td><td>955</td><td>฿242,268</td><td><b>81%</b></td></tr><tr><td>(A) กุ้งชุบแป้งทอดเทมปุระ (5 ตัว)</td><td>792</td><td>฿201,032</td><td><b>89%</b></td></tr><tr><td>(A) ยำไทยปลาแซลมอน</td><td>588</td><td>฿150,970</td><td><b>83%</b></td></tr><tr><td>(A) สลัดปลาเงินทอดกรอบ</td><td>759</td><td>฿136,287</td><td><b>92%</b></td></tr><tr><td>(A) ข้าวหน้าหมูสไลด์ เทริ</td><td>499</td><td>฿84,023</td><td><b>92%</b></td></tr><tr><td>(A) ซูพรีม อูนิ ซูชิ (1 ชิ้น)</td><td>274</td><td>฿75,236</td><td><b>90%</b></td></tr><tr><td>(A) สลัดหนังปลาแซลมอนทอดกรอบ</td><td>332</td><td>฿69,718</td><td><b>94%</b></td></tr><tr><td>(A) ข้าวปั้นหน้าปลาแซลมอน (1 ชิ้น)</td><td>1,225</td><td>฿66,866</td><td><b>82%</b></td></tr></tbody></table>
+    <div class="callout">🍣 เมนู à-la-carte ที่ทำกำไรล้วนเป็น<b>กลุ่มแซลมอน/ซีฟู้ด</b> — สอดคล้องกับจุดขายของแบรนด์ ควรชู เมนูเหล่านี้ให้เด่นและขยายเป็นเซ็ต/โปรโมชัน</div>
+    </section><section id="s7"><h2 class="sec"><span class="num">7</span>ความเสี่ยงด้านวัตถุดิบ (Supply Concentration)</h2>
+    <p class="sec-sub">วัตถุดิบ 12 อันดับแรกตามสัดส่วนต้นทุน · <b>ข้อมูลรวมทั้งช่วง 2025-07 – 2026-06</b> (mix สะสม — ไม่ใช่รายเดือน)</p>
+    <table><thead><tr><th>วัตถุดิบ</th><th>ประเภท</th><th>ต้นทุนรวม</th><th>% ของ COGS</th></tr></thead><tbody><tr><td>เนื้อปลาแซลมอนขูด</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:160px;background:#ef4444"></div><span class="bar-lbl">฿46.3M</span></div></td><td><b>33.4%</b></td></tr><tr><td>ปลาแซลมอนแช่แข็งตัดชิ้นติดหนัง 1 ชิ้น</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:28px;background:#ef4444"></div><span class="bar-lbl">฿8.2M</span></div></td><td><b>5.9%</b></td></tr><tr><td>ทุเรียน (ประมาณการชั่วคราว 30 บ./หน่วย)</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>ESTIMATE</span></td><td><div class="bar-wrap"><div class="bar" style="width:26px;background:#94a3b8"></div><span class="bar-lbl">฿7.5M</span></div></td><td><b>5.4%</b></td></tr><tr><td>กุ้งแกะเปลือก  5 ตัวละ 15 กรัม</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:18px;background:#94a3b8"></div><span class="bar-lbl">฿5.2M</span></div></td><td><b>3.8%</b></td></tr><tr><td>กุ้งขาวแกะเปลือกไว้หาง</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:16px;background:#94a3b8"></div><span class="bar-lbl">฿4.7M</span></div></td><td><b>3.4%</b></td></tr><tr><td>เนื้อปลาทูน่า 1 ชิ้น</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:12px;background:#94a3b8"></div><span class="bar-lbl">฿3.6M</span></div></td><td><b>2.6%</b></td></tr><tr><td>น้ำมันพืช</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>oil</span></td><td><div class="bar-wrap"><div class="bar" style="width:12px;background:#94a3b8"></div><span class="bar-lbl">฿3.5M</span></div></td><td><b>2.5%</b></td></tr><tr><td>กุ้งอาเจนติน่า</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:8px;background:#94a3b8"></div><span class="bar-lbl">฿2.3M</span></div></td><td><b>1.7%</b></td></tr><tr><td>ปลาไหลอูนางิ 70 P 1 ตัว</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>sauce</span></td><td><div class="bar-wrap"><div class="bar" style="width:8px;background:#94a3b8"></div><span class="bar-lbl">฿2.3M</span></div></td><td><b>1.7%</b></td></tr><tr><td>เนื้อเสือร้องไห้สไลด์ ( 5 ชิ้นละ 10 กรัม )</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:8px;background:#94a3b8"></div><span class="bar-lbl">฿2.2M</span></div></td><td><b>1.6%</b></td></tr><tr><td>อูนิ</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>protein</span></td><td><div class="bar-wrap"><div class="bar" style="width:8px;background:#94a3b8"></div><span class="bar-lbl">฿2.2M</span></div></td><td><b>1.6%</b></td></tr><tr><td>หนวดปลาหมึกยักษ์</td><td><span class='pill' style='background:#eef2ff;color:#4f46e5'>sauce</span></td><td><div class="bar-wrap"><div class="bar" style="width:7px;background:#94a3b8"></div><span class="bar-lbl">฿2.1M</span></div></td><td><b>1.5%</b></td></tr></tbody></table>
+    <div class="callout risk">🐟 <b>ปลาแซลมอนคิดเป็น 39.3% ของต้นทุนวัตถุดิบทั้งเครือ</b> (฿54.5M ตลอดช่วง 2025-07 – 2026-06)
+    — วัตถุดิบเดียวที่กำหนดความอยู่รอดของกำไร หากราคาแซลมอนขึ้น 10% กำไรขั้นต้นหายไป ~฿5.5M ต่อช่วงข้อมูลทันที</div>
+    <div class="callout good">💰 <b>โอกาส:</b> ลดต้นทุนแซลมอนเพียง 5% (เจรจาสัญญาระยะยาว / dual-source / คุม yield การขูดเนื้อ) = กำไรเพิ่ม ~<b>฿2.7M ต่อช่วงข้อมูล</b></div>
+    </section><section id="s8"><h2 class="sec"><span class="num">8</span>ข้อเสนอเชิงกลยุทธ์</h2>
+    <p class="sec-sub">เรียงตามผลกระทบต่อกำไร · ตัวเลขโอกาสคำนวณจากข้อมูลจริง</p>
+    <div class="rec"><span class="tag" style="background:#ef4444">ลำดับ 1 · เร่งด่วน</span><h4>บริหารความเสี่ยงปลาแซลมอน (40% ของต้นทุน)</h4><div class="impact">💵 ป้องกันความเสี่ยง ฿54.5M · โอกาสเพิ่มกำไร ~฿2.7M/ปี</div><ol><li>ล็อกสัญญาราคาระยะยาวกับซัพพลายเออร์หลัก + หาแหล่งสำรอง (dual-source)</li><li>คุม yield การขูด/ตัดเนื้อแซลมอนต่อจาน (ใช้ BoM Cost Simulator จำลองผล)</li><li>ทดสอบเมนูโปรตีนทางเลือก (ทูน่า/หอยเชลล์) เพื่อกระจายความเสี่ยงในเมนูบุฟเฟ่ต์</li></ol></div>
+    <div class="rec"><span class="tag" style="background:#f59e0b">ลำดับ 2 · ผลกระทบสูง</span><h4>ยกระดับสาขาที่กำไรต่ำสู่ค่ากลางเครือ</h4><div class="impact">💵 กำไรเพิ่ม ~฿0.0M/เดือน (~฿0.0M/ปี) โดยไม่ต้องเพิ่มยอดขาย</div><ol><li>โฟกัส 3 สาขาล่างเดือน 2026-06: เชียงใหม่, อุดรธานี, โคราช1 (GP 47–44%)</li><li>ถอด best practice จากสาขาเก่งเดือนนี้ (สุรินทร์, อุบลราชธานี) — portion control, การสั่งซื้อ, waste</li><li>ใช้ P&L รายสาขา + BoM เปรียบเทียบ หา เมนู/วัตถุดิบที่ทำให้ food cost สูงผิดปกติ</li></ol></div>
+    <div class="rec"><span class="tag" style="background:#10b981">ลำดับ 3 · กำไรเพิ่ม</span><h4>ดันยอดเครื่องดื่ม (profit center)</h4><div class="impact">💵 เครื่องดื่ม attach ~80% แต่เพียง 5.6% ของรายได้ — มี upside สูง</div><ol><li>ฝึกพนักงานเสนอเครื่องดื่มมาร์จิ้นสูง (พิเศษ/แอลกอฮอล์) ทุกโต๊ะ</li><li>ออกเซ็ตเครื่องดื่ม + โปรโมชันคู่บุฟเฟ่ต์</li><li>เติมต้นทุนเครื่องดื่มในระบบเพื่อวัดกำไรจริง (ดูข้อ 9)</li></ol></div>
+    <div class="rec"><span class="tag" style="background:#4f46e5">ลำดับ 4 · เสริมความแม่นยำ</span><h4>ปิดช่องว่างข้อมูลต้นทุน</h4><div class="impact">💵 ความครอบคลุมปัจจุบัน 74.4% → เป้า 90%+</div><ol><li>เติมต้นทุนเครื่องดื่ม (เกือบทั้งหมดยังไม่มี cost → มาร์จิ้นโชว์ 100% ปลอม)</li><li>แก้ข้อมูล à-la-carte ที่ unit_cost ≈ ราคาขาย (ทำให้บางเมนูมาร์จิ้นติดลบ)</li><li>ตั้งรอบทบทวนต้นทุนรายไตรมาสผ่าน Settings → Cost Recalibration</li></ol></div>
+    </section><section id="s9"><h2 class="sec"><span class="num">9</span>คุณภาพข้อมูลและระเบียบวิธี</h2>
+    <p class="sec-sub">ความโปร่งใสของข้อมูล — เพื่อให้ตัวเลขทุกตัวตรวจสอบย้อนกลับได้</p>
+    <ul style="font-size:14px;color:#334155">
+      <li><b>แหล่งข้อมูล:</b> Easy POS (easyrestaurant.asia) · 5 สาขา · 2025-07 – 2026-06 (12 เดือน)</li>
+      <li><b>ฐานการวิเคราะห์:</b> เดือนต่อเดือน (MoM) — ตัวเลขหลักคือ<b>เดือนล่าสุด 2026-06</b> พร้อมการเปลี่ยนแปลงเทียบเดือนก่อน (2026-05) · <u>ไม่ใช้</u>ยอดสะสมทั้งช่วงเป็นตัวชี้วัด · ข้อ 6–7 (เมนู/วัตถุดิบ) เป็น mix สะสมทั้งช่วงโดยธรรมชาติ จึงระบุกำกับไว้</li>
+      <li><b>รายได้</b> ใช้ <code>subtotal_ex_vat</code> (ก่อน VAT 7%) เสมอ — VAT ไม่นับเป็นรายได้</li>
+      <li><b>COGS</b> สูตรเดียวทั้งระบบ: BoM recipe ก่อน → ถ้าไม่มีใช้ sku_cost → buffet tier นับ 0 (กัน double-count). ทุกหน้า/รายงาน GP ตรงกันที่ 44.6%</li>
+      <li><b>ความครอบคลุมต้นทุน 74.4%</b> ของจำนวนเสิร์ฟ — ส่วนที่เหลือยังไม่มีรีซิปี/ต้นทุน</li>
+    </ul>
+    <div class="callout warn"><b>ข้อควรระวัง (อ่านก่อนตีความ):</b><br>
+      • <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → มาร์จิ้นเครื่องดื่มในวิเคราะห์เมนูขึ้น ~100% (ปลอม) ควรเติมก่อนนำไปตัดสินใจ<br>
+      • à-la-carte บางรายการ <code>unit_cost ≈ ราคาขาย</code> → มาร์จิ้นอาจติดลบ/ผิดปกติ เป็นปัญหาคุณภาพข้อมูล ไม่ใช่ผลประกอบการจริง<br>
+      • Food cost บุฟเฟ่ต์เดือนล่าสุด 61.1% (2026-06) คำนวณจากต้นทุนเมนูบุฟเฟ่ต์ (B0xxx) ÷ รายได้บุฟเฟ่ต์ · ลูกค้า (pax) ใช้ customer_count จริง</li>
+    </div>
+    <p class="muted">รายงานนี้สร้างอัตโนมัติจาก API ของระบบ (สูตรเดียวกับแดชบอร์ด) — ตัวเลขจึงตรงกับหน้าจอทุกประการ
+    · สร้างใหม่ได้ด้วย <code>python backend/gen_analysis_report.py</code></p>
+    </section><footer>Oshinei Enterprise ERP · Business Analysis Report · ออกรายงาน 2026-06-02
+    · Invisible Consulting<br>FastAPI · SQLite · unified-COGS engine</footer>
+    </div></body></html>

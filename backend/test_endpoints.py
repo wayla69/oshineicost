@@ -48,6 +48,11 @@ SMOKE = [
     ("/api/reports/management", {"period": "weekly"}),
     ("/api/reports/management", {"period": "daily", "branch": "BranchA"}),
     ("/api/reports/management", {"period": "weekly", "group": "master"}),
+    # ── master/franchise scope on the Analysis Report endpoints (must 200 with group=) ──
+    ("/api/analysis/anomalies", {"group": "master"}),
+    ("/api/analysis/discount_composition", {"month_from": "2026-05", "month_to": "2026-06", "group": "franchise"}),
+    ("/api/buffet/performance", {"group": "master"}),
+    ("/api/bom-cost/overview", {"group": "franchise"}),
 ]
 
 # Fixture periods: June (LATEST) sales are scaled 0.8 vs May (PREV).
@@ -112,6 +117,36 @@ def test_management_report_xlsx(client):
         assert "attachment" in r.headers.get("content-disposition", "")
         wb = openpyxl.load_workbook(io.BytesIO(r.content))   # must be a valid workbook
         assert "Summary" in wb.sheetnames and "Branch League" in wb.sheetnames
+
+
+def test_management_daily_never_defaults_to_current_partial_day(client):
+    """Regression: the daily report must NOT default to the in-progress current day
+    (its handful of today's sales would read as a chain-wide ~-100% collapse).
+    Default anchors on the latest COMPLETE day; an explicit today is flagged partial."""
+    import datetime as _dt
+    today = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).date().isoformat()  # Thai 'today'
+    d = client.get("/api/reports/management", params={"period": "daily"}).json()
+    assert d["available"]
+    assert d["focus"] < today, f"daily default focus {d['focus']} must be before today {today}"
+    assert d["partial"] is False
+    # An explicitly-requested current day is honoured but flagged partial so the UI
+    # can annotate it and the WoW/GP chips are not read as a real collapse.
+    dt = client.get("/api/reports/management", params={"period": "daily", "date": today}).json()
+    assert dt["partial"] is True
+
+
+def test_management_xlsx_honours_language(client):
+    """Regression: the Excel export must match the on-screen language (was always EN)."""
+    import io, openpyxl
+    def summary_text(lang):
+        r = client.get("/api/reports/management.xlsx", params={"period": "weekly", "lang": lang})
+        assert r.status_code == 200
+        ws = openpyxl.load_workbook(io.BytesIO(r.content))["Summary"]
+        return "\n".join(str(c.value) for row in ws.iter_rows() for c in row if c.value is not None)
+    en, th = summary_text("en"), summary_text("th")
+    assert en and th and en != th, "xlsx Summary should differ by language"
+    assert any("฀" <= ch <= "๿" for ch in th), "Thai export should contain Thai text"
+    assert not any("฀" <= ch <= "๿" for ch in en), "English export should not contain Thai text"
 
 
 def test_cost_drivers_has_total_and_mom(client):
@@ -380,3 +415,44 @@ def test_ai_ideas_fallback_without_key(client, monkeypatch):
         assert idea.get("title") and "rationale" in idea and "builds_on" in idea
 
 
+
+
+# ── master / franchise scope split (regression) ─────────────────────────────
+# Fixture: BranchA=master, BranchB=franchise, both carry sales. For an ADDITIVE
+# metric the two disjoint groups must sum back to the ungrouped total, and each
+# group must differ from the total. Guards the exact bug the scope split fixed:
+# an endpoint silently ignoring group= and returning ALL branches (then
+# master==franchise==all → both assertions below fail).  [[analysis_report_scope_split]]
+GROUP_ADDITIVE = [
+    ("/api/summary",                {}, lambda d: d["revenue"]),
+    ("/api/analysis/persona",       {}, lambda d: d["overall"]["tx_count"]),
+    ("/api/analysis/dow",           {}, lambda d: round(sum((r["revenue"] or 0) for r in d), 2)),
+    # hourly_open uses the same "JOIN branches when branch OR group" path as dow but
+    # needs the closed_hours table, which the hermetic fixture omits — dow covers it.
+    ("/api/cost/analysis",          {}, lambda d: d["summary"]["total_revenue"]),
+    ("/api/gp/by-branch-month",     {}, lambda d: len(d["rows"])),
+    ("/api/analysis/discounts",     {}, lambda d: d["overall"]["total_tx"]),
+]
+
+
+@pytest.mark.parametrize("path,params,extract", GROUP_ADDITIVE,
+                         ids=[p for p, _, _ in GROUP_ADDITIVE])
+def test_group_split_is_additive(client, path, params, extract):
+    def val(group):
+        p = dict(params)
+        if group:
+            p["group"] = group
+        r = client.get(path, params=p)
+        assert r.status_code == 200, (path, group, r.text[:200])
+        return extract(r.json())
+
+    all_v = val(None)
+    master = val("master")
+    franchise = val("franchise")
+    # group= must actually filter — if ignored, a group would equal the whole
+    assert master != all_v, f"{path}: group=master ({master}) == ungrouped ({all_v}) — group filter ignored?"
+    assert franchise != all_v, f"{path}: group=franchise ({franchise}) == ungrouped ({all_v}) — group filter ignored?"
+    # disjoint groups reconcile to the total (allow tiny per-bucket ROUND drift)
+    tol = max(1.0, abs(all_v) * 1e-4)
+    assert abs((master + franchise) - all_v) <= tol, \
+        f"{path}: master+franchise ({master}+{franchise}) != all ({all_v})"

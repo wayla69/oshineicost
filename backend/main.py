@@ -6336,6 +6336,7 @@ def analysis_dow(
     month_from:  Optional[str] = Query(None),
     month_to:    Optional[str] = Query(None),
     branch:      Optional[str] = Query(None),
+    group:       Optional[str] = Query(None),
     granularity: str           = Query("daily"),  # daily|weekly|monthly
 ):
     """Revenue and tx count grouped by day-of-week (0=Sun â€¦ 6=Sat)."""
@@ -6346,10 +6347,12 @@ def analysis_dow(
     filters: list = []
     params: dict = {}
     join = ""
-    if branch:
+    if branch or group:
         join = "JOIN branches b ON b.branch_id = st.branch_id"
+    if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
 
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
@@ -6555,6 +6558,7 @@ def analysis_persona(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
 ):
     """
     Customer behaviour from sales_transaction:
@@ -6568,6 +6572,7 @@ def analysis_persona(
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
 
     where = "WHERE " + " AND ".join(filters)
@@ -6829,6 +6834,7 @@ def analysis_discounts(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
     date_from:  Optional[str] = Query(None),
     date_to:    Optional[str] = Query(None),
 ):
@@ -6838,6 +6844,7 @@ def analysis_discounts(
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
     where = "WHERE " + " AND ".join(filters)
 
@@ -6847,6 +6854,7 @@ def analysis_discounts(
     if branch:
         trend_filters.append("b.name = :branch")
         trend_params["branch"] = branch
+    _group_filter(trend_filters, trend_params, group)
     trend_where = "WHERE " + " AND ".join(trend_filters)
 
     with get_db() as con:
@@ -7206,6 +7214,7 @@ def analysis_discount_composition(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
 ):
     """Per-branch discount composition by discount-as-%-of-bill bucket, for a period.
 
@@ -7227,6 +7236,7 @@ def analysis_discount_composition(
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
 
@@ -7934,6 +7944,7 @@ def analysis_anomalies(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
     threshold:  float         = Query(1.5, description="z-score threshold"),
 ):
     """
@@ -7946,12 +7957,21 @@ def analysis_anomalies(
     """
     insights: List[dict] = []
 
+    # Restrict every sub-query to a branch group (master|franchise) when asked.
+    # Two roll-up queries below are hard-coded WHEREs with no bound params, so we
+    # also build a literal fragment; group is validated to a fixed allow-list first,
+    # so the interpolation is injection-safe.
+    if group not in ("master", "franchise"):
+        group = None
+    grp_sql = f" AND COALESCE(b.branch_type,'master') = '{group}'" if group else ""
+
     # 1. Monthly revenue z-score: Easy transaction-level
     filters_tx = ["b.name != 'ALL'"]
     params: dict = {}
     if branch:
         filters_tx.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters_tx, params, group)
     _month_range_filter(filters_tx, params, month_from, month_to, None,
                         col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
@@ -8004,7 +8024,7 @@ def analysis_anomalies(
                    ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
-            WHERE b.name != 'ALL'{day_clause}
+            WHERE b.name != 'ALL'{grp_sql}{day_clause}
             GROUP BY b.name, month
             ORDER BY b.name, month
             """,
@@ -8099,7 +8119,7 @@ def analysis_anomalies(
                 JOIN skus sk     ON sk.sku_id = s.sku_id
                 LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
                 JOIN branches b  ON b.branch_id = s.branch_id
-                WHERE b.name != 'ALL'
+                WHERE b.name != 'ALL'{grp_sql}
                 GROUP BY s.period_month
                 ORDER BY s.period_month
             """).fetchall()
@@ -9532,6 +9552,7 @@ def cost_analysis(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     include_buffet_drink: bool = Query(False),
+    group:      Optional[str] = Query(None),
 ):
     """
     Per-SKU revenue + cost breakdown with menu engineering quadrant classification.
@@ -9544,6 +9565,7 @@ def cost_analysis(
     if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
     EXCLUDED_CATS = (
         'BUFFET', 'Oshinei SOFT DRINK', 'Oshinei ALCOHOL',
@@ -9711,6 +9733,7 @@ def cost_analysis(
     ws_params: dict = {}
     if branch:
         ws_filters.append("b.name = :wbranch"); ws_params["wbranch"] = branch
+    _group_filter(ws_filters, ws_params, group)
     _month_range_filter(ws_filters, ws_params, month_from, month_to, month, col="ssm.period_month")
     ws_where = "WHERE " + " AND ".join(ws_filters)
     with get_db() as con:
@@ -10034,6 +10057,7 @@ def _variant_filter(variant: Optional[str], sk: str = "sk", ssm: str = "ssm") ->
 @ttl_cache
 def buffet_performance(
     branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
     food_cost_target_lo: float = Query(55.0),
@@ -10053,11 +10077,18 @@ def buffet_performance(
     - cohort:     per-branch performance bucketed by months-since-opening
     - pricing_rec: current weighted tier price vs revenue-optimal
     """
+    # Optional master|franchise scope. grp_sql = literal fragment for the two
+    # roll-up queries below that use no bound params (group is allow-listed first).
+    if group not in ("master", "franchise"):
+        group = None
+    grp_sql = f" AND COALESCE(b.branch_type,'master') = '{group}'" if group else ""
+
     filters_sku = ["b.name != 'ALL'"]
     params_sku: dict = {}
     if branch:
         filters_sku.append("b.name = :branch")
         params_sku["branch"] = branch
+    _group_filter(filters_sku, params_sku, group)
     _month_range_filter(filters_sku, params_sku, month_from, month_to, None, col="sm.period_month")
     where_sku = "WHERE " + " AND ".join(filters_sku)
 
@@ -10066,6 +10097,7 @@ def buffet_performance(
     if branch:
         filters_tx.append("b.name = :branch")
         params_tx["branch"] = branch
+    _group_filter(filters_tx, params_tx, group)
     _month_range_filter(filters_tx, params_tx, month_from, month_to, None, col="strftime('%Y-%m', st.sold_at)")
     where_tx = "WHERE " + " AND ".join(filters_tx)
 
@@ -10187,11 +10219,11 @@ def buffet_performance(
         """, params_tx).fetchall()
 
         # ── 7. Branch opening month (cohort: months-since-open) ───────────────
-        branch_open = con.execute("""
+        branch_open = con.execute(f"""
             SELECT b.name AS branch, MIN(sm.period_month) AS first_month
             FROM sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
-            WHERE b.name != 'ALL'
+            WHERE b.name != 'ALL'{grp_sql}
             GROUP BY b.name
         """).fetchall()
         branch_first = {r["branch"]: r["first_month"] for r in branch_open}
@@ -10204,7 +10236,7 @@ def buffet_performance(
             FROM sales_sku_monthly sm
             JOIN skus sk ON sk.sku_id = sm.sku_id
             JOIN branches b ON b.branch_id = sm.branch_id
-            WHERE b.name != 'ALL'
+            WHERE b.name != 'ALL'{grp_sql}
               AND sk.sku_code IN ({tier_ph})
             GROUP BY b.name, sm.period_month
             ORDER BY b.name, sm.period_month
@@ -10480,6 +10512,7 @@ def buffet_performance(
     if branch:
         combined_filters.append("b.name = :branch")
         combined_params["branch"] = branch
+    _group_filter(combined_filters, combined_params, group)
     _month_range_filter(combined_filters, combined_params, month_from, month_to, None, col="ssm.period_month")
     combined_where = "WHERE " + " AND ".join(combined_filters)
     with get_db() as con:
@@ -10895,6 +10928,7 @@ def gp_by_branch_month(
     month_to:   Optional[str] = Query(None),
     month:      Optional[str] = Query(None),
     variant:    Optional[str] = Query(None, description="A | B | all — filter à la carte vs buffet SKUs"),
+    group:      Optional[str] = Query(None),
     granularity: str          = Query("month", description="day | week | month — bucket size for per-branch trend"),
 ):
     """GP per branch x month using the BoM rule (Easy data).
@@ -10906,6 +10940,7 @@ def gp_by_branch_month(
         granularity = "month"
     filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
     params: dict = {}
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
     var_clause = _variant_filter(variant)
     if var_clause:
@@ -11002,6 +11037,7 @@ def gp_by_branch_month(
         # Daily tx revenue per branch over the period
         tx_filters = ["b.name != 'ALL'", "st.source = 'Easy'", "COALESCE(b.active,1) = 1"]
         tx_params: dict = {}
+        _group_filter(tx_filters, tx_params, group)
         _month_range_filter(tx_filters, tx_params, month_from, month_to, month,
                             col="SUBSTR(st.sold_at,1,7)")
         tx_where = "WHERE " + " AND ".join(tx_filters)
@@ -11680,6 +11716,7 @@ def analysis_hourly_open(
     month_from:  Optional[str] = Query(None),
     month_to:    Optional[str] = Query(None),
     branch:      Optional[str] = Query(None),
+    group:       Optional[str] = Query(None),
     granularity: str           = Query("daily"),  # daily|weekly|monthly
 ):
     """Like /api/analysis/hourly but each hour is annotated with `is_open`,
@@ -11693,10 +11730,12 @@ def analysis_hourly_open(
     filters = ["st.source = 'Easy'"]
     params: dict = {}
     join = ""
-    if branch:
+    if branch or group:
         join = "JOIN branches b ON b.branch_id = st.branch_id"
+    if branch:
         filters.append("b.name = :branch")
         params["branch"] = branch
+    _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month,
                         col="strftime('%Y-%m', st.sold_at)")
     where = "WHERE " + " AND ".join(filters)
@@ -12277,7 +12316,21 @@ def report_management(
         mind = (rng["lo"] if rng else None) or "9999-99-99"
         if not maxd:
             return {"available": False, "period": period}
-        focus = (date or maxd)[:10]
+        # Never DEFAULT the daily report onto the in-progress current day: its handful
+        # of early sales read as a chain-wide ~-100% collapse across every section.
+        # With no explicit date, anchor on the latest COMPLETE day (strictly before
+        # Thai 'today', UTC+7). An explicitly-requested today is honoured but flagged
+        # partial below. Mirrors the weekly guard, which never picks the open week.
+        today_th = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
+        if date:
+            focus = date[:10]
+        else:
+            _cd = con.execute(
+                f"SELECT MAX(date(st.sold_at)) d FROM sales_transaction st "
+                f"JOIN branches b ON b.branch_id=st.branch_id "
+                f"WHERE {where} AND date(st.sold_at) < :t",
+                {**params, "t": today_th}).fetchone()
+            focus = ((_cd["d"] if _cd and _cd["d"] else maxd))[:10]
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
 
@@ -12289,7 +12342,7 @@ def report_management(
             cs = ce = fdate
             ps = pe = fdate - _dt.timedelta(days=7)
             days_in_period = 1
-            partial = False
+            partial = (focus == today_th)   # in-progress current day (explicit date=today)
             ref_anchor = fdate
             if th:
                 label = f"{DOW[fdate.weekday()]} {dlabel(fdate)}"
@@ -12342,13 +12395,12 @@ def report_management(
                 label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
                 comp_label = "previous week (Mon–Sun)"
         has_prev = ps.isoformat() >= mind
-        # YoY window — same calendar period a year earlier (daily = same date; weekly =
-        # 52 weeks back to keep the Mon–Sun alignment). Dropped if it predates the data.
-        def _minus_year(d):
-            try:    return d.replace(year=d.year - 1)
-            except ValueError: return d.replace(year=d.year - 1, day=28)   # Feb 29
+        # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
+        # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
+        # same-calendar-date YoY would drift (e.g. Sat→Fri) and distort the comparison.
+        # Dropped if it predates the data.
         if period == "daily":
-            ys = ye = _minus_year(fdate)
+            ys = ye = fdate - _dt.timedelta(days=364)
         else:
             ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
         has_yoy = ys.isoformat() >= mind
@@ -12623,6 +12675,19 @@ def report_management(
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id
             WHERE {mw}""", mp).fetchone()
+        # sales_sku_monthly is not populated for the in-progress (live-synced-only)
+        # month, so the month food-cost % would go blank for a current-month report.
+        # Fall back to sales_sku_daily (same tier-safe COGS expr; a wrapped subquery
+        # supplies the `source` column the expr expects). [[sync_no_month_summary]]
+        if not (bom_row and bom_row["cost"]):
+            mw_daily = mw.replace("s.period_month=:month", "strftime('%Y-%m', s.day)=:month")
+            bom_row = con.execute(f"""
+                SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+                FROM (SELECT *, 'Easy' AS source FROM sales_sku_daily) s
+                JOIN skus sk ON sk.sku_id=s.sku_id
+                LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+                JOIN branches b ON b.branch_id=s.branch_id
+                WHERE {mw_daily}""", mp).fetchone()
         mtd_row = con.execute(f"""
             SELECT ROUND(SUM(st.total_inc_vat)/1.07,2) rev,
                    COUNT(DISTINCT date(st.sold_at))    days
@@ -12998,6 +13063,7 @@ def report_management_xlsx(
     week:   Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
+    lang:   str = Query("en"),               # match the on-screen language
 ):
     """Download the Daily/Weekly Management Summary as a multi-sheet Excel file.
     Reuses report_management() so the numbers match the on-screen report exactly."""
@@ -13008,7 +13074,7 @@ def report_management_xlsx(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
     # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
-    resp = report_management(period=period, date=date, week=week, branch=branch, group=group)
+    resp = report_management(period=period, date=date, week=week, branch=branch, group=group, lang=lang)
     j = _json.loads(resp.body) if hasattr(resp, "body") else resp
     if not j.get("available"):
         raise HTTPException(status_code=404, detail="No sales data for this period")
@@ -18381,6 +18447,7 @@ def _bom_cost_period_filters(month_from, month_to, branches=None):
 def bom_cost_overview(
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
     granularity: str          = Query("month", description="day | week | month"),
     incl_service: bool        = Query(False, description="Count ex-VAT service charge as revenue (and in the Food-Cost%/GP% denominator)"),
 ):
@@ -18390,6 +18457,9 @@ def bom_cost_overview(
         granularity = "month"
 
     where, params = _bom_cost_period_filters(month_from, month_to)
+    if group in ("master", "franchise"):
+        where += " AND COALESCE(b.branch_type,'master') = :branch_group"
+        params["branch_group"] = group
     cogs_expr       = _cogs_case('ssm', 'sk', 'sc')
     costed_rev_expr = _costed_rev_case('ssm', 'sk', 'sc')
 
