@@ -29,6 +29,22 @@ jobs:
         run: |
           python -m pytest -q --cov=main --cov=sync_mssql --cov-report=term-missing
 
+  recon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # recon/main.py uses PEP 701 f-strings — requires >= 3.12
+          python-version: "3.12"
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r recon/requirements-dev.txt
+      - name: Run recon tests (with coverage)
+        run: |
+          python -m pytest recon/tests -q --cov=recon --cov-report=term-missing
+
   # Frontend E2E is opt-in (needs a populated DB + browsers). Run manually via
   # the Actions "Run workflow" button, or locally — see tests/e2e/README.md.
   e2e:
