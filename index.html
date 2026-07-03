@@ -10007,7 +10007,9 @@ async function renderBranchHilite() {
   catch (e) { return; }
   const isMtd  = !!d.mtd;
   const curLbl = isMtd ? `MTD 1–${d.mtd_cutoff_day}` : 'เดือนล่าสุด';
-  const cmpLbl = isMtd ? `เทียบ MTD เดือนก่อน (1–${d.mtd_cutoff_day} วันเท่ากัน)` : 'เทียบเดือนก่อน';
+  const cmpLbl = !isMtd ? 'เทียบเดือนก่อน'
+    : d.mom_basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน'
+    : `เทียบ MTD เดือนก่อน (1–${d.mtd_cutoff_day} วันเท่ากัน)`;
   const bl = (d.branches || []).filter(b => (b.revenue || 0) > 0 && b.mom_pct != null);
   if (bl.length < 2) { hl.innerHTML = ''; return; }
   const best  = bl.reduce((a, b) => b.mom_pct > (a?.mom_pct ?? -1e9) ? b : a, null);
@@ -15730,9 +15732,10 @@ async function loadActionCenter() {
     drill: (ins.metric || '').includes('cost') ? 'bomcost' : 'dailysales',
   }));
   const isMtd = !!dy.mtd;
+  const mtdLbl = dy.mom_basis === 'dow' ? 'MTD เทียบฐานวันในสัปดาห์เดือนก่อน' : 'MTD เทียบเดือนก่อน';
   const br = (dy.branches || []).filter(b => b.mom_pct != null);
   br.slice().sort((a, b) => a.mom_pct - b.mom_pct).slice(0, 3).forEach(b => {
-    if (b.mom_pct <= -10) items.push({ sev: 'bad', msg: `📉 ${b.branch} ยอดตก ${Math.abs(b.mom_pct).toFixed(0)}%${isMtd ? ' (MTD เทียบเดือนก่อน)' : ''} — รายได้ ${fmt(b.revenue)}`, drill: 'dailysales' });
+    if (b.mom_pct <= -10) items.push({ sev: 'bad', msg: `📉 ${b.branch} ยอดตก ${Math.abs(b.mom_pct).toFixed(0)}%${isMtd ? ` (${mtdLbl})` : ''} — รายได้ ${fmt(b.revenue)}`, drill: 'dailysales' });
   });
   br.slice().sort((a, b) => b.mom_pct - a.mom_pct).slice(0, 2).forEach(b => {
     if (b.mom_pct >= 10) items.push({ sev: 'good', msg: `📈 ${b.branch} ยอดโต ${b.mom_pct.toFixed(0)}%${isMtd ? ' (MTD)' : ''}`, drill: 'dailysales' });
@@ -18084,7 +18087,7 @@ async function loadHome() {
     //  · scorecard  — per-branch vs-normal drift (the core "needs attention" signal)
     //  · forecast   — month-end projection (run-rate, NOT target-based)
     //  · anomalies  — extra insight lines folded into the action queue
-    //  · sd (daily) — MTD-fair MoM (compares same days vs last month) → replaces target dependency
+    //  · sd (daily) — MTD-fair MoM (weekday-weighted baseline while the month is partial) → replaces target dependency
     const sdp = new URLSearchParams(); sdp.set('gran', 'month');
     if (getBranch()) sdp.set('branch', getBranch());
     if (getGroup())  sdp.set('group', getGroup());
@@ -18183,7 +18186,7 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
       icon: '📊', label: 'จังหวะเดือนนี้',
       value: fc && fc.available ? fmt(fc.projected) : (brief.mtd_revenue ? fmt(brief.mtd_revenue) : '—'),
       sub: fc && fc.available ? `วิ่ง ${fmt(fc.avg_daily)}/วัน · ${fc.days_elapsed}/${fc.days_total} วัน` : 'คาดการณ์ไม่ได้',
-      foot: mom != null ? `${mom >= 0 ? '▲' : '▼'} ${Math.abs(mom).toFixed(0)}% เทียบเดือนก่อน (ช่วงวันเท่ากัน)` : '',
+      foot: mom != null ? `${mom >= 0 ? '▲' : '▼'} ${Math.abs(mom).toFixed(0)}% ${sd && sd.mom_basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน' : 'เทียบเดือนก่อน (ช่วงวันเท่ากัน)'}` : '',
       footColor: momColor, valColor: '#4f46e5', go: "switchTab('dailysales')",
     },
     {
@@ -18251,7 +18254,7 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
       act: 'เจาะสาขา', go: `homeDrillBranch('${(b.branch || '').replace(/'/g, "\\'")}')` });
   });
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3)
-    A.push({ p: 3, sev: 'amber', icon: '📉', text: `เดือนนี้ run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% (เทียบช่วงวันเท่ากัน)`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
+    A.push({ p: 3, sev: 'amber', icon: '📉', text: `เดือนนี้ run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% ${sd.mom_basis === 'dow' ? '(เทียบฐานปกติตามวันในสัปดาห์)' : '(เทียบช่วงวันเท่ากัน)'}`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
   ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad').slice(0, 3)
     .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠️', text: esc(a.message) }));
   const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
@@ -18613,12 +18616,14 @@ async function loadDailySales(force) {
   const cutTxt = isMtd ? `MTD 1–${d.mtd_cutoff_day} (เดือนยังไม่จบ)` : lbl;
   document.getElementById('dsRange').textContent = `${cutTxt}: ${cr[0]}${cr[0] !== cr[1] ? ' – ' + cr[1] : ''}`;
   document.getElementById('dsCmpNote').textContent = isMtd
-    ? `· เทียบ MTD เดือนก่อน (${(d.prev_range || [''])[0]} – วันเท่ากัน) · ปีก่อน (${(d.yoy_range || [''])[0]}) · เทียบช่วงวันเท่ากัน ไม่เอาเดือนเต็มมาเทียบเดือนไม่จบ`
+    ? (d.mom_basis === 'dow'
+        ? `· เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน (weekday-fair, 1–${d.mtd_cutoff_day}) · ปีก่อน (${(d.yoy_range || [''])[0]}) เทียบช่วงวันเท่ากัน`
+        : `· เทียบ MTD เดือนก่อน (${(d.prev_range || [''])[0]} – วันเท่ากัน) · ปีก่อน (${(d.yoy_range || [''])[0]}) · เทียบช่วงวันเท่ากัน ไม่เอาเดือนเต็มมาเทียบเดือนไม่จบ`)
     : `· เทียบ${lbl}ก่อน (${(d.prev_range || [''])[0]}) · ปีก่อน (${(d.yoy_range || [''])[0]})`;
   const t = d.total || {};
   const badge = (v, hb = true) => v == null ? '<span class="text-slate-300 text-xs">—</span>'
     : `<span class="text-xs font-semibold" style="color:${(v >= 0) === hb ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
-  const cmpLbl = isMtd ? 'MTD เดือนก่อน' : (lbl + 'ก่อน');
+  const cmpLbl = isMtd ? (d.mom_basis === 'dow' ? 'ฐานวันในสัปดาห์เดือนก่อน' : 'MTD เดือนก่อน') : (lbl + 'ก่อน');
   // signed "vs <prev period> ±x%" sub-line — shared by every KPI box for a consistent MTD-fair comparison
   const cmpSub = (v) => 'vs ' + cmpLbl + ' ' + (v != null ? (v >= 0 ? '+' : '') + v + '%' : '—');
   document.getElementById('dsKpis').innerHTML = [
@@ -25310,7 +25315,7 @@ async function loadMobileSummary(force) {
   }
   document.getElementById('msSubtitle').textContent =
     (br || 'ทุกสาขา') + ' · ' + (m.mtd ? `MTD ถึงวันที่ ${m.mtd_cutoff_day}` : 'เดือนล่าสุด') + ` (${(m.focus || '').slice(0, 7)})`;
-  if (status) status.textContent = `เทียบเดือนก่อนแบบ MTD-fair · อัปเดต ${(m.focus || '').slice(0, 10)}`;
+  if (status) status.textContent = `${m.mom_basis === 'dow' ? 'เทียบเดือนก่อนถ่วงตามวันในสัปดาห์ (weekday-fair)' : 'เทียบเดือนก่อนแบบ MTD-fair'} · อัปเดต ${(m.focus || '').slice(0, 10)}`;
   msRenderActive();
 }
 

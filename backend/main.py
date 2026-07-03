@@ -2289,6 +2289,52 @@ def sales_daily(
         if pys.isoformat() < mind:
             py = {}
 
+        # Weekday-fair MoM (mirrors the Management report §3): a raw same-elapsed-
+        # days compare misleads early in the month (1–2 Jul = Wed+Thu vs 1–2 Jun =
+        # holiday Mon+Tue read as "-44%"), so while the focus month is partial the
+        # previous-month side of every MoM number (per-branch and total, revenue
+        # and customers) is rebuilt from that month's per-weekday daily averages
+        # summed over the same elapsed dates. YoY keeps the plain same-days clamp.
+        mom_basis = "same_days" if mtd_cut_day else "month"
+        dow_tot = None
+        if mtd_cut_day and pm:
+            elapsed_wd = [int((cs + _dt.timedelta(days=i)).strftime("%w"))
+                          for i in range(mtd_cut_day)]
+
+            def dow_base(rows_):
+                avg = {r["wd"]: ((r["rev"] or 0) / r["days"], (r["cust"] or 0) / r["days"])
+                       for r in rows_ if r["days"]}
+                if not avg:
+                    return None
+                fb = (sum(v[0] for v in avg.values()) / len(avg),
+                      sum(v[1] for v in avg.values()) / len(avg))
+                return {"rev":  round(sum(avg.get(w, fb)[0] for w in elapsed_wd), 2),
+                        "cust": round(sum(avg.get(w, fb)[1] for w in elapsed_wd), 1),
+                        "bills": 0}
+
+            dow_sel = """CAST(strftime('%w', t.sold_at) AS INT) wd,
+                       SUM(t.total_inc_vat)/1.07 rev, SUM(t.customer_count) cust,
+                       COUNT(DISTINCT date(t.sold_at)) days
+                FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id"""
+            dow_prm = {**params, "pmm": pms.strftime("%Y-%m")}
+            by_branch: dict = {}
+            for r in con.execute(f"""
+                SELECT b.name branch, {dow_sel}
+                WHERE {where} AND strftime('%Y-%m', t.sold_at)=:pmm
+                GROUP BY b.name, wd""", dow_prm).fetchall():
+                by_branch.setdefault(r["branch"], []).append(r)
+            pm_dow = {nm: base for nm, rs in by_branch.items() if (base := dow_base(rs))}
+            # chain-level baseline over the whole scope (NOT the sum of per-branch
+            # baselines) so the total MoM ties out with the Management report §3.
+            dow_tot = dow_base(con.execute(f"""
+                SELECT {dow_sel}
+                WHERE {where} AND strftime('%Y-%m', t.sold_at)=:pmm
+                GROUP BY wd""", dow_prm).fetchall())
+            if pm_dow and dow_tot:
+                pm, mom_basis = pm_dow, "dow"
+            else:
+                dow_tot = None
+
         out = []
         for nm in sorted(set(cur) | set(pm) | set(py)):
             c = cur.get(nm, {"rev": 0, "cust": 0, "bills": 0})
@@ -2308,6 +2354,8 @@ def sales_daily(
 
         def tot(d): return sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values())
         crv, ccu = tot(cur); prv, pcu = tot(pm); yrv, ycu = tot(py)
+        if dow_tot:   # total MoM against the scope-level weekday baseline
+            prv, pcu = dow_tot["rev"], dow_tot["cust"]
         cur_rph  = crv / ccu if ccu else None
         prev_rph = prv / pcu if pcu else None
         yoy_rph  = yrv / ycu if ycu else None
@@ -2348,6 +2396,7 @@ def sales_daily(
             "prev_range": [pms.isoformat(), pme.isoformat()],
             "yoy_range": [pys.isoformat(), pye.isoformat()],
             "mtd": mtd_cut_day is not None, "mtd_cutoff_day": mtd_cut_day,
+            "mom_basis": mom_basis,
             "branches": out, "total": total, "trend": tr, "anomalies": anomalies}
 
 
