@@ -8010,6 +8010,7 @@ const MGT_I18N = {
     // §3 pace
     monthNetSales:'Month Net Sales', mtdNetSales:'MTD Net Sales', days:' days', daysSoFar:' days so far',
     monthTotal:'Month Total', projMonthEnd:'Projected Month-End', actual:'actual', runRate:'run-rate',
+    runRateDow:'day-of-week weighted run-rate', dowBase:'the weekday-matched norm for the first', vsDowBase:'vs that weekday-matched norm',
     revTarget:'Revenue Target', actualSp:'actual ', projectionSp:'projection ', ofTarget:'% of target',
     noTarget:'no target set', foodCostPct:'Food Cost %', mtdSuffix:' (MTD)', bomBasis:'BoM basis',
     lastMonthSp:' · last month ', weeklyNetSales:'Weekly net sales — ',
@@ -8086,6 +8087,7 @@ const MGT_I18N = {
     discounts:'ส่วนลด', ofSales:'% ของยอดขาย', gp:'กำไรขั้นต้น', spendHeadShort:'ยอดต่อหัว',
     monthNetSales:'ยอดขายทั้งเดือน', mtdNetSales:'ยอดขายสะสมเดือนนี้', days:' วัน', daysSoFar:' วัน (ถึงปัจจุบัน)',
     monthTotal:'ยอดรวมทั้งเดือน', projMonthEnd:'ประมาณการสิ้นเดือน', actual:'จริง', runRate:'อัตราเฉลี่ย',
+    runRateDow:'อัตราเฉลี่ยถ่วงตามวันในสัปดาห์', dowBase:'ฐานปกติ (ตามวันในสัปดาห์) ช่วง', vsDowBase:'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน',
     revTarget:'เป้ายอดขาย', actualSp:'จริง ', projectionSp:'ประมาณการ ', ofTarget:'% ของเป้า',
     noTarget:'ยังไม่ตั้งเป้า', foodCostPct:'ต้นทุนอาหาร %', mtdSuffix:' (สะสม)', bomBasis:'อิงสูตร BoM',
     lastMonthSp:' · เดือนก่อน ', weeklyNetSales:'ยอดขายสุทธิรายสัปดาห์ — ',
@@ -8259,7 +8261,12 @@ function renderMgtReport(j, jM, jF) {
     const wk = P.weekly || [];
     if (!wk.length) return '';
     const vals = wk.map(w => w.revenue || 0);
-    const prevAvg = (PMx.revenue_full && wk.length) ? PMx.revenue_full / wk.length : null;
+    // Last month's TRUE average per week = full total ÷ (days-in-that-month / 7).
+    // (Dividing by THIS month's bucket count showed last month's whole total as
+    // "avg/wk" while the month only had 1-2 partial-week buckets.)
+    const pmM = /^(\d{4})-(\d{2})$/.exec(PMx.month || '');
+    const pmDays = pmM ? new Date(+pmM[1], +pmM[2], 0).getDate() : null;
+    const prevAvg = (PMx.revenue_full && pmDays) ? PMx.revenue_full / (pmDays / 7) : null;
     const mx = Math.max(...vals, prevAvg || 0, 1);
     const W = 900, H = 190, padL = 46, padR = 12, padT = 18, padB = 18, n = wk.length;
     const plotW = W - padL - padR, plotH = H - padT - padB, yMax = mx * 1.14 || 1;
@@ -8282,13 +8289,18 @@ function renderMgtReport(j, jM, jF) {
   })();
   const momBadge = (P.mom_pct != null) ? ' · MoM ' + wow(P.mom_pct) : '';
   const fcPrevTxt = (P.food_cost_pct_prev != null) ? T.lastMonthSp + P.food_cost_pct_prev.toFixed(1) + '%' : '';
+  // Weekday-fair MoM (backend mom_basis === 'dow' while the month is partial):
+  // the shown baseline is last month's per-weekday norm summed over the same
+  // elapsed weekdays, so a Wed+Thu sliver is never judged against a holiday Mon+Tue.
+  const fairMoM  = P.mom_basis === 'dow' && PMx.baseline_mtd != null;
+  const momBase  = fairMoM ? PMx.baseline_mtd : PMx.revenue_mtd;
   const lastMonthCaption = PMx.month
-    ? `<p class="text-[11px] text-slate-500 mt-2">${T.lastMonth} (${PMx.month}): <b>${baht(PMx.revenue_full)}</b> ${T.total} · <b>${baht(PMx.revenue_mtd)}</b> ${T.overSame} ${P.days_elapsed || 0} ${(P.days_elapsed || 0) === 1 ? T.day1 : T.dayN}` +
-      `${P.mom_pct != null ? ` — ${T.thisMonthIs} <b style="color:${P.mom_pct >= 0 ? '#059669' : '#dc2626'}">${P.mom_pct >= 0 ? '+' : '−'}${Math.abs(P.mom_pct).toFixed(1)}%</b> ${T.vsSameDays}` : ''}.</p>`
+    ? `<p class="text-[11px] text-slate-500 mt-2">${T.lastMonth} (${PMx.month}): <b>${baht(PMx.revenue_full)}</b> ${T.total} · <b>${baht(momBase)}</b> ${fairMoM ? T.dowBase : T.overSame} ${P.days_elapsed || 0} ${(P.days_elapsed || 0) === 1 ? T.day1 : T.dayN}` +
+      `${P.mom_pct != null ? ` — ${T.thisMonthIs} <b style="color:${P.mom_pct >= 0 ? '#059669' : '#dc2626'}">${P.mom_pct >= 0 ? '+' : '−'}${Math.abs(P.mom_pct).toFixed(1)}%</b> ${fairMoM ? T.vsDowBase : T.vsSameDays}` : ''}.</p>`
     : '';
   const pace = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       ${kpi(mc ? T.monthNetSales : T.mtdNetSales, baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? T.days : T.daysSoFar) + momBadge)}
-      ${kpi(mc ? T.monthTotal : T.projMonthEnd, baht(P.projected), mc ? T.actual : T.runRate)}
+      ${kpi(mc ? T.monthTotal : T.projMonthEnd, baht(P.projected), mc ? T.actual : (P.proj_method === 'dow' ? T.runRateDow : T.runRate))}
       ${kpi(T.revTarget, baht(P.target), (pvt != null ? (mc ? T.actualSp : T.projectionSp) + pvt.toFixed(0) + T.ofTarget : T.noTarget))}
       ${kpi(T.foodCostPct + (mc ? '' : T.mtdSuffix), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), T.bomBasis + fcPrevTxt)}
     </div>` + lastMonthCaption + weeklyBars + (() => {
@@ -8625,14 +8637,14 @@ function renderMgtReport(j, jM, jF) {
       const tgt  = P.target
         ? ' — ' + (P.proj_vs_target_pct != null ? '<b>' + P.proj_vs_target_pct.toFixed(0) + '%</b> ของเป้า ' + baht(P.target) : 'เทียบเป้า ' + baht(P.target))
         : ' (ยังไม่ตั้งเป้ายอดขาย)';
-      const proj = mc ? ' เป็นยอดรวมสุดท้ายของ ' + P.month : ' ที่อัตราเฉลี่ยปัจจุบัน คาดว่าทั้งเดือนจะปิดที่ราว <b>' + baht(P.projected) + '</b>';
+      const proj = mc ? ' เป็นยอดรวมสุดท้ายของ ' + P.month : ' ที่จังหวะปัจจุบัน' + (P.proj_method === 'dow' ? ' (ถ่วงตามวันในสัปดาห์)' : '') + ' คาดว่าทั้งเดือนจะปิดที่ราว <b>' + baht(P.projected) + '</b>';
       const lead2 = mc ? 'ทั้งเดือน' : 'สะสมเดือนนี้ (' + P.month + ')';
       ex.push({c:'#4f46e5', lead:'จังหวะทั้งเดือน', body:lead2 + 'อยู่ที่ <b>' + baht(P.mtd_revenue) + '</b> จาก ' + (P.mtd_days || 0) + ' วัน' + proj + tgt});
     } else {
       const tgt  = P.target
         ? ' — ' + (P.proj_vs_target_pct != null ? '<b>' + P.proj_vs_target_pct.toFixed(0) + '%</b> of the ' + baht(P.target) + ' target' : 'against a ' + baht(P.target) + ' target')
         : ' (no revenue target set)';
-      const proj = mc ? 'That is the final total for ' + P.month : 'At the current run-rate the month should close near <b>' + baht(P.projected) + '</b>';
+      const proj = mc ? 'That is the final total for ' + P.month : 'At the current pace' + (P.proj_method === 'dow' ? ' (day-of-week weighted)' : '') + ' the month should close near <b>' + baht(P.projected) + '</b>';
       const lead2 = mc ? 'The month' : 'Month-to-date (' + P.month + ')';
       ex.push({c:'#4f46e5', lead:'Month pace.', body:lead2 + ' stands at <b>' + baht(P.mtd_revenue) + '</b> over ' + (P.mtd_days || 0) +
               ' day' + ((P.mtd_days || 0) === 1 ? '' : 's') + '. ' + proj + tgt + '.'});
