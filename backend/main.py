@@ -13334,11 +13334,39 @@ def report_management(
         pm_rev_full = (pm_full["rev"] or 0) if pm_full else 0
         pm_rev_mtd  = (pm_mtd["rev"] or 0) if pm_mtd else 0
         pm_cost     = pm_bom["cost"] if pm_bom else None
+        # Per-weekday average revenue of the previous month. A raw same-elapsed-days
+        # MoM misleads early in the month (1-2 Jul = Wed+Thu vs 1-2 Jun = holiday
+        # Mon+Tue read as "-44%"), and the flat mtd/days*days_total projection
+        # undershoots until the first weekend is in — so while the month is partial,
+        # both the MoM baseline and the projection are weighted by weekday instead.
+        pm_dow = con.execute(f"""
+            SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
+                   SUM(st.total_inc_vat)/1.07 rev,
+                   COUNT(DISTINCT date(st.sold_at)) days
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+            GROUP BY wd""", {**params, "month": prev_month}).fetchall()
+        dow_avg = {r["wd"]: (r["rev"] or 0) / r["days"] for r in pm_dow if r["days"]}
+        mom_baseline, mom_basis = pm_rev_mtd, "same_days"
+        if not month_complete and dow_avg and days_elapsed:
+            dow_fallback = sum(dow_avg.values()) / len(dow_avg)
+            month_first  = ref_anchor.replace(day=1)
+            _wsum = lambda n: sum(
+                dow_avg.get(int((month_first + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
+                for i in range(n))
+            w_elapsed = _wsum(days_elapsed)
+            mom_baseline, mom_basis = round(w_elapsed, 2), "dow"
+            if mtd_rev and w_elapsed:
+                pace["projected"] = projected = round(mtd_rev / w_elapsed * _wsum(days_total), 2)
+                pace["proj_vs_target_pct"] = round(projected/target*100, 1) if target else None
+                pace["proj_method"] = "dow"
         pace["prev_month"] = {
             "month": prev_month, "revenue_full": pm_rev_full, "revenue_mtd": pm_rev_mtd,
+            "baseline_mtd": mom_baseline,
             "food_cost_pct": round(pm_cost/pm_rev_full*100, 1) if (pm_cost and pm_rev_full) else None,
         }
-        pace["mom_pct"]             = pct(mtd_rev, pm_rev_mtd)          # MTD vs same-elapsed last month
+        pace["mom_pct"]   = pct(mtd_rev, mom_baseline)  # MTD vs weekday-fair baseline (same-elapsed days once month is complete)
+        pace["mom_basis"] = mom_basis
         pace["food_cost_pct_prev"] = pace["prev_month"]["food_cost_pct"]
 
         # ---- trailing trend (8 periods) — ONE grouped query, not 8 round-trips ----
