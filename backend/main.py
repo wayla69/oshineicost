@@ -13358,17 +13358,6 @@ def report_management(
             "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
             "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
         }
-        # ---- §3 weekly bars (this month) + last-month comparison --------------
-        # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
-        # that week's in-month revenue), for a small weekly trend bar in §3.
-        mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
-        wk_rows = con.execute(f"""
-            SELECT {mon_e3} k, ROUND(SUM(st.total_inc_vat)/1.07) rev
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-            GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
-        pace["weekly"] = [{"label": f"{_dt.date.fromisoformat(r['k']).day} {MON[_dt.date.fromisoformat(r['k']).month-1]}",
-                           "start": r["k"], "revenue": r["rev"] or 0} for r in wk_rows]
         # `prev_month`: previous calendar month — full total, the SAME-elapsed-days MTD
         # (fair MTD-vs-MTD when the current month is partial) and its BoM food-cost %.
         pm_first   = ref_anchor.replace(day=1) - _dt.timedelta(days=1)
@@ -13406,10 +13395,38 @@ def report_management(
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
             GROUP BY wd""", {**params, "month": prev_month}).fetchall()
         dow_avg = {r["wd"]: (r["rev"] or 0) / r["days"] for r in pm_dow if r["days"]}
+        dow_fallback = sum(dow_avg.values()) / len(dow_avg) if dow_avg else 0
+
+        # ---- §3 weekly bars (this month) + last-month comparison --------------
+        # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
+        # that week's in-month revenue), for a small weekly trend bar in §3. Each bar's
+        # comparison (`fair_prev`) is last month's weekday-matched total for the EXACT
+        # calendar days summed into that bar — not a flat full-week average — so an
+        # in-progress week (e.g. only Wed–Sun so far) is never judged against a 7-day norm.
+        mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+        wk_rows = con.execute(f"""
+            SELECT {mon_e3} k, ROUND(SUM(st.total_inc_vat)/1.07) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+            GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
+        month_first = ref_anchor.replace(day=1)
+        month_last  = ref_anchor.replace(day=days_total)
+        pace["weekly"] = []
+        for r in wk_rows:
+            wk_start = _dt.date.fromisoformat(r["k"])
+            d0 = max(wk_start, month_first)
+            d1 = min(wk_start + _dt.timedelta(days=6), month_last, latest_day)
+            n_days = max(0, (d1 - d0).days + 1)
+            fair_prev = sum(dow_avg.get(int((d0 + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
+                            for i in range(n_days))
+            pace["weekly"].append({
+                "label": f"{wk_start.day} {MON[wk_start.month-1]}",
+                "start": r["k"], "revenue": r["rev"] or 0,
+                "fair_prev": round(fair_prev, 2), "days": n_days,
+                "complete": n_days >= 7,
+            })
         mom_baseline, mom_basis = pm_rev_mtd, "same_days"
         if not month_complete and dow_avg and days_elapsed:
-            dow_fallback = sum(dow_avg.values()) / len(dow_avg)
-            month_first  = ref_anchor.replace(day=1)
             _wsum = lambda n: sum(
                 dow_avg.get(int((month_first + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
                 for i in range(n))

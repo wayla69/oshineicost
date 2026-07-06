@@ -8014,8 +8014,8 @@ const MGT_I18N = {
     revTarget:'Revenue Target', actualSp:'actual ', projectionSp:'projection ', ofTarget:'% of target',
     noTarget:'no target set', foodCostPct:'Food Cost %', mtdSuffix:' (MTD)', bomBasis:'BoM basis',
     lastMonthSp:' · last month ', weeklyNetSales:'Weekly net sales — ',
-    weeklyHint:'(darker = latest week · dashed = last month average per week)',
-    lastMonthAvgWk:'last-month avg/wk', mtdRevenue:'MTD Revenue', projected:'Projected', target:'Target',
+    weeklyHint:'(darker = latest week · amber tick = last month, same weekdays)',
+    lastMonthAvgWk:'last month (same weekdays)', mtdRevenue:'MTD Revenue', projected:'Projected', target:'Target',
     lastMonth:'Last month', total:'total', overSame:'over the same', day1:'day', dayN:'days',
     thisMonthIs:'this month is', vsSameDays:'vs the same days last month',
     // §4 trend
@@ -8091,8 +8091,8 @@ const MGT_I18N = {
     revTarget:'เป้ายอดขาย', actualSp:'จริง ', projectionSp:'ประมาณการ ', ofTarget:'% ของเป้า',
     noTarget:'ยังไม่ตั้งเป้า', foodCostPct:'ต้นทุนอาหาร %', mtdSuffix:' (สะสม)', bomBasis:'อิงสูตร BoM',
     lastMonthSp:' · เดือนก่อน ', weeklyNetSales:'ยอดขายสุทธิรายสัปดาห์ — ',
-    weeklyHint:'(สีเข้ม = สัปดาห์ล่าสุด · เส้นประ = ค่าเฉลี่ยต่อสัปดาห์เดือนก่อน)',
-    lastMonthAvgWk:'เฉลี่ย/สัปดาห์ เดือนก่อน', mtdRevenue:'ยอดสะสมเดือนนี้', projected:'ประมาณการ', target:'เป้า',
+    weeklyHint:'(สีเข้ม = สัปดาห์ล่าสุด · ขีดอำพัน = เดือนก่อนเทียบวันเดียวกัน)',
+    lastMonthAvgWk:'เดือนก่อน (วันเดียวกัน)', mtdRevenue:'ยอดสะสมเดือนนี้', projected:'ประมาณการ', target:'เป้า',
     lastMonth:'เดือนก่อน', total:'รวม', overSame:'ในช่วง', day1:'วัน', dayN:'วัน',
     thisMonthIs:'เดือนนี้', vsSameDays:'เทียบช่วงวันเดียวกันเดือนก่อน',
     curveMa:'เส้น = ค่าเฉลี่ยเคลื่อนที่', darkerLatest:'แท่งสีเข้ม = ล่าสุด', trendMa:'แนวโน้ม (ค่าเฉลี่ยเคลื่อนที่)',
@@ -8255,19 +8255,17 @@ function renderMgtReport(j, jM, jF) {
   const mc = P.month_complete;
   const PMx = P.prev_month || {};
   const _fmtMc = v => v >= 1e6 ? '฿' + (v / 1e6).toFixed(1) + 'M' : v >= 1e3 ? '฿' + (v / 1e3).toFixed(0) + 'K' : '฿' + Math.round(v || 0);
-  // Weekly net-sales bars for the period's month (SVG → screen + print), with a dashed
-  // amber line at last month's average revenue per week — the "compare with last month".
+  // Weekly net-sales bars for the period's month (SVG → screen + print). Each bar
+  // gets its own amber tick from the backend's `fair_prev` — last month's weekday-
+  // matched revenue for the SAME calendar days that make up that bar — instead of a
+  // single flat "average per week" line, which made a partial in-progress week
+  // (e.g. 5 of 7 days) look like a cliff-edge shortfall against a full week's norm.
   const weeklyBars = (() => {
     const wk = P.weekly || [];
     if (!wk.length) return '';
     const vals = wk.map(w => w.revenue || 0);
-    // Last month's TRUE average per week = full total ÷ (days-in-that-month / 7).
-    // (Dividing by THIS month's bucket count showed last month's whole total as
-    // "avg/wk" while the month only had 1-2 partial-week buckets.)
-    const pmM = /^(\d{4})-(\d{2})$/.exec(PMx.month || '');
-    const pmDays = pmM ? new Date(+pmM[1], +pmM[2], 0).getDate() : null;
-    const prevAvg = (PMx.revenue_full && pmDays) ? PMx.revenue_full / (pmDays / 7) : null;
-    const mx = Math.max(...vals, prevAvg || 0, 1);
+    const fairs = wk.map(w => (w.fair_prev != null ? w.fair_prev : null));
+    const mx = Math.max(...vals, ...fairs.filter(f => f != null), 1);
     const W = 900, H = 190, padL = 46, padR = 12, padT = 18, padB = 18, n = wk.length;
     const plotW = W - padL - padR, plotH = H - padT - padB, yMax = mx * 1.14 || 1;
     const xc = i => padL + (i + 0.5) * (plotW / n), yc = v => padT + plotH * (1 - v / yMax);
@@ -8280,12 +8278,14 @@ function renderMgtReport(j, jM, jF) {
       return `<rect x="${(xc(i) - bw / 2).toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" rx="2" fill="${i === li ? '#4f46e5' : '#c7d2fe'}"/>`; }).join('');
     const vlab = vals.map((v, i) => `<text x="${xc(i).toFixed(1)}" y="${(yc(v) - 4).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="${i === li ? '800' : '600'}" fill="${i === li ? '#4f46e5' : '#64748b'}">${_fmtMc(v)}</text>`).join('');
     const xlab = wk.map((w, i) => `<text x="${xc(i).toFixed(1)}" y="${(H - 5).toFixed(1)}" text-anchor="middle" font-size="9" font-weight="700" fill="#475569">${w.label}</text>`).join('');
-    let ref = '';
-    if (prevAvg != null) { const ry = yc(prevAvg);
-      ref = `<line x1="${padL}" y1="${ry.toFixed(1)}" x2="${W - padR}" y2="${ry.toFixed(1)}" stroke="#f59e0b" stroke-width="1.6" stroke-dasharray="5 4"/>`
-          + `<text x="${W - padR}" y="${(ry - 3).toFixed(1)}" text-anchor="end" font-size="8.5" font-weight="700" fill="#d97706">${T.lastMonthAvgWk} ${_fmtMc(prevAvg)}</text>`; }
+    // One amber tick per bar, at THAT bar's own fair-comparison height, instead of a
+    // single flat line spanning the whole chart.
+    const ticks = fairs.map((f, i) => { if (f == null) return '';
+      const ty = yc(f), tx0 = xc(i) - bw / 2 - 3, tx1 = xc(i) + bw / 2 + 3, above = f >= vals[i];
+      return `<line x1="${tx0.toFixed(1)}" y1="${ty.toFixed(1)}" x2="${tx1.toFixed(1)}" y2="${ty.toFixed(1)}" stroke="#f59e0b" stroke-width="1.8" stroke-dasharray="4 3"/>`
+          + `<text x="${tx1.toFixed(1)}" y="${(ty + (above ? -3 : 9)).toFixed(1)}" text-anchor="end" font-size="8" font-weight="700" fill="#d97706">${_fmtMc(f)}</text>`; }).join('');
     return `<div class="mt-4"><p class="text-xs font-semibold text-slate-500 mb-1">${T.weeklyNetSales}${P.month || ''} <span class="text-slate-400 font-normal">${T.weeklyHint}</span></p>
-      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">${grid}${ylab}${bars}${ref}${vlab}${xlab}</svg></div>`;
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:auto;display:block">${grid}${ylab}${bars}${ticks}${vlab}${xlab}</svg></div>`;
   })();
   const momBadge = (P.mom_pct != null) ? ' · MoM ' + wow(P.mom_pct) : '';
   const fcPrevTxt = (P.food_cost_pct_prev != null) ? T.lastMonthSp + P.food_cost_pct_prev.toFixed(1) + '%' : '';
