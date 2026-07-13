@@ -184,7 +184,8 @@ def short_name(mssql_name: str) -> str:
 # ── drink / other category classification (food = everything else) ───────────
 def bucket_for_cat(name: str) -> str:
     u = (name or "").upper()
-    if any(k in u for k in ("SOFT DRINK", "DRINK", "ALCOHOL", "BEVERAGE", "เครื่องดื่ม")):
+    # "BAVERAGE" = real-world typo in the new-branch category names ((NEW)Oshinei-AL-BAVERAGE, Hat Yai 2026-07)
+    if any(k in u for k in ("SOFT DRINK", "DRINK", "ALCOHOL", "BEVERAGE", "BAVERAGE", "เครื่องดื่ม")):
         return "drink"
     if any(k in u for k in ("BUFFET", "แพ็คเกจ", "PACKAGE", "SERVICE", "DELIVERY",
                             "SPECIAL", "PROMOTION", "PAYMENT", "MEMBER", "GIFT",
