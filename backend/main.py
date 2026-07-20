@@ -839,18 +839,40 @@ def root():
     return {"message": "Oshinei API running. Dashboard file not found."}
 
 
-@app.get("/app.js", include_in_schema=False)
-def app_js():
-    """SPA application JS, split out of index.html (lean-overhaul Phase 4).
+_JS_DIR = INDEX.parent / "js"
+
+
+@app.get("/js/{name}", include_in_schema=False)
+def app_js_slice(name: str):
+    """One slice of the SPA JS (P2 refactor: app.js split into js/01…09,
+    loaded sequentially by index.html — shared global scope, order matters).
     no-cache = the browser revalidates on every load (ETag → 304 when
     unchanged), so a code deploy can never leave stale JS in caches — the
     StaticFiles /vendor mount sends no Cache-Control and relies on heuristic
     freshness, which is fine for third-party libs that never change but not
-    for the app itself."""
-    p = INDEX.parent / "app.js"
-    if p.exists():
+    for the app itself. Name is whitelist-validated (no path parts)."""
+    import re as _re
+    if not _re.fullmatch(r"[0-9a-z][0-9a-z-]*\.js", name):
+        raise HTTPException(status_code=404, detail="not found")
+    p = _JS_DIR / name
+    if p.exists() and p.parent == _JS_DIR:
         return FileResponse(str(p), media_type="application/javascript",
                             headers={"Cache-Control": "no-cache"})
+    raise HTTPException(status_code=404, detail="not found")
+
+
+@app.get("/app.js", include_in_schema=False)
+def app_js():
+    """Back-compat during the P2 rollout: a browser holding a CACHED shell
+    still references /app.js — serve the concatenation of the js/ slices
+    (sorted = load order) so it keeps working; the fresh shell loads the
+    slices individually. Droppable once caches have cycled."""
+    if _JS_DIR.exists():
+        parts = [p.read_text(encoding="utf-8") for p in sorted(_JS_DIR.glob("*.js"))]
+        if parts:
+            return _Response(content="\n".join(parts),
+                             media_type="application/javascript",
+                             headers={"Cache-Control": "no-cache"})
     raise HTTPException(status_code=404, detail="app.js not found")
 
 

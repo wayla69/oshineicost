@@ -6541,6 +6541,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
 </div>
 
-<script src="/app.js"></script>
+<!-- P2 structure refactor: app.js split into 9 sequential slices (shared
+     global scope — load order 01→09 must be preserved). /app.js still serves
+     the concatenation for any stale cached shell during rollout. -->
+<script src="/js/01-core.js"></script>
+<script src="/js/02-mgt-report.js"></script>
+<script src="/js/03-tabs-main.js"></script>
+<script src="/js/04-report-cost.js"></script>
+<script src="/js/05-pnl-settings.js"></script>
+<script src="/js/06-features.js"></script>
+<script src="/js/07-home.js"></script>
+<script src="/js/08-guest-buffet.js"></script>
+<script src="/js/09-deep-tools.js"></script>
 </body>
 </html>
