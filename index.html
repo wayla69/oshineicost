@@ -1274,11 +1274,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">⏰ เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
   <div class="nav-section">📄 รายงาน</div>
-  <div class="nav-item" id="nav-report" onclick="openMonthlyReport()" title="Monthly Report (รายงานประจำเดือน) · สรุปรายเดือนแบบง่าย สไตล์เดียวกับ Daily/Weekly · ฉบับเต็มแบบเดิมเปิดได้จากปุ่มในหน้ารายงาน">
+  <!-- nav-report hidden 2026-07-20: it duplicated nav-mgtreport (both open
+       #tab-mgtreport since the Monthly mode landed). Stays in the DOM for
+       applyPermissions' safety net; the LEGACY full pack (#tab-report) is
+       reached via the 📑 ฉบับเต็ม button inside the report's Monthly mode. -->
+  <div class="nav-item" id="nav-report" style="display:none" onclick="openMonthlyReport()" title="Monthly Report (รายงานประจำเดือน) · เปิดผ่าน 📊 Management Report โหมด Monthly">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
     <span class="nav-label">📄 Monthly Report</span>
   </div>
-  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily / Weekly / Monthly summary for management (printable)">
+  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily / Weekly / Monthly summary for management (printable) · โหมด Monthly = รายงานประจำเดือน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
     <span class="nav-label">📊 Management Report</span>
   </div>
@@ -5751,7 +5755,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
-        <b>ใหม่:</b> เมนู 📄 Monthly Report เปิด<b>แบบสรุปง่าย</b>สไตล์เดียวกับ Daily/Weekly (Management Report โหมด <b>Monthly</b>) — เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ในหน้ารายงาน (และหน้าเดิมมีปุ่ม 📊 แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠️ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "กรุณาเข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
+        รายงานรายเดือน<b>ยุบรวมเข้ากับ 📊 Management Report แล้ว</b> (เมนูเดียว ไม่ซ้ำ): เปิด <b>📊 Management Report → กดปุ่ม Monthly</b> — แบบสรุปง่ายสไตล์เดียวกับ Daily/Weekly, เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ที่โชว์เฉพาะโหมด Monthly (และหน้าเดิมมีปุ่ม 📊 แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠️ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "กรุณาเข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">🔮 Forecast &amp; Action Items (§10)</p>
@@ -5851,7 +5855,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 Monthly Report</b> (สรุปรายเดือนแบบง่าย สไตล์ Daily/Weekly · ฉบับเต็มกดปุ่มในหน้ารายงาน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 Management Report</b> (Daily · Weekly · Monthly ในเมนูเดียว — โหมด Monthly = รายงานประจำเดือน, ฉบับเต็มกดปุ่มในหน้ารายงาน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
