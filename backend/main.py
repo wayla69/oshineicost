@@ -378,20 +378,31 @@ app.add_middleware(GZipMiddleware, minimum_size=1000, compresslevel=6)
 # (no login, every endpoint open) so local dev + the test-suite are unaffected.
 # When set, every /api/* request must carry a valid session cookie and the
 # user's role must grant the module the path maps to (see backend/auth.py).
+# /docs/* (generated business reports — cost figures, internal plans) is gated
+# by the SAME session cookie: any logged-in ACTIVE user may read them (no
+# role-module mapping — reports are linked from the manual for every role).
+_DOCS_401_HTML = (
+    "<!doctype html><meta charset='utf-8'>"
+    "<body style='font-family:sans-serif;padding:3rem;text-align:center'>"
+    "<h3>กรุณาเข้าสู่ระบบก่อนเปิดเอกสาร (login required)</h3>"
+    "<p><a href='/'>ไปหน้าเข้าสู่ระบบ / open the dashboard</a> "
+    "แล้วกลับมาเปิดลิงก์นี้อีกครั้ง</p></body>")
+
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
     if not _auth.auth_enabled():
         return await call_next(request)
     path = request.url.path
+    docs_req = path == "/docs" or path.startswith("/docs/")
     # Fail CLOSED: auth is on but no real signing secret is configured → every
     # cookie would be forgeable with the source-tree dev key. Refuse all API
-    # traffic (the SPA shell still loads so the operator sees the 503 in the UI).
-    if path.startswith("/api/") and not _auth.secret_configured():
+    # and docs traffic (the SPA shell still loads so the operator sees the 503).
+    if (path.startswith("/api/") or docs_req) and not _auth.secret_configured():
         return JSONResponse(
             {"detail": "Auth misconfigured: set OSHINEI_AUTH_SECRET."}, status_code=503)
-    # Only gate the API. The SPA shell, static assets and login itself stay open
-    # so an unauthenticated browser can load the page and reach the login form.
-    if not path.startswith("/api/") or path.startswith("/api/auth/login") \
+    # Only gate the API + /docs. The SPA shell, static assets and login itself
+    # stay open so an unauthenticated browser can load the login form.
+    if not (path.startswith("/api/") or docs_req) or path.startswith("/api/auth/login") \
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db"):
@@ -399,9 +410,16 @@ async def enforce_auth(request: Request, call_next):
         # (?token=, returns 404 on mismatch). It must bypass the login middleware,
         # else enabling OSHINEI_AUTH silently breaks the hosted data-refresh push.
         return await call_next(request)
+    def _deny():
+        # a human opening a report link directly gets a pointer to the login
+        # page instead of a bare JSON blob; API callers keep the JSON contract
+        if docs_req:
+            return _Response(content=_DOCS_401_HTML, media_type="text/html",
+                             status_code=401)
+        return JSONResponse({"detail": "Authentication required."}, status_code=401)
     payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
     if not payload:
-        return JSONResponse({"detail": "Authentication required."}, status_code=401)
+        return _deny()
     # Re-read the LIVE account so a role change / deactivation / deletion takes
     # effect immediately instead of lingering until the 12h cookie expires.
     # Cheap at this scale (indexed lookup on a ~12-row table, served from cache).
@@ -411,7 +429,9 @@ async def enforce_auth(request: Request, call_next):
     except Exception:
         row = None
     if not row or not row["active"]:
-        return JSONResponse({"detail": "Authentication required."}, status_code=401)
+        return _deny()
+    if docs_req:                                   # any active user may read docs
+        return await call_next(request)
     mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
     if not _auth.path_allowed(request.method, path, mods):
         return JSONResponse(

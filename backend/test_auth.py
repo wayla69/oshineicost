@@ -368,3 +368,22 @@ def test_carry_forward_preserves_app_user(tmp_path):
     names = {r["username"] for r in ic.execute("SELECT username FROM app_user")}
     ic.close()
     assert names == {"boss"}
+
+
+# ── /docs gate: business reports require a login (any active role) ──────────
+def test_docs_open_when_auth_disabled(client):
+    r = client.get("/docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md")
+    assert r.status_code == 200
+
+
+def test_docs_requires_login_when_auth_on(client, app_db, auth_on):
+    c = _fresh(app_db)
+    r = c.get("/docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md")
+    assert r.status_code == 401
+    assert "text/html" in r.headers.get("content-type", "")   # human-friendly page
+    # any logged-in ACTIVE user may read docs (no role-module mapping)
+    assert _login(c, "operation1").status_code == 200
+    assert c.get("/docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md").status_code == 200
+    # SPA shell + static assets stay open for the login form itself
+    c2 = _fresh(app_db)
+    assert c2.get("/").status_code == 200
