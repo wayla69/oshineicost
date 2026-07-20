@@ -13284,6 +13284,59 @@ def report_management(
                     tier_out = {"rows": rows_t, "pax": round(pax_c),
                                 "pax_prev": round(pax_p) if has_prev else None,
                                 "mix_effect": mix_eff}
+
+                    # cost drivers of the worst-food% mainstream tier: which
+                    # ingredient groups / individual menus push its cost/head up
+                    # — turns the Food% column into an actionable "because guests
+                    # eat X". Reads the tier-dimensioned menu_fact_day (ent LIKE
+                    # 'g:%' = ingredient group, 's:%' = single menu); optional so a
+                    # driver failure never nukes the tier table above.
+                    try:
+                        cand = [r for r in rows_t if r["tier"].isdigit()
+                                and (r["share"] or 0) >= 5 and r["food_pct"] is not None
+                                and r["pax"]]
+                        if cand:
+                            focus = max(cand, key=lambda r: r["food_pct"])
+                            ft = focus["tier"]; ftpax = TC[ft]["pax"]
+                            lower = [r for r in cand if int(r["tier"]) < int(ft)]
+                            ref = max(lower, key=lambda r: int(r["tier"])) if lower else None
+                            rt = ref["tier"] if ref else None
+                            rtpax = TC[rt]["pax"] if rt else 0.0
+
+                            def _drv(kind_like, tier, pax):
+                                d = {}
+                                if not pax:
+                                    return d
+                                for ent, cg, q in con.execute(
+                                        f"""SELECT ent, SUM(ent_cogs), SUM(qty)
+                                            FROM menu_fact_day
+                                            WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                                              AND tier=? AND ent LIKE ? GROUP BY ent""",
+                                        [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
+                                    d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
+                                return d
+
+                            lblmap = {e: (l or e) for e, l in con.execute(
+                                "SELECT ent, label FROM menu_fact_meta")}
+                            gF = _drv("g:%", ft, ftpax)
+                            gR = _drv("g:%", rt, rtpax) if rt else {}
+                            grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                    "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
+                                   for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
+                                   if v[0] >= 1]
+                            mF = _drv("s:%", ft, ftpax)
+                            mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                    "qty_100": round(v[1], 1)}
+                                   for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
+                                   if v[0] >= 1]
+                            if grp or mnu:
+                                tier_out["drivers"] = {
+                                    "focus_tier": ft, "focus_label": focus["label"],
+                                    "focus_food_pct": focus["food_pct"],
+                                    "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
+                                    "groups": grp, "menus": mnu}
+                    except Exception:
+                        pass
         except Exception:
             tier_out = None
 
