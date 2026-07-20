@@ -2253,16 +2253,18 @@ async function msLoadSales() {
   const q = new URLSearchParams({ gran: _msSalesGran, trend: '12' });
   const br = msBranch(); if (br) q.set('branch', br);
   let d; try { d = await fetch(`${API}/api/sales/daily?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
-  const tr = (d.trend || []);
+  // latest day/month FIRST (owner request 2026-07-20) — the API returns the
+  // trend oldest→newest; reverse for display so index 0 = the newest period.
+  const tr = (d.trend || []).slice().reverse();
   const maxV = Math.max(1, ...tr.map(x => x.revenue || 0));
   const lblOf = x => _msSalesGran === 'month' ? (x.start || '').slice(0, 7) : (x.start || '').slice(5, 10);
   wrap.innerHTML = tr.map((x, i) => {
     const w = Math.round(100 * (x.revenue || 0) / maxV);
-    const last = i === tr.length - 1;
+    const latest = i === 0;
     return `<div class="ms-row">
-      <span style="width:58px;font-size:11px;color:var(--text-muted,#64748b)">${lblOf(x)}</span>
-      ${msBar(w, last ? '#4338ca' : '#a5b4fc')}
-      <span style="width:64px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}</span>
+      <span style="width:58px;font-size:11px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
+      ${msBar(w, latest ? '#4338ca' : '#a5b4fc')}
+      <span style="width:64px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}</span>
     </div>`;
   }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
@@ -2270,12 +2272,45 @@ async function msLoadSales() {
 // ── VIEW: เมนู ──
 async function msLoadMenu() {
   const wrap = document.getElementById('msMenu');
+  const rWrap = document.getElementById('msMenuRisers');
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
-  const q = new URLSearchParams({ sort: 'qty', limit: '20' });
+  if (rWrap) rWrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
+  // limit=100: one payload feeds BOTH lists — top-20 by qty (below) and the
+  // MoM risers. The top-100-by-qty pool doubles as a volume floor so a tiny-
+  // base SKU can't fake a huge % (debug-mantra rule 5); qty_mom_pct itself is
+  // MTD-fair (same day-range both months) and the food filter is the canonical
+  // _FOOD_CATEGORY_FILTER incl. the durian whitelist (rule 23).
+  const q = new URLSearchParams({ sort: 'qty', limit: '100' });
   const br = msBranch(); if (br) q.set('branch', br);
   const mon = (_msMonth?.focus || '').slice(0, 7); if (mon) q.set('month', mon);
-  let d; try { d = await fetch(`${API}/api/sales/top_ordered?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
-  const items = (d.items || []);
+  let d; try { d = await fetch(`${API}/api/sales/top_ordered?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; if (rWrap) rWrap.innerHTML = ''; return; }
+  const pool = (d.items || []);
+
+  // ── 📈 มาแรงเดือนนี้: biggest positive qty-MoM among meaningful-volume menus ──
+  if (rWrap) {
+    const MIN_QTY = 1000;
+    const risers = pool
+      .filter(x => (x.qty || 0) >= MIN_QTY && x.qty_mom_pct != null && x.qty_mom_pct > 0)
+      .sort((a, b) => b.qty_mom_pct - a.qty_mom_pct)
+      .slice(0, 8);
+    const maxM = Math.max(1, ...risers.map(x => x.qty_mom_pct || 0));
+    const capNote = d.mom_basis === 'mtd'
+      ? `เทียบช่วงวันที่ 1–${d.mtd_cutoff_day || ''} ของเดือนก่อน (แฟร์กับเดือนที่ยังไม่จบ)`
+      : 'เทียบเดือนก่อนหน้า';
+    rWrap.innerHTML = (risers.map((x, i) => {
+      const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
+      return `<div class="ms-row">
+        <span style="width:18px;font-size:11px;color:var(--text-muted,#94a3b8)">${i + 1}</span>
+        <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</span>
+        <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (x.qty_mom_pct || 0) / maxM), '#10b981')}</span></span>
+        <span style="width:84px;text-align:right;flex-shrink:0">${msPchip(Math.round(x.qty_mom_pct * 10) / 10)}<br><span style="font-size:11px;color:var(--text-muted,#64748b);font-variant-numeric:tabular-nums">${fmtN(x.qty || 0)} ชิ้น</span></span>
+      </div>`;
+    }).join('') || '<div class="ms-row">เดือนนี้ยังไม่มีเมนูยอดนิยมที่เพิ่มขึ้นชัดเจน</div>')
+      + `<div class="ms-row" style="border:0;padding-top:6px"><span style="font-size:10px;color:var(--text-muted,#94a3b8)">${capNote} · เฉพาะเมนูยอด ≥ ${fmtN(MIN_QTY)} ชิ้น</span></div>`;
+  }
+
+  // ── 🍣 เมนูขายดี top-20 (unchanged view; first 20 of the qty-sorted pool) ──
+  const items = pool.slice(0, 20);
   const maxQ = Math.max(1, ...items.map(x => x.qty || 0));
   wrap.innerHTML = items.map((x, i) => {
     const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
