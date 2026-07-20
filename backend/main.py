@@ -419,6 +419,103 @@ async def enforce_auth(request: Request, call_next):
             status_code=403)
     return await call_next(request)
 
+# ---------------------------------------------------------------------------
+# Usage telemetry  (lean-overhaul Phase 0 — docs/LEAN_OVERHAUL_PLAN.md)
+# ---------------------------------------------------------------------------
+# Counts endpoint hits and tab opens so the Phase-2 keep/merge/kill decisions
+# run on real usage, not guesses. Lives in a SEPARATE sqlite file next to the
+# main DB (usage.db) because the daily MSSQL sync / data-refresh replace the
+# main DB file wholesale — telemetry must survive those swaps. One UPSERTed
+# row per (day, kind, name), so the file stays tiny forever. Every write is
+# best-effort: telemetry must never break or slow a real request.
+
+def _usage_db_path() -> Path:
+    # Resolved at call time (not import) so the test-suite's DB_PATH rebind
+    # sends telemetry to the temp dir instead of the real backend/usage.db.
+    return Path(str(DB_PATH)).parent / "usage.db"
+
+def _usage_bump(kind: str, name: str, user: str = "") -> None:
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        try:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS usage_daily("
+                " day TEXT NOT NULL, kind TEXT NOT NULL, name TEXT NOT NULL,"
+                " hits INTEGER NOT NULL DEFAULT 0, last_user TEXT DEFAULT '',"
+                " PRIMARY KEY(day, kind, name))")
+            con.execute(
+                # date('now','+7 hours') = Thai calendar day (host clock is UTC on Fly)
+                "INSERT INTO usage_daily(day, kind, name, hits, last_user)"
+                " VALUES (date('now','+7 hours'), ?, ?, 1, ?)"
+                " ON CONFLICT(day, kind, name) DO UPDATE SET"
+                " hits = hits + 1, last_user = excluded.last_user",
+                (kind, name[:120], (user or "")[:40]))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass  # best-effort by design
+
+def _usage_user(request: Request) -> str:
+    try:
+        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+        return (payload or {}).get("u", "")
+    except Exception:
+        return ""
+
+@app.middleware("http")
+async def usage_counter(request: Request, call_next):
+    response = await call_next(request)
+    try:
+        path = request.url.path
+        if (path.startswith("/api/") and not path.startswith("/api/usage")
+                and response.status_code < 400):
+            route = request.scope.get("route")
+            name = getattr(route, "path", None) or path
+            _usage_bump("api", f"{request.method} {name}", _usage_user(request))
+    except Exception:
+        pass
+    return response
+
+@app.post("/api/usage/tab")
+async def usage_tab(request: Request):
+    """switchTab() beacon: {"tab": name}. Accepts sendBeacon's text/plain body.
+    Deliberately NOT write-token gated — it records nothing but a counter."""
+    tab = ""
+    try:
+        raw = await request.body()
+        tab = str((_json.loads(raw or b"{}") or {}).get("tab", ""))[:60]
+    except Exception:
+        pass
+    if tab:
+        _usage_bump("tab", tab, _usage_user(request))
+    return {"ok": bool(tab)}
+
+@app.get("/api/usage/summary")
+def usage_summary(days: int = Query(30, ge=1, le=365)):
+    """Hit totals per tab / endpoint over the last N Thai days (Settings →
+    การใช้งานจริง). Empty lists until any traffic is recorded."""
+    out: dict = {"days": days, "tabs": [], "api": []}
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        con.row_factory = sqlite3.Row
+        try:
+            for kind, key in (("tab", "tabs"), ("api", "api")):
+                rows = con.execute(
+                    "SELECT name, SUM(hits) AS hits,"
+                    " COUNT(DISTINCT day) AS days_seen, MAX(day) AS last_seen"
+                    " FROM usage_daily"
+                    " WHERE kind = ? AND day >= date('now','+7 hours', ?)"
+                    " GROUP BY name ORDER BY hits DESC",
+                    (kind, f"-{int(days)} day")).fetchall()
+                out[key] = [dict(r) for r in rows]
+        finally:
+            con.close()
+    except Exception:
+        pass
+    return out
+
+
 # Serve vendor JS/CSS
 if STATIC.exists():
     app.mount("/vendor", StaticFiles(directory=str(STATIC)), name="vendor")
@@ -715,6 +812,21 @@ def root():
     if INDEX.exists():
         return FileResponse(str(INDEX))
     return {"message": "Oshinei API running. Dashboard file not found."}
+
+
+@app.get("/app.js", include_in_schema=False)
+def app_js():
+    """SPA application JS, split out of index.html (lean-overhaul Phase 4).
+    no-cache = the browser revalidates on every load (ETag → 304 when
+    unchanged), so a code deploy can never leave stale JS in caches — the
+    StaticFiles /vendor mount sends no Cache-Control and relies on heuristic
+    freshness, which is fine for third-party libs that never change but not
+    for the app itself."""
+    p = INDEX.parent / "app.js"
+    if p.exists():
+        return FileResponse(str(p), media_type="application/javascript",
+                            headers={"Cache-Control": "no-cache"})
+    raise HTTPException(status_code=404, detail="app.js not found")
 
 
 # ---------------------------------------------------------------------------
@@ -1028,17 +1140,6 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     _os2.replace(stage, inc)   # atomic: poller only ever sees a complete, valid DB
     return {"ok": True, "staged_bytes": staged_bytes, "staged_rows": rows,
             "note": "restart the machine to apply (atomic swap at startup)"}
-
-
-@app.post("/api/_admin/apply-cost-patches", include_in_schema=False)
-def admin_apply_cost_patches(token: str = Query("")):
-    """Run _apply_cost_patches() on demand (hidden; write-token required).
-    Useful to apply startup cost corrections without a full restart."""
-    toks = _accepted_tokens()
-    if not toks or not _token_accepted(token):
-        raise HTTPException(status_code=404, detail="not found")
-    _apply_cost_patches()
-    return {"ok": True, "patches": [p[0] for p in _COST_PATCHES]}
 
 
 # ---------------------------------------------------------------------------
@@ -5965,85 +6066,6 @@ def buffet_gp_calendar(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/buffet/branch-tier-matrix
-# ---------------------------------------------------------------------------
-@app.get("/api/buffet/branch-tier-matrix")
-@ttl_cache
-def buffet_branch_tier_matrix(
-    month:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-):
-    """Per-branch buffet tier mix: pax, premium %, avg GP/cover, revenue."""
-    # fix C2/C5: revenue/pax from BUFFET category; COGS from ALL SKUs (item COGS on B0xxx rows)
-    # fix C5: premium price bands in ex-VAT units (590÷1.07≈551, 799÷1.07≈747)
-    filters: list = ["c.name = 'BUFFET'"]
-    cogs_filters: list = []
-    params:  dict = {}
-    _month_range_filter(filters, params, month_from, month_to, month)
-    _month_range_filter(cogs_filters, params, month_from, month_to, month)
-
-    sql = f"""
-        SELECT
-            b.name                                                          AS branch,
-            SUM(sm.qty)                                                     AS total_pax,
-            SUM(sm.subtotal_ex_vat)                                         AS rev_ex,
-            SUM(sm.total_inc_vat)                                           AS rev_inc,
-            SUM(CASE
-                    WHEN sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 535 AND 575
-                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) BETWEEN 720 AND 760
-                         OR sm.subtotal_ex_vat/NULLIF(sm.qty,0) > 950
-                    THEN sm.qty ELSE 0
-                END)                                                        AS premium_pax
-        FROM sales_sku_monthly sm
-        JOIN branches   b  ON b.branch_id  = sm.branch_id
-        JOIN skus       sk ON sk.sku_id    = sm.sku_id
-        JOIN categories c  ON c.category_id = sk.category_id
-        WHERE {' AND '.join(filters)} AND b.name != 'ALL'
-        GROUP BY b.name
-        ORDER BY b.name
-    """
-
-    cogs_where = ("WHERE " + " AND ".join(cogs_filters + ["b.name != 'ALL'"])) if cogs_filters else "WHERE b.name != 'ALL'"
-    cogs_sql = f"""
-        SELECT b.name AS branch, SUM({_unified_cogs_expr(ssm='sm')}) AS total_cogs
-        FROM sales_sku_monthly sm
-        JOIN branches b ON b.branch_id = sm.branch_id
-        {cogs_where}
-        GROUP BY b.name
-    """
-
-    with get_db() as con:
-        rows      = con.execute(sql,      params).fetchall()
-        cogs_rows = con.execute(cogs_sql, params).fetchall()
-
-    cogs_by_branch = {r["branch"]: (r["total_cogs"] or 0.0) for r in cogs_rows}
-
-    result = []
-    for r in rows:
-        total_pax   = r["total_pax"]   or 0
-        premium_pax = r["premium_pax"] or 0
-        premium_pct = round(premium_pax / total_pax * 100, 2) if total_pax else 0.0
-        total_cogs  = cogs_by_branch.get(r["branch"])
-        rev_ex      = r["rev_ex"] or 0.0
-        if total_cogs is not None and total_pax:
-            gp_total          = rev_ex - total_cogs
-            avg_gp_per_cover  = round(gp_total / total_pax, 2)
-        else:
-            avg_gp_per_cover  = None
-
-        result.append({
-            "branch":           r["branch"],
-            "total_pax":        total_pax,
-            "premium_pct":      premium_pct,
-            "avg_gp_per_cover": avg_gp_per_cover,
-            "total_revenue":    round(rev_ex, 2),   # ex-VAT (VAT is never revenue)
-        })
-
-    return result
-
-
-# ---------------------------------------------------------------------------
 # GET /api/buffet/child-trend
 # ---------------------------------------------------------------------------
 @app.get("/api/buffet/child-trend")
@@ -6313,7 +6335,6 @@ def buffet_breakeven(
 # ---------------------------------------------------------------------------
 # GET /api/buffet/forecast
 # ---------------------------------------------------------------------------
-@app.get("/api/buffet/forecast")
 @ttl_cache
 def buffet_forecast(
     branch:     Optional[str] = Query(None),
@@ -9234,7 +9255,6 @@ def analysis_yoy(
     return out
 
 
-@app.get("/api/analysis/forecast")
 @ttl_cache
 def analysis_forecast(
     branch: Optional[str] = Query(None),
@@ -9307,7 +9327,6 @@ def analysis_forecast(
     }
 
 
-@app.get("/api/analysis/forecast_branches")
 @ttl_cache
 def analysis_forecast_branches(group: Optional[str] = Query(None)):
     """Per-branch month-end revenue projection (run-rate) for the latest month,
@@ -9606,76 +9625,6 @@ def cost_diff(threshold_pct: float = Query(10.0, description="Flag changes >= th
             LIMIT 20
             """).fetchall()
     return {"recent_updates": [dict(r) for r in rows], "note": "Cost history not yet tracked  -  showing 20 most recently updated SKUs."}
-
-
-class AIBody(BaseModel):
-    period_label: Optional[str] = None
-    summary:      Dict[str, float] = {}
-    extra:        Optional[str] = None
-
-
-@app.post("/api/ai/commentary", dependencies=[Depends(require_write_token)])
-def ai_commentary(body: AIBody):
-    """
-    Generate a short narrative commentary about the period using Anthropic Claude
-    (requires ANTHROPIC_API_KEY env var). Falls back to a deterministic prose if no key.
-    """
-    import os, json
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    s = body.summary or {}
-
-    # Always-available deterministic fallback
-    def deterministic():
-        rev = s.get("revenue") or 0
-        tx  = s.get("tx_count") or 0
-        cust = s.get("customer_count") or 0
-        avg = s.get("avg_ticket") or 0
-        delta = s.get("revenue_delta_pct")
-        delta_str = (f"{'+' if delta and delta>=0 else ''}{round(delta,1)}%" if delta is not None else "n/a")
-        return (
-            f"ในช่วง {body.period_label or 'ที่เลือก'}: รายได้รวม {rev:,.0f} บาท "
-            f"จาก {tx:,} บิล ({cust:,} ลูกค้า) ยอดบิลเฉลี่ย {avg:,.0f} บาท "
-            f"รายได้เปลี่ยนแปลง {delta_str} เทียบช่วงก่อนหน้า "
-            "ยอดบิลเฉลี่ยที่เติบโตพร้อมจำนวนลูกค้าคงที่เป็นสัญญาณดี — "
-            "พิจารณายกระดับช่วงเวลาหรือสาขาที่อ่อนที่สุดเพื่อต่อยอดการเติบโต"
-        )
-
-    if not api_key:
-        return {"text": deterministic(), "source": "deterministic"}
-
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            "https://api.anthropic.com/v1/messages",
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01",
-            },
-            data=json.dumps({
-                "model": "claude-haiku-4-5-20251001",
-                "max_tokens": 350,
-                "messages": [{
-                    "role": "user",
-                    "content": (
-                        f"You are a restaurant analytics advisor for a Thai restaurant chain. "
-                        f"Write 4-5 sentences in THAI of clear, plain commentary about this period "
-                        f"for a busy GM. Period: {body.period_label}. "
-                        f"Numbers: {json.dumps(s)}. "
-                        f"Cover: สิ่งที่เกิดขึ้น, สาเหตุน่าจะมาจากอะไร, action ที่ควรทำ 1 อย่าง. "
-                        f"Be specific with numbers in Thai. No fluff. Currency unit is บาท (no symbol)."
-                        + (f" Extra context: {body.extra}" if body.extra else "")
-                    )
-                }],
-            }).encode("utf-8"),
-        )
-        with urllib.request.urlopen(req, timeout=20) as r:
-            data = json.loads(r.read().decode("utf-8"))
-            text = data.get("content", [{}])[0].get("text", "")
-            return {"text": text or deterministic(), "source": "claude"}
-    except Exception as e:
-        return {"text": deterministic(), "source": f"deterministic (fallback: {e})"}
 
 
 # ===========================================================================
@@ -11683,61 +11632,6 @@ def gp_by_branch_month(
             "food_cost_pct": round(grand_cogs / grand_rev * 100, 2) if grand_rev > 0 else None,
         },
     }
-
-
-@app.get("/api/profit/by-sku")
-@ttl_cache
-def profit_by_sku(
-    branch:     Optional[str] = Query(None),
-    group:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-    month:      Optional[str] = Query(None),
-    limit:      int = Query(20),
-    order:      str = Query("desc"),
-):
-    """Top (order=desc) or bottom (order=asc) SKUs by profit contribution.
-
-    Costed SKUs only. Excludes Easy buffet-tier SKUs (BUFFET350/500/590/799/CHILD)
-    from the cost half — their COGS is captured at item level (B0xxx)."""
-    filters = [
-        "b.name != 'ALL'",
-        f"{_effective_cost_subquery()} IS NOT NULL",
-        f"NOT (ssm.source = 'Easy' AND sk.sku_code IN {_EASY_TIER_CODES_SQL})",
-    ]
-    params: dict = {}
-    if branch:
-        filters.append("b.name = :branch")
-        params["branch"] = branch
-    _group_filter(filters, params, group)
-    _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
-    where = "WHERE " + " AND ".join(filters)
-    order_dir = "DESC" if order == "desc" else "ASC"
-    with get_db() as con:
-        rows = con.execute(f"""
-            SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
-              c.name AS category,
-              SUM(ssm.qty)                       AS qty,
-              ROUND(SUM(ssm.subtotal_ex_vat), 2) AS revenue_ex_vat,
-              ROUND(SUM({_cogs_case()}), 2) AS cogs,
-              ROUND(SUM(ssm.subtotal_ex_vat) - SUM({_cogs_case()}), 2) AS gross_profit,
-              CASE WHEN SUM(ssm.subtotal_ex_vat) > 0
-                THEN ROUND((SUM(ssm.subtotal_ex_vat) - SUM({_cogs_case()}))
-                          / SUM(ssm.subtotal_ex_vat) * 100, 2)
-                ELSE NULL END AS margin_pct,
-              sc.unit_cost
-            FROM sales_sku_monthly ssm
-            JOIN branches   b  ON b.branch_id   = ssm.branch_id
-            JOIN skus       sk ON sk.sku_id     = ssm.sku_id
-            JOIN categories c  ON c.category_id = sk.category_id
-            LEFT JOIN sku_cost sc ON sc.sku_id  = ssm.sku_id
-            {where}
-            GROUP BY sk.sku_id
-            HAVING SUM(ssm.qty) > 0
-            ORDER BY gross_profit {order_dir}
-            LIMIT :lim
-        """, {**params, "lim": limit}).fetchall()
-    return [dict(r) for r in rows]
 
 
 @app.get("/api/profit/per-bill-distribution")
@@ -14825,8 +14719,8 @@ class MenuIdeasBody(BaseModel):
 @app.post("/api/menu/ai-ideas", dependencies=[Depends(require_write_token)])
 def menu_ai_ideas(body: MenuIdeasBody):
     """Draft NEW dish / promo CONCEPTS in Thai from the data-driven opportunity
-    signals (cross-branch gaps, category whitespace, revive candidates). Mirrors
-    /api/ai/commentary: real Claude when ANTHROPIC_API_KEY is set, otherwise a
+    signals (cross-branch gaps, category whitespace, revive candidates). Uses real
+    Claude when ANTHROPIC_API_KEY is set, otherwise a
     deterministic data-derived fallback (no crash, no SDK). Concepts are creative
     and NOT proven by sales — the UI labels them as such."""
     import os, json
@@ -15115,7 +15009,6 @@ def buffet_mix(
     return {"summary": summary, "trend": trend, "tiers": all_tiers, "months": all_months}
 
 
-@app.get("/api/analysis/table_turnover")
 @ttl_cache
 def table_turnover(
     month:      Optional[str] = Query(None),
@@ -16910,7 +16803,6 @@ def daypart_economics(
 # ---------------------------------------------------------------------------
 # GET /api/analysis/table-turnover  (Analysis #7)
 # ---------------------------------------------------------------------------
-@app.get("/api/analysis/table-turnover")
 @ttl_cache
 def table_turnover_branches(   # distinct __name__ — was 'table_turnover', which collided
     branch:     Optional[str] = Query(None),   # in ttl_cache with /api/analysis/table_turnover
@@ -16953,7 +16845,6 @@ def table_turnover_branches(   # distinct __name__ — was 'table_turnover', whi
 # ---------------------------------------------------------------------------
 # GET /api/analysis/forecast  (Analysis #9)  — short-horizon revenue projection
 # ---------------------------------------------------------------------------
-@app.get("/api/analysis/revenue-forecast")
 @ttl_cache
 def revenue_forecast(
     branch:  Optional[str] = Query(None),
@@ -18618,72 +18509,6 @@ def cost_bulk_update(updates: list[CostUpdate]):
     return {"written": written, "unknown_skus": unknown}
 
 
-# ---------------------------------------------------------------------------
-# /api/bom/aliases — Phase 9 BoM-code → DB-SKU mapping
-# ---------------------------------------------------------------------------
-@app.get("/api/bom/aliases")
-def bom_aliases():
-    """List all BoM-code aliases mapping unmatched BoM codes to DB SKUs."""
-    with get_db() as con:
-        # Ensure table exists so first call after a clean install doesn't 500
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS bom_sku_alias ("
-            "bom_sku_code TEXT PRIMARY KEY, "
-            "resolved_sku_id INTEGER NOT NULL REFERENCES skus(sku_id), "
-            "match_method TEXT, confidence REAL, notes TEXT)"
-        )
-        rows = con.execute("""
-            SELECT a.bom_sku_code,
-                   a.resolved_sku_id,
-                   s.sku_code  AS resolved_sku_code,
-                   COALESCE(s.description,'') AS resolved_description,
-                   a.match_method,
-                   a.confidence,
-                   COALESCE(a.notes,'') AS notes
-              FROM bom_sku_alias a
-              JOIN skus s ON s.sku_id = a.resolved_sku_id
-             ORDER BY a.bom_sku_code
-        """).fetchall()
-    return {"count": len(rows), "aliases": [dict(r) for r in rows]}
-
-
-class BomAliasUpdate(BaseModel):
-    resolved_sku_code: str
-    notes: Optional[str] = None
-
-
-@app.put("/api/bom/aliases/{bom_code}", dependencies=[Depends(require_write_token)])
-def bom_alias_upsert(bom_code: str, body: BomAliasUpdate):
-    """Manually map a BoM Excel code to a DB SKU code. Marks the row as 'manual'."""
-    code = (bom_code or "").strip().upper()
-    if not code:
-        raise HTTPException(400, "bom_code required")
-    target = (body.resolved_sku_code or "").strip().upper()
-    if not target:
-        raise HTTPException(400, "resolved_sku_code required")
-    with get_db() as con:
-        con.execute(
-            "CREATE TABLE IF NOT EXISTS bom_sku_alias ("
-            "bom_sku_code TEXT PRIMARY KEY, "
-            "resolved_sku_id INTEGER NOT NULL REFERENCES skus(sku_id), "
-            "match_method TEXT, confidence REAL, notes TEXT)"
-        )
-        row = con.execute(
-            "SELECT sku_id FROM skus WHERE sku_code = ?", (target,)
-        ).fetchone()
-        if not row:
-            raise HTTPException(404, f"SKU {target} not found")
-        con.execute(
-            "INSERT OR REPLACE INTO bom_sku_alias "
-            "(bom_sku_code, resolved_sku_id, match_method, confidence, notes) "
-            "VALUES (?, ?, 'manual', 1.0, ?)",
-            (code, row["sku_id"], body.notes or ""),
-        )
-        con.commit()
-    invalidate_cache()
-    return {"bom_sku_code": code, "resolved_sku_code": target, "match_method": "manual"}
-
-
 # ════════════════════════════════════════════════════════════════════════════
 # Phase 12 — Per-branch BoM cost analysis
 # ════════════════════════════════════════════════════════════════════════════
@@ -19151,23 +18976,6 @@ _VALID_BUSINESS_TYPES = {"buffet_tier", "buffet", "alacarte", "beverage",
 
 class BusinessTypeUpdate(BaseModel):
     business_type: str
-
-
-@app.get("/api/skus/business-types")
-def list_business_types():
-    """Return valid business_type values + count per type from skus table."""
-    with get_db() as con:
-        rows = con.execute("""
-            SELECT COALESCE(business_type,'other') AS bt, COUNT(*) AS n
-              FROM skus
-             GROUP BY COALESCE(business_type,'other')
-        """).fetchall()
-    counts = {r["bt"]: int(r["n"]) for r in rows}
-    return {
-        "valid_types": sorted(_VALID_BUSINESS_TYPES),
-        "counts": counts,
-        "total_skus": sum(counts.values()),
-    }
 
 
 @app.put("/api/skus/{sku_code}/business-type", dependencies=[Depends(require_write_token)])
@@ -20285,3 +20093,53 @@ def bom_cost_recipe(sku_code: str):
         "total_cost":  round(total, 4),
         "ingredients": [dict(r) for r in rows],
     }
+# ═══════════════════════════════════════════════════════════════════════════
+# Lean-overhaul Phase 3 — unified dispatcher endpoints
+# ═══════════════════════════════════════════════════════════════════════════
+# Four forecast routes and two table-turnover routes collapsed into one path
+# each (mode/view param). The implementations above keep their own @ttl_cache
+# with distinct __name__s (cache keys must never collide — see the
+# table_turnover cache-poisoning note at the top of this file), so these
+# dispatchers are cache-transparent and behaviour-identical per mode.
+
+@app.get("/api/forecast")
+def forecast_unified(
+    mode:       str           = Query("month", pattern="^(month|branches|trend|buffet)$"),
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    periods:    int           = Query(3, ge=1, le=12),
+    horizon:    int           = Query(3),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """One forecast path, four views:
+    mode=month    → current-month run-rate projection      (was /api/analysis/forecast)
+    mode=branches → per-branch month-end projection        (was /api/analysis/forecast_branches)
+    mode=trend    → next-N-months OLS revenue projection   (was /api/analysis/revenue-forecast)
+    mode=buffet   → buffet pax/revenue regression forecast (was /api/buffet/forecast)"""
+    if mode == "branches":
+        return analysis_forecast_branches(group=group)
+    if mode == "trend":
+        return revenue_forecast(branch=branch, horizon=horizon)
+    if mode == "buffet":
+        return buffet_forecast(branch=branch, periods=periods,
+                               month_from=month_from, month_to=month_to)
+    return analysis_forecast(branch=branch, group=group)
+
+
+@app.get("/api/analysis/table-turnover")
+def table_turnover_unified(
+    view:       str           = Query("branches", pattern="^(branches|dwell)$"),
+    branch:     Optional[str] = Query(None),
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+):
+    """view=branches → per-branch POS turn-time feed (default; same shape the
+    path always returned). view=dwell → bill-gap dwell/turns estimate (the old
+    /api/analysis/table_turnover, used by the ⏰ Time & Flow tab)."""
+    if view == "dwell":
+        return table_turnover(month=month, month_from=month_from,
+                              month_to=month_to, branch=branch)
+    return table_turnover_branches(branch=branch, month=month,
+                                   month_from=month_from, month_to=month_to)

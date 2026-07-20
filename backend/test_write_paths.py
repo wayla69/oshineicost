@@ -180,34 +180,26 @@ def test_sku_business_type_roundtrip_and_validation(client):
     bad = client.put("/api/skus/A0001/business-type", json={"business_type": "junk"})
     assert bad.status_code == 400
 
-    def counts():
-        return client.get("/api/skus/business-types").json()["counts"]
+    # The GET list endpoint was removed in the lean overhaul (frontend never
+    # called it) — verify persistence straight from the DB instead.
+    def business_type(code):
+        import sqlite3
+        import main
+        con = sqlite3.connect(str(main.DB_PATH))
+        try:
+            r = con.execute("SELECT business_type FROM skus WHERE sku_code=?",
+                            (code,)).fetchone()
+            return r[0] if r else None
+        finally:
+            con.close()
 
-    base = counts()
     try:
         r = client.put("/api/skus/A0001/business-type", json={"business_type": "beverage"})
         assert r.status_code == 200, r.text[:200]
-        after = counts()
-        assert after.get("beverage", 0) == base.get("beverage", 0) + 1
-        assert after.get("alacarte", 0) == base.get("alacarte", 0) - 1
+        assert business_type("A0001") == "beverage"
     finally:
         client.put("/api/skus/A0001/business-type", json={"business_type": "alacarte"})
-    assert counts() == base
-
-
-# ── BoM aliases ──────────────────────────────────────────────────────────────
-def test_bom_alias_upsert_roundtrip(client):
-    r = client.put("/api/bom/aliases/PYTEST01", json={"resolved_sku_code": "A0001",
-                                                      "notes": "from pytest"})
-    assert r.status_code == 200, r.text[:200]
-    rows = client.get("/api/bom/aliases").json()
-    rows = rows if isinstance(rows, list) else rows.get("rows", rows.get("aliases", []))
-    mine = [a for a in rows if a["bom_sku_code"] == "PYTEST01"]
-    assert mine and mine[0]["resolved_sku_code"] == "A0001"
-    assert mine[0]["match_method"] == "manual"
-    # unknown resolved SKU must be rejected
-    bad = client.put("/api/bom/aliases/PYTEST02", json={"resolved_sku_code": "NOPE"})
-    assert bad.status_code in (400, 404)
+    assert business_type("A0001") == "alacarte"
 
 
 # ── per-branch fixed / labor costs ───────────────────────────────────────────
