@@ -5746,8 +5746,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
+        <p class="font-bold text-slate-700 mb-1">📊 Management Report — Daily | Weekly | Monthly</p>
+        รายงานสรุปผู้บริหารหน้าเดียว (พิมพ์/PDF ได้) สลับได้ 3 โหมดจากปุ่มบนหัวรายงาน: <b>Daily</b> = วันล่าสุดที่จบแล้ว (เลือกวันย้อนหลังได้ เทียบวันเดียวกันสัปดาห์ก่อน), <b>Weekly</b> = สัปดาห์เต็ม จ.–อา. ล่าสุด (เลือกสัปดาห์ได้ เทียบสัปดาห์ก่อน), <b>Monthly</b> = <b>เดือนที่จบแล้ว</b>เท่านั้น (เลือกเดือนย้อนหลังได้ เทียบ<b>เดือนก่อน MoM</b> + <b>เดือนเดียวกันปีก่อน YoY</b>). ทุกโหมดมี TL;DR + บทสรุปผู้บริหาร, KPI, Action Items, จังหวะเดือน, แนวโน้ม 8 ช่วง, อันดับสาขา, เรดาร์จุดรั่ว, ต้นทุนเมนู/หัว, ชั่วโมงพีค, โต๊ะหมุนเวียน, ช่องทางชำระเงิน, Buffet Tiers + สลับ <b>EN ⇄ ไทย</b> + <b>📊 Export Excel</b> / <b>🖨️ Print PDF</b>. ใช้ filter สาขา/กลุ่มจากแถบบนได้ (ช่วงเวลา global ไม่มีผล — รายงานมี picker ของตัวเอง).
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
-        <b>ใหม่:</b> เมนู 📄 Monthly Report เปิด<b>แบบสรุปง่าย</b>สไตล์เดียวกับ Daily/Weekly (Management Report โหมด <b>Monthly</b>) — เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ในหน้ารายงาน.
+        <b>ใหม่:</b> เมนู 📄 Monthly Report เปิด<b>แบบสรุปง่าย</b>สไตล์เดียวกับ Daily/Weekly (Management Report โหมด <b>Monthly</b>) — เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ในหน้ารายงาน (และหน้าเดิมมีปุ่ม 📊 แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code>
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">🔮 Forecast &amp; Action Items (§10)</p>
