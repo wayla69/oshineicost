@@ -9457,11 +9457,15 @@ def analysis_cohort(
     group:  Optional[str] = Query(None),
 ):
     """
-    Approximate cohort retention: groups receipts by cashier+date as a proxy customer
-    if no customer ID. Since restaurants typically lack stable customer IDs, this falls
-    back to grouping receipts per month and showing same-period repeat-visit proxy
-    (table_no + cashier as a weak identifier).
-    Returns a {cohort_month: {0:100, 1:retention%, ...}} matrix.
+    Monthly customer-volume signal (no unique customer IDs in restaurant POS data,
+    so per-month covers stand in as a soft retention proxy). Per month: bills,
+    customers, revenue, ACTIVE BRANCH COUNT and the growth-fair derivatives
+    customers/branch + revenue/customer. A month whose day coverage is short of
+    the calendar (first month starts 23 May 2025; the sync-cutoff current month)
+    is flagged `partial` — MoM/YoY are only computed between two FULL months so
+    a 19-day July is never read as a collapse, and `vs_avg` averages full months
+    only. `seasonality` regroups the same rows by CALENDAR month × year
+    (customers/branch basis) for the month-of-year mini view.
     """
     filters = ["b.name != 'ALL'"]
     params: dict = {}
@@ -9476,7 +9480,9 @@ def analysis_cohort(
             SELECT strftime('%Y-%m', st.sold_at) AS month,
                    COUNT(DISTINCT st.receipt_no) AS tx_count,
                    SUM(st.customer_count)        AS customer_count,
-                   ROUND(SUM(st.total_inc_vat) / 1.07,2) AS revenue
+                   ROUND(SUM(st.total_inc_vat) / 1.07,2) AS revenue,
+                   COUNT(DISTINCT st.branch_id)  AS branches,
+                   COUNT(DISTINCT date(st.sold_at)) AS days_covered
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -9484,27 +9490,55 @@ def analysis_cohort(
             ORDER BY month
             """, params,
         ).fetchall()
-    # Without unique customer IDs, render a returning-customer proxy as customer_count growth rate vs avg
     months = [r["month"] for r in rows]
     if not months:
-        return {"cohorts": [], "matrix": []}
-    avgCust = sum((r["customer_count"] or 0) for r in rows) / len(rows) or 1
-    matrix = []
+        return {"cohorts": [], "matrix": [], "seasonality": []}
+    import calendar as _cal
+    recs = []
     for r in rows:
-        # Synthetic retention curve: index against avg customers
-        base = (r["customer_count"] or 0)
-        ratio = base / avgCust * 100 if avgCust else 0
-        matrix.append({
-            "cohort":  r["month"],
-            "tx":      r["tx_count"],
-            "customers": r["customer_count"] or 0,
-            "revenue": r["revenue"] or 0,
-            "vs_avg":  round(ratio, 1),
+        y, m = int(r["month"][:4]), int(r["month"][5:7])
+        dim = _cal.monthrange(y, m)[1]
+        cust = r["customer_count"] or 0
+        rev = r["revenue"] or 0
+        br = r["branches"] or 0
+        days = r["days_covered"] or 0
+        recs.append({
+            "cohort": r["month"], "tx": r["tx_count"],
+            "customers": cust, "revenue": rev, "branches": br,
+            "cust_per_branch": round(cust / br) if br else None,
+            "rev_per_cust": round(rev / cust) if cust else None,
+            "days_covered": days, "days_in_month": dim,
+            "partial": days < dim,
         })
+    by_month = {x["cohort"]: x for x in recs}
+    full = [x for x in recs if not x["partial"]]
+    _avg_pool = full or recs
+    avg_cust = sum(x["customers"] for x in _avg_pool) / len(_avg_pool) or 1
+
+    def _pct(c, p):
+        return round((c - p) / p * 100, 1) if p else None
+
+    for i, x in enumerate(recs):
+        prev = recs[i - 1] if i else None
+        x["mom_pct"] = (_pct(x["customers"], prev["customers"])
+                        if prev and not x["partial"] and not prev["partial"] else None)
+        yo = by_month.get(f"{int(x['cohort'][:4]) - 1}{x['cohort'][4:]}")
+        x["yoy_pct"] = (_pct(x["customers"], yo["customers"])
+                        if yo and not x["partial"] and not yo["partial"] else None)
+        x["vs_avg"] = round(x["customers"] / avg_cust * 100, 1)
+    # month-of-year × year regrouping (customers/branch = fair across the branch
+    # roll-out; raw customers kept for tooltips). Powers the seasonality mini view.
+    seas: dict = {}
+    for x in recs:
+        seas.setdefault(int(x["cohort"][5:7]), {})[x["cohort"][:4]] = {
+            "cust": x["customers"], "cpb": x["cust_per_branch"], "partial": x["partial"]}
     return {
-        "note": "Restaurant POS data lacks unique customer IDs; this view shows monthly customer volume vs the period average - useful as a soft retention signal.",
+        "note": ("POS ไม่มีรหัสลูกค้ารายคน จึงใช้จำนวนหัวรายเดือนเป็นสัญญาณ retention อย่างอ่อน — "
+                 "อ่านที่คอลัมน์ MoM/YoY และ ลูกค้า/สาขา เป็นหลัก (ตัดผลจากการเปิดสาขาเพิ่ม) · "
+                 "เดือนที่ติดป้าย \"ไม่ครบเดือน\" ไม่ถูกนำไปเทียบ MoM/YoY"),
         "cohorts": months,
-        "matrix":  matrix,
+        "matrix":  recs,
+        "seasonality": [{"m": mm, "years": ys} for mm, ys in sorted(seas.items())],
     }
 
 

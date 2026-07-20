@@ -220,6 +220,23 @@ def test_management_report_daily_and_weekly(client):
     assert w2["selected_week"] == pick
 
 
+def test_analysis_cohort_shape(client):
+    """Cohort view: growth-fair fields + partial-month guards."""
+    j = client.get("/api/analysis/cohort").json()
+    assert j["matrix"], "fixture months must appear"
+    for r in j["matrix"]:
+        for k in ("branches", "cust_per_branch", "rev_per_cust",
+                  "partial", "days_covered", "days_in_month", "mom_pct", "yoy_pct"):
+            assert k in r
+        # fixture covers only days 01-03 → every month is partial → the guards
+        # must refuse MoM/YoY rather than reading a 3-day month as a collapse
+        assert r["partial"] is True
+        assert r["mom_pct"] is None and r["yoy_pct"] is None
+        assert r["cust_per_branch"] == round(r["customers"] / r["branches"])
+    assert isinstance(j["seasonality"], list) and j["seasonality"]
+    assert "ไม่ครบเดือน" in j["note"]          # Thai explainer (F)
+
+
 def test_management_report_monthly(client):
     import datetime as _dt
     m = client.get("/api/reports/management", params={"period": "monthly"}).json()

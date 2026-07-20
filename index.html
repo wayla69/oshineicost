@@ -4986,22 +4986,28 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div id="opsub-cohort">
     <div class="card p-5">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-        <h2 class="section-title mb-0">Cohort · Monthly customer-volume signal</h2>
+        <h2 class="section-title mb-0">ลูกค้ารายเดือน (Cohort · customer-volume signal)</h2>
         <button onclick="exportTable('cohortTable','cohort.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">⬇ CSV</button>
       </div>
       <p id="cohortNote" class="text-xs text-slate-400 mb-3"></p>
+      <div id="cohortVerdict"></div>
+      <div style="height:250px" class="mb-4"><canvas id="cohortChart"></canvas></div>
       <div class="overflow-x-auto">
         <table id="cohortTable" class="text-xs w-full">
           <thead><tr class="text-left text-slate-500 border-b border-slate-200">
-            <th class="py-2 pr-3">Cohort (month)</th>
-            <th class="py-2 pr-3 text-right">Transactions</th>
-            <th class="py-2 pr-3 text-right">Customers</th>
-            <th class="py-2 pr-3 text-right">Revenue</th>
-            <th class="py-2 text-right">Customers vs Avg</th>
+            <th class="py-2 pr-3">เดือน</th>
+            <th class="py-2 pr-3 text-right">บิล</th>
+            <th class="py-2 pr-3 text-right">ลูกค้า</th>
+            <th class="py-2 pr-3 text-right" title="จำนวนหัว ÷ สาขาที่มียอดขายเดือนนั้น — ตัดผลจากการเปิดสาขาเพิ่ม">ลูกค้า/สาขา</th>
+            <th class="py-2 pr-3 text-right" title="รายได้ ex-VAT ÷ จำนวนหัว">ยอด/หัว</th>
+            <th class="py-2 pr-3 text-right">รายได้</th>
+            <th class="py-2 pr-3 text-right" title="ลูกค้าเทียบเดือนก่อน (เฉพาะเดือนเต็ม)">MoM</th>
+            <th class="py-2 text-right" title="ลูกค้าเทียบเดือนเดียวกันปีก่อน (เฉพาะเดือนเต็ม)">YoY</th>
           </tr></thead>
           <tbody id="cohortBody"></tbody>
         </table>
       </div>
+      <div id="cohortSeason" class="mt-4"></div>
     </div>
   </div>
 
@@ -5847,7 +5853,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">🧾 ปฏิบัติการ & ส่วนลด</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border-2 border-indigo-300 rounded-lg p-2.5" style="background:#eef2ff"><b>🛒 รายงานปฏิบัติการ ⭐ใหม่</b> — การชำระเงิน · ช่องทางขาย (ทานที่ร้าน/เดลิเวอรี/กลับบ้าน) · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือนได้)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> (Cohort/Affinity/What-If)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> — Cohort ลูกค้ารายเดือน (กราฟ+MoM/YoY+ลูกค้า/สาขา ตัดผลขยายสาขา+มุมมองฤดูกาล; เดือนไม่ครบติดป้ายและไม่ถูกเทียบ) / Affinity / What-If</div>
       </div>
     </div>
 

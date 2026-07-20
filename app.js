@@ -10829,17 +10829,129 @@ async function loadCohort() {
   if (getGroup())  params.set('group',  getGroup());
   const d = await fetch(`${API}/api/analysis/cohort?${params}`).then(r=>r.json());
   document.getElementById('cohortNote').textContent = d.note || '';
-  const colorFor = (v) => v >= 110 ? '#10b981' : v >= 90 ? '#4f46e5' : v >= 70 ? '#f59e0b' : '#ef4444';
-  document.getElementById('cohortBody').innerHTML = (d.matrix||[]).map(r => `
-    <tr class="border-t border-slate-100">
-      <td class="py-2 pr-3 font-semibold">${fmtPeriod(r.cohort)}</td>
-      <td class="py-2 pr-3 text-right">${fmtN(r.tx)}</td>
-      <td class="py-2 pr-3 text-right">${fmtN(r.customers)}</td>
-      <td class="py-2 pr-3 text-right">${fmt(r.revenue)}</td>
-      <td class="py-2 text-right">
-        <span style="display:inline-block;min-width:48px;padding:3px 8px;border-radius:999px;background:${colorFor(r.vs_avg)}22;color:${colorFor(r.vs_avg)};font-weight:700">${r.vs_avg}%</span>
-      </td>
+  const M = d.matrix || [];
+  const TH_M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const mLbl = ym => `${TH_M[+ym.slice(5,7)-1]} ${ym.slice(2,4)}`;
+  const chip = (p, inv) => (p == null)
+    ? '<span class="text-slate-300">—</span>'
+    : `<span style="font-weight:700;color:${(inv ? p <= 0 : p >= 0) ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+
+  // ── verdict line: latest FULL month vs prev + vs peak (partial months excluded) ──
+  const full = M.filter(x => !x.partial);
+  const last = full[full.length - 1] || M[M.length - 1];
+  const peak = full.reduce((a, b) => (b.customers > ((a && a.customers) || 0) ? b : a), null);
+  const vEl = document.getElementById('cohortVerdict');
+  if (vEl && last) {
+    const mom = last.mom_pct;
+    const col = mom == null ? '#64748b' : mom >= 1 ? '#059669' : mom <= -5 ? '#dc2626' : '#d97706';
+    const vsPeak = (peak && peak.cohort !== last.cohort && peak.customers)
+      ? ` · ต่ำกว่าพีค ${mLbl(peak.cohort)} (${fmtN(peak.customers)} คน) ${chip(-((peak.customers - last.customers) / peak.customers * 100))}` : '';
+    const partTag = last.partial ? ` <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#b45309">ไม่ครบเดือน (${last.days_covered}/${last.days_in_month} วัน)</span>` : '';
+    vEl.innerHTML = `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2 flex-wrap">
+        <span style="color:${col};line-height:1.5">●</span>
+        <span class="text-slate-600">เดือนเต็มล่าสุด ${mLbl(last.cohort)}: <b>${fmtN(last.customers)}</b> คน
+        ${mom != null ? `· MoM ${chip(mom)}` : ''}${last.yoy_pct != null ? ` · YoY ${chip(last.yoy_pct)}` : ''}
+        · <b>${fmtN(last.cust_per_branch)}</b> คน/สาขา (${last.branches} สาขา) · ยอด/หัว <b>฿${fmtN(last.rev_per_cust)}</b>${vsPeak}${partTag}</span></p>`;
+  }
+
+  // ── combo chart: customer bars (partial = ซีด + ลาย, latest full = เข้ม) + MA3 ──
+  const vals = M.map(x => x.customers || 0);
+  const lastFullIdx = M.length ? M.map(x => !x.partial).lastIndexOf(true) : -1;
+  mkChart('cohortChart', {
+    type: 'bar',
+    data: { labels: M.map(x => mLbl(x.cohort)), datasets: [
+      { type: 'bar', label: 'ลูกค้า', data: vals,
+        backgroundColor: M.map((x, i) => x.partial ? '#e2e8f0' : i === lastFullIdx ? '#1e40af' : '#93c5fd'),
+        borderRadius: 5, categoryPercentage: 0.72, barPercentage: 0.85, order: 2,
+        datalabels: { display: false } },
+      { type: 'line', label: 'แนวโน้ม (MA3)', data: movingAvg(vals, 3),
+        borderColor: '#f59e0b', backgroundColor: 'transparent', borderWidth: 2,
+        tension: 0.35, fill: false, order: 1, pointRadius: 0, datalabels: { display: false } },
+    ] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#0f172a', padding: 10, cornerRadius: 8, displayColors: false,
+          filter: it => it.dataset.type !== 'line',
+          callbacks: {
+            label: c => {
+              const x = M[c.dataIndex];
+              const out = [`ลูกค้า ${fmtN(x.customers)} คน · ${x.branches} สาขา`,
+                           `ลูกค้า/สาขา ${fmtN(x.cust_per_branch)} · ยอด/หัว ฿${fmtN(x.rev_per_cust)}`];
+              if (x.partial) out.push(`⚠ ไม่ครบเดือน (${x.days_covered}/${x.days_in_month} วัน)`);
+              return out;
+            },
+          },
+        },
+        datalabels: { display: false },
+      },
+      scales: {
+        y: { beginAtZero: true, grace: '12%', border: { display: false },
+             grid: { color: 'rgba(148,163,184,0.13)', drawTicks: false },
+             ticks: { color: '#94a3b8', font: { size: 10 },
+                      callback: v => v >= 1e3 ? (v / 1e3).toFixed(0) + 'k' : v } },
+        x: { border: { display: false }, grid: { display: false },
+             ticks: { color: ctx => ctx.index === lastFullIdx ? '#1e40af' : '#64748b',
+                      font: ctx => ({ size: 10, weight: ctx.index === lastFullIdx ? '700' : '500' }),
+                      maxRotation: 0, autoSkip: true } },
+      },
+    },
+  });
+
+  // ── table: bars on ลูกค้า, heat on ลูกค้า/สาขา, MoM/YoY chips, partial muted ──
+  const maxCust = Math.max(1, ...vals);
+  const cpbFull = full.map(x => x.cust_per_branch || 0);
+  const cpbMax = Math.max(1, ...cpbFull), cpbMin = Math.min(...(cpbFull.length ? cpbFull : [0]));
+  const heat = v => {
+    if (v == null || !cpbFull.length || cpbMax === cpbMin) return '';
+    const t = (v - cpbMin) / (cpbMax - cpbMin);          // 0 = worst, 1 = best
+    return `background:rgba(${t >= 0.5 ? '5,150,105' : '220,38,38'},${(0.06 + 0.24 * Math.abs(t - 0.5) * 2).toFixed(2)})`;
+  };
+  document.getElementById('cohortBody').innerHTML = M.map((r, i) => `
+    <tr class="border-t border-slate-100 ${i === lastFullIdx ? 'font-semibold' : ''}" ${r.partial ? 'style="opacity:.65"' : ''}>
+      <td class="py-2 pr-3 font-semibold whitespace-nowrap">${fmtPeriod(r.cohort)}${r.partial ? ` <span class="text-[9px] px-1 py-0.5 rounded font-normal" style="background:#fef3c7;color:#b45309" title="มีข้อมูล ${r.days_covered} จาก ${r.days_in_month} วัน — ไม่ถูกนำไปเทียบ MoM/YoY">ไม่ครบเดือน</span>` : ''}</td>
+      <td class="py-2 pr-3 text-right tabular-nums">${fmtN(r.tx)}</td>
+      <td class="py-2 pr-3 text-right tabular-nums whitespace-nowrap">${fmtN(r.customers)}
+        <span style="display:inline-block;height:5px;border-radius:3px;background:#4f46e5;vertical-align:middle;margin-left:5px;width:${Math.max(3, Math.round((r.customers || 0) / maxCust * 44))}px"></span></td>
+      <td class="py-2 pr-3 text-right tabular-nums"><span class="rounded px-1" style="${r.partial ? '' : heat(r.cust_per_branch)}">${fmtN(r.cust_per_branch)}</span> <span class="text-slate-400 text-[10px]">(${r.branches})</span></td>
+      <td class="py-2 pr-3 text-right tabular-nums">฿${fmtN(r.rev_per_cust)}</td>
+      <td class="py-2 pr-3 text-right tabular-nums">${fmt(r.revenue)}</td>
+      <td class="py-2 pr-3 text-right">${chip(r.mom_pct)}</td>
+      <td class="py-2 text-right">${chip(r.yoy_pct)}</td>
     </tr>`).join('');
+
+  // ── seasonality: month-of-year grouped bars, ลูกค้า/สาขา basis (growth-fair) ──
+  const sEl = document.getElementById('cohortSeason');
+  if (sEl) {
+    const SS = d.seasonality || [];
+    const years = [...new Set(SS.flatMap(s => Object.keys(s.years)))].sort();
+    if (!SS.length || years.length < 1) { sEl.innerHTML = ''; }
+    else {
+      const YC = { 0: '#c7d2fe', 1: '#4f46e5', 2: '#0f766e' };   // oldest → newest
+      const mx = Math.max(1, ...SS.flatMap(s => Object.values(s.years).map(v => v.cpb || 0)));
+      const bars = SS.map(s => {
+        const grp = years.map((y, yi) => {
+          const v = s.years[y];
+          if (!v) return '<div style="flex:1"></div>';
+          const h = Math.max(3, Math.round((v.cpb || 0) / mx * 78));
+          return `<div style="flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center" title="${TH_M[s.m-1]} ${y}: ${fmtN(v.cpb)} คน/สาขา (รวม ${fmtN(v.cust)} คน)${v.partial ? ' · ไม่ครบเดือน' : ''}">
+              <div style="width:82%;height:${h}px;border-radius:3px 3px 0 0;background:${YC[yi] || '#94a3b8'};${v.partial ? 'opacity:.4' : ''}"></div></div>`;
+        }).join('');
+        return `<div class="flex-1 flex flex-col items-center">
+            <div class="flex items-end w-full" style="height:86px;gap:1px">${grp}</div>
+            <span class="text-[9px] text-slate-500 mt-1">${TH_M[s.m-1]}</span></div>`;
+      }).join('');
+      const legend = years.map((y, yi) => `<span class="flex items-center gap-1"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${YC[yi] || '#94a3b8'}"></span>${y}</span>`).join(' ');
+      sEl.innerHTML = `<div class="pt-3 border-t border-slate-100">
+          <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+            <p class="text-xs font-semibold text-slate-500">ฤดูกาล — ลูกค้า/สาขา ตามเดือนของปี <span class="font-normal text-slate-400">(เทียบปีต่อปีแบบตัดผลขยายสาขา · แท่งซีด = เดือนไม่ครบ)</span></p>
+            <div class="flex items-center gap-3 text-[10px] text-slate-500">${legend}</div>
+          </div>
+          <div class="flex" style="gap:6px">${bars}</div></div>`;
+    }
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
