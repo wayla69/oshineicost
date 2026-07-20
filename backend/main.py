@@ -13988,6 +13988,35 @@ def report_management_xlsx(
             for c in (2, 3): ws.cell(rw, c).number_format = NUM
             for c in (6, 7, 8, 9): ws.cell(rw, c).number_format = NUM2
             for c in (4, 5, 10): ws.cell(rw, c).number_format = PCT
+        DRV = TIER.get("drivers")
+        if DRV:
+            def _short_menu(s):
+                s = (s or "").strip()
+                if s.startswith("(B) "):
+                    s = s[4:]
+                if s.lower().endswith("(buffet)"):
+                    s = s[:-len("(buffet)")].rstrip()
+                return s
+            ws.append([])
+            ws.append([f"Why {DRV.get('focus_label', '')} runs the highest food %"
+                       + (f" ({DRV['focus_food_pct']:.1f}%)" if DRV.get("focus_food_pct") is not None else "")
+                       + " — cost drivers / head"])
+            ws.cell(ws.max_row, 1).font = BOLD
+            has_vs = bool(DRV.get("ref_label"))
+            header(ws, ["Ingredient group", "Cost/Head"]
+                   + ([f"vs {DRV['ref_label']}"] if has_vs else []))
+            for g in DRV.get("groups", []):
+                ws.append([g["label"], g.get("cogs_head")]
+                          + ([g.get("vs_ref")] if has_vs else []))
+                ws.cell(ws.max_row, 2).number_format = NUM2
+                if has_vs:
+                    ws.cell(ws.max_row, 3).number_format = NUM2
+            ws.append([])
+            header(ws, ["Top menu item", "Cost/Head", "Qty/100 guests"])
+            for m in DRV.get("menus", []):
+                ws.append([_short_menu(m["label"]), m.get("cogs_head"), m.get("qty_100")])
+                ws.cell(ws.max_row, 2).number_format = NUM2
+                ws.cell(ws.max_row, 3).number_format = NUM
         autofit(ws)
 
     # Sheet — Action Items
