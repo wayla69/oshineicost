@@ -2531,18 +2531,77 @@ function renderMgtReport(j, jM, jF) {
   const footnote = isTH
     ? `<p class="text-[11px] text-slate-400 px-1">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว (อิงสูตร BoM), ${isDaily ? 'วันนี้' : 'สัปดาห์นี้'}เทียบสัปดาห์ก่อน · ต้นทุนอาหาร % เป็นตัวเลขอิง BoM ของ ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
     : `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
+  // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
+  // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.
+  const vLine = (col, txt) => `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2"><span style="color:${col};line-height:1.5">●</span><span class="text-slate-600">${txt}</span></p>`;
+  const _sg = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
+  const _hh = h => String(h).padStart(2, '0') + ':00';
+  const v3 = (() => {
+    const parts = [];
+    let col = '#4f46e5';
+    if (P.proj_vs_target_pct != null) {
+      const p = P.proj_vs_target_pct;
+      col = p >= 100 ? '#059669' : p >= 90 ? '#d97706' : '#dc2626';
+      parts.push(isTH ? `คาดทั้งเดือน <b style="color:${col}">${p.toFixed(0)}%</b> ของเป้า (${p >= 100 ? 'ถึงเป้า' : p >= 90 ? 'ใกล้เป้า' : 'ต่ำกว่าเป้า'})`
+                      : `Projected <b style="color:${col}">${p.toFixed(0)}%</b> of target (${p >= 100 ? 'on track' : p >= 90 ? 'near' : 'behind'})`);
+    }
+    if (P.mom_pct != null) parts.push(`MoM ${_sg(P.mom_pct)}`);
+    if (P.food_cost_pct != null) parts.push(isTH ? `ต้นทุนอาหาร ${P.food_cost_pct.toFixed(1)}%` : `food cost ${P.food_cost_pct.toFixed(1)}%`);
+    return parts.length ? vLine(col, parts.join(' · ')) : '';
+  })();
+  const v4 = (() => {
+    const tr = (j.trend || []).map(t => t.revenue || 0);
+    if (tr.length < 2) return '';
+    const latest = tr[tr.length - 1], avg = tr.reduce((a, b) => a + b, 0) / tr.length;
+    const gap = avg ? (latest - avg) / avg * 100 : 0;
+    const col = gap >= 3 ? '#059669' : gap <= -3 ? '#dc2626' : '#d97706';
+    const dir = isTH ? (gap >= 3 ? 'สูงกว่า' : gap <= -3 ? 'ต่ำกว่า' : 'ใกล้เคียง') : (gap >= 3 ? 'above' : gap <= -3 ? 'below' : 'near');
+    const u = isDaily ? (isTH ? 'วัน' : 'day') : (isTH ? 'สัปดาห์' : 'week');
+    return vLine(col, isTH
+      ? `ล่าสุด <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b>ค่าเฉลี่ย ${tr.length} ${u} ${_sg(gap)}`
+      : `Latest <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b> the ${tr.length}-${u} average by ${_sg(gap)}`);
+  })();
+  const v8 = (() => {
+    if (!PK.peak_hour) return '';
+    const dp = (PK.dayparts || []).slice().sort((a, b) => (b.pct || 0) - (a.pct || 0))[0];
+    const parts = [isTH ? `พีคช่วง <b>${_hh(PK.peak_hour.hour)}</b>` : `Peaks <b>${_hh(PK.peak_hour.hour)}</b>`];
+    if (PK.best_day) parts.push(isTH ? `วันขายดี <b>${dowLabel(PK.best_day)}</b>` : `busiest <b>${dowLabel(PK.best_day)}</b>`);
+    if (dp && dp.pct != null) parts.push(`${dpLabel(dp.name)} ${dp.pct.toFixed(0)}%`);
+    return vLine('#0284c7', parts.join(' · '));
+  })();
+  const v9 = (() => {
+    if (!TB.available || TB.covers_per_table == null) return '';
+    let col = '#9333ea';
+    const parts = [isTH ? `หมุนโต๊ะ <b>${TB.covers_per_table.toFixed(2)}</b> หัว/โต๊ะ` : `<b>${TB.covers_per_table.toFixed(2)}</b> covers/table`];
+    if (TB.avg_turn_min != null) {
+      parts.push(isTH ? `เฉลี่ย <b>${Math.round(TB.avg_turn_min)}</b> นาที/รอบ` : `avg <b>${Math.round(TB.avg_turn_min)}</b> min/turn`);
+      const tp = (TB.prev || {}).avg_turn_min;
+      if (tp != null && TB.avg_turn_min !== tp) {
+        const faster = TB.avg_turn_min < tp; col = faster ? '#059669' : '#dc2626';
+        parts.push(isTH ? (faster ? 'เร็วขึ้น' : 'ช้าลง') : (faster ? 'faster' : 'slower'));
+      }
+    }
+    return vLine(col, parts.join(' · '));
+  })();
+  const v10 = (() => {
+    if (!_payPD || !(_payPD.channels || []).length) return '';
+    const d = _payPD.channels[0];
+    return vLine('#0d9488', isTH
+      ? `ช่องทางหลัก <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} จาก ${_payPD.channels.length} ช่องทาง`
+      : `Top channel <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} of ${_payPD.channels.length}`);
+  })();
   body.innerHTML =
       execSummary
     + sec(T.s1 + (isDaily ? T.s1d : T.s1w), kpis, '#0f766e')
     + sec(T.s2, actsWithSplit, '#d97706')
-    + sec(T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, pace, '#4f46e5')
-    + sec(T.s4pre + (isDaily ? T.s4d : T.s4w) + T.s4post, trend, '#0891b2')
+    + sec(T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, v3 + pace, '#4f46e5')
+    + sec(T.s4pre + (isDaily ? T.s4d : T.s4w) + T.s4post, v4 + trend, '#0891b2')
     + sec(T.s5, branchTbl, '#7c3aed')
     + sec(T.s6, leakWithSplit, '#dc2626')
     + sec(T.s7, menu, '#059669')
-    + sec(T.s8, peakWithSplit, '#0284c7')
-    + (tableHtml ? sec(T.s9, tableWithSplit, '#9333ea') : '')
-    + (payHtml ? sec(T.s10 + _payScope, payHtml, '#0d9488') : '')
+    + sec(T.s8, v8 + peakWithSplit, '#0284c7')
+    + (tableHtml ? sec(T.s9, v9 + tableWithSplit, '#9333ea') : '')
+    + (payHtml ? sec(T.s10 + _payScope, v10 + payHtml, '#0d9488') : '')
     + (tierHtml ? sec(T.s11, tierHtml, '#b45309') : '')
     + footnote;
 
