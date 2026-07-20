@@ -830,34 +830,75 @@ def _eff_month_range(date_from, date_to, month_from, month_to, month):
 
 
 # ---------------------------------------------------------------------------
-# Root  -  serve dashboard HTML
+# Root  -  serve dashboard HTML (with content-hash cache-busting for /js/)
 # ---------------------------------------------------------------------------
+_JS_DIR = INDEX.parent / "js"
+
+# Immutable-cache scheme (no build step): the shell is served no-cache and the
+# server injects ?v=<md5-8> onto every /js/ script src at request time, so a
+# slice URL changes IFF its content changes. The slice route then serves
+# versioned URLs with a 1-year immutable Cache-Control — repeat page loads
+# skip 9 revalidation round-trips entirely, while a deploy (new hash → new
+# URL) still picks up fresh JS instantly. Hashes are cached per (path, mtime,
+# size) so local edits re-hash automatically without a restart.
+_js_hash_cache: dict = {}
+
+
+def _js_hash(p) -> str:
+    import hashlib
+    try:
+        st = p.stat()
+        key = (str(p), st.st_mtime_ns, st.st_size)
+        h = _js_hash_cache.get(key)
+        if h is None:
+            h = hashlib.md5(p.read_bytes()).hexdigest()[:8]
+            _js_hash_cache.clear()          # old (path, mtime) keys are dead weight
+            for q in _JS_DIR.glob("*.js"):  # rebuild the full set in one pass
+                qs = q.stat()
+                _js_hash_cache[(str(q), qs.st_mtime_ns, qs.st_size)] = \
+                    hashlib.md5(q.read_bytes()).hexdigest()[:8]
+            h = _js_hash_cache[key]
+        return h
+    except OSError:
+        return "0"
+
+
+def _versioned_index_html() -> str:
+    import re as _re
+    html = INDEX.read_text(encoding="utf-8")
+    def sub(m):
+        p = _JS_DIR / m.group(1)
+        return f'src="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
+    return _re.sub(r'src="/js/([0-9a-z-]+\.js)"', sub, html)
+
+
 @app.get("/", include_in_schema=False)
 def root():
     if INDEX.exists():
-        return FileResponse(str(INDEX))
+        # no-cache: the shell must always be fresh — it carries the js hashes
+        return _Response(content=_versioned_index_html(), media_type="text/html",
+                         headers={"Cache-Control": "no-cache"})
     return {"message": "Oshinei API running. Dashboard file not found."}
 
 
-_JS_DIR = INDEX.parent / "js"
-
-
 @app.get("/js/{name}", include_in_schema=False)
-def app_js_slice(name: str):
+def app_js_slice(name: str, v: Optional[str] = Query(None)):
     """One slice of the SPA JS (P2 refactor: app.js split into js/01…09,
     loaded sequentially by index.html — shared global scope, order matters).
-    no-cache = the browser revalidates on every load (ETag → 304 when
-    unchanged), so a code deploy can never leave stale JS in caches — the
-    StaticFiles /vendor mount sends no Cache-Control and relies on heuristic
-    freshness, which is fine for third-party libs that never change but not
-    for the app itself. Name is whitelist-validated (no path parts)."""
+    Requested WITH the current ?v=<content-hash> (as the served shell always
+    does) → 1-year immutable cache: the URL changes whenever the content
+    does, so stale JS is impossible and repeat loads skip revalidation.
+    Requested without ?v (or with a stale hash) → no-cache, the safe
+    pre-versioning behaviour. Name is whitelist-validated (no path parts)."""
     import re as _re
     if not _re.fullmatch(r"[0-9a-z][0-9a-z-]*\.js", name):
         raise HTTPException(status_code=404, detail="not found")
     p = _JS_DIR / name
     if p.exists() and p.parent == _JS_DIR:
+        cache = ("public, max-age=31536000, immutable"
+                 if v and v == _js_hash(p) else "no-cache")
         return FileResponse(str(p), media_type="application/javascript",
-                            headers={"Cache-Control": "no-cache"})
+                            headers={"Cache-Control": cache})
     raise HTTPException(status_code=404, detail="not found")
 
 
