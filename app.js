@@ -1596,9 +1596,9 @@ const MGT_I18N = {
     tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
     tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
     tierNote:'Tier = adult buffet menu price on the bill (ex-VAT) · promo = non-standard price (discount/promotion) · guests count buffet bills only, so the total can sit slightly under headline covers · Cost/Head = BoM food cost',
-    tierDrvTitle:'Why this tier runs the highest food % — cost drivers / head', tierDrvGroup:'Ingredient group', tierDrvMenu:'Top menu item',
-    tierDrvCostHead:'Cost/Head', tierDrvVs:'vs', tierDrvQty:'Qty/100',
-    tierDrvNote:'Cost/head = this tier’s BoM food cost ÷ its guests. The vs column = extra ฿/head this tier eats over the next-cheaper tier (red = eats more). Qty/100 = pieces served per 100 guests.',
+    tierDrvTitle:'Cost drivers / head', tierDrvPick:'Tier', tierDrvGroup:'Ingredient group', tierDrvMenu:'Top menu item',
+    tierDrvCostHead:'Cost/Head', tierDrvShare:'% of tier cost', tierDrvVs:'vs', tierDrvQty:'Qty/100',
+    tierDrvNote:'Bars scale to the biggest driver · % of tier cost = share of this tier’s total food cost/head · vs = extra ฿/head over the next-cheaper tier (red = more) · Qty/100 = pieces per 100 guests · tap a tier above to compare.',
     dow:{Mon:'Mon',Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'},
     numLocale:'en-US',
   },
@@ -1666,9 +1666,9 @@ const MGT_I18N = {
     tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
     tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
     tierNote:'Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · โปรฯ = ราคานอกมาตรฐาน (ส่วนลด/โปรโมชัน) · นับเฉพาะบิลบุฟเฟ่ต์ ยอดรวมจึงต่ำกว่าจำนวนหัวรวมเล็กน้อย · ต้นทุน/หัว = ต้นทุนอาหารอิงสูตร BoM',
-    tierDrvTitle:'ทำไม tier นี้ Food % สูงสุด — วัตถุดิบ/เมนูที่ดันต้นทุน/หัว', tierDrvGroup:'กลุ่มวัตถุดิบ', tierDrvMenu:'เมนูต้นทุนสูงสุด',
-    tierDrvCostHead:'ต้นทุน/หัว', tierDrvVs:'เทียบ', tierDrvQty:'จำนวน/100หัว',
-    tierDrvNote:'ต้นทุน/หัว = ต้นทุนอาหาร BoM ของ tier นี้ ÷ จำนวนคนทาน · คอลัมน์ “เทียบ” = ต้นทุน/หัว ที่ tier นี้กินมากกว่า tier ราคาถัดลงมา (แดง = กินมากกว่า) · จำนวน/100หัว = จำนวนชิ้นต่อ 100 คน',
+    tierDrvTitle:'ตัวขับต้นทุน/หัว', tierDrvPick:'เลือก tier', tierDrvGroup:'กลุ่มวัตถุดิบ', tierDrvMenu:'เมนูต้นทุนสูงสุด',
+    tierDrvCostHead:'ต้นทุน/หัว', tierDrvShare:'% ต้นทุน tier', tierDrvVs:'เทียบ', tierDrvQty:'จำนวน/100หัว',
+    tierDrvNote:'แท่งบาร์ยาวตามตัวที่ต้นทุนสูงสุด · % ต้นทุน tier = สัดส่วนของต้นทุนอาหาร/หัว ของ tier นี้ · เทียบ = ต้นทุน/หัว ที่มากกว่า tier ราคาถัดลงมา (แดง = มากกว่า) · จำนวน/100หัว = จำนวนชิ้นต่อ 100 คน · กดเลือก tier ด้านบนเพื่อเทียบ',
     dow:{Mon:'จ.',Tue:'อ.',Wed:'พ.',Thu:'พฤ.',Fri:'ศ.',Sat:'ส.',Sun:'อา.'},
     numLocale:'en-US',
   },
@@ -2412,41 +2412,17 @@ function renderMgtReport(j, jM, jF) {
       <td class="py-1.5 pl-2 text-right tabular-nums">${r.food_pct != null ? r.food_pct.toFixed(1) + '%' : '—'}</td></tr>`).join('');
     const mix = (TD.mix_effect != null && Math.abs(TD.mix_effect) >= 0.5)
       ? `<p class="text-[11px] mt-2 font-medium" style="color:${TD.mix_effect < 0 ? '#dc2626' : '#059669'}">${TD.mix_effect < 0 ? T.tierMixDown : T.tierMixUp}${TD.mix_effect >= 0 ? '+' : ''}${TD.mix_effect.toFixed(2)} ${isTH ? 'บาท/หัว' : 'THB/head'} <span class="text-slate-400 font-normal">${compShort}</span></p>` : '';
-    // cost drivers of the worst-food% tier: ingredient groups + top menus that
-    // push its cost/head up (j.tier.drivers; absent when the fact detail is thin).
-    const DR = TD.drivers;
-    const driversHtml = (DR && ((DR.groups || []).length || (DR.menus || []).length)) ? (() => {
-      const clean = s => esc(String(s).replace(/^\(B\)\s*/, '').replace(/\s*\(Buffet\)\s*$/i, ''));
-      const vsCell = v => v == null ? '—'
-        : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v >= 0 ? '+' : '−'}${baht(Math.abs(v))}</span>`;
-      const showVs = !!DR.ref_label;
-      const grp = (DR.groups || []).map(g => `<tr class="border-t border-slate-100">
-        <td class="py-1 pr-3 text-slate-700">${clean(g.label)}</td>
-        <td class="py-1 px-2 text-right tabular-nums font-semibold">${baht(g.cogs_head)}</td>
-        ${showVs ? `<td class="py-1 pl-2 text-right tabular-nums">${vsCell(g.vs_ref)}</td>` : ''}</tr>`).join('');
-      const mnu = (DR.menus || []).map(m => `<tr class="border-t border-slate-100">
-        <td class="py-1 pr-3 text-slate-700">${clean(m.label)}</td>
-        <td class="py-1 px-2 text-right tabular-nums font-semibold">${baht(m.cogs_head)}</td>
-        <td class="py-1 pl-2 text-right tabular-nums text-slate-500">${num(m.qty_100)}</td></tr>`).join('');
-      return `<div class="mt-4 pt-3 border-t border-slate-200">
-        <p class="text-[11px] font-semibold text-slate-600 mb-2">${T.tierDrvTitle} · <span style="color:#b45309">${esc(DR.focus_label)}</span>${DR.focus_food_pct != null ? ` <span class="text-slate-400 font-normal">(Food ${DR.focus_food_pct.toFixed(1)}%)</span>` : ''}</p>
-        <div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
-          <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
-            <th class="text-left py-1 pr-3">${T.tierDrvGroup}</th><th class="text-right py-1 px-2">${T.tierDrvCostHead}</th>
-            ${showVs ? `<th class="text-right py-1 pl-2">${T.tierDrvVs} ${esc(DR.ref_label)}</th>` : ''}</tr></thead><tbody>${grp}</tbody></table></div>
-          <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
-            <th class="text-left py-1 pr-3">${T.tierDrvMenu}</th><th class="text-right py-1 px-2">${T.tierDrvCostHead}</th>
-            <th class="text-right py-1 pl-2">${T.tierDrvQty}</th></tr></thead><tbody>${mnu}</tbody></table></div>
-        </div>
-        <p class="text-[10px] text-slate-400 mt-2">${T.tierDrvNote}</p></div>`;
-    })() : '';
+    // cost-driver sub-block: rendered post-innerHTML into #mgtTierDrivers by the
+    // initTierDrivers IIFE below (interactive — tier picker, bars, ranks, heat,
+    // auto-insight). Container only appears when j.tier.drivers.by_tier exists.
+    const driversSlot = ((TD.drivers || {}).by_tier) ? `<div id="mgtTierDrivers" class="mt-4"></div>` : '';
     return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
         <th class="text-left py-1.5 pr-3">${T.tierCol}</th><th class="text-right py-1.5 px-2">${T.tierGuests}</th>
         <th class="text-right py-1.5 px-2">${T.tierShare}</th><th class="text-right py-1.5 px-2">${T.tierRevHead}</th>
         <th class="text-right py-1.5 px-2">${T.tierCostHead}</th><th class="text-right py-1.5 px-2">${T.tierGpHead}</th>
         <th class="text-right py-1.5 pl-2">${T.tierFood}</th></tr></thead><tbody>${rows}</tbody></table></div>
-      ${mix}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${driversHtml}`;
+      ${mix}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${driversSlot}`;
   })();
 
   const body = document.getElementById('mgtRptBody');
@@ -2469,6 +2445,67 @@ function renderMgtReport(j, jM, jF) {
     + (payHtml ? sec(T.s10 + _payScope, payHtml, '#0d9488') : '')
     + (tierHtml ? sec(T.s11, tierHtml, '#b45309') : '')
     + footnote;
+
+  // §11 cost-driver sub-block — interactive: tier picker (compare tiers), rank
+  // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
+  // Rendered here (after innerHTML so #mgtTierDrivers exists); the tier buttons
+  // call window._mgtRenderDrivers to re-render in place without a refetch.
+  (function initTierDrivers() {
+    const DR = (j.tier || {}).drivers;
+    const slot = document.getElementById('mgtTierDrivers');
+    if (!DR || !DR.by_tier || !slot) return;
+    const clean = s => esc(String(s).replace(/^\(B\)\s*/, '').replace(/\s*\(Buffet\)\s*$/i, ''));
+    const vsCell = v => v == null ? '—'
+      : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v >= 0 ? '+' : '−'}${baht(Math.abs(v))}</span>`;
+    const bar = (v, max) => `<span style="display:inline-block;height:6px;border-radius:3px;background:#f59e0b;width:${Math.max(3, Math.round((v / max) * 52))}px;vertical-align:middle;margin-right:5px"></span>`;
+    const heat = (v, max) => `background:rgba(220,38,38,${(0.06 + 0.5 * (v / max)).toFixed(2)})`;
+    const shareCell = p => p == null ? '' : `<span class="text-slate-500">${p.toFixed(0)}%</span>`;
+    function render(tier) {
+      const cur = DR.by_tier[tier] || DR.by_tier[DR.default_tier];
+      if (!cur) { slot.innerHTML = ''; return; }
+      const sel = cur.focus_tier, order = DR.tier_order || [sel], showVs = !!cur.ref_label;
+      const btns = order.map(t => {
+        const on = t === sel;
+        return `<button type="button" onclick="window._mgtRenderDrivers('${t}')" class="px-2 py-0.5 rounded text-[11px] font-semibold" style="border:1px solid ${on ? '#b45309' : 'var(--border,#e2e8f0)'};${on ? 'background:#b45309;color:#fff' : 'background:transparent;color:#64748b'}">฿${t}</button>`;
+      }).join(' ');
+      const gmax = Math.max(1, ...(cur.groups || []).map(g => g.cogs_head));
+      const mmax = Math.max(1, ...(cur.menus || []).map(m => m.cogs_head));
+      const grp = (cur.groups || []).map((g, i) => `<tr class="border-t border-slate-100">
+        <td class="py-1 pr-1 text-right text-slate-400 tabular-nums" style="width:1.3em">${i + 1}</td>
+        <td class="py-1 pr-3 text-slate-700">${clean(g.label)}</td>
+        <td class="py-1 px-2 text-right tabular-nums font-semibold rounded" style="${heat(g.cogs_head, gmax)}">${baht(g.cogs_head)}</td>
+        <td class="py-1 px-2 tabular-nums whitespace-nowrap">${bar(g.cogs_head, gmax)}${shareCell(g.share_pct)}</td>
+        ${showVs ? `<td class="py-1 pl-2 text-right tabular-nums">${vsCell(g.vs_ref)}</td>` : ''}</tr>`).join('');
+      const mnu = (cur.menus || []).map((m, i) => `<tr class="border-t border-slate-100">
+        <td class="py-1 pr-1 text-right text-slate-400 tabular-nums" style="width:1.3em">${i + 1}</td>
+        <td class="py-1 pr-3 text-slate-700">${clean(m.label)}</td>
+        <td class="py-1 px-2 text-right tabular-nums font-semibold rounded" style="${heat(m.cogs_head, mmax)}">${baht(m.cogs_head)}</td>
+        <td class="py-1 px-2 tabular-nums whitespace-nowrap">${bar(m.cogs_head, mmax)}${shareCell(m.share_pct)}</td>
+        <td class="py-1 pl-2 text-right tabular-nums text-slate-500">${num(m.qty_100)}</td></tr>`).join('');
+      const topg = (cur.groups || [])[0];
+      const insight = topg ? `<p class="text-[11.5px] mt-1 mb-2" style="color:#b45309">💡 ${isTH
+        ? `${clean(topg.label)} คิดเป็น <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> ของต้นทุนอาหาร tier ${esc(cur.focus_label)} — จุดคุมต้นทุนสำคัญที่สุด`
+        : `${clean(topg.label)} is <b>${topg.share_pct != null ? topg.share_pct.toFixed(0) + '%' : '—'}</b> of this tier's food cost (${esc(cur.focus_label)}) — the single biggest lever`}</p>` : '';
+      slot.innerHTML = `<div class="pt-3 border-t border-slate-200">
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="text-[11px] font-semibold text-slate-600">${T.tierDrvTitle}</span>
+          <span class="text-[10px] text-slate-400">${T.tierDrvPick}:</span>${btns}
+          <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}</span>
+        </div>
+        ${insight}
+        <div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
+          <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
+            <th></th><th class="text-left py-1 pr-3">${T.tierDrvGroup}</th><th class="text-right py-1 px-2">${T.tierDrvCostHead}</th>
+            <th class="text-left py-1 px-2">${T.tierDrvShare}</th>${showVs ? `<th class="text-right py-1 pl-2">${T.tierDrvVs} ${esc(cur.ref_label)}</th>` : ''}</tr></thead><tbody>${grp}</tbody></table></div>
+          <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
+            <th></th><th class="text-left py-1 pr-3">${T.tierDrvMenu}</th><th class="text-right py-1 px-2">${T.tierDrvCostHead}</th>
+            <th class="text-left py-1 px-2">${T.tierDrvShare}</th><th class="text-right py-1 pl-2">${T.tierDrvQty}</th></tr></thead><tbody>${mnu}</tbody></table></div>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-2">${T.tierDrvNote}</p></div>`;
+    }
+    window._mgtRenderDrivers = render;
+    render(DR.default_tier);
+  })();
 
   // Trend chart(s). Split → 3 separate bar charts (Total/Master/Franchise), each with an
   // amber moving-average trend curve. Single → one bar chart + the same MA trend curve.

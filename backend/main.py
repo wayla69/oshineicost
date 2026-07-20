@@ -13179,23 +13179,21 @@ def report_management(
                                 "pax_prev": round(pax_p) if has_prev else None,
                                 "mix_effect": mix_eff}
 
-                    # cost drivers of the worst-food% mainstream tier: which
-                    # ingredient groups / individual menus push its cost/head up
-                    # — turns the Food% column into an actionable "because guests
-                    # eat X". Reads the tier-dimensioned menu_fact_day (ent LIKE
-                    # 'g:%' = ingredient group, 's:%' = single menu); optional so a
-                    # driver failure never nukes the tier table above.
+                    # cost drivers per mainstream tier: which ingredient groups /
+                    # single menus push each tier's cost/head up — turns the Food%
+                    # column into an actionable "because guests eat X". Computes a
+                    # payload for EVERY mainstream tier (share>=5%) so the UI can
+                    # switch/compare; `default_tier` = worst food%. Reads the
+                    # tier-dimensioned menu_fact_day (ent LIKE 'g:%' = ingredient
+                    # group, 's:%' = single menu). Optional: wrapped so a driver
+                    # failure never nukes the tier table above.
                     try:
                         cand = [r for r in rows_t if r["tier"].isdigit()
                                 and (r["share"] or 0) >= 5 and r["food_pct"] is not None
                                 and r["pax"]]
                         if cand:
-                            focus = max(cand, key=lambda r: r["food_pct"])
-                            ft = focus["tier"]; ftpax = TC[ft]["pax"]
-                            lower = [r for r in cand if int(r["tier"]) < int(ft)]
-                            ref = max(lower, key=lambda r: int(r["tier"])) if lower else None
-                            rt = ref["tier"] if ref else None
-                            rtpax = TC[rt]["pax"] if rt else 0.0
+                            lblmap = {e: (l or e) for e, l in con.execute(
+                                "SELECT ent, label FROM menu_fact_meta")}
 
                             def _drv(kind_like, tier, pax):
                                 d = {}
@@ -13210,25 +13208,46 @@ def report_management(
                                     d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
                                 return d
 
-                            lblmap = {e: (l or e) for e, l in con.execute(
-                                "SELECT ent, label FROM menu_fact_meta")}
-                            gF = _drv("g:%", ft, ftpax)
-                            gR = _drv("g:%", rt, rtpax) if rt else {}
-                            grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                    "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
-                                   for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
-                                   if v[0] >= 1]
-                            mF = _drv("s:%", ft, ftpax)
-                            mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                    "qty_100": round(v[1], 1)}
-                                   for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
-                                   if v[0] >= 1]
-                            if grp or mnu:
+                            def _build(frow):
+                                ft = frow["tier"]; ftpax = TC[ft]["pax"]
+                                fch = frow.get("cogs_head") or 0.0
+                                lower = [x for x in cand if int(x["tier"]) < int(ft)]
+                                ref = max(lower, key=lambda x: int(x["tier"])) if lower else None
+                                rt = ref["tier"] if ref else None
+                                rtpax = TC[rt]["pax"] if rt else 0.0
+                                gF = _drv("g:%", ft, ftpax)
+                                gR = _drv("g:%", rt, rtpax) if rt else {}
+                                sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
+                                grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                        "share_pct": sh(v[0]),
+                                        "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
+                                       for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
+                                       if v[0] >= 1]
+                                mF = _drv("s:%", ft, ftpax)
+                                mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                        "share_pct": sh(v[0]), "qty_100": round(v[1], 1)}
+                                       for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
+                                       if v[0] >= 1]
+                                if not (grp or mnu):
+                                    return None
+                                return {"focus_tier": ft, "focus_label": frow["label"],
+                                        "focus_food_pct": frow["food_pct"],
+                                        "focus_cogs_head": round(fch, 1),
+                                        "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
+                                        "groups": grp, "menus": mnu}
+
+                            by_tier = {}
+                            for frow in sorted(cand, key=lambda r: int(r["tier"])):
+                                payload = _build(frow)
+                                if payload:
+                                    by_tier[frow["tier"]] = payload
+                            if by_tier:
+                                worst = max((r for r in cand if r["tier"] in by_tier),
+                                            key=lambda r: r["food_pct"])
                                 tier_out["drivers"] = {
-                                    "focus_tier": ft, "focus_label": focus["label"],
-                                    "focus_food_pct": focus["food_pct"],
-                                    "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
-                                    "groups": grp, "menus": mnu}
+                                    "default_tier": worst["tier"],
+                                    "tier_order": sorted(by_tier, key=lambda t: int(t)),
+                                    "by_tier": by_tier}
                     except Exception:
                         pass
         except Exception:
@@ -13882,8 +13901,9 @@ def report_management_xlsx(
             for c in (2, 3): ws.cell(rw, c).number_format = NUM
             for c in (6, 7, 8, 9): ws.cell(rw, c).number_format = NUM2
             for c in (4, 5, 10): ws.cell(rw, c).number_format = PCT
-        DRV = TIER.get("drivers")
-        if DRV:
+        DRV = TIER.get("drivers") or {}
+        DPAY = (DRV.get("by_tier") or {}).get(DRV.get("default_tier"))
+        if DPAY:
             def _short_menu(s):
                 s = (s or "").strip()
                 if s.startswith("(B) "):
@@ -13891,26 +13911,30 @@ def report_management_xlsx(
                 if s.lower().endswith("(buffet)"):
                     s = s[:-len("(buffet)")].rstrip()
                 return s
+            _frac = lambda p: (p / 100.0 if p is not None else None)
             ws.append([])
-            ws.append([f"Why {DRV.get('focus_label', '')} runs the highest food %"
-                       + (f" ({DRV['focus_food_pct']:.1f}%)" if DRV.get("focus_food_pct") is not None else "")
+            ws.append([f"Why {DPAY.get('focus_label', '')} runs the highest food %"
+                       + (f" ({DPAY['focus_food_pct']:.1f}%)" if DPAY.get("focus_food_pct") is not None else "")
                        + " — cost drivers / head"])
             ws.cell(ws.max_row, 1).font = BOLD
-            has_vs = bool(DRV.get("ref_label"))
-            header(ws, ["Ingredient group", "Cost/Head"]
-                   + ([f"vs {DRV['ref_label']}"] if has_vs else []))
-            for g in DRV.get("groups", []):
-                ws.append([g["label"], g.get("cogs_head")]
+            has_vs = bool(DPAY.get("ref_label"))
+            header(ws, ["Ingredient group", "Cost/Head", "% of tier cost"]
+                   + ([f"vs {DPAY['ref_label']}"] if has_vs else []))
+            for g in DPAY.get("groups", []):
+                ws.append([g["label"], g.get("cogs_head"), _frac(g.get("share_pct"))]
                           + ([g.get("vs_ref")] if has_vs else []))
                 ws.cell(ws.max_row, 2).number_format = NUM2
+                ws.cell(ws.max_row, 3).number_format = PCT
                 if has_vs:
-                    ws.cell(ws.max_row, 3).number_format = NUM2
+                    ws.cell(ws.max_row, 4).number_format = NUM2
             ws.append([])
-            header(ws, ["Top menu item", "Cost/Head", "Qty/100 guests"])
-            for m in DRV.get("menus", []):
-                ws.append([_short_menu(m["label"]), m.get("cogs_head"), m.get("qty_100")])
+            header(ws, ["Top menu item", "Cost/Head", "% of tier cost", "Qty/100 guests"])
+            for m in DPAY.get("menus", []):
+                ws.append([_short_menu(m["label"]), m.get("cogs_head"),
+                           _frac(m.get("share_pct")), m.get("qty_100")])
                 ws.cell(ws.max_row, 2).number_format = NUM2
-                ws.cell(ws.max_row, 3).number_format = NUM
+                ws.cell(ws.max_row, 3).number_format = PCT
+                ws.cell(ws.max_row, 4).number_format = NUM
         autofit(ws)
 
     # Sheet — Action Items
