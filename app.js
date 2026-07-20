@@ -1549,7 +1549,7 @@ const MGT_I18N = {
     curveMa:'curve = moving-average trend', darkerLatest:'darker bar = latest', trendMa:'Trend (moving avg)',
     darkLatest:'dark bar = latest', day:'day', week:'week', totalSeries:'Total',
     // §5 league
-    branch:'Branch', share:'Share', noBranchData:'No branch data.',
+    branch:'Branch', share:'Share', noBranchData:'No branch data.', watch:'watch',
     // §6 leak
     naNoPay:'n/a — no payment detail', totalDiscounts:'Total Discounts · this', dayWord:'day', weekWord:'week',
     allDiscTie:'(all discounted bills — ties to the Discounts page)',
@@ -1628,7 +1628,7 @@ const MGT_I18N = {
     thisMonthIs:'เดือนนี้', vsSameDays:'เทียบช่วงวันเดียวกันเดือนก่อน',
     curveMa:'เส้น = ค่าเฉลี่ยเคลื่อนที่', darkerLatest:'แท่งสีเข้ม = ล่าสุด', trendMa:'แนวโน้ม (ค่าเฉลี่ยเคลื่อนที่)',
     darkLatest:'แท่งเข้ม = ล่าสุด', day:'วัน', week:'สัปดาห์', totalSeries:'รวม',
-    branch:'สาขา', share:'สัดส่วน', noBranchData:'ไม่มีข้อมูลสาขา',
+    branch:'สาขา', share:'สัดส่วน', noBranchData:'ไม่มีข้อมูลสาขา', watch:'ต้องดู',
     naNoPay:'ไม่มีข้อมูล — ไม่มีรายละเอียดการชำระเงิน', totalDiscounts:'ส่วนลดรวม · ', dayWord:'วันนี้', weekWord:'สัปดาห์นี้',
     allDiscTie:'(บิลส่วนลดทั้งหมด — ตรงกับหน้าส่วนลด)',
     heavyDisc:'ส่วนลดหนัก', heavyHint:'บิลให้ส่วนลด ≥30%',
@@ -1918,17 +1918,31 @@ function renderMgtReport(j, jM, jF) {
     const up = rc > 0;
     return `<span class="text-xs font-bold" style="color:${up?'#16a34a':'#dc2626'}">${up?'▲':'▼'}${Math.abs(rc)}</span>`;
   };
-  const brRows = (j.branches || []).map((b, i) => `<tr class="border-b border-slate-50">
+  const _brs = j.branches || [];
+  const _brMax = Math.max(1, ..._brs.map(b => b.revenue || 0));
+  const _watch = b => (b.wow_pct != null && b.wow_pct <= -10);   // sharp weekly drop
+  const brRows = _brs.map((b, i) => `<tr class="border-b border-slate-50" ${_watch(b) ? 'style="background:#fef2f2"' : ''}>
       <td class="py-2 pl-1 text-slate-400 font-mono text-xs w-5 text-center">${b.rank || (i+1)}</td>
       <td class="py-2 w-7 text-center">${mvBadge(b.rank_change)}</td>
-      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}</td>
-      <td class="py-2 text-right font-semibold">${baht(b.revenue)}</td>
+      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}${_watch(b) ? ` <span class="text-[10px] px-1 rounded whitespace-nowrap" style="background:#fee2e2;color:#dc2626">${T.watch}</span>` : ''}</td>
+      <td class="py-2 text-right" style="min-width:96px">
+        <span class="font-semibold" title="${baht(b.revenue)}">${bigBaht(b.revenue)}</span>
+        <span style="display:inline-block;height:4px;border-radius:2px;background:#7c3aed;vertical-align:middle;margin-left:6px;width:${Math.max(4, Math.round((b.revenue || 0) / _brMax * 48))}px"></span>
+      </td>
       <td class="py-2 text-right">${num(b.customers)}</td>
       <td class="py-2 text-right">${baht(b.rev_per_head)}</td>
       <td class="py-2 text-right">${b.share_pct != null ? b.share_pct.toFixed(1) + '%' : '—'}</td>
       <td class="py-2 text-right pr-1">${wow(b.wow_pct)}</td>
     </tr>`).join('');
-  const branchTbl = `<div class="overflow-x-auto"><table class="w-full text-sm">
+  // Verdict line: leader + the sharpest decliner to watch (if any)
+  const _brTop = _brs.find(b => (b.rank || 99) === 1) || _brs[0];
+  const _brDecl = _brs.filter(b => b.wow_pct != null).slice().sort((a, b) => a.wow_pct - b.wow_pct)[0];
+  const branchVerdict = _brs.length ? `<p class="text-xs mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
+      <span class="text-slate-500">${_brs.length} ${T.branchesWord}</span>
+      ${_brTop ? `<span>🥇 <b>${esc(_brTop.branch)}</b> <span class="text-slate-400" title="${baht(_brTop.revenue)}">${bigBaht(_brTop.revenue)}</span></span>` : ''}
+      ${(_brDecl && _brDecl.wow_pct != null && _brDecl.wow_pct < 0) ? `<span style="color:#dc2626">${T.watch}: <b>${esc(_brDecl.branch)}</b> ${wow(_brDecl.wow_pct)}</span>` : ''}
+    </p>` : '';
+  const branchTbl = branchVerdict + `<div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
         <th class="text-left py-2 pl-1 w-5">#</th><th class="py-2 w-7"></th>
         <th class="text-left py-2">${T.branch}</th><th class="text-right py-2">${T.netSales}</th>
@@ -2001,9 +2015,15 @@ function renderMgtReport(j, jM, jF) {
   const M = j.menu || {};
   const cnum = v => (Math.round(v * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const cph  = v => (v == null) ? '—' : '฿' + cnum(v);
-  const liTop = x => `<li class="flex items-center justify-between gap-3 py-1.5 border-b border-slate-50 text-sm">
-      <span class="truncate">${esc(x.menu)}</span>
-      <span class="font-semibold whitespace-nowrap">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-400">${T.perHead}</span></span>
+  // Highest-cost list adopts the §11 treatment: rank number + proportion bar +
+  // amber heat on the value, so the priciest dishes jump out at a glance.
+  const _mMax = Math.max(1, ...((M.top || []).map(x => x.cost_per_head || 0)));
+  const _mHeat = v => `background:rgba(202,138,4,${(0.08 + 0.42 * (v / _mMax)).toFixed(2)})`;
+  const liTop = (x, i) => `<li class="flex items-center gap-2 py-1.5 border-b border-slate-50 text-sm">
+      <span class="text-slate-400 tabular-nums w-4 text-right">${i + 1}</span>
+      <span class="truncate flex-1">${esc(x.menu)}</span>
+      <span style="display:inline-block;height:5px;border-radius:3px;background:#ca8a04;width:${Math.max(3, Math.round((x.cost_per_head || 0) / _mMax * 38))}px"></span>
+      <span class="font-semibold whitespace-nowrap rounded px-1" style="${_mHeat(x.cost_per_head || 0)}">${cph(x.cost_per_head)}<span class="text-[11px] text-slate-400">${T.perHead}</span></span>
     </li>`;
   // rising food cost/head = margin risk (red); falling = good (green)
   const liMove = x => {
