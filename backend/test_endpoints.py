@@ -220,9 +220,32 @@ def test_management_report_daily_and_weekly(client):
     assert w2["selected_week"] == pick
 
 
+def test_management_report_monthly(client):
+    import datetime as _dt
+    m = client.get("/api/reports/management", params={"period": "monthly"}).json()
+    assert m["available"] and m["period"] == "monthly"
+    # COMPLETE months only: default = latest complete month, never the partial one
+    assert m["partial"] is False
+    assert m["selected_month"] == m["range"][0][:7]
+    cs = _dt.date.fromisoformat(m["range"][0]); ce = _dt.date.fromisoformat(m["range"][1])
+    assert cs.day == 1 and (ce + _dt.timedelta(days=1)).day == 1   # full calendar month
+    assert m["headline"]["revenue"] > 0
+    assert abs(sum(b["revenue"] for b in m["branches"]) - m["headline"]["revenue"]) < 1.0
+    assert len(m["trend"]) == 8
+    # picker carries the selectable complete months; explicit pick round-trips
+    assert isinstance(m["months"], list) and len(m["months"]) >= 1
+    pick = m["months"][-1]["month"]
+    m2 = client.get("/api/reports/management", params={"period": "monthly", "month": pick}).json()
+    assert m2["selected_month"] == pick
+    # comparison window = the previous calendar month
+    if m["comp_range"]:
+        pe = _dt.date.fromisoformat(m["comp_range"][1])
+        assert (pe + _dt.timedelta(days=1)) == cs
+
+
 def test_management_report_xlsx(client):
     import io, openpyxl
-    for period in ("daily", "weekly"):
+    for period in ("daily", "weekly", "monthly"):
         r = client.get("/api/reports/management.xlsx", params={"period": period})
         assert r.status_code == 200, r.text[:200]
         assert "spreadsheetml" in r.headers.get("content-type", "")

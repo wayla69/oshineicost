@@ -12730,30 +12730,33 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
 
 
 # ---------------------------------------------------------------------------
-# /api/reports/management  — Daily & Weekly Management Summary (English, printable)
+# /api/reports/management — Daily, Weekly & Monthly Management Summary (printable)
 # ---------------------------------------------------------------------------
 @app.get("/api/reports/management")
 @ttl_cache
 def report_management(
-    period: str = Query("daily"),            # 'daily' | 'weekly'
+    period: str = Query("daily"),            # 'daily' | 'weekly' | 'monthly'
     date:   Optional[str] = Query(None),     # focus day (default = latest day in data)
     week:   Optional[str] = Query(None),     # weekly: any date in the wanted FULL week (default = last completed week)
+    month:  Optional[str] = Query(None),     # monthly: 'YYYY-MM' (default = last COMPLETE month)
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),               # 'en' | 'th' — language for labels, comp_label & action items
 ):
-    """One-glance management summary for a single day or a single COMPLETE week.
+    """One-glance management summary for a day, a COMPLETE week or a COMPLETE month.
 
     Mirrors the proven idioms used across the dashboard so the numbers tie out:
       · revenue = SUM(total_inc_vat)/1.07  (ex-VAT, the reconciled accounting basis)
-      · current-vs-prior is WoW-fair (same weekday last week / full prior week)
+      · current-vs-prior is WoW-fair (same weekday last week / full prior week);
+        monthly compares against the previous calendar month + same month last year
       · food-cost % is the BoM figure for the period's month (_cogs_case — tier-safe)
       · money-leak signals reuse the Daily-Brief leak definitions (heavy/cash/reprint/zero)
-    Weekly reports cover only FULL Mon–Sun weeks; the response carries the list of
-    selectable completed weeks (`weeks`) and the chosen one (`selected_week`).
-    Everything is English-labelled and shaped for a printable management report."""
+    Weekly reports cover only FULL Mon–Sun weeks; monthly reports only COMPLETE
+    calendar months. The response carries the selectable periods (`weeks`/`months`)
+    and the chosen one (`selected_week`/`selected_month`), so the same simple
+    presentation serves the Daily, Weekly AND Monthly report."""
     import datetime as _dt, calendar as _cal
-    if period not in ("daily", "weekly"):
+    if period not in ("daily", "weekly", "monthly"):
         period = "daily"
     th = (lang == "th")          # localise labels / comp_label / action items
     if th:
@@ -12805,6 +12808,8 @@ def report_management(
         latest_day = _dt.date.fromisoformat(maxd)
         weeks: list = []
         selected_week = None
+        months: list = []
+        selected_month = None
         if period == "daily":
             cs = ce = fdate
             ps = pe = fdate - _dt.timedelta(days=7)
@@ -12817,6 +12822,43 @@ def report_management(
             else:
                 label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
                 comp_label = "same weekday last week"
+        elif period == "monthly":
+            # COMPLETE calendar months only (mirrors the weekly full-week rule): a
+            # month is selectable once its last day is <= the latest data day —
+            # never the in-progress month, whose partial totals would read as a
+            # chain-wide collapse against a full prior month. Most recent first.
+            mrows = con.execute(
+                f"SELECT DISTINCT strftime('%Y-%m', st.sold_at) m FROM sales_transaction st "
+                f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
+            for m in sorted((r["m"] for r in mrows if r["m"]), reverse=True):
+                my, mm = int(m[:4]), int(m[5:7])
+                if _dt.date(my, mm, _cal.monthrange(my, mm)[1]) <= latest_day:
+                    months.append({"month": m, "label": f"{MON[mm-1]} {my}"})
+                if len(months) >= 24:
+                    break
+            # Default = latest complete month; fall back to the latest data month
+            # (flagged partial) only when no month has completed yet.
+            sel = months[0]["month"] if months else maxd[:7]
+            if month:
+                m10 = month[:7]
+                if any(x["month"] == m10 for x in months):
+                    sel = m10
+            sy, sm = int(sel[:4]), int(sel[5:7])
+            cs = _dt.date(sy, sm, 1)
+            ce = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
+            days_in_period = (ce - cs).days + 1
+            partial = ce > latest_day
+            ref_anchor = ce
+            pm_l = cs - _dt.timedelta(days=1)          # previous calendar month
+            ps = pm_l.replace(day=1)
+            pe = pm_l
+            selected_month = sel
+            if th:
+                label = f"เดือน {MON[sm-1]} {sy}"
+                comp_label = "เดือนก่อนหน้า"
+            else:
+                label = f"{MON[sm-1]} {sy}"
+                comp_label = "previous month"
         else:
             # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
             # have data — most recent first, cap 26 — so the picker and the default
@@ -12865,9 +12907,14 @@ def report_management(
         # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
         # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
         # same-calendar-date YoY would drift (e.g. Sat→Fri) and distort the comparison.
-        # Dropped if it predates the data.
+        # Dropped if it predates the data. Monthly compares the SAME CALENDAR month
+        # last year (full month vs full month — the standard for monthly reporting;
+        # weekday drift washes out over a whole month).
         if period == "daily":
             ys = ye = fdate - _dt.timedelta(days=364)
+        elif period == "monthly":
+            ys = cs.replace(year=cs.year - 1)
+            ye = ys.replace(day=_cal.monthrange(ys.year, ys.month)[1])
         else:
             ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
         has_yoy = ys.isoformat() >= mind
@@ -13425,6 +13472,23 @@ def report_management(
                 d = cs - _dt.timedelta(days=i)
                 trend.append({"label": dlabel(d), "start": d.isoformat(),
                               "revenue": rev_by.get(d.isoformat(), 0)})
+        elif period == "monthly":
+            mlist = []                       # 8 calendar months ending at the selected one
+            for i in range(7, -1, -1):
+                mi = (cs.month - 1 - i) % 12 + 1
+                yi = cs.year + (cs.month - 1 - i - (mi - 1)) // 12
+                mlist.append((yi, mi))
+            start = _dt.date(mlist[0][0], mlist[0][1], 1)
+            rows = con.execute(f"""
+                SELECT strftime('%Y-%m', st.sold_at) k, ROUND(SUM(st.total_inc_vat)/1.07,2) rev
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
+            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+            for yi, mi in mlist:
+                k = f"{yi:04d}-{mi:02d}"
+                trend.append({"label": f"{MON[mi-1]} {yi % 100:02d}", "start": f"{k}-01",
+                              "revenue": rev_by.get(k, 0)})
         else:
             start = cs - _dt.timedelta(days=49)      # 8 full Mon–Sun weeks incl. the current one
             mon_e = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
@@ -13607,7 +13671,8 @@ def report_management(
             payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
 
     # ---- auto-generated action items (localised, severity-ordered) -------
-    pword = ("วัน" if period == "daily" else "สัปดาห์") if th else ("day" if period == "daily" else "week")
+    pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "สัปดาห์") if th
+             else ("day" if period == "daily" else "month" if period == "monthly" else "week"))
     actions = []
     if prev and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
         actions.append({"sev": "high",
@@ -13682,6 +13747,8 @@ def report_management(
         "partial": partial,
         "selected_week": selected_week,
         "weeks": weeks,
+        "selected_month": selected_month,
+        "months": months,
         "days_in_period": days_in_period,
         "latest_day": maxd,
         "min_day": mind,
@@ -13711,12 +13778,13 @@ def report_management_xlsx(
     period: str = Query("daily"),
     date:   Optional[str] = Query(None),
     week:   Optional[str] = Query(None),
+    month:  Optional[str] = Query(None),
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
     lang:   str = Query("en"),               # match the on-screen language
 ):
-    """Download the Daily/Weekly Management Summary as a multi-sheet Excel file.
-    Reuses report_management() so the numbers match the on-screen report exactly."""
+    """Download the Daily/Weekly/Monthly Management Summary as a multi-sheet Excel
+    file. Reuses report_management() so the numbers match the on-screen report."""
     try:
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -13724,7 +13792,8 @@ def report_management_xlsx(
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
     # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
-    resp = report_management(period=period, date=date, week=week, branch=branch, group=group, lang=lang)
+    resp = report_management(period=period, date=date, week=week, month=month,
+                             branch=branch, group=group, lang=lang)
     j = _json.loads(resp.body) if hasattr(resp, "body") else resp
     if not j.get("available"):
         raise HTTPException(status_code=404, detail="No sales data for this period")
@@ -13753,7 +13822,7 @@ def report_management_xlsx(
     # Sheet 1 — Summary
     ws = wb.active; ws.title = "Summary"
     ws.append(["Oshinei — Management Summary Report"]); ws["A1"].font = Font(bold=True, size=14)
-    ws.append(["Report", "Daily" if j["period"] == "daily" else "Weekly", j.get("label", "")])
+    ws.append(["Report", {"daily": "Daily", "monthly": "Monthly"}.get(j["period"], "Weekly"), j.get("label", "")])
     ws.append(["Scope", j.get("branch_scope", "")])
     ws.append(["Compared with", j.get("comp_label", "")])
     ws.append(["Latest data day", j.get("latest_day", "")])
@@ -13945,7 +14014,7 @@ def report_management_xlsx(
     autofit(ws)
 
     buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
-    tag = j.get("selected_week") or j.get("focus") or "report"
+    tag = j.get("selected_month") or j.get("selected_week") or j.get("focus") or "report"
     fname = f"management_{j['period']}_{tag}.xlsx"
     return StreamingResponse(
         buf,

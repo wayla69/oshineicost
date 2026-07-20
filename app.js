@@ -970,7 +970,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Analysis Report', mgtreport:'Management Report (Daily & Weekly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)' };
 
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
@@ -1388,6 +1388,7 @@ async function genMenuIdeas() {
 let mgtPeriod = 'daily';
 let mgtWeek = null;          // selected week (Monday ISO date); null = latest completed week
 let mgtDay = null;           // selected day (ISO date); null = latest day in data
+let mgtMonth = null;         // selected month ('YYYY-MM'); null = latest complete month
 let mgtLang = (() => { try { return localStorage.getItem('mgtLang') === 'th' ? 'th' : 'en'; } catch (e) { return 'en'; } })();
 
 function _mgtToggleUI() {
@@ -1395,17 +1396,24 @@ function _mgtToggleUI() {
   const off = 'background:transparent;color:#fff';
   const d = document.getElementById('mgtTabDaily');
   const w = document.getElementById('mgtTabWeekly');
-  if (d) d.setAttribute('style', mgtPeriod === 'daily'  ? on : off);
-  if (w) w.setAttribute('style', mgtPeriod === 'weekly' ? on : off);
+  const m = document.getElementById('mgtTabMonthly');
+  if (d) d.setAttribute('style', mgtPeriod === 'daily'   ? on : off);
+  if (w) w.setAttribute('style', mgtPeriod === 'weekly'  ? on : off);
+  if (m) m.setAttribute('style', mgtPeriod === 'monthly' ? on : off);
   const le = document.getElementById('mgtLangEn');
   const lt = document.getElementById('mgtLangTh');
   if (le) le.setAttribute('style', mgtLang === 'en' ? on : off);
   if (lt) lt.setAttribute('style', mgtLang === 'th' ? on : off);
-  // week picker is weekly-only; day picker is daily-only
+  // each picker only shows in its own period mode
   const wp = document.getElementById('mgtWeekPicker');
   if (wp && mgtPeriod !== 'weekly') wp.classList.add('hidden');
   const dp = document.getElementById('mgtDayPicker');
   if (dp && mgtPeriod !== 'daily') dp.classList.add('hidden');
+  const mp = document.getElementById('mgtMonthPicker');
+  if (mp && mgtPeriod !== 'monthly') mp.classList.add('hidden');
+  // legacy full-report shortcut is monthly-only
+  const lb = document.getElementById('mgtLegacyBtn');
+  if (lb) lb.classList.toggle('hidden', mgtPeriod !== 'monthly');
 }
 
 function setMgtLang(l) {
@@ -1441,10 +1449,39 @@ function renderMgtWeekPicker(j) {
   sel.classList.remove('hidden');
 }
 
+function renderMgtMonthPicker(j) {
+  const sel = document.getElementById('mgtMonthPicker');
+  if (!sel) return;
+  if (j.period !== 'monthly' || !(j.months && j.months.length)) {
+    sel.classList.add('hidden'); sel.innerHTML = ''; return;
+  }
+  const moPfx = (mgtLang === 'th') ? 'เดือน: ' : 'Month: ';
+  sel.innerHTML = j.months.map(m =>
+    `<option value="${m.month}"${m.month === j.selected_month ? ' selected' : ''}>${moPfx}${m.label}</option>`
+  ).join('');
+  sel.classList.remove('hidden');
+}
+
 function onMgtWeekChange(v) {
   mgtWeek = v || null;
   _tabLastKey.mgtreport = null;     // force a refetch for the chosen week
   loadMgtReport();
+}
+
+function onMgtMonthChange(v) {
+  mgtMonth = v || null;
+  _tabLastKey.mgtreport = null;     // force a refetch for the chosen month
+  loadMgtReport();
+}
+
+// Sidebar "📄 Monthly Report" → the Management Report in monthly mode (the simple
+// Daily/Weekly-style presentation). The legacy full pack stays reachable via the
+// ฉบับเต็ม button (monthly mode only) → switchTab('report').
+function openMonthlyReport() {
+  mgtPeriod = 'monthly';
+  mgtMonth = null;                  // latest complete month
+  _tabLastKey.mgtreport = null;
+  switchTab('mgtreport');
 }
 
 function onMgtDayChange(v) {
@@ -1454,9 +1491,10 @@ function onMgtDayChange(v) {
 }
 
 function setMgtPeriod(p) {
-  mgtPeriod = (p === 'weekly') ? 'weekly' : 'daily';
+  mgtPeriod = (p === 'weekly' || p === 'monthly') ? p : 'daily';
   mgtWeek = null;                   // reset to the latest completed week on mode switch
   mgtDay = null;                    // reset to the latest day on mode switch
+  mgtMonth = null;                  // reset to the latest complete month on mode switch
   _tabLastKey.mgtreport = null;     // force a refetch for the new period
   _mgtToggleUI();
   loadMgtReport();
@@ -1467,8 +1505,9 @@ function printMgtReport() { try { window.print(); } catch (e) {} }
 function exportMgtReport() {
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
-  if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
-  if (mgtPeriod === 'daily'  && mgtDay)  qs.set('date', mgtDay);
+  if (mgtPeriod === 'weekly'  && mgtWeek)  qs.set('week',  mgtWeek);
+  if (mgtPeriod === 'daily'   && mgtDay)   qs.set('date',  mgtDay);
+  if (mgtPeriod === 'monthly' && mgtMonth) qs.set('month', mgtMonth);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   qs.set('lang', mgtLang);                                             // export in the on-screen language
@@ -1476,7 +1515,7 @@ function exportMgtReport() {
 }
 
 async function loadMgtReport() {
-  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + mgtLang;
+  const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + (mgtMonth || '') + '|' + mgtLang;
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
   _mgtToggleUI();
@@ -1485,8 +1524,9 @@ async function loadMgtReport() {
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
   qs.set('lang', mgtLang);
-  if (mgtPeriod === 'weekly' && mgtWeek) qs.set('week', mgtWeek);
-  if (mgtPeriod === 'daily'  && mgtDay)  qs.set('date', mgtDay);
+  if (mgtPeriod === 'weekly'  && mgtWeek)  qs.set('week',  mgtWeek);
+  if (mgtPeriod === 'daily'   && mgtDay)   qs.set('date',  mgtDay);
+  if (mgtPeriod === 'monthly' && mgtMonth) qs.set('month', mgtMonth);
   if (getBranch()) qs.set('branch', getBranch());
   if (getGroup())  qs.set('group',  getGroup());
   // Fire master & franchise splits in parallel — only when no specific branch/type filter is active
@@ -1522,11 +1562,12 @@ async function loadMgtReport() {
 // on the client is keyed here so the EN ⇄ ไทย toggle re-skins the whole report.
 const MGT_I18N = {
   en: {
-    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', wtd:'  (week-to-date)', dtd:'  (so far today — partial)',
+    dailyReport:'Daily report · ', weeklyReport:'Weekly report · ', monthlyReport:'Monthly report · ',
+    wtd:'  (week-to-date)', dtd:'  (so far today — partial)', mtdTag:'  (month-to-date — partial)',
     scope:'Scope: ', comparedWith:'   ·   compared with ', allBranches:'All branches', groupPfx:'Group: ',
     title:'Management Summary Report', generated:'Generated:', exportExcel:'📊 Export Excel',
-    printPdf:'🖨️ Print / Export PDF', daily:'Daily', weekly:'Weekly', loading:'Loading…',
-    compDaily:'vs last week', compWeekly:'vs prev week',
+    printPdf:'🖨️ Print / Export PDF', daily:'Daily', weekly:'Weekly', monthly:'Monthly', loading:'Loading…',
+    compDaily:'vs last week', compWeekly:'vs prev week', compMonthly:'vs prev month',
     masterFranchise:'Master · Franchise breakdown', master:'Master', franchise:'Franchise',
     netSales:'Net Sales', netSalesVat:'Net Sales (ex-VAT)', grossProfit:'Gross Profit',
     afterFoodCost:'after food cost', marginAfter:'% margin · after food cost',
@@ -1547,11 +1588,11 @@ const MGT_I18N = {
     thisMonthIs:'this month is', vsSameDays:'vs the same days last month',
     // §4 trend
     curveMa:'curve = moving-average trend', darkerLatest:'darker bar = latest', trendMa:'Trend (moving avg)',
-    darkLatest:'dark bar = latest', day:'day', week:'week', totalSeries:'Total',
+    darkLatest:'dark bar = latest', day:'day', week:'week', month:'month', totalSeries:'Total',
     // §5 league
     branch:'Branch', share:'Share', noBranchData:'No branch data.', watch:'watch',
     // §6 leak
-    naNoPay:'n/a — no payment detail', totalDiscounts:'Total Discounts · this', dayWord:'day', weekWord:'week',
+    naNoPay:'n/a — no payment detail', totalDiscounts:'Total Discounts · this', dayWord:'day', weekWord:'week', monthWord:'month',
     allDiscTie:'(all discounted bills — ties to the Discounts page)',
     heavyDisc:'Heavy Discounts', heavyHint:'Bills discounted ≥30%',
     cashHeavy:'Cash-Heavy Discounts', cashHint:'Discounted & paid mostly cash',
@@ -1579,17 +1620,17 @@ const MGT_I18N = {
     mfPriority:'Master · Franchise priority actions', noCritical:'No critical issues.',
     // §10 payment
     branchesWord:'branches', channels:'channels', payCaption2:'% = each branch share (bold = dominant · small no. in the total row = ',
-    masterBranches:'Master Branches', allBranchesCap:'All Branches', thisDay:'this day', thisWeek:'this week',
+    masterBranches:'Master Branches', allBranchesCap:'All Branches', thisDay:'this day', thisWeek:'this week', thisMonth:'this month',
     payBranch:'Branch', paySum:'Total', payAll:'All',
     // exec summary header + pills
-    execSummary:'📋 Executive Summary', tldr:'TL;DR — at a glance', thisDayP:'This Day', thisWeekP:'This Week',
-    avg8d:'8-Day Avg', avg8w:'8-Wk Avg', bestDayP:'Best Day', bestWeekP:'Best Week',
-    weakDayP:'Weakest Day', weakWeekP:'Weakest Week', vsAvgP:' vs avg', dod:' DoD', wow:' WoW',
+    execSummary:'📋 Executive Summary', tldr:'TL;DR — at a glance', thisDayP:'This Day', thisWeekP:'This Week', thisMonthP:'This Month',
+    avg8d:'8-Day Avg', avg8w:'8-Wk Avg', avg8m:'8-Mo Avg', bestDayP:'Best Day', bestWeekP:'Best Week', bestMonthP:'Best Month',
+    weakDayP:'Weakest Day', weakWeekP:'Weakest Week', weakMonthP:'Weakest Month', vsAvgP:' vs avg', dod:' DoD', wow:' WoW', mom:' MoM',
     trendAnalysis:'Trend analysis',
     // section titles
-    s1:'1. Headline — ', s1d:'Latest Day', s1w:'Selected Week', s2:'2. Action Items',
+    s1:'1. Headline — ', s1d:'Latest Day', s1w:'Selected Week', s1m:'Selected Month', s2:'2. Action Items',
     s3pre:'3. ', s3mc:'Month', s3mtd:'Month-to-Date', s3post:' Pacing & Cost',
-    s4pre:'4. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4post:')',
+    s4pre:'4. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4m:'months', s4post:')',
     s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
     s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
     s11:'11. Buffet Price Tiers — Guests & Cost/Head',
@@ -1604,11 +1645,12 @@ const MGT_I18N = {
     numLocale:'en-US',
   },
   th: {
-    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', wtd:'  (ถึงปัจจุบันในสัปดาห์)', dtd:'  (เฉพาะวันนี้ — ยังไม่ครบวัน)',
+    dailyReport:'รายงานรายวัน · ', weeklyReport:'รายงานรายสัปดาห์ · ', monthlyReport:'รายงานรายเดือน · ',
+    wtd:'  (ถึงปัจจุบันในสัปดาห์)', dtd:'  (เฉพาะวันนี้ — ยังไม่ครบวัน)', mtdTag:'  (ถึงปัจจุบันในเดือน — ยังไม่ครบเดือน)',
     scope:'ขอบเขต: ', comparedWith:'   ·   เทียบกับ ', allBranches:'ทุกสาขา', groupPfx:'กลุ่ม: ',
     title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'📊 ส่งออก Excel',
-    printPdf:'🖨️ พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', loading:'กำลังโหลด…',
-    compDaily:'เทียบสัปดาห์ก่อน', compWeekly:'เทียบสัปดาห์ก่อน',
+    printPdf:'🖨️ พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', loading:'กำลังโหลด…',
+    compDaily:'เทียบสัปดาห์ก่อน', compWeekly:'เทียบสัปดาห์ก่อน', compMonthly:'เทียบเดือนก่อน',
     masterFranchise:'แยกตามบริษัท · แฟรนไชส์', master:'บริษัท', franchise:'แฟรนไชส์',
     netSales:'ยอดขายสุทธิ', netSalesVat:'ยอดขายสุทธิ (ไม่รวม VAT)', grossProfit:'กำไรขั้นต้น',
     afterFoodCost:'หลังหักต้นทุนอาหาร', marginAfter:'% อัตรากำไร · หลังหักต้นทุนอาหาร',
@@ -1627,9 +1669,9 @@ const MGT_I18N = {
     lastMonth:'เดือนก่อน', total:'รวม', overSame:'ในช่วง', day1:'วัน', dayN:'วัน',
     thisMonthIs:'เดือนนี้', vsSameDays:'เทียบช่วงวันเดียวกันเดือนก่อน',
     curveMa:'เส้น = ค่าเฉลี่ยเคลื่อนที่', darkerLatest:'แท่งสีเข้ม = ล่าสุด', trendMa:'แนวโน้ม (ค่าเฉลี่ยเคลื่อนที่)',
-    darkLatest:'แท่งเข้ม = ล่าสุด', day:'วัน', week:'สัปดาห์', totalSeries:'รวม',
+    darkLatest:'แท่งเข้ม = ล่าสุด', day:'วัน', week:'สัปดาห์', month:'เดือน', totalSeries:'รวม',
     branch:'สาขา', share:'สัดส่วน', noBranchData:'ไม่มีข้อมูลสาขา', watch:'ต้องดู',
-    naNoPay:'ไม่มีข้อมูล — ไม่มีรายละเอียดการชำระเงิน', totalDiscounts:'ส่วนลดรวม · ', dayWord:'วันนี้', weekWord:'สัปดาห์นี้',
+    naNoPay:'ไม่มีข้อมูล — ไม่มีรายละเอียดการชำระเงิน', totalDiscounts:'ส่วนลดรวม · ', dayWord:'วันนี้', weekWord:'สัปดาห์นี้', monthWord:'เดือนนี้',
     allDiscTie:'(บิลส่วนลดทั้งหมด — ตรงกับหน้าส่วนลด)',
     heavyDisc:'ส่วนลดหนัก', heavyHint:'บิลให้ส่วนลด ≥30%',
     cashHeavy:'ส่วนลดจ่ายเงินสด', cashHint:'ส่วนลด & จ่ายเงินสดเป็นหลัก',
@@ -1652,15 +1694,15 @@ const MGT_I18N = {
     tables:'โต๊ะ', coversTableShort:'หัว/โต๊ะ', avgTurn:'เวลาเฉลี่ย', dataLbl:'ข้อมูล', na:'ไม่มี',
     mfPriority:'สิ่งที่ต้องทำ — บริษัท · แฟรนไชส์', noCritical:'ไม่มีประเด็นเร่งด่วน',
     branchesWord:'สาขา', channels:'ช่องทาง', payCaption2:'% = สัดส่วนของแต่ละสาขา (ตัวหนา = ช่องทางหลัก · เลขเล็กในแถวรวม = ',
-    masterBranches:'สาขาบริษัท', allBranchesCap:'ทุกสาขา', thisDay:'วันนี้', thisWeek:'สัปดาห์นี้',
+    masterBranches:'สาขาบริษัท', allBranchesCap:'ทุกสาขา', thisDay:'วันนี้', thisWeek:'สัปดาห์นี้', thisMonth:'เดือนนี้',
     payBranch:'สาขา', paySum:'รวม', payAll:'ทั้งหมด',
-    execSummary:'📋 บทสรุปผู้บริหาร', tldr:'TL;DR — สรุปเร็ว', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้',
-    avg8d:'เฉลี่ย 8 วัน', avg8w:'เฉลี่ย 8 สัปดาห์', bestDayP:'วันดีสุด', bestWeekP:'สัปดาห์ดีสุด',
-    weakDayP:'วันต่ำสุด', weakWeekP:'สัปดาห์ต่ำสุด', vsAvgP:' เทียบเฉลี่ย', dod:' DoD', wow:' WoW',
+    execSummary:'📋 บทสรุปผู้บริหาร', tldr:'TL;DR — สรุปเร็ว', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้', thisMonthP:'เดือนนี้',
+    avg8d:'เฉลี่ย 8 วัน', avg8w:'เฉลี่ย 8 สัปดาห์', avg8m:'เฉลี่ย 8 เดือน', bestDayP:'วันดีสุด', bestWeekP:'สัปดาห์ดีสุด', bestMonthP:'เดือนดีสุด',
+    weakDayP:'วันต่ำสุด', weakWeekP:'สัปดาห์ต่ำสุด', weakMonthP:'เดือนต่ำสุด', vsAvgP:' เทียบเฉลี่ย', dod:' DoD', wow:' WoW', mom:' MoM',
     trendAnalysis:'บทวิเคราะห์แนวโน้ม',
-    s1:'1. สรุปภาพรวม — ', s1d:'วันล่าสุด', s1w:'สัปดาห์ที่เลือก', s2:'2. สิ่งที่ต้องทำ',
+    s1:'1. สรุปภาพรวม — ', s1d:'วันล่าสุด', s1w:'สัปดาห์ที่เลือก', s1m:'เดือนที่เลือก', s2:'2. สิ่งที่ต้องทำ',
     s3pre:'3. ', s3mc:'ทั้งเดือน', s3mtd:'สะสมเดือนนี้', s3post:' — จังหวะยอดขาย & ต้นทุน',
-    s4pre:'4. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4post:')',
+    s4pre:'4. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4m:'เดือนล่าสุด', s4post:')',
     s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
     s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
@@ -1703,7 +1745,9 @@ function renderMgtReport(j, jM, jF) {
   // YoY is only trustworthy once the year-ago period sits inside our data window
   // (sales history reliably starts ~mid-May 2025). Before ~mid-May 2026 the year-ago
   // side is empty/partial and YoY balloons — suppress it there. [[no-cumulative-totals-rule]]
-  const _pDate = j.selected_week || j.focus || j.date || j.latest_day || null;
+  const _pDate = (j.period === 'monthly' && j.range && j.range[1])
+    ? j.range[1]
+    : (j.selected_week || j.focus || j.date || j.latest_day || null);
   const yoyOk = _pDate ? (new Date(_pDate) >= new Date('2026-05-15')) : true;
   const wow  = p => (p == null)
     ? '<span class="text-slate-400 text-xs">—</span>'
@@ -1725,7 +1769,10 @@ function renderMgtReport(j, jM, jF) {
            <p class="text-[10px] font-bold uppercase tracking-wide text-violet-700 mb-2">🔗 ${T.franchise}</p>${mkKv(fKv)}</div>
        </div></div>`;
   const isDaily = j.period === 'daily';
-  const compShort = isDaily ? T.compDaily : T.compWeekly;
+  const isMonthly = j.period === 'monthly';
+  const compShort = isDaily ? T.compDaily : isMonthly ? T.compMonthly : T.compWeekly;
+  // Delta badge label: daily & weekly compare week-over-week; monthly is month-over-month.
+  const dLbl = isMonthly ? 'MoM' : 'WoW';
   // WoW badge straight from current/prev values (the §6/§8/§9/§10 sections whose
   // backend supplies a prev figure rather than a precomputed %). prev=0 → "—".
   const wowVal = (cur, prev) => (prev == null) ? '' : wow(prev ? (cur - prev) / prev * 100 : null);
@@ -1742,7 +1789,8 @@ function renderMgtReport(j, jM, jF) {
 
   // Header band labels
   const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
-  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : T.weeklyReport) + j.label + (j.partial ? (isDaily ? T.dtd : T.wtd) : ''));
+  setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : isMonthly ? T.monthlyReport : T.weeklyReport) + j.label
+    + (j.partial ? (isDaily ? T.dtd : isMonthly ? T.mtdTag : T.wtd) : ''));
   setTxt('mgtBranchLabel', T.scope + scopeLabel(j.branch_scope) + T.comparedWith + j.comp_label);
   // Static cover-band chrome (title / brand / buttons) follows the language toggle too.
   setTxt('mgtTitle', T.title);
@@ -1751,11 +1799,13 @@ function renderMgtReport(j, jM, jF) {
   setTxt('mgtPrintBtn', T.printPdf);
   setTxt('mgtTabDaily', T.daily);
   setTxt('mgtTabWeekly', T.weekly);
+  setTxt('mgtTabMonthly', T.monthly);
   try { setTxt('mgtGenDate', new Date().toLocaleString(isTH ? 'th-TH' : 'en-GB', { dateStyle: 'medium', timeStyle: 'short' })); }
   catch (e) { setTxt('mgtGenDate', new Date().toString()); }
   _mgtToggleUI();
   renderMgtWeekPicker(j);
   renderMgtDayPicker(j);
+  renderMgtMonthPicker(j);
 
   const H = j.headline || {};
   // Each section carries a distinct accent (top bar + heading) so the report reads
@@ -1770,7 +1820,7 @@ function renderMgtReport(j, jM, jF) {
        <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-1">${title}</p>
        <p class="text-2xl font-bold text-slate-800">${value}</p>
        <p class="text-xs text-slate-500 mt-1">${sub || ''}</p>
-       ${(w !== undefined || y != null) ? `<p class="text-[11px] mt-1 flex items-center gap-1 flex-wrap">${w !== undefined ? '<span class="text-slate-400">WoW</span>' + wow(w) : ''}${(w !== undefined && y != null) ? '<span class="text-slate-300">·</span>' : ''}${y != null ? '<span class="text-slate-400">YoY</span>' + wow(y) : ''}</p>` : ''}
+       ${(w !== undefined || y != null) ? `<p class="text-[11px] mt-1 flex items-center gap-1 flex-wrap">${w !== undefined ? '<span class="text-slate-400">' + dLbl + '</span>' + wow(w) : ''}${(w !== undefined && y != null) ? '<span class="text-slate-300">·</span>' : ''}${y != null ? '<span class="text-slate-400">YoY</span>' + wow(y) : ''}</p>` : ''}
      </div>`;
 
   // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
@@ -1790,10 +1840,10 @@ function renderMgtReport(j, jM, jF) {
     const gpM = GM.gp_pct != null ? ` · ${GM.gp_pct.toFixed(0)}%` : '';
     const gpF = GF.gp_pct != null ? ` · ${GF.gp_pct.toFixed(0)}%` : '';
     return splitPanel(
-      [[T.netSales, baht(HM.revenue)], ['WoW', wow(HM.rev_wow_pct)], [T.gp, baht(GM.gp) + gpM],
+      [[T.netSales, baht(HM.revenue)], [dLbl, wow(HM.rev_wow_pct)], [T.gp, baht(GM.gp) + gpM],
        [T.customers, num(HM.customers)], [T.spendHeadShort, baht(HM.rev_per_head)], [T.avgTicket, baht(HM.avg_ticket)],
        [T.discounts, baht(HM.discount) + (HM.discount_pct != null ? ` · ${HM.discount_pct.toFixed(1)}%` : '')]],
-      [[T.netSales, baht(HF.revenue)], ['WoW', wow(HF.rev_wow_pct)], [T.gp, baht(GF.gp) + gpF],
+      [[T.netSales, baht(HF.revenue)], [dLbl, wow(HF.rev_wow_pct)], [T.gp, baht(GF.gp) + gpF],
        [T.customers, num(HF.customers)], [T.spendHeadShort, baht(HF.rev_per_head)], [T.avgTicket, baht(HF.avg_ticket)],
        [T.discounts, baht(HF.discount) + (HF.discount_pct != null ? ` · ${HF.discount_pct.toFixed(1)}%` : '')]]);
   })();
@@ -1876,7 +1926,7 @@ function renderMgtReport(j, jM, jF) {
   const C_FRN_H = '#d8b4fe', C_FRN_C = '#9333ea';     // split Franchise (purple)
   const _sw = c => `<span style="display:inline-block;width:12px;height:12px;border-radius:3px;background:${c}"></span>`;
   const _lg = (c, t) => `<span class="flex items-center gap-1.5">${_sw(c)} ${t}</span>`;
-  const _period = isDaily ? T.day : T.week;
+  const _period = isDaily ? T.day : isMonthly ? T.month : T.week;
   // Split → 3 separate charts (one per series), each self-labelled, so the legend only
   // carries the shared hints. Single → one chart with the amber moving-average trend line.
   const trendLegend = hasSplit
@@ -1993,7 +2043,7 @@ function renderMgtReport(j, jM, jF) {
   const leakTotalBanner = `<div class="rounded-xl p-4 mb-3" style="border:1px solid var(--border);border-left:3px solid ${_sevCol};background:#f8fafc">
       <div class="flex items-end justify-between flex-wrap gap-2">
         <div>
-          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : T.weekWord}</p>
+          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : isMonthly ? T.monthWord : T.weekWord}</p>
           <p class="text-2xl font-bold" style="color:${_sevCol}" title="${baht(lt.baht || 0)}">${bigBaht(lt.baht || 0)}</p>
         </div>
         <div class="text-right text-xs text-slate-500">
@@ -2152,9 +2202,9 @@ function renderMgtReport(j, jM, jF) {
   const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
   const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
-  const compW  = isTH ? (isDaily ? 'วันเดียวกันสัปดาห์ก่อน' : 'สัปดาห์ก่อนหน้า')
-                      : (isDaily ? 'the same weekday last week' : 'the previous week');
-  const pNoun  = isTH ? (isDaily ? 'วัน' : 'สัปดาห์') : (isDaily ? 'day' : 'week');
+  const compW  = isTH ? (isDaily ? 'วันเดียวกันสัปดาห์ก่อน' : isMonthly ? 'เดือนก่อนหน้า' : 'สัปดาห์ก่อนหน้า')
+                      : (isDaily ? 'the same weekday last week' : isMonthly ? 'the previous month' : 'the previous week');
+  const pNoun  = isTH ? (isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์') : (isDaily ? 'day' : isMonthly ? 'month' : 'week');
   const brs    = j.branches || [];
   const ex     = [];
 
@@ -2308,11 +2358,11 @@ function renderMgtReport(j, jM, jF) {
     const avg = trv.reduce((a, b) => a + b, 0) / trv.length, last = trv[trv.length - 1];
     if (isTH) {
       const td  = last > avg * 1.05 ? 'กำลังเพิ่มขึ้น' : last < avg * 0.95 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
-      ex.push({c:'#0284c7', lead:'แนวโน้ม', body:'ในช่วง ' + trv.length + ' ' + (isDaily ? 'วันล่าสุด' : 'สัปดาห์ล่าสุด') + ' ยอดขาย <b>' + td +
+      ex.push({c:'#0284c7', lead:'แนวโน้ม', body:'ในช่วง ' + trv.length + ' ' + (isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด') + ' ยอดขาย <b>' + td +
               '</b> — ' + pNoun + 'ล่าสุดอยู่' + (last >= avg ? 'เหนือ' : 'ต่ำกว่า') + 'ค่าเฉลี่ยของช่วง'});
     } else {
       const td  = last > avg * 1.05 ? 'rising' : last < avg * 0.95 ? 'softening' : 'holding steady';
-      ex.push({c:'#0284c7', lead:'Trend.', body:'Across the last ' + trv.length + ' ' + (isDaily ? 'days' : 'weeks') + ', revenue is <b>' + td +
+      ex.push({c:'#0284c7', lead:'Trend.', body:'Across the last ' + trv.length + ' ' + (isDaily ? 'days' : isMonthly ? 'months' : 'weeks') + ', revenue is <b>' + td +
               '</b> — the latest ' + pNoun + ' sits ' + (last >= avg ? 'above' : 'below') + ' the period average.'});
     }
   }
@@ -2365,7 +2415,7 @@ function renderMgtReport(j, jM, jF) {
       ? `สาขาเด่น <b>${esc(_sorted[0].branch)}</b> · ตามหลัง <b>${esc(_sorted[_sorted.length - 1].branch)}</b>`
       : `Top branch <b>${esc(_sorted[0].branch)}</b> · lagging <b>${esc(_sorted[_sorted.length - 1].branch)}</b>`);
   }
-  const _head = `${isTH ? 'ยอดขาย' : 'Sales'} <b>${bigBaht(H.revenue)}</b> · WoW ${wow(H.rev_wow_pct)} · GP <b>${G.gp_pct != null ? G.gp_pct.toFixed(0) + '%' : '—'}</b>${_fc != null ? ` · Food <b>${_fc.toFixed(1)}%</b>` : ''}`;
+  const _head = `${isTH ? 'ยอดขาย' : 'Sales'} <b>${bigBaht(H.revenue)}</b> · ${dLbl} ${wow(H.rev_wow_pct)} · GP <b>${G.gp_pct != null ? G.gp_pct.toFixed(0) + '%' : '—'}</b>${_fc != null ? ` · Food <b>${_fc.toFixed(1)}%</b>` : ''}`;
   const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border-left:3px solid ${_tone}">
       <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${_tone}">${T.tldr}</p>
       <p class="text-sm text-slate-700 mb-2">${_head}</p>
@@ -2487,7 +2537,7 @@ function renderMgtReport(j, jM, jF) {
       ${cols.map(c => { const pv = (_prevCh[c.code] || {}).amount;
         return `<td class="py-1.5 px-2 text-right tabular-nums font-bold" style="color:${colColor[c.code]}" title="${baht(c.amount)}">${c.pct.toFixed(1)}%${pv != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(c.amount, pv)}</div>` : ''}</td>`; }).join('')}
       <td class="py-1.5 pl-2 text-right tabular-nums font-bold text-slate-800">${baht(_payPD.total)}${_payPrev.total != null ? `<div class="text-[8.5px] font-normal leading-none mt-0.5">${wowVal(_payPD.total, _payPrev.total)}</div>` : ''}</td></tr>`;
-    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} ${T.branchesWord} · ${cols.length} ${T.channels} · ${T.total} <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? T.thisDay : T.thisWeek} · ${T.payCaption2}${compShort})</p>
+    return `<p class="text-[11px] text-slate-500 mb-3">${byB.length} ${T.branchesWord} · ${cols.length} ${T.channels} · ${T.total} <b>${baht(_payPD.total)}</b>${_payPrev.total != null ? ' ' + wowVal(_payPD.total, _payPrev.total) + ' <span class="text-slate-400">' + compShort + '</span>' : ''} · ${isDaily ? T.thisDay : isMonthly ? T.thisMonth : T.thisWeek} · ${T.payCaption2}${compShort})</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">${th}</tr></thead>
       <tbody>${rows}</tbody><tfoot>${foot}</tfoot></table></div>`;
   })();
@@ -2529,8 +2579,8 @@ function renderMgtReport(j, jM, jF) {
   if (!body) return;
   const footMonth = (j.pace && j.pace.month) || (isTH ? 'เดือนนั้น' : 'the period month');
   const footnote = isTH
-    ? `<p class="text-[11px] text-slate-400 px-1">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว (อิงสูตร BoM), ${isDaily ? 'วันนี้' : 'สัปดาห์นี้'}เทียบสัปดาห์ก่อน · ต้นทุนอาหาร % เป็นตัวเลขอิง BoM ของ ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
-    : `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
+    ? `<p class="text-[11px] text-slate-400 px-1">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว (อิงสูตร BoM), ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % เป็นตัวเลขอิง BoM ของ ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
+    : `<p class="text-[11px] text-slate-400 px-1">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
   // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
   // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.
   const vLine = (col, txt) => `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2"><span style="color:${col};line-height:1.5">●</span><span class="text-slate-600">${txt}</span></p>`;
@@ -2556,7 +2606,7 @@ function renderMgtReport(j, jM, jF) {
     const gap = avg ? (latest - avg) / avg * 100 : 0;
     const col = gap >= 3 ? '#059669' : gap <= -3 ? '#dc2626' : '#d97706';
     const dir = isTH ? (gap >= 3 ? 'สูงกว่า' : gap <= -3 ? 'ต่ำกว่า' : 'ใกล้เคียง') : (gap >= 3 ? 'above' : gap <= -3 ? 'below' : 'near');
-    const u = isDaily ? (isTH ? 'วัน' : 'day') : (isTH ? 'สัปดาห์' : 'week');
+    const u = isDaily ? (isTH ? 'วัน' : 'day') : isMonthly ? (isTH ? 'เดือน' : 'month') : (isTH ? 'สัปดาห์' : 'week');
     return vLine(col, isTH
       ? `ล่าสุด <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b>ค่าเฉลี่ย ${tr.length} ${u} ${_sg(gap)}`
       : `Latest <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b> the ${tr.length}-${u} average by ${_sg(gap)}`);
@@ -2592,10 +2642,10 @@ function renderMgtReport(j, jM, jF) {
   })();
   body.innerHTML =
       execSummary
-    + sec(T.s1 + (isDaily ? T.s1d : T.s1w), kpis, '#0f766e')
+    + sec(T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), kpis, '#0f766e')
     + sec(T.s2, actsWithSplit, '#d97706')
     + sec(T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, v3 + pace, '#4f46e5')
-    + sec(T.s4pre + (isDaily ? T.s4d : T.s4w) + T.s4post, v4 + trend, '#0891b2')
+    + sec(T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, v4 + trend, '#0891b2')
     + sec(T.s5, branchTbl, '#7c3aed')
     + sec(T.s6, leakWithSplit, '#dc2626')
     + sec(T.s7, menu, '#059669')
@@ -2788,11 +2838,11 @@ function renderMgtReport(j, jM, jF) {
       : '';
     // Period-aware labels — Day in daily mode, Week in weekly mode (so the two
     // reports stay consistent and the daily strip no longer mislabels days as weeks).
-    const _pThis = isDaily ? T.thisDayP : T.thisWeekP;
-    const _pAv = isDaily ? T.avg8d : T.avg8w;
-    const _pDl = isDaily ? T.dod : T.wow;
-    const _pBest = isDaily ? T.bestDayP : T.bestWeekP;
-    const _pWeak = isDaily ? T.weakDayP : T.weakWeekP;
+    const _pThis = isDaily ? T.thisDayP : isMonthly ? T.thisMonthP : T.thisWeekP;
+    const _pAv = isDaily ? T.avg8d : isMonthly ? T.avg8m : T.avg8w;
+    const _pDl = isDaily ? T.dod : isMonthly ? T.mom : T.wow;
+    const _pBest = isDaily ? T.bestDayP : isMonthly ? T.bestMonthP : T.bestWeekP;
+    const _pWeak = isDaily ? T.weakDayP : isMonthly ? T.weakMonthP : T.weakWeekP;
     summaryEl.innerHTML =
       `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9">
          ${pill(_pThis, fmtM(cur), af(wowP) + _pDl, ac(wowP))}
@@ -2820,7 +2870,7 @@ function renderMgtReport(j, jM, jF) {
       const vsAvgTxt = vsAvg != null ? (vsAvg >= 0 ? '+' : '') + vsAvg.toFixed(1) + '%' : '—';
       let s1, s2, s3 = '';
       if (isTH) {
-        const noun = isDaily ? 'วัน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : 'สัปดาห์ล่าสุด';
+        const noun = isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด';
         const dir = vsAvg == null ? 'ทรงตัว' : vsAvg > 5 ? 'กำลังเพิ่มขึ้น' : vsAvg < -5 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'ขาขึ้น' : maNow < maPrev * 0.98 ? 'ขาลง' : 'ทรงตัว') : 'ทรงตัว';
         s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${dirCol}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
@@ -2836,7 +2886,7 @@ function renderMgtReport(j, jM, jF) {
           s3 = ` สาขาบริษัทอยู่ <b style="color:${(mVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(mVs)}ค่าเฉลี่ยตัวเอง</b> และแฟรนไชส์อยู่ <b style="color:${(fVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(fVs)}ค่าเฉลี่ยตัวเอง</b>`;
         }
       } else {
-        const noun = isDaily ? 'day' : 'week', nounP = isDaily ? 'days' : 'weeks';
+        const noun = isDaily ? 'day' : isMonthly ? 'month' : 'week', nounP = isDaily ? 'days' : isMonthly ? 'months' : 'weeks';
         const dir = vsAvg == null ? 'holding steady' : vsAvg > 5 ? 'rising' : vsAvg < -5 ? 'softening' : 'holding steady';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'upward' : maNow < maPrev * 0.98 ? 'downward' : 'flat') : 'flat';
         s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${dirCol}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
