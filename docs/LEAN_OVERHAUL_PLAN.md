@@ -1,5 +1,5 @@
 # แผน Lean Overhaul — Oshinei Dashboard
-วันที่เสนอ: 2026-07-20 · สถานะ: **Phase 0–5 ทำเสร็จครบ 2026-07-20 (ยังไม่ commit/deploy)** — เหลือรอ telemetry+checklist: การลบแท็บ/เส้นจริง, router split, JS แตกละเอียด, GP audit 37 เส้น
+วันที่เสนอ: 2026-07-20 · สถานะ: **Phase 0–5 DEPLOYED LIVE 2026-07-20 (commit eecd402)** — telemetry เริ่มนับแล้ว → กลับมาดู kill list ~2026-08-03 · เหลือ: การลบแท็บ/เส้นจริง, router split, JS แตกละเอียด, GP audit 37 เส้น · ⚠️ โค้ด JS ของ dashboard อยู่ที่ **app.js** แล้ว (ไม่ใช่ index.html)
 
 ---
 
