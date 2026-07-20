@@ -393,7 +393,11 @@ async def enforce_auth(request: Request, call_next):
     if not _auth.auth_enabled():
         return await call_next(request)
     path = request.url.path
-    docs_req = path == "/docs" or path.startswith("/docs/")
+    # /docs/ui-kit/ stays OPEN: index.html's <head> loads its design tokens
+    # (tokens.css) as the SPA's single :root variable source — gating it breaks
+    # the styling of the LOGIN page itself. It is CSS only, no business data.
+    docs_req = (path == "/docs" or path.startswith("/docs/")) \
+        and not path.startswith("/docs/ui-kit/")
     # Fail CLOSED: auth is on but no real signing secret is configured → every
     # cookie would be forgeable with the source-tree dev key. Refuse all API
     # and docs traffic (the SPA shell still loads so the operator sees the 503).

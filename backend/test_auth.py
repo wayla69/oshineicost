@@ -387,3 +387,8 @@ def test_docs_requires_login_when_auth_on(client, app_db, auth_on):
     # SPA shell + static assets stay open for the login form itself
     c2 = _fresh(app_db)
     assert c2.get("/").status_code == 200
+    # /docs/ui-kit/ (design tokens CSS) must stay open — index.html <head>
+    # loads tokens.css as the SPA's only :root variable source; gating it
+    # renders the LOGIN page itself unstyled (live regression 2026-07-20)
+    r = c2.get("/docs/ui-kit/tokens.css")
+    assert r.status_code == 200 and ":root" in r.text
