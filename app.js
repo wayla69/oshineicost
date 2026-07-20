@@ -1530,6 +1530,7 @@ const MGT_I18N = {
     masterFranchise:'Master · Franchise breakdown', master:'Master', franchise:'Franchise',
     netSales:'Net Sales', netSalesVat:'Net Sales (ex-VAT)', grossProfit:'Gross Profit',
     afterFoodCost:'after food cost', marginAfter:'% margin · after food cost',
+    yoyHidden:'YoY hidden — sales history starts ~May 2025, so the year-ago period isn’t comparable yet.',
     customers:'Customers', covers:'covers', spendHead:'Spend / Head', perCover:'per cover',
     avgTicket:'Avg Ticket', perBill:'per bill', bills:'Bills', receipts:'receipts',
     discounts:'Discounts', ofSales:'% of sales', gp:'GP', spendHeadShort:'Spend/Head',
@@ -1581,7 +1582,7 @@ const MGT_I18N = {
     masterBranches:'Master Branches', allBranchesCap:'All Branches', thisDay:'this day', thisWeek:'this week',
     payBranch:'Branch', paySum:'Total', payAll:'All',
     // exec summary header + pills
-    execSummary:'📋 Executive Summary', thisDayP:'This Day', thisWeekP:'This Week',
+    execSummary:'📋 Executive Summary', tldr:'TL;DR — at a glance', thisDayP:'This Day', thisWeekP:'This Week',
     avg8d:'8-Day Avg', avg8w:'8-Wk Avg', bestDayP:'Best Day', bestWeekP:'Best Week',
     weakDayP:'Weakest Day', weakWeekP:'Weakest Week', vsAvgP:' vs avg', dod:' DoD', wow:' WoW',
     trendAnalysis:'Trend analysis',
@@ -1611,6 +1612,7 @@ const MGT_I18N = {
     masterFranchise:'แยกตามบริษัท · แฟรนไชส์', master:'บริษัท', franchise:'แฟรนไชส์',
     netSales:'ยอดขายสุทธิ', netSalesVat:'ยอดขายสุทธิ (ไม่รวม VAT)', grossProfit:'กำไรขั้นต้น',
     afterFoodCost:'หลังหักต้นทุนอาหาร', marginAfter:'% อัตรากำไร · หลังหักต้นทุนอาหาร',
+    yoyHidden:'ซ่อน YoY — ข้อมูลเริ่ม ~พ.ค. 2025 ช่วงเดียวกันปีก่อนจึงยังเทียบไม่ได้',
     customers:'ลูกค้า', covers:'จำนวนหัว', spendHead:'ยอดต่อหัว', perCover:'ต่อหัว',
     avgTicket:'ยอดเฉลี่ย/บิล', perBill:'ต่อบิล', bills:'จำนวนบิล', receipts:'ใบเสร็จ',
     discounts:'ส่วนลด', ofSales:'% ของยอดขาย', gp:'กำไรขั้นต้น', spendHeadShort:'ยอดต่อหัว',
@@ -1652,7 +1654,7 @@ const MGT_I18N = {
     branchesWord:'สาขา', channels:'ช่องทาง', payCaption2:'% = สัดส่วนของแต่ละสาขา (ตัวหนา = ช่องทางหลัก · เลขเล็กในแถวรวม = ',
     masterBranches:'สาขาบริษัท', allBranchesCap:'ทุกสาขา', thisDay:'วันนี้', thisWeek:'สัปดาห์นี้',
     payBranch:'สาขา', paySum:'รวม', payAll:'ทั้งหมด',
-    execSummary:'📋 บทสรุปผู้บริหาร', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้',
+    execSummary:'📋 บทสรุปผู้บริหาร', tldr:'TL;DR — สรุปเร็ว', thisDayP:'วันนี้', thisWeekP:'สัปดาห์นี้',
     avg8d:'เฉลี่ย 8 วัน', avg8w:'เฉลี่ย 8 สัปดาห์', bestDayP:'วันดีสุด', bestWeekP:'สัปดาห์ดีสุด',
     weakDayP:'วันต่ำสุด', weakWeekP:'สัปดาห์ต่ำสุด', vsAvgP:' เทียบเฉลี่ย', dod:' DoD', wow:' WoW',
     trendAnalysis:'บทวิเคราะห์แนวโน้ม',
@@ -1687,6 +1689,22 @@ function renderMgtReport(j, jM, jF) {
   };
   const baht = n => (n == null) ? '—' : '฿' + Math.round(n).toLocaleString('en-US');
   const num  = n => (n == null) ? '—' : Math.round(n).toLocaleString('en-US');
+  // Compact money for headline tiles: ฿18.3M / ฿46k — the full figure stays in the
+  // cell's title tooltip via bigCell(). Scanning millions is far faster than counting
+  // digits in ฿18,297,820.
+  const bigBaht = n => {
+    if (n == null) return '—';
+    const a = Math.abs(n);
+    if (a >= 1e6) return '฿' + (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+    if (a >= 1e4) return '฿' + Math.round(n / 1e3) + 'k';
+    return '฿' + Math.round(n).toLocaleString('en-US');
+  };
+  const bigCell = n => (n == null) ? '—' : `<span title="${baht(n)}">${bigBaht(n)}</span>`;
+  // YoY is only trustworthy once the year-ago period sits inside our data window
+  // (sales history reliably starts ~mid-May 2025). Before ~mid-May 2026 the year-ago
+  // side is empty/partial and YoY balloons — suppress it there. [[no-cumulative-totals-rule]]
+  const _pDate = j.selected_week || j.focus || j.date || j.latest_day || null;
+  const yoyOk = _pDate ? (new Date(_pDate) >= new Date('2026-05-15')) : true;
   const wow  = p => (p == null)
     ? '<span class="text-slate-400 text-xs">—</span>'
     : `<span class="text-xs font-semibold" style="color:${p >= 0 ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
@@ -1758,14 +1776,14 @@ function renderMgtReport(j, jM, jF) {
   // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
   const G = j.gp || {};
   const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-      ${kpi(T.netSalesVat, baht(H.revenue),      compShort,  H.rev_wow_pct, H.rev_yoy_pct)}
-      ${kpi(T.grossProfit, baht(G.gp),           (G.gp_pct != null ? G.gp_pct.toFixed(0) + T.marginAfter : T.afterFoodCost))}
-      ${kpi(T.customers,   num(H.customers),     T.covers,   H.cust_wow_pct, H.cust_yoy_pct)}
-      ${kpi(T.spendHead,   baht(H.rev_per_head), T.perCover, H.rph_wow_pct,  H.rph_yoy_pct)}
+      ${kpi(T.netSalesVat, bigCell(H.revenue),   compShort,  H.rev_wow_pct, yoyOk ? H.rev_yoy_pct : null)}
+      ${kpi(T.grossProfit, bigCell(G.gp),         (G.gp_pct != null ? G.gp_pct.toFixed(0) + T.marginAfter : T.afterFoodCost))}
+      ${kpi(T.customers,   num(H.customers),     T.covers,   H.cust_wow_pct, yoyOk ? H.cust_yoy_pct : null)}
+      ${kpi(T.spendHead,   baht(H.rev_per_head), T.perCover, H.rph_wow_pct,  yoyOk ? H.rph_yoy_pct : null)}
       ${kpi(T.avgTicket,   baht(H.avg_ticket),   T.perBill,  H.ticket_wow_pct)}
       ${kpi(T.bills,       num(H.bills),         T.receipts, H.bills_wow_pct)}
-      ${kpi(T.discounts,   baht(H.discount),     (H.discount_pct != null ? H.discount_pct.toFixed(1) + T.ofSales : ''))}
-    </div>` + (() => {
+      ${kpi(T.discounts,   bigCell(H.discount),   (H.discount_pct != null ? H.discount_pct.toFixed(1) + T.ofSales : ''))}
+    </div>` + ((!yoyOk && (H.rev_yoy_pct != null)) ? `<p class="text-[11px] text-slate-400 mt-2">${T.yoyHidden}</p>` : '') + (() => {
     if (!hasSplit) return '';
     const HM = jM.headline || {}, HF = jF.headline || {};
     const GM = jM.gp || {}, GF = jF.gp || {};
@@ -1943,9 +1961,34 @@ function renderMgtReport(j, jM, jF) {
   // abnormal-only subsets carved from it). Ties out with the Discounts page for the
   // same scope — both = SUM(Sale.Discount).
   const lt = L.total || {};
-  const leakTotalBanner = `<div class="rounded-xl p-3 mb-3 flex items-center justify-between flex-wrap gap-1" style="border:1px solid var(--border);background:#f8fafc">
-      <span class="text-[11px] uppercase tracking-wide text-slate-400">${T.totalDiscounts} ${isDaily ? T.dayWord : T.weekWord} <span class="normal-case text-slate-300">${T.allDiscTie}</span></span>
-      <span class="text-sm flex items-center gap-1"><b class="text-slate-700">${baht(lt.baht || 0)}</b> <span class="text-slate-400">· ${num(lt.bills || 0)} ${T.bills}</span>${lt.prev_baht != null ? `<span class="text-slate-300">·</span><span class="text-[11px] text-slate-400">${compShort}</span>${wow(lt.baht_wow)}` : ''}</span>
+  // Hero: total discount ฿ as a big number, tinted by severity (% of sales), with a
+  // one-line verdict naming the biggest abnormal leak — so the eye lands on the size
+  // of the leak and the single thing to chase, not a row of equal-weight cards.
+  const _discPct = H.discount_pct;
+  const _sevCol = _discPct == null ? '#64748b' : _discPct >= 10 ? '#dc2626' : _discPct >= 6 ? '#d97706' : '#059669';
+  const _sevTxt = _discPct == null ? '' : (isTH ? (_discPct >= 10 ? 'สูง' : _discPct >= 6 ? 'เฝ้าระวัง' : 'ปกติ')
+                                                 : (_discPct >= 10 ? 'high' : _discPct >= 6 ? 'watch' : 'normal'));
+  const _worst = [[T.heavyDisc, L.heavy_discount], [T.cashHeavy, L.cash_heavy], [T.reprinted, L.reprinted], [T.zeroGross, L.zero_gross]]
+    .map(([lbl, o]) => ({ lbl, o: o || {} })).filter(x => (x.o.bills || 0) > 0)
+    .sort((a, b) => (b.o.baht || 0) - (a.o.baht || 0))[0];
+  const _wBr = (_worst && _worst.o.by_branch && _worst.o.by_branch[0]) ? ' — ' + esc(_worst.o.by_branch[0].branch) : '';
+  const _leakVerdict = _worst
+    ? (isTH ? `เด่นสุด: <b>${esc(_worst.lbl)}</b> ${num(_worst.o.bills)} บิล (${bigBaht(_worst.o.baht)})${_wBr}`
+            : `Biggest: <b>${esc(_worst.lbl)}</b> ${num(_worst.o.bills)} bills (${bigBaht(_worst.o.baht)})${_wBr}`)
+    : (isTH ? 'ไม่พบบิลผิดปกติในช่วงนี้' : 'No abnormal bills flagged this period');
+  const leakTotalBanner = `<div class="rounded-xl p-4 mb-3" style="border:1px solid var(--border);border-left:3px solid ${_sevCol};background:#f8fafc">
+      <div class="flex items-end justify-between flex-wrap gap-2">
+        <div>
+          <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : T.weekWord}</p>
+          <p class="text-2xl font-bold" style="color:${_sevCol}" title="${baht(lt.baht || 0)}">${bigBaht(lt.baht || 0)}</p>
+        </div>
+        <div class="text-right text-xs text-slate-500">
+          ${_discPct != null ? `<p><b style="color:${_sevCol}">${_discPct.toFixed(1)}%</b> ${T.ofSales}${_sevTxt ? ` · <span class="font-semibold" style="color:${_sevCol}">${_sevTxt}</span>` : ''}</p>` : ''}
+          <p>${num(lt.bills || 0)} ${T.bills}${lt.prev_baht != null ? ` · ${compShort} ${wow(lt.baht_wow)}` : ''}</p>
+        </div>
+      </div>
+      <p class="text-[12px] text-slate-600 mt-2 pt-2 border-t border-slate-100"><span style="color:${_sevCol}">●</span> ${_leakVerdict}</p>
+      <p class="text-[10px] text-slate-300 mt-1">${T.allDiscTie}</p>
     </div>`;
   const leak = leakTotalBanner + `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       ${leakCard(T.heavyDisc, L.heavy_discount, T.heavyHint)}
@@ -2272,8 +2315,45 @@ function renderMgtReport(j, jM, jF) {
     ex.push({c:'#0f172a', lead:'Bottom line.', body:tone + '.' + actsT});
   }
 
+  // TL;DR — a 5-second scannable verdict + 3-4 bullets ABOVE the full prose, so
+  // readers get the takeaway without reading ~10 paragraphs. Tone colour keys off WoW.
+  const _tone = (H.rev_wow_pct == null) ? '#64748b' : (H.rev_wow_pct >= 2 ? '#059669' : H.rev_wow_pct <= -5 ? '#dc2626' : '#d97706');
+  const _fc = P.food_cost_pct;
+  const _bul = [];
+  if (H.cust_wow_pct != null || H.rph_wow_pct != null) {
+    const byT = Math.abs(H.cust_wow_pct || 0) >= Math.abs(H.rph_wow_pct || 0);
+    _bul.push(isTH
+      ? `การเปลี่ยนแปลงยอดขายมาจาก <b>${byT ? 'จำนวนลูกค้า' : 'ยอดใช้จ่าย/หัว'}</b> เป็นหลัก (หัว ${signed(H.cust_wow_pct)} · ต่อหัว ${signed(H.rph_wow_pct)})`
+      : `Sales shift driven mainly by <b>${byT ? 'customer traffic' : 'spend per head'}</b> (covers ${signed(H.cust_wow_pct)} · per-head ${signed(H.rph_wow_pct)})`);
+  }
+  if (_fc != null) {
+    const fCol = _fc >= 53 ? '#dc2626' : _fc <= 47 ? '#059669' : '#d97706';
+    _bul.push(isTH
+      ? `ต้นทุนอาหาร <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'สูงกว่าเป้า ~50%' : _fc <= 47 ? 'ต่ำกว่าเป้า ~50% (ดี)' : 'ใกล้เป้า ~50%'}`
+      : `Food cost <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'above the ~50% target' : _fc <= 47 ? 'below ~50% (good)' : 'near the ~50% target'}`);
+  }
+  const _hv = L.heavy_discount || {};
+  if ((_hv.bills || 0) > 0) {
+    const _hb = (_hv.by_branch && _hv.by_branch[0]) ? ' — ' + esc(_hv.by_branch[0].branch) : '';
+    _bul.push(isTH
+      ? `จุดรั่วเด่น: <b>${num(_hv.bills)}</b> บิลลดหนัก ≥30% (${bigBaht(_hv.baht)})${_hb}`
+      : `Top leak: <b>${num(_hv.bills)}</b> bills discounted ≥30% (${bigBaht(_hv.baht)})${_hb}`);
+  }
+  if (brs.length >= 2) {
+    const _sorted = brs.slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+    _bul.push(isTH
+      ? `สาขาเด่น <b>${esc(_sorted[0].branch)}</b> · ตามหลัง <b>${esc(_sorted[_sorted.length - 1].branch)}</b>`
+      : `Top branch <b>${esc(_sorted[0].branch)}</b> · lagging <b>${esc(_sorted[_sorted.length - 1].branch)}</b>`);
+  }
+  const _head = `${isTH ? 'ยอดขาย' : 'Sales'} <b>${bigBaht(H.revenue)}</b> · WoW ${wow(H.rev_wow_pct)} · GP <b>${G.gp_pct != null ? G.gp_pct.toFixed(0) + '%' : '—'}</b>${_fc != null ? ` · Food <b>${_fc.toFixed(1)}%</b>` : ''}`;
+  const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border-left:3px solid ${_tone}">
+      <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${_tone}">${T.tldr}</p>
+      <p class="text-sm text-slate-700 mb-2">${_head}</p>
+      <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${_tone}">•</span><span>${b}</span></li>`).join('')}</ul>
+    </div>`;
   const execSummary = '<div class="card p-6" style="border-top:3px solid #0f172a">'
     + `<h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">${T.execSummary}</h2>`
+    + tldr
     + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div></div>';
 
   // §6 — per-MASTER-branch discount + % of sales (the company-owned follow-up line).
