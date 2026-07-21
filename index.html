@@ -947,8 +947,12 @@ body.dark #mgtRptBody {
 }
 body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
 
-/* ── Management Report cover band: collapsible (mobile starts collapsed) ── */
-#mgtCover.collapsed { padding: 12px 18px; }
+/* ── Management Report cover band: collapsible (mobile starts collapsed) ──
+   Collapsed = a slim bar that STICKS to the top while scrolling, so the
+   expand button is reachable anywhere in the (long) report. Same pattern as
+   the legacy report's #rptNav sticky strip. */
+#mgtCover.collapsed { padding: 12px 18px; position: sticky; top: 0;
+  z-index: 30; box-shadow: 0 2px 14px rgba(2,6,23,.28); }
 #mgtCover.collapsed .mgt-full { display: none !important; }
 #mgtCover.collapsed .mgt-slim { display: flex !important; }
 @media (max-width: 700px) {
@@ -957,7 +961,7 @@ body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color:
   #mgtCover .mgt-hide-sm { display: none; }
 }
 @media print {  /* the printed cover is always the full band */
-  #mgtCover, #mgtCover.collapsed { padding: 2rem; }
+  #mgtCover, #mgtCover.collapsed { padding: 2rem; position: static; box-shadow: none; }
   #mgtCover.collapsed .mgt-full { display: flex !important; }
   #mgtCover .mgt-slim { display: none !important; }
 }
