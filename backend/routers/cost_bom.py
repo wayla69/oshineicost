@@ -1209,53 +1209,6 @@ def bom_composition(sku: str = Query(..., description="SKU code, e.g. B0005")):
     }
 
 
-# Ingredient family keyword map — rolls up the many name variants (e.g. 24 salmon
-# spellings) into one family so consumption truly reflects the dominant proteins.
-# Order matters: first matching family wins. TH + EN keywords.
-_INGREDIENT_FAMILIES = [
-    # --- specific seafood/proteins FIRST (so generic "ปลา"/"หอย"/"ไข่" don't steal them) ---
-    ("Salmon · แซลมอน",      ("แซลมอน", "แซม่อน", "แซลมอล", "salmon")),
-    ("Eel/Unagi · ปลาไหล",   ("ปลาไหล", "อูนางิ", "unagi", "eel")),
-    ("Tuna · ทูน่า",         ("ทูน่า", "มากุโระ", "โอโทโร่", "ชูโทโร่", "อาคามิ", "tuna", "maguro", "toro", "akami")),
-    ("Hamachi · ฮามาจิ",     ("ฮามาจิ", "hamachi", "yellowtail", "buri")),
-    ("Roe · ไข่ปลา/ไข่กุ้ง",   ("ไข่กุ้ง", "ไข่ปลา", "ไข่หอย", "roe", "ikura", "tobiko", "masago")),
-    ("Shrimp · กุ้ง",        ("กุ้ง", "shrimp", "prawn", "ebi")),
-    ("Crab · ปู",            ("ปูอัด", "มันปู", "ปู ", "crab", "kani")),
-    ("Squid/Octopus · หมึก", ("ปลาหมึก", "หมึก", "ทาโกะ", "squid", "octopus", "ika", "tako")),
-    ("Scallop · หอยเชลล์",   ("หอยเชลล์", "scallop", "hotate")),
-    ("Oyster · หอยนางรม",    ("หอยนางรม", "oyster")),
-    ("Uni · อูนิ",           ("อูนิ", "uni", "sea urchin")),
-    ("Shellfish · หอย",      ("หอยแมลงภู่", "หอยลาย", "หอย", "mussel", "clam")),  # generic หอย AFTER scallop/oyster
-    ("Fish (other) · ปลาอื่นๆ", ("ปลาเนื้อขาว", "ปลาซาบะ", "ซาบะ", "ปลาดอลลี่", "ปลาตาเดียว",
-                              "คามาโบโกะ", "ลูกชิ้นปลา", "ปลา", "fish", "saba", "dory", "tai")),  # generic ปลา last among fish
-    # --- meats ---
-    ("Beef · เนื้อวัว",       ("เนื้อวัว", "ลิ้นวัว", "โคขุน", "ชาโรเล่ส์", "เสือร้องไห้", "ใบพาย",
-                              "ออสเตรเลีย", "วากิว", "สเต็ก", "เนื้อสไลด์", "เนื้อสันใน", "เนื้อเสือ",
-                              "beef", "wagyu", "charolais", "sirloin")),
-    ("Pork · หมู",           ("หมู", "เบคอน", "pork", "bacon", "buta")),
-    ("Chicken · ไก่",        ("ไก่", "chicken", "tori")),
-    ("Egg · ไข่",            ("ไข่", "ไข่หวาน", "ทามาโกะ", "egg", "tamago")),  # generic ไข่ AFTER roe
-    # --- staples / sides ---
-    ("Noodle · เส้น",        ("เส้น", "โซบะ", "อุด้ง", "ราเมน", "บุก", "ชิราตากิ", "udon", "soba", "ramen", "noodle")),
-    ("Rice · ข้าว",          ("ข้าวญี่ปุ่น", "ข้าวสวย", "ข้าว", "rice", "gohan")),
-    ("Seaweed · สาหร่าย",    ("สาหร่าย", "โนริ", "วากาเมะ", "nori", "seaweed", "wakame")),
-    ("Tofu · เต้าหู้",        ("เต้าหู้", "tofu")),
-    ("Cheese/Dairy · ชีส/นม", ("ชีส", "เนย", "ครีม", "นมสด", "cheese", "butter", "cream")),
-    ("Flour/Batter · แป้ง",   ("แป้ง", "เทมปุระ", "เกล็ดขนมปัง", "เกล็ดแป้ง", "tempura", "breadcrumb", "flour", "panko")),
-    ("Mushroom · เห็ด",      ("เห็ด", "mushroom", "shiitake", "enoki")),
-    # --- fats / seasonings (seasoning BEFORE veg so พริกไทย≠พริก) ---
-    ("Oil · น้ำมัน",         ("น้ำมัน", "oil")),
-    ("Sauce/Seasoning · ซอส/เครื่องปรุง",
-                            ("ซอส", "น้ำซุป", "น้ำดอง", "น้ำจิ้ม", "น้ำพอนสึ", "พอนสึ", "น้ำยำ",
-                             "โชยุ", "โชยู", "มิริน", "มายองเนส", "เทอริยากิ", "สาเก", "เกลือ",
-                             "พริกไทย", "ดาชิ", "มิโซะ", "sauce", "teriyaki", "mayo", "mirin",
-                             "soy", "shoyu", "dashi", "ponzu", "miso", "broth", "soup")),
-    ("Vegetable · ผัก",      ("ผัก", "สลัด", "แตงกวา", "ต้นหอม", "ขิง", "หอมใหญ่", "หอม",
-                             "หัวไชเท้า", "มะเขือเทศ", "พริก", "กระเทียม", "แครอท", "มะนาว",
-                             "ใบโอบะ", "veg", "salad", "lettuce", "onion", "garlic", "carrot")),
-]
-
-
 
 
 @router.get("/api/bom/consumption-analysis")
