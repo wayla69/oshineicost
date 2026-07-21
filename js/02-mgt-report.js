@@ -124,6 +124,25 @@ function setMgtPeriod(p) {
 
 function printMgtReport() { try { window.print(); } catch (e) {} }
 
+// ── collapsible cover band: on small screens the reader wants the report, not
+// the chrome — start collapsed there (persisted; an explicit choice wins).
+// Print always expands via the @media print rules in index.html.
+function toggleMgtCover(collapse) {
+  const cov = document.getElementById('mgtCover');
+  if (!cov) return;
+  const c = (collapse !== undefined) ? collapse : !cov.classList.contains('collapsed');
+  cov.classList.toggle('collapsed', c);
+  try { localStorage.setItem('mgtCoverCollapsed', c ? '1' : '0'); } catch (e) {}
+}
+let _mgtCoverInited = false;
+function _mgtCoverInit() {
+  if (_mgtCoverInited) return;
+  _mgtCoverInited = true;
+  let pref = null;
+  try { pref = localStorage.getItem('mgtCoverCollapsed'); } catch (e) {}
+  toggleMgtCover(pref == null ? window.innerWidth < 700 : pref === '1');
+}
+
 function exportMgtReport() {
   const qs = new URLSearchParams();
   qs.set('period', mgtPeriod);
@@ -137,6 +156,7 @@ function exportMgtReport() {
 }
 
 async function loadMgtReport() {
+  _mgtCoverInit();
   const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + (mgtMonth || '') + '|' + mgtLang;
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
@@ -413,6 +433,7 @@ function renderMgtReport(j, jM, jF) {
   const setTxt = (id, t) => { const el = document.getElementById(id); if (el) el.textContent = t; };
   setTxt('mgtPeriodLabel', (isDaily ? T.dailyReport : isMonthly ? T.monthlyReport : T.weeklyReport) + j.label
     + (j.partial ? (isDaily ? T.dtd : isMonthly ? T.mtdTag : T.wtd) : ''));
+  setTxt('mgtSlimLabel', document.getElementById('mgtPeriodLabel')?.textContent || T.title);
   setTxt('mgtBranchLabel', T.scope + scopeLabel(j.branch_scope) + T.comparedWith + j.comp_label);
   // Static cover-band chrome (title / brand / buttons) follows the language toggle too.
   setTxt('mgtTitle', T.title);

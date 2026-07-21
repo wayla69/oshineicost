@@ -934,6 +934,33 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 .ms-seg { flex: 1; padding: 7px 6px; border-radius: 9px; border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
 .ms-seg-on { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+/* ── Management Report: white-paper island — the printable report keeps a light
+   document look in dark mode. The report's inner styles consume these tokens
+   (inline var(--bg-card) etc.), so re-declaring them here scopes the override
+   to every descendant; charts inside pick up light theming via
+   [data-force-light] in mkChart. Fixed slate text classes are white-bg safe. */
+body.dark #mgtRptBody {
+  --bg-card: #ffffff; --bg-subtle: #f8fafc; --border: #e2e8f0;
+  --text-primary: #1e293b; --text-muted: #64748b;
+  color-scheme: light;
+}
+body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
+
+/* ── Management Report cover band: collapsible (mobile starts collapsed) ── */
+#mgtCover.collapsed { padding: 12px 18px; }
+#mgtCover.collapsed .mgt-full { display: none !important; }
+#mgtCover.collapsed .mgt-slim { display: flex !important; }
+@media (max-width: 700px) {
+  #mgtCover { padding: 16px 18px; }
+  #mgtCover h1 { font-size: 20px; }
+  #mgtCover .mgt-hide-sm { display: none; }
+}
+@media print {  /* the printed cover is always the full band */
+  #mgtCover, #mgtCover.collapsed { padding: 2rem; }
+  #mgtCover.collapsed .mgt-full { display: flex !important; }
+  #mgtCover .mgt-slim { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -4675,10 +4702,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-mgtreport" class="hidden">
 
-  <!-- Management report cover band -->
-  <div class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+  <!-- Management report cover band. Collapsible (mobile starts collapsed —
+       the reader wants the report, not the chrome): .collapsed hides the two
+       .mgt-full rows and shows the slim one-line bar; print always expands. -->
+  <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
        style="background:linear-gradient(135deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)">
-    <div class="flex items-start justify-between flex-wrap gap-4">
+    <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
+      <span class="text-sm font-semibold truncate" id="mgtSlimLabel">Management Summary Report</span>
+      <button onclick="toggleMgtCover(false)" class="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0"
+              style="background:rgba(255,255,255,0.18)">▼ เมนูรายงาน</button>
+    </div>
+    <div class="mgt-full flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
         <h1 id="mgtTitle" class="text-3xl font-bold leading-tight">Management Summary Report</h1>
@@ -4686,12 +4720,14 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <p id="mgtBranchLabel" class="text-sm opacity-90">—</p>
       </div>
       <div class="text-right text-xs opacity-90">
-        <div class="mb-3"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
+        <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
         <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
         <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
+                style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
       </div>
     </div>
-    <div class="no-print mt-5 flex flex-wrap items-center gap-3">
+    <div class="mgt-full no-print mt-5 flex flex-wrap items-center gap-3">
       <div class="inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
         <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
         <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
@@ -4717,7 +4753,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
-  <div id="mgtRptBody" class="space-y-5">
+  <!-- data-force-light: the printable report keeps a white-paper look in dark
+       mode — local token overrides below + charts pick it up via mkChart -->
+  <div id="mgtRptBody" class="space-y-5" data-force-light>
     <div class="text-center text-slate-400 py-10 text-sm">Loading…</div>
   </div>
 </div>

@@ -578,8 +578,10 @@ function colorForBranch(name) {
 }
 
 // Theme-aware axis / grid colors that respect dark mode
-function chartTheme() {
-  const dark = document.body.classList.contains('dark');
+function chartTheme(force) {
+  // force='light' → a chart inside a forced-light island (e.g. the printable
+  // Management Report keeps a white-paper look in dark mode) themes as light.
+  const dark = force ? force === 'dark' : document.body.classList.contains('dark');
   return {
     text:     dark ? '#cbd5e1' : '#64748b',
     textDim:  dark ? '#94a3b8' : '#94a3b8',
@@ -588,8 +590,8 @@ function chartTheme() {
     bg:       dark ? '#1e293b' : '#ffffff',
   };
 }
-function applyChartTheme(cfg) {
-  const t = chartTheme();
+function applyChartTheme(cfg, force) {
+  const t = chartTheme(force);
   if (!cfg.options) return;
   if (cfg.options.scales) {
     Object.values(cfg.options.scales).forEach(ax => {
@@ -715,8 +717,10 @@ function mkChart(id, config) {
       };
     }
   }
-  // Apply theme-aware axis / grid / label colors (respects dark mode)
-  applyChartTheme(config);
+  // Apply theme-aware axis / grid / label colors (respects dark mode).
+  // A canvas inside a [data-force-light] container (the printable Management
+  // Report keeps a white-paper look in dark mode) always themes as light.
+  applyChartTheme(config, ctx.closest('[data-force-light]') ? 'light' : undefined);
   chartInstances[id] = new Chart(ctx, config);
   // Auto-inject a "Dive in" zoom button on the chart canvas wrapper
   injectDiveBtn(id, ctx);
