@@ -319,15 +319,25 @@ function renderHomeMenuMovers(m) {
       : `วันนี้ ${x.ph100} vs ปกติ ${x.avg_ph100}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct}%` : ''}`;
     // Revenue tie-in: ฿ change vs the trailing avg day for this menu — shows whether a
     // per-head move actually moved money. Colored to match the direction.
-    const revTxt = (x.rev_delta != null)
+    // Buffet dishes carry NO line revenue (they ride the package — see the (B)
+    // convention), so a literal "฿+0" on every row read as broken data. Only show
+    // the ฿ chip when this menu actually moved money.
+    const revTxt = (x.rev_delta)
       ? ` · <span style="color:${col};font-weight:600">฿${x.rev_delta >= 0 ? '+' : ''}${fmtN(x.rev_delta)}</span>`
       : '';
+    // An un-named SKU (description still equals the POS code — a new-branch code
+    // series the sync hasn't backfilled) is labelled honestly instead of showing
+    // a cryptic code as if it were a dish name.
+    const noName = /^[A-Z0-9][A-Z0-9-]{4,}$/.test(x.menu || '');
+    const nameHtml = noName
+      ? `<span style="opacity:.85">${esc(x.menu)}</span> <span class="text-[10px]" style="color:var(--text-muted)">(ยังไม่มีชื่อเมนู)</span>`
+      : esc(x.menu);
     // Two-line row: name + headline delta on line 1 (name truncates via min-w-0 so
     // it yields space and never collides with the nowrap delta), muted context on
     // line 2. Fixes the overlap from cramming name + delta + context on one line.
     return `<div class="py-1 border-b" style="border-color:var(--border)">
       <div class="flex items-baseline justify-between gap-2">
-        <span class="text-xs font-medium truncate min-w-0" style="color:var(--text-primary)" title="${esc(x.menu)}">${tag}${esc(x.menu)}</span>
+        <span class="text-xs font-medium truncate min-w-0" style="color:var(--text-primary)" title="${esc(x.menu)}">${tag}${nameHtml}</span>
         <span class="text-xs font-semibold whitespace-nowrap tabular-nums" style="color:${col}">${main}</span>
       </div>
       <div class="text-[10px] tabular-nums" style="color:var(--text-muted)">${ctx}${revTxt}</div>

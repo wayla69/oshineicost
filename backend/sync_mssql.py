@@ -309,10 +309,46 @@ def main():
     for r in mc.fetchall():
         cat_bucket[r["CategoryId"]] = bucket_for_cat(r["CategoryName"])
 
-    mc.execute("SELECT ItemId, ItemCode, CategoryId FROM Items")
-    itemid2code = {r["ItemId"]: (r["ItemCode"] or "").strip() for r in mc.fetchall()}
+    # Item NAME column: schema-probed, never guessed — vendor builds differ
+    # (ItemName / Name / Description / ItemDesc). Without it every lazily-created
+    # stub SKU kept description = code, so new-branch code series (THBF*/THAL*/
+    # OSN-PM-*) showed as raw codes across the UI forever. Degrades silently to
+    # the previous behaviour when no such column exists.
+    mc.execute("""SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_NAME='Items' AND DATA_TYPE IN
+                        ('nvarchar','varchar','nchar','char')""")
+    _item_cols = [r["COLUMN_NAME"] for r in mc.fetchall()]
+    name_col = next((c for c in ("ItemName", "Name", "Description", "ItemDesc",
+                                 "ItemNameThai", "ItemDescription")
+                     if c in _item_cols), None)
+    print(f"      Items name column = {name_col or 'NOT FOUND (stubs keep code as name)'}")
+
+    mc.execute(f"SELECT ItemId, ItemCode, CategoryId"
+               f"{', ' + name_col + ' AS ItemNm' if name_col else ''} FROM Items")
+    itemid2code, itemid2name = {}, {}
+    for r in mc.fetchall():
+        code = (r["ItemCode"] or "").strip()
+        itemid2code[r["ItemId"]] = code
+        if name_col:
+            nm = (r["ItemNm"] or "").strip()
+            if nm and nm != code:
+                itemid2name[r["ItemId"]] = nm
     item_map = {iid: code2sid[c] for iid, c in itemid2code.items() if c and c in code2sid}
     new_skus = 0                       # stubs added lazily (only for items that actually have sales)
+
+    # Backfill EXISTING stub SKUs (description still == sku_code) now that names
+    # are available — one-time self-heal, no re-ingest needed. Excel-ingested
+    # names already differ from the code, so they are never touched.
+    if itemid2name:
+        code2name = {itemid2code[i]: n for i, n in itemid2name.items() if itemid2code.get(i)}
+        stubs = sq.execute("SELECT sku_id, sku_code FROM skus "
+                           "WHERE description IS NULL OR TRIM(description)='' "
+                           "   OR description = sku_code").fetchall()
+        fixed = [(code2name[s["sku_code"]], s["sku_id"])
+                 for s in stubs if s["sku_code"] in code2name]
+        if fixed:
+            sq.executemany("UPDATE skus SET description=? WHERE sku_id=?", fixed)
+        print(f"      backfilled names on {len(fixed):,} stub skus (of {len(stubs):,} stubs)")
 
     print(f"      branches mapped={len(bid_map)} (unmatched/skipped={len(unmatched_branches)}: {unmatched_branches[:6]})")
     print(f"      items pre-mapped={len(item_map)} of {len(itemid2code)}")
@@ -342,7 +378,8 @@ def main():
                 skipped_rev += (r["sub_exvat"] or 0); continue
             max_sid += 1
             sq.execute("INSERT INTO skus(sku_id,sku_code,description,category_id,active,business_type) "
-                       "VALUES (?,?,?,?,1,?)", (max_sid, code, code, None, None))
+                       "VALUES (?,?,?,?,1,?)",
+                       (max_sid, code, itemid2name.get(r["iid"], code), None, None))
             code2sid[code] = max_sid; item_map[r["iid"]] = max_sid; sid = max_sid; new_skus += 1
         sub = round(r["sub_exvat"] or 0, 2); tax = round(r["tax"] or 0, 2)
         skum.append((bid, r["ym"], sid, round(r["qty"] or 0, 2), sub, tax, round(sub + tax, 2), "Easy"))

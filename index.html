@@ -1523,8 +1523,10 @@ body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color:
       <div id="home-action-queue" class="space-y-2.5"></div>
     </div>
 
-    <!-- Money-leak radar + yesterday's menu movers -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <!-- Money-leak radar + yesterday's menu movers.
+         items-start: the movers list is much taller than the leak tiles, and a
+         stretched leak card left a big blank half — each card sizes to content. -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5 items-start">
       <div class="card p-5">
         <h2 class="section-title mb-1">🔎 จับเงินรั่ว / ผิดปกติ <span id="home-leak-date" class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)"></span></h2>
         <p class="text-xs text-slate-400 mb-3">ส่วนลดหนัก ≥30% · เงินสด+ลดหนัก (เสี่ยงรั่ว) · บิลพิมพ์ซ้ำ · บิลลดล้วน</p>
