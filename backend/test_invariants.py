@@ -375,5 +375,34 @@ def test_sku_cost_beats_bom_and_zero_falls_through():
     assert uc["A0001"] == 10.0 and uc["A0002"] == 7.5
 
 
+# R6 — the derived cost table must NEVER carry a buffet-PACKAGE price.
+# sku_cost holds the package PRICE for tier codes (BUFFET = ฿679.08 against a
+# ~฿642 realised selling price), so materialising it into sku_effective_cost
+# left ฿1.07B of phantom COGS one un-guarded query away: every consumer had to
+# remember the _cogs_case tier exclusion. _build_sku_effective_cost now zeroes
+# tier codes at the source, making the safe answer the default.
+def test_effective_cost_never_carries_a_tier_package_price():
+    con = fresh_db()
+    # sanity: the fixture really does price the tier SKU (that is the trap)
+    priced = con.execute(
+        "SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0]
+    assert priced and priced > 0, "fixture must price the tier SKU for this test to mean anything"
+
+    main._build_sku_effective_cost(con, force=True)
+    eff = {r[0]: r[1] for r in con.execute(
+        "SELECT sku_id, recipe_cost FROM sku_effective_cost")}
+    assert eff[1] == 0, (
+        f"tier SKU BUFFET must have zero effective cost, got {eff[1]} — a "
+        f"package price leaked into the derived cost table")
+    # a real dish's cost is untouched (BoM fall-through is covered by R5 above,
+    # which seeds bom_ingredients; the bare fixture has none)
+    assert eff[2] == 10.0
+
+    # every code in the canonical tuple is covered, not just BUFFET
+    assert "BUFFET" in main._ALL_TIER_CODES
+    for code in main._ALL_TIER_CODES:
+        assert f"'{code}'" in main._ALL_TIER_CODES_SQL, f"{code} missing from the SQL list"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

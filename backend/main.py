@@ -2213,6 +2213,8 @@ _EASY_TIER_CODES_SQL = "('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799
 # Legacy buffet tier-level codes (no item breakdown) — kept as a SKU exclusion list.
 _LEGACY_TIER_CODES = ('B01','B02','B03','B07','B11')
 _ALL_TIER_CODES = _EASY_TIER_CODES + _LEGACY_TIER_CODES
+# Derived from the tuple (never hand-maintained — that drift is bug class #7).
+_ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in _ALL_TIER_CODES) + ")"
 
 
 def _effective_cost_subquery(ssm: str = "ssm", sc: str = "sc") -> str:
@@ -2350,15 +2352,26 @@ def _build_sku_effective_cost(con, force: bool = True):
                 return
         except Exception:
             pass
+    # Buffet-PACKAGE codes are forced to 0 here, at the source of the derived
+    # table. Their sku_cost row holds the package PRICE, not a cost (BUFFET =
+    # ฿679.08 vs a realised ฿642 average selling price) — the package's real
+    # cost is the dishes guests actually eat, which are costed individually.
+    # Every COGS path already zeroes these via _cogs_case/_unified_cogs_expr,
+    # but that left ฿1.07B of phantom cost one un-guarded query away: any new
+    # code reading sku_effective_cost directly would book it. Zeroing the
+    # derived value makes the safe answer the DEFAULT instead of something each
+    # caller must remember. Survives a price-as-cost re-upload, since this table
+    # is rebuilt from sku_cost on every cache flush / startup.
     rows = con.execute(
-        """
-        SELECT s.sku_id, COALESCE(
+        f"""
+        SELECT s.sku_id,
+               CASE WHEN s.sku_code IN {_ALL_TIER_CODES_SQL} THEN 0 ELSE COALESCE(
             (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
             (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = s.sku_id),
             (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
                JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id
                WHERE a.bom_sku_code = s.sku_code),
-            0) AS rc
+            0) END AS rc
         FROM skus s
         """
     ).fetchall()
