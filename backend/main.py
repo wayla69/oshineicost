@@ -1602,6 +1602,205 @@ def upload_file(
                 pass
 
 
+# ---------------------------------------------------------------------------
+# /api/market   -  external market & industry context for the Home brief.
+# Two parts:
+#   (1) CURATED, SOURCED figures (Thai macro + F&B + Japanese-buffet segment).
+#       Hand-compiled from public reports — update MARKET_* + MARKET_AS_OF when
+#       refreshing. These are static, so they never break the page.
+#   (2) LIVE news-headline strip fetched server-side from Google News RSS,
+#       cached with a TTL and degrading gracefully (status flag) so a slow or
+#       blocked feed can never break the dashboard.
+# stdlib only (urllib + xml.etree) — no new pip dependency. NOT wrapped in the
+# 5-min response cache so a transient feed failure isn't cached as "unavailable".
+# ---------------------------------------------------------------------------
+MARKET_AS_OF = "2025 actuals + 2026F · refreshed 2026-06"   # vintage of curated data
+
+MARKET_MACRO = [
+    {"label": "GDP Growth (TH)",     "value": "+2.4%",  "year": "2025",     "trend": "down",
+     "sub": "2026F ~+1.7–2.0% — slowing",             "source": "BoT / Min. of Finance"},
+    {"label": "Headline Inflation",  "value": "~0%",    "year": "2025",     "trend": "flat",
+     "sub": "2026F ~+1% — subdued",                   "source": "IMF / BoT"},
+    {"label": "Consumer Confidence", "value": "50.6",   "year": "Apr 2026", "trend": "down",
+     "sub": "lowest since Aug — demand soft",         "source": "UTCC"},
+    {"label": "Foreign Tourists",    "value": "32.9M",  "year": "2025",     "trend": "down",
+     "sub": "−7.2% YoY — first drop since COVID",      "source": "TAT"},
+]
+
+MARKET_INDUSTRY = [
+    {"label": "TH Foodservice market",     "value": "$38.1B",
+     "sub": "2026F · +7.6% YoY (CAGR ~7.6% to 2031)",          "source": "Mordor Intelligence"},
+    {"label": "Restaurant sales growth",   "value": "+4–5%/yr",
+     "sub": "2024–26 · restaurants = 93% of F&B income",       "source": "Krungsri Research"},
+    {"label": "Japanese restaurants (TH)", "value": "5,916",
+     "sub": "2024 census · +2.9% YoY (+165 outlets)",          "source": "JETRO Bangkok"},
+    {"label": "Japanese segment growth",   "value": "+6.0%/yr",
+     "sub": "$1.45B (2025) → $2.31B (2033) · buffet = price wars, thin margins", "source": "Phoenix Research"},
+]
+
+# Annual industry growth used as the benchmark line against the chain's own YoY.
+MARKET_BENCHMARK = {
+    "industry_growth_pct": 6.0,     # blended TH restaurant/foodservice growth (2026)
+    "jp_segment_growth_pct": 6.0,   # Japanese-restaurant segment CAGR (2026–33)
+    "label": "TH foodservice ~+7.6%/yr · restaurant ~+4–5% · Japanese ~+6%/yr",
+}
+
+MARKET_SOURCES = [
+    {"name": "Bank of Thailand — Economic Outlook",
+     "url": "https://www.bot.or.th/en/thai-economy/economic-outlook.html"},
+    {"name": "IMF — Thailand 2025 Article IV",
+     "url": "https://www.imf.org/en/news/articles/2026/02/13/pr26048-thailand-imf-executive-board-concludes-2025-article-iv-consultation-with-thailand"},
+    {"name": "Mordor Intelligence — Thailand Foodservice Market",
+     "url": "https://www.mordorintelligence.com/industry-reports/thailand-foodservice-market"},
+    {"name": "Krungsri Research — F&B / Restaurant Outlook 2024-26",
+     "url": "https://www.krungsri.com/en/research/industry/industry-outlook/services/food-beverages/io/io-food-beverage-restaurant-2024-2026"},
+    {"name": "JETRO — Japanese restaurants in Thailand (≈5,916)",
+     "url": "https://www.nationthailand.com/business/economy/40045018"},
+    {"name": "Phoenix Research — Thailand Japanese Restaurant Market",
+     "url": "https://www.pheonixresearch.com/food-beverages/foodservice-restaurant/market-report/thailand-japanese-restaurant-market/"},
+]
+
+_MARKET_NEWS_CACHE = {"ts": 0.0, "items": None}
+_MARKET_NEWS_TTL = 3 * 3600   # 3 hours
+
+def _fetch_market_news():
+    """Fetch a few Thailand restaurant-industry headlines from Google News RSS.
+    Returns (items, status) where status ∈ {'ok','stale','unavailable'}.
+    Never raises — degrades gracefully so the Home page never breaks."""
+    import time as _t
+    now = _t.time()
+    cache = _MARKET_NEWS_CACHE
+    if cache["items"] is not None and (now - cache["ts"]) < _MARKET_NEWS_TTL:
+        return cache["items"], "ok"
+    try:
+        import urllib.request as _u, urllib.parse as _up, xml.etree.ElementTree as _ET
+        q = _up.quote('Thailand restaurant industry OR ร้านอาหาร')
+        url = f"https://news.google.com/rss/search?q={q}&hl=en-US&gl=US&ceid=US:en"
+        req = _u.Request(url, headers={"User-Agent": "Mozilla/5.0 (OshineiDashboard)"})
+        with _u.urlopen(req, timeout=6) as resp:
+            raw = resp.read()
+        root = _ET.fromstring(raw)
+        items = []
+        for it in root.findall(".//item")[:6]:
+            title = (it.findtext("title") or "").strip()
+            link  = (it.findtext("link") or "").strip()
+            pub   = (it.findtext("pubDate") or "").strip()
+            src_el = it.find("source")
+            src = (src_el.text.strip() if src_el is not None and src_el.text else "")
+            if src and title.endswith(f" - {src}"):
+                title = title[: -(len(src) + 3)].strip()
+            if title and link:
+                items.append({"title": title, "url": link, "source": src, "published": pub})
+        if items:
+            cache["items"] = items
+            cache["ts"] = now
+            return items, "ok"
+        if cache["items"]:
+            return cache["items"], "stale"
+        return [], "unavailable"
+    except Exception:
+        if cache["items"]:
+            return cache["items"], "stale"
+        return [], "unavailable"
+
+
+_MARKET_QUOTES_CACHE = {"ts": 0.0, "items": None}
+_MARKET_QUOTES_TTL = 30 * 60   # 30 min — intraday but not real-time
+
+def _yahoo_quote(symbol):
+    """(price, prev_close) for a Yahoo Finance symbol via its public chart API,
+    or (None, None) on any failure. Used for live FX / gold / oil quotes."""
+    import urllib.request as _u, json as _j
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1d&range=5d"
+    req = _u.Request(url, headers={"User-Agent": "Mozilla/5.0 (OshineiDashboard)"})
+    with _u.urlopen(req, timeout=6) as resp:
+        d = _j.loads(resp.read())
+    meta = d["chart"]["result"][0]["meta"]
+    return meta.get("regularMarketPrice"), meta.get("chartPreviousClose")
+
+def _fetch_market_quotes():
+    """Live macro quotes — FX (USD/JPY/RMB vs THB), oil (WTI/Brent) and gold — from
+    Yahoo Finance, cached 30 min. Gives the owner a macro/cost picture: import cost via
+    FX (esp. JPY for Japanese ingredients), energy/transport via oil, inflation via gold.
+    NOTE on source: the owner asked for investing.com, but investing.com has no public
+    API and Cloudflare-blocks datacenter IPs (the Fly host), so a scrape would be fragile
+    and break silently. Yahoo Finance tracks the same global spot rates and is reliable.
+    Each symbol is fetched independently so one hiccup can't blank the whole strip.
+    Never raises; degrades to last-known/empty gracefully. Returns (items, status)."""
+    import time as _t
+    now = _t.time()
+    cache = _MARKET_QUOTES_CACHE
+    if cache["items"] is not None and (now - cache["ts"]) < _MARKET_QUOTES_TTL:
+        return cache["items"], "ok"
+
+    def q(sym, tries=3):
+        # Yahoo occasionally returns an empty/garbled body for a single symbol;
+        # a quick retry almost always succeeds, so the important quotes (USD/THB)
+        # don't silently drop out of the strip.
+        for _ in range(tries):
+            try:
+                r = _yahoo_quote(sym)
+                if r and r[0]:
+                    return r
+            except Exception:
+                pass
+            _t.sleep(0.4)
+        return (None, None)
+
+    usdthb, usdthb_prev = q("THB=X")
+    jpythb, jpythb_prev = q("JPYTHB=X")   # THB per 1 JPY
+    cnythb, cnythb_prev = q("CNYTHB=X")   # THB per 1 CNY (RMB)
+    gold,   gold_prev   = q("GC=F")
+    wti,    wti_prev    = q("CL=F")
+    brent,  brent_prev  = q("BZ=F")
+
+    def chg(p, pv):
+        return round((p - pv) / pv * 100, 1) if (p and pv) else None
+
+    items = []
+    if usdthb:
+        c = chg(usdthb, usdthb_prev)
+        sub = "อัตราแลกเปลี่ยน"
+        if c is not None:
+            sub = "เงินบาทอ่อนค่า — นำเข้าแพงขึ้น" if c > 0 else "เงินบาทแข็งค่า — นำเข้าถูกลง" if c < 0 else "ทรงตัว"
+        items.append({"label": "USD/THB", "value": f"{usdthb:.2f}", "change_pct": c, "sub": sub})
+    if jpythb:
+        c = chg(jpythb, jpythb_prev)   # ratio change is the same whether per-1 or per-100 yen
+        sub = "เยน vs บาท"
+        if c is not None:
+            sub = "เยนแข็ง — วัตถุดิบญี่ปุ่นแพงขึ้น" if c > 0 else "เยนอ่อน — วัตถุดิบญี่ปุ่นถูกลง" if c < 0 else "ทรงตัว"
+        items.append({"label": "JPY/THB (100¥)", "value": f"{jpythb * 100:.2f}", "change_pct": c, "sub": sub})
+    if cnythb:
+        c = chg(cnythb, cnythb_prev)
+        items.append({"label": "CNY/THB (หยวน)", "value": f"{cnythb:.2f}", "change_pct": c, "sub": "หยวน vs บาท · นักท่องเที่ยว/นำเข้าจีน"})
+    if gold:
+        c = chg(gold, gold_prev)
+        thb_baht = gold * usdthb * (15.244 / 31.1035) if usdthb else None   # THB per 1 baht-weight
+        items.append({"label": "ทองคำ (Gold)", "value": f"${gold:,.0f}/oz", "change_pct": c,
+                      "sub": f"~฿{thb_baht:,.0f}/บาททอง" if thb_baht else "ราคาทองโลก · เครื่องชี้เงินเฟ้อ"})
+    if wti:
+        c = chg(wti, wti_prev)
+        items.append({"label": "น้ำมัน WTI", "value": f"${wti:.1f}/บาร์เรล", "change_pct": c,
+                      "sub": "ต้นทุนพลังงาน/ขนส่ง"})
+    if brent:
+        c = chg(brent, brent_prev)
+        items.append({"label": "น้ำมัน Brent", "value": f"${brent:.1f}/บาร์เรล", "change_pct": c,
+                      "sub": "อ้างอิงราคาน้ำมันโลก"})
+    # Only cache a set that has the USD/THB anchor — never let a partial fetch
+    # (e.g. a Yahoo hiccup that dropped the key quotes) overwrite a good cache.
+    if items and usdthb:
+        cache["items"] = items
+        cache["ts"] = now
+        return items, "ok"
+    if cache["items"]:
+        return cache["items"], "stale"
+    if items:
+        return items, "ok"          # first run, partial — better than nothing
+    return [], "unavailable"
+
+
+
+
 @app.get("/api/market")
 def api_market():
     """Curated market/industry context + live (server-fetched) news + macro quotes."""
