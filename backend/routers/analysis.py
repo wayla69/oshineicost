@@ -2522,6 +2522,25 @@ def analysis_yoy(
         else:
             ly_rev_map = {}
 
+        # Day-count + trading-branch set per month, for the like-for-like guard
+        # below (a month with 9 days and 7 branches cannot be compared to a full
+        # month with 26 as if the difference were performance).
+        _yoy_cov: dict = {}
+        _cov_months = sorted({m for m in cur_months} | set(ly_months_unique))
+        if _cov_months:
+            cph = ",".join(f":c{i}" for i in range(len(_cov_months)))
+            for x in con.execute(f"""
+                SELECT strftime('%Y-%m', st.sold_at) m, b.name br,
+                       COUNT(DISTINCT date(st.sold_at)) days
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE b.name != 'ALL' AND strftime('%Y-%m', st.sold_at) IN ({cph})
+                  {where_branch}
+                GROUP BY m, b.name""",
+                {**params, **{f"c{i}": m for i, m in enumerate(_cov_months)}}).fetchall():
+                e = _yoy_cov.setdefault(x["m"], {"days": 0, "branches": set()})
+                e["branches"].add(x["br"])
+                e["days"] = max(e["days"], x["days"] or 0)
+
         out = []
         for r in rng:
             cur_mo = r["period_month"]
@@ -2529,12 +2548,47 @@ def analysis_yoy(
             ly_mo  = f"{int(yr)-1}-{mo}"
             ly_rev = ly_rev_map.get(ly_mo, 0)
             yoy_pct = ((r["revenue"] - ly_rev) / ly_rev * 100) if ly_rev > 0 else None
+            # LIKE-FOR-LIKE guard. The chain grew 7 → 27 branches and the first
+            # data month (2025-05) holds only 9 days, so a raw month-vs-month YoY
+            # reported +1991% — branch roll-out and partial coverage, not growth.
+            # `same_store_pct` re-runs the comparison over ONLY the branches that
+            # traded in BOTH months and, when either month is partial, only the
+            # overlapping day-of-month window. `comparable` is False when the raw
+            # figure is structurally misleading, so the UI can lead with the fair
+            # number and mark the raw one. Same philosophy as the weekday-fair MoM.
+            cov = _yoy_cov.get(cur_mo, {}); lcov = _yoy_cov.get(ly_mo, {})
+            cur_days, ly_days = cov.get("days", 0), lcov.get("days", 0)
+            cur_brs, ly_brs = cov.get("branches", set()), lcov.get("branches", set())
+            both = cur_brs & ly_brs
+            ss_pct = None
+            if both and ly_days and cur_days:
+                d_cut = min(cur_days, ly_days)          # overlapping day window
+                ph = ",".join(f":b{i}" for i in range(len(both)))
+                ss_p = {f"b{i}": b for i, b in enumerate(sorted(both))}
+                ss = con.execute(f"""
+                    SELECT strftime('%Y-%m', st.sold_at) m,
+                           ROUND(SUM(st.total_inc_vat)/1.07, 2) rev
+                    FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                    WHERE b.name IN ({ph}) AND strftime('%Y-%m', st.sold_at) IN (:cm, :lm)
+                      AND CAST(strftime('%d', st.sold_at) AS INT) <= :d
+                    GROUP BY m""",
+                    {**ss_p, "cm": cur_mo, "lm": ly_mo, "d": d_cut}).fetchall()
+                sm = {x["m"]: (x["rev"] or 0) for x in ss}
+                if sm.get(ly_mo, 0) > 0:
+                    ss_pct = round((sm.get(cur_mo, 0) - sm[ly_mo]) / sm[ly_mo] * 100, 1)
+            comparable = bool(both) and ly_days >= 20 and abs(len(cur_brs) - len(ly_brs)) <= 2
             out.append({
                 "period_month": cur_mo,
                 "revenue":      r["revenue"],
                 "ly_period":    ly_mo,
                 "ly_revenue":   ly_rev,
                 "yoy_pct":      round(yoy_pct, 1) if yoy_pct is not None else None,
+                # comparability context
+                "comparable":       comparable,
+                "same_store_pct":   ss_pct,
+                "cur_days":         cur_days,  "ly_days":     ly_days,
+                "cur_branches":     len(cur_brs), "ly_branches": len(ly_brs),
+                "same_store_count": len(both),
             })
     return out
 

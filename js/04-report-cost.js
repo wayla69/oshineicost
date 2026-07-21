@@ -374,7 +374,12 @@ async function loadReport() {
   alerts.push(`🗓️ <b>เดือนล่าสุดที่จบแล้ว:</b> ${mLastLabel} · สรุปด้านบนเป็น<b>รายเดือนเต็ม</b> (MoM/YoY เทียบเดือนเต็มต่อเดือนเต็ม)${(partialMonth && mPartial) ? ` · <b>${fmtMonth(partialMonth)}</b> ยังไม่จบ (ข้อมูลถึงวันที่ ${dataWin.max_day}) แสดงเป็น MTD ใน §2 ไม่นำมาเทียบ` : ''} · ยอดรวมทั้งช่วง ${trend.length} เดือน = ${fmt(periodTotalRev)}`);
   const latestYoy = yoy[yoy.length-1];
   if (latestYoy && latestYoy.yoy_pct != null) {
-    alerts.push(`📊 <b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
+    // Prefer the like-for-like figure when the raw one is structurally unfair
+    // (branch roll-out / partial month) — see the guard in /api/analysis/yoy.
+    alerts.push(
+      (!latestYoy.comparable && latestYoy.same_store_pct != null)
+        ? `📊 <b>YoY ${latestYoy.period_month} (เทียบสาขาเดิม):</b> ${latestYoy.same_store_pct>=0?'+':''}${latestYoy.same_store_pct.toFixed(1)}% vs ${latestYoy.ly_period} · <span style="color:#d97706">ตัวเลขดิบ ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% รวมผลขยายสาขา (${latestYoy.ly_branches}→${latestYoy.cur_branches} สาขา)</span>`
+        : `📊 <b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
   }
   const cs = costAnalysis.summary || {};
   if (cs.overall_margin_pct != null) {
@@ -1157,8 +1162,12 @@ async function loadReport() {
     `อัตราการให้ส่วนลดรวมเกิน 10% — ตรวจสอบประสิทธิภาพโปรโมชั่น.`,
     `ส่วนลดรวม ${fmtN(discOverall.total_discount||0)} บาท`);
 
-  if (latestYoy && latestYoy.yoy_pct != null && latestYoy.yoy_pct < 0) pushA('high', 'ผู้บริหาร',
-    `รายได้ลดลง YoY <b>${latestYoy.yoy_pct.toFixed(1)}%</b> (${latestYoy.period_month} เทียบ ${latestYoy.ly_period}) — เจาะหาสาขา/เมนูที่ฉุดยอด.`,
+  // Only raise the YoY-decline action on a figure that is actually comparable —
+  // a raw drop caused by a partial current month is not a business problem.
+  const _yoyAct = (latestYoy && !latestYoy.comparable && latestYoy.same_store_pct != null)
+    ? latestYoy.same_store_pct : (latestYoy ? latestYoy.yoy_pct : null);
+  if (_yoyAct != null && _yoyAct < 0) pushA('high', 'ผู้บริหาร',
+    `รายได้ลดลง YoY <b>${_yoyAct.toFixed(1)}%</b> (${latestYoy.period_month} เทียบ ${latestYoy.ly_period}${latestYoy.comparable ? '' : ' · เทียบสาขาเดิม'}) — เจาะหาสาขา/เมนูที่ฉุดยอด.`,
     `แนวโน้มรายได้`);
 
   if (forecastBranches && forecastBranches.available) {

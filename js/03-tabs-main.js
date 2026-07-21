@@ -1268,6 +1268,17 @@ async function loadTrendChart() {
                 const pct = yoy.yoy_pct;
                 const arrow = pct >= 0 ? '▲' : '▼';
                 lines.push(`YoY: ${fmtN(yoy.ly_revenue)} (${arrow}${Math.abs(pct).toFixed(1)}%)`);
+                // The raw YoY compares whatever traded in each month — with the
+                // chain growing 7→27 branches (and partial first/current months)
+                // that reads as growth it isn't. Lead with the like-for-like
+                // number whenever the raw one is structurally unfair.
+                if (!yoy.comparable) {
+                  if (yoy.same_store_pct != null) {
+                    const a2 = yoy.same_store_pct >= 0 ? '▲' : '▼';
+                    lines.push(`เทียบสาขาเดิม: ${a2}${Math.abs(yoy.same_store_pct).toFixed(1)}% (${yoy.same_store_count} สาขา, ${Math.min(yoy.cur_days, yoy.ly_days)} วันเท่ากัน)`);
+                  }
+                  lines.push(`⚠ ปีก่อนมี ${yoy.ly_branches} สาขา/${yoy.ly_days} วัน · ปีนี้ ${yoy.cur_branches}/${yoy.cur_days}`);
+                }
               }
               const tgt = targetMap[period];
               if (tgt) {

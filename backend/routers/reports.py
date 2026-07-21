@@ -17,6 +17,7 @@ router = APIRouter()
 
 M = _sys.modules.get("backend.main") or _sys.modules["main"]
 _SHARED = (
+    '_ALL_TIER_CODES_SQL',
     'HTTPException',
     'Optional',
     'Query',
@@ -1849,6 +1850,61 @@ def report_management(
         mtd_days = mtd_row["days"] or 0
         bom_cost = bom_row["cost"] if bom_row else None
         food_cost_pct = round(bom_cost/mtd_rev*100, 1) if bom_cost and mtd_rev else None
+
+        # ---- cost-data COVERAGE for that month (why food-cost% is a FLOOR) ------
+        # A dish with no unit cost contributes ฿0 COGS, so the headline food-cost %
+        # is understated by exactly the dishes we haven't costed yet — silently.
+        # Coverage must be weighted by PLATES, not revenue: buffet dishes carry ~฿0
+        # line revenue by design, so a revenue-weighted number says "fine" while a
+        # tenth of the plates served are free-of-charge in the P&L.
+        # `est_food_cost_pct` prices the uncosted plates at the average cost of the
+        # plates we DO cost — a first-order estimate, flagged as such, never booked.
+        # same effective-cost expression, aliased for sales_sku_monthly (`s.`)
+        _eff_cost_m = ("COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec "
+                       "WHERE sec.sku_id=s.sku_id),"
+                       " (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id), 0)")
+        cost_coverage = None
+        try:
+            cc = con.execute(f"""
+                SELECT ROUND(SUM(s.qty)) plates,
+                       ROUND(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty ELSE 0 END)) plates_costed,
+                       ROUND(AVG(CASE WHEN {_eff_cost_m} > 0 THEN {_eff_cost_m} END), 2) avg_unit_cost,
+                       COUNT(DISTINCT s.sku_id) skus,
+                       COUNT(DISTINCT CASE WHEN {_eff_cost_m} = 0 THEN s.sku_id END) skus_uncosted
+                FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+                JOIN branches b ON b.branch_id=s.branch_id
+                WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+                  AND s.sku_id IN {food_sub}""", mp).fetchone()
+            plates = (cc["plates"] or 0) if cc else 0
+            if plates:
+                costed = cc["plates_costed"] or 0
+                gap    = plates - costed
+                avg_uc = cc["avg_unit_cost"] or 0
+                est_missing = round(gap * avg_uc)
+                cost_coverage = {
+                    "plates": plates, "plates_costed": costed,
+                    "coverage_pct": round(costed / plates * 100, 1),
+                    "uncosted_plates": gap,
+                    "skus": cc["skus"], "skus_uncosted": cc["skus_uncosted"],
+                    "est_missing_cost": est_missing,
+                    "est_food_cost_pct": (round((bom_cost + est_missing) / mtd_rev * 100, 1)
+                                          if (bom_cost and mtd_rev) else None),
+                }
+                # worklist: the biggest uncosted dishes BY PLATES (revenue ranks
+                # buffet dishes at ~0, which is why they were never chased)
+                cost_coverage["top_uncosted"] = [
+                    {"menu": clean(r["description"] or r["sku_code"]),
+                     "sku_code": r["sku_code"], "plates": round(r["qty"] or 0)}
+                    for r in con.execute(f"""
+                        SELECT sk.sku_code, sk.description, SUM(s.qty) qty
+                        FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+                        JOIN branches b ON b.branch_id=s.branch_id
+                        WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+                          AND s.sku_id IN {food_sub} AND {_eff_cost_m} = 0
+                        GROUP BY sk.sku_id ORDER BY qty DESC LIMIT 8""", mp).fetchall()]
+        except Exception:
+            cost_coverage = None
+
         days_total = _cal.monthrange(ref_anchor.year, ref_anchor.month)[1]
         # MTD up to the latest data for the current month; a full (past) month otherwise.
         days_elapsed = latest_day.day if cur_month == maxd[:7] else days_total
@@ -1870,6 +1926,7 @@ def report_management(
             "projected": projected, "target": target or None,
             "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
             "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
+            "cost_coverage": cost_coverage,
         }
         # `prev_month`: previous calendar month — full total, the SAME-elapsed-days MTD
         # (fair MTD-vs-MTD when the current month is partial) and its BoM food-cost %.

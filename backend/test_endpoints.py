@@ -666,3 +666,21 @@ def test_management_gp_never_fake_100pct_without_cost_data(client):
         # a real cost basis must produce a sane margin, never 100%
         assert gp["food_cost"] and gp["food_cost"] > 0
         assert gp["gp_pct"] is not None and gp["gp_pct"] < 99.9
+
+
+def test_yoy_carries_like_for_like_guard(client):
+    """Regression: raw YoY compared whatever traded in each month, so a chain
+    that grew 7→27 branches reported +1991% 'growth'. Every row must carry the
+    comparability context and a same-store figure when the raw one is unfair."""
+    rows = client.get("/api/analysis/yoy",
+                      params={"month_from": "2026-05", "month_to": "2026-06"}).json()
+    assert rows, "fixture must produce yoy rows"
+    for r in rows:
+        for k in ("comparable", "same_store_pct", "cur_days", "ly_days",
+                  "cur_branches", "ly_branches", "same_store_count"):
+            assert k in r, f"{k} missing from yoy row"
+        assert isinstance(r["comparable"], bool)
+        # a month judged comparable must not be built on a partial year-ago month
+        if r["comparable"]:
+            assert r["ly_days"] >= 20
+            assert abs(r["cur_branches"] - r["ly_branches"]) <= 2

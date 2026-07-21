@@ -535,6 +535,15 @@ function renderMgtReport(j, jM, jF) {
   })();
   const momBadge = (P.mom_pct != null) ? ' · MoM ' + wow(P.mom_pct) : '';
   const fcPrevTxt = (P.food_cost_pct_prev != null) ? T.lastMonthSp + P.food_cost_pct_prev.toFixed(1) + '%' : '';
+  // Food cost % is a FLOOR: dishes with no unit cost book ฿0 COGS. Disclose the
+  // plate-coverage and the estimated true figure so the headline is never read
+  // as exact. Silent below ~99.5% coverage would be the dishonest choice.
+  const _cc = P.cost_coverage;
+  const _fcCoverageNote = (_cc && _cc.coverage_pct != null && _cc.coverage_pct < 99.5)
+    ? `<br><span style="color:#d97706">${isTH
+        ? `ครอบคลุม ${_cc.coverage_pct}% ของจาน${_cc.est_food_cost_pct != null ? ` · ประมาณการจริง ~${_cc.est_food_cost_pct}%` : ''}`
+        : `covers ${_cc.coverage_pct}% of plates${_cc.est_food_cost_pct != null ? ` · est. true ~${_cc.est_food_cost_pct}%` : ''}`}</span>`
+    : '';
   // Weekday-fair MoM (backend mom_basis === 'dow' while the month is partial):
   // the shown baseline is last month's per-weekday norm summed over the same
   // elapsed weekdays, so a Wed+Thu sliver is never judged against a holiday Mon+Tue.
@@ -548,7 +557,8 @@ function renderMgtReport(j, jM, jF) {
       ${kpi(mc ? T.monthNetSales : T.mtdNetSales, baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? T.days : T.daysSoFar) + momBadge)}
       ${kpi(mc ? T.monthTotal : T.projMonthEnd, baht(P.projected), mc ? T.actual : (P.proj_method === 'dow' ? T.runRateDow : T.runRate))}
       ${kpi(T.revTarget, baht(P.target), (pvt != null ? (mc ? T.actualSp : T.projectionSp) + pvt.toFixed(0) + T.ofTarget : T.noTarget))}
-      ${kpi(T.foodCostPct + (mc ? '' : T.mtdSuffix), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'), T.bomBasis + fcPrevTxt)}
+      ${kpi(T.foodCostPct + (mc ? '' : T.mtdSuffix), (P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—'),
+            T.bomBasis + fcPrevTxt + _fcCoverageNote)}
     </div>` + lastMonthCaption + weeklyBars + (() => {
     if (!hasSplit) return '';
     const PM = jM.pace || {}, PF = jF.pace || {};
@@ -744,12 +754,32 @@ function renderMgtReport(j, jM, jF) {
     : (M.total_cph != null)
     ? `<p class="text-xs text-slate-500 mb-3">${T.totFoodHead}<b>${cph(M.total_cph)}</b>${M.total_cph_prev != null ? ` (${T.was} ${cph(M.total_cph_prev)}${M.total_cph_delta != null ? `, ${M.total_cph_delta >= 0 ? '+' : '−'}฿${cnum(Math.abs(M.total_cph_delta))}` : ''})` : ''} · ${num(M.covers)}${T.overCovers}</p>`
     : '';
+  // Actionable worklist: the biggest dishes with NO unit cost, ranked by plates.
+  // Ranking these by revenue (the old coverage view) hid them entirely — buffet
+  // dishes carry ~฿0 line revenue, so the costliest gaps never surfaced.
+  const uncostedBlock = (() => {
+    const cc = P.cost_coverage;
+    if (!cc || !(cc.top_uncosted || []).length || cc.coverage_pct >= 99.5) return '';
+    const rows = cc.top_uncosted.map((x, i) => `<li class="flex items-center gap-2 py-1 border-b border-slate-50 text-sm">
+        <span class="text-slate-400 tabular-nums w-4 text-right">${i + 1}</span>
+        <span class="truncate flex-1">${esc(x.menu)}</span>
+        <span class="text-slate-400 text-[11px] tabular-nums">${num(x.plates)} ${isTH ? 'จาน' : 'plates'}</span>
+      </li>`).join('');
+    return `<div class="mt-4 pt-3 border-t border-slate-100">
+        <p class="text-xs font-semibold mb-1" style="color:#d97706">${isTH
+          ? `⚠️ เมนูที่ยังไม่มีต้นทุน — ${num(cc.uncosted_plates)} จาน (${cc.skus_uncosted} รายการ) ทำให้ต้นทุนอาหารต่ำกว่าจริงราว ฿${num(cc.est_missing_cost)}`
+          : `⚠️ Dishes with no unit cost — ${num(cc.uncosted_plates)} plates (${cc.skus_uncosted} SKUs) understate food cost by about ฿${num(cc.est_missing_cost)}`}</p>
+        <p class="text-[10px] text-slate-400 mb-2">${isTH
+          ? 'เรียงตามจำนวนจาน (ไม่ใช่ยอดขาย — เมนูบุฟเฟ่ต์ไม่มีรายได้รายบรรทัด) · เติมต้นทุนที่ ตั้งค่า → Cost Management'
+          : 'ranked by plates, not revenue (buffet dishes carry no line revenue) · add costs in Settings → Cost Management'}</p>
+        <ul>${rows}</ul></div>`;
+  })();
   const noCmp = j.has_prev ? T.none : T.noCompPeriod;
   const menu = totLine + `<div class="grid grid-cols-1 md:grid-cols-3 gap-5">
       <div><p class="text-xs font-semibold text-slate-500 mb-1">${T.highestCostHead}</p>${listT(M.top, T.noData)}</div>
       <div><p class="text-xs font-semibold text-slate-500 mb-1">${T.costHeadRising}${compShort}</p>${listM(M.risers, noCmp)}</div>
       <div><p class="text-xs font-semibold text-slate-500 mb-1">${T.costHeadFalling}${compShort}</p>${listM(M.savers, noCmp)}</div>
-    </div>`;
+    </div>` + uncostedBlock;
 
   // §8 — Peak Hours & Dayparts
   const PK = j.peak || {};
