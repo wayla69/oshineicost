@@ -1552,24 +1552,54 @@ def report_management(
         sw = " AND ".join(sb)
         _eff_cost = ("COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id),"
                      " (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=d.sku_id), 0)")
+        # sales_sku_daily is a ROLLING window (currently starts 2026-03-22) while
+        # sales_sku_monthly carries full history. Reading daily blindly made every
+        # pre-coverage month report ฿0 food cost — i.e. GP 100% — instead of saying
+        # "no data". Resolve the source per window: daily when covered, the monthly
+        # table when the window is exactly whole calendar months (the monthly
+        # report's case — same tier-safe cost expr, so the numbers tie out), else
+        # unavailable so the UI can show "—" rather than a fake zero.
+        _dmin_row = con.execute("SELECT MIN(day) d FROM sales_sku_daily").fetchone()
+        daily_min = (_dmin_row["d"] if _dmin_row else None) or "9999-99-99"
+
+        def _whole_months(s, e):
+            return s.day == 1 and e == _dt.date(e.year, e.month,
+                                                _cal.monthrange(e.year, e.month)[1])
+
         def menu_cost_map(s, e):
-            rows = con.execute(f"""
-                SELECT d.sku_id, s.description, s.sku_code,
-                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
-                FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
-                JOIN skus s ON s.sku_id=d.sku_id
-                WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
-                GROUP BY d.sku_id""", {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-            return {r["sku_id"]: r for r in rows}
+            """→ (rows_by_sku_id, source) where source ∈ daily|monthly|unavailable."""
+            if s.isoformat() >= daily_min:
+                rows = con.execute(f"""
+                    SELECT d.sku_id, s.description, s.sku_code,
+                           SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                    FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+                    JOIN skus s ON s.sku_id=d.sku_id
+                    WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
+                    GROUP BY d.sku_id""",
+                    {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
+                return {r["sku_id"]: r for r in rows}, "daily"
+            if _whole_months(s, e):
+                rows = con.execute(f"""
+                    SELECT d.sku_id, s.description, s.sku_code,
+                           SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                    FROM sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
+                    JOIN skus s ON s.sku_id=d.sku_id
+                    WHERE {sw} AND d.period_month BETWEEN :s AND :e
+                      AND d.sku_id IN {food_sub}
+                    GROUP BY d.sku_id""",
+                    {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchall()
+                return {r["sku_id"]: r for r in rows}, "monthly"
+            return {}, "unavailable"
         def clean(nm):
             return (nm or "").replace("(A) ", "").replace("(B) ", "").strip()
         covers_cur  = cur["customers"] or 0
         covers_prev = (prev["customers"] or 0) if prev else 0
         try:
-            cur_m  = menu_cost_map(cs, ce)
-            prev_m = menu_cost_map(ps, pe) if has_prev else {}
+            cur_m,  cost_src = menu_cost_map(cs, ce)
+            prev_m, _        = menu_cost_map(ps, pe) if has_prev else ({}, None)
         except Exception:
-            cur_m, prev_m = {}, {}
+            cur_m, prev_m, cost_src = {}, {}, "unavailable"
+        cost_available = cost_src != "unavailable"
         def cph(cost, covers): return round(cost / covers, 2) if covers else None
         cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
         menu_rows = []
@@ -1619,6 +1649,9 @@ def report_management(
             "total_cph_delta": (round((total_cph or 0) - (total_cph_prev or 0), 2)
                                 if (total_cph is not None and total_cph_prev is not None) else None),
             "top": cost_top, "risers": cost_up, "savers": cost_down,
+            # which table the dish costs came from — 'unavailable' means the window
+            # predates sales_sku_daily and isn't whole calendar months
+            "cost_basis": cost_src, "cost_from": daily_min,
         }
 
         # ---- buffet price-tier split (tier-dimensioned menu_fact_*; optional) ----
@@ -1759,17 +1792,26 @@ def report_management(
             tier_out = None
 
         # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
-        gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
-        gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
-        gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
-                       if (cmp_ok and prev and prev["revenue"]) else None)
-        gp = {
-            "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
-            "gp": gp_cur, "gp_pct": gp_pct,
-            "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
-            "gp_pct_prev": gp_prev_pct,
-            "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
-        }
+        # With no cost source for the window, GP is UNKNOWN — never revenue−0, which
+        # rendered as a triumphant "100% margin, ฿0 food cost" on pre-2026-03-22
+        # monthly reports. Emit nulls + cost_basis so the UI prints "—" and says why.
+        if not cost_available:
+            gp = {"revenue": cur["revenue"], "food_cost": None, "gp": None, "gp_pct": None,
+                  "gp_per_head": None, "gp_pct_prev": None, "gp_pct_delta_pp": None,
+                  "cost_basis": "unavailable", "cost_from": daily_min}
+        else:
+            gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
+            gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
+            gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
+                           if (cmp_ok and prev and prev["revenue"]) else None)
+            gp = {
+                "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
+                "gp": gp_cur, "gp_pct": gp_pct,
+                "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
+                "gp_pct_prev": gp_prev_pct,
+                "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
+                "cost_basis": cost_src,
+            }
 
         # ---- food cost % (BoM) + month pace, anchored on the period's month ----
         cur_month = ref_anchor.strftime("%Y-%m")

@@ -470,7 +470,10 @@ function renderMgtReport(j, jM, jF) {
   const G = j.gp || {};
   const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
       ${kpi(T.netSalesVat, bigCell(H.revenue),   compShort,  H.rev_wow_pct, yoyOk ? H.rev_yoy_pct : null)}
-      ${kpi(T.grossProfit, bigCell(G.gp),         (G.gp_pct != null ? G.gp_pct.toFixed(0) + T.marginAfter : T.afterFoodCost))}
+      ${kpi(T.grossProfit, bigCell(G.gp),
+            G.cost_basis === 'unavailable'
+              ? `<span style="color:#d97706">${isTH ? 'ไม่มีข้อมูลต้นทุนรายวันก่อน ' + (G.cost_from || '') : 'no daily cost data before ' + (G.cost_from || '')}</span>`
+              : (G.gp_pct != null ? G.gp_pct.toFixed(0) + T.marginAfter : T.afterFoodCost))}
       ${kpi(T.customers,   num(H.customers),     T.covers,   H.cust_wow_pct, yoyOk ? H.cust_yoy_pct : null)}
       ${kpi(T.spendHead,   baht(H.rev_per_head), T.perCover, H.rph_wow_pct,  yoyOk ? H.rph_yoy_pct : null)}
       ${kpi(T.avgTicket,   baht(H.avg_ticket),   T.perBill,  H.ticket_wow_pct)}
@@ -731,7 +734,14 @@ function renderMgtReport(j, jM, jF) {
   };
   const listT = (arr, empty) => (arr && arr.length) ? `<ul>${arr.map(liTop).join('')}</ul>` : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
   const listM = (arr, empty) => (arr && arr.length) ? `<ul>${arr.map(liMove).join('')}</ul>` : `<p class="text-sm text-slate-400 py-2">${empty}</p>`;
-  const totLine = (M.total_cph != null)
+  // No cost source for this window (pre-dates the rolling sales_sku_daily table and
+  // isn't whole calendar months) → say so, instead of an empty section that reads
+  // like "this period had no food cost".
+  const totLine = (M.cost_basis === 'unavailable')
+    ? `<p class="text-xs mb-3" style="color:#d97706">${isTH
+        ? `ไม่มีข้อมูลต้นทุนรายเมนูสำหรับช่วงนี้ — รายละเอียดรายวันเริ่ม ${M.cost_from || ''} (เลือกโหมด Monthly เพื่อดูเดือนเก่ากว่านั้น)`
+        : `No per-dish cost data for this window — daily detail starts ${M.cost_from || ''} (use Monthly mode for older periods)`}</p>`
+    : (M.total_cph != null)
     ? `<p class="text-xs text-slate-500 mb-3">${T.totFoodHead}<b>${cph(M.total_cph)}</b>${M.total_cph_prev != null ? ` (${T.was} ${cph(M.total_cph_prev)}${M.total_cph_delta != null ? `, ${M.total_cph_delta >= 0 ? '+' : '−'}฿${cnum(Math.abs(M.total_cph_delta))}` : ''})` : ''} · ${num(M.covers)}${T.overCovers}</p>`
     : '';
   const noCmp = j.has_prev ? T.none : T.noCompPeriod;

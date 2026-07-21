@@ -647,3 +647,22 @@ def test_group_split_is_additive(client, path, params, extract):
     tol = max(1.0, abs(all_v) * 1e-4)
     assert abs((master + franchise) - all_v) <= tol, \
         f"{path}: master+franchise ({master}+{franchise}) != all ({all_v})"
+
+
+def test_management_gp_never_fake_100pct_without_cost_data(client):
+    """Regression: sales_sku_daily is a ROLLING window. Reading it blindly made
+    every pre-coverage period report ฿0 food cost — rendering as a triumphant
+    'GP 100%'. Cost must come from the monthly table for whole-month windows,
+    and be reported as unavailable (nulls) otherwise — never revenue-minus-zero."""
+    j = client.get("/api/reports/management", params={"period": "monthly"}).json()
+    gp = j["gp"]
+    assert gp.get("cost_basis") in ("daily", "monthly", "unavailable")
+    if gp.get("cost_basis") == "unavailable":
+        # unknown cost => unknown GP, and the UI is told why
+        assert gp["gp"] is None and gp["gp_pct"] is None and gp["food_cost"] is None
+        assert gp.get("cost_from")
+        assert j["menu"]["cost_basis"] == "unavailable"
+    else:
+        # a real cost basis must produce a sane margin, never 100%
+        assert gp["food_cost"] and gp["food_cost"] > 0
+        assert gp["gp_pct"] is not None and gp["gp_pct"] < 99.9
