@@ -930,7 +930,9 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
 
     with get_db() as con:
         try:
-            maxd = con.execute("SELECT MAX(day) FROM sale_bill_cogs").fetchone()[0]
+            _w = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sale_bill_cogs").fetchone()
+            maxd = _w["hi"] if _w else None
+            mind = _w["lo"] if _w else None
         except Exception:
             return {"focus": None, "note": "no per-bill cost data", "summary": {}, "dist": [], "worst": []}
         if not maxd:
@@ -1001,10 +1003,16 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         loss = rows_for(" AND c.cogs_bom > t.total_inc_vat/1.07", "LIMIT 2000")
         ls = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(c.cogs_bom - t.total_inc_vat/1.07)) loss
                              {JN} AND c.cogs_bom > t.total_inc_vat/1.07""", params).fetchone()
+    # Per-bill COGS is a ROLLING window (sale_bill_cogs, ~31 days). Outside it the
+    # tab rendered an all-zero table with no explanation — numerically honest but
+    # indistinguishable from "the page is broken", which is exactly how it was
+    # reported. Ship the window so the UI can say why instead of showing nothing.
     return {"focus": focus, "gran": gran, "range": [s.isoformat(), e.isoformat()],
             "summary": summary, "dist": dist, "worst": worst, "by_branch": by_branch,
             "loss": loss, "loss_count": (ls["n"] or 0) if ls else 0,
-            "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000}
+            "loss_total": (ls["loss"] or 0) if ls else 0, "loss_capped": len(loss) >= 2000,
+            "data_window": [mind, maxd],
+            "out_of_window": bool(mind and e.isoformat() < mind) or bool(maxd and s.isoformat() > maxd)}
 
 
 @router.get("/api/reports/pnl-bill-items")

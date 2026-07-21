@@ -3334,6 +3334,12 @@ _PERF_INDEXES = (
     # (dominant payment code + payment count per receipt). Without this index SQLite
     # does a full table scan for every row in the result set → O(n * |sale_payment|).
     "CREATE INDEX IF NOT EXISTS idx_sp_receipt ON sale_payment(branch_id, receipt_no, amount)",
+    # menu-impact selector runs `SELECT ent, SUM(qty) ... GROUP BY ent` over the
+    # 2.1M-row fact table on every load, purely to know which entities sold. The
+    # existing ix_mfd_ent(ent, day) doesn't carry qty, so SQLite still visited
+    # every row; adding qty makes it an index-ONLY scan. 2,016ms → 120ms, and the
+    # endpoint as a whole 8.8s → 163ms.
+    "CREATE INDEX IF NOT EXISTS ix_mfd_ent_qty ON menu_fact_day(ent, qty)",
 )
 
 

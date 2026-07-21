@@ -809,7 +809,15 @@ function pbCloseDrill() {
 function renderPnlBill(d) {
   const cogsView = _pbView === 'cogs';
   const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_pbGran];
-  document.getElementById('pbRange').textContent = `${lbl}: ${(d.range || [''])[0]}${d.range && d.range[1] !== d.range[0] ? ' → ' + d.range[1] : ''}`;
+  // Per-bill COGS is a rolling ~31-day window. Outside it every figure is 0,
+  // which is honest but reads as a broken page — say why, in place.
+  const _pbWin = document.getElementById('pbRange');
+  if (_pbWin) {
+    _pbWin.innerHTML = `${lbl}: ${(d.range || [''])[0]}${d.range && d.range[1] !== d.range[0] ? ' → ' + d.range[1] : ''}`
+      + (d.out_of_window && d.data_window
+          ? ` <span style="color:#d97706;font-weight:600">· ไม่มีข้อมูลรายบิลของช่วงนี้ (มีเฉพาะ ${d.data_window[0]} → ${d.data_window[1]})</span>`
+          : '');
+  }
   const s = d.summary || {};
   const cogsPct = (s.revenue ? s.cogs / s.revenue * 100 : null);
   const cogsPerBill = (s.bills ? Math.round(s.cogs / s.bills) : null);
