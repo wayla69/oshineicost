@@ -13,6 +13,9 @@ router = APIRouter()
 
 M = _sys.modules.get("backend.main") or _sys.modules["main"]
 _SHARED = (
+    '_FOOD_CATEGORY_FILTER',
+    '_Response',
+    '_ALL_TIER_CODES_SQL',
     'BOM_TYPE_BENCHMARKS',
     'BaseModel',
     'CostEntry',
@@ -1025,6 +1028,129 @@ def cost_audit():
 # ---------------------------------------------------------------------------
 # GET /api/cost/uncosted-coverage  — cost-data coverage tracker (Analysis #3)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# /api/cost/suggestions — ESTIMATED unit costs for dishes that have none
+# ---------------------------------------------------------------------------
+def _cost_suggestions(con, limit=400):
+    """Suggest a unit cost for every selling dish that has none, derived ONLY
+    from dishes we have already costed. Nothing here is written to sku_cost —
+    these are review candidates for the owner, and every row carries the method
+    and the sample it came from so a bad suggestion is obvious on sight.
+
+    Priority (strongest signal first):
+      1. ingredient family  — median cost of costed dishes sharing the main
+         ingredient (reuses _ingredient_family, the same map the BoM views use).
+         A salmon dish is priced from other salmon dishes.
+      2. category median    — median cost of costed dishes in the same category.
+      3. price ratio        — selling price x the chain's median cost/price
+         ratio, for dishes that carry a real à-la-carte price.
+    Confidence reflects both the method and the size of the sample behind it."""
+    import statistics as _stat
+    eff = ("COALESCE((SELECT recipe_cost FROM sku_effective_cost WHERE sku_id=s.sku_id),"
+           "(SELECT NULLIF(unit_cost,0) FROM sku_cost WHERE sku_id=s.sku_id),0)")
+    rows = con.execute(f"""
+        SELECT s.sku_id, s.sku_code, s.description, c.name cat, {eff} eff,
+               (SELECT ROUND(SUM(qty)) FROM sales_sku_monthly WHERE sku_id=s.sku_id) qty,
+               (SELECT ROUND(SUM(subtotal_ex_vat)/NULLIF(SUM(qty),0),2)
+                  FROM sales_sku_monthly WHERE sku_id=s.sku_id) price
+        FROM skus s JOIN categories c ON c.category_id=s.category_id
+        WHERE s.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+          AND s.sku_id IN (SELECT sk.sku_id FROM skus sk
+                           JOIN categories c2 ON c2.category_id=sk.category_id
+                           WHERE {_FOOD_CATEGORY_FILTER.replace('c.', 'c2.').replace('sk.', 'sk.')})
+    """).fetchall()
+
+    costed = [r for r in rows if (r["eff"] or 0) > 0]
+    fam_pool, cat_pool, ratios = {}, {}, []
+    for r in costed:
+        fam_pool.setdefault(_ingredient_family(r["description"] or ""), []).append(r["eff"])
+        cat_pool.setdefault(r["cat"], []).append(r["eff"])
+        if r["price"] and r["price"] > 0 and r["eff"] / r["price"] < 1.5:
+            ratios.append(r["eff"] / r["price"])
+    median_ratio = round(_stat.median(ratios), 3) if ratios else 0.2
+
+    out = []
+    for r in rows:
+        if (r["eff"] or 0) > 0 or not (r["qty"] or 0):
+            continue                                   # already costed / never sold
+        # A family median built on a handful of peers is not evidence — it is
+        # how a ฿2 dipping sauce inherits ฿20 from four costed sauces. Demand a
+        # real sample before trusting a median, and never let an estimate claim
+        # a dish costs most of what it sells for.
+        fam = _ingredient_family(r["description"] or "")
+        pool = fam_pool.get(fam) if fam != "Other · อื่นๆ" else None
+        if pool and len(pool) >= 8:
+            est, method = _stat.median(pool), "ingredient"
+            basis, n = fam, len(pool)
+            conf = "high" if len(pool) >= 20 else "medium"
+        elif cat_pool.get(r["cat"]) and len(cat_pool[r["cat"]]) >= 8:
+            pool = cat_pool[r["cat"]]
+            est, method = _stat.median(pool), "category"
+            basis, n = r["cat"], len(pool)
+            conf = "medium" if len(pool) >= 20 else "low"
+        elif r["price"] and r["price"] > 0:
+            est, method = r["price"] * median_ratio, "price_ratio"
+            basis, n = f"ราคาขาย x {median_ratio}", len(ratios)
+            conf = "low"
+        else:
+            continue                                   # no defensible signal
+        # Sanity cap: a dish whose estimate exceeds 60% of its own selling price
+        # is almost certainly a bad analogue, not a loss-leader. Cap and demote.
+        if r["price"] and r["price"] > 0 and est > r["price"] * 0.6:
+            est, conf = r["price"] * 0.6, "low"
+            basis += " · จำกัดที่ 60% ของราคาขาย"
+        est = round(est, 2)
+        out.append({
+            "sku_id": r["sku_id"], "sku_code": r["sku_code"],
+            "menu": (r["description"] or r["sku_code"]).replace("(A) ", "").replace("(B) ", ""),
+            "category": r["cat"], "qty": round(r["qty"] or 0),
+            "price": r["price"], "suggested_cost": est,
+            "method": method, "basis": basis, "sample": n, "confidence": conf,
+            # what booking this suggestion would add to COGS over all history
+            "impact": round(est * (r["qty"] or 0)),
+        })
+    out.sort(key=lambda x: -x["impact"])
+    return out[:limit], median_ratio
+
+
+@router.get("/api/cost/suggestions")
+@ttl_cache
+def cost_suggestions(limit: int = Query(400, ge=1, le=2000)):
+    """Review list of ESTIMATED costs for uncosted dishes (never auto-applied)."""
+    with get_db() as con:
+        items, ratio = _cost_suggestions(con, limit)
+    return {
+        "items": items,
+        "count": len(items),
+        "total_impact": sum(i["impact"] for i in items),
+        "median_cost_price_ratio": ratio,
+        "note": ("ค่าประมาณจากเมนูที่มีต้นทุนจริงแล้วเท่านั้น — ยังไม่ถูกบันทึกลงระบบ "
+                 "ตรวจแล้วค่อยกรอกที่ ตั้งค่า → Cost Management"),
+    }
+
+
+@router.get("/api/cost/suggestions.csv")
+def cost_suggestions_csv(limit: int = Query(2000, ge=1, le=5000)):
+    """The same suggestions as a CSV, shaped for bulk review/entry."""
+    import csv as _csv
+    import io as _io2
+    with get_db() as con:
+        items, _ = _cost_suggestions(con, limit)
+    buf = _io2.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["sku_code", "menu", "category", "qty_sold", "selling_price",
+                "suggested_cost", "method", "basis", "sample_size",
+                "confidence", "cogs_impact"])
+    for i in items:
+        w.writerow([i["sku_code"], i["menu"], i["category"], i["qty"], i["price"],
+                    i["suggested_cost"], i["method"], i["basis"], i["sample"],
+                    i["confidence"], i["impact"]])
+    return _Response(content="\ufeff" + buf.getvalue(),      # BOM so Excel reads Thai
+                     media_type="text/csv; charset=utf-8",
+                     headers={"Content-Disposition":
+                              "attachment; filename=cost_suggestions.csv"})
+
+
 @router.get("/api/cost/uncosted-coverage")
 @ttl_cache
 def cost_uncosted_coverage(

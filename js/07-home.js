@@ -1878,6 +1878,10 @@ async function loadDataQuality() {
         </div>
         <p class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(f.detail)}</p>
         ${rows ? `<ul class="mt-1 space-y-0.5">${rows}</ul>` : ''}
+        ${f.key === 'uncosted_skus' ? `<a href="${API}/api/cost/suggestions.csv" download
+             class="inline-block mt-2 text-[11px] font-semibold rounded px-2 py-1"
+             style="background:#fff;border:1px solid ${c};color:${c}">⬇ ดาวน์โหลดต้นทุนที่ระบบประมาณให้ (CSV)</a>
+           <span class="text-[10px] ml-2" style="color:var(--text-muted)">ประมาณจากเมนูที่มีต้นทุนจริงแล้ว · ตรวจก่อนนำไปกรอก</span>` : ''}
       </div>`;
   }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';
 }

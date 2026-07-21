@@ -702,3 +702,23 @@ def test_data_quality_reports_without_repairing(client):
         assert f["detail"]
     # the headline total excludes by-design findings
     assert j["total"] == sum(f["count"] for f in j["findings"] if not f["benign"])
+
+
+def test_cost_suggestions_are_defensible_estimates(client):
+    """Cost suggestions must be derived from costed dishes only, carry their
+    method/sample, and never claim a dish costs most of what it sells for.
+    They are review candidates — nothing is written to sku_cost."""
+    j = client.get("/api/cost/suggestions", params={"limit": 50}).json()
+    assert "items" in j and "median_cost_price_ratio" in j
+    for i in j["items"]:
+        assert i["suggested_cost"] > 0
+        assert i["method"] in ("ingredient", "category", "price_ratio")
+        assert i["confidence"] in ("high", "medium", "low")
+        assert i["sample"] >= 1
+        # sanity cap: never above 60% of the dish's own selling price
+        if i.get("price"):
+            assert i["suggested_cost"] <= i["price"] * 0.6 + 0.01, i
+    # the endpoint must not mutate anything
+    before = client.get("/api/cost/uncosted-coverage").json()
+    client.get("/api/cost/suggestions")
+    assert client.get("/api/cost/uncosted-coverage").json() == before
