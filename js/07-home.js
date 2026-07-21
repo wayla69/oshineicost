@@ -1854,7 +1854,36 @@ async function cancelBillDrill(branch, month) {
 }
 
 // ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)
+// 🩺 Data-integrity findings — reported, never auto-repaired (real financial
+// records; missing days can only come back from a POS re-sync).
+async function loadDataQuality() {
+  const el = document.getElementById('dqFindings'); if (!el) return;
+  let d; try { d = await fetch(`${API}/api/data-quality`).then(r => r.json()); }
+  catch (e) { el.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่สำเร็จ</p>'; return; }
+  const sev = { high: ['#dc2626', '#fef2f2'], warn: ['#d97706', '#fffbeb'], info: ['#0891b2', '#f0f9ff'] };
+  const rowLine = (k, r) => {
+    if (k === 'missing_days') return `${esc(r.branch)} — ${r.missing_days} วัน (${(r.dates || []).slice(0, 3).join(', ')}${(r.dates || []).length > 3 ? ' …' : ''})`;
+    if (k === 'zero_covers') return `${esc(r.br)} — ${fmtN(r.n)} บิล · ฿${fmtN(r.rev)}`;
+    if (k === 'discount_gt_total') return `${esc(r.br)} — ${fmtN(r.n)} บิล · ส่วนลด ฿${fmtN(r.disc)} เทียบยอดบิล ฿${fmtN(r.tot)}`;
+    return '';
+  };
+  el.innerHTML = (d.findings || []).map(f => {
+    const [c, bg] = sev[f.severity] || sev.info;
+    const rows = (f.rows || []).map(r => `<li class="text-[11px]" style="color:var(--text-muted)">• ${rowLine(f.key, r)}</li>`).join('');
+    return `<div class="mb-2 rounded-lg p-3" style="background:${f.benign ? 'var(--bg-subtle)' : bg};border-left:3px solid ${f.benign ? 'var(--border)' : c}">
+        <div class="flex items-baseline justify-between gap-3 flex-wrap">
+          <span class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.title)}
+            ${f.benign ? '<span class="text-[10px] font-normal" style="color:var(--text-muted)">· ไม่กระทบตัวเลขการเงิน</span>' : ''}</span>
+          <span class="text-lg font-bold tabular-nums" style="color:${f.benign ? 'var(--text-muted)' : c}">${fmtN(f.count)}</span>
+        </div>
+        <p class="text-[11px] mt-1" style="color:var(--text-muted)">${esc(f.detail)}</p>
+        ${rows ? `<ul class="mt-1 space-y-0.5">${rows}</ul>` : ''}
+      </div>`;
+  }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';
+}
+
 async function loadCloseTime(force) {
+  loadDataQuality();                          // integrity panel above the freshness table
   _syncExtraDate('ctmDate', 'closetime');     // follow the global period (snap to its end day)
   const dateSel = document.getElementById('ctmDate')?.value || '';
   const _fk = _filterKey() + '|' + dateSel;

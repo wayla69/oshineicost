@@ -1345,6 +1345,121 @@ def data_coverage():
 
 
 # ---------------------------------------------------------------------------
+# /api/data-quality  — integrity findings the headline numbers never surface
+# ---------------------------------------------------------------------------
+@app.get("/api/data-quality")
+@ttl_cache
+def data_quality():
+    """Read-only integrity report: gaps and malformed rows that quietly distort
+    reports. It REPORTS rather than repairs, deliberately — these are real
+    financial records (deleting them destroys history) and missing days can only
+    come back from the POS source via a re-sync, never be invented here.
+
+    Every finding carries the numbers needed to judge it plus a `benign` flag, so
+    a known-by-design pattern is never dressed up as a problem."""
+    import datetime as _dt
+    out = {"generated": _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+           "findings": []}
+    with get_db() as con:
+        def add(key, title, sev, count, detail, benign=False, rows=None):
+            out["findings"].append({"key": key, "title": title, "severity": sev,
+                                    "count": count, "detail": detail,
+                                    "benign": benign, "rows": rows or []})
+
+        # 1. Missing trading days INSIDE a branch's own active span. A branch that
+        #    opened later (or closed) is not a gap — only holes between its own
+        #    first and last sale count.
+        gaps = []
+        for sp in con.execute("""
+                SELECT b.name br, MIN(date(t.sold_at)) lo, MAX(date(t.sold_at)) hi,
+                       COUNT(DISTINCT date(t.sold_at)) days
+                FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE b.name!='ALL' GROUP BY b.name""").fetchall():
+            if not sp["lo"]:
+                continue
+            lo = _dt.date.fromisoformat(sp["lo"]); hi = _dt.date.fromisoformat(sp["hi"])
+            expected = (hi - lo).days + 1
+            missing = expected - (sp["days"] or 0)
+            if missing <= 0:
+                continue
+            have = {r[0] for r in con.execute(
+                """SELECT DISTINCT date(t.sold_at) FROM sales_transaction t
+                   JOIN branches b ON b.branch_id=t.branch_id WHERE b.name=?""",
+                (sp["br"],))}
+            miss = [(lo + _dt.timedelta(days=i)).isoformat() for i in range(expected)
+                    if (lo + _dt.timedelta(days=i)).isoformat() not in have]
+            gaps.append({"branch": sp["br"], "missing_days": missing, "dates": miss[:20]})
+        gaps.sort(key=lambda g: -g["missing_days"])
+        add("missing_days", "วันที่ไม่มีข้อมูล ระหว่างช่วงที่สาขาเปิดขายอยู่", "warn",
+            sum(g["missing_days"] for g in gaps),
+            "ช่องว่างกลางคาบการขายของสาขานั้นเอง (ไม่นับก่อนเปิด/หลังปิดสาขา) — "
+            "กู้คืนได้ด้วยการ re-sync ช่วงวันดังกล่าวจาก POS เท่านั้น ระบบจะไม่สร้างข้อมูลขึ้นเอง",
+            rows=gaps[:10])
+
+        # 2. Bills carrying revenue but zero covers — every per-head figure that
+        #    divides by covers is guarded, but these bills still under-count pax.
+        z = con.execute("""
+            SELECT b.name br, COUNT(*) n, ROUND(SUM(t.total_inc_vat/1.07)) rev
+            FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+            WHERE COALESCE(t.customer_count,0)=0 AND t.total_inc_vat>0
+            GROUP BY b.name ORDER BY n DESC""").fetchall()
+        add("zero_covers", "บิลที่มียอดขาย แต่จำนวนลูกค้า = 0", "warn",
+            sum(r["n"] for r in z),
+            "ทำให้ยอดต่อหัวของสาขานั้นเพี้ยนเล็กน้อย (นับบิล แต่ไม่มีหัว) — แก้ที่การคีย์หน้าร้าน",
+            rows=[dict(r) for r in z[:10]])
+
+        # 3. Discount larger than the bill — any discount% computed as
+        #    discount/total runs past 100% on these.
+        d = con.execute("""
+            SELECT b.name br, COUNT(*) n, ROUND(SUM(t.discount)) disc,
+                   ROUND(SUM(t.total_inc_vat)) tot
+            FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+            WHERE t.discount > t.total_inc_vat
+            GROUP BY b.name ORDER BY n DESC""").fetchall()
+        add("discount_gt_total", "บิลที่ส่วนลดมากกว่ายอดบิล", "high",
+            sum(r["n"] for r in d),
+            "% ส่วนลดที่คิดจาก discount ÷ total จะเกิน 100% — ตรวจว่าเป็นบิลยกเลิก/แจกฟรี "
+            "ที่คีย์ผิดช่องหรือไม่",
+            rows=[dict(r) for r in d[:10]])
+
+        # 4. Items still selling without a name (the POS code shows as the dish).
+        stub = con.execute("""
+            SELECT COUNT(DISTINCT s.sku_id) n, ROUND(SUM(m.qty)) qty
+            FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
+            WHERE s.description = s.sku_code""").fetchone()
+        add("stub_names", "เมนูที่ยังไม่มีชื่อ (แสดงเป็นรหัส POS)", "warn",
+            (stub["n"] or 0) if stub else 0,
+            f"ขายไปแล้ว {(stub['qty'] or 0):,.0f} ชิ้น — ชื่อจะถูกเติมอัตโนมัติเมื่อ sync รอบถัดไปทำงาน")
+
+        # 5. Dishes with sales but no unit cost — food-cost% is a floor while these exist.
+        unc = con.execute(f"""
+            SELECT COUNT(DISTINCT s.sku_id) n, ROUND(SUM(m.qty)) qty
+            FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
+            WHERE s.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+              AND COALESCE((SELECT recipe_cost FROM sku_effective_cost WHERE sku_id=m.sku_id),0)=0
+              AND COALESCE((SELECT NULLIF(unit_cost,0) FROM sku_cost WHERE sku_id=m.sku_id),0)=0
+        """).fetchone()
+        add("uncosted_skus", "เมนูที่ขายแล้ว แต่ยังไม่มีต้นทุน", "high",
+            (unc["n"] or 0) if unc else 0,
+            f"รวม {(unc['qty'] or 0):,.0f} ชิ้น — ทำให้ต้นทุนอาหารต่ำกว่าความจริง "
+            f"เติมได้ที่ ตั้งค่า → Cost Management")
+
+        # 6. Retired dishes never deactivated — cosmetic only, flagged benign.
+        dead = con.execute("""
+            SELECT COUNT(*) n FROM skus s
+            WHERE COALESCE(s.active,1)=1
+              AND (SELECT MAX(period_month) FROM sales_sku_monthly WHERE sku_id=s.sku_id)
+                  < (SELECT MAX(period_month) FROM sales_sku_monthly)""").fetchone()
+        add("stale_skus", "เมนูที่ไม่มียอดขายในเดือนล่าสุด แต่ยังเปิดใช้งานอยู่", "info",
+            (dead["n"] or 0) if dead else 0,
+            "เมนูเลิกขายที่ไม่ได้ปิดสถานะ — รายการเมนูยาวเกินจำเป็น ไม่กระทบตัวเลขการเงิน",
+            benign=True)
+
+    out["total"] = sum(f["count"] for f in out["findings"] if not f["benign"])
+    return out
+
+
+# ---------------------------------------------------------------------------
 # /api/sales/monthly   -  monthly revenue trend
 # ---------------------------------------------------------------------------
 @app.get("/api/meta/data-window")

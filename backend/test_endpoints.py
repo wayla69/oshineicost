@@ -684,3 +684,21 @@ def test_yoy_carries_like_for_like_guard(client):
         if r["comparable"]:
             assert r["ly_days"] >= 20
             assert abs(r["cur_branches"] - r["ly_branches"]) <= 2
+
+
+def test_data_quality_reports_without_repairing(client):
+    """The integrity report must expose findings with counts + a benign flag,
+    and must never be a mutation surface (it only ever reads)."""
+    j = client.get("/api/data-quality").json()
+    assert "findings" in j and j["findings"], "expected integrity findings"
+    keys = {f["key"] for f in j["findings"]}
+    for expected in ("missing_days", "zero_covers", "discount_gt_total",
+                     "uncosted_skus", "stub_names", "stale_skus"):
+        assert expected in keys, f"{expected} check missing"
+    for f in j["findings"]:
+        assert isinstance(f["count"], int) and f["count"] >= 0
+        assert f["severity"] in ("high", "warn", "info")
+        assert isinstance(f["benign"], bool)
+        assert f["detail"]
+    # the headline total excludes by-design findings
+    assert j["total"] == sum(f["count"] for f in j["findings"] if not f["benign"])
