@@ -1,5 +1,9 @@
 # ย้ายโฟลเดอร์ทำงานออกจาก OneDrive → ใช้ GitHub เป็นตัว sync
-เขียน: 2026-07-20 · สถานะ: **รอเจ้าของสั่ง cutover**
+เขียน: 2026-07-20 · ปรับปรุง: 2026-07-27 · สถานะ: **cutover ทำแล้ว 2026-07-20** (เหลือเปลี่ยนชื่อโฟลเดอร์เดิมตามข้อ 8)
+
+> ⚠️ **บทเรียนจากของจริง (2026-07-27):** ข้อ 3 ของแผนเดิม **ลืม `backend/.env`** → MSSQL sync
+> ล้มเหลวเงียบ ๆ **7 วันติด** (scheduled task ทั้งสองตัว exit 1 ทุกวัน โดยไม่มีใครรู้) กว่าจะจับได้
+> รายการไฟล์ด้านล่างแก้ให้ครบแล้ว — **ทำ checklist ข้อ 3 กับข้อ 3b ให้ครบทุกช่องก่อนถือว่าย้ายเสร็จ**
 
 ## ข้อเท็จจริงก่อน: โค้ด "อยู่บน GitHub แล้ว"
 - Repo: `github.com/wayla69/oshineicost` — ทุก commit ถูก push ขึ้นไปตลอด (ล่าสุด `eecd402` deploy วันนี้)
@@ -15,14 +19,53 @@
 
 1. ตรวจ `git status` สะอาด + `git push` ครบ
 2. `git clone https://github.com/wayla69/oshineicost.git C:\Users\ASUS\Oshinei`  (นอก OneDrive)
-3. ปิด server ทุกตัว แล้วคัดลอกไฟล์ที่ git ไม่เก็บ:
-   - `backend/oshinei.db` (หลัง checkpoint — ไม่ copy ตอน -wal มีข้อมูลค้าง)
-   - `backend/usage.db`, `backend/.seed_tokens.txt`, `backend/.manager_token.txt`, `.pdf_passwords.txt` (ถ้ามี)
+3. ปิด server ทุกตัว แล้วคัดลอกไฟล์ที่ git ไม่เก็บ
+
+   **กฎเหล็ก: `git clone` ไม่พาไฟล์ที่อยู่ใน `.gitignore` มาด้วย** — ซึ่งก็คือ *ความลับทั้งหมด*
+   ของระบบ ไฟล์พวกนี้จึงมีอยู่ที่เดียวคือเครื่องเดิม ถ้าลืมข้อไหน ระบบจะพังแบบ **เงียบ**
+   (task ล้มเหลวทุกวันโดยไม่มีใครเห็น เพราะไม่มีใครเปิดดู log)
+
+   **ความลับ / credentials — ต้องครบทุกไฟล์:**
+   - [ ] `backend/.env` — **รหัส MSSQL** (`OSH_SVR/OSH_PORT/OSH_USER/OSH_PWD/OSH_DB`) ← ตัวที่เคยลืม ทำให้ sync ตาย 7 วัน
+   - [ ] `backend/.refresh_login.txt` — login ที่ `refresh_fly_db.py` ใช้ยืนยันผลตอน push ขึ้น Fly (ถ้าไม่มี step 5/5 จะ time out)
+   - [ ] `backend/.seed_tokens.txt` — token ของ `/api/_admin/seed-db`
+   - [ ] `backend/.manager_token.txt`
+   - [ ] `recon/.pdf_passwords.txt` (ถ้ามี) — รหัสเปิด PDF statement ของ KTB
+
+   **ข้อมูล:**
+   - [ ] `backend/oshinei.db` (หลัง checkpoint — ไม่ copy ตอน -wal มีข้อมูลค้าง)
+   - [ ] `backend/usage.db`
+
+3b. **ตรวจว่าครบจริง** (รันที่โฟลเดอร์ใหม่ — ต้องขึ้น OK ทุกบรรทัด):
+   ```powershell
+   foreach ($f in '.env','.refresh_login.txt','.seed_tokens.txt','.manager_token.txt') {
+     $p = "backend\$f"
+     if (Test-Path $p) { "OK      $f" } else { "MISSING $f" }
+   }
+   ```
+   แล้วทดสอบว่าต่อ MSSQL ได้จริง (ไม่ใช่แค่ไฟล์มีอยู่):
+   ```bash
+   cd backend && python -c "import sync_mssql as s; c=s.connect_mssql(); print('MSSQL OK'); c.close()"
+   ```
 4. **ไฟล์ข้อมูลดิบ** ("Data for Oshinei/", "BoM/", "All recon data/", xlsx ต่าง ๆ): **แนะนำปล่อยไว้ใน OneDrive** เป็นคลังเอกสาร (ได้ cloud backup ฟรี — ตอบโจทย์ AUD-plan เรื่อง off-site backup ด้วย) — เวลา ingest ค่อยชี้ path ไปที่ OneDrive
 5. อัปเดต **Windows Task Scheduler**: งาน "Sync Live (Fly)" daily 10:00 + `Refresh Online Data.bat` ให้ชี้ path ใหม่
+
+   **วันรุ่งขึ้นต้องกลับมาเช็คผลรันจริง** — งานพวกนี้ล้มเหลวแบบไม่มีเสียง ไม่มีใครแจ้งเตือน:
+   ```powershell
+   Get-ScheduledTask | Where-Object { $_.TaskName -like '*Oshinei*' } |
+     ForEach-Object { $i = $_ | Get-ScheduledTaskInfo
+       [PSCustomObject]@{ Name=$_.TaskName; Last=$i.LastRunTime; Result=$i.LastTaskResult } }
+   ```
+   อ่านค่า `Result`: **`0` = สำเร็จ** · **`1` = .bat เข้าสาย "SYNC FAILED"** (คือ `sync_mssql.py` ตาย —
+   เช็ค `backend/.env` ก่อนอย่างอื่นเสมอ) · `267014` = task ถูกสั่งหยุด
+   นี่คือวิธี**เร็วที่สุด**ในการวินิจฉัย sync ที่ไม่ทำงาน — เร็วกว่าไปไล่หาปัญหา network/SQL มาก
 6. Deploy worktree: ลบ `~/oshinei_deploy_clean` เดิม (มันชี้ .git เก่า) — `deploy-clean.sh` สร้างใหม่เองจาก repo ใหม่
 7. ย้าย Claude Code memory: copy `~/.claude/projects/<key เดิม>/memory/` → `<key ใหม่>` (path เปลี่ยน = project key เปลี่ยน)
 8. เปลี่ยนชื่อโฟลเดอร์เดิมใน OneDrive เป็น `_ARCHIVED_Cost Analysis` **อย่าเพิ่งลบ** (กันเผลอเข้าไปแก้ + เผื่อไฟล์ตกหล่น เก็บไว้ 1–2 สัปดาห์)
+   - **ห้ามลบจนกว่าข้อ 3b จะผ่านครบทุกช่อง** — โฟลเดอร์เดิมคือ *แหล่งเดียว* ของไฟล์ความลับ
+     ถ้าลบไปก่อนแล้วพบว่าลืม `.env` จะกู้ไม่ได้เลย (ไม่ได้อยู่บน git ตามเจตนา)
+   - หลังยืนยันครบแล้ว ควรสำรอง credentials ไว้อีกที่ (password manager / ที่เก็บ secret) —
+     ตอนนี้มันอยู่บนดิสก์ลูกเดียวและไม่มี backup
 9. เครื่องอื่น (ถ้ามี): ทำแบบเดียวกัน — clone จาก GitHub + copy DB ของเครื่องตัวเอง จากนั้น **sync โค้ดผ่าน git pull/push เท่านั้น**
 
 ## ข้อแลกเปลี่ยนที่ต้องรู้
