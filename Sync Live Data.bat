@@ -11,7 +11,9 @@ python --version >nul 2>&1
 if errorlevel 1 ( echo ERROR: Python not found. & if "%~1"=="" pause & exit /b 1 )
 set "PATH=%USERPROFILE%\.fly\bin;%PATH%"
 
-echo [1/2] Sync from POS (MSSQL) -> oshinei.db.incoming + reconcile...
+REM NOTE: keep the arrow escaped as -^>. An unescaped > REDIRECTS this echo into
+REM a file literally named "oshinei.db.incoming", destroying the staged DB.
+echo [1/2] Sync from POS (MSSQL) -^> oshinei.db.incoming + reconcile...
 python sync_mssql.py
 if errorlevel 1 (
     echo.
