@@ -18,7 +18,7 @@ if errorlevel 1 ( pause & exit /b 1 )
 set "PATH=%USERPROFILE%\.fly\bin;%PATH%"
 
 :: Run the refresh (snapshot -> upload -> restart -> verify)
-"%PY%" refresh_fly_db.py %*
+"%PY%" -u refresh_fly_db.py %*
 
 echo.
 echo Done. You can close this window.
