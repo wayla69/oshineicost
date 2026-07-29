@@ -10,19 +10,15 @@ echo   https://oshinei-dashboard.fly.dev/
 echo so your team sees the latest numbers. Safe to run anytime.
 echo.
 
-:: Check Python
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ERROR: Python not found. Please install Python first.
-    pause
-    exit /b 1
-)
+:: Resolve %PY% to an interpreter that has the deps (see _python.bat)
+call "%~dp0_python.bat" requests
+if errorlevel 1 ( pause & exit /b 1 )
 
 :: Make sure flyctl is reachable for the restart step
 set "PATH=%USERPROFILE%\.fly\bin;%PATH%"
 
 :: Run the refresh (snapshot -> upload -> restart -> verify)
-python refresh_fly_db.py %*
+"%PY%" refresh_fly_db.py %*
 
 echo.
 echo Done. You can close this window.
