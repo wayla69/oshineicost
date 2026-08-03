@@ -1073,10 +1073,39 @@ def reconcile(sq):
         bid_in = "(" + ",".join(str(int(b)) for b in existing_bids) + ")" if existing_bids else "(-1)"
         a_new = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
         a_old = one(cur, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
-        checks.append((f"SETTLED rev {anchor} (shared branches)", a_old, a_new, 'strict'))
+        # A settled month is only truly FROZEN if the current DB was captured after
+        # that month had ended — i.e. it already holds a later month. When the anchor
+        # IS the current DB's newest month, that snapshot was taken while the month
+        # was still filling: HQ delivers each day's bills about a day late, so the
+        # month legitimately GROWS on the next sync and a strict two-sided gate blocks
+        # every run in the first days of a new month. Seen 2026-08-03: settled 2026-07
+        # was +3.44%, and ALL of it was 2026-07-31 alone (60 bills captured on 08-01 →
+        # 1,716 delivered), every other July day byte-identical, zero duplicate
+        # (branch, receipt) keys. A DROP still fails — that is the direction that means
+        # history loss.
+        tail_open = (anchor == cur_max)
+        a_mode = 'nodrop' if tail_open else 'strict'
+        if tail_open:
+            print(f"    [tail-open] current DB's newest month IS the settled anchor {anchor} → it was "
+                  f"captured mid-fill, so growth is expected (late HQ delivery); only a DROP gates")
+        checks.append((f"SETTLED rev {anchor} (shared branches)", a_old, a_new, a_mode))
         ab_new = one(sq, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
         ab_old = one(cur, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
-        checks.append((f"SETTLED bills {anchor} (shared branches)", ab_old, ab_new, 'strict'))
+        checks.append((f"SETTLED bills {anchor} (shared branches)", ab_old, ab_new, a_mode))
+        # Relaxing the anchor must never leave the sync without a two-sided canary, so
+        # when it is relaxed, strict-check the month before it — that one is frozen by
+        # construction (the current DB holds two later months).
+        if tail_open:
+            frozen = cur.execute(
+                "SELECT MAX(period_month) m FROM sales_sku_monthly WHERE period_month < ?", (anchor,)
+            ).fetchone()["m"]
+            if frozen:
+                fz_bids = [r[0] for r in cur.execute(
+                    "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month=?", (frozen,)).fetchall()]
+                fz_in = "(" + ",".join(str(int(b)) for b in fz_bids) + ")" if fz_bids else "(-1)"
+                f_new = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {fz_in}", (frozen,)) or 0
+                f_old = one(cur, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {fz_in}", (frozen,)) or 0
+                checks.append((f"FROZEN rev {frozen} (shared branches)", f_old, f_new, 'strict'))
         # Revenue from branches NEW to this settled month (present in synced, absent
         # from current) — reported for visibility; never gates. A large value here is
         # expected right after a BRANCH_ALIAS fix and disappears on the next sync.
