@@ -271,6 +271,21 @@ def main():
     print(f"[1/6] copy {DB.name} → {INCOMING.name} (preserves BoM/cost/settings)")
     if INCOMING.exists():
         INCOMING.unlink()
+    # …and its WAL/SHM. copy2 copies ONLY the main file, so a -wal left behind by a
+    # previous run that died mid-sync gets REPLAYED into the fresh copy — and it
+    # belongs to a different database image, so SQLite happily grafts its pages on
+    # top: duplicate sqlite_master rows, "2nd reference to page N", cross-linked
+    # b-trees. Seen 2026-08-07: a 502 MB stale WAL from the 08-06 10:00 run turned
+    # every later sync into "malformed database schema (recon_attachment)". The live
+    # oshinei.db was never touched — only the staging copy — but the sync was dead
+    # until the orphans were cleared. SQLite cannot detect this: a WAL carries no
+    # identity of the database it came from.
+    for suf in ("-wal", "-shm"):
+        try:
+            os.remove(str(INCOMING) + suf)
+            print(f"      removed stale {INCOMING.name}{suf} (orphan from an interrupted run)")
+        except OSError:
+            pass
     shutil.copy2(DB, INCOMING)
 
     sq = sqlite3.connect(str(INCOMING)); sq.row_factory = sqlite3.Row
