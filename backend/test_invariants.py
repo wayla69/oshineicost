@@ -404,5 +404,56 @@ def test_effective_cost_never_carries_a_tier_package_price():
         assert f"'{code}'" in main._ALL_TIER_CODES_SQL, f"{code} missing from the SQL list"
 
 
+# R6 — the SYNC is the SECOND writer of sku_effective_cost (it refreshes the
+# staged DB every night; main rebuilds at startup). Its INSERT used to lack the
+# tier-code CASE, so the table flip-flopped by last writer: BUFFET recipe_cost
+# = 679.08 (the package PRICE) after a sync, 0 after a restart — observed live
+# 2026-08-10, ~฿1.07B phantom COGS one raw read away. Lock the two writers
+# together: identical tier tuple, identical output, row for row.
+def test_sync_rebuild_of_effective_cost_matches_main_and_zeroes_tiers():
+    import sync_mssql
+    # the duplicated tuple (sync is standalone-runnable) must never drift
+    assert set(sync_mssql.ALL_TIER_CODES) == set(main._ALL_TIER_CODES)
+
+    con = fresh_db()
+    # widen the trap beyond BUFFET: a priced Easy tier, a priced LEGACY tier
+    # (the sync's old startswith('BUFFET') check missed B01/B02/…), and a
+    # recipe'd tier (the CASE must beat the BoM path too, not just sku_cost)
+    con.executemany(
+        "INSERT INTO skus(sku_id,sku_code,description,category_id,unit) VALUES(?,?,?,?,?)",
+        [(10, "BUFFET590", "Easy tier",   1, "pax"),
+         (11, "B01",       "Legacy tier", 1, "pax"),
+         (12, "BUFFET350", "Recipe tier", 1, "pax")])
+    con.executemany("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(?,?)",
+                    [(10, 590.0), (11, 350.0)])
+    con.execute("INSERT INTO bom_ingredients(sku_id,seq,ingredient_name,ingredient_cost)"
+                " VALUES(12,1,'salmon',123.0)")
+    con.commit()
+
+    sync_mssql.refresh_sku_effective_cost(con)
+    eff = {r[0]: r[1] for r in con.execute(
+        "SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e"
+        " JOIN skus s ON s.sku_id = e.sku_id")}
+    for code in ("BUFFET", "BUFFET590", "B01", "BUFFET350"):
+        assert eff[code] == 0, (
+            f"sync-built effective cost for tier {code} must be 0, got {eff[code]}")
+    assert eff["A0001"] == 10.0   # real dishes still costed
+
+    sync_rows = {r[0]: r[1] for r in con.execute(
+        "SELECT sku_id, recipe_cost FROM sku_effective_cost")}
+    main._build_sku_effective_cost(con, force=True)
+    main_rows = {r[0]: r[1] for r in con.execute(
+        "SELECT sku_id, recipe_cost FROM sku_effective_cost")}
+    assert sync_rows == main_rows, (
+        "sync and startup rebuilds must agree row-for-row (no last-writer flip-flop)")
+
+    # per-bill costmap predicate (sale_bill_cogs path): full tier list + BUFFET*
+    # package variants, but never a real B0xxx menu item
+    assert sync_mssql.is_tier_code("B01")
+    assert sync_mssql.is_tier_code("BUFFETCHILDFREE")
+    assert not sync_mssql.is_tier_code("B0040")
+    assert not sync_mssql.is_tier_code("A0001")
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

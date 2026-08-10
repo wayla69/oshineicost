@@ -60,6 +60,43 @@ MAX_SANE_LINE_QTY = 1000
 QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
             f"THEN 0 ELSE CAST(si.Qty AS float) END)")
 
+# ── Buffet/tier PACKAGE codes: their cost must never be booked ───────────────
+# Keep in lockstep with main._ALL_TIER_CODES (this file is standalone-runnable,
+# hence the duplicated tuple, same as SALE_FILTER above; test_invariants.py
+# fails if the two drift). sku_cost holds the package PRICE for these codes
+# (BUFFET = ฿679.08), not a cost — the real cost is the itemised dishes on the
+# same bill, so booking the package too double-counts (~฿1.07B phantom COGS).
+ALL_TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
+                  'BUFFETCHILD', 'B01', 'B02', 'B03', 'B07', 'B11')
+ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in ALL_TIER_CODES) + ")"
+
+def is_tier_code(code):
+    """Tier/package predicate for the per-bill costmap: the canonical tuple PLUS
+    the BUFFET* prefix — Easy emits package variants (e.g. BUFFETCHILDFREE) that
+    aren't in main's tuple but are still packages, never costed line items.
+    Exact match keeps real B0xxx menu items (B0040, B0324…) costed."""
+    c = code or ""
+    return c in ALL_TIER_CODES or c.startswith("BUFFET")
+
+def refresh_sku_effective_cost(sq):
+    """(Re)build sku_effective_cost in the staged DB — MIRROR of
+    main._build_sku_effective_cost: same COALESCE chain AND the same tier-code
+    zeroing. The sync's INSERT used to lack the tier CASE, so the table
+    flip-flopped by last writer (BUFFET recipe_cost=679.08 after a nightly sync,
+    0 after an app restart — observed live 2026-08-10). test_invariants.py
+    asserts sync output == main output row-for-row."""
+    sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
+                     "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
+                     "DELETE FROM sku_effective_cost;")
+    sq.execute(f"""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
+                  SELECT s.sku_id, CASE WHEN s.sku_code IN {ALL_TIER_CODES_SQL} THEN 0 ELSE COALESCE(
+                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
+                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
+                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
+                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
+                       WHERE a.bom_sku_code=s.sku_code), 0) END
+                  FROM skus s""")
+
 def _norm_paycode(c):
     """Collapse payment-code case-dups (POS has both 'CASH' and 'Cash') to one
     canonical label for the per-bill sale_payment table. Minimal — readable codes
@@ -967,7 +1004,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
 
     # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
     #    Per-sku unit cost from OUR data (sku_cost cost-management table first,
-    #    then recipe → alias; BUFFET tier=0). Same priority as main._unified_cogs_expr
+    #    then recipe → alias; tier codes=0 via is_tier_code). Same priority as main._unified_cogs_expr
     #    (cost-management first since 2026-06-11). Heavy pull but stored per-bill.
     bill_since = dly_since
     if mx:
@@ -982,21 +1019,11 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
             (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
                JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code), 0) AS c
         FROM skus s""").fetchall():
-        costmap[r["sku_id"]] = 0.0 if (r["sku_code"] or "").startswith("BUFFET") else (r["c"] or 0.0)
-    # Refresh the per-SKU effective-cost lookup in the staged DB with the SAME
-    # chain, so a swapped-in DB never serves stale costs (main only force-rebuilds
-    # it at startup, not on hot-swap pre-2026-06-11).
-    sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
-                     "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
-                     "DELETE FROM sku_effective_cost;")
-    sq.execute("""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
-                  SELECT s.sku_id, COALESCE(
-                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
-                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
-                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
-                       WHERE a.bom_sku_code=s.sku_code), 0)
-                  FROM skus s""")
+        costmap[r["sku_id"]] = 0.0 if is_tier_code(r["sku_code"]) else (r["c"] or 0.0)
+    # Refresh the per-SKU effective-cost lookup in the staged DB, so a swapped-in
+    # DB never serves stale costs (main only force-rebuilds it at startup, not on
+    # hot-swap pre-2026-06-11). Shared helper = same tier-code zeroing as main.
+    refresh_sku_effective_cost(sq)
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     bill_rows = _chunk(mc, f"""
