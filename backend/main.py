@@ -10,7 +10,7 @@ import shutil
 import threading
 import time as _time
 import functools
-from contextlib import contextmanager
+from contextlib import contextmanager, closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -234,15 +234,19 @@ def _maybe_swap_incoming_db():
     inc = Path(str(DB_PATH) + ".incoming")
     if not inc.exists():
         return
+    # closing() so the probe handle NEVER outlives this block — if a query raises
+    # (e.g. COUNT on a malformed upload), a bare chk.close() is skipped and the
+    # leaked handle keeps .incoming open on Windows: our own unlink below fails
+    # AND every nightly sync dies at its INCOMING.unlink() with WinError 32
+    # (2026-08-08..10: three days of silent sync failures until the app closed).
     try:
-        chk = sqlite3.connect(str(inc))
-        # quick_check (page-level) not integrity_check (full index cross-check):
-        # the realistic failure of a freshly streamed upload is a truncated/partial
-        # transfer, which quick_check catches — and it's ~20x faster on a large DB
-        # (0.45s vs ~10s on 348 MB), so this no longer dominates startup.
-        ok  = chk.execute("PRAGMA quick_check").fetchone()[0]
-        n   = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
-        chk.close()
+        with closing(sqlite3.connect(str(inc))) as chk:
+            # quick_check (page-level) not integrity_check (full index cross-check):
+            # the realistic failure of a freshly streamed upload is a truncated/partial
+            # transfer, which quick_check catches — and it's ~20x faster on a large DB
+            # (0.45s vs ~10s on 348 MB), so this no longer dominates startup.
+            ok  = chk.execute("PRAGMA quick_check").fetchone()[0]
+            n   = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
     except Exception:
         ok, n = "bad", 0
     if ok != "ok" or not n:
@@ -710,11 +714,14 @@ def _apply_incoming_live() -> bool:
     if not inc.exists():
         return False
     # Validate the staged file before disturbing anything (cheap quick_check).
+    # closing() is load-bearing: this runs in the 60s poller, so a probe handle
+    # leaked on a raised query would be re-leaked every poll and keep .incoming
+    # locked indefinitely — blocking both the unlink below and the nightly
+    # sync's staging (WinError 32, the 2026-08-08..10 outage).
     try:
-        chk = sqlite3.connect(str(inc))
-        ok = chk.execute("PRAGMA quick_check").fetchone()[0]
-        n  = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
-        chk.close()
+        with closing(sqlite3.connect(str(inc))) as chk:
+            ok = chk.execute("PRAGMA quick_check").fetchone()[0]
+            n  = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
     except Exception:
         ok, n = "bad", 0
     if ok != "ok" or not n:
@@ -1210,11 +1217,13 @@ async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
         try: _os2.remove(tmp_path)
         except OSError: pass
     # Validate the .partial before we ever expose it to the swap poller.
+    # closing() even on error: a leaked probe handle would follow the rename
+    # below (the handle tracks the file, not the name) and keep the published
+    # .incoming locked; on the 422 path it blocks the remove() → orphan .partial.
     try:
-        chk = sqlite3.connect(stage)
-        ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
-        rows = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
-        chk.close()
+        with closing(sqlite3.connect(stage)) as chk:
+            ok  = chk.execute("PRAGMA integrity_check").fetchone()[0]
+            rows = chk.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0]
     except Exception as e:
         ok, rows = f"error: {e}", 0
     if ok != "ok" or not rows:

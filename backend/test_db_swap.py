@@ -64,3 +64,83 @@ def test_no_false_abort_on_fresh_install(tmp_path):
     _mk_incoming(inc)
     safe, reason = main._carry_forward_and_verify(str(live), str(inc))
     assert safe, reason
+
+
+# ── every handle on .incoming must close before the function returns ─────────
+# A probe connection leaked by the swap validation (query raising mid-block)
+# kept oshinei.db.incoming open on Windows: the discard-unlink below it failed
+# silently, and every nightly sync died at its own INCOMING.unlink() with
+# WinError 32 (2026-08-08..10, three days). The poller re-runs the same block
+# every 60 s, so a leak there re-arms forever. These tests spy on every
+# sqlite3.connect() the swap paths make and demand each one is closed.
+import pytest  # noqa: E402
+
+
+def _spy_connections(monkeypatch):
+    opened, real = [], sqlite3.connect
+
+    def spy(*a, **k):
+        con = real(*a, **k)
+        opened.append(con)
+        return con
+
+    monkeypatch.setattr(main.sqlite3, "connect", spy)
+    return opened
+
+
+def _assert_all_closed(opened):
+    for con in opened:
+        with pytest.raises(sqlite3.ProgrammingError):
+            con.execute("SELECT 1")   # "Cannot operate on a closed database"
+
+
+def test_startup_swap_discards_malformed_incoming_and_closes_probe(tmp_path, monkeypatch):
+    live = tmp_path / "oshinei.db"; _mk_live(live)
+    inc = Path(str(live) + ".incoming")
+    inc.write_bytes(b"this is not a database")    # probe raises mid-validation
+    monkeypatch.setattr(main, "DB_PATH", live)
+    opened = _spy_connections(monkeypatch)
+    main._maybe_swap_incoming_db()
+    _assert_all_closed(opened)
+    # the discard-unlink only works on Windows because the probe closed first
+    assert not inc.exists()
+
+
+def test_startup_swap_applies_good_incoming_and_closes_probe(tmp_path, monkeypatch):
+    live = tmp_path / "oshinei.db"; _mk_live(live)
+    inc = Path(str(live) + ".incoming"); _mk_incoming(inc)
+    monkeypatch.setattr(main, "DB_PATH", live)
+    opened = _spy_connections(monkeypatch)
+    main._maybe_swap_incoming_db()
+    _assert_all_closed(opened)
+    assert not inc.exists()                       # swapped in (needs all handles closed)
+    con = sqlite3.connect(str(live))
+    assert con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM recon_uploads").fetchone()[0] == 3  # carried
+    con.close()
+
+
+def test_hot_swap_discards_malformed_incoming_and_closes_probe(tmp_path, monkeypatch):
+    live = tmp_path / "oshinei.db"; _mk_live(live)
+    inc = Path(str(live) + ".incoming")
+    inc.write_bytes(b"this is not a database")
+    monkeypatch.setattr(main, "DB_PATH", live)
+    opened = _spy_connections(monkeypatch)
+    assert main._apply_incoming_live() is False
+    _assert_all_closed(opened)
+    assert not inc.exists()
+
+
+def test_hot_swap_applies_good_incoming_and_closes_probe(tmp_path, monkeypatch):
+    live = tmp_path / "oshinei.db"; _mk_live(live)
+    inc = Path(str(live) + ".incoming"); _mk_incoming(inc)
+    monkeypatch.setattr(main, "DB_PATH", live)
+    gen_before = main._db_gen
+    opened = _spy_connections(monkeypatch)
+    assert main._apply_incoming_live() is True
+    _assert_all_closed(opened)
+    assert main._db_gen == gen_before + 1         # threads reconnect lazily
+    con = sqlite3.connect(str(live))
+    assert con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0] == 1
+    assert con.execute("SELECT COUNT(*) FROM recon_uploads").fetchone()[0] == 3  # carried
+    con.close()

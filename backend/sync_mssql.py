@@ -23,7 +23,7 @@ Creds come from backend/.env (gitignored). Run:
     python sync_mssql.py --since 2026-05-01
 Aggregation is done server-side (GROUP BY) so we never pull the 21M SaleItem rows.
 """
-import os, sys, shutil, sqlite3, argparse
+import os, sys, shutil, sqlite3, argparse, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -216,6 +216,154 @@ def apply_local_swap():
         return False
 
 
+# ── staged-file preparation (step [1/6]) ─────────────────────────────────────
+# The sync builds into oshinei.db.incoming — but on Windows that name can be
+# LOCKED: the locally-running dashboard (backend/main.py) re-opens .incoming
+# every ~60 s to validate/hot-swap it, and a handle it doesn't close stays held
+# for as long as the app window stays open. Seen 2026-08-08..10: every nightly
+# sync died at INCOMING.unlink() with PermissionError WinError 32 for 3 straight
+# days, until the app was closed. Strategy: retry the claim briefly (a healthy
+# poller pass holds the file only a few seconds), then fall back to building
+# under a private name and publishing it over .incoming once done — and if even
+# that stays blocked, exit with a message that names the fix (close the local
+# dashboard) instead of a raw traceback.
+
+STAGE_FALLBACK = HERE / "oshinei.db.incoming.new"
+
+_CLAIM_WAITS   = (1, 2, 4, 8)          # ~15 s — rides out one poller validation pass
+_PUBLISH_WAITS = (2, 5, 10, 15, 30)    # ~1 min — covers a full 60 s poller cycle
+
+_LOCK_FIX_HINT = ("close the locally-running dashboard (the backend/main.py app — "
+                  "its .incoming swap poller is the usual lock holder), then re-run "
+                  "the sync")
+
+
+def _is_file_locked_err(e: OSError) -> bool:
+    """A Windows sharing/lock violation (file open in another process)?
+    os.remove/unlink of an open file raises WinError 32; os.replace onto an open
+    target raises WinError 5 — both surface as PermissionError."""
+    return isinstance(e, PermissionError) or getattr(e, "winerror", None) in (5, 32, 33)
+
+
+def _clear_staging_sidecars(base, announce=False) -> bool:
+    """Remove <base>-wal/-shm. Returns False if a sidecar exists but is locked.
+
+    WHY sidecars must go before (re)using <base>: copy2/os.replace move ONLY the
+    main file, so a -wal left behind by a run that died mid-sync gets REPLAYED
+    into the fresh file — and it belongs to a DIFFERENT database image, so
+    SQLite happily grafts its pages on top: duplicate sqlite_master rows, "2nd
+    reference to page N", cross-linked b-trees. Seen 2026-08-07 (#72): a 502 MB
+    stale WAL from a killed run turned every later sync into "malformed database
+    schema (recon_attachment)". SQLite cannot detect this — a WAL carries no
+    identity of the database it came from. A sidecar that exists but CANNOT be
+    removed is therefore a hard stop for staging at <base>."""
+    ok = True
+    for suf in ("-wal", "-shm"):
+        side = str(base) + suf
+        try:
+            os.remove(side)
+            if announce:
+                print(f"      removed stale {os.path.basename(side)} (orphan from an interrupted run)")
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            print(f"      ⚠ cannot remove {os.path.basename(side)}: {e}")
+            ok = False
+    return ok
+
+
+def _claim_staging(path):
+    """Try to free `path` (and its WAL/SHM sidecars) for a fresh staging build.
+    Returns (ok, blocker) — blocker describes the lock when ok is False.
+    Non-lock errors (bad path, disk trouble) raise: retrying can't help those."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        if _is_file_locked_err(e):
+            return False, e
+        raise
+    if not _clear_staging_sidecars(path, announce=True):
+        return False, f"{path.name}-wal/-shm sidecar is locked"
+    return True, None
+
+
+def prepare_staging():
+    """Claim INCOMING for the build, falling back to STAGE_FALLBACK when locked.
+    Returns the Path the sync must build into (publish_staging() moves a
+    fallback build onto INCOMING at the end)."""
+    blocker = None
+    for i, wait in enumerate((0,) + _CLAIM_WAITS):
+        if wait:
+            time.sleep(wait)
+        ok, blocker = _claim_staging(INCOMING)
+        if ok:
+            # Sweep a fallback build a previous run left behind (its publish
+            # failed, or it died before publishing) — this fresh build
+            # supersedes it, and a ~500 MB stray must not rot on disk.
+            if STAGE_FALLBACK.exists():
+                _claim_staging(STAGE_FALLBACK)
+            return INCOMING
+        if i == 0:
+            print(f"      ⚠ {INCOMING.name} is locked by another process ({blocker}) — "
+                  f"retrying for ~{sum(_CLAIM_WAITS)}s…")
+    print(f"      ⚠ {INCOMING.name} still locked — staging to {STAGE_FALLBACK.name} instead; "
+          f"it will be published over {INCOMING.name} once the build is done")
+    ok, blocker = _claim_staging(STAGE_FALLBACK)
+    if not ok:
+        sys.exit(f"[1/6] ✗ fallback staging file {STAGE_FALLBACK.name} is locked too "
+                 f"({blocker}). To fix: {_LOCK_FIX_HINT}.")
+    return STAGE_FALLBACK
+
+
+def publish_staging(stage) -> bool:
+    """Make the finished build available under the INCOMING name.
+
+    No-op when the build already lives at INCOMING (the normal path). A
+    fallback build is os.replace()d over .incoming — atomic, but on Windows the
+    replace fails while ANY process still holds .incoming open, so retry across
+    a full poller cycle. Orphan .incoming-wal/-shm are cleared first each try:
+    publishing next to a stale WAL would graft it onto the fresh DB at first
+    open (#72). Returns True when INCOMING is the fresh build; on False the
+    stage file is kept (a multi-minute build is never thrown away) and an
+    actionable message has been printed."""
+    if stage == INCOMING:
+        return True
+    # Fold the stage's own -wal in first (e.g. the menu-fact subprocess died
+    # mid-write): unlike an orphan .incoming-wal it belongs to THIS file, so
+    # opening the DB replays it legitimately; os.replace of the bare main file
+    # would silently drop those committed frames.
+    if os.path.exists(str(stage) + "-wal"):
+        try:
+            c = sqlite3.connect(str(stage))
+            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            c.close()
+        except sqlite3.Error as e:
+            print(f"      ⚠ could not checkpoint {stage.name}-wal: {e}")
+    blocker = None
+    for wait in (0,) + _PUBLISH_WAITS:
+        if wait:
+            time.sleep(wait)
+        if not _clear_staging_sidecars(INCOMING):
+            blocker = f"{INCOMING.name}-wal/-shm sidecar is locked"
+            continue
+        try:
+            os.replace(str(stage), str(INCOMING))
+            print(f"      ✓ published {stage.name} → {INCOMING.name}")
+            return True
+        except OSError as e:
+            if not _is_file_locked_err(e):
+                raise
+            blocker = e
+    print(f"      ✗ could not publish {stage.name} → {INCOMING.name}: still locked "
+          f"after ~{sum(_PUBLISH_WAITS)}s ({blocker}).\n"
+          f"        The fully-built, reconciled DB is KEPT at {stage.name}.\n"
+          f"        To fix: {_LOCK_FIX_HINT} — or apply the staged file manually:\n"
+          f"          move /Y \"{stage}\" \"{INCOMING}\"")
+    return False
+
+
 def _month_windows(since):
     """Calendar-month [lo, hi) windows from `since` up to and including the current
     month. The first window honours the exact `since` day; the rest start on the
@@ -269,26 +417,12 @@ def main():
         sys.exit(f"current DB not found: {DB}")
 
     print(f"[1/6] copy {DB.name} → {INCOMING.name} (preserves BoM/cost/settings)")
-    if INCOMING.exists():
-        INCOMING.unlink()
-    # …and its WAL/SHM. copy2 copies ONLY the main file, so a -wal left behind by a
-    # previous run that died mid-sync gets REPLAYED into the fresh copy — and it
-    # belongs to a different database image, so SQLite happily grafts its pages on
-    # top: duplicate sqlite_master rows, "2nd reference to page N", cross-linked
-    # b-trees. Seen 2026-08-07: a 502 MB stale WAL from the 08-06 10:00 run turned
-    # every later sync into "malformed database schema (recon_attachment)". The live
-    # oshinei.db was never touched — only the staging copy — but the sync was dead
-    # until the orphans were cleared. SQLite cannot detect this: a WAL carries no
-    # identity of the database it came from.
-    for suf in ("-wal", "-shm"):
-        try:
-            os.remove(str(INCOMING) + suf)
-            print(f"      removed stale {INCOMING.name}{suf} (orphan from an interrupted run)")
-        except OSError:
-            pass
-    shutil.copy2(DB, INCOMING)
+    # Claims .incoming (retrying/falling back if the dashboard holds it locked —
+    # WinError 32) and clears orphan -wal/-shm (#72). See prepare_staging().
+    staging = prepare_staging()
+    shutil.copy2(DB, staging)
 
-    sq = sqlite3.connect(str(INCOMING)); sq.row_factory = sqlite3.Row
+    sq = sqlite3.connect(str(staging)); sq.row_factory = sqlite3.Row
     # idempotent column adds — mirror backend/main.py startup migration so a sync
     # against an older oshinei.db doesn't fail with "no column named …".
     st_cols = {r[1] for r in sq.execute("PRAGMA table_info(sales_transaction)").fetchall()}
@@ -528,11 +662,11 @@ def main():
     sq.execute("VACUUM")
     sq.isolation_level = ""
 
-    print("[5/6] reconcile .incoming vs current DB")
+    print(f"[5/6] reconcile {staging.name} vs current DB")
     ok = reconcile(sq)
     sq.close()
     if not ok:
-        print("[6/6] ⚠ RECONCILE FAILED — .incoming built but NOT safe to push. Investigate.")
+        print(f"[6/6] ⚠ RECONCILE FAILED — {staging.name} built but NOT safe to push. Investigate.")
         sys.exit(3)
 
     # ── [5b/6] refresh menu_fact_* in the .incoming (🧪 วิเคราะห์วัตถุดิบ tab) ──
@@ -541,17 +675,24 @@ def main():
     # NON-FATAL by design: a fact-build hiccup must never block the sales sync —
     # the tab just shows slightly stale coverage until the next run.
     if not args.no_menu_fact:
-        print("[5b/6] refresh menu_fact_* (build_menu_fact.py --db .incoming)")
+        print(f"[5b/6] refresh menu_fact_* (build_menu_fact.py --db {staging.name})")
         try:
             import subprocess
             env = dict(os.environ, PYTHONIOENCODING="utf-8")
             rc = subprocess.run(
-                [sys.executable, str(HERE / "build_menu_fact.py"), "--db", str(INCOMING)],
+                [sys.executable, str(HERE / "build_menu_fact.py"), "--db", str(staging)],
                 timeout=2400, env=env).returncode
             if rc:
                 print(f"      ⚠ menu-fact build exited rc={rc} — tab data stays at previous coverage")
         except Exception as e:
             print(f"      ⚠ menu-fact build skipped: {e}")
+
+    # A fallback build (dashboard held .incoming locked at step 1) is published
+    # over .incoming only NOW, fully built + reconciled — the poller/refresh_fly
+    # never see a half-written file. Exit non-zero if the lock never cleared so
+    # the scheduler bat aborts instead of pushing/applying a STALE .incoming.
+    if not publish_staging(staging):
+        sys.exit(4)
 
     if args.apply_local:
         print("[6/6] reconciled → applying to local oshinei.db")
