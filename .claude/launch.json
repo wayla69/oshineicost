@@ -28,9 +28,6 @@
         "8016"
       ],
       "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "OSHINEI_DB": "C:\\Users\\ASUS\\OneDrive\\Daiki\\2026\\Cost Analysis\\backend\\oshinei.db"
-      },
       "port": 8016
     },
     {
