@@ -2543,6 +2543,19 @@ function setupChartDefaults() {
       return label + v.toLocaleString('en-US', { maximumFractionDigits: dp });
     } catch (e) { return ctx.formattedValue; }
   };
+
+  // Datalabels (the on-chart numbers): strip IEEE-754 dust, change NOTHING else.
+  // The plugin's default formatter prints the RAW value, so any unrounded
+  // arithmetic leaks float error onto the chart (menu drill 2026-08: pen
+  // 0.5777 × 100 → "57.769999999999996"). Rounding to 4 dp kills the dust
+  // while keeping every intentionally-precise label (qty/head "1.327" stays
+  // "1.327") and adding no thousand separators. null still returns null (label
+  // hidden), and a per-chart `datalabels.formatter` still overrides this.
+  if (Chart.defaults.plugins.datalabels) {
+    Chart.defaults.plugins.datalabels.formatter = function (v) {
+      return (typeof v === 'number' && isFinite(v)) ? String(parseFloat(v.toFixed(4))) : v;
+    };
+  }
 }
 init().catch(console.error);
 
