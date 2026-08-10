@@ -1,10 +1,12 @@
 {
   "version": "0.0.1",
+  "_comment": "runtimeExecutable is 'py -3.14', never bare 'python': PATH resolves 'python' to Programs\\Python\\Python312, which has NO fastapi/uvicorn/pymssql. The real environment is the Python Install Manager build (pythoncore-3.14) that also carries pytest. Same root cause _python.bat documents for the scheduled syncs - keep the two in lockstep.",
   "configurations": [
     {
       "name": "oshinei-backend",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "main:app",
@@ -16,8 +18,9 @@
     },
     {
       "name": "oshinei-tier",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "main:app",
@@ -25,15 +28,13 @@
         "8016"
       ],
       "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "OSHINEI_DB": "C:\\Users\\ASUS\\OneDrive\\Daiki\\2026\\Cost Analysis\\backend\\oshinei.db"
-      },
       "port": 8016
     },
     {
       "name": "oshinei-auth",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "main:app",
@@ -49,8 +50,9 @@
     },
     {
       "name": "docs-static",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "http.server",
         "8011"
@@ -60,8 +62,9 @@
     },
     {
       "name": "recon",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "recon.main:app",
@@ -76,8 +79,9 @@
     },
     {
       "name": "recon-preview",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "recon.main:app",
@@ -92,8 +96,9 @@
     },
     {
       "name": "recon-ux",
-      "runtimeExecutable": "python",
+      "runtimeExecutable": "py",
       "runtimeArgs": [
+        "-3.14",
         "-m",
         "uvicorn",
         "recon.main:app",
