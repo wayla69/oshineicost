@@ -46,6 +46,20 @@ import month_summary                            # sales_month_summary roll-up (b
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
 
+# ── per-LINE qty sanity guard ────────────────────────────────────────────────
+# Easy POS accepts fat-fingered quantities and never voids them (real incidents,
+# both at ระยอง: 2026-08-03 SaleId 40609 B0032 qty=1,000,000,000 → ฿4.93 BILLION
+# phantom COGS on every dashboard/report; 2026-06-05 SaleId 35773 SV0003
+# qty=10,000). Every run REBUILDS the qty tables from MSSQL, so a one-off SQLite
+# repair is undone the next night — the guard must live in the pull itself.
+# No genuine bill line reaches 1,000 units of one menu item. Only the qty that
+# feeds qty×cost COGS and menu-mix counts is zeroed; ExtendedPrice (money) is
+# never touched, so revenue and reconcile totals are unaffected. Zeroed lines
+# are printed by the sync and logged to sync_qty_guard_log (see [6/6] section).
+MAX_SANE_LINE_QTY = 1000
+QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
+            f"THEN 0 ELSE CAST(si.Qty AS float) END)")
+
 def _norm_paycode(c):
     """Collapse payment-code case-dups (POS has both 'CASH' and 'Cash') to one
     canonical label for the per-bill sale_payment table. Minimal — readable codes
@@ -506,7 +520,7 @@ def main():
     skum_rows = _chunk(mc, f"""
         SELECT si.BranchId AS bid, si.ItemId AS iid,
                CONVERT(char(7), s.SaleDate, 126) AS ym,
-               SUM(CAST(si.Qty AS float))            AS qty,
+               SUM({QTY_SANE})                       AS qty,
                SUM(CAST(si.ExtendedPrice AS float))  AS sub_exvat,
                SUM(CAST(ISNULL(si.Tax,0) AS float))  AS tax
         FROM SaleItem si
@@ -910,11 +924,37 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     if mx:
         y, m, d = (int(x) for x in mx.split("-"))
         dly_since = (_dt.date(y, m, d) - _dt.timedelta(days=120)).isoformat()
+    # Surface every line the qty guard zeroes (never a silent cap) and keep a
+    # durable audit trail in the staged DB — sync_qty_guard_log rides the swap to
+    # local AND Fly, so the 🩺 data-quality side can read it later. INSERT OR
+    # IGNORE keeps the original first_seen when the same line re-appears nightly.
+    mc.execute(f"""SELECT CONVERT(char(10), s.SaleDate, 126) d, b.BranchName bn,
+                          s.SaleId sid, i.ItemCode code, CAST(si.Qty AS float) qty
+                   FROM SaleItem si
+                   JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+                   JOIN Branch b ON b.BranchId=s.BranchId
+                   LEFT JOIN Items i ON i.ItemId=si.ItemId
+                   WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= '{dly_since}'
+                         AND ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY}""")
+    bad_lines = mc.fetchall()
+    sq.execute("CREATE TABLE IF NOT EXISTS sync_qty_guard_log("
+               "sale_date TEXT, branch TEXT, sale_id INT, item_code TEXT, qty REAL, "
+               "first_seen TEXT, PRIMARY KEY(sale_date, sale_id, item_code))")
+    if bad_lines:
+        _now = _dt.datetime.now().isoformat(timespec="seconds")
+        sq.executemany("INSERT OR IGNORE INTO sync_qty_guard_log VALUES(?,?,?,?,?,?)",
+                       [(r["d"], r["bn"], r["sid"], (r["code"] or "").strip(), r["qty"], _now)
+                        for r in bad_lines])
+        print(f"        QTY GUARD: zeroed {len(bad_lines)} insane line(s) "
+              f"(|qty| > {MAX_SANE_LINE_QTY:,}/line):")
+        for r in bad_lines[:10]:
+            print(f"          {r['d']} {r['bn']} SaleId={r['sid']} "
+                  f"{(r['code'] or '').strip()} qty={r['qty']:,.0f}")
     sq.executescript("DROP TABLE IF EXISTS sales_sku_daily; CREATE TABLE sales_sku_daily("
                      "branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);")
     drows = _chunk(mc, f"""
         SELECT si.BranchId bid, si.ItemId iid, CONVERT(char(10), s.SaleDate, 126) d,
-               SUM(CAST(si.Qty AS float)) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
+               SUM({QTY_SANE}) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(10), s.SaleDate, 126)
@@ -961,7 +1001,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     bill_rows = _chunk(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               si.ItemId iid, SUM({QTY_SANE}) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
@@ -1008,7 +1048,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # full-history per-line pull for discount bills (same shape/grouping as bill_rows).
     disc_line_rows = _chunk(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               si.ItemId iid, SUM({QTY_SANE}) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND s.Discount>0 AND {{RANGE}}

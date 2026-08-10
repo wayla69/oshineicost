@@ -40,6 +40,15 @@ load_env()
 from ingest_may26_update import BRANCH_ALIAS
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
+
+# Per-LINE qty sanity guard — keep in lockstep with sync_mssql.MAX_SANE_LINE_QTY
+# (this file is standalone-runnable, hence the duplicated constant, same as
+# SALE_FILTER above). A fat-fingered POS line (ระยอง 2026-08-03: qty=1e9 on one
+# sashimi line) otherwise floods menu_fact_* with billions of phantom qty×cost.
+MAX_SANE_LINE_QTY = 1000
+QTY1 = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
+        f"THEN 0 ELSE CAST(si.Qty AS float) END)")   # SaleItem alias `si`
+QTY2 = QTY1.replace("si.", "si2.")                    # SaleItem alias `si2`
 TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
               'BUFFETCHILD', 'BUFFETCHILDFREE', 'B01', 'B02', 'B07', 'B11')
 HC_COST = 30.0   # unit BoM cost >= this = "เมนูต้นทุนสูง" (high-cost consumption metric)
@@ -196,10 +205,10 @@ def main():
 WITH bill0 AS (
   SELECT s.SaleId sid, s.BranchId bid, CONVERT(char(10), s.SaleDate, 126) d,
     ISNULL(s.NumOfCust, 0) pax, CAST(ISNULL(s.Total, 0) AS float) / {VAT} net,
-    SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.Qty AS float) ELSE 0 END) aq,
+    SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN {QTY1} ELSE 0 END) aq,
     SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) aext,
-    SUM(CAST(si.Qty AS float) * ISNULL(c.cost, 0)) cogs,
-    SUM(CASE WHEN c.cost >= {HC_COST} THEN CAST(si.Qty AS float) * c.cost ELSE 0 END) hc
+    SUM({QTY1} * ISNULL(c.cost, 0)) cogs,
+    SUM(CASE WHEN c.cost >= {HC_COST} THEN {QTY1} * c.cost ELSE 0 END) hc
   FROM Sale s
   JOIN SaleItem si ON si.SaleId = s.SaleId AND si.BranchId = s.BranchId
   LEFT JOIN (VALUES {cost_sql}) c(ItemId, cost) ON c.ItemId = si.ItemId
@@ -214,9 +223,9 @@ bill AS (SELECT sid, bid, d, pax, net, cogs, hc, {tier_case} tier FROM bill0)"""
     Q_TOTAL = BILL_CTE + "SELECT bid, d, tier, COUNT(*), SUM(pax), SUM(cogs), SUM(net), SUM(hc) FROM bill GROUP BY bid, d, tier"
     Q_ITEM = BILL_CTE + f""",
 x AS (SELECT si2.SaleId sid, si2.BranchId bid, si2.ItemId iid,
-        SUM(CAST(si2.Qty AS float)) q,
-        SUM(CAST(si2.Qty AS float) * ISNULL(c2.cost, 0)) qc,
-        SUM(CASE WHEN c2.cost >= {HC_COST} THEN CAST(si2.Qty AS float) * c2.cost ELSE 0 END) qh
+        SUM({QTY2}) q,
+        SUM({QTY2} * ISNULL(c2.cost, 0)) qc,
+        SUM(CASE WHEN c2.cost >= {HC_COST} THEN {QTY2} * c2.cost ELSE 0 END) qh
       FROM SaleItem si2
       JOIN Sale s ON s.SaleId = si2.SaleId AND s.BranchId = si2.BranchId
       LEFT JOIN (VALUES {cost_sql}) c2(ItemId, cost) ON c2.ItemId = si2.ItemId
@@ -228,9 +237,9 @@ FROM bill b JOIN x ON x.sid = b.sid AND x.bid = b.bid
 GROUP BY x.iid, b.bid, b.d, b.tier"""
     Q_GROUP = BILL_CTE + f""",
 x AS (SELECT si2.SaleId sid, si2.BranchId bid, g.grp,
-        SUM(CAST(si2.Qty AS float)) q,
-        SUM(CAST(si2.Qty AS float) * ISNULL(c2.cost, 0)) qc,
-        SUM(CASE WHEN c2.cost >= {HC_COST} THEN CAST(si2.Qty AS float) * c2.cost ELSE 0 END) qh
+        SUM({QTY2}) q,
+        SUM({QTY2} * ISNULL(c2.cost, 0)) qc,
+        SUM(CASE WHEN c2.cost >= {HC_COST} THEN {QTY2} * c2.cost ELSE 0 END) qh
       FROM SaleItem si2
       JOIN (VALUES {grp_sql}) g(ItemId, grp) ON g.ItemId = si2.ItemId
       JOIN Sale s ON s.SaleId = si2.SaleId AND s.BranchId = si2.BranchId
