@@ -15,6 +15,7 @@ Set OSHINEI_WRITE_TOKEN env var to skip --token flag.
 
 import argparse
 import os
+import re
 import sys
 import json
 from pathlib import Path
@@ -34,6 +35,50 @@ BRANCH_MAP = {
     "5.UDN": 25,   # Udon Thani (อุดรธานี)
     "6.SRN": 24,   # Surin (สุรินทร์)
 }
+
+# Some documents do not sit in the branch/channel/month tree at all -- e.g. the
+# flat "May" folder, which holds every bank statement we have. For those the
+# branch, month and provider have to come out of the FILENAME instead.
+BRANCH_CODE_MAP = {
+    "CNX": 7,
+    "KR1": 4,
+    "UBN": 26,
+    "UDN": 25,
+    "SRN": 24,
+}
+
+# Branch codes we recognise and deliberately do NOT upload, with the reason.
+# Listed explicitly so nobody "fixes" the skip later by mapping them to the
+# nearest branch id -- that would book another brand's takings against an
+# Oshinei branch and inflate its bank side against POS forever.
+OUT_OF_SCOPE_CODES = {
+    # KBank SA 260-1-03492-4, สาขาถนนชยางกูร อุบลราชธานี -- same account holder
+    # (บริษัท โอชิเน เอ็นเตอร์ไพรส์) and same KBank branch as UBN, but a
+    # different restaurant: Renshin Ubon. No branch row, no POS data here, so
+    # nothing to reconcile it against.
+    "RUB": "Renshin Ubon -- different restaurant brand, not in this database",
+}
+
+# Whole-word tokens in a loose filename -> (source_type, provider)
+LOOSE_SOURCE_TOKENS = {
+    "KTB": ("bank", "KTB"),
+    "KB": ("bank", "KBank"),
+    "KBANK": ("bank", "KBank"),
+    "SCB": ("bank", "SCB"),
+    "BBL": ("bank", "BBL"),
+    "TTB": ("bank", "TTB"),
+    "KTC": ("credit_card", "KTC"),
+    "KRUNGSRI": ("credit_card", "Krungsri"),
+    "BAY": ("credit_card", "Krungsri"),
+    "GRAB": ("grab", "Grab"),
+    "LINEMAN": ("lineman", "Lineman"),
+}
+
+# "05.69", "05.2569", "05.2026", "05-2026", "05_2026"
+MONTH_IN_NAME = re.compile(r"(?<!\d)(0[1-9]|1[0-2])[._-](\d{4}|\d{2})(?!\d)")
+
+# A folder like "3.XXX" is a branch folder we do not know -- not a loose bundle
+BRANCH_FOLDER_RE = re.compile(r"^\d+\.")
 
 # Map channel folders to document source_type
 # Uses substring matching so it's flexible with numbering
@@ -62,8 +107,25 @@ FILE_PROVIDER = {
 }
 
 
+def normalize_year(y: int) -> int:
+    """Return a Gregorian year from a 2- or 4-digit, CE or Thai Buddhist year.
+
+    '2569' -> 2026, '69' -> 2026 (2569 BE), '2026' -> 2026, '26' -> 2026.
+    A 2-digit year is read as Buddhist first (25xx) and falls back to 20xx when
+    that lands outside the plausible range -- the documents use both.
+    """
+    if y < 100:
+        be = 2500 + y
+        if 2015 <= be - 543 <= 2100:
+            return be - 543
+        return 2000 + y
+    if 2400 <= y <= 2600:      # Thai Buddhist era
+        return y - 543
+    return y
+
+
 def parse_month(folder_name: str) -> str:
-    """Convert '05.2026', '05.69', '2025', '2026' to '2026-05' or '2025-01' etc."""
+    """Convert '05.2026', '05.2569', '05.69', '2025', '2026' to '2026-05' etc."""
     # If it's a year only (2025, 2026), return None (skip it)
     if folder_name.isdigit() and len(folder_name) == 4:
         return None
@@ -73,10 +135,7 @@ def parse_month(folder_name: str) -> str:
     if len(parts) == 2:
         try:
             m = int(parts[0])
-            y = int(parts[1])
-            if len(parts[1]) == 2 and y < 100:
-                # Thai Buddhist year (e.g., 69 = 2026)
-                y = 2543 + y
+            y = normalize_year(int(parts[1]))
             if 1 <= m <= 12 and y >= 1900:
                 return f"{y}-{m:02d}"
         except (ValueError, IndexError):
@@ -95,18 +154,105 @@ def infer_provider(file_path: str, source_type: str) -> str:
             "lineman": "Lineman"}.get(source_type, "")
 
 
+def should_skip(file_path: Path) -> bool:
+    """Dot-files, backups, unsupported types, and non-settlement documents."""
+    if file_path.name.startswith("."):
+        return True
+    if file_path.suffix.lower() in (".txt", ".zip"):
+        return True
+
+    name_lower = file_path.name.lower()
+    skip_patterns = (
+        "e-tax_invoice",        # invoices, not settlement reports
+        "invoice_",             # other invoices
+        "receipt_",             # receipts
+        "line_man",             # malformed lineman xlsx
+    )
+    if any(p in name_lower for p in skip_patterns):
+        return True
+    if name_lower.startswith("im"):  # Grab expense receipts
+        return True
+    return False
+
+
+def parse_loose_file(file_path: Path, channel_label: str) -> dict:
+    """Build an upload job for a file that carries its own branch/month/provider.
+
+    Files under a flat bundle like "May" have no branch or channel folder above
+    them, so everything is read off the filename:
+        05.69-Statement KTB CNX - ....pdf   -> 2026-05, branch CNX, KTB
+        CNX_Statements KB_CA_05.2569.pdf    -> 2026-05, branch CNX, KBank
+    Returns None (after explaining why) when the name does not identify a
+    branch, a month and a document type.
+    """
+    tokens = [t.upper() for t in re.split(r"[^0-9A-Za-z]+", file_path.name) if t]
+
+    out_of_scope = next((t for t in tokens if t in OUT_OF_SCOPE_CODES), None)
+    if out_of_scope:
+        print(f"[skip] {file_path.name} ({OUT_OF_SCOPE_CODES[out_of_scope]})",
+              file=sys.stderr)
+        return None
+
+    branch_code = next((t for t in tokens if t in BRANCH_CODE_MAP), None)
+    if not branch_code:
+        print(f"[skip] {file_path.name} (no known branch code in the filename)",
+              file=sys.stderr)
+        return None
+
+    m = MONTH_IN_NAME.search(file_path.name)
+    if not m:
+        print(f"[skip] {file_path.name} (no month in the filename)", file=sys.stderr)
+        return None
+    period_month = f"{normalize_year(int(m.group(2)))}-{int(m.group(1)):02d}"
+
+    hit = next((LOOSE_SOURCE_TOKENS[t] for t in tokens if t in LOOSE_SOURCE_TOKENS), None)
+    if hit:
+        source_type, provider = hit
+    else:
+        # fall back to the same substring matching the channel folders use
+        name_lower = file_path.name.lower()
+        source_type = next((v for k, v in CHANNEL_SOURCE.items() if k in name_lower), None)
+        if not source_type:
+            print(f"[skip] {file_path.name} (unknown document type)", file=sys.stderr)
+            return None
+        provider = infer_provider(file_path.name, source_type)
+
+    return {
+        "file_path": file_path,
+        "branch_id": BRANCH_CODE_MAP[branch_code],
+        "branch_name": branch_code,
+        "source_type": source_type,
+        "period_month": period_month,
+        "provider": provider,
+        "channel": channel_label,
+    }
+
+
 def collect_uploads(data_folder: Path) -> list[dict]:
     """Scan folder structure and return list of upload jobs."""
     jobs = []
 
-    for branch_folder in data_folder.iterdir():
-        if not branch_folder.is_dir():
+    for branch_folder in sorted(data_folder.iterdir()):
+        # Loose documents that name their own branch, e.g. the flat "May" bundle
+        if branch_folder.is_file():
+            job = parse_loose_file(branch_folder, "(loose)")
+            if job:
+                jobs.append(job)
             continue
 
         branch_name = branch_folder.name
         branch_id = BRANCH_MAP.get(branch_name)
         if not branch_id:
-            print(f"⚠️  Skipping unknown branch: {branch_name}", file=sys.stderr)
+            if BRANCH_FOLDER_RE.match(branch_name):
+                # numbered like a branch folder, but not one we know
+                print(f"⚠️  Skipping unknown branch: {branch_name}", file=sys.stderr)
+                continue
+            for f in sorted(branch_folder.rglob("*")):
+                if not f.is_file() or should_skip(f):
+                    continue
+                job = parse_loose_file(f, branch_name)
+                if job:
+                    jobs.append(job)
             continue
 
         # Scan channel/month/files
@@ -141,23 +287,7 @@ def collect_uploads(data_folder: Path) -> list[dict]:
                     if not file_path.is_file():
                         continue
 
-                    # Skip dot-files, backups, unsupported types, and wrong document types
-                    if file_path.name.startswith("."):
-                        continue
-                    if file_path.suffix.lower() in (".txt", ".zip"):
-                        continue
-
-                    name_lower = file_path.name.lower()
-                    # Skip files that don't parse correctly
-                    skip_patterns = (
-                        "e-tax_invoice",        # invoices, not settlement reports
-                        "invoice_",             # other invoices
-                        "receipt_",             # receipts
-                        "line_man",             # malformed lineman xlsx
-                    )
-                    if any(p in name_lower for p in skip_patterns):
-                        continue
-                    if name_lower.startswith("im"):  # Grab expense receipts
+                    if should_skip(file_path):
                         continue
 
                     jobs.append({
