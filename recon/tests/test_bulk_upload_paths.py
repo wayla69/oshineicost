@@ -56,7 +56,6 @@ def test_parse_loose_file_reads_the_filename(tmp_path, name, branch_id, provider
 
 
 @pytest.mark.parametrize("name", [
-    "RUB_Statements KB_SA_05.2569.pdf",   # branch code we do not map
     "CNX_Statements KB_CA.pdf",           # no month
     "CNX_mystery_05.2569.pdf",            # no document type
 ])
@@ -84,3 +83,14 @@ def test_collect_uploads_walks_loose_bundles_but_not_unknown_branch_folders(tmp_
     assert [j["file_path"].name for j in jobs] == ["CNX_Statements KB_CA_05.2569.pdf"]
     assert jobs[0]["channel"] == "May"          # came from the bundle, not 7.XYZ
     assert jobs[0]["branch_id"] == 7
+
+
+def test_renshin_ubon_never_lands_on_an_oshinei_branch(tmp_path):
+    """RUB is Renshin Ubon -- a different brand that shares the account holder
+    and the KBank branch with UBN. Booking it against branch 26 would inflate
+    Ubon's bank side against POS with takings never rung up there."""
+    f = tmp_path / "RUB_Statements KB_SA_05.2569.pdf"
+    f.write_bytes(b"%PDF-1.4")
+    assert bru.parse_loose_file(f, "May") is None
+    assert "RUB" not in bru.BRANCH_CODE_MAP
+    assert "RUB" in bru.OUT_OF_SCOPE_CODES

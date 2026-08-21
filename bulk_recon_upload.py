@@ -47,6 +47,18 @@ BRANCH_CODE_MAP = {
     "SRN": 24,
 }
 
+# Branch codes we recognise and deliberately do NOT upload, with the reason.
+# Listed explicitly so nobody "fixes" the skip later by mapping them to the
+# nearest branch id -- that would book another brand's takings against an
+# Oshinei branch and inflate its bank side against POS forever.
+OUT_OF_SCOPE_CODES = {
+    # KBank SA 260-1-03492-4, สาขาถนนชยางกูร อุบลราชธานี -- same account holder
+    # (บริษัท โอชิเน เอ็นเตอร์ไพรส์) and same KBank branch as UBN, but a
+    # different restaurant: Renshin Ubon. No branch row, no POS data here, so
+    # nothing to reconcile it against.
+    "RUB": "Renshin Ubon -- different restaurant brand, not in this database",
+}
+
 # Whole-word tokens in a loose filename -> (source_type, provider)
 LOOSE_SOURCE_TOKENS = {
     "KTB": ("bank", "KTB"),
@@ -174,6 +186,12 @@ def parse_loose_file(file_path: Path, channel_label: str) -> dict:
     branch, a month and a document type.
     """
     tokens = [t.upper() for t in re.split(r"[^0-9A-Za-z]+", file_path.name) if t]
+
+    out_of_scope = next((t for t in tokens if t in OUT_OF_SCOPE_CODES), None)
+    if out_of_scope:
+        print(f"[skip] {file_path.name} ({OUT_OF_SCOPE_CODES[out_of_scope]})",
+              file=sys.stderr)
+        return None
 
     branch_code = next((t for t in tokens if t in BRANCH_CODE_MAP), None)
     if not branch_code:
