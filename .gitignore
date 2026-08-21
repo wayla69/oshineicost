@@ -70,3 +70,6 @@ backend/*.db.gz
 Oshinei_App_Presentation_TH.pptx
 deck_assets/
 Reconciliation Data Udon/
+
+# Raw recon documents live in the OneDrive archive, never in the repo
+All recon data/
