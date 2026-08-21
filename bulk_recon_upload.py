@@ -20,7 +20,7 @@ import sys
 import json
 from pathlib import Path
 from collections import defaultdict
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit, urlunsplit
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -304,7 +304,8 @@ def collect_uploads(data_folder: Path) -> list[dict]:
                                         x["source_type"], x["file_path"].name))
 
 
-def upload_file(base_url: str, token: str, job: dict, verbose: bool = False) -> dict:
+def upload_file(session, base_url: str, token: str, job: dict,
+                verbose: bool = False) -> dict:
     """Upload one file via /api/uploads/{source_type}/confirm endpoint."""
     url = urljoin(base_url, f"/api/uploads/{job['source_type']}/confirm")
 
@@ -318,7 +319,7 @@ def upload_file(base_url: str, token: str, job: dict, verbose: bool = False) -> 
             }
             headers = {"X-Upload-Token": token}
 
-            resp = requests.post(url, files=files, data=data, headers=headers,
+            resp = session.post(url, files=files, data=data, headers=headers,
                                 verify=False, timeout=30)
 
         if resp.status_code == 200:
@@ -352,6 +353,44 @@ def upload_file(base_url: str, token: str, job: dict, verbose: bool = False) -> 
         }
 
 
+def login(session, login_url: str, creds_path: Path) -> str:
+    """Sign in on the dashboard so the recon writes carry a real session.
+
+    Recon runs with RECON_ENFORCE_AUTH: every POST to /api/ must present the
+    dashboard's signed session cookie, so X-Upload-Token alone gets a 401 --
+    the token gate and the login gate are two different doors, and writes need
+    both. The cookie is host-scoped, not port-scoped, so signing in on the
+    dashboard covers the recon app on :8443 of the same host.
+
+    Credentials are read from a file (user:password on one line) that is never
+    committed -- backend/.refresh_login.txt by default.
+    """
+    if not creds_path.is_file():
+        raise SystemExit(
+            f"Login file not found: {creds_path}. Expected one line "
+            f"'username:password'. Pass --login-file, or set RECON_LOGIN_FILE.")
+    user, sep, password = creds_path.read_text(encoding="utf-8").strip().partition(":")
+    if not sep or not user or not password:
+        raise SystemExit(f"{creds_path} must hold one line 'username:password'")
+
+    resp = session.post(urljoin(login_url, "/api/auth/login"),
+                        json={"username": user, "password": password},
+                        verify=False, timeout=30)
+    if resp.status_code != 200:
+        raise SystemExit(f"Login failed for {user}: HTTP {resp.status_code} "
+                         f"{resp.text[:200]}")
+    if not session.cookies.get_dict():
+        raise SystemExit(f"Login returned 200 but set no cookie -- the uploads "
+                         f"would all 401. Check {login_url}")
+    return user
+
+
+def default_login_url(upload_url: str) -> str:
+    """The dashboard (login) origin for a recon URL -- same host, no :8443."""
+    parts = urlsplit(upload_url)
+    return urlunsplit((parts.scheme, parts.hostname or "", "", "", ""))
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Bulk upload recon documents to Oshinei recon app")
@@ -368,6 +407,14 @@ def main():
                        help="Print every upload (default: only errors)")
     parser.add_argument("--dry-run", action="store_true",
                        help="Show what would be uploaded, don't actually upload")
+    parser.add_argument("--login-file", default=os.getenv("RECON_LOGIN_FILE"),
+                       help="File holding 'username:password' for the dashboard "
+                            "login (default: backend/.refresh_login.txt)")
+    parser.add_argument("--login-url", default=None,
+                       help="Dashboard origin to log in against "
+                            "(default: same host as --url, no port)")
+    parser.add_argument("--no-login", action="store_true",
+                       help="Skip login -- only works if RECON_ENFORCE_AUTH is off")
 
     args = parser.parse_args()
 
@@ -409,7 +456,7 @@ def main():
     results = []
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
-            executor.submit(upload_file, args.url, args.token, job, args.verbose): job
+            executor.submit(upload_file, session, args.url, args.token, job, args.verbose): job
             for job in jobs
         }
 
