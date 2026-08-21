@@ -5,7 +5,10 @@ Reads branch/channel/month/file structure, maps to app endpoints, uploads in par
 
 Usage:
   python bulk_recon_upload.py --url https://oshinei-dashboard.fly.dev:8443 \
-    --token <write-token> --folder "All recon data"
+    --token <write-token> [--folder "<path to All recon data>"]
+
+The data folder defaults to $RECON_DATA_DIR, else the OneDrive archive
+(see recon_paths.py) -- the raw documents are not kept in this repo.
 
 Set OSHINEI_WRITE_TOKEN env var to skip --token flag.
 """
@@ -20,6 +23,8 @@ from urllib.parse import urljoin
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+
+from recon_paths import recon_data_dir
 
 # Map folder names (user-facing) to branch IDs (database)
 BRANCH_MAP = {
@@ -222,8 +227,9 @@ def main():
         description="Bulk upload recon documents to Oshinei recon app")
     parser.add_argument("--url", default="https://oshinei-dashboard.fly.dev:8443",
                        help="Base URL (default: production Fly)")
-    parser.add_argument("--folder", default="All recon data",
-                       help="Path to recon data folder (default: 'All recon data')")
+    parser.add_argument("--folder", default=None,
+                       help="Path to recon data folder "
+                            "(default: $RECON_DATA_DIR, else the OneDrive archive)")
     parser.add_argument("--token", default=os.getenv("OSHINEI_WRITE_TOKEN"),
                        help="Write token (or set OSHINEI_WRITE_TOKEN env var)")
     parser.add_argument("--workers", type=int, default=4,
@@ -247,9 +253,9 @@ def main():
             print("[ERROR] Token required.", file=sys.stderr)
             sys.exit(1)
 
-    data_folder = Path(args.folder)
+    data_folder = recon_data_dir(args.folder)
     if not data_folder.exists():
-        print(f"❌ Folder not found: {args.folder}", file=sys.stderr)
+        print(f"❌ Folder not found: {data_folder}", file=sys.stderr)
         sys.exit(1)
 
     # Collect all upload jobs

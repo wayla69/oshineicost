@@ -3,7 +3,9 @@
 import zipfile
 from pathlib import Path
 
-ROOT = Path("All recon data")
+from recon_paths import require_recon_data_dir
+
+ROOT = require_recon_data_dir()
 extracted, skipped = 0, 0
 
 for zip_path in ROOT.rglob("RDB003_*.zip"):
@@ -28,7 +30,7 @@ xls = list(ROOT.rglob("RDB003_*.xls"))
 print(f"Total RDB003 .xls now available: {len(xls)}")
 by_branch = {}
 for f in xls:
-    branch = f.parts[1]  # All recon data / <branch> / ...
+    branch = f.relative_to(ROOT).parts[0]  # <branch>/...
     by_branch[branch] = by_branch.get(branch, 0) + 1
 for b in sorted(by_branch):
     print(f"  {b}: {by_branch[b]} files")

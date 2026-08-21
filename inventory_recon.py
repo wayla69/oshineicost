@@ -3,7 +3,9 @@
 from pathlib import Path
 from collections import defaultdict
 
-ROOT = Path("All recon data")
+from recon_paths import require_recon_data_dir
+
+ROOT = require_recon_data_dir()
 
 # branch -> channel -> month -> {ext: [filenames]}
 tree = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: defaultdict(list))))
