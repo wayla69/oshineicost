@@ -1273,6 +1273,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
     <span class="nav-label">⏰ เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
+  <div class="nav-section">🧺 จัดซื้อ/วัตถุดิบ</div>
+  <div class="nav-item" id="nav-ordering" onclick="switchTab('ordering')" title="🧺 แผนสั่งวัตถุดิบรายสาขา — ปริมาณที่ควรสั่งต่อสัปดาห์/เดือน จากยอดขายจริง × BoM + ออกจดหมายแจ้งสาขา">
+    <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
+    <span class="nav-label">🧺 แผนสั่งวัตถุดิบ</span>
+  </div>
+  <div class="nav-item" id="nav-ordersetup" onclick="switchTab('ordersetup')" title="⚙️ ตั้งค่าการสั่งซื้อ — ขนาดบรรจุ (หน่วยสั่ง) และปฏิทินเทศกาล/โปรโมชัน">
+    <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>
+    <span class="nav-label">⚙️ ตั้งค่าการสั่งซื้อ</span>
+  </div>
   <div class="nav-section">📄 รายงาน</div>
   <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="Monthly Report (รายงานประจำเดือน) · Exportable summary">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -1768,6 +1777,239 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 </div>
 
 <!-- ══ 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) ══ -->
+<div id="tab-ordering" style="display:none">
+
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#ecfdf5 0%,#e0f2fe 100%);border-left:4px solid #0f766e">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">🧺</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#115e59">แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          คำนวณจาก <b>ยอดขายจริงรายวัน × สูตร BoM</b> → แต่ละสาขาใช้วัตถุดิบตัวไหนวันละเท่าไร
+          และควรสั่งเท่าไรต่อสัปดาห์/ต่อเดือน · กดปุ่ม <b>📄 ออกจดหมายแจ้งสาขา</b> เพื่อพิมพ์ใบแจ้งปริมาณสั่ง (1 หน้า/สาขา)
+          <br><b style="color:#b45309">⚠️ ตัวเลขนี้คือปริมาณที่คาดว่าจะ “ใช้” ยังไม่ได้หักสต๊อกคงเหลือ</b> — ต้องตรวจนับของในร้านก่อนออกใบสั่งซื้อ
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+    <label class="text-xs" style="color:var(--text-muted)">สาขา</label>
+    <select id="opBranch" onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
+
+    <label class="text-xs" style="color:var(--text-muted)">ใช้ข้อมูลย้อนหลัง</label>
+    <select id="opDays" onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="7">7 วัน</option><option value="14">14 วัน</option>
+      <option value="28" selected>28 วัน</option><option value="56">56 วัน</option><option value="90">90 วัน</option>
+    </select>
+
+    <label class="text-xs" style="color:var(--text-muted)">ฐานคำนวณ</label>
+    <div style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+      <button class="gran-btn gran-active" data-ob="avg"    onclick="opSetBasis('avg')">เฉลี่ยทั้งช่วง</button>
+      <button class="gran-btn"             data-ob="recent" onclick="opSetBasis('recent')">7 วันล่าสุด</button>
+    </div>
+
+    <label class="text-xs" style="color:var(--text-muted)">เผื่อ %</label>
+    <input type="number" id="opBuffer" value="10" min="0" max="100" step="5" onchange="loadOrderPlan(true)"
+           style="width:64px;border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+
+    <select id="opType" onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="">— ทุกประเภท —</option>
+      <option value="protein">โปรตีน</option><option value="veg">ผัก</option>
+      <option value="carb">คาร์โบไฮเดรต</option><option value="sauce">ซอส</option>
+      <option value="oil">น้ำมัน</option><option value="seasoning">เครื่องปรุง</option>
+      <option value="other">อื่นๆ</option>
+    </select>
+
+    <input type="search" id="opQ" placeholder="ค้นหาวัตถุดิบ…" onchange="loadOrderPlan(true)"
+           style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:150px">
+
+    <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)" title="ปรับปริมาณตามเทศกาล โดยอ้างอิงยอดลูกค้าช่วงเดียวกันปีก่อน">
+      <input type="checkbox" id="opSeason" onchange="loadOrderPlan(true)"> 🎉 ปรับตามเทศกาล
+    </label>
+
+    <select id="opInclude" onchange="loadOrderPlan(true)" title="เลือกว่าจะแสดง/แนะนำรายการไหน" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุกรายการ</option>
+      <option value="central">เฉพาะที่แนะนำสั่ง</option>
+      <option value="local">เฉพาะที่สาขาซื้อเอง</option>
+    </select>
+
+    <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)">
+      <input type="checkbox" id="opFamily" onchange="loadOrderPlan(true)"> รวมชื่อคล้ายกัน
+    </label>
+
+    <span class="ml-auto flex items-center gap-2">
+      <select id="opHorizon" title="รอบการสั่งที่จะพิมพ์ลงจดหมาย" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+        <option value="week">จดหมายรอบสัปดาห์</option>
+        <option value="month">จดหมายรอบเดือน</option>
+      </select>
+      <button onclick="opPrintLetter()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">📄 ออกจดหมายแจ้งสาขา</button>
+      <button onclick="opExportXlsx()" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer">⬇️ Excel</button>
+    </span>
+    <span id="opStatus" class="text-xs w-full" style="color:var(--text-muted)"></span>
+  </div>
+
+  <div id="opKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div id="opCoverage" class="mb-4"></div>
+
+  <div id="opBranchCard" class="card p-5 mb-4" style="display:none">
+    <h2 class="section-title mb-1">🏪 มูลค่าที่ต้องสั่ง แยกรายสาขา</h2>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกชื่อสาขาเพื่อดูรายการวัตถุดิบของสาขานั้น</p>
+    <div style="max-height:340px;overflow:auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">จำนวนวัตถุดิบ</th>
+          <th class="py-1.5 pr-2 text-right">มูลค่าสั่ง/สัปดาห์</th>
+          <th class="py-1.5 text-right">มูลค่าสั่ง/เดือน</th>
+        </tr></thead><tbody id="opBranchBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="opSeasonNote" class="mb-4"></div>
+
+  <!-- ── issued cycles + what was actually ordered ────────────────────── -->
+  <div class="card p-5 mb-4" id="opCyclesCard">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">📋 รอบสั่งที่ออกแล้ว &amp; การสั่งจริง</h2>
+      <span class="text-xs" style="color:var(--text-muted)">
+        กด “ออกรอบสั่ง” เพื่อบันทึกตัวเลขที่แนะนำไว้เป็นหลักฐาน แล้วค่อยกรอกจำนวนที่สาขาสั่งจริง
+      </span>
+    </div>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">
+      ตัวเลขที่แนะนำจะถูก <b>บันทึกแช่แข็งไว้ ณ วันที่ออกรอบ</b> — คำนวณใหม่ภายหลังจะไม่เปลี่ยนสิ่งที่สาขาถูกเทียบด้วย
+      · เกณฑ์แจ้งเตือน = ไม่ได้สั่งผ่านส่วนกลาง หรือสั่งต่ำกว่าแผนเกิน <b id="opTolLabel">20</b>%
+    </p>
+    <div class="flex flex-wrap items-center gap-2 mb-3">
+      <label class="text-xs" style="color:var(--text-muted)">รอบเริ่ม</label>
+      <input type="date" id="opCycleStart" onchange="loadOrderPlan(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <button onclick="opIssueCycle()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">📌 ออกรอบสั่ง (บันทึกแผน)</button>
+      <label class="text-xs ml-2" style="color:var(--text-muted)">เกณฑ์ต่ำกว่าแผน %</label>
+      <input type="number" id="opTolerance" value="20" min="0" max="100" step="5" onchange="opLoadCycles()"
+             style="width:64px;border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <button onclick="opWarnLetter()" style="background:#b91c1c;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">⚠️ ออกจดหมายแจ้งเตือน</button>
+      <span id="opCycleStatus" class="text-xs" style="color:var(--text-muted)"></span>
+    </div>
+    <div style="max-height:260px;overflow:auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2">รอบสั่ง</th><th class="py-1.5 pr-2">ออกเมื่อ</th>
+          <th class="py-1.5 pr-2 text-right">รายการ</th><th class="py-1.5 pr-2 text-right">ไม่ได้สั่ง</th>
+          <th class="py-1.5 pr-2 text-right">ต่ำกว่าแผน</th><th class="py-1.5 pr-2 text-right">มูลค่าที่ขาด</th>
+          <th class="py-1.5">สถานะ</th>
+        </tr></thead><tbody id="opCycleBody"></tbody>
+      </table>
+    </div>
+    <div id="opCycleDetail" class="mt-4" style="display:none"></div>
+  </div>
+
+  <div class="card p-5 overflow-x-auto">
+    <h2 class="section-title mb-1">📦 ปริมาณที่ควรสั่ง รายวัตถุดิบ <span id="opScopeNote" class="font-normal normal-case" style="color:var(--text-muted);font-size:11px"></span></h2>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)">เรียงตามมูลค่าต่อเดือน มาก→น้อย · <b>ติ๊กช่อง “แนะนำ”</b> เพื่อเลือกว่ารายการไหนให้อยู่ในจดหมายสั่งของ (เอาติ๊กออก = สาขาซื้อเอง ยังนับต้นทุนอยู่แต่ไม่แนะนำให้สั่ง) · เลือกสาขาไว้ = ตั้งเฉพาะสาขานั้น · ช่อง “สั่ง” <b>ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่ง</b> แล้ว (ในวงเล็บ = ปริมาณจริงที่จะได้รับ) · <span style="color:#b45309">◇</span> = ยังไม่ได้ตั้งขนาดบรรจุ ใช้หน่วยมาตรฐาน กก./ลิตร ไปก่อน · แนวโน้ม = ใช้ 7 วันล่าสุด เทียบ 7 วันก่อนหน้า (▲ ควรเผื่อเพิ่ม · ▼ ควรลดปริมาณสั่ง)</p>
+    <table class="text-xs w-full">
+      <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2 text-center" title="ติ๊ก = แนะนำให้สั่งผ่านส่วนกลาง (จะอยู่ในจดหมาย) · เอาออก = สาขาซื้อเอง">แนะนำ</th>
+        <th class="py-1.5 pr-2">รหัส</th>
+        <th class="py-1.5 pr-2">วัตถุดิบ</th>
+        <th class="py-1.5 pr-2">ประเภท</th>
+        <th class="py-1.5 pr-2 text-right">ใช้เฉลี่ย/วัน</th>
+        <th class="py-1.5 pr-2 text-right">หน่วยสั่ง</th>
+        <th class="py-1.5 pr-2 text-right">สั่ง/สัปดาห์</th>
+        <th class="py-1.5 pr-2 text-right">สั่ง/เดือน</th>
+        <th class="py-1.5 pr-2 text-right">฿/เดือน</th>
+        <th class="py-1.5 pr-2 text-right">เมนูที่ใช้</th>
+        <th class="py-1.5 text-right">แนวโน้ม</th>
+      </tr></thead><tbody id="opBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div id="tab-ordersetup" style="display:none">
+
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #4f46e5">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">⚙️</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#3730a3">ตั้งค่าการสั่งซื้อ (Order Setup)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          <b>ขนาดบรรจุ</b> = 1 หน่วยสั่ง เท่ากับกี่หน่วยนับ (ใช้ปัดปริมาณขึ้นเป็นจำนวนเต็มหน่วยสั่ง) ·
+          <b>ปฏิทินเทศกาล</b> = ช่วงที่ต้องสั่งเพิ่ม เช่น สงกรานต์ ปีใหม่ โปรโมชัน
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="subtab-bar mb-3">
+    <button class="subtab-btn active" data-osub="pack" onclick="osSetSub('pack')">📦 ขนาดบรรจุ</button>
+    <button class="subtab-btn"        data-osub="cal"  onclick="osSetSub('cal')">🎉 ปฏิทินเทศกาล/โปรโมชัน</button>
+  </div>
+
+  <!-- ── pack sizes ─────────────────────────────────────────────────── -->
+  <div id="os-pane-pack">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <input type="search" id="osPackQ" placeholder="ค้นหารหัส/ชื่อวัตถุดิบ…" oninput="osRenderPacks()"
+             style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
+      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)">
+        <input type="checkbox" id="osPackOnlyMissing" checked onchange="osRenderPacks()"> แสดงเฉพาะที่ยังไม่ตั้ง
+      </label>
+      <span id="osPackSummary" class="text-xs" style="color:var(--text-muted)"></span>
+      <button onclick="osSavePacks()" class="ml-auto" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">💾 บันทึกที่แก้ไข</button>
+    </div>
+    <div class="card p-3 mb-4 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+      กรอก <b>ขนาดบรรจุ</b> = จำนวนหน่วยนับต่อ 1 หน่วยสั่ง (เช่น แซลมอน 1 แพ็ค = 1,000 กรัม ให้กรอก 1000) ·
+      <b>ยกลัง</b> = สั่งเป็นจำนวนเท่าของกี่หน่วย (สั่งยกลัง 6 ให้กรอก 6) · <b>ขั้นต่ำ</b> = จำนวนหน่วยสั่งขั้นต่ำของผู้ขาย ·
+      รายการที่ยังไม่ตั้งจะใช้หน่วยมาตรฐาน กก./ลิตร ไปก่อน ไม่ได้พังแต่จะสั่งเป็นกิโลแทนแพ็ค
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th>
+          <th class="py-1.5 pr-2">หน่วยนับ</th><th class="py-1.5 pr-2 text-right">ใช้ในสูตร</th>
+          <th class="py-1.5 pr-2">ชื่อหน่วยสั่ง</th><th class="py-1.5 pr-2 text-right">ขนาดบรรจุ</th>
+          <th class="py-1.5 pr-2 text-right">ราคา/หน่วยสั่ง</th><th class="py-1.5 pr-2 text-right">ยกลัง</th>
+          <th class="py-1.5 pr-2 text-right">ขั้นต่ำ</th><th class="py-1.5">สถานะ</th>
+        </tr></thead><tbody id="osPackBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── demand calendar ────────────────────────────────────────────── -->
+  <div id="os-pane-cal" style="display:none">
+    <div class="card p-4 mb-4">
+      <h3 class="text-sm font-bold mb-2" style="color:var(--text-primary)">เพิ่มช่วงเทศกาล / โปรโมชัน</h3>
+      <div class="flex flex-wrap items-end gap-3">
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ชื่อ</label>
+          <input id="osCalName" placeholder="เช่น สงกรานต์" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:170px"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ตั้งแต่</label>
+          <input type="date" id="osCalFrom" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ถึง</label>
+          <input type="date" id="osCalTo" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">สาขา</label>
+          <select id="osCalBranch" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:150px"></select></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ตัวคูณ (เว้นว่าง = คิดจากปีก่อน)</label>
+          <input type="number" id="osCalFactor" step="0.05" min="0.5" max="3" placeholder="อัตโนมัติ"
+                 style="width:120px;border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <button onclick="osAddEvent()" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">+ เพิ่ม</button>
+        <span id="osCalStatus" class="text-xs" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-[11px] mt-2" style="color:var(--text-muted)">
+        เว้นตัวคูณว่างไว้ = ระบบคำนวณเองจาก<b>ยอดลูกค้าช่วงเดียวกันปีก่อน</b>เทียบกับช่วงปกติ (รายสาขา) ·
+        กรอกเองเมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน
+      </p>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">ชื่อ</th><th class="py-1.5 pr-2">ตั้งแต่</th><th class="py-1.5 pr-2">ถึง</th>
+          <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ตัวคูณ</th>
+          <th class="py-1.5 pr-2">หมายเหตุ</th><th class="py-1.5"></th>
+        </tr></thead><tbody id="osCalBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="tab-menuimpact" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">วัตถุดิบ/เมนู:</span>
