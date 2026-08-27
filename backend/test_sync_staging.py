@@ -7,6 +7,7 @@ normalisation, TIS-620 decode, rounding, unknown-branch dropping) end-to-end
 into a real in-memory SQLite. Also covers the pure helpers and the
 ResilientCursor retry loop that test_sync_mssql.py doesn't reach.
 """
+import os
 import re
 import sqlite3
 import sys
@@ -339,3 +340,194 @@ def test_stage_extra_cancel_and_discount_bills(staged):
     assert cbd["cancel_user"] == "cashier1"
     dm = staged.execute("SELECT * FROM pos_discount_month").fetchone()
     assert tuple(dm) == (1, "2026-06", 3, 2, 150.0)
+
+
+# ── staged-file preparation: locked .incoming (WinError 32) resilience ───────
+# 2026-08-08..10 the dashboard's swap poller held oshinei.db.incoming open for
+# 3 days and every nightly sync died at INCOMING.unlink(). prepare_staging /
+# publish_staging must ride out a transient lock, fall back to a private
+# staging name for a persistent one, and never end in a raw traceback.
+
+def _lock_err():
+    e = PermissionError(13, "The process cannot access the file because it is "
+                            "being used by another process")
+    e.winerror = 32
+    return e
+
+
+@pytest.fixture
+def staging_paths(tmp_path, monkeypatch):
+    inc = tmp_path / "oshinei.db.incoming"
+    fb = tmp_path / "oshinei.db.incoming.new"
+    monkeypatch.setattr(sync, "INCOMING", inc)
+    monkeypatch.setattr(sync, "STAGE_FALLBACK", fb)
+    return inc, fb
+
+
+def test_prepare_staging_claims_incoming_and_drops_stale_sidecars(staging_paths):
+    inc, fb = staging_paths
+    inc.write_bytes(b"old staged db")
+    Path(str(inc) + "-wal").write_bytes(b"stale wal")     # the #72 orphan
+    Path(str(inc) + "-shm").write_bytes(b"stale shm")
+    fb.write_bytes(b"orphan of a failed fallback publish")
+    assert sync.prepare_staging() == inc
+    assert not inc.exists()
+    assert not Path(str(inc) + "-wal").exists()
+    assert not Path(str(inc) + "-shm").exists()
+    assert not fb.exists()                                # superseded stray swept
+
+
+def test_prepare_staging_retries_through_transient_lock(staging_paths, monkeypatch):
+    inc, _fb = staging_paths
+    inc.write_bytes(b"x")
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+    real_unlink, fails = Path.unlink, {"n": 2}
+
+    def flaky_unlink(self, *a, **k):
+        if self == inc and fails["n"]:
+            fails["n"] -= 1
+            raise _lock_err()
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    assert sync.prepare_staging() == inc      # lock cleared during the retries
+    assert sleeps == [1, 2]                   # backed off exactly while locked
+    assert not inc.exists()
+
+
+def test_prepare_staging_falls_back_when_incoming_stays_locked(staging_paths, monkeypatch, capsys):
+    inc, fb = staging_paths
+    inc.write_bytes(b"held by the dashboard")
+    fb.write_bytes(b"leftover from a crashed fallback run")
+    Path(str(fb) + "-wal").write_bytes(b"leftover wal")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    real_unlink = Path.unlink
+
+    def locked_unlink(self, *a, **k):
+        if self == inc:
+            raise _lock_err()
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    assert sync.prepare_staging() == fb
+    assert inc.exists()                       # untouched — another process owns it
+    assert not fb.exists()                    # leftover cleaned, ready for copy2
+    assert not Path(str(fb) + "-wal").exists()
+    assert "locked" in capsys.readouterr().out
+
+
+def test_prepare_staging_exits_actionably_when_everything_is_locked(staging_paths, monkeypatch):
+    inc, fb = staging_paths
+    inc.write_bytes(b"x")
+    fb.write_bytes(b"y")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+
+    def locked_unlink(self, *a, **k):
+        raise _lock_err()
+
+    monkeypatch.setattr(Path, "unlink", locked_unlink)
+    with pytest.raises(SystemExit) as ei:
+        sync.prepare_staging()
+    # actionable message naming the holder, not a raw PermissionError traceback
+    assert "dashboard" in str(ei.value)
+
+
+def test_publish_staging_is_noop_on_direct_path(staging_paths):
+    inc, _fb = staging_paths
+    assert sync.publish_staging(inc) is True  # build already lives at .incoming
+
+
+def test_publish_staging_replaces_incoming_and_clears_orphan_sidecars(staging_paths):
+    inc, fb = staging_paths
+    fb.write_bytes(b"fresh build")
+    inc.write_bytes(b"stale locked-era incoming")          # lock has since cleared
+    Path(str(inc) + "-wal").write_bytes(b"orphan wal")     # would graft (#72) if left
+    assert sync.publish_staging(fb) is True
+    assert inc.read_bytes() == b"fresh build"
+    assert not fb.exists()
+    assert not Path(str(inc) + "-wal").exists()
+
+
+def test_publish_staging_folds_stages_own_wal_before_moving(staging_paths):
+    """A -wal belonging to the STAGE file (e.g. menu-fact died pre-checkpoint) is
+    replayed into it before the move — os.replace of the bare main file would
+    silently drop those committed frames."""
+    inc, fb = staging_paths
+    con = sqlite3.connect(str(fb))
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA wal_autocheckpoint=0")             # keep the commit in the wal
+    con.execute("CREATE TABLE t(x)")
+    con.execute("INSERT INTO t VALUES(42)")
+    con.commit()
+    main_img = fb.read_bytes()                             # pre-checkpoint image
+    wal_img = Path(str(fb) + "-wal").read_bytes()
+    assert wal_img, "test premise: the commit must still live in the wal"
+    con.close()                                            # checkpoints + deletes wal
+    fb.write_bytes(main_img)                               # resurrect crashed-writer state
+    Path(str(fb) + "-wal").write_bytes(wal_img)
+    assert sync.publish_staging(fb) is True
+    chk = sqlite3.connect(str(inc))
+    assert chk.execute("SELECT x FROM t").fetchone()[0] == 42
+    chk.close()
+    assert not Path(str(fb) + "-wal").exists()
+
+
+def test_publish_staging_succeeds_once_the_lock_clears(staging_paths, monkeypatch):
+    inc, fb = staging_paths
+    fb.write_bytes(b"fresh build")
+    inc.write_bytes(b"old")
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    real_replace, fails = os.replace, {"n": 2}
+
+    def flaky_replace(src, dst):
+        if fails["n"]:
+            fails["n"] -= 1
+            raise _lock_err()
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(sync.os, "replace", flaky_replace)
+    assert sync.publish_staging(fb) is True
+    assert inc.read_bytes() == b"fresh build"
+
+
+def test_publish_staging_retries_then_reports_actionably(staging_paths, monkeypatch, capsys):
+    inc, fb = staging_paths
+    fb.write_bytes(b"fresh build")
+    inc.write_bytes(b"still locked")
+    sleeps = []
+    monkeypatch.setattr("time.sleep", sleeps.append)
+
+    def locked_replace(src, dst):
+        raise _lock_err()
+
+    monkeypatch.setattr(sync.os, "replace", locked_replace)
+    assert sync.publish_staging(fb) is False
+    out = capsys.readouterr().out
+    assert "dashboard" in out                 # names the holder + the fix
+    assert fb.name in out                     # …and where the build was kept
+    assert fb.exists()                        # a multi-minute build is never thrown away
+    assert sleeps == list(sync._PUBLISH_WAITS)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows sharing-violation semantics")
+def test_windows_real_lock_falls_back_then_publishes(staging_paths, monkeypatch):
+    """End-to-end against a REAL open handle (what the dashboard poller holds):
+    claim falls back to .incoming.new; publish succeeds the moment the holder
+    lets go (here: during a retry backoff)."""
+    inc, fb = staging_paths
+    inc.write_bytes(b"held")
+    holder = open(inc, "rb")                  # CRT open() denies delete/replace
+    try:
+        monkeypatch.setattr("time.sleep", lambda s: None)
+        assert sync.prepare_staging() == fb   # unlink hit WinError 32 → fell back
+        fb.write_bytes(b"fresh build")
+        def sleep_release(_s):
+            if not holder.closed:
+                holder.close()                # the "user closes the dashboard" moment
+        monkeypatch.setattr("time.sleep", sleep_release)
+        assert sync.publish_staging(fb) is True
+        assert inc.read_bytes() == b"fresh build"
+    finally:
+        if not holder.closed:
+            holder.close()

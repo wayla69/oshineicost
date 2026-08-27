@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Endpoint Code Review — 2026-06-10</title>
+<style>
+  :root{
+    --ink:#1a2332; --muted:#5a6b7f; --bg:#f6f8fa; --card:#ffffff; --line:#e3e8ee;
+    --high:#c0392b; --high-bg:#fdecea;
+    --med:#b9770e; --med-bg:#fef5e7;
+    --low:#2471a3; --low-bg:#eaf2f8;
+    --ok:#1e8449; --ok-bg:#e9f7ef;
+    --code:#eef1f5;
+  }
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,sans-serif;color:var(--ink);background:var(--bg);margin:0;padding:32px 16px;line-height:1.55}
+  .wrap{max-width:1100px;margin:0 auto}
+  h1{font-size:26px;margin:0 0 4px}
+  h2{font-size:20px;margin:40px 0 12px;padding-bottom:6px;border-bottom:2px solid var(--line)}
+  .sub{color:var(--muted);margin-bottom:24px}
+  .stats{display:flex;gap:12px;flex-wrap:wrap;margin:20px 0}
+  .stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 22px;min-width:130px}
+  .stat .n{font-size:28px;font-weight:700}
+  .stat .l{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  .stat.h .n{color:var(--high)} .stat.m .n{color:var(--med)} .stat.lo .n{color:var(--low)} .stat.k .n{color:var(--ok)}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:2px 9px;border-radius:20px;letter-spacing:.5px;vertical-align:middle}
+  .badge.HIGH{background:var(--high-bg);color:var(--high)}
+  .badge.MEDIUM{background:var(--med-bg);color:var(--med)}
+  .badge.LOW{background:var(--low-bg);color:var(--low)}
+  .badge.conf{background:var(--code);color:var(--muted);font-weight:600}
+  .finding{background:var(--card);border:1px solid var(--line);border-left:4px solid var(--line);border-radius:8px;padding:16px 20px;margin:12px 0}
+  .finding.HIGH{border-left-color:var(--high)}
+  .finding.MEDIUM{border-left-color:var(--med)}
+  .finding.LOW{border-left-color:var(--low)}
+  .finding h3{margin:0 0 6px;font-size:15.5px}
+  .meta{font-size:12.5px;color:var(--muted);margin-bottom:8px}
+  .meta code{background:var(--code);padding:1px 6px;border-radius:4px;font-size:12px}
+  .finding p{margin:6px 0;font-size:14px}
+  .impact{background:#fafbfc;border:1px dashed var(--line);border-radius:6px;padding:8px 12px;font-size:13.5px;margin-top:8px}
+  .impact b{color:var(--high)}
+  code{font-family:Consolas,monospace;background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}
+  table{border-collapse:collapse;width:100%;background:var(--card);font-size:13.5px;margin:14px 0}
+  th,td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+  th{background:#f0f3f7;font-size:12px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted)}
+  tr:hover td{background:#fafcff}
+  a{color:#1f618d;text-decoration:none} a:hover{text-decoration:underline}
+  .theme{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;margin:10px 0}
+  .theme h3{margin:0 0 6px;font-size:15px}
+  .cleared{background:var(--ok-bg);border:1px solid #bfe8cf;border-radius:8px;padding:14px 18px;margin:10px 0;font-size:14px}
+  .cleared h3{margin:0 0 6px;font-size:15px;color:var(--ok)}
+  .foot{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>🔍 Endpoint Code Review — Full Backend Audit</h1>
+<div class="sub">Oshinei Dashboard · <code>backend/main.py</code> (~16,850 lines, 177 endpoints) + <code>auth.py</code> · Reviewed 2026-06-10 · 8 parallel review passes, key findings verified against live <code>oshinei.db</code></div>
+
+<div class="stats">
+  <div class="stat h"><div class="n">14</div><div class="l">High</div></div>
+  <div class="stat m"><div class="n">24</div><div class="l">Medium</div></div>
+  <div class="stat lo"><div class="n">23</div><div class="l">Low</div></div>
+  <div class="stat k"><div class="n">1</div><div class="l">Open issue solved</div></div>
+</div>
+
+<h2>🎯 Headline: known "GP day/week 2× scaling" — ROOT CAUSE FOUND</h2>
+<div class="cleared">
+  <h3>✅ Root cause located in /api/analysis/gross_profit (line ~5566), NOT in /api/buffet/gp or /api/gp/by-branch-month</h3>
+  The daily/weekly path prorates the <b>full month's</b> revenue &amp; COGS onto days, but the share denominator (<code>bm_daily_total_inc</code>) is summed only over days <b>inside the selected date window</b>. Pick half a month → every day shows ~2× revenue, COGS and GP. Exact 2× when the window is half the month; correct only for whole-month windows. See finding <a href="#C1">C1</a>.<br><br>
+  <b>Cleared:</b> <code>/api/buffet/gp</code> was executed empirically — month, day, and week granularity all return identical period GP (52,090,233 for 2026-04); its pro-ration conserves revenue and cost. <code>/api/gp/by-branch-month</code> fractions were verified to sum to exactly 1 per branch-month.
+</div>
+
+<h2>🧩 Cross-cutting themes (same bug, many endpoints)</h2>
+
+<div class="theme"><h3>1. <code>group</code> (master/franchise) filter silently dropped in sub-queries</h3>
+Several endpoints apply <code>_group_filter</code> to the main query but not to companion COGS/MoM/sparkline queries — group-filtered views mix group revenue with whole-chain COGS. Findings <a href="#A1">A1</a>, <a href="#A2">A2</a>, <a href="#A3">A3</a>, <a href="#A4">A4</a>.</div>
+
+<div class="theme"><h3>2. <code>receipt_no</code> joined without branch/date scope</h3>
+<code>receipt_no</code> is NOT globally unique (per-branch counter; verified 406 values exist in &gt;1 branch; unscoped join already yields 8 phantom rows). Joins on <code>receipt_no</code> alone mispair one branch's revenue with another's COGS, and <code>sale_bill_cogs</code>'s PK = receipt_no means colliding bills silently overwrite at sync time. Findings <a href="#A5">A5</a>, <a href="#B2">B2</a>, <a href="#F3">F3</a>, <a href="#D4">D4</a>, <a href="#D9">D9</a>.</div>
+
+<div class="theme"><h3>3. <code>avg_ticket</code> is inc-VAT while revenue on the same row is ex-VAT</h3>
+<code>AVG(total_inc_vat)</code> without /1.07 in at least 9 endpoints, while <code>/api/analysis/persona</code> and <code>/api/profit/summary</code> correctly de-VAT — the same KPI differs by exactly 7% across tabs. Findings <a href="#D6">D6</a>, <a href="#E5">E5</a>, <a href="#C9">C9</a>, <a href="#F5">F5</a>. One shared fix: change every <code>AVG(st.total_inc_vat)</code> to <code>AVG(st.total_inc_vat/1.07)</code>.</div>
+
+<div class="theme"><h3>4. BoM-first unified COGS vs legacy sku_cost-only gating</h3>
+COGS now resolves BoM-recipe-first (<code>_unified_cogs_expr</code>), but several endpoints still gate "has cost" / "costed revenue" / "uncosted count" on the old <code>sku_cost</code> chain. 98 BoM-costed SKUs (carrying ฿333M = 54% of total COGS) fall through the cracks. Findings <a href="#A6">A6</a>, <a href="#E3">E3</a>, <a href="#E7">E7</a>, <a href="#F6">F6</a>, <a href="#G3">G3</a>, <a href="#G4">G4</a>, <a href="#G7">G7</a>.</div>
+
+<div class="theme"><h3>5. Partial in-progress month treated as a full data point</h3>
+The live month (synced daily) enters trend/forecast/health/lifecycle math as if complete, producing fake collapses early in each month. Findings <a href="#D7">D7</a>, <a href="#D8">D8</a>, <a href="#C8">C8</a>, <a href="#G5">G5</a>, <a href="#G6">G6</a>.</div>
+
+<div class="theme"><h3>6. Hardcoded buffet tier SKU codes that don't exist in the DB</h3>
+Code references <code>BUFFET590/BUFFET799/B01/B02/B03/B07/B11</code> — none exist; the real SKUs are plain <code>BUFFET</code> and <code>BUFFETCHILD</code>. Several buffet features are therefore permanently no-op or 100%-wrong. Findings <a href="#C3">C3</a>, <a href="#C4">C4</a>, <a href="#C5">C5</a>.</div>
+
+<h2>🔴 HIGH severity (14)</h2>
+
+<div class="finding HIGH" id="C1"><h3><span class="badge HIGH">HIGH</span> C1 — GP 2× at day/week: window-only share denominator vs full-month numerator</h3>
+<div class="meta"><code>/api/analysis/gross_profit</code> · main.py:5566 · <span class="badge conf">confidence: high</span> · ✔ verified in code</div>
+<p>Daily/weekly proration computes <code>share = day_rev_inc / bm_daily_total_inc[k]</code> where the denominator sums only days inside the requested <code>date_from/date_to</code> window, but <code>bm["cogs"]</code>/<code>bm["rev_ex"]</code> are the FULL month's totals. Shares sum to 1 over the window, squeezing the whole month's revenue and COGS into the selected days.</p>
+<div class="impact"><b>Impact:</b> Day/week GP, revenue and COGS roughly 2× too high for half-month windows (scales with window fraction). This is the documented "gp day/week 2× scaling" open issue. <b>Fix:</b> sum the share denominator over the full month (unfiltered by date), or scale <code>bm</code> totals by the in-window revenue fraction.</div></div>
+
+<div class="finding HIGH" id="C2"><h3><span class="badge HIGH">HIGH</span> C2 — Buffet GP endpoints report 100% margin (COGS = 0)</h3>
+<div class="meta"><code>/api/buffet/breakeven</code> + tier-mix, upgrade-simulator, branch-tier-matrix, child-trend · main.py:5042 / 4092 / 4502 / 4837 / 4943 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>These endpoints filter to category <code>BUFFET</code> then aggregate <code>_cogs_case()</code> — but the unified expression deliberately returns 0 for tier SKUs (consumption is booked on item-level B0xxx rows in OTHER categories, which the filter excludes). Verified 2026-05: BUFFET category rev_ex = ฿110.4M, COGS = 0. The gp-calendar comment (lines 4744-4748) documents this exact trap, but only gp-calendar was fixed.</p>
+<div class="impact"><b>Impact:</b> Every buffet GP/breakeven figure shows ~100% margin; breakeven's <code>avg_gp_per_cover</code> ≈ ฿705 instead of a realistic ~฿300, so required covers/day are understated ~2.4×.</div></div>
+
+<div class="finding HIGH" id="F2"><h3><span class="badge HIGH">HIGH</span> F2 — Cost-sensitivity baseline GP is −13.4M when real GP is +52.1M</h3>
+<div class="meta"><code>/api/buffet/cost-sensitivity</code> · main.py:13017 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>Revenue excludes buffet tier SKUs (where ฿96M of ฿112M revenue is booked) while cost sums only the top-N (default 50) rows (฿29.1M of ฿59.7M actual). Two mismatched denominators → <code>base_gp = −13,359,284</code> for 2026-04 vs the real +52,090,233 from <code>/api/buffet/gp</code>.</p>
+<div class="impact"><b>Impact:</b> Every simulated margin-impact figure in the cost-sensitivity tool starts from a wildly wrong negative baseline.</div></div>
+
+<div class="finding HIGH" id="F1"><h3><span class="badge HIGH">HIGH</span> F1 — buffet_mix counts buffet FOOD pieces and penalty fees as price-tier covers</h3>
+<div class="meta"><code>/api/analysis/buffet_mix</code> · main.py:11717 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p><code>classify()</code> tests tier substrings ('350'/'500'/'590'/'799') BEFORE the buffet-charge / rev&gt;0 check. Zero-revenue (B) item SKUs whose names contain a tier number — e.g. B0068 "(B) ข้าวปั้นหน้าปลาไหล 590 (1 ชิ้น)", qty 153,629 — are counted as covers. Penalty SKUs ("ค่าปรับบุฟเฟ่ต์ 590++"), gift vouchers "500" and soju combos also land in tiers.</p>
+<div class="impact"><b>Impact:</b> ~260k phantom "covers" dumped into 590/799 tiers (vs ~1.58M real covers); tier revenue share and the monthly trend chart polluted. Likely also a contributor to the known "89% untiered" anomaly reading strangely.</div></div>
+
+<div class="finding HIGH" id="C3"><h3><span class="badge HIGH">HIGH</span> C3 — Upgrade simulator is permanently a no-op</h3>
+<div class="meta"><code>/api/buffet/upgrade-simulator</code> · main.py:4592 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p><code>_tier_label</code> can only produce '590'/'799' from SKU codes B02/B11 or names containing those numbers — but the BUFFET category contains exactly two SKUs: <code>BUFFET</code> and <code>BUFFETCHILD</code>. The <code>if tier_590 and tier_799</code> branch never executes; every call returns <code>delta_gp=0</code> with the note "tier data not found".</p>
+<div class="impact"><b>Impact:</b> The what-if simulator silently never simulates anything, for any input.</div></div>
+
+<div class="finding HIGH" id="C4"><h3><span class="badge HIGH">HIGH</span> C4 — Child-trend shows 100% children every month</h3>
+<div class="meta"><code>/api/buffet/child-trend</code> · main.py:4639 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p><code>_BUFFET_ADULT_CODES</code> lists only legacy codes (BUFFET350/500/590/799, B01…B11) — none exist in the DB. The actual adult SKU <code>BUFFET</code> (156,580 pax in 2026-05) matches neither adult nor child, so it is dropped; only BUFFETCHILD survives.</p>
+<div class="impact"><b>Impact:</b> adult_pax = 0 and child_pct = 100% in every month of the chart.</div></div>
+
+<div class="finding HIGH" id="A1"><h3><span class="badge HIGH">HIGH</span> A1 — cost-per-head: COGS/revenue ignore the <code>group</code> filter</h3>
+<div class="meta"><code>/api/sales/cost-per-head</code> · main.py:2291 · <span class="badge conf">confidence: high</span></div>
+<p>The customers query applies <code>_group_filter</code>, but the COGS/revenue query over <code>sales_sku_daily</code> filters only by branch name. With <code>?group=master|franchise</code>, customers are group-scoped while COGS/revenue cover all branches.</p>
+<div class="impact"><b>Impact:</b> Group-filtered views divide all-chain COGS by group-only customers — cost_per_head, cost_pct and gp_per_head materially wrong; out-of-group branches appear with customers=0.</div></div>
+
+<div class="finding HIGH" id="A2"><h3><span class="badge HIGH">HIGH</span> A2 — MTD headline: COGS ignores <code>group</code> while revenue respects it</h3>
+<div class="meta"><code>/api/overall/latest-month-mtd</code> · main.py:2368 · <span class="badge conf">confidence: high</span></div>
+<p>Same copy-paste pattern as A1: revenue/customers/discount from <code>sales_transaction</code> are group-filtered; the COGS aggregate over <code>sales_sku_daily</code> is not.</p>
+<div class="impact"><b>Impact:</b> gross_profit = group revenue − whole-chain COGS → deeply negative/garbage GP and MoM on group-filtered MTD headlines.</div></div>
+
+<div class="finding HIGH" id="B1"><h3><span class="badge HIGH">HIGH</span> B1 — /api/summary fallback divides ex-VAT revenue by 1.07 again</h3>
+<div class="meta"><code>/api/summary</code> · main.py:3439-3441 · <span class="badge conf">confidence: high</span> · ✔ verified in code + ingest rule</div>
+<p>For branch×months missing from <code>sales_sku_monthly</code>, the fallback treats <code>sales_month_summary.net_sales</code> as inc-VAT and calls <code>ex_vat()</code> on it — but the ingest hard rule (ingest_easy.py:632) writes <code>net_sales</code> VAT-EXCLUSIVE, and other endpoints use it directly as ex-VAT.</p>
+<div class="impact"><b>Impact:</b> Headline revenue and avg_ticket ~6.5% too low for fallback months; <code>revenue_inc_vat</code> is fed an ex-VAT figure, breaking POS reconciliation.</div></div>
+
+<div class="finding HIGH" id="D1"><h3><span class="badge HIGH">HIGH</span> D1 — Discounts tab uses the broken subtotal base everywhere</h3>
+<div class="meta"><code>/api/analysis/discounts</code> · main.py:6241 · <span class="badge conf">confidence: high</span></div>
+<p>by_branch, top_cashiers, pattern_groups and overall gross_sales compute discount % against <code>food+drink+other subtotal</code> — a base that excludes the buffet per-head charge. The codebase itself documents the defect in discount_bills (lines 6383-6390: 221 bills read &gt;100% discount) and fixed it there with <code>(total_inc_vat − service)/1.07 + discount</code>, but this endpoint was never migrated. The cashier outlier flag is computed from the inflated values.</p>
+<div class="impact"><b>Impact:</b> Branch/cashier discount % wildly overstated on buffet bills; normal buffet bills classified "100% free"; wrong cashiers flagged for fraud review.</div></div>
+
+<div class="finding HIGH" id="D2"><h3><span class="badge HIGH">HIGH</span> D2 — discount_composition buckets copy the same broken base</h3>
+<div class="meta"><code>/api/analysis/discount_composition</code> · main.py:6544 · <span class="badge conf">confidence: high</span></div>
+<p>The bucket CASE classifies bills by <code>st.discount</code> vs subtotal gross — same defect as D1; a 10% discount on a buffet bill lands in 'free' or 'ge50'. The correct <code>base_expr</code> already exists in discount_leakage in the very next endpoint.</p>
+<div class="impact"><b>Impact:</b> Branches shown doing heavy 50%+/free discounting when they actually give small markdowns on buffet bills; per-branch "dominant bucket" wrong.</div></div>
+
+<div class="finding HIGH" id="G1"><h3><span class="badge HIGH">HIGH</span> G1 — GP Excel export: every percentage 100× too small</h3>
+<div class="meta"><code>/api/buffet/gp/export</code> · main.py:13706/13742/13755/13768 · <span class="badge conf">confidence: high</span> · ✔ verified in code</div>
+<p><code>PCT_FMT = '0.0"%"'</code> uses a QUOTED % — a literal suffix with no ×100 scaling — yet every percent value is divided by 100 before writing (<code>(s["margin_pct"] or 0) / 100</code>). A 42.5% margin renders as "0.4%". The monthly-pack renderer (line 14082) uses the same literal format with UNdivided values, which is correct.</p>
+<div class="impact"><b>Impact:</b> Margin %, vs-network pp, and % of total cost in the downloaded Excel are wrong by a factor of 100 vs the dashboard. <b>Fix:</b> stop dividing by 100 (3 places).</div></div>
+
+<div class="finding HIGH" id="G3"><h3><span class="badge HIGH">HIGH</span> G3 — Recalibration worklist hides 54% of total COGS</h3>
+<div class="meta"><code>/api/cost/recalibration</code> · main.py:15102 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>The per-SKU query INNER JOINs <code>sku_cost</code> and filters on the legacy effective-cost chain, but total COGS uses the unified BoM-first expression. 98 BoM-only SKUs carry ฿333.1M of ฿615.1M total COGS (54.2%) — mostly buffet B0xxx items, the true top drivers — and can never appear in the list, while pct_of_total_cogs uses the full denominator.</p>
+<div class="impact"><b>Impact:</b> The worklist shows only the sku_cost-priced minority (mostly bogus price-as-cost rows per the 2026-06-01 audit) and hides the SKUs that drive over half of food cost.</div></div>
+
+<div class="finding HIGH" id="G5"><h3><span class="badge HIGH">HIGH</span> G5 — Revenue forecast OLS includes the partial live month</h3>
+<div class="meta"><code>/api/analysis/revenue-forecast</code> · main.py:13626 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>History GROUPs BY period_month with no live-month guard. Verified today: 2026-06 = ฿29.6M (day 10) vs ฿126.7M (May). The crash point drags the OLS slope strongly negative, inflates residual sd (huge confidence band), and poisons the first forecast bucket.</p>
+<div class="impact"><b>Impact:</b> For most of every month the forecast projects collapse; r_squared/trend stats meaningless.</div></div>
+
+<h2>🟠 MEDIUM severity (24)</h2>
+
+<div class="finding MEDIUM" id="A3"><h3><span class="badge MEDIUM">MEDIUM</span> A3 — sales/monthly: daily/weekly/quarterly ignore <code>group</code> (quarterly also drops <code>source</code>)</h3>
+<div class="meta"><code>/api/sales/monthly</code> · main.py:1051/1084/1119 · <span class="badge conf">confidence: high</span></div>
+<p>Monthly and yearly branches apply <code>_group_filter</code>; daily, weekly and quarterly never do, and quarterly also drops the source filter.</p>
+<div class="impact"><b>Impact:</b> Group-filtered trend charts at those grains silently show whole-chain numbers.</div></div>
+
+<div class="finding MEDIUM" id="A4"><h3><span class="badge MEDIUM">MEDIUM</span> A4 — top_ordered: MoM and sparklines ignore <code>group</code></h3>
+<div class="meta"><code>/api/sales/top_ordered</code> · main.py:1563/1655 · <span class="badge conf">confidence: high</span></div>
+<p>Ranking/totals/covers are group-filtered, but per-SKU MoM and sparkline queries are not (the MTD daily override IS, so month- and MTD-basis disagree).</p>
+<div class="impact"><b>Impact:</b> Misleading trend arrows and sparklines on group-filtered Most Ordered tables.</div></div>
+
+<div class="finding MEDIUM" id="A5"><h3><span class="badge MEDIUM">MEDIUM</span> A5 — heavy-eaters joins sale_bill_cogs on bare receipt_no</h3>
+<div class="meta"><code>/api/sales/heavy-eaters</code> · main.py:1895 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p><code>t.receipt_no = sbc.receipt_no</code> with no branch/date scope. 406 receipt_no values exist in &gt;1 branch; the unscoped join already produces 57,450 rows vs 57,442 scoped.</p>
+<div class="impact"><b>Impact:</b> Duplicated/mispaired bills (branch X revenue paired with branch Y COGS); grows silently as the costed window extends.</div></div>
+
+<div class="finding MEDIUM" id="B2"><h3><span class="badge MEDIUM">MEDIUM</span> B2 — pnl-bill family: receipt_no join unscoped + PK collisions overwrite at sync</h3>
+<div class="meta"><code>/api/reports/pnl-bill, pnl-bill-drill, pnl-bill-items</code> · main.py:2436/2491/2573 · <span class="badge conf">confidence: medium</span></div>
+<p>Synthetic receipt = <code>{date}-{SaleNum}-{SaleId}</code> with per-branch counters; <code>sale_bill_cogs</code> PK is receipt_no only with INSERT OR REPLACE, so colliding bills overwrite each other at sync, then the unscoped join fans the surviving COGS row onto both branches. pnl-bill-items fetches headers with <code>WHERE receipt_no=:r</code> (arbitrary branch on collision) and SUMs item lines across colliding bills.</p>
+<div class="impact"><b>Impact:</b> Wrong COGS/GM per bill, phantom loss bills in the wrong branch, merged item lines in the loss-bill drilldown.</div></div>
+
+<div class="finding MEDIUM" id="F3"><h3><span class="badge MEDIUM">MEDIUM</span> F3 — Same unscoped receipt_no join in heavy-eater-tail and turn-efficiency</h3>
+<div class="meta"><code>/api/buffet/heavy-eater-tail, /api/buffet/turn-efficiency</code> · main.py:12834/12915 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>Identical copy-pasted unscoped join; 8 joined rows already have mismatched branch or day.</p>
+<div class="impact"><b>Impact:</b> Loss-bill counts, GP/head and per-branch loss attribution include duplicated bills with another branch's COGS.</div></div>
+
+<div class="finding MEDIUM" id="D4"><h3><span class="badge MEDIUM">MEDIUM</span> D4 — sale_payment joined on (branch, receipt_no) without date</h3>
+<div class="meta"><code>/api/analysis/discount_bills, payment_discount, discount_alerts</code> · main.py:6442/6749/6853 · <span class="badge conf">confidence: medium</span></div>
+<p>Dominant-payment subqueries key by branch+receipt_no only; receipt numbers repeat across days within a branch.</p>
+<div class="impact"><b>Impact:</b> Payment-method attribution on discounted bills (incl. "cash + heavy discount" fraud flags) can aggregate payments from multiple unrelated bills.</div></div>
+
+<div class="finding MEDIUM" id="D3"><h3><span class="badge MEDIUM">MEDIUM</span> D3 — period_compare built from LIMIT-10 lists → fake −100% collapses</h3>
+<div class="meta"><code>/api/analysis/period_compare</code> · main.py:7126 · <span class="badge conf">confidence: high</span></div>
+<p><code>_fetch_period_kpis</code> returns only the top 10 branches per period; a branch absent from one period's top-10 reads revenue 0, producing fake −100%-style deltas and meaningless rank shifts (sentinel 99).</p>
+<div class="impact"><b>Impact:</b> Real branches shown with revenue 0 purely because they fell out of an arbitrary top-10 cut.</div></div>
+
+<div class="finding MEDIUM" id="D5"><h3><span class="badge MEDIUM">MEDIUM</span> D5 — p95_discount computed over the returned page, not the scope</h3>
+<div class="meta"><code>/api/analysis/discount_bills</code> · main.py:6513 · <span class="badge conf">confidence: high</span></div>
+<p>p95 is taken from the LIMIT rows (default 100, sorted discount DESC) — i.e. the 95th percentile of the 100 LARGEST discounts.</p>
+<div class="impact"><b>Impact:</b> The "abnormally high" threshold is massively inflated, so genuinely abnormal bills are never flagged.</div></div>
+
+<div class="finding MEDIUM" id="D6"><h3><span class="badge MEDIUM">MEDIUM</span> D6 — avg_ticket inc-VAT in cashiers / period_compare / percentiles / KPI block</h3>
+<div class="meta"><code>/api/analysis/cashiers</code> + 3 others · main.py:6158/7019/8168/5804 · <span class="badge conf">confidence: high</span></div>
+<p><code>AVG(st.total_inc_vat)</code> without /1.07 while revenue on the same row is ex-VAT; persona de-VATs correctly. (Theme 3.)</p>
+<div class="impact"><b>Impact:</b> Average-ticket KPIs disagree by exactly 7% across tabs; revenue/tx_count ≠ avg_ticket within one row.</div></div>
+
+<div class="finding MEDIUM" id="D7"><h3><span class="badge MEDIUM">MEDIUM</span> D7 — Health score: no MTD clamp on the partial latest month</h3>
+<div class="meta"><code>/api/analysis/health</code> · main.py:7626 · <span class="badge conf">confidence: high</span></div>
+<p>growth/momentum compare the partial latest month against full prior months — unlike anomalies and the KPI compare block which clamp to same-day-range MTD.</p>
+<div class="impact"><b>Impact:</b> Early/mid-month all branch health scores collapse; rankings reflect days-elapsed, not performance.</div></div>
+
+<div class="finding MEDIUM" id="E1"><h3><span class="badge MEDIUM">MEDIUM</span> E1 — GET /api/targets without ?month fans out per target month</h3>
+<div class="meta"><code>/api/targets</code> · main.py:8468 · <span class="badge conf">confidence: high</span></div>
+<p>With no month, the LEFT JOIN has no period filter — each branch multiplies by every <code>branch_targets</code> row. Fine today (one month populated), breaks the moment a second month is saved.</p>
+<div class="impact"><b>Impact:</b> Duplicate branch rows with mixed period_months in the targets editor; clients keying by branch keep an arbitrary month.</div></div>
+
+<div class="finding MEDIUM" id="E3"><h3><span class="badge MEDIUM">MEDIUM</span> E3 — pnl/* family: BoM-first COGS paired with sku_cost-only costed revenue</h3>
+<div class="meta"><code>/api/pnl/monthly, /api/pnl/branches, /api/pnl/branch-detail, /api/buffet/performance</code> · main.py:10354/9621 · <span class="badge conf">confidence: medium</span></div>
+<p><code>_cogs_case()</code> (BoM-first) paired with <code>_costed_rev_case()</code> whose "has cost" test checks only sku_cost/sku_cost_monthly. A BoM-only SKU contributes full COGS but zero costed revenue. (Theme 4.)</p>
+<div class="impact"><b>Impact:</b> Understated GP and margin % on P&L tables and the buffet KPI hero row; disagrees with /api/profit/summary for the same period.</div></div>
+
+<div class="finding MEDIUM" id="E4"><h3><span class="badge MEDIUM">MEDIUM</span> E4 — gp/by-branch-month day/week drops one source on dual-source months</h3>
+<div class="meta"><code>/api/gp/by-branch-month</code> · main.py:10162 · <span class="badge conf">confidence: medium</span></div>
+<p>Main query groups by (branch, month, source) but <code>monthly_map</code> keys by month only — whichever source iterates last wins (arbitrary order). Day/week buckets scale one source's numbers while headline totals sum both.</p>
+<div class="impact"><b>Impact:</b> Trend buckets won't reconcile with monthly totals for months containing both Easy and legacy CM rows.</div></div>
+
+<div class="finding MEDIUM" id="C5"><h3><span class="badge MEDIUM">MEDIUM</span> C5 — branch-tier-matrix premium_pct always 0</h3>
+<div class="meta"><code>/api/buffet/branch-tier-matrix</code> · main.py:4830 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>Premium detection checks nonexistent tier codes plus price bands (570-620/780-820) that target inc-VAT prices but compare against ex-VAT units (590 inc → 551.40 ex) — both miss. Verified: premium_pax = 0 for every branch in 2026-05.</p>
+<div class="impact"><b>Impact:</b> The premium-mix column reads 0% chain-wide — conveys nothing.</div></div>
+
+<div class="finding MEDIUM" id="C6"><h3><span class="badge MEDIUM">MEDIUM</span> C6 — Upload guard says "rejected" but the mutation is already committed</h3>
+<div class="meta"><code>/api/upload</code> · main.py:5328-5336 · <span class="badge conf">confidence: high</span></div>
+<p>The curated-table-change guard detects pre≠post AFTER ingest engines have committed, raises 500 "was rejected" — but never restores from the backup it just made, and skips <code>invalidate_cache()</code>.</p>
+<div class="impact"><b>Impact:</b> On the exact failure the guard exists for, corrupted cost tables persist live while the operator is told the write was rejected; caches serve stale numbers until TTL.</div></div>
+
+<div class="finding MEDIUM" id="C7"><h3><span class="badge MEDIUM">MEDIUM</span> C7 — RevPASH not normalized by day count</h3>
+<div class="meta"><code>/api/buffet/revpash</code> · main.py:4432 · <span class="badge conf">confidence: high</span></div>
+<p>Hourly revpash = SUM over ALL days in range / seats — never divided by day count; a 3-month range reads ~3× a 1-month range. The dow series in the same response divides per-day, so the two series use incomparable units.</p>
+<div class="impact"><b>Impact:</b> Displayed magnitudes are range-dependent and not a per-seat-hour rate; only the peak/dead ranking survives.</div></div>
+
+<div class="finding MEDIUM" id="C8"><h3><span class="badge MEDIUM">MEDIUM</span> C8 — Buffet forecast regression includes the partial live month</h3>
+<div class="meta"><code>/api/buffet/forecast</code> · main.py:5158 · <span class="badge conf">confidence: medium</span></div>
+<p>No in-progress-month guard; a month at ~30% elapsed enters OLS as a full point. (Theme 5.)</p>
+<div class="impact"><b>Impact:</b> Forecast and trend flags systematically pessimistic for most of each month.</div></div>
+
+<div class="finding MEDIUM" id="G2"><h3><span class="badge MEDIUM">MEDIUM</span> G2 — GP export Sheet 1: percent format applied to the wrong row</h3>
+<div class="meta"><code>/api/buffet/gp/export</code> · main.py:13733 · <span class="badge conf">confidence: high</span> · ✔ verified in code</div>
+<p>Rows: 2=Revenue, 3=BoM Cost, 4=Gross Profit, 5=GP Margin %. The code formats <code>B4</code> (Gross Profit baht) as percent and leaves B5 (the already-/100 margin) unformatted.</p>
+<div class="impact"><b>Impact:</b> Gross Profit displays with a bogus % suffix; GP Margin shows a raw decimal like 0.4.</div></div>
+
+<div class="finding MEDIUM" id="G4"><h3><span class="badge MEDIUM">MEDIUM</span> G4 — bulk-update cost apply is a silent no-op for recipe-backed SKUs</h3>
+<div class="meta"><code>/api/cost/bulk-update</code> · main.py:15196 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p>The endpoint writes <code>sku_cost.unit_cost</code>, but the unified chain resolves BoM recipe FIRST — and 198 SKUs have both a recipe and a sku_cost row. Apply succeeds, cache rebuilds, and no COGS number moves.</p>
+<div class="impact"><b>Impact:</b> User edits a cost, gets success, dashboard doesn't change — confusing silent failure of the recalibration tool.</div></div>
+
+<div class="finding MEDIUM" id="G6"><h3><span class="badge MEDIUM">MEDIUM</span> G6 — Menu lifecycle classifies healthy SKUs as "declining" mid-month</h3>
+<div class="meta"><code>/api/menu/lifecycle</code> · main.py:14565 · <span class="badge conf">confidence: high</span></div>
+<p>max_month defaults to the in-progress month (~25% volume today); slope and is_new/is_dead windows straddle it with no exclusion. (Theme 5.)</p>
+<div class="impact"><b>Impact:</b> Stable items flagged declining/dead early each month, misleading menu-engineering decisions.</div></div>
+
+<div class="finding MEDIUM" id="G7"><h3><span class="badge MEDIUM">MEDIUM</span> G7 — Monthly pack GP%/food-cost% basis diverges from on-screen Branch P&L</h3>
+<div class="meta"><code>/api/export/monthly-pack</code> · main.py:13964 · <span class="badge conf">confidence: medium</span> · ✔ verified vs live DB</div>
+<p>Pack uses cogs/costed_rev (costed_rev = sku_cost-chain test, ฿112.6M for 2026-05) while /api/pnl/branch uses cogs/full revenue (฿126.7M) — an 11.1% denominator gap.</p>
+<div class="impact"><b>Impact:</b> The management pack's GP%/FC% differ by several pp from the dashboard for the same month — invites wrong conclusions on the 55-70% target.</div></div>
+
+<div class="finding MEDIUM" id="H1"><h3><span class="badge MEDIUM">MEDIUM</span> H1 — branch-bom ALL + day/week trend always empty (contradictory filters)</h3>
+<div class="meta"><code>/api/branch-bom/analysis</code> · main.py:15627 · <span class="badge conf">confidence: high</span></div>
+<p>For branch='ALL' at day/week granularity, tx_filters contain both <code>b.name = 'ALL'</code> and <code>b.name != 'ALL'</code> — mutually exclusive, so the trend array is always [].</p>
+<div class="impact"><b>Impact:</b> Chain-wide BoM-cost trend chart shows no data at day/week; only month works.</div></div>
+
+<div class="finding MEDIUM" id="H2"><h3><span class="badge MEDIUM">MEDIUM</span> H2 — Login throttle bypassable via X-Forwarded-For spoofing</h3>
+<div class="meta"><code>auth.py</code> · auth.py:670 · <span class="badge conf">confidence: high</span></div>
+<p><code>_client_ip()</code> trusts the FIRST hop of X-Forwarded-For; behind Fly's proxy the client-supplied value is preserved left-most, so the throttle key (ip, username) is attacker-controlled — rotate the header per request and <code>login_throttled()</code> never trips.</p>
+<div class="impact"><b>Impact:</b> Unbounded online password guessing against 12 known usernames when OSHINEI_AUTH=1. <b>Fix:</b> use the LAST untrusted hop (or Fly-Client-IP header).</div></div>
+
+<div class="finding MEDIUM" id="A6"><h3><span class="badge MEDIUM">MEDIUM</span> A6 — /api/sales/skus: 98 BoM-costed SKUs show blank cost/margin</h3>
+<div class="meta"><code>/api/sales/skus</code> · main.py:1394 · <span class="badge conf">confidence: high</span> · ✔ verified vs live DB</div>
+<p><code>cogs_total</code> uses the unified BoM-first expression but <code>has_cost</code> gates on the legacy sku_cost chain — a BoM-only SKU gets cogs=None/margin=None despite real COGS; unit_cost mixes mismatched numerator/denominator bases. (Theme 4.)</p>
+<div class="impact"><b>Impact:</b> Top-SKUs table blanks cost/COGS/margin for ~98 genuinely costed items; distorted unit_cost where monthly costing is partial.</div></div>
+
+<h2>🔵 LOW severity (23)</h2>
+<table>
+<tr><th style="width:60px">ID</th><th style="width:230px">Endpoint · line</th><th>Issue</th></tr>
+<tr id="A7"><td>A7</td><td><code>/api/branches/{id}/type</code> · 912</td><td>Branch-type mutation never calls <code>invalidate_cache()</code> — group-filtered dashboards stale up to 5 min after a master↔franchise edit.</td></tr>
+<tr id="B4"><td>B4</td><td><code>/api/sales/margin</code>, <code>/api/summary</code> · 3868/3376</td><td>No <code>source='Easy'</code> filter on sales_sku_monthly (siblings filter it) — latent double counting if a second source ever coexists.</td></tr>
+<tr id="B5"><td>B5</td><td><code>/api/extra/price-zone</code> · 2773</td><td>Uncapped <code>limit</code> drives an N+1 elasticity loop — one SQL query per price-change row; accidental DoS via one param.</td></tr>
+<tr id="B6"><td>B6</td><td><code>/api/extra/customer-type</code> · 2720</td><td><code>sum(...) or 1</code> used both as div-guard AND returned total — empty months report total_customers=1 / total_net=1 instead of 0.</td></tr>
+<tr id="B7"><td>B7</td><td><code>/api/cost/monthly</code> GET · 3696</td><td>Up to 3 queries per costed SKU in a Python loop (thousands per request) — slow on the 1-CPU Fly host; results correct.</td></tr>
+<tr id="C9"><td>C9</td><td><code>/api/analysis/hourly, /dow</code> · 5679/5731</td><td>avg_ticket inc-VAT vs ex-VAT revenue in the same row (Theme 3) — 7% inconsistency.</td></tr>
+<tr id="C10"><td>C10</td><td><code>/api/analysis/gross_profit</code> · 5562</td><td>Fallback rows (tx but no monthly costing) emit gross_profit = full revenue with COGS 0 and are summed into period totals — GP overstated when SKU data lags sync.</td></tr>
+<tr id="C11"><td>C11</td><td><code>/api/upload</code> · 5273</td><td>Temp file renamed to fixed <code>tempdir/&lt;basename&gt;</code> — concurrent same-named uploads collide (FileExistsError on Windows; silent replacement + premature unlink on POSIX).</td></tr>
+<tr id="D8"><td>D8</td><td><code>/api/analysis/forecast</code> · 7886</td><td>days_elapsed = days WITH sales, not calendar days — closed/missing days inflate the projection; disagrees with forecast_branches' calendar basis on the same page.</td></tr>
+<tr id="D9"><td>D9</td><td><code>/api/analysis/cohort</code> · 8033</td><td><code>COUNT(DISTINCT receipt_no)</code> chain-wide collapses identical receipt numbers across branches/days — undercounts tx; COUNT(*) is correct here.</td></tr>
+<tr id="D10"><td>D10</td><td><code>/api/analysis/anomalies</code> · 7264</td><td>Documented <code>threshold</code> (z-score) param accepted but never used — all triggers hardcoded ±5%/±5pp.</td></tr>
+<tr id="D11"><td>D11</td><td><code>/api/analysis/yoy</code> · 7817</td><td>N+1: one aggregate query per month in the loop — 25 scans for a 24-month range.</td></tr>
+<tr id="D12"><td>D12</td><td><code>/api/closed_hours</code> PUT · 7762</td><td>No range validation on dow/hour_from/hour_to — dow=99 persists, never matches lookups, and fails to replace the row the caller meant to edit.</td></tr>
+<tr id="D13"><td>D13</td><td><code>/api/analysis/forecast_branches</code> · 7962</td><td>LEFT JOIN nullified by <code>st.source='Easy'</code> in WHERE — never-traded branches dropped instead of appearing as inactive; total_branches undercounts.</td></tr>
+<tr id="E2"><td>E2</td><td><code>/api/cost/detail</code> · 8638</td><td>Pagination COUNT ignores the min_rev HAVING filter — pager shows pages that return empty.</td></tr>
+<tr id="E5"><td>E5</td><td><code>/api/pnl/*</code>, <code>/api/analysis/hourly_open</code> · 10397+</td><td>avg_ticket inc-VAT (Theme 3); worse: branch-detail per-bill profit buckets multiply inc-VAT bills by ex-VAT margin_frac — profit histogram ~7% inflated.</td></tr>
+<tr id="E6"><td>E6</td><td><code>/api/buffet/performance</code> · 9546</td><td>pricing_rec margins built from raw sku_cost (price-as-cost data) with a 40%-of-price fallback; tier_cost_monthly dict built but never used — margins fictional.</td></tr>
+<tr id="E7"><td>E7</td><td><code>/api/cost/analysis</code> · 8849</td><td>Quadrant gates on raw <code>sc.unit_cost IS NULL</code> — monthly-costed SKUs labeled "uncosted" yet included in the medians, skewing classification boundaries.</td></tr>
+<tr id="E8"><td>E8</td><td><code>/api/cost/analysis</code> · 8741</td><td>Per-item table has no source filter while headline KPIs are Easy-only — internal inconsistency if legacy CM rows coexist.</td></tr>
+<tr id="F5"><td>F5</td><td><code>/api/home/brief</code>, <code>daypart_grid</code>, <code>branch_peak</code> · 10987/11295/11359</td><td>avg_ticket inc-VAT vs ex-VAT revenue on the same card/heatmap (Theme 3).</td></tr>
+<tr id="F6"><td>F6</td><td><code>/api/analysis/food_cost_trend</code> · 11581</td><td>"Uncosted" counter uses the sku_cost path while the cost column is BoM-first — BoM-recipe SKUs counted uncosted (Theme 4); same stale pattern in buffet/gp's unused uncovered_sql.</td></tr>
+<tr id="F7"><td>F7</td><td><code>/api/buffet/gp</code> · 12072</td><td>O(days × tx_rows) linear rescan inside the day/week loop (~50M comparisons on wide ranges) just to fetch covers already available — multi-second first hit; numbers correct.</td></tr>
+<tr id="H3"><td>H3</td><td><code>/api/bom-cost/simulate</code>, <code>scenarios/{id}/savings</code> · 16617</td><td>ScenarioOverride <code>qty</code> and <code>disabled</code> are persisted but simulate ignores both (only unit_cost applied); savings ignores new_qty — scenario projections identical to no change.</td></tr>
+</table>
+
+<h2>✅ Checked and cleared (no bug found)</h2>
+<div class="cleared">
+<ul style="margin:6px 0 6px 18px;padding:0">
+<li><b>/api/buffet/gp pro-ration math</b> — executed against the live DB; month/day/week period totals identical (52,090,233 for 2026-04). Not the source of the 2× issue.</li>
+<li><b>/api/gp/by-branch-month fractions</b> — verified to sum to exactly 1 per branch-month.</li>
+<li><b>Auth crypto</b> (auth.py) — HMAC-SHA256 signed cookies with <code>hmac.compare_digest</code>, domain-separated key derivation, fail-closed without a real secret, expiry validated, live user row re-read per request (instant demotion), last-admin/self-lockout guards correct.</li>
+<li><b>SQL injection</b> — all reviewed f-string SQL fragments are code-controlled or use parameterized IN-placeholders; no user-string interpolation found anywhere.</li>
+<li><b>Write-token coverage</b> — every mutating endpoint reviewed carries <code>require_write_token</code>; <code>/api/bom-cost/simulate</code> open by documented owner decision; <code>/api/_admin/seed-db</code> has its own token auth.</li>
+<li><b>Scenario adopt/unadopt</b> — adopt snapshots baseline only (no live-cost mutation); unadopt fully restores.</li>
+<li><b>Division-by-zero guards</b> — present on every ratio traced in the profit/pnl slice.</li>
+</ul>
+</div>
+
+<h2>🛠️ Suggested fix order</h2>
+<table>
+<tr><th style="width:50px">#</th><th>Batch</th><th>Findings</th><th>Why first</th></tr>
+<tr><td>1</td><td>GP 2× root cause — share denominator over full month</td><td>C1 (+C10)</td><td>Closes the long-standing open issue; one-function fix.</td></tr>
+<tr><td>2</td><td>Buffet GP family — route tier GP through item-level COGS like gp-calendar</td><td>C2, F2, C3, C4, C5</td><td>Whole buffet section currently shows fictional 100%-margin economics.</td></tr>
+<tr><td>3</td><td>Discount base — reuse discount_leakage's <code>base_expr</code></td><td>D1, D2, D5</td><td>Fraud-review surface flags the wrong people.</td></tr>
+<tr><td>4</td><td>Excel export percent fixes (3 divisions + 1 cell ref)</td><td>G1, G2, G7</td><td>Files go to management; trivially fixable.</td></tr>
+<tr><td>5</td><td>BoM-first vs sku_cost gating — update <code>_costed_rev_case</code>/_effective tests to the unified chain</td><td>G3, G4, E3, A6, E7, F6</td><td>One helper-contract fix clears six findings.</td></tr>
+<tr><td>6</td><td>receipt_no scoping — add <code>branch_id + day</code> to all joins; consider composite PK on sale_bill_cogs at sync</td><td>A5, B2, F3, D4, D9</td><td>Silent corruption that grows with every sync.</td></tr>
+<tr><td>7</td><td>group-filter completeness + partial-month guards + avg_ticket /1.07 sweep</td><td>A1-A4, D6/E5/C9/F5, D7/D8/C8/G5/G6</td><td>Mechanical, pattern-based sweeps.</td></tr>
+<tr><td>8</td><td>Security/ops — XFF throttle fix, upload rollback, cache invalidation</td><td>H2, C6, A7, C11, D12</td><td>Lower exposure but cheap to fix.</td></tr>
+</table>
+
+<div class="foot">
+Generated by Claude Code · 2026-06-10 · Method: 8 parallel slice reviews of backend/main.py (lines 1–16,850) + auth.py, each cross-reading shared helpers (<code>_cogs_case</code>, <code>_unified_cogs_expr</code>, <code>_group_filter</code>, <code>_effective_cost_subquery</code>) and ingest/sync scripts; HIGH findings verified against the live oshinei.db where possible (marked ✔). Findings are backend-only; frontend (index.html) not in scope for this pass.
+</div>
+
+</div>
+</body>
+</html>

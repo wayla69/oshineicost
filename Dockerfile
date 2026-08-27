@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r /app/backend/requirements.txt \
 COPY backend/ /app/backend/
 COPY recon/   /app/recon/
 COPY index.html /app/index.html
-COPY app.js     /app/app.js
+COPY js/        /app/js/
 COPY vendor/    /app/vendor/
 COPY docs/      /app/docs/
 COPY start.sh   /app/start.sh

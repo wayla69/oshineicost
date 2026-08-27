@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Phase D — Multi-Tenant SaaS · Oshinei Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-page:#f0f4f8; --bg-card:#ffffff; --bg-subtle:#f8fafc;
+  --text-primary:#0f172a; --text-secondary:#475569; --text-muted:#94a3b8;
+  --border:#e2e8f0; --border-soft:#f1f5f9;
+  --indigo:#4f46e5; --indigo-mid:#6366f1; --indigo-soft:#eef2ff;
+  --good:#16a34a; --bad:#dc2626; --warn:#d97706; --cyan:#0891b2;
+  --shadow-sm:0 1px 3px rgba(15,23,42,.04),0 2px 8px rgba(15,23,42,.06);
+  --shadow-md:0 4px 8px rgba(15,23,42,.05),0 12px 24px rgba(15,23,42,.08);
+  --shadow-lg:0 12px 32px rgba(15,23,42,.12),0 4px 10px rgba(15,23,42,.05);
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:22px;
+}
+body.dark{
+  --bg-page:#080e1c; --bg-card:#0f1a2e; --bg-subtle:#111828;
+  --text-primary:#f1f5f9; --text-secondary:#94a3b8; --text-muted:#64748b;
+  --border:#1e2d45; --border-soft:#131f35;
+  --indigo:#818cf8; --indigo-mid:#6366f1; --indigo-soft:#1c2060;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3),0 2px 10px rgba(0,0,0,.25);
+  --shadow-md:0 8px 24px rgba(0,0,0,.4); --shadow-lg:0 20px 50px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:84px}
+body{
+  font-family:'Sarabun','Inter',system-ui,-apple-system,sans-serif;
+  background:var(--bg-page); color:var(--text-primary);
+  line-height:1.6; -webkit-font-smoothing:antialiased;
+  transition:background .3s,color .3s;
+}
+.mono{font-family:'Inter',ui-monospace,'SF Mono',Menlo,monospace}
+code{font-family:'Inter',ui-monospace,Menlo,monospace;font-size:.84em;
+  background:var(--indigo-soft);color:var(--indigo);padding:.1em .45em;border-radius:6px;font-weight:600}
+body.dark code{background:#1c2060}
+a{color:var(--indigo);text-decoration:none}
+
+/* ===== NAV ===== */
+.nav{position:sticky;top:0;z-index:50;backdrop-filter:saturate(180%) blur(14px);
+  background:color-mix(in srgb,var(--bg-page) 82%,transparent);
+  border-bottom:1px solid var(--border);}
+.nav-in{max-width:1120px;margin:0 auto;padding:13px 24px;display:flex;align-items:center;gap:20px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:15px;letter-spacing:-.02em}
+.brand .dot{width:26px;height:26px;border-radius:8px;
+  background:linear-gradient(135deg,var(--indigo),#a855f7);
+  display:grid;place-items:center;color:#fff;font-size:13px;font-weight:900;box-shadow:0 4px 12px rgba(79,70,229,.4)}
+.nav-links{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.nav-links a{font-size:13px;font-weight:600;color:var(--text-secondary);padding:6px 11px;border-radius:8px;transition:.15s}
+.nav-links a:hover,.nav-links a.active{background:var(--indigo-soft);color:var(--indigo)}
+.toggle{cursor:pointer;border:1px solid var(--border);background:var(--bg-card);
+  width:38px;height:38px;border-radius:10px;font-size:16px;display:grid;place-items:center;flex-shrink:0}
+@media(max-width:860px){.nav-links{display:none}}
+
+/* ===== LAYOUT ===== */
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+section{padding:62px 0;border-bottom:1px solid var(--border-soft)}
+.eyebrow{font-size:12px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--indigo);margin-bottom:14px}
+h2{font-size:clamp(26px,4vw,38px);font-weight:800;letter-spacing:-.025em;line-height:1.15;margin-bottom:14px}
+h3{font-size:19px;font-weight:700;letter-spacing:-.01em;margin-bottom:8px}
+.lead{font-size:17px;color:var(--text-secondary);max-width:740px}
+.muted{color:var(--text-muted)}
+
+/* ===== HERO ===== */
+.hero{position:relative;overflow:hidden;background:#070c18;color:#e7ecf5;
+  border-bottom:1px solid #16213c}
+.hero::before{content:"";position:absolute;inset:0;
+  background:
+    radial-gradient(900px 480px at 78% -10%,rgba(99,102,241,.42),transparent 60%),
+    radial-gradient(720px 420px at 6% 110%,rgba(168,85,247,.30),transparent 55%),
+    radial-gradient(600px 360px at 50% 50%,rgba(13,148,136,.10),transparent 60%);}
+.hero-grid{position:absolute;inset:0;opacity:.5;
+  background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);
+  background-size:46px 46px;mask-image:radial-gradient(circle at 60% 30%,#000,transparent 78%)}
+.hero-in{position:relative;max-width:1120px;margin:0 auto;padding:78px 24px 86px}
+.status-pill{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:700;
+  background:rgba(217,119,6,.16);color:#fbbf24;border:1px solid rgba(251,191,36,.3);
+  padding:7px 15px;border-radius:999px;margin-bottom:24px}
+.status-pill .blink{width:8px;height:8px;border-radius:50%;background:#fbbf24;box-shadow:0 0 0 0 rgba(251,191,36,.6);animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(251,191,36,.6)}70%{box-shadow:0 0 0 9px rgba(251,191,36,0)}100%{box-shadow:0 0 0 0 rgba(251,191,36,0)}}
+.hero h1{font-size:clamp(38px,6.5vw,68px);font-weight:900;letter-spacing:-.04em;line-height:1.02;
+  background:linear-gradient(180deg,#fff,#aab4d4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:20px}
+.hero h1 em{font-style:normal;background:linear-gradient(120deg,#818cf8,#c084fc,#5eead4);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:19px;color:#aeb8d4;max-width:660px;margin-bottom:34px}
+.chips{display:flex;flex-wrap:wrap;gap:12px}
+.chip{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  border-radius:14px;padding:14px 18px;backdrop-filter:blur(6px)}
+.chip .n{font-size:26px;font-weight:900;letter-spacing:-.03em;color:#fff;font-family:'Inter',sans-serif}
+.chip .l{font-size:12.5px;color:#9aa6c8;font-weight:600;margin-top:2px}
+
+/* ===== CARDS / GRID ===== */
+.grid{display:grid;gap:18px}
+.g2{grid-template-columns:1fr 1fr}
+.g3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:780px){.g2,.g3{grid-template-columns:1fr}}
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);
+  padding:24px;box-shadow:var(--shadow-sm);transition:.2s}
+.card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.card .ic{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;font-size:21px;margin-bottom:14px;
+  background:var(--indigo-soft)}
+.tldr{background:linear-gradient(135deg,var(--indigo) 0%,#7c3aed 100%);color:#fff;
+  border-radius:var(--r-xl);padding:34px 36px;box-shadow:var(--shadow-lg);border:none}
+.tldr h3{color:#fff;font-size:15px;text-transform:uppercase;letter-spacing:.1em;opacity:.85}
+.tldr ul{list-style:none;margin-top:14px;display:grid;gap:13px}
+.tldr li{display:flex;gap:13px;font-size:16.5px;align-items:flex-start}
+.tldr li b{color:#fff}
+.tldr li .k{flex-shrink:0;width:26px;height:26px;border-radius:8px;background:rgba(255,255,255,.18);display:grid;place-items:center;font-size:13px;font-weight:800;margin-top:2px}
+
+/* from -> to */
+.ft{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:stretch;margin-top:8px}
+@media(max-width:780px){.ft{grid-template-columns:1fr}.ft .arrow{transform:rotate(90deg);padding:8px 0}}
+.ft .col{padding:24px;border:1px solid var(--border);background:var(--bg-card)}
+.ft .col:first-child{border-radius:var(--r-lg) 0 0 var(--r-lg)}
+.ft .col:last-child{border-radius:0 var(--r-lg) var(--r-lg) 0;background:linear-gradient(180deg,var(--indigo-soft),var(--bg-card))}
+@media(max-width:780px){.ft .col:first-child{border-radius:var(--r-lg) var(--r-lg) 0 0}.ft .col:last-child{border-radius:0 0 var(--r-lg) var(--r-lg)}}
+.ft .arrow{display:grid;place-items:center;padding:0 14px;color:var(--indigo);font-size:24px;font-weight:900}
+.ft h4{font-size:13px;text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px;font-weight:800}
+.ft .now h4{color:var(--text-muted)} .ft .tgt h4{color:var(--indigo)}
+.ft ul{list-style:none;display:grid;gap:9px}
+.ft li{font-size:14.5px;color:var(--text-secondary);padding-left:22px;position:relative}
+.ft li::before{content:"";position:absolute;left:0;top:9px;width:7px;height:7px;border-radius:2px;background:var(--text-muted)}
+.ft .tgt li::before{background:var(--indigo)}
+
+/* table */
+.tbl{width:100%;border-collapse:separate;border-spacing:0;font-size:14px;
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;box-shadow:var(--shadow-sm)}
+.tbl th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:800;
+  color:var(--text-muted);background:var(--bg-subtle);padding:13px 16px;border-bottom:1px solid var(--border)}
+.tbl td{padding:14px 16px;border-bottom:1px solid var(--border-soft);vertical-align:top;color:var(--text-secondary)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl td b{color:var(--text-primary)}
+.tbl .rec{background:var(--indigo-soft)}
+.tbl .rec td:first-child b{color:var(--indigo)}
+.tag{display:inline-block;font-size:11px;font-weight:800;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.t-good{background:rgba(22,163,74,.13);color:var(--good)}
+.t-bad{background:rgba(220,38,38,.12);color:var(--bad)}
+.t-warn{background:rgba(217,119,6,.13);color:var(--warn)}
+.t-info{background:var(--indigo-soft);color:var(--indigo)}
+
+/* workstream */
+.ws{position:relative;padding-left:30px}
+.ws::before{content:"";position:absolute;left:9px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(180deg,var(--indigo),transparent)}
+.ws .item{position:relative;margin-bottom:18px}
+.ws .item::before{content:"";position:absolute;left:-29px;top:24px;width:14px;height:14px;border-radius:50%;
+  background:var(--bg-card);border:3px solid var(--indigo);box-shadow:0 0 0 4px var(--bg-page)}
+.ws-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.ws-code{font-family:'Inter';font-weight:900;font-size:13px;color:#fff;background:var(--indigo);
+  padding:3px 10px;border-radius:7px;letter-spacing:.02em}
+.ws-size{margin-left:auto}
+.ws ul{list-style:none;margin-top:10px;display:grid;gap:7px}
+.ws li{font-size:14.5px;color:var(--text-secondary);padding-left:20px;position:relative}
+.ws li::before{content:"→";position:absolute;left:0;color:var(--indigo);font-weight:700}
+.touch{margin-top:12px;font-size:12.5px;color:var(--text-muted);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.touch .f{font-family:'Inter';background:var(--bg-subtle);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--text-secondary)}
+
+/* timeline bars */
+.gantt{display:grid;gap:10px;margin-top:8px}
+.gantt .row{display:grid;grid-template-columns:120px 1fr;gap:14px;align-items:center}
+.gantt .lab{font-size:13px;font-weight:700;text-align:right}
+.gantt .track{position:relative;height:34px;background:var(--bg-subtle);border-radius:9px;border:1px solid var(--border)}
+.gantt .bar{position:absolute;top:4px;bottom:4px;border-radius:7px;display:flex;align-items:center;padding:0 11px;
+  font-size:12px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden}
+.b-found{background:linear-gradient(90deg,#4f46e5,#6366f1)}
+.b-onb{background:linear-gradient(90deg,#0891b2,#06b6d4)}
+.b-bill{background:linear-gradient(90deg,#7c3aed,#a855f7)}
+.b-infra{background:linear-gradient(90deg,#d97706,#f59e0b)}
+.b-admin{background:linear-gradient(90deg,#16a34a,#22c55e)}
+@media(max-width:780px){.gantt .row{grid-template-columns:74px 1fr}.gantt .lab{font-size:11px}}
+
+/* risk */
+.risk{border-left:4px solid var(--bad);padding:16px 20px;background:var(--bg-card);border-radius:0 var(--r-md) var(--r-md) 0;border-top:1px solid var(--border);border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+.risk.med{border-left-color:var(--warn)}
+.risk .rt{display:flex;align-items:center;gap:10px;font-weight:700;margin-bottom:6px}
+.risk .sev{font-size:10.5px;font-weight:900;padding:2px 8px;border-radius:6px;text-transform:uppercase;letter-spacing:.05em}
+.risk .sev.high{background:rgba(220,38,38,.13);color:var(--bad)}
+.risk .sev.med{background:rgba(217,119,6,.13);color:var(--warn)}
+.risk p{font-size:14px;color:var(--text-secondary)}
+.risk .mit{margin-top:8px;font-size:13.5px;color:var(--text-secondary)}
+.risk .mit b{color:var(--good)}
+
+/* gate */
+.gate{background:var(--bg-card);border:2px solid var(--indigo);border-radius:var(--r-xl);padding:32px;box-shadow:var(--shadow-md)}
+.gate h3{color:var(--indigo)}
+.check{display:grid;gap:12px;margin-top:18px}
+.check .c{display:flex;gap:13px;align-items:flex-start;font-size:15px}
+.check .box{flex-shrink:0;width:24px;height:24px;border-radius:7px;border:2px solid var(--indigo);display:grid;place-items:center;font-size:13px;color:var(--indigo);font-weight:900;margin-top:1px}
+.check .c b{color:var(--text-primary)}
+
+.note{display:flex;gap:13px;background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:16px 18px;font-size:14px;color:var(--text-secondary);margin-top:20px}
+.note .i{font-size:19px;flex-shrink:0}
+
+footer{padding:44px 24px;text-align:center;color:var(--text-muted);font-size:13px}
+footer .brand{justify-content:center;margin-bottom:10px}
+.kbd{font-family:'Inter';font-size:12px;background:var(--bg-subtle);border:1px solid var(--border);border-bottom-width:2px;padding:1px 7px;border-radius:6px;color:var(--text-secondary)}
+.divider-label{display:flex;align-items:center;gap:14px;margin:0 0 26px}
+.divider-label .line{flex:1;height:1px;background:var(--border)}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-in">
+    <div class="brand"><span class="dot">O</span> Oshinei · Phase D</div>
+    <div class="nav-links">
+      <a href="#tldr">สรุป</a>
+      <a href="#why">ทำไม</a>
+      <a href="#shift">From → To</a>
+      <a href="#arch">สถาปัตยกรรม</a>
+      <a href="#work">Workstreams</a>
+      <a href="#timeline">ลำดับงาน</a>
+      <a href="#risk">ความเสี่ยง</a>
+      <a href="#gate">Go / No-Go</a>
+    </div>
+    <button class="toggle" id="themeBtn" title="สลับโหมดสว่าง/มืด">🌙</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<header class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-in">
+    <div class="status-pill"><span class="blink"></span> สถานะ: DEFERRED — รอ Go / No-Go decision</div>
+    <h1>Phase D<br><em>Multi-Tenant SaaS</em></h1>
+    <p>ยกระดับ Oshinei Dashboard จาก “เครื่องมือภายในของบริษัทเดียว” → เป็น <b style="color:#dfe5f5">สินทรัพย์ SaaS ที่ขายได้</b> ให้เชนร้านอาหารหลายรายสมัครใช้งานบนระบบเดียวกัน โดยข้อมูลต้นทุน/กำไรของแต่ละรายแยกขาดกันอย่างปลอดภัย</p>
+    <div class="chips">
+      <div class="chip"><div class="n">62</div><div class="l">ตารางที่ต้องเติม tenant_id</div></div>
+      <div class="chip"><div class="n">~167</div><div class="l">API endpoints ที่ต้อง scope</div></div>
+      <div class="chip"><div class="n">7</div><div class="l">Workstreams (D1–D7)</div></div>
+      <div class="chip"><div class="n">1 → N</div><div class="l">tenant ต่อระบบ</div></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<!-- TL;DR -->
+<section id="tldr">
+  <div class="eyebrow">Executive summary</div>
+  <h2>Phase D คืออะไร ในสามบรรทัด</h2>
+  <p class="lead" style="margin-bottom:26px">ภาคต่อหลังจาก Phase A–C พิสูจน์ “คุณค่า” ของแอปแล้ว (buffet-leak guard, ROI ledger, food-cost benchmark, exec summary, targets). Phase D คือก้าวที่เปลี่ยน “ของที่ใช้ดี” ให้กลายเป็น “ของที่ขายต่อได้”.</p>
+  <div class="tldr">
+    <h3>The deal</h3>
+    <ul>
+      <li><span class="k">1</span><div><b>หลายผู้เช่า (multi-tenant):</b> ร้านอื่นสมัครเข้ามาใช้แดชบอร์ดเดียวกันได้ ข้อมูลของแต่ละเชนแยกขาด 100% — เห็นข้ามกันไม่ได้เด็ดขาด เพราะนี่คือ <b>ข้อมูลต้นทุนและกำไร</b> ที่ลับที่สุดของลูกค้า</div></li>
+      <li><span class="k">2</span><div><b>สมัคร + นำเข้าข้อมูลได้เอง (self-serve onboarding):</b> tenant ใหม่กรอกข้อมูล อัปโหลด Easy POS export / BoM Excel แล้วระบบ seed ค่าตั้งต้น + ผู้ใช้ + สิทธิ์ ให้อัตโนมัติ</div></li>
+      <li><span class="k">3</span><div><b>เก็บเงินเป็นแพ็กเกจ (billing):</b> แบ่ง plan ตามจำนวนสาขา / ประวัติข้อมูล / live-sync เป็น add-on — แอปกลายเป็นรายได้ประจำ (recurring revenue) ไม่ใช่ต้นทุน</div></li>
+    </ul>
+  </div>
+  <div class="note"><span class="i">📌</span><div><b>ตัดสินใจไว้แล้วว่า “ยังไม่ทำตอนนี้”</b> — เจ้าของเลือกแยก Phase D เป็นโปรเจกต์ของมันเอง ไม่มัดรวมกับ A–C เพราะมันคือการ <b>rewrite</b> ขนาดใหญ่ (62 ตาราง / ~167 endpoint). เอกสารหน้านี้คือ <b>design doc</b> ที่ roadmap กำหนดให้ทำก่อน แล้วค่อยเคาะ go / no-go.</div></div>
+</section>
+
+<!-- WHY -->
+<section id="why">
+  <div class="eyebrow">Context · ทำไมตอนนี้ / ทำไมยังไม่ใช่ตอนนี้</div>
+  <h2>ทำไม Phase D ถึงสำคัญ — และทำไมต้องรอ</h2>
+  <div class="grid g2" style="margin-top:24px">
+    <div class="card">
+      <div class="ic">🚀</div>
+      <h3>ทำไมมันคือก้าวที่เพิ่มมูลค่า</h3>
+      <p style="color:var(--text-secondary);font-size:15px">วันนี้แอปคือ internal tool ของเชนเดียว — มูลค่ามาจาก “เงินที่บริษัทประหยัด/ได้เพิ่ม”. พอเป็น multi-tenant SaaS แล้ว มูลค่าจะมาจาก <b style="color:var(--text-primary)">ARR ของลูกค้าที่จ่ายรายเดือน</b> ซึ่งเป็น valuation multiple ที่สูงกว่ามาก. นี่คือเหตุผลทั้งหมดของ valuation roadmap.</p>
+    </div>
+    <div class="card">
+      <div class="ic">🧭</div>
+      <h3>ทำไมต้องทำ A–C ให้จบก่อน</h3>
+      <p style="color:var(--text-secondary);font-size:15px">ลำดับที่ตกลงกันคือ <b style="color:var(--text-primary)">“พิสูจน์ ROI ก่อน แล้วค่อยลงทุน SaaS lift”</b>. หลักฐานว่าแอปสร้างเงินได้จริง (ROI ledger เห็นยอดประหยัดจริง, exec summary ถูกใช้งาน) คือสิ่งที่ทำให้ขายได้ และเป็นข้อมูลปิดการขายกับ tenant รายแรก ๆ.</p>
+    </div>
+  </div>
+  <div class="note"><span class="i">✅</span><div><b>เงื่อนไขที่ทำเสร็จแล้ว (2026-06-09):</b> Phase A (buffet-leak guard + sku_cost audit), Phase B (ROI savings ledger), Phase C (C1 food-cost benchmark · C2 exec summary · C3 targets + <code>branch_targets</code> ปี 2026-06). RBAC login + 6 roles × 16 modules ก็ deploy live แล้ว — ซึ่งเป็น “ครึ่งแรก” ของงาน auth ที่ Phase D ต้องต่อยอด.</div></div>
+</section>
+
+<!-- FROM TO -->
+<section id="shift">
+  <div class="eyebrow">The shift</div>
+  <h2>จากวันนี้ → ปลายทาง Phase D</h2>
+  <p class="lead" style="margin-bottom:28px">โครงปัจจุบัน: FastAPI + SQLite ไฟล์เดียว + <code>index.html</code> หน้าเดียว ~13.3K บรรทัด เสิร์ฟผ่าน Fly.io ให้บริษัทเดียว.</p>
+  <div class="ft">
+    <div class="col now">
+      <h4>🔹 วันนี้ — Single-tenant</h4>
+      <ul>
+        <li>SQLite ไฟล์เดียว <code>/data/oshinei.db</code> เก็บข้อมูลของ Oshinei รายเดียว</li>
+        <li>Auth env-gated <code>OSHINEI_AUTH=1</code> — ผู้ใช้ทั้งหมดอยู่ในองค์กรเดียว</li>
+        <li>~167 endpoint query ตรงไปที่ตาราง โดยไม่มีแนวคิด “เจ้าของข้อมูล”</li>
+        <li>นำเข้าข้อมูลด้วยมือผ่าน <code>.bat</code> / CLI (operator รัน)</li>
+        <li>Live sync ผูกกับ MSSQL HQ ของ Oshinei โดยเฉพาะ</li>
+        <li>ไม่มีการเก็บเงิน / ไม่มี plan / ไม่มี onboarding</li>
+      </ul>
+    </div>
+    <div class="arrow">→</div>
+    <div class="col tgt">
+      <h4>🎯 ปลายทาง — Multi-tenant SaaS</h4>
+      <ul>
+        <li>ทุกตารางมี <code>tenant_id</code>; ข้อมูลแต่ละเชนแยกขาด (เชิงกายภาพหรือเชิง schema)</li>
+        <li>Auth รู้จัก tenant — session ผูก tenant_id; ข้ามเช่ากันไม่ได้</li>
+        <li>ทุก query ถูก scope ด้วย tenant อัตโนมัติผ่าน accessor กลาง</li>
+        <li>tenant สมัคร + อัปโหลดข้อมูลเองผ่าน onboarding wizard</li>
+        <li>Live sync เป็น add-on ต่อ tenant (creds แยกต่อราย)</li>
+        <li>Plan / subscription / metering + super-admin console</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ARCH -->
+<section id="arch">
+  <div class="eyebrow">Architecture · การตัดสินใจที่ใหญ่ที่สุด</div>
+  <h2>โมเดลการแยกข้อมูล (isolation model)</h2>
+  <p class="lead" style="margin-bottom:24px">นี่คือการเลือกที่กำหนดทุกอย่างหลังจากนั้น เพราะข้อมูลคือ <b>ต้นทุน/กำไรที่อ่อนไหวสูง</b> — การรั่วข้ามเช่าหนึ่งครั้ง = จบเกมความน่าเชื่อถือ. มีสามทางหลัก:</p>
+  <table class="tbl">
+    <thead><tr><th style="width:24%">ทางเลือก</th><th>การแยก</th><th>ข้อดี</th><th>ข้อเสีย</th><th style="width:14%">เหมาะกับ</th></tr></thead>
+    <tbody>
+      <tr class="rec">
+        <td><b>DB-per-tenant</b><br><span class="tag t-info">แนะนำ v1</span><br><span class="muted" style="font-size:12px">SQLite ไฟล์ละ tenant</span></td>
+        <td><b>เชิงกายภาพ</b> — คนละไฟล์ รั่วข้ามกันแทบเป็นไปไม่ได้</td>
+        <td>ใกล้เคียงโค้ดเดิมที่สุด (เปิดไฟล์ตาม tenant), backup/restore ต่อรายง่าย, ปลอดภัยที่สุด</td>
+        <td>query ข้าม tenant (analytics รวม) ทำยาก, จำนวนไฟล์เยอะเมื่อ scale มาก</td>
+        <td>10–200 tenants</td>
+      </tr>
+      <tr>
+        <td><b>Shared schema + <code>tenant_id</code></b><br><span class="muted" style="font-size:12px">SQLite ไฟล์เดียว</span></td>
+        <td>เชิงตรรกะ — ทุกแถวมี tenant_id, ทุก query ต้อง <code>WHERE</code></td>
+        <td>โครงสร้างเดียว ดูแลง่าย, รายงานรวมข้าม tenant ทำได้ทันที</td>
+        <td><span class="tag t-bad">เสี่ยงรั่ว</span> ลืม WHERE แถวเดียว = leak; SQLite เขียนพร้อมกันหลาย tenant คอขวด</td>
+        <td>prototype</td>
+      </tr>
+      <tr>
+        <td><b>Postgres + RLS</b><br><span class="muted" style="font-size:12px">Row-Level Security</span></td>
+        <td>เชิงตรรกะ + บังคับที่ DB — policy กรอง tenant ให้เองทุก query</td>
+        <td>scale + concurrency จริงจัง, RLS เป็นตาข่ายนิรภัยระดับ DB, มาตรฐาน SaaS</td>
+        <td>ต้อง <b>ย้ายจาก SQLite</b> (rewrite query บางส่วน + ops ใหม่), ลงทุนสูงสุด</td>
+        <td>scale 100+ / ระยะยาว</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="note"><span class="i">🧩</span><div><b>คำแนะนำเชิงกลยุทธ์:</b> เริ่ม v1 ด้วย <b>DB-per-tenant (SQLite)</b> — ได้ความปลอดภัยสูงสุดโดยแตะโค้ดเดิมน้อยที่สุด (โค้ดทุกวันนี้ก็ทำงานกับ SQLite ไฟล์เดียวอยู่แล้ว แค่เปลี่ยนเป็น “เลือกไฟล์ตาม tenant”). วาง abstraction การเชื่อมต่อ DB ให้สลับไป <b>Postgres + RLS</b> ได้ภายหลังเมื่อจำนวน tenant โตจนคุ้มค่าย้าย. การ query รวมข้ามเช่า (เช่น industry benchmark) ทำเป็น aggregation นอกเส้น request.</div></div>
+</section>
+
+<!-- WORKSTREAMS -->
+<section id="work">
+  <div class="eyebrow">Scope · งานแยกเป็น 7 สาย</div>
+  <h2>Workstreams D1 – D7</h2>
+  <p class="lead" style="margin-bottom:30px">แต่ละสายมีขอบเขต งานหลัก จุดที่ต้องแตะในโค้ดจริง และขนาดงานโดยประมาณ (t-shirt size).</p>
+  <div class="ws">
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D1</span><h3 style="margin:0">Tenant data model & การแยกข้อมูล</h3><span class="ws-size tag t-bad">XL</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">รากฐานของทุกอย่าง — เพิ่มมิติ “เจ้าของข้อมูล” เข้าไปทั้งสคีมา.</p>
+      <ul>
+        <li>เพิ่มตาราง <code>tenant</code> (id, slug/subdomain, name, plan, status, settings JSON, created_at)</li>
+        <li>เติม <code>tenant_id</code> FK ลงทั้ง <b>62 ตาราง</b> (branches, skus, sku_cost, sales_sku_monthly, sales_transaction, sales_month_summary, branch_targets, app_settings, bom_ingredients, cost_scenario, app_user, sale_bill_item, *_archive ฯลฯ)</li>
+        <li>เปลี่ยน natural key ให้เป็น composite — เช่น <code>receipt_no</code> ที่ไม่ unique ทั่วระบบอยู่แล้ว → <code>(tenant_id, receipt_no)</code></li>
+        <li>เลือก isolation model (จากหัวข้อด้านบน) แล้วเขียน migration backfill ข้อมูลเดิมเป็น <code>tenant_id = 1</code> (Oshinei)</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">backend/main.py (init_db/schema)</span><span class="f">migration script ใหม่</span><span class="f">ทุกตารางใน oshinei.db</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D2</span><h3 style="margin:0">Auth & request scoping ที่รู้จัก tenant</h3><span class="ws-size tag t-bad">L</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">ต่อยอดจาก RBAC ที่มีแล้ว — เพิ่มมิติ tenant เหนือมิติ role.</p>
+      <ul>
+        <li>resolve tenant จาก subdomain (<code>acme.oshinei.app</code>) หรือจาก login → ฝัง tenant_id ใน session cookie (HMAC-signed อยู่แล้ว, 12h)</li>
+        <li>ขยาย <code>backend/auth.py</code>: <code>path_allowed()</code> + middleware <code>enforce_auth</code> ให้บังคับ tenant boundary — ปฏิเสธ request ที่ข้าม tenant ทันที</li>
+        <li>ทำ accessor กลาง <code>tdb(tenant_id)</code> — ทุก handler ดึง connection/scope จากตรงนี้ ไม่ใช่ต่อ DB ตรง ๆ</li>
+        <li>เพิ่ม role <b>super-admin</b> ข้าม tenant + เส้นทาง impersonation สำหรับซัพพอร์ต</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">backend/auth.py</span><span class="f">enforce_auth middleware</span><span class="f">require_write_token</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D3</span><h3 style="margin:0">Refactor endpoint ~167 ตัว</h3><span class="ws-size tag t-bad">XL</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">งานหนักที่สุดเชิงปริมาณ — ทุก endpoint ต้องถูก scope และพิสูจน์ว่าแยกจริง.</p>
+      <ul>
+        <li>ทำ inventory endpoint ทั้งหมด แล้วจัดกลุ่ม: data-read / mutation / export / admin</li>
+        <li>ฉีด tenant scope ผ่าน accessor กลาง (D2) — <b>อย่าแก้ทีละ handler</b> เพราะลืมตัวเดียว = รั่ว</li>
+        <li>เขียน <b>isolation test matrix</b>: สร้าง 2 tenant แล้วยืนยันทุก endpoint ว่า tenant A เห็นข้อมูล tenant B ไม่ได้</li>
+        <li>ผูก write-token / RBAC module gate เข้ากับมิติ tenant ด้วย</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">backend/main.py (~8.5K บรรทัด)</span><span class="f">test_auth.py → test_tenant_isolation.py</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D4</span><h3 style="margin:0">Self-serve onboarding & data import</h3><span class="ws-size tag t-warn">L</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">เปลี่ยนการนำเข้าข้อมูลจาก “operator รัน .bat” → “ลูกค้าทำเองได้”.</p>
+      <ul>
+        <li>signup flow → provision tenant + seed ค่าตั้งต้น (categories, app_settings, default users + RBAC roles)</li>
+        <li>import wizard: reuse <code>upload_data.py</code> (ตัวอัปโหลด canonical ตัวเดียว) + parser Easy POS export + BoM Excel + sku_cost mapping — ทำให้ tenant-scoped และมีไกด์</li>
+        <li>ใช้ coverage guard เดิม (missing last-day, VAT column quirks, sku_cost-is-price) ซ้ำได้เลย — ทุก tenant เจอ quirk แบบเดียวกัน</li>
+        <li>Live MSSQL sync (<code>sync_mssql.py</code>) = add-on ระดับพรีเมียมต่อ tenant (creds แยกราย); v1 onboarding เป็น file-upload ก่อน</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">backend/upload_data.py</span><span class="f">sync_mssql.py</span><span class="f">onboarding UI ใหม่</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D5</span><h3 style="margin:0">Billing, plans & metering</h3><span class="ws-size tag t-warn">M</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">ทำให้แอปเป็นรายได้ ไม่ใช่ต้นทุน.</p>
+      <ul>
+        <li>นิยาม plan: ตามจำนวนสาขา / ความยาวประวัติข้อมูล / live-sync เป็น add-on</li>
+        <li>ผูก plan เข้ากับ <b>RBAC modules ที่มีอยู่แล้ว</b> (16 modules) — plan gate = เปิด/ปิด module ต่อ tenant</li>
+        <li>เชื่อม payment gateway (พิจารณา Omise / 2C2P สำหรับ THB หรือ Stripe) + invoice + trial</li>
+        <li>metering: นับจำนวนสาขา, storage, ความถี่ sync ต่อ tenant</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">ตาราง subscription/invoice ใหม่</span><span class="f">payment webhook</span><span class="f">applyPermissions() ใน index.html</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D6</span><h3 style="margin:0">Infra, data store & ops</h3><span class="ws-size tag t-bad">L</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">รันคู่ขนานกับ D1 — เพราะการเลือก store กำหนดทุกอย่าง.</p>
+      <ul>
+        <li>ตัดสินใจ store: <b>SQLite-per-tenant</b> บน Fly volume (ใกล้เคียงโค้ดเดิม) vs <b>Postgres</b> (managed, concurrency, RLS)</li>
+        <li>automation การ provision tenant + backup/restore <b>ต่อราย</b> (ปัจจุบัน backup = คัดลอกไฟล์เดียว)</li>
+        <li>logging/monitoring ติด tenant_id ทุกบรรทัด + rate limit ต่อ tenant</li>
+        <li>เลิกพึ่ง Fly free auto-sleep (cold start ~7s) สำหรับลูกค้าที่จ่ายเงิน → always-on; secrets แยกต่อ tenant (เช่น Easy API creds)</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">Fly config</span><span class="f">Refresh/Backup .bat</span><span class="f">DB connection layer</span></div>
+    </div>
+
+    <div class="item card">
+      <div class="ws-head"><span class="ws-code">D7</span><h3 style="margin:0">Super-admin console & เครื่องมือซัพพอร์ต</h3><span class="ws-size tag t-good">M</span></div>
+      <p style="color:var(--text-secondary);font-size:15px">งานสุดท้าย — ทำให้ดูแล tenant หลายรายได้จริง.</p>
+      <ul>
+        <li>tenant CRUD, จัดการ plan/status, impersonate-for-support, audit log, feature flags</li>
+        <li>health ต่อ tenant: sync ล่าสุด, ความสดของข้อมูล, ช่องโหว่ coverage</li>
+        <li>ต่อยอด Settings → 👥 ผู้ใช้งาน (มี CRUD users อยู่แล้ว) ให้มีชั้น tenant เหนือขึ้นไป</li>
+      </ul>
+      <div class="touch">แตะ: <span class="f">/api/auth/users (มีอยู่)</span><span class="f">super-admin UI ใหม่</span></div>
+    </div>
+
+  </div>
+</section>
+
+<!-- TIMELINE -->
+<section id="timeline">
+  <div class="eyebrow">Sequencing · ลำดับและขนาดงานคร่าว ๆ</div>
+  <h2>ลำดับงาน — ทำอะไรก่อนหลัง</h2>
+  <p class="lead" style="margin-bottom:8px">D1 → D2 → D3 คือสามเสาหลักที่ “ต้องเสร็จก่อนถึงจะเป็น multi-tenant”. D6 รันคู่ขนานกับ D1. D4 ทำให้ self-serve, D5 ทำให้มีรายได้, D7 ปิดท้าย.</p>
+  <p class="muted" style="font-size:13px;margin-bottom:22px">⚠️ ตัวเลขสัปดาห์เป็น <b>ประมาณการหยาบ</b> เพื่อให้เห็นสัดส่วน ไม่ใช่คำมั่นตามวันที่ — ขึ้นกับคนทำและการตัดสินใจ store.</p>
+  <div class="gantt">
+    <div class="row"><div class="lab">D1 Data model</div><div class="track"><div class="bar b-found" style="left:0%;width:34%">รากฐาน · 4–6 สัปดาห์</div></div></div>
+    <div class="row"><div class="lab">D6 Infra</div><div class="track"><div class="bar b-infra" style="left:2%;width:30%">คู่ขนาน · store + provisioning</div></div></div>
+    <div class="row"><div class="lab">D2 Auth scope</div><div class="track"><div class="bar b-found" style="left:30%;width:22%">2–3 สัปดาห์</div></div></div>
+    <div class="row"><div class="lab">D3 Endpoints</div><div class="track"><div class="bar b-found" style="left:40%;width:34%">~167 ตัว + isolation tests</div></div></div>
+    <div class="row"><div class="lab">D4 Onboarding</div><div class="track"><div class="bar b-onb" style="left:62%;width:24%">2–3 สัปดาห์</div></div></div>
+    <div class="row"><div class="lab">D5 Billing</div><div class="track"><div class="bar b-bill" style="left:74%;width:18%">2 สัปดาห์</div></div></div>
+    <div class="row"><div class="lab">D7 Admin</div><div class="track"><div class="bar b-admin" style="left:84%;width:16%">1–2 สัปดาห์</div></div></div>
+  </div>
+  <div class="note"><span class="i">🎯</span><div><b>นิยาม MVP ที่ตัดให้เล็กที่สุดเพื่อให้ส่งได้จริง:</b> DB-per-tenant + onboarding แบบ file-upload + 2 plan + super-admin ขั้นต่ำ. ตัด live-sync ต่อ tenant, white-label theming, public API ออกไปก่อน (ดูหัวข้อ Out of scope).</div></div>
+</section>
+
+<!-- RISK -->
+<section id="risk">
+  <div class="eyebrow">Risks · ความเสี่ยงและการรับมือ</div>
+  <h2>ความเสี่ยงหลัก</h2>
+  <div class="grid g2" style="margin-top:24px">
+    <div class="risk">
+      <div class="rt"><span class="sev high">High</span> ข้อมูลรั่วข้ามเช่า (cross-tenant leak)</div>
+      <p>นี่คือข้อมูล <b>ต้นทุน/กำไร</b> ที่ลับที่สุด — รั่วครั้งเดียวจบ. ลืม <code>WHERE tenant_id</code> แถวเดียวใน 167 endpoint ก็พอ.</p>
+      <p class="mit"><b>รับมือ:</b> เลือก DB-per-tenant (แยกเชิงกายภาพ) สำหรับ v1 + accessor กลางบังคับ scope + isolation test matrix ครบทุก endpoint + default-deny.</p>
+    </div>
+    <div class="risk">
+      <div class="rt"><span class="sev high">High</span> พื้นผิว ~167 endpoint กว้างเกินจะตรวจด้วยตา</div>
+      <p>main.py ~8.5K บรรทัด — แก้ทีละ handler แล้วพลาดเป็นเรื่องปกติ.</p>
+      <p class="mit"><b>รับมือ:</b> ฉีด tenant scope ที่ accessor กลางจุดเดียว ไม่ใช่ 167 จุด; เขียนเทสต์ที่ fail ถ้ามี endpoint ใดยังไม่ถูก scope.</p>
+    </div>
+    <div class="risk med">
+      <div class="rt"><span class="sev med">Med</span> SQLite เขียนพร้อมกันหลาย tenant</div>
+      <p>หลาย tenant sync/upload พร้อมกัน → SQLite ล็อกทั้งไฟล์ถ้าใช้ shared schema.</p>
+      <p class="mit"><b>รับมือ:</b> DB-per-tenant ทำให้การเขียนแยกไฟล์ (ไม่ชนกัน); ถ้าโตมากค่อยย้าย Postgres ตาม abstraction ที่วางไว้.</p>
+    </div>
+    <div class="risk med">
+      <div class="rt"><span class="sev med">Med</span> ไฟล์ใหญ่ก้อนเดียว + parallel-session edit</div>
+      <p>index.html ~13.3K บรรทัด + main.py ~8.5K บรรทัด, blast radius กว้าง; เคยมี session คู่ขนานสวีปโค้ดของกันมาแล้ว.</p>
+      <p class="mit"><b>รับมือ:</b> feature-branch วินัย, stage เป็น hunk (อย่า git-add ทั้งไฟล์), ตรวจ insertion count ทุกครั้ง.</p>
+    </div>
+    <div class="risk med">
+      <div class="rt"><span class="sev med">Med</span> คุณภาพข้อมูล onboarding ของ tenant ใหม่</div>
+      <p>ทุก tenant จะเจอ quirk แบบเดียวกับ Easy (วันสุดท้ายหาย, คอลัมน์ VAT, sku_cost=ราคาขาย).</p>
+      <p class="mit"><b>รับมือ:</b> reuse parser + coverage guard ที่ผ่านการ harden แล้วใน upload_data.py; แสดง coverage report ให้ tenant เห็นก่อน confirm.</p>
+    </div>
+    <div class="risk">
+      <div class="rt"><span class="sev high">High</span> Scope creep / โปรเจกต์ไม่จบ</div>
+      <p>multi-tenant + billing + admin เป็นหลุมที่ทำได้ไม่รู้จบ.</p>
+      <p class="mit"><b>รับมือ:</b> go/no-go gate ที่ชัด + นิยาม MVP ที่ตัดออกเยอะ + ส่งเป็นเฟส ไม่ big-bang.</p>
+    </div>
+  </div>
+</section>
+
+<!-- GATE -->
+<section id="gate">
+  <div class="eyebrow">Decision · จุดเคาะ</div>
+  <h2>Go / No-Go gate</h2>
+  <p class="lead" style="margin-bottom:8px">Roadmap ระบุชัด: <b>“ห้ามเริ่มโดยไม่มีการตัดสินใจชัดเจน”</b>. ติ๊กให้ครบก่อนค่อยกด GO.</p>
+  <div class="gate" style="margin-top:24px">
+    <h3>✅ เงื่อนไขก่อนกด GO</h3>
+    <div class="check">
+      <div class="c"><span class="box">✓</span><div><b>A–C พิสูจน์ ROI ได้จริง</b> — ROI ledger เห็นยอด realized savings &gt; 0 (ไม่ใช่แค่ potential), exec summary ถูกใช้งานตัดสินใจจริง</div></div>
+      <div class="c"><span class="box">○</span><div><b>มี demand จริง</b> — มี prospective tenant อย่างน้อย 1–2 ราย / LOI หรือสัญญาณว่าจะจ่าย ก่อนลงทุน rewrite</div></div>
+      <div class="c"><span class="box">○</span><div><b>เคาะ store แล้ว</b> — เลือกระหว่าง SQLite-per-tenant vs Postgres+RLS (กำหนดทุกอย่างหลังจากนั้น)</div></div>
+      <div class="c"><span class="box">○</span><div><b>เจ้าของ commit ทรัพยากร</b> — ยอมรับว่าเป็นโปรเจกต์แยก มี timeline + งบของตัวเอง ไม่แทรกงานเดิม</div></div>
+      <div class="c"><span class="box">○</span><div><b>ตกลง MVP scope</b> — เห็นพ้องว่าตัดอะไรออก (live-sync ต่อราย, white-label, public API) เพื่อให้ส่งได้</div></div>
+    </div>
+  </div>
+
+  <div class="divider-label" style="margin-top:44px"><span class="line"></span><span class="muted" style="font-size:13px;font-weight:700">OUT OF SCOPE (v1)</span><span class="line"></span></div>
+  <div class="grid g3">
+    <div class="card"><h3 style="font-size:15px">🚫 Per-branch row-level</h3><p class="muted" style="font-size:13.5px">จำกัดสิทธิ์ระดับสาขาภายใน tenant — ถูก defer ไว้แล้วใน RBAC, ไม่ใช่ v1</p></div>
+    <div class="card"><h3 style="font-size:15px">🚫 recon/ app multi-tenant</h3><p class="muted" style="font-size:13.5px">แอป reconciliation แยก branch/repo — ทำ multi-tenant ทีหลัง</p></div>
+    <div class="card"><h3 style="font-size:15px">🚫 White-label theming</h3><p class="muted" style="font-size:13.5px">โลโก้/สีต่อ tenant — เพิ่มได้หลัง v1 (token system มีอยู่แล้ว)</p></div>
+    <div class="card"><h3 style="font-size:15px">🚫 Public tenant API</h3><p class="muted" style="font-size:13.5px">ให้ tenant ดึงข้อมูลผ่าน API ของตัวเอง — เฟสหลัง</p></div>
+    <div class="card"><h3 style="font-size:15px">🚫 Live-sync ต่อ tenant</h3><p class="muted" style="font-size:13.5px">v1 เป็น file-upload; MSSQL sync เป็น add-on พรีเมียมภายหลัง</p></div>
+    <div class="card"><h3 style="font-size:15px">🚫 Mobile app</h3><p class="muted" style="font-size:13.5px">responsive web พอสำหรับ v1</p></div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="brand"><span class="dot">O</span> Oshinei Enterprise ERP · Cost Analysis Dashboard</div>
+  <div>Phase D — Multi-Tenant SaaS · Design Doc (draft) · สถานะ: DEFERRED รอ Go/No-Go · 2026-06-09</div>
+  <div style="margin-top:8px" class="muted">สลับโหมดมืดได้ที่ปุ่ม 🌙 มุมขวาบน — เนื้อหาอ้างอิงจาก valuation roadmap, auth_rbac, project notes</div>
+</footer>
+
+<script>
+// theme toggle
+const btn=document.getElementById('themeBtn');
+btn.addEventListener('click',()=>{
+  document.body.classList.toggle('dark');
+  btn.textContent=document.body.classList.contains('dark')?'☀️':'🌙';
+});
+// scroll-spy
+const links=[...document.querySelectorAll('.nav-links a')];
+const secs=links.map(a=>document.querySelector(a.getAttribute('href')));
+const obs=new IntersectionObserver(es=>{
+  es.forEach(e=>{
+    if(e.isIntersecting){
+      const id='#'+e.target.id;
+      links.forEach(a=>a.classList.toggle('active',a.getAttribute('href')===id));
+    }
+  });
+},{rootMargin:'-45% 0px -50% 0px'});
+secs.forEach(s=>s&&obs.observe(s));
+</script>
+</body>
+</html>

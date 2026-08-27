@@ -1,0 +1,1390 @@
+// ─── 01-core.js — slice 1/9 of the former app.js (P2 structure refactor) ───
+// Sequential load order matters: index.html loads 01→09; classic scripts
+// share one global scope, so this equals the original single file.
+
+// Oshinei Dashboard — application JS (split out of index.html,
+// lean-overhaul Phase 4, 2026-07-20). Served at /app.js with
+// Cache-Control: no-cache so deploys can never leave stale JS cached.
+// This file IS the app: index.html holds markup/CSS only.
+// ── Config & globals ───────────────────────────────────────────
+// When opened as a local file (file://) point API calls at the running backend
+const API = location.protocol === 'file:' ? 'http://localhost:8000' : '';
+
+// ── Write-auth: attach the owner token to mutating /api/ calls ────────────────
+// Hosted deploys gate every data-writing endpoint behind X-Upload-Token (the
+// same token as upload/seed). Local dev leaves OSHINEI_SEED_TOKEN unset, so the
+// server allows writes without a token and this stays invisible. /api/upload
+// manages its own token (see handleUpload) and is excluded here. Read-only POSTs
+// like /api/bom-cost/simulate aren't gated server-side, so they never prompt.
+(function () {
+  const TOK_KEY = 'oshinei_upload_token';
+  const _origFetch = window.fetch.bind(window);
+  const isWrite = m => /^(POST|PUT|DELETE|PATCH)$/i.test(m || 'GET');
+  // When an authenticated session expires (12h), every /api/ call starts 401-ing.
+  // Catch it once and re-open the login overlay instead of letting the SPA break
+  // silently into half-loaded charts + a generic error toast.
+  const observe = (url, res) => {
+    if (res && res.status === 401 && url.includes('/api/') && !url.includes('/api/auth/')
+        && window.AUTH && window.AUTH.enabled) {
+      try { onSessionExpired(); } catch (e) {}
+    }
+    return res;
+  };
+  window.fetch = function (input, init) {
+    init = init || {};
+    const url = typeof input === 'string' ? input : (input && input.url) || '';
+    const method = init.method || (typeof input !== 'string' && input && input.method) || 'GET';
+    if (!isWrite(method) || !url.includes('/api/') || url.includes('/api/upload')) {
+      return _origFetch(input, init).then(r => observe(url, r));
+    }
+    const send = (tok) => {
+      const h = new Headers(init.headers || (typeof input !== 'string' && input ? input.headers : null) || {});
+      if (tok) h.set('X-Upload-Token', tok);
+      return _origFetch(input, Object.assign({}, init, { headers: h }));
+    };
+    return send(localStorage.getItem(TOK_KEY) || '').then(res => {
+      if (res.status !== 403) return observe(url, res);
+      const tok = (window.prompt('🔒 ต้องใช้ Owner Write-Token เพื่อบันทึก\n(enter the owner write-token to save):') || '').trim();
+      if (!tok) return res;                       // cancelled → surface the 403
+      localStorage.setItem(TOK_KEY, tok);
+      return send(tok).then(res2 => {
+        if (res2.status === 403) localStorage.removeItem(TOK_KEY);  // wrong token
+        return res2;
+      });
+    });
+  };
+})();
+
+// Session-expiry handler — re-open the login overlay (guarded so a burst of
+// concurrent 401s only prompts once).
+let _sessionExpiredShown = false;
+function onSessionExpired() {
+  if (_sessionExpiredShown) return;
+  _sessionExpiredShown = true;
+  if (window.AUTH) window.AUTH.authenticated = false;
+  const err = document.getElementById('loginError');
+  if (err) { err.textContent = 'เซสชันหมดอายุ — กรุณาเข้าสู่ระบบอีกครั้ง'; err.style.display = 'block'; }
+  if (typeof showLogin === 'function') showLogin();
+}
+
+// ── Role-based authentication (client side; server enforces too) ─────────────
+// window.AUTH = { enabled, authenticated, username, role, modules[] }. When the
+// server has OSHINEI_AUTH off, /api/auth/me reports enabled:false + all modules,
+// so nothing below hides anything (current behaviour preserved).
+window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };
+
+// Sidebar tab → module it requires. Tabs absent from the map (e.g. 'manual') are
+// always allowed to any logged-in user. Mirrors MODULE_RULES in backend/auth.py.
+const TAB_MODULE = {
+  home:'sales.overview', overall:'sales.overview', action:'sales.overview',
+  dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
+  buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
+  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
+  menuactionboard:'cost.analysis', menuopportunities:'menu.analysis',
+  cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis', costheadtop60:'cost.analysis',
+  menuimpact:'cost.analysis',
+  heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
+  simhub:'cost.simulator',
+  gpbranch:'profit.pnl', pnlbranch:'profit.pnl', pnlbill:'profit.pnl', profit:'profit.pnl', benchmark:'profit.pnl',
+  opsreport:'ops.report', ops:'ops.report', ordering:'ops.report', ordersetup:'ops.report',
+  staff:'ops.staff', discounts:'ops.discounts',
+  cashctl:'ops.cash',
+  custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
+  cancelbill:'ops.posextra', closetime:'ops.posextra',
+  report:'report.export', mgtreport:'report.export', settings:'system.settings',
+};
+const ROLE_LABEL_TH = {
+  management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
+  analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
+};
+// Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
+// so the owner can see what each role unlocks before assigning it.
+const MODULE_LABEL_TH = {
+  'sales.overview':'ยอดขายภาพรวม', 'customer.buffet':'บุฟเฟ่ต์/ลูกค้า',
+  'menu.analysis':'วิเคราะห์เมนู', 'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลองต้นทุน',
+  'bom.edit':'แก้ไข BoM', 'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ',
+  'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
+  'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
+  'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
+};
+const ROLE_MODULES_TH = {
+  management: Object.keys(MODULE_LABEL_TH),
+  marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export'],
+  operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export'],
+  accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
+  innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings'],
+};
+
+function hasModule(m) {
+  if (!window.AUTH || !window.AUTH.enabled) return true;   // auth off → everything
+  return (window.AUTH.modules || []).includes(m);
+}
+function tabAllowed(name) {
+  const m = TAB_MODULE[name];
+  return !m || hasModule(m);                                // unmapped → always allowed
+}
+function firstAllowedTab() {
+  const order = ['overall','home','action','dailysales','trend','compare','more',
+    'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
+    'staff','custtype','manual'];
+  return order.find(tabAllowed) || 'manual';
+}
+
+async function bootstrapAuth() {
+  try {
+    const r = await fetch(`${API}/api/auth/me`);
+    window.AUTH = await r.json();
+    window.AUTH.modules = window.AUTH.modules || [];
+  } catch (e) {
+    // Network/health failure — don't hard-lock the UI; treat as auth-off.
+    window.AUTH = { enabled: false, authenticated: true, role: 'management', modules: [] };
+  }
+}
+
+function showLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='flex';
+                        setTimeout(()=>document.getElementById('loginUser')?.focus(),50); }
+function hideLogin()  { const o=document.getElementById('loginOverlay'); if(o) o.style.display='none'; }
+
+async function doLogin(ev) {
+  if (ev) ev.preventDefault();
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  const btn = document.getElementById('loginBtn');
+  errEl.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'กำลังเข้าสู่ระบบ…';
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ username:u, password:p }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      errEl.textContent = d.detail || 'เข้าสู่ระบบไม่สำเร็จ';
+      errEl.style.display = 'block';
+      return;
+    }
+    const data = await res.json();
+    window.AUTH = { enabled:true, authenticated:true, username:data.username,
+                    role:data.role, modules:data.modules || [] };
+    _sessionExpiredShown = false;
+    hideLogin();
+    applyPermissions();
+    // Force a password change off the shared/temporary default before using the app.
+    if (data.must_change) { openPasswordChange(true); return; }
+    await startApp();
+  } catch (e) {
+    errEl.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
+    errEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = 'เข้าสู่ระบบ';
+  }
+}
+
+async function doLogout() {
+  try { await fetch(`${API}/api/auth/logout`, { method:'POST' }); } catch(e){}
+  location.reload();
+}
+
+// ── Change password (forced on first login, or voluntary from the user chip) ──
+let _pwForced = false;
+function openPasswordChange(force) {
+  _pwForced = !!force;
+  const ov = document.getElementById('pwOverlay'); if (!ov) return;
+  document.getElementById('pwCurrent').value = '';
+  document.getElementById('pwNew').value = '';
+  document.getElementById('pwConfirm').value = '';
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwHint').textContent = force
+    ? 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 8 ตัวอักษร)'
+    : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)';
+  // When forced, no cancel — the user must set a password before continuing.
+  document.getElementById('pwCancel').style.display = force ? 'none' : '';
+  ov.style.display = 'flex';
+  setTimeout(() => document.getElementById('pwCurrent').focus(), 50);
+}
+function closePasswordChange() {
+  const ov = document.getElementById('pwOverlay'); if (ov) ov.style.display = 'none';
+}
+async function submitPasswordChange(ev) {
+  if (ev) ev.preventDefault();
+  const cur = document.getElementById('pwCurrent').value;
+  const nw  = document.getElementById('pwNew').value;
+  const cf  = document.getElementById('pwConfirm').value;
+  const err = document.getElementById('pwError');
+  const btn = document.getElementById('pwSubmit');
+  const fail = (m) => { err.textContent = m; err.style.display = 'block'; };
+  err.style.display = 'none';
+  if (nw.length < 8)  return fail('รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร');
+  if (nw !== cf)      return fail('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน');
+  btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  try {
+    const res = await fetch(`${API}/api/auth/me/password`, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ current_password: cur, new_password: nw }),
+    });
+    if (!res.ok) { const d = await res.json().catch(()=>({})); return fail(d.detail || 'เปลี่ยนรหัสผ่านไม่สำเร็จ'); }
+    closePasswordChange();
+    if (_pwForced) { _pwForced = false; await startApp(); }   // continue into the app
+    else if (typeof notifySuccess === 'function') notifySuccess('เปลี่ยนรหัสผ่านแล้ว');
+  } catch (e) {
+    fail('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+  } finally {
+    btn.disabled = false; btn.textContent = 'บันทึกรหัสผ่านใหม่';
+  }
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('userChip');
+  if (!chip) return;
+  if (window.AUTH && window.AUTH.enabled && window.AUTH.authenticated) {
+    const role = window.AUTH.role || '';
+    document.getElementById('userChipName').textContent =
+      `${window.AUTH.username} · ${ROLE_LABEL_TH[role] || role}`;
+    chip.style.display = 'flex';
+  } else {
+    chip.style.display = 'none';
+  }
+}
+
+// Hide nav items / sections / topbar actions the current role can't use.
+function applyPermissions() {
+  renderUserChip();
+  if (!window.AUTH || !window.AUTH.enabled) return;   // auth off → show everything
+  // 1) Hide disallowed nav items (don't force-show ones intentionally display:none)
+  Object.keys(TAB_MODULE).forEach(tab => {
+    const el = document.getElementById('nav-' + tab);
+    if (el && !tabAllowed(tab)) el.style.display = 'none';
+  });
+  // 1b) Cluster safety net: each cluster's sidebar entry is tabs[0]; when a
+  // role can't open the entry but CAN open other members, reveal the first
+  // allowed member's nav item so the cluster stays reachable for that role.
+  TAB_CLUSTERS.forEach(cl => {
+    if (tabAllowed(cl.tabs[0][0])) return;
+    const alt = cl.tabs.find(([t]) => tabAllowed(t));
+    if (alt) { const el = document.getElementById('nav-' + alt[0]); if (el) el.style.display = ''; }
+  });
+  // 2) Collapse nav-section headers whose items are all hidden
+  document.querySelectorAll('.nav-section').forEach(sec => {
+    let n = sec.nextElementSibling, anyVisible = false;
+    while (n && !n.classList.contains('nav-section')) {
+      if (n.classList.contains('nav-item') && getComputedStyle(n).display !== 'none') anyVisible = true;
+      n = n.nextElementSibling;
+    }
+    sec.style.display = anyVisible ? '' : 'none';
+  });
+  // 3) Topbar action buttons
+  const costUp = document.querySelector('[onclick="openCostModal()"]');
+  if (costUp) costUp.style.display = (hasModule('bom.edit') || hasModule('system.settings')) ? '' : 'none';
+  const salesUp = document.querySelector('[onclick*="salesDataFile"]');
+  if (salesUp) salesUp.style.display = hasModule('data.upload') ? '' : 'none';
+  // The monthly review pack bundles P&L + top cost drivers → cost/profit roles only
+  // (server gates /api/export/monthly-pack the same way; this avoids a raw-403 page).
+  const packBtn = document.querySelector('[onclick="openMonthlyPackDialog()"]');
+  if (packBtn) packBtn.style.display = (hasModule('cost.analysis') || hasModule('profit.pnl')) ? '' : 'none';
+  // 4) Settings → ผู้ใช้งาน sub-tab visible to admins only
+  const uBtn = document.getElementById('settabbtn-users');
+  if (uBtn) uBtn.style.display = hasModule('system.admin') ? '' : 'none';
+  // 5) If the current/landing tab isn't allowed, jump to the first allowed one
+  if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
+}
+
+// ── User management (Settings → ผู้ใช้งาน) ──────────────────────────────────
+async function loadUsers() {
+  // Populate the role <select> for the add-user form
+  const sel = document.getElementById('newUserRole');
+  if (sel && !sel.options.length) {
+    Object.entries(ROLE_LABEL_TH).forEach(([k,v]) =>
+      sel.add(new Option(`${v} (${k})`, k)));
+  }
+  const tb = document.getElementById('userTableBody');
+  if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  let users = [];
+  try { users = await fetch(`${API}/api/auth/users`).then(r => r.json()); }
+  catch(e) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">โหลดรายชื่อผู้ใช้ไม่ได้</td></tr>'; return; }
+  if (!Array.isArray(users)) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">ไม่มีสิทธิ์ดูรายชื่อผู้ใช้</td></tr>'; return; }
+  tb.innerHTML = users.map(u => {
+    const opts = Object.entries(ROLE_LABEL_TH).map(([k,v]) =>
+      `<option value="${k}" ${k===u.role?'selected':''}>${v} (${k})</option>`).join('');
+    const me = window.AUTH && window.AUTH.username === u.username;
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-2 pr-4 font-medium" style="color:var(--text-primary)">${u.username}${me?' <span class=\"text-xs\" style=\"color:var(--text-muted)\">(คุณ)</span>':''}</td>
+      <td class="py-2 pr-4"><select onchange="updateUserRole('${u.username}', this.value)" ${me?'disabled title="เปลี่ยนบทบาทตัวเองไม่ได้"':''} class="border rounded px-2 py-1 text-xs ${me?'opacity-50 cursor-not-allowed':''}" style="border-color:var(--border)">${opts}</select></td>
+      <td class="py-2 pr-4">${u.active
+        ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">ใช้งาน</span>'
+        : '<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ปิด</span>'}</td>
+      <td class="py-2 pr-4 text-xs" style="color:var(--text-muted)">${(u.created_at||'').slice(0,10)}</td>
+      <td class="py-2 text-right whitespace-nowrap">
+        <button onclick="resetUserPassword('${u.username}')" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)" title="ตั้งรหัสผ่านใหม่">🔑</button>
+        ${me ? '' : `<button onclick="toggleUserActive('${u.username}', ${u.active?0:1})" class="text-xs px-2 py-1 rounded border mr-1" style="border-color:var(--border)">${u.active?'ปิดใช้':'เปิดใช้'}</button>`}
+        ${me ? '' : `<button onclick="deleteUser('${u.username}')" class="text-xs px-2 py-1 rounded border text-rose-600" style="border-color:var(--border)" title="ลบผู้ใช้">🗑️</button>`}
+      </td></tr>`;
+  }).join('') || '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีผู้ใช้</td></tr>';
+}
+let _rolePermsData = null;
+
+async function loadRolePermissions() {
+  const el = document.getElementById('rolePermMatrix');
+  if (!el) return;
+  const canEdit = window.AUTH && window.AUTH.enabled && window.AUTH.modules && window.AUTH.modules.includes('system.admin');
+  const btn = document.getElementById('permSaveBtn');
+  if (btn) btn.classList.toggle('hidden', !canEdit);
+
+  // Try to load from API; fall back to local constants
+  let roles, modules, permissions;
+  try {
+    const d = await fetch(`${API}/api/auth/role-permissions`).then(r => r.ok ? r.json() : null);
+    if (d) {
+      roles = d.roles;
+      modules = d.modules;
+      permissions = d.permissions;
+    }
+  } catch(e) {}
+  if (!permissions) {
+    roles = Object.keys(ROLE_LABEL_TH);
+    modules = Object.keys(MODULE_LABEL_TH);
+    permissions = {};
+    roles.forEach(r => { permissions[r] = ROLE_MODULES_TH[r] || []; });
+  }
+  _rolePermsData = { roles, modules, permissions };
+  _renderPermMatrix(canEdit);
+}
+
+function _renderPermMatrix(canEdit) {
+  const el = document.getElementById('rolePermMatrix');
+  if (!el || !_rolePermsData) return;
+  const { roles, modules, permissions } = _rolePermsData;
+
+  // Group modules for readability
+  const MOD_GROUP = {
+    'sales.overview':'ยอดขาย', 'customer.buffet':'ลูกค้า', 'menu.analysis':'เมนู',
+    'cost.analysis':'ต้นทุน', 'cost.simulator':'Simulator', 'bom.edit':'แก้ BoM',
+    'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
+    'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
+    'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
+    'data.upload':'Upload',
+  };
+
+  const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
+  const th_mods = modules.map(m =>
+    `<th class="py-2 px-2 text-center text-[10px] font-medium whitespace-nowrap" style="color:var(--text-muted)" title="${m}">${MOD_GROUP[m]||m}</th>`
+  ).join('');
+
+  const rows = roles.map(role => {
+    const roleMods = new Set(permissions[role] || []);
+    const cells = modules.map(m => {
+      const checked = roleMods.has(m);
+      const dis = (role === 'management' && m === 'system.admin') ? ' title="management เสมอ"' : '';
+      const inp = canEdit
+        ? `<input type="checkbox" data-role="${role}" data-mod="${m}" ${checked?'checked':''} ${dis}
+             onchange="_permToggle(this)" class="w-3.5 h-3.5 accent-indigo-600">`
+        : `<span style="color:${checked?'#4f46e5':'#e2e8f0'};font-size:14px">${checked?'✓':'–'}</span>`;
+      return `<td class="py-1.5 px-2 text-center">${inp}</td>`;
+    }).join('');
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-4 text-sm font-medium sticky left-0" style="background:var(--bg-card);color:var(--text-primary)">
+        ${ROLE_LABEL_TH[role]||role} <span class="text-xs" style="color:var(--text-muted)">(${role})</span>
+      </td>${cells}</tr>`;
+  }).join('');
+
+  el.innerHTML = `<table class="text-sm w-full border-collapse">
+    <thead><tr class="border-b" style="border-color:var(--border)">${th_role}${th_mods}</tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+function _permToggle(cb) {
+  if (!_rolePermsData) return;
+  const role = cb.dataset.role, mod = cb.dataset.mod;
+  const perms = _rolePermsData.permissions;
+  if (!perms[role]) perms[role] = [];
+  if (cb.checked) { if (!perms[role].includes(mod)) perms[role].push(mod); }
+  else { perms[role] = perms[role].filter(m => m !== mod); }
+}
+
+async function saveRolePermissions() {
+  if (!_rolePermsData) return;
+  const btn = document.getElementById('permSaveBtn');
+  const status = document.getElementById('permSaveStatus');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังบันทึก…'; }
+  try {
+    const res = await fetch(`${API}/api/auth/role-permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissions: _rolePermsData.permissions }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(()=>({}));
+      if (status) { status.textContent = d.detail || 'บันทึกไม่สำเร็จ'; status.className = 'text-xs text-rose-600'; }
+    } else {
+      if (status) { status.textContent = 'บันทึกแล้ว ✓'; status.className = 'text-xs text-emerald-600'; }
+      setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+      await loadRolePermissions();
+    }
+  } catch(e) {
+    if (status) { status.textContent = 'เชื่อมต่อไม่ได้'; status.className = 'text-xs text-rose-600'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '💾 บันทึกสิทธิ์'; }
+  }
+}
+
+function _userStatus(msg, ok) {
+  const s = document.getElementById('userSaveStatus');
+  if (!s) return;
+  s.textContent = msg; s.className = 'text-sm ' + (ok ? 'text-emerald-600' : 'text-rose-600');
+  setTimeout(() => { s.textContent = ''; }, 4000);
+}
+async function createUser() {
+  const username = document.getElementById('newUserName').value.trim();
+  const password = document.getElementById('newUserPass').value;
+  const role = document.getElementById('newUserRole').value;
+  if (!username || !password) { _userStatus('กรอกชื่อผู้ใช้และรหัสผ่าน', false); return; }
+  const res = await fetch(`${API}/api/auth/users`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ username, password, role }) });
+  if (res.ok) {
+    document.getElementById('newUserName').value = '';
+    document.getElementById('newUserPass').value = '';
+    _userStatus('เพิ่มผู้ใช้แล้ว', true); loadUsers();
+  } else {
+    const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'เพิ่มไม่สำเร็จ', false);
+  }
+}
+async function _putUser(username, body, okMsg) {
+  const res = await fetch(`${API}/api/auth/users/${encodeURIComponent(username)}`, {
+    method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  if (res.ok) { _userStatus(okMsg, true); loadUsers(); }
+  else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'บันทึกไม่สำเร็จ', false); }
+}
+function updateUserRole(username, role) { _putUser(username, { role }, `เปลี่ยนบทบาท ${username} แล้ว`); }
+function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
+function resetUserPassword(username) {
+  const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);
+  if (pw) _putUser(username, { password: pw }, 'ตั้งรหัสผ่านใหม่แล้ว');
+}
+async function deleteUser(username) {
+  if (!window.confirm(`ลบผู้ใช้ ${username}?`)) return;
+  const res = await fetch(`${API}/api/auth/users/${encodeURIComponent(username)}`, { method:'DELETE' });
+  if (res.ok) { _userStatus('ลบผู้ใช้แล้ว', true); loadUsers(); }
+  else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'ลบไม่สำเร็จ', false); }
+}
+
+const PALETTE = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6','#a78bfa','#fb923c'];
+
+// ── World-class semantic color system ─────────────────────────
+const SEMANTIC = {
+  revenue:    '#4f46e5',  // indigo
+  customers:  '#10b981',  // emerald
+  avgTicket:  '#06b6d4',  // cyan
+  margin:     '#14b8a6',  // teal
+  cost:       '#f97316',  // orange
+  discount:   '#f59e0b',  // amber
+  refund:     '#ef4444',  // red
+  good:       '#10b981',
+  bad:        '#ef4444',
+  neutral:    '#64748b',
+  // Daypart colors (restaurant timeline)
+  morning:    '#f59e0b',
+  lunch:      '#10b981',
+  afternoon:  '#fbbf24',
+  dinner:     '#4f46e5',
+  late:       '#8b5cf6',
+  // Branch group
+  master:     '#4f46e5',
+  franchise:  '#f59e0b',
+  easy:       '#4f46e5',
+};
+
+// Thai day-of-week color palette
+const DOW_COLORS = {
+  0: '#ef4444',  // Sun = red
+  1: '#eab308',  // Mon = yellow
+  2: '#ec4899',  // Tue = pink
+  3: '#10b981',  // Wed = green
+  4: '#f97316',  // Thu = orange
+  5: '#3b82f6',  // Fri = blue
+  6: '#8b5cf6',  // Sat = purple
+};
+const DOW_LABELS_TH_SHORT = ['จ','อ','พ','พฤ','ศ','ส','อา'];
+const DOW_LABELS_TH = ['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
+
+// Deterministic, category-specific palette (anchored to common Thai-restaurant categories)
+const CATEGORY_COLOR_MAP = {
+  'BUFFET': '#4f46e5', 'BUFFET 350': '#4338ca', 'BUFFET 450': '#6366f1',
+  'A LA CARTE': '#10b981', 'FOOD': '#10b981',
+  'DRINK': '#06b6d4', 'BEVERAGE': '#06b6d4', 'SOFT DRINK': '#0891b2',
+  'ALCOHOL': '#9333ea', 'BEER': '#a855f7', 'WINE': '#7c3aed',
+  'DESSERT': '#ec4899', 'SWEETS': '#f472b6',
+  'APPETIZER': '#f59e0b', 'SIDE': '#fbbf24',
+  'YAKINIKU': '#dc2626', 'BBQ': '#ef4444', 'GRILL': '#dc2626',
+  'SUSHI': '#0d9488', 'SASHIMI': '#14b8a6',
+  'NOODLE': '#f97316', 'RAMEN': '#ea580c', 'PASTA': '#fb923c',
+  'RICE': '#84cc16', 'CURRY': '#fbbf24',
+  'SET MENU': '#8b5cf6',
+  'OTHER': '#64748b', 'OTHERS': '#94a3b8',
+  'SERVICE': '#94a3b8', 'SERVICECHARGE': '#94a3b8', 'SP': '#94a3b8',
+};
+// Hash-based fallback so unknown categories get a stable color
+function _hashColor(str) {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
+function colorForCategory(name) {
+  if (!name) return SEMANTIC.neutral;
+  const up = name.toUpperCase().trim();
+  // exact match
+  if (CATEGORY_COLOR_MAP[up]) return CATEGORY_COLOR_MAP[up];
+  // partial — look for any known token in name
+  for (const k in CATEGORY_COLOR_MAP) {
+    if (up.includes(k)) return CATEGORY_COLOR_MAP[k];
+  }
+  return _hashColor(up);
+}
+function colorForHour(h) {
+  if (h >= 6  && h <= 10) return SEMANTIC.morning;
+  if (h >= 11 && h <= 14) return SEMANTIC.lunch;
+  if (h >= 15 && h <= 16) return SEMANTIC.afternoon;
+  if (h >= 17 && h <= 21) return SEMANTIC.dinner;
+  return SEMANTIC.late;
+}
+// Rank-tier colors (top tier emerald → middle indigo → bottom amber)
+function colorForRank(idx, total) {
+  const t = idx / Math.max(1, total - 1);
+  if (t < 0.33) return SEMANTIC.good;        // top third
+  if (t < 0.66) return SEMANTIC.revenue;     // middle third
+  return SEMANTIC.discount;                  // bottom third
+}
+// Continuous heat scale: t∈[0,1] → red (low) ▸ amber ▸ green (high).
+// Pass invert=true for "lower is better" metrics (cost) so green=low, red=high.
+function heatColor(t, invert) {
+  if (t == null || isNaN(t)) return '#f1f5f9';
+  let x = Math.max(0, Math.min(1, t));
+  if (invert) x = 1 - x;
+  const stops = [[239,68,68], [245,158,11], [22,163,74]]; // red → amber → green
+  const seg = x < 0.5 ? 0 : 1;
+  const f   = x < 0.5 ? x / 0.5 : (x - 0.5) / 0.5;
+  const a = stops[seg], b = stops[seg + 1];
+  const mix = i => Math.round(a[i] + (b[i] - a[i]) * f);
+  return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
+}
+// Deterministic, distinct colour per branch name (stable across reloads)
+function colorForBranch(name) {
+  if (!name) return SEMANTIC.neutral;
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+  return PALETTE[Math.abs(h) % PALETTE.length];
+}
+
+// Theme-aware axis / grid colors that respect dark mode
+function chartTheme(force) {
+  // force='light' → a chart inside a forced-light island (e.g. the printable
+  // Management Report keeps a white-paper look in dark mode) themes as light.
+  const dark = force ? force === 'dark' : document.body.classList.contains('dark');
+  return {
+    text:     dark ? '#cbd5e1' : '#64748b',
+    textDim:  dark ? '#94a3b8' : '#94a3b8',
+    grid:     dark ? 'rgba(148,163,184,0.12)' : '#f1f5f9',
+    labelStrong: dark ? '#f1f5f9' : '#1e293b',
+    bg:       dark ? '#1e293b' : '#ffffff',
+  };
+}
+function applyChartTheme(cfg, force) {
+  const t = chartTheme(force);
+  if (!cfg.options) return;
+  if (cfg.options.scales) {
+    Object.values(cfg.options.scales).forEach(ax => {
+      if (!ax) return;
+      ax.grid = ax.grid || {};
+      ax.ticks = ax.ticks || {};
+      if (ax.grid.color !== false && ax.grid.display !== false) ax.grid.color = t.grid;
+      ax.ticks.color = ax.ticks.color && /^#[0-9a-fA-F]{6}$/.test(ax.ticks.color) ? t.text : ax.ticks.color || t.text;
+      // overwrite hard-coded slate colors
+      if (ax.ticks.color === '#94a3b8' || ax.ticks.color === '#64748b') ax.ticks.color = t.text;
+    });
+  }
+  if (cfg.options.plugins?.datalabels?.color === '#1e293b') {
+    cfg.options.plugins.datalabels.color = t.labelStrong;
+  }
+}
+let activeTab       = 'home';
+let activeSubtab    = 'mostOrdered';
+let activeOpsSubtab = 'cohort';
+let chartInstances = {};    // name → Chart instance
+// allMonths is always an array — enforced by getter/setter
+let _allMonths = [];
+Object.defineProperty(window, 'allMonths', {
+  get() { return _allMonths; },
+  set(v) { _allMonths = Array.isArray(v) ? v : []; },
+  configurable: true
+});
+let costModalSkuMap = {};
+const _tabLastKey = {};   // tab name → last filter key used
+function _filterKey() { return `${getBranch()}|${getMonthFrom()}|${getMonthTo()}`; }
+let parsedCostRows  = [];
+
+// cached data per tab
+let cache = {};
+
+// ── Security: HTML-escape any untrusted string before innerHTML interpolation.
+// Branch names and SKU descriptions are user-entered / CSV-uploaded — never trust them.
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Safe interpolation into a single-quoted JS string inside an HTML attribute,
+// e.g. onclick="f('${jsAttr(v)}')". JS-escape first, then HTML-escape.
+const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+
+// ── Formatters (guard against null / NaN / numeric-string from the API) ──────
+const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
+const fmt  = n => { const v=_num(n); return v==null ? '—' : v >= 1e6 ? (v/1e6).toFixed(2)+'M' : v >= 1e3 ? (v/1e3).toFixed(1)+'K' : v.toFixed(0); };
+const fmtN = n => { const v=_num(n); return v==null ? '—' : v.toLocaleString('th-TH',{maximumFractionDigits:0}); };
+const fmtP = n => { const v=_num(n); return v==null ? '—' : v.toFixed(1)+'%'; };
+const fmtM = n => { const v=_num(n); return v==null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(1)+'%'; };
+
+// ── Fetch robustness (D3) + stale-response guard (D4) ───────────────────────
+// loadGen increments on every tab switch / filter change. A loader captures the
+// generation at start; if it has changed by the time a response arrives, the
+// response is stale (the user moved on) and must NOT overwrite the new view.
+let loadGen = 0;
+let _chartsPending = false;   // set when mkChart was called before Chart.js finished loading
+let _chartSetupDone = false;  // guards one-time plugin registration + global chart defaults
+const STALE = Symbol('stale-response');
+
+// Standard JSON fetch: checks response.ok and (optionally) drops stale responses.
+// Pass the generation captured at loader start as `gen` to enable the stale guard.
+async function getJSON(path, { gen = null, signal } = {}) {
+  const url = (path.startsWith('http') || path.startsWith('/')) ? path : `${API}${path}`;
+  const res = await fetch(url, { signal });
+  if (gen !== null && gen !== loadGen) throw STALE;   // user navigated away mid-flight
+  if (!res.ok) throw new Error(`HTTP ${res.status} for ${path}`);
+  const data = await res.json();
+  if (gen !== null && gen !== loadGen) throw STALE;
+  return data;
+}
+
+// Surface otherwise-silent fetch/render failures instead of leaving a half-built tab.
+function notifyError(msg) {
+  let el = document.getElementById('globalErrToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'globalErrToast';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
+      'background:#7f1d1d;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
+    el.onclick = () => el.remove();
+    document.body.appendChild(el);
+  }
+  el.textContent = '⚠ ' + msg + '  (คลิกเพื่อปิด)';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.remove(), 8000);
+}
+
+window.addEventListener('unhandledrejection', e => {
+  if (e.reason === STALE) { e.preventDefault(); return; }            // expected — ignore
+  const msg = (e.reason && e.reason.message) || String(e.reason || '');
+  if (/abort/i.test(msg)) { e.preventDefault(); return; }            // expected on cancel
+  console.error('Unhandled fetch/render error:', e.reason);
+  notifyError('โหลดข้อมูลไม่สำเร็จ: ' + msg);
+});
+
+// chart registry alias used by zoom reset buttons
+const charts = chartInstances;
+
+function resetZoom(chartId) {
+  const c = charts[chartId];
+  if (c) c.resetZoom();
+}
+
+function mkChart(id, config) {
+  // Vendor-load race: a tab loader can fire before chart.umd.min.js finishes
+  // loading. Fail soft (the chart re-renders on the next tab/filter load) rather
+  // than throwing a ReferenceError that aborts the whole loader.
+  if (typeof Chart === 'undefined') { _chartsPending = true; return null; }
+  ensureChartSetup();   // apply global defaults before the first chart is built
+  if (chartInstances[id]) { chartInstances[id].destroy(); }
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  // Charts are static by default — no mouse-wheel zoom (avoids accidental zoom while scrolling page).
+  // Users who want zoom can click the dive-in 🔍 button to open the full analysis modal.
+  if (['line','bar','scatter'].includes(config.type)) {
+    config.options = config.options || {};
+    config.options.plugins = config.options.plugins || {};
+    if (!config.options.plugins.zoom) {
+      config.options.plugins.zoom = {
+        zoom: { wheel: { enabled: false }, pinch: { enabled: false }, drag: { enabled: false }, mode: 'xy' },
+        pan:  { enabled: false, mode: 'xy' },
+      };
+    }
+  }
+  // Apply theme-aware axis / grid / label colors (respects dark mode).
+  // A canvas inside a [data-force-light] container (the printable Management
+  // Report keeps a white-paper look in dark mode) always themes as light.
+  applyChartTheme(config, ctx.closest('[data-force-light]') ? 'light' : undefined);
+  chartInstances[id] = new Chart(ctx, config);
+  // Auto-inject a "Dive in" zoom button on the chart canvas wrapper
+  injectDiveBtn(id, ctx);
+  return chartInstances[id];
+}
+
+// Centered moving-average smoother → a "trend curve" over a short series (the 8-day /
+// 8-week revenue trend). The window clamps at the edges so the first/last points stay
+// anchored to real data rather than drifting. Pure function of the input array.
+function movingAvg(values, win = 3) {
+  const n = values.length, half = Math.floor(win / 2);
+  return values.map((_, i) => {
+    let sum = 0, cnt = 0;
+    for (let j = Math.max(0, i - half); j <= Math.min(n - 1, i + half); j++) {
+      sum += values[j] || 0; cnt++;
+    }
+    return cnt ? sum / cnt : 0;
+  });
+}
+
+function injectDiveBtn(chartId, canvas) {
+  if (chartId.startsWith('zoom-') || chartId.startsWith('drill')) return; // skip modal charts
+  const wrap = canvas.parentElement;
+  if (!wrap || wrap.querySelector('.dive-btn[data-for="'+chartId+'"]')) return;
+  wrap.style.position = wrap.style.position || 'relative';
+  const btn = document.createElement('button');
+  btn.className = 'dive-btn';
+  btn.dataset.for = chartId;
+  btn.title = 'Dive in (zoom + analysis)';
+  btn.innerHTML = '🔍';
+  btn.onclick = () => diveInChart(chartId);
+  wrap.appendChild(btn);
+}
+
+function badge(pct) {
+  if (pct == null) return '<span class="pill pill-neu">N/A</span>';
+  const cls = pct > 0 ? 'pill-up' : pct < 0 ? 'pill-down' : 'pill-neu';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+  return `<span class="pill ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+function trendBadge(pct) {
+  if (pct == null) return '';
+  const cls = pct > 0 ? 'pill-up' : pct < 0 ? 'pill-down' : 'pill-neu';
+  const arrow = pct > 0 ? '▲' : pct < 0 ? '▼' : '—';
+  return `<span class="pill ${cls}">${arrow} ${Math.abs(pct).toFixed(1)}%</span>`;
+}
+
+function mkSparkline(values, color, w=72, h=26) {
+  if (!values || values.length < 2) return '';
+  const mn = Math.min(...values), mx = Math.max(...values);
+  const range = mx - mn || 1;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * w;
+    const y = h - ((v - mn) / range) * (h - 6) - 3;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" fill="none" style="opacity:0.75;flex-shrink:0"><polyline points="${pts}" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+// ── Filter helpers ─────────────────────────────────────────────
+const getBranch    = () => document.getElementById('selBranch').value;
+const getGroup     = () => document.getElementById('selGroup')?.value || '';
+const getMonthFrom = () => document.getElementById('selMonthFrom').value;
+const getMonthTo   = () => document.getElementById('selMonthTo').value;
+const getMonth     = () => getMonthTo() || getMonthFrom(); // backward compat for single-month contexts
+const getVariant   = () => document.getElementById('selVariant')?.value || '';
+
+// A per-dish margin / cost% is only meaningful for items that carry a real
+// à-la-carte price. Buffet (B) dishes are included in the buffet package
+// (revenue ≈ 0 per dish — the price lives on the buffet-package SKU), so their
+// margin explodes to garbage (e.g. -29,709,896%). Exclude them from margin
+// analysis; their ingredient cost is still counted in chain COGS elsewhere.
+function _hasMenuPrice(r){
+  if (!r) return false;
+  const d = r.description || '';
+  if (/^\(\s*B\s*\)/.test(d)) return false;                       // (B) = buffet-included dish
+  if (/BUFFET/i.test((r.sku_code||'') + ' ' + (r.category||''))) return false;
+  return (r.revenue_ex_vat ?? r.revenue ?? 0) > 0;
+}
+function qp(extra = {}) {
+  const p = {};
+  if (getBranch())    p.branch     = getBranch();
+  if (getGroup())     p.group      = getGroup();
+  if (getMonthFrom()) p.month_from = getMonthFrom();
+  if (getMonthTo())   p.month_to   = getMonthTo();
+  // Day-precise mode (daily/weekly granularity, incl. the custom day range): also
+  // pass exact date_from/date_to. Day-capable endpoints prefer these; month-grain
+  // endpoints ignore them and use the (enclosing) month range above.
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  if (g === 'daily' || g === 'weekly') {
+    const df = document.getElementById('selDateFrom')?.value;
+    const dt = document.getElementById('selDateTo')?.value;
+    if (df) p.date_from = df;
+    if (dt) p.date_to   = dt;
+  }
+  if (getVariant())   p.variant    = getVariant();
+  Object.assign(p, extra);
+  const s = new URLSearchParams(p).toString();
+  return s ? '?' + s : '';
+}
+
+// Params for the KPI summary cards. Same as qp(), but in daily/weekly mode the
+// summary follows the date-range pickers instead of the month range (the month
+// selects are hidden then, so their values are stale). /api/summary computes the
+// window from sales_transaction when date_from/date_to are present.
+function summaryParams() {
+  const g = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
+  if (g === 'daily' || g === 'weekly') {
+    const p = {};
+    if (getBranch()) p.branch = getBranch();
+    if (getGroup())  p.group  = getGroup();
+    const df = document.getElementById('selDateFrom')?.value;
+    const dt = document.getElementById('selDateTo')?.value;
+    if (df) p.date_from = df;
+    if (dt) p.date_to   = dt;
+    const s = new URLSearchParams(p).toString();
+    return s ? '?' + s : '';
+  }
+  return qp();
+}
+
+// ── Calendar year quick selector (Phase 7) ─────────────────────────
+// Populate selYearQuick from window.allMonths (set by loadMonths in dashboard init).
+function _populateYearQuick() {
+  const sel = document.getElementById('selYearQuick');
+  if (!sel) return;
+  const months = Array.isArray(window.allMonths) ? window.allMonths.slice() : [];
+  const years = [...new Set(months.map(m => m.slice(0, 4)))].sort();
+  // Preserve placeholder option, rebuild rest
+  while (sel.options.length > 1) sel.remove(1);
+  years.forEach(y => {
+    const o = document.createElement('option');
+    o.value = y; o.textContent = y;
+    sel.appendChild(o);
+  });
+}
+// Set month range to Jan–Dec of a given calendar year (clamped to data availability).
+// fullYear=true → always Jan-Dec; false → Jan-current month for YTD behaviour.
+function setYearRange(year, fullYear = true) {
+  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
+  if (!months.length) return;
+  const yStr = String(year);
+  const inYear = months.filter(m => m.startsWith(yStr));
+  if (!inYear.length) {
+    alert(`ไม่มีข้อมูลในปี ${yStr}`);
+    return;
+  }
+  const from = fullYear ? `${yStr}-01` : inYear[0];
+  const to = fullYear ? `${yStr}-12` : inYear[inYear.length - 1];
+  // Snap to available months (some months may be missing in data)
+  const fromSnap = months.find(m => m >= from) || inYear[0];
+  const toSnap   = [...months].reverse().find(m => m <= to) || inYear[inYear.length - 1];
+  const selFrom = document.getElementById('selMonthFrom');
+  const selTo   = document.getElementById('selMonthTo');
+  if (selFrom) selFrom.value = fromSnap;
+  if (selTo)   selTo.value   = toSnap;
+  // Sync the year dropdown display
+  const ySel = document.getElementById('selYearQuick');
+  if (ySel) ySel.value = yStr;
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+function onYearQuickChange(val) {
+  if (!val) return;  // placeholder selected — no-op
+  setYearRange(parseInt(val, 10), true);
+}
+// YoY: set range to current-year YTD; user can switch to previous via dropdown for compare.
+function setYoYRange() {
+  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
+  if (!months.length) return;
+  const latest = months[months.length - 1];
+  const curYear = parseInt(latest.slice(0, 4), 10);
+  const prevYear = curYear - 1;
+  // Set to span Jan(prevYear) → latest(curYear) so charts show YoY context
+  const selFrom = document.getElementById('selMonthFrom');
+  const selTo   = document.getElementById('selMonthTo');
+  if (selFrom) selFrom.value = months.find(m => m >= `${prevYear}-01`) || months[0];
+  if (selTo)   selTo.value   = latest;
+  const ySel = document.getElementById('selYearQuick');
+  if (ySel) ySel.value = '';
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+
+// Phase 5 — click any branch name/box to drill into it globally.
+// Calling twice on the same branch toggles back to "all branches".
+function drillIntoBranch(branchName) {
+  const sel = document.getElementById('selBranch');
+  if (!sel) return;
+  sel.value = (sel.value === branchName) ? '' : branchName;
+  sel.style.transition = 'box-shadow 0.5s';
+  sel.style.boxShadow = sel.value ? '0 0 0 3px rgba(99,102,241,0.45)' : '';
+  setTimeout(() => { sel.style.boxShadow = ''; }, 700);
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+
+// Phase 4 — global period presets. Sets selMonthFrom/selMonthTo then reloads.
+// Highlights the active preset button; clears it when the user changes selectors manually.
+function setPeriodPreset(preset) {
+  const months = Array.isArray(window.allMonths) ? window.allMonths : [];
+  if (!months.length) return;
+  const latest = months[months.length - 1];
+  const latestDate = new Date(latest + '-01');
+  let from = '';
+  if (preset === 'all') {
+    from = '';
+  } else if (preset === '3m') {
+    const d = new Date(latestDate); d.setMonth(d.getMonth() - 2);
+    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  } else if (preset === '6m') {
+    const d = new Date(latestDate); d.setMonth(d.getMonth() - 5);
+    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  } else if (preset === '12m') {
+    const d = new Date(latestDate); d.setMonth(d.getMonth() - 11);
+    from = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+  } else if (preset === 'ytd') {
+    from = latest.slice(0, 4) + '-01';
+  }
+  // Snap to nearest available month
+  const snapFrom = from ? (months.find(m => m >= from) || months[0]) : '';
+  const selFrom = document.getElementById('selMonthFrom');
+  const selTo   = document.getElementById('selMonthTo');
+  if (selFrom) selFrom.value = snapFrom;
+  if (selTo)   selTo.value   = '';
+  // Highlight active preset button
+  document.querySelectorAll('.period-preset').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('preset-' + preset);
+  if (btn) btn.classList.add('active');
+  if (typeof onFilterChange === 'function') onFilterChange();
+}
+// Clear preset highlight when user manually changes period selectors
+(function() {
+  function clearPresetHighlight() {
+    document.querySelectorAll('.period-preset').forEach(b => b.classList.remove('active'));
+  }
+  document.addEventListener('DOMContentLoaded', () => {
+    ['selMonthFrom','selMonthTo'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', clearPresetHighlight);
+    });
+  });
+})();
+
+async function onGroupChange() {
+  // Filter the branch dropdown to show only branches in the selected group
+  const grp = getGroup();
+  const url = grp ? `${API}/api/branches?group=${grp}` : `${API}/api/branches`;
+  const data = await fetch(url).then(r => r.json());
+  const sel = document.getElementById('selBranch');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">ทุกสาขา</option>' +
+    data.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+  // keep existing branch if still valid; else reset
+  sel.value = data.some(b => b.name === prev) ? prev : '';
+  onFilterChange();
+}
+
+// ── Tab switching ──────────────────────────────────────────────
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)' };
+
+function switchTab(name) {
+  // Permission guard — refuse tabs the current role can't access (server enforces too).
+  if (!tabAllowed(name)) { name = firstAllowedTab(); }
+  activeTab = name;
+  try { navigator.sendBeacon(API + '/api/usage/tab', JSON.stringify({tab: name})); } catch(e) {}
+  ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','mgtreport','ops','settings',
+   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','costheadtop60','menuimpact','pnlbill','opsreport',
+   'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater','ordering','ordersetup'].forEach(t => {
+    document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
+    const el = document.getElementById('tab-' + t);
+    if (!el) return;
+    if (t === name) {
+      el.style.display = '';
+      el.classList.remove('hidden', 'tab-active');
+      void el.offsetWidth;
+      el.classList.add('tab-active');
+    } else {
+      el.style.display = 'none';
+      el.classList.add('hidden');
+      el.classList.remove('tab-active');
+    }
+  });
+  // Hide top-bar filters in Settings + Compare (Compare has its own pickers)
+  const hideFilters = (name === 'settings' || name === 'compare');
+  document.getElementById('selBranch').closest('div').classList.toggle('invisible', hideFilters);
+  // Daily Brief is fixed to "yesterday + month-to-date" — it ignores the period
+  // range entirely (only the branch filter applies). Hide the period controls and
+  // the Quick-load bar here so they don't look broken when they have no effect.
+  const hidePeriod = (name === 'home' || name === 'mgtreport');
+  document.querySelector('[aria-label^="ความถี่ข้อมูล"]')?.classList.toggle('invisible', hidePeriod);
+  document.getElementById('dateRangePickers')?.classList.toggle('invisible', hidePeriod);
+  document.getElementById('monthRangePickers')?.classList.toggle('invisible', hidePeriod);
+  const _pb = document.getElementById('presetBar');
+  if (_pb) _pb.style.display = hidePeriod ? 'none' : '';
+  document.getElementById('pageTitle').textContent = PAGE_TITLES[name] || name;
+  _updateClusterBar(name);
+  // Reset buffet subtab to overview whenever user navigates to/from buffetperf
+  if (name === 'buffetperf') switchBperfTab('overview');
+  showLoadingBar();
+  // Free charts that belong to the tab we just left. Chart.js instances are not
+  // garbage-collected while registered, so without this they pile up (~80 live
+  // after a full session), each holding a resize listener that fires on every
+  // switch/resize and keeps the renderer busy. Each tab rebuilds its own charts
+  // via mkChart() when re-opened (loadActiveTab below), so dropping them is safe.
+  for (const [id, inst] of Object.entries(chartInstances)) {
+    const panel = inst && inst.canvas && inst.canvas.closest('[id^="tab-"]');
+    if (panel && panel.id !== 'tab-' + name) {
+      try { inst.destroy(); } catch(e){}
+      delete chartInstances[id];
+    }
+  }
+  // Re-size remaining (now just this tab's) charts so any rendered while hidden
+  // get correct dimensions.
+  setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
+  Promise.resolve(loadActiveTab()).finally(() => hideLoadingBar());
+}
+
+// Lean-overhaul Phase 2: every analysis area is ONE sidebar entry + a cluster
+// bar of related views on the page itself. tabs[0] of each cluster is its
+// sidebar entry (applyPermissions' safety net relies on that ordering).
+const TAB_CLUSTERS = [
+  { key: 'overview', label: '📊 ภาพรวม',       tabs: [['overall','ภาพรวม & KPI'],['dailysales','📅 ยอดขายรายวัน'],['trend','📈 แนวโน้ม'],['compare','⚖️ เทียบ A/B'],['more','📈 Insight เพิ่มเติม']] },
+  { key: 'buffet',   label: '🍱 บุฟเฟ่ต์',      tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['childbuffet','🧒 บุฟเฟ่ต์เด็ก'],['guest','👥 ลูกค้า & ยอด/หัว'],['timeflow','⏰ ช่วงเวลา & การไหล'],['custtype','👥 ประเภทลูกค้า']] },
+  { key: 'menu',     label: '🍣 เมนู',          tabs: [['menu','วิเคราะห์เมนู'],['engineering','⭐ เมนูทำเงิน'],['menucompare','🆚 เทียบเมนู A/B'],['menuimpact','🧪 วิเคราะห์วัตถุดิบ']] },
+  { key: 'menufix',  label: '⚡ ปรับเมนู',       tabs: [['menuactionboard','ปรับเมนู'],['menuopportunities','💡 โอกาสเมนู'],['menuefficiency','🎯 เป้าลดต้นทุน']] },
+  { key: 'cost',     label: '💰 ต้นทุน',         tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','🎮 Simulators'],['costhead','ต้นทุน/หัว'],['costheadtop60','🏅 Top60/หัว'],['heavyeater','🍽️ นักกินหนัก'],['coverage','ความครอบคลุม'],['branchbom','🔬 BoM รายสาขา']] },
+  { key: 'profit',   label: '💵 กำไร & P&L',     tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
+  { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
+  { key: 'ops',      label: '🛒 ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','🏷️ ส่วนลด'],['ops','🔬 เชิงลึก'],['staff','👤 พนักงาน'],['cashctl','💵 เงินสด'],['cancelbill','🗑️ บิลยกเลิก'],['modifiers','🍽️ Modifiers'],['pricezone','🏷️ ราคา/โซน'],['closetime','⏰ ปิดร้าน/ข้อมูล']] },
+];
+function _updateClusterBar(name) {
+  const bar = document.getElementById('clusterBar');
+  if (!bar) return;
+  const cl = TAB_CLUSTERS.find(c => c.tabs.some(t => t[0] === name));
+  if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
+  bar.classList.remove('hidden'); bar.classList.add('flex');
+  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
+    cl.tabs.filter(([t]) => tabAllowed(t)).map(([t, lbl]) => {
+      const on = t === name;
+      return `<button onclick="switchTab('${t}')" class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+        ? 'background:var(--indigo);color:#fff;font-weight:600'
+        : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${lbl}</button>`;
+    }).join('');
+}
+
+function toggleSidebar() {
+  const sb = document.getElementById('sidebar');
+  sb.classList.toggle('collapsed');
+  const icon = document.getElementById('toggleIcon');
+  icon.innerHTML = sb.classList.contains('collapsed')
+    ? '<path d="M9 18l6-6-6-6"/>'
+    : '<path d="M15 18l-6-6 6-6"/>';
+}
+
+function switchSubtab(name) {
+  activeSubtab = name;
+  const subs = ['mostOrdered','mostCost','engineering','persona'];
+  document.querySelectorAll('#tab-menu .subtab-btn').forEach((b, i) => {
+    b.classList.toggle('active', subs[i] === name);
+  });
+  subs.forEach(s => {
+    document.getElementById('sub-' + s)?.classList.toggle('hidden', s !== name);
+  });
+  loadMenuSubtab();
+}
+
+// ── Settings sub-tab state ─────────────────────────────────────────────────
+let activeSettingsTab = 'targets';
+let costPageOffset = 0;
+const COST_PAGE_SIZE = 80;
+let costSearchTimer = null;
+
+function switchSettingsTab(name) {
+  activeSettingsTab = name;
+  document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
+    const subs = ['targets','costs','fixedcosts','branches','hours','prefs','usage','deactivate','users'];
+    b.classList.toggle('active', subs[i] === name);
+  });
+  ['targets','costs','fixedcosts','branches','hours','prefs','usage','deactivate','users'].forEach(s => {
+    document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
+  });
+  loadSettingsSubtab();
+}
+
+// ── Buffet Performance sub-tab state ──────────────────────────────────────
+let _activeBperfTab = 'overview';
+const _BPERF_TABS = ['overview','tier','cover','gppnl','bomdeep','sim'];
+// Phase 15: 4 main groups, each containing 1+ sub-tabs
+const _BPERF_GROUPS = {
+  overview:  { tabs: ['overview'],         default: 'overview' },
+  customers: { tabs: ['cover'],            default: 'cover' },
+  profit:    { tabs: ['gppnl'],            default: 'gppnl' },
+  bomsim:    { tabs: ['bomdeep','sim'],    default: 'bomdeep' },
+};
+// reverse map for switchBperfTab to know which group owns a tab
+const _BPERF_TAB_TO_GROUP = (() => {
+  const m = {};
+  for (const [g, info] of Object.entries(_BPERF_GROUPS)) info.tabs.forEach(t => m[t] = g);
+  return m;
+})();
+let _activeBperfGroup = 'overview';
+function switchBperfGroup(g) {
+  if (!_BPERF_GROUPS[g]) return;
+  _activeBperfGroup = g;
+  // toggle level-1 group buttons
+  document.querySelectorAll('#bperfGroupBar .subtab-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.bgroup === g));
+  // show only this group's level-2 sub-nav (if any)
+  ['customers','bomsim'].forEach(grp => {
+    const nav = document.getElementById('bperfSubNav-' + grp);
+    if (nav) nav.style.display = (grp === g) ? '' : 'none';
+  });
+  // activate the group's default (or last-active) sub-tab
+  const tabs = _BPERF_GROUPS[g].tabs;
+  const target = tabs.includes(_activeBperfTab) ? _activeBperfTab : _BPERF_GROUPS[g].default;
+  switchBperfTab(target);
+}
+
+function switchBperfTab(name) {
+  if (!_BPERF_TABS.includes(name)) return;
+  _activeBperfTab = name;
+  // Show active subtab div, hide others
+  _BPERF_TABS.forEach(s => {
+    const el = document.getElementById('bperftab-' + s);
+    if (el) el.style.display = (s === name) ? 'block' : 'none';
+  });
+  // Update level-2 sub-tab button states (uses data-btab now, not index)
+  document.querySelectorAll('#tab-buffetperf [data-btab]').forEach(b => {
+    b.classList.toggle('active', b.dataset.btab === name);
+  });
+  // Also ensure the owning group is selected at level 1
+  const ownerGroup = _BPERF_TAB_TO_GROUP[name];
+  if (ownerGroup && _activeBperfGroup !== ownerGroup) {
+    _activeBperfGroup = ownerGroup;
+    document.querySelectorAll('#bperfGroupBar .subtab-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.bgroup === ownerGroup));
+    ['customers','bomsim'].forEach(grp => {
+      const nav = document.getElementById('bperfSubNav-' + grp);
+      if (nav) nav.style.display = (grp === ownerGroup) ? '' : 'none';
+    });
+  }
+  // Resize charts so anything rendered while hidden gets correct dimensions
+  setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
+  // Re-run observer so lazy panels in newly visible subtab get picked up
+  _observeBuffetPanels();
+  // Phase 4: lazy-init BoM deep-dive panels
+  if (name === 'bomdeep' && typeof initBomDeepDive === 'function') {
+    initBomDeepDive();
+  }
+}
+
+function loadSettingsSubtab() {
+  if (activeSettingsTab === 'targets')    loadTargets();
+  if (activeSettingsTab === 'costs')      { renderMenuPresetSelect(); loadCosts(); loadBomAudit(); }
+  if (activeSettingsTab === 'fixedcosts') loadFixedCosts();
+  if (activeSettingsTab === 'branches')   loadBranchConfig();
+  if (activeSettingsTab === 'deactivate') loadDeactivate();
+  if (activeSettingsTab === 'hours')    loadClosedHours();
+  if (activeSettingsTab === 'prefs')    loadPreferences();
+  if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
+  if (activeSettingsTab === 'usage')    loadUsageStats();
+}
+
+// ── Usage telemetry (Settings → 📈 การใช้งานจริง · lean-overhaul Phase 0) ──
+async function loadUsageStats() {
+  const el = document.getElementById('usageStatsBody');
+  if (!el) return;
+  el.textContent = 'กำลังโหลด…';
+  const days = document.getElementById('usageDays')?.value || 30;
+  let d = null;
+  try { d = await fetch(`${API}/api/usage/summary?days=${days}`).then(r => r.json()); } catch(e) {}
+  if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const tabs = d.tabs || [];
+  const seen = new Set(tabs.map(t => t.name));
+  const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t));
+  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
+  const api = (d.api || []).slice(0, 20);
+  el.innerHTML = `
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
+        <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">แท็บที่ถูกเปิด (${esc(days)} วันล่าสุด)</div>
+        <table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง</th><th class="py-1 pr-3 text-right">จำนวนวัน</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${tabs.map(row).join('') || '<tr><td class="py-2" colspan="4" style="color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มนับหลัง deploy เวอร์ชันนี้</td></tr>'}</tbody></table>
+      </div>
+      <div>
+        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บที่ยังไม่ถูกเปิดเลย (${never.length})</div>
+        <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว 🎉</span>'}</div>
+        <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 API endpoints</div>
+        <table class="text-xs w-full"><tbody>${api.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
+      </div>
+    </div>`;
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// ⚡ Menu Action Board — Menu Engineering + lifecycle → 4 ranked action lists
+// ══════════════════════════════════════════════════════════════════════════
+const _MAB_META = {
+  feature:    { icon:'🚀', title:'ดันต่อ / จัดโปรโมชัน', sub:'ขายดี+กำไรดี → ฟีเจอร์ในโปร',           color:'#10b981', bg:'#ecfdf5' },
+  market:     { icon:'🔍', title:'ผลักดันยอด',          sub:'กำไรดีแต่ยังขายน้อย → โปรโมต/วางตำแหน่ง', color:'#0ea5e9', bg:'#eff6ff' },
+  fix_margin: { icon:'💰', title:'ปรับราคา / ลดต้นทุน',  sub:'ขายดีแต่กำไรบาง',                        color:'#f59e0b', bg:'#fffbeb' },
+  review_cut: { icon:'✂️', title:'ทบทวน / พิจารณาตัด',   sub:'ขายน้อย กำไรบาง และกำลังลด/ตาย',          color:'#ef4444', bg:'#fef2f2' },
+};
+const _MAB_QUAD  = { star:'⭐ดาว', plowhorse:'🐴ม้าแบก', puzzle:'🧩ปริศนา', dog:'🐶หมา' };
+const _MAB_STAGE = { growing:'📈โต', stable:'➖ทรงตัว', declining:'📉ลด', dead:'💀ตาย', new:'🆕ใหม่' };
+
+async function loadMenuActionBoard() {
+  const fk = _filterKey();
+  if (_tabLastKey.menuactionboard === fk) return;
+  const st = document.getElementById('mabStatus');
+  if (st) st.textContent = 'กำลังโหลด…';
+  const qp = new URLSearchParams();
+  if (getBranch())    qp.set('branch', getBranch());
+  if (getMonthFrom()) qp.set('month_from', getMonthFrom());
+  if (getMonthTo())   qp.set('month_to', getMonthTo());
+  let d;
+  try { d = await fetch(`${API}/api/menu/action-board?${qp}`).then(r => r.json()); }
+  catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  _tabLastKey.menuactionboard = fk;
+  renderActionBoard(d);
+}
+
+function _mabCard(r) {
+  const quad = _MAB_QUAD[r.quadrant] || '', stage = _MAB_STAGE[r.stage] || '';
+  return `<div class="rounded p-2" style="background:var(--bg-subtle)">
+    <div class="text-xs font-semibold" style="color:var(--text-primary)">${esc(r.description)}</div>
+    <div class="text-[10.5px] mt-0.5" style="color:var(--text-muted)">${esc(r.category || '')}</div>
+    <div class="flex flex-wrap gap-1 mt-1 text-[10px]">
+      ${quad ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,.1);color:#4f46e5">${quad}</span>` : ''}
+      ${stage ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.1);color:#059669">${stage}</span>` : ''}
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">มาร์จิ้น ${fmtP(r.margin_pct)}</span>
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">ส่วนแบ่ง ${fmtP(r.popularity_pct)}</span>
+      <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">${fmtN(r.qty)} ชิ้น</span>
+    </div>
+    <div class="text-[10.5px] mt-1" style="color:var(--text-secondary)">${esc(r.reason || '')}</div>
+  </div>`;
+}
+
+function renderActionBoard(d) {
+  const st = document.getElementById('mabStatus');
+  if (st) st.innerHTML = `วิเคราะห์ ${fmtN(d.total_skus)} เมนู · มีข้อมูลต้นทุน ${fmtN(d.costed_skus)} เมนู · ช่วง ${esc((d.month_range || []).filter(Boolean).join(' → ') || 'ทั้งหมด')}`;
+  const order = ['feature', 'market', 'fix_margin', 'review_cut'];
+  const kpiHost = document.getElementById('mabKpis');
+  if (kpiHost) kpiHost.innerHTML = order.map(k => {
+    const m = _MAB_META[k];
+    return `<span class="text-xs px-3 py-1 rounded-full font-semibold" style="background:${m.bg};color:${m.color}">${m.icon} ${m.title}: ${fmtN(((d.buckets || {})[k] || []).length)}</span>`;
+  }).join('');
+  const board = document.getElementById('mabBoard');
+  board.innerHTML = order.map(k => {
+    const m = _MAB_META[k], rows = (d.buckets && d.buckets[k]) || [];
+    const body = rows.length ? rows.map(_mabCard).join('')
+      : `<div class="text-xs text-center py-4" style="color:var(--text-muted)">— ไม่มีเมนูในกลุ่มนี้ —</div>`;
+    return `<div class="card p-0 overflow-hidden" style="border-top:3px solid ${m.color}">
+      <div class="p-3" style="background:${m.bg}">
+        <div class="font-bold text-sm" style="color:${m.color}">${m.icon} ${m.title} <span class="font-normal">(${rows.length})</span></div>
+        <div class="text-[11px]" style="color:var(--text-muted)">${m.sub}</div>
+      </div>
+      <div class="p-2 space-y-1" style="max-height:520px;overflow-y:auto">${body}</div>
+    </div>`;
+  }).join('');
+  const nc = (d.buckets && d.buckets.needs_cost) || [], wrap = document.getElementById('mabNeedsWrap');
+  if (nc.length) {
+    wrap.style.display = '';
+    document.getElementById('mabNeedsCount').textContent = nc.length;
+    document.getElementById('mabNeedsBody').innerHTML = nc.slice(0, 200).map(r =>
+      `<div class="text-xs py-0.5 flex justify-between gap-2 border-b" style="border-color:var(--border)"><span>${esc(r.description)}</span><span style="color:var(--text-muted)">${fmtN(r.qty)} ชิ้น · ${fmt(r.revenue)} ฿</span></div>`).join('');
+  } else { wrap.style.display = 'none'; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// 💡 Menu Opportunities — cross-branch gaps · category whitespace · revive · AI
+// ══════════════════════════════════════════════════════════════════════════
+async function loadMenuOpportunities() {
+  const fk = _filterKey();
+  if (_tabLastKey.menuopportunities === fk) return;
+  const st = document.getElementById('oppStatus');
+  if (st) st.textContent = 'กำลังโหลด…';
+  const qp = new URLSearchParams();
+  if (getBranch())    qp.set('branch', getBranch());
+  if (getMonthFrom()) qp.set('month_from', getMonthFrom());
+  if (getMonthTo())   qp.set('month_to', getMonthTo());
+  let d;
+  try { d = await fetch(`${API}/api/menu/opportunities?${qp}`).then(r => r.json()); }
+  catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  _tabLastKey.menuopportunities = fk;
+  renderOpportunities(d);
+}
+
+const _oppEmpty = msg => `<div class="text-xs text-center py-4" style="color:var(--text-muted)">${esc(msg)}</div>`;
+
+function renderOpportunities(d) {
+  const st = document.getElementById('oppStatus');
+  if (st) st.innerHTML = `ช่วง ${esc((d.month_range || []).filter(Boolean).join(' → ') || 'ทั้งหมด')}${getBranch() ? ` · สาขา ${esc(getBranch())}` : ' · ทุกสาขา'}`;
+
+  const gaps = d.cross_branch_gaps || [];
+  document.getElementById('oppGaps').innerHTML = gaps.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+      <th class="py-1.5 pr-2 text-right">สาขานี้</th><th class="py-1.5 pr-2 text-right">ทั้งเครือ</th>
+      <th class="py-1.5 pr-2 text-right">โอกาสเพิ่ม (ชิ้น)</th><th class="py-1.5">หมายเหตุ</th></tr></thead>
+    <tbody>${gaps.map(g => `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2 font-semibold">${esc(g.branch)}</td><td class="py-1 pr-2">${esc(g.description)}</td>
+      <td class="py-1 pr-2" style="color:var(--text-muted)">${esc(g.category)}</td>
+      <td class="py-1 pr-2 text-right">${fmtN(g.branch_qty)}</td><td class="py-1 pr-2 text-right">${fmtN(g.chain_qty)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:#0ea5e9">+${fmtN(g.potential_qty)}</td>
+      <td class="py-1" style="color:var(--text-muted)">${esc(g.note)}</td></tr>`).join('')}</tbody></table>`
+    : _oppEmpty('ไม่พบช่องว่างเด่น (ต้องเป็นเมนูที่ขายใน ≥5 สาขา) — ลองเลือกทุกสาขา/ขยายช่วงเดือน');
+
+  const ws = d.category_whitespace || [];
+  const wlabel = { expand: ['ขยายได้', '#059669', '#ecfdf5'], trim: ['ควรลด', '#dc2626', '#fef2f2'], watch: ['เฝ้าดู', '#64748b', '#f1f5f9'] };
+  document.getElementById('oppWhitespace').innerHTML = ws.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">หมวด</th><th class="py-1.5 pr-2 text-right">#เมนู</th>
+      <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">รายได้/เมนู</th>
+      <th class="py-1.5 pr-2 text-right">แนวโน้ม</th><th class="py-1.5 pr-2">คำแนะนำ</th></tr></thead>
+    <tbody>${ws.map(w => { const L = wlabel[w.label] || wlabel.watch; return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2 font-semibold">${esc(w.category)}</td><td class="py-1 pr-2 text-right">${fmtN(w.n_skus)}</td>
+      <td class="py-1 pr-2 text-right">${fmt(w.revenue)}</td><td class="py-1 pr-2 text-right">${fmt(w.revenue_per_sku)}</td>
+      <td class="py-1 pr-2 text-right">${fmtM(w.slope_pct)}</td>
+      <td class="py-1 pr-2"><span class="px-1.5 py-0.5 rounded text-[10px]" style="background:${L[2]};color:${L[1]}">${L[0]}</span> <span style="color:var(--text-muted)">${esc(w.reason || '')}</span></td></tr>`; }).join('')}</tbody></table>`
+    : _oppEmpty('ไม่มีข้อมูลหมวด');
+
+  const rv = d.revive || [];
+  document.getElementById('oppRevive').innerHTML = rv.length ? `
+    <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+      <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+      <th class="py-1.5 pr-2 text-right">เคยขาย/เดือน</th><th class="py-1.5 pr-2 text-right">รวม</th>
+      <th class="py-1.5">ขายครั้งสุดท้าย</th></tr></thead>
+    <tbody>${rv.map(r => `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2">${esc(r.description)}</td><td class="py-1 pr-2" style="color:var(--text-muted)">${esc(r.category)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:#f59e0b">${fmtN(r.avg_monthly_when_alive)}</td>
+      <td class="py-1 pr-2 text-right">${fmtN(r.total_qty)}</td><td class="py-1">${esc(r.last_active_month || '—')}</td></tr>`).join('')}</tbody></table>`
+    : _oppEmpty('ไม่มีเมนูที่หยุดขายในช่วงนี้');
+
+  const ai = document.getElementById('oppAiIdeas');   // filters changed → clear stale AI ideas
+  if (ai) { ai.innerHTML = ''; delete ai.dataset.generated; }
+}
+
+async function genMenuIdeas() {
+  const btn = document.getElementById('oppAiBtn'), host = document.getElementById('oppAiIdeas');
+  if (!host) return;
+  const old = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ กำลังสร้าง…';
+  host.innerHTML = '<div class="text-xs" style="color:var(--text-muted)">กำลังให้ AI ช่วยคิด…</div>';
+  const body = {};
+  if (getBranch())    body.branch = getBranch();
+  if (getMonthFrom()) body.month_from = getMonthFrom();
+  if (getMonthTo())   body.month_to = getMonthTo();
+  let d;
+  try {
+    d = await fetch(`${API}/api/menu/ai-ideas`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    }).then(r => r.json());
+  } catch (e) {
+    host.innerHTML = `<div class="text-xs" style="color:#dc2626">สร้างไอเดียไม่สำเร็จ</div>`;
+    btn.disabled = false; btn.textContent = old; return;
+  }
+  const ideas = d.ideas || [];
+  const src = d.generated_by === 'claude' ? 'AI (Claude)' : 'สร้างจากข้อมูล (ยังไม่ได้ตั้งค่า AI key)';
+  host.dataset.generated = '1';
+  host.innerHTML = `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ที่มา: ${esc(src)}</div>` + (ideas.length ? ideas.map((it, i) => `
+    <div class="rounded p-3" style="background:var(--bg-subtle);border-left:3px solid #ec4899">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${i + 1}. ${esc(it.title)}</div>
+      <div class="text-xs mt-1" style="color:var(--text-secondary)">${esc(it.rationale || '')}</div>
+      ${it.builds_on && it.builds_on !== 'none' ? `<div class="text-[10px] mt-1" style="color:var(--text-muted)">อิงสัญญาณ: ${esc(it.builds_on)}</div>` : ''}
+    </div>`).join('') : `<div class="text-xs" style="color:var(--text-muted)">ไม่มีไอเดีย</div>`);
+  btn.disabled = false; btn.textContent = old;
+}

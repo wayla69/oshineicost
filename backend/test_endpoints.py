@@ -220,9 +220,49 @@ def test_management_report_daily_and_weekly(client):
     assert w2["selected_week"] == pick
 
 
+def test_analysis_cohort_shape(client):
+    """Cohort view: growth-fair fields + partial-month guards."""
+    j = client.get("/api/analysis/cohort").json()
+    assert j["matrix"], "fixture months must appear"
+    for r in j["matrix"]:
+        for k in ("branches", "cust_per_branch", "rev_per_cust",
+                  "partial", "days_covered", "days_in_month", "mom_pct", "yoy_pct"):
+            assert k in r
+        # fixture covers only days 01-03 → every month is partial → the guards
+        # must refuse MoM/YoY rather than reading a 3-day month as a collapse
+        assert r["partial"] is True
+        assert r["mom_pct"] is None and r["yoy_pct"] is None
+        assert r["cust_per_branch"] == round(r["customers"] / r["branches"])
+    assert isinstance(j["seasonality"], list) and j["seasonality"]
+    assert "ไม่ครบเดือน" in j["note"]          # Thai explainer (F)
+
+
+def test_management_report_monthly(client):
+    import datetime as _dt
+    m = client.get("/api/reports/management", params={"period": "monthly"}).json()
+    assert m["available"] and m["period"] == "monthly"
+    # COMPLETE months only: default = latest complete month, never the partial one
+    assert m["partial"] is False
+    assert m["selected_month"] == m["range"][0][:7]
+    cs = _dt.date.fromisoformat(m["range"][0]); ce = _dt.date.fromisoformat(m["range"][1])
+    assert cs.day == 1 and (ce + _dt.timedelta(days=1)).day == 1   # full calendar month
+    assert m["headline"]["revenue"] > 0
+    assert abs(sum(b["revenue"] for b in m["branches"]) - m["headline"]["revenue"]) < 1.0
+    assert len(m["trend"]) == 8
+    # picker carries the selectable complete months; explicit pick round-trips
+    assert isinstance(m["months"], list) and len(m["months"]) >= 1
+    pick = m["months"][-1]["month"]
+    m2 = client.get("/api/reports/management", params={"period": "monthly", "month": pick}).json()
+    assert m2["selected_month"] == pick
+    # comparison window = the previous calendar month
+    if m["comp_range"]:
+        pe = _dt.date.fromisoformat(m["comp_range"][1])
+        assert (pe + _dt.timedelta(days=1)) == cs
+
+
 def test_management_report_xlsx(client):
     import io, openpyxl
-    for period in ("daily", "weekly"):
+    for period in ("daily", "weekly", "monthly"):
         r = client.get("/api/reports/management.xlsx", params={"period": period})
         assert r.status_code == 200, r.text[:200]
         assert "spreadsheetml" in r.headers.get("content-type", "")
@@ -607,3 +647,78 @@ def test_group_split_is_additive(client, path, params, extract):
     tol = max(1.0, abs(all_v) * 1e-4)
     assert abs((master + franchise) - all_v) <= tol, \
         f"{path}: master+franchise ({master}+{franchise}) != all ({all_v})"
+
+
+def test_management_gp_never_fake_100pct_without_cost_data(client):
+    """Regression: sales_sku_daily is a ROLLING window. Reading it blindly made
+    every pre-coverage period report ฿0 food cost — rendering as a triumphant
+    'GP 100%'. Cost must come from the monthly table for whole-month windows,
+    and be reported as unavailable (nulls) otherwise — never revenue-minus-zero."""
+    j = client.get("/api/reports/management", params={"period": "monthly"}).json()
+    gp = j["gp"]
+    assert gp.get("cost_basis") in ("daily", "monthly", "unavailable")
+    if gp.get("cost_basis") == "unavailable":
+        # unknown cost => unknown GP, and the UI is told why
+        assert gp["gp"] is None and gp["gp_pct"] is None and gp["food_cost"] is None
+        assert gp.get("cost_from")
+        assert j["menu"]["cost_basis"] == "unavailable"
+    else:
+        # a real cost basis must produce a sane margin, never 100%
+        assert gp["food_cost"] and gp["food_cost"] > 0
+        assert gp["gp_pct"] is not None and gp["gp_pct"] < 99.9
+
+
+def test_yoy_carries_like_for_like_guard(client):
+    """Regression: raw YoY compared whatever traded in each month, so a chain
+    that grew 7→27 branches reported +1991% 'growth'. Every row must carry the
+    comparability context and a same-store figure when the raw one is unfair."""
+    rows = client.get("/api/analysis/yoy",
+                      params={"month_from": "2026-05", "month_to": "2026-06"}).json()
+    assert rows, "fixture must produce yoy rows"
+    for r in rows:
+        for k in ("comparable", "same_store_pct", "cur_days", "ly_days",
+                  "cur_branches", "ly_branches", "same_store_count"):
+            assert k in r, f"{k} missing from yoy row"
+        assert isinstance(r["comparable"], bool)
+        # a month judged comparable must not be built on a partial year-ago month
+        if r["comparable"]:
+            assert r["ly_days"] >= 20
+            assert abs(r["cur_branches"] - r["ly_branches"]) <= 2
+
+
+def test_data_quality_reports_without_repairing(client):
+    """The integrity report must expose findings with counts + a benign flag,
+    and must never be a mutation surface (it only ever reads)."""
+    j = client.get("/api/data-quality").json()
+    assert "findings" in j and j["findings"], "expected integrity findings"
+    keys = {f["key"] for f in j["findings"]}
+    for expected in ("missing_days", "zero_covers", "discount_gt_total",
+                     "uncosted_skus", "stub_names", "stale_skus"):
+        assert expected in keys, f"{expected} check missing"
+    for f in j["findings"]:
+        assert isinstance(f["count"], int) and f["count"] >= 0
+        assert f["severity"] in ("high", "warn", "info")
+        assert isinstance(f["benign"], bool)
+        assert f["detail"]
+    # the headline total excludes by-design findings
+    assert j["total"] == sum(f["count"] for f in j["findings"] if not f["benign"])
+
+
+def test_cost_suggestions_are_defensible_estimates(client):
+    """Cost suggestions must be derived from costed dishes only, carry their
+    method/sample, and never claim a dish costs most of what it sells for.
+    They are review candidates — nothing is written to sku_cost."""
+    j = client.get("/api/cost/suggestions", params={"limit": 50}).json()
+    assert "items" in j and "median_cost_price_ratio" in j
+    for i in j["items"]:
+        assert i["suggested_cost"] > 0
+        assert i["method"] in ("ingredient", "category", "price_ratio")
+        assert i["confidence"] in ("high", "medium", "low")
+        assert i["sample"] >= 1
+        # sanity cap: never above 60% of the dish's own selling price
+        if i.get("price"):
+            assert i["suggested_cost"] <= i["price"] * 0.6 + 0.01, i
+    # the endpoint must not mutate anything
+    before = client.get("/api/cost/uncosted-coverage").json()
+    client.get("/api/cost/suggestions")
+    assert client.get("/api/cost/uncosted-coverage").json() == before

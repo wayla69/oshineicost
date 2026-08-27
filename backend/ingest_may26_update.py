@@ -97,6 +97,7 @@ BRANCH_ALIAS = {
     "OSHINEIอยุธยา":            "อยุธยา",
     # "OSHINEI สาขา " (spaced) variant — new branches 2026-07:
     "OSHINEI สาขา หาดใหญ่":      "หาดใหญ่",   # opened 2026-07-09 (MSSQL BranchId 39, code 0032)
+    "OSHINEI ปลวกแดง":           "ปลวกแดง",   # opened 2026-08-08 (MSSQL BranchId 40, franchise)
 }
 
 CURATED = rr.CURATED

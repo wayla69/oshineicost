@@ -934,6 +934,37 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 .ms-seg { flex: 1; padding: 7px 6px; border-radius: 9px; border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
 .ms-seg-on { background: #6366f1; color: #fff; border-color: #6366f1; }
+
+/* ── Management Report: white-paper island — the printable report keeps a light
+   document look in dark mode. The report's inner styles consume these tokens
+   (inline var(--bg-card) etc.), so re-declaring them here scopes the override
+   to every descendant; charts inside pick up light theming via
+   [data-force-light] in mkChart. Fixed slate text classes are white-bg safe. */
+body.dark #mgtRptBody {
+  --bg-card: #ffffff; --bg-subtle: #f8fafc; --border: #e2e8f0;
+  --text-primary: #1e293b; --text-muted: #64748b;
+  color-scheme: light;
+}
+body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
+
+/* ── Management Report cover band: collapsible (mobile starts collapsed) ──
+   Collapsed = a slim bar that STICKS to the top while scrolling, so the
+   expand button is reachable anywhere in the (long) report. Same pattern as
+   the legacy report's #rptNav sticky strip. */
+#mgtCover.collapsed { padding: 12px 18px; position: sticky; top: 0;
+  z-index: 30; box-shadow: 0 2px 14px rgba(2,6,23,.28); }
+#mgtCover.collapsed .mgt-full { display: none !important; }
+#mgtCover.collapsed .mgt-slim { display: flex !important; }
+@media (max-width: 700px) {
+  #mgtCover { padding: 16px 18px; }
+  #mgtCover h1 { font-size: 20px; }
+  #mgtCover .mgt-hide-sm { display: none; }
+}
+@media print {  /* the printed cover is always the full band */
+  #mgtCover, #mgtCover.collapsed { padding: 2rem; position: static; box-shadow: none; }
+  #mgtCover.collapsed .mgt-full { display: flex !important; }
+  #mgtCover .mgt-slim { display: none !important; }
+}
 </style>
 </head>
 <body>
@@ -1067,6 +1098,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <!-- VIEW: เมนู -->
   <div id="msv-menu" class="ms-view" style="display:none">
     <div class="ms-section">
+      <div class="ms-section-title">📈 มาแรงเดือนนี้ (คนกินเพิ่มขึ้น)</div>
+      <div id="msMenuRisers" class="ms-card"></div>
       <div class="ms-section-title">🍣 เมนูขายดี (ตามจำนวน)</div>
       <div id="msMenu" class="ms-card"></div>
     </div>
@@ -1283,11 +1316,15 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span class="nav-label">⚙️ ตั้งค่าการสั่งซื้อ</span>
   </div>
   <div class="nav-section">📄 รายงาน</div>
-  <div class="nav-item" id="nav-report" onclick="switchTab('report')" title="Monthly Report (รายงานประจำเดือน) · Exportable summary">
+  <!-- nav-report hidden 2026-07-20: it duplicated nav-mgtreport (both open
+       #tab-mgtreport since the Monthly mode landed). Stays in the DOM for
+       applyPermissions' safety net; the LEGACY full pack (#tab-report) is
+       reached via the 📑 ฉบับเต็ม button inside the report's Monthly mode. -->
+  <div class="nav-item" id="nav-report" style="display:none" onclick="openMonthlyReport()" title="Monthly Report (รายงานประจำเดือน) · เปิดผ่าน 📊 Management Report โหมด Monthly">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
     <span class="nav-label">📄 Monthly Report</span>
   </div>
-  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily &amp; Weekly summary for management (English, printable)">
+  <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily / Weekly / Monthly summary for management (printable) · โหมด Monthly = รายงานประจำเดือน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
     <span class="nav-label">📊 Management Report</span>
   </div>
@@ -1495,8 +1532,10 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <div id="home-action-queue" class="space-y-2.5"></div>
     </div>
 
-    <!-- Money-leak radar + yesterday's menu movers -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <!-- Money-leak radar + yesterday's menu movers.
+         items-start: the movers list is much taller than the leak tiles, and a
+         stretched leak card left a big blank half — each card sizes to content. -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5 items-start">
       <div class="card p-5">
         <h2 class="section-title mb-1">🔎 จับเงินรั่ว / ผิดปกติ <span id="home-leak-date" class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)"></span></h2>
         <p class="text-xs text-slate-400 mb-3">ส่วนลดหนัก ≥30% · เงินสด+ลดหนัก (เสี่ยงรั่ว) · บิลพิมพ์ซ้ำ · บิลลดล้วน</p>
@@ -1888,6 +1927,8 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <label class="text-xs ml-2" style="color:var(--text-muted)">เกณฑ์ต่ำกว่าแผน %</label>
       <input type="number" id="opTolerance" value="20" min="0" max="100" step="5" onchange="opLoadCycles()"
              style="width:64px;border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <label class="text-xs" style="color:var(--text-muted)">ชี้แจงภายใน</label>
+      <input type="date" id="opDueDate" title="กำหนดให้สาขาชี้แจง/แก้ไขภายในวันที่ (เว้นว่างได้)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <button onclick="opWarnLetter()" style="background:#b91c1c;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">⚠️ ออกจดหมายแจ้งเตือน</button>
       <span id="opCycleStatus" class="text-xs" style="color:var(--text-muted)"></span>
     </div>
@@ -2437,6 +2478,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
   </div>
   <div id="ctmKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+
+  <!-- Integrity report: problems the headline numbers never show. Read-only by
+       design — these are real records (deleting destroys history) and missing
+       days can only return via a POS re-sync, never be invented. -->
+  <div class="card p-5 mb-4">
+    <h2 class="section-title mb-1">🩺 ตรวจสุขภาพข้อมูล</h2>
+    <p class="text-xs text-slate-400 mb-3">สิ่งที่ทำให้ตัวเลขเพี้ยนแบบเงียบ ๆ · ระบบ<b>รายงานอย่างเดียว ไม่แก้ไขข้อมูลให้</b> (เป็นบันทึกการเงินจริง และวันที่ขาดต้องกู้จาก POS เท่านั้น)</p>
+    <div id="dqFindings"></div>
+  </div>
+
   <div class="card p-5 overflow-x-auto">
     <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
     <table class="text-xs w-full"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
@@ -4911,10 +4962,17 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-mgtreport" class="hidden">
 
-  <!-- Management report cover band -->
-  <div class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+  <!-- Management report cover band. Collapsible (mobile starts collapsed —
+       the reader wants the report, not the chrome): .collapsed hides the two
+       .mgt-full rows and shows the slim one-line bar; print always expands. -->
+  <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
        style="background:linear-gradient(135deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)">
-    <div class="flex items-start justify-between flex-wrap gap-4">
+    <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
+      <span class="text-sm font-semibold truncate" id="mgtSlimLabel">Management Summary Report</span>
+      <button onclick="toggleMgtCover(false)" class="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0"
+              style="background:rgba(255,255,255,0.18)">▼ เมนูรายงาน</button>
+    </div>
+    <div class="mgt-full flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
         <h1 id="mgtTitle" class="text-3xl font-bold leading-tight">Management Summary Report</h1>
@@ -4922,15 +4980,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         <p id="mgtBranchLabel" class="text-sm opacity-90">—</p>
       </div>
       <div class="text-right text-xs opacity-90">
-        <div class="mb-3"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
+        <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
         <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
         <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
+                style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
       </div>
     </div>
-    <div class="no-print mt-5 flex flex-wrap items-center gap-3">
+    <div class="mgt-full no-print mt-5 flex flex-wrap items-center gap-3">
       <div class="inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
         <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
         <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
+        <button id="mgtTabMonthly" onclick="setMgtPeriod('monthly')" class="px-6 py-2 text-sm font-semibold transition">Monthly</button>
       </div>
       <input id="mgtDayPicker" type="date" onchange="onMgtDayChange(this.value)"
              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
@@ -4938,6 +4999,13 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <select id="mgtWeekPicker" onchange="onMgtWeekChange(this.value)"
               class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
               style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
+      <select id="mgtMonthPicker" onchange="onMgtMonthChange(this.value)"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+              style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
+      <!-- monthly-only escape hatch back to the legacy full Monthly Report pack -->
+      <button id="mgtLegacyBtn" onclick="switchTab('report')"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium"
+              style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">📑 ฉบับเต็ม (แบบเดิม)</button>
       <div class="inline-flex rounded-lg overflow-hidden ml-auto" style="background:rgba(255,255,255,0.12)" title="Language / ภาษา">
         <button id="mgtLangEn" onclick="setMgtLang('en')" class="px-4 py-2 text-sm font-semibold transition">EN</button>
         <button id="mgtLangTh" onclick="setMgtLang('th')" class="px-4 py-2 text-sm font-semibold transition">ไทย</button>
@@ -4945,7 +5013,9 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     </div>
   </div>
 
-  <div id="mgtRptBody" class="space-y-5">
+  <!-- data-force-light: the printable report keeps a white-paper look in dark
+       mode — local token overrides below + charts pick it up via mkChart -->
+  <div id="mgtRptBody" class="space-y-5" data-force-light>
     <div class="text-center text-slate-400 py-10 text-sm">Loading…</div>
   </div>
 </div>
@@ -4973,6 +5043,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3">Generated: <span id="rptDate">—</span></div>
+        <button onclick="openMonthlyReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 แบบสรุปง่าย (ใหม่)</button>
         <button onclick="printReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
       </div>
     </div>
@@ -5215,22 +5286,28 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   <div id="opsub-cohort">
     <div class="card p-5">
       <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
-        <h2 class="section-title mb-0">Cohort · Monthly customer-volume signal</h2>
+        <h2 class="section-title mb-0">ลูกค้ารายเดือน (Cohort · customer-volume signal)</h2>
         <button onclick="exportTable('cohortTable','cohort.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">⬇ CSV</button>
       </div>
       <p id="cohortNote" class="text-xs text-slate-400 mb-3"></p>
+      <div id="cohortVerdict"></div>
+      <div style="height:250px" class="mb-4"><canvas id="cohortChart"></canvas></div>
       <div class="overflow-x-auto">
         <table id="cohortTable" class="text-xs w-full">
           <thead><tr class="text-left text-slate-500 border-b border-slate-200">
-            <th class="py-2 pr-3">Cohort (month)</th>
-            <th class="py-2 pr-3 text-right">Transactions</th>
-            <th class="py-2 pr-3 text-right">Customers</th>
-            <th class="py-2 pr-3 text-right">Revenue</th>
-            <th class="py-2 text-right">Customers vs Avg</th>
+            <th class="py-2 pr-3">เดือน</th>
+            <th class="py-2 pr-3 text-right">บิล</th>
+            <th class="py-2 pr-3 text-right">ลูกค้า</th>
+            <th class="py-2 pr-3 text-right" title="จำนวนหัว ÷ สาขาที่มียอดขายเดือนนั้น — ตัดผลจากการเปิดสาขาเพิ่ม">ลูกค้า/สาขา</th>
+            <th class="py-2 pr-3 text-right" title="รายได้ ex-VAT ÷ จำนวนหัว">ยอด/หัว</th>
+            <th class="py-2 pr-3 text-right">รายได้</th>
+            <th class="py-2 pr-3 text-right" title="ลูกค้าเทียบเดือนก่อน (เฉพาะเดือนเต็ม)">MoM</th>
+            <th class="py-2 text-right" title="ลูกค้าเทียบเดือนเดียวกันปีก่อน (เฉพาะเดือนเต็ม)">YoY</th>
           </tr></thead>
           <tbody id="cohortBody"></tbody>
         </table>
       </div>
+      <div id="cohortSeason" class="mt-4"></div>
     </div>
   </div>
 
@@ -5979,8 +6056,12 @@ body.dark .skeleton-kpi { border-color: var(--border); }
         แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
+        <p class="font-bold text-slate-700 mb-1">📊 Management Report — Daily | Weekly | Monthly</p>
+        รายงานสรุปผู้บริหารหน้าเดียว (พิมพ์/PDF ได้) สลับได้ 3 โหมดจากปุ่มบนหัวรายงาน: <b>Daily</b> = วันล่าสุดที่จบแล้ว (เลือกวันย้อนหลังได้ เทียบวันเดียวกันสัปดาห์ก่อน), <b>Weekly</b> = สัปดาห์เต็ม จ.–อา. ล่าสุด (เลือกสัปดาห์ได้ เทียบสัปดาห์ก่อน), <b>Monthly</b> = <b>เดือนที่จบแล้ว</b>เท่านั้น (เลือกเดือนย้อนหลังได้ เทียบ<b>เดือนก่อน MoM</b> + <b>เดือนเดียวกันปีก่อน YoY</b>). ทุกโหมดมี TL;DR + บทสรุปผู้บริหาร, KPI, Action Items, จังหวะเดือน, แนวโน้ม 8 ช่วง, อันดับสาขา, เรดาร์จุดรั่ว, ต้นทุนเมนู/หัว, ชั่วโมงพีค, โต๊ะหมุนเวียน, ช่องทางชำระเงิน, Buffet Tiers + สลับ <b>EN ⇄ ไทย</b> + <b>📊 Export Excel</b> / <b>🖨️ Print PDF</b>. ใช้ filter สาขา/กลุ่มจากแถบบนได้ (ช่วงเวลา global ไม่มีผล — รายงานมี picker ของตัวเอง).
+      </div>
+      <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">📑 Monthly Report (เดิม Analysis Report) — รายเดือน</p>
-        เลิกใช้ยอดสะสมที่ทำให้เข้าใจผิด → ทุก section นำด้วย<b>เดือนล่าสุด + MoM/YoY + YTD</b>. §8 เลือก<b>รายสาขา</b>ได้ + แสดง <b>Top 60</b> เมนู + %สะสม + ยอดรวม + MoM Δ จริง. §3 มี<b>โปรไฟล์รายสาขา</b> (เด่น/ผิดปกติเทียบเครือ). §9 มี<b>ลักษณะส่วนลดรายสาขา</b>เทียบเดือนก่อน.
+        รายงานรายเดือน<b>ยุบรวมเข้ากับ 📊 Management Report แล้ว</b> (เมนูเดียว ไม่ซ้ำ): เปิด <b>📊 Management Report → กดปุ่ม Monthly</b> — แบบสรุปง่ายสไตล์เดียวกับ Daily/Weekly, เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>📑 ฉบับเต็ม (แบบเดิม)</b> ที่โชว์เฉพาะโหมด Monthly (และหน้าเดิมมีปุ่ม 📊 แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠️ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "กรุณาเข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
       </div>
       <div class="border border-slate-200 rounded-lg p-3">
         <p class="font-bold text-slate-700 mb-1">🔮 Forecast &amp; Action Items (§10)</p>
@@ -5996,7 +6077,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <span style="font-size:30px">📑</span>
       <div class="flex-1">
         <div class="font-bold text-base">รายงานวิเคราะห์ธุรกิจ (Business Analysis Report) →</div>
-        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้</div>
+        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้ · 🔒 ต้อง login (เอกสารใต้ /docs ทุกไฟล์)</div>
         <div class="text-[11px] mt-1" style="opacity:.8">สร้างใหม่ทุกเดือน: <code style="background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px">python backend/gen_analysis_report.py</code></div>
       </div>
     </div>
@@ -6072,7 +6153,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">🧾 ปฏิบัติการ & ส่วนลด</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border-2 border-indigo-300 rounded-lg p-2.5" style="background:#eef2ff"><b>🛒 รายงานปฏิบัติการ ⭐ใหม่</b> — การชำระเงิน · ช่องทางขาย (ทานที่ร้าน/เดลิเวอรี/กลับบ้าน) · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือนได้)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> (Cohort/Affinity/What-If)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>👤 พนักงาน</b> (cashier scorecard) · <b>🏷️ ส่วนลด</b> (leakage) · <b>🔬 วิเคราะห์เชิงลึก</b> — Cohort ลูกค้ารายเดือน (กราฟ+MoM/YoY+ลูกค้า/สาขา ตัดผลขยายสาขา+มุมมองฤดูกาล; เดือนไม่ครบติดป้ายและไม่ถูกเทียบ) / Affinity / What-If</div>
       </div>
     </div>
 
@@ -6080,7 +6161,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
       <p class="text-sm font-bold text-slate-700 mb-1.5">⚙️ เครื่องมือ</p>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
         <div class="border border-slate-200 rounded-lg p-2.5"><b>⚙️ ตั้งค่า → Cost Management</b> — แก้ต้นทุนในหน้า (auto-save), Recalibration, BoM audit, CSV</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>📄 Monthly Report</b> (export pack รายเดือน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
+        <div class="border border-slate-200 rounded-lg p-2.5"><b>📊 Management Report</b> (Daily · Weekly · Monthly ในเมนูเดียว — โหมด Monthly = รายงานประจำเดือน, ฉบับเต็มกดปุ่มในหน้ารายงาน) · <b>📖 คู่มือ</b> (หน้านี้)</div>
       </div>
     </div>
   </div>
@@ -6760,6 +6841,18 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   </div>
 </div>
 
-<script src="/app.js"></script>
+<!-- P2 structure refactor: app.js split into 9 sequential slices (shared
+     global scope — load order 01→09 must be preserved). /app.js still serves
+     the concatenation for any stale cached shell during rollout. -->
+<script src="/js/01-core.js"></script>
+<script src="/js/02-mgt-report.js"></script>
+<script src="/js/03-tabs-main.js"></script>
+<script src="/js/04-report-cost.js"></script>
+<script src="/js/05-pnl-settings.js"></script>
+<script src="/js/06-features.js"></script>
+<script src="/js/07-home.js"></script>
+<script src="/js/08-guest-buffet.js"></script>
+<script src="/js/09-deep-tools.js"></script>
+<script src="/js/10-ordering.js"></script>
 </body>
 </html>

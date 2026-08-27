@@ -23,7 +23,7 @@ Creds come from backend/.env (gitignored). Run:
     python sync_mssql.py --since 2026-05-01
 Aggregation is done server-side (GROUP BY) so we never pull the 21M SaleItem rows.
 """
-import os, sys, shutil, sqlite3, argparse
+import os, sys, shutil, sqlite3, argparse, time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -45,6 +45,57 @@ from ingest_may26_update import BRANCH_ALIAS   # MSSQL/full name → short DB na
 import month_summary                            # sales_month_summary roll-up (backend/month_summary.py)
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
+
+# ── per-LINE qty sanity guard ────────────────────────────────────────────────
+# Easy POS accepts fat-fingered quantities and never voids them (real incidents,
+# both at ระยอง: 2026-08-03 SaleId 40609 B0032 qty=1,000,000,000 → ฿4.93 BILLION
+# phantom COGS on every dashboard/report; 2026-06-05 SaleId 35773 SV0003
+# qty=10,000). Every run REBUILDS the qty tables from MSSQL, so a one-off SQLite
+# repair is undone the next night — the guard must live in the pull itself.
+# No genuine bill line reaches 1,000 units of one menu item. Only the qty that
+# feeds qty×cost COGS and menu-mix counts is zeroed; ExtendedPrice (money) is
+# never touched, so revenue and reconcile totals are unaffected. Zeroed lines
+# are printed by the sync and logged to sync_qty_guard_log (see [6/6] section).
+MAX_SANE_LINE_QTY = 1000
+QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
+            f"THEN 0 ELSE CAST(si.Qty AS float) END)")
+
+# ── Buffet/tier PACKAGE codes: their cost must never be booked ───────────────
+# Keep in lockstep with main._ALL_TIER_CODES (this file is standalone-runnable,
+# hence the duplicated tuple, same as SALE_FILTER above; test_invariants.py
+# fails if the two drift). sku_cost holds the package PRICE for these codes
+# (BUFFET = ฿679.08), not a cost — the real cost is the itemised dishes on the
+# same bill, so booking the package too double-counts (~฿1.07B phantom COGS).
+ALL_TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
+                  'BUFFETCHILD', 'B01', 'B02', 'B03', 'B07', 'B11')
+ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in ALL_TIER_CODES) + ")"
+
+def is_tier_code(code):
+    """Tier/package predicate for the per-bill costmap: the canonical tuple PLUS
+    the BUFFET* prefix — Easy emits package variants (e.g. BUFFETCHILDFREE) that
+    aren't in main's tuple but are still packages, never costed line items.
+    Exact match keeps real B0xxx menu items (B0040, B0324…) costed."""
+    c = code or ""
+    return c in ALL_TIER_CODES or c.startswith("BUFFET")
+
+def refresh_sku_effective_cost(sq):
+    """(Re)build sku_effective_cost in the staged DB — MIRROR of
+    main._build_sku_effective_cost: same COALESCE chain AND the same tier-code
+    zeroing. The sync's INSERT used to lack the tier CASE, so the table
+    flip-flopped by last writer (BUFFET recipe_cost=679.08 after a nightly sync,
+    0 after an app restart — observed live 2026-08-10). test_invariants.py
+    asserts sync output == main output row-for-row."""
+    sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
+                     "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
+                     "DELETE FROM sku_effective_cost;")
+    sq.execute(f"""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
+                  SELECT s.sku_id, CASE WHEN s.sku_code IN {ALL_TIER_CODES_SQL} THEN 0 ELSE COALESCE(
+                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
+                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
+                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
+                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
+                       WHERE a.bom_sku_code=s.sku_code), 0) END
+                  FROM skus s""")
 
 def _norm_paycode(c):
     """Collapse payment-code case-dups (POS has both 'CASH' and 'Cash') to one
@@ -216,6 +267,154 @@ def apply_local_swap():
         return False
 
 
+# ── staged-file preparation (step [1/6]) ─────────────────────────────────────
+# The sync builds into oshinei.db.incoming — but on Windows that name can be
+# LOCKED: the locally-running dashboard (backend/main.py) re-opens .incoming
+# every ~60 s to validate/hot-swap it, and a handle it doesn't close stays held
+# for as long as the app window stays open. Seen 2026-08-08..10: every nightly
+# sync died at INCOMING.unlink() with PermissionError WinError 32 for 3 straight
+# days, until the app was closed. Strategy: retry the claim briefly (a healthy
+# poller pass holds the file only a few seconds), then fall back to building
+# under a private name and publishing it over .incoming once done — and if even
+# that stays blocked, exit with a message that names the fix (close the local
+# dashboard) instead of a raw traceback.
+
+STAGE_FALLBACK = HERE / "oshinei.db.incoming.new"
+
+_CLAIM_WAITS   = (1, 2, 4, 8)          # ~15 s — rides out one poller validation pass
+_PUBLISH_WAITS = (2, 5, 10, 15, 30)    # ~1 min — covers a full 60 s poller cycle
+
+_LOCK_FIX_HINT = ("close the locally-running dashboard (the backend/main.py app — "
+                  "its .incoming swap poller is the usual lock holder), then re-run "
+                  "the sync")
+
+
+def _is_file_locked_err(e: OSError) -> bool:
+    """A Windows sharing/lock violation (file open in another process)?
+    os.remove/unlink of an open file raises WinError 32; os.replace onto an open
+    target raises WinError 5 — both surface as PermissionError."""
+    return isinstance(e, PermissionError) or getattr(e, "winerror", None) in (5, 32, 33)
+
+
+def _clear_staging_sidecars(base, announce=False) -> bool:
+    """Remove <base>-wal/-shm. Returns False if a sidecar exists but is locked.
+
+    WHY sidecars must go before (re)using <base>: copy2/os.replace move ONLY the
+    main file, so a -wal left behind by a run that died mid-sync gets REPLAYED
+    into the fresh file — and it belongs to a DIFFERENT database image, so
+    SQLite happily grafts its pages on top: duplicate sqlite_master rows, "2nd
+    reference to page N", cross-linked b-trees. Seen 2026-08-07 (#72): a 502 MB
+    stale WAL from a killed run turned every later sync into "malformed database
+    schema (recon_attachment)". SQLite cannot detect this — a WAL carries no
+    identity of the database it came from. A sidecar that exists but CANNOT be
+    removed is therefore a hard stop for staging at <base>."""
+    ok = True
+    for suf in ("-wal", "-shm"):
+        side = str(base) + suf
+        try:
+            os.remove(side)
+            if announce:
+                print(f"      removed stale {os.path.basename(side)} (orphan from an interrupted run)")
+        except FileNotFoundError:
+            pass
+        except OSError as e:
+            print(f"      ⚠ cannot remove {os.path.basename(side)}: {e}")
+            ok = False
+    return ok
+
+
+def _claim_staging(path):
+    """Try to free `path` (and its WAL/SHM sidecars) for a fresh staging build.
+    Returns (ok, blocker) — blocker describes the lock when ok is False.
+    Non-lock errors (bad path, disk trouble) raise: retrying can't help those."""
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as e:
+        if _is_file_locked_err(e):
+            return False, e
+        raise
+    if not _clear_staging_sidecars(path, announce=True):
+        return False, f"{path.name}-wal/-shm sidecar is locked"
+    return True, None
+
+
+def prepare_staging():
+    """Claim INCOMING for the build, falling back to STAGE_FALLBACK when locked.
+    Returns the Path the sync must build into (publish_staging() moves a
+    fallback build onto INCOMING at the end)."""
+    blocker = None
+    for i, wait in enumerate((0,) + _CLAIM_WAITS):
+        if wait:
+            time.sleep(wait)
+        ok, blocker = _claim_staging(INCOMING)
+        if ok:
+            # Sweep a fallback build a previous run left behind (its publish
+            # failed, or it died before publishing) — this fresh build
+            # supersedes it, and a ~500 MB stray must not rot on disk.
+            if STAGE_FALLBACK.exists():
+                _claim_staging(STAGE_FALLBACK)
+            return INCOMING
+        if i == 0:
+            print(f"      ⚠ {INCOMING.name} is locked by another process ({blocker}) — "
+                  f"retrying for ~{sum(_CLAIM_WAITS)}s…")
+    print(f"      ⚠ {INCOMING.name} still locked — staging to {STAGE_FALLBACK.name} instead; "
+          f"it will be published over {INCOMING.name} once the build is done")
+    ok, blocker = _claim_staging(STAGE_FALLBACK)
+    if not ok:
+        sys.exit(f"[1/6] ✗ fallback staging file {STAGE_FALLBACK.name} is locked too "
+                 f"({blocker}). To fix: {_LOCK_FIX_HINT}.")
+    return STAGE_FALLBACK
+
+
+def publish_staging(stage) -> bool:
+    """Make the finished build available under the INCOMING name.
+
+    No-op when the build already lives at INCOMING (the normal path). A
+    fallback build is os.replace()d over .incoming — atomic, but on Windows the
+    replace fails while ANY process still holds .incoming open, so retry across
+    a full poller cycle. Orphan .incoming-wal/-shm are cleared first each try:
+    publishing next to a stale WAL would graft it onto the fresh DB at first
+    open (#72). Returns True when INCOMING is the fresh build; on False the
+    stage file is kept (a multi-minute build is never thrown away) and an
+    actionable message has been printed."""
+    if stage == INCOMING:
+        return True
+    # Fold the stage's own -wal in first (e.g. the menu-fact subprocess died
+    # mid-write): unlike an orphan .incoming-wal it belongs to THIS file, so
+    # opening the DB replays it legitimately; os.replace of the bare main file
+    # would silently drop those committed frames.
+    if os.path.exists(str(stage) + "-wal"):
+        try:
+            c = sqlite3.connect(str(stage))
+            c.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+            c.close()
+        except sqlite3.Error as e:
+            print(f"      ⚠ could not checkpoint {stage.name}-wal: {e}")
+    blocker = None
+    for wait in (0,) + _PUBLISH_WAITS:
+        if wait:
+            time.sleep(wait)
+        if not _clear_staging_sidecars(INCOMING):
+            blocker = f"{INCOMING.name}-wal/-shm sidecar is locked"
+            continue
+        try:
+            os.replace(str(stage), str(INCOMING))
+            print(f"      ✓ published {stage.name} → {INCOMING.name}")
+            return True
+        except OSError as e:
+            if not _is_file_locked_err(e):
+                raise
+            blocker = e
+    print(f"      ✗ could not publish {stage.name} → {INCOMING.name}: still locked "
+          f"after ~{sum(_PUBLISH_WAITS)}s ({blocker}).\n"
+          f"        The fully-built, reconciled DB is KEPT at {stage.name}.\n"
+          f"        To fix: {_LOCK_FIX_HINT} — or apply the staged file manually:\n"
+          f"          move /Y \"{stage}\" \"{INCOMING}\"")
+    return False
+
+
 def _month_windows(since):
     """Calendar-month [lo, hi) windows from `since` up to and including the current
     month. The first window honours the exact `since` day; the rest start on the
@@ -269,11 +468,12 @@ def main():
         sys.exit(f"current DB not found: {DB}")
 
     print(f"[1/6] copy {DB.name} → {INCOMING.name} (preserves BoM/cost/settings)")
-    if INCOMING.exists():
-        INCOMING.unlink()
-    shutil.copy2(DB, INCOMING)
+    # Claims .incoming (retrying/falling back if the dashboard holds it locked —
+    # WinError 32) and clears orphan -wal/-shm (#72). See prepare_staging().
+    staging = prepare_staging()
+    shutil.copy2(DB, staging)
 
-    sq = sqlite3.connect(str(INCOMING)); sq.row_factory = sqlite3.Row
+    sq = sqlite3.connect(str(staging)); sq.row_factory = sqlite3.Row
     # idempotent column adds — mirror backend/main.py startup migration so a sync
     # against an older oshinei.db doesn't fail with "no column named …".
     st_cols = {r[1] for r in sq.execute("PRAGMA table_info(sales_transaction)").fetchall()}
@@ -309,10 +509,46 @@ def main():
     for r in mc.fetchall():
         cat_bucket[r["CategoryId"]] = bucket_for_cat(r["CategoryName"])
 
-    mc.execute("SELECT ItemId, ItemCode, CategoryId FROM Items")
-    itemid2code = {r["ItemId"]: (r["ItemCode"] or "").strip() for r in mc.fetchall()}
+    # Item NAME column: schema-probed, never guessed — vendor builds differ
+    # (ItemName / Name / Description / ItemDesc). Without it every lazily-created
+    # stub SKU kept description = code, so new-branch code series (THBF*/THAL*/
+    # OSN-PM-*) showed as raw codes across the UI forever. Degrades silently to
+    # the previous behaviour when no such column exists.
+    mc.execute("""SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_NAME='Items' AND DATA_TYPE IN
+                        ('nvarchar','varchar','nchar','char')""")
+    _item_cols = [r["COLUMN_NAME"] for r in mc.fetchall()]
+    name_col = next((c for c in ("ItemName", "Name", "Description", "ItemDesc",
+                                 "ItemNameThai", "ItemDescription")
+                     if c in _item_cols), None)
+    print(f"      Items name column = {name_col or 'NOT FOUND (stubs keep code as name)'}")
+
+    mc.execute(f"SELECT ItemId, ItemCode, CategoryId"
+               f"{', ' + name_col + ' AS ItemNm' if name_col else ''} FROM Items")
+    itemid2code, itemid2name = {}, {}
+    for r in mc.fetchall():
+        code = (r["ItemCode"] or "").strip()
+        itemid2code[r["ItemId"]] = code
+        if name_col:
+            nm = (r["ItemNm"] or "").strip()
+            if nm and nm != code:
+                itemid2name[r["ItemId"]] = nm
     item_map = {iid: code2sid[c] for iid, c in itemid2code.items() if c and c in code2sid}
     new_skus = 0                       # stubs added lazily (only for items that actually have sales)
+
+    # Backfill EXISTING stub SKUs (description still == sku_code) now that names
+    # are available — one-time self-heal, no re-ingest needed. Excel-ingested
+    # names already differ from the code, so they are never touched.
+    if itemid2name:
+        code2name = {itemid2code[i]: n for i, n in itemid2name.items() if itemid2code.get(i)}
+        stubs = sq.execute("SELECT sku_id, sku_code FROM skus "
+                           "WHERE description IS NULL OR TRIM(description)='' "
+                           "   OR description = sku_code").fetchall()
+        fixed = [(code2name[s["sku_code"]], s["sku_id"])
+                 for s in stubs if s["sku_code"] in code2name]
+        if fixed:
+            sq.executemany("UPDATE skus SET description=? WHERE sku_id=?", fixed)
+        print(f"      backfilled names on {len(fixed):,} stub skus (of {len(stubs):,} stubs)")
 
     print(f"      branches mapped={len(bid_map)} (unmatched/skipped={len(unmatched_branches)}: {unmatched_branches[:6]})")
     print(f"      items pre-mapped={len(item_map)} of {len(itemid2code)}")
@@ -321,7 +557,7 @@ def main():
     skum_rows = _chunk(mc, f"""
         SELECT si.BranchId AS bid, si.ItemId AS iid,
                CONVERT(char(7), s.SaleDate, 126) AS ym,
-               SUM(CAST(si.Qty AS float))            AS qty,
+               SUM({QTY_SANE})                       AS qty,
                SUM(CAST(si.ExtendedPrice AS float))  AS sub_exvat,
                SUM(CAST(ISNULL(si.Tax,0) AS float))  AS tax
         FROM SaleItem si
@@ -342,7 +578,8 @@ def main():
                 skipped_rev += (r["sub_exvat"] or 0); continue
             max_sid += 1
             sq.execute("INSERT INTO skus(sku_id,sku_code,description,category_id,active,business_type) "
-                       "VALUES (?,?,?,?,1,?)", (max_sid, code, code, None, None))
+                       "VALUES (?,?,?,?,1,?)",
+                       (max_sid, code, itemid2name.get(r["iid"], code), None, None))
             code2sid[code] = max_sid; item_map[r["iid"]] = max_sid; sid = max_sid; new_skus += 1
         sub = round(r["sub_exvat"] or 0, 2); tax = round(r["tax"] or 0, 2)
         skum.append((bid, r["ym"], sid, round(r["qty"] or 0, 2), sub, tax, round(sub + tax, 2), "Easy"))
@@ -476,11 +713,11 @@ def main():
     sq.execute("VACUUM")
     sq.isolation_level = ""
 
-    print("[5/6] reconcile .incoming vs current DB")
+    print(f"[5/6] reconcile {staging.name} vs current DB")
     ok = reconcile(sq)
     sq.close()
     if not ok:
-        print("[6/6] ⚠ RECONCILE FAILED — .incoming built but NOT safe to push. Investigate.")
+        print(f"[6/6] ⚠ RECONCILE FAILED — {staging.name} built but NOT safe to push. Investigate.")
         sys.exit(3)
 
     # ── [5b/6] refresh menu_fact_* in the .incoming (🧪 วิเคราะห์วัตถุดิบ tab) ──
@@ -489,17 +726,24 @@ def main():
     # NON-FATAL by design: a fact-build hiccup must never block the sales sync —
     # the tab just shows slightly stale coverage until the next run.
     if not args.no_menu_fact:
-        print("[5b/6] refresh menu_fact_* (build_menu_fact.py --db .incoming)")
+        print(f"[5b/6] refresh menu_fact_* (build_menu_fact.py --db {staging.name})")
         try:
             import subprocess
             env = dict(os.environ, PYTHONIOENCODING="utf-8")
             rc = subprocess.run(
-                [sys.executable, str(HERE / "build_menu_fact.py"), "--db", str(INCOMING)],
+                [sys.executable, str(HERE / "build_menu_fact.py"), "--db", str(staging)],
                 timeout=2400, env=env).returncode
             if rc:
                 print(f"      ⚠ menu-fact build exited rc={rc} — tab data stays at previous coverage")
         except Exception as e:
             print(f"      ⚠ menu-fact build skipped: {e}")
+
+    # A fallback build (dashboard held .incoming locked at step 1) is published
+    # over .incoming only NOW, fully built + reconciled — the poller/refresh_fly
+    # never see a half-written file. Exit non-zero if the lock never cleared so
+    # the scheduler bat aborts instead of pushing/applying a STALE .incoming.
+    if not publish_staging(staging):
+        sys.exit(4)
 
     if args.apply_local:
         print("[6/6] reconciled → applying to local oshinei.db")
@@ -717,11 +961,37 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     if mx:
         y, m, d = (int(x) for x in mx.split("-"))
         dly_since = (_dt.date(y, m, d) - _dt.timedelta(days=120)).isoformat()
+    # Surface every line the qty guard zeroes (never a silent cap) and keep a
+    # durable audit trail in the staged DB — sync_qty_guard_log rides the swap to
+    # local AND Fly, so the 🩺 data-quality side can read it later. INSERT OR
+    # IGNORE keeps the original first_seen when the same line re-appears nightly.
+    mc.execute(f"""SELECT CONVERT(char(10), s.SaleDate, 126) d, b.BranchName bn,
+                          s.SaleId sid, i.ItemCode code, CAST(si.Qty AS float) qty
+                   FROM SaleItem si
+                   JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
+                   JOIN Branch b ON b.BranchId=s.BranchId
+                   LEFT JOIN Items i ON i.ItemId=si.ItemId
+                   WHERE {F} AND ISNULL(si.Active,1)=1 AND s.SaleDate >= '{dly_since}'
+                         AND ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY}""")
+    bad_lines = mc.fetchall()
+    sq.execute("CREATE TABLE IF NOT EXISTS sync_qty_guard_log("
+               "sale_date TEXT, branch TEXT, sale_id INT, item_code TEXT, qty REAL, "
+               "first_seen TEXT, PRIMARY KEY(sale_date, sale_id, item_code))")
+    if bad_lines:
+        _now = _dt.datetime.now().isoformat(timespec="seconds")
+        sq.executemany("INSERT OR IGNORE INTO sync_qty_guard_log VALUES(?,?,?,?,?,?)",
+                       [(r["d"], r["bn"], r["sid"], (r["code"] or "").strip(), r["qty"], _now)
+                        for r in bad_lines])
+        print(f"        QTY GUARD: zeroed {len(bad_lines)} insane line(s) "
+              f"(|qty| > {MAX_SANE_LINE_QTY:,}/line):")
+        for r in bad_lines[:10]:
+            print(f"          {r['d']} {r['bn']} SaleId={r['sid']} "
+                  f"{(r['code'] or '').strip()} qty={r['qty']:,.0f}")
     sq.executescript("DROP TABLE IF EXISTS sales_sku_daily; CREATE TABLE sales_sku_daily("
                      "branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);")
     drows = _chunk(mc, f"""
         SELECT si.BranchId bid, si.ItemId iid, CONVERT(char(10), s.SaleDate, 126) d,
-               SUM(CAST(si.Qty AS float)) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
+               SUM({QTY_SANE}) qty, SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
         GROUP BY si.BranchId, si.ItemId, CONVERT(char(10), s.SaleDate, 126)
@@ -734,7 +1004,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
 
     # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
     #    Per-sku unit cost from OUR data (sku_cost cost-management table first,
-    #    then recipe → alias; BUFFET tier=0). Same priority as main._unified_cogs_expr
+    #    then recipe → alias; tier codes=0 via is_tier_code). Same priority as main._unified_cogs_expr
     #    (cost-management first since 2026-06-11). Heavy pull but stored per-bill.
     bill_since = dly_since
     if mx:
@@ -749,26 +1019,16 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
             (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
                JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code), 0) AS c
         FROM skus s""").fetchall():
-        costmap[r["sku_id"]] = 0.0 if (r["sku_code"] or "").startswith("BUFFET") else (r["c"] or 0.0)
-    # Refresh the per-SKU effective-cost lookup in the staged DB with the SAME
-    # chain, so a swapped-in DB never serves stale costs (main only force-rebuilds
-    # it at startup, not on hot-swap pre-2026-06-11).
-    sq.executescript("CREATE TABLE IF NOT EXISTS sku_effective_cost("
-                     "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
-                     "DELETE FROM sku_effective_cost;")
-    sq.execute("""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
-                  SELECT s.sku_id, COALESCE(
-                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
-                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
-                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
-                       WHERE a.bom_sku_code=s.sku_code), 0)
-                  FROM skus s""")
+        costmap[r["sku_id"]] = 0.0 if is_tier_code(r["sku_code"]) else (r["c"] or 0.0)
+    # Refresh the per-SKU effective-cost lookup in the staged DB, so a swapped-in
+    # DB never serves stale costs (main only force-rebuilds it at startup, not on
+    # hot-swap pre-2026-06-11). Shared helper = same tier-code zeroing as main.
+    refresh_sku_effective_cost(sq)
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
                      "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
     bill_rows = _chunk(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               si.ItemId iid, SUM({QTY_SANE}) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND {{RANGE}}
@@ -815,7 +1075,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # full-history per-line pull for discount bills (same shape/grouping as bill_rows).
     disc_line_rows = _chunk(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
-               si.ItemId iid, SUM(CAST(si.Qty AS float)) qty,
+               si.ItemId iid, SUM({QTY_SANE}) qty,
                SUM(CAST(si.ExtendedPrice AS float)) rev
         FROM SaleItem si JOIN Sale s ON s.SaleId=si.SaleId AND s.BranchId=si.BranchId
         WHERE {F} AND ISNULL(si.Active,1)=1 AND s.Discount>0 AND {{RANGE}}
@@ -1036,10 +1296,39 @@ def reconcile(sq):
         bid_in = "(" + ",".join(str(int(b)) for b in existing_bids) + ")" if existing_bids else "(-1)"
         a_new = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
         a_old = one(cur, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {bid_in}", (anchor,)) or 0
-        checks.append((f"SETTLED rev {anchor} (shared branches)", a_old, a_new, 'strict'))
+        # A settled month is only truly FROZEN if the current DB was captured after
+        # that month had ended — i.e. it already holds a later month. When the anchor
+        # IS the current DB's newest month, that snapshot was taken while the month
+        # was still filling: HQ delivers each day's bills about a day late, so the
+        # month legitimately GROWS on the next sync and a strict two-sided gate blocks
+        # every run in the first days of a new month. Seen 2026-08-03: settled 2026-07
+        # was +3.44%, and ALL of it was 2026-07-31 alone (60 bills captured on 08-01 →
+        # 1,716 delivered), every other July day byte-identical, zero duplicate
+        # (branch, receipt) keys. A DROP still fails — that is the direction that means
+        # history loss.
+        tail_open = (anchor == cur_max)
+        a_mode = 'nodrop' if tail_open else 'strict'
+        if tail_open:
+            print(f"    [tail-open] current DB's newest month IS the settled anchor {anchor} → it was "
+                  f"captured mid-fill, so growth is expected (late HQ delivery); only a DROP gates")
+        checks.append((f"SETTLED rev {anchor} (shared branches)", a_old, a_new, a_mode))
         ab_new = one(sq, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
         ab_old = one(cur, f"SELECT COUNT(*) FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id WHERE substr(t.sold_at,1,7)=? AND t.branch_id IN {bid_in}", (anchor,))
-        checks.append((f"SETTLED bills {anchor} (shared branches)", ab_old, ab_new, 'strict'))
+        checks.append((f"SETTLED bills {anchor} (shared branches)", ab_old, ab_new, a_mode))
+        # Relaxing the anchor must never leave the sync without a two-sided canary, so
+        # when it is relaxed, strict-check the month before it — that one is frozen by
+        # construction (the current DB holds two later months).
+        if tail_open:
+            frozen = cur.execute(
+                "SELECT MAX(period_month) m FROM sales_sku_monthly WHERE period_month < ?", (anchor,)
+            ).fetchone()["m"]
+            if frozen:
+                fz_bids = [r[0] for r in cur.execute(
+                    "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month=?", (frozen,)).fetchall()]
+                fz_in = "(" + ",".join(str(int(b)) for b in fz_bids) + ")" if fz_bids else "(-1)"
+                f_new = one(sq, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {fz_in}", (frozen,)) or 0
+                f_old = one(cur, f"SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly WHERE period_month=? AND branch_id IN {fz_in}", (frozen,)) or 0
+                checks.append((f"FROZEN rev {frozen} (shared branches)", f_old, f_new, 'strict'))
         # Revenue from branches NEW to this settled month (present in synced, absent
         # from current) — reported for visibility; never gates. A large value here is
         # expected right after a BRANCH_ALIAS fix and disappears on the next sync.
