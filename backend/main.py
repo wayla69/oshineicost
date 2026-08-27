@@ -5367,3 +5367,151 @@ def ingredients_demand_calendar_delete(event_id: int):
         con.commit()
     invalidate_cache()
     return {"ok": True}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Forecast accuracy — tune the buffer from what actually got consumed
+# ═══════════════════════════════════════════════════════════════════════════
+# The compliance report answers "did the branch order what we told it to".
+# That is NOT accuracy: a branch can comply perfectly with a bad forecast.
+# Accuracy is the frozen recommendation against what the branch actually
+# CONSUMED over that same cycle — which we can compute once the cycle's period
+# has passed, from sales_sku_daily x BoM, the same way the plan was built.
+#
+# The buffer suggestion is a service level, not an average. Ordering the mean
+# leaves you short half the time, so we take the ratio of consumption to the
+# RAW forecast (buffer removed) and pick the percentile the owner asks for:
+# "a buffer that would have covered N% of past cycles". Under-ordering costs a
+# stock-out; over-ordering costs carry — so the default leans to 80%.
+
+def _pctl(sorted_vals, q: float):
+    """Linear-interpolated percentile on an already-sorted list."""
+    if not sorted_vals:
+        return None
+    if len(sorted_vals) == 1:
+        return sorted_vals[0]
+    pos = (len(sorted_vals) - 1) * max(0.0, min(q, 1.0))
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (pos - lo)
+
+
+def _ing_consumed(con, branch: str, start: str, end: str):
+    """Actual consumption per ingredient for one branch over a closed window."""
+    rows = con.execute(f"""
+        SELECT COALESCE(NULLIF(bi.ingredient_code,''), '__' || bi.ingredient_name) AS code,
+               bi.unit AS unit,
+               SUM(d.qty * bi.qty_per_serving) AS qty
+          FROM sales_sku_daily d
+          JOIN branches b         ON b.branch_id = d.branch_id
+          JOIN {_ING_BOM_MAP} m   ON m.sale_sku  = d.sku_id
+          JOIN bom_ingredients bi ON bi.sku_id   = m.bom_sku
+         WHERE b.name = :branch AND d.day BETWEEN :start AND :end
+         GROUP BY code, bi.unit
+    """, {"branch": branch, "start": start, "end": end}).fetchall()
+    return {(r["code"], r["unit"] or ""): float(r["qty"] or 0) for r in rows}
+
+
+@app.get("/api/ingredients/order-accuracy")
+@ttl_cache
+def ingredients_order_accuracy(
+    branch:        Optional[str] = Query(None),
+    service_level: float         = Query(80.0, description="buffer should cover this % of past cycles"),
+    min_cycles:    int           = Query(2, description="ingredients seen in fewer cycles are listed but not tuned"),
+    limit:         int           = Query(200),
+):
+    """How well the plan predicted real consumption, and what buffer to use next.
+
+    Only CLOSED cycles count — a cycle whose period_end is past the last day of
+    sales data would be judged on days that have not happened yet."""
+    sl = max(50.0, min(float(service_level or 80), 99.0)) / 100.0
+    with get_db() as con:
+        _ing_issue_tables(con)
+        maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+        if not maxd:
+            return {"available": False, "reason": "no daily sales data"}
+        f = ["i.period_end <= :maxd"]
+        p: Dict = {"maxd": maxd}
+        if branch:
+            f.append("i.branch = :branch")
+            p["branch"] = branch
+        issues = con.execute(
+            f"SELECT * FROM ingredient_order_issue i WHERE {' AND '.join(f)} "
+            f"ORDER BY i.period_start DESC LIMIT 60", p).fetchall()
+        if not issues:
+            return {"available": False,
+                    "reason": "ยังไม่มีรอบสั่งที่ปิดแล้ว (period_end ต้องผ่านวันล่าสุดของข้อมูลขาย)",
+                    "data_through": maxd}
+
+        per_ing: Dict[tuple, dict] = {}
+        per_branch: Dict[str, dict] = {}
+        n_lines = 0
+        for i in issues:
+            consumed = _ing_consumed(con, i["branch"], i["period_start"], i["period_end"])
+            buf = float(i["buffer_pct"] or 0)
+            for l in con.execute(
+                    "SELECT * FROM ingredient_order_issue_line WHERE issue_id=?",
+                    (i["issue_id"],)):
+                rec = float(l["rec_base"] or 0)
+                if rec <= 0:
+                    continue
+                used = consumed.get((l["ingredient_code"], l["base_unit"] or ""), 0.0)
+                raw = rec / (1.0 + buf / 100.0)          # forecast before the buffer
+                if raw <= 0:
+                    continue
+                ratio = used / raw                        # >1 = we under-forecast
+                n_lines += 1
+                k = (l["ingredient_code"], l["base_unit"] or "")
+                e = per_ing.setdefault(k, {
+                    "code": l["ingredient_code"], "name": l["name"] or "",
+                    "unit": l["base_unit"] or "", "n": 0,
+                    "rec": 0.0, "used": 0.0, "ratios": []})
+                e["n"] += 1
+                e["rec"] += rec
+                e["used"] += used
+                e["ratios"].append(ratio)
+                b = per_branch.setdefault(i["branch"], {"branch": i["branch"], "n": 0,
+                                                        "short": 0, "ratios": []})
+                b["n"] += 1
+                b["ratios"].append(ratio)
+                if used > rec:
+                    b["short"] += 1
+
+    def finish(e):
+        rs = sorted(e.pop("ratios"))
+        p50, p80 = _pctl(rs, 0.5), _pctl(rs, sl)
+        e["ratio_median"] = round(p50, 3) if p50 is not None else None
+        e["ratio_service"] = round(p80, 3) if p80 is not None else None
+        if p80 is not None and e["n"] >= min_cycles:
+            e["suggested_buffer_pct"] = round(max(0.0, (p80 - 1.0) * 100.0), 1)
+        else:
+            e["suggested_buffer_pct"] = None
+        return e
+
+    ings = [finish(e) for e in per_ing.values()]
+    for e in ings:
+        e["rec"] = round(e["rec"], 2)
+        e["used"] = round(e["used"], 2)
+        e["rec_disp"] = _ing_pretty(e["rec"], e["unit"])[2]
+        e["used_disp"] = _ing_pretty(e["used"], e["unit"])[2]
+        e["verdict"] = ("under" if (e["ratio_median"] or 1) > 1.05
+                        else "over" if (e["ratio_median"] or 1) < 0.8 else "ok")
+    ings.sort(key=lambda e: -(e["ratio_median"] or 0))
+    brs = [finish(b) for b in per_branch.values()]
+    for b in brs:
+        b["short_pct"] = round(100.0 * b["short"] / b["n"], 1) if b["n"] else 0
+
+    flat = sorted([x for e in ings for x in [e["ratio_median"]] if x is not None])
+    headline = {
+        "cycles_evaluated": len(issues),
+        "lines_evaluated": n_lines,
+        "service_level_pct": round(sl * 100, 1),
+        "median_ratio": round(_pctl(flat, 0.5), 3) if flat else None,
+        "suggested_buffer_pct": (round(max(0.0, (_pctl(flat, sl) - 1.0) * 100.0), 1)
+                                 if flat else None),
+        "buffer_used_median": round(sum(float(i["buffer_pct"] or 0) for i in issues) / len(issues), 1),
+        "data_through": maxd,
+    }
+    return {"available": True, "headline": headline,
+            "by_ingredient": ings[:max(1, min(int(limit or 200), 1000))],
+            "by_branch": sorted(brs, key=lambda b: -b["short_pct"])}

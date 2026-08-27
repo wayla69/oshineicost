@@ -107,6 +107,7 @@ async function loadOrderPlan(force) {
        ? `<div class="card p-3 text-xs" style="background:var(--bg-subtle);color:var(--text-muted)">🎉 เปิดปรับตามเทศกาลไว้ แต่${esc(sn.reason || '')}</div>`
        : '');
   opLoadCycles();
+  opLoadAccuracy();
 
   const brs = d.branches || [];
   const brCard = document.getElementById('opBranchCard');
@@ -458,4 +459,62 @@ function opWarnLetter() {
   const cs = document.getElementById('opCycleStart')?.value || '';
   if (cs) p.set('period_start', cs);
   window.open(`${API}/api/ingredients/compliance-letter.print?${p}`, '_blank');
+}
+
+
+// ── forecast accuracy ──────────────────────────────────────────────────────
+// Compliance answers "did they order what we said". This answers "was what we
+// said right" — the frozen recommendation vs what the branch actually consumed
+// in that cycle. The suggested buffer is a SERVICE LEVEL, not a mean: ordering
+// the average leaves you short half the time.
+let _opAccSuggested = null;
+
+async function opLoadAccuracy() {
+  const branch = document.getElementById('opBranch')?.value || '';
+  const sl = document.getElementById('opServiceLevel')?.value || '80';
+  const head = document.getElementById('opAccHead');
+  const body = document.getElementById('opAccBody');
+  if (!head) return;
+  let d;
+  try {
+    d = await fetch(`${API}/api/ingredients/order-accuracy?service_level=${sl}`
+      + (branch ? `&branch=${encodeURIComponent(branch)}` : '')).then(r => r.json());
+  } catch (e) { return; }
+  if (!d || d.available === false) {
+    _opAccSuggested = null;
+    head.innerHTML = `<div class="card p-3 text-xs" style="background:var(--bg-subtle);color:var(--text-muted)">
+      ${esc(d?.reason || 'ยังประเมินไม่ได้')} — ออกรอบสั่งแล้วรอให้รอบนั้นผ่านไปก่อน จึงจะเทียบกับการใช้จริงได้</div>`;
+    body.innerHTML = '';
+    return;
+  }
+  const h = d.headline || {};
+  _opAccSuggested = h.suggested_buffer_pct;
+  const drift = h.median_ratio != null ? (h.median_ratio - 1) * 100 : null;
+  head.innerHTML = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">` + [
+    { l:'รอบที่ประเมินได้', v:fmtN(h.cycles_evaluated), s:`${fmtN(h.lines_evaluated)} บรรทัด · ข้อมูลถึง ${esc(h.data_through)}`, c:'#64748b' },
+    { l:'ใช้จริง vs พยากรณ์', v:(drift==null?'—':(drift>0?'+':'')+drift.toFixed(1)+'%'),
+      s:(drift==null?'':drift>0?'พยากรณ์ต่ำไป':'พยากรณ์สูงไป'), c:(drift>5?'#dc2626':drift<-5?'#0891b2':'#059669') },
+    { l:'% เผื่อที่ใช้อยู่', v:(h.buffer_used_median??'—')+'%', s:'ค่ากลางของรอบที่ผ่านมา', c:'#64748b' },
+    { l:'% เผื่อที่ควรใช้', v:(h.suggested_buffer_pct??'—')+'%', s:`ครอบคลุม ${h.service_level_pct}% ของรอบ`, c:'#7c3aed' },
+  ].map(k => `<div class="card p-3" style="border-top:3px solid ${k.c}"><p class="text-[10.5px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[10.5px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('') + `</div>`;
+
+  const vlab = { under:['พยากรณ์ต่ำไป','#dc2626'], over:['พยากรณ์สูงไป','#0891b2'], ok:['พอดี','#059669'] };
+  body.innerHTML = (d.by_ingredient || []).map(e => {
+    const [txt, col] = vlab[e.verdict] || vlab.ok;
+    return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1 pr-2" style="font-family:monospace;font-size:10.5px;color:var(--text-muted)">${esc(e.code)}</td>
+      <td class="py-1 pr-2">${esc(e.name)}</td>
+      <td class="py-1 pr-2 text-right">${esc(e.rec_disp)}</td>
+      <td class="py-1 pr-2 text-right">${esc(e.used_disp)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:${col}">×${e.ratio_median ?? '—'}</td>
+      <td class="py-1 pr-2 text-right" style="color:var(--text-muted)">${fmtN(e.n)}</td>
+      <td class="py-1 pr-2 text-right">${e.suggested_buffer_pct == null ? '<span style="color:var(--text-muted)">รอบยังน้อย</span>' : e.suggested_buffer_pct + '%'}</td>
+      <td class="py-1" style="color:${col};font-weight:600">${txt}</td></tr>`;
+  }).join('') || '<tr><td colspan="8" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีรอบที่ปิดแล้ว</td></tr>';
+}
+
+function opApplySuggestedBuffer() {
+  if (_opAccSuggested == null) { alert('ยังไม่มีค่าที่แนะนำ — ต้องมีรอบสั่งที่ปิดแล้วอย่างน้อย 1 รอบ'); return; }
+  const el = document.getElementById('opBuffer');
+  if (el) { el.value = _opAccSuggested; loadOrderPlan(true); }
 }
