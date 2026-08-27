@@ -1674,6 +1674,8 @@ function loadActiveTab() {
   if (activeTab === 'menuimpact') loadMenuImpact();
   if (activeTab === 'pnlbill')     loadPnlBill();
   if (activeTab === 'opsreport')   loadOpsReport();
+  if (activeTab === 'ordering')    loadOrderPlan();
+  if (activeTab === 'ordersetup')  loadOrderSetup();
   if (activeTab === 'cashctl')     loadCashCtl();
   if (activeTab === 'custtype')    loadCustType();
   if (activeTab === 'modifiers')   loadModifiers();

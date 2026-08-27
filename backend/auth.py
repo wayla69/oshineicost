@@ -209,6 +209,7 @@ MODULE_RULES = [
     ("GET", "/api/gp",                       {"profit.pnl"}),
     ("GET", "/api/reports/pnl-bill",         {"profit.pnl"}),
     ("GET", "/api/reports/ops",              {"ops.report"}),
+    ("GET", "/api/ingredients",              {"cost.analysis", "ops.report"}),  # order plan + branch letter
     ("GET", "/api/analysis/discount",        {"ops.discounts"}),
     ("GET", "/api/analysis/coupon",          {"ops.discounts"}),
     ("GET", "/api/extra/cash",               {"ops.cash"}),
