@@ -115,7 +115,13 @@ function onMgtDayChange(v) {
 // The chrome is hidden by a class on <body>, so it would stay hidden after
 // switching to another tab. Any tab change clears it; re-entering the report
 // re-applies whatever the reader chose.
-function _mgtReadingOff() { document.body.classList.remove('mgt-reading'); }
+let _mgtFoldedNav = false;     // did reading mode fold the rail, or had the reader?
+
+function _mgtReadingOff() {
+  document.body.classList.remove('mgt-reading');
+  const sb = document.getElementById('sidebar');
+  if (sb && _mgtFoldedNav) { toggleSidebar(); _mgtFoldedNav = false; }
+}
 
 function setMgtPeriod(p) {
   mgtPeriod = (p === 'weekly' || p === 'monthly') ? p : 'daily';
@@ -161,6 +167,17 @@ function toggleMgtCover(collapse) {
   // filter, presets, user chip, upload buttons — so the report only really
   // starts below the fold. Print is unaffected: it forces the full header back.
   document.body.classList.toggle('mgt-reading', c);
+  // The nav rail folds to icons using the app's OWN collapse, rather than being
+  // hidden: the reader keeps a way to navigate. The width media query could not
+  // do this — a phone in desktop mode reports a ~980px layout viewport, so the
+  // ≤700px rule never matched and the menu bar stayed at full width.
+  // Only undo it if WE folded it, so a reader who had already collapsed the rail
+  // does not get it re-opened on the way out.
+  const sb = document.getElementById('sidebar');
+  if (sb) {
+    if (c && !sb.classList.contains('collapsed')) { toggleSidebar(); _mgtFoldedNav = true; }
+    else if (!c && _mgtFoldedNav) { toggleSidebar(); _mgtFoldedNav = false; }
+  }
   try { localStorage.setItem('mgtCoverCollapsed', c ? '1' : '0'); } catch (e) {}
 }
 let _mgtCoverInited = false;
