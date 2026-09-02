@@ -461,8 +461,51 @@ def main():
                     help="after reconcile, swap .incoming into the live local oshinei.db")
     ap.add_argument("--no-menu-fact", action="store_true",
                     help="skip the menu_fact_* refresh (🧪 วิเคราะห์วัตถุดิบ tab data)")
+    ap.add_argument("--window-days", type=int, default=0, metavar="N",
+                    help="INCREMENTAL: re-pull only the last N days of sales instead of "
+                         "everything since --since. The cutoff is snapped BACK to the first "
+                         "of that month, so whole months are always replaced. 0 = full rebuild.")
+    ap.add_argument("--full-every-days", type=int, default=7, metavar="D",
+                    help="with --window-days, still force a FULL rebuild when the last one "
+                         "is older than D days (0 = never force)")
     args = ap.parse_args()
-    windows = _month_windows(args.since)   # per-month chunking of the heavy aggregates
+
+    # ── INCREMENTAL cutoff ──────────────────────────────────────────────────
+    # A full rebuild re-pulls 20 monthly chunks from MSSQL every run — measured at
+    # ~7 min for the sku aggregate and ~10 min for the per-sale split, which is why
+    # the run kept being killed half way (0xC000013A in Task Scheduler).
+    #
+    # THE SNAP TO A MONTH BOUNDARY IS NOT COSMETIC. sales_sku_monthly is keyed by
+    # month, so re-pulling from mid-month would delete a whole month and re-insert
+    # only part of it — August would silently lose half its revenue. The cutoff is
+    # therefore always the 1st of the month containing (today - N days).
+    import datetime as _dtm          # NOT `dt`: that name is a per-row datetime later in main()
+    incr_from = None
+    if args.window_days and args.window_days > 0:
+        _c = _dtm.date.today() - _dtm.timedelta(days=args.window_days)
+        incr_from = _c.replace(day=1).isoformat()
+        if incr_from <= args.since[:10]:
+            incr_from = None          # window reaches back past --since: just do it all
+    # Drift insurance: an edit to a bill OLDER than the window is invisible to an
+    # incremental run, so a full rebuild is forced periodically regardless.
+    if incr_from and args.full_every_days:
+        try:
+            sq0 = sqlite3.connect(str(DB))
+            sq0.execute("CREATE TABLE IF NOT EXISTS sync_state(k TEXT PRIMARY KEY, v TEXT)")
+            row = sq0.execute("SELECT v FROM sync_state WHERE k='last_full_sync'").fetchone()
+            sq0.close()
+            last_full = row[0] if row else None
+            if not last_full or (_dtm.date.today() - _dtm.date.fromisoformat(last_full[:10])).days >= args.full_every_days:
+                print(f"      [incremental] last full rebuild {last_full or 'never'} — forcing a FULL run")
+                incr_from = None
+        except Exception as e:
+            print(f"      [incremental] cannot read sync_state ({e}) — falling back to FULL")
+            incr_from = None
+
+    windows = _month_windows(incr_from or args.since)   # per-month chunking of the heavy aggregates
+    if incr_from:
+        print(f"      [incremental] re-pulling from {incr_from} "
+              f"({len(windows)} month chunk(s)); older rows are kept from the copied DB")
 
     if not DB.exists():
         sys.exit(f"current DB not found: {DB}")
@@ -583,7 +626,11 @@ def main():
             code2sid[code] = max_sid; item_map[r["iid"]] = max_sid; sid = max_sid; new_skus += 1
         sub = round(r["sub_exvat"] or 0, 2); tax = round(r["tax"] or 0, 2)
         skum.append((bid, r["ym"], sid, round(r["qty"] or 0, 2), sub, tax, round(sub + tax, 2), "Easy"))
-    sq.execute("DELETE FROM sales_sku_monthly")
+    if incr_from:
+        # whole months only — see the snap note above
+        sq.execute("DELETE FROM sales_sku_monthly WHERE period_month >= ?", (incr_from[:7],))
+    else:
+        sq.execute("DELETE FROM sales_sku_monthly")
     sq.executemany("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source) "
                    "VALUES (?,?,?,?,?,?,?,?)", skum)
     print(f"      inserted {len(skum):,} rows · new stub skus={new_skus} · skipped revenue (unmapped branch)=฿{skipped_rev:,.0f}")
@@ -682,7 +729,10 @@ def main():
                     0.0, round(r["disc"] or 0, 2), round(r["svc"] or 0, 2), round(r["total"] or 0, 2), "Easy",
                     (r["rid"] or None), (cs[0] if cs else None), int(r["ptimes"] or 0),
                     dwell_map.get((r["bid"], r["sid"]))))
-    sq.execute("DELETE FROM sales_transaction")
+    if incr_from:
+        sq.execute("DELETE FROM sales_transaction WHERE date(sold_at) >= ?", (incr_from,))
+    else:
+        sq.execute("DELETE FROM sales_transaction")
     sq.executemany("""INSERT INTO sales_transaction
         (branch_id,receipt_no,sold_at,cashier,table_no,customer_count,food_subtotal,drink_subtotal,
          other_subtotal,tip,sp_discount,discount,service_charge,total_inc_vat,source,
@@ -744,6 +794,19 @@ def main():
     # the scheduler bat aborts instead of pushing/applying a STALE .incoming.
     if not publish_staging(staging):
         sys.exit(4)
+
+    # Only a FULL run resets the clock — that is what the --full-every-days guard
+    # measures against, and an incremental run cannot stand in for it: it never
+    # looked at the months it skipped.
+    if not incr_from:
+        try:
+            sq2 = sqlite3.connect(str(INCOMING if INCOMING.exists() else DB))
+            sq2.execute("CREATE TABLE IF NOT EXISTS sync_state(k TEXT PRIMARY KEY, v TEXT)")
+            sq2.execute("INSERT OR REPLACE INTO sync_state(k, v) VALUES('last_full_sync', ?)",
+                        (_dtm.date.today().isoformat(),))
+            sq2.commit(); sq2.close()
+        except Exception as e:
+            print(f"      [incremental] could not record last_full_sync: {e}")
 
     if args.apply_local:
         print("[6/6] reconciled → applying to local oshinei.db")
