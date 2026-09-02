@@ -112,6 +112,11 @@ function onMgtDayChange(v) {
   loadMgtReport();
 }
 
+// The chrome is hidden by a class on <body>, so it would stay hidden after
+// switching to another tab. Any tab change clears it; re-entering the report
+// re-applies whatever the reader chose.
+function _mgtReadingOff() { document.body.classList.remove('mgt-reading'); }
+
 function setMgtPeriod(p) {
   mgtPeriod = (p === 'weekly' || p === 'monthly') ? p : 'daily';
   mgtWeek = null;                   // reset to the latest completed week on mode switch
@@ -151,6 +156,11 @@ function toggleMgtCover(collapse) {
   if (!cov) return;
   const c = (collapse !== undefined) ? collapse : !cov.classList.contains('collapsed');
   cov.classList.toggle('collapsed', c);
+  // Collapsing the cover also folds the app chrome (top bar + preset row). On a
+  // phone that chrome is most of the first screenful — nav, title, search,
+  // filter, presets, user chip, upload buttons — so the report only really
+  // starts below the fold. Print is unaffected: it forces the full header back.
+  document.body.classList.toggle('mgt-reading', c);
   try { localStorage.setItem('mgtCoverCollapsed', c ? '1' : '0'); } catch (e) {}
 }
 let _mgtCoverInited = false;
@@ -1567,7 +1577,12 @@ function renderMgtReport(j, jM, jF) {
         <div class="flex flex-wrap items-center gap-2 mb-2">
           <span class="text-[11px] font-semibold text-slate-600">${T.tierDrvTitle}</span>
           <span class="text-[10px] text-slate-400">${T.tierDrvPick}:</span>${btns}
-          <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}</span>
+          <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}${
+            (cur.focus_share != null && cur.focus_share < 5)
+              ? ` <span style="color:#dc2626;font-weight:600">${isTH
+                  ? `· ${num(cur.focus_pax)} คน (${cur.focus_share.toFixed(1)}%) — กลุ่มเล็ก ตัวเลขแกว่ง`
+                  : `· ${num(cur.focus_pax)} covers (${cur.focus_share.toFixed(1)}%) — small sample, figures swing`}</span>`
+              : ''}</span>
         </div>
         ${insight}
         <div class="grid md:grid-cols-2 gap-x-6 gap-y-3">
@@ -1582,6 +1597,22 @@ function renderMgtReport(j, jM, jF) {
     }
     window._mgtRenderDrivers = render;
     render(DR.default_tier);
+
+    // PRINT: the block above is a picker — it shows ONE tier, so paper was
+    // getting whichever tier happened to be selected and losing the others
+    // with no hint that they existed. Build every tier into a second,
+    // screen-hidden container that only print reveals (see #mgtTierDriversPrint).
+    const pslot = document.createElement('div');
+    pslot.id = 'mgtTierDriversPrint';
+    pslot.style.display = 'none';
+    const order = DR.tier_order || Object.keys(DR.by_tier);
+    const keep = slot.innerHTML;                       // restore the picker after harvesting
+    pslot.innerHTML = order.map(t => {
+      render(t);
+      return '<div class="mgt-atom">' + slot.innerHTML + '</div>';
+    }).join('');
+    slot.innerHTML = keep;
+    slot.parentNode.insertBefore(pslot, slot.nextSibling);
   })();
 
   // Trend chart(s). Split → 3 separate bar charts (Total/Master/Franchise), each with an
