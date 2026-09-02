@@ -30,7 +30,7 @@ globals().update({_n: getattr(M, _n) for _n in _SHARED})
 def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head,
     7-day sparkline, vs trailing-7-day average %, vs same-weekday-last-week %, and
-    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 = reconciled)."""
+    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 − service_charge)."""
     import datetime as _dt
     base = ["t.source='Easy'", "b.name!='ALL'"]; params: dict = {}
     _group_filter(base, params, group)
@@ -47,7 +47,7 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
         days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
         rows = con.execute(f"""
             SELECT b.name branch, date(t.sold_at) d,
-                   ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust, COUNT(*) bills
+                   ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev, SUM(t.customer_count) cust, COUNT(*) bills
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
             GROUP BY b.name, date(t.sold_at)""",
@@ -230,7 +230,7 @@ def extra_price_zone(month: Optional[str] = Query(None), branch: Optional[str] =
             er = con.execute("""
                 SELECT AVG(CASE WHEN day BETWEEN :bS AND :bE THEN qty END) bq,
                        AVG(CASE WHEN day BETWEEN :aS AND :aE THEN qty END) aq
-                FROM sales_sku_daily WHERE branch_id=:bid AND sku_id=:sid
+                FROM v_sales_sku_daily WHERE branch_id=:bid AND sku_id=:sid
                   AND day BETWEEN :bS AND :aE""",
                 {"bid": c["bid"], "sid": c["sid"], "bS": bS, "bE": bE, "aS": aS, "aE": aE}).fetchone()
             bq = er["bq"]; aq = er["aq"]
@@ -539,10 +539,10 @@ def home_brief(branch: Optional[str] = Query(None)):
         # Revenue / tx / customers yesterday
         yest_row = con.execute(f"""
             SELECT
-                ROUND(SUM(st.total_inc_vat) / 1.07, 2)        AS revenue,
+                ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)        AS revenue,
                 COUNT(*)                                AS tx_count,
                 COALESCE(SUM(st.customer_count), 0)    AS customer_count,
-                ROUND(AVG(st.total_inc_vat), 2)        AS avg_ticket
+                ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)        AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE DATE(st.sold_at) = :yesterday
@@ -557,7 +557,7 @@ def home_brief(branch: Optional[str] = Query(None)):
             wow_params = dict(branch_params)
             wow_params["yesterday"] = wow_date_str
             wow_row = con.execute(f"""
-                SELECT ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
+                SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS revenue
                 FROM sales_transaction st
                 JOIN branches b ON b.branch_id = st.branch_id
                 WHERE DATE(st.sold_at) = :yesterday
@@ -572,7 +572,7 @@ def home_brief(branch: Optional[str] = Query(None)):
             mtd_params["branch"] = branch
         mtd_row = con.execute(f"""
             SELECT
-                ROUND(SUM(st.total_inc_vat) / 1.07, 2)     AS mtd_revenue,
+                ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)     AS mtd_revenue,
                 COUNT(DISTINCT DATE(st.sold_at))    AS mtd_days
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -585,7 +585,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         # Revenue by branch yesterday (top 3)
         yest_branch_rows = con.execute(f"""
             SELECT b.name AS branch,
-                   ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS revenue
+                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE DATE(st.sold_at) = :yesterday
@@ -600,7 +600,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         # MTD by branch
         mtd_branch_rows = con.execute(f"""
             SELECT b.name AS branch,
-                   ROUND(SUM(st.total_inc_vat) / 1.07, 2) AS mtd_revenue
+                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS mtd_revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE strftime('%Y-%m', st.sold_at) = :month
@@ -640,7 +640,7 @@ def home_brief(branch: Optional[str] = Query(None)):
             bom_params["branch"] = branch
         mtd_bom_row = con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}), 2) AS bom_cost
-            FROM sales_sku_monthly s
+            FROM v_sales_sku_monthly s
             JOIN skus sk     ON sk.sku_id = s.sku_id
             LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
             JOIN branches b  ON b.branch_id = s.branch_id
@@ -685,7 +685,7 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
       · zero_gross     — discount-only / zeroed bills (gross <= 0)
     All from sales_transaction at date grain. Void/cancelled bills live in pos_cancel_bill
     (month-grain only) and are intentionally not folded in here."""
-    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    base = "(((st.total_inc_vat/1.07 - COALESCE(st.service_charge,0))) + st.discount)"
     with get_db() as con:
         maxd = con.execute(
             "SELECT DATE(MAX(sold_at)) FROM sales_transaction WHERE source='Easy'"
@@ -795,11 +795,11 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
               WHERE {_FOOD_CATEGORY_FILTER}),
             today AS (
               SELECT d.sku_id, SUM(d.qty) q, SUM(d.subtotal_ex_vat) rev
-              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
               WHERE d.day=:focus {bf} GROUP BY d.sku_id),
             histday AS (
               SELECT d.day, d.sku_id, SUM(d.qty) daily, SUM(d.subtotal_ex_vat) drev
-              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
               WHERE d.day>=:ws AND d.day<:focus {bf}
               GROUP BY d.day, d.sku_id),
             hist AS (
@@ -824,7 +824,7 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
         # total food revenue in scope today — denominator for the movers' revenue share
         frow = con.execute(f"""
             SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev
-            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
             WHERE d.day=:focus {bf}
               AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
                                JOIN categories c ON c.category_id=sk.category_id
@@ -838,7 +838,7 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
                    COALESCE(SUM(CASE WHEN d.day<:focus THEN d.subtotal_ex_vat END),0) rev_h,
                    COALESCE(SUM(CASE WHEN d.day<:focus THEN d.qty END),0) cov_h,
                    COUNT(DISTINCT CASE WHEN d.day<:focus THEN d.day END) hdays
-            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id JOIN skus s ON s.sku_id=d.sku_id
+            FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id JOIN skus s ON s.sku_id=d.sku_id
             WHERE d.day>=:ws AND d.day<=:focus AND s.sku_code LIKE 'BUFFET%' {bf}""", p).fetchone()
         hd = (bp["hdays"] or 1) if bp else 1
         buf = {
@@ -850,7 +850,7 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
         # à-la-carte food revenue trailing daily average (today = today_food_rev)
         af = con.execute(f"""
             SELECT COALESCE(SUM(d.subtotal_ex_vat),0) rev, COUNT(DISTINCT d.day) hdays
-            FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+            FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
             WHERE d.day>=:ws AND d.day<:focus {bf}
               AND d.sku_id IN (SELECT sk.sku_id FROM skus sk
                                JOIN categories c ON c.category_id=sk.category_id

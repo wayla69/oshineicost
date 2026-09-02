@@ -70,7 +70,7 @@ def sales_monthly(
             rows = con.execute(
                 f"""
                 SELECT DATE(st.sold_at)              AS period_month,
-                       ROUND(SUM(st.total_inc_vat) / 1.07,2) AS revenue,
+                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) AS revenue,
                        COUNT(*)                       AS tx_count,
                        SUM(st.customer_count)         AS customer_count
                 FROM sales_transaction st
@@ -105,7 +105,7 @@ def sales_monthly(
                 f"""
                 SELECT {_wk}                            AS period_month,
                        MIN(DATE(st.sold_at))            AS week_start,
-                       ROUND(SUM(st.total_inc_vat) / 1.07, 2)  AS revenue,
+                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)  AS revenue,
                        COUNT(*)                         AS tx_count,
                        SUM(st.customer_count)           AS customer_count
                 FROM sales_transaction st
@@ -142,7 +142,7 @@ def sales_monthly(
                         ((CAST(substr(sm.period_month,6,2) AS INTEGER)-1)/3+1) AS qtr,
                         sm.total_inc_vat   AS rev_inc_vat,
                         sm.subtotal_ex_vat AS rev_ex_vat
-                    FROM sales_sku_monthly sm
+                    FROM v_sales_sku_monthly sm
                     JOIN branches b ON b.branch_id = sm.branch_id
                     {where}
                 ) sub
@@ -172,7 +172,7 @@ def sales_monthly(
                        ROUND(SUM(sm.subtotal_ex_vat), 2)      AS revenue,
                        ROUND(SUM(sm.subtotal_ex_vat), 2)      AS revenue_ex_vat,
                        ROUND(SUM(sm.total_inc_vat), 2)        AS pos_total_inc_vat_diagnostic
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 {where_y}
                 GROUP BY sm.period_month
@@ -237,7 +237,7 @@ def sales_monthly(
                    ROUND(SUM(sm.subtotal_ex_vat), 2)  AS revenue,
                    ROUND(SUM(sm.subtotal_ex_vat), 2)  AS revenue_ex_vat,
                    ROUND(SUM(sm.total_inc_vat), 2)    AS pos_total_inc_vat_diagnostic
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             {where_sku}
             GROUP BY sm.period_month
@@ -334,7 +334,7 @@ def sales_by_category(
             SELECT c.name AS category,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue,
                    ROUND(SUM(sm.qty), 2)            AS qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id    = sm.branch_id
             JOIN skus sk       ON sk.sku_id       = sm.sku_id
             JOIN categories c  ON c.category_id   = sk.category_id
@@ -405,7 +405,7 @@ def top_skus(
                    SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs_total,
                    SUM(CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NOT NULL
                             THEN sm.qty ELSE 0 END)              AS costed_qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id      = sm.sku_id
             JOIN categories c  ON c.category_id  = sk.category_id
@@ -495,7 +495,7 @@ def top_ordered(
                    ROUND(SUM(sm.qty), 2)             AS qty,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue,
                    ROUND(SUM({cogs_expr}), 2)        AS cogs
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
             JOIN categories c  ON c.category_id = sk.category_id
@@ -509,7 +509,7 @@ def top_ordered(
             SELECT ROUND(SUM(sm.qty), 2) AS total_qty,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS total_rev,
                    ROUND(SUM({cogs_expr}), 2) AS total_cogs
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
             JOIN categories c  ON c.category_id = sk.category_id
@@ -548,7 +548,7 @@ def top_ordered(
             mparams["cutoff"] = cutoff
         months = con.execute(f"""
             SELECT DISTINCT sm.period_month AS m
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b    ON b.branch_id   = sm.branch_id
             JOIN skus sk       ON sk.sku_id     = sm.sku_id
             JOIN categories c  ON c.category_id = sk.category_id
@@ -574,7 +574,7 @@ def top_ordered(
             mrows = con.execute(f"""
                 SELECT sm.sku_id, sm.period_month AS m,
                        SUM(sm.qty) AS q, SUM(sm.subtotal_ex_vat) AS rev
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 WHERE sm.sku_id IN ({ph})
                   AND sm.period_month IN (:lm, :pm) {branch_clause}
@@ -612,7 +612,7 @@ def top_ordered(
                   SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.qty ELSE 0 END) pq,
                   SUM(CASE WHEN d.day BETWEEN :cs AND :ce THEN d.subtotal_ex_vat ELSE 0 END) cr,
                   SUM(CASE WHEN d.day BETWEEN :ps AND :pe THEN d.subtotal_ex_vat ELSE 0 END) pr
-                FROM sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
+                FROM v_sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
                 WHERE {' AND '.join(dwhere)} GROUP BY d.sku_id""", dparams).fetchall()
             mom_map = {}; rev_mom_map = {}
             for dr in drows:
@@ -647,7 +647,7 @@ def top_ordered(
         if ids:
             allm = con.execute(f"""
                 SELECT DISTINCT sm.period_month AS m
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches b   ON b.branch_id   = sm.branch_id
                 JOIN skus sk      ON sk.sku_id      = sm.sku_id
                 JOIN categories c ON c.category_id  = sk.category_id
@@ -665,7 +665,7 @@ def top_ordered(
                     sbranch = "AND b.name = :sbranch"; sp_params["sbranch"] = branch
                 srows = con.execute(f"""
                     SELECT sm.sku_id, sm.period_month AS m, SUM(sm.qty) AS q
-                    FROM sales_sku_monthly sm
+                    FROM v_sales_sku_monthly sm
                     JOIN branches b ON b.branch_id = sm.branch_id
                     WHERE sm.sku_id IN ({ph2})
                       AND sm.period_month IN ({mph}) {sbranch}
@@ -728,7 +728,7 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
                 f"JOIN skus s_al ON s_al.sku_id=d.sku_id WHERE a.bom_sku_code=s_al.sku_code), "
                 f"0) END")
         sql = (f"SELECT {gb_select}, ROUND(SUM(d.qty),2) qty, ROUND(SUM(d.subtotal_ex_vat),2) rev, "
-               f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_daily d "
+               f"ROUND(SUM({cogs}),2) cogs FROM v_sales_sku_daily d "
                f"JOIN branches b ON b.branch_id=d.branch_id JOIN skus sk ON sk.sku_id=d.sku_id "
                f"JOIN categories c ON c.category_id=sk.category_id "
                f"WHERE {' AND '.join(base)} GROUP BY {gb_col}")
@@ -737,7 +737,7 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
         if mto:   base.append("sm.period_month<=:mt"); p["mt"] = mto
         cogs = _unified_cogs_expr("sm")
         sql = (f"SELECT {gb_select}, ROUND(SUM(sm.qty),2) qty, ROUND(SUM(sm.subtotal_ex_vat),2) rev, "
-               f"ROUND(SUM({cogs}),2) cogs FROM sales_sku_monthly sm "
+               f"ROUND(SUM({cogs}),2) cogs FROM v_sales_sku_monthly sm "
                f"JOIN branches b ON b.branch_id=sm.branch_id JOIN skus sk ON sk.sku_id=sm.sku_id "
                f"JOIN categories c ON c.category_id=sk.category_id "
                f"WHERE {' AND '.join(base)} GROUP BY {gb_col}")
@@ -859,7 +859,7 @@ def menu_compare_drill(
         trend = [dict(r) for r in con.execute(
             f"""SELECT sm.period_month month, ROUND(SUM(sm.qty),2) qty,
                        ROUND(SUM(sm.subtotal_ex_vat),2) rev, ROUND(SUM({cogs_m}),2) cogs
-                FROM sales_sku_monthly sm JOIN branches b ON b.branch_id=sm.branch_id
+                FROM v_sales_sku_monthly sm JOIN branches b ON b.branch_id=sm.branch_id
                 JOIN skus sk ON sk.sku_id=sm.sku_id
                 WHERE {' AND '.join(ew)} GROUP BY sm.period_month ORDER BY sm.period_month""", pb).fetchall()]
     branches = []
@@ -903,7 +903,7 @@ def heavy_eaters(
         win = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sale_bill_cogs").fetchone()
         rows = con.execute(f"""
             SELECT b.name br, sbc.day day, sbc.receipt_no rcpt, t.customer_count cov,
-                   t.total_inc_vat/1.07 rev, sbc.cogs_bom cogs
+                   (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) rev, sbc.cogs_bom cogs
             FROM sale_bill_cogs sbc
             JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no
             JOIN branches b ON b.branch_id = sbc.branch_id
@@ -1069,12 +1069,12 @@ def sales_daily(
 
         def fetch(d):
             s, e = bounds(d)
-            # revenue ex-VAT = total_inc_vat / 1.07 (the reconciled basis that matches
+            # revenue ex-VAT ex-service-charge = total_inc_vat/1.07 − service_charge (matches
             # accounting & sales_sku_monthly). NOT food+drink+other — those double-count
             # buffet (buffet dishes duplicated in food + the package in other → +~50%).
             rows = con.execute(f"""
                 SELECT b.name branch,
-                       ROUND(SUM(t.total_inc_vat)/1.07,2) rev,
+                       ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev,
                        SUM(t.customer_count) cust, COUNT(*) bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
@@ -1120,7 +1120,7 @@ def sales_daily(
                         "bills": 0}
 
             dow_sel = """CAST(strftime('%w', t.sold_at) AS INT) wd,
-                       SUM(t.total_inc_vat)/1.07 rev, SUM(t.customer_count) cust,
+                       (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) rev, SUM(t.customer_count) cust,
                        COUNT(DISTINCT date(t.sold_at)) days
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id"""
             dow_prm = {**params, "pmm": pms.strftime("%Y-%m")}
@@ -1235,11 +1235,11 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
         rows = con.execute(f"""
             WITH today AS (
               SELECT d.branch_id, d.sku_id, SUM(d.qty) q
-              FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+              FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
               WHERE d.day=:focus {bfilt} GROUP BY d.branch_id, d.sku_id),
             hist AS (
               SELECT branch_id, sku_id, AVG(qty) avgq, COUNT(*) n
-              FROM sales_sku_daily WHERE day>=:ws AND day<:focus GROUP BY branch_id, sku_id)
+              FROM v_sales_sku_daily WHERE day>=:ws AND day<:focus GROUP BY branch_id, sku_id)
             SELECT b.name branch, s.description, s.sku_code, t.q today,
                    COALESCE(h.avgq,0) avgq, COALESCE(h.n,0) n
             FROM today t JOIN branches b ON b.branch_id=t.branch_id
@@ -1323,7 +1323,7 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
                 f"""SELECT b.name branch, ROUND(SUM({cogs_expr}),2) cogs,
                            ROUND(SUM(ssm.subtotal_ex_vat),2) rev
                     FROM (SELECT branch_id, sku_id, qty, subtotal_ex_vat, 'Easy' AS source
-                          FROM sales_sku_daily WHERE day BETWEEN :s AND :e) ssm
+                          FROM v_sales_sku_daily WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{dbf}{gcond} GROUP BY b.name""",
                 {"s": s.isoformat(), "e": e.isoformat(), **({"branch": branch} if branch else {}), **_gcond_params}).fetchall():
@@ -1396,14 +1396,14 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
 
         def agg(s, e):
             r = con.execute(
-                f"""SELECT ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust,
+                f"""SELECT ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev, SUM(t.customer_count) cust,
                     ROUND(SUM(t.discount),2) disc, COUNT(*) bills
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                     WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e""",
                 {**tp, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
             co = con.execute(
                 f"""SELECT ROUND(SUM({cogs_expr}),2) cogs
-                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM sales_sku_daily
+                    FROM (SELECT branch_id, sku_id, qty, 'Easy' AS source FROM v_sales_sku_daily
                           WHERE day BETWEEN :s AND :e) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{dbf}{gcond2}""",
@@ -1414,7 +1414,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
 
         cur = agg(cur_s, cur_e); prev = agg(prev_s, prev_e)
         # COGS window is rolling — flag if prev period predates available daily-sku data
-        mindd = con.execute("SELECT MIN(day) FROM sales_sku_daily").fetchone()[0]
+        mindd = con.execute("SELECT MIN(day) FROM v_sales_sku_daily").fetchone()[0]
         cogs_ok = bool(mindd) and mindd <= prev_s.isoformat()
     return {"available": True, "partial": partial, "cutoff_day": d, "days_in_month": last_dom,
             "cur_month": f"{y:04d}-{m:02d}", "prev_month": f"{py:04d}-{pm:02d}",
@@ -1524,7 +1524,7 @@ def summary(
             SELECT b.name AS branch, sm.period_month AS m,
                    SUM(sm.total_inc_vat) AS rev_inc,
                    SUM(sm.subtotal_ex_vat) AS rev_ex
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             {where_sku}
             GROUP BY b.name, sm.period_month
@@ -1650,7 +1650,7 @@ def sales_margin(
                    ROUND(SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}), 2) AS cost,
                    COUNT(DISTINCT CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NULL
                                        THEN sk.sku_id END)                  AS uncosted_skus
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b   ON b.branch_id   = sm.branch_id
             JOIN skus sk      ON sk.sku_id      = sm.sku_id
             JOIN categories c ON c.category_id  = sk.category_id
@@ -1665,7 +1665,7 @@ def sales_margin(
         uncosted_total = con.execute(
             f"""
             SELECT COUNT(DISTINCT CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NULL THEN sk.sku_id END)
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b   ON b.branch_id   = sm.branch_id
             JOIN skus sk      ON sk.sku_id      = sm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id  = sm.sku_id
@@ -1779,7 +1779,7 @@ def sales_dish_movers(
                            COALESCE(sk.description, sk.sku_code) AS name,
                            c.name AS category,
                            SUM({val_col}) AS val
-                    FROM sales_sku_monthly ssm
+                    FROM v_sales_sku_monthly ssm
                     JOIN branches b   ON b.branch_id   = ssm.branch_id
                     JOIN skus sk      ON sk.sku_id      = ssm.sku_id
                     JOIN categories c ON c.category_id  = sk.category_id

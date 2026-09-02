@@ -86,7 +86,7 @@ def _menu_engineering_compute(
                 SUM({_cogs_case(ssm='ssm', sk='s', sc='sc')}) AS cogs_total,
                 SUM(CASE WHEN {_effective_cost_subquery(ssm='ssm', sc='sc')} IS NOT NULL
                          THEN ssm.qty ELSE 0 END)             AS costed_qty
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN skus s ON s.sku_id = ssm.sku_id
             JOIN branches b ON b.branch_id = ssm.branch_id
             LEFT JOIN categories cat ON cat.category_id = s.category_id
@@ -199,7 +199,7 @@ def _menu_lifecycle_stages(con, branch=None, month_from=None, month_to=None):
     where = ("WHERE " + " AND ".join(filters)) if filters else ""
     rows = con.execute(f"""
         SELECT sk.sku_code AS code, sm.period_month AS m, SUM(sm.qty) AS qty
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN skus     sk ON sk.sku_id    = sm.sku_id
         JOIN branches b  ON b.branch_id  = sm.branch_id
         {where}
@@ -378,7 +378,7 @@ def _menu_opportunities_compute(branch=None, month=None, month_from=None, month_
                    COALESCE(c.name, 'Uncategorised') AS category,
                    ssm.period_month AS m,
                    SUM(ssm.qty) AS qty, SUM(ssm.subtotal_ex_vat) AS rev
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN skus       sk ON sk.sku_id     = ssm.sku_id
             JOIN branches   b  ON b.branch_id   = ssm.branch_id
             JOIN categories c  ON c.category_id = sk.category_id
@@ -653,7 +653,7 @@ def menu_lifecycle(
                        sm.period_month AS m,
                        SUM(sm.qty)            AS qty,
                        SUM(sm.subtotal_ex_vat) AS rev
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches   b  ON b.branch_id  = sm.branch_id
                 JOIN skus       sk ON sk.sku_id     = sm.sku_id
                 JOIN categories c  ON c.category_id = sk.category_id
@@ -675,7 +675,7 @@ def menu_lifecycle(
                        sm.period_month AS m,
                        SUM(sm.qty)            AS qty,
                        SUM(sm.subtotal_ex_vat) AS rev
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN skus       sk ON sk.sku_id     = sm.sku_id
                 JOIN categories c  ON c.category_id = sk.category_id
                 WHERE sm.period_month >= :cutoff AND sm.period_month <= :max_m

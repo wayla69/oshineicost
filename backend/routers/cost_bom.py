@@ -110,7 +110,7 @@ def post_cost(entries: List[CostEntry]):
             ph = ",".join("?" for _ in codes)
             for code, q, rev in cur.execute(
                 f"""SELECT sk.sku_code, SUM(ssm.qty), SUM(ssm.subtotal_ex_vat)
-                    FROM skus sk JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+                    FROM skus sk JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
                     WHERE sk.sku_code IN ({ph})
                     GROUP BY sk.sku_code
                     HAVING SUM(ssm.qty) > 0 AND SUM(ssm.subtotal_ex_vat) > 0""",
@@ -603,7 +603,7 @@ def get_cost_detail(
             FROM skus sk
             JOIN  categories c   ON c.category_id = sk.category_id
             LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
-            LEFT JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+            LEFT JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
             {where}
             GROUP BY sk.sku_id
             {having_clause}
@@ -621,7 +621,7 @@ def get_cost_detail(
                 FROM skus sk
                 JOIN categories c ON c.category_id = sk.category_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
-                LEFT JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+                LEFT JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
                 {where}
                 GROUP BY sk.sku_id
                 {having_clause}
@@ -662,7 +662,7 @@ def cost_template():
                    MAX(ssm.period_month)              AS last_sold
             FROM skus sk
             JOIN  categories c    ON c.category_id = sk.category_id
-            JOIN  sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id AND ssm.source = 'Easy'
+            JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id AND ssm.source = 'Easy'
             LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
             WHERE COALESCE(sk.active, 1) = 1
               AND sk.sku_code NOT LIKE 'BUFFET%'
@@ -742,7 +742,7 @@ def cost_analysis(
                 ROUND(SUM({_cogs_case()}), 2)                               AS cogs,
                 MAX(CASE WHEN {_effective_cost_subquery()} IS NOT NULL
                          THEN 1 ELSE 0 END)                                  AS has_cost
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id  = ssm.branch_id
             JOIN skus sk      ON sk.sku_id    = ssm.sku_id
             JOIN categories c ON c.category_id = sk.category_id
@@ -876,7 +876,7 @@ def cost_analysis(
             SELECT ROUND(SUM(ssm.subtotal_ex_vat), 2) AS revenue,
                    ROUND(SUM({_unified_cogs_expr('ssm')}), 2) AS cogs,
                    ROUND(SUM(ssm.qty), 0) AS qty
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus sk    ON sk.sku_id   = ssm.sku_id
             {ws_where}
@@ -943,7 +943,7 @@ def cost_audit():
             FROM sku_cost sc
             JOIN skus sk      ON sk.sku_id      = sc.sku_id
             JOIN categories c ON c.category_id  = sk.category_id
-            LEFT JOIN sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
+            LEFT JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id
             WHERE sc.unit_cost IS NOT NULL AND sc.unit_cost > 0
             GROUP BY sk.sku_id
         """).fetchall()
@@ -1050,9 +1050,9 @@ def _cost_suggestions(con, limit=400):
            "(SELECT NULLIF(unit_cost,0) FROM sku_cost WHERE sku_id=s.sku_id),0)")
     rows = con.execute(f"""
         SELECT s.sku_id, s.sku_code, s.description, c.name cat, {eff} eff,
-               (SELECT ROUND(SUM(qty)) FROM sales_sku_monthly WHERE sku_id=s.sku_id) qty,
+               (SELECT ROUND(SUM(qty)) FROM v_sales_sku_monthly WHERE sku_id=s.sku_id) qty,
                (SELECT ROUND(SUM(subtotal_ex_vat)/NULLIF(SUM(qty),0),2)
-                  FROM sales_sku_monthly WHERE sku_id=s.sku_id) price
+                  FROM v_sales_sku_monthly WHERE sku_id=s.sku_id) price
         FROM skus s JOIN categories c ON c.category_id=s.category_id
         WHERE s.sku_code NOT IN {_ALL_TIER_CODES_SQL}
           AND s.sku_id IN (SELECT sk.sku_id FROM skus sk
@@ -1181,7 +1181,7 @@ def cost_uncosted_coverage(
                    SUM({costed})            AS costed_rev,
                    COUNT(DISTINCT ssm.sku_id) AS skus,
                    COUNT(DISTINCT CASE WHEN {uncosted_pred} THEN ssm.sku_id END) AS uncosted_skus
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus sk    ON sk.sku_id   = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1192,7 +1192,7 @@ def cost_uncosted_coverage(
             SELECT ssm.period_month AS m,
                    SUM(ssm.subtotal_ex_vat) AS total_rev,
                    SUM({costed})            AS costed_rev
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             JOIN skus sk    ON sk.sku_id   = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1203,7 +1203,7 @@ def cost_uncosted_coverage(
             SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
                    c.name AS category,
                    SUM(ssm.subtotal_ex_vat) AS rev, ROUND(SUM(ssm.qty),0) AS qty
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id  = ssm.branch_id
             JOIN skus sk      ON sk.sku_id    = ssm.sku_id
             JOIN categories c ON c.category_id = sk.category_id
@@ -1372,7 +1372,7 @@ def bom_consumption_analysis(
             SUM(ssm.qty * bi.qty_per_serving) AS total_qty,
             SUM(ssm.qty * bi.ingredient_cost) AS total_cost,
             COUNT(DISTINCT ssm.sku_id)        AS n_menus
-          FROM sales_sku_monthly ssm
+          FROM v_sales_sku_monthly ssm
           JOIN branches b         ON b.branch_id = ssm.branch_id
           JOIN bom_ingredients bi ON bi.sku_id   = ssm.sku_id
          WHERE """ + where + """
@@ -1498,7 +1498,7 @@ def cost_recalibration(
                 WHEN sk.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
                 ELSE {cogs_expr}
               END) AS cogs
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN skus sk ON sk.sku_id = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {totals_where}
@@ -1522,7 +1522,7 @@ def cost_recalibration(
                    SUM({cogs_expr}) AS cogs,
                    CASE WHEN SUM(ssm.qty) > 0 THEN SUM({cogs_expr}) / SUM(ssm.qty) ELSE sc.unit_cost END AS current_unit_cost,
                    SUM(ssm.subtotal_ex_vat) / NULLIF(SUM(ssm.qty), 0) AS avg_sell
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN skus sk ON sk.sku_id = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {where}
@@ -1567,7 +1567,7 @@ def cost_recalibration(
               SUM(ssm.subtotal_ex_vat) AS rev,
               SUM(CASE WHEN sk.sku_code IN {_EASY_TIER_CODES_SQL} THEN 0
                        ELSE {cogs_expr} END) AS cogs
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN skus sk ON sk.sku_id = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
             {totals_where}
@@ -1702,7 +1702,7 @@ def branch_bom_analysis(
               COALESCE(SUM({costed_rev_expr}), 0)          AS costed_rev_ex,
               COUNT(DISTINCT ssm.sku_id)                   AS menus_total,
               COUNT(DISTINCT CASE WHEN {cogs_expr} > 0 THEN ssm.sku_id END) AS menus_with_cost
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id = ssm.branch_id
             JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1715,7 +1715,7 @@ def branch_bom_analysis(
                    COALESCE(SUM(ssm.subtotal_ex_vat), 0)        AS revenue_ex,
                    COALESCE(SUM({cogs_expr}), 0)                AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)          AS costed_rev_ex
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1735,7 +1735,7 @@ def branch_bom_analysis(
                    CASE WHEN SUM(ssm.qty) > 0
                         THEN SUM({cogs_expr}) / SUM(ssm.qty)
                         ELSE 0 END                                  AS avg_unit_cost
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1756,7 +1756,7 @@ def branch_bom_analysis(
             mrows = con.execute(f"""
                 SELECT ssm.sku_id, ssm.period_month AS m,
                        COALESCE(SUM({cogs_expr}), 0) AS cogs
-                  FROM sales_sku_monthly ssm
+                  FROM v_sales_sku_monthly ssm
                   JOIN branches b   ON b.branch_id = ssm.branch_id
                   JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                   LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1795,7 +1795,7 @@ def branch_bom_analysis(
                           JOIN skus s ON s.sku_id = ssm.sku_id
                          WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                      ) AS bom_sku_id
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN branches b   ON b.branch_id = ssm.branch_id
                 JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1835,7 +1835,7 @@ def branch_bom_analysis(
                               JOIN skus s ON s.sku_id = ssm.sku_id
                              WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                          ) AS bom_sku_id
-                    FROM sales_sku_monthly ssm
+                    FROM v_sales_sku_monthly ssm
                     JOIN branches b   ON b.branch_id = ssm.branch_id
                     JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                     LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1871,7 +1871,7 @@ def branch_bom_analysis(
                      JOIN skus s ON s.sku_id = ssm.sku_id
                     WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                 ) AS bom_sku_id
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN branches b   ON b.branch_id = ssm.branch_id
               {where}
             )
@@ -2117,7 +2117,7 @@ def bom_cost_overview(
                    COALESCE(SUM({cogs_expr}), 0)               AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)         AS costed_rev_ex,
                    COUNT(DISTINCT ssm.sku_id)                  AS menus_total
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2129,7 +2129,7 @@ def bom_cost_overview(
                    COALESCE(SUM(ssm.subtotal_ex_vat), 0)  AS rev,
                    COALESCE(SUM({cogs_expr}), 0)          AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)    AS costed
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2147,7 +2147,7 @@ def bom_cost_overview(
                    CASE WHEN SUM(ssm.qty) > 0
                         THEN SUM({cogs_expr}) / SUM(ssm.qty)
                         ELSE 0 END                        AS avg_unit_cost
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2166,7 +2166,7 @@ def bom_cost_overview(
             srows = con.execute(f"""
                 SELECT ssm.sku_id, ssm.period_month AS m,
                        COALESCE(SUM({cogs_expr}), 0) AS cogs
-                  FROM sales_sku_monthly ssm
+                  FROM v_sales_sku_monthly ssm
                   JOIN branches b   ON b.branch_id = ssm.branch_id
                   JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                   LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2184,7 +2184,7 @@ def bom_cost_overview(
                    COALESCE(SUM(ssm.subtotal_ex_vat), 0)   AS rev,
                    COALESCE(SUM({cogs_expr}), 0)           AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)     AS costed
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2205,7 +2205,7 @@ def bom_cost_overview(
                           JOIN skus s ON s.sku_id = ssm.sku_id
                          WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                      ) AS bom_sku_id
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN branches b   ON b.branch_id = ssm.branch_id
                 JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2341,7 +2341,7 @@ def bom_cost_drivers(
     brs = [branch] if (scope == "branch" and branch and branch != "ALL") else None
     where, params = _bom_cost_period_filters(month_from, month_to, brs)
     cogs_expr = _cogs_case("ssm", "sk", "sc")
-    JOINS = ("FROM sales_sku_monthly ssm JOIN branches b ON b.branch_id=ssm.branch_id "
+    JOINS = ("FROM v_sales_sku_monthly ssm JOIN branches b ON b.branch_id=ssm.branch_id "
              "JOIN skus sk ON sk.sku_id=ssm.sku_id LEFT JOIN sku_cost sc ON sc.sku_id=ssm.sku_id")
     with get_db() as con:
         rows = con.execute(f"""
@@ -2373,7 +2373,7 @@ def bom_cost_drivers(
                     SELECT ssm.sku_id,
                       SUM(CASE WHEN ssm.day BETWEEN :cs AND :ce THEN ({ucx}) ELSE 0 END) cur,
                       SUM(CASE WHEN ssm.day BETWEEN :ps AND :pe THEN ({ucx}) ELSE 0 END) prev
-                    FROM (SELECT branch_id, sku_id, qty, day, 'Easy' AS source FROM sales_sku_daily
+                    FROM (SELECT branch_id, sku_id, qty, day, 'Easy' AS source FROM v_sales_sku_daily
                           WHERE sku_id IN ({phd}) AND (day BETWEEN :cs AND :ce OR day BETWEEN :ps AND :pe)) ssm
                     JOIN branches b ON b.branch_id=ssm.branch_id
                     WHERE b.name!='ALL'{bclause} GROUP BY ssm.sku_id""", kp).fetchall()
@@ -2457,7 +2457,7 @@ def bom_cost_branch_foodcost_mom(
                    COALESCE(SUM(ssm.subtotal_ex_vat), 0) AS rev,
                    COALESCE(SUM({cogs_expr}), 0)         AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)   AS costed
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2473,7 +2473,7 @@ def bom_cost_branch_foodcost_mom(
                    ssm.period_month AS m,
                    COALESCE(SUM({cogs_expr}), 0) AS cogs,
                    COALESCE(SUM(ssm.qty), 0)     AS qty
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2585,7 +2585,7 @@ def bom_cost_compare(
                    COALESCE(SUM({cogs_expr}), 0)               AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)         AS costed,
                    COUNT(DISTINCT CASE WHEN sc.unit_cost IS NULL THEN ssm.sku_id END) AS uncosted_skus
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2599,7 +2599,7 @@ def bom_cost_compare(
                      COALESCE(sk.description,'') AS description,
                      COALESCE(SUM({cogs_expr}), 0) AS total_cogs,
                      ROW_NUMBER() OVER (PARTITION BY b.name ORDER BY SUM({cogs_expr}) DESC) AS rn
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN branches b   ON b.branch_id = ssm.branch_id
                 JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2618,7 +2618,7 @@ def bom_cost_compare(
                           JOIN skus s ON s.sku_id = ssm.sku_id
                          WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                      ) AS bom_sku_id
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN branches b   ON b.branch_id = ssm.branch_id
                 JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2715,7 +2715,7 @@ def bom_cost_simulator_base(
             SELECT COALESCE(SUM(ssm.subtotal_ex_vat), 0)   AS revenue_ex,
                    COALESCE(SUM({cogs_expr}), 0)           AS cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)     AS costed_rev
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2731,7 +2731,7 @@ def bom_cost_simulator_base(
                    COALESCE(SUM({cogs_expr}), 0)        AS period_cogs,
                    CASE WHEN SUM(ssm.qty) > 0 THEN SUM({cogs_expr})/SUM(ssm.qty) ELSE 0 END
                      AS current_unit_cost
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2904,7 +2904,7 @@ def simulate_scenario(body: SimulateBody):
                    COALESCE(SUM({cogs_expr}), 0)        AS base_cogs,
                    COALESCE(SUM({costed_rev_expr}), 0)  AS base_costed,
                    COALESCE(SUM(ssm.subtotal_ex_vat),0) AS revenue
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -3006,7 +3006,7 @@ def adopt_scenario(scen_id: int, body: Optional[AdoptBody] = None):
         if head is None:
             raise HTTPException(404, "scenario not found")
         _build_sku_effective_cost(con, force=False)   # ensure current costs exist
-        bm = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        bm = con.execute("SELECT MAX(period_month) m FROM v_sales_sku_monthly").fetchone()["m"]
         now = datetime.now().isoformat(timespec="seconds")
         items = con.execute("SELECT sku_id FROM cost_scenario_item WHERE scenario_id=?", (scen_id,)).fetchall()
         for it in items:
@@ -3063,7 +3063,7 @@ def scenario_savings(scen_id: int):
         if sku_ids and bm:
             ph = ",".join("?" * len(sku_ids))
             for r in con.execute(
-                f"""SELECT sku_id, period_month, SUM(qty) q FROM sales_sku_monthly
+                f"""SELECT sku_id, period_month, SUM(qty) q FROM v_sales_sku_monthly
                      WHERE sku_id IN ({ph}) AND period_month >= ?
                      GROUP BY sku_id, period_month""", (*sku_ids, bm)).fetchall():
                 qty_by[(r["sku_id"], r["period_month"])] = r["q"] or 0

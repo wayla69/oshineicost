@@ -279,10 +279,13 @@ import inspect  # noqa: E402
 
 
 def test_sph_endpoint_uses_ex_vat():
-    """Spend-per-head must be ex-VAT: total_inc_vat / 1.07 / customer_count.
-    Regression: it used to divide raw total_inc_vat by customer_count (+7%)."""
+    """Spend-per-head must be ex-VAT AND ex-service-charge:
+    (total_inc_vat / 1.07 - service_charge) / customer_count.
+    Regressions guarded: raw inc-VAT / customer_count (+7%), and revenue that
+    still carries the 5% service charge (+4.7%)."""
     src = inspect.getsource(inspect.unwrap(main.analysis_sph))
-    assert "/ 1.07" in src, "SPH no longer divides by VAT divisor"
+    assert "1.07" in src, "SPH no longer divides by the VAT divisor"
+    assert "service_charge" in src,         "SPH regressed to revenue that still carries the 5% service charge"
     assert "total_inc_vat / st.customer_count" not in src, \
         "SPH regressed to VAT-inflated raw inc-VAT / customer_count"
 
