@@ -984,6 +984,9 @@ function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
   activeTab = name;
+  // Reading mode hides the app chrome via a <body> class for the Management
+  // Report; without this it would follow the reader into every other tab.
+  if (name !== 'mgtreport') { try { _mgtReadingOff(); } catch (e) {} }
   try { navigator.sendBeacon(API + '/api/usage/tab', JSON.stringify({tab: name})); } catch(e) {}
   ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','mgtreport','ops','settings',
    'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','costheadtop60','menuimpact','pnlbill','opsreport',

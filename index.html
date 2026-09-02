@@ -1033,6 +1033,81 @@ body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color:
   #mgtCover.collapsed .mgt-full { display: flex !important; }
   #mgtCover .mgt-slim { display: none !important; }
 }
+
+/* ════════════════════════════════════════════════════════════
+   READING MODE — the app chrome eats most of a phone screen before the report
+   even starts (nav + title + search + filter + preset row + user chip + upload
+   buttons). Collapsing the report cover now folds that chrome away too, so the
+   page opens straight onto the report. One control, remembered; print ignores it.
+════════════════════════════════════════════════════════════ */
+body.mgt-reading .top-bar,
+body.mgt-reading #presetBar { display: none !important; }
+body.mgt-reading .content-area { padding-top: 10px; }
+/* On a phone the nav strip is another full row of chrome above the report. It
+   folds too — the collapsed cover stays stuck to the top with its "▼ เมนูรายงาน"
+   button, so expanding brings the nav straight back. Desktop keeps its sidebar:
+   there is no shortage of width there. */
+@media (max-width: 700px) {
+  body.mgt-reading .sidebar { display: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════
+   PRINT — RE-ASSERTED LAST.
+   The mobile @media (max-width:700px) blocks above sit LATER in this stylesheet
+   than the main @media print block, so at equal specificity they win — and when
+   printing they DO match, because A4 portrait is ~700px of CSS width (a phone's
+   print viewport is narrower still). That is how a good print layout turned into
+   overflowing chaos on a phone: `.content-area [class*=grid-cols-*]` forced every
+   grid to 2 columns even on landscape sheets, and `.content-area .card
+   { overflow-x: auto }` CLIPPED whatever stuck out instead of letting it wrap.
+   Nothing below is new intent — it is the same intent, stated last so it applies.
+════════════════════════════════════════════════════════════ */
+@media print {
+  /* the phone-only overlay must never reach paper, and the desktop shell has to
+     be visible even when the phone was not in force-desktop mode */
+  #mobileSummary, #msNav, #backToMobile { display: none !important; }
+  body:not(.force-desktop) .app-layout { display: block !important; }
+  .app-layout, .main-wrapper, .content-area { display: block !important; }
+  .content-area { padding: 0 !important; }
+  /* reading mode is a screen convenience — paper always gets the full header */
+  body.mgt-reading .top-bar, body.mgt-reading #presetBar { display: none !important; }
+
+  /* undo the mobile clamps for the report … */
+  #tab-mgtreport .card,
+  .content-area .card { overflow: visible !important; }
+  #tab-mgtreport [class*="grid-cols-"] { grid-template-columns: revert !important; }
+  /* Tailwind's md:/lg: column counts are keyed to the VIEWPORT, and a print
+     viewport is ~700px — narrower than the md breakpoint — so every responsive
+     grid collapsed to a single column on paper. §11's two driver tables stacked
+     instead of sitting side by side, and five tiers of them ran to five sheets.
+     A landscape sheet is 273mm wide; give it the layout the screen would use. */
+  #tab-mgtreport .pg-land [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .pg-land [class*="md:grid-cols-3"],
+  #tab-mgtreport .pg-land [class*="lg:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
+  #tab-mgtreport .pg-land [class*="md:grid-cols-4"],
+  #tab-mgtreport .pg-land [class*="lg:grid-cols-4"] { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+  /* portrait keeps the two-column cap set below */
+  #tab-mgtreport .pg-port [class*="md:grid-cols-2"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  /* … then re-apply the ONE clamp print actually wants: portrait sheets are
+     ~90mm narrower than landscape, so their multi-column grids drop to two. */
+  #tab-mgtreport .pg-port [class*="grid-cols-3"],
+  #tab-mgtreport .pg-port [class*="grid-cols-4"],
+  #tab-mgtreport .pg-port [class*="grid-cols-5"],
+  #tab-mgtreport .pg-port [class*="grid-cols-6"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  /* a long table that spills onto a second sheet takes its header with it */
+  #tab-mgtreport thead { display: table-header-group !important; }
+  #tab-mgtreport tfoot { display: table-footer-group !important; }
+  #tab-mgtreport tr, #tab-mgtreport .mgt-atom { break-inside: avoid; page-break-inside: avoid; }
+  #tab-mgtreport .mgt-sec { break-inside: auto !important; page-break-inside: auto !important; }
+
+  /* §11 cost drivers: on screen it is a tier PICKER showing one tier at a time,
+     so paper was getting whichever tier happened to be selected and silently
+     dropping the rest. Print swaps in the every-tier stack. */
+  #mgtTierDrivers { display: none !important; }
+  #mgtTierDriversPrint { display: block !important; }
+}
 </style>
 </head>
 <body>
