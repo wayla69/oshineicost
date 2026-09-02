@@ -2338,6 +2338,48 @@ def report_management(
 # ---------------------------------------------------------------------------
 # /api/reports/management.xlsx — the same Management Summary as a formatted .xlsx
 # ---------------------------------------------------------------------------
+# Glossary for the workbook's Definitions sheet. Kept in lockstep with the printed
+# appendix (T.defs in js/02-mgt-report.js) — change one, change the other.
+_MGT_DEFS_EN = [
+    ("Net sales", "Bill total including VAT / 1.07. VAT is never counted as revenue."),
+    ("Gross profit (GP)", "Net sales minus food COGS. Labour, rent and utilities are NOT deducted here."),
+    ("Covers", "Guests served (pax on the bill). Spend / head = net sales / covers."),
+    ("Avg ticket", "Net sales / number of bills — one bill can carry several covers."),
+    ("Food cost %", "Recipe (BoM) food cost / net sales for the period's month. Dishes with no costed "
+                    "recipe book 0 THB, so the figure is a FLOOR; plate coverage is disclosed in the report."),
+    ("Comparison basis", "Daily = the same weekday last week; weekly = the previous full Mon-Sun week; "
+                         "monthly = the previous calendar month, weekday-matched while the month is still partial."),
+    ("Projection", "Day-of-week weighted run-rate — elapsed days extended by last month's weekday shape, "
+                   "not a flat daily average."),
+    ("Heavy discount", "A bill discounted 30% or more of its pre-discount value."),
+    ("Cash-heavy discount", "A discounted bill settled mostly in cash — the classic skim signature."),
+    ("Reprinted bill", "A discounted bill printed more than once."),
+    ("Zero-gross bill", "A bill left at 0 THB after discount (free / discount-only)."),
+    ("Price tier", "The adult buffet menu price on the bill, ex-VAT. 'promo' = a non-standard price."),
+    ("YoY", "Suppressed before mid-May 2026 — sales history starts ~May 2025, so the year-ago window "
+            "is incomplete."),
+    ("Basis of preparation", "Unaudited management information generated from the POS sales database. "
+                             "Tier, discount and cost-per-head analysis covers buffet bills."),
+]
+_MGT_DEFS_TH = [
+    ("ยอดขายสุทธิ", "ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้"),
+    ("กำไรขั้นต้น (GP)", "ยอดขายสุทธิ − ต้นทุนอาหาร ยังไม่หักค่าแรง ค่าเช่า ค่าสาธารณูปโภค"),
+    ("จำนวนหัว", "ลูกค้าที่รับบริการ (pax บนบิล) · ยอดต่อหัว = ยอดขายสุทธิ ÷ จำนวนหัว"),
+    ("ยอดเฉลี่ย/บิล", "ยอดขายสุทธิ ÷ จำนวนบิล — หนึ่งบิลอาจมีหลายหัว"),
+    ("ต้นทุนอาหาร %", "ต้นทุนตามสูตร BoM ÷ ยอดขายสุทธิของเดือนนั้น · เมนูที่ยังไม่มีต้นทุนคิดเป็น ฿0 "
+                      "ตัวเลขจึงเป็นขั้นต่ำ"),
+    ("ฐานการเปรียบเทียบ", "รายวัน = วันเดียวกันของสัปดาห์ก่อน · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · "
+                          "รายเดือน = เดือนก่อน (ถ่วงตามวันในสัปดาห์เมื่อเดือนยังไม่ครบ)"),
+    ("ประมาณการ", "อัตราเฉลี่ยถ่วงตามวันในสัปดาห์ — ต่อยอดจากวันที่ผ่านมาโดยอิงรูปแบบวันของเดือนก่อน"),
+    ("ส่วนลดหนัก", "บิลที่ให้ส่วนลดตั้งแต่ 30% ของมูลค่าก่อนลด"),
+    ("ส่วนลดจ่ายเงินสด", "บิลส่วนลดที่ชำระด้วยเงินสดเป็นหลัก — รูปแบบความเสี่ยงเงินขาด"),
+    ("บิลพิมพ์ซ้ำ", "บิลส่วนลดที่ถูกพิมพ์มากกว่า 1 ครั้ง"),
+    ("บิลยอดศูนย์", "บิลที่เหลือ ฿0 หลังหักส่วนลด (แจกฟรี / ส่วนลดล้วน)"),
+    ("Tier ราคา", "ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · โปรฯ = ราคานอกมาตรฐาน"),
+    ("YoY", "ซ่อนก่อนกลาง พ.ค. 2026 — ข้อมูลเริ่ม ~พ.ค. 2025 ช่วงปีก่อนจึงยังไม่ครบ"),
+    ("เกณฑ์การจัดทำ", "ข้อมูลเพื่อการบริหาร ยังไม่ผ่านการตรวจสอบบัญชี จัดทำจากฐานข้อมูลการขาย POS · "
+                     "การวิเคราะห์ tier ส่วนลด และต้นทุนต่อหัว นับเฉพาะบิลบุฟเฟ่ต์"),
+]
 @router.get("/api/reports/management.xlsx")
 def report_management_xlsx(
     period: str = Query("daily"),
@@ -2362,6 +2404,7 @@ def report_management_xlsx(
     j = _json.loads(resp.body) if hasattr(resp, "body") else resp
     if not j.get("available"):
         raise HTTPException(status_code=404, detail="No sales data for this period")
+    th = (j.get("lang") == "th")          # the Definitions sheet follows the report language
 
     wb = openpyxl.Workbook()
     HDR    = Font(bold=True, color="FFFFFF")
@@ -2570,6 +2613,70 @@ def report_management_xlsx(
                 ws.cell(ws.max_row, 3).number_format = PCT
                 ws.cell(ws.max_row, 4).number_format = NUM
         autofit(ws)
+
+    # Sheet — Payment Channels (§10 of the printed report; the workbook used to
+    # stop at price tiers, so the tender mix was the one section you could read on
+    # paper but not in Excel).
+    PAY = j.get("payment") or {}
+    if PAY.get("available") and PAY.get("channels"):
+        ws = wb.create_sheet("Payment Channels")
+        ws.append([f"Tender mix — total {PAY.get('total'):,}"]); ws["A1"].font = BOLD
+        ws.append([])
+        prev_by = ((PAY.get("prev") or {}).get("channels") or {})
+        has_pv = bool(prev_by)
+        header(ws, ["Channel", "Amount", "Share %"] + (["Prev amount", "Prev share %"] if has_pv else []))
+        for c in PAY["channels"]:
+            row = [c["code"], c.get("amount"), pdelta(c.get("pct"))]
+            if has_pv:
+                pv = prev_by.get(c["code"]) or {}
+                row += [pv.get("amount"), pdelta(pv.get("pct"))]
+            ws.append(row)
+            ws.cell(ws.max_row, 2).number_format = NUM
+            ws.cell(ws.max_row, 3).number_format = PCT
+            if has_pv:
+                ws.cell(ws.max_row, 4).number_format = NUM
+                ws.cell(ws.max_row, 5).number_format = PCT
+        # branch x channel matrix — the same grid the report prints
+        codes = [c["code"] for c in PAY["channels"]]
+        if PAY.get("by_branch"):
+            ws.append([])
+            header(ws, ["Branch"] + codes + ["Total"])
+            for b in PAY["by_branch"]:
+                chans = b.get("channels") or {}
+                ws.append([b["branch"]] + [(chans.get(c) or {}).get("amount") for c in codes] + [b.get("total")])
+                for i in range(2, len(codes) + 3):
+                    ws.cell(ws.max_row, i).number_format = NUM
+        autofit(ws)
+
+    # Sheet — Definitions & Method. Same glossary the printed appendix carries, so a
+    # workbook that leaves the building can still be read without the PDF next to it.
+    ws = wb.create_sheet("Definitions")
+    ws.append(["Report information" if not th else "ข้อมูลรายงาน"]); ws["A1"].font = Font(bold=True, size=12)
+    for k, v in [
+        ("Report" if not th else "ประเภทรายงาน",
+         ({"daily": "รายวัน", "monthly": "รายเดือน"}.get(j["period"], "รายสัปดาห์") if th
+          else {"daily": "Daily", "monthly": "Monthly"}.get(j["period"], "Weekly"))
+         + " · " + str(j.get("label", ""))),
+        ("Period covered" if not th else "ช่วงข้อมูล", " → ".join(j.get("range") or [])),
+        ("Compared with" if not th else "เทียบกับ", j.get("comp_label", "")),
+        ("Scope" if not th else "ขอบเขต", j.get("branch_scope", "")),
+        ("Days in period" if not th else "จำนวนวัน", j.get("days_in_period")),
+        ("Data through" if not th else "ข้อมูลถึงวันที่", j.get("latest_day", "")),
+        ("Partial period" if not th else "ช่วงยังไม่สิ้นสุด", "yes" if j.get("partial") else "no"),
+        ("Revenue basis" if not th else "ฐานรายได้",
+         "Net sales ex-VAT (bill total / 1.07)" if not th else "ยอดขายสุทธิไม่รวม VAT (ยอดบิล ÷ 1.07)"),
+        ("Cost basis" if not th else "ฐานต้นทุน",
+         ("BoM recipe food cost" if not th else "ต้นทุนอาหารตามสูตร BoM") + " · " + str(P.get("month") or "")),
+    ]:
+        ws.append([k, v]); ws.cell(ws.max_row, 1).font = BOLD
+    ws.append([])
+    header(ws, ["Term", "Definition"] if not th else ["คำศัพท์", "นิยาม"])
+    for term, definition in (_MGT_DEFS_TH if th else _MGT_DEFS_EN):
+        ws.append([term, definition])
+        ws.cell(ws.max_row, 1).font = BOLD
+        ws.cell(ws.max_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
+    ws.column_dimensions["A"].width = 26
+    ws.column_dimensions["B"].width = 92
 
     # Sheet — Action Items
     ws = wb.create_sheet("Action Items")

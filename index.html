@@ -761,35 +761,94 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   .card { break-inside: avoid; box-shadow: none !important; border: 1px solid #ddd !important; }
   .anomaly-banner { background: #fef3c7 !important; }
   body { background: #fff !important; color: #000 !important; }
-  .app-layout { display: block !important; }
+  /* The shell is a nested FLEX layout. A flex container is laid out once, against
+     the FIRST page box, and is not re-resolved when a named @page switches the
+     sheet to landscape - so every landscape section kept the narrow portrait width
+     and wasted ~1/3 of the sheet. Plain blocks re-resolve per page group. */
+  .app-layout, .main-wrapper, .content-area { display: block !important; }
   #rptNav { display: none !important; }
   #rptCover { -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #fff !important; }
   #reportContent > .card, #rptHero, #rptCover { break-inside: avoid; page-break-inside: avoid; }
 
-  /* ── Management Report → colourful, boardroom-ready PDF ──
-     Browsers DROP background colours/gradients in print to save ink unless you
+  /* ── Management Report → boardroom-ready PDF ───────────────────
+     PAGE MODEL — the pack is a MIXED-ORIENTATION document:
+       · the default @page stays A4 LANDSCAPE: wide tables, chart rows, AND the
+         safe fallback for engines without named-page support (Chrome/Edge 110+
+         honour `page:`; anything older simply prints all-landscape, i.e. exactly
+         the previous behaviour, so nothing regresses).
+       · narrative sections opt into the named PORTRAIT page via .pg-port.
+     Chrome starts a fresh sheet whenever the page NAME changes, so the
+     orientation switch IS the page break — no section straddles two sheets in
+     two orientations. The plan itself lives in the SECTIONS list in
+     js/02-mgt-report.js (`land: true` → landscape). */
+  @page         { size: A4 landscape; margin: 10mm 11mm 12mm; }
+  @page mgtport { size: A4 portrait;  margin: 12mm 13mm 14mm; }
+  #tab-mgtreport .pg-port, #mgtCover { page: mgtport; }
+  #tab-mgtreport .pg-break { break-before: page; page-break-before: always; }
+
+  /* Browsers DROP background colours/gradients in print to save ink unless you
      opt back in. Force exact colour on the whole report so the gradient cover,
-     section accents, chart, table headers and coloured deltas all render. */
+     section accents, charts, table headers and coloured deltas all render. */
   #tab-mgtreport, #tab-mgtreport * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
-  #tab-mgtreport { color: #1e293b !important; }                 /* override the global body→black */
-  #tab-mgtreport > div:first-child { break-inside: avoid; }     /* gradient cover band */
-  #tab-mgtreport .card {
-    box-shadow: none !important; border: 1px solid #e2e8f0 !important;
-    break-inside: avoid; page-break-inside: avoid;
-  }
+  #tab-mgtreport { color: #1e293b !important; orphans: 3; widows: 3; }   /* override body→black */
+  #tab-mgtreport > div:first-child { break-inside: avoid; }              /* gradient cover band */
+  #tab-mgtreport .card { box-shadow: none !important; border: 1px solid #e2e8f0 !important; }
   #tab-mgtreport table thead th {
     background: #0f766e !important; color: #fff !important; border-color: #0f766e !important;
   }
   #tab-mgtreport table tbody tr:nth-child(even) td { background: #f1f5f9 !important; }
 
-  /* ── Fit the report neatly onto each A4 page ──
-     A4-landscape gives only ~190 mm (~540 pt) of usable HEIGHT. The on-screen card
-     paddings/fonts are sized for a wide monitor, so each tall section landed on its
-     own page and `break-inside: avoid` left ~half of every page blank (14 pages, mostly
-     white). Compact the paddings, fonts and gaps so 2–3 sections pack onto each page. */
+  /* ── PAGINATION ──
+     `break-inside: avoid` on a card TALLER than one sheet does not shrink it —
+     the browser keeps the box whole, overflows the page and CLIPS the tail. That
+     is what cut the branch league (27 rows), the payment matrix and §11 short.
+     Let a section FLOW across sheets and protect only the atoms inside it. */
+  #tab-mgtreport .mgt-sec { break-inside: auto !important; page-break-inside: auto !important; }
+  #tab-mgtreport .mgt-sec > h2 { break-after: avoid; page-break-after: avoid; }
+  #tab-mgtreport h3 { break-after: avoid; page-break-after: avoid; }
+  #tab-mgtreport tr, #tab-mgtreport li, #tab-mgtreport svg,
+  #tab-mgtreport .rounded-xl, #tab-mgtreport .mgt-atom {
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  /* repeat the header (and any totals row) on every sheet a long table spills onto */
+  #tab-mgtreport thead { display: table-header-group; }
+  #tab-mgtreport tfoot { display: table-footer-group; }
+  /* horizontal scrollers are a SCREEN affordance — on paper they clip silently */
+  #tab-mgtreport .overflow-x-auto { overflow: visible !important; }
+  #tab-mgtreport table { width: 100% !important; max-width: 100% !important; table-layout: auto; }
+  /* break-word, NOT anywhere: "anywhere" also shrinks a column's min-content width
+     to one character, which stood the branch names in the 15-column payment matrix
+     on end, one letter per line. break-word still splits a word that cannot fit a
+     line, but leaves the column sizing intact. */
+  #tab-mgtreport th, #tab-mgtreport td { overflow-wrap: break-word; }
+  /* ...but NUMBERS must never break: a rank of "10" split over two lines reads as
+     1 and 0. Only the free-text columns get the aggressive wrapping. */
+  #tab-mgtreport .tabular-nums, #tab-mgtreport .font-mono,
+  #tab-mgtreport th.text-right, #tab-mgtreport td.text-right,
+  #tab-mgtreport th.text-center, #tab-mgtreport td.text-center {
+    overflow-wrap: normal !important; word-break: keep-all !important; white-space: nowrap;
+  }
+  /* .truncate (nowrap + ellipsis) is a SCREEN affordance for narrow flex columns.
+     On paper it silently ate the tail of every long Thai dish name (แซลมอนด…) in
+     §7 and §11 - there is no hover tooltip to recover it from, so let it wrap. */
+  #tab-mgtreport .truncate {
+    white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
+  }
+  /* grid/flex children default to min-width:auto, which lets a wide table push its
+     column past the sheet edge instead of shrinking - and everything past the edge
+     is simply not painted. */
+  #tab-mgtreport .grid > *, #tab-mgtreport .overflow-x-auto { min-width: 0 !important; }
+  #tab-mgtreport img, #tab-mgtreport svg, #tab-mgtreport canvas { max-width: 100% !important; }
+  /* the contents page is a jump-nav on screen; on paper it must read as text */
+  #tab-mgtreport a { color: inherit !important; text-decoration: none !important; }
+
+  /* ── Density ──
+     On-screen paddings/fonts are sized for a wide monitor, so each section landed
+     on its own sheet and left half of every page blank. Compact them so 2–3
+     sections pack onto a sheet. */
   .content-area { padding: 0 !important; }                    /* @page margin already insets the report */
   #tab-mgtreport { font-size: 10.5px !important; line-height: 1.35 !important; }
   #tab-mgtreport .space-y-5 > * + * { margin-top: 9px !important; }   /* gap between sections */
@@ -797,7 +856,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   #tab-mgtreport h1 { font-size: 18px !important; }
   #tab-mgtreport h2 { font-size: 12.5px !important; margin-bottom: 8px !important; padding-bottom: 4px !important; }
   #tab-mgtreport h3 { font-size: 11px !important; margin-top: 8px !important; }
-  /* Cover band: shrink so page 1 also carries the Executive Summary instead of sitting blank. */
+  /* Cover band: shrink so page 1 also carries the contents + report information. */
   #tab-mgtreport > div:first-child { padding: 14px 20px !important; margin-bottom: 9px !important; }
   #tab-mgtreport .text-3xl { font-size: 18px !important; }
   #tab-mgtreport .text-2xl { font-size: 15px !important; }
@@ -807,6 +866,16 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   #tab-mgtreport table { font-size: 9.5px !important; }
   #tab-mgtreport table th, #tab-mgtreport table td { padding-top: 2px !important; padding-bottom: 2px !important; }
   #tab-mgtreport ul li { padding-top: 2px !important; padding-bottom: 2px !important; }
+
+  /* Portrait sheets are ~90 mm narrower than landscape ones: the multi-column
+     grids inside them (KPI tiles, leak cards, split panels, the contents list)
+     would otherwise squeeze to unreadable slivers. Cap them at two columns. */
+  #tab-mgtreport .pg-port [class*="grid-cols-3"],
+  #tab-mgtreport .pg-port [class*="grid-cols-4"],
+  #tab-mgtreport .pg-port [class*="grid-cols-5"],
+  #tab-mgtreport .pg-port [class*="grid-cols-6"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
 
   /* Revenue Trend: canvas doesn't print reliably → show the SVG fallback chart(s),
      which carry the y-axis, bars and amber moving-average curve. The SVGs are sized
@@ -818,7 +887,6 @@ body.dark .skeleton-kpi { border-color: var(--border); }
     align-items: flex-start !important;
     padding-top: 4px !important;
   }
-  @page { size: A4 landscape; margin: 10mm; }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -5011,7 +5079,7 @@ body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color:
       <div class="text-right text-xs opacity-90">
         <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
         <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
-        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
         <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
                 style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
       </div>
