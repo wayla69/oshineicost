@@ -115,7 +115,13 @@ function onMgtDayChange(v) {
 // The chrome is hidden by a class on <body>, so it would stay hidden after
 // switching to another tab. Any tab change clears it; re-entering the report
 // re-applies whatever the reader chose.
-function _mgtReadingOff() { document.body.classList.remove('mgt-reading'); }
+let _mgtFoldedNav = false;     // did reading mode fold the rail, or had the reader?
+
+function _mgtReadingOff() {
+  document.body.classList.remove('mgt-reading');
+  const sb = document.getElementById('sidebar');
+  if (sb && _mgtFoldedNav) { toggleSidebar(); _mgtFoldedNav = false; }
+}
 
 function setMgtPeriod(p) {
   mgtPeriod = (p === 'weekly' || p === 'monthly') ? p : 'daily';
@@ -161,6 +167,17 @@ function toggleMgtCover(collapse) {
   // filter, presets, user chip, upload buttons — so the report only really
   // starts below the fold. Print is unaffected: it forces the full header back.
   document.body.classList.toggle('mgt-reading', c);
+  // The nav rail folds to icons using the app's OWN collapse, rather than being
+  // hidden: the reader keeps a way to navigate. The width media query could not
+  // do this — a phone in desktop mode reports a ~980px layout viewport, so the
+  // ≤700px rule never matched and the menu bar stayed at full width.
+  // Only undo it if WE folded it, so a reader who had already collapsed the rail
+  // does not get it re-opened on the way out.
+  const sb = document.getElementById('sidebar');
+  if (sb) {
+    if (c && !sb.classList.contains('collapsed')) { toggleSidebar(); _mgtFoldedNav = true; }
+    else if (!c && _mgtFoldedNav) { toggleSidebar(); _mgtFoldedNav = false; }
+  }
   try { localStorage.setItem('mgtCoverCollapsed', c ? '1' : '0'); } catch (e) {}
 }
 let _mgtCoverInited = false;
@@ -1490,7 +1507,12 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
     { id:'mgt-s3',  c:'#4f46e5', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
     { id:'mgt-s4',  c:'#0891b2', land:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
-    { id:'mgt-s5',  c:'#7c3aed', land:true, t:T.s5, h:branchTbl },
+    // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
+    // page of its own anyway, and letting it begin at the foot of §4's page
+    // stranded four rows there and carried the other twenty-four over — a table
+    // split 4/24 for no reason. Short tables (a single-branch report) still flow
+    // inline rather than burning a sheet on six rows.
+    { id:'mgt-s5',  c:'#7c3aed', land:true, brk: _brs.length >= 12, t:T.s5, h:branchTbl },
     { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
     { id:'mgt-s7',  c:'#059669', land:true, t:T.s7, h:menu },
     { id:'mgt-s8',  c:'#0284c7', land:true, t:T.s8, h:v8 + peakWithSplit },
