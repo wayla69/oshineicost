@@ -122,7 +122,26 @@ function setMgtPeriod(p) {
   loadMgtReport();
 }
 
-function printMgtReport() { try { window.print(); } catch (e) {} }
+function printMgtReport() {
+  // Chrome stamps ITS OWN page header/footer from document.title, so every printed
+  // sheet used to read "Oshinei - Sales & Cost Analysis" - true of any page in the
+  // app, and useless on a report someone is holding. Swap in this report's own
+  // label (period + scope) for the duration of the print, then put it back.
+  const prev = document.title;
+  const lbl = (document.getElementById('mgtPeriodLabel') || {}).textContent || '';
+  document.title = 'Oshinei - Management Summary' + (lbl ? ' - ' + lbl.trim() : '');
+  const restore = () => { document.title = prev; window.removeEventListener('afterprint', restore); };
+  window.addEventListener('afterprint', restore);
+  try { window.print(); } catch (e) {}
+  setTimeout(restore, 2000);          // afterprint never fires in some engines
+}
+
+// Contents -> section. A plain #anchor does not scroll reliably inside the app's
+// own scroll container (.content-area owns the scrollbar, not the window).
+function _mgtGo(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
 // ── collapsible cover band: on small screens the reader wants the report, not
 // the chrome — start collapsed there (persisted; an explicit choice wins).
@@ -155,8 +174,14 @@ function exportMgtReport() {
   window.location.href = `${API}/api/reports/management.xlsx?${qs}`;   // session cookie travels with it
 }
 
+// Bumped on every load; a response whose generation is stale (the reader clicked
+// Weekly while the Daily fetch was still in flight) is DISCARDED instead of
+// painting the wrong period over the right one.
+let _mgtGen = 0;
+
 async function loadMgtReport() {
   _mgtCoverInit();
+  const _gen = ++_mgtGen;
   const _fk = _filterKey() + '|' + mgtPeriod + '|' + (mgtWeek || '') + '|' + (mgtDay || '') + '|' + (mgtMonth || '') + '|' + mgtLang;
   if (_tabLastKey.mgtreport === _fk) return;
   _tabLastKey.mgtreport = _fk;
@@ -187,9 +212,11 @@ async function loadMgtReport() {
       j = await fetch(`${API}/api/reports/management?${qs}`).then(r => r.json());
     }
   } catch (e) {
+    if (_gen !== _mgtGen) return;
     if (body) body.innerHTML = `<div class="card p-6 text-sm text-rose-600">${mgtLang === 'th' ? 'โหลดรายงานไม่สำเร็จ' : 'Failed to load the report.'}</div>`;
     return;
   }
+  if (_gen !== _mgtGen) return;        // superseded by a newer period/branch/lang
   if (!j || !j.available) {
     if (body) body.innerHTML = `<div class="card p-6 text-sm text-slate-500">${mgtLang === 'th' ? 'ยังไม่มีข้อมูลการขาย — กรุณาอัปโหลดหรือซิงค์ข้อมูลก่อน' : 'No sales data yet — upload or sync data first.'}</div>`;
     return;
@@ -283,6 +310,32 @@ const MGT_I18N = {
     tierDrvTitle:'Cost drivers / head', tierDrvPick:'Tier', tierDrvGroup:'Ingredient group', tierDrvMenu:'Top menu item',
     tierDrvCostHead:'Cost/Head', tierDrvShare:'% of tier cost', tierDrvVs:'vs', tierDrvQty:'Qty/100',
     tierDrvNote:'Bars scale to the biggest driver · % of tier cost = share of this tier’s total food cost/head · vs = extra ฿/head over the next-cheaper tier (red = more) · Qty/100 = pieces per 100 guests · tap a tier above to compare.',
+    // cover page (contents + report information) & appendix
+    tocTitle:'Contents', repInfo:'Report information',
+    riType:'Report', riRange:'Period covered', riComp:'Compared with', riScope:'Scope',
+    riDays:'Days in period', riData:'Data through', riPartial:'period still open — not final',
+    riRev:'Revenue basis', riRevV:'Net sales ex-VAT (bill total ÷ 1.07)',
+    riCost:'Cost basis', riCostV:'BoM recipe food cost',
+    naTable:'Table-turnover data is not available for this period — no table sessions were recorded.',
+    naPay:'Payment-channel detail is not available for this period.',
+    naTier:'Buffet price-tier data is not available for this period.',
+    s12:'12. Appendix — Definitions & Method',
+    defs:[
+      ['Net sales','bill total including VAT ÷ 1.07. VAT is never counted as revenue.'],
+      ['Gross profit (GP)','net sales − food COGS. Labour, rent and utilities are NOT deducted here.'],
+      ['Covers','guests served (pax on the bill). Spend / head = net sales ÷ covers.'],
+      ['Avg ticket','net sales ÷ number of bills — one bill can carry several covers.'],
+      ['Food cost %','recipe (BoM) food cost ÷ net sales for the period’s month. Dishes with no costed recipe book ฿0, so the figure is a FLOOR; plate coverage is disclosed in §3.'],
+      ['Comparison basis','daily = the same weekday last week · weekly = the previous full Mon–Sun week · monthly = the previous calendar month, weekday-matched while the month is still partial.'],
+      ['Projection','day-of-week weighted run-rate — elapsed days extended by last month’s weekday shape, not a flat daily average.'],
+      ['Heavy discount','a bill discounted 30% or more of its pre-discount value.'],
+      ['Cash-heavy discount','a discounted bill settled mostly in cash — the classic skim signature.'],
+      ['Reprinted bill','a discounted bill printed more than once.'],
+      ['Zero-gross bill','a bill left at ฿0 after discount (free / discount-only).'],
+      ['Price tier','the adult buffet menu price on the bill, ex-VAT. “promo” = a non-standard price (discount / promotion).'],
+      ['YoY','suppressed before mid-May 2026 — sales history starts ~May 2025, so the year-ago window is incomplete.'],
+    ],
+    defsNote:'Unaudited management information generated from the POS sales database. Tier, discount and cost-per-head analysis covers buffet bills; à-la-carte codes are excluded where noted.',
     dow:{Mon:'Mon',Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'},
     numLocale:'en-US',
   },
@@ -355,6 +408,31 @@ const MGT_I18N = {
     tierDrvTitle:'ตัวขับต้นทุน/หัว', tierDrvPick:'เลือก tier', tierDrvGroup:'กลุ่มวัตถุดิบ', tierDrvMenu:'เมนูต้นทุนสูงสุด',
     tierDrvCostHead:'ต้นทุน/หัว', tierDrvShare:'% ต้นทุน tier', tierDrvVs:'เทียบ', tierDrvQty:'จำนวน/100หัว',
     tierDrvNote:'แท่งบาร์ยาวตามตัวที่ต้นทุนสูงสุด · % ต้นทุน tier = สัดส่วนของต้นทุนอาหาร/หัว ของ tier นี้ · เทียบ = ต้นทุน/หัว ที่มากกว่า tier ราคาถัดลงมา (แดง = มากกว่า) · จำนวน/100หัว = จำนวนชิ้นต่อ 100 คน · กดเลือก tier ด้านบนเพื่อเทียบ',
+    tocTitle:'สารบัญ', repInfo:'ข้อมูลรายงาน',
+    riType:'ประเภทรายงาน', riRange:'ช่วงข้อมูล', riComp:'เทียบกับ', riScope:'ขอบเขต',
+    riDays:'จำนวนวัน', riData:'ข้อมูลถึงวันที่', riPartial:'ช่วงยังไม่สิ้นสุด — ตัวเลขยังไม่สรุป',
+    riRev:'ฐานรายได้', riRevV:'ยอดขายสุทธิไม่รวม VAT (ยอดบิล ÷ 1.07)',
+    riCost:'ฐานต้นทุน', riCostV:'ต้นทุนอาหารตามสูตร BoM',
+    naTable:'ไม่มีข้อมูลรอบหมุนเวียนโต๊ะในช่วงนี้',
+    naPay:'ไม่มีรายละเอียดช่องทางการชำระเงินในช่วงนี้',
+    naTier:'ไม่มีข้อมูล tier ราคาบุฟเฟ่ต์ในช่วงนี้',
+    s12:'12. ภาคผนวก — นิยามและวิธีคำนวณ',
+    defs:[
+      ['ยอดขายสุทธิ','ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้'],
+      ['กำไรขั้นต้น (GP)','ยอดขายสุทธิ − ต้นทุนอาหาร ยังไม่หักค่าแรง ค่าเช่า ค่าสาธารณูปโภค'],
+      ['จำนวนหัว','ลูกค้าที่รับบริการ (pax บนบิล) · ยอดต่อหัว = ยอดขายสุทธิ ÷ จำนวนหัว'],
+      ['ยอดเฉลี่ย/บิล','ยอดขายสุทธิ ÷ จำนวนบิล — หนึ่งบิลอาจมีหลายหัว'],
+      ['ต้นทุนอาหาร %','ต้นทุนตามสูตร BoM ÷ ยอดขายสุทธิของเดือนนั้น · เมนูที่ยังไม่มีต้นทุนคิดเป็น ฿0 ตัวเลขจึงเป็น“ขั้นต่ำ” — ดูความครอบคลุมในข้อ 3'],
+      ['ฐานการเปรียบเทียบ','รายวัน = วันเดียวกันของสัปดาห์ก่อน · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · รายเดือน = เดือนก่อน (ถ่วงตามวันในสัปดาห์เมื่อเดือนยังไม่ครบ)'],
+      ['ประมาณการ','อัตราเฉลี่ยถ่วงตามวันในสัปดาห์ — ต่อยอดจากวันที่ผ่านมาโดยอิงรูปแบบวันของเดือนก่อน'],
+      ['ส่วนลดหนัก','บิลที่ให้ส่วนลดตั้งแต่ 30% ของมูลค่าก่อนลด'],
+      ['ส่วนลดจ่ายเงินสด','บิลส่วนลดที่ชำระด้วยเงินสดเป็นหลัก — รูปแบบความเสี่ยงเงินขาด'],
+      ['บิลพิมพ์ซ้ำ','บิลส่วนลดที่ถูกพิมพ์มากกว่า 1 ครั้ง'],
+      ['บิลยอดศูนย์','บิลที่เหลือ ฿0 หลังหักส่วนลด (แจกฟรี / ส่วนลดล้วน)'],
+      ['Tier ราคา','ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · “โปรฯ” = ราคานอกมาตรฐาน'],
+      ['YoY','ซ่อนก่อนกลาง พ.ค. 2026 — ข้อมูลเริ่ม ~พ.ค. 2025 ช่วงปีก่อนจึงยังไม่ครบ'],
+    ],
+    defsNote:'ข้อมูลเพื่อการบริหาร ยังไม่ผ่านการตรวจสอบบัญชี จัดทำจากฐานข้อมูลการขาย POS · การวิเคราะห์ tier ส่วนลด และต้นทุนต่อหัว นับเฉพาะบิลบุฟเฟ่ต์',
     dow:{Mon:'จ.',Tue:'อ.',Wed:'พ.',Thu:'พฤ.',Fri:'ศ.',Sat:'ส.',Sun:'อา.'},
     numLocale:'en-US',
   },
@@ -453,9 +531,15 @@ function renderMgtReport(j, jM, jF) {
   const H = j.headline || {};
   // Each section carries a distinct accent (top bar + heading) so the report reads
   // as a professional, colourful template on screen AND in PDF.
-  const sec = (title, inner, accent = '#0f766e') =>
-    `<div class="card p-6" style="border-top:3px solid ${accent}">
-       <h2 class="text-base font-bold mb-4 pb-2" style="color:${accent};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</div>`;
+  // `o` carries the print plan for the section (see the SECTIONS list below):
+  //   o.id   -> anchor id, used by the table of contents
+  //   o.land -> print on a LANDSCAPE sheet (wide tables / side-by-side charts);
+  //             everything else gets the named PORTRAIT page. Chrome starts a new
+  //             sheet whenever the @page name changes, so orientation IS the break.
+  //   o.brk  -> force a page break before the section (same-orientation boundaries)
+  const sec = (title, inner, accent = '#0f766e', o = {}) =>
+    `<section class="card p-6 mgt-sec ${o.land ? 'pg-land' : 'pg-port'}${o.brk ? ' pg-break' : ''}"${o.id ? ` id="${o.id}"` : ''} style="border-top:3px solid ${accent}">
+       <h2 class="text-base font-bold mb-4 pb-2" style="color:${accent};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</section>`;
   // w = WoW delta, y = YoY delta (both optional). When given, a second line shows
   // "WoW ▲x% · YoY ▲y%" so management sees week-over-week AND year-over-year at a glance.
   const kpi = (title, value, sub, w, y) =>
@@ -1104,10 +1188,8 @@ function renderMgtReport(j, jM, jF) {
       <p class="text-sm text-slate-700 mb-2">${_head}</p>
       <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${_tone}">•</span><span>${b}</span></li>`).join('')}</ul>
     </div>`;
-  const execSummary = '<div class="card p-6" style="border-top:3px solid #0f172a">'
-    + `<h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">${T.execSummary}</h2>`
-    + tldr
-    + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div></div>';
+  const execInner = tldr
+    + '<div class="text-sm leading-relaxed text-slate-700">' + ex.map(para).join('') + '</div>';
 
   // §6 — per-MASTER-branch discount + % of sales (the company-owned follow-up line).
   // Independent of the master/franchise split; shows whenever master branches are in scope.
@@ -1323,20 +1405,71 @@ function renderMgtReport(j, jM, jF) {
       ? `ช่องทางหลัก <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} จาก ${_payPD.channels.length} ช่องทาง`
       : `Top channel <b>${esc(d.code)}</b> ${d.pct != null ? d.pct.toFixed(1) + '%' : ''} of ${_payPD.channels.length}`);
   })();
-  body.innerHTML =
-      execSummary
-    + sec(T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), kpis, '#0f766e')
-    + sec(T.s2, actsWithSplit, '#d97706')
-    + sec(T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, v3 + pace, '#4f46e5')
-    + sec(T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, v4 + trend, '#0891b2')
-    + sec(T.s5, branchTbl, '#7c3aed')
-    + sec(T.s6, leakWithSplit, '#dc2626')
-    + sec(T.s7, menu, '#059669')
-    + sec(T.s8, v8 + peakWithSplit, '#0284c7')
-    + (tableHtml ? sec(T.s9, v9 + tableWithSplit, '#9333ea') : '')
-    + (payHtml ? sec(T.s10 + _payScope, v10 + payHtml, '#0d9488') : '')
-    + (tierHtml ? sec(T.s11, tierHtml, '#b45309') : '')
-    + footnote;
+  // A section with no data used to VANISH, so the reader could not tell an empty
+  // section from a missing one. Print the placeholder instead - a management pack
+  // has to account for every numbered section its contents page promises.
+  const naBox = m => `<p class="text-sm text-slate-400 py-3">${m}</p>`;
+
+  // 12 - Appendix: definitions & method. Without it the reader has to guess what
+  // "GP", "food cost %" or "cash-heavy" mean, and every number becomes arguable.
+  const appendix = `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">${
+      (T.defs || []).map(([k, v]) => `<div class="py-1.5 border-b border-slate-100 mgt-atom">
+         <span class="text-[12px] font-semibold text-slate-700">${k}</span>
+         <span class="text-[12px] text-slate-500"> &mdash; ${v}</span></div>`).join('')
+    }</div><p class="text-[11px] text-slate-400 mt-3">${T.defsNote}</p>`;
+
+  // -- The report plan ------------------------------------------------------
+  // ONE declarative list drives three things that used to drift apart: the
+  // on-screen order, the table of contents, and the printed page plan.
+  //   land -> landscape sheet (wide tables, chart rows) - brk -> forced break
+  const SECTIONS = [
+    { id:'mgt-s0',  c:'#0f172a', brk:true, t:T.execSummary, h:execInner },
+    { id:'mgt-s1',  c:'#0f766e', t:T.s1 + (isDaily ? T.s1d : isMonthly ? T.s1m : T.s1w), h:kpis },
+    { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
+    { id:'mgt-s3',  c:'#4f46e5', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
+    { id:'mgt-s4',  c:'#0891b2', land:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
+    { id:'mgt-s5',  c:'#7c3aed', land:true, t:T.s5, h:branchTbl },
+    { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
+    { id:'mgt-s7',  c:'#059669', land:true, t:T.s7, h:menu },
+    { id:'mgt-s8',  c:'#0284c7', land:true, t:T.s8, h:v8 + peakWithSplit },
+    { id:'mgt-s9',  c:'#9333ea', t:T.s9,  h:tableHtml ? (v9 + tableWithSplit) : naBox(T.naTable) },
+    { id:'mgt-s10', c:'#0d9488', land:!!payHtml,  t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
+    { id:'mgt-s11', c:'#b45309', land:!!tierHtml, t:T.s11, h:tierHtml || naBox(T.naTier) },
+    { id:'mgt-s12', c:'#475569', t:T.s12, h:appendix },
+  ];
+
+  // Cover page: contents + the report-information block (period, comparison basis,
+  // scope, data cut-off, revenue/cost basis). Page 1 of the printed pack, and a
+  // jump-nav on screen.
+  const _rangeTxt = (j.range && j.range.length === 2) ? `${j.range[0]} &rarr; ${j.range[1]}` : (j.focus || '&mdash;');
+  const _ri = [
+    [T.riType,  (isDaily ? T.daily : isMonthly ? T.monthly : T.weekly) + ' &middot; ' + (j.label || '')],
+    [T.riRange, _rangeTxt + (j.partial ? ` <span style="color:#d97706">&middot; ${T.riPartial}</span>` : '')],
+    [T.riComp,  (j.comp_label || '&mdash;')],
+    [T.riScope, scopeLabel(j.branch_scope)],
+    [T.riDays,  (j.days_in_period != null ? j.days_in_period : '&mdash;') + ''],
+    [T.riData,  j.latest_day || '&mdash;'],
+    [T.riRev,   T.riRevV],
+    [T.riCost,  T.riCostV + (P.month ? ' &middot; ' + P.month : '')],
+  ];
+  const toc = `<section class="card p-6 mgt-sec pg-port" style="border-top:3px solid #0f172a">
+      <h2 class="text-base font-bold mb-3 pb-2" style="color:#0f172a;border-bottom:2px solid #0f172a33">${T.tocTitle}</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-0 mb-4">
+        ${SECTIONS.map(sx => `<a href="#${sx.id}" onclick="_mgtGo('${sx.id}');return false"
+             class="flex items-baseline gap-2 text-[13px] py-1.5 border-b border-slate-100 mgt-atom" style="text-decoration:none">
+            <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${sx.c};flex:none"></span>
+            <span class="text-slate-600">${sx.t}</span></a>`).join('')}
+      </div>
+      <p class="text-[10px] font-bold uppercase tracking-wide text-slate-400 mb-1">${T.repInfo}</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+        ${_ri.map(([k, v]) => `<div class="flex justify-between gap-3 text-[12px] py-1 border-b border-slate-100 mgt-atom">
+            <span class="text-slate-400" style="flex:none">${k}</span>
+            <span class="text-slate-700 font-medium text-right">${v}</span></div>`).join('')}
+      </div></section>`;
+
+  body.innerHTML = toc
+    + SECTIONS.map(sx => sec(sx.t, sx.h, sx.c, sx)).join('')
+    + `<div class="pg-port">${footnote}</div>`;
 
   // §11 cost-driver sub-block — interactive: tier picker (compare tiers), rank
   // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
