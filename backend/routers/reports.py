@@ -1734,6 +1734,71 @@ def report_management(
                                 "pax_prev": round(pax_p) if has_prev else None,
                                 "mix_effect": mix_eff}
 
+                    # WHY the promo bucket is what it is. It is the one row on the
+                    # table whose label explains nothing, and it is not small — so
+                    # break it into the three things it actually contains, and name
+                    # the branches behind the two that are not ordinary discounts.
+                    #   free   whole bill comped
+                    #   mixed  a free / half-price head riding along with paying ones,
+                    #          which drags the bill average between two tiers
+                    #   disc   one uniform price that is not a tier = a real discount
+                    try:
+                        pz_kind, pz_price, pz_branch = {}, {}, {}
+                        for ent, brn, nb3, px3 in con.execute(
+                                f"""SELECT d.ent, b.name, SUM(d.bills), SUM(d.pax)
+                                    FROM menu_fact_day d JOIN branches b ON b.branch_id = d.branch_id
+                                    WHERE d.day BETWEEN ? AND ? AND d.branch_id IN ({t_ph})
+                                      AND d.ent LIKE 'pz:%'
+                                    GROUP BY d.ent, b.name""",
+                                [cs.isoformat(), ce.isoformat()] + t_bids):
+                            parts = str(ent).split(":")
+                            if len(parts) < 3:
+                                continue
+                            kind, unit = parts[1], parts[2]
+                            k = pz_kind.setdefault(kind, {"bills": 0, "pax": 0.0})
+                            k["bills"] += nb3 or 0; k["pax"] += px3 or 0.0
+                            if kind == "disc":
+                                q = pz_price.setdefault(unit, {"bills": 0, "pax": 0.0})
+                                q["bills"] += nb3 or 0; q["pax"] += px3 or 0.0
+                            else:
+                                bb = pz_branch.setdefault(kind, {}).setdefault(brn, {"bills": 0, "pax": 0.0})
+                                bb["bills"] += nb3 or 0; bb["pax"] += px3 or 0.0
+                        if pz_kind:
+                            # only tiers actually SOLD in this period: both menus'
+                            # price lists live in _PT_ORDER, so a September ฿395 would
+                            # otherwise be matched against the retired ฿350 tier and
+                            # reported as a 12.9% surcharge instead of a discount.
+                            std = [int(x["tier"]) for x in rows_t
+                                   if str(x["tier"]).isdigit() and (x["pax"] or 0) > 0]
+
+                            def _near(u):
+                                """nearest standard tier + what % of it this price is,
+                                so a bare ฿710 reads as '10% off ฿789'."""
+                                if not std or not u:
+                                    return None, None
+                                n = min(std, key=lambda t: abs(u - t))
+                                return n, round(u / n * 100, 1)
+
+                            disc = []
+                            for unit, v in sorted(pz_price.items(), key=lambda kv: -kv[1]["pax"])[:6]:
+                                u = int(unit)
+                                n, pctof = _near(u)
+                                disc.append({"unit": u, "of_tier": n, "pct_of_tier": pctof,
+                                             "off_pct": round(100 - pctof, 1) if pctof else None,
+                                             "bills": v["bills"], "pax": round(v["pax"])})
+                            tier_out["promo"] = {
+                                "kinds": {k: {"bills": v["bills"], "pax": round(v["pax"])}
+                                          for k, v in pz_kind.items()},
+                                "discounts": disc,
+                                "branches": {k: [{"branch": bn, "bills": bv["bills"],
+                                                  "pax": round(bv["pax"])}
+                                                 for bn, bv in sorted(v.items(),
+                                                                      key=lambda kv: -kv[1]["pax"])[:5]]
+                                             for k, v in pz_branch.items()},
+                            }
+                    except Exception:
+                        pass
+
                     # cost drivers per mainstream tier: which ingredient groups /
                     # single menus push each tier's cost/head up — turns the Food%
                     # column into an actionable "because guests eat X". Computes a

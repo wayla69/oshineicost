@@ -228,6 +228,10 @@ WITH bill0 AS (
     CASE WHEN ISNULL(s.ServiceChargeAmount, 0) > 0 THEN {VAT * SC_MULT:.4f} ELSE {VAT} END nf,
     SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN {QTY1} ELSE 0 END) aq,
     SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) aext,
+    MIN(CASE WHEN si.ItemId IN {inlist(adult_ids)}
+             THEN CAST(si.ExtendedPrice AS float) / NULLIF(CAST(si.Qty AS float), 0) END) amin,
+    MAX(CASE WHEN si.ItemId IN {inlist(adult_ids)}
+             THEN CAST(si.ExtendedPrice AS float) / NULLIF(CAST(si.Qty AS float), 0) END) amax,
     SUM({QTY1} * ISNULL(c.cost, 0)) cogs,
     SUM(CASE WHEN c.cost >= {HC_COST} THEN {QTY1} * c.cost ELSE 0 END) hc
   FROM Sale s
@@ -240,9 +244,34 @@ WITH bill0 AS (
   HAVING SUM(CASE WHEN si.ItemId IN {inlist(tier_ids)} THEN 1 ELSE 0 END) > 0
      AND ISNULL(s.NumOfCust, 0) BETWEEN 1 AND 40
 ),
-bill AS (SELECT sid, bid, d, pax, net, cogs, hc, {tier_case} tier FROM bill0)"""
+bill AS (SELECT sid, bid, d, pax, net, cogs, hc, aq, aext, nf, amin, amax,
+                {tier_case} tier FROM bill0)"""
 
     Q_TOTAL = BILL_CTE + "SELECT bid, d, tier, COUNT(*), SUM(pax), SUM(cogs), SUM(net), SUM(hc) FROM bill GROUP BY bid, d, tier"
+    # WHY a bill landed in 'promo'. Without this the bucket is a black box — on
+    # 1 Sep 2026 it held 6.3% of covers and nobody could say whether that was a
+    # discount, a giveaway, or a pricing error. Three kinds, and they mean
+    # different things to the business:
+    #   free   every adult on the bill at ฿0        — comped bill
+    #   mixed  adult lines at DIFFERENT prices      — a free/half-price head
+    #          riding along with full-price ones, which drags the bill average
+    #          between two tiers and looks like a phantom price
+    #   disc   one uniform price that is not a tier — a straight discount
+    # The net unit price rides along so the report can say "10% off ฿789".
+    Q_PROMO = BILL_CTE + """
+SELECT bid, d,
+       CASE WHEN aext <= 0 THEN 'free'
+            WHEN ABS(ISNULL(amax,0) - ISNULL(amin,0)) > 0.01 THEN 'mixed'
+            ELSE 'disc' END pz,
+       ROUND(aext / NULLIF(aq, 0) * nf, 0) unit_net,
+       COUNT(*), SUM(pax)
+FROM bill
+WHERE tier = 'promo'
+GROUP BY bid, d,
+         CASE WHEN aext <= 0 THEN 'free'
+              WHEN ABS(ISNULL(amax,0) - ISNULL(amin,0)) > 0.01 THEN 'mixed'
+              ELSE 'disc' END,
+         ROUND(aext / NULLIF(aq, 0) * nf, 0)"""
     Q_ITEM = BILL_CTE + f""",
 x AS (SELECT si2.SaleId sid, si2.BranchId bid, si2.ItemId iid,
         SUM({QTY2}) q,
@@ -304,6 +333,13 @@ GROUP BY x.grp, b.bid, b.d, b.tier"""
             if b and sid:
                 ent_rows.append((b, r[2], r[3], f"s:{sid}", int(r[4]), float(r[5] or 0), float(r[6] or 0),
                                  float(r[7] or 0), float(r[8] or 0), float(r[9] or 0), float(r[10] or 0), float(r[11] or 0)))
+        for r in run_retry(Q_PROMO, (lo, hi), "promo"):
+            b = bid_map.get(int(r[0]))
+            if b:
+                # pz:<kind>:<net unit price> — the price is part of the key so the
+                # report can name the tier it was discounted from.
+                ent_rows.append((b, r[1], 'promo', "pz:%s:%d" % (r[2], int(r[3] or 0)),
+                                 int(r[4]), float(r[5] or 0), 0.0, 0.0, 0.0, 0.0, 0.0, 0.0))
         for r in run_retry(Q_GROUP, (lo, hi) * 2, "groups"):
             b = bid_map.get(int(r[1]))
             if b:

@@ -307,6 +307,8 @@ const MGT_I18N = {
     tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
     tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
     tierNote:'Tier = the adult buffet price printed on that period’s menu. Until Aug 2026 the menu quoted the price BEFORE service charge and VAT; the Grand Menu from 1 Sep 2026 quotes NET prices (5% service charge and 7% VAT already inside), so ฿789 net = ฿702.27 + SC + VAT. promo = a non-standard price (discount / promotion). Guests count buffet bills only, so the total can sit slightly under headline covers · Cost/Head = BoM food cost · Rev/Head is ex-VAT but still INCLUDES the 5% service charge.',
+    promoTitle:'What is inside “Promo/other price”',
+    promoNote:'Read from the adult buffet lines on each bill: a bill whose adult heads carry DIFFERENT prices is counted as mixed, not as a discount — its per-head average is an artefact of the mix.',
     tierDrvTitle:'Cost drivers / head', tierDrvPick:'Tier', tierDrvGroup:'Ingredient group', tierDrvMenu:'Top menu item',
     tierDrvCostHead:'Cost/Head', tierDrvShare:'% of tier cost', tierDrvVs:'vs', tierDrvQty:'Qty/100',
     tierDrvNote:'Bars scale to the biggest driver · % of tier cost = share of this tier’s total food cost/head · vs = extra ฿/head over the next-cheaper tier (red = more) · Qty/100 = pieces per 100 guests · tap a tier above to compare.',
@@ -405,6 +407,8 @@ const MGT_I18N = {
     tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
     tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
     tierNote:'Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่ตามเมนูของช่วงนั้น · ถึง ส.ค. 2026 เมนูตั้งราคา “ก่อน” บวก service charge และ VAT · ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) เป็นราคา NET คือรวม service charge 5% และ VAT 7% ไว้แล้ว เช่น ฿789 net = ฿702.27 + SC + VAT · โปรฯ = ราคานอกมาตรฐาน (ส่วนลด/โปรโมชัน) · นับเฉพาะบิลบุฟเฟ่ต์ ยอดรวมจึงต่ำกว่าจำนวนหัวรวมเล็กน้อย · ต้นทุน/หัว = ต้นทุนอาหารอิงสูตร BoM · รายได้/หัว ถอด VAT แล้วแต่ยัง “รวม” service charge 5%',
+    promoTitle:'ในช่อง “โปรฯ/ราคาอื่น” มีอะไรบ้าง',
+    promoNote:'อ่านจากบรรทัดบุฟเฟ่ต์ผู้ใหญ่ในแต่ละบิล · บิลที่หัวผู้ใหญ่ราคาไม่เท่ากันจะนับเป็น “หัวฟรี/ครึ่งราคาปน” ไม่ใช่ส่วนลด เพราะราคาเฉลี่ยต่อหัวเป็นผลจากการปนกัน ไม่ใช่ราคาที่ตั้งขาย',
     tierDrvTitle:'ตัวขับต้นทุน/หัว', tierDrvPick:'เลือก tier', tierDrvGroup:'กลุ่มวัตถุดิบ', tierDrvMenu:'เมนูต้นทุนสูงสุด',
     tierDrvCostHead:'ต้นทุน/หัว', tierDrvShare:'% ต้นทุน tier', tierDrvVs:'เทียบ', tierDrvQty:'จำนวน/100หัว',
     tierDrvNote:'แท่งบาร์ยาวตามตัวที่ต้นทุนสูงสุด · % ต้นทุน tier = สัดส่วนของต้นทุนอาหาร/หัว ของ tier นี้ · เทียบ = ต้นทุน/หัว ที่มากกว่า tier ราคาถัดลงมา (แดง = มากกว่า) · จำนวน/100หัว = จำนวนชิ้นต่อ 100 คน · กดเลือก tier ด้านบนเพื่อเทียบ',
@@ -1331,13 +1335,53 @@ function renderMgtReport(j, jM, jF) {
     // initTierDrivers IIFE below (interactive — tier picker, bars, ranks, heat,
     // auto-insight). Container only appears when j.tier.drivers.by_tier exists.
     const driversSlot = ((TD.drivers || {}).by_tier) ? `<div id="mgtTierDrivers" class="mt-4"></div>` : '';
+    // "โปรฯ" is the one row whose label explains nothing, and it is not a small
+    // row. Spell out what is inside it in prose: real discounts (named against
+    // the tier they came off), bills carrying a comped or half-price head, and
+    // fully comped bills — the last two with the branches behind them.
+    const promoNote = (() => {
+      const PZ = TD.promo;
+      if (!PZ || !PZ.kinds) return '';
+      const K = PZ.kinds, bits = [];
+      const paxOf = k => (K[k] && K[k].pax) || 0;
+      const billsOf = k => (K[k] && K[k].bills) || 0;
+      const totPax = paxOf('disc') + paxOf('mixed') + paxOf('free');
+      if (!totPax) return '';
+      const brList = kind => ((PZ.branches || {})[kind] || [])
+        .map(b => `${esc(b.branch)} (${num(b.pax)})`).join(' · ');
+      if (paxOf('disc')) {
+        const top = (PZ.discounts || []).filter(d => d.off_pct != null && d.off_pct > 0).slice(0, 3)
+          .map(d => isTH
+            ? `${baht(d.unit)} = ลด ${d.off_pct.toFixed(0)}% จาก ${baht(d.of_tier)} (${num(d.pax)} คน)`
+            : `${baht(d.unit)} = ${d.off_pct.toFixed(0)}% off ${baht(d.of_tier)} (${num(d.pax)} covers)`);
+        bits.push(isTH
+          ? `<b>ส่วนลดทั้งบิล</b> ${num(billsOf('disc'))} บิล / ${num(paxOf('disc'))} คน${top.length ? ' — ' + top.join(' · ') : ''}`
+          : `<b>Whole-bill discounts</b> ${num(billsOf('disc'))} bills / ${num(paxOf('disc'))} covers${top.length ? ' — ' + top.join(' · ') : ''}`);
+      }
+      if (paxOf('mixed')) {
+        bits.push(isTH
+          ? `<b>บิลที่มีหัวฟรีหรือครึ่งราคาปนกับหัวเต็มราคา</b> ${num(billsOf('mixed'))} บิล / ${num(paxOf('mixed'))} คน — ราคาเฉลี่ยต่อหัวจึงตกอยู่ระหว่าง tier ไม่ใช่ราคาขายจริง${brList('mixed') ? ' · สาขา: ' + brList('mixed') : ''}`
+          : `<b>Bills mixing a comped or half-price head with paying ones</b> ${num(billsOf('mixed'))} bills / ${num(paxOf('mixed'))} covers — the per-head average lands between tiers and is not a real price${brList('mixed') ? ' · branches: ' + brList('mixed') : ''}`);
+      }
+      if (paxOf('free')) {
+        bits.push(isTH
+          ? `<b>บิลฟรีทั้งใบ</b> ${num(billsOf('free'))} บิล / ${num(paxOf('free'))} คน${brList('free') ? ' · สาขา: ' + brList('free') : ''}`
+          : `<b>Fully comped bills</b> ${num(billsOf('free'))} bills / ${num(paxOf('free'))} covers${brList('free') ? ' · branches: ' + brList('free') : ''}`);
+      }
+      if (!bits.length) return '';
+      return `<div class="mt-3 pt-3 border-t border-slate-100 mgt-atom">
+          <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">${T.promoTitle}</p>
+          <ul class="text-[12px] text-slate-600 space-y-1">${bits.map(b =>
+            `<li class="flex gap-2"><span style="color:#b45309">•</span><span>${b}</span></li>`).join('')}</ul>
+          <p class="text-[10px] text-slate-400 mt-1.5">${T.promoNote}</p></div>`;
+    })();
     return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
         <th class="text-left py-1.5 pr-3">${T.tierCol}</th><th class="text-right py-1.5 px-2">${T.tierGuests}</th>
         <th class="text-right py-1.5 px-2">${T.tierShare}</th><th class="text-right py-1.5 px-2">${T.tierRevHead}</th>
         <th class="text-right py-1.5 px-2">${T.tierCostHead}</th><th class="text-right py-1.5 px-2">${T.tierGpHead}</th>
         <th class="text-right py-1.5 pl-2">${T.tierFood}</th></tr></thead><tbody>${rows}</tbody></table></div>
-      ${mix}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${driversSlot}`;
+      ${mix}${promoNote}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${driversSlot}`;
   })();
 
   const body = document.getElementById('mgtRptBody');
