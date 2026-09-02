@@ -35,6 +35,44 @@ no WIP leaks, and no other session's working tree is touched. Deploy a different
 5. **Leave untracked files alone.** Backups, `.tmp_*`, data dirs, and other sessions'
    scratch files are not yours to commit or delete.
 
+## Always confirm the deploy with a live probe
+
+`deploy-clean.sh` prints `✓ deployed <sha>` — that is the sha it *pinned*, not proof of what
+the app is serving. On 2026-09-02 it reported success while shipping the previous commit
+(see below). After every deploy, grep the live site for a marker only your change contains:
+
+```bash
+curl -s https://oshinei-dashboard.fly.dev/ | grep -c '<marker-from-your-change>'
+```
+
+### Why a deploy can ship the wrong commit
+
+This machine has **two checkouts of the same GitHub remote** — the OneDrive working copy and
+`C:/Users/ASUS/Oshinei` (the migration target) — with **separate ref stores**. The deploy
+worktree `~/oshinei_deploy_clean` is linked to exactly one of them, and refs resolve against
+that **owner**, whichever checkout you launched the script from. The script used to fetch the
+checkout it ran in, so `origin/main` in the owner could stay stale and the worktree got pinned
+to an old commit — silently, with a green success line.
+
+The script now fetches the **owner** (`git rev-parse --git-common-dir` on the worktree) and
+**aborts** when the two ref stores disagree about the ref being deployed. If it ever does
+abort, the fix it prints is the whole fix:
+
+```bash
+git --git-dir="C:/Users/ASUS/Oshinei/.git" fetch origin
+```
+
+### If flyctl says "no access token available"
+
+That does **not** always mean the login expired — flyctl sometimes fails to read its own
+config. The token in `~/.fly/config.yml` is usually still valid; pass it explicitly:
+
+```bash
+export FLY_API_TOKEN="$(sed -n 's/^access_token:[[:space:]]*//p' ~/.fly/config.yml)"
+```
+
+Only run `flyctl auth login` (interactive, needs a browser) if that still fails.
+
 ## Quick reference
 
 | Goal | Command |
@@ -42,6 +80,7 @@ no WIP leaks, and no other session's working tree is touched. Deploy a different
 | Deploy latest `main` to Fly | `bash scripts/deploy-clean.sh` |
 | Deploy a specific commit/tag | `bash scripts/deploy-clean.sh <ref>` |
 | Check what's live vs `main` | `git fetch && git log --oneline origin/main -3` |
+| Prove what is actually live | `curl -s https://oshinei-dashboard.fly.dev/ \| grep -c '<marker>'` |
 | Set/rotate a Fly secret | `flyctl secrets set NAME=value` (restarts the app) |
 | List Fly secrets (names only) | `flyctl secrets list` |
 

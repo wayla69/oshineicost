@@ -24,14 +24,42 @@ REF="${1:-origin/main}"
 DEPLOY_WT="${OSHINEI_DEPLOY_WT:-$HOME/oshinei_deploy_clean}"
 REPO="$(git rev-parse --show-toplevel)"
 
-echo "→ fetching origin (the only network step before deploy)…"
-ok=0; for i in 1 2 3; do git -C "$REPO" fetch origin --quiet && { ok=1; break; }; echo "  fetch retry $i…"; sleep 5; done
+# WHICH repo do the worktree's refs come from?
+#   A linked worktree resolves refs against its OWNING repo, and that is not
+#   necessarily the checkout you ran this from. This machine has TWO checkouts of the
+#   same GitHub remote (the OneDrive copy and C:/Users/ASUS/Oshinei) with SEPARATE ref
+#   stores; the deploy worktree belongs to exactly one of them. On 2026-09-02 the
+#   script fetched the checkout it was invoked from, then reset the worktree to the
+#   OWNER's stale origin/main — and still printed a green "deployed <old-sha>". A
+#   silent stale ship, caught only by probing the live site.
+# So: fetch the OWNER, and refuse to deploy when the two ref stores disagree.
+# (Ask git for the path — never grep it: git-bash mixes 'C:/…' and '/c/…' formats.)
+if git -C "$DEPLOY_WT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  OWNER_GITDIR="$(git -C "$DEPLOY_WT" rev-parse --path-format=absolute --git-common-dir)"
+else
+  OWNER_GITDIR="$(git -C "$REPO"      rev-parse --path-format=absolute --git-common-dir)"
+fi
+owner_git() { git --git-dir="$OWNER_GITDIR" "$@"; }   # a function, not a var: paths have spaces
+
+echo "→ fetching origin in the repo that OWNS the deploy worktree…"
+echo "    $OWNER_GITDIR"
+ok=0; for i in 1 2 3; do owner_git fetch origin --quiet && { ok=1; break; }; echo "  fetch retry $i…"; sleep 5; done
 [ "$ok" = 1 ] || { echo "✗ could not reach origin after retries — aborting (re-run when the network is back)"; exit 1; }
+git -C "$REPO" fetch origin --quiet || true    # keep your own checkout current too (no-op when it IS the owner)
+
+# The ref must exist in the OWNER, and must match this checkout's idea of it.
+WT_SHA="$(owner_git rev-parse --verify --quiet "$REF" || true)"
+[ -n "$WT_SHA" ] || { echo "✗ '$REF' does not exist in $OWNER_GITDIR — aborting"; exit 1; }
+MY_SHA="$(git -C "$REPO" rev-parse --verify --quiet "$REF" || true)"
+if [ -n "$MY_SHA" ] && [ "$MY_SHA" != "$WT_SHA" ]; then
+  echo "✗ ref mismatch — '$REF' is ${MY_SHA:0:9} in this checkout but ${WT_SHA:0:9} in the"
+  echo "  repo that owns the deploy worktree. Deploying now would ship the WRONG commit."
+  echo "  Fix: git --git-dir=\"$OWNER_GITDIR\" fetch origin    (then re-run)"
+  exit 1
+fi
 
 # Create the dedicated deploy worktree once (detached HEAD so it never fights a
-# branch checked out elsewhere); thereafter just repoint + scrub it. Worktrees share
-# the repo's object store + refs, so no second fetch is needed. (Check by asking git
-# directly — never grep paths: git-bash mixes 'C:/…' and '/c/…' formats.)
+# branch checked out elsewhere); thereafter just repoint + scrub it.
 if git -C "$DEPLOY_WT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "→ reusing deploy worktree: $DEPLOY_WT"
 else
@@ -45,6 +73,8 @@ git -C "$DEPLOY_WT" reset --hard --quiet "$REF"
 git -C "$DEPLOY_WT" clean -fdxq            # remove ANY stray/untracked file → pristine
 
 SHA="$(git -C "$DEPLOY_WT" rev-parse --short HEAD)"
+[ "$(git -C "$DEPLOY_WT" rev-parse HEAD)" = "$WT_SHA" ] || {
+  echo "✗ worktree HEAD is not '$REF' after the reset — aborting rather than shipping a surprise"; exit 1; }
 echo "→ deploying $SHA from a clean tree (no WIP, isolated)…"
 ( cd "$DEPLOY_WT" && flyctl deploy --remote-only )
 echo "✓ deployed $SHA from $DEPLOY_WT"
