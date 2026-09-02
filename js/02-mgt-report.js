@@ -1577,7 +1577,12 @@ function renderMgtReport(j, jM, jF) {
         <div class="flex flex-wrap items-center gap-2 mb-2">
           <span class="text-[11px] font-semibold text-slate-600">${T.tierDrvTitle}</span>
           <span class="text-[10px] text-slate-400">${T.tierDrvPick}:</span>${btns}
-          <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}</span>
+          <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}${
+            (cur.focus_share != null && cur.focus_share < 5)
+              ? ` <span style="color:#dc2626;font-weight:600">${isTH
+                  ? `· ${num(cur.focus_pax)} คน (${cur.focus_share.toFixed(1)}%) — กลุ่มเล็ก ตัวเลขแกว่ง`
+                  : `· ${num(cur.focus_pax)} covers (${cur.focus_share.toFixed(1)}%) — small sample, figures swing`}</span>`
+              : ''}</span>
         </div>
         ${insight}
         <div class="grid md:grid-cols-2 gap-x-6 gap-y-3">

@@ -1824,9 +1824,14 @@ def report_management(
                     # group, 's:%' = single menu). Optional: wrapped so a driver
                     # failure never nukes the tier table above.
                     try:
+                        # Every tier that actually sold gets a driver breakdown. The 5%
+                        # share floor used to sit here, which meant the small tiers —
+                        # often the most interesting ones, ฿1,299 included — simply had
+                        # no breakdown and no hint that one was missing. The floor now
+                        # only decides which tier opens by DEFAULT (below), so a 45-cover
+                        # tier can be inspected without being allowed to set the headline.
                         cand = [r for r in rows_t if r["tier"].isdigit()
-                                and (r["share"] or 0) >= 5 and r["food_pct"] is not None
-                                and r["pax"]]
+                                and r["food_pct"] is not None and r["pax"]]
                         if cand:
                             lblmap = {e: (l or e) for e, l in con.execute(
                                 "SELECT ent, label FROM menu_fact_meta")}
@@ -1870,6 +1875,10 @@ def report_management(
                                         "focus_food_pct": frow["food_pct"],
                                         "focus_cogs_head": round(fch, 1),
                                         "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
+                                        # carried so the reader can weigh the numbers: a
+                                        # cost/head drawn from 45 covers swings hard.
+                                        "focus_pax": round(frow["pax"] or 0),
+                                        "focus_share": frow["share"],
                                         "groups": grp, "menus": mnu}
 
                             by_tier = {}
@@ -1878,8 +1887,14 @@ def report_management(
                                 if payload:
                                     by_tier[frow["tier"]] = payload
                             if by_tier:
-                                worst = max((r for r in cand if r["tier"] in by_tier),
-                                            key=lambda r: r["food_pct"])
+                                # The tier that OPENS is still picked from the mainstream
+                                # ones — the headline "biggest lever" should not be a tier
+                                # with a handful of covers and a noisy cost/head. Falls
+                                # back to the full set when no tier clears the floor.
+                                _pool = [r for r in cand
+                                         if r["tier"] in by_tier and (r["share"] or 0) >= 5] \
+                                        or [r for r in cand if r["tier"] in by_tier]
+                                worst = max(_pool, key=lambda r: r["food_pct"])
                                 tier_out["drivers"] = {
                                     "default_tier": worst["tier"],
                                     "tier_order": sorted(by_tier, key=lambda t: int(t)),
