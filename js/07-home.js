@@ -1081,7 +1081,7 @@ async function loadMenuImpact(force) {
   const tierCard = (d.tiers || []).length < 2 ? '' : `
     <div class="card p-5 overflow-x-auto mb-5">
       <h2 class="section-title mb-1">เจาะตาม Tier ราคาบุฟเฟ่ต์ — ใครสั่ง/กินเยอะ และผลต่อต้นทุน-กำไร</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนู (ไม่รวม VAT — ลูกค้าจ่าย +7%) อ่านจากบรรทัดแพ็กเกจในบิลจริง · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)</p>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนูของช่วงนั้น อ่านจากบรรทัดแพ็กเกจในบิลจริง (ถึง ส.ค. 2026 = ราคาก่อนบวก service charge 5% + VAT 7% · ตั้งแต่ 1 ก.ย. 2026 = ราคา NET รวมทั้งสองอย่างแล้ว) · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)</p>
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">บิลใน Tier</th><th class="py-1.5 pr-2 text-right">% สั่ง</th>
         <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนตัวเอง/หัว</th>
