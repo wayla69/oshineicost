@@ -93,7 +93,7 @@ def _cost_head_scopes(con, month: str, scope: str = "master"):
     def revenue(ids):
         ph = ",".join("?" * len(ids))
         return float(con.execute(
-            f"SELECT COALESCE(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly "
+            f"SELECT COALESCE(SUM(subtotal_ex_vat),0) FROM v_sales_sku_monthly "
             f"WHERE period_month=? AND branch_id IN ({ph})", [month, *ids]).fetchone()[0] or 0)
 
     def menus(ids):
@@ -101,7 +101,7 @@ def _cost_head_scopes(con, month: str, scope: str = "master"):
         rows = con.execute(
             f"""SELECT ssm.sku_id AS sku_id, sk.sku_code AS code, sk.description AS desc,
                        ROUND(SUM(ssm.qty),0) AS qty, ROUND(SUM({cogs}),2) AS cogs
-                FROM sales_sku_monthly ssm
+                FROM v_sales_sku_monthly ssm
                 JOIN skus sk ON sk.sku_id = ssm.sku_id
                 WHERE ssm.period_month=? AND ssm.branch_id IN ({ph})
                 GROUP BY ssm.sku_id HAVING SUM({cogs}) > 0
@@ -901,7 +901,7 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
                    ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
                    ROUND({gm},1) gpp {JN} AND {cond} ORDER BY gpp ASC LIMIT :lim""",
                    {**params, "lim": limit}).fetchall()]
-        st = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))) rev,
+        st = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev,
                    ROUND(SUM(c.cogs_bom)) cogs, SUM(t.customer_count) cust, ROUND(SUM(t.discount)) disc,
                    ROUND(AVG({gm}),1) avg_gm {JN} AND {cond}""", params).fetchone()
         rev = (st["rev"] or 0) if st else 0; cogs = (st["cogs"] or 0) if st else 0
@@ -950,7 +950,7 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
               f"JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
-        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0)),2) rev, "
+        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))),2) rev, "
                         f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
                         f"ROUND(SUM(t.discount),2) disc {JN}", params).fetchone()
         bills = r["bills"] or 0; rev = r["rev"] or 0; cogs = r["cogs"] or 0; cust = r["cust"] or 0
@@ -990,9 +990,9 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         by_branch = []
         for x in con.execute(f"""
             SELECT b.name branch, COUNT(*) bills,
-                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))) rev,
+                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev,
                    ROUND(SUM(c.cogs_bom)) cogs,
-                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0) - c.cogs_bom)) gp,
+                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom)) gp,
                    SUM(CASE WHEN c.cogs_bom > (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) THEN 1 ELSE 0 END) loss_bills,
                    SUM(t.customer_count) cust
             {JN} GROUP BY b.name""", params).fetchall():
@@ -1576,7 +1576,7 @@ def report_management(
         # table when the window is exactly whole calendar months (the monthly
         # report's case — same tier-safe cost expr, so the numbers tie out), else
         # unavailable so the UI can show "—" rather than a fake zero.
-        _dmin_row = con.execute("SELECT MIN(day) d FROM sales_sku_daily").fetchone()
+        _dmin_row = con.execute("SELECT MIN(day) d FROM v_sales_sku_daily").fetchone()
         daily_min = (_dmin_row["d"] if _dmin_row else None) or "9999-99-99"
 
         def _whole_months(s, e):
@@ -1589,7 +1589,7 @@ def report_management(
                 rows = con.execute(f"""
                     SELECT d.sku_id, s.description, s.sku_code,
                            SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
-                    FROM sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+                    FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
                     JOIN skus s ON s.sku_id=d.sku_id
                     WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
                     GROUP BY d.sku_id""",
@@ -1599,7 +1599,7 @@ def report_management(
                 rows = con.execute(f"""
                     SELECT d.sku_id, s.description, s.sku_code,
                            SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
-                    FROM sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
+                    FROM v_sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
                     JOIN skus s ON s.sku_id=d.sku_id
                     WHERE {sw} AND d.period_month BETWEEN :s AND :e
                       AND d.sku_id IN {food_sub}
@@ -1839,7 +1839,7 @@ def report_management(
         mw = " AND ".join(mb)
         bom_row = con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-            FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+            FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id
             WHERE {mw}""", mp).fetchone()
@@ -1851,7 +1851,7 @@ def report_management(
             mw_daily = mw.replace("s.period_month=:month", "strftime('%Y-%m', s.day)=:month")
             bom_row = con.execute(f"""
                 SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-                FROM (SELECT *, 'Easy' AS source FROM sales_sku_daily) s
+                FROM (SELECT *, 'Easy' AS source FROM v_sales_sku_daily) s
                 JOIN skus sk ON sk.sku_id=s.sku_id
                 LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
                 JOIN branches b ON b.branch_id=s.branch_id
@@ -1887,7 +1887,7 @@ def report_management(
                        ROUND(AVG(CASE WHEN {_eff_cost_m} > 0 THEN {_eff_cost_m} END), 2) avg_unit_cost,
                        COUNT(DISTINCT s.sku_id) skus,
                        COUNT(DISTINCT CASE WHEN {_eff_cost_m} = 0 THEN s.sku_id END) skus_uncosted
-                FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+                FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
                 JOIN branches b ON b.branch_id=s.branch_id
                 WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
                   AND s.sku_id IN {food_sub}""", mp).fetchone()
@@ -1913,7 +1913,7 @@ def report_management(
                      "sku_code": r["sku_code"], "plates": round(r["qty"] or 0)}
                     for r in con.execute(f"""
                         SELECT sk.sku_code, sk.description, SUM(s.qty) qty
-                        FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+                        FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
                         JOIN branches b ON b.branch_id=s.branch_id
                         WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
                           AND s.sku_id IN {food_sub} AND {_eff_cost_m} = 0
@@ -1961,7 +1961,7 @@ def report_management(
             {**params, "month": prev_month, "d": days_elapsed}).fetchone()
         pm_bom = con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-            FROM sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+            FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
             JOIN branches b ON b.branch_id=s.branch_id
             WHERE {mw}""", {**mp, "month": prev_month}).fetchone()

@@ -751,6 +751,21 @@ def _apply_incoming_live() -> bool:
             print(f"[hot-swap] replace failed: {e}")
             return False
         _db_gen += 1
+        # the freshly-swapped file is a straight copy from sync — it has the tables
+        # but not the views the revenue queries read from.
+        # NOTE: `with sqlite3.connect(...)` is a TRANSACTION context manager, not a
+        # closing one — it would leave the handle open, and on Windows an open handle
+        # on the live DB is exactly what breaks the next swap. Close it explicitly.
+        _c = None
+        try:
+            _c = sqlite3.connect(str(DB_PATH))
+            _ensure_rev_views(_c)
+            _c.commit()
+        except Exception as e:
+            print(f"[hot-swap] rev-view ensure failed: {e}")
+        finally:
+            if _c is not None:
+                _c.close()
         print(f"[hot-swap] ✓ applied {inc.name} → {DB_PATH.name} (gen {_db_gen}, {n:,} bills)")
         return True
     finally:
@@ -1408,7 +1423,7 @@ def data_quality():
         # 2. Bills carrying revenue but zero covers — every per-head figure that
         #    divides by covers is guarded, but these bills still under-count pax.
         z = con.execute("""
-            SELECT b.name br, COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))) rev
+            SELECT b.name br, COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE COALESCE(t.customer_count,0)=0 AND t.total_inc_vat>0
             GROUP BY b.name ORDER BY n DESC""").fetchall()
@@ -1434,7 +1449,7 @@ def data_quality():
         # 4. Items still selling without a name (the POS code shows as the dish).
         stub = con.execute("""
             SELECT COUNT(DISTINCT s.sku_id) n, ROUND(SUM(m.qty)) qty
-            FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
+            FROM v_sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
             WHERE s.description = s.sku_code""").fetchone()
         add("stub_names", "เมนูที่ยังไม่มีชื่อ (แสดงเป็นรหัส POS)", "warn",
             (stub["n"] or 0) if stub else 0,
@@ -1443,7 +1458,7 @@ def data_quality():
         # 5. Dishes with sales but no unit cost — food-cost% is a floor while these exist.
         unc = con.execute(f"""
             SELECT COUNT(DISTINCT s.sku_id) n, ROUND(SUM(m.qty)) qty
-            FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
+            FROM v_sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id
             WHERE s.sku_code NOT IN {_ALL_TIER_CODES_SQL}
               AND COALESCE((SELECT recipe_cost FROM sku_effective_cost WHERE sku_id=m.sku_id),0)=0
               AND COALESCE((SELECT NULLIF(unit_cost,0) FROM sku_cost WHERE sku_id=m.sku_id),0)=0
@@ -2201,7 +2216,7 @@ def suggest_targets(
     `lookback`-month average × `uplift`. Read-only — the client fills the editor so
     the owner reviews before saving. Seeds the (currently empty) branch_targets."""
     with get_db() as con:
-        latest = con.execute("SELECT MAX(period_month) m FROM sales_sku_monthly").fetchone()["m"]
+        latest = con.execute("SELECT MAX(period_month) m FROM v_sales_sku_monthly").fetchone()["m"]
         target_month = month or latest
         mrows = con.execute(
             "SELECT DISTINCT period_month FROM sales_sku_monthly WHERE period_month < ? "
@@ -2214,7 +2229,7 @@ def suggest_targets(
         rev = con.execute(
             f"""SELECT b.name br, AVG(m.rev) avg_rev
                   FROM (SELECT branch_id, period_month, SUM(subtotal_ex_vat) rev
-                          FROM sales_sku_monthly WHERE period_month IN ({ph})
+                          FROM v_sales_sku_monthly WHERE period_month IN ({ph})
                          GROUP BY branch_id, period_month) m
                   JOIN branches b ON b.branch_id = m.branch_id
                  WHERE b.name != 'ALL' AND COALESCE(b.active,1) = 1
@@ -2675,7 +2690,7 @@ def _mpack_collect(month: str) -> dict:
                        COALESCE(SUM({cogs_expr}),0)          AS cogs,
                        COALESCE(SUM({costed_rev_expr}),0)    AS costed_rev,
                        COUNT(DISTINCT ssm.branch_id)         AS branch_count
-                  FROM sales_sku_monthly ssm
+                  FROM v_sales_sku_monthly ssm
                   JOIN branches b ON b.branch_id = ssm.branch_id
                   JOIN skus     sk ON sk.sku_id  = ssm.sku_id
                   LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2699,7 +2714,7 @@ def _mpack_collect(month: str) -> dict:
                    COALESCE(SUM(ssm.subtotal_ex_vat),0) AS revenue,
                    COALESCE(SUM({cogs_expr}),0)         AS cogs,
                    COALESCE(SUM({costed_rev_expr}),0)   AS costed_rev
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b ON b.branch_id = ssm.branch_id
               JOIN skus     sk ON sk.sku_id  = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2717,7 +2732,7 @@ def _mpack_collect(month: str) -> dict:
                    SUM(ssm.qty)                          AS qty,
                    SUM({cogs_expr}) / NULLIF(SUM(ssm.qty),0) AS unit_cost,
                    SUM({cogs_expr})                      AS total_cogs
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b ON b.branch_id = ssm.branch_id
               JOIN skus     sk ON sk.sku_id  = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -2751,7 +2766,7 @@ def _mpack_collect(month: str) -> dict:
                 ph = ",".join(":s"+str(i) for i in range(len(ids)))
                 qrows = con.execute(f"""
                     SELECT sku_id, period_month, SUM(qty) AS qty
-                      FROM sales_sku_monthly
+                      FROM v_sales_sku_monthly
                      WHERE sku_id IN ({ph})
                        AND period_month >= :mf AND period_month <= :mt
                      GROUP BY sku_id, period_month
@@ -2789,7 +2804,7 @@ def _mpack_collect(month: str) -> dict:
                      JOIN skus s ON s.sku_id = ssm.sku_id
                      WHERE a.bom_sku_code = s.sku_code LIMIT 1)
                 ) AS bom_sku_id
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b ON b.branch_id = ssm.branch_id
               WHERE ssm.period_month = :m
                 AND b.name != 'ALL'
@@ -3479,12 +3494,42 @@ _PERF_INDEXES = (
     "CREATE INDEX IF NOT EXISTS ix_mfd_ent_qty ON menu_fact_day(ent, qty)",
 )
 
+# The 5% service charge is not revenue, and the SKU roll-ups book it as a
+# SERVICECHARGE pseudo-SKU — so every SUM(subtotal_ex_vat) over them silently
+# carried it (฿4.6M in Aug 2026 alone). Those roll-ups are read from ~180 places
+# with no shared WHERE clause to hook the exclusion into, and most of them do not
+# join `skus` at all, so the rule lives here ONCE and readers select the view.
+# Revenue readers use the view; writers (sync, ingest) keep the base table, which
+# still holds every line the POS produced.
+_REV_VIEWS = (
+    """CREATE VIEW IF NOT EXISTS v_sales_sku_monthly AS
+         SELECT * FROM sales_sku_monthly
+          WHERE sku_id NOT IN (SELECT sku_id FROM skus
+                                WHERE UPPER(sku_code) IN ('SERVICECHARGE','SERVICE'))""",
+    """CREATE VIEW IF NOT EXISTS v_sales_sku_daily AS
+         SELECT * FROM sales_sku_daily
+          WHERE sku_id NOT IN (SELECT sku_id FROM skus
+                                WHERE UPPER(sku_code) IN ('SERVICECHARGE','SERVICE'))""",
+)
+
+
+def _ensure_rev_views(con):
+    """Create the service-charge-free roll-up views on whichever DB is live.
+
+    Every revenue read selects from these, so a DB without them answers 500 — and a
+    DB can become live WITHOUT going through startup (the hot-swap poller replaces
+    the file under a running app). Called from both paths, and cheap enough to be
+    unconditional: CREATE VIEW IF NOT EXISTS on an existing view is a no-op."""
+    for ddl in _REV_VIEWS:
+        con.execute(ddl)
+
 
 def _perf_startup():
     """One-time DB perf setup: build the per-SKU effective-cost lookup and ensure the
     covering indexes exist. Resilient — a failure here must never block app startup."""
     try:
         with get_db() as con:
+            _ensure_rev_views(con)
             for ddl in _PERF_INDEXES:
                 try:
                     con.execute(ddl)
@@ -3869,7 +3914,7 @@ def _ing_pretty(qty: float, unit: str):
 
 def _ing_window(con, days: int, date_to: Optional[str]):
     """Resolve the lookback window on sales_sku_daily. Returns (start, end, days)."""
-    maxd = con.execute("SELECT MAX(day) FROM sales_sku_daily").fetchone()[0]
+    maxd = con.execute("SELECT MAX(day) FROM v_sales_sku_daily").fetchone()[0]
     if not maxd:
         return None, None, 0
     end = date_to or maxd
@@ -4031,7 +4076,7 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
                         THEN d.qty * bi.qty_per_serving ELSE 0 END) AS qty_prev,
                SUM(d.qty * bi.ingredient_cost) AS cost,
                COUNT(DISTINCT d.sku_id) AS n_menus
-          FROM sales_sku_daily d
+          FROM v_sales_sku_daily d
           JOIN branches b         ON b.branch_id = d.branch_id
           JOIN {_ING_BOM_MAP} m   ON m.sale_sku  = d.sku_id
           JOIN bom_ingredients bi ON bi.sku_id   = m.bom_sku
@@ -4052,7 +4097,7 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
     for r in con.execute(f"""
         SELECT b.name AS branch, COUNT(DISTINCT d.day) AS nd,
                COUNT(DISTINCT CASE WHEN d.day >= date(:end,'-6 day') THEN d.day END) AS nr
-          FROM sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
+          FROM v_sales_sku_daily d JOIN branches b ON b.branch_id = d.branch_id
          WHERE {' AND '.join(tf)} GROUP BY b.branch_id
     """, tp):
         trading[r["branch"]] = int(r["nd"] or 0)
@@ -4173,7 +4218,7 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
 def _ing_trading_days(con, start: str, end: str, branch: str) -> int:
     """Days this branch actually sold inside the window (the averaging divisor)."""
     row = con.execute(
-        "SELECT COUNT(DISTINCT d.day) FROM sales_sku_daily d "
+        "SELECT COUNT(DISTINCT d.day) FROM v_sales_sku_daily d "
         "JOIN branches b ON b.branch_id = d.branch_id "
         "WHERE b.name = :branch AND d.day BETWEEN :start AND :end",
         {"branch": branch, "start": start, "end": end}).fetchone()
@@ -4218,7 +4263,7 @@ def _ing_coverage(con, start: str, end: str, branch: Optional[str], group: Optio
     row = con.execute(f"""
         SELECT SUM(d.qty) AS tot,
                SUM(CASE WHEN m.sale_sku IS NOT NULL THEN d.qty ELSE 0 END) AS cov
-          FROM sales_sku_daily d
+          FROM v_sales_sku_daily d
           JOIN branches b ON b.branch_id = d.branch_id
           JOIN skus s     ON s.sku_id    = d.sku_id
           LEFT JOIN {_ING_BOM_MAP} m ON m.sale_sku = d.sku_id
@@ -4228,7 +4273,7 @@ def _ing_coverage(con, start: str, end: str, branch: Optional[str], group: Optio
     cov = float(row["cov"] or 0)
     missing = con.execute(f"""
         SELECT s.sku_code AS code, s.description AS name, ROUND(SUM(d.qty)) AS qty
-          FROM sales_sku_daily d
+          FROM v_sales_sku_daily d
           JOIN branches b ON b.branch_id = d.branch_id
           JOIN skus s     ON s.sku_id    = d.sku_id
           LEFT JOIN {_ING_BOM_MAP} m ON m.sale_sku = d.sku_id
@@ -5402,7 +5447,7 @@ def _ing_consumed(con, branch: str, start: str, end: str):
         SELECT COALESCE(NULLIF(bi.ingredient_code,''), '__' || bi.ingredient_name) AS code,
                bi.unit AS unit,
                SUM(d.qty * bi.qty_per_serving) AS qty
-          FROM sales_sku_daily d
+          FROM v_sales_sku_daily d
           JOIN branches b         ON b.branch_id = d.branch_id
           JOIN {_ING_BOM_MAP} m   ON m.sale_sku  = d.sku_id
           JOIN bom_ingredients bi ON bi.sku_id   = m.bom_sku

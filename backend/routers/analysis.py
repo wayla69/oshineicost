@@ -261,7 +261,7 @@ def analysis_gross_profit(
                        ROUND(SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}), 2)     AS cogs,
                        SUM(CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NULL THEN sm.subtotal_ex_vat ELSE 0 END)
                                                                                    AS uncosted_rev
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 JOIN skus sk ON sk.sku_id = sm.sku_id
                 LEFT JOIN sku_cost sc ON sc.sku_id = sm.sku_id
@@ -332,7 +332,7 @@ def analysis_gross_profit(
                    SUM(sm.subtotal_ex_vat) AS rev_ex,
                    SUM(sm.total_inc_vat)   AS rev_inc,
                    SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk ON sk.sku_id = sm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id = sm.sku_id
@@ -505,7 +505,7 @@ def analysis_hourly(
                    COUNT(*)                                     AS tx_count,
                    COALESCE(SUM(st.customer_count), 0)         AS customer_count,
                    ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)             AS revenue,
-                   ROUND(AVG(st.total_inc_vat), 2)             AS avg_ticket
+                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)             AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -560,7 +560,7 @@ def analysis_dow(
                    COUNT(*)                                     AS tx_count,
                    SUM(st.customer_count)                       AS customer_count,
                    ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)             AS revenue,
-                   ROUND(AVG(st.total_inc_vat), 2)             AS avg_ticket,
+                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)             AS avg_ticket,
                    COUNT(DISTINCT DATE(st.sold_at))             AS day_count
             FROM sales_transaction st
             {join}
@@ -648,7 +648,7 @@ def analysis_compare(
             f"""
             SELECT ROUND(SUM(sm.subtotal_ex_vat), 2)   AS revenue,
                    ROUND(SUM(sm.subtotal_ex_vat), 2)  AS revenue_ex_vat
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             WHERE b.name != 'ALL' AND sm.period_month = :period
               {branch_filter}
@@ -783,8 +783,8 @@ def analysis_persona(
                      ELSE customer_count
                    END AS party_size,
                    COUNT(*)                          AS tx_count,
-                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)), 2)     AS avg_bill,
-                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0) / CASE WHEN customer_count <= 0 THEN 1
+                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0))), 2)     AS avg_bill,
+                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0)) / CASE WHEN customer_count <= 0 THEN 1
                                                    ELSE customer_count END), 2) AS avg_per_head
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -828,7 +828,7 @@ def analysis_persona(
             f"""
             SELECT COUNT(*)                          AS tx_count,
                    ROUND(AVG(customer_count), 2)    AS avg_party_size,
-                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)), 2)     AS avg_ticket,
+                   ROUND(AVG((total_inc_vat/1.07 - COALESCE(service_charge,0))), 2)     AS avg_ticket,
                    ROUND((SUM(total_inc_vat)/1.07 - SUM(COALESCE(service_charge,0))) /
                          NULLIF(SUM(customer_count), 0), 2) AS avg_per_head
             FROM sales_transaction st
@@ -989,7 +989,7 @@ def analysis_cashiers(
                    COUNT(*)                                           AS tx_count,
                    SUM(st.customer_count)                            AS customer_count,
                    ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)                  AS revenue,
-                   ROUND(AVG(st.total_inc_vat), 2)                  AS avg_ticket,
+                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)                  AS avg_ticket,
                    SUM(CASE WHEN st.discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
                    ROUND(SUM(st.discount), 2)                        AS total_discount,
                    ROUND(100.0 * SUM(CASE WHEN st.discount > 0 THEN 1 ELSE 0 END)
@@ -1060,7 +1060,7 @@ def analysis_discounts(
                    SUM(CASE WHEN discount > 0 THEN 1 ELSE 0 END) AS discount_tx,
                    ROUND(SUM(discount), 2)                        AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
-                   ROUND(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)) + discount), 2) AS gross_sales,
+                   ROUND(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0))) + discount), 2) AS gross_sales,
                    SUM(CASE WHEN discount > 0 AND COALESCE(print_times,0) > 1 THEN 1 ELSE 0 END) AS reprinted_disc_bills,
                    MAX(COALESCE(print_times, 0)) AS max_print_times
             FROM sales_transaction st
@@ -1080,7 +1080,7 @@ def analysis_discounts(
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)) + discount),0), 1) AS disc_pct_of_sales
+                         / NULLIF(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0))) + discount),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -1118,7 +1118,7 @@ def analysis_discounts(
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)) + discount),0), 1) AS disc_pct_of_sales,
+                         / NULLIF(SUM(((total_inc_vat/1.07 - COALESCE(service_charge,0))) + discount),0), 1) AS disc_pct_of_sales,
                    SUM(CASE WHEN discount > 0 AND COALESCE(print_times,0) > 1 THEN 1 ELSE 0 END) AS reprinted_disc_bills,
                    MAX(COALESCE(print_times, 0)) AS max_print_times
             FROM sales_transaction st
@@ -1136,7 +1136,7 @@ def analysis_discounts(
             f"""
             WITH t AS (
               SELECT discount AS d,
-                     (((total_inc_vat/1.07 - COALESCE(service_charge,0)) - COALESCE(service_charge,0)) + discount) AS gross
+                     (((total_inc_vat/1.07 - COALESCE(service_charge,0))) + discount) AS gross
               FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
               {where} AND discount > 0
             )
@@ -1895,7 +1895,7 @@ def _fetch_period_kpis(con, branch, month_from, month_to, date_from, date_to):
         SELECT COUNT(*)                                  AS tx_count,
                COALESCE(SUM(st.customer_count), 0)      AS customer_count,
                ROUND(COALESCE((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 0), 2) AS revenue,
-               ROUND(COALESCE(AVG(st.total_inc_vat), 0), 2) AS avg_ticket,
+               ROUND(COALESCE(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 0), 2) AS avg_ticket,
                ROUND(COALESCE(SUM(st.discount), 0), 2)  AS discount,
                ROUND(COALESCE(SUM(st.food_subtotal), 0), 2)  AS food,
                ROUND(COALESCE(SUM(st.drink_subtotal), 0), 2) AS drink
@@ -1945,7 +1945,7 @@ def _fetch_period_kpis(con, branch, month_from, month_to, date_from, date_to):
         SELECT sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
                ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue,
                ROUND(SUM(sm.qty), 0)            AS qty
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b ON b.branch_id = sm.branch_id
         JOIN skus sk    ON sk.sku_id    = sm.sku_id
         JOIN categories c ON c.category_id = sk.category_id
@@ -2098,7 +2098,7 @@ def heatmap_branch(
                 SELECT b.name AS branch,
                        sm.period_month AS period,
                        ROUND(SUM(sm.subtotal_ex_vat), 2) AS revenue
-                FROM sales_sku_monthly sm
+                FROM v_sales_sku_monthly sm
                 JOIN branches b ON b.branch_id = sm.branch_id
                 {where_easy}
                 GROUP BY b.name, sm.period_month
@@ -2311,7 +2311,7 @@ def analysis_anomalies(
                 SELECT s.period_month AS month,
                        ROUND(SUM({_cogs_case('s','sk','c')}), 2) AS bom_cost,
                        ROUND(SUM(s.subtotal_ex_vat), 2)          AS revenue
-                FROM sales_sku_monthly s
+                FROM v_sales_sku_monthly s
                 JOIN skus sk     ON sk.sku_id = s.sku_id
                 LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
                 JOIN branches b  ON b.branch_id = s.branch_id
@@ -2493,7 +2493,7 @@ def analysis_yoy(
         rng = con.execute(
             f"""
             SELECT sm.period_month, ROUND(SUM(sm.subtotal_ex_vat),2) AS revenue
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             WHERE b.name != 'ALL'
               AND sm.period_month BETWEEN :mf AND :mt
@@ -2512,7 +2512,7 @@ def analysis_yoy(
             ly_params = {**params, **{f"ly{i}": m for i, m in enumerate(ly_months_unique)}}
             ly_rows = con.execute(
                 f"""SELECT sm.period_month, ROUND(SUM(sm.subtotal_ex_vat),2) AS revenue
-                    FROM sales_sku_monthly sm
+                    FROM v_sales_sku_monthly sm
                     JOIN branches b ON b.branch_id = sm.branch_id
                     WHERE b.name != 'ALL' AND sm.period_month IN ({ly_ph}) {where_branch}
                     GROUP BY sm.period_month""",
@@ -2884,7 +2884,7 @@ def analysis_affinity(
         anchor_baskets = con.execute(
             f"""
             SELECT DISTINCT sm.branch_id || '|' || sm.period_month AS basket
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk    ON sk.sku_id    = sm.sku_id
             {where} AND sk.sku_code = :anchor
@@ -2901,7 +2901,7 @@ def analysis_affinity(
                    COUNT(DISTINCT sm.branch_id || '|' || sm.period_month) AS co_count,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS co_revenue,
                    ROUND(SUM(sm.qty), 0) AS co_qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk    ON sk.sku_id    = sm.sku_id
             {where} AND sk.sku_code != :anchor
@@ -2921,7 +2921,7 @@ def analysis_affinity(
                    COUNT(DISTINCT sm.branch_id || '|' || sm.period_month) AS co_count,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS co_revenue,
                    ROUND(SUM(sm.qty), 0) AS co_qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk    ON sk.sku_id    = sm.sku_id
             WHERE b.name != 'ALL' AND sk.sku_code != ?
@@ -2957,7 +2957,7 @@ def analysis_percentiles(
                    COUNT(*)                                AS tx,
                    SUM(st.customer_count)                  AS cust,
                    ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)        AS revenue,
-                   ROUND(AVG(st.total_inc_vat), 2)        AS avg_ticket
+                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)        AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -3022,7 +3022,7 @@ def analysis_hourly_open(
                    COUNT(*)                                    AS tx_count,
                    COALESCE(SUM(st.customer_count), 0)         AS customer_count,
                    ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)             AS revenue,
-                   ROUND(AVG(st.total_inc_vat), 2)             AS avg_ticket
+                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)             AS avg_ticket
             FROM sales_transaction st
             {join}
             {where}
@@ -3321,7 +3321,7 @@ def analysis_daypart_grid(
                 COUNT(*)                                      AS tx_count,
                 COALESCE(SUM(st.customer_count), 0)           AS customer_count,
                 ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)               AS revenue,
-                ROUND(AVG(st.total_inc_vat), 2)               AS avg_ticket,
+                ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)               AS avg_ticket,
                 COUNT(DISTINCT DATE(st.sold_at))              AS day_count
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -3385,7 +3385,7 @@ def analysis_branch_peak(
                 COUNT(*) AS tx_count,
                 COALESCE(SUM(st.customer_count), 0) AS customer_count,
                 ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS revenue,
-                ROUND(AVG(st.total_inc_vat), 2) AS avg_ticket,
+                ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2) AS avg_ticket,
                 COUNT(DISTINCT DATE(st.sold_at)) AS day_count
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -3469,7 +3469,7 @@ def food_cost_trend(
                    ROUND(SUM(sm.qty), 0)                                          AS servings,
                    COUNT(DISTINCT CASE WHEN {_unified_cogs_expr('sm', 'sk')} = 0
                                        THEN sk.sku_id END)                         AS uncosted
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b   ON b.branch_id   = sm.branch_id
             JOIN skus sk      ON sk.sku_id      = sm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id  = sm.sku_id
@@ -3568,7 +3568,7 @@ def buffet_mix(
                    COALESCE(sk.description, sk.sku_code) AS description,
                    ROUND(SUM(sm.qty), 2)                 AS qty,
                    ROUND(SUM(sm.subtotal_ex_vat), 2)       AS revenue
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b   ON b.branch_id  = sm.branch_id
             JOIN skus sk      ON sk.sku_id     = sm.sku_id
             LEFT JOIN categories cat ON cat.category_id = sk.category_id
@@ -3904,7 +3904,7 @@ def revenue_forecast(
     with get_db() as con:
         rows = con.execute(f"""
             SELECT ssm.period_month AS m, SUM(ssm.subtotal_ex_vat) AS rev
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b ON b.branch_id = ssm.branch_id
             {where}
             GROUP BY ssm.period_month

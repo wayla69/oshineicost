@@ -54,7 +54,7 @@ def buffet_child(branch: Optional[str] = Query(None)):
             SELECT b.name AS branch, sm.period_month AS m, sk.sku_code AS code,
                    ROUND(SUM(sm.qty), 0)             AS qty,
                    ROUND(SUM(sm.subtotal_ex_vat), 2) AS rev
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk    ON sk.sku_id   = sm.sku_id
             {where}
@@ -139,7 +139,7 @@ def buffet_tier_mix(
             SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs_total,
             SUM(CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NOT NULL
                      THEN sm.qty ELSE 0 END)                AS costed_qty
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b   ON b.branch_id = sm.branch_id
         JOIN skus sk      ON sk.sku_id   = sm.sku_id
         JOIN categories c ON c.category_id = sk.category_id
@@ -260,8 +260,8 @@ def buffet_cover_economics(
                 t.customer_count                   AS party_size,
                 COUNT(*)                           AS tx_count,
                 (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0)))        AS revenue,
-                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0) / t.customer_count) AS avg_revenue_per_cover,
-                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))        AS avg_ticket
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) / t.customer_count) AS avg_revenue_per_cover,
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))        AS avg_ticket
             FROM sales_transaction t
             JOIN branches b ON b.branch_id = t.branch_id
             {tx_where}
@@ -303,7 +303,7 @@ def buffet_cover_economics(
                 COUNT(*)              AS tx_count,
                 SUM(t.customer_count) AS total_covers,
                 (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) AS revenue,
-                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0)) AS avg_ticket,
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))) AS avg_ticket,
                 AVG(t.customer_count) AS avg_covers
             FROM sales_transaction t
             JOIN branches b ON b.branch_id = t.branch_id
@@ -346,7 +346,7 @@ def buffet_cover_economics(
         child_row = con.execute(
             f"""
             SELECT SUM(sm.qty) AS child_qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk    ON sk.sku_id   = sm.sku_id
             {child_where}
@@ -549,7 +549,7 @@ def buffet_upgrade_simulator(
             SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs_total,
             SUM(CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NOT NULL
                      THEN sm.qty ELSE 0 END)               AS costed_qty
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b   ON b.branch_id  = sm.branch_id
         JOIN skus sk      ON sk.sku_id    = sm.sku_id
         JOIN categories c ON c.category_id = sk.category_id
@@ -736,7 +736,7 @@ def buffet_gp_calendar(
 
     mon_sql = f"""
         SELECT SUM({_unified_cogs_expr(ssm='sm')}) AS cogs
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b ON b.branch_id = sm.branch_id
         WHERE {' AND '.join(mon_filters)}
     """
@@ -827,7 +827,7 @@ def buffet_child_trend(
             c.name          AS category,
             SUM(sm.qty)     AS qty,
             SUM(sm.subtotal_ex_vat) AS rev_ex
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
@@ -841,7 +841,7 @@ def buffet_child_trend(
     cogs_where = ("WHERE " + " AND ".join(cogs_base_filters + ["b.name != 'ALL'"])) if cogs_base_filters else "WHERE b.name != 'ALL'"
     cogs_sql = f"""
         SELECT sm.period_month, SUM({_unified_cogs_expr(ssm='sm')}) AS cogs
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b ON b.branch_id = sm.branch_id
         {cogs_where}
         GROUP BY sm.period_month
@@ -985,7 +985,7 @@ def buffet_breakeven(
         SELECT
             SUM(sm.qty)             AS total_pax,
             SUM(sm.subtotal_ex_vat) AS rev_ex
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
@@ -994,7 +994,7 @@ def buffet_breakeven(
 
     cogs_sql = f"""
         SELECT SUM({_unified_cogs_expr(ssm='sm')}) AS total_cogs
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches b ON b.branch_id = sm.branch_id
         WHERE {' AND '.join(cogs_filters)}
     """
@@ -1080,7 +1080,7 @@ def buffet_forecast(
             sm.period_month,
             SUM(sm.qty)           AS pax,
             SUM(sm.subtotal_ex_vat) AS revenue
-        FROM sales_sku_monthly sm
+        FROM v_sales_sku_monthly sm
         JOIN branches   b  ON b.branch_id   = sm.branch_id
         JOIN skus       sk ON sk.sku_id     = sm.sku_id
         JOIN categories c  ON c.category_id = sk.category_id
@@ -1216,7 +1216,7 @@ def buffet_performance(
                    SUM(sm.qty)             AS pax,
                    SUM(sm.total_inc_vat)   AS rev_inc,
                    SUM(sm.subtotal_ex_vat) AS rev_ex
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus sk      ON sk.sku_id    = sm.sku_id
             JOIN branches b   ON b.branch_id  = sm.branch_id
             {where_sku}
@@ -1262,7 +1262,7 @@ def buffet_performance(
             SELECT sm.period_month AS m,
                    SUM(sm.qty) AS qty,
                    SUM(sm.subtotal_ex_vat) AS rev
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus sk ON sk.sku_id = sm.sku_id
             JOIN branches b ON b.branch_id = sm.branch_id
             {where_sku}
@@ -1273,7 +1273,7 @@ def buffet_performance(
         # Buffet pax per month (for waste rate denominator)
         buffet_pax_rows = con.execute(f"""
             SELECT sm.period_month AS m, SUM(sm.qty) AS pax
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus sk ON sk.sku_id = sm.sku_id
             JOIN branches b ON b.branch_id = sm.branch_id
             {where_sku}
@@ -1332,7 +1332,7 @@ def buffet_performance(
             SELECT b.name AS branch, sm.period_month AS m,
                    SUM(sm.subtotal_ex_vat) AS rev,
                    SUM(sm.qty) AS pax
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus sk ON sk.sku_id = sm.sku_id
             JOIN branches b ON b.branch_id = sm.branch_id
             WHERE b.name != 'ALL'{grp_sql}
@@ -1352,7 +1352,7 @@ def buffet_performance(
                    SUM(CASE WHEN sk.business_type = 'buffet_tier'
                             THEN sm.subtotal_ex_vat ELSE 0 END)  AS rev_ex,
                    SUM({_unified_cogs_expr('sm', 'sk')})         AS cogs
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus     sk ON sk.sku_id   = sm.sku_id
             JOIN branches b  ON b.branch_id = sm.branch_id
             {where_sku}
@@ -1369,7 +1369,7 @@ def buffet_performance(
         ac_rows = con.execute(f"""
             SELECT sk.sku_code AS code, SUM(sm.qty) AS qty,
                    SUM(sm.subtotal_ex_vat) AS rev
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN skus sk     ON sk.sku_id   = sm.sku_id
             JOIN branches b  ON b.branch_id = sm.branch_id
             {where_sku}
@@ -1621,7 +1621,7 @@ def buffet_performance(
               COALESCE(SUM(ssm.total_inc_vat),  0)        AS rev_inc,
               COALESCE(SUM({_cogs_case('ssm','sk','sc')}), 0)        AS cogs,
               COALESCE(SUM({_costed_rev_case('ssm','sk','sc')}), 0)  AS costed_rev_ex
-              FROM sales_sku_monthly ssm
+              FROM v_sales_sku_monthly ssm
               JOIN branches b   ON b.branch_id = ssm.branch_id
               JOIN skus     sk  ON sk.sku_id   = ssm.sku_id
               LEFT JOIN sku_cost sc ON sc.sku_id = ssm.sku_id
@@ -1759,7 +1759,7 @@ def buffet_gp(
                 SUM(sm.subtotal_ex_vat) AS rev,
                 SUM({bom_cost_sql}) AS bom_cost,
                 COUNT(DISTINCT {uncovered_sql}) AS uncovered
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches   b  ON b.branch_id   = sm.branch_id
             JOIN skus       sk ON sk.sku_id      = sm.sku_id
             JOIN categories c  ON c.category_id  = sk.category_id
@@ -2026,7 +2026,7 @@ def buffet_menu_cost_efficiency(
                      WHEN EXISTS (SELECT 1 FROM sku_cost sc WHERE sc.sku_id = sk.sku_id) THEN 'sku_cost'
                      ELSE 'none'
                    END AS cost_source
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
             JOIN skus sk      ON sk.sku_id      = ssm.sku_id
             JOIN categories c ON c.category_id  = sk.category_id
@@ -2093,7 +2093,7 @@ def buffet_menu_cost_trend(
                    ssm.period_month AS month,
                    SUM(ssm.qty)                     AS servings,
                    SUM({_unified_cogs_expr('ssm')}) AS cost
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
             JOIN skus sk      ON sk.sku_id      = ssm.sku_id
             JOIN categories c ON c.category_id  = sk.category_id
@@ -2155,7 +2155,7 @@ def buffet_menu_cost_by_branch(
                    SUM(ssm.qty)                     AS servings,
                    SUM({_unified_cogs_expr('ssm')}) AS cost,
                    SUM(ssm.subtotal_ex_vat)         AS revenue
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id   = ssm.branch_id
             JOIN skus sk      ON sk.sku_id      = ssm.sku_id
             {where}
@@ -2219,7 +2219,7 @@ def buffet_menu_cost_coverage(
                      WHEN EXISTS (SELECT 1 FROM sku_cost sc2 WHERE sc2.sku_id = sk.sku_id) THEN 'sku_cost'
                      ELSE 'none'
                    END AS bucket
-            FROM sales_sku_monthly ssm
+            FROM v_sales_sku_monthly ssm
             JOIN branches b   ON b.branch_id  = ssm.branch_id
             JOIN skus sk      ON sk.sku_id     = ssm.sku_id
             JOIN categories c ON c.category_id = sk.category_id
@@ -2319,7 +2319,7 @@ def buffet_portion_velocity(
                    sk.sku_code, COALESCE(sk.description, sk.sku_code) AS description,
                    c.name AS category,
                    SUM(sm.qty) AS qty
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches   b  ON b.branch_id   = sm.branch_id
             JOIN skus       sk ON sk.sku_id      = sm.sku_id
             JOIN categories c  ON c.category_id  = sk.category_id
@@ -2431,7 +2431,7 @@ def buffet_plate_cost_dist(
             SELECT b.name AS branch, sm.period_month AS m,
                    SUM(CASE WHEN sk.sku_code NOT IN ({tier_ph})
                             THEN {_cogs_case(ssm='sm', sk='sk', sc='sc')} ELSE 0 END) AS bom_cost
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches   b  ON b.branch_id  = sm.branch_id
             JOIN skus       sk ON sk.sku_id     = sm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id  = sm.sku_id
@@ -2611,7 +2611,7 @@ def buffet_turn_efficiency(branch: Optional[str] = Query(None), group: Optional[
               FROM pos_table_turn_day x JOIN branches b ON b.branch_id=x.branch_id
               WHERE {tw} AND x.day>=:since GROUP BY x.branch_id),
             gp AS (
-              SELECT t.branch_id, SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0) - c.cogs_bom) gp, SUM(t.customer_count) cov
+              SELECT t.branch_id, SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom) gp, SUM(t.customer_count) cov
               FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
               JOIN branches b ON b.branch_id=t.branch_id WHERE {tw} AND t.customer_count>0 GROUP BY t.branch_id)
             SELECT b.name branch, ROUND(tt.turn_min,1) turn_min, tt.cov_day, tt.tabs_day,
@@ -2674,7 +2674,7 @@ def buffet_cost_sensitivity(
                    SUM(sm.qty)                                            AS total_qty,
                    SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')})          AS total_bom_cost,
                    SUM(sm.subtotal_ex_vat)                                AS total_rev
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches   b  ON b.branch_id  = sm.branch_id
             JOIN skus       sk ON sk.sku_id     = sm.sku_id
             JOIN categories c  ON c.category_id = sk.category_id
@@ -2690,7 +2690,7 @@ def buffet_cost_sensitivity(
         # Total revenue for the period (to compute margin impact)
         rev_row = con.execute(f"""
             SELECT SUM(sm.subtotal_ex_vat) AS total_rev
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches b ON b.branch_id = sm.branch_id
             JOIN skus sk ON sk.sku_id = sm.sku_id
             {where}
@@ -2769,7 +2769,7 @@ def buffet_pnl(
                    SUM(sm.subtotal_ex_vat)                                  AS revenue,
                    SUM(CASE WHEN sk.sku_code NOT IN ({tier_ph})
                             THEN {_cogs_case(ssm='sm', sk='sk', sc='sc')} ELSE 0 END) AS bom_cost
-            FROM sales_sku_monthly sm
+            FROM v_sales_sku_monthly sm
             JOIN branches   b  ON b.branch_id   = sm.branch_id
             JOIN skus       sk ON sk.sku_id      = sm.sku_id
             LEFT JOIN sku_cost sc ON sc.sku_id   = sm.sku_id
