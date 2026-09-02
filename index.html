@@ -808,6 +808,11 @@ body.dark .skeleton-kpi { border-color: var(--border); }
      Let a section FLOW across sheets and protect only the atoms inside it. */
   #tab-mgtreport .mgt-sec { break-inside: auto !important; page-break-inside: auto !important; }
   #tab-mgtreport .mgt-sec > h2 { break-after: avoid; page-break-after: avoid; }
+  /* …and the one-line verdict that follows most headings travels with them. Without
+     this the heading and its verdict were a legal pair to leave at the foot of a
+     page while the section's actual content went overleaf — a title stranded above
+     nothing. */
+  #tab-mgtreport .mgt-sec > h2 + p { break-after: avoid; page-break-after: avoid; }
   #tab-mgtreport h3 { break-after: avoid; page-break-after: avoid; }
   #tab-mgtreport tr, #tab-mgtreport li, #tab-mgtreport svg,
   #tab-mgtreport .rounded-xl, #tab-mgtreport .mgt-atom {
@@ -865,7 +870,28 @@ body.dark .skeleton-kpi { border-color: var(--border); }
   #tab-mgtreport .p-4 { padding: 7px 9px !important; }
   #tab-mgtreport table { font-size: 9.5px !important; }
   #tab-mgtreport table th, #tab-mgtreport table td { padding-top: 2px !important; padding-bottom: 2px !important; }
-  #tab-mgtreport ul li { padding-top: 2px !important; padding-bottom: 2px !important; }
+  #tab-mgtreport ul li { padding-top: 1px !important; padding-bottom: 1px !important; }
+
+  /* Two sections were each missing a sheet by a hair, and the leftovers looked
+     like mistakes: §5 stranded rows on the page before, §7 pushed a single dish
+     row onto the page after, alone above §8. Both are cheaper to fix by making
+     the rows themselves slightly shorter than by spending another sheet.
+     §5 must fit all 28 branches on one landscape page: it cleared 25 before. */
+  #tab-mgtreport #mgt-s5 table { font-size: 9px !important; }
+  #tab-mgtreport #mgt-s5 th,
+  #tab-mgtreport #mgt-s5 td { padding-top: 0 !important; padding-bottom: 0 !important;
+                              line-height: 1.25 !important; }
+  /* §7 is three lists of six dishes; this recovers more than the one row that
+     was spilling. */
+  #tab-mgtreport #mgt-s7 li { line-height: 1.2 !important; }
+  #tab-mgtreport #mgt-s7 ul li { padding-top: 0 !important; padding-bottom: 0 !important; }
+
+  /* §8's dayparts-and-hours block is half a page and was being cut wherever the
+     previous section happened to end — one daypart row left behind, the rest
+     overleaf. Keeping it whole makes it move to the next sheet intact instead.
+     Only safe because this block is nowhere near a page tall; a taller one would
+     be clipped rather than moved, which is the trap `break-inside: avoid` sets. */
+  #tab-mgtreport #mgt-s8 > div:not(.mgt-atom) { break-inside: avoid; page-break-inside: avoid; }
 
   /* Portrait sheets are ~90 mm narrower than landscape ones: the multi-column
      grids inside them (KPI tiles, leak cards, split panels, the contents list)

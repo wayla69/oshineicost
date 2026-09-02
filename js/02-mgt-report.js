@@ -1490,7 +1490,12 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s2',  c:'#d97706', t:T.s2, h:actsWithSplit },
     { id:'mgt-s3',  c:'#4f46e5', t:T.s3pre + (mc ? T.s3mc : T.s3mtd) + T.s3post, h:v3 + pace },
     { id:'mgt-s4',  c:'#0891b2', land:true, t:T.s4pre + (isDaily ? T.s4d : isMonthly ? T.s4m : T.s4w) + T.s4post, h:v4 + trend },
-    { id:'mgt-s5',  c:'#7c3aed', land:true, t:T.s5, h:branchTbl },
+    // §5 starts a fresh sheet ONCE THE TABLE IS LONG. With 28 branches it needs a
+    // page of its own anyway, and letting it begin at the foot of §4's page
+    // stranded four rows there and carried the other twenty-four over — a table
+    // split 4/24 for no reason. Short tables (a single-branch report) still flow
+    // inline rather than burning a sheet on six rows.
+    { id:'mgt-s5',  c:'#7c3aed', land:true, brk: _brs.length >= 12, t:T.s5, h:branchTbl },
     { id:'mgt-s6',  c:'#dc2626', t:T.s6, h:leakWithSplit },
     { id:'mgt-s7',  c:'#059669', land:true, t:T.s7, h:menu },
     { id:'mgt-s8',  c:'#0284c7', land:true, t:T.s8, h:v8 + peakWithSplit },
