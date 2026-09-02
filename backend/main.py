@@ -331,6 +331,11 @@ _FOOD_CATEGORY_FILTER = (
     # service, DEL* = delivery — these can sit inside food categories but are not
     # dishes, so exclude by code too.
     " AND sk.sku_code NOT GLOB 'OT[0-9]*'"
+    # The Grand Menu (2026-09) re-coded those charges as OTHOT* — ค่าปรับบุฟเฟ่ต์
+    # (food-waste penalty) and ค่าเปิดห้อง, which the OT[0-9] pattern does not match. They
+    # were landing in food analytics as revenue that will never have a recipe,
+    # inflating the uncosted gap and pulling food % down (฿11.6k on 1 Sep alone).
+    " AND sk.sku_code NOT GLOB 'OTHOT*'"
     " AND sk.sku_code NOT GLOB 'DEL[0-9]*'"
     " AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE','SP','SERVICE','DISCOUNT','DEPOSIT')"
     " AND sk.sku_code NOT LIKE 'BUFFET%'"
