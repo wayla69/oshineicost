@@ -1343,6 +1343,13 @@ function renderMgtReport(j, jM, jF) {
       const PZ = TD.promo;
       if (!PZ || !PZ.kinds) return '';
       const K = PZ.kinds, bits = [];
+      // one colour per kind, so the eye can sort them without reading:
+      //   free  = red     money given away outright
+      //   mixed = amber   the sneaky one — not a price, an artefact of the mix
+      //   disc  = teal    an ordinary, intended discount
+      const C = { free: '#dc2626', mixed: '#b45309', disc: '#0f766e' };
+      const chip = (k, txt) => `<span style="display:inline-block;padding:1px 7px;border-radius:999px;`
+        + `background:${C[k]}18;color:${C[k]};font-weight:700;font-size:11px;white-space:nowrap">${txt}</span>`;
       const paxOf = k => (K[k] && K[k].pax) || 0;
       const billsOf = k => (K[k] && K[k].bills) || 0;
       const totPax = paxOf('disc') + paxOf('mixed') + paxOf('free');
@@ -1354,26 +1361,27 @@ function renderMgtReport(j, jM, jF) {
           .map(d => isTH
             ? `${baht(d.unit)} = ลด ${d.off_pct.toFixed(0)}% จาก ${baht(d.of_tier)} (${num(d.pax)} คน)`
             : `${baht(d.unit)} = ${d.off_pct.toFixed(0)}% off ${baht(d.of_tier)} (${num(d.pax)} covers)`);
-        bits.push(isTH
-          ? `<b>ส่วนลดทั้งบิล</b> ${num(billsOf('disc'))} บิล / ${num(paxOf('disc'))} คน${top.length ? ' — ' + top.join(' · ') : ''}`
-          : `<b>Whole-bill discounts</b> ${num(billsOf('disc'))} bills / ${num(paxOf('disc'))} covers${top.length ? ' — ' + top.join(' · ') : ''}`);
+        bits.push([ 'disc', isTH
+          ? `${chip('disc', 'ส่วนลดทั้งบิล')} <b>${num(billsOf('disc'))}</b> บิล / <b>${num(paxOf('disc'))}</b> คน${top.length ? ' — ' + top.join(' · ') : ''}`
+          : `${chip('disc', 'Whole-bill discount')} <b>${num(billsOf('disc'))}</b> bills / <b>${num(paxOf('disc'))}</b> covers${top.length ? ' — ' + top.join(' · ') : ''}` ]);
       }
       if (paxOf('mixed')) {
-        bits.push(isTH
-          ? `<b>บิลที่มีหัวฟรีหรือครึ่งราคาปนกับหัวเต็มราคา</b> ${num(billsOf('mixed'))} บิล / ${num(paxOf('mixed'))} คน — ราคาเฉลี่ยต่อหัวจึงตกอยู่ระหว่าง tier ไม่ใช่ราคาขายจริง${brList('mixed') ? ' · สาขา: ' + brList('mixed') : ''}`
-          : `<b>Bills mixing a comped or half-price head with paying ones</b> ${num(billsOf('mixed'))} bills / ${num(paxOf('mixed'))} covers — the per-head average lands between tiers and is not a real price${brList('mixed') ? ' · branches: ' + brList('mixed') : ''}`);
+        bits.push([ 'mixed', isTH
+          ? `${chip('mixed', 'หัวฟรี/ครึ่งราคาปน')} <b>${num(billsOf('mixed'))}</b> บิล / <b>${num(paxOf('mixed'))}</b> คน — ราคาเฉลี่ยต่อหัวตกอยู่ระหว่าง tier <b>ไม่ใช่ราคาขายจริง</b>${brList('mixed') ? '<br><span class="text-slate-500">สาขา: ' + brList('mixed') + '</span>' : ''}`
+          : `${chip('mixed', 'Comped/half-price head mixed in')} <b>${num(billsOf('mixed'))}</b> bills / <b>${num(paxOf('mixed'))}</b> covers — the per-head average lands between tiers and is <b>not a real price</b>${brList('mixed') ? '<br><span class="text-slate-500">branches: ' + brList('mixed') + '</span>' : ''}` ]);
       }
       if (paxOf('free')) {
-        bits.push(isTH
-          ? `<b>บิลฟรีทั้งใบ</b> ${num(billsOf('free'))} บิล / ${num(paxOf('free'))} คน${brList('free') ? ' · สาขา: ' + brList('free') : ''}`
-          : `<b>Fully comped bills</b> ${num(billsOf('free'))} bills / ${num(paxOf('free'))} covers${brList('free') ? ' · branches: ' + brList('free') : ''}`);
+        bits.push([ 'free', isTH
+          ? `${chip('free', 'ฟรีทั้งใบ')} <b>${num(billsOf('free'))}</b> บิล / <b>${num(paxOf('free'))}</b> คน${brList('free') ? '<br><span class="text-slate-500">สาขา: ' + brList('free') + '</span>' : ''}`
+          : `${chip('free', 'Fully comped')} <b>${num(billsOf('free'))}</b> bills / <b>${num(paxOf('free'))}</b> covers${brList('free') ? '<br><span class="text-slate-500">branches: ' + brList('free') + '</span>' : ''}` ]);
       }
       if (!bits.length) return '';
-      return `<div class="mt-3 pt-3 border-t border-slate-100 mgt-atom">
-          <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mb-1">${T.promoTitle}</p>
-          <ul class="text-[12px] text-slate-600 space-y-1">${bits.map(b =>
-            `<li class="flex gap-2"><span style="color:#b45309">•</span><span>${b}</span></li>`).join('')}</ul>
-          <p class="text-[10px] text-slate-400 mt-1.5">${T.promoNote}</p></div>`;
+      const shareTxt = TD.pax ? ` <span style="color:#92400e">(${(totPax / TD.pax * 100).toFixed(1)}% ${isTH ? 'ของคนทานทั้งหมด' : 'of all covers'})</span>` : '';
+      return `<div class="mt-4 rounded-xl mgt-atom" style="background:#fffbeb;border:1px solid #fde68a;border-left:4px solid #d97706;padding:11px 14px">
+          <p class="text-[12px] font-extrabold mb-2" style="color:#92400e">${T.promoTitle}${shareTxt}</p>
+          <ul class="space-y-1.5" style="font-size:12.5px;color:#1f2937">${bits.map(([k, b]) =>
+            `<li class="flex gap-2"><span style="color:${C[k]};font-weight:700">•</span><span>${b}</span></li>`).join('')}</ul>
+          <p class="text-[10.5px] mt-2" style="color:#a16207">${T.promoNote}</p></div>`;
     })();
     return `<p class="text-[11px] text-slate-500 mb-3">${num(TD.pax)} ${T.tierBuffetGuests}${TD.pax_prev != null ? ' ' + wowVal(TD.pax, TD.pax_prev) + ' <span class="text-slate-400">' + compShort + '</span>' : ''}</p>
       <div class="overflow-x-auto"><table class="w-full text-xs"><thead><tr class="text-slate-500">
