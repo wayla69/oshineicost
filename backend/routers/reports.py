@@ -1705,7 +1705,13 @@ def report_management(
                     rows_t = []
                     for t in _PT_ORDER:
                         vc0 = TC.get(t); vp = TP.get(t)
-                        if not vc0 and not vp:
+                        # A tier with nobody on it in THIS period is not a finding,
+                        # it is a retired price. The menu changed on 2026-09-01, so a
+                        # September report was carrying all six old tiers as empty
+                        # rows purely because the comparison week still had guests on
+                        # them — six lines of "—" for prices that no longer exist.
+                        # Symmetric: an August report drops the new tiers the same way.
+                        if not vc0 or not (vc0.get("pax") or 0):
                             continue
                         vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
                         pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
@@ -1727,9 +1733,19 @@ def report_management(
                     mix_eff = None
                     rev_p = sum(v["rev"] for v in TP.values())
                     if pax_c and pax_p and rev_p:
-                        at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
-                                      for t in TC if TP.get(t, {}).get("pax", 0) > 0)
-                        mix_eff = round(at_prev - rev_p / pax_p, 2)
+                        # Only tiers that existed in BOTH periods can carry the
+                        # comparison; the weights are re-based on those. When the menu
+                        # itself was replaced (2026-09-01) barely any tier overlaps, so
+                        # the weights summed to ~0.21 of the mix and the shortfall was
+                        # reported as a ฿-520/head "customers moved to cheaper tiers"
+                        # — an artefact of the missing 79%, not a shift in behaviour.
+                        # Below near-full coverage there is no mix story to tell.
+                        shared = [t for t in TC if TP.get(t, {}).get("pax", 0) > 0]
+                        cover = sum(TC[t]["pax"] for t in shared) / pax_c
+                        if cover >= 0.9:
+                            at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
+                                          for t in shared)
+                            mix_eff = round(at_prev - rev_p / pax_p, 2)
                     tier_out = {"rows": rows_t, "pax": round(pax_c),
                                 "pax_prev": round(pax_p) if has_prev else None,
                                 "mix_effect": mix_eff}
