@@ -107,7 +107,7 @@ def buffet_per_bill(
                    st.customer_count                              AS pax,
                    st.food_subtotal / st.customer_count           AS per_head,
                    st.total_inc_vat                               AS rev_inc,
-                   st.total_inc_vat / 1.07                        AS rev_ex,
+                   (st.total_inc_vat/1.07 - COALESCE(st.service_charge,0))                        AS rev_ex,
                    st.discount + st.sp_discount                   AS discount
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -700,7 +700,7 @@ def pnl_monthly(
             SELECT strftime('%Y-%m', st.sold_at) AS period_month,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND(AVG(st.total_inc_vat) / 1.07, 2) AS avg_ticket
+                   ROUND((AVG(st.total_inc_vat)/1.07 - AVG(COALESCE(st.service_charge,0))), 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}
@@ -762,7 +762,7 @@ def pnl_branches_deep(
             SELECT b.name AS branch,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND(AVG(st.total_inc_vat) / 1.07, 2) AS avg_ticket
+                   ROUND((AVG(st.total_inc_vat)/1.07 - AVG(COALESCE(st.service_charge,0))), 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}

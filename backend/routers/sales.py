@@ -70,7 +70,7 @@ def sales_monthly(
             rows = con.execute(
                 f"""
                 SELECT DATE(st.sold_at)              AS period_month,
-                       ROUND(SUM(st.total_inc_vat) / 1.07,2) AS revenue,
+                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) AS revenue,
                        COUNT(*)                       AS tx_count,
                        SUM(st.customer_count)         AS customer_count
                 FROM sales_transaction st
@@ -105,7 +105,7 @@ def sales_monthly(
                 f"""
                 SELECT {_wk}                            AS period_month,
                        MIN(DATE(st.sold_at))            AS week_start,
-                       ROUND(SUM(st.total_inc_vat) / 1.07, 2)  AS revenue,
+                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)  AS revenue,
                        COUNT(*)                         AS tx_count,
                        SUM(st.customer_count)           AS customer_count
                 FROM sales_transaction st
@@ -903,7 +903,7 @@ def heavy_eaters(
         win = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sale_bill_cogs").fetchone()
         rows = con.execute(f"""
             SELECT b.name br, sbc.day day, sbc.receipt_no rcpt, t.customer_count cov,
-                   t.total_inc_vat/1.07 rev, sbc.cogs_bom cogs
+                   (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) rev, sbc.cogs_bom cogs
             FROM sale_bill_cogs sbc
             JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no
             JOIN branches b ON b.branch_id = sbc.branch_id
@@ -1069,12 +1069,12 @@ def sales_daily(
 
         def fetch(d):
             s, e = bounds(d)
-            # revenue ex-VAT = total_inc_vat / 1.07 (the reconciled basis that matches
+            # revenue ex-VAT ex-service-charge = total_inc_vat/1.07 − service_charge (matches
             # accounting & sales_sku_monthly). NOT food+drink+other — those double-count
             # buffet (buffet dishes duplicated in food + the package in other → +~50%).
             rows = con.execute(f"""
                 SELECT b.name branch,
-                       ROUND(SUM(t.total_inc_vat)/1.07,2) rev,
+                       ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev,
                        SUM(t.customer_count) cust, COUNT(*) bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
@@ -1120,7 +1120,7 @@ def sales_daily(
                         "bills": 0}
 
             dow_sel = """CAST(strftime('%w', t.sold_at) AS INT) wd,
-                       SUM(t.total_inc_vat)/1.07 rev, SUM(t.customer_count) cust,
+                       (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) rev, SUM(t.customer_count) cust,
                        COUNT(DISTINCT date(t.sold_at)) days
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id"""
             dow_prm = {**params, "pmm": pms.strftime("%Y-%m")}
@@ -1396,7 +1396,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
 
         def agg(s, e):
             r = con.execute(
-                f"""SELECT ROUND(SUM(t.total_inc_vat)/1.07,2) rev, SUM(t.customer_count) cust,
+                f"""SELECT ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev, SUM(t.customer_count) cust,
                     ROUND(SUM(t.discount),2) disc, COUNT(*) bills
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                     WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e""",

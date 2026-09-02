@@ -259,9 +259,9 @@ def buffet_cover_economics(
             SELECT
                 t.customer_count                   AS party_size,
                 COUNT(*)                           AS tx_count,
-                SUM(t.total_inc_vat) / 1.07        AS revenue,
-                AVG(t.total_inc_vat / 1.07 / t.customer_count) AS avg_revenue_per_cover,
-                AVG(t.total_inc_vat / 1.07)        AS avg_ticket
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0)))        AS revenue,
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0) / t.customer_count) AS avg_revenue_per_cover,
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))        AS avg_ticket
             FROM sales_transaction t
             JOIN branches b ON b.branch_id = t.branch_id
             {tx_where}
@@ -279,7 +279,7 @@ def buffet_cover_economics(
                 SUM(t.customer_count)                      AS total_covers,
                 COUNT(*)                                   AS tx_count,
                 AVG(t.customer_count)                      AS avg_covers_per_tx,
-                SUM(t.total_inc_vat) / 1.07                AS revenue
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0)))                AS revenue
             FROM sales_transaction t
             JOIN branches b ON b.branch_id = t.branch_id
             {tx_where}
@@ -302,8 +302,8 @@ def buffet_cover_economics(
                 END AS zone,
                 COUNT(*)              AS tx_count,
                 SUM(t.customer_count) AS total_covers,
-                SUM(t.total_inc_vat) / 1.07 AS revenue,
-                AVG(t.total_inc_vat / 1.07) AS avg_ticket,
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) AS revenue,
+                AVG((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0)) AS avg_ticket,
                 AVG(t.customer_count) AS avg_covers
             FROM sales_transaction t
             JOIN branches b ON b.branch_id = t.branch_id
@@ -319,7 +319,7 @@ def buffet_cover_economics(
             f"""
             SELECT
                 AVG(t.customer_count)               AS avg_party_size,
-                SUM(t.total_inc_vat) / 1.07 / NULLIF(SUM(t.customer_count), 0) AS avg_revenue_per_cover,
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) / NULLIF(SUM(t.customer_count), 0) AS avg_revenue_per_cover,
                 SUM(t.customer_count)               AS total_covers,
                 COUNT(*)                            AS total_tx
             FROM sales_transaction t
@@ -438,7 +438,7 @@ def buffet_revpash(
             f"""
             SELECT
                 CAST(strftime('%H', t.sold_at) AS INTEGER) AS hour,
-                SUM(t.total_inc_vat) / 1.07                AS revenue,
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0)))                AS revenue,
                 SUM(t.customer_count)                      AS covers,
                 COUNT(*)                                   AS tx_count
             FROM sales_transaction t
@@ -454,7 +454,7 @@ def buffet_revpash(
             f"""
             SELECT
                 CAST(strftime('%w', t.sold_at) AS INTEGER) AS dow,
-                SUM(t.total_inc_vat) / 1.07                AS revenue,
+                (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0)))                AS revenue,
                 SUM(t.customer_count)                      AS covers,
                 COUNT(DISTINCT DATE(t.sold_at))            AS day_count
             FROM sales_transaction t
@@ -724,7 +724,7 @@ def buffet_gp_calendar(
     """
 
     # --- Monthly BoM COGS from sales_sku_monthly ---------------------------
-    # Revenue comes from the actual dine-in receipts above (total_inc_vat ÷1.07),
+    # Revenue comes from the actual dine-in receipts above (total_inc_vat ÷1.07 − service charge),
     # so COGS must be the matching ALL-SKU BoM cost — NOT category='BUFFET'
     # (that bucket holds only the tier SKUs, whose COGS is deliberately 0 since
     #  consumption is logged on the item-level B0xxx rows). Filtering to BUFFET
@@ -924,7 +924,7 @@ def buffet_drink_attach_by_branch(
             SUM(CASE WHEN st.drink_subtotal > 0 THEN 1 ELSE 0 END) AS bills_with_drink,
             AVG(CASE WHEN st.drink_subtotal > 0 THEN st.drink_subtotal ELSE NULL END) AS avg_drink_per_bill,
             SUM(st.drink_subtotal)                  AS total_drink_revenue,
-            SUM(st.total_inc_vat) / 1.07                   AS total_revenue
+            (SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0)))                   AS total_revenue
         FROM sales_transaction st
         JOIN branches b ON b.branch_id = st.branch_id
         WHERE {' AND '.join(filters)}
@@ -1287,7 +1287,7 @@ def buffet_performance(
             SELECT strftime('%Y-%m', st.sold_at) AS m,
                    SUM(st.drink_subtotal) AS drink_rev,
                    SUM(st.food_subtotal)  AS food_rev,
-                   SUM(st.total_inc_vat) / 1.07 AS total_rev,  -- ex-VAT, consistent with drink/food subtotals
+                   (SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))) AS total_rev,  -- ex-VAT, consistent with drink/food subtotals
                    COUNT(*)               AS bills,
                    SUM(CASE WHEN st.drink_subtotal > 0 THEN 1 ELSE 0 END) AS bills_with_drink
             FROM sales_transaction st
@@ -2533,7 +2533,7 @@ def buffet_heavy_eater_tail(branch: Optional[str] = Query(None), group: Optional
     _group_filter(filt, p, group)
     JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
           "JOIN branches b ON b.branch_id=t.branch_id WHERE " + " AND ".join(filt))
-    rev = "t.total_inc_vat/1.07"                # ex-VAT paid
+    rev = "(t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))"                # ex-VAT paid
     mh  = f"({rev} - c.cogs_bom)/t.customer_count"   # margin per head
     with get_db() as con:
         win = con.execute("SELECT MIN(day) mn, MAX(day) mx FROM sale_bill_cogs").fetchone()
@@ -2611,7 +2611,7 @@ def buffet_turn_efficiency(branch: Optional[str] = Query(None), group: Optional[
               FROM pos_table_turn_day x JOIN branches b ON b.branch_id=x.branch_id
               WHERE {tw} AND x.day>=:since GROUP BY x.branch_id),
             gp AS (
-              SELECT t.branch_id, SUM(t.total_inc_vat/1.07 - c.cogs_bom) gp, SUM(t.customer_count) cov
+              SELECT t.branch_id, SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0) - c.cogs_bom) gp, SUM(t.customer_count) cov
               FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
               JOIN branches b ON b.branch_id=t.branch_id WHERE {tw} AND t.customer_count>0 GROUP BY t.branch_id)
             SELECT b.name branch, ROUND(tt.turn_min,1) turn_min, tt.cov_day, tt.tabs_day,

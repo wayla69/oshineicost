@@ -36,7 +36,9 @@ Column definitions mirror ingest_easy.load_es_typeb EXACTLY so the two
 ingestion paths stay identical:
   gross_sales       = Σ(food+drink+other)      (ex-VAT subtotals)
   discounts         = Σ(sp_discount+discount)
-  net_sales         = Σ(total_inc_vat)/1.07    (hard rule: VAT is never revenue)
+  net_sales         = Σ(total_inc_vat)/1.07 − Σ(service_charge)
+                      (VAT is never revenue; the 5% service charge sits INSIDE the
+                       ex-VAT subtotal, so it is subtracted after the VAT divide)
   customer_count    = Σ(customer_count)
   transaction_count = COUNT(*)
   refunds / voided  = 0.0                       (as the Excel path sets them)
@@ -56,7 +58,7 @@ SELECT st.branch_id,
        0.0,
        ROUND(SUM(st.sp_discount + st.discount), 2),
        0.0,
-       ROUND(SUM(st.total_inc_vat) / 1.07, 2),
+       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2),
        0.0, 0.0, 0.0, 0.0, 0.0,
        SUM(st.customer_count),
        COUNT(*),

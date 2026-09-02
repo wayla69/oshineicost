@@ -1408,7 +1408,7 @@ def data_quality():
         # 2. Bills carrying revenue but zero covers — every per-head figure that
         #    divides by covers is guarded, but these bills still under-count pax.
         z = con.execute("""
-            SELECT b.name br, COUNT(*) n, ROUND(SUM(t.total_inc_vat/1.07)) rev
+            SELECT b.name br, COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - COALESCE(t.service_charge,0))) rev
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE COALESCE(t.customer_count,0)=0 AND t.total_inc_vat>0
             GROUP BY b.name ORDER BY n DESC""").fetchall()
