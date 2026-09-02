@@ -35,7 +35,13 @@ echo [1/2] Sync from POS (MSSQL) -^> oshinei.db.incoming + reconcile...
 echo       python: %PY%
 REM -u: unbuffered, so progress reaches the console/log line by line. Without it
 REM python block-buffers when piped and a killed run loses everything in flight.
-"%PY%" -u sync_mssql.py
+REM INCREMENTAL: re-pull only the recent window instead of all 20 months. The
+REM full rebuild measured ~7 min for the sku aggregate + ~10 min for the per-sale
+REM split, and the run kept being killed half way (0xC000013A = window closed).
+REM --window-days snaps BACK to the 1st of that month, so whole months are always
+REM replaced; --full-every-days still forces a real full rebuild every week, which
+REM is what catches edits to bills older than the window.
+"%PY%" -u sync_mssql.py --window-days 45 --full-every-days 7
 if errorlevel 1 (
     echo.
     echo *** SYNC/RECONCILE FAILED - NOT pushing to production. ***
