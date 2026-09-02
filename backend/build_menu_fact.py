@@ -53,11 +53,23 @@ TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
               'BUFFETCHILD', 'BUFFETCHILDFREE', 'B01', 'B02', 'B07', 'B11')
 HC_COST = 30.0   # unit BoM cost >= this = "เมนูต้นทุนสูง" (high-cost consumption metric)
 VAT = 1.07
-# Buffet price tiers (adult BUFFET line ExtendedPrice = ex-VAT menu price; customers
-# pay +7%). Bills whose adult unit price is none of these (line-level discounts,
-# promo pricing) fall in 'promo'; bills with no adult cover = 'child'.
-PRICE_TIERS = (350, 590, 649, 689, 799, 999)
+# Buffet price tiers. The adult BUFFET line's ExtendedPrice is the menu price with
+# BOTH the 5% service charge and the 7% VAT stripped out — the POS stores the base and
+# adds SC then VAT on top. Bills whose adult unit price matches none of the canonical
+# prices (line discounts, promo pricing) fall in 'promo'; no adult cover = 'child'.
+#
+# The Grand Menu that went live on 2026-09-01 quotes NET prices instead: ฿789 on the
+# menu is what the guest pays all-in, so its ExtendedPrice is 789 / 1.05 / 1.07 =
+# 702.27. Matching a net price list against the stored base put 99% of 1-Sep bills in
+# 'promo' (1,265 of 1,277 bills). So each era gets its own list, matched on its own
+# basis, and the label stays the number printed on that menu.
+PRICE_TIERS = (350, 590, 649, 689, 799, 999)   # until 2026-08-31 — menu price BEFORE SC + VAT
 TIER_TOL = 3.0   # ฿ tolerance around a canonical price
+
+NEW_MENU_FROM = "2026-09-01"                   # Grand Menu 2026-09 [[grand_menu_2026_09]]
+PRICE_TIERS_NEW = (459, 629, 789, 999, 1299)   # from 2026-09-01 — NET price (SC + VAT inside)
+TIER_TOL_NET = 4.0   # ฿ tolerance, on the net price (the ±3 base tolerance grossed up)
+SC_MULT = 1.05       # service charge, when the bill carries one
 
 # Ingredient groups: slug -> (thai label, SQL LIKE patterns on skus.description,
 # extra exact sku_codes). Only (B)-prefixed buffet menus + whitelisted codes join
@@ -196,15 +208,24 @@ def main():
     cost_sql = ",".join(f"({i},{rc:.6f})" for i, rc in cost_vals)
     grp_sql = ",".join(f"({i},'{slug}')" for i, slug in grp_vals)
     adult_ids = code2iids.get("BUFFET", [])
+    # `nf` (computed per bill in bill0) lifts the stored base price back to what the
+    # menu quotes: always the 7% VAT, plus the 5% service charge when this bill was
+    # actually charged one (delivery/takeaway bills are not, and grossing those up by
+    # a service charge they never paid would push every one of them into 'promo').
+    when = lambda tiers, expr, tol: " ".join(
+        f"WHEN ABS({expr} - {p}) <= {tol} THEN '{p}'" for p in tiers)
     tier_case = ("CASE WHEN ISNULL(aq, 0) <= 0 THEN 'child' "
-                 + " ".join(f"WHEN ABS(aext / aq - {p}) <= {TIER_TOL} THEN '{p}'"
-                            for p in PRICE_TIERS)
+                 f"WHEN d >= '{NEW_MENU_FROM}' THEN (CASE "
+                 + when(PRICE_TIERS_NEW, "aext / aq * nf", TIER_TOL_NET)
+                 + " ELSE 'promo' END) "
+                 + when(PRICE_TIERS, "aext / aq", TIER_TOL)
                  + " ELSE 'promo' END")
 
     BILL_CTE = f"""
 WITH bill0 AS (
   SELECT s.SaleId sid, s.BranchId bid, CONVERT(char(10), s.SaleDate, 126) d,
     ISNULL(s.NumOfCust, 0) pax, CAST(ISNULL(s.Total, 0) AS float) / {VAT} net,
+    CASE WHEN ISNULL(s.ServiceChargeAmount, 0) > 0 THEN {VAT * SC_MULT:.4f} ELSE {VAT} END nf,
     SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN {QTY1} ELSE 0 END) aq,
     SUM(CASE WHEN si.ItemId IN {inlist(adult_ids)} THEN CAST(si.ExtendedPrice AS float) ELSE 0 END) aext,
     SUM({QTY1} * ISNULL(c.cost, 0)) cogs,
@@ -214,7 +235,8 @@ WITH bill0 AS (
   LEFT JOIN (VALUES {cost_sql}) c(ItemId, cost) ON c.ItemId = si.ItemId
   WHERE {SALE_FILTER} AND ISNULL(si.Active, 1) = 1 AND s.SaleDate >= %s AND s.SaleDate < %s
   GROUP BY s.SaleId, s.BranchId, CONVERT(char(10), s.SaleDate, 126),
-           ISNULL(s.NumOfCust, 0), CAST(ISNULL(s.Total, 0) AS float)
+           ISNULL(s.NumOfCust, 0), CAST(ISNULL(s.Total, 0) AS float),
+           CASE WHEN ISNULL(s.ServiceChargeAmount, 0) > 0 THEN {VAT * SC_MULT:.4f} ELSE {VAT} END
   HAVING SUM(CASE WHEN si.ItemId IN {inlist(tier_ids)} THEN 1 ELSE 0 END) > 0
      AND ISNULL(s.NumOfCust, 0) BETWEEN 1 AND 40
 ),

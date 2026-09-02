@@ -441,7 +441,13 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 # is not enough history before it).
 # ---------------------------------------------------------------------------
 _PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
-_PT_ORDER = ("999", "799", "689", "649", "590", "350", "promo", "child")
+# Buffet price tiers, richest first. TWO eras live side by side here: the Grand Menu
+# from 2026-09-01 quotes NET prices (459/629/789/999/1299 - service charge and VAT are
+# already inside), while the menu before it quoted the price BEFORE both
+# (350/590/649/689/799/999). A tier missing from this tuple is silently dropped from
+# the report, so it must carry BOTH lists. 999 exists in both eras and shares one row.
+_PT_ORDER = ("1299", "999", "799", "789", "689", "649", "629", "590", "459", "350",
+             "promo", "child")
 _PT_LABEL = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
 
 
