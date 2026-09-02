@@ -3381,6 +3381,21 @@ _COST_PATCHES: list[tuple[str, float]] = [
     ("B0040",    13.40),  # หอยเชลล์ต้มฮอกไกโด (1 ชิ้น)  — BOM workbook had ~38.2 (wrong)
     ("B0322",    13.40),  # หอยเชลล์ฮอกไกโดซาชิมิ (1 ตัว) — same ingredient, same correction
     ("1150-084", 13.40),  # HOKKAIDO HOTATE SASHIMI (1PCS) — same ingredient, same correction
+    # Durian: the requisition audit priced it at ฿68/serve, but the correction was
+    # applied to a database and then lost — sync copies the cost tables out of the
+    # LOCAL base DB into .incoming, which is hot-swapped over the live one, so a DB-only
+    # fix survives exactly until the next swap. It was found back at ฿20/฿30/฿40 on
+    # 2026-09-02, understating COGS by ฿36.7M across the history. Listed here so it
+    # re-asserts itself on every startup no matter which DB is swapped in.
+    # The BoM is NOT deleted: EST-DURIAN already totals ฿68, so the guard above leaves
+    # the recipe alone and the ingredient order plan keeps seeing durian.
+    ("KKN018",        68.00),  # (B) ทุเรียน (1 พู)
+    ("KKN019",        68.00),  # (B) ทุเรียน (1 เม็ด)
+    ("DUR-999",       68.00),  # ทุเรียน (B)(Buffet)
+    ("PM0010",        68.00),  # (B) ทุเรียนยำน้ำปลาร้า
+    ("PM0011",        68.00),  # (B) เทมปุระทุเรียนมัทชะ (5 ชิ้น)
+    ("PM0012",        68.00),  # (B) ทุเรียนไม่อั้น
+    ("OTHBFPMO00013", 68.00),  # (BF) ทุเรียน — Grand Menu 2026-09 code for the same dish
 ]
 
 
