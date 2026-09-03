@@ -3459,6 +3459,83 @@ def _load_grand_menu_costs(path=None):
     return out
 
 
+# Some Grand Menu codes are a renamed dish that already has a recipe under its old
+# code. They are costed by pointing at that donor rather than by re-entering a
+# number, so the dish inherits the recipe itself — which is what lets the
+# ingredient order plan see it at all, something a flat cost cannot do.
+#
+# bom_sku_alias resolves in ONE hop: _build_sku_effective_cost sums the donor's
+# bom_ingredients rows directly. It does NOT chain and it does NOT read the
+# donor's sku_cost, so pointing at a donor that is itself aliased, or at one
+# priced by a flat cost, silently yields ฿0 — the failure this loader exists to
+# make impossible. Two of these needed the chain resolved by hand (the soup
+# stocks point past THBFSOU000xx to B0097/B0098) and one donor has no recipe at
+# all, so its cost is COPIED instead. The copy is refreshed on every boot, so it
+# tracks the donor rather than freezing a number into the database.
+GRAND_MENU_ALIAS_FILE = HERE / "data" / "grand_menu_aliases_2026-09.csv"
+
+
+def _load_grand_menu_aliases(path=None):
+    """Point Grand Menu codes at the donor that carries their recipe."""
+    import csv as _csv
+    path = Path(path) if path else GRAND_MENU_ALIAS_FILE
+    out = {"aliased": 0, "cost_copied": 0, "unknown_sku": 0,
+           "unknown_donor": 0, "donor_has_nothing": 0}
+    if not path.exists():
+        print(f"[grand-menu] alias file not found: {path} — skipped")
+        return out
+    try:
+        with open(path, encoding="utf-8-sig", newline="") as fh:
+            pairs = [((r.get("sku_code") or "").strip(),
+                      (r.get("donor_sku_code") or "").strip())
+                     for r in _csv.DictReader(fh)]
+        pairs = [p for p in pairs if p[0] and p[1]]
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        with get_db() as con:
+            for code, donor in pairs:
+                own = con.execute("SELECT sku_id FROM skus WHERE sku_code = ?", (code,)).fetchone()
+                if own is None:
+                    out["unknown_sku"] += 1
+                    continue
+                d = con.execute("SELECT sku_id FROM skus WHERE sku_code = ?", (donor,)).fetchone()
+                if d is None:
+                    print(f"[grand-menu] alias {code}: donor {donor} not found — skipped")
+                    out["unknown_donor"] += 1
+                    continue
+                donor_id = d[0]
+                bom = con.execute(
+                    "SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id = ?",
+                    (donor_id,)).fetchone()[0]
+                if bom:
+                    con.execute(
+                        "INSERT OR REPLACE INTO bom_sku_alias"
+                        "(bom_sku_code, resolved_sku_id, match_method, confidence, notes)"
+                        " VALUES(?, ?, 'grand-menu-2026-09', 1.0, ?)",
+                        (code, donor_id, f"Grand Menu 2026-09: same dish as {donor}"))
+                    out["aliased"] += 1
+                    continue
+                # No recipe to inherit. Fall back to the donor's effective cost so
+                # the dish is at least costed — an alias here would book it at ฿0.
+                eff = con.execute(
+                    "SELECT recipe_cost FROM sku_effective_cost WHERE sku_id = ?",
+                    (donor_id,)).fetchone()
+                eff = (eff[0] if eff else 0) or 0
+                if eff > 0:
+                    con.execute(
+                        "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
+                        " VALUES(?, ?, ?, ?)", (own[0], eff, "2026-09-01", now))
+                    out["cost_copied"] += 1
+                else:
+                    print(f"[grand-menu] alias {code}: donor {donor} has neither recipe nor cost")
+                    out["donor_has_nothing"] += 1
+            con.commit()
+        print(f"[grand-menu] aliases: {out}")
+        invalidate_cache()
+    except Exception as e:
+        print(f"[grand-menu] alias load failed: {e}")
+    return out
+
+
 # Manual cost corrections — applied at every startup after BOM seed.
 # Use when the BOM workbook has a verified-wrong ingredient cost and cannot
 # be corrected immediately. Each entry removes the SKU's BOM rows (so the
@@ -3555,6 +3632,9 @@ def _bom_startup():
     # Owner's Grand Menu master first, hand-verified patches second — a patch
     # exists precisely because a bulk source was wrong, so it must win.
     _load_grand_menu_costs()
+    # Aliases after the sheet: a code in both should take the owner's number, and
+    # the alias fallback reads sku_effective_cost, which the sheet has just fed.
+    _load_grand_menu_aliases()
     _apply_cost_patches()
     _sku_cost_monthly_ensure()
     _perf_startup()

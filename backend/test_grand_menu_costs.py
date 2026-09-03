@@ -116,10 +116,115 @@ def test_patches_outrank_the_master_file():
     with open(main.GRAND_MENU_COST_FILE, encoding="utf-8-sig", newline="") as fh:
         sheet = {r["sku_code"]: float(r["cost_per_serve"]) for r in csv.DictReader(fh)}
     src = (main.HERE / "main.py").read_text(encoding="utf-8")
-    startup = src.split("def _bom_startup()", 1)[1][:400]
-    assert startup.index("_load_grand_menu_costs()") < startup.index("_apply_cost_patches()")
+    startup = src.split("def _bom_startup()", 1)[1].split("_sku_cost_monthly_ensure", 1)[0]
+    # sheet, then aliases (whose fallback reads the effective cost the sheet just
+    # fed), then the hand-verified patches, which must have the last word.
+    assert (startup.index("_load_grand_menu_costs()")
+            < startup.index("_load_grand_menu_aliases()")
+            < startup.index("_apply_cost_patches()"))
     for code, cost in main._COST_PATCHES:
         if code in sheet:
             assert abs(sheet[code] - cost) < 0.01, (
                 f"{code} is in both the master sheet ({sheet[code]}) and _COST_PATCHES "
                 f"({cost}); the patch wins at startup — reconcile them")
+
+
+# ─── alias loader ────────────────────────────────────────────────────────────
+# Several Grand Menu codes are a renamed dish whose recipe still lives under the
+# old code. bom_sku_alias resolves in ONE hop and reads only the donor's
+# bom_ingredients — never the donor's own alias, never its sku_cost — so a
+# plausible-looking mapping can silently cost a dish at ฿0. These tests pin the
+# three cases that actually occur in the shipped file.
+
+def _alias_db():
+    con = _db()
+    con.execute("CREATE TABLE bom_ingredients(sku_id INT, ingredient_cost REAL)")
+    con.execute("CREATE TABLE bom_sku_alias(bom_sku_code TEXT PRIMARY KEY,"
+                " resolved_sku_id INT, match_method TEXT, confidence REAL, notes TEXT)")
+    con.execute("CREATE TABLE sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
+    return con
+
+
+def _run_alias(monkeypatch, tmp_path, con, csv_text):
+    p = tmp_path / "aliases.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    class _Ctx:
+        def __enter__(self): return con
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(main, "get_db", lambda *a, **k: _Ctx())
+    monkeypatch.setattr(main, "invalidate_cache", lambda *a, **k: None)
+    return main._load_grand_menu_aliases(p)
+
+
+AHEAD = "sku_code,donor_sku_code,note\n"
+
+
+def test_donor_with_a_recipe_is_aliased(monkeypatch, tmp_path):
+    con = _alias_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFSPC00110', '(BF) ปีกไก่ทอด')")
+    con.execute("INSERT INTO skus VALUES(2, 'B0119', '(B) ปีกไก่ทอด')")
+    con.execute("INSERT INTO bom_ingredients VALUES(2, 12.48)")
+    out = _run_alias(monkeypatch, tmp_path, con, AHEAD + "OTHBFSPC00110,B0119,x\n")
+    assert out["aliased"] == 1 and out["cost_copied"] == 0
+    row = con.execute("SELECT resolved_sku_id, match_method FROM bom_sku_alias"
+                      " WHERE bom_sku_code='OTHBFSPC00110'").fetchone()
+    assert row == (2, "grand-menu-2026-09")
+    # and no flat cost was invented alongside it
+    assert con.execute("SELECT COUNT(*) FROM sku_cost").fetchone()[0] == 0
+
+
+def test_recipeless_donor_copies_the_cost_instead_of_aliasing_to_zero(monkeypatch, tmp_path):
+    """UBN002 carries a flat sku_cost and no recipe. An alias to it resolves to
+    SUM(bom_ingredients) = NULL, i.e. ฿0 — so the loader copies the cost."""
+    con = _alias_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFSPC00045', '(BF) เนื้อวากิวย่างใบโฮบะ')")
+    con.execute("INSERT INTO skus VALUES(2, 'UBN002', '(A) เนื้อวากิวย่างใบโฮบะ')")
+    con.execute("INSERT INTO sku_effective_cost VALUES(2, 409.25)")
+    out = _run_alias(monkeypatch, tmp_path, con, AHEAD + "OTHBFSPC00045,UBN002,x\n")
+    assert out["cost_copied"] == 1 and out["aliased"] == 0
+    assert con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0] == 409.25
+    assert con.execute("SELECT COUNT(*) FROM bom_sku_alias").fetchone()[0] == 0, \
+        "an alias to a recipe-less donor would book the dish at ฿0"
+
+
+def test_donor_with_neither_recipe_nor_cost_is_reported_not_written(monkeypatch, tmp_path):
+    con = _alias_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFSPC00099', 'new')")
+    con.execute("INSERT INTO skus VALUES(2, 'EMPTY001', 'donor with nothing')")
+    out = _run_alias(monkeypatch, tmp_path, con, AHEAD + "OTHBFSPC00099,EMPTY001,x\n")
+    assert out["donor_has_nothing"] == 1
+    assert con.execute("SELECT COUNT(*) FROM bom_sku_alias").fetchone()[0] == 0
+    assert con.execute("SELECT COUNT(*) FROM sku_cost").fetchone()[0] == 0
+
+
+def test_missing_codes_are_counted_separately(monkeypatch, tmp_path):
+    con = _alias_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFSPC00110', 'new')")
+    out = _run_alias(monkeypatch, tmp_path, con,
+                     AHEAD + "OTHBFSPC00110,NOPE001,donor missing\n"
+                           + "OTHBFNOTHERE,B0119,sku missing\n")
+    assert out["unknown_donor"] == 1 and out["unknown_sku"] == 1
+
+
+def test_shipped_alias_file_never_points_at_an_aliased_donor():
+    """The resolver does not chain. Two entries in this file exist only because
+    the obvious donor (THBFSOU000xx) is itself an alias — if a future edit points
+    at a donor that is aliased rather than at a recipe, the dish silently costs
+    ฿0. This test refuses that shape."""
+    import csv
+    path = main.GRAND_MENU_ALIAS_FILE
+    assert path.exists(), f"missing {path}"
+    with open(path, encoding="utf-8-sig", newline="") as fh:
+        rows = list(csv.DictReader(fh))
+    assert rows, "alias file is empty"
+    codes = [r["sku_code"] for r in rows]
+    assert len(set(codes)) == len(codes), "a SKU is mapped twice"
+    for r in rows:
+        assert r["sku_code"] != r["donor_sku_code"], f"{r['sku_code']} points at itself"
+    mapped = set(codes)
+    for r in rows:
+        assert r["donor_sku_code"] not in mapped, (
+            f"{r['sku_code']} points at {r['donor_sku_code']}, which this same file "
+            f"aliases — bom_sku_alias resolves in one hop, so this would cost ฿0")
