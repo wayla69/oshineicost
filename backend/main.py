@@ -3559,6 +3559,16 @@ _COST_PATCHES: list[tuple[str, float]] = [
     ("PM0011",        68.00),  # (B) เทมปุระทุเรียนมัทชะ (5 ชิ้น)
     ("PM0012",        68.00),  # (B) ทุเรียนไม่อั้น
     ("OTHBFPMO00013", 68.00),  # (BF) ทุเรียน — Grand Menu 2026-09 code for the same dish
+    # เนื้อวากิวสไลด์ย่างใบโฮบะ. UBN002 was the only SKU in this dish family carrying
+    # any cost at all, and it carried ฿409.25 — 93.9% of its own ฿435.94 ex-VAT
+    # selling price. That is a price sitting in a cost column, not a cost. It slipped
+    # past is_price_as_cost because that guard only spots the 1.03-1.12 band, i.e. an
+    # INC-VAT price pasted in; a number just under the ex-VAT price is equally
+    # impossible for food and equally invisible to it.
+    # The Grand Menu code was inheriting that same figure through the alias file, so
+    # the alias row is gone and both codes are pinned here at the owner-confirmed ฿16.
+    ("UBN002",        16.00),  # (A) เนื้อวากิวสไลด์ย่างใบโฮบะ — retired code, 32 units ever
+    ("OTHBFSPC00045", 16.00),  # (BF) เนื้อวากิวสไลด์ย่างใบโฮบะ — Grand Menu 2026-09
 ]
 
 
