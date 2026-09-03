@@ -3373,6 +3373,92 @@ def _bom_ensure_and_seed():
         print(f"[bom] ensure_table failed: {e}")
 
 
+# The Grand Menu (from 2026-09-01) ships its costs as an owner-maintained master
+# file rather than a recipe: BoM/GrandMenu_2026-09/master_item_costs.csv, one
+# cost-per-serve per SKU for all 384 dishes (192 buffet + 192 a-la-carte).
+#
+# It is loaded HERE, at startup, for the same reason the durian correction is:
+# sync_mssql copies the cost tables out of the local base DB into `.incoming`
+# and that file is hot-swapped over the live one, so a cost written only into a
+# database survives exactly until the next swap. A file in the repo is deployed
+# with the code and re-asserts itself on every boot, whichever DB is underneath.
+# It lives under backend/data/ and NOT beside the recipe workbooks in BoM/,
+# which is gitignored — an uncommitted file is not deployed, so the loader would
+# find nothing on Fly and silently fall back to the recipes it is meant to replace.
+#
+# It runs BEFORE _apply_cost_patches() so a hand-verified patch always outranks
+# the sheet. Both write sku_cost, which _build_sku_effective_cost prefers over
+# any recipe — for these SKUs the owner's number IS the authority.
+GRAND_MENU_COST_FILE = HERE / "data" / "grand_menu_costs_2026-09.csv"
+
+
+def _load_grand_menu_costs(path=None):
+    """Upsert the Grand Menu master costs into sku_cost. Returns a summary dict."""
+    import csv as _csv
+    path = Path(path) if path else GRAND_MENU_COST_FILE
+    out = {"applied": 0, "unknown_sku": 0, "rejected_price_as_cost": 0, "bad_value": 0}
+    if not path.exists():
+        print(f"[grand-menu] cost file not found: {path} — skipped")
+        return out
+    try:
+        rows = []
+        with open(path, encoding="utf-8-sig", newline="") as fh:
+            for rec in _csv.DictReader(fh):
+                code = (rec.get("sku_code") or "").strip()
+                if not code:
+                    continue
+                try:
+                    cost = float(rec.get("cost_per_serve") or 0)
+                except (TypeError, ValueError):
+                    out["bad_value"] += 1
+                    continue
+                if cost <= 0:
+                    out["bad_value"] += 1
+                    continue
+                rows.append((code, cost))
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        with get_db() as con:
+            ids = {r[1]: r[0] for r in con.execute(
+                "SELECT sku_id, sku_code FROM skus WHERE sku_code IN (%s)"
+                % ",".join("?" * len(rows)), [c for c, _ in rows])} if rows else {}
+            # A selling price pasted into a cost column has reached this project
+            # three separate times. Where the SKU has actually sold we can tell
+            # the difference, so we check — and refuse the row rather than book
+            # a dish at its own menu price.
+            price = {}
+            if ids:
+                for r in con.execute(
+                    "SELECT sku_id, SUM(subtotal_ex_vat) rev, SUM(qty) qty "
+                    "FROM sales_sku_monthly WHERE sku_id IN (%s) GROUP BY 1"
+                    % ",".join("?" * len(ids)), list(ids.values())
+                ):
+                    if (r[2] or 0) > 0 and (r[1] or 0) > 0:
+                        price[r[0]] = r[1] / r[2]
+
+            for code, cost in rows:
+                sku_id = ids.get(code)
+                if sku_id is None:
+                    out["unknown_sku"] += 1
+                    continue
+                if is_price_as_cost(cost, price.get(sku_id)):
+                    print(f"[grand-menu] {code}: {cost} looks like the selling price — rejected")
+                    out["rejected_price_as_cost"] += 1
+                    continue
+                con.execute(
+                    "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
+                    " VALUES(?, ?, ?, ?)",
+                    (sku_id, cost, "2026-09-01", now),
+                )
+                out["applied"] += 1
+            con.commit()
+        print(f"[grand-menu] master costs: {out}")
+        invalidate_cache()
+    except Exception as e:
+        print(f"[grand-menu] load failed: {e}")
+    return out
+
+
 # Manual cost corrections — applied at every startup after BOM seed.
 # Use when the BOM workbook has a verified-wrong ingredient cost and cannot
 # be corrected immediately. Each entry removes the SKU's BOM rows (so the
@@ -3466,6 +3552,9 @@ def _sku_cost_monthly_ensure():
 @app.on_event("startup")
 def _bom_startup():
     _bom_ensure_and_seed()
+    # Owner's Grand Menu master first, hand-verified patches second — a patch
+    # exists precisely because a bulk source was wrong, so it must win.
+    _load_grand_menu_costs()
     _apply_cost_patches()
     _sku_cost_monthly_ensure()
     _perf_startup()
