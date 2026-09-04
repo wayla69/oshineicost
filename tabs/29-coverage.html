@@ -1,0 +1,61 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: COST COVERAGE  (how much revenue still sits on uncosted SKUs)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-coverage" style="display:none">
+  <p class="text-sm text-slate-500 mb-4">รายได้ที่มี/ไม่มีข้อมูลต้นทุน · ใช้จัดลำดับ SKU ที่ต้องใส่ต้นทุน (บุฟเฟ่ต์นับว่ามีต้นทุนผ่าน BoM)</p>
+  <div id="cov-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+  <div class="card p-4 mb-5">
+    <div class="text-sm font-semibold text-slate-700 mb-2">แนวโน้ม % รายได้ที่ยังไม่มีต้นทุน</div>
+    <div style="position:relative;height:240px"><canvas id="cov-trend"></canvas></div>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-2">รายสาขา · % ไม่มีต้นทุน (มาก→น้อย)</div>
+      <div style="max-height:380px;overflow:auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-slate-400 text-xs border-b">
+            <th class="py-1.5 pr-3">สาขา</th><th class="py-1.5 pr-3 text-right">รายได้</th>
+            <th class="py-1.5 pr-3 text-right">ไม่มีต้นทุน</th><th class="py-1.5 pr-3 text-right">% ไม่มี</th>
+            <th class="py-1.5 text-right">SKU ค้าง</th></tr></thead>
+          <tbody id="cov-branches"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card p-4">
+      <div class="text-sm font-semibold text-slate-700 mb-2">🥩 วัตถุดิบที่ขับต้นทุนสูงสุด (Top cost drivers)</div>
+      <div class="text-xs text-slate-400 mb-2">รวมกลุ่ม · ใช้วางแผนจัดซื้อ/เจรจาราคา</div>
+      <div style="max-height:380px;overflow:auto">
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-slate-400 text-xs border-b">
+            <th class="py-1.5 pr-3">#</th><th class="py-1.5 pr-3">วัตถุดิบ</th>
+            <th class="py-1.5 pr-3 text-right">ต้นทุนรวม</th><th class="py-1.5 text-right">% ต้นทุน</th></tr></thead>
+          <tbody id="cov-ingredients"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <!-- 🛠️ No-cost fixer: editable worklist — fill unit_cost right here -->
+  <div class="card p-4 mt-5" style="border:1px solid #e0e7ff">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="text-sm font-semibold text-slate-700">🛠️ เติมต้นทุนที่ขาด — แก้ได้เลย (SKU รายได้สูงสุดที่ยังไม่มีต้นทุน)</div>
+      <button id="cov-fixer-saveall" onclick="saveAllUncosted()" class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#4f46e5;color:#fff">💾 บันทึกทั้งหมดที่กรอก</button>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">กรอก <b>ต้นทุน/หน่วย</b> (ต้องต่ำกว่าราคาขาย) แล้วกด <b>Enter</b> หรือ “บันทึกทั้งหมด” · ค่าธรรมเนียม เช่น Service Charge ใส่ <b>0</b> ได้ · ระบบกันการใส่ราคาขายเป็นต้นทุนให้อัตโนมัติ · แสดง Top 25 (ครอบคลุมช่องว่างส่วนใหญ่)</p>
+    <div style="max-height:440px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">SKU</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+          <th class="py-1.5 pr-2 text-right">รายได้</th><th class="py-1.5 pr-2 text-right">จำนวน</th>
+          <th class="py-1.5 pr-2 text-right">ราคาขาย/หน่วย</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th><th class="py-1.5 text-center">บันทึก</th>
+        </tr></thead>
+        <tbody id="cov-fixer"></tbody>
+      </table>
+    </div>
+    <div id="cov-fixer-msg" class="text-xs mt-2"></div>
+  </div>
+  <div class="card p-4 mt-5">
+    <div class="text-sm font-semibold text-slate-700 mb-2">⏰ ชั่วโมงขายดี (Peak hours by revenue)</div>
+    <div class="text-xs text-slate-400 mb-2">รายได้เฉลี่ยต่อชั่วโมง · ไม่รวมเวลาปิดร้าน · ใช้วางแผนกำลังคน/เตรียมของ</div>
+    <div style="position:relative;height:240px"><canvas id="cov-peak"></canvas></div>
+  </div>
+</div>

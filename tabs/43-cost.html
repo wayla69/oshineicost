@@ -1,0 +1,190 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 6 — COST ANALYSIS
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-cost" class="hidden">
+
+  <div class="subtab-bar mb-6" style="max-width:480px">
+    <button class="subtab-btn active" onclick="switchCostTab('overview')">Overview</button>
+    <button class="subtab-btn" onclick="switchCostTab('detail')">รายละเอียดเมนู</button>
+    <button class="subtab-btn" onclick="switchCostTab('suggestions')">Suggestions</button>
+  </div>
+
+  <!-- ── Overview ── -->
+  <div id="costtab-overview">
+    <!-- KPI row -->
+    <div id="costKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5"></div>
+
+    <!-- No-cost banner -->
+    <div id="costNoBanner" class="hidden mb-5 card p-4 flex items-start gap-3" style="border-left:4px solid #f59e0b;background:#fffbeb">
+      <svg class="flex-shrink-0 mt-0.5" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <div>
+        <p id="costNoBannerText" class="text-sm font-semibold text-amber-800"></p>
+        <p class="text-xs text-amber-700 mt-0.5">Go to <button onclick="switchTab('settings');switchSettingsTab('costs')" class="underline font-medium">Settings → Cost Management</button> to enter unit costs and unlock the full margin analysis.</p>
+      </div>
+    </div>
+
+    <!-- Scatter + Category donut -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <div class="card p-5 lg:col-span-2">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="section-title mb-0" id="scatterTitle">Revenue × Popularity</h2>
+          <div class="flex items-center gap-2">
+            <span id="scatterMode" class="pill pill-neu text-xs">no cost data</span>
+            <button onclick="resetZoom('chartMenuScatter')" class="text-xs text-slate-400 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5 transition-colors">&#x27F3; Reset</button>
+          </div>
+        </div>
+        <p id="scatterSubtitle" class="text-xs text-slate-400 mb-3">Each dot = one menu item. Size = revenue share. Color = category.</p>
+        <div class="flex gap-4">
+          <div style="height:280px;flex:1;min-width:0"><canvas id="chartMenuScatter"></canvas></div>
+          <div id="costAnalysisBar" class="flex-shrink-0 border-l border-slate-100 pl-3 space-y-3" style="width:140px;overflow:hidden"></div>
+        </div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title">สัดส่วนรายได้ตามหมวด</h2>
+        <div style="height:220px"><canvas id="chartCostCatMix"></canvas></div>
+        <div id="catMixLegend" class="mt-3 space-y-1 overflow-y-auto" style="max-height:80px"></div>
+      </div>
+    </div>
+
+    <!-- Quadrant / classification panels -->
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5" id="quadrantPanels">
+      <!-- Stars -->
+      <div class="card p-4" style="border-top:3px solid #10b981">
+        <div class="flex items-center gap-1.5 mb-2">
+          <span class="text-base">⭐</span>
+          <span class="text-xs font-bold text-emerald-700">Stars</span>
+          <span id="starCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
+        </div>
+        <p class="text-xs text-slate-400 mb-2">High volume · High margin</p>
+        <ul id="starList" class="space-y-1"></ul>
+      </div>
+      <!-- Puzzles -->
+      <div class="card p-4" style="border-top:3px solid #4f46e5">
+        <div class="flex items-center gap-1.5 mb-2">
+          <span class="text-base">🔮</span>
+          <span class="text-xs font-bold text-indigo-700">Puzzles</span>
+          <span id="puzzleCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
+        </div>
+        <p class="text-xs text-slate-400 mb-2">Low volume · High margin</p>
+        <ul id="puzzleList" class="space-y-1"></ul>
+      </div>
+      <!-- Plowhorses -->
+      <div class="card p-4" style="border-top:3px solid #f59e0b">
+        <div class="flex items-center gap-1.5 mb-2">
+          <span class="text-base">🐴</span>
+          <span class="text-xs font-bold text-amber-700">Plowhorses</span>
+          <span id="plowhorseCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
+        </div>
+        <p class="text-xs text-slate-400 mb-2">High volume · Low margin</p>
+        <ul id="plowhorseList" class="space-y-1"></ul>
+      </div>
+      <!-- Dogs -->
+      <div class="card p-4" style="border-top:3px solid #ef4444">
+        <div class="flex items-center gap-1.5 mb-2">
+          <span class="text-base">🐕</span>
+          <span class="text-xs font-bold text-red-600">Dogs</span>
+          <span id="dogCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
+        </div>
+        <p class="text-xs text-slate-400 mb-2">Low volume · Low margin</p>
+        <ul id="dogList" class="space-y-1"></ul>
+      </div>
+    </div>
+
+    <!-- Pareto insight bar -->
+    <div class="card p-5" id="paretoCard">
+      <h2 class="section-title">Pareto — Revenue Concentration</h2>
+      <div id="paretoContent"></div>
+    </div>
+
+    <!-- วิเคราะห์ ABC -->
+    <div class="card p-5 mt-5" id="abcCard">
+      <h2 class="section-title">วิเคราะห์ ABC — จัดกลุ่มตามรายได้</h2>
+      <div id="abcContent"></div>
+    </div>
+  </div>
+
+  <!-- ── รายละเอียดเมนู ── -->
+  <div id="costtab-detail" class="hidden">
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <input id="costItemSearch" type="text" placeholder="Search item…"
+          oninput="filterCostDetail()"
+          class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+        <select id="costItemCat" onchange="filterCostDetail()"
+          class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="">ทุกหมวด</option>
+        </select>
+        <select id="costItemQuadrant" onchange="filterCostDetail()"
+          class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          <option value="">All Quadrants</option>
+          <option value="star">⭐ Stars</option>
+          <option value="puzzle">🔮 Puzzles</option>
+          <option value="plowhorse">🐴 Plowhorses</option>
+          <option value="dog">🐕 Dogs</option>
+          <option value="uncosted">⚪ Uncosted</option>
+        </select>
+        <span id="costItemCount" class="text-xs text-slate-400 ml-auto"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="text-sm w-full">
+          <thead>
+            <tr class="text-left text-xs text-slate-500 border-b border-slate-200">
+              <th class="py-2 pr-2">#</th>
+              <th class="py-2 pr-3">SKU</th>
+              <th class="py-2 pr-3">Description</th>
+              <th class="py-2 pr-3">Category</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('qty')">Qty ↕</th>
+              <th class="py-2 pr-3 text-right">Qty Mix</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('revenue')">Revenue ↕</th>
+              <th class="py-2 pr-3 text-right">Rev Mix</th>
+              <th class="py-2 pr-3 text-right">Unit Cost</th>
+              <th class="py-2 pr-3 text-right cursor-pointer hover:text-indigo-600" onclick="sortCostDetail('margin_pct')">Margin % ↕</th>
+              <th class="py-2 text-center">Quadrant</th>
+            </tr>
+          </thead>
+          <tbody id="costItemBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Suggestions ── -->
+  <div id="costtab-suggestions" class="hidden">
+    <div id="suggestionsContent" class="space-y-4"></div>
+  </div>
+
+  <!-- Food Cost % Trend section -->
+  <div class="card p-5 mb-5" id="foodCostTrendCard">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <div>
+        <h2 class="section-title mb-0">รายได้ vs ต้นทุน BoM vs จำนวนเสิร์ฟ · รายเดือน</h2>
+        <p class="text-xs text-slate-400 mt-1">เปรียบเทียบรายได้ ex-VAT, CoGS ตามต้นทุน BoM, จำนวนเสิร์ฟ และ % Food Cost</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <label class="text-xs text-slate-500">เกณฑ์เตือน:</label>
+        <input type="number" id="foodCostThreshold" value="35" min="1" max="100"
+          onchange="loadFoodCostTrend()"
+          style="width:60px;border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+        <span class="text-xs text-slate-400">%</span>
+      </div>
+    </div>
+    <div id="foodCostAlerts" class="mb-3 space-y-1"></div>
+    <div style="height:280px"><canvas id="chartFoodCostTrend"></canvas></div>
+    <div id="foodCostInsight" class="mt-4"></div>
+  </div>
+
+  <!-- Cost per head — branch comparison (extra analytical view) -->
+  <div class="card p-5 mb-5" id="cphCompareCard">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <div>
+        <h2 class="section-title mb-0">ต้นทุน/หัว เปรียบเทียบรายสาขา (BoM)</h2>
+        <p class="text-xs text-slate-400 mt-1">ต้นทุนวัตถุดิบต่อลูกค้า · แท่งแดง = สูงกว่าค่าเฉลี่ยเครือ (กินต้นทุน/หัวมาก) · เทียบ ต้นทุน/หัว ข้ามสาขาให้เห็นว่าใครคุมต้นทุนได้ดี</p>
+      </div>
+      <span id="cphCompareMonth" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="cphCompareInsight" class="mb-3"></div>
+    <div style="height:380px"><canvas id="chartCphCompare"></canvas></div>
+  </div>
+
+</div><!-- /tab-cost -->
+

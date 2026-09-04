@@ -1,0 +1,59 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: 🍽️ HEAVY EATERS / PER-COVER ECONOMICS
+     Per-bill revenue/head vs BoM COGS/head → margin/head distribution.
+     "Heavy eater" = COGS/head in the costly tail (≥ p90). AYCE buffet: revenue
+     per cover is ~fixed, so the COGS/head tail is exactly the margin risk.
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-heavyeater" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fff7ed 0%,#fffbeb 100%);border-left:4px solid #f59e0b">
+    <h2 class="text-base font-bold" style="color:#b45309">🍽️ ต่อหัว & นักกินหนัก (Heavy Eaters)</h2>
+    <p class="text-xs text-slate-500 mt-1">บุฟเฟ่ต์รายได้/หัวเกือบคงที่ → ความเสี่ยงกำไรอยู่ที่ <b>ต้นทุน(BoM)/หัว</b> ที่กระจายตัว · "นักกินหนัก" = บิลที่ต้นทุน/หัวอยู่หาง 10% บนสุด (≥ p90) · คำนวณต่อบิลจริง (sale_bill_cogs × จำนวนลูกค้า)</p>
+  </div>
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <span class="text-xs font-bold" style="color:#b45309">ช่วงวันที่</span>
+    <input type="date" id="heFrom" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-slate-400">–</span>
+    <input type="date" id="heTo" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs text-slate-500">ลูกค้า/บิล ≥</span>
+    <select id="heMinCov" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)">
+      <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+    </select>
+    <button onclick="loadHeavyEaters(true)" class="px-4 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium">โหลด</button>
+    <span id="heStatus" class="text-[11px] text-slate-400 ml-auto"></span>
+  </div>
+  <div id="heKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+  <div id="heCallouts" class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"></div>
+  <div class="card p-5 mb-4">
+    <h3 class="text-sm font-bold text-slate-700 mb-1">การกระจายต้นทุน(BoM)/หัว ต่อบิล</h3>
+    <p class="text-[11px] text-slate-400 mb-3">แต่ละแถบ = จำนวนบิลในช่วงต้นทุน/หัวนั้น · เส้นสีส้ม = เกณฑ์นักกินหนัก (p90)</p>
+    <div id="heHist"></div>
+  </div>
+  <div class="card p-5 mb-4">
+    <h3 class="text-sm font-bold text-slate-700 mb-2">รายสาขา — สัดส่วนบิลนักกินหนัก & เศรษฐศาสตร์ต่อหัว</h3>
+    <div class="overflow-auto" style="max-height:520px">
+      <table class="tbl-top60 w-full text-xs">
+        <thead><tr>
+          <th>สาขา</th><th class="num">บิล</th><th class="num">นักกินหนัก</th><th class="num">% นักกินหนัก</th>
+          <th class="num">รายได้/หัว</th><th class="num">ต้นทุน/หัว</th><th class="num">มาร์จิน/หัว</th>
+        </tr></thead>
+        <tbody id="heBranchBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="card p-5">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-sm font-bold text-slate-700">บิลมาร์จิน/หัว แย่สุด (ตรวจสอบ/เฝ้าระวัง)</h3>
+      <button onclick="exportTable('heExTable','heavy_eaters_worst.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+    </div>
+    <p class="text-[11px] text-slate-400 mb-3">ต้นทุน/หัว สูงกว่ารายได้/หัว = ขาดทุนต่อหัว · บิลต้นทุน/หัวสูงผิดปกติอาจเป็นข้อมูลผิด (จำนวนลูกค้าผิด) ที่ควรเช็ก</p>
+    <div class="overflow-auto" style="max-height:520px">
+      <table class="tbl-top60 w-full text-xs" id="heExTable">
+        <thead><tr>
+          <th>วันที่</th><th>สาขา</th><th>ใบเสร็จ</th><th class="num">ลูกค้า</th>
+          <th class="num">รายได้/หัว</th><th class="num">ต้นทุน/หัว</th><th class="num">มาร์จิน/หัว</th>
+        </tr></thead>
+        <tbody id="heExBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>

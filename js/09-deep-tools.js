@@ -17,7 +17,7 @@ async function loadEngineering() {
   const cat = document.getElementById('engCategory')?.value;
   if (cat) params.set('category', cat);
 
-  const d = await fetch(`${API}/api/menu/engineering?${params}`).then(r => r.json());
+  const d = await api(`${API}/api/menu/engineering?${params}`);
   _engData = d.items || [];
 
   // Populate category filter (first load only)
@@ -432,7 +432,7 @@ async function loadStaff() {
   // Abnormal-discount bills panel (top by discount, current filters)
   (async () => {
     const bp = new URLSearchParams(params); bp.set('limit', '8'); bp.set('sort', 'discount');
-    const db = await fetch(`${API}/api/analysis/discount_bills?${bp}`).then(r => r.json()).catch(() => null);
+    const db = await api(`${API}/api/analysis/discount_bills?${bp}`).catch(() => null);
     const el = document.getElementById('staff-abnormal-bills');
     if (!db || !db.bills || !db.bills.length) {
       el.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีบิลส่วนลดในช่วงนี้</p>'; return;
@@ -440,7 +440,7 @@ async function loadStaff() {
     el.innerHTML = renderDiscBillsTable(db.bills, db.summary?.p95_discount || 0, true, !getBranch());
   })();
 
-  const d = await fetch(`${API}/api/analysis/cashiers?${cashierParams}`).then(r => r.json()).catch(() => []);
+  const d = await api(`${API}/api/analysis/cashiers?${cashierParams}`).catch(() => []);
 
   if (!Array.isArray(d) || !d.length) {
     document.getElementById('staff-kpi-row').innerHTML = '';
@@ -520,7 +520,7 @@ async function loadStaff() {
 // DISCOUNTS & LEAKAGE
 // ════════════════════════════════════════════════════════════════
 async function loadChildBuffet() {
-  const d = await fetch(`${API}/api/buffet/child${getBranch()?'?branch='+encodeURIComponent(getBranch()):''}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/child${getBranch()?'?branch='+encodeURIComponent(getBranch()):''}`).catch(() => null);
   if (!d || !d.by_branch) return;
   const bb = d.by_branch;
   const momChip = p => p == null ? '<span class="text-slate-300 text-xs">—</span>'
@@ -608,7 +608,7 @@ async function loadDiscountReasons(params, gen) {
   const note = document.getElementById('disc-reason-note');
   if (!body) return;
   body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
-  let d; try { d = await fetch(`${API}/api/analysis/discount-reasons?${params}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/analysis/discount-reasons?${params}`); }
   catch (e) { body.innerHTML = '<tr><td colspan="5" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
   if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
@@ -671,7 +671,7 @@ async function loadCouponSeries(params, gen) {
   const note = document.getElementById('coupon-series-note');
   if (!body) return;
   body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
-  let d; try { d = await fetch(`${API}/api/analysis/coupon-series?${params}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/analysis/coupon-series?${params}`); }
   catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
   if (gen != null && gen !== loadGen) return;
   if (d.staged === false) {
@@ -761,7 +761,7 @@ async function loadCouponDrill() {
   body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   const qp = new URLSearchParams(COUPON_DRILL_PARAMS);
   qp.set('series_id', COUPON_DRILL.id); qp.set('by', by);
-  let d; try { d = await fetch(`${API}/api/analysis/coupon-series/drill?${qp}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/analysis/coupon-series/drill?${qp}`); }
   catch (e) { body.innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">โหลดไม่สำเร็จ</td></tr>'; return; }
   if (d.available === false) {
     body.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-400">ยังไม่มีข้อมูลรายวัน — รัน sync รอบใหม่เพื่อเก็บ pos_coupon_day</td></tr>';
@@ -808,7 +808,7 @@ async function loadDiscountAlerts(params, gen) {
   const meta = document.getElementById('disc-alert-meta');
   if (!el) return;
   el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังตรวจ…</p>';
-  const d = await fetch(`${API}/api/analysis/discount_alerts?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/discount_alerts?${params}`).catch(() => null);
   if (gen != null && gen !== loadGen) return;
   if (!d) { el.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; if (meta) meta.textContent = ''; return; }
   const flags = d.flags || [];
@@ -857,7 +857,7 @@ async function loadPaymentDiscount(params, gen) {
   const mixEl = document.getElementById('paydisc-mix');
   if (!chEl) return;
   chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">กำลังโหลด…</p>';
-  const d = await fetch(`${API}/api/analysis/payment_discount?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/payment_discount?${params}`).catch(() => null);
   if (gen != null && gen !== loadGen) return;
   if (!d) { chEl.innerHTML = mixEl.innerHTML = '<p class="text-sm text-slate-400 py-3 text-center">โหลดไม่ได้</p>'; return; }
   if (!d.available) {
@@ -908,7 +908,7 @@ async function loadDiscountLeakage(params, gen) {
   const meta  = document.getElementById('disc-leak-meta');
   if (!wrap) return;
   wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">กำลังโหลด…</div>';
-  const d = await fetch(`${API}/api/analysis/discount_leakage?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/discount_leakage?${params}`).catch(() => null);
   if (gen != null && gen !== loadGen) return;
   if (!d || !Array.isArray(d.branches) || !d.branches.length) {
     wrap.innerHTML = '<div class="col-span-full text-center text-slate-400 py-4 text-sm">ไม่มีข้อมูลส่วนลดในช่วงนี้</div>';
@@ -1019,7 +1019,7 @@ async function loadDiscountsTab() {
   loadDiscountLeakage(_leakP, gen);
   loadPaymentDiscount(new URLSearchParams(_leakP), gen);
   loadDiscountAlerts(new URLSearchParams(_leakP), gen);
-  const d = await fetch(`${API}/api/analysis/discounts?${params}`).then(r => r.json()).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
+  const d = await api(`${API}/api/analysis/discounts?${params}`).catch(() => ({ overall: {}, trend: [], by_branch: [], top_cashiers: [] }));
   if (gen !== loadGen) return;
   const o = d.overall || {};
 
@@ -1318,10 +1318,10 @@ async function loadTimeflow() {
   if (getMonthTo())   bpParams.set('month_to',   getMonthTo());
 
   const [grid, hourly, dow, branchPeak] = await Promise.all([
-    fetch(`${API}/api/analysis/daypart_grid?${params}`).then(r => r.json()),
-    fetch(`${API}/api/analysis/hourly_open${qp()}`).then(r => r.json()).catch(() => []),
-    fetch(`${API}/api/analysis/dow${qp()}`).then(r => r.json()).catch(() => []),
-    fetch(`${API}/api/analysis/branch_peak?${bpParams}`).then(r => r.json()).catch(() => ({ branches: [] })),
+    api(`${API}/api/analysis/daypart_grid?${params}`),
+    api(`${API}/api/analysis/hourly_open${qp()}`).catch(() => []),
+    api(`${API}/api/analysis/dow${qp()}`).catch(() => []),
+    api(`${API}/api/analysis/branch_peak?${bpParams}`).catch(() => ({ branches: [] })),
   ]);
 
   _timeflowData = grid;
@@ -1477,7 +1477,7 @@ async function tfDrillBranch(branchName, cardEl) {
   const params = new URLSearchParams({ branch: branchName });
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const tv = await fetch(`${API}/api/analysis/table-turnover?view=dwell&${params}`).then(r=>r.json()).catch(()=>null);
+  const tv = await api(`${API}/api/analysis/table-turnover?view=dwell&${params}`).catch(()=>null);
   const tvEl = document.getElementById('tfDrillTurnover');
   if (tvEl) {
     const br = tv && tv.by_branch && tv.by_branch.find(x => x.branch === branchName);
@@ -1503,7 +1503,7 @@ async function loadTableTurnover() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const d = await fetch(`${API}/api/analysis/table-turnover?view=dwell&${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/table-turnover?view=dwell&${params}`).catch(() => null);
   if (!d || !d.available) {
     document.getElementById('tableTurnoverKpis').innerHTML = '<p class="text-xs text-slate-400 col-span-4">No table data available. Requires table_no field in transactions.</p>';
     return;
@@ -1846,7 +1846,7 @@ async function loadCoverageExtras() {
   if (getMonthFrom()) ip.set('month_from', getMonthFrom());
   if (getMonthTo())   ip.set('month_to', getMonthTo());
   if (getBranch())    ip.set('branch', getBranch());
-  fetch(`${API}/api/bom/consumption-analysis?${ip}`).then(r=>r.json()).then(d=>{
+  api(`${API}/api/bom/consumption-analysis?${ip}`).then(d=>{
     const ings = d.ingredients||[];
     document.getElementById('cov-ingredients').innerHTML = ings.map((r,i)=>`
       <tr class="border-b border-slate-50">
@@ -1861,7 +1861,7 @@ async function loadCoverageExtras() {
   if (getBranch())    hp.set('branch', getBranch());
   if (getMonthFrom()) hp.set('month_from', getMonthFrom());
   if (getMonthTo())   hp.set('month_to', getMonthTo());
-  fetch(`${API}/api/analysis/hourly_open?${hp}`).then(r=>r.json()).then(d=>{
+  api(`${API}/api/analysis/hourly_open?${hp}`).then(d=>{
     const all = (d.hourly||d||[]).filter(h=>h.hour!=null);
     // ตัดเวลาร้านปิดออก: ใช้ closed_hours config ถ้ามี ไม่งั้น fallback ตัดชั่วโมงที่รายได้ = 0
     const hasClosed = all.some(h=>h.is_open===false);
@@ -1888,7 +1888,7 @@ async function loadPrimeCost() {
   const p = new URLSearchParams();
   if (month) p.set('month', month);
   if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/finance/prime-cost?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/finance/prime-cost?${p}`); } catch (e) { return; }
   const ch = d.chain || {}; const band = d.band || { good: 70, high: 78 };
   const rows = d.branches || [];
   const pcCol = pp => pp == null ? '#94a3b8' : pp > band.high ? '#ef4444' : pp > band.good ? '#f59e0b' : '#10b981';
@@ -2088,7 +2088,7 @@ async function openPnlDrill(branch) {
 
   // Monthly profit trend for this branch (all months)
   try {
-    const mt = await fetch(`${API}/api/pnl/monthly?branch=${encodeURIComponent(branch)}`).then(r => r.json()).catch(() => []);
+    const mt = await api(`${API}/api/pnl/monthly?branch=${encodeURIComponent(branch)}`).catch(() => []);
     const arr = (Array.isArray(mt) ? mt : []).sort((a,b)=>(a.period_month||'').localeCompare(b.period_month||''));
     if (arr.length) mkChart('pnlDrillTrend', {
       type: 'bar',
@@ -2163,7 +2163,7 @@ async function loadMobileSummary(force) {
   if (status) status.textContent = 'กำลังโหลด…';
   const br = msBranch();
   const mq = new URLSearchParams({ gran: 'month' }); if (br) mq.set('branch', br);
-  try { _msMonth = await fetch(`${API}/api/sales/daily?${mq}`).then(r => r.json()); }
+  try { _msMonth = await api(`${API}/api/sales/daily?${mq}`); }
   catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; return; }
   const m = _msMonth;
 
@@ -2252,7 +2252,7 @@ async function msLoadSales() {
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
   const q = new URLSearchParams({ gran: _msSalesGran, trend: '12' });
   const br = msBranch(); if (br) q.set('branch', br);
-  let d; try { d = await fetch(`${API}/api/sales/daily?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  let d; try { d = await api(`${API}/api/sales/daily?${q}`); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
   // latest day/month FIRST (owner request 2026-07-20) — the API returns the
   // trend oldest→newest; reverse for display so index 0 = the newest period.
   const tr = (d.trend || []).slice().reverse();
@@ -2283,7 +2283,7 @@ async function msLoadMenu() {
   const q = new URLSearchParams({ sort: 'qty', limit: '100' });
   const br = msBranch(); if (br) q.set('branch', br);
   const mon = (_msMonth?.focus || '').slice(0, 7); if (mon) q.set('month', mon);
-  let d; try { d = await fetch(`${API}/api/sales/top_ordered?${q}`).then(r => r.json()); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; if (rWrap) rWrap.innerHTML = ''; return; }
+  let d; try { d = await api(`${API}/api/sales/top_ordered?${q}`); } catch (e) { wrap.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; if (rWrap) rWrap.innerHTML = ''; return; }
   const pool = (d.items || []);
 
   // ── 📈 มาแรงเดือนนี้: biggest positive qty-MoM among meaningful-volume menus ──
@@ -2329,7 +2329,7 @@ async function msLoadProfit() {
   kp.innerHTML = ''; br.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
   const q = new URLSearchParams({ gran: 'month' });
   const b = msBranch(); if (b) q.set('branch', b);
-  let d; try { d = await fetch(`${API}/api/sales/cost-per-head?${q}`).then(r => r.json()); } catch (e) { br.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
+  let d; try { d = await api(`${API}/api/sales/cost-per-head?${q}`); } catch (e) { br.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
   const t = d.total || {};
   const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
   kp.innerHTML = [
@@ -2852,7 +2852,7 @@ async function loadRecalibration() {
   const body = document.getElementById('recalibBody');
   body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400">⏳ Loading…</td></tr>';
   try {
-    const data = await fetch(`${API}/api/cost/recalibration?${params}`).then(r => r.json());
+    const data = await api(`${API}/api/cost/recalibration?${params}`);
     _recalibData = data;
     _renderRecalibSummary();
     _renderRecalibTable();
@@ -2958,11 +2958,11 @@ async function recalibSave() {
   status.textContent = '⏳ saving…';
   status.className = 'text-xs text-amber-700';
   try {
-    const res = await fetch(`${API}/api/cost/bulk-update`, {
+    const res = await api(`${API}/api/cost/bulk-update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    }).then(r => r.json());
+    });
     status.textContent = `✅ บันทึก ${res.written} SKU` + (res.unknown_skus?.length ? ` · unknown: ${res.unknown_skus.join(',')}` : '');
     status.className = 'text-xs text-emerald-700 font-semibold';
     setTimeout(loadRecalibration, 700);   // refresh
@@ -3207,7 +3207,7 @@ async function loadMenuCompare() {
   if (getBranch()) qp.branch = getBranch();
   if (getGroup()) qp.group = getGroup();
   const st = document.getElementById('mcStatus'); if (st) st.textContent = 'กำลังโหลด…';
-  let d; try { d = await fetch(`${API}/api/sales/menu-compare?${new URLSearchParams(qp)}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/sales/menu-compare?${new URLSearchParams(qp)}`); }
   catch (e) { if (st) st.textContent = 'ผิดพลาด'; return; }
   _mcLast = { items: d.items || [], totals: d.totals || {}, covers_a: d.covers_a || 0,
               covers_b: d.covers_b || 0, a_range: d.a_range, b_range: d.b_range, qp };
@@ -3443,7 +3443,7 @@ async function mcOpenDrill(sku) {
   bEl.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">กำลังโหลด…</p>';
   const q = { sku_code: sku, ..._mcPeriodParams('A', 'a'), ..._mcPeriodParams('B', 'b') };
   if (getGroup()) q.group = getGroup();
-  let d; try { d = await fetch(`${API}/api/sales/menu-compare/drill?${new URLSearchParams(q)}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/sales/menu-compare/drill?${new URLSearchParams(q)}`); }
   catch (e) { bEl.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้</p>'; return; }
   _mcDrillData = d;
   _mcDrillPerHead = _mcPerHead;   // open the dive-in in the same mode as the main table
@@ -3505,7 +3505,7 @@ async function mcLoadBom() {
   const sku = _mcDrillData?.sku_code, el = document.getElementById('mcDrillBom');
   if (!sku || !el || _mcBomSku === sku) return;
   el.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">กำลังโหลด BoM…</p>';
-  let d; try { d = await fetch(`${API}/api/bom-cost/recipe/${encodeURIComponent(sku)}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/bom-cost/recipe/${encodeURIComponent(sku)}`); }
   catch (e) { el.innerHTML = '<p class="text-sm text-red-500 py-6 text-center">โหลด BoM ไม่ได้</p>'; return; }
   _mcBomSku = sku;
   const ings = d.ingredients || [];
@@ -3642,9 +3642,9 @@ async function bcLoadOverview() {
   const cdQp = new URLSearchParams({ scope: 'chain', limit: 60 });
   if (mf) cdQp.set('month_from', mf); if (mt) cdQp.set('month_to', mt);
   const [data, mom, cd] = await Promise.all([
-    fetch(`${API}/api/bom-cost/overview?${qp}`).then(r => r.json()),
-    fetch(`${API}/api/bom-cost/branch-foodcost-mom${momQp}`).then(r => r.json()).catch(() => ({branches:[]})),
-    fetch(`${API}/api/bom-cost/cost-drivers?${cdQp}`).then(r => r.json()).catch(() => null),
+    api(`${API}/api/bom-cost/overview?${qp}`),
+    api(`${API}/api/bom-cost/branch-foodcost-mom${momQp}`).catch(() => ({branches:[]})),
+    api(`${API}/api/bom-cost/cost-drivers?${cdQp}`).catch(() => null),
   ]);
   bcOverviewData = data;
   bcFoodMomData  = mom;
@@ -3873,7 +3873,7 @@ async function bcLoadBranch() {
   const pane = document.getElementById('bc-pane-branch');
   const { mf, mt, gr } = bcPeriod();
   // Branch selector
-  const brs = await fetch(`${API}/api/branches`).then(r => r.json());
+  const brs = await api(`${API}/api/branches`);
   const brList = Array.isArray(brs) ? brs : (brs.items || []);
   const sel = pane.querySelector('#bcBranchSel');
   const currBranch = sel ? sel.value : (brList[0]?.name || '');
@@ -3895,10 +3895,10 @@ async function bcLoadBranch() {
   const cdQp = new URLSearchParams({ scope: 'branch', branch: useBranch, limit: 60 });
   if (mf) cdQp.set('month_from', mf); if (mt) cdQp.set('month_to', mt);
   const [data, cd] = await Promise.all([
-    fetch(`${API}/api/branch-bom/analysis?${qp}`).then(r => r.json()),
+    api(`${API}/api/branch-bom/analysis?${qp}`),
     (useBranch && useBranch !== 'ALL')
-      ? fetch(`${API}/api/bom-cost/cost-drivers?${cdQp}`).then(r => r.json()).catch(() => null)
-      : fetch(`${API}/api/bom-cost/cost-drivers?scope=chain&limit=60${mf?'&month_from='+mf:''}${mt?'&month_to='+mt:''}`).then(r => r.json()).catch(() => null),
+      ? api(`${API}/api/bom-cost/cost-drivers?${cdQp}`).catch(() => null)
+      : api(`${API}/api/bom-cost/cost-drivers?scope=chain&limit=60${mf?'&month_from='+mf:''}${mt?'&month_to='+mt:''}`).catch(() => null),
   ]);
   const body = pane.querySelector('#bcBranchBody');
   const t = data.totals || {};
@@ -3945,7 +3945,7 @@ async function bcLoadBranch() {
 }
 
 async function bcShowRecipe(skuCode) {
-  const data = await fetch(`${API}/api/bom-cost/recipe/${encodeURIComponent(skuCode)}`).then(r => r.json());
+  const data = await api(`${API}/api/bom-cost/recipe/${encodeURIComponent(skuCode)}`);
   const html = `
     <div onclick="this.remove()" class="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
       <div onclick="event.stopPropagation()" class="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-auto p-5">
@@ -3976,7 +3976,7 @@ async function bcShowRecipe(skuCode) {
 async function bcLoadCompare() {
   const pane = document.getElementById('bc-pane-compare');
   if (!pane.querySelector('#bcCmpSel')) {
-    const brs = await fetch(`${API}/api/branches`).then(r => r.json());
+    const brs = await api(`${API}/api/branches`);
     const brList = Array.isArray(brs) ? brs : (brs.items || []);
     pane.innerHTML = `
       <div class="card p-3 mb-4">
@@ -4003,7 +4003,7 @@ async function bcLoadCompareRun() {
   const qp = new URLSearchParams({ branches: bcCompareSelection.join(',') });
   if (mf) qp.set('month_from', mf);
   if (mt) qp.set('month_to', mt);
-  const data = await fetch(`${API}/api/bom-cost/compare?${qp}`).then(r => r.json());
+  const data = await api(`${API}/api/bom-cost/compare?${qp}`);
   const body = document.getElementById('bcCmpBody');
   const res = data.results || [];
   const variance = data.variance || {};
@@ -4073,7 +4073,7 @@ async function bcLoadCompareRun() {
   const cds = await Promise.all(bcCompareSelection.map(br => {
     const q = new URLSearchParams({ scope: 'branch', branch: br, limit: 60 });
     if (mf) q.set('month_from', mf); if (mt) q.set('month_to', mt);
-    return fetch(`${API}/api/bom-cost/cost-drivers?${q}`).then(r => r.json()).catch(() => null);
+    return api(`${API}/api/bom-cost/cost-drivers?${q}`).catch(() => null);
   }));
   let cdHtml = '<h3 class="font-semibold mb-2 mt-2">Top 60 Cost-Driver SKUs · แยกรายสาขา</h3>';
   bcCompareSelection.forEach((br, i) => { if (cds[i]) cdHtml += bcCostDriverTable(cds[i], '· ' + esc(br)); });
@@ -4087,10 +4087,10 @@ async function bcLoadSimulator() {
   const qp = new URLSearchParams({ limit: 2000 });   // ALL menus that have BoM
   if (mf) qp.set('month_from', mf);
   if (mt) qp.set('month_to', mt);
-  const data = await fetch(`${API}/api/bom-cost/simulator-base?${qp}`).then(r => r.json());
+  const data = await api(`${API}/api/bom-cost/simulator-base?${qp}`);
   bcSimBase = data;
   // scenarios list
-  const scens = await fetch(`${API}/api/bom-cost/scenarios`).then(r => r.json());
+  const scens = await api(`${API}/api/bom-cost/scenarios`);
   const scenList = scens.scenarios || [];
   pane.innerHTML = `
     <div class="flex flex-wrap items-center gap-3 mb-4">
@@ -4347,16 +4347,16 @@ async function bcSaveScenario() {
     disabled: !!bcSimDisabled[sku_code],
   }));
   if (!overrides.length) { alert('ยังไม่มีการปรับ (ต้นทุน/จำนวน/ปิดเมนู)'); return; }
-  const r = await fetch(`${API}/api/bom-cost/scenarios`, {
+  const r = await api(`${API}/api/bom-cost/scenarios`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({name, description: desc, overrides})
-  }).then(r => r.json());
+  });
   alert(`บันทึก Scenario #${r.id} สำเร็จ (${r.items_inserted} items)`);
   bcLoadSimulator();
 }
 async function bcLoadScenario(id) {
   if (!id) { bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {}; bcRenderSimEditor(); bcRecomputeKpis(); return; }
-  const r = await fetch(`${API}/api/bom-cost/scenarios/${id}`).then(r => r.json());
+  const r = await api(`${API}/api/bom-cost/scenarios/${id}`);
   bcSimOverrides = {}; bcSimQty = {}; bcSimDisabled = {};
   const curCost = {}; (bcSimBase?.skus || []).forEach(r => { curCost[r.sku_code] = r.current_unit_cost; });
   (r.items||[]).forEach(it => {
@@ -4398,7 +4398,7 @@ async function bcShowRoi() {
   if (!id) { alert('เลือก scenario ก่อน'); return; }
   panel.classList.remove('hidden');
   panel.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
-  let d; try { d = await fetch(`${API}/api/bom-cost/scenarios/${id}/savings`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/bom-cost/scenarios/${id}/savings`); }
   catch (e) { panel.innerHTML = '<p class="text-sm text-red-500 py-4 text-center">โหลดไม่สำเร็จ</p>'; return; }
   bcRenderRoi(d, id);
 }

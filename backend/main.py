@@ -6,6 +6,7 @@ Run: uvicorn backend.main:app --reload --port 8000
 
 import sqlite3
 import tempfile
+import hashlib
 import threading
 from contextlib import closing
 from datetime import datetime, timezone
@@ -461,7 +462,9 @@ def _versioned_index_html() -> str:
     def sub(m):
         p = _JS_DIR / m.group(1)
         return f'src="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
-    return _re.sub(r'src="/js/([0-9a-z-]+\.js)"', sub, html)
+    html = _re.sub(r'src="/js/([0-9a-z-]+\.js)"', sub, html)
+    return html.replace('<div id="tabsRoot"></div>',
+                        f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle()[1]}"></div>', 1)
 
 
 @app.get("/", include_in_schema=False)
@@ -471,6 +474,33 @@ def root():
         return _Response(content=_versioned_index_html(), media_type="text/html",
                          headers={"Cache-Control": "no-cache"})
     return {"message": "Oshinei API running. Dashboard file not found."}
+
+
+_TABS_DIR = INDEX.parent / "tabs"
+_tabs_cache = {"key": None, "html": "", "hash": ""}
+
+
+def _tabs_bundle() -> tuple:
+    """The 48 tab panels, concatenated in file order, with a content hash.
+
+    Re-read when any fragment's mtime or size changes, so an edit shows up on
+    the next request locally and a deploy is one fresh read. The shell carries
+    the hash as data-tabs-v, so a stale cached shell fetches its own version."""
+    files = sorted(_TABS_DIR.glob("*.html")) if _TABS_DIR.exists() else []
+    key = tuple((f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in files)
+    if key != _tabs_cache["key"]:
+        html = "".join(f.read_text(encoding="utf-8") for f in files)
+        _tabs_cache.update(key=key, html=html,
+                           hash=hashlib.sha1(html.encode("utf-8")).hexdigest()[:10])
+    return _tabs_cache["html"], _tabs_cache["hash"]
+
+
+@app.get("/tabs.html", include_in_schema=False)
+def tabs_html(v: Optional[str] = Query(None)):
+    html, h = _tabs_bundle()
+    cache = "public, max-age=31536000, immutable" if v == h else "no-cache"
+    return _Response(content=html, media_type="text/html; charset=utf-8",
+                     headers={"Cache-Control": cache, "X-Tabs-Version": h})
 
 
 @app.get("/js/{name}", include_in_schema=False)

@@ -1,0 +1,110 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: TIME & FLOW
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-timeflow" style="display:none">
+  <!-- Metric selector -->
+  <div class="flex flex-wrap items-center gap-3 mb-5">
+    <div class="flex gap-1" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px">
+      <button onclick="setTimeflowMetric('revenue')"      id="tf-metric-revenue"      class="subtab-btn active text-xs px-3 py-1">Revenue</button>
+      <button onclick="setTimeflowMetric('tx_count')"     id="tf-metric-tx_count"     class="subtab-btn text-xs px-3 py-1">Transactions</button>
+      <button onclick="setTimeflowMetric('customer_count')" id="tf-metric-customer_count" class="subtab-btn text-xs px-3 py-1">Customers</button>
+      <button onclick="setTimeflowMetric('avg_ticket')"   id="tf-metric-avg_ticket"   class="subtab-btn text-xs px-3 py-1">Avg Ticket</button>
+    </div>
+    <span class="text-xs text-slate-400">Click a cell to see detail. เข้มขึ้น = higher value.</span>
+  </div>
+
+  <!-- Per-branch peak overview -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="section-title mb-0">พีครายสาขา</h2>
+      <span class="text-[11px]" style="color:var(--text-muted)">คลิกการ์ดเพื่อโฟกัสสาขานั้น · คลิกซ้ำเพื่อยกเลิก</span>
+    </div>
+    <div id="tfBranchCards" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3"></div>
+  </div>
+
+  <!-- Branch drill-down panel (shown when branch card clicked) -->
+  <div id="tfBranchDrill" class="card p-5 mb-5 hidden">
+    <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div>
+        <h2 class="section-title mb-0" id="tfDrillTitle">สาขา —</h2>
+        <p class="text-xs mt-0.5" style="color:var(--text-muted)">Revenue by Hour · Day-of-Week · อัตราหมุนเวียนโต๊ะ</p>
+      </div>
+      <button onclick="tfClearDrill()" class="text-xs px-3 py-1.5 rounded-lg" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">✕ ปิดดู drill-down</button>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
+      <div>
+        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Revenue by Hour (daily avg)</p>
+        <div style="height:180px"><canvas id="chartDrillHourly"></canvas></div>
+      </div>
+      <div>
+        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">รายได้ตามวันในสัปดาห์ (avg per day)</p>
+        <div style="height:180px"><canvas id="chartDrillDow"></canvas></div>
+      </div>
+    </div>
+    <div>
+      <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">อัตราหมุนเวียนโต๊ะ (Turnover)</p>
+      <div id="tfDrillTurnover" class="text-xs" style="color:var(--text-secondary)"></div>
+    </div>
+  </div>
+
+  <!-- Heatmap grid -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="section-title mb-0">Daypart × Day-of-Week Heatmap</h2>
+      <div class="flex items-center gap-2">
+        <span id="tf-peak-label" class="text-xs font-medium text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full"></span>
+        <button onclick="tfDiveIn()" title="Dive in — heatmap analysis" style="width:28px;height:28px;background:rgba(255,255,255,.85);border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s" onmouseover="this.style.background='#4f46e5';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.85)';this.style.color=''">🔍</button>
+      </div>
+    </div>
+    <div id="timeflowGrid" class="overflow-x-auto"></div>
+    <!-- Cell detail panel (shown on click) -->
+    <div id="tfCellDetail" class="hidden mt-4 p-4 rounded-xl border border-indigo-100 bg-indigo-50/50"></div>
+  </div>
+
+  <!-- Hourly bar chart -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <div class="card p-5">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h2 class="section-title mb-0">Revenue by Hour</h2>
+        <div class="flex items-center gap-1 text-xs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px">
+          <button id="tfHourAvg"   onclick="setTfHourMode('avg')"   class="subtab-btn active px-3 py-1">เฉลี่ย/วัน</button>
+          <button id="tfHourTotal" onclick="setTfHourMode('total')" class="subtab-btn px-3 py-1">รวมทั้งช่วง</button>
+        </div>
+      </div>
+      <div style="height:220px"><canvas id="chartTfHourly"></canvas></div>
+      <p class="text-[11px] text-slate-400 mt-2">คลิกแท่งเพื่อเจาะดูชั่วโมงนั้น (รายสาขา + รายวันในสัปดาห์)</p>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-3">รายได้ตามวันในสัปดาห์ (avg per day)</h2>
+      <div style="height:220px"><canvas id="chartTfDow"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Peak hours summary -->
+  <div class="card p-5">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <h2 class="section-title mb-0">สรุปชั่วโมงพีค <span class="text-xs font-normal text-slate-400">· คลิกการ์ดเพื่อเจาะลึก</span></h2>
+    </div>
+    <div id="tfPeakSummary" class="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm"></div>
+  </div>
+
+  <!-- อัตราหมุนเวียนโต๊ะ section -->
+  <div class="card p-5 mt-5">
+    <h2 class="section-title mb-1">อัตราหมุนเวียนโต๊ะ</h2>
+    <p class="text-xs text-slate-400 mb-4">Estimated avg bills per table per day &amp; dwell time (from table_no gaps)</p>
+    <div id="tableTurnoverKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+    <div style="height:180px"><canvas id="chartTableTurnover"></canvas></div>
+  </div>
+</div>
+
+<!-- ══ Hour-detail drill modal (Time & Flow peak cards / hourly bars) ══ -->
+<div id="hourDetailModal" onclick="if(event.target.id==='hourDetailModal')closeHourDetail()"
+     style="position:fixed;inset:0;z-index:90;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;padding:20px">
+  <div style="background:var(--bg-card);border-radius:14px;max-width:920px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+      <h3 id="hourDetailTitle" class="text-base font-bold text-slate-800">รายละเอียดชั่วโมง</h3>
+      <button onclick="closeHourDetail()" class="topbar-icon-btn" title="ปิด (Esc)">✕</button>
+    </div>
+    <div id="hourDetailBody" class="p-5"></div>
+  </div>
+</div>

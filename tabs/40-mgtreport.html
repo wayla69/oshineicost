@@ -1,0 +1,62 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 4 — ANALYSIS REPORT
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-mgtreport" class="hidden">
+
+  <!-- Management report cover band. Collapsible (mobile starts collapsed —
+       the reader wants the report, not the chrome): .collapsed hides the two
+       .mgt-full rows and shows the slim one-line bar; print always expands. -->
+  <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+       style="background:linear-gradient(135deg,#0f766e 0%,#0891b2 55%,#2563eb 100%)">
+    <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
+      <span class="text-sm font-semibold truncate" id="mgtSlimLabel">Management Summary Report</span>
+      <button onclick="toggleMgtCover(false)" class="text-xs rounded-lg px-3 py-1.5 font-semibold flex-shrink-0"
+              style="background:rgba(255,255,255,0.18)">▼ เมนูรายงาน</button>
+    </div>
+    <div class="mgt-full flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
+        <h1 id="mgtTitle" class="text-3xl font-bold leading-tight">Management Summary Report</h1>
+        <p id="mgtPeriodLabel" class="text-sm opacity-90 mt-2">—</p>
+        <p id="mgtBranchLabel" class="text-sm opacity-90">—</p>
+      </div>
+      <div class="text-right text-xs opacity-90">
+        <div class="mb-3 mgt-hide-sm"><span id="mgtGenLabel">Generated:</span> <span id="mgtGenDate">—</span></div>
+        <button id="mgtExportBtn" onclick="exportMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 Export Excel</button>
+        <button id="mgtPrintBtn" onclick="printMgtReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" title="A4 แนวตั้ง+แนวนอนอัตโนมัติ · ในกล่องพิมพ์ให้เปิด “Background graphics” และตั้ง Margins = Default เพื่อให้สีและการแบ่งหน้าถูกต้อง" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button onclick="toggleMgtCover(true)" class="no-print px-3 py-2 text-sm rounded-lg font-medium ml-2" title="ย่อหัวรายงาน"
+                style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">▲ ย่อ</button>
+      </div>
+    </div>
+    <div class="mgt-full no-print mt-5 flex flex-wrap items-center gap-3">
+      <div class="inline-flex rounded-lg overflow-hidden" style="background:rgba(255,255,255,0.12)">
+        <button id="mgtTabDaily"  onclick="setMgtPeriod('daily')"  class="px-6 py-2 text-sm font-semibold transition">Daily</button>
+        <button id="mgtTabWeekly" onclick="setMgtPeriod('weekly')" class="px-6 py-2 text-sm font-semibold transition">Weekly</button>
+        <button id="mgtTabMonthly" onclick="setMgtPeriod('monthly')" class="px-6 py-2 text-sm font-semibold transition">Monthly</button>
+      </div>
+      <input id="mgtDayPicker" type="date" onchange="onMgtDayChange(this.value)"
+             class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+             style="background:rgba(255,255,255,0.92);color:#0f172a" />
+      <select id="mgtWeekPicker" onchange="onMgtWeekChange(this.value)"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+              style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
+      <select id="mgtMonthPicker" onchange="onMgtMonthChange(this.value)"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium border-0"
+              style="background:rgba(255,255,255,0.92);color:#0f172a"></select>
+      <!-- monthly-only escape hatch back to the legacy full Monthly Report pack -->
+      <button id="mgtLegacyBtn" onclick="switchTab('report')"
+              class="hidden text-sm rounded-lg px-3 py-2 font-medium"
+              style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.25)">📑 ฉบับเต็ม (แบบเดิม)</button>
+      <div class="inline-flex rounded-lg overflow-hidden ml-auto" style="background:rgba(255,255,255,0.12)" title="Language / ภาษา">
+        <button id="mgtLangEn" onclick="setMgtLang('en')" class="px-4 py-2 text-sm font-semibold transition">EN</button>
+        <button id="mgtLangTh" onclick="setMgtLang('th')" class="px-4 py-2 text-sm font-semibold transition">ไทย</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- data-force-light: the printable report keeps a white-paper look in dark
+       mode — local token overrides below + charts pick it up via mkChart -->
+  <div id="mgtRptBody" class="space-y-5" data-force-light>
+    <div class="text-center text-slate-400 py-10 text-sm">Loading…</div>
+  </div>
+</div>

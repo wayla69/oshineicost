@@ -1,0 +1,124 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: BRANCH BoM ANALYSIS (Phase 12)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-branchbom" class="tab-content" style="display:none">
+
+  <!-- Header strip -->
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fef3c7 0%,#fce7f3 100%);border-left:4px solid #d946ef">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">🔬</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#86198f">BoM วิเคราะห์รายสาขา (Per-Branch Cost Deep-Dive)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          เลือกสาขา → ดูต้นทุนทุกเมนูในสาขานั้น · เมนูใดคิดเป็นกี่ % ของต้นทุน · เทรนด์รายเดือน · ลงลึกถึงระดับวัตถุดิบ
+          <br>ใช้สูตร BoM เดียวกับ <b>GP รายสาขา</b> (ตัด tier SKU ออก · รวมทุก SKU บุฟเฟ่ต์ + อลาคาท)
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Phase 16: View mode toggle (per-branch vs chain-wide) -->
+  <div class="subtab-bar mb-3" id="bbomViewModeBar">
+    <button class="subtab-btn active" data-bbom-mode="branch" onclick="setBbomViewMode('branch')">🏪 รายสาขา</button>
+    <button class="subtab-btn"        data-bbom-mode="chain"  onclick="setBbomViewMode('chain')">🌐 รวมเครือ (ทุกสาขา)</button>
+  </div>
+
+  <!-- Filters -->
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+    <label class="text-xs text-slate-500" id="bbomBranchLabel">สาขา</label>
+    <select id="bbomBranch" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:180px"></select>
+    <label class="text-xs text-slate-500 ml-3">เดือนเริ่ม</label>
+    <select id="bbomMonthFrom" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    <label class="text-xs text-slate-500">ถึง</label>
+    <select id="bbomMonthTo" onchange="loadBranchBom()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    <label class="text-xs text-slate-500 ml-3">ความถี่</label>
+    <div class="inline-flex" role="group" aria-label="ความถี่">
+      <button type="button" class="subtab-btn text-xs px-3 py-1" id="bbomGran-day"   onclick="setBbomGranularity('day')">วัน</button>
+      <button type="button" class="subtab-btn text-xs px-3 py-1" id="bbomGran-week"  onclick="setBbomGranularity('week')">สัปดาห์</button>
+      <button type="button" class="subtab-btn active text-xs px-3 py-1" id="bbomGran-month" onclick="setBbomGranularity('month')">เดือน</button>
+    </div>
+    <button onclick="loadBranchBom(true)" class="ml-2" style="background:#d946ef;color:white;border:none;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">รีเฟรช</button>
+    <span id="bbomStatus" class="text-xs text-slate-400 ml-auto"></span>
+  </div>
+
+  <!-- Summary cards -->
+  <div id="bbomSummary" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
+
+  <!-- Per-branch summary table (chain mode only) -->
+  <div id="bbomBranchSummary" class="card p-5 mb-4" style="display:none">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <h2 class="section-title mb-0">🌐 สรุปภาพรวมทุกสาขา — รายได้ · ต้นทุน · กำไรขั้นต้น · Food Cost%</h2>
+      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียง · เป้า Food Cost 55-70%</span>
+    </div>
+    <div style="max-height:480px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-slate-400 text-xs border-b sticky top-0 bg-white">
+          <th class="py-1.5 pr-3 cursor-pointer" onclick="_bbomSortBranches('branch')">สาขา</th>
+          <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_revenue')">รายได้</th>
+          <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_cogs')">ต้นทุน BoM</th>
+          <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_gp')">กำไรขั้นต้น</th>
+          <th class="py-1.5 pr-3 text-right cursor-pointer" onclick="_bbomSortBranches('total_gp_pct')">GP%</th>
+          <th class="py-1.5 text-right cursor-pointer" onclick="_bbomSortBranches('total_food_cost_pct')">Food Cost%</th>
+        </tr></thead>
+        <tbody id="bbomBranchSummaryBody"></tbody>
+        <tfoot id="bbomBranchSummaryFoot" class="font-semibold border-t-2 border-slate-200 bg-slate-50"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Concentration callout -->
+  <div id="bbomConcentration" class="card p-3 mb-4" style="display:none;background:#f0f9ff;border-left:3px solid #0284c7">
+    <p class="text-sm" style="color:#075985"></p>
+  </div>
+
+  <!-- Monthly trend chart -->
+  <div class="card p-5 mb-4">
+    <h2 class="section-title mb-1">📈 แนวโน้มรายเดือน — รายได้ · ต้นทุน · GP</h2>
+    <p class="text-xs text-slate-400 mb-3">เส้นเขียว = GP · เส้นแดง = COGS · เส้นน้ำเงิน = รายได้</p>
+    <div style="position:relative;height:320px"><canvas id="bbomTrendChart"></canvas></div>
+  </div>
+
+  <!-- Top menus table -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="section-title mb-0">🍽️ Top 60 เมนูที่ใช้ต้นทุนมากที่สุด</h2>
+      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียงข้อมูล · 🔬 = มีสูตร BoM</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table id="bbomMenuTable" class="min-w-full text-sm" style="border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--bg-subtle);border-bottom:2px solid var(--border)">
+            <th class="px-3 py-2 text-left cursor-pointer" onclick="_bbomSort('sku_code')">SKU</th>
+            <th class="px-3 py-2 text-left">ชื่อเมนู</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('qty')">จำนวน</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('unit_cost')">ต้นทุน/หน่วย ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('total_cogs')">COGS รวม ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_bbomSort('pct_of_branch_cogs')">% ของสาขา</th>
+            <th class="px-3 py-2 text-center">Sparkline</th>
+            <th class="px-3 py-2 text-center">BoM</th>
+          </tr>
+        </thead>
+        <tbody id="bbomMenuTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Top ingredients bar chart -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+    <div class="card p-5 lg:col-span-2">
+      <h2 class="section-title mb-1">🧪 Top 25 วัตถุดิบที่มีต้นทุนมากที่สุด</h2>
+      <p class="text-xs text-slate-400 mb-3">เรียงตามต้นทุนรวม · สีแถบ = ชนิดวัตถุดิบ · ความยาวแถบ = สัดส่วนต้นทุน</p>
+      <div class="overflow-y-auto" style="max-height:560px"><div id="bbomIngList"></div></div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-1">🥩 ต้นทุนตามชนิดวัตถุดิบ</h2>
+      <p class="text-xs text-slate-400 mb-3">โปรตีน · คาร์บ · ผัก · ซอส · น้ำมัน · เครื่องปรุง · อื่นๆ</p>
+      <div style="position:relative;height:280px"><canvas id="bbomTypeChart"></canvas></div>
+      <div id="bbomTypeLegend" class="mt-3 text-xs space-y-1"></div>
+    </div>
+  </div>
+
+  <!-- Coverage stat footer -->
+  <div id="bbomCoverage" class="text-xs text-slate-400 text-center mt-4 mb-8"></div>
+
+</div><!-- /tab-branchbom -->

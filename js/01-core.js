@@ -301,7 +301,7 @@ async function loadUsers() {
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
   let users = [];
-  try { users = await fetch(`${API}/api/auth/users`).then(r => r.json()); }
+  try { users = await api(`${API}/api/auth/users`); }
   catch(e) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">โหลดรายชื่อผู้ใช้ไม่ได้</td></tr>'; return; }
   if (!Array.isArray(users)) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">ไม่มีสิทธิ์ดูรายชื่อผู้ใช้</td></tr>'; return; }
   tb.innerHTML = users.map(u => {
@@ -653,6 +653,29 @@ const STALE = Symbol('stale-response');
 
 // Standard JSON fetch: checks response.ok and (optionally) drops stale responses.
 // Pass the generation captured at loader start as `gen` to enable the stale guard.
+// The one JSON call: fetch + r.json(), nothing else — deliberately identical to
+// the `fetch(url).then(r => r.json())` it replaced at 200+ sites, so a non-OK
+// JSON body still reaches the caller that checks `detail` / `available` today.
+// The write token is attached by the global fetch wrapper above. This is the one
+// place to add a timeout, a retry or an error toast for every call at once.
+// The tab panels are not in the shell any more (tabs/NN-<name>.html, served as
+// one bundle at /tabs.html). Load them into #tabsRoot before anything reads a
+// panel id — init() awaits this first, so the DOM is complete at the same point
+// of the boot it always was. The version comes from the shell, so a shell cached
+// by the browser still fetches the bundle that matches it.
+async function loadTabFragments() {
+  const root = document.getElementById('tabsRoot');
+  if (!root || root.childElementCount) return;
+  const v = root.dataset.tabsV || '';
+  const r = await fetch(`${API}/tabs.html${v ? '?v=' + v : ''}`);
+  if (!r.ok) throw new Error('tabs.html ' + r.status);
+  root.innerHTML = await r.text();
+}
+
+function api(url, opts) {
+  return fetch(url, opts).then(r => r.json());
+}
+
 async function getJSON(path, { gen = null, signal } = {}) {
   const url = (path.startsWith('http') || path.startsWith('/')) ? path : `${API}${path}`;
   const res = await fetch(url, { signal });
@@ -967,7 +990,7 @@ async function onGroupChange() {
   // Filter the branch dropdown to show only branches in the selected group
   const grp = getGroup();
   const url = grp ? `${API}/api/branches?group=${grp}` : `${API}/api/branches`;
-  const data = await fetch(url).then(r => r.json());
+  const data = await api(url);
   const sel = document.getElementById('selBranch');
   const prev = sel.value;
   sel.innerHTML = '<option value="">ทุกสาขา</option>' +
@@ -980,6 +1003,71 @@ async function onGroupChange() {
 // ── Tab switching ──────────────────────────────────────────────
 const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)' };
 
+// Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
+// because the loaders are defined in later slices and must resolve at call time) (or the
+// global filter changes); a tab without one is static. switchTab() walks these
+// keys to show/hide panels and loadActiveTab() dispatches through them — the
+// 47-branch if-chain and the 48-name literal list this replaces had to be kept
+// in step by hand, in two different files. TAB_MODULE (permissions) keys the
+// same names.
+const TABS = {
+  overall: { load: () => loadOverall() },
+  action: { load: () => loadActionCenter() },
+  menu: { load: () => { loadMenuSubtab(); renderMenuSalesNarrative(); } },
+  trend: { load: () => loadTrend() },
+  cost: { load: () => loadCostAnalysis() },
+  profit: { load: () => loadProfitAnalysis() },
+  pnl: { load: () => loadPnlTab() },
+  compare: { load: () => initCompare() },
+  report: { load: () => loadReport() },
+  mgtreport: { load: () => loadMgtReport() },
+  ops: { load: () => loadOpsSubtab() },
+  settings: { load: () => loadSettingsSubtab() },
+  home: { load: () => loadHome() },
+  dailysales: { load: () => loadDailySales() },
+  costhead: { load: () => loadCostHead() },
+  menuimpact: { load: () => loadMenuImpact() },
+  pnlbill: { load: () => loadPnlBill() },
+  opsreport: { load: () => loadOpsReport() },
+  ordering: { load: () => loadOrderPlan() },
+  ordersetup: { load: () => loadOrderSetup() },
+  cashctl: { load: () => loadCashCtl() },
+  custtype: { load: () => loadCustType() },
+  modifiers: { load: () => loadModifiers() },
+  pricezone: { load: () => loadPriceZone() },
+  cancelbill: { load: () => loadCancelBill() },
+  closetime: { load: () => loadCloseTime() },
+  guest: { load: () => loadGuest() },
+  benchmark: { load: () => loadBenchmark() },
+  engineering: { load: () => loadEngineering() },
+  buffetperf: { load: () => loadBuffetPerformance() },
+  staff: { load: () => loadStaff() },
+  discounts: { load: () => loadDiscountsTab() },
+  childbuffet: { load: () => loadChildBuffet() },
+  timeflow: { load: () => loadTimeflow() },
+  gpbranch: { load: () => loadGpBranch() },
+  branchbom: { load: () => loadBranchBom() },
+  bomcost: { load: () => loadBomCostTab() },
+  simhub: { load: () => loadSimhub() },
+  menucompare: { load: () => loadMenuCompare() },
+  menuefficiency: { load: () => loadMCE() },
+  menuactionboard: { load: () => loadMenuActionBoard() },
+  menuopportunities: { load: () => loadMenuOpportunities() },
+  coverage: { load: () => loadCostCoverage() },
+  pnlbranch: { load: () => loadPnlBranch() },
+  more: { load: () => loadMoreAnalytics() },
+  heavyeater: { load: () => loadHeavyEaters() },
+  manual: {},
+  costheadtop60: { load: () => loadCostHeadTop60() },
+};
+
+function loadActiveTab() {
+  loadGen++;   // invalidate any in-flight responses from a previous tab/filter
+  cache = {};  // clear tab cache on filter change
+  const t = TABS[activeTab];
+  if (t && t.load) return t.load();
+}
+
 function switchTab(name) {
   // Permission guard — refuse tabs the current role can't access (server enforces too).
   if (!tabAllowed(name)) { name = firstAllowedTab(); }
@@ -988,9 +1076,7 @@ function switchTab(name) {
   // Report; without this it would follow the reader into every other tab.
   if (name !== 'mgtreport') { try { _mgtReadingOff(); } catch (e) {} }
   try { navigator.sendBeacon(API + '/api/usage/tab', JSON.stringify({tab: name})); } catch(e) {}
-  ['home','overall','action','menu','trend','cost','profit','pnl','compare','report','mgtreport','ops','settings',
-   'guest','benchmark','engineering','buffetperf','staff','discounts','childbuffet','timeflow','gpbranch','branchbom','bomcost','simhub','menucompare','menuefficiency','menuactionboard','menuopportunities','coverage','pnlbranch','more','manual','dailysales','costhead','costheadtop60','menuimpact','pnlbill','opsreport',
-   'cashctl','custtype','modifiers','pricezone','cancelbill','closetime','heavyeater','ordering','ordersetup'].forEach(t => {
+  Object.keys(TABS).forEach(t => {
     document.getElementById('nav-' + t)?.classList.toggle('active', t === name);
     const el = document.getElementById('tab-' + t);
     if (!el) return;
@@ -1193,7 +1279,7 @@ async function loadUsageStats() {
   el.textContent = 'กำลังโหลด…';
   const days = document.getElementById('usageDays')?.value || 30;
   let d = null;
-  try { d = await fetch(`${API}/api/usage/summary?days=${days}`).then(r => r.json()); } catch(e) {}
+  try { d = await api(`${API}/api/usage/summary?days=${days}`); } catch(e) {}
   if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
@@ -1239,7 +1325,7 @@ async function loadMenuActionBoard() {
   if (getMonthFrom()) qp.set('month_from', getMonthFrom());
   if (getMonthTo())   qp.set('month_to', getMonthTo());
   let d;
-  try { d = await fetch(`${API}/api/menu/action-board?${qp}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/menu/action-board?${qp}`); }
   catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   _tabLastKey.menuactionboard = fk;
   renderActionBoard(d);
@@ -1305,7 +1391,7 @@ async function loadMenuOpportunities() {
   if (getMonthFrom()) qp.set('month_from', getMonthFrom());
   if (getMonthTo())   qp.set('month_to', getMonthTo());
   let d;
-  try { d = await fetch(`${API}/api/menu/opportunities?${qp}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/menu/opportunities?${qp}`); }
   catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   _tabLastKey.menuopportunities = fk;
   renderOpportunities(d);
@@ -1373,9 +1459,9 @@ async function genMenuIdeas() {
   if (getMonthTo())   body.month_to = getMonthTo();
   let d;
   try {
-    d = await fetch(`${API}/api/menu/ai-ideas`, {
+    d = await api(`${API}/api/menu/ai-ideas`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    }).then(r => r.json());
+    });
   } catch (e) {
     host.innerHTML = `<div class="text-xs" style="color:#dc2626">สร้างไอเดียไม่สำเร็จ</div>`;
     btn.disabled = false; btn.textContent = old; return;

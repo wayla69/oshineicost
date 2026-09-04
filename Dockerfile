@@ -21,6 +21,7 @@ COPY backend/ /app/backend/
 COPY recon/   /app/recon/
 COPY index.html /app/index.html
 COPY js/        /app/js/
+COPY tabs/      /app/tabs/
 COPY vendor/    /app/vendor/
 COPY docs/      /app/docs/
 COPY start.sh   /app/start.sh

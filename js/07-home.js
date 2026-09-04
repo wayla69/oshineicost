@@ -21,7 +21,7 @@ async function loadHome() {
   try {
     const bp = new URLSearchParams();
     if (getBranch()) bp.set('branch', getBranch());
-    const brief = await fetch(`${API}/api/home/brief?${bp}`).then(r => r.json());
+    const brief = await api(`${API}/api/home/brief?${bp}`);
     if (!brief || !brief.yesterday) {
       if (loading) loading.innerHTML = '<p class="text-sm text-slate-400 py-4">ยังไม่มีข้อมูลยอดขาย — อัปโหลดหรือซิงก์ข้อมูลก่อน</p>';
       return;
@@ -45,13 +45,13 @@ async function loadHome() {
     if (getBranch()) hp.set('branch', getBranch());
     const [scorecard, fc, anomaly, sd, leak, movers, hourly, trend7] = await Promise.all([
       renderHomeScorecard(brief.yesterday),                                       // renders leaderboard + returns its data
-      fetch(`${API}/api/forecast?${bp}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/analysis/anomalies`).then(r => r.json()).catch(() => ({ insights: [] })),
-      fetch(`${API}/api/sales/daily?${sdp}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/home/leak-watch?${gp}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/home/menu-movers?${gp}&limit=15`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/analysis/hourly?${hp}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/sales/daily?${dayp}`).then(r => r.json()).catch(() => null),
+      api(`${API}/api/forecast?${bp}`).catch(() => null),
+      api(`${API}/api/analysis/anomalies`).catch(() => ({ insights: [] })),
+      api(`${API}/api/sales/daily?${sdp}`).catch(() => null),
+      api(`${API}/api/home/leak-watch?${gp}`).catch(() => null),
+      api(`${API}/api/home/menu-movers?${gp}&limit=15`).catch(() => null),
+      api(`${API}/api/analysis/hourly?${hp}`).catch(() => null),
+      api(`${API}/api/sales/daily?${dayp}`).catch(() => null),
     ]);
 
     // Reveal the content FIRST so the chart canvases have real layout dimensions —
@@ -418,7 +418,7 @@ async function renderMenuSalesNarrative() {
   const el = document.getElementById('menuSalesNarrative'); if (!el) return;
   el.innerHTML = '<p class="text-xs text-slate-400 italic py-1">กำลังวิเคราะห์…</p>';
   const p = new URLSearchParams(); if (getBranch()) p.set('branch', getBranch()); p.set('limit', '15');
-  let m; try { m = await fetch(`${API}/api/home/menu-movers?${p}`).then(r => r.json()); }
+  let m; try { m = await api(`${API}/api/home/menu-movers?${p}`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-red-400">โหลดไม่สำเร็จ</p>'; return; }
   const s = m && m.sales, b = s && s.buffet;
   if (!s || !b) { el.innerHTML = '<p class="text-xs text-slate-400 italic py-1">ยังไม่มีข้อมูลพอจะวิเคราะห์ (เลือกช่วง/สาขาที่มียอด)</p>'; return; }
@@ -513,7 +513,7 @@ async function renderHomeScorecard(focusDate) {
   if (focusDate) p.set('date', focusDate);
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/home/branch-scorecard?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/home/branch-scorecard?${p}`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-red-500 py-3">โหลดไม่สำเร็จ</p>'; return null; }
   // Leaderboard order: highest yesterday revenue first.
   const rows = (d.branches || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
@@ -561,7 +561,7 @@ async function loadDailySales(force) {
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/sales/daily?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/sales/daily?${p}`); }
   catch (e) { return; }
   if (d.focus && !dv) { const el = document.getElementById('dsDate'); if (el) el.value = d.focus; }
   const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_dsGran];
@@ -618,7 +618,7 @@ async function renderMenuSpike(focusDate) {
   const bsel = document.getElementById('spikeBranch');
   if (bsel && !_spikeBranchesLoaded) {
     try {
-      const bl = await fetch(`${API}/api/branches`).then(r => r.json());
+      const bl = await api(`${API}/api/branches`);
       const names = (bl || []).map(b => (typeof b === 'string' ? b : (b.name || b.branch))).filter(Boolean)
         .filter(n => n !== 'ALL').sort();
       bsel.innerHTML = '<option value="">ทุกสาขา</option>' + names.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
@@ -633,7 +633,7 @@ async function renderMenuSpike(focusDate) {
   else if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/sales/menu-spike?${p}`).then(r => r.json()); } catch (e) { el.innerHTML = ''; return; }
+  try { d = await api(`${API}/api/sales/menu-spike?${p}`); } catch (e) { el.innerHTML = ''; return; }
   const sp = d.spikes || [];
   const cntEl = document.getElementById('spikeCount');
   if (cntEl) cntEl.textContent = (d.count || 0) + ' รายการ' + ((d.count || 0) > sp.length ? ` (แสดง ${sp.length})` : '');
@@ -671,7 +671,7 @@ async function loadCostHead(force) {
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/sales/cost-per-head?${p}`).then(r => r.json()); } catch (e) { return; }
+  try { d = await api(`${API}/api/sales/cost-per-head?${p}`); } catch (e) { return; }
   if (d.focus && !dv) { const el = document.getElementById('chDate'); if (el) el.value = d.focus; }
   const lbl = { day: 'วัน', week: 'สัปดาห์', month: 'เดือน' }[_chGran];
   document.getElementById('chRange').textContent = `${lbl}: ${(d.cur_range || [''])[0]}`;
@@ -744,7 +744,7 @@ async function loadPnlBill(force) {
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/reports/pnl-bill?${p}`).then(r => r.json()); } catch (e) { return; }
+  try { d = await api(`${API}/api/reports/pnl-bill?${p}`); } catch (e) { return; }
   if (d.focus && !dv) { const el = document.getElementById('pbDate'); if (el) el.value = d.focus; }
   _pbData = d;
   _pbDrillIdx = null; pbCloseDrill();   // a fresh period/filter closes any open drill
@@ -760,7 +760,7 @@ async function pbDrill(idx, keepOpen) {
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/reports/pnl-bill-drill?${p}`).then(r => r.json()); } catch (e) { return; }
+  try { d = await api(`${API}/api/reports/pnl-bill-drill?${p}`); } catch (e) { return; }
   const cogsView = _pbView === 'cogs';
   const panel = document.getElementById('pbDrill');
   const st = d.stat || {};
@@ -914,7 +914,7 @@ async function loadOpsReport(force) {
   if (!_opMonthsLoaded && sel) {
     // populate month options from sales months (descending)
     try {
-      const mi = await fetch(`${API}/api/months`).then(r => r.json());
+      const mi = await api(`${API}/api/months`);
       const months = (mi.months || mi || []).slice().sort().reverse();
       sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
       _opMonthsLoaded = true;
@@ -941,7 +941,7 @@ async function loadOpsReport(force) {
   else if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch());
   let d;
-  try { d = await fetch(`${API}/api/reports/ops?${p}`).then(r => r.json()); } catch (e) { return; }
+  try { d = await api(`${API}/api/reports/ops?${p}`); } catch (e) { return; }
   if (!useDate && d.month && sel && !sel.value) sel.value = d.month;
   document.getElementById('opRange').textContent = d.daily
     ? (d.date_from === d.date_to ? `วันที่ ${d.date_from}` : `${d.date_from} → ${d.date_to}`)
@@ -1007,7 +1007,7 @@ async function loadMenuImpact(force) {
   loadPriceTier(force);   // 🏷️ tier section shares the same range/scope pickers
   const body = document.getElementById('miBody');
   if (!_miEnts) {
-    try { _miEnts = await fetch(`${API}/api/reports/menu-impact/entities`).then(r => r.json()); }
+    try { _miEnts = await api(`${API}/api/reports/menu-impact/entities`); }
     catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">โหลดรายการเมนูไม่สำเร็จ</p>'; return; }
     if (!_miEnts.ready) {
       body.innerHTML = `<p class="text-center text-slate-400 py-10">${esc(_miEnts.hint || 'ยังไม่มีข้อมูล')}</p>`;
@@ -1034,7 +1034,7 @@ async function loadMenuImpact(force) {
   const p = new URLSearchParams({ ent, scope, tier });
   if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
   let d;
-  try { d = await fetch(`${API}/api/reports/menu-impact?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/reports/menu-impact?${p}`); }
   catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">วิเคราะห์ไม่สำเร็จ</p>'; return; }
   _tabLastKey.menuimpact = key;
   if (!d.ready || d.error) {
@@ -1154,7 +1154,7 @@ async function loadPriceTier(force) {
   const p = new URLSearchParams({ scope });
   if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
   let d;
-  try { d = await fetch(`${API}/api/reports/price-tier?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/reports/price-tier?${p}`); }
   catch (e) { if (seq === _ptSeq) body.innerHTML = '<p class="text-center text-rose-500 py-10">วิเคราะห์ Tier ไม่สำเร็จ</p>'; return; }
   if (seq !== _ptSeq) return;
   _tabLastKey.pricetier = key;
@@ -1279,7 +1279,7 @@ async function loadCostHeadTop60(force) {
   const sel = document.getElementById('chtMonth');
   if (!_chtMonthsLoaded && sel) {
     try {
-      const mi = await fetch(`${API}/api/months`).then(r => r.json());
+      const mi = await api(`${API}/api/months`);
       const months = (mi.months || mi || []).slice().sort().reverse();
       sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
       _chtMonthsLoaded = true;
@@ -1298,7 +1298,7 @@ async function loadCostHeadTop60(force) {
   body.innerHTML = '<p class="text-center text-slate-400 py-10">กำลังโหลด…</p>';
   const p = new URLSearchParams(); if (mv) p.set('month', mv); p.set('scope', scope);
   let d;
-  try { d = await fetch(`${API}/api/reports/cost-head-top60?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/reports/cost-head-top60?${p}`); }
   catch (e) { body.innerHTML = '<p class="text-center text-rose-500 py-10">โหลดข้อมูลไม่สำเร็จ</p>'; return; }
   // export links + range label follow the resolved month + scope; snap the picker to it
   const m = d.month || mv;
@@ -1486,7 +1486,7 @@ async function _extraMonths(selId, valNow) {
   const sel = document.getElementById(selId);
   if (!sel || sel.dataset.loaded) return;
   try {
-    const mi = await fetch(`${API}/api/months`).then(r => r.json());
+    const mi = await api(`${API}/api/months`);
     const months = ((mi.months || mi) || []).slice().sort().reverse();
     const keep = sel.querySelector('option[value=""]');
     sel.innerHTML = (keep ? keep.outerHTML : '') + months.map(m => `<option value="${m}">${m}</option>`).join('');
@@ -1581,7 +1581,7 @@ async function loadCashCtl(force) {
   if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
   const p = new URLSearchParams(); if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/extra/cash?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/cash?${p}`); } catch (e) { return; }
   if (d.month) { const el = document.getElementById('ccMonth'); if (el && !el.value) el.value = d.month; }
   document.getElementById('ccRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const s = d.summary || {};
@@ -1614,7 +1614,7 @@ async function loadCustType(force) {
   if (!force && _tabLastKey.custtype === _fk) return; _tabLastKey.custtype = _fk;
   const p = new URLSearchParams(); if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/extra/customer-type?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/customer-type?${p}`); } catch (e) { return; }
   if (d.month) { const el = document.getElementById('ctMonth'); if (el && !el.value) el.value = d.month; }
   document.getElementById('ctRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const types = d.types || [];
@@ -1659,7 +1659,7 @@ async function loadModifiers(force) {
   if (!force && _tabLastKey.modifiers === _fk) return; _tabLastKey.modifiers = _fk;
   const p = new URLSearchParams(); p.set('limit', '25');
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/extra/modifiers?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/modifiers?${p}`); } catch (e) { return; }
   document.getElementById('modTotal').textContent = `รวม ${fmtN(d.total || 0)} ครั้ง`;
   const ch = d.choices || []; const maxN = Math.max(1, ...ch.map(x => x.n || 0));
   document.getElementById('modBars').innerHTML = ch.map((x, i) => `
@@ -1680,7 +1680,7 @@ async function loadPriceZone(force) {
   if (!force && _tabLastKey.pricezone === _fk) return; _tabLastKey.pricezone = _fk;
   const p = new URLSearchParams(); p.set('limit', '200'); if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/extra/price-zone?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/price-zone?${p}`); } catch (e) { return; }
   document.getElementById('pzCount').textContent = `แก้ราคา ${fmtN(d.change_count || 0)} ครั้ง${(d.changes || []).length >= 200 ? ' (แสดง 200 ล่าสุด)' : ''}`;
   document.getElementById('pzBody').innerHTML = (d.changes || []).map(r => {
     const dn = (r.delta || 0) < 0;
@@ -1712,7 +1712,7 @@ async function loadCancelBill(force) {
   if (!force && _tabLastKey.cancelbill === _fk) return; _tabLastKey.cancelbill = _fk;
   const p = new URLSearchParams(); if (mv) p.set('month', mv);
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/extra/cancel-bills?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/cancel-bills?${p}`); } catch (e) { return; }
   if (d.month) { const el = document.getElementById('cbMonth'); if (el && !el.value) el.value = d.month; }
   document.getElementById('cbRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const s = d.summary || {};
@@ -1751,7 +1751,7 @@ async function cashDayDrill(branch, month) {
   title.textContent = `🔍 เงินสดขาด/เกิน รายวัน · ${branch} · ${month}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
-  let d; try { d = await fetch(`${API}/api/extra/cash/detail?branch=${encodeURIComponent(branch)}&month=${encodeURIComponent(month)}`).then(r=>r.json()); }
+  let d; try { d = await api(`${API}/api/extra/cash/detail?branch=${encodeURIComponent(branch)}&month=${encodeURIComponent(month)}`); }
   catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
   const days = d.days || [];
   const net = days.reduce((a,x)=>a+(x.over_short||0),0);
@@ -1784,7 +1784,7 @@ async function cashWorstDayDrill(branch, day) {
   title.textContent = `🔍 เงินสดขาด/เกิน · ${branch} · ${day}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
-  let d; try { d = await fetch(`${API}/api/extra/cash/day?branch=${encodeURIComponent(branch)}&day=${encodeURIComponent(day)}`).then(r=>r.json()); }
+  let d; try { d = await api(`${API}/api/extra/cash/day?branch=${encodeURIComponent(branch)}&day=${encodeURIComponent(day)}`); }
   catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
   const h = d.head || {};
   const kpi = (label, val, col) => `<div class="card p-3" style="background:var(--bg-subtle)">
@@ -1827,7 +1827,7 @@ async function cancelBillDrill(branch, month) {
   title.textContent = `🔍 บิลที่ถูกยกเลิก/ลบ · ${branch}${month?' · '+month:''}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
-  let d; try { d = await fetch(`${API}/api/extra/cancel-bills/detail?branch=${encodeURIComponent(branch)}${month?'&month='+encodeURIComponent(month):''}`).then(r=>r.json()); }
+  let d; try { d = await api(`${API}/api/extra/cancel-bills/detail?branch=${encodeURIComponent(branch)}${month?'&month='+encodeURIComponent(month):''}`); }
   catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดไม่สำเร็จ: ${e.message}</p>`; return; }
   if (d.staged === false) {
     body.innerHTML = `<div style="padding:24px"><p class="text-sm text-slate-600">ยังไม่มีข้อมูลบิลรายใบ — ตารางรายละเอียดจะถูกสร้างเมื่อ <b>ซิงก์ครั้งถัดไป</b> (Sync Live Data / งาน 9 โมง). หลังจากนั้นคลิกสาขาจะเห็นบิลแต่ละใบที่ถูกยกเลิกพร้อมเหตุผล</p>
@@ -1858,7 +1858,7 @@ async function cancelBillDrill(branch, month) {
 // records; missing days can only come back from a POS re-sync).
 async function loadDataQuality() {
   const el = document.getElementById('dqFindings'); if (!el) return;
-  let d; try { d = await fetch(`${API}/api/data-quality`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/data-quality`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่สำเร็จ</p>'; return; }
   const sev = { high: ['#dc2626', '#fef2f2'], warn: ['#d97706', '#fffbeb'], info: ['#0891b2', '#f0f9ff'] };
   const rowLine = (k, r) => {
@@ -1895,7 +1895,7 @@ async function loadCloseTime(force) {
   const p = new URLSearchParams();
   if (getBranch()) p.set('branch', getBranch()); if (getGroup()) p.set('group', getGroup());
   if (dateSel) p.set('date', dateSel);
-  let d; try { d = await fetch(`${API}/api/extra/closing-time?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/extra/closing-time?${p}`); } catch (e) { return; }
   const s = d.summary || {};
   const head = document.getElementById('ctmHead');
   const title = document.getElementById('ctmTitle');
@@ -1965,7 +1965,7 @@ async function loadCloseTime(force) {
 // ── Industry & Economy context (curated figures + live news strip) ──
 async function loadMarket() {
   try {
-    const m = await fetch(`${API}/api/market`).then(r => r.json());
+    const m = await api(`${API}/api/market`);
     const trIco = t => t === 'up' ? '▲' : t === 'down' ? '▼' : '▬';
     const trCol = t => t === 'up' ? '#10b981' : t === 'down' ? '#ef4444' : '#64748b';
 
@@ -2044,7 +2044,7 @@ async function renderMarketBenchmark(b) {
   if (!el || !b) { if (el) el.innerHTML = ''; return; }
   let ourPct = null, label = '', isYoY = false;
   try {
-    const rows = await fetch(`${API}/api/sales/monthly`).then(r => r.json());
+    const rows = await api(`${API}/api/sales/monthly`);
     const arr = Array.isArray(rows) ? rows : (rows.monthly || rows.data || []);
     const byMonth = {};
     arr.forEach(r => { const k = r.period_month || r.month; if (k) byMonth[k] = r.revenue_ex_vat || r.revenue || 0; });

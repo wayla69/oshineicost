@@ -41,8 +41,8 @@ async function loadTimeAnalysis() {
 
   // Use hourly_open which annotates each hour with is_open from closed_hours config
   const [hourly, dow] = await Promise.all([
-    fetch(`${API}/api/analysis/hourly_open${qp()}${gran}`).then(r => r.json()),
-    fetch(`${API}/api/analysis/dow${qp()}${gran}`).then(r => r.json()),
+    api(`${API}/api/analysis/hourly_open${qp()}${gran}`),
+    api(`${API}/api/analysis/dow${qp()}${gran}`),
   ]);
   // Filter to operating hours only by default — user can toggle to see all
   const opOnly = document.getElementById('hourlyOpOnlyToggle')?.checked !== false;
@@ -250,6 +250,7 @@ function hideLoadingBar() {
 
 // ── Init ───────────────────────────────────────────────────────
 async function init() {
+  await loadTabFragments();   // the 48 panels, before anything looks for one
   initDarkMode();
   showLoadingBar();
   await bootstrapAuth();
@@ -325,7 +326,7 @@ async function initDataCoverageNote() {
   const el = document.getElementById('dataCoverageNote');
   if (!el) return;
   try {
-    const c = await fetch(`${API}/api/data-coverage`).then(r => r.json());
+    const c = await api(`${API}/api/data-coverage`);
     if (!c || !c.last_date) return;
     const TH_MON = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
     const [y, m, d] = c.last_date.split('-').map(Number);
@@ -349,7 +350,7 @@ async function initDataCoverageNote() {
 
 async function loadBranches() {
   try {
-    const data = await fetch(`${API}/api/branches`).then(r => r.json());
+    const data = await api(`${API}/api/branches`);
     const sel = document.getElementById('selBranch');
     const prev = sel.value;
     // Keep only the "All Branches" placeholder, rebuild the rest
@@ -578,14 +579,14 @@ async function renderExecSummary() {
   if (getBranch()) bq.set('branch', getBranch());
   if (getGroup())  bq.set('group', getGroup());
   let fc;
-  try { fc = await fetch(`${API}/api/forecast?${bq}`).then(r => r.json()); }
+  try { fc = await api(`${API}/api/forecast?${bq}`); }
   catch (e) { host.classList.add('hidden'); return; }
   if (!fc || !fc.available) { host.classList.add('hidden'); return; }
   // GP for the same month + total revenue target for that month (parallel)
   const pq = new URLSearchParams(bq); pq.set('month', fc.period);
   const [prof, tg] = await Promise.all([
-    fetch(`${API}/api/profit/summary?${pq}`).then(r => r.json()).catch(() => null),
-    fetch(`${API}/api/targets?month=${fc.period}`).then(r => r.json()).catch(() => []),
+    api(`${API}/api/profit/summary?${pq}`).catch(() => null),
+    api(`${API}/api/targets?month=${fc.period}`).catch(() => []),
   ]);
   const tgtTotal = (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
   const projVsTgt = tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null;
@@ -792,7 +793,7 @@ async function renderBranchHilite() {
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup())  p.set('group', getGroup());
   let d;
-  try { d = await fetch(`${API}/api/sales/daily?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/sales/daily?${p}`); }
   catch (e) { return; }
   const isMtd  = !!d.mtd;
   const curLbl = isMtd ? `MTD 1–${d.mtd_cutoff_day}` : 'เดือนล่าสุด';
@@ -835,7 +836,7 @@ async function loadSummaryKpis() {
     [d, trendData, mtd] = await Promise.all([
       getJSON(`/api/summary${summaryParams()}`, { gen }),
       getJSON(`/api/sales/monthly${getTrendParams()}`, { gen }),
-      fetch(`${API}/api/overall/latest-month-mtd?${mtdP}`).then(r => r.json()).catch(() => null),
+      api(`${API}/api/overall/latest-month-mtd?${mtdP}`).catch(() => null),
     ]);
   } catch(err) {
     if (err === STALE) return;   // a newer tab/filter load superseded this one
@@ -849,8 +850,8 @@ async function loadSummaryKpis() {
   // Hero extras (GP, discount, best/worst branch) — load async so they don't
   // block the core KPIs; augment the hero when ready.
   Promise.all([
-    fetch(`${API}/api/gp/by-branch-month`).then(r => r.json()).catch(() => null),
-    fetch(`${API}/api/analysis/discounts`).then(r => r.json()).catch(() => null),
+    api(`${API}/api/gp/by-branch-month`).catch(() => null),
+    api(`${API}/api/analysis/discounts`).catch(() => null),
   ]).then(([gpb, disc]) => { if (loadGen === gen) renderKpiHero(trendData, gpb, disc); });
 
   // Last 6 months for sparklines
@@ -936,17 +937,17 @@ async function loadGroupBreakdown() {
   if (!el) return;
   try {
     const [branches, summaryMaster, summaryFranchise] = await Promise.all([
-      fetch(`${API}/api/branches?include_inactive=true`).then(r => r.json()),
-      fetch(`${API}/api/summary?${new URLSearchParams({
+      api(`${API}/api/branches?include_inactive=true`),
+      api(`${API}/api/summary?${new URLSearchParams({
         group: 'master',
         ...(getMonthFrom() ? {month_from: getMonthFrom()} : {}),
         ...(getMonthTo()   ? {month_to:   getMonthTo()}   : {}),
-      })}`).then(r => r.json()).catch(() => null),
-      fetch(`${API}/api/summary?${new URLSearchParams({
+      })}`).catch(() => null),
+      api(`${API}/api/summary?${new URLSearchParams({
         group: 'franchise',
         ...(getMonthFrom() ? {month_from: getMonthFrom()} : {}),
         ...(getMonthTo()   ? {month_to:   getMonthTo()}   : {}),
-      })}`).then(r => r.json()).catch(() => null),
+      })}`).catch(() => null),
     ]);
 
     const masters    = (branches || []).filter(b => (b.branch_type || 'master') === 'master');
@@ -1122,7 +1123,7 @@ function renderYearlyOverlay(rows) {
 }
 
 async function loadTrendChart() {
-  const data = await fetch(`${API}/api/sales/monthly${getTrendParams()}`).then(r => r.json());
+  const data = await api(`${API}/api/sales/monthly${getTrendParams()}`);
 
   // ── Yearly mode: pivot into per-year line series on Jan-Dec axis ────────────
   if (currentGranularity === 'yearly') return renderYearlyOverlay(data);
@@ -1139,12 +1140,12 @@ async function loadTrendChart() {
     if (getMonthFrom()) params.set('month_from', getMonthFrom());
     if (getMonthTo())   params.set('month_to',   getMonthTo());
     const [yoy, targets, forecast] = await Promise.all([
-      fetch(`${API}/api/analysis/yoy?${params}`).then(r => r.json()).catch(()=>[]),
+      api(`${API}/api/analysis/yoy?${params}`).catch(()=>[]),
       Promise.all((allMonths.length ? data : []).map(d =>
-        fetch(`${API}/api/targets?month=${d.period_month}`).then(r=>r.json()).catch(()=>[])
+        api(`${API}/api/targets?month=${d.period_month}`).catch(()=>[])
           .then(rows => ({ period: d.period_month, total: rows.reduce((s,r)=>s+(r.revenue_target||0),0) }))
       )),
-      fetch(`${API}/api/forecast?${getBranch()?'branch='+encodeURIComponent(getBranch()):''}${getGroup()?'&group='+getGroup():''}`).then(r=>r.json()).catch(()=>({available:false})),
+      api(`${API}/api/forecast?${getBranch()?'branch='+encodeURIComponent(getBranch()):''}${getGroup()?'&group='+getGroup():''}`).catch(()=>({available:false})),
     ]);
     yoy.forEach(r => { yoyMap[r.period_month] = r; });
     targets.forEach(t => { if (t.total > 0) targetMap[t.period] = t.total; });
@@ -1301,7 +1302,7 @@ async function loadTrendChart() {
 }
 
 async function loadCatChart() {
-  const data = await fetch(`${API}/api/sales/category${qp()}`).then(r => r.json());
+  const data = await api(`${API}/api/sales/category${qp()}`);
   // MoM per category — latest month vs previous month (respects branch filter)
   let momMap = {};
   try {
@@ -1310,8 +1311,8 @@ async function loadCatChart() {
     if (lastM && prevM) {
       const bq = getBranch() ? `&branch=${encodeURIComponent(getBranch())}` : '';
       const [cl, cp] = await Promise.all([
-        fetch(`${API}/api/sales/category?month=${lastM}${bq}`).then(r => r.json()).catch(() => []),
-        fetch(`${API}/api/sales/category?month=${prevM}${bq}`).then(r => r.json()).catch(() => []),
+        api(`${API}/api/sales/category?month=${lastM}${bq}`).catch(() => []),
+        api(`${API}/api/sales/category?month=${prevM}${bq}`).catch(() => []),
       ]);
       const pm = {}; cp.forEach(c => pm[c.category] = c.revenue || 0);
       cl.forEach(c => { const pv = pm[c.category]; momMap[c.category] = (pv > 0) ? ((c.revenue - pv) / pv * 100) : null; });
@@ -1371,7 +1372,7 @@ async function loadCatChart() {
 async function loadBreakdownChart() {
   // Revenue composition by business type (more useful than the old net/disc/
   // refund split — payment-method fields are empty in this dataset).
-  const data = await fetch(`${API}/api/sales/category${qp()}`).then(r => r.json());
+  const data = await api(`${API}/api/sales/category${qp()}`);
   if (!data.length) {
     if (chartInstances['chartBreakdown']) { try { chartInstances['chartBreakdown'].destroy(); delete chartInstances['chartBreakdown']; } catch(e){} }
     return;
@@ -1410,7 +1411,7 @@ async function loadBreakdownChart() {
 async function loadTopSkusChart() {
   const body = document.getElementById('topSkusBody');
   if (!body) return;
-  const d = await fetch(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/sales/top_ordered${qp({limit:60, sort:'cogs'})}`).catch(() => null);
   const items = (d && d.items) ? d.items : [];
   if (!items.length) { body.innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
   body.innerHTML = items.map((r, i) => {
@@ -1456,7 +1457,7 @@ async function loadMarginTable() {   // now: Category Movers (MoM revenue change
   // Gross-Margin KPI = WHOLE-STORE GP (unified COGS), same figure as Profit /
   // GP รายสาขา / P&L (~39.5%). Was wrongly using /api/cost/analysis which is the
   // à-la-carte Menu-Engineering margin (~70%) and overstated the Overview KPI.
-  fetch(`${API}/api/profit/summary${qp()}`).then(r => r.json()).then(s => {
+  api(`${API}/api/profit/summary${qp()}`).then(s => {
     const mp = (s.margin_pct != null) ? s.margin_pct : null;
     const el = document.getElementById('kpiMargin');
     const note = document.getElementById('kpiMarginNote');
@@ -1503,7 +1504,7 @@ async function loadMovers() {
     url = `${API}/api/sales/dish-movers${qp({ metric: 'qty', limit: 30 })}`;
   }
   let data;
-  try { data = await fetch(url).then(r => r.json()); }
+  try { data = await api(url); }
   catch (e) { card.classList.add('hidden'); return; }
   if (!data || (!data.gainers?.length && !data.decliners?.length)) {
     card.classList.add('hidden'); return;
@@ -1538,7 +1539,7 @@ async function loadMenuSubtab() {
 let _menuFinderData = [];
 async function loadMenuFinder() {
   try {
-    const data = await fetch(`${API}/api/sales/skus${qp({ limit: 200, sort: 'revenue' })}`).then(r => r.json());
+    const data = await api(`${API}/api/sales/skus${qp({ limit: 200, sort: 'revenue' })}`);
     _menuFinderData = Array.isArray(data) ? data : [];
   } catch(e){ _menuFinderData = []; }
   // populate category dropdown (preserve current choice)
@@ -1595,7 +1596,7 @@ async function loadMenuEngineering() {
   if (getBranch())    params.set('branch',     getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const data = await fetch(`${API}/api/cost/analysis?${params}`).then(r => r.json());
+  const data = await api(`${API}/api/cost/analysis?${params}`);
   _meData = data;
   renderMenuEngineering();
 }
@@ -1834,8 +1835,8 @@ function exportMenuEngTable() {
 async function loadMostOrdered() {
   // Two Top-60 views from one endpoint: ranked by sales (qty) and by cost/head (cogs).
   const [dQ, dC] = await Promise.all([
-    fetch(`${API}/api/sales/top_ordered${qp({ limit: 60, sort: 'qty' })}`).then(r => r.json()).catch(() => null),
-    fetch(`${API}/api/sales/top_ordered${qp({ limit: 60, sort: 'cogs' })}`).then(r => r.json()).catch(() => null),
+    api(`${API}/api/sales/top_ordered${qp({ limit: 60, sort: 'qty' })}`).catch(() => null),
+    api(`${API}/api/sales/top_ordered${qp({ limit: 60, sort: 'cogs' })}`).catch(() => null),
   ]);
   _renderTop60Sales(dQ);
   _renderTop60CostHead(dC);
@@ -1971,7 +1972,7 @@ let _mostRevSort = 'revenue';
 async function loadMostRev() {
   // Fetch the full à la carte set once (buffet/drinks already excluded server-side)
   // so coverage and client-side re-sorting work without refetching.
-  const data = await fetch(`${API}/api/sales/skus${qp({limit:200,sort:'revenue'})}`).then(r => r.json()).catch(() => []);
+  const data = await api(`${API}/api/sales/skus${qp({limit:200,sort:'revenue'})}`).catch(() => []);
   _mostRevData = Array.isArray(data) ? data : [];
   _renderMostRev();
 }
@@ -2126,7 +2127,7 @@ function renderSphDistribution(sph) {
 }
 
 async function loadPersona() {
-  const data = await fetch(`${API}/api/analysis/persona${qp()}`).then(r=>r.json());
+  const data = await api(`${API}/api/analysis/persona${qp()}`);
   const o = data.overall;
   document.getElementById('pAvgParty').textContent  = (o.avg_party_size||0).toFixed(1);
   document.getElementById('pAvgHead').textContent   = fmtN(o.avg_per_head);
@@ -2241,7 +2242,7 @@ async function loadGrossProfit(){
     qp.set('month_to', month);
   }
   let rows = [];
-  try { rows = await fetch(`${API}/api/analysis/gross_profit?${qp}`).then(r=>r.json()); }
+  try { rows = await api(`${API}/api/analysis/gross_profit?${qp}`); }
   catch(e){ rows = []; }
   if(!Array.isArray(rows)) rows = [];
 
@@ -2304,9 +2305,9 @@ async function loadTrend() {
   if (branch) qpCmp.set('branch', branch);
 
   const [cmp, daily, dow] = await Promise.all([
-    fetch(`${API}/api/analysis/compare?${qpCmp}`).then(r=>r.json()),
-    fetch(`${API}/api/analysis/daily?month=${month}${branch?'&branch='+encodeURIComponent(branch):''}`).then(r=>r.json()),
-    fetch(`${API}/api/analysis/dow?month=${month}${branch?'&branch='+encodeURIComponent(branch):''}`).then(r=>r.json()),
+    api(`${API}/api/analysis/compare?${qpCmp}`),
+    api(`${API}/api/analysis/daily?month=${month}${branch?'&branch='+encodeURIComponent(branch):''}`),
+    api(`${API}/api/analysis/dow?month=${month}${branch?'&branch='+encodeURIComponent(branch):''}`),
   ]);
 
   // Delta KPIs

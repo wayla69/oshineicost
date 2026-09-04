@@ -1,0 +1,92 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: GP BY BRANCH (BoM formula)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-gpbranch" class="tab-content" style="display:none">
+
+  <!-- Header strip -->
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#ecfeff 0%,#f0fdf4 100%);border-left:4px solid #10b981">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">📊</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold text-emerald-900">GP รายสาขา (Gross Profit by Branch)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          <b>ภาพรวม — รวมทุก SKU ทั้งบุฟเฟ่ต์และอลาคาท</b> · ใช้สูตร BoM: ตัด tier SKU (BUFFET350/500/590/799/CHILD) ออก เพราะนับซ้ำกับ B0xxx
+          <br>เป้าหมาย Food Cost: <b id="gpbTargetText">55-70%</b> · สถานะ ✅ ในเป้า · ⚠️ ใกล้ขอบ · 🔴 เกินเป้า
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+    <label class="text-xs text-slate-500">เดือนเริ่ม</label>
+    <select id="gpbMonthFrom" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    <label class="text-xs text-slate-500">ถึง</label>
+    <select id="gpbMonthTo" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
+    <label class="text-xs text-slate-500 ml-3">ความถี่</label>
+    <div class="inline-flex" role="group" aria-label="ความถี่">
+      <button type="button" class="subtab-btn text-xs px-3 py-1" id="gpbGran-day"   onclick="setGpbGranularity('day')">วัน</button>
+      <button type="button" class="subtab-btn text-xs px-3 py-1" id="gpbGran-week"  onclick="setGpbGranularity('week')">สัปดาห์</button>
+      <button type="button" class="subtab-btn active text-xs px-3 py-1" id="gpbGran-month" onclick="setGpbGranularity('month')">เดือน</button>
+    </div>
+    <button onclick="loadGpBranch()" class="ml-2" style="background:#10b981;color:white;border:none;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">รีเฟรช</button>
+    <span id="gpbStatus" class="text-xs text-slate-400 ml-auto"></span>
+  </div>
+
+  <!-- Summary cards -->
+  <div id="gpbSummary" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 mb-4"></div>
+
+  <!-- Narrative page summary — plain-Thai read of the GP picture across branches -->
+  <div class="card p-4 mb-4">
+    <h2 class="section-title mb-2">📝 สรุปอ่านง่าย — ภาพรวม GP รายสาขา</h2>
+    <div id="gpbNarrative"></div>
+  </div>
+
+  <!-- Per-branch GP% boxes (latest month + MoM progression) -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h2 class="section-title mb-0">🧱 GP% รายสาขา — กล่องรายสาขา</h2>
+      <span class="text-xs text-slate-400">เรียงตาม GP% เดือนล่าสุด · ▲/▼ = พัฒนาการเทียบเดือนก่อนหน้า (pp)</span>
+    </div>
+    <div id="gpbBoxes" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mt-3"></div>
+  </div>
+
+  <!-- GP% bar chart -->
+  <div class="card p-5 mb-4">
+    <h2 class="section-title mb-1">📊 GP% รายสาขา</h2>
+    <p class="text-xs text-slate-400 mb-3">เปอร์เซ็นต์กำไรขั้นต้นของแต่ละสาขา · พื้นที่เขียวคือเป้าหมาย (Food Cost 55-70% = GP 45-55%)</p>
+    <div id="gpbBarWrap" style="position:relative;height:560px"><canvas id="gpbBarChart"></canvas></div>
+  </div>
+
+  <!-- Main table -->
+  <div class="card p-5 mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="section-title mb-0">📋 ตารางสรุป — คลิกแถวเพื่อดูรายเดือน</h2>
+      <span class="text-xs text-slate-400">คลิกหัวคอลัมน์เพื่อเรียงข้อมูล</span>
+    </div>
+    <div class="overflow-x-auto">
+      <table id="gpbTable" class="min-w-full text-sm" style="border-collapse:collapse">
+        <thead>
+          <tr style="background:var(--bg-subtle);border-bottom:2px solid var(--border)">
+            <th class="px-3 py-2 text-left cursor-pointer" onclick="_gpbSort('branch')">สาขา</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_revenue')">รายได้ ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_cogs')">BoM Cost ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_gp')">GP ()</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_gp_pct')">GP %</th>
+            <th class="px-3 py-2 text-right cursor-pointer" onclick="_gpbSort('total_food_cost_pct')">Food Cost %</th>
+            <th class="px-3 py-2 text-center">สถานะ</th>
+          </tr>
+        </thead>
+        <tbody id="gpbTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Heatmap -->
+  <div class="card p-5 mb-4">
+    <h2 class="section-title mb-1">🗺️ Heatmap GP% รายเดือน × รายสาขา</h2>
+    <p class="text-xs text-slate-400 mb-3">สีเขียว = GP สูง · สีแดง = GP ต่ำ/ขาดทุน · เลื่อนเมาส์เพื่อดูรายละเอียด</p>
+    <div id="gpbHeatmap" style="overflow:auto"></div>
+  </div>
+
+</div><!-- /tab-gpbranch -->

@@ -1,0 +1,102 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 5 — OPERATIONS
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-ops" class="hidden">
+
+  <div class="subtab-bar mb-5" style="max-width:500px">
+    <button class="subtab-btn active" onclick="switchOpsSubtab('cohort')">Cohort</button>
+    <button class="subtab-btn" onclick="switchOpsSubtab('affinity')">Affinity</button>
+    <button class="subtab-btn" onclick="switchTab('simhub'); simhubSetMode('whatif')" title="ย้ายไปที่หน้า 🎮 Simulators แล้ว">What-If ↗</button>
+  </div>
+  <p class="text-xs text-slate-400 mb-4 -mt-3">เปรียบเทียบสาขา/แคชเชียร์/ส่วนลด ดูได้ที่แท็บ <b>🏆 Benchmark สาขา</b> · <b>👤 Staff</b> · <b>🏷️ Discounts</b> และ <b>รายงาน §3</b></p>
+
+
+  <!-- Time Analysis removed — use Time & Flow tab -->
+
+  <!-- ─── Cohort retention ─── -->
+  <div id="opsub-cohort">
+    <div class="card p-5">
+      <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <h2 class="section-title mb-0">ลูกค้ารายเดือน (Cohort · customer-volume signal)</h2>
+        <button onclick="exportTable('cohortTable','cohort.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">⬇ CSV</button>
+      </div>
+      <p id="cohortNote" class="text-xs text-slate-400 mb-3"></p>
+      <div id="cohortVerdict"></div>
+      <div style="height:250px" class="mb-4"><canvas id="cohortChart"></canvas></div>
+      <div class="overflow-x-auto">
+        <table id="cohortTable" class="text-xs w-full">
+          <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-3">เดือน</th>
+            <th class="py-2 pr-3 text-right">บิล</th>
+            <th class="py-2 pr-3 text-right">ลูกค้า</th>
+            <th class="py-2 pr-3 text-right" title="จำนวนหัว ÷ สาขาที่มียอดขายเดือนนั้น — ตัดผลจากการเปิดสาขาเพิ่ม">ลูกค้า/สาขา</th>
+            <th class="py-2 pr-3 text-right" title="รายได้ ex-VAT ÷ จำนวนหัว">ยอด/หัว</th>
+            <th class="py-2 pr-3 text-right">รายได้</th>
+            <th class="py-2 pr-3 text-right" title="ลูกค้าเทียบเดือนก่อน (เฉพาะเดือนเต็ม)">MoM</th>
+            <th class="py-2 text-right" title="ลูกค้าเทียบเดือนเดียวกันปีก่อน (เฉพาะเดือนเต็ม)">YoY</th>
+          </tr></thead>
+          <tbody id="cohortBody"></tbody>
+        </table>
+      </div>
+      <div id="cohortSeason" class="mt-4"></div>
+    </div>
+  </div>
+
+  <!-- ─── Item affinity ─── -->
+  <div id="opsub-affinity" class="hidden">
+    <div class="card p-5">
+      <div class="flex items-center gap-3 mb-4 flex-wrap">
+        <h2 class="section-title mb-0">ความสัมพันธ์เมนู</h2>
+        <input id="affinityAnchor" type="text" placeholder="Anchor SKU code (e.g. BUFFET, YB0001)"
+          class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-72" oninput="debounceAffinity()">
+        <span id="affinityStatus" class="text-xs text-slate-400"></span>
+      </div>
+      <div id="affinityBody"></div>
+    </div>
+  </div>
+
+  <!-- ─── What-If simulator ─── -->
+  <div id="opsub-whatif" class="hidden">
+    <div class="card p-5">
+      <h2 class="section-title">What-If Simulator</h2>
+      <p class="text-xs text-slate-400 mb-4">Adjust the sliders to see projected revenue & margin from your current period baseline.</p>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div>
+          <div id="whatifBase" class="text-xs text-slate-500 mb-4 p-3 border border-slate-200 rounded-lg" style="background:var(--bg-subtle)"></div>
+          <div class="space-y-4">
+            <div>
+              <label class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                <span>Traffic (transactions)</span>
+                <span id="wiTrafficLbl" class="text-indigo-600 font-bold">+0%</span>
+              </label>
+              <input id="wiTraffic" type="range" min="-50" max="50" value="0" class="w-full accent-indigo-600" oninput="renderWhatIf()">
+            </div>
+            <div>
+              <label class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                <span>Avg Ticket</span>
+                <span id="wiTicketLbl" class="text-indigo-600 font-bold">+0%</span>
+              </label>
+              <input id="wiTicket" type="range" min="-30" max="50" value="0" class="w-full accent-indigo-600" oninput="renderWhatIf()">
+            </div>
+            <div>
+              <label class="flex justify-between text-xs font-medium text-slate-600 mb-1">
+                <span>Cost-of-Goods %</span>
+                <span id="wiCogsLbl" class="text-indigo-600 font-bold">+0%</span>
+              </label>
+              <input id="wiCogs" type="range" min="-20" max="20" value="0" class="w-full accent-indigo-600" oninput="renderWhatIf()">
+            </div>
+          </div>
+        </div>
+        <div>
+          <div id="whatifResult" class="grid grid-cols-2 gap-3"></div>
+          <div class="mt-4" style="height:200px"><canvas id="chartWhatIf"></canvas></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── AI Insights ─── -->
+  <!-- AI Insights removed -->
+
+</div><!-- /tab-ops -->
+
