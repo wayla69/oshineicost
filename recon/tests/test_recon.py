@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repo root → im
 from recon.seed_payment_map import normalize, classify          # noqa: E402
 from recon.parsers import parse_grab_report                      # noqa: E402
 import recon.main as main                                        # noqa: E402
+import recon.core as core   # get_db() reads core._DB_PATH; main._DB_PATH is a copy
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -59,7 +60,7 @@ DEMO_POS = [("KNNQR", 100000), ("K-SHOP", 50000), ("Credit กรุงไทย
 
 @pytest.fixture
 def client(tmp_path):
-    main._DB_PATH = _make_db(tmp_path, DEMO_POS)
+    core._DB_PATH = main._DB_PATH = _make_db(tmp_path, DEMO_POS)
     os.environ.pop("OSHINEI_SEED_TOKEN", None)
     with TestClient(main.app) as cl:        # startup → schema + migrate + seed
         yield cl
@@ -966,7 +967,7 @@ def test_bay_point_parses_and_ties_to_bank():
     db = pathlib.Path(tempfile.mkdtemp()) / "b.db"
     c = sq.connect(db); c.execute("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY,name TEXT,branch_type TEXT,active INTEGER)")
     c.execute("INSERT INTO branches VALUES(25,'อุดร','master',1)"); c.commit(); c.close()
-    m._DB_PATH = db; os.environ.pop("OSHINEI_SEED_TOKEN", None)
+    core._DB_PATH = m._DB_PATH = db; os.environ.pop("OSHINEI_SEED_TOKEN", None)
     with TestClient(m.app) as cl:
         for st, raw2 in [("credit_card", raw), (_udon and "bank", _udon("UDN_Statements KB_SA_05.2569.pdf"))]:
             cl.post(f"/api/uploads/{st}/confirm", files={"file": ("x.pdf", raw2, "application/pdf")},
@@ -1068,7 +1069,7 @@ def test_payout_matching_real_grab_ties_to_transfers():
     db = pathlib.Path(tempfile.mkdtemp()) / "p.db"
     c = sq.connect(db); c.execute("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY,name TEXT,branch_type TEXT,active INTEGER)")
     c.execute("INSERT INTO branches VALUES(25,'อุดร','master',1)"); c.commit(); c.close()
-    m._DB_PATH = db
+    core._DB_PATH = m._DB_PATH = db
     from fastapi.testclient import TestClient
     import os; os.environ.pop("OSHINEI_SEED_TOKEN", None)
     with TestClient(m.app) as cl:
@@ -1491,7 +1492,7 @@ def test_daily_pending_vs_missing(tmp_path):
         ("2026-06-02", "KNNQR", 12000), ("2026-06-02", "Cash", 4000),
         ("2026-06-03", "KNNQR", 9000),  ("2026-06-03", "Cash", 6000)])
     c.commit(); c.close()
-    main._DB_PATH = db
+    core._DB_PATH = main._DB_PATH = db
     os.environ.pop("OSHINEI_SEED_TOKEN", None)
     with TestClient(main.app) as cl:
         pm = {x["payment_code_norm"]: x for x in cl.get("/api/payment-map").json()}
@@ -1528,7 +1529,7 @@ def test_daily_cash_coverage_uses_cash_dep_only(tmp_path):
     c.executemany("INSERT INTO pos_payment_day VALUES(4,?, 'Cash',?,0)",
                   [("2026-06-01", 4000), ("2026-06-03", 5000)])
     c.commit(); c.close()
-    main._DB_PATH = db
+    core._DB_PATH = main._DB_PATH = db
     with TestClient(main.app) as cl:
         sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
         cc = sqlite3.connect(db)
@@ -1550,7 +1551,7 @@ def test_daily_unmapped_bank_status(tmp_path):
     c.execute("CREATE TABLE pos_payment_day(branch_id INT,day TEXT,payment_code TEXT,amount REAL,txn_count INT)")
     c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-01','MYQR',5000,0)")
     c.commit(); c.close()
-    main._DB_PATH = db
+    core._DB_PATH = main._DB_PATH = db
     with TestClient(main.app) as cl:
         sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
         days = {x["day"]: x for x in cl.get(f"/api/sessions/{sid}/daily").json()["days"]}
