@@ -36,6 +36,15 @@ from fastapi import Query
 from fastapi.responses import Response as _Response
 from pathlib import Path
 from pydantic import BaseModel
+# core.py is imported as `core` by main.py (which puts backend/ on sys.path first)
+# but also directly — `import backend.core` from the recon app and standalone
+# scripts. Its sibling imports (rules, auth, month_summary) resolve by bare name,
+# so it must be able to put backend/ on sys.path itself.
+import sys as _sys_path_fix
+from pathlib import Path as _P
+if str(_P(__file__).parent.resolve()) not in _sys_path_fix.path:
+    _sys_path_fix.path.insert(0, str(_P(__file__).parent.resolve()))
+
 from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
 from rules import VAT_DIVISOR

@@ -18,3 +18,12 @@ def test_app_imports_as_backend_main_like_production():
     r = subprocess.run([sys.executable, "-c", "import backend.main"], cwd=str(ROOT),
                        capture_output=True, text=True, env=env, timeout=180)
     assert r.returncode == 0, r.stderr[-1500:]
+
+
+def test_core_imports_standalone_like_recon_does():
+    """The recon app imports backend.core directly, without backend.main having
+    put backend/ on sys.path first. core.py must manage that on its own."""
+    env = {**os.environ, "OSHINEI_NO_SWAP": "1", "PYTHONIOENCODING": "utf-8"}
+    r = subprocess.run([sys.executable, "-c", "import backend.core"], cwd=str(ROOT),
+                       capture_output=True, text=True, env=env, timeout=180)
+    assert r.returncode == 0, r.stderr[-1500:]
