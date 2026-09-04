@@ -1,0 +1,53 @@
+{
+ "branches": [
+  {
+   "branch_id": 4,
+   "channels": [],
+   "name": "Korat1",
+   "pos_channels": [],
+   "pos_totals": {
+    "money": 0.0,
+    "pos": 0.0,
+    "variance": 0.0
+   },
+   "totals": {
+    "discount": 0.0,
+    "fee": 0.0,
+    "gross": 0.0,
+    "net": 0.0,
+    "vat": 0.0
+   }
+  },
+  {
+   "branch_id": 5,
+   "channels": [],
+   "name": "อุดรธานี",
+   "pos_channels": [],
+   "pos_totals": {
+    "money": 0.0,
+    "pos": 0.0,
+    "variance": 0.0
+   },
+   "totals": {
+    "discount": 0.0,
+    "fee": 0.0,
+    "gross": 0.0,
+    "net": 0.0,
+    "vat": 0.0
+   }
+  }
+ ],
+ "day": "2026-05-01",
+ "grand_totals": {
+  "discount": 0.0,
+  "fee": 0.0,
+  "gross": 0.0,
+  "net": 0.0,
+  "vat": 0.0
+ },
+ "pos_grand": {
+  "money": 0.0,
+  "pos": 0.0,
+  "variance": 0.0
+ }
+}

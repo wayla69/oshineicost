@@ -1,0 +1,5 @@
+{
+ "branches": [],
+ "grand_total": 0.0,
+ "period_month": "2026-05"
+}

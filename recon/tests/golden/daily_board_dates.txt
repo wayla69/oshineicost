@@ -1,0 +1,4 @@
+{
+ "max_day": null,
+ "min_day": null
+}

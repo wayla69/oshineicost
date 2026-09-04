@@ -126,6 +126,20 @@ def get_db():
     finally:
         conn.close()
 
+def _has_table(conn, name: str) -> bool:
+    """The POS day/month tables (pos_payment_day, sales_month_summary, …) are
+    written by the dashboard's sync, not by recon. On a fresh deployment, a
+    restored database or the test fixture they do not exist yet, and the
+    endpoints that read them used to answer 500. They check first now and say
+    "not available yet" — which is the truth, not an error."""
+    return conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name=?", (name,)
+    ).fetchone() is not None
+
+
+_POS_DAY_UNAVAILABLE = ("ยังไม่มีข้อมูล POS รายวันในฐานข้อมูลนี้ — "
+                        "จะปรากฏหลัง sync ยอดขายจากสำนักงานใหญ่ครั้งแรก")
+
 
 # Idempotent column adds for DBs created before a schema column existed
 # (CREATE TABLE IF NOT EXISTS never alters an existing table).
@@ -3670,6 +3684,9 @@ def daily_board_endpoint(day: str):
     if not _DAY_RE.match(day or ""):
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
     with get_db() as conn:
+        if not _has_table(conn, "pos_payment_day"):
+            return {"day": day, "available": False, "reason": _POS_DAY_UNAVAILABLE,
+                    "categories": [], "branches": [], "totals": {}, "unmapped": []}
         return daily_board(conn, day)
 
 
@@ -3871,6 +3888,11 @@ def daily_report(day: str, branch_id: int | None = None):
     if not _DAY_RE.match(day or ""):
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
     with get_db() as conn:
+        if not _has_table(conn, "pos_payment_day"):
+            html = (f"<!doctype html><html lang=\"th\"><meta charset=\"utf-8\">"
+                    f"<body style=\"font-family:sans-serif;padding:2rem\">"
+                    f"<h2>รายงานกระทบยอดรายวัน {day}</h2><p>{_POS_DAY_UNAVAILABLE}</p></body></html>")
+            return Response(content=html, media_type="text/html; charset=utf-8")
         html = _daily_report_html(conn, day, branch_id)
     return Response(content=html, media_type="text/html; charset=utf-8")
 
@@ -6419,6 +6441,17 @@ _UAT_CASES = [
      "expected": "dropdown branch ทำงาน, ไม่มี session -> empty state, มี session -> แถบสรุปถูกต้อง, "
                  "chip รายช่องทาง, ปุ่มกรองทำงาน, 3 ขั้นบัตรเครดิตถ้ามีข้อมูล, "
                  "เฉพาะ master branch, ไม่สร้าง session ใหม่"},
+    {"id": "TC-25", "title": "ก่อน sync ครั้งแรก -- กระดานรายวัน/รายงานรายวัน/วินิจฉัย Excel แจ้ง 'ยังไม่มีข้อมูล' ไม่ใช่ error",
+     "role": "ผู้ดูแลระบบ",
+     "narrative": "ตาราง POS รายวัน (pos_payment_day) และสรุปรายเดือน (sales_month_summary) ถูกเขียนโดย sync ของ dashboard "
+                  "ไม่ใช่โดย recon เอง บนฐานข้อมูลที่เพิ่งติดตั้งหรือกู้คืนมา สามหน้านี้เคยล้มเป็น 500 "
+                  "ตอนนี้ต้องตอบ 200 พร้อมข้อความว่ายังไม่มีข้อมูล และกลับมาแสดงผลปกติทันทีที่ sync ครั้งแรกเสร็จ",
+     "steps": ["ใช้ฐานข้อมูลที่ยังไม่มีตาราง pos_payment_day (เช่น สำเนาใหม่ก่อน sync)",
+               "เปิด /api/daily-board?day=<วันใดก็ได้> -> ต้องได้ JSON available=false พร้อม reason ไม่ใช่หน้า error",
+               "เปิด /api/daily-report?day=<วันเดียวกัน> -> ต้องได้หน้า HTML แจ้งว่ายังไม่มีข้อมูล",
+               "เปิด [เพิ่มเติม] > วินิจฉัย > คอลัมน์ชำระเงิน Excel -> rows ว่าง + available=false",
+               "รัน sync แล้วเปิดซ้ำ -> แสดงผลปกติ"],
+     "expected": "ไม่มีหน้าใดตอบ 500 เมื่อขาดตารางฝั่ง sync; ข้อความบอกเหตุผลและวิธีแก้ (sync) ชัดเจน"},
 ]
 
 
@@ -7247,6 +7280,9 @@ def diag_excel_payment_cols(period_month: str, branch_id: int | None = None):
     Use to verify col 40 (qr field) actually contains QR/PromptPay data.
     """
     with get_db() as conn:
+        if not _has_table(conn, "sales_month_summary"):
+            return {"period_month": period_month, "rows": [], "available": False,
+                    "reason": "ยังไม่มี sales_month_summary ในฐานข้อมูลนี้ — ปรากฏหลัง sync ครั้งแรก"}
         filters = ["period_month=?", "source='Easy'"]
         params: list = [period_month]
         if branch_id:

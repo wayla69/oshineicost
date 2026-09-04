@@ -1,0 +1,184 @@
+{
+ "month_rollup": {
+  "2025-12": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  },
+  "2026-01": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  },
+  "2026-02": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  },
+  "2026-03": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  },
+  "2026-04": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  },
+  "2026-05": {
+   "approved": 0,
+   "closed": 0,
+   "open": 2,
+   "total": 2
+  }
+ },
+ "months": [
+  "2026-05",
+  "2026-04",
+  "2026-03",
+  "2026-02",
+  "2026-01",
+  "2025-12"
+ ],
+ "open_total": 12,
+ "period_month": "2026-05",
+ "rows": [
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2025-12",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2026-01",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2026-02",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2026-03",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2026-04",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "has_snapshot": false,
+   "period_month": "2026-05",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2025-12",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2026-01",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2026-02",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2026-03",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2026-04",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "approved_at": null,
+   "approved_by": null,
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "has_snapshot": false,
+   "period_month": "2026-05",
+   "progress_pct": 100.0,
+   "status": "draft",
+   "todo_count": 0
+  }
+ ]
+}

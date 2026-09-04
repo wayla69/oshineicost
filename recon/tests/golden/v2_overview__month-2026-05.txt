@@ -1,0 +1,51 @@
+{
+ "branches": [
+  {
+   "branch_id": 4,
+   "branch_name": "Korat1",
+   "channels": {},
+   "ext_total": 0,
+   "non_revenue": 0,
+   "pos_total": 0,
+   "progress_pct": 100.0,
+   "reclass_amount": 0,
+   "reclass_count": 0,
+   "status": "draft",
+   "todo_count": 0
+  },
+  {
+   "branch_id": 5,
+   "branch_name": "อุดรธานี",
+   "channels": {},
+   "ext_total": 0,
+   "non_revenue": 0,
+   "pos_total": 0,
+   "progress_pct": 100.0,
+   "reclass_amount": 0,
+   "reclass_count": 0,
+   "status": "draft",
+   "todo_count": 0
+  }
+ ],
+ "channel_labels": {
+  "CASH": "เงินสด",
+  "COUPON": "คูปอง",
+  "CREDIT": "บัตรเครดิต",
+  "GRAB": "Grab",
+  "LINEMAN": "Line Man",
+  "QR": "QR พร้อมเพย์",
+  "TRANSFER": "เงินโอน"
+ },
+ "channel_order": [
+  "QR",
+  "CASH",
+  "TRANSFER",
+  "CREDIT",
+  "GRAB",
+  "LINEMAN",
+  "COUPON"
+ ],
+ "period_month": "2026-05",
+ "reclass_amount_total": 0,
+ "reclass_count_total": 0
+}

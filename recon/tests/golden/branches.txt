@@ -1,0 +1,12 @@
+[
+ {
+  "branch_id": 4,
+  "branch_type": "master",
+  "name": "Korat1"
+ },
+ {
+  "branch_id": 5,
+  "branch_type": "master",
+  "name": "อุดรธานี"
+ }
+]
