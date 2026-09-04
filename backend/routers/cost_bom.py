@@ -1617,28 +1617,13 @@ def cost_bulk_update(updates: list[CostUpdate]):
 #   • Cost concentration (top-5/10/20 share of branch COGS)
 #
 # This is the back-end for the "🔬 BoM รายสาขา" sidebar tab.
-@router.get("/api/branch-bom/analysis")
-@ttl_cache
-def branch_bom_analysis(
-    branch:     str           = Query(..., description="Branch name, or 'ALL' for chain-wide aggregate"),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-    top_n:      int           = Query(50, description="How many top menus to return (default 50)"),
-    granularity: str          = Query("month", description="day | week | month — bucket size for the trend array"),
-):
-    """Per-branch BoM cost analysis (or chain-wide if branch='ALL').
-
-    The `trend` array (always returned) honours the granularity param:
-      • month  — one entry per ``YYYY-MM`` (mirrors `monthly_trend`).
-      • week   — ISO weeks ``YYYY-Www``; daily COGS pro-rated by daily tx revenue.
-      • day    — one entry per ``YYYY-MM-DD``; same pro-ration pattern as `/api/buffet/gp`.
-
-    `monthly_trend` is preserved (always monthly) for backwards compatibility.
-
-    Phase 16: when `branch='ALL'` (or 'all'), aggregates across ALL active
-    branches — chain-wide overview. Hides per-branch filter, returns same
-    response shape with `branch: "ALL (เครือ)"`.
-    """
+def _bba_setup(*, branch, granularity, month_from, month_to):
+    # names this section hands on; None where a path never assigns one
+    cogs_expr = None
+    costed_rev_expr = None
+    is_chain = None
+    params = None
+    where = None
     if not branch:
         raise HTTPException(400, "branch is required ('ALL' for chain-wide)")
     if granularity not in ("day", "week", "month"):
@@ -1658,7 +1643,26 @@ def branch_bom_analysis(
 
     cogs_expr        = _cogs_case('ssm', 'sk', 'sc')
     costed_rev_expr  = _costed_rev_case('ssm', 'sk', 'sc')
+    return {"cogs_expr": cogs_expr, "costed_rev_expr": costed_rev_expr, "granularity": granularity, "is_chain": is_chain, "params": params, "where": where}
 
+
+def _bba_query(*, branch, cogs_expr, costed_rev_expr, is_chain, params, top_n, where):
+    # names this section hands on; None where a path never assigns one
+    cogs = None
+    costed_rev_ex = None
+    coverage_row = None
+    food_pct = None
+    gp = None
+    gp_pct = None
+    has_bom_map = None
+    ing_menus = None
+    ing_rows = None
+    monthly_by_sku = None
+    revenue_ex = None
+    revenue_inc = None
+    top_menu_rows = None
+    totals_row = None
+    trend_rows = None
     with get_db() as con:
         # Verify branch exists (skip for chain-wide mode)
         if not is_chain:
@@ -1863,7 +1867,14 @@ def branch_bom_analysis(
     gp            = revenue_ex - cogs
     gp_pct        = (gp   / revenue_ex * 100) if revenue_ex > 0 else None
     food_pct      = (cogs / revenue_ex * 100) if revenue_ex > 0 else None
+    return {"cogs": cogs, "costed_rev_ex": costed_rev_ex, "coverage_row": coverage_row, "food_pct": food_pct, "gp": gp, "gp_pct": gp_pct, "has_bom_map": has_bom_map, "ing_menus": ing_menus, "ing_rows": ing_rows, "monthly_by_sku": monthly_by_sku, "revenue_ex": revenue_ex, "revenue_inc": revenue_inc, "top_menu_rows": top_menu_rows, "totals_row": totals_row, "trend_rows": trend_rows}
 
+
+def _bba_trend(*, trend_rows):
+    # names this section hands on; None where a path never assigns one
+    monthly_trend = None
+    months_list = None
+    n_months = None
     # period
     months_list   = [r["m"] for r in trend_rows]
     n_months      = len(months_list)
@@ -1883,7 +1894,12 @@ def branch_bom_analysis(
             "gp_pct":        round(m_gp_pct, 1)   if m_gp_pct   is not None else None,
             "food_cost_pct": round(m_food_pct, 1) if m_food_pct is not None else None,
         })
+    return {"monthly_trend": monthly_trend, "months_list": months_list, "n_months": n_months}
 
+
+def _bba_top_menus(*, cogs, has_bom_map, monthly_by_sku, top_menu_rows):
+    # names this section hands on; None where a path never assigns one
+    top_menus = None
     top_menus = []
     for r in top_menu_rows:
         tc      = float(r["total_cogs"] or 0)
@@ -1900,7 +1916,12 @@ def branch_bom_analysis(
             "monthly_cogs":      monthly_by_sku.get(r["sku_id"], []),
             "has_bom_recipe":    has_bom_map.get(r["sku_id"], False),
         })
+    return {"top_menus": top_menus}
 
+
+def _bba_concentration(*, cogs, top_menus):
+    # names this section hands on; None where a path never assigns one
+    concentration = None
     # concentration
     cumulative = 0.0
     cum_at = {}
@@ -1919,7 +1940,15 @@ def branch_bom_analysis(
         "top_10_menus_pct_of_cogs": _share(10),
         "top_20_menus_pct_of_cogs": _share(20),
     }
+    return {"concentration": concentration}
 
+
+def _bba_ingredient_types(*, cogs, coverage_row, ing_menus, ing_rows):
+    # names this section hands on; None where a path never assigns one
+    cost_by_type_out = None
+    menus_total = None
+    menus_with_recipe = None
+    top_ingredients = None
     top_ingredients = []
     cost_by_type: Dict[str, float] = {}
     for r in ing_rows:
@@ -1941,7 +1970,12 @@ def branch_bom_analysis(
 
     menus_with_recipe = int(coverage_row["with_bom"] or 0) if coverage_row else 0
     menus_total       = int(coverage_row["total"]    or 0) if coverage_row else 0
+    return {"cost_by_type_out": cost_by_type_out, "menus_total": menus_total, "menus_with_recipe": menus_with_recipe, "top_ingredients": top_ingredients}
 
+
+def _bba_granular_trend(*, branch, granularity, month_from, month_to, monthly_trend, months_list, trend_rows):
+    # names this section hands on; None where a path never assigns one
+    trend = None
     # ── Granularity-aware trend array ────────────────────────────────────
     # Always include `trend` keyed by `bucket`. For month: mirrors monthly_trend.
     # For week/day: pro-rate each month's COGS by daily tx revenue fraction
@@ -2030,6 +2064,61 @@ def branch_bom_analysis(
                 "gp_pct":        round(gpp, 1) if gpp is not None else None,
                 "food_cost_pct": round(fcp, 1) if fcp is not None else None,
             })
+    return {"trend": trend}
+
+
+@router.get("/api/branch-bom/analysis")
+@ttl_cache
+def branch_bom_analysis(
+    branch:     str           = Query(..., description="Branch name, or 'ALL' for chain-wide aggregate"),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    top_n:      int           = Query(50, description="How many top menus to return (default 50)"),
+    granularity: str          = Query("month", description="day | week | month — bucket size for the trend array"),
+):
+    """Per-branch BoM cost analysis (or chain-wide if branch='ALL').
+
+    The `trend` array (always returned) honours the granularity param:
+      • month  — one entry per ``YYYY-MM`` (mirrors `monthly_trend`).
+      • week   — ISO weeks ``YYYY-Www``; daily COGS pro-rated by daily tx revenue.
+      • day    — one entry per ``YYYY-MM-DD``; same pro-ration pattern as `/api/buffet/gp`.
+
+    `monthly_trend` is preserved (always monthly) for backwards compatibility.
+
+    Phase 16: when `branch='ALL'` (or 'all'), aggregates across ALL active
+    branches — chain-wide overview. Hides per-branch filter, returns same
+    response shape with `branch: "ALL (เครือ)"`.
+    """
+    # Each stage is its own function (_bba_*, Phase 3b 2026-09); they run in
+    # order and pass what they compute forward through `ctx`. The statements are
+    # the ones this function used to hold inline — golden pins the output.
+    ctx = {"branch": branch, "granularity": granularity, "month_from": month_from, "month_to": month_to, "top_n": top_n}
+    ctx.update(_bba_setup(branch=ctx.get("branch"), granularity=ctx.get("granularity"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to")))
+    ctx.update(_bba_query(branch=ctx.get("branch"), cogs_expr=ctx.get("cogs_expr"), costed_rev_expr=ctx.get("costed_rev_expr"), is_chain=ctx.get("is_chain"), params=ctx.get("params"), top_n=ctx.get("top_n"), where=ctx.get("where")))
+    ctx.update(_bba_trend(trend_rows=ctx.get("trend_rows")))
+    ctx.update(_bba_top_menus(cogs=ctx.get("cogs"), has_bom_map=ctx.get("has_bom_map"), monthly_by_sku=ctx.get("monthly_by_sku"), top_menu_rows=ctx.get("top_menu_rows")))
+    ctx.update(_bba_concentration(cogs=ctx.get("cogs"), top_menus=ctx.get("top_menus")))
+    ctx.update(_bba_ingredient_types(cogs=ctx.get("cogs"), coverage_row=ctx.get("coverage_row"), ing_menus=ctx.get("ing_menus"), ing_rows=ctx.get("ing_rows")))
+    ctx.update(_bba_granular_trend(branch=ctx.get("branch"), granularity=ctx.get("granularity"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to"), monthly_trend=ctx.get("monthly_trend"), months_list=ctx.get("months_list"), trend_rows=ctx.get("trend_rows")))
+    cogs = ctx["cogs"]
+    concentration = ctx["concentration"]
+    cost_by_type_out = ctx["cost_by_type_out"]
+    costed_rev_ex = ctx["costed_rev_ex"]
+    food_pct = ctx["food_pct"]
+    gp = ctx["gp"]
+    gp_pct = ctx["gp_pct"]
+    is_chain = ctx["is_chain"]
+    menus_total = ctx["menus_total"]
+    menus_with_recipe = ctx["menus_with_recipe"]
+    monthly_trend = ctx["monthly_trend"]
+    months_list = ctx["months_list"]
+    n_months = ctx["n_months"]
+    revenue_ex = ctx["revenue_ex"]
+    revenue_inc = ctx["revenue_inc"]
+    top_ingredients = ctx["top_ingredients"]
+    top_menus = ctx["top_menus"]
+    totals_row = ctx["totals_row"]
+    trend = ctx["trend"]
 
     return {
         "branch": ("ALL (รวมเครือ)" if is_chain else branch),
