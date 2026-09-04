@@ -727,7 +727,7 @@ def main():
     print(f"      inserted {len(txr):,} transactions")
 
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")
-    stage_reports(sq, mc, args.since, bid_map, item_map, name2bid, windows)
+    stage_reports(sq, mc, args.since, bid_map, item_map, name2bid, windows, incr_from=incr_from)
 
     # sales_month_summary is written only by the Excel ingest, never by this sync,
     # so live-synced-only months would have 0 counts/gross/discounts in every
@@ -801,10 +801,37 @@ def main():
         print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
         print("       python refresh_fly_db.py --db oshinei.db.incoming")
 
-def _stage_void(*, bid_map, item_map, run, sq):
+def _reset_table(sq, table, incr_from, date_col, cols):
+    """Prepare a staged table for (re)filling from the HQ pull.
+
+    Full run (incr_from None): drop and recreate — the pull covers the whole
+    history. Incremental run: the pull covers only the months from incr_from,
+    so keep the older rows the copied DB already holds and delete just the
+    window's rows before they are re-inserted. `date_col` is the column the
+    window is cut on: period_month compares YYYY-MM; day-grain columns and
+    expressions such as substr(receipt_no,1,10) compare YYYY-MM-DD.
+
+    WHY: until 2026-09 every stager dropped its table on every run, so the
+    scheduled --window-days sync (the Fly run since #90) shipped pos_* tables
+    holding the window's two or three months and nothing before — reports,
+    drills and the recon's POS tender lines for any older month went blank on
+    Fly while the local full run still had them. A table whose columns no
+    longer match `cols` is rebuilt from scratch either way: its old rows are
+    unusable."""
+    sq.commit()                         # executescript() committed here too
+    wanted = [c.strip().split()[0] for c in cols.split(",")]
+    have = [r[1] for r in sq.execute(f"PRAGMA table_info({table})").fetchall()]
+    if incr_from is None or have != wanted:
+        sq.executescript(f"DROP TABLE IF EXISTS {table}; CREATE TABLE {table}({cols});")
+        return
+    cut = incr_from[:7] if date_col == "period_month" else incr_from[:10]
+    sq.execute(f"DELETE FROM {table} WHERE {date_col} >= ?", (cut,))
+
+
+def _stage_void(*, bid_map, incr_from, item_map, run, sq):
     # ── pos_void: cancelled/void items (qty + sale price; cost via BoM later) ──
-    sq.executescript("DROP TABLE IF EXISTS pos_void; CREATE TABLE pos_void("
-                     "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
+    _reset_table(sq, "pos_void", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL")
     rows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
                  FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""", col="CancelDate")
@@ -815,8 +842,8 @@ def _stage_void(*, bid_map, item_map, run, sq):
 
     # ── pos_void_day: same voids per DAY (powers the by-day Operations report) ──
     # Mirror of pos_void grouped by char(10) CancelDate instead of char(7).
-    sq.executescript("DROP TABLE IF EXISTS pos_void_day; CREATE TABLE pos_void_day("
-                     "branch_id INT, day TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
+    _reset_table(sq, "pos_void_day", incr_from, "day",
+                 "branch_id INT, day TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL")
     vdrows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(10),CancelDate,126) d, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
                  FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(10),CancelDate,126), ReasonId""", col="CancelDate")
@@ -828,10 +855,10 @@ def _stage_void(*, bid_map, item_map, run, sq):
     return {}
 
 
-def _stage_payment(*, F, bid_map, run, sq):
+def _stage_payment(*, F, bid_map, incr_from, run, sq):
     # ── pos_staff_month: items served per staff (upsell/performance) ──
-    sq.executescript("DROP TABLE IF EXISTS pos_staff_month; CREATE TABLE pos_staff_month("
-                     "branch_id INT, period_month TEXT, staff_id INT, staff_name TEXT, item_qty REAL);")
+    _reset_table(sq, "pos_staff_month", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, staff_id INT, staff_name TEXT, item_qty REAL")
     rows = run(f"""SELECT st.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, st.StaffId sid, st.StaffName nm,
                  SUM(CAST(st.Qty AS float)) q
                  FROM SaleItemStaff st JOIN Sale s ON s.SaleId=st.SaleId AND s.BranchId=st.BranchId
@@ -841,8 +868,8 @@ def _stage_payment(*, F, bid_map, run, sq):
     print(f"        pos_staff_month: {len(rows)} groups")
 
     # ── pos_payment_month: payment mix ──
-    sq.executescript("DROP TABLE IF EXISTS pos_payment_month; CREATE TABLE pos_payment_month("
-                     "branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT);")
+    _reset_table(sq, "pos_payment_month", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, payment_code TEXT, amount REAL, txn_count INT")
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym, p.PaymentCode pc,
                  SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
@@ -853,13 +880,13 @@ def _stage_payment(*, F, bid_map, run, sq):
     return {}
 
 
-def _stage_channel_tab(*, F, bid_map, run, sq):
+def _stage_channel_tab(*, F, bid_map, incr_from, run, sq):
     # ── pos_payment_day: daily payment mix (powers daily reconciliation) ──
     # Same query as pos_payment_month but grouped by day (char(10)) instead of
     # month (char(7)). Lets the recon app reconcile POS tender vs bank/CC/Grab/
     # Lineman per day. Volume ~ branches × days × codes (small).
-    sq.executescript("DROP TABLE IF EXISTS pos_payment_day; CREATE TABLE pos_payment_day("
-                     "branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT);")
+    _reset_table(sq, "pos_payment_day", incr_from, "day",
+                 "branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT")
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, p.PaymentCode pc,
                  SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
@@ -876,8 +903,8 @@ def _stage_channel_tab(*, F, bid_map, run, sq):
     # POS leg of the points 3-way (POS coupon ↔ issuer settlement ↔ bank deposit).
     for grain, col, conv in (("month", "period_month", "char(7)"), ("day", "day", "char(10)")):
         tbl = f"pos_coupon_payment_{grain}"
-        sq.executescript(f"DROP TABLE IF EXISTS {tbl}; CREATE TABLE {tbl}("
-                         f"branch_id INT, {col} TEXT, coupon_series_id INT, amount REAL, txn_count INT);")
+        _reset_table(sq, tbl, incr_from, col,
+                     f"branch_id INT, {col} TEXT, coupon_series_id INT, amount REAL, txn_count INT")
         rows = run(f"""SELECT p.BranchId bid, CONVERT({conv},s.SaleDate,126) g, p.CouponSeriesId csid,
                      SUM(CAST(p.Amount AS float)) amt, COUNT(*) n
                      FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
@@ -892,14 +919,14 @@ def _stage_channel_tab(*, F, bid_map, run, sq):
     return {}
 
 
-def _stage_coupon(*, F, bid_map, run, sq):
+def _stage_coupon(*, F, bid_map, incr_from, run, sq):
     # ── sale_payment: per-RECEIPT payment lines (powers the discount-bill drill) ──
     # Same SalePayment source as pos_payment_month, but kept per receipt instead of
     # rolled up — a bill can have >1 row (split payment: e.g. cash + credit).
     # receipt_no is built IDENTICALLY to sales_transaction ("<date>-<SaleNum>-<SaleId>",
     # see the header build above) so it joins 1:1.
-    sq.executescript("DROP TABLE IF EXISTS sale_payment; CREATE TABLE sale_payment("
-                     "branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL);")
+    _reset_table(sq, "sale_payment", incr_from, "substr(receipt_no,1,10)",
+                 "branch_id INT, receipt_no TEXT, payment_code TEXT, amount REAL")
     rows = run(f"""SELECT p.BranchId bid, CONVERT(char(10),s.SaleDate,126) d, s.SaleNum num, s.SaleId sid,
                  p.PaymentCode pc, SUM(CAST(p.Amount AS float)) amt
                  FROM SalePayment p JOIN Sale s ON s.SaleId=p.SaleId AND s.BranchId=p.BranchId
@@ -912,8 +939,8 @@ def _stage_coupon(*, F, bid_map, run, sq):
     print(f"        sale_payment: {len(rows)} rows (per receipt × code)")
 
     # ── pos_table_turn_day: turnover / dwell ──
-    sq.executescript("DROP TABLE IF EXISTS pos_table_turn_day; CREATE TABLE pos_table_turn_day("
-                     "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")
+    _reset_table(sq, "pos_table_turn_day", incr_from, "day",
+                 "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL")
     rows = run("""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
                  CAST(AVG(CASE WHEN EndTime>StartTime THEN DATEDIFF(minute,StartTime,EndTime)*1.0 END) AS float) avgmin
                  FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND {{RANGE}}
@@ -924,13 +951,13 @@ def _stage_coupon(*, F, bid_map, run, sq):
     return {}
 
 
-def _stage_cashcount(*, F, bid_map, run, sq):
+def _stage_cashcount(*, F, bid_map, incr_from, run, sq):
     # ── pos_channel_month: dine-in vs delivery vs takeaway (from Sale, revenue side) ──
     # (SaleByDeliveryType uses varchar Thai branch names that mojibake under UTF-8,
     #  so we derive channel from Sale.DeliveryType / OrderChannel instead — int codes,
     #  branch via BranchId. Map codes→labels in the report layer.)
-    sq.executescript("DROP TABLE IF EXISTS pos_channel_month; CREATE TABLE pos_channel_month("
-                     "branch_id INT, period_month TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL);")
+    _reset_table(sq, "pos_channel_month", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL")
     rows = run(f"""SELECT s.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym,
                  ISNULL(s.DeliveryType,0) dt, ISNULL(s.OrderChannel,0) oc,
                  COUNT(*) bills, SUM(s.NumOfCust) cust, SUM(CAST(s.Total AS float)) total
@@ -943,8 +970,8 @@ def _stage_cashcount(*, F, bid_map, run, sq):
 
     # ── pos_channel_day: same channel mix per DAY (powers the by-day Operations report) ──
     # Mirror of pos_channel_month grouped by char(10) SaleDate instead of char(7).
-    sq.executescript("DROP TABLE IF EXISTS pos_channel_day; CREATE TABLE pos_channel_day("
-                     "branch_id INT, day TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL);")
+    _reset_table(sq, "pos_channel_day", incr_from, "day",
+                 "branch_id INT, day TEXT, delivery_type INT, order_channel INT, bills INT, customers INT, total_inc_vat REAL")
     cdrows = run(f"""SELECT s.BranchId bid, CONVERT(char(10),s.SaleDate,126) d,
                  ISNULL(s.DeliveryType,0) dt, ISNULL(s.OrderChannel,0) oc,
                  COUNT(*) bills, SUM(s.NumOfCust) cust, SUM(CAST(s.Total AS float)) total
@@ -957,8 +984,8 @@ def _stage_cashcount(*, F, bid_map, run, sq):
     print(f"        pos_channel_day: {len(cdrows)} groups")
 
     # ── pos_coupon_month: promo / coupon usage ──
-    sq.executescript("DROP TABLE IF EXISTS pos_coupon_month; CREATE TABLE pos_coupon_month("
-                     "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
+    _reset_table(sq, "pos_coupon_month", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL")
     rows = run("""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
                  FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""", col="UsedDate")
@@ -968,10 +995,10 @@ def _stage_cashcount(*, F, bid_map, run, sq):
     return {}
 
 
-def _stage_discount(*, F, bid_map, mc, run, sq):
+def _stage_discount(*, F, bid_map, incr_from, mc, run, sq):
     # ── pos_coupon_day: same usage but per DAY (powers the by-day coupon drill) ──
-    sq.executescript("DROP TABLE IF EXISTS pos_coupon_day; CREATE TABLE pos_coupon_day("
-                     "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
+    _reset_table(sq, "pos_coupon_day", incr_from, "day",
+                 "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL")
     drows = run("""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
                  FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""", col="UsedDate")
@@ -992,8 +1019,8 @@ def _stage_discount(*, F, bid_map, mc, run, sq):
     print(f"        coupon_series: {len(csrows)} series names")
 
     # ── pos_kitchen_month: cook/ticket time ──
-    sq.executescript("DROP TABLE IF EXISTS pos_kitchen_month; CREATE TABLE pos_kitchen_month("
-                     "branch_id INT, period_month TEXT, avg_cook_sec REAL, cooked_count INT);")
+    _reset_table(sq, "pos_kitchen_month", incr_from, "period_month",
+                 "branch_id INT, period_month TEXT, avg_cook_sec REAL, cooked_count INT")
     rows = run(f"""SELECT si.BranchId bid, CONVERT(char(7),s.SaleDate,126) ym,
                  CAST(AVG(CASE WHEN si.CookedTime IS NOT NULL AND si.CookedTime>si.InsertDate THEN DATEDIFF(second,si.InsertDate,si.CookedTime)*1.0 END) AS float) avgsec,
                  SUM(CASE WHEN si.CookedTime IS NOT NULL THEN 1 ELSE 0 END) cooked
@@ -1063,7 +1090,7 @@ def _stage_daily(*, F, bid_map, item_map, mc, since, sq):
     return {"_dt": _dt, "dly_since": dly_since, "mx": mx}
 
 
-def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, item_map, mc, mx, since, sq, windows):
+def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx, since, sq, windows):
     # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
     #    Per-sku unit cost from OUR data (sku_cost cost-management table first,
     #    then recipe → alias; tier codes=0 via is_tier_code). Same priority as main._unified_cogs_expr
@@ -1151,8 +1178,13 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, item_map, mc, mx, since, sq,
         disc_bill_set.add(rcpt)
         item_rows[(rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
                                         round(r["rev"] or 0, 2), round(qty * c, 4))
-    sq.executescript("DROP TABLE IF EXISTS sale_bill_item; CREATE TABLE sale_bill_item("
-                     "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL);")
+    _reset_table(sq, "sale_bill_item", incr_from, "substr(receipt_no,1,10)",
+                 "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL")
+    if incr_from is not None:
+        # the loss-bill lines reach back 31 days from the last sale — earlier than
+        # the window can be — so replace those receipts too, never duplicate them
+        sq.executemany("DELETE FROM sale_bill_item WHERE receipt_no=?",
+                       [(rc,) for rc in {k[0] for k in item_rows}])
     sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", list(item_rows.values()))
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbi ON sale_bill_item(receipt_no)")
     print(f"        sale_bill_item: {len(item_rows)} lines across "
@@ -1163,10 +1195,14 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, item_map, mc, mx, since, sq,
     return {}
 
 
-def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
+def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows, incr_from=None):
     """Stage POS report data into pos_* tables — server-side aggregates only.
     IRON RULE: NO POS cost is staged. We keep quantities / revenue / counts /
-    timings; all COGS valuation is done later from our BoM."""
+    timings; all COGS valuation is done later from our BoM.
+
+    `windows` is the month range being pulled; on an incremental run
+    (incr_from set) it is only the recent months, and every windowed table
+    keeps the older rows the copied DB already holds (see _reset_table)."""
     F = SALE_FILTER
 
     def run(sql, params=None, col=None):
@@ -1179,15 +1215,15 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # Each table family is its own stage (_stage_*, Phase 6b 2026-09) — the
     # [k/6] steps the log already names. They run in order and hand forward
     # through `ctx`; backend/test_sync_golden.py pins every table they write.
-    ctx = {"F": F, "bid_map": bid_map, "item_map": item_map, "mc": mc, "name2bid": name2bid, "run": run, "since": since, "sq": sq, "windows": windows}
-    ctx.update(_stage_void(bid_map=ctx.get("bid_map"), item_map=ctx.get("item_map"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_payment(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_channel_tab(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_coupon(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_cashcount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
-    ctx.update(_stage_discount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), mc=ctx.get("mc"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx = {"F": F, "bid_map": bid_map, "incr_from": incr_from, "item_map": item_map, "mc": mc, "name2bid": name2bid, "run": run, "since": since, "sq": sq, "windows": windows}
+    ctx.update(_stage_void(bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), item_map=ctx.get("item_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_payment(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_channel_tab(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_coupon(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_cashcount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_discount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), mc=ctx.get("mc"), run=ctx.get("run"), sq=ctx.get("sq")))
     ctx.update(_stage_daily(F=ctx.get("F"), bid_map=ctx.get("bid_map"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), since=ctx.get("since"), sq=ctx.get("sq")))
-    ctx.update(_stage_bill_cogs(F=ctx.get("F"), _dt=ctx.get("_dt"), bid_map=ctx.get("bid_map"), dly_since=ctx.get("dly_since"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), mx=ctx.get("mx"), since=ctx.get("since"), sq=ctx.get("sq"), windows=ctx.get("windows")))
+    ctx.update(_stage_bill_cogs(F=ctx.get("F"), _dt=ctx.get("_dt"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), dly_since=ctx.get("dly_since"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), mx=ctx.get("mx"), since=ctx.get("since"), sq=ctx.get("sq"), windows=ctx.get("windows")))
 
 
 def _th(s):
