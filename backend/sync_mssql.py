@@ -1443,6 +1443,19 @@ def stage_extra(sq, mc, since, bid_map, item_map):
     print(f"        pos_cancel_bill_detail: {len(drows)} bills")
 
 
+# (table, month expression) — every table the stagers fill from a month window.
+# reconcile() refuses a build whose copy of any of these starts LATER than the
+# current DB's: that is the incremental sync dropping history (#113).
+HISTORY_TABLES = (
+    ("pos_void", "period_month"), ("pos_staff_month", "period_month"),
+    ("pos_payment_month", "period_month"), ("pos_payment_day", "substr(day,1,7)"),
+    ("pos_coupon_payment_month", "period_month"), ("sale_payment", "substr(receipt_no,1,7)"),
+    ("pos_table_turn_day", "substr(day,1,7)"), ("pos_channel_month", "period_month"),
+    ("pos_coupon_month", "period_month"), ("pos_kitchen_month", "period_month"),
+    ("sale_bill_item", "substr(receipt_no,1,7)"),
+)
+
+
 def reconcile(sq):
     cur = sqlite3.connect(str(DB)); cur.row_factory = sqlite3.Row
     def one(con, q, p=()):
@@ -1539,6 +1552,24 @@ def reconcile(sq):
     buf_new = one(sq, "SELECT ROUND(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly m JOIN skus s ON s.sku_id=m.sku_id WHERE s.description LIKE '(B)%' AND m.period_month=?", (syn_max,)) or 0
     checks.append(("buffet (B) rev (should ≈0)", 0, buf_new, 'info'))
 
+    # Staged history must never SHRINK. An incremental run re-pulls only the
+    # window, so every windowed table must still start where the current DB's
+    # copy starts — #113 (2026-09-04): each stager dropped its table and Fly served
+    # pos_* / sale_payment / sale_bill_item from July only, for two days, with every
+    # numeric check above green. Growth (a backfill) is fine; a later first month
+    # is history loss and gates like a strict check. A table absent from either DB
+    # is skipped (older DB, or a table the sync has not written yet).
+    history = []   # (table, current first month, synced first month, passed)
+    for tbl, col in HISTORY_TABLES:
+        have = {k for k, con in (("cur", cur), ("new", sq))
+                if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tbl,)).fetchone()}
+        if have != {"cur", "new"}:
+            continue
+        c_min = one(cur, f"SELECT MIN({col}) FROM {tbl}")
+        n_min = one(sq, f"SELECT MIN({col}) FROM {tbl}")
+        passed = not c_min or (n_min is not None and n_min <= c_min)
+        history.append((tbl, c_min, n_min, passed))
+
     ok = True
     print("    " + "-"*82)
     print(f"    {'check':42} {'current':>15} {'synced':>15}  Δ%")
@@ -1555,6 +1586,11 @@ def reconcile(sq):
         if mode in ('strict', 'nodrop') and not passed:
             ok = False
         print(f"    {name:42} {old:>15,.0f} {new:>15,.0f}  {d:+6.2f}%{'  ✓' if passed else '  ⚠'}")
+    for tbl, c_min, n_min, passed in history:
+        print(f"    {'HISTORY ' + tbl + ' starts':42} {str(c_min):>15} {str(n_min):>15}  "
+              f"{'      ' if passed else 'LOST  '}{'  ✓' if passed else '  ⚠'}")
+        if not passed:
+            ok = False
     print("    " + "-"*82)
     cur.close()
     return ok

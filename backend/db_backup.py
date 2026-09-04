@@ -25,7 +25,6 @@ latest backup at least once a quarter and keep the console output as evidence.
 """
 import argparse
 import hashlib
-import shutil
 import sqlite3
 import sys
 from pathlib import Path

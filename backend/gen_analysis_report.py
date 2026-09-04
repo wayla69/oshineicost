@@ -13,7 +13,6 @@ All numbers are pulled from the same unified-COGS endpoints the dashboard uses,
 so the report reconciles exactly with the app (no hand-typed figures).
 """
 import argparse, json, os, urllib.request
-from datetime import datetime
 
 # ── data access ─────────────────────────────────────────────────────────────
 def fetch(api, path):

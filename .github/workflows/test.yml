@@ -20,9 +20,10 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          # app runtime deps needed to import main / the ingest chain
-          pip install "uvicorn" "python-multipart" "openpyxl" "python-pptx" "python-dateutil"
+          # the PINNED runtime set production runs on, plus the test tools
+          pip install -r requirements.txt -r requirements-dev.txt pyflakes "python-pptx" "python-dateutil"
+      - name: pyflakes (the backend is kept at zero warnings)
+        run: python -m pyflakes $(ls *.py | grep -v '^test_\|^conftest') routers/*.py
       - name: Run tests (with coverage)
         env:
           OSHINEI_NO_SWAP: "1"   # never touch a real DB during import
@@ -45,16 +46,20 @@ jobs:
           # bank-statement PDFs with it and skip when it's absent.
           sudo apt-get update -q && sudo apt-get install -y -q fonts-freefont-ttf
           python -m pip install --upgrade pip
-          pip install -r recon/requirements-dev.txt
+          pip install -r recon/requirements-dev.txt pyflakes
+      - name: pyflakes (recon is kept at zero warnings)
+        run: python -m pyflakes $(ls recon/*.py | grep -v '/test_\|/conftest') recon/routers/*.py
       - name: Run recon tests (with coverage)
         run: |
           python -m pytest recon/tests -q --cov=recon --cov-report=term-missing
 
-  # Frontend E2E: runs on every push/PR against a LOCAL server seeded with the
-  # same hermetic fixture the backend pytest suite uses — it gates merges
-  # instead of checking prod after the fact. A manual "Run workflow" dispatch
-  # can still target a live deployment via the E2E_BASE_URL repo variable.
+  # Frontend E2E against a LOCAL server seeded with the same hermetic fixture the
+  # backend pytest suite uses. Manual dispatch only (2026-09): a browser install
+  # per run is the expensive job on a private-repo minute budget, and the
+  # Playwright harnesses in scripts/ are run on the dev server before a merge.
+  # A dispatch can target a live deployment via the E2E_BASE_URL repo variable.
   e2e:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
