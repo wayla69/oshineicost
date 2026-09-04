@@ -45,11 +45,11 @@ from pathlib import Path as _P
 if str(_P(__file__).parent.resolve()) not in _sys_path_fix.path:
     _sys_path_fix.path.insert(0, str(_P(__file__).parent.resolve()))
 
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
 from rules import VAT_DIVISOR
 from rules import cogs_expr as _rules_cogs_expr
 from rules import raw_unit_cost_sql as _raw_unit_cost_sql
+from rules import tier_code_sql as _tier_code_sql
 from typing import Optional
 import functools
 import json as _json
@@ -908,7 +908,7 @@ def _build_sku_effective_cost(con, force: bool = True):
             if con.execute("SELECT 1 FROM sku_effective_cost LIMIT 1").fetchone():
                 return
         except Exception:
-            pass
+            pass                      # no table yet -> fall through and build it
     # Buffet-PACKAGE codes are forced to 0 here, at the source of the derived
     # table. Their sku_cost row holds the package PRICE, not a cost (BUFFET =
     # ฿679.08 vs a realised ฿642 average selling price) — the package's real
@@ -922,7 +922,7 @@ def _build_sku_effective_cost(con, force: bool = True):
     rows = con.execute(
         f"""
         SELECT s.sku_id,
-               CASE WHEN s.sku_code IN {_ALL_TIER_CODES_SQL} THEN 0
+               CASE WHEN {_tier_code_sql('s.sku_code')} THEN 0
                     ELSE {_raw_unit_cost_sql('s')} END AS rc
         FROM skus s
         """

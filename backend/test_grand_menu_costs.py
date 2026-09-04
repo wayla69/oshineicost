@@ -228,3 +228,13 @@ def test_shipped_alias_file_never_points_at_an_aliased_donor():
         assert r["donor_sku_code"] not in mapped, (
             f"{r['sku_code']} points at {r['donor_sku_code']}, which this same file "
             f"aliases — bom_sku_alias resolves in one hop, so this would cost ฿0")
+
+
+def test_a_few_promo_sales_do_not_veto_the_owners_cost(monkeypatch, tmp_path):
+    """OTHALHAR00006 sold 3 discounted sets and its ฿53 cost was refused as a
+    price. The guard must wait for a real sample."""
+    con = _db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHALHAR00006', '(AL) แฮนด์โรล')")
+    con.execute("INSERT INTO sales_sku_monthly VALUES(1, '2026-09', 3, 150.0)")   # ฿50 each, 3 sold
+    out = _run(monkeypatch, tmp_path, con, HEADER + "OTHALHAR00006,,x,53.25\n")
+    assert out["applied"] == 1 and out["rejected_price_as_cost"] == 0

@@ -66,15 +66,9 @@ QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
 # here and a test stood guard against drift.) sku_cost holds the package PRICE
 # for these codes (BUFFET = ฿679.08), not a cost — the real cost is the itemised
 # dishes on the same bill, so booking the package too double-counts.
-from rules import ALL_TIER_CODES, ALL_TIER_CODES_SQL, raw_unit_cost_sql  # noqa: E402
+from rules import ALL_TIER_CODES, ALL_TIER_CODES_SQL, raw_unit_cost_sql, tier_code_sql  # noqa: E402
+from rules import is_tier_code  # noqa: E402,F401  the one package predicate, shared with the app
 
-def is_tier_code(code):
-    """Tier/package predicate for the per-bill costmap: the canonical tuple PLUS
-    the BUFFET* prefix — Easy emits package variants (e.g. BUFFETCHILDFREE) that
-    aren't in main's tuple but are still packages, never costed line items.
-    Exact match keeps real B0xxx menu items (B0040, B0324…) costed."""
-    c = code or ""
-    return c in ALL_TIER_CODES or c.startswith("BUFFET")
 
 def refresh_sku_effective_cost(sq):
     """(Re)build sku_effective_cost in the staged DB — MIRROR of
@@ -87,7 +81,7 @@ def refresh_sku_effective_cost(sq):
                      "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
                      "DELETE FROM sku_effective_cost;")
     sq.execute(f"""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
-                  SELECT s.sku_id, CASE WHEN s.sku_code IN {ALL_TIER_CODES_SQL} THEN 0
+                  SELECT s.sku_id, CASE WHEN {tier_code_sql('s.sku_code')} THEN 0
                                         ELSE {raw_unit_cost_sql('s')} END
                   FROM skus s""")
 

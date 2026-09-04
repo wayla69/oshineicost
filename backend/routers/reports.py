@@ -1814,8 +1814,8 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
                                                                   key=lambda kv: -kv[1]["pax"])[:5]]
                                          for k, v in pz_branch.items()},
                         }
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[mgt] §11 promo breakdown unavailable: {e}")
 
                 # cost drivers per mainstream tier: which ingredient groups /
                 # single menus push each tier's cost/head up — turns the Food%
@@ -1901,8 +1901,8 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
                                 "default_tier": worst["tier"],
                                 "tier_order": sorted(by_tier, key=lambda t: int(t)),
                                 "by_tier": by_tier}
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"[mgt] §11 cost drivers unavailable: {e}")
     except Exception:
         tier_out = None
     return {"tier_out": tier_out}

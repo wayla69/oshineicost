@@ -88,8 +88,9 @@ def _log_auth_event(con, action: str, username: str, ip: str = "") -> None:
             "VALUES ('auth', 0, ?, 'ip', ?, ?)",
             (action, ip or "", (username or "").strip()))
         con.commit()
-    except Exception:
-        pass
+    except Exception as e:
+        # never block a login on the audit row, but never lose the fact either
+        print(f"[auth] audit log write failed for {action!r}: {e}")
 
 
 @router.post("/api/auth/login", include_in_schema=False)

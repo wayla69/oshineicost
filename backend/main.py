@@ -1378,7 +1378,10 @@ def _load_grand_menu_costs(path=None):
                     "FROM sales_sku_monthly WHERE sku_id IN (%s) GROUP BY 1"
                     % ",".join("?" * len(ids)), list(ids.values())
                 ):
-                    if (r[2] or 0) > 0 and (r[1] or 0) > 0:
+                    # A handful of promo sales must not veto the owner's number: on
+                    # 2026-09-04 three discounted hand rolls made ฿53 look like a
+                    # price. Judge only once the dish has really sold.
+                    if (r[2] or 0) >= 10 and (r[1] or 0) > 0:
                         price[r[0]] = r[1] / r[2]
 
             for code, cost in rows:

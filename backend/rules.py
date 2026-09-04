@@ -56,6 +56,21 @@ EASY_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in EASY_TIER_CODES) + ")"
 ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in ALL_TIER_CODES) + ")"
 
 
+def is_tier_code(code: str) -> bool:
+    """Package predicate: the known codes PLUS the BUFFET* prefix. Easy emits
+    package variants the tuple never listed (BUFFETCHILDFREE) that are still
+    packages, never costed line items. Exact match keeps real B0xxx dishes."""
+    c = code or ""
+    return c in ALL_TIER_CODES or c.startswith("BUFFET")
+
+
+def tier_code_sql(expr: str) -> str:
+    """SQL twin of is_tier_code for a sku_code expression. Until 2026-09 the app
+    used the IN-list and the sync used the prefix — two definitions of the same
+    rule, which agreed only because no variant carried a cost yet."""
+    return f"({expr} IN {ALL_TIER_CODES_SQL} OR {expr} LIKE 'BUFFET%')"
+
+
 # ─── Effective unit cost and COGS ────────────────────────────────────────────
 # One SKU, one cost, resolved in this order:
 #   1. sku_effective_cost — precomputed at startup and on every cost/BoM edit
@@ -108,8 +123,7 @@ def cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
     return (
         f"CASE "
         f"  WHEN {ssm}.source = 'Easy' AND "
-        f"       (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id) "
-        f"       IN {EASY_TIER_CODES_SQL} THEN 0 "
+        f"       {tier_code_sql(f'(SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id)')} THEN 0 "
         f"  ELSE {ssm}.qty * {effective_unit_cost_sql(ssm)} "
         f"END"
     )

@@ -41,7 +41,8 @@ def test_tier_code_sql_is_derived_from_the_tuples():
 def test_cogs_expr_zeroes_easy_tier_rows_and_multiplies_qty():
     t = rules.cogs_expr("ssm")
     assert t.startswith("CASE ")
-    assert "ssm.source = 'Easy'" in t and rules.EASY_TIER_CODES_SQL in t
+    # the tier predicate is the shared one: the full list PLUS the BUFFET* prefix
+    assert "ssm.source = 'Easy'" in t and rules.ALL_TIER_CODES_SQL in t and "LIKE 'BUFFET%'" in t
     assert "ssm.qty * COALESCE(" in t
     assert "sku_effective_cost" in t and "bom_sku_alias" in t
 
@@ -104,3 +105,17 @@ def test_scope_filter_binds_what_it_appends():
     f, p = [], {}
     rules.scope_filter(f, p, branch="X", alias="br")
     assert f == ["br.name=:branch"]
+
+
+def test_package_predicate_covers_variants_the_tuple_never_listed():
+    """Easy emits BUFFETCHILDFREE-style package variants. The tuple is the
+    documented list; the prefix is what production data actually contains."""
+    assert rules.is_tier_code("BUFFET799") and rules.is_tier_code("BUFFETCHILDFREE")
+    assert rules.is_tier_code("B01") and not rules.is_tier_code("B0119")
+    con = _db()
+    con.execute("INSERT INTO skus VALUES (9, 'BUFFETCHILDFREE')")
+    con.execute("INSERT INTO sku_cost VALUES (9, 350.0)")          # a price parked as a cost
+    con.execute("INSERT INTO sales VALUES (9, 4, 'Easy', 0, 0)")
+    c = con.execute(f"SELECT {rules.cogs_expr('ssm')} FROM sales ssm WHERE sku_id=9").fetchone()[0]
+    assert c == 0, "a package variant must never book its parked price as COGS"
+    assert con.execute(f"SELECT {rules.tier_code_sql('sku_code')} FROM skus WHERE sku_id=9").fetchone()[0] == 1
