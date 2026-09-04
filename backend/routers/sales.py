@@ -5,7 +5,6 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
-from pydantic import BaseModel
 from typing import Optional
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
 from core import (

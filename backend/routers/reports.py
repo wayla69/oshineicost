@@ -19,7 +19,7 @@ import io as _io
 from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, scope_filter
 from core import (
     HERE,
-    _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _group_filter, _unified_cogs_expr,
+    _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _unified_cogs_expr,
     get_db, ttl_cache,
 )
 
@@ -139,7 +139,7 @@ def _cost_head_deviation(scope, overview):
 def _load_top60_gen():
     """Lazy-import the standalone report generator (presentation only: build_html /
     write_xlsx). Kept out of module import so the JSON tab endpoint never depends on it."""
-    import importlib, sys as _sys, os as _os2
+    import importlib, sys as _sys
     bd = str(HERE)
     if bd not in _sys.path:
         _sys.path.insert(0, bd)
@@ -1194,6 +1194,1207 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
 # ---------------------------------------------------------------------------
 # /api/reports/management — Daily, Weekly & Monthly Management Summary (printable)
 # ---------------------------------------------------------------------------
+def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, params, period, th, week, where):
+    # names this section hands on; None where a period path never assigns one
+    ce = None
+    comp_label = None
+    cs = None
+    days_in_period = None
+    focus = None
+    has_prev = None
+    has_yoy = None
+    label = None
+    latest_day = None
+    maxd = None
+    mind = None
+    months = None
+    partial = None
+    pe = None
+    ps = None
+    ref_anchor = None
+    selected_month = None
+    selected_week = None
+    weeks = None
+    ye = None
+    ys = None
+    rng = con.execute(
+        f"SELECT MIN(date(st.sold_at)) lo, MAX(date(st.sold_at)) hi "
+        f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
+        f"WHERE {where}", params).fetchone()
+    maxd = rng["hi"] if rng else None
+    mind = (rng["lo"] if rng else None) or "9999-99-99"
+    if not maxd:
+        return {"available": False, "period": period}
+    # Never DEFAULT the daily report onto the in-progress current day: its handful
+    # of early sales read as a chain-wide ~-100% collapse across every section.
+    # With no explicit date, anchor on the latest COMPLETE day (strictly before
+    # Thai 'today', UTC+7). An explicitly-requested today is honoured but flagged
+    # partial below. Mirrors the weekly guard, which never picks the open week.
+    today_th = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
+    if date:
+        focus = date[:10]
+    else:
+        _cd = con.execute(
+            f"SELECT MAX(date(st.sold_at)) d FROM sales_transaction st "
+            f"JOIN branches b ON b.branch_id=st.branch_id "
+            f"WHERE {where} AND date(st.sold_at) < :t",
+            {**params, "t": today_th}).fetchone()
+        focus = ((_cd["d"] if _cd and _cd["d"] else maxd))[:10]
+    fy, fm, fd = (int(x) for x in focus.split("-"))
+    fdate = _dt.date(fy, fm, fd)
+
+    # ---- period bounds + WoW-fair comparison window -------------------
+    latest_day = _dt.date.fromisoformat(maxd)
+    weeks: list = []
+    selected_week = None
+    months: list = []
+    selected_month = None
+    if period == "daily":
+        cs = ce = fdate
+        ps = pe = fdate - _dt.timedelta(days=7)
+        days_in_period = 1
+        partial = (focus == today_th)   # in-progress current day (explicit date=today)
+        ref_anchor = fdate
+        if th:
+            label = f"{DOW[fdate.weekday()]} {dlabel(fdate)}"
+            comp_label = "วันเดียวกันสัปดาห์ก่อน"
+        else:
+            label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
+            comp_label = "same weekday last week"
+    elif period == "monthly":
+        # COMPLETE calendar months only (mirrors the weekly full-week rule): a
+        # month is selectable once its last day is <= the latest data day —
+        # never the in-progress month, whose partial totals would read as a
+        # chain-wide collapse against a full prior month. Most recent first.
+        mrows = con.execute(
+            f"SELECT DISTINCT strftime('%Y-%m', st.sold_at) m FROM sales_transaction st "
+            f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
+        for m in sorted((r["m"] for r in mrows if r["m"]), reverse=True):
+            my, mm = int(m[:4]), int(m[5:7])
+            if _dt.date(my, mm, _cal.monthrange(my, mm)[1]) <= latest_day:
+                months.append({"month": m, "label": f"{MON[mm-1]} {my}"})
+            if len(months) >= 24:
+                break
+        # Default = latest complete month; fall back to the latest data month
+        # (flagged partial) only when no month has completed yet.
+        sel = months[0]["month"] if months else maxd[:7]
+        if month:
+            m10 = month[:7]
+            if any(x["month"] == m10 for x in months):
+                sel = m10
+        sy, sm = int(sel[:4]), int(sel[5:7])
+        cs = _dt.date(sy, sm, 1)
+        ce = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
+        days_in_period = (ce - cs).days + 1
+        partial = ce > latest_day
+        ref_anchor = ce
+        pm_l = cs - _dt.timedelta(days=1)          # previous calendar month
+        ps = pm_l.replace(day=1)
+        pe = pm_l
+        selected_month = sel
+        if th:
+            label = f"เดือน {MON[sm-1]} {sy}"
+            comp_label = "เดือนก่อนหน้า"
+        else:
+            label = f"{MON[sm-1]} {sy}"
+            comp_label = "previous month"
+    else:
+        # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
+        # have data — most recent first, cap 26 — so the picker and the default
+        # both come from real, finished weeks (never the current partial week).
+        mon_expr = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+        monrows = con.execute(
+            f"SELECT DISTINCT {mon_expr} mon FROM sales_transaction st "
+            f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
+        for m in sorted((r["mon"] for r in monrows if r["mon"]), reverse=True):
+            md = _dt.date.fromisoformat(m)
+            sun = md + _dt.timedelta(days=6)
+            if sun <= latest_day:
+                weeks.append({"start": m, "end": sun.isoformat(),
+                              "label": f"{dlabel(md)} – {dlabel(sun)}"})
+            if len(weeks) >= 26:
+                break
+        # Default = most recent completed week WITH data; fall back to the calendar
+        # week before the latest day if there is no fully-completed week yet.
+        cur_mon = latest_day - _dt.timedelta(days=latest_day.weekday())
+        default_mon = (_dt.date.fromisoformat(weeks[0]["start"]) if weeks
+                       else cur_mon - _dt.timedelta(days=7))
+        sel_mon = default_mon
+        if week:
+            try:
+                wd = _dt.date.fromisoformat(week[:10])
+                cand = wd - _dt.timedelta(days=wd.weekday())          # snap to that week's Monday
+                if (cand + _dt.timedelta(days=6)) <= latest_day:      # never an incomplete week
+                    sel_mon = cand
+            except Exception:
+                pass
+        cs = sel_mon
+        ce = sel_mon + _dt.timedelta(days=6)
+        days_in_period = 7
+        partial = False
+        ref_anchor = ce
+        ps = cs - _dt.timedelta(days=7)
+        pe = cs - _dt.timedelta(days=1)
+        selected_week = cs.isoformat()
+        if th:
+            label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)} (จ.–อา.)"
+            comp_label = "สัปดาห์ก่อนหน้า (จ.–อา.)"
+        else:
+            label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
+            comp_label = "previous week (Mon–Sun)"
+    has_prev = ps.isoformat() >= mind
+    # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
+    # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
+    # same-calendar-date YoY would drift (e.g. Sat→Fri) and distort the comparison.
+    # Dropped if it predates the data. Monthly compares the SAME CALENDAR month
+    # last year (full month vs full month — the standard for monthly reporting;
+    # weekday drift washes out over a whole month).
+    if period == "daily":
+        ys = ye = fdate - _dt.timedelta(days=364)
+    elif period == "monthly":
+        ys = cs.replace(year=cs.year - 1)
+        ye = ys.replace(day=_cal.monthrange(ys.year, ys.month)[1])
+    else:
+        ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
+    has_yoy = ys.isoformat() >= mind
+    return {"ce": ce, "comp_label": comp_label, "cs": cs, "days_in_period": days_in_period, "focus": focus, "has_prev": has_prev, "has_yoy": has_yoy, "label": label, "latest_day": latest_day, "maxd": maxd, "mind": mind, "months": months, "partial": partial, "pe": pe, "ps": ps, "ref_anchor": ref_anchor, "selected_month": selected_month, "selected_week": selected_week, "weeks": weeks, "ye": ye, "ys": ys}
+
+
+def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where, ye, ys):
+    # names this section hands on; None where a period path never assigns one
+    cur = None
+    headline = None
+    prev = None
+    # ---- headline totals for an arbitrary [s,e] range -----------------
+    def agg(s, e):
+        r = con.execute(f"""
+            SELECT ROUND({net_revenue_sum('st')},2) rev,
+                   COALESCE(SUM(st.customer_count),0)  cust,
+                   COUNT(*)                            bills,
+                   ROUND(COALESCE(SUM(st.discount),0),2) disc
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+        """, {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
+        rev = r["rev"] or 0; cust = r["cust"] or 0; bills = r["bills"] or 0
+        return {"revenue": rev, "customers": cust, "bills": bills, "discount": r["disc"] or 0,
+                "rev_per_head": round(rev/cust, 1) if cust else None,
+                "avg_ticket":   round(rev/bills, 1) if bills else None}
+
+    cur  = agg(cs, ce)
+    prev = agg(ps, pe) if has_prev else None
+    headline = dict(cur)
+    headline["discount_pct"] = round(cur["discount"]/cur["revenue"]*100, 1) if cur["revenue"] else None
+    if prev:
+        headline["prev"] = prev
+        headline["rev_wow_pct"]   = pct(cur["revenue"], prev["revenue"])
+        headline["cust_wow_pct"]  = pct(cur["customers"], prev["customers"])
+        headline["bills_wow_pct"] = pct(cur["bills"], prev["bills"])
+        headline["rph_wow_pct"]   = pct(cur["rev_per_head"] or 0, prev["rev_per_head"]) if prev["rev_per_head"] else None
+        headline["ticket_wow_pct"]= pct(cur["avg_ticket"] or 0, prev["avg_ticket"]) if prev["avg_ticket"] else None
+    yoy = agg(ys, ye) if has_yoy else None
+    if yoy:
+        headline["yoy"] = yoy
+        headline["rev_yoy_pct"]  = pct(cur["revenue"], yoy["revenue"])
+        headline["cust_yoy_pct"] = pct(cur["customers"], yoy["customers"])
+        headline["rph_yoy_pct"]  = pct(cur["rev_per_head"] or 0, yoy["rev_per_head"]) if yoy["rev_per_head"] else None
+    return {"cur": cur, "headline": headline, "prev": prev}
+
+
+def _mgt_branches(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
+    # names this section hands on; None where a period path never assigns one
+    branches = None
+    # ---- branch league table -----------------------------------------
+    def by_branch(s, e):
+        rows = con.execute(f"""
+            SELECT b.name branch,
+                   ROUND({net_revenue_sum('st')},2) rev,
+                   COALESCE(SUM(st.customer_count),0)  cust,
+                   COUNT(*)                            bills
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY b.name""", {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
+        return {r["branch"]: r for r in rows}
+    cur_b  = by_branch(cs, ce)
+    prev_b = by_branch(ps, pe) if has_prev else {}
+    tot_rev = sum((r["rev"] or 0) for r in cur_b.values()) or 0
+    branches = []
+    for nm, r in cur_b.items():
+        rev = r["rev"] or 0; cust = r["cust"] or 0
+        p = prev_b.get(nm)
+        branches.append({
+            "branch": nm, "revenue": rev, "customers": cust, "bills": r["bills"],
+            "rev_per_head": round(rev/cust, 1) if cust else None,
+            "share_pct": round(rev/tot_rev*100, 1) if tot_rev else None,
+            "wow_pct": pct(rev, p["rev"] or 0) if p else None,
+        })
+    branches.sort(key=lambda x: -x["revenue"])
+    prev_rank_map = {nm: i + 1 for i, (nm, _) in
+                     enumerate(sorted(prev_b.items(), key=lambda kv: -(kv[1]["rev"] or 0)))}
+    for i, b in enumerate(branches):
+        b["rank"] = i + 1
+        pr = prev_rank_map.get(b["branch"])
+        b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
+    return {"branches": branches}
+
+
+def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
+    # names this section hands on; None where a period path never assigns one
+    cash_heavy = None
+    heavy = None
+    leak = None
+    reprint = None
+    # ---- money-leak radar over the period (+ last-period comparison) ----
+    # leak_total/cash_heavy_total take an explicit [s,e] window so the SAME signal
+    # can be measured for the current period AND the comparison period (last week /
+    # same weekday last week) — the §6 cards then show a WoW delta.
+    lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    def leak_total(extra, s, e):
+        r = con.execute(f"""
+            SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}""",
+            {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
+        return {"bills": r["bills"] or 0, "baht": r["baht"] or 0}
+    def leak_branches(extra, by="baht"):
+        rows = con.execute(f"""
+            SELECT b.name branch, COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}
+            GROUP BY b.name ORDER BY {by} DESC LIMIT 3""",
+            {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+        return [dict(r) for r in rows]
+    # cash-heavy: of the period's heavy-discount bills (a SMALL set), how many were
+    # paid mostly in CASH. Drive FROM the heavy bills and pick each bill's dominant
+    # tender with an indexed (branch_id, receipt_no, amount) lookup — NOT a window
+    # over the entire sale_payment table (that scan made this the slowest query in
+    # the report). Guards a missing sale_payment.
+    def cash_heavy_total(s, e, with_branches=False):
+        try:
+            dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
+                        "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
+                        "ORDER BY sp.amount DESC LIMIT 1)")
+            heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
+                         f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
+                         f"WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e "
+                         f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
+            lpe = {**params, "s": s.isoformat(), "e": e.isoformat()}
+            cr = con.execute(f"""
+                SELECT COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                FROM (SELECT discount, {dom_code} dc FROM ({heavy_sub}) h)
+                WHERE dc='Cash'""", lpe).fetchone()
+            out = {"bills": cr["bills"] or 0, "baht": cr["baht"] or 0}
+            if with_branches:
+                cb = con.execute(f"""
+                    SELECT branch, COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                    FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
+                    WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lpe).fetchall()
+                out["by_branch"] = [dict(r) for r in cb]
+            return out
+        except Exception:
+            return {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
+    # WoW helper — attaches prev figures + % deltas onto a leak card.
+    def _leak_wow(cur_o, prev_o):
+        return {"prev_bills": prev_o["bills"], "prev_baht": prev_o["baht"],
+                "bills_wow": pct(cur_o["bills"], prev_o["bills"]),
+                "baht_wow":  pct(cur_o["baht"],  prev_o["baht"])}
+
+    heavy_extra   = f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30"
+    reprint_extra = "AND st.discount>0 AND COALESCE(st.print_times,0)>1"
+    zero_extra    = f"AND st.discount>0 AND {lk} <= 0"
+    all_extra     = "AND st.discount>0"
+    heavy   = {**leak_total(heavy_extra, cs, ce),   "by_branch": leak_branches(heavy_extra)}
+    reprint = {**leak_total(reprint_extra, cs, ce), "by_branch": leak_branches(reprint_extra, "bills")}
+    zero    = {**leak_total(zero_extra, cs, ce),    "by_branch": leak_branches(zero_extra)}
+    cash_heavy = cash_heavy_total(cs, ce, with_branches=True)
+    ltot       = leak_total(all_extra, cs, ce)
+    if has_prev:
+        heavy.update(  _leak_wow(heavy,   leak_total(heavy_extra,   ps, pe)))
+        reprint.update(_leak_wow(reprint, leak_total(reprint_extra, ps, pe)))
+        zero.update(   _leak_wow(zero,    leak_total(zero_extra,    ps, pe)))
+        ltot.update(   _leak_wow(ltot,    leak_total(all_extra,     ps, pe)))
+        ch_prev = cash_heavy_total(ps, pe)
+        if not cash_heavy.get("unavailable") and not ch_prev.get("unavailable"):
+            cash_heavy.update(_leak_wow(cash_heavy, ch_prev))
+    # ALL discounted bills in the period (every branch in scope) — the reconciling
+    # total so the radar's abnormal-only subsets read against the full figure and
+    # tie out with the Discounts menu (both = SUM(Sale.Discount) over the same scope).
+    leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
+            "reprinted": reprint, "zero_gross": zero, "total": ltot}
+    return {"cash_heavy": cash_heavy, "heavy": heavy, "leak": leak, "reprint": reprint}
+
+
+def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, params, pct, pe, prev, ps, where):
+    # names this section hands on; None where a period path never assigns one
+    cmp_ok = None
+    cost_available = None
+    cost_src = None
+    cost_up = None
+    daily_min = None
+    food_sub = None
+    menu_out = None
+    sp = None
+    sw = None
+    tot_cur_cost = None
+    tot_prev_cost = None
+    # Per-MASTER-branch discount follow-up: amount + % of that branch's ex-VAT sales
+    # + bill count, for the period. Master (company-owned) stores are the owner's own
+    # money leak — franchise discounts are the franchisee's cost — so this is the line
+    # to action on. Honours the report's branch/period scope; always master-only.
+    mb_rows = con.execute(f"""
+        SELECT b.name branch,
+               ROUND({net_revenue_sum('st')}) sales,
+               ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
+               SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND COALESCE(b.branch_type,'master')='master'
+        GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
+        ORDER BY disc DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+    leak["by_master_branch"] = [
+        {"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
+         "bills": r["bills"] or 0,
+         "pct": round((r["disc"] or 0) / r["sales"] * 100, 1) if r["sales"] else None}
+        for r in mb_rows]
+
+    # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
+    # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:
+    #   cost/head = (dish COGS over the period) / (covers in scope), current vs the
+    #   comparison period. COGS uses the app's effective unit cost (sku_effective_cost
+    #   → non-zero sku_cost fallback) — the same basis as _unified_cogs_expr.
+    food_sub = (f"(SELECT sk.sku_id FROM skus sk JOIN categories c "
+                f"ON c.category_id=sk.category_id WHERE {_FOOD_CATEGORY_FILTER})")
+    sb = ["b.name!='ALL'"]; sp: dict = {}
+    scope_filter(sb, sp, branch, group)
+    sw = " AND ".join(sb)
+    _eff_cost = effective_unit_cost_sql('d')
+    # sales_sku_daily is a ROLLING window (currently starts 2026-03-22) while
+    # sales_sku_monthly carries full history. Reading daily blindly made every
+    # pre-coverage month report ฿0 food cost — i.e. GP 100% — instead of saying
+    # "no data". Resolve the source per window: daily when covered, the monthly
+    # table when the window is exactly whole calendar months (the monthly
+    # report's case — same tier-safe cost expr, so the numbers tie out), else
+    # unavailable so the UI can show "—" rather than a fake zero.
+    _dmin_row = con.execute("SELECT MIN(day) d FROM v_sales_sku_daily").fetchone()
+    daily_min = (_dmin_row["d"] if _dmin_row else None) or "9999-99-99"
+
+    def _whole_months(s, e):
+        return s.day == 1 and e == _dt.date(e.year, e.month,
+                                            _cal.monthrange(e.year, e.month)[1])
+
+    def menu_cost_map(s, e):
+        """→ (rows_by_sku_id, source) where source ∈ daily|monthly|unavailable."""
+        if s.isoformat() >= daily_min:
+            rows = con.execute(f"""
+                SELECT d.sku_id, s.description, s.sku_code,
+                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
+                JOIN skus s ON s.sku_id=d.sku_id
+                WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
+                GROUP BY d.sku_id""",
+                {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
+            return {r["sku_id"]: r for r in rows}, "daily"
+        if _whole_months(s, e):
+            rows = con.execute(f"""
+                SELECT d.sku_id, s.description, s.sku_code,
+                       SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
+                FROM v_sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
+                JOIN skus s ON s.sku_id=d.sku_id
+                WHERE {sw} AND d.period_month BETWEEN :s AND :e
+                  AND d.sku_id IN {food_sub}
+                GROUP BY d.sku_id""",
+                {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchall()
+            return {r["sku_id"]: r for r in rows}, "monthly"
+        return {}, "unavailable"
+    def clean(nm):
+        return (nm or "").replace("(A) ", "").replace("(B) ", "").strip()
+    covers_cur  = cur["customers"] or 0
+    covers_prev = (prev["customers"] or 0) if prev else 0
+    try:
+        cur_m,  cost_src = menu_cost_map(cs, ce)
+        prev_m, _        = menu_cost_map(ps, pe) if has_prev else ({}, None)
+    except Exception:
+        cur_m, prev_m, cost_src = {}, {}, "unavailable"
+    cost_available = cost_src != "unavailable"
+    def cph(cost, covers): return round(cost / covers, 2) if covers else None
+    cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
+    menu_rows = []
+    for sid, r in cur_m.items():
+        cost_cur  = r["cost"] or 0
+        cost_prev = (prev_m[sid]["cost"] if sid in prev_m else 0) or 0
+        c_cur  = cph(cost_cur, covers_cur)
+        c_prev = cph(cost_prev, covers_prev)
+        if not c_cur and not c_prev:
+            continue
+        menu_rows.append({
+            "menu": clean(r["description"] or r["sku_code"]),
+            "qty": round(r["qty"] or 0), "cost": round(cost_cur),
+            "cost_per_head": c_cur,
+            "cost_per_head_prev": c_prev if cmp_ok else None,
+            "delta": round((c_cur or 0) - (c_prev or 0), 2) if cmp_ok else None,
+            "pct": pct(c_cur or 0, c_prev or 0) if cmp_ok else None,
+        })
+    # dishes that carried cost last period but none now → cost/head fell to 0
+    if cmp_ok:
+        for sid, r in prev_m.items():
+            if sid in cur_m:
+                continue
+            c_prev = cph(r["cost"] or 0, covers_prev)
+            if not c_prev:
+                continue
+            menu_rows.append({
+                "menu": clean(r["description"] or r["sku_code"]),
+                "qty": 0, "cost": 0, "cost_per_head": 0.0,
+                "cost_per_head_prev": c_prev,
+                "delta": round(-c_prev, 2), "pct": -100.0,
+            })
+    cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
+                        key=lambda x: -(x["cost_per_head"] or 0))[:12]
+    cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
+                        key=lambda x: -x["delta"])[:12]
+    cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
+                        key=lambda x: x["delta"])[:12]
+    tot_cur_cost  = sum((r["cost"] or 0) for r in cur_m.values())
+    tot_prev_cost = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
+    total_cph      = cph(tot_cur_cost, covers_cur)
+    total_cph_prev = cph(tot_prev_cost, covers_prev) if cmp_ok else None
+    menu_out = {
+        "basis": "cost_per_head",
+        "covers": covers_cur, "covers_prev": covers_prev if has_prev else None,
+        "total_cph": total_cph, "total_cph_prev": total_cph_prev,
+        "total_cph_delta": (round((total_cph or 0) - (total_cph_prev or 0), 2)
+                            if (total_cph is not None and total_cph_prev is not None) else None),
+        "top": cost_top, "risers": cost_up, "savers": cost_down,
+        # which table the dish costs came from — 'unavailable' means the window
+        # predates sales_sku_daily and isn't whole calendar months
+        "cost_basis": cost_src, "cost_from": daily_min,
+    }
+    return {"clean": clean, "cmp_ok": cmp_ok, "cost_available": cost_available, "cost_src": cost_src, "cost_up": cost_up, "daily_min": daily_min, "food_sub": food_sub, "menu_out": menu_out, "sp": sp, "sw": sw, "tot_cur_cost": tot_cur_cost, "tot_prev_cost": tot_prev_cost}
+
+
+def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
+    # names this section hands on; None where a period path never assigns one
+    tier_out = None
+    # ---- buffet price-tier split (tier-dimensioned menu_fact_*; optional) ----
+    # Same current-vs-comparison windows as the headline. None (section hidden)
+    # when the fact tables are missing/old schema or the window predates their
+    # coverage. pax here counts BUFFET bills only (menu_fact universe), so the
+    # total can sit slightly under the headline covers.
+    tier_out = None
+    try:
+        if con.execute("SELECT 1 FROM pragma_table_info('menu_fact_total') "
+                       "WHERE name='tier'").fetchone():
+            t_bids = [r[0] for r in con.execute(
+                f"SELECT b.branch_id FROM branches b WHERE {sw}", sp)]
+            t_ph = ",".join("?" * len(t_bids))
+
+            def tier_sum(s, e):
+                out = {}
+                for t, nb2, px, cg, rv in con.execute(
+                        f"""SELECT tier, SUM(bills), SUM(pax), SUM(cogs), SUM(rev)
+                            FROM menu_fact_total
+                            WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                            GROUP BY tier""",
+                        [s.isoformat(), e.isoformat()] + t_bids):
+                    out[str(t or "promo")] = {"bills": nb2 or 0, "pax": px or 0.0,
+                                              "cogs": cg or 0.0, "rev": rv or 0.0}
+                return out
+            TC = tier_sum(cs, ce)
+            TP = tier_sum(ps, pe) if has_prev else {}
+            pax_c = sum(v["pax"] for v in TC.values())
+            pax_p = sum(v["pax"] for v in TP.values())
+            if pax_c > 0:
+                TLBL = ({"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"} if th else
+                        {"promo": "Promo/other price", "child": "Child-only/other"})
+                rows_t = []
+                for t in _PT_ORDER:
+                    vc0 = TC.get(t); vp = TP.get(t)
+                    # A tier with nobody on it in THIS period is not a finding,
+                    # it is a retired price. The menu changed on 2026-09-01, so a
+                    # September report was carrying all six old tiers as empty
+                    # rows purely because the comparison week still had guests on
+                    # them — six lines of "—" for prices that no longer exist.
+                    # Symmetric: an August report drops the new tiers the same way.
+                    if not vc0 or not (vc0.get("pax") or 0):
+                        continue
+                    vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
+                    pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
+                    rows_t.append({
+                        "tier": t, "label": TLBL.get(t, f"฿{int(t):,}" if t.isdigit() else t),
+                        "pax": round(pxc), "pax_prev": round(pxp) if has_prev else None,
+                        "d_pax_pct": pct(pxc, pxp) if (has_prev and pxp) else None,
+                        "share": round(pxc / pax_c * 100, 1),
+                        "share_prev": round(pxp / pax_p * 100, 1) if pax_p else None,
+                        "rev_head": round(vc["rev"] / pxc, 2) if pxc else None,
+                        "cogs_head": round(vc["cogs"] / pxc, 2) if pxc else None,
+                        "cogs_head_prev": round(vp["cogs"] / pxp, 2) if (vp and pxp) else None,
+                        "gp_head": round((vc["rev"] - vc["cogs"]) / pxc, 2) if pxc else None,
+                        "food_pct": round(vc["cogs"] / vc["rev"] * 100, 1) if vc["rev"] else None,
+                    })
+                # mix effect on rev/head: current tier mix priced at the comparison
+                # period's per-tier rev/head, vs its blended rev/head — isolates
+                # "customers moved tier" from "tiers themselves changed".
+                mix_eff = None
+                rev_p = sum(v["rev"] for v in TP.values())
+                if pax_c and pax_p and rev_p:
+                    # Only tiers that existed in BOTH periods can carry the
+                    # comparison; the weights are re-based on those. When the menu
+                    # itself was replaced (2026-09-01) barely any tier overlaps, so
+                    # the weights summed to ~0.21 of the mix and the shortfall was
+                    # reported as a ฿-520/head "customers moved to cheaper tiers"
+                    # — an artefact of the missing 79%, not a shift in behaviour.
+                    # Below near-full coverage there is no mix story to tell.
+                    shared = [t for t in TC if TP.get(t, {}).get("pax", 0) > 0]
+                    cover = sum(TC[t]["pax"] for t in shared) / pax_c
+                    if cover >= 0.9:
+                        at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
+                                      for t in shared)
+                        mix_eff = round(at_prev - rev_p / pax_p, 2)
+                tier_out = {"rows": rows_t, "pax": round(pax_c),
+                            "pax_prev": round(pax_p) if has_prev else None,
+                            "mix_effect": mix_eff}
+
+                # WHY the promo bucket is what it is. It is the one row on the
+                # table whose label explains nothing, and it is not small — so
+                # break it into the three things it actually contains, and name
+                # the branches behind the two that are not ordinary discounts.
+                #   free   whole bill comped
+                #   mixed  a free / half-price head riding along with paying ones,
+                #          which drags the bill average between two tiers
+                #   disc   one uniform price that is not a tier = a real discount
+                try:
+                    pz_kind, pz_price, pz_branch = {}, {}, {}
+                    for ent, brn, nb3, px3 in con.execute(
+                            f"""SELECT d.ent, b.name, SUM(d.bills), SUM(d.pax)
+                                FROM menu_fact_day d JOIN branches b ON b.branch_id = d.branch_id
+                                WHERE d.day BETWEEN ? AND ? AND d.branch_id IN ({t_ph})
+                                  AND d.ent LIKE 'pz:%'
+                                GROUP BY d.ent, b.name""",
+                            [cs.isoformat(), ce.isoformat()] + t_bids):
+                        parts = str(ent).split(":")
+                        if len(parts) < 3:
+                            continue
+                        kind, unit = parts[1], parts[2]
+                        k = pz_kind.setdefault(kind, {"bills": 0, "pax": 0.0})
+                        k["bills"] += nb3 or 0; k["pax"] += px3 or 0.0
+                        if kind == "disc":
+                            q = pz_price.setdefault(unit, {"bills": 0, "pax": 0.0})
+                            q["bills"] += nb3 or 0; q["pax"] += px3 or 0.0
+                        else:
+                            bb = pz_branch.setdefault(kind, {}).setdefault(brn, {"bills": 0, "pax": 0.0})
+                            bb["bills"] += nb3 or 0; bb["pax"] += px3 or 0.0
+                    if pz_kind:
+                        # only tiers actually SOLD in this period: both menus'
+                        # price lists live in _PT_ORDER, so a September ฿395 would
+                        # otherwise be matched against the retired ฿350 tier and
+                        # reported as a 12.9% surcharge instead of a discount.
+                        std = [int(x["tier"]) for x in rows_t
+                               if str(x["tier"]).isdigit() and (x["pax"] or 0) > 0]
+
+                        def _near(u):
+                            """nearest standard tier + what % of it this price is,
+                            so a bare ฿710 reads as '10% off ฿789'."""
+                            if not std or not u:
+                                return None, None
+                            n = min(std, key=lambda t: abs(u - t))
+                            return n, round(u / n * 100, 1)
+
+                        disc = []
+                        for unit, v in sorted(pz_price.items(), key=lambda kv: -kv[1]["pax"])[:6]:
+                            u = int(unit)
+                            n, pctof = _near(u)
+                            disc.append({"unit": u, "of_tier": n, "pct_of_tier": pctof,
+                                         "off_pct": round(100 - pctof, 1) if pctof else None,
+                                         "bills": v["bills"], "pax": round(v["pax"])})
+                        tier_out["promo"] = {
+                            "kinds": {k: {"bills": v["bills"], "pax": round(v["pax"])}
+                                      for k, v in pz_kind.items()},
+                            "discounts": disc,
+                            "branches": {k: [{"branch": bn, "bills": bv["bills"],
+                                              "pax": round(bv["pax"])}
+                                             for bn, bv in sorted(v.items(),
+                                                                  key=lambda kv: -kv[1]["pax"])[:5]]
+                                         for k, v in pz_branch.items()},
+                        }
+                except Exception:
+                    pass
+
+                # cost drivers per mainstream tier: which ingredient groups /
+                # single menus push each tier's cost/head up — turns the Food%
+                # column into an actionable "because guests eat X". Computes a
+                # payload for EVERY mainstream tier (share>=5%) so the UI can
+                # switch/compare; `default_tier` = worst food%. Reads the
+                # tier-dimensioned menu_fact_day (ent LIKE 'g:%' = ingredient
+                # group, 's:%' = single menu). Optional: wrapped so a driver
+                # failure never nukes the tier table above.
+                try:
+                    # Every tier that actually sold gets a driver breakdown. The 5%
+                    # share floor used to sit here, which meant the small tiers —
+                    # often the most interesting ones, ฿1,299 included — simply had
+                    # no breakdown and no hint that one was missing. The floor now
+                    # only decides which tier opens by DEFAULT (below), so a 45-cover
+                    # tier can be inspected without being allowed to set the headline.
+                    cand = [r for r in rows_t if r["tier"].isdigit()
+                            and r["food_pct"] is not None and r["pax"]]
+                    if cand:
+                        lblmap = {e: (l or e) for e, l in con.execute(
+                            "SELECT ent, label FROM menu_fact_meta")}
+
+                        def _drv(kind_like, tier, pax):
+                            d = {}
+                            if not pax:
+                                return d
+                            for ent, cg, q in con.execute(
+                                    f"""SELECT ent, SUM(ent_cogs), SUM(qty)
+                                        FROM menu_fact_day
+                                        WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                                          AND tier=? AND ent LIKE ? GROUP BY ent""",
+                                    [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
+                                d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
+                            return d
+
+                        def _build(frow):
+                            ft = frow["tier"]; ftpax = TC[ft]["pax"]
+                            fch = frow.get("cogs_head") or 0.0
+                            lower = [x for x in cand if int(x["tier"]) < int(ft)]
+                            ref = max(lower, key=lambda x: int(x["tier"])) if lower else None
+                            rt = ref["tier"] if ref else None
+                            rtpax = TC[rt]["pax"] if rt else 0.0
+                            gF = _drv("g:%", ft, ftpax)
+                            gR = _drv("g:%", rt, rtpax) if rt else {}
+                            sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
+                            grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                    "share_pct": sh(v[0]),
+                                    "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
+                                   for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
+                                   if v[0] >= 1]
+                            mF = _drv("s:%", ft, ftpax)
+                            mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                                    "share_pct": sh(v[0]), "qty_100": round(v[1], 1)}
+                                   for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
+                                   if v[0] >= 1]
+                            if not (grp or mnu):
+                                return None
+                            return {"focus_tier": ft, "focus_label": frow["label"],
+                                    "focus_food_pct": frow["food_pct"],
+                                    "focus_cogs_head": round(fch, 1),
+                                    "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
+                                    # carried so the reader can weigh the numbers: a
+                                    # cost/head drawn from 45 covers swings hard.
+                                    "focus_pax": round(frow["pax"] or 0),
+                                    "focus_share": frow["share"],
+                                    "groups": grp, "menus": mnu}
+
+                        by_tier = {}
+                        for frow in sorted(cand, key=lambda r: int(r["tier"])):
+                            payload = _build(frow)
+                            if payload:
+                                by_tier[frow["tier"]] = payload
+                        if by_tier:
+                            # The tier that OPENS is still picked from the mainstream
+                            # ones — the headline "biggest lever" should not be a tier
+                            # with a handful of covers and a noisy cost/head. Falls
+                            # back to the full set when no tier clears the floor.
+                            _pool = [r for r in cand
+                                     if r["tier"] in by_tier and (r["share"] or 0) >= 5] \
+                                    or [r for r in cand if r["tier"] in by_tier]
+                            worst = max(_pool, key=lambda r: r["food_pct"])
+                            tier_out["drivers"] = {
+                                "default_tier": worst["tier"],
+                                "tier_order": sorted(by_tier, key=lambda t: int(t)),
+                                "by_tier": by_tier}
+                except Exception:
+                    pass
+    except Exception:
+        tier_out = None
+    return {"tier_out": tier_out}
+
+
+def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, prev, tot_cur_cost, tot_prev_cost):
+    # names this section hands on; None where a period path never assigns one
+    gp = None
+    # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
+    # With no cost source for the window, GP is UNKNOWN — never revenue−0, which
+    # rendered as a triumphant "100% margin, ฿0 food cost" on pre-2026-03-22
+    # monthly reports. Emit nulls + cost_basis so the UI prints "—" and says why.
+    if not cost_available:
+        gp = {"revenue": cur["revenue"], "food_cost": None, "gp": None, "gp_pct": None,
+              "gp_per_head": None, "gp_pct_prev": None, "gp_pct_delta_pp": None,
+              "cost_basis": "unavailable", "cost_from": daily_min}
+    else:
+        gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
+        gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
+        gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
+                       if (cmp_ok and prev and prev["revenue"]) else None)
+        gp = {
+            "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
+            "gp": gp_cur, "gp_pct": gp_pct,
+            "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
+            "gp_pct_prev": gp_prev_pct,
+            "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
+            "cost_basis": cost_src,
+        }
+    return {"gp": gp}
+
+
+def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, params, ref_anchor, where):
+    # names this section hands on; None where a period path never assigns one
+    cur_month = None
+    days_elapsed = None
+    days_total = None
+    food_cost_pct = None
+    month_complete = None
+    mp = None
+    mtd_rev = None
+    mw = None
+    pace = None
+    projected = None
+    target = None
+    # ---- food cost % (BoM) + month pace, anchored on the period's month ----
+    cur_month = ref_anchor.strftime("%Y-%m")
+    # §3 covers the month UP TO THIS REPORT'S DATE, not up to whatever the
+    # sync last loaded. The daily report deliberately anchors on the last
+    # COMPLETE day, so while today is still trading the month holds one day
+    # more than the report describes — a report dated the 3rd was counting
+    # "4 days so far" and averaging three full days plus a sliver over four.
+    # That understated the daily run rate, the month projection built on it,
+    # and the weekday-fair MoM baseline, which is sized by days_elapsed.
+    # For a past month ref_anchor is the month end, so this bounds nothing.
+    mtd_cut = ref_anchor.isoformat()
+    # True when the month rollup would reach past the report: the COGS below
+    # must then come from the day-granular source, or food-cost % divides a
+    # 4-day cost by 3 days of revenue.
+    mtd_partial = (cur_month == maxd[:7] and ref_anchor < latest_day)
+    mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
+    scope_filter(mb, mp, branch, group)
+    mw = " AND ".join(mb)
+    bom_row = None if mtd_partial else con.execute(f"""
+        SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+        FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+        LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+        JOIN branches b ON b.branch_id=s.branch_id
+        WHERE {mw}""", mp).fetchone()
+    # sales_sku_monthly is not populated for the in-progress (live-synced-only)
+    # month, so the month food-cost % would go blank for a current-month report.
+    # Fall back to sales_sku_daily (same tier-safe COGS expr; a wrapped subquery
+    # supplies the `source` column the expr expects). [[sync_no_month_summary]]
+    if not (bom_row and bom_row["cost"]):
+        mw_daily = (mw.replace("s.period_month=:month",
+                               "strftime('%Y-%m', s.day)=:month")
+                    + " AND s.day <= :mtd_cut")
+        bom_row = con.execute(f"""
+            SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+            FROM (SELECT *, 'Easy' AS source FROM v_sales_sku_daily) s
+            JOIN skus sk ON sk.sku_id=s.sku_id
+            LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+            JOIN branches b ON b.branch_id=s.branch_id
+            WHERE {mw_daily}""", {**mp, "mtd_cut": mtd_cut}).fetchone()
+    mtd_row = con.execute(f"""
+        SELECT ROUND({net_revenue_sum('st')},2) rev,
+               COUNT(DISTINCT date(st.sold_at))    days
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+          AND date(st.sold_at) <= :mtd_cut""",
+        {**params, "month": cur_month, "mtd_cut": mtd_cut}).fetchone()
+    mtd_rev  = mtd_row["rev"] or 0
+    mtd_days = mtd_row["days"] or 0
+    bom_cost = bom_row["cost"] if bom_row else None
+    food_cost_pct = round(bom_cost/mtd_rev*100, 1) if bom_cost and mtd_rev else None
+
+    # ---- cost-data COVERAGE for that month (why food-cost% is a FLOOR) ------
+    # A dish with no unit cost contributes ฿0 COGS, so the headline food-cost %
+    # is understated by exactly the dishes we haven't costed yet — silently.
+    # Coverage must be weighted by PLATES, not revenue: buffet dishes carry ~฿0
+    # line revenue by design, so a revenue-weighted number says "fine" while a
+    # tenth of the plates served are free-of-charge in the P&L.
+    # `est_food_cost_pct` prices the uncosted plates at the average cost of the
+    # plates we DO cost — a first-order estimate, flagged as such, never booked.
+    # same effective-cost expression, aliased for sales_sku_monthly (`s.`)
+    _eff_cost_m = effective_unit_cost_sql('s')
+    cost_coverage = None
+    try:
+        cc = con.execute(f"""
+            SELECT ROUND(SUM(s.qty)) plates,
+                   ROUND(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty ELSE 0 END)) plates_costed,
+                   ROUND(AVG(CASE WHEN {_eff_cost_m} > 0 THEN {_eff_cost_m} END), 2) avg_unit_cost,
+                   COUNT(DISTINCT s.sku_id) skus,
+                   COUNT(DISTINCT CASE WHEN {_eff_cost_m} = 0 THEN s.sku_id END) skus_uncosted
+            FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+            JOIN branches b ON b.branch_id=s.branch_id
+            WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+              AND s.sku_id IN {food_sub}""", mp).fetchone()
+        plates = (cc["plates"] or 0) if cc else 0
+        if plates:
+            costed = cc["plates_costed"] or 0
+            gap    = plates - costed
+            avg_uc = cc["avg_unit_cost"] or 0
+            est_missing = round(gap * avg_uc)
+            cost_coverage = {
+                "plates": plates, "plates_costed": costed,
+                "coverage_pct": round(costed / plates * 100, 1),
+                "uncosted_plates": gap,
+                "skus": cc["skus"], "skus_uncosted": cc["skus_uncosted"],
+                "est_missing_cost": est_missing,
+                "est_food_cost_pct": (round((bom_cost + est_missing) / mtd_rev * 100, 1)
+                                      if (bom_cost and mtd_rev) else None),
+            }
+            # worklist: the biggest uncosted dishes BY PLATES (revenue ranks
+            # buffet dishes at ~0, which is why they were never chased)
+            cost_coverage["top_uncosted"] = [
+                {"menu": clean(r["description"] or r["sku_code"]),
+                 "sku_code": r["sku_code"], "plates": round(r["qty"] or 0)}
+                for r in con.execute(f"""
+                    SELECT sk.sku_code, sk.description, SUM(s.qty) qty
+                    FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+                    JOIN branches b ON b.branch_id=s.branch_id
+                    WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
+                      AND s.sku_id IN {food_sub} AND {_eff_cost_m} = 0
+                    GROUP BY sk.sku_id ORDER BY qty DESC LIMIT 8""", mp).fetchall()]
+    except Exception:
+        cost_coverage = None
+
+    days_total = _cal.monthrange(ref_anchor.year, ref_anchor.month)[1]
+    # MTD up to the latest data for the current month; a full (past) month otherwise.
+    # Not latest_day.day: that is the last day with DATA, which on a daily
+    # report is the still-open day AFTER the one being reported.
+    days_elapsed = (min(ref_anchor.day, latest_day.day)
+                    if cur_month == maxd[:7] else days_total)
+    month_complete = days_elapsed >= days_total
+    projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
+    tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
+    scope_filter(tb, tp, branch, group)
+    tw = " AND ".join(tb)
+    tgt_row = con.execute(f"""
+        SELECT COALESCE(SUM(bt.revenue_target),0) tgt
+        FROM branch_targets bt JOIN branches b ON b.branch_id=bt.branch_id
+        WHERE {tw}""", tp).fetchone()
+    target = tgt_row["tgt"] or 0
+    pace = {
+        "month": cur_month, "mtd_revenue": mtd_rev, "mtd_days": mtd_days,
+        "days_elapsed": days_elapsed, "days_total": days_total, "month_complete": month_complete,
+        "projected": projected, "target": target or None,
+        "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
+        "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
+        "cost_coverage": cost_coverage,
+    }
+    return {"cur_month": cur_month, "days_elapsed": days_elapsed, "days_total": days_total, "food_cost_pct": food_cost_pct, "month_complete": month_complete, "mp": mp, "mtd_rev": mtd_rev, "mw": mw, "pace": pace, "projected": projected, "target": target}
+
+
+def _mgt_mom(con, *, MON, _dt, cur_month, days_elapsed, days_total, latest_day, month_complete, mp, mtd_rev, mw, pace, params, pct, ref_anchor, target, where):
+    # names this section hands on; None where a period path never assigns one
+    projected = None
+    # `prev_month`: previous calendar month — full total, the SAME-elapsed-days MTD
+    # (fair MTD-vs-MTD when the current month is partial) and its BoM food-cost %.
+    pm_first   = ref_anchor.replace(day=1) - _dt.timedelta(days=1)
+    prev_month = pm_first.strftime("%Y-%m")
+    pm_full = con.execute(f"""
+        SELECT ROUND({net_revenue_sum('st')},2) rev
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month""",
+        {**params, "month": prev_month}).fetchone()
+    pm_mtd = con.execute(f"""
+        SELECT ROUND({net_revenue_sum('st')},2) rev
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+          AND CAST(strftime('%d', st.sold_at) AS INT) <= :d""",
+        {**params, "month": prev_month, "d": days_elapsed}).fetchone()
+    pm_bom = con.execute(f"""
+        SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
+        FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
+        LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
+        JOIN branches b ON b.branch_id=s.branch_id
+        WHERE {mw}""", {**mp, "month": prev_month}).fetchone()
+    pm_rev_full = (pm_full["rev"] or 0) if pm_full else 0
+    pm_rev_mtd  = (pm_mtd["rev"] or 0) if pm_mtd else 0
+    pm_cost     = pm_bom["cost"] if pm_bom else None
+    # Per-weekday average revenue of the previous month. A raw same-elapsed-days
+    # MoM misleads early in the month (1-2 Jul = Wed+Thu vs 1-2 Jun = holiday
+    # Mon+Tue read as "-44%"), and the flat mtd/days*days_total projection
+    # undershoots until the first weekend is in — so while the month is partial,
+    # both the MoM baseline and the projection are weighted by weekday instead.
+    pm_dow = con.execute(f"""
+        SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
+               {net_revenue_sum('st')} rev,
+               COUNT(DISTINCT date(st.sold_at)) days
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+        GROUP BY wd""", {**params, "month": prev_month}).fetchall()
+    dow_avg = {r["wd"]: (r["rev"] or 0) / r["days"] for r in pm_dow if r["days"]}
+    dow_fallback = sum(dow_avg.values()) / len(dow_avg) if dow_avg else 0
+
+    # ---- §3 weekly bars (this month) + last-month comparison --------------
+    # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
+    # that week's in-month revenue), for a small weekly trend bar in §3. Each bar's
+    # comparison (`fair_prev`) is last month's weekday-matched total for the EXACT
+    # calendar days summed into that bar — not a flat full-week average — so an
+    # in-progress week (e.g. only Wed–Sun so far) is never judged against a 7-day norm.
+    mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+    wk_rows = con.execute(f"""
+        SELECT {mon_e3} k, ROUND({net_revenue_sum('st')}) rev
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+        GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
+    month_first = ref_anchor.replace(day=1)
+    month_last  = ref_anchor.replace(day=days_total)
+    pace["weekly"] = []
+    for r in wk_rows:
+        wk_start = _dt.date.fromisoformat(r["k"])
+        d0 = max(wk_start, month_first)
+        d1 = min(wk_start + _dt.timedelta(days=6), month_last, latest_day)
+        n_days = max(0, (d1 - d0).days + 1)
+        fair_prev = sum(dow_avg.get(int((d0 + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
+                        for i in range(n_days))
+        pace["weekly"].append({
+            "label": f"{wk_start.day} {MON[wk_start.month-1]}",
+            "start": r["k"], "revenue": r["rev"] or 0,
+            "fair_prev": round(fair_prev, 2), "days": n_days,
+            "complete": n_days >= 7,
+        })
+    mom_baseline, mom_basis = pm_rev_mtd, "same_days"
+    if not month_complete and dow_avg and days_elapsed:
+        _wsum = lambda n: sum(
+            dow_avg.get(int((month_first + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
+            for i in range(n))
+        w_elapsed = _wsum(days_elapsed)
+        mom_baseline, mom_basis = round(w_elapsed, 2), "dow"
+        if mtd_rev and w_elapsed:
+            pace["projected"] = projected = round(mtd_rev / w_elapsed * _wsum(days_total), 2)
+            pace["proj_vs_target_pct"] = round(projected/target*100, 1) if target else None
+            pace["proj_method"] = "dow"
+    pace["prev_month"] = {
+        "month": prev_month, "revenue_full": pm_rev_full, "revenue_mtd": pm_rev_mtd,
+        "baseline_mtd": mom_baseline,
+        "food_cost_pct": round(pm_cost/pm_rev_full*100, 1) if (pm_cost and pm_rev_full) else None,
+    }
+    pace["mom_pct"]   = pct(mtd_rev, mom_baseline)  # MTD vs weekday-fair baseline (same-elapsed days once month is complete)
+    pace["mom_basis"] = mom_basis
+    pace["food_cost_pct_prev"] = pace["prev_month"]["food_cost_pct"]
+    return {"projected": projected}
+
+
+def _mgt_trend(con, *, MON, _dt, ce, cs, dlabel, params, period, where):
+    # names this section hands on; None where a period path never assigns one
+    peak = None
+    trend = None
+    # ---- trailing trend (8 periods) — ONE grouped query, not 8 round-trips ----
+    trend = []
+    if period == "daily":
+        start = cs - _dt.timedelta(days=7)
+        rows = con.execute(f"""
+            SELECT date(st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY k""", {**params, "s": start.isoformat(), "e": cs.isoformat()}).fetchall()
+        rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+        for i in range(7, -1, -1):
+            d = cs - _dt.timedelta(days=i)
+            trend.append({"label": dlabel(d), "start": d.isoformat(),
+                          "revenue": rev_by.get(d.isoformat(), 0)})
+    elif period == "monthly":
+        mlist = []                       # 8 calendar months ending at the selected one
+        for i in range(7, -1, -1):
+            mi = (cs.month - 1 - i) % 12 + 1
+            yi = cs.year + (cs.month - 1 - i - (mi - 1)) // 12
+            mlist.append((yi, mi))
+        start = _dt.date(mlist[0][0], mlist[0][1], 1)
+        rows = con.execute(f"""
+            SELECT strftime('%Y-%m', st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
+        rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+        for yi, mi in mlist:
+            k = f"{yi:04d}-{mi:02d}"
+            trend.append({"label": f"{MON[mi-1]} {yi % 100:02d}", "start": f"{k}-01",
+                          "revenue": rev_by.get(k, 0)})
+    else:
+        start = cs - _dt.timedelta(days=49)      # 8 full Mon–Sun weeks incl. the current one
+        mon_e = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
+        rows = con.execute(f"""
+            SELECT {mon_e} k, ROUND({net_revenue_sum('st')},2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
+        rev_by = {r["k"]: r["rev"] or 0 for r in rows}
+        for i in range(7, -1, -1):
+            d = cs - _dt.timedelta(days=7 * i)
+            sun = d + _dt.timedelta(days=6)   # label with week-end Sunday (matches report header)
+            trend.append({"label": f"{sun.day} {MON[sun.month-1]}", "start": d.isoformat(),
+                          "revenue": rev_by.get(d.isoformat(), 0)})
+
+    # ---- peak hours & dayparts (revenue + covers by hour over the period) ----
+    hr_rows = con.execute(f"""
+        SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
+               ROUND({net_revenue_sum('st')},2) rev,
+               COALESCE(SUM(st.customer_count),0) cust, COUNT(*) bills
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+        GROUP BY hr ORDER BY hr""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+    hourly = [{"hour": r["hr"], "revenue": r["rev"] or 0, "covers": r["cust"] or 0, "bills": r["bills"]} for r in hr_rows]
+    def _daypart(hh):
+        if 11 <= hh <= 14: return "Lunch"
+        if 17 <= hh <= 22: return "Dinner"
+        return "Other"
+    dp: dict = {}
+    for r in hourly:
+        d2 = dp.setdefault(_daypart(r["hour"]), {"name": _daypart(r["hour"]), "revenue": 0, "covers": 0})
+        d2["revenue"] += r["revenue"]; d2["covers"] += r["covers"]
+    tot_hr_rev = sum(r["revenue"] for r in hourly) or 0
+    dayparts = []
+    for k in ("Lunch", "Dinner", "Other"):
+        if k in dp:
+            d2 = dp[k]
+            d2["pct"] = round(d2["revenue"]/tot_hr_rev*100, 1) if tot_hr_rev else None
+            d2["revenue"] = round(d2["revenue"]); dayparts.append(d2)
+    ph = max(hourly, key=lambda r: r["revenue"], default=None)
+    peak = {"hourly": hourly, "dayparts": dayparts, "total_rev": round(tot_hr_rev),
+            "peak_hour": ({"hour": ph["hour"], "revenue": round(ph["revenue"])} if ph and ph["revenue"] else None)}
+    return {"_daypart": _daypart, "peak": peak, "trend": trend}
+
+
+def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, peak, period, ps, where):
+    # names this section hands on; None where a period path never assigns one
+    table = None
+    # last-period comparison — daypart revenue, scope total and the peak hour, so §8
+    # can show a WoW delta against the same weekday last week / the previous week.
+    if has_prev:
+        ph_rows = con.execute(f"""
+            SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
+                   ROUND({net_revenue_sum('st')},2) rev
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY hr""", {**params, "s": ps.isoformat(), "e": pe.isoformat()}).fetchall()
+        pdp: dict = {}
+        for r in ph_rows:
+            nm = _daypart(r["hr"]); pdp[nm] = pdp.get(nm, 0) + (r["rev"] or 0)
+        pphr = max(ph_rows, key=lambda r: r["rev"] or 0, default=None)
+        peak["prev"] = {
+            "dayparts":  {k: round(v) for k, v in pdp.items()},
+            "total_rev": round(sum((r["rev"] or 0) for r in ph_rows)),
+            "peak_hour": ({"hour": pphr["hr"], "revenue": round(pphr["rev"])} if pphr and pphr["rev"] else None),
+        }
+    if period != "daily":      # which day of the week drove the week
+        dow_rows = con.execute(f"""
+            SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
+                   ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+            GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
+        dm = {r["w"]: r for r in dow_rows}
+        by_day = []
+        for i, nm in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
+            r = dm.get((i + 1) % 7)      # %w: 0=Sun..6=Sat → Mon-first
+            by_day.append({"dow": nm, "revenue": round(r["rev"] or 0) if r else 0,
+                           "covers": (r["cust"] or 0) if r else 0})
+        bd = max(by_day, key=lambda d: d["revenue"], default=None)
+        peak["by_day"] = by_day
+        peak["best_day"] = bd["dow"] if bd and bd["revenue"] else None
+
+    # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
+    table = {"available": False}
+    try:
+        if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_table_turn_day'").fetchone():
+            tt_base = ["b.name!='ALL'"]; tparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
+            scope_filter(tt_base, tparams, branch, group)
+            tw2 = " AND ".join(tt_base)
+            tot = con.execute(f"""
+                SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                       ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE {tw2} AND t.day BETWEEN :s AND :e""", tparams).fetchone()
+            brows = con.execute(f"""
+                SELECT b.name branch, COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                       ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                WHERE {tw2} AND t.day BETWEEN :s AND :e
+                GROUP BY b.name HAVING SUM(t.tabs)>0
+                ORDER BY SUM(t.customers)*1.0/SUM(t.tabs) DESC""", tparams).fetchall()
+            tabs = tot["tabs"] or 0; tcust = tot["cust"] or 0
+            if tabs:
+                table = {
+                    "available": True, "tables": tabs, "covers": tcust,
+                    "covers_per_table": round(tcust/tabs, 2), "avg_turn_min": tot["avg_turn"],
+                    "by_branch": [{"branch": r["branch"], "tables": r["tabs"], "covers": r["cust"],
+                                   "covers_per_table": round((r["cust"] or 0)/r["tabs"], 2) if r["tabs"] else None,
+                                   "avg_turn_min": r["avg_turn"]} for r in brows][:12],
+                }
+                if has_prev:      # last-period turnover for the §9 WoW deltas
+                    pt = con.execute(f"""
+                        SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
+                               ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
+                        FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
+                        WHERE {tw2} AND t.day BETWEEN :ps AND :pe""",
+                        {**tparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchone()
+                    ptabs = pt["tabs"] or 0; pcust = pt["cust"] or 0
+                    table["prev"] = {
+                        "tables": ptabs, "covers": pcust,
+                        "covers_per_table": round(pcust/ptabs, 2) if ptabs else None,
+                        "avg_turn_min": pt["avg_turn"],
+                    }
+    except Exception:
+        table = {"available": False}
+    return {"table": table}
+
+
+def _mgt_payment(con, *, branch, ce, cs, group, has_prev, pe, ps):
+    # names this section hands on; None where a period path never assigns one
+    payment = None
+    # ---- payment channels for the scope (how the branches got paid) ------
+    # Tender mix over the period [cs, ce] from pos_payment_day: the scope total by
+    # payment code (`channels`, each with % of scope total — defines the §10 matrix
+    # column order) AND a per-branch breakdown (`by_branch`, each branch's own channel
+    # mix). Powers §10, rendered for the MASTER group broken out per branch in the
+    # all-branches split view. Daily table → degrades to unavailable if a pre-sync DB
+    # lacks it.
+    payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
+    try:
+        if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_payment_day'").fetchone():
+            pp_base = ["b.name!='ALL'"]; pparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
+            scope_filter(pp_base, pparams, branch, group)
+            pw = " AND ".join(pp_base)
+            prows = con.execute(f"""
+                SELECT b.name branch, pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n
+                FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
+                WHERE {pw} AND pp.day BETWEEN :s AND :e
+                GROUP BY b.name, pp.payment_code""", pparams).fetchall()
+            ptot = sum((r["amount"] or 0) for r in prows)
+            if ptot > 0:
+                agg: dict = {}; bdata: dict = {}
+                for r in prows:
+                    code = r["code"] or "—"; amt = r["amount"] or 0
+                    agg[code] = agg.get(code, 0) + amt
+                    bd = bdata.setdefault(r["branch"], {"branch": r["branch"], "total": 0, "ch": {}})
+                    bd["ch"][code] = {"amount": round(amt), "txns": r["n"] or 0}
+                    bd["total"] += amt
+                channels = [{"code": c, "amount": round(a), "pct": round(a / ptot * 100, 1)}
+                            for c, a in sorted(agg.items(), key=lambda kv: -kv[1])]
+                by_branch = []
+                for bd in bdata.values():
+                    bt = bd["total"] or 1
+                    chans = {c: {"amount": v["amount"], "txns": v["txns"], "pct": round(v["amount"] / bt * 100, 1)}
+                             for c, v in bd["ch"].items()}
+                    by_branch.append({"branch": bd["branch"], "total": round(bd["total"]), "channels": chans})
+                by_branch.sort(key=lambda x: -x["total"])
+                payment = {"available": True, "total": round(ptot), "channels": channels, "by_branch": by_branch}
+                if has_prev:      # last-period tender mix for the §10 WoW deltas
+                    pprev = con.execute(f"""
+                        SELECT pp.payment_code code, ROUND(SUM(pp.amount)) amount
+                        FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
+                        WHERE {pw} AND pp.day BETWEEN :ps AND :pe
+                        GROUP BY pp.payment_code""",
+                        {**pparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchall()
+                    pby = {(r["code"] or "—"): (r["amount"] or 0) for r in pprev}
+                    ptot_prev = sum(pby.values())
+                    payment["prev"] = {
+                        "total": round(ptot_prev),
+                        "by_code": {k: round(v) for k, v in pby.items()},
+                        "channels": {c["code"]: {"amount": round(pby.get(c["code"], 0)),
+                                                 "pct": round(pby.get(c["code"], 0) / ptot_prev * 100, 1) if ptot_prev else None}
+                                     for c in channels},
+                    }
+    except Exception:
+        payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
+    return {"payment": payment}
+
+
 @router.get("/api/reports/management")
 @ttl_cache
 def report_management(
@@ -1237,1098 +2438,80 @@ def report_management(
     def pct(c, p):
         return round((c - p) / p * 100, 1) if p else None
 
+    # Each section of the report is its own function (Phase 3, 2026-09). They run
+    # in order on one connection and pass what they compute forward through
+    # `ctx`; a section that finds no data returns the "unavailable" payload,
+    # which is passed straight back to the caller. The sections are the same
+    # statements this function used to hold inline, so their output is
+    # unchanged — backend/test_golden.py pins that for all three periods.
+    ctx = {"DOW": DOW, "MON": MON, "_cal": _cal, "_dt": _dt, "base": base, "branch": branch, "date": date, "dlabel": dlabel, "group": group, "lang": lang, "month": month, "params": params, "pct": pct, "period": period, "th": th, "week": week, "where": where}
     with get_db() as con:
-        rng = con.execute(
-            f"SELECT MIN(date(st.sold_at)) lo, MAX(date(st.sold_at)) hi "
-            f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
-            f"WHERE {where}", params).fetchone()
-        maxd = rng["hi"] if rng else None
-        mind = (rng["lo"] if rng else None) or "9999-99-99"
-        if not maxd:
-            return {"available": False, "period": period}
-        # Never DEFAULT the daily report onto the in-progress current day: its handful
-        # of early sales read as a chain-wide ~-100% collapse across every section.
-        # With no explicit date, anchor on the latest COMPLETE day (strictly before
-        # Thai 'today', UTC+7). An explicitly-requested today is honoured but flagged
-        # partial below. Mirrors the weekly guard, which never picks the open week.
-        today_th = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
-        if date:
-            focus = date[:10]
-        else:
-            _cd = con.execute(
-                f"SELECT MAX(date(st.sold_at)) d FROM sales_transaction st "
-                f"JOIN branches b ON b.branch_id=st.branch_id "
-                f"WHERE {where} AND date(st.sold_at) < :t",
-                {**params, "t": today_th}).fetchone()
-            focus = ((_cd["d"] if _cd and _cd["d"] else maxd))[:10]
-        fy, fm, fd = (int(x) for x in focus.split("-"))
-        fdate = _dt.date(fy, fm, fd)
+        out = _mgt_window(con, DOW=ctx.get("DOW"), MON=ctx.get("MON"), _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), date=ctx.get("date"), dlabel=ctx.get("dlabel"), month=ctx.get("month"), params=ctx.get("params"), period=ctx.get("period"), th=ctx.get("th"), week=ctx.get("week"), where=ctx.get("where"))
+        if out.get("available") is False:
+            return out
+        ctx.update(out)
+        out = _mgt_headline(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
+        ctx.update(out)
+        out = _mgt_branches(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_leak(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_menu(con, _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), cur=ctx.get("cur"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), leak=ctx.get("leak"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), prev=ctx.get("prev"), ps=ctx.get("ps"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_tier(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), sp=ctx.get("sp"), sw=ctx.get("sw"), th=ctx.get("th"))
+        ctx.update(out)
+        out = _mgt_gp(con, cmp_ok=ctx.get("cmp_ok"), cost_available=ctx.get("cost_available"), cost_src=ctx.get("cost_src"), cur=ctx.get("cur"), daily_min=ctx.get("daily_min"), prev=ctx.get("prev"), tot_cur_cost=ctx.get("tot_cur_cost"), tot_prev_cost=ctx.get("tot_prev_cost"))
+        ctx.update(out)
+        out = _mgt_pace(con, _cal=ctx.get("_cal"), branch=ctx.get("branch"), clean=ctx.get("clean"), food_sub=ctx.get("food_sub"), group=ctx.get("group"), latest_day=ctx.get("latest_day"), maxd=ctx.get("maxd"), params=ctx.get("params"), ref_anchor=ctx.get("ref_anchor"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_mom(con, MON=ctx.get("MON"), _dt=ctx.get("_dt"), cur_month=ctx.get("cur_month"), days_elapsed=ctx.get("days_elapsed"), days_total=ctx.get("days_total"), latest_day=ctx.get("latest_day"), month_complete=ctx.get("month_complete"), mp=ctx.get("mp"), mtd_rev=ctx.get("mtd_rev"), mw=ctx.get("mw"), pace=ctx.get("pace"), params=ctx.get("params"), pct=ctx.get("pct"), ref_anchor=ctx.get("ref_anchor"), target=ctx.get("target"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_trend(con, MON=ctx.get("MON"), _dt=ctx.get("_dt"), ce=ctx.get("ce"), cs=ctx.get("cs"), dlabel=ctx.get("dlabel"), params=ctx.get("params"), period=ctx.get("period"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_table(con, _daypart=ctx.get("_daypart"), branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pe=ctx.get("pe"), peak=ctx.get("peak"), period=ctx.get("period"), ps=ctx.get("ps"), where=ctx.get("where"))
+        ctx.update(out)
+        out = _mgt_payment(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), pe=ctx.get("pe"), ps=ctx.get("ps"))
+        ctx.update(out)
+    branches = ctx["branches"]
+    cash_heavy = ctx["cash_heavy"]
+    ce = ctx["ce"]
+    comp_label = ctx["comp_label"]
+    cost_up = ctx["cost_up"]
+    cs = ctx["cs"]
+    days_in_period = ctx["days_in_period"]
+    focus = ctx["focus"]
+    food_cost_pct = ctx["food_cost_pct"]
+    gp = ctx["gp"]
+    has_prev = ctx["has_prev"]
+    has_yoy = ctx["has_yoy"]
+    headline = ctx["headline"]
+    heavy = ctx["heavy"]
+    label = ctx["label"]
+    leak = ctx["leak"]
+    maxd = ctx["maxd"]
+    menu_out = ctx["menu_out"]
+    mind = ctx["mind"]
+    month_complete = ctx["month_complete"]
+    months = ctx["months"]
+    pace = ctx["pace"]
+    partial = ctx["partial"]
+    payment = ctx["payment"]
+    pe = ctx["pe"]
+    peak = ctx["peak"]
+    prev = ctx["prev"]
+    projected = ctx["projected"]
+    ps = ctx["ps"]
+    reprint = ctx["reprint"]
+    selected_month = ctx["selected_month"]
+    selected_week = ctx["selected_week"]
+    table = ctx["table"]
+    target = ctx["target"]
+    tier_out = ctx["tier_out"]
+    trend = ctx["trend"]
+    weeks = ctx["weeks"]
+    ye = ctx["ye"]
+    ys = ctx["ys"]
 
-        # ---- period bounds + WoW-fair comparison window -------------------
-        latest_day = _dt.date.fromisoformat(maxd)
-        weeks: list = []
-        selected_week = None
-        months: list = []
-        selected_month = None
-        if period == "daily":
-            cs = ce = fdate
-            ps = pe = fdate - _dt.timedelta(days=7)
-            days_in_period = 1
-            partial = (focus == today_th)   # in-progress current day (explicit date=today)
-            ref_anchor = fdate
-            if th:
-                label = f"{DOW[fdate.weekday()]} {dlabel(fdate)}"
-                comp_label = "วันเดียวกันสัปดาห์ก่อน"
-            else:
-                label = f"{DOW[fdate.weekday()]}, {dlabel(fdate)}"
-                comp_label = "same weekday last week"
-        elif period == "monthly":
-            # COMPLETE calendar months only (mirrors the weekly full-week rule): a
-            # month is selectable once its last day is <= the latest data day —
-            # never the in-progress month, whose partial totals would read as a
-            # chain-wide collapse against a full prior month. Most recent first.
-            mrows = con.execute(
-                f"SELECT DISTINCT strftime('%Y-%m', st.sold_at) m FROM sales_transaction st "
-                f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
-            for m in sorted((r["m"] for r in mrows if r["m"]), reverse=True):
-                my, mm = int(m[:4]), int(m[5:7])
-                if _dt.date(my, mm, _cal.monthrange(my, mm)[1]) <= latest_day:
-                    months.append({"month": m, "label": f"{MON[mm-1]} {my}"})
-                if len(months) >= 24:
-                    break
-            # Default = latest complete month; fall back to the latest data month
-            # (flagged partial) only when no month has completed yet.
-            sel = months[0]["month"] if months else maxd[:7]
-            if month:
-                m10 = month[:7]
-                if any(x["month"] == m10 for x in months):
-                    sel = m10
-            sy, sm = int(sel[:4]), int(sel[5:7])
-            cs = _dt.date(sy, sm, 1)
-            ce = _dt.date(sy, sm, _cal.monthrange(sy, sm)[1])
-            days_in_period = (ce - cs).days + 1
-            partial = ce > latest_day
-            ref_anchor = ce
-            pm_l = cs - _dt.timedelta(days=1)          # previous calendar month
-            ps = pm_l.replace(day=1)
-            pe = pm_l
-            selected_month = sel
-            if th:
-                label = f"เดือน {MON[sm-1]} {sy}"
-                comp_label = "เดือนก่อนหน้า"
-            else:
-                label = f"{MON[sm-1]} {sy}"
-                comp_label = "previous month"
-        else:
-            # FULL weeks only (Mon–Sun). First, the selectable COMPLETED weeks that
-            # have data — most recent first, cap 26 — so the picker and the default
-            # both come from real, finished weeks (never the current partial week).
-            mon_expr = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
-            monrows = con.execute(
-                f"SELECT DISTINCT {mon_expr} mon FROM sales_transaction st "
-                f"JOIN branches b ON b.branch_id=st.branch_id WHERE {where}", params).fetchall()
-            for m in sorted((r["mon"] for r in monrows if r["mon"]), reverse=True):
-                md = _dt.date.fromisoformat(m)
-                sun = md + _dt.timedelta(days=6)
-                if sun <= latest_day:
-                    weeks.append({"start": m, "end": sun.isoformat(),
-                                  "label": f"{dlabel(md)} – {dlabel(sun)}"})
-                if len(weeks) >= 26:
-                    break
-            # Default = most recent completed week WITH data; fall back to the calendar
-            # week before the latest day if there is no fully-completed week yet.
-            cur_mon = latest_day - _dt.timedelta(days=latest_day.weekday())
-            default_mon = (_dt.date.fromisoformat(weeks[0]["start"]) if weeks
-                           else cur_mon - _dt.timedelta(days=7))
-            sel_mon = default_mon
-            if week:
-                try:
-                    wd = _dt.date.fromisoformat(week[:10])
-                    cand = wd - _dt.timedelta(days=wd.weekday())          # snap to that week's Monday
-                    if (cand + _dt.timedelta(days=6)) <= latest_day:      # never an incomplete week
-                        sel_mon = cand
-                except Exception:
-                    pass
-            cs = sel_mon
-            ce = sel_mon + _dt.timedelta(days=6)
-            days_in_period = 7
-            partial = False
-            ref_anchor = ce
-            ps = cs - _dt.timedelta(days=7)
-            pe = cs - _dt.timedelta(days=1)
-            selected_week = cs.isoformat()
-            if th:
-                label = f"สัปดาห์ {dlabel(cs)} – {dlabel(ce)} (จ.–อา.)"
-                comp_label = "สัปดาห์ก่อนหน้า (จ.–อา.)"
-            else:
-                label = f"Week of {dlabel(cs)} – {dlabel(ce)} (Mon–Sun)"
-                comp_label = "previous week (Mon–Sun)"
-        has_prev = ps.isoformat() >= mind
-        # YoY window — 364 days back (exactly 52 weeks) for BOTH daily and weekly, so the
-        # weekday stays aligned. Restaurant revenue is strongly weekday-seasonal, so a
-        # same-calendar-date YoY would drift (e.g. Sat→Fri) and distort the comparison.
-        # Dropped if it predates the data. Monthly compares the SAME CALENDAR month
-        # last year (full month vs full month — the standard for monthly reporting;
-        # weekday drift washes out over a whole month).
-        if period == "daily":
-            ys = ye = fdate - _dt.timedelta(days=364)
-        elif period == "monthly":
-            ys = cs.replace(year=cs.year - 1)
-            ye = ys.replace(day=_cal.monthrange(ys.year, ys.month)[1])
-        else:
-            ys = cs - _dt.timedelta(days=364); ye = ce - _dt.timedelta(days=364)
-        has_yoy = ys.isoformat() >= mind
-
-        # ---- headline totals for an arbitrary [s,e] range -----------------
-        def agg(s, e):
-            r = con.execute(f"""
-                SELECT ROUND({net_revenue_sum('st')},2) rev,
-                       COALESCE(SUM(st.customer_count),0)  cust,
-                       COUNT(*)                            bills,
-                       ROUND(COALESCE(SUM(st.discount),0),2) disc
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-            """, {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
-            rev = r["rev"] or 0; cust = r["cust"] or 0; bills = r["bills"] or 0
-            return {"revenue": rev, "customers": cust, "bills": bills, "discount": r["disc"] or 0,
-                    "rev_per_head": round(rev/cust, 1) if cust else None,
-                    "avg_ticket":   round(rev/bills, 1) if bills else None}
-
-        cur  = agg(cs, ce)
-        prev = agg(ps, pe) if has_prev else None
-        headline = dict(cur)
-        headline["discount_pct"] = round(cur["discount"]/cur["revenue"]*100, 1) if cur["revenue"] else None
-        if prev:
-            headline["prev"] = prev
-            headline["rev_wow_pct"]   = pct(cur["revenue"], prev["revenue"])
-            headline["cust_wow_pct"]  = pct(cur["customers"], prev["customers"])
-            headline["bills_wow_pct"] = pct(cur["bills"], prev["bills"])
-            headline["rph_wow_pct"]   = pct(cur["rev_per_head"] or 0, prev["rev_per_head"]) if prev["rev_per_head"] else None
-            headline["ticket_wow_pct"]= pct(cur["avg_ticket"] or 0, prev["avg_ticket"]) if prev["avg_ticket"] else None
-        yoy = agg(ys, ye) if has_yoy else None
-        if yoy:
-            headline["yoy"] = yoy
-            headline["rev_yoy_pct"]  = pct(cur["revenue"], yoy["revenue"])
-            headline["cust_yoy_pct"] = pct(cur["customers"], yoy["customers"])
-            headline["rph_yoy_pct"]  = pct(cur["rev_per_head"] or 0, yoy["rev_per_head"]) if yoy["rev_per_head"] else None
-
-        # ---- branch league table -----------------------------------------
-        def by_branch(s, e):
-            rows = con.execute(f"""
-                SELECT b.name branch,
-                       ROUND({net_revenue_sum('st')},2) rev,
-                       COALESCE(SUM(st.customer_count),0)  cust,
-                       COUNT(*)                            bills
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY b.name""", {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-            return {r["branch"]: r for r in rows}
-        cur_b  = by_branch(cs, ce)
-        prev_b = by_branch(ps, pe) if has_prev else {}
-        tot_rev = sum((r["rev"] or 0) for r in cur_b.values()) or 0
-        branches = []
-        for nm, r in cur_b.items():
-            rev = r["rev"] or 0; cust = r["cust"] or 0
-            p = prev_b.get(nm)
-            branches.append({
-                "branch": nm, "revenue": rev, "customers": cust, "bills": r["bills"],
-                "rev_per_head": round(rev/cust, 1) if cust else None,
-                "share_pct": round(rev/tot_rev*100, 1) if tot_rev else None,
-                "wow_pct": pct(rev, p["rev"] or 0) if p else None,
-            })
-        branches.sort(key=lambda x: -x["revenue"])
-        prev_rank_map = {nm: i + 1 for i, (nm, _) in
-                         enumerate(sorted(prev_b.items(), key=lambda kv: -(kv[1]["rev"] or 0)))}
-        for i, b in enumerate(branches):
-            b["rank"] = i + 1
-            pr = prev_rank_map.get(b["branch"])
-            b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
-
-        # ---- money-leak radar over the period (+ last-period comparison) ----
-        # leak_total/cash_heavy_total take an explicit [s,e] window so the SAME signal
-        # can be measured for the current period AND the comparison period (last week /
-        # same weekday last week) — the §6 cards then show a WoW delta.
-        lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
-        def leak_total(extra, s, e):
-            r = con.execute(f"""
-                SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}""",
-                {**params, "s": s.isoformat(), "e": e.isoformat()}).fetchone()
-            return {"bills": r["bills"] or 0, "baht": r["baht"] or 0}
-        def leak_branches(extra, by="baht"):
-            rows = con.execute(f"""
-                SELECT b.name branch, COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e {extra}
-                GROUP BY b.name ORDER BY {by} DESC LIMIT 3""",
-                {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
-            return [dict(r) for r in rows]
-        # cash-heavy: of the period's heavy-discount bills (a SMALL set), how many were
-        # paid mostly in CASH. Drive FROM the heavy bills and pick each bill's dominant
-        # tender with an indexed (branch_id, receipt_no, amount) lookup — NOT a window
-        # over the entire sale_payment table (that scan made this the slowest query in
-        # the report). Guards a missing sale_payment.
-        def cash_heavy_total(s, e, with_branches=False):
-            try:
-                dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
-                            "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
-                            "ORDER BY sp.amount DESC LIMIT 1)")
-                heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
-                             f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
-                             f"WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e "
-                             f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
-                lpe = {**params, "s": s.isoformat(), "e": e.isoformat()}
-                cr = con.execute(f"""
-                    SELECT COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
-                    FROM (SELECT discount, {dom_code} dc FROM ({heavy_sub}) h)
-                    WHERE dc='Cash'""", lpe).fetchone()
-                out = {"bills": cr["bills"] or 0, "baht": cr["baht"] or 0}
-                if with_branches:
-                    cb = con.execute(f"""
-                        SELECT branch, COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
-                        FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
-                        WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lpe).fetchall()
-                    out["by_branch"] = [dict(r) for r in cb]
-                return out
-            except Exception:
-                return {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
-        # WoW helper — attaches prev figures + % deltas onto a leak card.
-        def _leak_wow(cur_o, prev_o):
-            return {"prev_bills": prev_o["bills"], "prev_baht": prev_o["baht"],
-                    "bills_wow": pct(cur_o["bills"], prev_o["bills"]),
-                    "baht_wow":  pct(cur_o["baht"],  prev_o["baht"])}
-
-        heavy_extra   = f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30"
-        reprint_extra = "AND st.discount>0 AND COALESCE(st.print_times,0)>1"
-        zero_extra    = f"AND st.discount>0 AND {lk} <= 0"
-        all_extra     = "AND st.discount>0"
-        heavy   = {**leak_total(heavy_extra, cs, ce),   "by_branch": leak_branches(heavy_extra)}
-        reprint = {**leak_total(reprint_extra, cs, ce), "by_branch": leak_branches(reprint_extra, "bills")}
-        zero    = {**leak_total(zero_extra, cs, ce),    "by_branch": leak_branches(zero_extra)}
-        cash_heavy = cash_heavy_total(cs, ce, with_branches=True)
-        ltot       = leak_total(all_extra, cs, ce)
-        if has_prev:
-            heavy.update(  _leak_wow(heavy,   leak_total(heavy_extra,   ps, pe)))
-            reprint.update(_leak_wow(reprint, leak_total(reprint_extra, ps, pe)))
-            zero.update(   _leak_wow(zero,    leak_total(zero_extra,    ps, pe)))
-            ltot.update(   _leak_wow(ltot,    leak_total(all_extra,     ps, pe)))
-            ch_prev = cash_heavy_total(ps, pe)
-            if not cash_heavy.get("unavailable") and not ch_prev.get("unavailable"):
-                cash_heavy.update(_leak_wow(cash_heavy, ch_prev))
-        # ALL discounted bills in the period (every branch in scope) — the reconciling
-        # total so the radar's abnormal-only subsets read against the full figure and
-        # tie out with the Discounts menu (both = SUM(Sale.Discount) over the same scope).
-        leak = {"heavy_discount": heavy, "cash_heavy": cash_heavy,
-                "reprinted": reprint, "zero_gross": zero, "total": ltot}
-        # Per-MASTER-branch discount follow-up: amount + % of that branch's ex-VAT sales
-        # + bill count, for the period. Master (company-owned) stores are the owner's own
-        # money leak — franchise discounts are the franchisee's cost — so this is the line
-        # to action on. Honours the report's branch/period scope; always master-only.
-        mb_rows = con.execute(f"""
-            SELECT b.name branch,
-                   ROUND({net_revenue_sum('st')}) sales,
-                   ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
-                   SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND COALESCE(b.branch_type,'master')='master'
-            GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
-            ORDER BY disc DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
-        leak["by_master_branch"] = [
-            {"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
-             "bills": r["bills"] or 0,
-             "pct": round((r["disc"] or 0) / r["sales"] * 100, 1) if r["sales"] else None}
-            for r in mb_rows]
-
-        # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
-        # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:
-        #   cost/head = (dish COGS over the period) / (covers in scope), current vs the
-        #   comparison period. COGS uses the app's effective unit cost (sku_effective_cost
-        #   → non-zero sku_cost fallback) — the same basis as _unified_cogs_expr.
-        food_sub = (f"(SELECT sk.sku_id FROM skus sk JOIN categories c "
-                    f"ON c.category_id=sk.category_id WHERE {_FOOD_CATEGORY_FILTER})")
-        sb = ["b.name!='ALL'"]; sp: dict = {}
-        scope_filter(sb, sp, branch, group)
-        sw = " AND ".join(sb)
-        _eff_cost = effective_unit_cost_sql('d')
-        # sales_sku_daily is a ROLLING window (currently starts 2026-03-22) while
-        # sales_sku_monthly carries full history. Reading daily blindly made every
-        # pre-coverage month report ฿0 food cost — i.e. GP 100% — instead of saying
-        # "no data". Resolve the source per window: daily when covered, the monthly
-        # table when the window is exactly whole calendar months (the monthly
-        # report's case — same tier-safe cost expr, so the numbers tie out), else
-        # unavailable so the UI can show "—" rather than a fake zero.
-        _dmin_row = con.execute("SELECT MIN(day) d FROM v_sales_sku_daily").fetchone()
-        daily_min = (_dmin_row["d"] if _dmin_row else None) or "9999-99-99"
-
-        def _whole_months(s, e):
-            return s.day == 1 and e == _dt.date(e.year, e.month,
-                                                _cal.monthrange(e.year, e.month)[1])
-
-        def menu_cost_map(s, e):
-            """→ (rows_by_sku_id, source) where source ∈ daily|monthly|unavailable."""
-            if s.isoformat() >= daily_min:
-                rows = con.execute(f"""
-                    SELECT d.sku_id, s.description, s.sku_code,
-                           SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
-                    FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id
-                    JOIN skus s ON s.sku_id=d.sku_id
-                    WHERE {sw} AND d.day BETWEEN :s AND :e AND d.sku_id IN {food_sub}
-                    GROUP BY d.sku_id""",
-                    {**sp, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-                return {r["sku_id"]: r for r in rows}, "daily"
-            if _whole_months(s, e):
-                rows = con.execute(f"""
-                    SELECT d.sku_id, s.description, s.sku_code,
-                           SUM(d.qty) qty, SUM(d.qty * {_eff_cost}) cost
-                    FROM v_sales_sku_monthly d JOIN branches b ON b.branch_id=d.branch_id
-                    JOIN skus s ON s.sku_id=d.sku_id
-                    WHERE {sw} AND d.period_month BETWEEN :s AND :e
-                      AND d.sku_id IN {food_sub}
-                    GROUP BY d.sku_id""",
-                    {**sp, "s": s.strftime("%Y-%m"), "e": e.strftime("%Y-%m")}).fetchall()
-                return {r["sku_id"]: r for r in rows}, "monthly"
-            return {}, "unavailable"
-        def clean(nm):
-            return (nm or "").replace("(A) ", "").replace("(B) ", "").strip()
-        covers_cur  = cur["customers"] or 0
-        covers_prev = (prev["customers"] or 0) if prev else 0
-        try:
-            cur_m,  cost_src = menu_cost_map(cs, ce)
-            prev_m, _        = menu_cost_map(ps, pe) if has_prev else ({}, None)
-        except Exception:
-            cur_m, prev_m, cost_src = {}, {}, "unavailable"
-        cost_available = cost_src != "unavailable"
-        def cph(cost, covers): return round(cost / covers, 2) if covers else None
-        cmp_ok = has_prev and covers_prev > 0      # only show deltas vs a period that had covers
-        menu_rows = []
-        for sid, r in cur_m.items():
-            cost_cur  = r["cost"] or 0
-            cost_prev = (prev_m[sid]["cost"] if sid in prev_m else 0) or 0
-            c_cur  = cph(cost_cur, covers_cur)
-            c_prev = cph(cost_prev, covers_prev)
-            if not c_cur and not c_prev:
-                continue
-            menu_rows.append({
-                "menu": clean(r["description"] or r["sku_code"]),
-                "qty": round(r["qty"] or 0), "cost": round(cost_cur),
-                "cost_per_head": c_cur,
-                "cost_per_head_prev": c_prev if cmp_ok else None,
-                "delta": round((c_cur or 0) - (c_prev or 0), 2) if cmp_ok else None,
-                "pct": pct(c_cur or 0, c_prev or 0) if cmp_ok else None,
-            })
-        # dishes that carried cost last period but none now → cost/head fell to 0
-        if cmp_ok:
-            for sid, r in prev_m.items():
-                if sid in cur_m:
-                    continue
-                c_prev = cph(r["cost"] or 0, covers_prev)
-                if not c_prev:
-                    continue
-                menu_rows.append({
-                    "menu": clean(r["description"] or r["sku_code"]),
-                    "qty": 0, "cost": 0, "cost_per_head": 0.0,
-                    "cost_per_head_prev": c_prev,
-                    "delta": round(-c_prev, 2), "pct": -100.0,
-                })
-        cost_top   = sorted([m for m in menu_rows if (m["cost_per_head"] or 0) > 0],
-                            key=lambda x: -(x["cost_per_head"] or 0))[:12]
-        cost_up    = sorted([m for m in menu_rows if m["delta"] and m["delta"] > 0],
-                            key=lambda x: -x["delta"])[:12]
-        cost_down  = sorted([m for m in menu_rows if m["delta"] and m["delta"] < 0],
-                            key=lambda x: x["delta"])[:12]
-        tot_cur_cost  = sum((r["cost"] or 0) for r in cur_m.values())
-        tot_prev_cost = sum((r["cost"] or 0) for r in prev_m.values()) if has_prev else 0
-        total_cph      = cph(tot_cur_cost, covers_cur)
-        total_cph_prev = cph(tot_prev_cost, covers_prev) if cmp_ok else None
-        menu_out = {
-            "basis": "cost_per_head",
-            "covers": covers_cur, "covers_prev": covers_prev if has_prev else None,
-            "total_cph": total_cph, "total_cph_prev": total_cph_prev,
-            "total_cph_delta": (round((total_cph or 0) - (total_cph_prev or 0), 2)
-                                if (total_cph is not None and total_cph_prev is not None) else None),
-            "top": cost_top, "risers": cost_up, "savers": cost_down,
-            # which table the dish costs came from — 'unavailable' means the window
-            # predates sales_sku_daily and isn't whole calendar months
-            "cost_basis": cost_src, "cost_from": daily_min,
-        }
-
-        # ---- buffet price-tier split (tier-dimensioned menu_fact_*; optional) ----
-        # Same current-vs-comparison windows as the headline. None (section hidden)
-        # when the fact tables are missing/old schema or the window predates their
-        # coverage. pax here counts BUFFET bills only (menu_fact universe), so the
-        # total can sit slightly under the headline covers.
-        tier_out = None
-        try:
-            if con.execute("SELECT 1 FROM pragma_table_info('menu_fact_total') "
-                           "WHERE name='tier'").fetchone():
-                t_bids = [r[0] for r in con.execute(
-                    f"SELECT b.branch_id FROM branches b WHERE {sw}", sp)]
-                t_ph = ",".join("?" * len(t_bids))
-
-                def tier_sum(s, e):
-                    out = {}
-                    for t, nb2, px, cg, rv in con.execute(
-                            f"""SELECT tier, SUM(bills), SUM(pax), SUM(cogs), SUM(rev)
-                                FROM menu_fact_total
-                                WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
-                                GROUP BY tier""",
-                            [s.isoformat(), e.isoformat()] + t_bids):
-                        out[str(t or "promo")] = {"bills": nb2 or 0, "pax": px or 0.0,
-                                                  "cogs": cg or 0.0, "rev": rv or 0.0}
-                    return out
-                TC = tier_sum(cs, ce)
-                TP = tier_sum(ps, pe) if has_prev else {}
-                pax_c = sum(v["pax"] for v in TC.values())
-                pax_p = sum(v["pax"] for v in TP.values())
-                if pax_c > 0:
-                    TLBL = ({"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"} if th else
-                            {"promo": "Promo/other price", "child": "Child-only/other"})
-                    rows_t = []
-                    for t in _PT_ORDER:
-                        vc0 = TC.get(t); vp = TP.get(t)
-                        # A tier with nobody on it in THIS period is not a finding,
-                        # it is a retired price. The menu changed on 2026-09-01, so a
-                        # September report was carrying all six old tiers as empty
-                        # rows purely because the comparison week still had guests on
-                        # them — six lines of "—" for prices that no longer exist.
-                        # Symmetric: an August report drops the new tiers the same way.
-                        if not vc0 or not (vc0.get("pax") or 0):
-                            continue
-                        vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
-                        pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
-                        rows_t.append({
-                            "tier": t, "label": TLBL.get(t, f"฿{int(t):,}" if t.isdigit() else t),
-                            "pax": round(pxc), "pax_prev": round(pxp) if has_prev else None,
-                            "d_pax_pct": pct(pxc, pxp) if (has_prev and pxp) else None,
-                            "share": round(pxc / pax_c * 100, 1),
-                            "share_prev": round(pxp / pax_p * 100, 1) if pax_p else None,
-                            "rev_head": round(vc["rev"] / pxc, 2) if pxc else None,
-                            "cogs_head": round(vc["cogs"] / pxc, 2) if pxc else None,
-                            "cogs_head_prev": round(vp["cogs"] / pxp, 2) if (vp and pxp) else None,
-                            "gp_head": round((vc["rev"] - vc["cogs"]) / pxc, 2) if pxc else None,
-                            "food_pct": round(vc["cogs"] / vc["rev"] * 100, 1) if vc["rev"] else None,
-                        })
-                    # mix effect on rev/head: current tier mix priced at the comparison
-                    # period's per-tier rev/head, vs its blended rev/head — isolates
-                    # "customers moved tier" from "tiers themselves changed".
-                    mix_eff = None
-                    rev_p = sum(v["rev"] for v in TP.values())
-                    if pax_c and pax_p and rev_p:
-                        # Only tiers that existed in BOTH periods can carry the
-                        # comparison; the weights are re-based on those. When the menu
-                        # itself was replaced (2026-09-01) barely any tier overlaps, so
-                        # the weights summed to ~0.21 of the mix and the shortfall was
-                        # reported as a ฿-520/head "customers moved to cheaper tiers"
-                        # — an artefact of the missing 79%, not a shift in behaviour.
-                        # Below near-full coverage there is no mix story to tell.
-                        shared = [t for t in TC if TP.get(t, {}).get("pax", 0) > 0]
-                        cover = sum(TC[t]["pax"] for t in shared) / pax_c
-                        if cover >= 0.9:
-                            at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
-                                          for t in shared)
-                            mix_eff = round(at_prev - rev_p / pax_p, 2)
-                    tier_out = {"rows": rows_t, "pax": round(pax_c),
-                                "pax_prev": round(pax_p) if has_prev else None,
-                                "mix_effect": mix_eff}
-
-                    # WHY the promo bucket is what it is. It is the one row on the
-                    # table whose label explains nothing, and it is not small — so
-                    # break it into the three things it actually contains, and name
-                    # the branches behind the two that are not ordinary discounts.
-                    #   free   whole bill comped
-                    #   mixed  a free / half-price head riding along with paying ones,
-                    #          which drags the bill average between two tiers
-                    #   disc   one uniform price that is not a tier = a real discount
-                    try:
-                        pz_kind, pz_price, pz_branch = {}, {}, {}
-                        for ent, brn, nb3, px3 in con.execute(
-                                f"""SELECT d.ent, b.name, SUM(d.bills), SUM(d.pax)
-                                    FROM menu_fact_day d JOIN branches b ON b.branch_id = d.branch_id
-                                    WHERE d.day BETWEEN ? AND ? AND d.branch_id IN ({t_ph})
-                                      AND d.ent LIKE 'pz:%'
-                                    GROUP BY d.ent, b.name""",
-                                [cs.isoformat(), ce.isoformat()] + t_bids):
-                            parts = str(ent).split(":")
-                            if len(parts) < 3:
-                                continue
-                            kind, unit = parts[1], parts[2]
-                            k = pz_kind.setdefault(kind, {"bills": 0, "pax": 0.0})
-                            k["bills"] += nb3 or 0; k["pax"] += px3 or 0.0
-                            if kind == "disc":
-                                q = pz_price.setdefault(unit, {"bills": 0, "pax": 0.0})
-                                q["bills"] += nb3 or 0; q["pax"] += px3 or 0.0
-                            else:
-                                bb = pz_branch.setdefault(kind, {}).setdefault(brn, {"bills": 0, "pax": 0.0})
-                                bb["bills"] += nb3 or 0; bb["pax"] += px3 or 0.0
-                        if pz_kind:
-                            # only tiers actually SOLD in this period: both menus'
-                            # price lists live in _PT_ORDER, so a September ฿395 would
-                            # otherwise be matched against the retired ฿350 tier and
-                            # reported as a 12.9% surcharge instead of a discount.
-                            std = [int(x["tier"]) for x in rows_t
-                                   if str(x["tier"]).isdigit() and (x["pax"] or 0) > 0]
-
-                            def _near(u):
-                                """nearest standard tier + what % of it this price is,
-                                so a bare ฿710 reads as '10% off ฿789'."""
-                                if not std or not u:
-                                    return None, None
-                                n = min(std, key=lambda t: abs(u - t))
-                                return n, round(u / n * 100, 1)
-
-                            disc = []
-                            for unit, v in sorted(pz_price.items(), key=lambda kv: -kv[1]["pax"])[:6]:
-                                u = int(unit)
-                                n, pctof = _near(u)
-                                disc.append({"unit": u, "of_tier": n, "pct_of_tier": pctof,
-                                             "off_pct": round(100 - pctof, 1) if pctof else None,
-                                             "bills": v["bills"], "pax": round(v["pax"])})
-                            tier_out["promo"] = {
-                                "kinds": {k: {"bills": v["bills"], "pax": round(v["pax"])}
-                                          for k, v in pz_kind.items()},
-                                "discounts": disc,
-                                "branches": {k: [{"branch": bn, "bills": bv["bills"],
-                                                  "pax": round(bv["pax"])}
-                                                 for bn, bv in sorted(v.items(),
-                                                                      key=lambda kv: -kv[1]["pax"])[:5]]
-                                             for k, v in pz_branch.items()},
-                            }
-                    except Exception:
-                        pass
-
-                    # cost drivers per mainstream tier: which ingredient groups /
-                    # single menus push each tier's cost/head up — turns the Food%
-                    # column into an actionable "because guests eat X". Computes a
-                    # payload for EVERY mainstream tier (share>=5%) so the UI can
-                    # switch/compare; `default_tier` = worst food%. Reads the
-                    # tier-dimensioned menu_fact_day (ent LIKE 'g:%' = ingredient
-                    # group, 's:%' = single menu). Optional: wrapped so a driver
-                    # failure never nukes the tier table above.
-                    try:
-                        # Every tier that actually sold gets a driver breakdown. The 5%
-                        # share floor used to sit here, which meant the small tiers —
-                        # often the most interesting ones, ฿1,299 included — simply had
-                        # no breakdown and no hint that one was missing. The floor now
-                        # only decides which tier opens by DEFAULT (below), so a 45-cover
-                        # tier can be inspected without being allowed to set the headline.
-                        cand = [r for r in rows_t if r["tier"].isdigit()
-                                and r["food_pct"] is not None and r["pax"]]
-                        if cand:
-                            lblmap = {e: (l or e) for e, l in con.execute(
-                                "SELECT ent, label FROM menu_fact_meta")}
-
-                            def _drv(kind_like, tier, pax):
-                                d = {}
-                                if not pax:
-                                    return d
-                                for ent, cg, q in con.execute(
-                                        f"""SELECT ent, SUM(ent_cogs), SUM(qty)
-                                            FROM menu_fact_day
-                                            WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
-                                              AND tier=? AND ent LIKE ? GROUP BY ent""",
-                                        [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
-                                    d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
-                                return d
-
-                            def _build(frow):
-                                ft = frow["tier"]; ftpax = TC[ft]["pax"]
-                                fch = frow.get("cogs_head") or 0.0
-                                lower = [x for x in cand if int(x["tier"]) < int(ft)]
-                                ref = max(lower, key=lambda x: int(x["tier"])) if lower else None
-                                rt = ref["tier"] if ref else None
-                                rtpax = TC[rt]["pax"] if rt else 0.0
-                                gF = _drv("g:%", ft, ftpax)
-                                gR = _drv("g:%", rt, rtpax) if rt else {}
-                                sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
-                                grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                        "share_pct": sh(v[0]),
-                                        "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
-                                       for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
-                                       if v[0] >= 1]
-                                mF = _drv("s:%", ft, ftpax)
-                                mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                        "share_pct": sh(v[0]), "qty_100": round(v[1], 1)}
-                                       for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
-                                       if v[0] >= 1]
-                                if not (grp or mnu):
-                                    return None
-                                return {"focus_tier": ft, "focus_label": frow["label"],
-                                        "focus_food_pct": frow["food_pct"],
-                                        "focus_cogs_head": round(fch, 1),
-                                        "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
-                                        # carried so the reader can weigh the numbers: a
-                                        # cost/head drawn from 45 covers swings hard.
-                                        "focus_pax": round(frow["pax"] or 0),
-                                        "focus_share": frow["share"],
-                                        "groups": grp, "menus": mnu}
-
-                            by_tier = {}
-                            for frow in sorted(cand, key=lambda r: int(r["tier"])):
-                                payload = _build(frow)
-                                if payload:
-                                    by_tier[frow["tier"]] = payload
-                            if by_tier:
-                                # The tier that OPENS is still picked from the mainstream
-                                # ones — the headline "biggest lever" should not be a tier
-                                # with a handful of covers and a noisy cost/head. Falls
-                                # back to the full set when no tier clears the floor.
-                                _pool = [r for r in cand
-                                         if r["tier"] in by_tier and (r["share"] or 0) >= 5] \
-                                        or [r for r in cand if r["tier"] in by_tier]
-                                worst = max(_pool, key=lambda r: r["food_pct"])
-                                tier_out["drivers"] = {
-                                    "default_tier": worst["tier"],
-                                    "tier_order": sorted(by_tier, key=lambda t: int(t)),
-                                    "by_tier": by_tier}
-                    except Exception:
-                        pass
-        except Exception:
-            tier_out = None
-
-        # ---- gross profit for THIS period (revenue − period food COGS, BoM basis) ----
-        # With no cost source for the window, GP is UNKNOWN — never revenue−0, which
-        # rendered as a triumphant "100% margin, ฿0 food cost" on pre-2026-03-22
-        # monthly reports. Emit nulls + cost_basis so the UI prints "—" and says why.
-        if not cost_available:
-            gp = {"revenue": cur["revenue"], "food_cost": None, "gp": None, "gp_pct": None,
-                  "gp_per_head": None, "gp_pct_prev": None, "gp_pct_delta_pp": None,
-                  "cost_basis": "unavailable", "cost_from": daily_min}
-        else:
-            gp_cur = round(cur["revenue"] - tot_cur_cost, 2)
-            gp_pct = round(gp_cur / cur["revenue"] * 100, 1) if cur["revenue"] else None
-            gp_prev_pct = (round((prev["revenue"] - tot_prev_cost) / prev["revenue"] * 100, 1)
-                           if (cmp_ok and prev and prev["revenue"]) else None)
-            gp = {
-                "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
-                "gp": gp_cur, "gp_pct": gp_pct,
-                "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
-                "gp_pct_prev": gp_prev_pct,
-                "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
-                "cost_basis": cost_src,
-            }
-
-        # ---- food cost % (BoM) + month pace, anchored on the period's month ----
-        cur_month = ref_anchor.strftime("%Y-%m")
-        # §3 covers the month UP TO THIS REPORT'S DATE, not up to whatever the
-        # sync last loaded. The daily report deliberately anchors on the last
-        # COMPLETE day, so while today is still trading the month holds one day
-        # more than the report describes — a report dated the 3rd was counting
-        # "4 days so far" and averaging three full days plus a sliver over four.
-        # That understated the daily run rate, the month projection built on it,
-        # and the weekday-fair MoM baseline, which is sized by days_elapsed.
-        # For a past month ref_anchor is the month end, so this bounds nothing.
-        mtd_cut = ref_anchor.isoformat()
-        # True when the month rollup would reach past the report: the COGS below
-        # must then come from the day-granular source, or food-cost % divides a
-        # 4-day cost by 3 days of revenue.
-        mtd_partial = (cur_month == maxd[:7] and ref_anchor < latest_day)
-        mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
-        scope_filter(mb, mp, branch, group)
-        mw = " AND ".join(mb)
-        bom_row = None if mtd_partial else con.execute(f"""
-            SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-            FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
-            LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
-            JOIN branches b ON b.branch_id=s.branch_id
-            WHERE {mw}""", mp).fetchone()
-        # sales_sku_monthly is not populated for the in-progress (live-synced-only)
-        # month, so the month food-cost % would go blank for a current-month report.
-        # Fall back to sales_sku_daily (same tier-safe COGS expr; a wrapped subquery
-        # supplies the `source` column the expr expects). [[sync_no_month_summary]]
-        if not (bom_row and bom_row["cost"]):
-            mw_daily = (mw.replace("s.period_month=:month",
-                                   "strftime('%Y-%m', s.day)=:month")
-                        + " AND s.day <= :mtd_cut")
-            bom_row = con.execute(f"""
-                SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-                FROM (SELECT *, 'Easy' AS source FROM v_sales_sku_daily) s
-                JOIN skus sk ON sk.sku_id=s.sku_id
-                LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
-                JOIN branches b ON b.branch_id=s.branch_id
-                WHERE {mw_daily}""", {**mp, "mtd_cut": mtd_cut}).fetchone()
-        mtd_row = con.execute(f"""
-            SELECT ROUND({net_revenue_sum('st')},2) rev,
-                   COUNT(DISTINCT date(st.sold_at))    days
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-              AND date(st.sold_at) <= :mtd_cut""",
-            {**params, "month": cur_month, "mtd_cut": mtd_cut}).fetchone()
-        mtd_rev  = mtd_row["rev"] or 0
-        mtd_days = mtd_row["days"] or 0
-        bom_cost = bom_row["cost"] if bom_row else None
-        food_cost_pct = round(bom_cost/mtd_rev*100, 1) if bom_cost and mtd_rev else None
-
-        # ---- cost-data COVERAGE for that month (why food-cost% is a FLOOR) ------
-        # A dish with no unit cost contributes ฿0 COGS, so the headline food-cost %
-        # is understated by exactly the dishes we haven't costed yet — silently.
-        # Coverage must be weighted by PLATES, not revenue: buffet dishes carry ~฿0
-        # line revenue by design, so a revenue-weighted number says "fine" while a
-        # tenth of the plates served are free-of-charge in the P&L.
-        # `est_food_cost_pct` prices the uncosted plates at the average cost of the
-        # plates we DO cost — a first-order estimate, flagged as such, never booked.
-        # same effective-cost expression, aliased for sales_sku_monthly (`s.`)
-        _eff_cost_m = effective_unit_cost_sql('s')
-        cost_coverage = None
-        try:
-            cc = con.execute(f"""
-                SELECT ROUND(SUM(s.qty)) plates,
-                       ROUND(SUM(CASE WHEN {_eff_cost_m} > 0 THEN s.qty ELSE 0 END)) plates_costed,
-                       ROUND(AVG(CASE WHEN {_eff_cost_m} > 0 THEN {_eff_cost_m} END), 2) avg_unit_cost,
-                       COUNT(DISTINCT s.sku_id) skus,
-                       COUNT(DISTINCT CASE WHEN {_eff_cost_m} = 0 THEN s.sku_id END) skus_uncosted
-                FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
-                JOIN branches b ON b.branch_id=s.branch_id
-                WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
-                  AND s.sku_id IN {food_sub}""", mp).fetchone()
-            plates = (cc["plates"] or 0) if cc else 0
-            if plates:
-                costed = cc["plates_costed"] or 0
-                gap    = plates - costed
-                avg_uc = cc["avg_unit_cost"] or 0
-                est_missing = round(gap * avg_uc)
-                cost_coverage = {
-                    "plates": plates, "plates_costed": costed,
-                    "coverage_pct": round(costed / plates * 100, 1),
-                    "uncosted_plates": gap,
-                    "skus": cc["skus"], "skus_uncosted": cc["skus_uncosted"],
-                    "est_missing_cost": est_missing,
-                    "est_food_cost_pct": (round((bom_cost + est_missing) / mtd_rev * 100, 1)
-                                          if (bom_cost and mtd_rev) else None),
-                }
-                # worklist: the biggest uncosted dishes BY PLATES (revenue ranks
-                # buffet dishes at ~0, which is why they were never chased)
-                cost_coverage["top_uncosted"] = [
-                    {"menu": clean(r["description"] or r["sku_code"]),
-                     "sku_code": r["sku_code"], "plates": round(r["qty"] or 0)}
-                    for r in con.execute(f"""
-                        SELECT sk.sku_code, sk.description, SUM(s.qty) qty
-                        FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
-                        JOIN branches b ON b.branch_id=s.branch_id
-                        WHERE {mw} AND sk.sku_code NOT IN {_ALL_TIER_CODES_SQL}
-                          AND s.sku_id IN {food_sub} AND {_eff_cost_m} = 0
-                        GROUP BY sk.sku_id ORDER BY qty DESC LIMIT 8""", mp).fetchall()]
-        except Exception:
-            cost_coverage = None
-
-        days_total = _cal.monthrange(ref_anchor.year, ref_anchor.month)[1]
-        # MTD up to the latest data for the current month; a full (past) month otherwise.
-        # Not latest_day.day: that is the last day with DATA, which on a daily
-        # report is the still-open day AFTER the one being reported.
-        days_elapsed = (min(ref_anchor.day, latest_day.day)
-                        if cur_month == maxd[:7] else days_total)
-        month_complete = days_elapsed >= days_total
-        projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
-        tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
-        scope_filter(tb, tp, branch, group)
-        tw = " AND ".join(tb)
-        tgt_row = con.execute(f"""
-            SELECT COALESCE(SUM(bt.revenue_target),0) tgt
-            FROM branch_targets bt JOIN branches b ON b.branch_id=bt.branch_id
-            WHERE {tw}""", tp).fetchone()
-        target = tgt_row["tgt"] or 0
-        pace = {
-            "month": cur_month, "mtd_revenue": mtd_rev, "mtd_days": mtd_days,
-            "days_elapsed": days_elapsed, "days_total": days_total, "month_complete": month_complete,
-            "projected": projected, "target": target or None,
-            "proj_vs_target_pct": round(projected/target*100, 1) if (projected and target) else None,
-            "food_cost_pct": food_cost_pct, "bom_cost_mtd": bom_cost,
-            "cost_coverage": cost_coverage,
-        }
-        # `prev_month`: previous calendar month — full total, the SAME-elapsed-days MTD
-        # (fair MTD-vs-MTD when the current month is partial) and its BoM food-cost %.
-        pm_first   = ref_anchor.replace(day=1) - _dt.timedelta(days=1)
-        prev_month = pm_first.strftime("%Y-%m")
-        pm_full = con.execute(f"""
-            SELECT ROUND({net_revenue_sum('st')},2) rev
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month""",
-            {**params, "month": prev_month}).fetchone()
-        pm_mtd = con.execute(f"""
-            SELECT ROUND({net_revenue_sum('st')},2) rev
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-              AND CAST(strftime('%d', st.sold_at) AS INT) <= :d""",
-            {**params, "month": prev_month, "d": days_elapsed}).fetchone()
-        pm_bom = con.execute(f"""
-            SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
-            FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
-            LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
-            JOIN branches b ON b.branch_id=s.branch_id
-            WHERE {mw}""", {**mp, "month": prev_month}).fetchone()
-        pm_rev_full = (pm_full["rev"] or 0) if pm_full else 0
-        pm_rev_mtd  = (pm_mtd["rev"] or 0) if pm_mtd else 0
-        pm_cost     = pm_bom["cost"] if pm_bom else None
-        # Per-weekday average revenue of the previous month. A raw same-elapsed-days
-        # MoM misleads early in the month (1-2 Jul = Wed+Thu vs 1-2 Jun = holiday
-        # Mon+Tue read as "-44%"), and the flat mtd/days*days_total projection
-        # undershoots until the first weekend is in — so while the month is partial,
-        # both the MoM baseline and the projection are weighted by weekday instead.
-        pm_dow = con.execute(f"""
-            SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
-                   {net_revenue_sum('st')} rev,
-                   COUNT(DISTINCT date(st.sold_at)) days
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-            GROUP BY wd""", {**params, "month": prev_month}).fetchall()
-        dow_avg = {r["wd"]: (r["rev"] or 0) / r["days"] for r in pm_dow if r["days"]}
-        dow_fallback = sum(dow_avg.values()) / len(dow_avg) if dow_avg else 0
-
-        # ---- §3 weekly bars (this month) + last-month comparison --------------
-        # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
-        # that week's in-month revenue), for a small weekly trend bar in §3. Each bar's
-        # comparison (`fair_prev`) is last month's weekday-matched total for the EXACT
-        # calendar days summed into that bar — not a flat full-week average — so an
-        # in-progress week (e.g. only Wed–Sun so far) is never judged against a 7-day norm.
-        mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
-        wk_rows = con.execute(f"""
-            SELECT {mon_e3} k, ROUND({net_revenue_sum('st')}) rev
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-            GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
-        month_first = ref_anchor.replace(day=1)
-        month_last  = ref_anchor.replace(day=days_total)
-        pace["weekly"] = []
-        for r in wk_rows:
-            wk_start = _dt.date.fromisoformat(r["k"])
-            d0 = max(wk_start, month_first)
-            d1 = min(wk_start + _dt.timedelta(days=6), month_last, latest_day)
-            n_days = max(0, (d1 - d0).days + 1)
-            fair_prev = sum(dow_avg.get(int((d0 + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
-                            for i in range(n_days))
-            pace["weekly"].append({
-                "label": f"{wk_start.day} {MON[wk_start.month-1]}",
-                "start": r["k"], "revenue": r["rev"] or 0,
-                "fair_prev": round(fair_prev, 2), "days": n_days,
-                "complete": n_days >= 7,
-            })
-        mom_baseline, mom_basis = pm_rev_mtd, "same_days"
-        if not month_complete and dow_avg and days_elapsed:
-            _wsum = lambda n: sum(
-                dow_avg.get(int((month_first + _dt.timedelta(days=i)).strftime("%w")), dow_fallback)
-                for i in range(n))
-            w_elapsed = _wsum(days_elapsed)
-            mom_baseline, mom_basis = round(w_elapsed, 2), "dow"
-            if mtd_rev and w_elapsed:
-                pace["projected"] = projected = round(mtd_rev / w_elapsed * _wsum(days_total), 2)
-                pace["proj_vs_target_pct"] = round(projected/target*100, 1) if target else None
-                pace["proj_method"] = "dow"
-        pace["prev_month"] = {
-            "month": prev_month, "revenue_full": pm_rev_full, "revenue_mtd": pm_rev_mtd,
-            "baseline_mtd": mom_baseline,
-            "food_cost_pct": round(pm_cost/pm_rev_full*100, 1) if (pm_cost and pm_rev_full) else None,
-        }
-        pace["mom_pct"]   = pct(mtd_rev, mom_baseline)  # MTD vs weekday-fair baseline (same-elapsed days once month is complete)
-        pace["mom_basis"] = mom_basis
-        pace["food_cost_pct_prev"] = pace["prev_month"]["food_cost_pct"]
-
-        # ---- trailing trend (8 periods) — ONE grouped query, not 8 round-trips ----
-        trend = []
-        if period == "daily":
-            start = cs - _dt.timedelta(days=7)
-            rows = con.execute(f"""
-                SELECT date(st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY k""", {**params, "s": start.isoformat(), "e": cs.isoformat()}).fetchall()
-            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
-            for i in range(7, -1, -1):
-                d = cs - _dt.timedelta(days=i)
-                trend.append({"label": dlabel(d), "start": d.isoformat(),
-                              "revenue": rev_by.get(d.isoformat(), 0)})
-        elif period == "monthly":
-            mlist = []                       # 8 calendar months ending at the selected one
-            for i in range(7, -1, -1):
-                mi = (cs.month - 1 - i) % 12 + 1
-                yi = cs.year + (cs.month - 1 - i - (mi - 1)) // 12
-                mlist.append((yi, mi))
-            start = _dt.date(mlist[0][0], mlist[0][1], 1)
-            rows = con.execute(f"""
-                SELECT strftime('%Y-%m', st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
-            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
-            for yi, mi in mlist:
-                k = f"{yi:04d}-{mi:02d}"
-                trend.append({"label": f"{MON[mi-1]} {yi % 100:02d}", "start": f"{k}-01",
-                              "revenue": rev_by.get(k, 0)})
-        else:
-            start = cs - _dt.timedelta(days=49)      # 8 full Mon–Sun weeks incl. the current one
-            mon_e = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
-            rows = con.execute(f"""
-                SELECT {mon_e} k, ROUND({net_revenue_sum('st')},2) rev
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
-            rev_by = {r["k"]: r["rev"] or 0 for r in rows}
-            for i in range(7, -1, -1):
-                d = cs - _dt.timedelta(days=7 * i)
-                sun = d + _dt.timedelta(days=6)   # label with week-end Sunday (matches report header)
-                trend.append({"label": f"{sun.day} {MON[sun.month-1]}", "start": d.isoformat(),
-                              "revenue": rev_by.get(d.isoformat(), 0)})
-
-        # ---- peak hours & dayparts (revenue + covers by hour over the period) ----
-        hr_rows = con.execute(f"""
-            SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
-                   ROUND({net_revenue_sum('st')},2) rev,
-                   COALESCE(SUM(st.customer_count),0) cust, COUNT(*) bills
-            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-            GROUP BY hr ORDER BY hr""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
-        hourly = [{"hour": r["hr"], "revenue": r["rev"] or 0, "covers": r["cust"] or 0, "bills": r["bills"]} for r in hr_rows]
-        def _daypart(hh):
-            if 11 <= hh <= 14: return "Lunch"
-            if 17 <= hh <= 22: return "Dinner"
-            return "Other"
-        dp: dict = {}
-        for r in hourly:
-            d2 = dp.setdefault(_daypart(r["hour"]), {"name": _daypart(r["hour"]), "revenue": 0, "covers": 0})
-            d2["revenue"] += r["revenue"]; d2["covers"] += r["covers"]
-        tot_hr_rev = sum(r["revenue"] for r in hourly) or 0
-        dayparts = []
-        for k in ("Lunch", "Dinner", "Other"):
-            if k in dp:
-                d2 = dp[k]
-                d2["pct"] = round(d2["revenue"]/tot_hr_rev*100, 1) if tot_hr_rev else None
-                d2["revenue"] = round(d2["revenue"]); dayparts.append(d2)
-        ph = max(hourly, key=lambda r: r["revenue"], default=None)
-        peak = {"hourly": hourly, "dayparts": dayparts, "total_rev": round(tot_hr_rev),
-                "peak_hour": ({"hour": ph["hour"], "revenue": round(ph["revenue"])} if ph and ph["revenue"] else None)}
-        # last-period comparison — daypart revenue, scope total and the peak hour, so §8
-        # can show a WoW delta against the same weekday last week / the previous week.
-        if has_prev:
-            ph_rows = con.execute(f"""
-                SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
-                       ROUND({net_revenue_sum('st')},2) rev
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY hr""", {**params, "s": ps.isoformat(), "e": pe.isoformat()}).fetchall()
-            pdp: dict = {}
-            for r in ph_rows:
-                nm = _daypart(r["hr"]); pdp[nm] = pdp.get(nm, 0) + (r["rev"] or 0)
-            pphr = max(ph_rows, key=lambda r: r["rev"] or 0, default=None)
-            peak["prev"] = {
-                "dayparts":  {k: round(v) for k, v in pdp.items()},
-                "total_rev": round(sum((r["rev"] or 0) for r in ph_rows)),
-                "peak_hour": ({"hour": pphr["hr"], "revenue": round(pphr["rev"])} if pphr and pphr["rev"] else None),
-            }
-        if period != "daily":      # which day of the week drove the week
-            dow_rows = con.execute(f"""
-                SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
-                       ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust
-                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
-                GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
-            dm = {r["w"]: r for r in dow_rows}
-            by_day = []
-            for i, nm in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
-                r = dm.get((i + 1) % 7)      # %w: 0=Sun..6=Sat → Mon-first
-                by_day.append({"dow": nm, "revenue": round(r["rev"] or 0) if r else 0,
-                               "covers": (r["cust"] or 0) if r else 0})
-            bd = max(by_day, key=lambda d: d["revenue"], default=None)
-            peak["by_day"] = by_day
-            peak["best_day"] = bd["dow"] if bd and bd["revenue"] else None
-
-        # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
-        table = {"available": False}
-        try:
-            if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_table_turn_day'").fetchone():
-                tt_base = ["b.name!='ALL'"]; tparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
-                scope_filter(tt_base, tparams, branch, group)
-                tw2 = " AND ".join(tt_base)
-                tot = con.execute(f"""
-                    SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
-                           ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
-                    FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {tw2} AND t.day BETWEEN :s AND :e""", tparams).fetchone()
-                brows = con.execute(f"""
-                    SELECT b.name branch, COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
-                           ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
-                    FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
-                    WHERE {tw2} AND t.day BETWEEN :s AND :e
-                    GROUP BY b.name HAVING SUM(t.tabs)>0
-                    ORDER BY SUM(t.customers)*1.0/SUM(t.tabs) DESC""", tparams).fetchall()
-                tabs = tot["tabs"] or 0; tcust = tot["cust"] or 0
-                if tabs:
-                    table = {
-                        "available": True, "tables": tabs, "covers": tcust,
-                        "covers_per_table": round(tcust/tabs, 2), "avg_turn_min": tot["avg_turn"],
-                        "by_branch": [{"branch": r["branch"], "tables": r["tabs"], "covers": r["cust"],
-                                       "covers_per_table": round((r["cust"] or 0)/r["tabs"], 2) if r["tabs"] else None,
-                                       "avg_turn_min": r["avg_turn"]} for r in brows][:12],
-                    }
-                    if has_prev:      # last-period turnover for the §9 WoW deltas
-                        pt = con.execute(f"""
-                            SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
-                                   ROUND(AVG(NULLIF(t.avg_turn_min,0))) avg_turn
-                            FROM pos_table_turn_day t JOIN branches b ON b.branch_id=t.branch_id
-                            WHERE {tw2} AND t.day BETWEEN :ps AND :pe""",
-                            {**tparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchone()
-                        ptabs = pt["tabs"] or 0; pcust = pt["cust"] or 0
-                        table["prev"] = {
-                            "tables": ptabs, "covers": pcust,
-                            "covers_per_table": round(pcust/ptabs, 2) if ptabs else None,
-                            "avg_turn_min": pt["avg_turn"],
-                        }
-        except Exception:
-            table = {"available": False}
-
-        # ---- payment channels for the scope (how the branches got paid) ------
-        # Tender mix over the period [cs, ce] from pos_payment_day: the scope total by
-        # payment code (`channels`, each with % of scope total — defines the §10 matrix
-        # column order) AND a per-branch breakdown (`by_branch`, each branch's own channel
-        # mix). Powers §10, rendered for the MASTER group broken out per branch in the
-        # all-branches split view. Daily table → degrades to unavailable if a pre-sync DB
-        # lacks it.
-        payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
-        try:
-            if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_payment_day'").fetchone():
-                pp_base = ["b.name!='ALL'"]; pparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
-                scope_filter(pp_base, pparams, branch, group)
-                pw = " AND ".join(pp_base)
-                prows = con.execute(f"""
-                    SELECT b.name branch, pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n
-                    FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
-                    WHERE {pw} AND pp.day BETWEEN :s AND :e
-                    GROUP BY b.name, pp.payment_code""", pparams).fetchall()
-                ptot = sum((r["amount"] or 0) for r in prows)
-                if ptot > 0:
-                    agg: dict = {}; bdata: dict = {}
-                    for r in prows:
-                        code = r["code"] or "—"; amt = r["amount"] or 0
-                        agg[code] = agg.get(code, 0) + amt
-                        bd = bdata.setdefault(r["branch"], {"branch": r["branch"], "total": 0, "ch": {}})
-                        bd["ch"][code] = {"amount": round(amt), "txns": r["n"] or 0}
-                        bd["total"] += amt
-                    channels = [{"code": c, "amount": round(a), "pct": round(a / ptot * 100, 1)}
-                                for c, a in sorted(agg.items(), key=lambda kv: -kv[1])]
-                    by_branch = []
-                    for bd in bdata.values():
-                        bt = bd["total"] or 1
-                        chans = {c: {"amount": v["amount"], "txns": v["txns"], "pct": round(v["amount"] / bt * 100, 1)}
-                                 for c, v in bd["ch"].items()}
-                        by_branch.append({"branch": bd["branch"], "total": round(bd["total"]), "channels": chans})
-                    by_branch.sort(key=lambda x: -x["total"])
-                    payment = {"available": True, "total": round(ptot), "channels": channels, "by_branch": by_branch}
-                    if has_prev:      # last-period tender mix for the §10 WoW deltas
-                        pprev = con.execute(f"""
-                            SELECT pp.payment_code code, ROUND(SUM(pp.amount)) amount
-                            FROM pos_payment_day pp JOIN branches b ON b.branch_id=pp.branch_id
-                            WHERE {pw} AND pp.day BETWEEN :ps AND :pe
-                            GROUP BY pp.payment_code""",
-                            {**pparams, "ps": ps.isoformat(), "pe": pe.isoformat()}).fetchall()
-                        pby = {(r["code"] or "—"): (r["amount"] or 0) for r in pprev}
-                        ptot_prev = sum(pby.values())
-                        payment["prev"] = {
-                            "total": round(ptot_prev),
-                            "by_code": {k: round(v) for k, v in pby.items()},
-                            "channels": {c["code"]: {"amount": round(pby.get(c["code"], 0)),
-                                                     "pct": round(pby.get(c["code"], 0) / ptot_prev * 100, 1) if ptot_prev else None}
-                                         for c in channels},
-                        }
-        except Exception:
-            payment = {"available": False, "channels": [], "by_branch": [], "total": 0}
 
     # ---- auto-generated action items (localised, severity-ordered) -------
     pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "สัปดาห์") if th
