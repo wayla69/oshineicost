@@ -1133,30 +1133,17 @@ def buffet_forecast(
 
 
 
-@router.get("/api/buffet/performance")
-@ttl_cache
-def buffet_performance(
-    branch:     Optional[str] = Query(None),
-    group:      Optional[str] = Query(None),
-    month_from: Optional[str] = Query(None),
-    month_to:   Optional[str] = Query(None),
-    food_cost_target_lo: float = Query(55.0),
-    food_cost_target_hi: float = Query(70.0),
-):
-    """Comprehensive Buffet Performance metrics for the core all-you-can-eat business.
-
-    Returns:
-    - kpis: pax, bills, avg_pax_per_bill, premium_tier_pct, food_cost_pct, over_consumption_pct, beverage_attach_pct
-    - tier_trend: per-month tier mix (BUFFET350/500/590/799 + CHILD)
-    - food_cost_trend: monthly food_cost % vs target band
-    - seat_util: per-branch daily pax vs network peak (proxy)
-    - turnover:   per-branch bills/table/day (turnover proxy)
-    - waste:      per-month over-consumption rate from OT0012/0013/0016
-    - beverage_attach: per-month beverage revenue % of buffet bills
-    - daypart_tier: lunch vs dinner tier mix
-    - cohort:     per-branch performance bucketed by months-since-opening
-    - pricing_rec: current weighted tier price vs revenue-optimal
-    """
+def _bp_setup(*, branch, group, month_from, month_to):
+    # names this section hands on; None where a path never assigns one
+    grp_sql = None
+    params_sku = None
+    params_tx = None
+    tier_named = None
+    tier_ph = None
+    waste_named = None
+    waste_ph = None
+    where_sku = None
+    where_tx = None
     # Optional master|franchise scope. grp_sql = literal fragment for the two
     # roll-up queries below that use no bound params (group is allow-listed first).
     if group not in ("master", "franchise"):
@@ -1189,7 +1176,24 @@ def buffet_performance(
     tier_ph     = ", ".join(f":bt{i}" for i in range(len(BUFFET_TIERS)))
     waste_named = {f"wc{i}": v for i, v in enumerate(WASTE_CODES)}
     waste_ph    = ", ".join(f":wc{i}" for i in range(len(WASTE_CODES)))
+    return {"group": group, "grp_sql": grp_sql, "params_sku": params_sku, "params_tx": params_tx, "tier_named": tier_named, "tier_ph": tier_ph, "waste_named": waste_named, "waste_ph": waste_ph, "where_sku": where_sku, "where_tx": where_tx}
 
+
+def _bp_query(*, grp_sql, params_sku, params_tx, tier_named, tier_ph, waste_named, waste_ph, where_sku, where_tx):
+    # names this section hands on; None where a path never assigns one
+    adult_pax = None
+    bcohort_rows = None
+    bev_rows = None
+    bf_cost_by_month = None
+    branch_first = None
+    buffet_billed_pax = None
+    child_pax = None
+    child_pct = None
+    daily_pax_rows = None
+    daypart_rows = None
+    pax_by_month = None
+    tier_rows = None
+    waste_rows = None
     with get_db() as con:
         # ── 1. Tier mix trend (monthly pax + revenue per tier) ────────────────
         tier_rows = con.execute(f"""
@@ -1361,7 +1365,16 @@ def buffet_performance(
     child_pax = next((float(r["qty"] or 0) for r in ac_rows if r["code"] == 'BUFFETCHILD'), 0.0)
     buffet_billed_pax = adult_pax + child_pax  # buffet covers sold (tier rows)
     child_pct = (child_pax / buffet_billed_pax * 100) if buffet_billed_pax else 0
+    return {"adult_pax": adult_pax, "bcohort_rows": bcohort_rows, "bev_rows": bev_rows, "bf_cost_by_month": bf_cost_by_month, "branch_first": branch_first, "buffet_billed_pax": buffet_billed_pax, "child_pax": child_pax, "child_pct": child_pct, "daily_pax_rows": daily_pax_rows, "daypart_rows": daypart_rows, "pax_by_month": pax_by_month, "tier_rows": tier_rows, "waste_rows": waste_rows}
 
+
+def _bp_tier_trend(*, tier_rows):
+    # names this section hands on; None where a path never assigns one
+    defaultdict = None
+    months = None
+    tier_list = None
+    tier_trend = None
+    tier_trend_out = None
     # ── Aggregate tier_trend (pax + cost%) ──────────────────────────────────
     from collections import defaultdict
     tier_trend = defaultdict(lambda: defaultdict(float))
@@ -1378,7 +1391,12 @@ def buffet_performance(
         **{t: tier_trend[mo].get(t, 0) for t in tier_list},
         "total_pax": sum(tier_trend[mo].values()),
     } for mo in months]
+    return {"defaultdict": defaultdict, "months": months, "tier_list": tier_list, "tier_trend": tier_trend, "tier_trend_out": tier_trend_out}
 
+
+def _bp_food_cost(*, bf_cost_by_month, months):
+    # names this section hands on; None where a path never assigns one
+    food_cost_trend = None
     # ── Food cost trend (Buffet only — real unified COGS) ───────────────────
     # 2026-06-02: replaced the tier-pax × tier-unit-cost calc (which produced 0
     # because per-tier rows are empty) with the real buffet COGS computed above.
@@ -1391,7 +1409,15 @@ def buffet_performance(
             "period": mo, "revenue_ex": round(rev_ex, 0), "cost": round(cost, 0),
             "cost_pct": round(pct, 1) if pct is not None else None,
         })
+    return {"food_cost_trend": food_cost_trend}
 
+
+def _bp_seat_util(*, daily_pax_rows, defaultdict):
+    # names this section hands on; None where a path never assigns one
+    branch_bills = None
+    branch_pax = None
+    branch_tables = None
+    seat_util = None
     # ── Seat utilization proxy: per-branch avg pax/day vs network peak ──────
     branch_pax = defaultdict(list)
     branch_bills = defaultdict(list)
@@ -1415,7 +1441,12 @@ def buffet_performance(
             "utilization_pct": round(utilization, 1),
         })
     seat_util.sort(key=lambda x: -x["utilization_pct"])
+    return {"branch_bills": branch_bills, "branch_pax": branch_pax, "branch_tables": branch_tables, "seat_util": seat_util}
 
+
+def _bp_turnover(*, branch_bills, branch_tables):
+    # names this section hands on; None where a path never assigns one
+    turnover = None
     # ── Turnover proxy: bills per table per day ─────────────────────────────
     turnover = []
     for br in branch_bills:
@@ -1429,7 +1460,12 @@ def buffet_performance(
             "bills_per_table":  round(ratio, 2),
         })
     turnover.sort(key=lambda x: -x["bills_per_table"])
+    return {"turnover": turnover}
 
+
+def _bp_waste(*, months, pax_by_month, waste_rows):
+    # names this section hands on; None where a path never assigns one
+    waste_trend = None
     # ── Waste / over-consumption rate ───────────────────────────────────────
     waste_trend = []
     for r in waste_rows:
@@ -1448,7 +1484,12 @@ def buffet_performance(
         if mo not in waste_periods:
             waste_trend.append({"period": mo, "qty": 0, "revenue": 0, "rate_pct": 0})
     waste_trend.sort(key=lambda x: x["period"])
+    return {"waste_trend": waste_trend}
 
+
+def _bp_beverage(*, bev_rows):
+    # names this section hands on; None where a path never assigns one
+    bev_trend = None
     # ── Beverage attach ─────────────────────────────────────────────────────
     bev_trend = []
     for r in bev_rows:
@@ -1463,7 +1504,12 @@ def buffet_performance(
             "attach_pct":     round(attach_rev, 1),
             "bills_attach_pct": round(attach_bills, 1),
         })
+    return {"bev_trend": bev_trend}
 
+
+def _bp_daypart(*, daypart_rows, defaultdict, tier_list):
+    # names this section hands on; None where a path never assigns one
+    daypart_out = None
     # ── Daypart tier mix ────────────────────────────────────────────────────
     daypart_mix = defaultdict(lambda: defaultdict(int))
     for r in daypart_rows:
@@ -1476,7 +1522,12 @@ def buffet_performance(
             "total_pax": sum(daypart_mix[dp].values()),
             **{t: round(daypart_mix[dp].get(t, 0) / tot * 100, 1) for t in tier_list},
         })
+    return {"daypart_out": daypart_out}
 
+
+def _bp_cohort(*, bcohort_rows, branch_first, defaultdict):
+    # names this section hands on; None where a path never assigns one
+    cohort_curve = None
     # ── Branch cohort: months-since-open vs revenue/pax ─────────────────────
     from datetime import datetime as _dt
     def months_diff(a, b):
@@ -1502,7 +1553,13 @@ def buffet_performance(
             "avg_pax":      round(sum(v["pax"] for v in vals) / len(vals), 0),
             "branch_count": len(vals),
         })
+    return {"cohort_curve": cohort_curve}
 
+
+def _bp_pricing(*, bf_cost_by_month, tier_list, tier_trend):
+    # names this section hands on; None where a path never assigns one
+    actual_pax = None
+    pricing_rec = None
     # ── Pricing recommendation ──────────────────────────────────────────────
     TIER_PRICES = {'BUFFET350': 350, 'BUFFET500': 500, 'BUFFET590': 590, 'BUFFET799': 799, 'BUFFETCHILD': 295}
     # fix E6: use actual food-cost ratio from BoM data instead of raw sku_cost
@@ -1557,7 +1614,13 @@ def buffet_performance(
         "margin_gain":     round(margin_gain, 0),
         "assumption":      "30% ของลูกค้า tier 350/500 ขยับขึ้นไป 590 (70%) และ 799 (30%)",
     }
+    return {"actual_pax": actual_pax, "pricing_rec": pricing_rec}
 
+
+def _bp_kpis(*, actual_pax, adult_pax, bev_rows, bev_trend, branch, branch_bills, branch_pax, buffet_billed_pax, child_pax, child_pct, daily_pax_rows, food_cost_target_hi, food_cost_target_lo, food_cost_trend, group, month_from, month_to, pricing_rec, waste_trend):
+    # names this section hands on; None where a path never assigns one
+    kpis = None
+    tier_pct_split = None
     # ── KPI summary ─────────────────────────────────────────────────────────
     total_buffet_pax = sum(actual_pax.values())
     premium_pax = actual_pax.get('BUFFET590', 0) + actual_pax.get('BUFFET799', 0)
@@ -1647,6 +1710,60 @@ def buffet_performance(
         "combined_gp_pct":          round(c_gp_pct, 1)   if c_gp_pct   is not None else None,
         "combined_food_cost_pct":   round(c_food_pct, 1) if c_food_pct is not None else None,
     }
+    return {"kpis": kpis, "tier_pct_split": tier_pct_split}
+
+
+@router.get("/api/buffet/performance")
+@ttl_cache
+def buffet_performance(
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    food_cost_target_lo: float = Query(55.0),
+    food_cost_target_hi: float = Query(70.0),
+):
+    """Comprehensive Buffet Performance metrics for the core all-you-can-eat business.
+
+    Returns:
+    - kpis: pax, bills, avg_pax_per_bill, premium_tier_pct, food_cost_pct, over_consumption_pct, beverage_attach_pct
+    - tier_trend: per-month tier mix (BUFFET350/500/590/799 + CHILD)
+    - food_cost_trend: monthly food_cost % vs target band
+    - seat_util: per-branch daily pax vs network peak (proxy)
+    - turnover:   per-branch bills/table/day (turnover proxy)
+    - waste:      per-month over-consumption rate from OT0012/0013/0016
+    - beverage_attach: per-month beverage revenue % of buffet bills
+    - daypart_tier: lunch vs dinner tier mix
+    - cohort:     per-branch performance bucketed by months-since-opening
+    - pricing_rec: current weighted tier price vs revenue-optimal
+    """
+    # Each stage is its own function (_bp_*, Phase 3b 2026-09); they run in
+    # order and pass what they compute forward through `ctx`. The statements are
+    # the ones this function used to hold inline — golden pins the output.
+    ctx = {"branch": branch, "food_cost_target_hi": food_cost_target_hi, "food_cost_target_lo": food_cost_target_lo, "group": group, "month_from": month_from, "month_to": month_to}
+    ctx.update(_bp_setup(branch=ctx.get("branch"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to")))
+    ctx.update(_bp_query(grp_sql=ctx.get("grp_sql"), params_sku=ctx.get("params_sku"), params_tx=ctx.get("params_tx"), tier_named=ctx.get("tier_named"), tier_ph=ctx.get("tier_ph"), waste_named=ctx.get("waste_named"), waste_ph=ctx.get("waste_ph"), where_sku=ctx.get("where_sku"), where_tx=ctx.get("where_tx")))
+    ctx.update(_bp_tier_trend(tier_rows=ctx.get("tier_rows")))
+    ctx.update(_bp_food_cost(bf_cost_by_month=ctx.get("bf_cost_by_month"), months=ctx.get("months")))
+    ctx.update(_bp_seat_util(daily_pax_rows=ctx.get("daily_pax_rows"), defaultdict=ctx.get("defaultdict")))
+    ctx.update(_bp_turnover(branch_bills=ctx.get("branch_bills"), branch_tables=ctx.get("branch_tables")))
+    ctx.update(_bp_waste(months=ctx.get("months"), pax_by_month=ctx.get("pax_by_month"), waste_rows=ctx.get("waste_rows")))
+    ctx.update(_bp_beverage(bev_rows=ctx.get("bev_rows")))
+    ctx.update(_bp_daypart(daypart_rows=ctx.get("daypart_rows"), defaultdict=ctx.get("defaultdict"), tier_list=ctx.get("tier_list")))
+    ctx.update(_bp_cohort(bcohort_rows=ctx.get("bcohort_rows"), branch_first=ctx.get("branch_first"), defaultdict=ctx.get("defaultdict")))
+    ctx.update(_bp_pricing(bf_cost_by_month=ctx.get("bf_cost_by_month"), tier_list=ctx.get("tier_list"), tier_trend=ctx.get("tier_trend")))
+    ctx.update(_bp_kpis(actual_pax=ctx.get("actual_pax"), adult_pax=ctx.get("adult_pax"), bev_rows=ctx.get("bev_rows"), bev_trend=ctx.get("bev_trend"), branch=ctx.get("branch"), branch_bills=ctx.get("branch_bills"), branch_pax=ctx.get("branch_pax"), buffet_billed_pax=ctx.get("buffet_billed_pax"), child_pax=ctx.get("child_pax"), child_pct=ctx.get("child_pct"), daily_pax_rows=ctx.get("daily_pax_rows"), food_cost_target_hi=ctx.get("food_cost_target_hi"), food_cost_target_lo=ctx.get("food_cost_target_lo"), food_cost_trend=ctx.get("food_cost_trend"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to"), pricing_rec=ctx.get("pricing_rec"), waste_trend=ctx.get("waste_trend")))
+    bev_trend = ctx["bev_trend"]
+    cohort_curve = ctx["cohort_curve"]
+    daypart_out = ctx["daypart_out"]
+    food_cost_trend = ctx["food_cost_trend"]
+    kpis = ctx["kpis"]
+    pricing_rec = ctx["pricing_rec"]
+    seat_util = ctx["seat_util"]
+    tier_pct_split = ctx["tier_pct_split"]
+    tier_trend_out = ctx["tier_trend_out"]
+    turnover = ctx["turnover"]
+    waste_trend = ctx["waste_trend"]
 
     return {
         "kpis":            kpis,
