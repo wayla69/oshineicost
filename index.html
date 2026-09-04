@@ -2146,6 +2146,21 @@ body.mgt-reading .content-area { padding-top: 10px; }
   <div class="card p-5 overflow-x-auto">
     <h2 class="section-title mb-1">📦 ปริมาณที่ควรสั่ง รายวัตถุดิบ <span id="opScopeNote" class="font-normal normal-case" style="color:var(--text-muted);font-size:11px"></span></h2>
     <p class="text-[11px] mb-2" style="color:var(--text-muted)">เรียงตามมูลค่าต่อเดือน มาก→น้อย · <b>ติ๊กช่อง “แนะนำ”</b> เพื่อเลือกว่ารายการไหนให้อยู่ในจดหมายสั่งของ (เอาติ๊กออก = สาขาซื้อเอง ยังนับต้นทุนอยู่แต่ไม่แนะนำให้สั่ง) · เลือกสาขาไว้ = ตั้งเฉพาะสาขานั้น · ช่อง “สั่ง” <b>ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่ง</b> แล้ว (ในวงเล็บ = ปริมาณจริงที่จะได้รับ) · <span style="color:#b45309">◇</span> = ยังไม่ได้ตั้งขนาดบรรจุ ใช้หน่วยมาตรฐาน กก./ลิตร ไปก่อน · แนวโน้ม = ใช้ 7 วันล่าสุด เทียบ 7 วันก่อนหน้า (▲ ควรเผื่อเพิ่ม · ▼ ควรลดปริมาณสั่ง)</p>
+    <div class="flex flex-wrap items-center gap-2 mb-2 p-2" style="background:var(--bg-subtle);border-radius:var(--r-sm)">
+      <span class="text-[11px] font-semibold" style="color:var(--text-primary)">เลือกเป็นชุด:</span>
+      <button onclick="opBulkSourcing(true)" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
+              title="ตั้งทุกรายการที่แสดงอยู่เป็น สั่งส่วนกลาง">✓ ติดตามทั้งหมดที่แสดง</button>
+      <button onclick="opBulkSourcing(false)" style="background:var(--bg-input);color:var(--text-primary);border:1px solid var(--border);border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
+              title="ตั้งทุกรายการที่แสดงอยู่เป็น สาขาซื้อเอง">✕ ไม่ติดตามทั้งหมดที่แสดง</button>
+      <span style="width:1px;height:18px;background:var(--border)"></span>
+      <label class="text-[11px] flex items-center gap-1" style="color:var(--text-muted)">ติดตามเฉพาะ
+        <input type="number" id="opTopN" value="30" min="1" max="999"
+               style="width:58px;border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 6px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
+        รายการที่มูลค่าสูงสุด</label>
+      <button onclick="opKeepTopN()" style="background:#7c3aed;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
+              title="เก็บวัตถุดิบหลักไว้ติดตาม ที่เหลือให้สาขาซื้อเอง">⭐ ใช้เฉพาะวัตถุดิบหลัก</button>
+      <span id="opBulkNote" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    </div>
     <table class="text-xs w-full">
       <thead><tr class="text-left border-b" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2 text-center" title="ติ๊ก = แนะนำให้สั่งผ่านส่วนกลาง (จะอยู่ในจดหมาย) · เอาออก = สาขาซื้อเอง">แนะนำ</th>

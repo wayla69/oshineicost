@@ -9,6 +9,9 @@
 // ═══════════════════════════════════════════════════════════════════════════
 let _opBasis = 'avg';
 let _opFiltersReady = false;
+// The rows exactly as the table is showing them, kept so the bulk controls act
+// on what the user can see rather than on a second, differently-filtered fetch.
+let _opLastRows = [];
 
 const OP_TYPE_TH = { protein:'โปรตีน', carb:'คาร์โบไฮเดรต', veg:'ผัก',
   sauce:'ซอส', oil:'น้ำมัน', seasoning:'เครื่องปรุง', other:'อื่นๆ' };
@@ -122,6 +125,8 @@ async function loadOrderPlan(force) {
       </tr>`).join('');
   } else { brCard.style.display = 'none'; }
 
+  _opLastRows = d.rows || [];
+  opRenderBulkNote();
   document.getElementById('opBody').innerHTML = (d.rows || []).map(r => {
     const tr = r.trend_pct;
     const trHtml = tr == null ? '<span style="color:var(--text-muted)">—</span>'
@@ -191,6 +196,127 @@ async function opSetSourcing(code, central) {
     if (st) st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e).slice(0, 120);
     loadOrderPlan(true);          // put the checkbox back where the server has it
   }
+}
+
+
+// ── bulk sourcing ───────────────────────────────────────────────────────────
+// All 256 ingredients default to 'สั่งส่วนกลาง', so "monitor only the main
+// ones" meant unticking some 200 boxes one at a time. These set many at once.
+//
+// Family mode is refused throughout: rolling up by name blanks `code`, and the
+// API silently skips a row with an empty ingredient_code — the user would get a
+// success message and no change.
+
+function opRenderBulkNote() {
+  const el = document.getElementById('opBulkNote');
+  if (!el) return;
+  const fam = document.getElementById('opFamily')?.checked;
+  const br  = document.getElementById('opBranch')?.value || '';
+  const n   = _opLastRows.length;
+  const nLocal = _opLastRows.filter(r => r.sourcing === 'local').length;
+  const nCodes = new Set(_opLastRows.filter(r => r.code).map(r => r.code)).size;
+  el.innerHTML = fam
+    ? '<span style="color:#b45309">ปิด “รวมชื่อคล้ายกัน” ก่อนจึงจะเลือกเป็นชุดได้</span>'
+    : 'กำลังแสดง <b>' + n + '</b> แถว (<b>' + nCodes + '</b> รหัส) · สาขาซื้อเอง <b>' + nLocal + '</b>'
+      + (br ? ' · ตั้งเฉพาะ <b>' + esc(br) + '</b>' : ' · ตั้งเป็นค่าเริ่มต้น <b>ทุกสาขา</b>');
+}
+
+async function _opPostSourcing(rows, label) {
+  const st = document.getElementById('opStatus');
+  if (st) st.textContent = 'กำลังบันทึก…';
+  try {
+    const r = await fetch(`${API}/api/ingredients/sourcing`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rows),
+    });
+    if (!r.ok) throw new Error(await r.text());
+    await loadOrderPlan(true);            // reload first — it rewrites opStatus
+    if (st) st.textContent = '✓ ' + label + ' · ' + rows.length + ' รายการ';
+  } catch (e) {
+    if (st) st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e).slice(0, 120);
+    loadOrderPlan(true);
+  }
+}
+
+// One entry per ingredient CODE, value summed across its rows.
+//
+// The table lists a row per (code, unit) — code 03-01-060 appears as both
+// "หอยนางรม/ตัว" at ฿932k and "หอยนางรมญี่ปุ่น/ชิ้น" at ฿18k. But
+// ingredient_sourcing is keyed by (code, branch), one setting per code. Ranking
+// the ROWS would put the first inside a top-30 and the second outside it, post
+// the same code as central and then local, and the later write would win —
+// silently handing the ฿932k oyster to the branches. Four of the top thirty do
+// this today. Summing first also ranks correctly: a code split across units is
+// worth the sum of its parts, not its largest part.
+function _opBulkGuard() {
+  if (document.getElementById('opFamily')?.checked) {
+    alert('โหมด “รวมชื่อคล้ายกัน” รวมหลายรหัสเข้าเป็นบรรทัดเดียว จึงไม่มีรหัสให้บันทึก\n'
+        + 'กรุณาปิดโหมดนี้ก่อนเลือกเป็นชุด');
+    return null;
+  }
+  const by = new Map();
+  for (const r of _opLastRows) {
+    if (!r.code) continue;
+    const e = by.get(r.code);
+    if (e) { e.value_month += (r.value_month || 0); e.units++; }
+    else by.set(r.code, { code: r.code, name: r.name,
+                          value_month: r.value_month || 0, units: 1 });
+  }
+  const rows = [...by.values()].sort((a, b) => b.value_month - a.value_month);
+  if (!rows.length) { alert('ไม่มีรายการให้ตั้งค่า'); return null; }
+  return rows;
+}
+
+// Apply to every row currently listed — the type / search / include filters
+// above the table are how you scope this to a subset.
+function opBulkSourcing(central) {
+  const rows = _opBulkGuard();
+  if (!rows) return;
+  const branch = document.getElementById('opBranch')?.value || '';
+  const word = central ? 'สั่งส่วนกลาง (ติดตาม)' : 'สาขาซื้อเอง (ไม่ติดตาม)';
+  const scope = branch ? 'เฉพาะสาขา ' + branch : 'ทุกสาขา';
+  if (!confirm('ตั้ง ' + rows.length + ' วัตถุดิบที่แสดงอยู่ เป็น “' + word + '”\n'
+             + 'ขอบเขต: ' + scope + '\n\nยืนยันหรือไม่?')) return;
+  _opPostSourcing(rows.map(r => ({ ingredient_code: r.code, branch,
+                                   mode: central ? 'central' : 'local' })),
+                  'ตั้งเป็น “' + word + '”');
+}
+
+// Keep the N biggest by monthly value, hand the rest to the branches. The table
+// arrives sorted by ฿/เดือน descending, so "top N" is the first N rows — but
+// only while nothing is filtering them, or the ranking would be over a subset
+// and the tail silently spared.
+function opKeepTopN() {
+  const rows = _opBulkGuard();
+  if (!rows) return;
+  const inc = document.getElementById('opInclude')?.value || 'all';
+  const q   = (document.getElementById('opQ')?.value || '').trim();
+  const typ = document.getElementById('opType')?.value || '';
+  if (inc !== 'all' || q || typ) {
+    alert('อันดับต้องคิดจากวัตถุดิบทั้งหมด\n'
+        + 'กรุณาตั้ง “ทุกรายการ” และล้างตัวกรองประเภท/คำค้นก่อน');
+    return;
+  }
+  const n = parseInt(document.getElementById('opTopN')?.value, 10);
+  if (!n || n < 1) { alert('ใส่จำนวนรายการที่ต้องการติดตาม'); return; }
+  if (n >= rows.length) {
+    alert('มีวัตถุดิบทั้งหมด ' + rows.length + ' รายการ — ใส่จำนวนที่น้อยกว่านี้');
+    return;
+  }
+  const branch = document.getElementById('opBranch')?.value || '';
+  const keep = rows.slice(0, n), drop = rows.slice(n);
+  const kv = keep.reduce((a, r) => a + (r.value_month || 0), 0);
+  const tv = rows.reduce((a, r) => a + (r.value_month || 0), 0);
+  const share = tv ? Math.round(kv / tv * 100) : 0;
+  const split = rows.filter(r => r.units > 1).length;
+  if (!confirm('ติดตาม ' + keep.length + ' วัตถุดิบที่มูลค่าสูงสุด (คิดเป็น ' + share + '% ของมูลค่าสั่งทั้งหมด)\n'
+             + 'อีก ' + drop.length + ' รายการตั้งเป็น “สาขาซื้อเอง”\n'
+             + (split ? 'มี ' + split + ' รหัสที่แยกหลายหน่วยในตาราง — รวมเป็นรายการเดียวแล้ว\n' : '')
+             + 'ขอบเขต: ' + (branch ? 'เฉพาะสาขา ' + branch : 'ทุกสาขา') + '\n\nยืนยันหรือไม่?')) return;
+  _opPostSourcing(
+    keep.map(r => ({ ingredient_code: r.code, branch, mode: 'central' }))
+      .concat(drop.map(r => ({ ingredient_code: r.code, branch, mode: 'local' }))),
+    'ติดตาม ' + keep.length + ' รายการหลัก (' + share + '% ของมูลค่า)');
 }
 
 
