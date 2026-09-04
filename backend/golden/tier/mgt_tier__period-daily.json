@@ -1,0 +1,165 @@
+{
+ "drivers": {
+  "by_tier": {
+   "590": {
+    "focus_cogs_head": 180.0,
+    "focus_food_pct": 30.5,
+    "focus_label": "฿590",
+    "focus_pax": 24,
+    "focus_share": 42.1,
+    "focus_tier": "590",
+    "groups": [
+     {
+      "cogs_head": 60.0,
+      "label": "เนื้อ",
+      "share_pct": 33.3,
+      "vs_ref": null
+     },
+     {
+      "cogs_head": 90.0,
+      "label": "แซลมอน",
+      "share_pct": 50.0,
+      "vs_ref": null
+     }
+    ],
+    "menus": [
+     {
+      "cogs_head": 12.0,
+      "label": "(B) แซลมอน",
+      "qty_100": 150.0,
+      "share_pct": 6.7
+     },
+     {
+      "cogs_head": 2.0,
+      "label": "(A) สเต๊ก",
+      "qty_100": 20.0,
+      "share_pct": 1.1
+     }
+    ],
+    "ref_label": null,
+    "ref_tier": null
+   },
+   "789": {
+    "focus_cogs_head": 210.0,
+    "focus_food_pct": 26.6,
+    "focus_label": "฿789",
+    "focus_pax": 30,
+    "focus_share": 52.6,
+    "focus_tier": "789",
+    "groups": [
+     {
+      "cogs_head": 60.0,
+      "label": "เนื้อ",
+      "share_pct": 28.6,
+      "vs_ref": 0.0
+     },
+     {
+      "cogs_head": 90.0,
+      "label": "แซลมอน",
+      "share_pct": 42.9,
+      "vs_ref": 0.0
+     }
+    ],
+    "menus": [
+     {
+      "cogs_head": 12.0,
+      "label": "(B) แซลมอน",
+      "qty_100": 150.0,
+      "share_pct": 5.7
+     },
+     {
+      "cogs_head": 2.0,
+      "label": "(A) สเต๊ก",
+      "qty_100": 20.0,
+      "share_pct": 1.0
+     }
+    ],
+    "ref_label": "฿590",
+    "ref_tier": "590"
+   }
+  },
+  "default_tier": "590",
+  "tier_order": [
+   "590",
+   "789"
+  ]
+ },
+ "mix_effect": -11.96,
+ "pax": 57,
+ "pax_prev": 62,
+ "promo": {
+  "branches": {
+   "mixed": [
+    {
+     "bills": 1,
+     "branch": "BranchA",
+     "pax": 1
+    }
+   ]
+  },
+  "discounts": [
+   {
+    "bills": 2,
+    "of_tier": 789,
+    "off_pct": 10.0,
+    "pax": 2,
+    "pct_of_tier": 90.0,
+    "unit": 710
+   }
+  ],
+  "kinds": {
+   "disc": {
+    "bills": 2,
+    "pax": 2
+   },
+   "mixed": {
+    "bills": 1,
+    "pax": 1
+   }
+  }
+ },
+ "rows": [
+  {
+   "cogs_head": 150.0,
+   "cogs_head_prev": 150.0,
+   "d_pax_pct": -33.3,
+   "food_pct": 25.0,
+   "gp_head": 450.0,
+   "label": "Promo/other price",
+   "pax": 3,
+   "pax_prev": 4,
+   "rev_head": 600.0,
+   "share": 5.3,
+   "share_prev": 7.3,
+   "tier": "promo"
+  },
+  {
+   "cogs_head": 180.0,
+   "cogs_head_prev": 180.0,
+   "d_pax_pct": 14.3,
+   "food_pct": 30.5,
+   "gp_head": 410.0,
+   "label": "฿590",
+   "pax": 24,
+   "pax_prev": 21,
+   "rev_head": 590.0,
+   "share": 42.1,
+   "share_prev": 34.1,
+   "tier": "590"
+  },
+  {
+   "cogs_head": 210.0,
+   "cogs_head_prev": 210.0,
+   "d_pax_pct": -16.7,
+   "food_pct": 26.6,
+   "gp_head": 579.0,
+   "label": "฿789",
+   "pax": 30,
+   "pax_prev": 36,
+   "rev_head": 789.0,
+   "share": 52.6,
+   "share_prev": 58.5,
+   "tier": "789"
+  }
+ ]
+}
