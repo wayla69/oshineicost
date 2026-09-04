@@ -36,7 +36,6 @@ import sqlite3
 import sys
 from pathlib import Path
 
-import ingest_easy as ie
 import reingest_raw_2026 as rr
 
 HERE    = Path(__file__).parent.resolve()
@@ -109,7 +108,6 @@ def _canon(name: str) -> str:
 
 def _remap_branches(parsed: dict) -> dict:
     """Return parsed with branch keys mapped to canonical DB names (merging dups)."""
-    from collections import defaultdict
     new: dict = {}
     for branch, payload in parsed["branches"].items():
         c = _canon(branch)

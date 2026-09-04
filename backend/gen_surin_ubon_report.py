@@ -7,7 +7,7 @@ Reads the live DB READ-ONLY (SELECT only) and writes an HTML report.
 Usage: python gen_surin_ubon_report.py [--db oshinei.db] [--out ../docs/SURIN_UBON_DISCOUNT_REVIEW.html]
 """
 import sqlite3, sys, os, argparse
-from datetime import datetime, date
+from datetime import datetime
 
 DATE_FROM, DATE_TO = "2026-01-01", "2026-05-31"
 BRANCH_IDS = {"surin": 24, "ubon": 26}
@@ -403,7 +403,7 @@ def generate(db_data):
 ({round(100*b['ch_unexp']['d']/(b['disc_total'] or 1),1)}% ของส่วนลดสาขา) ไม่มีทั้งคูปองและรหัสเหตุผลในระบบ
 จึงไม่สามารถระบุได้ว่าเป็นโปรโมชันประเภทใด — แนะนำให้บังคับระบุรหัสเหตุผลก่อนกดส่วนลด และกำหนดผู้มีสิทธิ์อนุมัติให้ชัดเจน</div>""")
         else:
-            add(f"""<div class="alert alert-em">
+            add("""<div class="alert alert-em">
 <strong>ไม่มีส่วนลดที่ยังไม่มีที่มา:</strong> ทุกบิลผูกกับคูปองโปรโมชันที่นิยามไว้ — ตรวจสอบย้อนกลับได้ครบถ้วน
 ประเด็นที่ควรพิจารณาคือความเหมาะสมของนโยบายโปรโมชันและผลต่อมาร์จิน</div>""")
         add('</div></div>')
@@ -484,7 +484,7 @@ def generate(db_data):
     add(page_hdr("ข้อเสนอแนะด้านการควบคุม (Control Recommendations)"))
     add('<div class="sec-label">CONTROL RECOMMENDATIONS</div>')
     add('<div class="sec-title" style="font-size:17px">ข้อเสนอแนะเชิงกระบวนการ (ไม่พาดพิงบุคคล)</div>')
-    add(f"""<div class="alert alert-teal">
+    add("""<div class="alert alert-teal">
 ข้อเสนอต่อไปนี้มุ่งที่<strong>กระบวนการควบคุมส่วนลด</strong> เพื่อให้ทุกส่วนลดตรวจสอบย้อนกลับได้
 ไม่ได้ตั้งอยู่บนสมมติฐานว่ามีผู้ใดกระทำผิด</div>""")
     add("""<table><thead><tr><th>#</th><th>ข้อเสนอ</th><th>เป้าหมาย</th><th class="center">ระดับ</th></tr></thead><tbody>

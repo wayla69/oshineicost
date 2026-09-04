@@ -2,7 +2,7 @@
 audit_easy2.py — refined audit. Aggregate ES1 SKUs by sku_code per (branch,month)
 to match how the DB stores them, then compare counts AND revenue.
 """
-import sys, io, json, re
+import json
 from pathlib import Path
 import sqlite3
 

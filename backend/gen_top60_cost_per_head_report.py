@@ -272,7 +272,6 @@ def fig(n, label, hint="", cls=""):
 def menu_table(scope, overview, with_variance):
     """Render a Top-60 menu table. with_variance adds overview comparison cols."""
     ov = overview["by_sku"]
-    ov_cph_total = overview["cph_total"]
     rows = scope["menus"][:TOPN]
     cum = 0.0
     out = ['<table>']
@@ -321,7 +320,6 @@ def menu_table(scope, overview, with_variance):
     # totals row for Top-60
     top_cogs = sum(m["cogs"] for m in rows)
     top_cph = sum(m["cph"] for m in rows)
-    ncol_pre = 4
     if with_variance:
         out.append(
             f'<tr class="tot"><td></td><td>รวม Top {len(rows)}</td>'
@@ -402,7 +400,7 @@ def build_html(period, overview, branches, gen_dt, db_path, scope_label="Master"
     </div></div>"""
 
     # methodology + TOC on the cover page tail
-    method = f"""
+    method = """
     <h3 style="margin-top:1.6em">วิธีการคำนวณ (อ้างอิงสูตรมาตรฐานของระบบ)</h3>
     <ul class="small" style="font-size:12px;color:var(--ink2)">
       <li><b>ต้นทุน/หัวของเมนู</b> = (ต้นทุนวัตถุดิบของเมนูนั้นทั้งเดือนในขอบเขตนั้น) ÷ (จำนวนหัวลูกค้าของขอบเขต = ผลรวม customer_count). บอกว่า “เมนูนี้กินต้นทุนกี่บาทต่อลูกค้า 1 คน”.</li>
@@ -481,7 +479,6 @@ def build_html(period, overview, branches, gen_dt, db_path, scope_label="Master"
     arr += '</tbody></table>'
 
     hottest = ranked[0]
-    coolest = ranked[-1]
     h_gap = hottest["cph_total"] - overview["cph_total"]
     h_highs, _ = deviation_decomp(hottest, overview)
     # excess baht for hottest branch on its covers
@@ -616,11 +613,11 @@ def thai_month(period):
 # ── Excel export (same data pipeline as the HTML — single source of truth) ────
 def write_xlsx(path, period, overview, branches, gen_dt, scope_label="Master"):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment, Side, Border
+    from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
     INK = "FF1B2A30"; RED = "FFB0472D"; GREEN = "FF1F7A4D"
-    SOFT = "FFF1F4F4"; TOTF = "FFE7EBEC"; LINE = "FFD9DEDF"
+    TOTF = "FFE7EBEC"
     f_title = Font(name="Tahoma", size=13, bold=True, color=INK)
     f_sub   = Font(name="Tahoma", size=9,  color="FF8B979D")
     f_kpi   = Font(name="Tahoma", size=10, bold=True, color=INK)
@@ -633,7 +630,6 @@ def write_xlsx(path, period, overview, branches, gen_dt, scope_label="Master"):
     fill_tot = PatternFill("solid", fgColor=TOTF)
     AL_R = Alignment(horizontal="right"); AL_C = Alignment(horizontal="center")
     AL_L = Alignment(horizontal="left"); AL_W = Alignment(horizontal="left", wrap_text=True, vertical="top")
-    thin = Border(bottom=Side(style="thin", color=LINE))
     I = "#,##0"; D2 = "#,##0.00"; P = "0.0%"
 
     def style_header(ws, row, ncols, first_data_row, autofilter=True):
@@ -760,7 +756,7 @@ def write_xlsx(path, period, overview, branches, gen_dt, scope_label="Master"):
                 c.alignment = AL_W
         dr += 1
     # overview baseline row
-    base = [f"ภาพรวม (ฐานเทียบ)", overview["covers"], overview["cph_total"], 0.0,
+    base = ["ภาพรวม (ฐานเทียบ)", overview["covers"], overview["cph_total"], 0.0,
             overview["food_pct"] / 100, overview["total_cogs"], ""]
     for ci, v in enumerate(base, 1):
         c = ws.cell(dr, ci, v); c.font = f_bold; c.fill = fill_tot

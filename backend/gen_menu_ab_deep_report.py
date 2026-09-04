@@ -7,7 +7,7 @@ Reuses main.py's _menucmp_agg so COGS follows the canonical helper
 
 Usage:  python gen_menu_ab_deep_report.py
 """
-import json, html as H, math, sys
+import html as H, math, sys
 from pathlib import Path
 
 HERE = Path(__file__).parent
@@ -673,7 +673,6 @@ def menu_reeng_section():
             BRANCHES).fetchall()
         ing = [dict(ing=r['ing'], th=(r['tot'] or 0) / covm, nm=r['nm']) for r in ing_rows]
         salmon_head = sum(d['th'] for d in ing if 'แซลมอน' in d['ing'])
-        shrimp_head = sum(d['th'] for d in ing if 'กุ้ง' in d['ing'])
 
         def shared_n(sid):
             top = con.execute("SELECT ingredient_name FROM bom_ingredients WHERE sku_id=? "

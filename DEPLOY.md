@@ -73,10 +73,43 @@ export FLY_API_TOKEN="$(sed -n 's/^access_token:[[:space:]]*//p' ~/.fly/config.y
 
 Only run `flyctl auth login` (interactive, needs a browser) if that still fails.
 
+## Before you merge: the gate runs here, not on GitHub
+
+GitHub Actions is **disabled** in the repo settings (since 2026-08-10) — the workflows in
+`.github/workflows/` are correct but nothing runs them. Until it is switched back on, the
+machine that merges is the only thing that runs the suites:
+
+```bash
+bash scripts/gate.sh            # pyflakes + pytest for backend AND recon; last line is the verdict
+```
+
+It gates on **exit codes**. `pytest -q | tail -1` shows the progress bar, not "N passed",
+and a red suite was merged that way once (#108/#109). If Actions is ever re-enabled:
+`tests` runs the same gate on every PR; the Playwright `e2e` job and `deploy` are manual
+dispatch only (`deploy-clean.sh` stays the one deploy path).
+
+## After a merge that touches the sync
+
+The nightly sync does **not** run from this checkout. It runs from the scheduler clone
+`C:\Users\ASUS\Oshinei` (Task Scheduler: *Oshinei Auto Sync* 06:00 local full run, *Oshinei
+Sync Live (Fly)* 10:00 incremental + push). That clone ran #90's code for a week while `main`
+moved 22 commits, and the first real run of the newer code failed (#115). So:
+
+```bash
+git -C /c/Users/ASUS/Oshinei pull --ff-only origin main
+```
+
+after every merge that changes `backend/sync_mssql.py`, `backend/refresh_fly_db.py`,
+`backend/month_summary.py` or the `.bat` files — then read the next run's log
+(`backend/logs/sync_live_fly.log` there, UTF-16). `reconcile()` refuses a build whose staged
+tables start later than the current DB's (history loss, #113), on top of the revenue gates.
+
 ## Quick reference
 
 | Goal | Command |
 |------|---------|
+| Gate a branch before merging | `bash scripts/gate.sh` |
+| Update the scheduler clone after a sync change | `git -C /c/Users/ASUS/Oshinei pull --ff-only origin main` |
 | Deploy latest `main` to Fly | `bash scripts/deploy-clean.sh` |
 | Deploy a specific commit/tag | `bash scripts/deploy-clean.sh <ref>` |
 | Check what's live vs `main` | `git fetch && git log --oneline origin/main -3` |

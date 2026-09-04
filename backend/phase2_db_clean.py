@@ -143,7 +143,7 @@ def gather_targets(con: sqlite3.Connection) -> list[dict]:
     """Return one dict per category that should be deleted, with context."""
     # Build LIKE clauses for test prefixes
     like_clauses = " OR ".join(
-        f"c.name LIKE ?" for _ in TEST_CATEGORY_PREFIXES
+        "c.name LIKE ?" for _ in TEST_CATEGORY_PREFIXES
     )
     like_args = [f"{p}%" for p in TEST_CATEGORY_PREFIXES]
 
@@ -208,8 +208,8 @@ def print_report(targets: list[dict], orphan_count: int, total_rev: float) -> No
         print(f"  SKUs to re-point to '{FALLBACK_CATEGORY}': {skus_to_move}")
         print(f"  Revenue in these categories: ฿{rev_in_targets / 1e6:.3f} M")
         if rev_in_targets > 0:
-            print(f"  NOTE: These categories have revenue — their SKUs will be")
-            print(f"        re-pointed (not deleted), so revenue stays intact.")
+            print("  NOTE: These categories have revenue — their SKUs will be")
+            print("        re-pointed (not deleted), so revenue stays intact.")
 
     if orphan_count:
         print(f"\n  Orphan SKUs (no category): {orphan_count} → will point to '{FALLBACK_CATEGORY}'")
@@ -333,7 +333,7 @@ def main() -> int:
     # ── Verify the things that MUST be preserved (a flat sales sum can't — this
     #    script never writes sales_sku_monthly, so it would always look OK). ──
     inv_after = clean_invariants(con)
-    print(f"\nInvariant check:")
+    print("\nInvariant check:")
     print(f"  SKU count:        {inv_before['sku_count']} -> {inv_after['sku_count']}")
     print(f"  revenue via join: ฿{inv_before['revenue_via_join'] / 1e6:.6f} M "
           f"-> ฿{inv_after['revenue_via_join'] / 1e6:.6f} M")

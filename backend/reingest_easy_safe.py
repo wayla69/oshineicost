@@ -11,7 +11,7 @@ Wipes & rebuilds:
   - sales_transaction  (source='Easy')
   - sales_month_summary (source='Easy')
 """
-import sys, io, re, shutil, sqlite3
+import re, shutil, sqlite3
 from pathlib import Path
 from datetime import datetime
 

@@ -1,9 +1,11 @@
 name: deploy
 
+# Manual only. The one deploy path is `bash scripts/deploy-clean.sh` (DEPLOY.md):
+# it ships origin/main from an isolated worktree and is followed by a live probe.
+# Until 2026-09 this also fired on every push to main — a second deployer that
+# restarted the machine on its own schedule, next to the nightly data push.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
 
 jobs:
   deploy:

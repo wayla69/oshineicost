@@ -21,7 +21,7 @@ report reconciles with the app. Output is a single print-friendly HTML file.
 Usage:
     python gen_fraud_report.py [--db oshinei.db] [--from 2026-01-01] [--to 2026-05-31]
 """
-import argparse, os, sqlite3, statistics
+import argparse, os, sqlite3
 from datetime import datetime
 
 # ── formatting helpers ──────────────────────────────────────────────────────
@@ -60,7 +60,7 @@ def main():
 
     # period label, Thai months
     TH_MO = {1:"ม.ค.",2:"ก.พ.",3:"มี.ค.",4:"เม.ย.",5:"พ.ค.",6:"มิ.ย.",7:"ก.ค.",8:"ส.ค.",9:"ก.ย.",10:"ต.ค.",11:"พ.ย.",12:"ธ.ค."}
-    y0,m0 = int(D0[:4]),int(D0[5:7]); y1,m1 = int(D1[:4]),int(D1[5:7])
+    m0 = int(D0[5:7]); y1,m1 = int(D1[:4]),int(D1[5:7])
     period = f"{TH_MO[m0]} – {TH_MO[m1]} {y1+543}"
     gen_date = datetime.now().strftime("%d/%m/%Y %H:%M")
 
@@ -84,7 +84,7 @@ def main():
     can_repeat = q(f"""SELECT COALESCE(cancel_user,'(ไม่ระบุ)') u, branch_id, ROUND(amount,2) amt, COUNT(*) n, ROUND(SUM(amount)) tot
         FROM pos_cancel_bill_detail WHERE {Wsale} AND amount>0
         GROUP BY u, branch_id, amount HAVING COUNT(*) >= 25 ORDER BY n DESC LIMIT 12""", P).fetchall()
-    can_after = q(f"""SELECT branch_id, COUNT(*) n, ROUND(SUM(amount)) amt
+    q(f"""SELECT branch_id, COUNT(*) n, ROUND(SUM(amount)) amt
         FROM pos_cancel_bill_detail WHERE {Wsale}
         AND CAST(strftime('%H',sale_date) AS INT) >= 22 GROUP BY branch_id ORDER BY amt DESC LIMIT 6""", P).fetchall()
     can_untyped = q(f"""SELECT COUNT(*) n, ROUND(SUM(amount)) amt FROM pos_cancel_bill_detail d
@@ -92,7 +92,7 @@ def main():
         WHERE {Wsale} AND (d.reason_id IS NULL OR r.reason_desc LIKE 'อื่น%')""", P).fetchone()
 
     # CASH OVER/SHORT
-    cash_tot = q(f"""SELECT COUNT(*) days, ROUND(SUM(over_short)) net,
+    cash_tot = q("""SELECT COUNT(*) days, ROUND(SUM(over_short)) net,
         ROUND(SUM(CASE WHEN over_short<0 THEN over_short ELSE 0 END)) short,
         ROUND(SUM(CASE WHEN over_short>0 THEN over_short ELSE 0 END)) over_
         FROM pos_cashcount_day WHERE day BETWEEN ? AND ?""", P).fetchone()
@@ -274,7 +274,6 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     (ยอดวอยด์บิล {thb(can_tot['amt'])} + เงินสดขาดสุทธิ {thb(abs(cash_tot['net'] or 0))})
     ตัวเลขเหล่านี้ <u>ไม่ใช่การยืนยันการทุจริต</u> แต่เป็นจุดที่ควรตรวจสอบเอกสาร/CCTV และสอบถามผู้รับผิดชอบเป็นลำดับแรก</p>""")
     for sev, title, body, _ in flags:
-        c = SEV[sev][0]
         A(f"""<div class="flag {'med' if sev=='med' else ''}"><div>{pill(sev)}</div>
         <div class="ftxt"><b>{esc(title)}</b><br><span class="muted" style="font-size:13px">{esc(body)}</span></div></div>""")
     A("</section>")

@@ -5,7 +5,7 @@ Outputs a coverage matrix (branch x month) for both:
   - ES1_*.xlsx  -> sales_sku_monthly
   - 23 ES_*.xlsx -> sales_transaction
 """
-import sys, io, json, re
+import json, re
 from pathlib import Path
 import sqlite3
 

@@ -50,6 +50,27 @@ def find_flyctl():
     return str(cand) if cand.exists() else None
 
 
+def fly_env(config=None, environ=None) -> dict:
+    """Environment for a flyctl call: FLY_API_TOKEN filled from ~/.fly/config.yml
+    when the caller has none. flyctl sometimes fails to read its own config
+    ("no access token available", DEPLOY.md) — under Task Scheduler it always
+    did, so every nightly push ended with "could not list machines" and the
+    staged DB waited for the app's next restart to be swapped in."""
+    env = dict(os.environ if environ is None else environ)
+    if env.get("FLY_API_TOKEN"):
+        return env
+    cfg = Path(config) if config else Path.home() / ".fly" / "config.yml"
+    try:
+        for line in cfg.read_text(encoding="utf-8").splitlines():
+            k, _, v = line.partition(":")
+            if k.strip() == "access_token" and v.strip():
+                env["FLY_API_TOKEN"] = v.strip().strip('"')
+                break
+    except OSError:
+        pass
+    return env
+
+
 def _parse_token_file(path: Path) -> str | None:
     """Return the first valid token from a token file.
     Accepts both bare hex tokens and 'label:hex' lines (multi-user format)."""
@@ -263,17 +284,20 @@ def main():
     fly = find_flyctl()
     if not fly:
         sys.exit("flyctl not found — rerun with --no-restart and restart manually.")
+    env = fly_env()
     listing = subprocess.run([fly, "machine", "list", "--app", args.app, "--json"],
-                             capture_output=True, text=True)
+                             capture_output=True, text=True, env=env)
     try:
         machines = json.loads(listing.stdout or "[]")
         ids = [m["id"] for m in machines]
     except Exception:
         ids = []
     if not ids:
-        sys.exit("could not list machines; restart manually with flyctl.")
+        why = (listing.stderr or listing.stdout or "").strip()[:300]
+        sys.exit(f"could not list machines ({why or 'no output'}); the staged DB is applied at the "
+                 f"app's next restart — or restart now: flyctl machine restart <id> --app {args.app}")
     for mid in ids:
-        subprocess.run([fly, "machine", "restart", mid, "--app", args.app], check=False)
+        subprocess.run([fly, "machine", "restart", mid, "--app", args.app], check=False, env=env)
 
     run_verify(api, local_n, args)
 
