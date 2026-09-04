@@ -1913,10 +1913,8 @@ async function loadPrimeCost() {
 }
 
 // ── Branch P&L tab (Analysis #1, BoM-based COGS) ───────────────
-async function loadPnlBranch() {
-  loadPrimeCost();
-  const gen = loadGen;
-  // populate month dropdown once (from selMonthFrom options)
+function _pnlFillMonths() {
+  // populate the month dropdown once (from the global selMonthTo options)
   const msel = document.getElementById('pnlMonthSel');
   if (msel && msel.options.length <= 1) {
     const src = document.getElementById('selMonthTo');
@@ -1924,7 +1922,12 @@ async function loadPnlBranch() {
       const opt=document.createElement('option'); opt.value=o.value; opt.textContent=o.textContent; msel.appendChild(opt);
     });
   }
-  _syncExtraMonth('pnlMonthSel', 'pnlbranch');   // follow the global period (snap to its end month)
+}
+async function loadPnlBranch() {
+  loadPrimeCost();
+  const gen = loadGen;
+  _pnlFillMonths();
+  const msel = document.getElementById('pnlMonthSel');
   const pnlMonth = msel ? msel.value : '';
   const p = new URLSearchParams();
   if (getBranch())    p.set('branch', getBranch());

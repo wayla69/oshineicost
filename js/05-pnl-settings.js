@@ -2118,7 +2118,6 @@ async function loadAnomalyBanner() {
 // 🔔 Action Center — consolidate anomalies + branch-pace (MTD-fair) into one
 // prioritized "watch today" panel with drill-through. Reuses existing endpoints.
 async function loadHeavyEaters(force) {
-  _syncExtraDateRange('heFrom', 'heTo', 'heavyeater');   // follow the global period (date range)
   const fromEl = document.getElementById('heFrom'), toEl = document.getElementById('heTo'),
         mcEl = document.getElementById('heMinCov');
   const p = new URLSearchParams();

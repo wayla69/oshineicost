@@ -551,7 +551,6 @@ function dsSetGran(g) {
   loadDailySales(true);
 }
 async function loadDailySales(force) {
-  _syncExtraDate('dsDate', 'dailysales');     // follow the global period (snap to its end day)
   const dv = document.getElementById('dsDate')?.value || '';
   const _fk = _filterKey() + '|' + _dsGran + '|' + dv;
   if (!force && _tabLastKey.dailysales === _fk) return;
@@ -661,7 +660,6 @@ function chSetGran(g) {
   loadCostHead(true);
 }
 async function loadCostHead(force) {
-  _syncExtraDate('chDate', 'costhead');       // follow the global period (snap to its end day)
   const dv = document.getElementById('chDate')?.value || '';
   const _fk = _filterKey() + '|' + _chGran + '|' + dv;
   if (!force && _tabLastKey.costhead === _fk) return;
@@ -734,7 +732,6 @@ function pbSetView(v) {
   if (_pbData) renderPnlBill(_pbData);
 }
 async function loadPnlBill(force) {
-  _syncExtraDate('pbDate', 'pnlbill');        // follow the global period (snap to its end day)
   const dv = document.getElementById('pbDate')?.value || '';
   const _fk = _filterKey() + '|' + _pbGran + '|' + dv;
   if (!force && _tabLastKey.pnlbill === _fk) return;
@@ -909,17 +906,20 @@ function renderPnlBill(d) {
 
 // ══ 🛒 รายงานปฏิบัติการ (Payment · Channel · Void · Table · Promo) ══
 let _opMonthsLoaded = false;
+async function _opFillMonths() {
+  // populate month options from sales months (descending), once
+  const sel = document.getElementById('opMonth');
+  if (_opMonthsLoaded || !sel) return;
+  try {
+    const mi = await api(`${API}/api/months`);
+    const months = (mi.months || mi || []).slice().sort().reverse();
+    sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
+    _opMonthsLoaded = true;
+  } catch (e) {}
+}
 async function loadOpsReport(force) {
   const sel = document.getElementById('opMonth');
-  if (!_opMonthsLoaded && sel) {
-    // populate month options from sales months (descending)
-    try {
-      const mi = await api(`${API}/api/months`);
-      const months = (mi.months || mi || []).slice().sort().reverse();
-      sel.innerHTML = months.map(m => `<option value="${m}">${m}</option>`).join('');
-      _opMonthsLoaded = true;
-    } catch (e) {}
-  }
+  await _opFillMonths();
   // Follow the global period filter: in Day/Week granularity pass the global date range
   // (→ backend aggregates the daily tables); in Month granularity use the month picker.
   const gran = (typeof currentGranularity !== 'undefined') ? currentGranularity : 'monthly';
@@ -931,7 +931,7 @@ async function loadOpsReport(force) {
     if (!dateFrom && !dateTo) useDate = false;   // no concrete range (latest/all) → month fallback
   }
   let mv = '';
-  if (!useDate) { _syncExtraMonth('opMonth', 'opsreport'); mv = sel?.value || ''; }
+  if (!useDate) { mv = sel?.value || ''; }
   if (sel) { sel.disabled = useDate; sel.style.opacity = useDate ? '0.45' : '1'; }   // month picker inert in day/week mode
   const _fk = _filterKey() + '|' + (useDate ? (dateFrom + '~' + dateTo) : mv);
   if (!force && _tabLastKey.opsreport === _fk) return;
@@ -1495,10 +1495,12 @@ async function _extraMonths(selId, valNow) {
 }
 const _extKpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${c}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub||''}</p></div>`;
 
-// Make a LOCAL Extra month-picker follow the GLOBAL period. These endpoints take a
-// single month, so we snap the local picker to the global END month whenever the
-// global range changes (a manual local pick still wins until the global changes
-// again). This is what makes the top period selector drive the Extra tabs too.
+// Make a LOCAL picker follow the GLOBAL period. These endpoints take a single
+// month/day, so the picker snaps to the global END month/day whenever the global
+// range changes (a manual local pick still wins until the global changes again).
+// Since 2026-09 a tab declares which picker follows in TABS (`follow: {...}`,
+// js/01-core.js) and loadActiveTab calls these before the loader — no loader
+// calls them directly any more.
 const _extraLastGlobal = {};
 function _syncExtraMonth(selId, tabKey) {
   const sel = document.getElementById(selId); if (!sel) return;
@@ -1575,7 +1577,7 @@ function _syncExtraMonthRange(fromId, toId, tabKey) {
 
 // 💵 เงินสดขาด/เกิน
 async function loadCashCtl(force) {
-  await _extraMonths('ccMonth'); _syncExtraMonth('ccMonth', 'cashctl');
+  await _extraMonths('ccMonth');
   const mv = document.getElementById('ccMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cashctl === _fk) return; _tabLastKey.cashctl = _fk;
@@ -1608,7 +1610,7 @@ async function loadCashCtl(force) {
 
 // 👥 ประเภทลูกค้า
 async function loadCustType(force) {
-  await _extraMonths('ctMonth'); _syncExtraMonth('ctMonth', 'custtype');
+  await _extraMonths('ctMonth');
   const mv = document.getElementById('ctMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.custtype === _fk) return; _tabLastKey.custtype = _fk;
@@ -1674,7 +1676,7 @@ async function loadModifiers(force) {
 
 // 🏷️ ราคา & โซนโต๊ะ
 async function loadPriceZone(force) {
-  await _extraMonths('pzMonth'); _syncExtraMonth('pzMonth', 'pricezone');
+  await _extraMonths('pzMonth');
   const mv = document.getElementById('pzMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.pricezone === _fk) return; _tabLastKey.pricezone = _fk;
@@ -1706,7 +1708,7 @@ async function loadPriceZone(force) {
 
 // 🗑️ บิลยกเลิก/ลบ (whole-bill voids)
 async function loadCancelBill(force) {
-  await _extraMonths('cbMonth'); _syncExtraMonth('cbMonth', 'cancelbill');
+  await _extraMonths('cbMonth');
   const mv = document.getElementById('cbMonth')?.value || '';
   const _fk = _filterKey() + '|' + mv;
   if (!force && _tabLastKey.cancelbill === _fk) return; _tabLastKey.cancelbill = _fk;
@@ -1888,7 +1890,6 @@ async function loadDataQuality() {
 
 async function loadCloseTime(force) {
   loadDataQuality();                          // integrity panel above the freshness table
-  _syncExtraDate('ctmDate', 'closetime');     // follow the global period (snap to its end day)
   const dateSel = document.getElementById('ctmDate')?.value || '';
   const _fk = _filterKey() + '|' + dateSel;
   if (!force && _tabLastKey.closetime === _fk) return; _tabLastKey.closetime = _fk;
