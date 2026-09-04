@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import recon.main as main                      # noqa: E402
+import recon.core as core   # get_db() reads core._DB_PATH; main._DB_PATH is a copy
 from test_recon import _make_db, DEMO_POS      # noqa: E402
 
 GOLDEN = Path(__file__).parent / "golden"
@@ -106,7 +107,7 @@ SMOKE = [
 
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
-    main._DB_PATH = _make_db(tmp_path_factory.mktemp("golden"), DEMO_POS)
+    core._DB_PATH = main._DB_PATH = _make_db(tmp_path_factory.mktemp("golden"), DEMO_POS)
     with TestClient(main.app) as cl:
         yield cl
 
