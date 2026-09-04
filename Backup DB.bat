@@ -39,6 +39,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Recon evidence files (slips/receipts) live on the Fly volume, not in the DB.
+REM Non-fatal: the DB copy above is the critical part; an empty folder writes nothing.
+"%PY%" -u backend\pull_fly_attachments.py --out "%OUT%" --stamp %STAMP%
+
 REM The gitignored secrets live only on this PC: without them a fresh clone
 REM cannot sync (the 2026-07-27 outage). Keep an off-site copy next to the DB.
 if not exist "%OUT%\secrets" mkdir "%OUT%\secrets"

@@ -64,6 +64,8 @@ def test_prune_keeps_recent_days_and_the_first_backup_of_each_month(tmp_path):
         (out / f"oshinei_{d}_0730.db.gz").write_bytes(b"x")
         (out / f"oshinei_{d}_0730.manifest.txt").write_text("m")
     (out / "notes.txt").write_text("keep me")
+    for d in ("2026-04-01", "2026-05-10", "2026-06-15", "2026-09-04"):  # tarballs rotate on their own
+        (out / f"attachments_{d}_0730.tgz").write_bytes(b"x")
     removed = B.prune(out, keep_daily=3, keep_monthly=3, today=B._dt.date(2026, 9, 4))
     left = sorted(p.name for p in out.iterdir())
     # last 3 days: 09-02, 09-03, 09-04; first of the last 3 months: 07-01, 08-01, 09-01
@@ -71,10 +73,14 @@ def test_prune_keeps_recent_days_and_the_first_backup_of_each_month(tmp_path):
         "oshinei_2026-07-01_0730.db.gz", "oshinei_2026-08-01_0730.db.gz", "oshinei_2026-09-01_0730.db.gz",
         "oshinei_2026-09-02_0730.db.gz", "oshinei_2026-09-03_0730.db.gz", "oshinei_2026-09-04_0730.db.gz"]
     assert sorted(p.name for p in removed) == [
+        "attachments_2026-04-01_0730.tgz",
         "oshinei_2026-06-01_0730.db.gz", "oshinei_2026-06-15_0730.db.gz",
         "oshinei_2026-07-20_0730.db.gz", "oshinei_2026-08-30_0730.db.gz"]
     assert not (out / "oshinei_2026-06-01_0730.manifest.txt").exists()   # manifests go with their file
     assert (out / "notes.txt").exists()                                  # never touches other files
+    # attachments: its own last-3-months (05, 06, 09) survive; April rolls out
+    assert [n for n in left if n.startswith("attachments_")] == [
+        "attachments_2026-05-10_0730.tgz", "attachments_2026-06-15_0730.tgz", "attachments_2026-09-04_0730.tgz"]
 
 
 def test_prune_with_no_limits_keeps_everything(tmp_path):
