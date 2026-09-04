@@ -15,6 +15,8 @@ import hashlib
 import hmac
 import json
 import os
+# The dashboard states VAT once, in backend/rules.py; recon uses the same number.
+from backend.rules import VAT_DIVISOR  # noqa: E402
 import re
 import sqlite3
 import uuid
@@ -105,6 +107,16 @@ async def _frontend_no_cache(request, call_next):
 
 @contextmanager
 def get_db():
+    """One connection per request — deliberately NOT backend.core.get_db.
+
+    core keeps a persistent connection per worker thread and relies on the
+    hot-swap in the SAME process to close them when /data/oshinei.db is
+    replaced. Recon runs as its own uvicorn process (start.sh); a cached
+    connection here would keep the old file's inode open and serve stale data
+    after every data refresh until a restart. Reconnecting per request is what
+    makes recon see the swapped-in file immediately. Same PRAGMAs as core
+    (WAL, foreign keys on); the write token is the same OSHINEI_SEED_TOKEN.
+    (Structural plan phase 5, 2026-09: shared where sharing is right.)"""
     conn = sqlite3.connect(_DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -7215,7 +7227,7 @@ def diag_customer_types(period_month: str, branch_id: int | None = None):
             if branch_id:
                 filters.append("branch_id=?"); params.append(branch_id)
             rows = conn.execute(f"""
-                SELECT type_name, SUM(customers) customers, ROUND(SUM(net)/1.07) net_ex_vat,
+                SELECT type_name, SUM(customers) customers, ROUND(SUM(net)/{VAT_DIVISOR}) net_ex_vat,
                        COUNT(DISTINCT branch_id) branches
                 FROM pos_customer_type_month
                 WHERE {' AND '.join(filters)}
