@@ -1928,12 +1928,25 @@ def report_management(
 
         # ---- food cost % (BoM) + month pace, anchored on the period's month ----
         cur_month = ref_anchor.strftime("%Y-%m")
+        # §3 covers the month UP TO THIS REPORT'S DATE, not up to whatever the
+        # sync last loaded. The daily report deliberately anchors on the last
+        # COMPLETE day, so while today is still trading the month holds one day
+        # more than the report describes — a report dated the 3rd was counting
+        # "4 days so far" and averaging three full days plus a sliver over four.
+        # That understated the daily run rate, the month projection built on it,
+        # and the weekday-fair MoM baseline, which is sized by days_elapsed.
+        # For a past month ref_anchor is the month end, so this bounds nothing.
+        mtd_cut = ref_anchor.isoformat()
+        # True when the month rollup would reach past the report: the COGS below
+        # must then come from the day-granular source, or food-cost % divides a
+        # 4-day cost by 3 days of revenue.
+        mtd_partial = (cur_month == maxd[:7] and ref_anchor < latest_day)
         mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
         if branch:
             mb.append("b.name=:branch"); mp["branch"] = branch
         _group_filter(mb, mp, group)
         mw = " AND ".join(mb)
-        bom_row = con.execute(f"""
+        bom_row = None if mtd_partial else con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
             FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id=s.sku_id
             LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
@@ -1944,20 +1957,23 @@ def report_management(
         # Fall back to sales_sku_daily (same tier-safe COGS expr; a wrapped subquery
         # supplies the `source` column the expr expects). [[sync_no_month_summary]]
         if not (bom_row and bom_row["cost"]):
-            mw_daily = mw.replace("s.period_month=:month", "strftime('%Y-%m', s.day)=:month")
+            mw_daily = (mw.replace("s.period_month=:month",
+                                   "strftime('%Y-%m', s.day)=:month")
+                        + " AND s.day <= :mtd_cut")
             bom_row = con.execute(f"""
                 SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
                 FROM (SELECT *, 'Easy' AS source FROM v_sales_sku_daily) s
                 JOIN skus sk ON sk.sku_id=s.sku_id
                 LEFT JOIN sku_cost c ON c.sku_id=s.sku_id
                 JOIN branches b ON b.branch_id=s.branch_id
-                WHERE {mw_daily}""", mp).fetchone()
+                WHERE {mw_daily}""", {**mp, "mtd_cut": mtd_cut}).fetchone()
         mtd_row = con.execute(f"""
             SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev,
                    COUNT(DISTINCT date(st.sold_at))    days
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month""",
-            {**params, "month": cur_month}).fetchone()
+            WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
+              AND date(st.sold_at) <= :mtd_cut""",
+            {**params, "month": cur_month, "mtd_cut": mtd_cut}).fetchone()
         mtd_rev  = mtd_row["rev"] or 0
         mtd_days = mtd_row["days"] or 0
         bom_cost = bom_row["cost"] if bom_row else None
@@ -2019,7 +2035,10 @@ def report_management(
 
         days_total = _cal.monthrange(ref_anchor.year, ref_anchor.month)[1]
         # MTD up to the latest data for the current month; a full (past) month otherwise.
-        days_elapsed = latest_day.day if cur_month == maxd[:7] else days_total
+        # Not latest_day.day: that is the last day with DATA, which on a daily
+        # report is the still-open day AFTER the one being reported.
+        days_elapsed = (min(ref_anchor.day, latest_day.day)
+                        if cur_month == maxd[:7] else days_total)
         month_complete = days_elapsed >= days_total
         projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
         tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
