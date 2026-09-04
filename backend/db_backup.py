@@ -116,7 +116,9 @@ def cmd_backup(args) -> int:
     return 0
 
 
-_STAMP = re.compile(r"^oshinei_(\d{4}-\d{2}-\d{2})(?:_\d{4})?\.db(?:\.gz)?$")
+# oshinei_<date>[_HHMM].db[.gz] — the DB copies; attachments_<date>[_HHMM].tgz — the
+# recon evidence folder pulled from Fly (pull_fly_attachments.py). Same rotation.
+_STAMP = re.compile(r"^(oshinei|attachments)_(\d{4}-\d{2}-\d{2})(?:_\d{4})?\.(?:db(?:\.gz)?|tgz)$")
 
 
 def prune(out_dir: Path, keep_daily: int, keep_monthly: int, today=None) -> list:
@@ -127,27 +129,29 @@ def prune(out_dir: Path, keep_daily: int, keep_monthly: int, today=None) -> list
     if not keep_daily and not keep_monthly:
         return []
     today = today or _dt.date.today()
-    dated = []
-    for p in sorted(out_dir.iterdir()):
+    dated = []                                  # (kind, date, path) — each kind rotates on its own
+    for p in out_dir.iterdir():
         m = _STAMP.match(p.name)
         if m:
-            dated.append((_dt.date.fromisoformat(m.group(1)), p))
+            dated.append((m.group(1), _dt.date.fromisoformat(m.group(2)), p))
+    dated.sort(key=lambda x: (x[0], x[1], x[2].name))
     keep = set()
-    for d, p in dated:
+    for kind, d, p in dated:
         if keep_daily and (today - d).days < keep_daily:
             keep.add(p)
     if keep_monthly:
         first_of_month = {}
-        for d, p in dated:                      # sorted by name = by date, earliest first
-            first_of_month.setdefault((d.year, d.month), p)
-        months = sorted(first_of_month)[-keep_monthly:]
-        keep.update(first_of_month[m] for m in months)
+        for kind, d, p in dated:                # sorted by date within a kind, earliest first
+            first_of_month.setdefault((kind, d.year, d.month), p)
+        for kind in {k for k, _, _ in dated}:
+            months = sorted(m for m in first_of_month if m[0] == kind)[-keep_monthly:]
+            keep.update(first_of_month[m] for m in months)
     removed = []
-    for d, p in dated:
+    for kind, d, p in dated:
         if p in keep:
             continue
         p.unlink()
-        man = out_dir / (re.sub(r"\.db(\.gz)?$", "", p.name) + ".manifest.txt")
+        man = out_dir / (re.sub(r"\.(db(\.gz)?|tgz)$", "", p.name) + ".manifest.txt")
         if man.exists():
             man.unlink()
         removed.append(p)
