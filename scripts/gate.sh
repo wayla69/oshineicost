@@ -11,7 +11,12 @@
 # "N passed", and once (#108) a red suite was merged that way.
 set -u
 cd "$(dirname "$0")/.."
-PY="${PY:-py -3.14}"
+# Python 3.12 = the interpreter that carries the PINNED production versions
+# (backend/requirements.txt: fastapi 0.141 / starlette 1.6, same as Fly and CI).
+# The 3.14 install has an older FastAPI that flattens included routers, so a
+# recon route-table test passed here and failed on CI (2026-09-04). Override
+# with PY="py -3.14" only to compare.
+PY="${PY:-py -3.12}"
 [ -x "$(command -v py 2>/dev/null)" ] || PY="${PY:-python}"
 area="${1:-all}"
 fail=0
