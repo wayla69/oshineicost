@@ -54,7 +54,9 @@ def partial_day_client(tmp_path_factory):
     # Repointing main.DB_PATH is global. Without restoring it this module would
     # leave every later test reading THIS fixture — which is how it first showed
     # up: test_mtd expected cutoff_day 3 and got today's day instead.
-    prev = main.DB_PATH
+    import core
+    prev = core.DB_PATH
+    core.DB_PATH = db
     main.DB_PATH = db
     main._tls.con = None
     try: main.invalidate_cache()
@@ -63,6 +65,7 @@ def partial_day_client(tmp_path_factory):
         with TestClient(main.app) as c:
             yield c
     finally:
+        core.DB_PATH = prev
         main.DB_PATH = prev
         main._tls.con = None
         try: main.invalidate_cache()

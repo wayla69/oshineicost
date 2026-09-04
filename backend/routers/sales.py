@@ -2,34 +2,20 @@
 VERBATIM out of main.py (P1 structure refactor, step 3). No logic changes;
 URLs unchanged. Same host-module pattern as routers/reports.py.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import Query
+from pydantic import BaseModel
+from typing import Optional
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from core import (
+    _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
+    _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
+    ex_vat, get_db, ttl_cache,
+)
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    'BaseModel',
-    'Optional',
-    'Query',
-    '_EASY_TIER_CODES_SQL',
-    '_FOOD_CATEGORY_FILTER',
-    '_cogs_case',
-    '_effective_cost_subquery',
-    '_group_filter',
-    '_iso_week_sql',
-    '_month_range_filter',
-    '_partial_months',
-    '_txn_fallback_counts',
-    '_unified_cogs_expr',
-    '_ym_parts',
-    'ex_vat',
-    'get_db',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
-from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 

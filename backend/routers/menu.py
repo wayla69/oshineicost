@@ -3,27 +3,18 @@ opportunities / ai-ideas / lifecycle) + the _menu_*_compute helpers, moved
 VERBATIM out of main.py (P1 structure refactor, step 4). No logic changes;
 URLs unchanged. Same host-module pattern as routers/reports.py.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import Depends, Query
+from pydantic import BaseModel
+from typing import Optional
+from core import (
+    _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _month_range_filter, get_db,
+    require_write_token, ttl_cache,
+)
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    'BaseModel',
-    'Depends',
-    'Optional',
-    'Query',
-    '_FOOD_CATEGORY_FILTER',
-    '_cogs_case',
-    '_effective_cost_subquery',
-    '_month_range_filter',
-    'get_db',
-    'require_write_token',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
 
 
 
