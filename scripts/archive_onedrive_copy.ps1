@@ -1,4 +1,6 @@
 # Archive the old OneDrive working copy once nothing holds it open.
+# (ASCII only: Windows PowerShell 5.1 reads a BOM-less .ps1 as ANSI, and a
+#  non-ASCII character inside a string breaks the parse.)
 #
 # The repo moved to C:\Users\ASUS\Oshinei on 2026-07-20 (docs/MIGRATE_OFF_ONEDRIVE.md);
 # the last step, renaming the old folder so it stops looking live, fails with
@@ -19,7 +21,7 @@ $deadline = (Get-Date).AddHours($Hours)
 "$(Get-Date -Format s) start: '$Old' -> '$NewName' (until $deadline)" | Out-File -Append -Encoding utf8 $log
 while ((Get-Date) -lt $deadline) {
     if (-not (Test-Path -LiteralPath $Old)) {
-        "$(Get-Date -Format s) already gone — nothing to do" | Out-File -Append -Encoding utf8 $log
+        "$(Get-Date -Format s) already gone - nothing to do" | Out-File -Append -Encoding utf8 $log
         exit 0
     }
     try {
@@ -30,5 +32,5 @@ while ((Get-Date) -lt $deadline) {
         Start-Sleep -Seconds $EverySeconds
     }
 }
-"$(Get-Date -Format s) gave up after $Hours h — rename it from File Explorer (close Claude sessions opened in the old folder first)" | Out-File -Append -Encoding utf8 $log
+"$(Get-Date -Format s) gave up after $Hours h - rename it from File Explorer (close Claude sessions opened in the old folder first)" | Out-File -Append -Encoding utf8 $log
 exit 1
