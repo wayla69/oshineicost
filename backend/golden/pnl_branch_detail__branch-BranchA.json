@@ -1,0 +1,171 @@
+{
+ "bill_stats": {
+  "avg": 1070.0,
+  "avg_profit": 749.0,
+  "buckets": [
+   {
+    "count": 0,
+    "label": "0-100"
+   },
+   {
+    "count": 0,
+    "label": "100-200"
+   },
+   {
+    "count": 0,
+    "label": "1500+"
+   },
+   {
+    "count": 0,
+    "label": "200-300"
+   },
+   {
+    "count": 0,
+    "label": "300-500"
+   },
+   {
+    "count": 0,
+    "label": "500-750"
+   },
+   {
+    "count": 0,
+    "label": "750-1000"
+   },
+   {
+    "count": 6,
+    "label": "1000-1500"
+   }
+  ],
+  "margin_pct_used": 70.0,
+  "max": 1070.0,
+  "min": 1070.0,
+  "p10": 1070.0,
+  "p25": 1070.0,
+  "p50": 1070.0,
+  "p75": 1070.0,
+  "p90": 1070.0,
+  "profit_buckets": [
+   {
+    "count": 0,
+    "label": "0-50"
+   },
+   {
+    "count": 0,
+    "label": "100-200"
+   },
+   {
+    "count": 0,
+    "label": "200-400"
+   },
+   {
+    "count": 0,
+    "label": "400-700"
+   },
+   {
+    "count": 0,
+    "label": "50-100"
+   },
+   {
+    "count": 0,
+    "label": "<0"
+   },
+   {
+    "count": 6,
+    "label": "700+"
+   }
+  ],
+  "tx_count": 6
+ },
+ "branch": "BranchA",
+ "branch_total_cogs": 12600.0,
+ "category_mix": [
+  {
+   "category": "A La Carte",
+   "cogs": 1400.0,
+   "cost_pct": 11.1,
+   "revenue": 14000.0
+  },
+  {
+   "category": "Sashimi",
+   "cogs": 11200.0,
+   "cost_pct": 88.9,
+   "revenue": 0
+  }
+ ],
+ "monthly": [
+  {
+   "avg_ticket": 0,
+   "cogs": 4500.0,
+   "costed_rev_ex": 15000.0,
+   "customer_count": 0,
+   "gross_profit": 10500.0,
+   "margin_pct": 70.0,
+   "mom_pct": null,
+   "period_month": "2026-04",
+   "pos_total_inc_vat_diagnostic": 16050.0,
+   "profit_per_bill": null,
+   "revenue": 15000.0,
+   "revenue_ex_vat": 15000.0,
+   "tx_count": 0
+  },
+  {
+   "avg_ticket": 950.0,
+   "cogs": 3600.0,
+   "costed_rev_ex": 12000.0,
+   "customer_count": 12,
+   "gross_profit": 8400.0,
+   "margin_pct": 70.0,
+   "mom_pct": -20.0,
+   "period_month": "2026-06",
+   "pos_total_inc_vat_diagnostic": 12840.0,
+   "profit_per_bill": 2800.0,
+   "revenue": 12000.0,
+   "revenue_ex_vat": 12000.0,
+   "tx_count": 3
+  },
+  {
+   "avg_ticket": 950.0,
+   "cogs": 4500.0,
+   "costed_rev_ex": 15000.0,
+   "customer_count": 12,
+   "gross_profit": 10500.0,
+   "margin_pct": 70.0,
+   "mom_pct": 0.0,
+   "period_month": "2026-05",
+   "pos_total_inc_vat_diagnostic": 16050.0,
+   "profit_per_bill": 3500.0,
+   "revenue": 15000.0,
+   "revenue_ex_vat": 15000.0,
+   "tx_count": 3
+  }
+ ],
+ "top_ingredients": [],
+ "top_skus": [
+  {
+   "category": "A La Carte",
+   "cogs": 1400.0,
+   "cost_pct": 11.1,
+   "description": "(A) สเต๊ก",
+   "gp": 12600.0,
+   "margin_pct": 90.0,
+   "qty": 140.0,
+   "revenue": 14000.0,
+   "revenue_ex_vat": 14000.0,
+   "sku_code": "A0001",
+   "unit_cost": 10.0
+  },
+  {
+   "category": "Sashimi",
+   "cogs": 11200.0,
+   "cost_pct": 88.9,
+   "description": "(B) แซลมอน",
+   "gp": -11200.0,
+   "margin_pct": null,
+   "qty": 1400.0,
+   "revenue": 0.0,
+   "revenue_ex_vat": 0.0,
+   "sku_code": "B0001",
+   "unit_cost": 8.0
+  }
+ ]
+}

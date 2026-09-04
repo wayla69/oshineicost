@@ -1,0 +1,20 @@
+[
+ {
+  "customer_count": 8,
+  "day": "2026-06-01",
+  "revenue": 1900.0,
+  "tx_count": 2
+ },
+ {
+  "customer_count": 8,
+  "day": "2026-06-02",
+  "revenue": 1900.0,
+  "tx_count": 2
+ },
+ {
+  "customer_count": 8,
+  "day": "2026-06-03",
+  "revenue": 1900.0,
+  "tx_count": 2
+ }
+]

@@ -1,0 +1,22 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cost": 11200.0,
+   "cost_pct_of_total": 50.0,
+   "cost_per_serving": 8.0,
+   "food_cost_rate": null,
+   "servings": 1400.0
+  },
+  {
+   "branch": "BranchB",
+   "cost": 11200.0,
+   "cost_pct_of_total": 50.0,
+   "cost_per_serving": 8.0,
+   "food_cost_rate": null,
+   "servings": 1400.0
+  }
+ ],
+ "n_branches": 2,
+ "sku_code": "B0001"
+}

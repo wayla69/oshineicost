@@ -1,0 +1,32 @@
+{
+ "current": {
+  "avg_ticket": 950.0,
+  "customer_count": 24,
+  "discounts": 0,
+  "gross_sales": 0,
+  "net_sales": 5700.0,
+  "period": "2026-06",
+  "revenue": 5700.0,
+  "revenue_ex": 5700.0,
+  "tx_count": 6
+ },
+ "delta": {
+  "avg_ticket": 0.0,
+  "customer_count": 0.0,
+  "revenue": 0.0,
+  "tx_count": 0.0
+ },
+ "mtd": true,
+ "mtd_cutoff_day": 3,
+ "prior": {
+  "avg_ticket": 950.0,
+  "customer_count": 24,
+  "discounts": 0,
+  "gross_sales": 0,
+  "net_sales": 5700.0,
+  "period": "2026-05",
+  "revenue": 5700.0,
+  "revenue_ex": 5700.0,
+  "tx_count": 6
+ }
+}

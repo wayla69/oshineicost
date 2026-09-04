@@ -1,0 +1,11 @@
+{
+ "branches": [],
+ "skus": [
+  {
+   "category": "A La Carte",
+   "description": "(A) สเต๊ก",
+   "sku_code": "A0001",
+   "type": "sku"
+  }
+ ]
+}

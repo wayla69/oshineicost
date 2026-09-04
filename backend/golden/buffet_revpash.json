@@ -1,0 +1,176 @@
+{
+ "dead_hour": null,
+ "dow": [],
+ "hourly": [
+  {
+   "covers": 0,
+   "hour": 0,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 1,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 10,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 11,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 12,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 13,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 14,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 15,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 16,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 17,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 18,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 19,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 2,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 20,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 21,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 22,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 23,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 3,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 4,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 5,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 6,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 7,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 8,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  },
+  {
+   "covers": 0,
+   "hour": 9,
+   "revenue": 0.0,
+   "revpash": 0.0,
+   "tx_count": 0
+  }
+ ],
+ "peak_hour": null,
+ "seats": 120
+}

@@ -1,0 +1,25 @@
+{
+ "available": true,
+ "avg_daily": 1900.0,
+ "daily": [
+  {
+   "day": "2026-06-01",
+   "revenue": 1900.0
+  },
+  {
+   "day": "2026-06-02",
+   "revenue": 1900.0
+  },
+  {
+   "day": "2026-06-03",
+   "revenue": 1900.0
+  }
+ ],
+ "days_elapsed": 3,
+ "days_total": 30,
+ "hi": 57000.0,
+ "lo": 57000.0,
+ "mtd": 5700.0,
+ "period": "2026-06",
+ "projected": 57000.0
+}

@@ -1,0 +1,59 @@
+{
+ "branches": [
+  {
+   "avg7": 950.0,
+   "bills": 1,
+   "branch": "BranchA",
+   "customers": 4,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "spark": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    950.0,
+    950.0,
+    950.0
+   ],
+   "status": "ok",
+   "vs_avg_pct": 0.0,
+   "vs_wow_pct": null,
+   "wow": null
+  },
+  {
+   "avg7": 950.0,
+   "bills": 1,
+   "branch": "BranchB",
+   "customers": 4,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "spark": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    950.0,
+    950.0,
+    950.0
+   ],
+   "status": "ok",
+   "vs_avg_pct": 0.0,
+   "vs_wow_pct": null,
+   "wow": null
+  }
+ ],
+ "date": "2026-06-03",
+ "days": [
+  "2026-05-27",
+  "2026-05-28",
+  "2026-05-29",
+  "2026-05-30",
+  "2026-05-31",
+  "2026-06-01",
+  "2026-06-02",
+  "2026-06-03"
+ ]
+}

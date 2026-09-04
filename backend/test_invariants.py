@@ -284,10 +284,15 @@ def test_sph_endpoint_uses_ex_vat():
     Regressions guarded: raw inc-VAT / customer_count (+7%), and revenue that
     still carries the 5% service charge (+4.7%)."""
     src = inspect.getsource(inspect.unwrap(main.analysis_sph))
-    assert "1.07" in src, "SPH no longer divides by the VAT divisor"
-    assert "service_charge" in src,         "SPH regressed to revenue that still carries the 5% service charge"
+    # Since Phase 1 the rule is stated once in rules.py; the endpoint must reach
+    # it through the helper rather than restate it — that is the whole point.
+    assert "net_revenue_row(" in src, "SPH no longer uses the shared net-revenue rule"
     assert "total_inc_vat / st.customer_count" not in src, \
         "SPH regressed to VAT-inflated raw inc-VAT / customer_count"
+    import rules
+    text = rules.net_revenue_row("st")
+    assert "/1.07" in text and "service_charge" in text, \
+        "the shared rule itself must divide by 1.07 and strip the service charge"
 
 
 def test_buffet_per_bill_uses_real_cost_ratio():

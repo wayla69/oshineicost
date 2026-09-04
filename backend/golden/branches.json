@@ -1,0 +1,14 @@
+[
+ {
+  "active": true,
+  "branch_type": "franchise",
+  "id": 2,
+  "name": "BranchB"
+ },
+ {
+  "active": true,
+  "branch_type": "master",
+  "id": 1,
+  "name": "BranchA"
+ }
+]

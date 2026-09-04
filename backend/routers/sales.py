@@ -29,6 +29,7 @@ _SHARED = (
     'ttl_cache',
 )
 globals().update({_n: getattr(M, _n) for _n in _SHARED})
+from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 
@@ -70,7 +71,7 @@ def sales_monthly(
             rows = con.execute(
                 f"""
                 SELECT DATE(st.sold_at)              AS period_month,
-                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) AS revenue,
+                       ROUND({net_revenue_sum('st')},2) AS revenue,
                        COUNT(*)                       AS tx_count,
                        SUM(st.customer_count)         AS customer_count
                 FROM sales_transaction st
@@ -105,7 +106,7 @@ def sales_monthly(
                 f"""
                 SELECT {_wk}                            AS period_month,
                        MIN(DATE(st.sold_at))            AS week_start,
-                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)  AS revenue,
+                       ROUND({net_revenue_sum('st')}, 2)  AS revenue,
                        COUNT(*)                         AS tx_count,
                        SUM(st.customer_count)           AS customer_count
                 FROM sales_transaction st
@@ -903,7 +904,7 @@ def heavy_eaters(
         win = con.execute("SELECT MIN(day) lo, MAX(day) hi FROM sale_bill_cogs").fetchone()
         rows = con.execute(f"""
             SELECT b.name br, sbc.day day, sbc.receipt_no rcpt, t.customer_count cov,
-                   (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) rev, sbc.cogs_bom cogs
+                   {net_revenue_row('t')} rev, sbc.cogs_bom cogs
             FROM sale_bill_cogs sbc
             JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no
             JOIN branches b ON b.branch_id = sbc.branch_id
@@ -999,9 +1000,7 @@ def sales_daily(
         gran = "day"
     base = ["t.source='Easy'", "b.name!='ALL'"]
     params: dict = {}
-    if branch:
-        base.append("b.name=:branch"); params["branch"] = branch
-    _group_filter(base, params, group)
+    scope_filter(base, params, branch, group)
     where = " AND ".join(base)
 
     mtd_cut_day = None   # set below when the latest month is partial → MTD-fair month compare
@@ -1074,7 +1073,7 @@ def sales_daily(
             # buffet (buffet dishes duplicated in food + the package in other → +~50%).
             rows = con.execute(f"""
                 SELECT b.name branch,
-                       ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev,
+                       ROUND({net_revenue_sum('t')},2) rev,
                        SUM(t.customer_count) cust, COUNT(*) bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
@@ -1119,8 +1118,8 @@ def sales_daily(
                         "cust": round(sum(avg.get(w, fb)[1] for w in elapsed_wd), 1),
                         "bills": 0}
 
-            dow_sel = """CAST(strftime('%w', t.sold_at) AS INT) wd,
-                       (SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))) rev, SUM(t.customer_count) cust,
+            dow_sel = f"""CAST(strftime('%w', t.sold_at) AS INT) wd,
+                       {net_revenue_sum('t')} rev, SUM(t.customer_count) cust,
                        COUNT(DISTINCT date(t.sold_at)) days
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id"""
             dow_prm = {**params, "pmm": pms.strftime("%Y-%m")}
@@ -1293,8 +1292,7 @@ def cost_per_head(date: Optional[str] = Query(None), branch: Optional[str] = Que
         return _dt.date(y, m, min(d.day, _cal.monthrange(y, m)[1]))
 
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
-    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
-    _group_filter(tfilt, tp, group)
+    scope_filter(tfilt, tp, branch, group)
     twhere = " AND ".join(tfilt)
     dbf = ""  # branch filter for the daily-sku side (by name via join)
     if branch: dbf = " AND b.name=:branch"
@@ -1371,8 +1369,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
     import datetime as _dt, calendar as _cal
     cogs_expr = _unified_cogs_expr("ssm")
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
-    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
-    _group_filter(tfilt, tp, group)
+    scope_filter(tfilt, tp, branch, group)
     twhere = " AND ".join(tfilt)
     dbf = " AND b.name=:branch" if branch else ""
     # fix A2: propagate group filter into the COGS query so it matches the revenue query scope
@@ -1396,7 +1393,7 @@ def latest_month_mtd(branch: Optional[str] = Query(None), group: Optional[str] =
 
         def agg(s, e):
             r = con.execute(
-                f"""SELECT ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev, SUM(t.customer_count) cust,
+                f"""SELECT ROUND({net_revenue_sum('t')},2) rev, SUM(t.customer_count) cust,
                     ROUND(SUM(t.discount),2) disc, COUNT(*) bills
                     FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                     WHERE {twhere} AND date(t.sold_at) BETWEEN :s AND :e""",

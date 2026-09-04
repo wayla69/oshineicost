@@ -1,0 +1,13 @@
+{
+ "available": true,
+ "by": "branch",
+ "name": "Series 5",
+ "rows": [
+  {
+   "amount": 4000.0,
+   "label": "BranchA",
+   "uses": 40
+  }
+ ],
+ "series_id": 5
+}

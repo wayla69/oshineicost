@@ -1,0 +1,92 @@
+{
+ "branches": [
+  "BranchA",
+  "BranchB"
+ ],
+ "period": {
+  "month_from": null,
+  "month_to": null
+ },
+ "results": [
+  {
+   "branch": "BranchA",
+   "cogs": 12600.0,
+   "cost_by_ingredient_type": {},
+   "costed_revenue": 42000.0,
+   "food_cost_pct": 30.0,
+   "gp": 29400.0,
+   "gp_pct": 70.0,
+   "revenue": 42000.0,
+   "top_menus": [
+    {
+     "description": "(A) สเต๊ก",
+     "pct_of_branch_cogs": 11.11,
+     "sku_code": "A0001",
+     "total_cogs": 1400.0
+    },
+    {
+     "description": "(B) แซลมอน",
+     "pct_of_branch_cogs": 88.89,
+     "sku_code": "B0001",
+     "total_cogs": 11200.0
+    },
+    {
+     "description": "ค่าบุฟเฟ่ต์",
+     "pct_of_branch_cogs": 0.0,
+     "sku_code": "BUFFET",
+     "total_cogs": 0.0
+    }
+   ],
+   "uncosted_skus": 0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 12600.0,
+   "cost_by_ingredient_type": {},
+   "costed_revenue": 42000.0,
+   "food_cost_pct": 30.0,
+   "gp": 29400.0,
+   "gp_pct": 70.0,
+   "revenue": 42000.0,
+   "top_menus": [
+    {
+     "description": "(A) สเต๊ก",
+     "pct_of_branch_cogs": 11.11,
+     "sku_code": "A0001",
+     "total_cogs": 1400.0
+    },
+    {
+     "description": "(B) แซลมอน",
+     "pct_of_branch_cogs": 88.89,
+     "sku_code": "B0001",
+     "total_cogs": 11200.0
+    },
+    {
+     "description": "ค่าบุฟเฟ่ต์",
+     "pct_of_branch_cogs": 0.0,
+     "sku_code": "BUFFET",
+     "total_cogs": 0.0
+    }
+   ],
+   "uncosted_skus": 0
+  }
+ ],
+ "variance": {
+  "cogs": {
+   "mean": 12600.0,
+   "outliers": []
+  },
+  "food_cost_pct": {
+   "mean": 30.0,
+   "outliers": []
+  },
+  "gp_pct": {
+   "mean": 70.0,
+   "outliers": []
+  },
+  "revenue": {
+   "mean": 42000.0,
+   "outliers": []
+  }
+ }
+}

@@ -1,0 +1,24 @@
+{
+ "mom": {
+  "cur": "2026-06",
+  "prev": "2026-05"
+ },
+ "series": [
+  {
+   "active": 0,
+   "amount": 4000.0,
+   "avg": 100,
+   "code": null,
+   "cur_amount": 4000,
+   "id": 5,
+   "mom_pct": null,
+   "name": "Series 5",
+   "pct": 100.0,
+   "uses": 40
+  }
+ ],
+ "series_count": 1,
+ "staged": true,
+ "total_amount": 4000.0,
+ "total_uses": 40
+}

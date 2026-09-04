@@ -1,0 +1,83 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cogs": 3600.0,
+   "cogs_delta": -900.0,
+   "costed_revenue": 12000.0,
+   "delta_pp": 0.0,
+   "food_cost_pct": 30.0,
+   "movers_down": [
+    {
+     "cogs": 3200.0,
+     "delta": -800.0,
+     "description": "(B) แซลมอน",
+     "is_gone": false,
+     "is_new": false,
+     "prev_cogs": 4000.0,
+     "prev_qty": 500.0,
+     "qty": 400.0,
+     "sku_code": "B0001"
+    },
+    {
+     "cogs": 400.0,
+     "delta": -100.0,
+     "description": "(A) สเต๊ก",
+     "is_gone": false,
+     "is_new": false,
+     "prev_cogs": 500.0,
+     "prev_qty": 50.0,
+     "qty": 40.0,
+     "sku_code": "A0001"
+    }
+   ],
+   "movers_up": [],
+   "prev_cogs": 4500.0,
+   "prev_costed_revenue": 15000.0,
+   "prev_food_cost_pct": 30.0,
+   "prev_revenue": 15000.0,
+   "revenue": 12000.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 3600.0,
+   "cogs_delta": -900.0,
+   "costed_revenue": 12000.0,
+   "delta_pp": 0.0,
+   "food_cost_pct": 30.0,
+   "movers_down": [
+    {
+     "cogs": 3200.0,
+     "delta": -800.0,
+     "description": "(B) แซลมอน",
+     "is_gone": false,
+     "is_new": false,
+     "prev_cogs": 4000.0,
+     "prev_qty": 500.0,
+     "qty": 400.0,
+     "sku_code": "B0001"
+    },
+    {
+     "cogs": 400.0,
+     "delta": -100.0,
+     "description": "(A) สเต๊ก",
+     "is_gone": false,
+     "is_new": false,
+     "prev_cogs": 500.0,
+     "prev_qty": 50.0,
+     "qty": 40.0,
+     "sku_code": "A0001"
+    }
+   ],
+   "movers_up": [],
+   "prev_cogs": 4500.0,
+   "prev_costed_revenue": 15000.0,
+   "prev_food_cost_pct": 30.0,
+   "prev_revenue": 15000.0,
+   "revenue": 12000.0
+  }
+ ],
+ "incl_service": false,
+ "month": "2026-06",
+ "prev_month": "2026-05"
+}

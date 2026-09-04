@@ -1,0 +1,140 @@
+{
+ "branch_breakdown": [
+  {
+   "branch": "BranchA",
+   "cogs": 12600.0,
+   "food_cost_pct": 30.0,
+   "revenue": 42000.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 12600.0,
+   "food_cost_pct": 30.0,
+   "revenue": 42000.0
+  }
+ ],
+ "concentration": {
+  "top_10_pct": 100.0,
+  "top_20_pct": 100.0,
+  "top_50_pct": 100.0,
+  "top_5_pct": 100.0
+ },
+ "cost_by_ingredient_type": {},
+ "granularity": "month",
+ "heatmap": [
+  {
+   "branch": "BranchA",
+   "cogs": 3600.0,
+   "food_cost_pct": 30.0,
+   "gp": 8400.0,
+   "month": "2026-06",
+   "revenue": 12000.0
+  },
+  {
+   "branch": "BranchA",
+   "cogs": 4500.0,
+   "food_cost_pct": 30.0,
+   "gp": 10500.0,
+   "month": "2026-04",
+   "revenue": 15000.0
+  },
+  {
+   "branch": "BranchA",
+   "cogs": 4500.0,
+   "food_cost_pct": 30.0,
+   "gp": 10500.0,
+   "month": "2026-05",
+   "revenue": 15000.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 3600.0,
+   "food_cost_pct": 30.0,
+   "gp": 8400.0,
+   "month": "2026-06",
+   "revenue": 12000.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 4500.0,
+   "food_cost_pct": 30.0,
+   "gp": 10500.0,
+   "month": "2026-04",
+   "revenue": 15000.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 4500.0,
+   "food_cost_pct": 30.0,
+   "gp": 10500.0,
+   "month": "2026-05",
+   "revenue": 15000.0
+  }
+ ],
+ "period": {
+  "month_from": null,
+  "month_to": null
+ },
+ "top_ingredients": [],
+ "top_skus": [
+  {
+   "business_type": "alacarte",
+   "description": "(A) สเต๊ก",
+   "pct_of_chain_cogs": 11.11,
+   "qty": 280.0,
+   "sku_code": "A0001",
+   "sku_id": 3,
+   "sparkline": [
+    {
+     "cogs": 1000.0,
+     "month": "2026-04"
+    },
+    {
+     "cogs": 1000.0,
+     "month": "2026-05"
+    },
+    {
+     "cogs": 800.0,
+     "month": "2026-06"
+    }
+   ],
+   "total_cogs": 2800.0,
+   "unit_cost": 10.0
+  },
+  {
+   "business_type": "buffet",
+   "description": "(B) แซลมอน",
+   "pct_of_chain_cogs": 88.89,
+   "qty": 2800.0,
+   "sku_code": "B0001",
+   "sku_id": 2,
+   "sparkline": [
+    {
+     "cogs": 6400.0,
+     "month": "2026-06"
+    },
+    {
+     "cogs": 8000.0,
+     "month": "2026-04"
+    },
+    {
+     "cogs": 8000.0,
+     "month": "2026-05"
+    }
+   ],
+   "total_cogs": 22400.0,
+   "unit_cost": 8.0
+  }
+ ],
+ "totals": {
+  "cogs": 25200.0,
+  "costed_revenue": 84000.0,
+  "food_cost_pct": 30.0,
+  "gp": 58800.0,
+  "gp_pct": 70.0,
+  "incl_service": false,
+  "menus_total": 3,
+  "revenue": 84000.0,
+  "service_charge": 0
+ }
+}

@@ -1,0 +1,23 @@
+{
+ "branches": [
+  {
+   "amount": 6000.0,
+   "bills": 5,
+   "branch": "BranchA"
+  }
+ ],
+ "month": "2026-06",
+ "reasons": [
+  {
+   "amount": 6000.0,
+   "bills": 5,
+   "reason": "คีย์ข้อมูลผิด"
+  }
+ ],
+ "summary": {
+  "amount": 6000.0,
+  "bills": 5,
+  "cancel_rate": 45.45,
+  "valid_bills": 6
+ }
+}

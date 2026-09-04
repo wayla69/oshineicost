@@ -1,0 +1,21 @@
+{
+ "bills": [],
+ "capped": false,
+ "hi": 0.0,
+ "idx": -1,
+ "label": "ขาดทุน (<0%)",
+ "lo": null,
+ "range": [
+  "2026-06-03",
+  "2026-06-03"
+ ],
+ "stat": {
+  "avg_gm": null,
+  "cogs": 0,
+  "cust": 0,
+  "disc": 0,
+  "gp": 0,
+  "n": 0,
+  "rev": 0
+ }
+}

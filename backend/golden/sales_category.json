@@ -1,0 +1,17 @@
+[
+ {
+  "category": "A La Carte",
+  "qty": 280.0,
+  "revenue": 28000.0
+ },
+ {
+  "category": "BUFFET",
+  "qty": 560.0,
+  "revenue": 56000.0
+ },
+ {
+  "category": "Sashimi",
+  "qty": 2800.0,
+  "revenue": 0.0
+ }
+]

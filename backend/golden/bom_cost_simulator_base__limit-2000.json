@@ -1,0 +1,36 @@
+{
+ "baseline": {
+  "cogs": 25200.0,
+  "costed_revenue": 84000.0,
+  "food_cost_pct": 30.0,
+  "gp": 58800.0,
+  "gp_pct": 70.0,
+  "revenue": 84000.0
+ },
+ "period": {
+  "month_from": null,
+  "month_to": null
+ },
+ "skus": [
+  {
+   "business_type": "alacarte",
+   "current_unit_cost": 10.0,
+   "description": "(A) สเต๊ก",
+   "period_cogs": 2800.0,
+   "period_revenue": 28000.0,
+   "qty": 280.0,
+   "sku_code": "A0001",
+   "sku_id": 3
+  },
+  {
+   "business_type": "buffet",
+   "current_unit_cost": 8.0,
+   "description": "(B) แซลมอน",
+   "period_cogs": 22400.0,
+   "period_revenue": 0.0,
+   "qty": 2800.0,
+   "sku_code": "B0001",
+   "sku_id": 2
+  }
+ ]
+}

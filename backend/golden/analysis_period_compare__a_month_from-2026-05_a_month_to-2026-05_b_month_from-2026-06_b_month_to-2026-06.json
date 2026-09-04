@@ -1,0 +1,115 @@
+{
+ "a": {
+  "avg_ticket": 950.0,
+  "customer_count": 24,
+  "discount": 120.0,
+  "drink": 600.0,
+  "food": 5400.0,
+  "label": "2026-05 â†' 2026-05",
+  "revenue": 5700.0,
+  "top_branches": [
+   {
+    "branch": "BranchA",
+    "revenue": 2850.0,
+    "tx_count": 3
+   },
+   {
+    "branch": "BranchB",
+    "revenue": 2850.0,
+    "tx_count": 3
+   }
+  ],
+  "top_skus": [
+   {
+    "description": "(A) สเต๊ก",
+    "qty": 100.0,
+    "revenue": 10000.0,
+    "sku_code": "A0001"
+   },
+   {
+    "description": "(B) แซลมอน",
+    "qty": 1000.0,
+    "revenue": 0.0,
+    "sku_code": "B0001"
+   }
+  ],
+  "tx_count": 6
+ },
+ "b": {
+  "avg_ticket": 950.0,
+  "customer_count": 24,
+  "discount": 120.0,
+  "drink": 600.0,
+  "food": 5400.0,
+  "label": "2026-06 â†' 2026-06",
+  "revenue": 5700.0,
+  "top_branches": [
+   {
+    "branch": "BranchA",
+    "revenue": 2850.0,
+    "tx_count": 3
+   },
+   {
+    "branch": "BranchB",
+    "revenue": 2850.0,
+    "tx_count": 3
+   }
+  ],
+  "top_skus": [
+   {
+    "description": "(A) สเต๊ก",
+    "qty": 80.0,
+    "revenue": 8000.0,
+    "sku_code": "A0001"
+   },
+   {
+    "description": "(B) แซลมอน",
+    "qty": 800.0,
+    "revenue": 0.0,
+    "sku_code": "B0001"
+   }
+  ],
+  "tx_count": 6
+ },
+ "branch_changes": [
+  {
+   "branch": "BranchA",
+   "delta_b_pct": 0.0,
+   "delta_c_pct": null,
+   "delta_d_pct": null,
+   "rank_a": 2,
+   "rank_b": 2,
+   "rank_c": null,
+   "rank_d": null,
+   "rank_shift": 0,
+   "revenue_a": 2850.0,
+   "revenue_b": 2850.0,
+   "revenue_c": 0,
+   "revenue_d": 0
+  },
+  {
+   "branch": "BranchB",
+   "delta_b_pct": 0.0,
+   "delta_c_pct": null,
+   "delta_d_pct": null,
+   "rank_a": 1,
+   "rank_b": 1,
+   "rank_c": null,
+   "rank_d": null,
+   "rank_shift": 0,
+   "revenue_a": 2850.0,
+   "revenue_b": 2850.0,
+   "revenue_c": 0,
+   "revenue_d": 0
+  }
+ ],
+ "c": null,
+ "d": null,
+ "delta": {
+  "avg_ticket": 0.0,
+  "customer_count": 0.0,
+  "discount": 0.0,
+  "revenue": 0.0,
+  "tx_count": 0.0
+ }
+}

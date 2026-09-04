@@ -1,0 +1,22 @@
+[
+ {
+  "branch": "BranchA",
+  "branch_id": 1,
+  "cogs": 12600.0,
+  "costed_revenue_ex_vat": 0.0,
+  "gross_profit": 29400.0,
+  "margin_pct": 70.0,
+  "qty": 1820.0,
+  "revenue_ex_vat": 42000.0
+ },
+ {
+  "branch": "BranchB",
+  "branch_id": 2,
+  "cogs": 12600.0,
+  "costed_revenue_ex_vat": 0.0,
+  "gross_profit": 29400.0,
+  "margin_pct": 70.0,
+  "qty": 1820.0,
+  "revenue_ex_vat": 42000.0
+ }
+]

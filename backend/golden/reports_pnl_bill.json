@@ -1,0 +1,252 @@
+{
+ "by_branch": [
+  {
+   "bills": 1,
+   "branch": "BranchA",
+   "cogs": 520.0,
+   "cust": 4,
+   "gm_pct": 45.3,
+   "gp": 430.0,
+   "gp_per_bill": 430,
+   "loss_bills": 0,
+   "rev": 950.0
+  },
+  {
+   "bills": 1,
+   "branch": "BranchB",
+   "cogs": 520.0,
+   "cust": 4,
+   "gm_pct": 45.3,
+   "gp": 430.0,
+   "gp_per_bill": 430,
+   "loss_bills": 0,
+   "rev": 950.0
+  }
+ ],
+ "data_window": [
+  "2026-05-01",
+  "2026-06-03"
+ ],
+ "dist": [
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 0.0,
+   "idx": -1,
+   "label": "ขาดทุน (<0%)",
+   "lo": null,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 10.0,
+   "idx": 1,
+   "label": "5–10%",
+   "lo": 5.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 100.0,
+   "idx": 14,
+   "label": "90–100%",
+   "lo": 90.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 15.0,
+   "idx": 2,
+   "label": "10–15%",
+   "lo": 10.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 20.0,
+   "idx": 3,
+   "label": "15–20%",
+   "lo": 15.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 25.0,
+   "idx": 4,
+   "label": "20–25%",
+   "lo": 20.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 30.0,
+   "idx": 5,
+   "label": "25–30%",
+   "lo": 25.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 35.0,
+   "idx": 6,
+   "label": "30–35%",
+   "lo": 30.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 40.0,
+   "idx": 7,
+   "label": "35–40%",
+   "lo": 35.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 45.0,
+   "idx": 8,
+   "label": "40–45%",
+   "lo": 40.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 5.0,
+   "idx": 0,
+   "label": "0–5%",
+   "lo": 0.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 60.0,
+   "idx": 10,
+   "label": "50–60%",
+   "lo": 50.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 70.0,
+   "idx": 11,
+   "label": "60–70%",
+   "lo": 60.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 80.0,
+   "idx": 12,
+   "label": "70–80%",
+   "lo": 70.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 0,
+   "cust": 0,
+   "gp": 0,
+   "hi": 90.0,
+   "idx": 13,
+   "label": "80–90%",
+   "lo": 80.0,
+   "n": 0,
+   "rev": 0
+  },
+  {
+   "cogs": 1040.0,
+   "cust": 8,
+   "gp": 860.0,
+   "hi": 50.0,
+   "idx": 9,
+   "label": "45–50%",
+   "lo": 45.0,
+   "n": 2,
+   "rev": 1900.0
+  }
+ ],
+ "focus": "2026-06-03",
+ "gran": "day",
+ "loss": [],
+ "loss_capped": false,
+ "loss_count": 0,
+ "loss_total": 0,
+ "out_of_window": false,
+ "range": [
+  "2026-06-03",
+  "2026-06-03"
+ ],
+ "summary": {
+  "bills": 2,
+  "cogs": 1040.0,
+  "customers": 8,
+  "discount": 40.0,
+  "gp_pct": 45.3,
+  "gp_per_bill": 430,
+  "gp_per_head": 108,
+  "gross_profit": 860.0,
+  "revenue": 1900.0
+ },
+ "worst": [
+  {
+   "branch": "BranchA",
+   "cogs": 520.0,
+   "cust": 4,
+   "disc": 20.0,
+   "dwell_min": null,
+   "gp_pct": 45.3,
+   "receipt": "2026-06-03-1001-1",
+   "rev": 950.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 520.0,
+   "cust": 4,
+   "disc": 20.0,
+   "dwell_min": null,
+   "gp_pct": 45.3,
+   "receipt": "2026-06-03-2001-2",
+   "rev": 950.0
+  }
+ ]
+}

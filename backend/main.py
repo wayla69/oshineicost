@@ -284,8 +284,14 @@ INDEX   = HERE.parent / "index.html"   # canonical (Phase 17d-fix 2026-05-28: wa
 # `1.07` for performance/readability; this constant is the canonical reference
 # and is enforced by test_invariants (per-head/ticket must be ex-VAT).
 # ---------------------------------------------------------------------------
-VAT_RATE    = 0.07
-VAT_DIVISOR = 1.0 + VAT_RATE          # 1.07  — inc-VAT ➜ ex-VAT divisor
+# VAT, tier codes and the COGS expression are defined ONCE in rules.py so the
+# live sync and the standalone generators state them the same way the app does.
+from rules import (VAT_RATE, VAT_DIVISOR, net_revenue_row, net_revenue_sum,  # noqa: F401
+                   scope_filter, cogs_expr as _rules_cogs_expr,
+                   raw_unit_cost_sql as _raw_unit_cost_sql, effective_unit_cost_sql,
+                   EASY_TIER_CODES as _EASY_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL,
+                   LEGACY_TIER_CODES as _LEGACY_TIER_CODES, ALL_TIER_CODES as _ALL_TIER_CODES,
+                   ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL)
 
 def ex_vat(inc_vat_amount: float) -> float:
     """Convert an inc-VAT amount to ex-VAT (net) revenue."""
@@ -1426,8 +1432,8 @@ def data_quality():
 
         # 2. Bills carrying revenue but zero covers — every per-head figure that
         #    divides by covers is guarded, but these bills still under-count pax.
-        z = con.execute("""
-            SELECT b.name br, COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev
+        z = con.execute(f"""
+            SELECT b.name br, COUNT(*) n, ROUND(SUM({net_revenue_row('t')})) rev
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE COALESCE(t.customer_count,0)=0 AND t.total_inc_vat>0
             GROUP BY b.name ORDER BY n DESC""").fetchall()
@@ -2351,13 +2357,7 @@ def _tx_filters(branch, group, month_from, month_to, month):
 # 'BUFFET' (plain, sku_id=1) is a deprecated legacy buffet code. Some Easy
 # bills still emit it as a fallback. Treat same as tiered codes: count revenue,
 # skip unit_cost (avoid double-counting 825M of phantom COGS).
-_EASY_TIER_CODES = ('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')
-_EASY_TIER_CODES_SQL = "('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')"
-# Legacy buffet tier-level codes (no item breakdown) — kept as a SKU exclusion list.
-_LEGACY_TIER_CODES = ('B01','B02','B03','B07','B11')
-_ALL_TIER_CODES = _EASY_TIER_CODES + _LEGACY_TIER_CODES
-# Derived from the tuple (never hand-maintained — that drift is bug class #7).
-_ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in _ALL_TIER_CODES) + ")"
+# (tier-code tuples and their SQL forms now come from rules.py — imported above)
 
 
 def _effective_cost_subquery(ssm: str = "ssm", sc: str = "sc") -> str:
@@ -2446,31 +2446,7 @@ def _unified_cogs_expr(ssm: str = "ssm", sk: str = "sk") -> str:
     The `sk` arg is accepted for signature compatibility but not required.
     Buffet revenue stays intact; only the cost side is unified.
     """
-    return (
-        f"CASE "
-        f"  WHEN {ssm}.source = 'Easy' AND "
-        f"       (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id = {ssm}.sku_id) "
-        f"       IN {_EASY_TIER_CODES_SQL} THEN 0 "
-        # Per-SKU effective unit cost is precomputed once into sku_effective_cost
-        # (built at startup + on every cost/bom edit via invalidate_cache), turning
-        # what used to be THREE correlated subqueries PER sales row — evaluated
-        # ~87k+ times per request — into ONE rowid lookup into a ~1,200-row hot
-        # table. The original three subqueries are KEPT as a COALESCE fallback so
-        # the expression stays self-contained and CORRECT even if the table is
-        # absent/empty (tests, offline scripts, or a SKU added since the last
-        # build): COALESCE short-circuits, so the subqueries never execute once the
-        # table has the SKU. recipe_cost stores RAW cost; uncosted SKUs are stored
-        # as 0 (non-NULL) so a hit short-circuits correctly. Verified identical.
-        f"  ELSE {ssm}.qty * COALESCE("
-        f"    (SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id = {ssm}.sku_id), "
-        f"    (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = {ssm}.sku_id), "
-        f"    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = {ssm}.sku_id), "
-        f"    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
-        f"       JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id "
-        f"       JOIN skus s_al ON s_al.sku_id = {ssm}.sku_id WHERE a.bom_sku_code = s_al.sku_code), "
-        f"    0) "
-        f"END"
-    )
+    return _rules_cogs_expr(ssm, sk)   # the text lives in rules.py; see its docstring
 
 
 def _build_sku_effective_cost(con, force: bool = True):
@@ -2508,13 +2484,8 @@ def _build_sku_effective_cost(con, force: bool = True):
     rows = con.execute(
         f"""
         SELECT s.sku_id,
-               CASE WHEN s.sku_code IN {_ALL_TIER_CODES_SQL} THEN 0 ELSE COALESCE(
-            (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
-            (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = s.sku_id),
-            (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-               JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id
-               WHERE a.bom_sku_code = s.sku_code),
-            0) END AS rc
+               CASE WHEN s.sku_code IN {_ALL_TIER_CODES_SQL} THEN 0
+                    ELSE {_raw_unit_cost_sql('s')} END AS rc
         FROM skus s
         """
     ).fetchall()

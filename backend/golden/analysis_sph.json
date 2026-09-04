@@ -1,0 +1,108 @@
+{
+ "by_branch": [
+  {
+   "avg_sph": 237.5,
+   "branch": "BranchA",
+   "median_sph": 237.5,
+   "tx_count": 6
+  },
+  {
+   "avg_sph": 237.5,
+   "branch": "BranchB",
+   "median_sph": 237.5,
+   "tx_count": 6
+  }
+ ],
+ "by_daypart": [
+  {
+   "avg_sph": 0,
+   "daypart": "Dinner 17-22",
+   "tx_count": 0
+  },
+  {
+   "avg_sph": 0,
+   "daypart": "Other",
+   "tx_count": 0
+  },
+  {
+   "avg_sph": 237.5,
+   "daypart": "Lunch 11-14",
+   "tx_count": 12
+  }
+ ],
+ "distribution": [
+  {
+   "bucket": "ต่ำกว่า ฿350",
+   "color": "#94a3b8",
+   "count": 12,
+   "hi": 350,
+   "lo": 0,
+   "pct": 100.0
+  },
+  {
+   "bucket": "฿350–459",
+   "color": "#eab308",
+   "count": 0,
+   "hi": 460,
+   "lo": 350,
+   "pct": 0.0
+  },
+  {
+   "bucket": "฿460–589",
+   "color": "#10b981",
+   "count": 0,
+   "hi": 590,
+   "lo": 460,
+   "pct": 0.0
+  },
+  {
+   "bucket": "฿590–699",
+   "color": "#4f46e5",
+   "count": 0,
+   "hi": 700,
+   "lo": 590,
+   "pct": 0.0
+  },
+  {
+   "bucket": "฿700–889",
+   "color": "#f97316",
+   "count": 0,
+   "hi": 890,
+   "lo": 700,
+   "pct": 0.0
+  },
+  {
+   "bucket": "฿890 ขึ้นไป",
+   "color": "#ef4444",
+   "count": 0,
+   "hi": null,
+   "lo": 890,
+   "pct": 0.0
+  }
+ ],
+ "overall": {
+  "avg_sph": 237.5,
+  "dominant_pct": 100.0,
+  "dominant_tier": "ต่ำกว่า ฿350",
+  "median_sph": 237.5,
+  "p10": 237.5,
+  "p25": 237.5,
+  "p75": 237.5,
+  "p90": 237.5,
+  "pct_above_590": 0.0,
+  "pct_below_350": 100.0,
+  "sph_max": 237.5,
+  "sph_min": 237.5,
+  "total_tx": 12
+ },
+ "trend": [
+  {
+   "avg_sph": 237.5,
+   "period_month": "2026-05"
+  },
+  {
+   "avg_sph": 237.5,
+   "period_month": "2026-06"
+  }
+ ]
+}

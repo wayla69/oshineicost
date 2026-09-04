@@ -1,0 +1,20 @@
+[
+ {
+  "active": true,
+  "category": "A La Carte",
+  "description": "(A) สเต๊ก",
+  "sku_code": "A0001"
+ },
+ {
+  "active": true,
+  "category": "BUFFET",
+  "description": "ค่าบุฟเฟ่ต์",
+  "sku_code": "BUFFET"
+ },
+ {
+  "active": true,
+  "category": "Sashimi",
+  "description": "(B) แซลมอน",
+  "sku_code": "B0001"
+ }
+]

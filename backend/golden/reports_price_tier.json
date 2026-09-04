@@ -1,0 +1,4 @@
+{
+ "hint": "ยังไม่มีข้อมูล Tier (fact schema v2) — รัน python backend/build_menu_fact.py ก่อน",
+ "ready": false
+}

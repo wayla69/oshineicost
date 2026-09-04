@@ -1,0 +1,52 @@
+{
+ "abnormal_branches": [],
+ "branches": [
+  {
+   "avg_discount": 20.0,
+   "branch": "BranchA",
+   "disc_pct": 2.05,
+   "discount_rate": 100.0,
+   "discount_tx": 6,
+   "gross_base": 5839.63,
+   "is_abnormal": false,
+   "ratio_vs_chain": 1.0,
+   "top_reason": null,
+   "top_reason_amount": 0,
+   "top_reason_pct": 0,
+   "total_discount": 120.0,
+   "total_tx": 6,
+   "untyped_pct": 0,
+   "vs_avg_pts": 0.0
+  },
+  {
+   "avg_discount": 20.0,
+   "branch": "BranchB",
+   "disc_pct": 2.05,
+   "discount_rate": 100.0,
+   "discount_tx": 6,
+   "gross_base": 5839.63,
+   "is_abnormal": false,
+   "ratio_vs_chain": 1.0,
+   "top_reason": null,
+   "top_reason_amount": 0,
+   "top_reason_pct": 0,
+   "total_discount": 120.0,
+   "total_tx": 6,
+   "untyped_pct": 0,
+   "vs_avg_pts": 0.0
+  }
+ ],
+ "chain": {
+  "branch_count": 2,
+  "disc_pct": 2.05,
+  "discount_rate": 100.0,
+  "discount_tx": 12,
+  "gross_base": 11679.26,
+  "median_branch_pct": 2.05,
+  "threshold_pct": 3.07,
+  "total_discount": 240.0,
+  "total_tx": 12
+ },
+ "reasons_staged": false,
+ "summary": "✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ 3.07% (ค่าเฉลี่ยทุกสาขา 2.05% ของยอดก่อนลด)"
+}

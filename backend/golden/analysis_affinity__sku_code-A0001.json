@@ -1,0 +1,22 @@
+{
+ "anchor": "A0001",
+ "baskets": 6,
+ "items": [
+  {
+   "co_count": 6,
+   "co_qty": 2800.0,
+   "co_revenue": 0.0,
+   "description": "(B) แซลมอน",
+   "lift": 100.0,
+   "sku_code": "B0001"
+  },
+  {
+   "co_count": 6,
+   "co_qty": 560.0,
+   "co_revenue": 56000.0,
+   "description": "ค่าบุฟเฟ่ต์",
+   "lift": 100.0,
+   "sku_code": "BUFFET"
+  }
+ ]
+}

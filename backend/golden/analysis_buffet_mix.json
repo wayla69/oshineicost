@@ -1,0 +1,44 @@
+{
+ "months": [
+  "2026-04",
+  "2026-05",
+  "2026-06"
+ ],
+ "summary": [
+  {
+   "qty": 280.0,
+   "qty_pct": 33.3,
+   "revenue": 28000.0,
+   "revenue_pct": 33.3,
+   "tier": "à la carte"
+  },
+  {
+   "qty": 560.0,
+   "qty_pct": 66.7,
+   "revenue": 56000.0,
+   "revenue_pct": 66.7,
+   "tier": "350"
+  }
+ ],
+ "tiers": [
+  "à la carte",
+  "350"
+ ],
+ "trend": [
+  {
+   "350": 16000.0,
+   "period_month": "2026-06",
+   "à la carte": 8000.0
+  },
+  {
+   "350": 20000.0,
+   "period_month": "2026-04",
+   "à la carte": 10000.0
+  },
+  {
+   "350": 20000.0,
+   "period_month": "2026-05",
+   "à la carte": 10000.0
+  }
+ ]
+}

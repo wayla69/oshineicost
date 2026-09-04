@@ -1,0 +1,37 @@
+{
+ "branches": [
+  {
+   "avg_close": "12:00",
+   "avg_close_min": 720,
+   "branch": "BranchA",
+   "days_behind": 0,
+   "days_open": 3,
+   "last_date": "2026-06-03",
+   "last_sold": "2026-06-03T12:00:00",
+   "status": "current",
+   "total_bills": 6
+  },
+  {
+   "avg_close": "12:00",
+   "avg_close_min": 720,
+   "branch": "BranchB",
+   "days_behind": 0,
+   "days_open": 3,
+   "last_date": "2026-06-03",
+   "last_sold": "2026-06-03T12:00:00",
+   "status": "current",
+   "total_bills": 6
+  }
+ ],
+ "data_max": "2026-06-03T12:00:00",
+ "data_max_date": "2026-06-03",
+ "data_min_date": "2026-05-01",
+ "mode": "latest",
+ "summary": {
+  "behind": 0,
+  "branch_count": 2,
+  "current": 2,
+  "max_days_behind": 0
+ },
+ "today": "2026-09-04"
+}

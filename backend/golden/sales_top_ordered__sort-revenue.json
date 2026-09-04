@@ -1,0 +1,55 @@
+{
+ "cmp_covers_cur": 24,
+ "cmp_covers_prev": 24,
+ "items": [
+  {
+   "category": "A La Carte",
+   "cogs": 2800.0,
+   "cogs_share_pct": 11.1,
+   "description": "(A) สเต๊ก",
+   "qty": 280.0,
+   "qty_mom_pct": 0.0,
+   "qty_share_pct": 9.1,
+   "rev_mom_pct": 0.0,
+   "rev_share_pct": 100.0,
+   "revenue": 28000.0,
+   "sku_code": "A0001",
+   "spark": [
+    100.0,
+    100.0,
+    80.0
+   ]
+  },
+  {
+   "category": "Sashimi",
+   "cogs": 22400.0,
+   "cogs_share_pct": 88.9,
+   "description": "(B) แซลมอน",
+   "qty": 2800.0,
+   "qty_mom_pct": 0.0,
+   "qty_share_pct": 90.9,
+   "rev_mom_pct": null,
+   "rev_share_pct": 0.0,
+   "revenue": 0.0,
+   "sku_code": "B0001",
+   "spark": [
+    1000.0,
+    1000.0,
+    800.0
+   ]
+  }
+ ],
+ "latest_month": "2026-06",
+ "mom_basis": "mtd",
+ "mtd_cutoff_day": 3,
+ "prev_month": "2026-05",
+ "spark_months": [
+  "2026-04",
+  "2026-05",
+  "2026-06"
+ ],
+ "total_cogs": 25200.0,
+ "total_covers": 48,
+ "total_qty": 3080.0,
+ "total_rev": 28000.0
+}

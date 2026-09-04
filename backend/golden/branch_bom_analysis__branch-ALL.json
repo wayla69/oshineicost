@@ -1,0 +1,134 @@
+{
+ "branch": "ALL (รวมเครือ)",
+ "concentration": {
+  "top_10_menus_pct_of_cogs": null,
+  "top_20_menus_pct_of_cogs": null,
+  "top_5_menus_pct_of_cogs": null
+ },
+ "cost_by_ingredient_type": {},
+ "granularity": "month",
+ "is_chain": true,
+ "monthly_trend": [
+  {
+   "cogs": 7200.0,
+   "food_cost_pct": 30.0,
+   "gp": 16800.0,
+   "gp_pct": 70.0,
+   "month": "2026-06",
+   "revenue": 24000.0
+  },
+  {
+   "cogs": 9000.0,
+   "food_cost_pct": 30.0,
+   "gp": 21000.0,
+   "gp_pct": 70.0,
+   "month": "2026-04",
+   "revenue": 30000.0
+  },
+  {
+   "cogs": 9000.0,
+   "food_cost_pct": 30.0,
+   "gp": 21000.0,
+   "gp_pct": 70.0,
+   "month": "2026-05",
+   "revenue": 30000.0
+  }
+ ],
+ "period": {
+  "month_from": "2026-04",
+  "month_to": "2026-06",
+  "months": 3
+ },
+ "top_ingredients_by_cost": [],
+ "top_menus_by_cost": [
+  {
+   "description": "(A) สเต๊ก",
+   "has_bom_recipe": false,
+   "monthly_cogs": [
+    {
+     "cogs": 1000.0,
+     "month": "2026-04"
+    },
+    {
+     "cogs": 1000.0,
+     "month": "2026-05"
+    },
+    {
+     "cogs": 800.0,
+     "month": "2026-06"
+    }
+   ],
+   "pct_of_branch_cogs": 11.11,
+   "qty": 280.0,
+   "revenue": 28000.0,
+   "sku_code": "A0001",
+   "sku_id": 3,
+   "total_cogs": 2800.0,
+   "unit_cost": 10.0
+  },
+  {
+   "description": "(B) แซลมอน",
+   "has_bom_recipe": false,
+   "monthly_cogs": [
+    {
+     "cogs": 6400.0,
+     "month": "2026-06"
+    },
+    {
+     "cogs": 8000.0,
+     "month": "2026-04"
+    },
+    {
+     "cogs": 8000.0,
+     "month": "2026-05"
+    }
+   ],
+   "pct_of_branch_cogs": 88.89,
+   "qty": 2800.0,
+   "revenue": 0.0,
+   "sku_code": "B0001",
+   "sku_id": 2,
+   "total_cogs": 22400.0,
+   "unit_cost": 8.0
+  }
+ ],
+ "totals": {
+  "cogs": 25200.0,
+  "costed_revenue_ex_vat": 84000.0,
+  "food_cost_pct": 30.0,
+  "gp": 58800.0,
+  "gp_pct": 70.0,
+  "menus_in_period": 3,
+  "menus_total": 3,
+  "menus_with_bom_recipe": 0,
+  "menus_with_cost": 2,
+  "pos_total_inc_vat_diagnostic": 89880.0,
+  "revenue": 84000.0
+ },
+ "trend": [
+  {
+   "bucket": "2026-04",
+   "cogs": 9000.0,
+   "food_cost_pct": 30.0,
+   "gp": 21000.0,
+   "gp_pct": 70.0,
+   "revenue": 30000.0
+  },
+  {
+   "bucket": "2026-05",
+   "cogs": 9000.0,
+   "food_cost_pct": 30.0,
+   "gp": 21000.0,
+   "gp_pct": 70.0,
+   "revenue": 30000.0
+  },
+  {
+   "bucket": "2026-06",
+   "cogs": 7200.0,
+   "food_cost_pct": 30.0,
+   "gp": 16800.0,
+   "gp_pct": 70.0,
+   "revenue": 24000.0
+  }
+ ]
+}

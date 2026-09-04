@@ -1,0 +1,55 @@
+{
+ "branch": "ทุกสาขา",
+ "dishes": [
+  {
+   "description": "(A) สเต๊ก",
+   "monthly": [
+    {
+     "cost": 1000.0,
+     "cost_pct": 11.11,
+     "month": "2026-04"
+    },
+    {
+     "cost": 1000.0,
+     "cost_pct": 11.11,
+     "month": "2026-05"
+    },
+    {
+     "cost": 800.0,
+     "cost_pct": 11.11,
+     "month": "2026-06"
+    }
+   ],
+   "sku_code": "A0001",
+   "total_cost": 2800.0
+  },
+  {
+   "description": "(B) แซลมอน",
+   "monthly": [
+    {
+     "cost": 6400.0,
+     "cost_pct": 88.89,
+     "month": "2026-06"
+    },
+    {
+     "cost": 8000.0,
+     "cost_pct": 88.89,
+     "month": "2026-04"
+    },
+    {
+     "cost": 8000.0,
+     "cost_pct": 88.89,
+     "month": "2026-05"
+    }
+   ],
+   "sku_code": "B0001",
+   "total_cost": 22400.0
+  }
+ ],
+ "months": [
+  "2026-04",
+  "2026-05",
+  "2026-06"
+ ],
+ "n_dishes": 2
+}

@@ -29,6 +29,8 @@ import os
 import sqlite3
 import sys
 
+import rules   # the app's own revenue / cost definitions
+
 # ── locate things ────────────────────────────────────────────────────────────
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -59,19 +61,8 @@ def _find_db(explicit: str | None) -> str:
 
 
 # ── COGS: the app's unified rule, replicated verbatim ───────────────────────
-TIER = "('BUFFET','BUFFET350','BUFFET500','BUFFET590','BUFFET799','BUFFETCHILD')"
-COGS = f"""CASE
-  WHEN ssm.source='Easy' AND (SELECT sk_t.sku_code FROM skus sk_t WHERE sk_t.sku_id=ssm.sku_id) IN {TIER}
-       THEN 0
-  ELSE ssm.qty * COALESCE(
-       (SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=ssm.sku_id),
-       (SELECT NULLIF(sc2.unit_cost,0)  FROM sku_cost sc2     WHERE sc2.sku_id=ssm.sku_id),
-       (SELECT SUM(bi.ingredient_cost)  FROM bom_ingredients bi WHERE bi.sku_id=ssm.sku_id),
-       (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-          JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
-          JOIN skus s_al ON s_al.sku_id=ssm.sku_id WHERE a.bom_sku_code=s_al.sku_code),
-       0)
-END"""
+TIER = rules.EASY_TIER_CODES_SQL
+COGS = rules.cogs_expr('ssm')      # identical to every report in the app
 
 # premium / high-value ingredient keywords → drives the "what to check" hint
 PREMIUM_KW = [

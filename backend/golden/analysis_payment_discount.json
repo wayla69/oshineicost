@@ -1,0 +1,24 @@
+{
+ "available": true,
+ "cash_heavy": {
+  "bills": 0,
+  "branches": [],
+  "discount": 0,
+  "share_of_discount": 0.0,
+  "top_branch": null,
+  "top_branch_discount": 0
+ },
+ "heaviest": [],
+ "heavy_pct": 20,
+ "mix": [
+  {
+   "avg_discount": 20.0,
+   "bills": 12,
+   "code": "Cash",
+   "disc_pct": 2.1,
+   "discount": 240.0
+  }
+ ],
+ "total_discount": 240.0,
+ "total_discount_bills": 12
+}

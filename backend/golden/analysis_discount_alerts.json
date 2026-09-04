@@ -1,0 +1,23 @@
+{
+ "counts": {
+  "high": 0,
+  "med": 0,
+  "total": 0
+ },
+ "flags": [],
+ "has_payment": true,
+ "thresholds": {
+  "cash_min": 50000,
+  "cash_pct": 20,
+  "cashier_floor": 5.0,
+  "cashier_min_disc": 30000,
+  "cashier_mult": 2.0,
+  "late_from": 22,
+  "late_min_bills": 40,
+  "late_min_share": 25.0,
+  "repeat_min": 30,
+  "untyped_min": 50000,
+  "untyped_pct": 80,
+  "void_min": 20000
+ }
+}

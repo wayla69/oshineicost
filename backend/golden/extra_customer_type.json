@@ -1,0 +1,32 @@
+{
+ "by_branch": [
+  {
+   "branch": "BranchA",
+   "customers": 5050,
+   "delivery_cust": 50,
+   "delivery_pct": 1.0,
+   "net": 385047.0,
+   "net_pct": 100.0
+  }
+ ],
+ "count_caveat": true,
+ "month": "2026-06",
+ "total_customers": 5050,
+ "total_net": 385047.0,
+ "types": [
+  {
+   "cust_pct": 1.0,
+   "customers": 50,
+   "net": 11215.0,
+   "net_pct": 2.9,
+   "type": "Grab"
+  },
+  {
+   "cust_pct": 99.0,
+   "customers": 5000,
+   "net": 373832.0,
+   "net_pct": 97.1,
+   "type": "ลูกค้าทั่วไป"
+  }
+ ]
+}

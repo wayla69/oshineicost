@@ -1,0 +1,23 @@
+{
+ "note": "Cost history not yet tracked  -  showing 20 most recently updated SKUs.",
+ "recent_updates": [
+  {
+   "description": "(A) สเต๊ก",
+   "sku_code": "A0001",
+   "unit_cost": 10.0,
+   "updated_at": "<ts>"
+  },
+  {
+   "description": "(B) แซลมอน",
+   "sku_code": "B0001",
+   "unit_cost": 8.0,
+   "updated_at": "<ts>"
+  },
+  {
+   "description": "ค่าบุฟเฟ่ต์",
+   "sku_code": "BUFFET",
+   "unit_cost": 99.0,
+   "updated_at": "<ts>"
+  }
+ ]
+}

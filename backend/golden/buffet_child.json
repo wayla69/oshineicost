@@ -1,0 +1,39 @@
+{
+ "by_branch": [
+  {
+   "branch": "BranchA",
+   "covers": 0,
+   "mom_pct": null,
+   "pct_of_buffet": 0.0,
+   "prev_covers": 0,
+   "revenue": 0.0
+  },
+  {
+   "branch": "BranchB",
+   "covers": 0,
+   "mom_pct": null,
+   "pct_of_buffet": 0.0,
+   "prev_covers": 0,
+   "revenue": 0.0
+  }
+ ],
+ "latest_month": "2026-06",
+ "prev_month": "2026-05",
+ "trend": [
+  {
+   "covers": 0,
+   "month": "2026-04",
+   "revenue": 0.0
+  },
+  {
+   "covers": 0,
+   "month": "2026-05",
+   "revenue": 0.0
+  },
+  {
+   "covers": 0,
+   "month": "2026-06",
+   "revenue": 0.0
+  }
+ ]
+}

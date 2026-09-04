@@ -1,0 +1,142 @@
+{
+ "beverage": [
+  {
+   "attach_pct": 10.5,
+   "bills_attach_pct": 100.0,
+   "drink_revenue": 300.0,
+   "period": "2026-05",
+   "total_revenue": 2850.0
+  },
+  {
+   "attach_pct": 10.5,
+   "bills_attach_pct": 100.0,
+   "drink_revenue": 300.0,
+   "period": "2026-06",
+   "total_revenue": 2850.0
+  }
+ ],
+ "cohort": [],
+ "daypart_tier": [
+  {
+   "BUFFET350": 0.0,
+   "BUFFET500": 0.0,
+   "BUFFET590": 0.0,
+   "BUFFET799": 0.0,
+   "BUFFETCHILD": 0.0,
+   "daypart": "dinner",
+   "total_pax": 0
+  },
+  {
+   "BUFFET350": 0.0,
+   "BUFFET500": 0.0,
+   "BUFFET590": 0.0,
+   "BUFFET799": 0.0,
+   "BUFFETCHILD": 0.0,
+   "daypart": "lunch",
+   "total_pax": 0
+  },
+  {
+   "BUFFET350": 0.0,
+   "BUFFET500": 0.0,
+   "BUFFET590": 0.0,
+   "BUFFET799": 0.0,
+   "BUFFETCHILD": 0.0,
+   "daypart": "other",
+   "total_pax": 0
+  }
+ ],
+ "food_cost_trend": [
+  {
+   "cost": 3200.0,
+   "cost_pct": 40.0,
+   "period": "2026-06",
+   "revenue_ex": 8000.0
+  },
+  {
+   "cost": 4000.0,
+   "cost_pct": 40.0,
+   "period": "2026-04",
+   "revenue_ex": 10000.0
+  },
+  {
+   "cost": 4000.0,
+   "cost_pct": 40.0,
+   "period": "2026-05",
+   "revenue_ex": 10000.0
+  }
+ ],
+ "kpis": {
+  "adult_pax": 280,
+  "avg_pax_per_bill": 4.0,
+  "beverage_attach_pct": 10.5,
+  "beverage_bill_attach_pct": 100.0,
+  "branch_count": 1,
+  "buffet_food_cost_pct": 40.0,
+  "child_pax": 0,
+  "child_pct": 0.0,
+  "combined_cogs": 12600.0,
+  "combined_food_cost_pct": 30.0,
+  "combined_gp_pct": 70.0,
+  "combined_gross_profit": 29400.0,
+  "combined_pos_total_inc_vat_diagnostic": 44940.0,
+  "combined_revenue_ex_vat": 42000.0,
+  "food_cost_pct": 40.0,
+  "food_cost_target_hi": 70.0,
+  "food_cost_target_lo": 55.0,
+  "over_consumption_pct": 0.0,
+  "premium_tier_pct": 0,
+  "premium_tier_pct_target": 0.0,
+  "total_bills": 6,
+  "total_pax": 24
+ },
+ "pricing_rec": {
+  "assumption": "30% ของลูกค้า tier 350/500 ขยับขึ้นไป 590 (70%) และ 799 (30%)",
+  "current_margin": 0.0,
+  "current_margin_pct": 0,
+  "current_mix": {
+   "BUFFET350": 0.0,
+   "BUFFET500": 0.0,
+   "BUFFET590": 0.0,
+   "BUFFET799": 0.0,
+   "BUFFETCHILD": 0.0
+  },
+  "current_revenue": 0,
+  "margin_gain": 0.0,
+  "revenue_gain": 0.0,
+  "target_margin": 0.0,
+  "target_margin_pct": 0,
+  "target_mix": {
+   "BUFFET350": 0.0,
+   "BUFFET500": 0.0,
+   "BUFFET590": 0.0,
+   "BUFFET799": 0.0,
+   "BUFFETCHILD": 0.0
+  },
+  "target_revenue": 0.0
+ },
+ "seat_util": [
+  {
+   "avg_pax_per_day": 4.0,
+   "branch": "BranchA",
+   "max_pax_per_day": 4,
+   "utilization_pct": 100.0
+  }
+ ],
+ "tier_pct_split": {
+  "BUFFET350": 0,
+  "BUFFET500": 0,
+  "BUFFET590": 0,
+  "BUFFET799": 0,
+  "BUFFETCHILD": 0
+ },
+ "tier_trend": [],
+ "turnover": [
+  {
+   "bills_per_day": 1.0,
+   "bills_per_table": 0,
+   "branch": "BranchA",
+   "tables_per_day": 0.0
+  }
+ ],
+ "waste": []
+}

@@ -1,0 +1,24 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cov_day": 80.0,
+   "cov_per_tab": 2.67,
+   "gp_cover": 107.0,
+   "gp_per_table_min": 3.2,
+   "gp_per_table_occasion": 286,
+   "inefficient": false,
+   "tabs_day": 30.0,
+   "turn_min": 90.0
+  }
+ ],
+ "chain": {
+  "gp_cover": 107,
+  "gp_per_table_min": 3.2,
+  "turn_min": 90.0
+ },
+ "window": [
+  "2026-05-04",
+  "2026-06-03"
+ ]
+}

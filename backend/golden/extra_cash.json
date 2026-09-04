@@ -1,0 +1,30 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cancel": 600.0,
+   "discount": 1500.0,
+   "over_short": -1500.0,
+   "pax": 750,
+   "sales": 300000.0,
+   "short_days": 1
+  }
+ ],
+ "month": "2026-06",
+ "summary": {
+  "day_branch": 3,
+  "net": -1500.0,
+  "over_total": 0,
+  "short_days": 1,
+  "short_total": -1500.0
+ },
+ "worst_days": [
+  {
+   "branch": "BranchA",
+   "day": "2026-06-01",
+   "over_short": -1500.0,
+   "pax": 250,
+   "sales": 100000.0
+  }
+ ]
+}

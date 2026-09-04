@@ -1,0 +1,109 @@
+{
+ "anomalies": [
+  {
+   "msg": "ยอดรวมสูงกว่าค่าเฉลี่ย 250%",
+   "pct": 250.0,
+   "scope": "chain"
+  }
+ ],
+ "branches": [
+  {
+   "bills": 1,
+   "branch": "BranchA",
+   "customers": 4,
+   "mom_delta": 0.0,
+   "mom_pct": 0.0,
+   "mom_rev": 950.0,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "yoy_delta": null,
+   "yoy_pct": null,
+   "yoy_rev": null
+  },
+  {
+   "bills": 1,
+   "branch": "BranchB",
+   "customers": 4,
+   "mom_delta": 0.0,
+   "mom_pct": 0.0,
+   "mom_rev": 950.0,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "yoy_delta": null,
+   "yoy_pct": null,
+   "yoy_rev": null
+  }
+ ],
+ "cur_range": [
+  "2026-06-03",
+  "2026-06-03"
+ ],
+ "focus": "2026-06-03",
+ "gran": "day",
+ "mom_basis": "month",
+ "mtd": false,
+ "mtd_cutoff_day": null,
+ "prev_range": [
+  "2026-05-03",
+  "2026-05-03"
+ ],
+ "total": {
+  "cust_mom_pct": 0.0,
+  "cust_yoy_pct": null,
+  "customers": 8,
+  "mom_delta": 0.0,
+  "mom_pct": 0.0,
+  "rev_per_head": 237.5,
+  "revenue": 1900.0,
+  "rph_mom_pct": 0.0,
+  "rph_yoy_pct": null,
+  "yoy_delta": 1900.0,
+  "yoy_pct": null
+ },
+ "trend": [
+  {
+   "end": "2026-05-27",
+   "revenue": 0,
+   "start": "2026-05-27"
+  },
+  {
+   "end": "2026-05-28",
+   "revenue": 0,
+   "start": "2026-05-28"
+  },
+  {
+   "end": "2026-05-29",
+   "revenue": 0,
+   "start": "2026-05-29"
+  },
+  {
+   "end": "2026-05-30",
+   "revenue": 0,
+   "start": "2026-05-30"
+  },
+  {
+   "end": "2026-05-31",
+   "revenue": 0,
+   "start": "2026-05-31"
+  },
+  {
+   "end": "2026-06-01",
+   "revenue": 1900.0,
+   "start": "2026-06-01"
+  },
+  {
+   "end": "2026-06-02",
+   "revenue": 1900.0,
+   "start": "2026-06-02"
+  },
+  {
+   "end": "2026-06-03",
+   "revenue": 1900.0,
+   "start": "2026-06-03"
+  }
+ ],
+ "yoy_range": [
+  "2025-06-03",
+  "2025-06-03"
+ ]
+}

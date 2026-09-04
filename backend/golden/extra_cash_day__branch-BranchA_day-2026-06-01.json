@@ -1,0 +1,14 @@
+{
+ "branch": "BranchA",
+ "cancel_bills": [],
+ "cancel_staged": false,
+ "day": "2026-06-01",
+ "head": {
+  "cancel": 200.0,
+  "discount": 500.0,
+  "invoices": 60,
+  "over_short": -1500.0,
+  "pax": 250,
+  "sales": 100000.0
+ }
+}

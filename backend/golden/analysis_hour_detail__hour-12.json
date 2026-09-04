@@ -1,0 +1,51 @@
+{
+ "by_branch": [
+  {
+   "branch": "BranchA",
+   "customer_count": 24,
+   "revenue": 5700.0,
+   "tx_count": 6
+  },
+  {
+   "branch": "BranchB",
+   "customer_count": 24,
+   "revenue": 5700.0,
+   "tx_count": 6
+  }
+ ],
+ "by_dow": [
+  {
+   "dow": 0,
+   "revenue": 1900.0,
+   "tx_count": 2
+  },
+  {
+   "dow": 1,
+   "revenue": 1900.0,
+   "tx_count": 2
+  },
+  {
+   "dow": 2,
+   "revenue": 1900.0,
+   "tx_count": 2
+  },
+  {
+   "dow": 3,
+   "revenue": 1900.0,
+   "tx_count": 2
+  },
+  {
+   "dow": 5,
+   "revenue": 1900.0,
+   "tx_count": 2
+  },
+  {
+   "dow": 6,
+   "revenue": 1900.0,
+   "tx_count": 2
+  }
+ ],
+ "grand_revenue": 11400.0,
+ "hour": 12,
+ "total_days": 6
+}

@@ -1,0 +1,48 @@
+{
+ "date": "2026-06-03",
+ "down": [],
+ "min_ph": 0.5,
+ "rev_down_delta": 0,
+ "rev_net_delta": 0,
+ "rev_up_delta": 0,
+ "sales": {
+  "alacarte_avg": 1000,
+  "alacarte_today": 1000,
+  "buffet": {
+   "covers_avg": 0,
+   "covers_today": 0,
+   "ppc_avg": 0,
+   "ppc_today": 0,
+   "rev_avg": 0,
+   "rev_today": 0
+  }
+ },
+ "today_customers": 8,
+ "today_food_rev": 1000,
+ "top_gain": {
+  "avg_ph100": 0,
+  "delta_ph100": 1250.0,
+  "is_new": true,
+  "menu": "แซลมอน",
+  "pct": null,
+  "ph100": 1250.0,
+  "rev_delta": 0,
+  "rev_today": 0,
+  "today": 100
+ },
+ "top_loss": null,
+ "up": [
+  {
+   "avg_ph100": 0,
+   "delta_ph100": 1250.0,
+   "is_new": true,
+   "menu": "แซลมอน",
+   "pct": null,
+   "ph100": 1250.0,
+   "rev_delta": 0,
+   "rev_today": 0,
+   "today": 100
+  }
+ ],
+ "window_days": 21
+}

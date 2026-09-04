@@ -1,0 +1,35 @@
+{
+ "by_category": [
+  {
+   "category": "A La Carte",
+   "cost": 2800.0,
+   "margin": 25200.0,
+   "margin_pct": 90.0,
+   "revenue": 28000.0,
+   "uncosted_skus": 0
+  },
+  {
+   "category": "BUFFET",
+   "cost": 0.0,
+   "margin": 56000.0,
+   "margin_pct": 100.0,
+   "revenue": 56000.0,
+   "uncosted_skus": 0
+  },
+  {
+   "category": "Sashimi",
+   "cost": 22400.0,
+   "margin": -22400.0,
+   "margin_pct": 0.0,
+   "revenue": 0.0,
+   "uncosted_skus": 0
+  }
+ ],
+ "total": {
+  "cost": 25200.0,
+  "margin": 58800.0,
+  "margin_pct": 70.0,
+  "revenue": 84000.0
+ },
+ "uncosted_sku_count": 0
+}

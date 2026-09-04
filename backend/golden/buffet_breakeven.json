@@ -1,0 +1,9 @@
+{
+ "actual_avg_covers_per_day": 8.0,
+ "avg_gp_per_cover": 55.0,
+ "avg_revenue_per_cover": 100.0,
+ "breakeven_utilization_pct": null,
+ "monthly_fixed_cost": 0.0,
+ "required_covers_per_day": null,
+ "required_covers_per_month": null
+}

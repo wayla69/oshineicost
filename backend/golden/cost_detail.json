@@ -1,0 +1,41 @@
+{
+ "items": [
+  {
+   "business_type": "alacarte",
+   "category": "A La Carte",
+   "description": "(A) สเต๊ก",
+   "effective_cost": 10.0,
+   "sku_code": "A0001",
+   "sku_id": 3,
+   "total_qty": 280.0,
+   "total_revenue": 28000.0,
+   "unit_cost": 10.0,
+   "updated_at": "<ts>"
+  },
+  {
+   "business_type": "buffet",
+   "category": "Sashimi",
+   "description": "(B) แซลมอน",
+   "effective_cost": 8.0,
+   "sku_code": "B0001",
+   "sku_id": 2,
+   "total_qty": 2800.0,
+   "total_revenue": 0.0,
+   "unit_cost": 8.0,
+   "updated_at": "<ts>"
+  },
+  {
+   "business_type": "buffet_tier",
+   "category": "BUFFET",
+   "description": "ค่าบุฟเฟ่ต์",
+   "effective_cost": 0.0,
+   "sku_code": "BUFFET",
+   "sku_id": 1,
+   "total_qty": 560.0,
+   "total_revenue": 56000.0,
+   "unit_cost": 99.0,
+   "updated_at": "<ts>"
+  }
+ ],
+ "total": 3
+}
