@@ -1024,19 +1024,19 @@ const TABS = {
   ops: { load: () => loadOpsSubtab() },
   settings: { load: () => loadSettingsSubtab() },
   home: { load: () => loadHome() },
-  dailysales: { load: () => loadDailySales() },
-  costhead: { load: () => loadCostHead() },
+  dailysales: { load: () => loadDailySales(), follow: { date: 'dsDate' } },
+  costhead: { load: () => loadCostHead(), follow: { date: 'chDate' } },
   menuimpact: { load: () => loadMenuImpact() },
-  pnlbill: { load: () => loadPnlBill() },
-  opsreport: { load: () => loadOpsReport() },
+  pnlbill: { load: () => loadPnlBill(), follow: { date: 'pbDate' } },
+  opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
   ordersetup: { load: () => loadOrderSetup() },
-  cashctl: { load: () => loadCashCtl() },
-  custtype: { load: () => loadCustType() },
+  cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
+  custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
   modifiers: { load: () => loadModifiers() },
-  pricezone: { load: () => loadPriceZone() },
-  cancelbill: { load: () => loadCancelBill() },
-  closetime: { load: () => loadCloseTime() },
+  pricezone: { load: () => loadPriceZone(), follow: { month: 'pzMonth' } },
+  cancelbill: { load: () => loadCancelBill(), follow: { month: 'cbMonth' } },
+  closetime: { load: () => loadCloseTime(), follow: { date: 'ctmDate' } },
   guest: { load: () => loadGuest() },
   benchmark: { load: () => loadBenchmark() },
   engineering: { load: () => loadEngineering() },
@@ -1046,7 +1046,7 @@ const TABS = {
   childbuffet: { load: () => loadChildBuffet() },
   timeflow: { load: () => loadTimeflow() },
   gpbranch: { load: () => loadGpBranch() },
-  branchbom: { load: () => loadBranchBom() },
+  branchbom: { load: () => loadBranchBom(), follow: { monthRange: ['bbomMonthFrom', 'bbomMonthTo'], prepare: () => _bbomInitFilters() } },
   bomcost: { load: () => loadBomCostTab() },
   simhub: { load: () => loadSimhub() },
   menucompare: { load: () => loadMenuCompare() },
@@ -1054,9 +1054,9 @@ const TABS = {
   menuactionboard: { load: () => loadMenuActionBoard() },
   menuopportunities: { load: () => loadMenuOpportunities() },
   coverage: { load: () => loadCostCoverage() },
-  pnlbranch: { load: () => loadPnlBranch() },
+  pnlbranch: { load: () => loadPnlBranch(), follow: { month: 'pnlMonthSel', prepare: () => _pnlFillMonths() } },
   more: { load: () => loadMoreAnalytics() },
-  heavyeater: { load: () => loadHeavyEaters() },
+  heavyeater: { load: () => loadHeavyEaters(), follow: { dateRange: ['heFrom', 'heTo'] } },
   manual: {},
   costheadtop60: { load: () => loadCostHeadTop60() },
 };
@@ -1065,7 +1065,31 @@ function loadActiveTab() {
   loadGen++;   // invalidate any in-flight responses from a previous tab/filter
   cache = {};  // clear tab cache on filter change
   const t = TABS[activeTab];
-  if (t && t.load) return t.load();
+  if (!t || !t.load) return;
+  if (!t.follow) return t.load();
+  const gen = loadGen;
+  return _followGlobal(activeTab, t.follow).then(() => { if (gen === loadGen) return t.load(); });
+}
+
+// A tab that keeps its OWN picker declares in TABS how it follows the global
+// period, and the registry snaps that picker before the loader runs. Until
+// 2026-09 every such loader had to remember to call _syncExtra* itself, and a
+// tab that forgot silently ignored the top bar (js/07-home.js keeps the
+// snapping helpers). A hand pick on the local picker still wins until the
+// global period changes again — the helpers remember the last global value.
+//   month:      select id — one month, snapped to the global END month
+//   date:       input id  — one day, snapped to the global period's end day
+//   dateRange:  [from, to] input ids — the global day range
+//   monthRange: [from, to] select ids — the global month range
+//   prepare:    async fn that fills the picker's options first; a month select
+//               without one is filled by _extraMonths (the /api/months list)
+async function _followGlobal(tabKey, f) {
+  if (f.prepare) await f.prepare();
+  else if (f.month) await _extraMonths(f.month);
+  if (f.month) _syncExtraMonth(f.month, tabKey);
+  if (f.date) _syncExtraDate(f.date, tabKey);
+  if (f.dateRange) _syncExtraDateRange(f.dateRange[0], f.dateRange[1], tabKey);
+  if (f.monthRange) _syncExtraMonthRange(f.monthRange[0], f.monthRange[1], tabKey);
 }
 
 function switchTab(name) {

@@ -1995,7 +1995,6 @@ function setBbomViewMode(mode) {
 
 async function loadBranchBom(force) {
   await _bbomInitFilters();
-  _syncExtraMonthRange('bbomMonthFrom', 'bbomMonthTo', 'branchbom_r');  // follow the global month range
   // Phase 16: when chain mode, send branch=ALL (backend aggregates across all active branches)
   const branch = (_bbomViewMode === 'chain') ? 'ALL' : document.getElementById('bbomBranch').value;
   const mf     = document.getElementById('bbomMonthFrom').value;
