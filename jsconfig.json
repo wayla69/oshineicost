@@ -1,0 +1,17 @@
+{
+  "//": "Type-check the dashboard's JS slices without a build step: `npx -p typescript tsc -p jsconfig.json` (scripts/check-js.sh, part of scripts/gate.sh). The ten slices are plain scripts sharing one global scope, so tsc sees them as one program and reports a name used in one slice but defined in none — the class of bug that once aborted 01-core.js at load (a registry entry referencing a loader from a later slice). Loose on purpose: no implicit-any errors, no strict null checks; what it must catch is undefined names, wrong call shapes and typos.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "none",
+    "strict": false,
+    "noImplicitAny": false,
+    "strictNullChecks": false,
+    "skipLibCheck": true,
+    "types": []
+  },
+  "include": ["js/*.js", "js/globals.d.ts"]
+}

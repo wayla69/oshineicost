@@ -688,7 +688,7 @@ function analyzeBranches(cfg) {
     _diveMetric('Average',       f(avg)),
     _diveMetric('Top branch',    `${top3[0].b} (${f(top3[0].v)})`, 'good'),
     _diveMetric('Pareto 80%',    `${cntFor80} of ${labels.length} branches`),
-    _diveMetric('Top vs Bottom', gap + '×', gap > 5 ? 'bad' : ''),
+    _diveMetric('Top vs Bottom', gap + '×', Number(gap) > 5 ? 'bad' : ''),
   ].join('')) +
   _diveSection('🏆 Top 3', '🏆',
     top3.map((x,i) => `<div class="dive-metric"><span class="lbl">${['🥇','🥈','🥉'][i]} ${x.b}</span><span class="val good">${f(x.v)}</span></div>`).join('')) +
@@ -1919,6 +1919,7 @@ function _gpbRenderHeatmap() {
 
 // Wire init additions
 const _origInit = init;
+// @ts-ignore — deliberate: this slice wraps the app's init() to add its startup steps
 init = async function() {
   await _origInit();
   applyStoredUnit();

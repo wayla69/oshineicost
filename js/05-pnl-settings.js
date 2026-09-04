@@ -1077,7 +1077,7 @@ function renderSuggestions() {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div class="rounded-lg p-3 border border-indigo-100" style="background:#eef2ff">
           <p class="text-xs text-indigo-600 font-semibold mb-1">Pareto 80/20</p>
-          <p class="text-sm text-slate-700">SKU เพียง <b>${topPct}%</b> ทำรายได้ 80% — ${topPct <= 20 ? 'กระจุกตัวสมเหตุสมผล' : 'กระจายเกินไป (ปกติ ≤20%)'}</p>
+          <p class="text-sm text-slate-700">SKU เพียง <b>${topPct}%</b> ทำรายได้ 80% — ${Number(topPct) <= 20 ? 'กระจุกตัวสมเหตุสมผล' : 'กระจายเกินไป (ปกติ ≤20%)'}</p>
           <p class="text-xs text-slate-500 mt-1">Top 5 รวม <b>${top5Pct}%</b> ของยอดทั้งหมด</p>
         </div>
         <div class="rounded-lg p-3 border" style="background:#fff7ed;border-color:#fed7aa">

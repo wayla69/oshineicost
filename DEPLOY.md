@@ -80,7 +80,7 @@ GitHub Actions is **disabled** in the repo settings (since 2026-08-10) — the w
 machine that merges is the only thing that runs the suites:
 
 ```bash
-bash scripts/gate.sh            # pyflakes + pytest for backend AND recon; last line is the verdict
+bash scripts/gate.sh            # pyflakes + pytest for backend AND recon + tsc --checkJs for js/; last line is the verdict
 ```
 
 It gates on **exit codes**. `pytest -q | tail -1` shows the progress bar, not "N passed",

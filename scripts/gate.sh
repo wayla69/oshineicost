@@ -5,7 +5,7 @@
 # every merge and read the LAST line, which is the only thing that matters.
 #
 #   bash scripts/gate.sh            # backend + recon suites + pyflakes
-#   bash scripts/gate.sh backend    # one area
+#   bash scripts/gate.sh backend    # one area: backend | recon | js
 #
 # Gates on EXIT CODES. `pytest -q | tail -1` shows the progress bar, not
 # "N passed", and once (#108) a red suite was merged that way.
@@ -32,6 +32,9 @@ src() { ls "$1"/*.py | grep -v '/test_\|/conftest\.py'; }
 if [ "$area" = all ] || [ "$area" = backend ]; then
     run "pyflakes backend"  $PY -m pyflakes $(src backend) backend/routers/*.py
     run "pytest backend"    $PY -m pytest backend -q -p no:cacheprovider
+fi
+if [ "$area" = all ] || [ "$area" = js ]; then
+    run "check-js (tsc --checkJs)" bash scripts/check-js.sh
 fi
 if [ "$area" = all ] || [ "$area" = recon ]; then
     run "pyflakes recon"    $PY -m pyflakes $(src recon) recon/routers/*.py
