@@ -1,0 +1,42 @@
+<!-- ══ 💬 เสียงลูกค้า (Customer Feedback) ══ -->
+<div id="tab-feedback" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eff6ff 0%,#ecfeff 100%);border-left:4px solid #0369a1">
+    <h2 class="text-base font-bold" style="color:#0c4a6e">💬 เสียงลูกค้า — รีวิวจาก Google / Facebook / Grab / LINE MAN</h2>
+    <p class="text-xs mt-1" style="color:var(--text-secondary)">วางรีวิว (บรรทัดละ 1 รีวิว) หรืออัปโหลด CSV/TSV ที่มีคอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) — ระบบแยกความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ แล้วสรุปเทียบกับข้อมูลขายในแท็บเมนู</p>
+  </div>
+
+  <div class="card p-4 mb-4">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2">
+        <label class="text-xs font-semibold" style="color:var(--text-secondary)">วางรีวิว (บรรทัดละ 1 รีวิว)</label>
+        <textarea id="fbText" rows="5" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="เช่น  แซลมอนสดมาก บริการดี จะกลับมาอีก&#10;      รอนานมาก พนักงานไม่สนใจ ทุเรียนหมดตั้งแต่ทุ่มนึง"></textarea>
+      </div>
+      <div class="flex flex-col gap-2">
+        <label class="text-xs font-semibold" style="color:var(--text-secondary)">ค่าเริ่มต้นสำหรับบรรทัดที่ไม่ระบุ</label>
+        <select id="fbBranch" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"><option value="">— สาขา —</option></select>
+        <select id="fbSource" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+          <option value="">— ช่องทาง —</option><option>Google</option><option>Facebook</option><option>Grab</option><option>LINE MAN</option><option>หน้าร้าน</option><option>อื่นๆ</option>
+        </select>
+        <input type="date" id="fbDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+        <input type="file" id="fbFile" accept=".csv,.tsv,.txt" class="text-xs">
+        <button class="btn-primary text-sm px-3 py-1.5 rounded" onclick="uploadFeedback()">⬆ นำเข้าและวิเคราะห์</button>
+        <span id="fbUploadStatus" class="text-xs" style="color:var(--text-muted)"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-3 mb-3 flex-wrap">
+    <span id="fbStatus" class="text-xs" style="color:var(--text-muted)"></span>
+    <span class="text-xs" style="color:var(--text-muted)">ตามช่วงเดือน/สาขาของแถบด้านบน</span>
+  </div>
+  <div id="fbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">หัวข้อที่ถูกพูดถึง</h3><div id="fbThemes"></div></div>
+    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
+  </div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายสาขา</h3><div id="fbBranches" style="max-height:340px;overflow:auto"></div></div>
+    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รีวิวเชิงลบล่าสุด</h3><div id="fbNeg" style="max-height:340px;overflow:auto"></div></div>
+  </div>
+  <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายการล่าสุด</h3><div id="fbItems" style="max-height:420px;overflow:auto"></div></div>
+</div>
