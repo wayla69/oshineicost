@@ -21,6 +21,7 @@ _SHARED = (
     'ttl_cache',
 )
 globals().update({_n: getattr(M, _n) for _n in _SHARED})
+from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 
@@ -47,7 +48,7 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
         days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
         rows = con.execute(f"""
             SELECT b.name branch, date(t.sold_at) d,
-                   ROUND((SUM(t.total_inc_vat)/1.07 - SUM(COALESCE(t.service_charge,0))),2) rev, SUM(t.customer_count) cust, COUNT(*) bills
+                   ROUND({net_revenue_sum('t')},2) rev, SUM(t.customer_count) cust, COUNT(*) bills
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
             GROUP BY b.name, date(t.sold_at)""",
@@ -90,8 +91,7 @@ def extra_cash(month: Optional[str] = Query(None), branch: Optional[str] = Query
                group: Optional[str] = Query(None)):
     """Cash over/short + ops summary per branch per day (loss prevention)."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     with get_db() as con:
         mon = month or _extra_months(con, "pos_cashcount_day", "substr(day,1,7)")
@@ -123,8 +123,7 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
                         group: Optional[str] = Query(None)):
     """Customer-type / channel mix: walk-in vs Grab vs Line Man vs takeaway vs credit."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     with get_db() as con:
         mon = month or _extra_months(con, "pos_customer_type_month")
@@ -177,8 +176,7 @@ def extra_modifiers(branch: Optional[str] = Query(None), group: Optional[str] = 
     """Top customer special-requests (free modifiers) — for kitchen prep planning.
     All-time counts (no revenue; choices are free)."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     with get_db() as con:
         JN = "FROM pos_modifier x JOIN branches b ON b.branch_id=x.branch_id WHERE " + tw
@@ -197,8 +195,7 @@ def extra_price_zone(month: Optional[str] = Query(None), branch: Optional[str] =
                      group: Optional[str] = Query(None), limit: int = Query(100, ge=1, le=500)):  # fix B5
     """Price-override log (governance) + table-zone layout per branch."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     with get_db() as con:
         mfilt = ""
@@ -261,8 +258,7 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
     """Whole BILLS voided/deleted (Sale.Active=0), by branch and by reason.
     Distinct from item-level Void in the Ops report."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     with get_db() as con:
         mon = month or _extra_months(con, "pos_cancel_bill")
@@ -392,8 +388,7 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
     posted NO data that day (mode='date'). Use it to inspect a specific day's gaps,
     e.g. which branches reported on 2026-06-04."""
     filt = ["b.name!='ALL'"]; p: dict = {}
-    if branch: filt.append("b.name=:branch"); p["branch"] = branch
-    _group_filter(filt, p, group)
+    scope_filter(filt, p, branch, group)
     tw = " AND ".join(filt)
     import datetime as _dt
     with get_db() as con:
@@ -537,10 +532,10 @@ def home_brief(branch: Optional[str] = Query(None)):
         # Revenue / tx / customers yesterday
         yest_row = con.execute(f"""
             SELECT
-                ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)        AS revenue,
+                ROUND({net_revenue_sum('st')}, 2)        AS revenue,
                 COUNT(*)                                AS tx_count,
                 COALESCE(SUM(st.customer_count), 0)    AS customer_count,
-                ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2)        AS avg_ticket
+                ROUND(AVG{net_revenue_row('st')}, 2)        AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE DATE(st.sold_at) = :yesterday
@@ -555,7 +550,7 @@ def home_brief(branch: Optional[str] = Query(None)):
             wow_params = dict(branch_params)
             wow_params["yesterday"] = wow_date_str
             wow_row = con.execute(f"""
-                SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS revenue
+                SELECT ROUND({net_revenue_sum('st')}, 2) AS revenue
                 FROM sales_transaction st
                 JOIN branches b ON b.branch_id = st.branch_id
                 WHERE DATE(st.sold_at) = :yesterday
@@ -570,7 +565,7 @@ def home_brief(branch: Optional[str] = Query(None)):
             mtd_params["branch"] = branch
         mtd_row = con.execute(f"""
             SELECT
-                ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2)     AS mtd_revenue,
+                ROUND({net_revenue_sum('st')}, 2)     AS mtd_revenue,
                 COUNT(DISTINCT DATE(st.sold_at))    AS mtd_days
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -583,7 +578,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         # Revenue by branch yesterday (top 3)
         yest_branch_rows = con.execute(f"""
             SELECT b.name AS branch,
-                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS revenue
+                   ROUND({net_revenue_sum('st')}, 2) AS revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE DATE(st.sold_at) = :yesterday
@@ -598,7 +593,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         # MTD by branch
         mtd_branch_rows = con.execute(f"""
             SELECT b.name AS branch,
-                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))), 2) AS mtd_revenue
+                   ROUND({net_revenue_sum('st')}, 2) AS mtd_revenue
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE strftime('%Y-%m', st.sold_at) = :month
@@ -683,7 +678,7 @@ def home_leak_watch(date: Optional[str] = Query(None), branch: Optional[str] = Q
       · zero_gross     — discount-only / zeroed bills (gross <= 0)
     All from sales_transaction at date grain. Void/cancelled bills live in pos_cancel_bill
     (month-grain only) and are intentionally not folded in here."""
-    base = "(((st.total_inc_vat/1.07 - COALESCE(st.service_charge,0))) + st.discount)"
+    base = f"(({net_revenue_row('st')}) + st.discount)"
     with get_db() as con:
         maxd = con.execute(
             "SELECT DATE(MAX(sold_at)) FROM sales_transaction WHERE source='Easy'"

@@ -1,0 +1,11 @@
+{
+ "branches": [
+  {
+   "avg_covers_per_turn": 2.7,
+   "avg_turn_min": 90.0,
+   "branch": "BranchA",
+   "turns": 90
+  }
+ ],
+ "note": "จาก POS turn-time feed (pos_table_turn_day) · นาที/รอบ เฉลี่ย, รอบ = table-occasions รวม"
+}

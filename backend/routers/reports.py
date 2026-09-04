@@ -36,6 +36,7 @@ _SHARED = (
     'ttl_cache',
 )
 globals().update({_n: getattr(M, _n) for _n in _SHARED})
+from rules import net_revenue_row, net_revenue_sum, scope_filter, effective_unit_cost_sql  # noqa: E402
 
 
 # ── Top-60 menu cost-per-head · MASTER branches (overview → per-branch → variance) ──
@@ -879,8 +880,7 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
         return {"idx": idx, "bills": [], "stat": {}}
     _, label, lo, hi = band
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
-    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
-    _group_filter(tfilt, tp, group)
+    scope_filter(tfilt, tp, branch, group)
     tw = " AND ".join(tfilt)
     with get_db() as con:
         maxd = con.execute("SELECT MAX(day) FROM sale_bill_cogs").fetchone()[0]
@@ -893,15 +893,15 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
               "JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
-        gm = "((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom)/((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))*100"
+        gm = f"({net_revenue_row('t')} - c.cogs_bom)/({net_revenue_row('t')})*100"
         cond = f"{gm} < 0" if idx == -1 else f"{gm} >= {lo} AND {gm} < {hi}"
         bills = [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
                   "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"]}
-                 for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))) rev,
+                 for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND({net_revenue_row('t')}) rev,
                    ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust,
                    ROUND({gm},1) gpp {JN} AND {cond} ORDER BY gpp ASC LIMIT :lim""",
                    {**params, "lim": limit}).fetchall()]
-        st = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev,
+        st = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM({net_revenue_row('t')})) rev,
                    ROUND(SUM(c.cogs_bom)) cogs, SUM(t.customer_count) cust, ROUND(SUM(t.discount)) disc,
                    ROUND(AVG({gm}),1) avg_gm {JN} AND {cond}""", params).fetchone()
         rev = (st["rev"] or 0) if st else 0; cogs = (st["cogs"] or 0) if st else 0
@@ -922,8 +922,7 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
     if gran not in ("day", "week", "month"):
         gran = "day"
     tfilt = ["t.source='Easy'", "b.name!='ALL'"]; tp: dict = {}
-    if branch: tfilt.append("b.name=:branch"); tp["branch"] = branch
-    _group_filter(tfilt, tp, group)
+    scope_filter(tfilt, tp, branch, group)
     tw = " AND ".join(tfilt)
 
     def bounds(d):
@@ -950,7 +949,7 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
               f"JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
-        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))),2) rev, "
+        r = con.execute(f"SELECT COUNT(*) bills, ROUND(SUM({net_revenue_row('t')}),2) rev, "
                         f"ROUND(SUM(c.cogs_bom),2) cogs, SUM(t.customer_count) cust, "
                         f"ROUND(SUM(t.discount),2) disc {JN}", params).fetchone()
         bills = r["bills"] or 0; rev = r["rev"] or 0; cogs = r["cogs"] or 0; cust = r["cust"] or 0
@@ -961,13 +960,13 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
                    "gp_per_head": round(gp / cust) if cust else None}
         # Fine-grained gross-margin distribution: 5% bands across 0–50%, 10% above.
         # bkt = -1 loss · 0..9 = 0–5..45–50 · 10..14 = 50–60..90–100.
-        gm_expr = "((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom)/((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))*100"
+        gm_expr = f"({net_revenue_row('t')} - c.cogs_bom)/({net_revenue_row('t')})*100"
         rows = con.execute(f"""SELECT bkt, COUNT(*) n, ROUND(SUM(rev)) rev, ROUND(SUM(cogs)) cogs,
                    ROUND(SUM(rev-cogs)) gp, SUM(cust) cust FROM (
                      SELECT rev, cogs, cust,
                        CASE WHEN gm<0 THEN -1 WHEN gm<50 THEN CAST(gm/5 AS INT)
                             ELSE 10+MIN(4,CAST((gm-50)/10 AS INT)) END bkt
-                     FROM (SELECT (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) rev, c.cogs_bom cogs, t.customer_count cust,
+                     FROM (SELECT {net_revenue_row('t')} rev, c.cogs_bom cogs, t.customer_count cust,
                            {gm_expr} gm {JN}) x) y GROUP BY bkt""", params).fetchall()
         bmap = {r["bkt"]: r for r in rows}
         dist = []
@@ -980,9 +979,9 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         def rows_for(extra_where, limit):
             return [{"receipt": x["receipt_no"], "branch": x["branch"], "rev": x["rev"], "cogs": x["cogs"],
                      "disc": x["disc"], "cust": x["cust"], "gp_pct": x["gpp"], "dwell_min": x["dwell_min"]}
-                    for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))) rev,
+                    for x in con.execute(f"""SELECT t.receipt_no, b.name branch, ROUND({net_revenue_row('t')}) rev,
                       ROUND(c.cogs_bom) cogs, ROUND(t.discount) disc, t.customer_count cust, t.dwell_min,
-                      ROUND(((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom)/((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))*100,1) gpp
+                      ROUND(({net_revenue_row('t')} - c.cogs_bom)/({net_revenue_row('t')})*100,1) gpp
                       {JN}{extra_where} ORDER BY gpp ASC {limit}""", params).fetchall()]
         worst = rows_for("", "LIMIT 12")
         # Per-branch margin aggregate (replaces the noisy 12-worst-bills list):
@@ -990,10 +989,10 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         by_branch = []
         for x in con.execute(f"""
             SELECT b.name branch, COUNT(*) bills,
-                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) rev,
+                   ROUND(SUM({net_revenue_row('t')})) rev,
                    ROUND(SUM(c.cogs_bom)) cogs,
-                   ROUND(SUM((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) - c.cogs_bom)) gp,
-                   SUM(CASE WHEN c.cogs_bom > (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)) THEN 1 ELSE 0 END) loss_bills,
+                   ROUND(SUM({net_revenue_row('t')} - c.cogs_bom)) gp,
+                   SUM(CASE WHEN c.cogs_bom > {net_revenue_row('t')} THEN 1 ELSE 0 END) loss_bills,
                    SUM(t.customer_count) cust
             {JN} GROUP BY b.name""", params).fetchall():
             bb_rev = x["rev"] or 0; bb_gp = x["gp"] or 0; bb_bills = x["bills"] or 0
@@ -1006,9 +1005,9 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
         by_branch.sort(key=lambda r: (r["gm_pct"] if r["gm_pct"] is not None else 999))
         # ALL loss-making bills (COGS > revenue, i.e. negative gross profit). Capped
         # high for safety; loss_count/loss_total report the true totals regardless.
-        loss = rows_for(" AND c.cogs_bom > (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))", "LIMIT 2000")
-        ls = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(c.cogs_bom - (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0)))) loss
-                             {JN} AND c.cogs_bom > (t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))""", params).fetchone()
+        loss = rows_for(f" AND c.cogs_bom > {net_revenue_row('t')}", "LIMIT 2000")
+        ls = con.execute(f"""SELECT COUNT(*) n, ROUND(SUM(c.cogs_bom - {net_revenue_row('t')})) loss
+                             {JN} AND c.cogs_bom > {net_revenue_row('t')}""", params).fetchone()
     # Per-bill COGS is a ROLLING window (sale_bill_cogs, ~31 days). Outside it the
     # tab rendered an all-zero table with no explanation — numerically honest but
     # indistinguishable from "the page is broken", which is exactly how it was
@@ -1039,8 +1038,8 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
         # rolling per-bill-COGS window); when menu lines exist it is overridden below
         # with the live line sum.
         hdr = con.execute(
-            """SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
-                      ROUND((t.total_inc_vat/1.07 - COALESCE(t.service_charge,0))) rev, ROUND(c.cogs_bom) cogs,
+            f"""SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
+                      ROUND({net_revenue_row('t')}) rev, ROUND(c.cogs_bom) cogs,
                       ROUND(COALESCE(t.discount,0) + COALESCE(t.sp_discount,0)) disc
                FROM sales_transaction t
                LEFT JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
@@ -1244,9 +1243,7 @@ def report_management(
 
     base = ["st.source='Easy'", "b.name!='ALL'"]
     params: dict = {}
-    if branch:
-        base.append("b.name=:branch"); params["branch"] = branch
-    _group_filter(base, params, group)
+    scope_filter(base, params, branch, group)
     where = " AND ".join(base)
 
     def pct(c, p):
@@ -1397,7 +1394,7 @@ def report_management(
         # ---- headline totals for an arbitrary [s,e] range -----------------
         def agg(s, e):
             r = con.execute(f"""
-                SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev,
+                SELECT ROUND({net_revenue_sum('st')},2) rev,
                        COALESCE(SUM(st.customer_count),0)  cust,
                        COUNT(*)                            bills,
                        ROUND(COALESCE(SUM(st.discount),0),2) disc
@@ -1431,7 +1428,7 @@ def report_management(
         def by_branch(s, e):
             rows = con.execute(f"""
                 SELECT b.name branch,
-                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev,
+                       ROUND({net_revenue_sum('st')},2) rev,
                        COALESCE(SUM(st.customer_count),0)  cust,
                        COUNT(*)                            bills
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
@@ -1542,7 +1539,7 @@ def report_management(
         # to action on. Honours the report's branch/period scope; always master-only.
         mb_rows = con.execute(f"""
             SELECT b.name branch,
-                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0)))) sales,
+                   ROUND({net_revenue_sum('st')}) sales,
                    ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
                    SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
@@ -1563,12 +1560,9 @@ def report_management(
         food_sub = (f"(SELECT sk.sku_id FROM skus sk JOIN categories c "
                     f"ON c.category_id=sk.category_id WHERE {_FOOD_CATEGORY_FILTER})")
         sb = ["b.name!='ALL'"]; sp: dict = {}
-        if branch:
-            sb.append("b.name=:branch"); sp["branch"] = branch
-        _group_filter(sb, sp, group)
+        scope_filter(sb, sp, branch, group)
         sw = " AND ".join(sb)
-        _eff_cost = ("COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec WHERE sec.sku_id=d.sku_id),"
-                     " (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=d.sku_id), 0)")
+        _eff_cost = effective_unit_cost_sql('d')
         # sales_sku_daily is a ROLLING window (currently starts 2026-03-22) while
         # sales_sku_monthly carries full history. Reading daily blindly made every
         # pre-coverage month report ฿0 food cost — i.e. GP 100% — instead of saying
@@ -1942,9 +1936,7 @@ def report_management(
         # 4-day cost by 3 days of revenue.
         mtd_partial = (cur_month == maxd[:7] and ref_anchor < latest_day)
         mb = ["b.name!='ALL'", "s.period_month=:month"]; mp: dict = {"month": cur_month}
-        if branch:
-            mb.append("b.name=:branch"); mp["branch"] = branch
-        _group_filter(mb, mp, group)
+        scope_filter(mb, mp, branch, group)
         mw = " AND ".join(mb)
         bom_row = None if mtd_partial else con.execute(f"""
             SELECT ROUND(SUM({_cogs_case('s','sk','c')}),2) cost
@@ -1968,7 +1960,7 @@ def report_management(
                 JOIN branches b ON b.branch_id=s.branch_id
                 WHERE {mw_daily}""", {**mp, "mtd_cut": mtd_cut}).fetchone()
         mtd_row = con.execute(f"""
-            SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev,
+            SELECT ROUND({net_revenue_sum('st')},2) rev,
                    COUNT(DISTINCT date(st.sold_at))    days
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
@@ -1988,9 +1980,7 @@ def report_management(
         # `est_food_cost_pct` prices the uncosted plates at the average cost of the
         # plates we DO cost — a first-order estimate, flagged as such, never booked.
         # same effective-cost expression, aliased for sales_sku_monthly (`s.`)
-        _eff_cost_m = ("COALESCE((SELECT sec.recipe_cost FROM sku_effective_cost sec "
-                       "WHERE sec.sku_id=s.sku_id),"
-                       " (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id), 0)")
+        _eff_cost_m = effective_unit_cost_sql('s')
         cost_coverage = None
         try:
             cc = con.execute(f"""
@@ -2042,9 +2032,7 @@ def report_management(
         month_complete = days_elapsed >= days_total
         projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
         tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
-        if branch:
-            tb.append("b.name=:branch"); tp["branch"] = branch
-        _group_filter(tb, tp, group)
+        scope_filter(tb, tp, branch, group)
         tw = " AND ".join(tb)
         tgt_row = con.execute(f"""
             SELECT COALESCE(SUM(bt.revenue_target),0) tgt
@@ -2064,12 +2052,12 @@ def report_management(
         pm_first   = ref_anchor.replace(day=1) - _dt.timedelta(days=1)
         prev_month = pm_first.strftime("%Y-%m")
         pm_full = con.execute(f"""
-            SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+            SELECT ROUND({net_revenue_sum('st')},2) rev
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month""",
             {**params, "month": prev_month}).fetchone()
         pm_mtd = con.execute(f"""
-            SELECT ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+            SELECT ROUND({net_revenue_sum('st')},2) rev
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
               AND CAST(strftime('%d', st.sold_at) AS INT) <= :d""",
@@ -2090,7 +2078,7 @@ def report_management(
         # both the MoM baseline and the projection are weighted by weekday instead.
         pm_dow = con.execute(f"""
             SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
-                   (SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))) rev,
+                   {net_revenue_sum('st')} rev,
                    COUNT(DISTINCT date(st.sold_at)) days
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
@@ -2106,7 +2094,7 @@ def report_management(
         # in-progress week (e.g. only Wed–Sun so far) is never judged against a 7-day norm.
         mon_e3 = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
         wk_rows = con.execute(f"""
-            SELECT {mon_e3} k, ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0)))) rev
+            SELECT {mon_e3} k, ROUND({net_revenue_sum('st')}) rev
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
             GROUP BY k ORDER BY k""", {**params, "month": cur_month}).fetchall()
@@ -2151,7 +2139,7 @@ def report_management(
         if period == "daily":
             start = cs - _dt.timedelta(days=7)
             rows = con.execute(f"""
-                SELECT date(st.sold_at) k, ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+                SELECT date(st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
                 GROUP BY k""", {**params, "s": start.isoformat(), "e": cs.isoformat()}).fetchall()
@@ -2168,7 +2156,7 @@ def report_management(
                 mlist.append((yi, mi))
             start = _dt.date(mlist[0][0], mlist[0][1], 1)
             rows = con.execute(f"""
-                SELECT strftime('%Y-%m', st.sold_at) k, ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+                SELECT strftime('%Y-%m', st.sold_at) k, ROUND({net_revenue_sum('st')},2) rev
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
                 GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
@@ -2181,7 +2169,7 @@ def report_management(
             start = cs - _dt.timedelta(days=49)      # 8 full Mon–Sun weeks incl. the current one
             mon_e = "date(st.sold_at, '-' || ((CAST(strftime('%w', st.sold_at) AS INT)+6)%7) || ' days')"
             rows = con.execute(f"""
-                SELECT {mon_e} k, ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+                SELECT {mon_e} k, ROUND({net_revenue_sum('st')},2) rev
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
                 GROUP BY k""", {**params, "s": start.isoformat(), "e": ce.isoformat()}).fetchall()
@@ -2195,7 +2183,7 @@ def report_management(
         # ---- peak hours & dayparts (revenue + covers by hour over the period) ----
         hr_rows = con.execute(f"""
             SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
-                   ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev,
+                   ROUND({net_revenue_sum('st')},2) rev,
                    COALESCE(SUM(st.customer_count),0) cust, COUNT(*) bills
             FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
             WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
@@ -2224,7 +2212,7 @@ def report_management(
         if has_prev:
             ph_rows = con.execute(f"""
                 SELECT CAST(strftime('%H', st.sold_at) AS INT) hr,
-                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev
+                       ROUND({net_revenue_sum('st')},2) rev
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
                 GROUP BY hr""", {**params, "s": ps.isoformat(), "e": pe.isoformat()}).fetchall()
@@ -2240,7 +2228,7 @@ def report_management(
         if period != "daily":      # which day of the week drove the week
             dow_rows = con.execute(f"""
                 SELECT CAST(strftime('%w', st.sold_at) AS INT) w,
-                       ROUND((SUM(st.total_inc_vat)/1.07 - SUM(COALESCE(st.service_charge,0))),2) rev, COALESCE(SUM(st.customer_count),0) cust
+                       ROUND({net_revenue_sum('st')},2) rev, COALESCE(SUM(st.customer_count),0) cust
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
                 GROUP BY w""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
@@ -2259,9 +2247,7 @@ def report_management(
         try:
             if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_table_turn_day'").fetchone():
                 tt_base = ["b.name!='ALL'"]; tparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
-                if branch:
-                    tt_base.append("b.name=:branch"); tparams["branch"] = branch
-                _group_filter(tt_base, tparams, group)
+                scope_filter(tt_base, tparams, branch, group)
                 tw2 = " AND ".join(tt_base)
                 tot = con.execute(f"""
                     SELECT COALESCE(SUM(t.tabs),0) tabs, COALESCE(SUM(t.customers),0) cust,
@@ -2311,9 +2297,7 @@ def report_management(
         try:
             if con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='pos_payment_day'").fetchone():
                 pp_base = ["b.name!='ALL'"]; pparams: dict = {"s": cs.isoformat(), "e": ce.isoformat()}
-                if branch:
-                    pp_base.append("b.name=:branch"); pparams["branch"] = branch
-                _group_filter(pp_base, pparams, group)
+                scope_filter(pp_base, pparams, branch, group)
                 pw = " AND ".join(pp_base)
                 prows = con.execute(f"""
                     SELECT b.name branch, pp.payment_code code, ROUND(SUM(pp.amount)) amount, SUM(pp.txn_count) n

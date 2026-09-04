@@ -1,0 +1,15 @@
+{
+ "branches": [
+  {
+   "id": 1,
+   "name": "BranchA",
+   "type": "branch"
+  },
+  {
+   "id": 2,
+   "name": "BranchB",
+   "type": "branch"
+  }
+ ],
+ "skus": []
+}

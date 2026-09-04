@@ -1,0 +1,22 @@
+[
+ {
+  "avg_ticket": 950.0,
+  "branch": "BranchA",
+  "customer_count": 24,
+  "discount_rate": 100.0,
+  "discount_tx": 6,
+  "revenue": 5700.0,
+  "total_discount": 120.0,
+  "tx_count": 6
+ },
+ {
+  "avg_ticket": 950.0,
+  "branch": "BranchB",
+  "customer_count": 24,
+  "discount_rate": 100.0,
+  "discount_tx": 6,
+  "revenue": 5700.0,
+  "total_discount": 120.0,
+  "tx_count": 6
+ }
+]

@@ -1,0 +1,32 @@
+{
+ "category_whitespace": [
+  {
+   "category": "A La Carte",
+   "label": "trim",
+   "n_skus": 1,
+   "qty": 280,
+   "qty_per_sku": 280,
+   "reason": "หมวดกำลังหดตัว → ทบทวนเมนูที่อ่อน",
+   "revenue": 28000,
+   "revenue_per_sku": 28000,
+   "slope_pct": -10.7
+  },
+  {
+   "category": "Sashimi",
+   "label": "trim",
+   "n_skus": 1,
+   "qty": 2800,
+   "qty_per_sku": 2800,
+   "reason": "หมวดกำลังหดตัว → ทบทวนเมนูที่อ่อน",
+   "revenue": 0,
+   "revenue_per_sku": 0,
+   "slope_pct": -10.7
+  }
+ ],
+ "cross_branch_gaps": [],
+ "month_range": [
+  null,
+  null
+ ],
+ "revive": []
+}

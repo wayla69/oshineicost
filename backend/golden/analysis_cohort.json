@@ -1,0 +1,61 @@
+{
+ "cohorts": [
+  "2026-05",
+  "2026-06"
+ ],
+ "matrix": [
+  {
+   "branches": 2,
+   "cohort": "2026-05",
+   "cust_per_branch": 12,
+   "customers": 24,
+   "days_covered": 3,
+   "days_in_month": 31,
+   "mom_pct": null,
+   "partial": true,
+   "rev_per_cust": 238,
+   "revenue": 5700.0,
+   "tx": 6,
+   "vs_avg": 100.0,
+   "yoy_pct": null
+  },
+  {
+   "branches": 2,
+   "cohort": "2026-06",
+   "cust_per_branch": 12,
+   "customers": 24,
+   "days_covered": 3,
+   "days_in_month": 30,
+   "mom_pct": null,
+   "partial": true,
+   "rev_per_cust": 238,
+   "revenue": 5700.0,
+   "tx": 6,
+   "vs_avg": 100.0,
+   "yoy_pct": null
+  }
+ ],
+ "note": "POS ไม่มีรหัสลูกค้ารายคน จึงใช้จำนวนหัวรายเดือนเป็นสัญญาณ retention อย่างอ่อน — อ่านที่คอลัมน์ MoM/YoY และ ลูกค้า/สาขา เป็นหลัก (ตัดผลจากการเปิดสาขาเพิ่ม) · เดือนที่ติดป้าย \"ไม่ครบเดือน\" ไม่ถูกนำไปเทียบ MoM/YoY",
+ "seasonality": [
+  {
+   "m": 5,
+   "years": {
+    "2026": {
+     "cpb": 12,
+     "cust": 24,
+     "partial": true
+    }
+   }
+  },
+  {
+   "m": 6,
+   "years": {
+    "2026": {
+     "cpb": 12,
+     "cust": 24,
+     "partial": true
+    }
+   }
+  }
+ ]
+}

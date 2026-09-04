@@ -1,0 +1,49 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "cogs": 450.0,
+   "cost_pct": 90.0,
+   "cost_per_head": 112.5,
+   "customers": 4,
+   "delta_pct": 0.0,
+   "gp_per_head": 12.5,
+   "prev_cost_per_head": 112.5,
+   "rev_per_head": 125.0,
+   "revenue": 500.0
+  },
+  {
+   "branch": "BranchB",
+   "cogs": 450.0,
+   "cost_pct": 90.0,
+   "cost_per_head": 112.5,
+   "customers": 4,
+   "delta_pct": 0.0,
+   "gp_per_head": 12.5,
+   "prev_cost_per_head": 112.5,
+   "rev_per_head": 125.0,
+   "revenue": 500.0
+  }
+ ],
+ "cur_range": [
+  "2026-06-03",
+  "2026-06-03"
+ ],
+ "focus": "2026-06-03",
+ "gran": "day",
+ "prev_range": [
+  "2026-06-02",
+  "2026-06-02"
+ ],
+ "total": {
+  "cogs": 900.0,
+  "cost_pct": 90.0,
+  "cost_per_head": 112.5,
+  "customers": 8,
+  "delta_pct": 0.0,
+  "gp_per_head": 12.5,
+  "prev_cost_per_head": 112.5,
+  "rev_per_head": 125.0,
+  "revenue": 1000.0
+ }
+}

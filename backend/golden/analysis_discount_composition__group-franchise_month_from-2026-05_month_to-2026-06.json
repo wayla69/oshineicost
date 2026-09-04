@@ -1,0 +1,34 @@
+{
+ "branches": [
+  {
+   "bills": 6,
+   "branch": "BranchB",
+   "bucket_bills": {
+    "free": 0,
+    "ge50": 0,
+    "lt10": 6,
+    "p10_20": 0,
+    "p20_50": 0,
+    "zero_gross": 0
+   },
+   "buckets": {
+    "free": 0.0,
+    "ge50": 0.0,
+    "lt10": 120.0,
+    "p10_20": 0.0,
+    "p20_50": 0.0,
+    "zero_gross": 0.0
+   },
+   "dominant": "lt10",
+   "total_discount": 120.0
+  }
+ ],
+ "bucket_keys": [
+  "free",
+  "ge50",
+  "p20_50",
+  "p10_20",
+  "lt10",
+  "zero_gross"
+ ]
+}

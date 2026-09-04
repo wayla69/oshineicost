@@ -1,0 +1,22 @@
+[
+ {
+  "avg_ticket": 950.0,
+  "branch": "BranchA",
+  "cust": 24,
+  "p_avg_ticket": 100,
+  "p_customers": 100,
+  "p_revenue": 100,
+  "revenue": 5700.0,
+  "tx": 6
+ },
+ {
+  "avg_ticket": 950.0,
+  "branch": "BranchB",
+  "cust": 24,
+  "p_avg_ticket": 100,
+  "p_customers": 100,
+  "p_revenue": 100,
+  "revenue": 5700.0,
+  "tx": 6
+ }
+]

@@ -1,0 +1,56 @@
+{
+ "granularity": "monthly",
+ "overall": {
+  "avg_per_bill_cost": 380.0,
+  "avg_per_bill_profit": 570.0,
+  "avg_per_bill_rev": 950.0,
+  "bills": 12,
+  "cost": 4560.0,
+  "margin_pct": 60.0,
+  "pax": 48,
+  "profit": 6840.0,
+  "revenue_ex": 11400.0,
+  "tier_cost_mix": {
+   "≤450": 4560.0
+  },
+  "tier_mix": {
+   "≤450": 48
+  }
+ },
+ "rows": [
+  {
+   "avg_per_bill_cost": 380.0,
+   "avg_per_bill_profit": 570.0,
+   "avg_per_bill_rev": 950.0,
+   "bills": 6,
+   "cost": 2280.0,
+   "dominant_tier": "≤450",
+   "margin_pct": 60.0,
+   "pax": 24,
+   "period": "2026-05",
+   "profit": 3420.0,
+   "revenue_ex": 5700.0,
+   "revenue_inc": 6420.0,
+   "tier_mix": {
+    "≤450": 24
+   }
+  },
+  {
+   "avg_per_bill_cost": 380.0,
+   "avg_per_bill_profit": 570.0,
+   "avg_per_bill_rev": 950.0,
+   "bills": 6,
+   "cost": 2280.0,
+   "dominant_tier": "≤450",
+   "margin_pct": 60.0,
+   "pax": 24,
+   "period": "2026-06",
+   "profit": 3420.0,
+   "revenue_ex": 5700.0,
+   "revenue_inc": 6420.0,
+   "tier_mix": {
+    "≤450": 24
+   }
+  }
+ ]
+}

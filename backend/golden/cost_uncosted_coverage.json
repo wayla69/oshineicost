@@ -1,0 +1,46 @@
+{
+ "branches": [
+  {
+   "branch": "BranchA",
+   "costed_revenue": 42000.0,
+   "pct_uncosted": 0.0,
+   "skus": 3,
+   "total_revenue": 42000.0,
+   "uncosted_revenue": 0.0,
+   "uncosted_skus": 0
+  },
+  {
+   "branch": "BranchB",
+   "costed_revenue": 42000.0,
+   "pct_uncosted": 0.0,
+   "skus": 3,
+   "total_revenue": 42000.0,
+   "uncosted_revenue": 0.0,
+   "uncosted_skus": 0
+  }
+ ],
+ "chain": {
+  "costed_revenue": 84000.0,
+  "pct_uncosted": 0.0,
+  "total_revenue": 84000.0,
+  "uncosted_revenue": 0.0
+ },
+ "monthly_trend": [
+  {
+   "pct_uncosted": 0.0,
+   "period": "2026-04",
+   "uncosted_revenue": 0.0
+  },
+  {
+   "pct_uncosted": 0.0,
+   "period": "2026-05",
+   "uncosted_revenue": 0.0
+  },
+  {
+   "pct_uncosted": 0.0,
+   "period": "2026-06",
+   "uncosted_revenue": 0.0
+  }
+ ],
+ "top_uncosted": []
+}

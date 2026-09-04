@@ -1,0 +1,141 @@
+{
+ "by_branch": [
+  {
+   "avg_margin_head": 107.5,
+   "bills": 6,
+   "branch": "BranchA",
+   "covers": 24,
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 6,
+   "branch": "BranchB",
+   "covers": 24,
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  }
+ ],
+ "by_daypart": [
+  {
+   "avg_margin_head": 107.5,
+   "bills": 12,
+   "covers": 48,
+   "k": "กลางวัน (lunch)",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  }
+ ],
+ "by_dow": [
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 0,
+   "label": "อา",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 1,
+   "label": "จ",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 2,
+   "label": "อ",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 3,
+   "label": "พ",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 5,
+   "label": "ศ",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  },
+  {
+   "avg_margin_head": 107.5,
+   "bills": 2,
+   "covers": 8,
+   "k": 6,
+   "label": "ส",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  }
+ ],
+ "by_party_size": [
+  {
+   "avg_margin_head": 107.5,
+   "bills": 12,
+   "covers": 48,
+   "k": "3-4",
+   "loss_amount": 0.0,
+   "loss_bills": 0,
+   "loss_cover_pct": 0.0,
+   "loss_covers": 0
+  }
+ ],
+ "distribution": [
+  {
+   "bills": 12,
+   "bkt": 3,
+   "covers": 48,
+   "label": "100-300"
+  }
+ ],
+ "summary": {
+  "bills": 12,
+  "cogs": 6240.0,
+  "covers": 48,
+  "gp": 5160,
+  "gp_per_head": 107.5,
+  "loss_amount": 0,
+  "loss_bill_pct": 0.0,
+  "loss_bills": 0,
+  "loss_cover_pct": 0.0,
+  "loss_covers": 0,
+  "rev": 11400.0
+ },
+ "window": [
+  "2026-05-01",
+  "2026-06-03"
+ ]
+}

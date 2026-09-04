@@ -1,0 +1,42 @@
+{
+ "forecast": [
+  {
+   "confidence": "high",
+   "pax": 106.67,
+   "period": "2026-09",
+   "revenue": 10666.67
+  },
+  {
+   "confidence": "high",
+   "pax": 126.67,
+   "period": "2026-08",
+   "revenue": 12666.67
+  },
+  {
+   "confidence": "high",
+   "pax": 146.67,
+   "period": "2026-07",
+   "revenue": 14666.67
+  }
+ ],
+ "historical": [
+  {
+   "pax": 160.0,
+   "period": "2026-06",
+   "revenue": 16000.0
+  },
+  {
+   "pax": 200.0,
+   "period": "2026-04",
+   "revenue": 20000.0
+  },
+  {
+   "pax": 200.0,
+   "period": "2026-05",
+   "revenue": 20000.0
+  }
+ ],
+ "monthly_growth_rate": -10.0,
+ "r_squared": 0.75,
+ "trend": "down"
+}

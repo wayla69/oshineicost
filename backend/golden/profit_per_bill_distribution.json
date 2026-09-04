@@ -1,0 +1,33 @@
+{
+ "avg_profit": 700.0,
+ "buckets": [
+  {
+   "count": 0,
+   "label": "1-100"
+  },
+  {
+   "count": 0,
+   "label": "1000+"
+  },
+  {
+   "count": 0,
+   "label": "101-300"
+  },
+  {
+   "count": 0,
+   "label": "301-500"
+  },
+  {
+   "count": 0,
+   "label": "<=0"
+  },
+  {
+   "count": 12,
+   "label": "501-1000"
+  }
+ ],
+ "margin_pct_used": 70.0,
+ "max_profit": 700.0,
+ "min_profit": 700.0,
+ "total_tx": 12
+}

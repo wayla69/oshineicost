@@ -1,0 +1,36 @@
+{
+ "branch": "ทุกสาขา",
+ "items": [
+  {
+   "category": "A La Carte",
+   "cost": 2800.0,
+   "cost_pct": 11.11,
+   "cost_per_serving": 10.0,
+   "cost_source": "sku_cost",
+   "description": "(A) สเต๊ก",
+   "is_high_volume": false,
+   "reduce_priority": 11.11,
+   "revenue": 28000.0,
+   "serving_pct": 9.09,
+   "servings": 280.0,
+   "sku_code": "A0001"
+  },
+  {
+   "category": "Sashimi",
+   "cost": 22400.0,
+   "cost_pct": 88.89,
+   "cost_per_serving": 8.0,
+   "cost_source": "sku_cost",
+   "description": "(B) แซลมอน",
+   "is_high_volume": false,
+   "reduce_priority": 88.89,
+   "revenue": 0,
+   "serving_pct": 90.91,
+   "servings": 2800.0,
+   "sku_code": "B0001"
+  }
+ ],
+ "n_dishes": 2,
+ "total_cost": 25200.0,
+ "total_servings": 3080.0
+}

@@ -1,0 +1,50 @@
+{
+ "months": [
+  "2026-05",
+  "2026-06"
+ ],
+ "skus": [
+  {
+   "avg_ratio": 3.75,
+   "category": "A La Carte",
+   "description": "(A) สเต๊ก",
+   "series": [
+    {
+     "covers": 24,
+     "month": "2026-05",
+     "qty": 100.0,
+     "ratio": 4.1667
+    },
+    {
+     "covers": 24,
+     "month": "2026-06",
+     "qty": 80.0,
+     "ratio": 3.3333
+    }
+   ],
+   "sku_code": "A0001",
+   "trend_pct": 0
+  },
+  {
+   "avg_ratio": 37.5,
+   "category": "Sashimi",
+   "description": "(B) แซลมอน",
+   "series": [
+    {
+     "covers": 24,
+     "month": "2026-05",
+     "qty": 1000.0,
+     "ratio": 41.6667
+    },
+    {
+     "covers": 24,
+     "month": "2026-06",
+     "qty": 800.0,
+     "ratio": 33.3333
+    }
+   ],
+   "sku_code": "B0001",
+   "trend_pct": 0
+  }
+ ]
+}

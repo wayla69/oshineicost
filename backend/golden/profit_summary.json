@@ -1,0 +1,39 @@
+{
+ "avg_ticket": 7000.0,
+ "cogs": 25200.0,
+ "cost_coverage_pct": 0.0,
+ "gross_profit": 58800.0,
+ "margin_pct": 70.0,
+ "monthly_trend": [
+  {
+   "cogs": 7200.0,
+   "costed_revenue_ex_vat": 0.0,
+   "gross_profit": 16800.0,
+   "margin_pct": 70.0,
+   "period_month": "2026-06",
+   "revenue": 24000.0
+  },
+  {
+   "cogs": 9000.0,
+   "costed_revenue_ex_vat": 0.0,
+   "gross_profit": 21000.0,
+   "margin_pct": 70.0,
+   "period_month": "2026-04",
+   "revenue": 30000.0
+  },
+  {
+   "cogs": 9000.0,
+   "costed_revenue_ex_vat": 0.0,
+   "gross_profit": 21000.0,
+   "margin_pct": 70.0,
+   "period_month": "2026-05",
+   "revenue": 30000.0
+  }
+ ],
+ "pos_total_inc_vat_diagnostic": 89880.0,
+ "profit_per_bill": 4900.0,
+ "qty_sold": 3640.0,
+ "revenue": 84000.0,
+ "revenue_ex_vat": 84000.0,
+ "tx_count": 12
+}

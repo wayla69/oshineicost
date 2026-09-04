@@ -1,0 +1,21 @@
+{
+ "branch_growth": [
+  {
+   "branch": "BranchA",
+   "growth_pct": 0.0,
+   "last_month": "2026-06",
+   "last_revenue": 2850.0,
+   "prev_month": "2026-05",
+   "prev_revenue": 2850.0
+  },
+  {
+   "branch": "BranchB",
+   "growth_pct": 0.0,
+   "last_month": "2026-06",
+   "last_revenue": 2850.0,
+   "prev_month": "2026-05",
+   "prev_revenue": 2850.0
+  }
+ ],
+ "insights": []
+}

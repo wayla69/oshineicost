@@ -1,0 +1,363 @@
+{
+ "actions": [
+  {
+   "sev": "med",
+   "text": "Food cost 126% — above the ~50% target."
+  }
+ ],
+ "available": true,
+ "branch_scope": "All branches",
+ "branches": [
+  {
+   "bills": 1,
+   "branch": "BranchA",
+   "customers": 4,
+   "rank": 1,
+   "rank_change": null,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "share_pct": 50.0,
+   "wow_pct": null
+  },
+  {
+   "bills": 1,
+   "branch": "BranchB",
+   "customers": 4,
+   "rank": 2,
+   "rank_change": null,
+   "rev_per_head": 237.5,
+   "revenue": 950.0,
+   "share_pct": 50.0,
+   "wow_pct": null
+  }
+ ],
+ "comp_label": "same weekday last week",
+ "comp_range": [
+  "2026-05-27",
+  "2026-05-27"
+ ],
+ "days_in_period": 1,
+ "focus": "2026-06-03",
+ "gp": {
+  "cost_basis": "daily",
+  "food_cost": 900,
+  "gp": 1000.0,
+  "gp_pct": 52.6,
+  "gp_pct_delta_pp": null,
+  "gp_pct_prev": null,
+  "gp_per_head": 125.0,
+  "revenue": 1900.0
+ },
+ "has_prev": true,
+ "has_yoy": false,
+ "headline": {
+  "avg_ticket": 950.0,
+  "bills": 2,
+  "bills_wow_pct": null,
+  "cust_wow_pct": null,
+  "customers": 8,
+  "discount": 40.0,
+  "discount_pct": 2.1,
+  "prev": {
+   "avg_ticket": null,
+   "bills": 0,
+   "customers": 0,
+   "discount": 0,
+   "rev_per_head": null,
+   "revenue": 0
+  },
+  "rev_per_head": 237.5,
+  "rev_wow_pct": null,
+  "revenue": 1900.0,
+  "rph_wow_pct": null,
+  "ticket_wow_pct": null
+ },
+ "label": "Wednesday, 3 Jun 2026",
+ "lang": "en",
+ "latest_day": "2026-06-03",
+ "leak": {
+  "by_master_branch": [
+   {
+    "bills": 1,
+    "branch": "BranchA",
+    "disc": 20.0,
+    "pct": 2.1,
+    "sales": 950.0
+   }
+  ],
+  "cash_heavy": {
+   "baht": 0,
+   "baht_wow": null,
+   "bills": 0,
+   "bills_wow": null,
+   "by_branch": [],
+   "prev_baht": 0,
+   "prev_bills": 0
+  },
+  "heavy_discount": {
+   "baht": 0,
+   "baht_wow": null,
+   "bills": 0,
+   "bills_wow": null,
+   "by_branch": [],
+   "prev_baht": 0,
+   "prev_bills": 0
+  },
+  "reprinted": {
+   "baht": 0,
+   "baht_wow": null,
+   "bills": 0,
+   "bills_wow": null,
+   "by_branch": [],
+   "prev_baht": 0,
+   "prev_bills": 0
+  },
+  "total": {
+   "baht": 40.0,
+   "baht_wow": null,
+   "bills": 2,
+   "bills_wow": null,
+   "prev_baht": 0,
+   "prev_bills": 0
+  },
+  "zero_gross": {
+   "baht": 0,
+   "baht_wow": null,
+   "bills": 0,
+   "bills_wow": null,
+   "by_branch": [],
+   "prev_baht": 0,
+   "prev_bills": 0
+  }
+ },
+ "menu": {
+  "basis": "cost_per_head",
+  "cost_basis": "daily",
+  "cost_from": "2026-05-01",
+  "covers": 8,
+  "covers_prev": 0,
+  "risers": [],
+  "savers": [],
+  "top": [
+   {
+    "cost": 100,
+    "cost_per_head": 12.5,
+    "cost_per_head_prev": null,
+    "delta": null,
+    "menu": "สเต๊ก",
+    "pct": null,
+    "qty": 10
+   },
+   {
+    "cost": 800,
+    "cost_per_head": 100.0,
+    "cost_per_head_prev": null,
+    "delta": null,
+    "menu": "แซลมอน",
+    "pct": null,
+    "qty": 100
+   }
+  ],
+  "total_cph": 112.5,
+  "total_cph_delta": null,
+  "total_cph_prev": null
+ },
+ "min_day": "2026-05-01",
+ "months": [],
+ "pace": {
+  "bom_cost_mtd": 7200.0,
+  "cost_coverage": {
+   "coverage_pct": 100.0,
+   "est_food_cost_pct": 126.3,
+   "est_missing_cost": 0,
+   "plates": 880.0,
+   "plates_costed": 880.0,
+   "skus": 2,
+   "skus_uncosted": 0,
+   "top_uncosted": [],
+   "uncosted_plates": 0.0
+  },
+  "days_elapsed": 3,
+  "days_total": 30,
+  "food_cost_pct": 126.3,
+  "food_cost_pct_prev": 157.9,
+  "mom_basis": "dow",
+  "mom_pct": 0.0,
+  "month": "2026-06",
+  "month_complete": false,
+  "mtd_days": 3,
+  "mtd_revenue": 5700.0,
+  "prev_month": {
+   "baseline_mtd": 5700.0,
+   "food_cost_pct": 157.9,
+   "month": "2026-05",
+   "revenue_full": 5700.0,
+   "revenue_mtd": 5700.0
+  },
+  "proj_method": "dow",
+  "proj_vs_target_pct": null,
+  "projected": 57000.0,
+  "target": null,
+  "weekly": [
+   {
+    "complete": false,
+    "days": 3,
+    "fair_prev": 5700.0,
+    "label": "1 Jun",
+    "revenue": 5700.0,
+    "start": "2026-06-01"
+   }
+  ]
+ },
+ "partial": false,
+ "payment": {
+  "available": true,
+  "by_branch": [
+   {
+    "branch": "BranchA",
+    "channels": {
+     "Cash": {
+      "amount": 10000,
+      "pct": 66.7,
+      "txns": 30
+     },
+     "Credit": {
+      "amount": 5000,
+      "pct": 33.3,
+      "txns": 12
+     }
+    },
+    "total": 15000
+   }
+  ],
+  "channels": [
+   {
+    "amount": 10000,
+    "code": "Cash",
+    "pct": 66.7
+   },
+   {
+    "amount": 5000,
+    "code": "Credit",
+    "pct": 33.3
+   }
+  ],
+  "prev": {
+   "by_code": {},
+   "channels": {
+    "Cash": {
+     "amount": 0,
+     "pct": null
+    },
+    "Credit": {
+     "amount": 0,
+     "pct": null
+    }
+   },
+   "total": 0
+  },
+  "total": 15000
+ },
+ "peak": {
+  "dayparts": [
+   {
+    "covers": 8,
+    "name": "Lunch",
+    "pct": 100.0,
+    "revenue": 1900
+   }
+  ],
+  "hourly": [
+   {
+    "bills": 2,
+    "covers": 8,
+    "hour": 12,
+    "revenue": 1900.0
+   }
+  ],
+  "peak_hour": {
+   "hour": 12,
+   "revenue": 1900
+  },
+  "prev": {
+   "dayparts": {},
+   "peak_hour": null,
+   "total_rev": 0
+  },
+  "total_rev": 1900
+ },
+ "period": "daily",
+ "range": [
+  "2026-06-03",
+  "2026-06-03"
+ ],
+ "selected_month": null,
+ "selected_week": null,
+ "table": {
+  "available": true,
+  "avg_turn_min": 90.0,
+  "by_branch": [
+   {
+    "avg_turn_min": 90.0,
+    "branch": "BranchA",
+    "covers": 80,
+    "covers_per_table": 2.67,
+    "tables": 30
+   }
+  ],
+  "covers": 80,
+  "covers_per_table": 2.67,
+  "prev": {
+   "avg_turn_min": null,
+   "covers": 0,
+   "covers_per_table": null,
+   "tables": 0
+  },
+  "tables": 30
+ },
+ "tier": null,
+ "trend": [
+  {
+   "label": "1 Jun 2026",
+   "revenue": 1900.0,
+   "start": "2026-06-01"
+  },
+  {
+   "label": "2 Jun 2026",
+   "revenue": 1900.0,
+   "start": "2026-06-02"
+  },
+  {
+   "label": "27 May 2026",
+   "revenue": 0,
+   "start": "2026-05-27"
+  },
+  {
+   "label": "28 May 2026",
+   "revenue": 0,
+   "start": "2026-05-28"
+  },
+  {
+   "label": "29 May 2026",
+   "revenue": 0,
+   "start": "2026-05-29"
+  },
+  {
+   "label": "3 Jun 2026",
+   "revenue": 1900.0,
+   "start": "2026-06-03"
+  },
+  {
+   "label": "30 May 2026",
+   "revenue": 0,
+   "start": "2026-05-30"
+  },
+  {
+   "label": "31 May 2026",
+   "revenue": 0,
+   "start": "2026-05-31"
+  }
+ ],
+ "weeks": [],
+ "yoy_range": null
+}

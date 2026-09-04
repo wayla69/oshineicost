@@ -1,0 +1,76 @@
+{
+ "benchmark_status": {},
+ "benchmarks": {
+  "ayce_buffet": {
+   "carb": [
+    10,
+    15
+   ],
+   "label": "Top AYCE buffet (Japan/KR)",
+   "oil": [
+    3,
+    8
+   ],
+   "other": [
+    5,
+    10
+   ],
+   "protein": [
+    40,
+    50
+   ],
+   "sauce": [
+    5,
+    10
+   ],
+   "seasoning": [
+    2,
+    5
+   ],
+   "veg": [
+    15,
+    25
+   ]
+  },
+  "fine_dining": {
+   "carb": [
+    5,
+    10
+   ],
+   "label": "Fine-dining Japanese",
+   "oil": [
+    3,
+    8
+   ],
+   "other": [
+    3,
+    10
+   ],
+   "protein": [
+    50,
+    60
+   ],
+   "sauce": [
+    5,
+    10
+   ],
+   "seasoning": [
+    2,
+    5
+   ],
+   "veg": [
+    15,
+    20
+   ]
+  }
+ },
+ "branch": null,
+ "by_type": {},
+ "by_type_cost": {},
+ "grand_total_cost": 0,
+ "grouped": false,
+ "ingredients": [],
+ "month_from": null,
+ "month_to": null,
+ "n_ingredients_total": 0
+}

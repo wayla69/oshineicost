@@ -1,0 +1,26 @@
+[
+ {
+  "cogs": 7200.0,
+  "costed_revenue_ex_vat": 0.0,
+  "gross_profit": 16800.0,
+  "margin_pct": 70.0,
+  "period_month": "2026-06",
+  "revenue_ex_vat": 24000.0
+ },
+ {
+  "cogs": 9000.0,
+  "costed_revenue_ex_vat": 0.0,
+  "gross_profit": 21000.0,
+  "margin_pct": 70.0,
+  "period_month": "2026-04",
+  "revenue_ex_vat": 30000.0
+ },
+ {
+  "cogs": 9000.0,
+  "costed_revenue_ex_vat": 0.0,
+  "gross_profit": 21000.0,
+  "margin_pct": 70.0,
+  "period_month": "2026-05",
+  "revenue_ex_vat": 30000.0
+ }
+]

@@ -1,0 +1,39 @@
+{
+ "cash_heavy": {
+  "baht": 0,
+  "bills": 0,
+  "by_branch": []
+ },
+ "date": "2026-06-03",
+ "heavy_discount": {
+  "baht": 0,
+  "bills": 0,
+  "by_branch": []
+ },
+ "reprinted": {
+  "baht": 0,
+  "bills": 0,
+  "by_branch": []
+ },
+ "total": {
+  "baht": 40.0,
+  "bills": 2,
+  "by_branch": [
+   {
+    "baht": 20.0,
+    "bills": 1,
+    "branch": "BranchA"
+   },
+   {
+    "baht": 20.0,
+    "bills": 1,
+    "branch": "BranchB"
+   }
+  ]
+ },
+ "zero_gross": {
+  "baht": 0,
+  "bills": 0,
+  "by_branch": []
+ }
+}

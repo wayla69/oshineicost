@@ -1,0 +1,35 @@
+{
+ "avg_ticket_yesterday": 950.0,
+ "customer_yesterday": 8,
+ "dow_label": "Wednesday",
+ "food_cost_pct_mtd": 126.3,
+ "mtd_bom_cost": 7200.0,
+ "mtd_by_branch": [
+  {
+   "branch": "BranchA",
+   "mtd_revenue": 2850.0,
+   "revenue_target": null
+  },
+  {
+   "branch": "BranchB",
+   "mtd_revenue": 2850.0,
+   "revenue_target": null
+  }
+ ],
+ "mtd_days": 3,
+ "mtd_revenue": 5700.0,
+ "revenue_wow": null,
+ "revenue_yesterday": 1900.0,
+ "tx_yesterday": 2,
+ "yesterday": "2026-06-03",
+ "yesterday_by_branch": [
+  {
+   "branch": "BranchA",
+   "revenue": 950.0
+  },
+  {
+   "branch": "BranchB",
+   "revenue": 950.0
+  }
+ ]
+}

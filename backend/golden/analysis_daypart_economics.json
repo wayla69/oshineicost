@@ -1,0 +1,28 @@
+{
+ "assumptions": {
+  "drink_gp": 0.7,
+  "food_other_gp": 0.45,
+  "note": "est_gross_profit is an estimate using fixed component rates"
+ },
+ "dayparts": [
+  {
+   "avg_bill": 950.0,
+   "bills": 12,
+   "covers": 48,
+   "covers_per_bill": 4.0,
+   "daypart": "lunch",
+   "drink_pct": 10.0,
+   "est_gp_margin_pct": 50.0,
+   "est_gross_profit": 5700.0,
+   "label": "กลางวัน (11-14)",
+   "mix": {
+    "drink": 1200.0,
+    "food": 10800.0,
+    "other": 0
+   },
+   "rev_per_cover": 237.5,
+   "revenue": 11400.0,
+   "revenue_pct": 100.0
+  }
+ ]
+}

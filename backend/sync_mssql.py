@@ -61,14 +61,12 @@ QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
             f"THEN 0 ELSE CAST(si.Qty AS float) END)")
 
 # ── Buffet/tier PACKAGE codes: their cost must never be booked ───────────────
-# Keep in lockstep with main._ALL_TIER_CODES (this file is standalone-runnable,
-# hence the duplicated tuple, same as SALE_FILTER above; test_invariants.py
-# fails if the two drift). sku_cost holds the package PRICE for these codes
-# (BUFFET = ฿679.08), not a cost — the real cost is the itemised dishes on the
-# same bill, so booking the package too double-counts (~฿1.07B phantom COGS).
-ALL_TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
-                  'BUFFETCHILD', 'B01', 'B02', 'B03', 'B07', 'B11')
-ALL_TIER_CODES_SQL = "(" + ",".join(f"'{c}'" for c in ALL_TIER_CODES) + ")"
+# One definition, shared with the app: rules.py has no FastAPI import, so this
+# standalone script can use it directly. (Until 2026-09 the tuple was copied
+# here and a test stood guard against drift.) sku_cost holds the package PRICE
+# for these codes (BUFFET = ฿679.08), not a cost — the real cost is the itemised
+# dishes on the same bill, so booking the package too double-counts.
+from rules import ALL_TIER_CODES, ALL_TIER_CODES_SQL, raw_unit_cost_sql  # noqa: E402
 
 def is_tier_code(code):
     """Tier/package predicate for the per-bill costmap: the canonical tuple PLUS
@@ -89,12 +87,8 @@ def refresh_sku_effective_cost(sq):
                      "sku_id INTEGER PRIMARY KEY, recipe_cost REAL NOT NULL DEFAULT 0);"
                      "DELETE FROM sku_effective_cost;")
     sq.execute(f"""INSERT INTO sku_effective_cost(sku_id, recipe_cost)
-                  SELECT s.sku_id, CASE WHEN s.sku_code IN {ALL_TIER_CODES_SQL} THEN 0 ELSE COALESCE(
-                    (SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
-                    (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
-                    (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-                       JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id
-                       WHERE a.bom_sku_code=s.sku_code), 0) END
+                  SELECT s.sku_id, CASE WHEN s.sku_code IN {ALL_TIER_CODES_SQL} THEN 0
+                                        ELSE {raw_unit_cost_sql('s')} END
                   FROM skus s""")
 
 def _norm_paycode(c):
@@ -1072,13 +1066,8 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
         y, m, d = (int(x) for x in mx.split("-"))
         bill_since = (_dt.date(y, m, d) - _dt.timedelta(days=31)).isoformat()
     costmap = {}
-    for r in sq.execute("""
-        SELECT s.sku_id, s.sku_code,
-          COALESCE(
-            (SELECT NULLIF(sc.unit_cost, 0) FROM sku_cost sc WHERE sc.sku_id=s.sku_id),
-            (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id=s.sku_id),
-            (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-               JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code=s.sku_code), 0) AS c
+    for r in sq.execute(f"""
+        SELECT s.sku_id, s.sku_code, {raw_unit_cost_sql('s')} AS c
         FROM skus s""").fetchall():
         costmap[r["sku_id"]] = 0.0 if is_tier_code(r["sku_code"]) else (r["c"] or 0.0)
     # Refresh the per-SKU effective-cost lookup in the staged DB, so a swapped-in

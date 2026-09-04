@@ -1,0 +1,16 @@
+[
+ {
+  "branch": "BranchA",
+  "branch_id": 1,
+  "customer_target": 0,
+  "period_month": "",
+  "revenue_target": 0
+ },
+ {
+  "branch": "BranchB",
+  "branch_id": 2,
+  "customer_target": 0,
+  "period_month": "",
+  "revenue_target": 0
+ }
+]

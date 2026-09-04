@@ -1,0 +1,32 @@
+{
+ "active_branches": 2,
+ "available": true,
+ "branches": [
+  {
+   "branch": "BranchA",
+   "mom_pct": 900.0,
+   "mtd": 2850.0,
+   "prior_actual": 2850.0,
+   "projected": 28500.0
+  },
+  {
+   "branch": "BranchB",
+   "mom_pct": 900.0,
+   "mtd": 2850.0,
+   "prior_actual": 2850.0,
+   "projected": 28500.0
+  }
+ ],
+ "days_elapsed": 3,
+ "days_total": 30,
+ "inactive_branches": [],
+ "period": "2026-06",
+ "prior_period": "2026-05",
+ "total": {
+  "mom_pct": 900.0,
+  "mtd": 5700.0,
+  "prior_actual": 5700.0,
+  "projected": 57000.0
+ },
+ "total_branches": 2
+}

@@ -1,0 +1,33 @@
+{
+ "available": true,
+ "cogs_comparable": true,
+ "cur": {
+  "bills": 6,
+  "cogs": 2700.0,
+  "customers": 24,
+  "discount": 120.0,
+  "gross_profit": 3000.0,
+  "revenue_ex_vat": 5700.0
+ },
+ "cur_month": "2026-06",
+ "cur_range": [
+  "2026-06-01",
+  "2026-06-03"
+ ],
+ "cutoff_day": 3,
+ "days_in_month": 30,
+ "partial": true,
+ "prev": {
+  "bills": 6,
+  "cogs": 2700.0,
+  "customers": 24,
+  "discount": 120.0,
+  "gross_profit": 3000.0,
+  "revenue_ex_vat": 5700.0
+ },
+ "prev_month": "2026-05",
+ "prev_range": [
+  "2026-05-01",
+  "2026-05-03"
+ ]
+}

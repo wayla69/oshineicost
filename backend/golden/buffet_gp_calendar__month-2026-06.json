@@ -1,0 +1,36 @@
+{
+ "days": [
+  {
+   "cogs": 2400.0,
+   "customer_count": 8,
+   "date": "2026-06-01",
+   "gp": -400.0,
+   "margin_pct": -20.0,
+   "revenue_ex": 2000.0,
+   "revenue_inc": 2140.0,
+   "tx_count": 2
+  },
+  {
+   "cogs": 2400.0,
+   "customer_count": 8,
+   "date": "2026-06-02",
+   "gp": -400.0,
+   "margin_pct": -20.0,
+   "revenue_ex": 2000.0,
+   "revenue_inc": 2140.0,
+   "tx_count": 2
+  },
+  {
+   "cogs": 2400.0,
+   "customer_count": 8,
+   "date": "2026-06-03",
+   "gp": -400.0,
+   "margin_pct": -20.0,
+   "revenue_ex": 2000.0,
+   "revenue_inc": 2140.0,
+   "tx_count": 2
+  }
+ ],
+ "month": "2026-06",
+ "monthly_margin_pct": -20.0
+}

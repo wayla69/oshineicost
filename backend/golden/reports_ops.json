@@ -1,0 +1,67 @@
+{
+ "channel": [
+  {
+   "bills": 10,
+   "customers": 12,
+   "label": "เดลิเวอรี",
+   "revenue": 3738.0
+  },
+  {
+   "bills": 200,
+   "customers": 500,
+   "label": "ทานที่ร้าน",
+   "revenue": 74766.0
+  }
+ ],
+ "channel_pending": false,
+ "daily": false,
+ "date_from": null,
+ "date_to": null,
+ "month": "2026-06",
+ "payment": [
+  {
+   "amount": 30000.0,
+   "code": "Cash",
+   "n": 90
+  },
+  {
+   "amount": 50000.0,
+   "code": "Credit",
+   "n": 120
+  }
+ ],
+ "promo": [
+  {
+   "code": null,
+   "discount": 4000.0,
+   "name": "Series 5",
+   "series": 5,
+   "uses": 40
+  }
+ ],
+ "table": {
+  "avg_turn_min": 90.0,
+  "customers": 240,
+  "tabs": 90
+ },
+ "void": [
+  {
+   "bom_cost": 30.0,
+   "menu": "(A) สเต๊ก",
+   "qty": 3.0,
+   "value": 300.0
+  },
+  {
+   "bom_cost": 88.0,
+   "menu": "(B) แซลมอน",
+   "qty": 11.0,
+   "value": 0.0
+  }
+ ],
+ "void_pending": false,
+ "void_total": {
+  "bom_cost": 118.0,
+  "qty": 14.0,
+  "value": 300.0
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "branches": [
+  {
+   "bom_cost": 12600.0,
+   "branch": "BranchA",
+   "covers": 24,
+   "fixed_cost_monthly": 0.0,
+   "fixed_cost_period": 0.0,
+   "gp_margin_pct": 70.0,
+   "gross_profit": 29400.0,
+   "months": 3,
+   "net_profit": 29400.0,
+   "np_margin_pct": 70.0,
+   "np_per_cover": 1225.0,
+   "revenue": 42000.0
+  },
+  {
+   "bom_cost": 12600.0,
+   "branch": "BranchB",
+   "covers": 24,
+   "fixed_cost_monthly": 0.0,
+   "fixed_cost_period": 0.0,
+   "gp_margin_pct": 70.0,
+   "gross_profit": 29400.0,
+   "months": 3,
+   "net_profit": 29400.0,
+   "np_margin_pct": 70.0,
+   "np_per_cover": 1225.0,
+   "revenue": 42000.0
+  }
+ ]
+}

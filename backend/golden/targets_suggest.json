@@ -1,0 +1,21 @@
+{
+ "lookback": 2,
+ "month": "2026-06",
+ "suggestions": [
+  {
+   "branch": "BranchA",
+   "customer_target": 13,
+   "revenue_target": 16000.0
+  },
+  {
+   "branch": "BranchB",
+   "customer_target": 13,
+   "revenue_target": 16000.0
+  }
+ ],
+ "trailing_months": [
+  "2026-05",
+  "2026-04"
+ ],
+ "uplift": 1.05
+}

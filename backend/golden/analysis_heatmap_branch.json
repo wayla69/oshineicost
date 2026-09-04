@@ -1,0 +1,26 @@
+[
+ {
+  "branch": "BranchA",
+  "period": "2026-W18",
+  "revenue": 2850.0,
+  "tx_count": 3
+ },
+ {
+  "branch": "BranchA",
+  "period": "2026-W23",
+  "revenue": 2850.0,
+  "tx_count": 3
+ },
+ {
+  "branch": "BranchB",
+  "period": "2026-W18",
+  "revenue": 2850.0,
+  "tx_count": 3
+ },
+ {
+  "branch": "BranchB",
+  "period": "2026-W23",
+  "revenue": 2850.0,
+  "tx_count": 3
+ }
+]

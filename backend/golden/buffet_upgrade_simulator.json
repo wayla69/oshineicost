@@ -1,0 +1,30 @@
+{
+ "current": {
+  "tiers": [
+   {
+    "gp": 56000.0,
+    "gp_per_cover": 100.0,
+    "name": "BUFFET",
+    "qty": 560.0,
+    "revenue": 56000.0
+   }
+  ],
+  "total_gp": 56000.0
+ },
+ "delta_gp": 0.0,
+ "delta_pct": 0.0,
+ "note": "590 or 799 tier data not found; simulation unchanged",
+ "shift_pct": 10.0,
+ "simulated": {
+  "tiers": [
+   {
+    "gp": 56000.0,
+    "gp_per_cover": 100.0,
+    "name": "BUFFET",
+    "qty": 560.0,
+    "revenue": 56000.0
+   }
+  ],
+  "total_gp": 56000.0
+ }
+}

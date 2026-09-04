@@ -1,0 +1,27 @@
+{
+ "change_count": 1,
+ "changes": [
+  {
+   "after_qty": 5.0,
+   "before_qty": 5.0,
+   "branch": "BranchA",
+   "date": "2026-06-02T10:00:00",
+   "default_price": 200.0,
+   "delta": -20.0,
+   "elasticity": -0.0,
+   "item": "(A) สเต๊ก",
+   "new_price": 180.0,
+   "qty_pct": 0.0,
+   "user": "DA"
+  }
+ ],
+ "month": null,
+ "zones": [
+  {
+   "branch": "BranchA",
+   "seats": 0,
+   "tables": 20,
+   "zones": 1
+  }
+ ]
+}

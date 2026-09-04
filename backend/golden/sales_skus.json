@@ -1,0 +1,26 @@
+[
+ {
+  "category": "A La Carte",
+  "cogs": 2800.0,
+  "description": "(A) สเต๊ก",
+  "margin": 25200.0,
+  "margin_pct": 90.0,
+  "qty": 280.0,
+  "revenue": 28000.0,
+  "sku_code": "A0001",
+  "unit": "plate",
+  "unit_cost": 10.0
+ },
+ {
+  "category": "Sashimi",
+  "cogs": 22400.0,
+  "description": "(B) แซลมอน",
+  "margin": -22400.0,
+  "margin_pct": null,
+  "qty": 2800.0,
+  "revenue": 0.0,
+  "sku_code": "B0001",
+  "unit": "plate",
+  "unit_cost": 8.0
+ }
+]

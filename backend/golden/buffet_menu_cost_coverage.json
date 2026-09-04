@@ -1,0 +1,43 @@
+{
+ "high_cost_no_bom": [
+  {
+   "bucket": "sku_cost",
+   "category": "A La Carte",
+   "cost": 2800.0,
+   "description": "(A) สเต๊ก",
+   "revenue": 28000.0,
+   "servings": 280.0,
+   "sku_code": "A0001"
+  },
+  {
+   "bucket": "sku_cost",
+   "category": "Sashimi",
+   "cost": 22400.0,
+   "description": "(B) แซลมอน",
+   "revenue": 0.0,
+   "servings": 2800.0,
+   "sku_code": "B0001"
+  }
+ ],
+ "high_revenue_uncosted": [],
+ "summary": {
+  "bom": {
+   "cost": 0.0,
+   "cost_pct": 0.0,
+   "count": 0,
+   "revenue": 0.0
+  },
+  "none": {
+   "cost": 0.0,
+   "cost_pct": 0.0,
+   "count": 0,
+   "revenue": 0.0
+  },
+  "sku_cost": {
+   "cost": 25200.0,
+   "cost_pct": 100.0,
+   "count": 2,
+   "revenue": 28000.0
+  }
+ }
+}

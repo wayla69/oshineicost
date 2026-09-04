@@ -1,0 +1,26 @@
+[
+ {
+  "customer_count": 160,
+  "period_month": "2026-06",
+  "revenue": 24000.0,
+  "revenue_ex_vat": 24000.0,
+  "source": "Easy",
+  "tx_count": 40
+ },
+ {
+  "customer_count": 200,
+  "period_month": "2026-04",
+  "revenue": 30000.0,
+  "revenue_ex_vat": 30000.0,
+  "source": "Easy",
+  "tx_count": 50
+ },
+ {
+  "customer_count": 200,
+  "period_month": "2026-05",
+  "revenue": 30000.0,
+  "revenue_ex_vat": 30000.0,
+  "source": "Easy",
+  "tx_count": 50
+ }
+]

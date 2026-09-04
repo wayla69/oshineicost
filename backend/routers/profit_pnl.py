@@ -31,6 +31,7 @@ _SHARED = (
     'ttl_cache',
 )
 globals().update({_n: getattr(M, _n) for _n in _SHARED})
+from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 
@@ -107,7 +108,7 @@ def buffet_per_bill(
                    st.customer_count                              AS pax,
                    st.food_subtotal / st.customer_count           AS per_head,
                    st.total_inc_vat                               AS rev_inc,
-                   (st.total_inc_vat/1.07 - COALESCE(st.service_charge,0))                        AS rev_ex,
+                   {net_revenue_row('st')}                        AS rev_ex,
                    st.discount + st.sp_discount                   AS discount
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -849,7 +850,7 @@ def pnl_branch_detail(
         tx_monthly = con.execute(f"""
             SELECT strftime('%Y-%m', st.sold_at) AS period_month,
                    COUNT(*) AS tx_count,
-                   ROUND(AVG(st.total_inc_vat/1.07 - COALESCE(st.service_charge,0)), 2) AS avg_ticket,
+                   ROUND(AVG{net_revenue_row('st')}, 2) AS avg_ticket,
                    SUM(st.customer_count) AS customer_count
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id

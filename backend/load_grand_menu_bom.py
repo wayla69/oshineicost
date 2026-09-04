@@ -46,6 +46,8 @@ from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 
+from rules import raw_unit_cost_sql   # the same cost chain the app and the sync use
+
 HERE = Path(__file__).parent.resolve()
 ROOT = HERE.parent
 DEFAULT_DB = HERE / "oshinei.db"
@@ -141,14 +143,8 @@ def rebuild_effective_cost(con) -> int:
     Compute-then-replace so a failure never leaves the table all-zero.
     """
     rows = con.execute(
-        """
-        SELECT s.sku_id, COALESCE(
-            (SELECT NULLIF(sc2.unit_cost, 0) FROM sku_cost sc2 WHERE sc2.sku_id = s.sku_id),
-            (SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id = s.sku_id),
-            (SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2
-               JOIN bom_sku_alias a ON a.resolved_sku_id = bi2.sku_id
-               WHERE a.bom_sku_code = s.sku_code),
-            0) AS rc
+        f"""
+        SELECT s.sku_id, {raw_unit_cost_sql('s')} AS rc
         FROM skus s
         """
     ).fetchall()

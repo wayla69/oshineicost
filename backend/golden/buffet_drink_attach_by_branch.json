@@ -1,0 +1,20 @@
+[
+ {
+  "attach_rate_pct": 100.0,
+  "avg_drink_per_bill": 100.0,
+  "bills_with_drink": 6,
+  "branch": "BranchA",
+  "drink_revenue_pct": 10.53,
+  "total_bills": 6,
+  "total_drink_revenue": 600.0
+ },
+ {
+  "attach_rate_pct": 100.0,
+  "avg_drink_per_bill": 100.0,
+  "bills_with_drink": 6,
+  "branch": "BranchB",
+  "drink_revenue_pct": 10.53,
+  "total_bills": 6,
+  "total_drink_revenue": 600.0
+ }
+]

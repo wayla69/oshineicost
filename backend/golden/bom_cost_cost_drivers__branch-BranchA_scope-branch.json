@@ -1,0 +1,38 @@
+{
+ "branch": "BranchA",
+ "items": [
+  {
+   "business_type": "alacarte",
+   "description": "(A) สเต๊ก",
+   "mom_pct": 0.0,
+   "pct_of_total": 11.1,
+   "prev_cogs": 150.0,
+   "qty": 140.0,
+   "sku_code": "A0001",
+   "total_cogs": 1400.0,
+   "unit_cost": 10.0
+  },
+  {
+   "business_type": "buffet",
+   "description": "(B) แซลมอน",
+   "mom_pct": 0.0,
+   "pct_of_total": 88.9,
+   "prev_cogs": 1200.0,
+   "qty": 1400.0,
+   "sku_code": "B0001",
+   "total_cogs": 11200.0,
+   "unit_cost": 8.0
+  }
+ ],
+ "mom_basis": "mtd",
+ "mtd_cutoff_day": 3,
+ "scope": "branch",
+ "total": {
+  "mom_pct": 0.0,
+  "prev_cogs": 1350.0,
+  "qty": 1820.0,
+  "shown_cogs": 12600.0,
+  "shown_pct": 100.0,
+  "total_cogs": 12600.0
+ }
+}

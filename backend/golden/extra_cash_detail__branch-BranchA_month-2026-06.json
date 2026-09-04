@@ -1,0 +1,33 @@
+{
+ "branch": "BranchA",
+ "days": [
+  {
+   "cancel": 200.0,
+   "day": "2026-06-01",
+   "discount": 500.0,
+   "invoices": 60,
+   "over_short": -1500.0,
+   "pax": 250,
+   "sales": 100000.0
+  },
+  {
+   "cancel": 200.0,
+   "day": "2026-06-02",
+   "discount": 500.0,
+   "invoices": 60,
+   "over_short": 0.0,
+   "pax": 250,
+   "sales": 100000.0
+  },
+  {
+   "cancel": 200.0,
+   "day": "2026-06-03",
+   "discount": 500.0,
+   "invoices": 60,
+   "over_short": 0.0,
+   "pax": 250,
+   "sales": 100000.0
+  }
+ ],
+ "month": "2026-06"
+}

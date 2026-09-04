@@ -1,0 +1,73 @@
+{
+ "branch": "BranchA",
+ "cost_breakdown": [
+  {
+   "category": "A La Carte",
+   "cogs": 400.0,
+   "cost_pct": 11.1,
+   "description": "(A) สเต๊ก",
+   "servings": 40.0,
+   "sku_code": "A0001"
+  },
+  {
+   "category": "BUFFET",
+   "cogs": 0,
+   "cost_pct": 0.0,
+   "description": "ค่าบุฟเฟ่ต์",
+   "servings": 80.0,
+   "sku_code": "BUFFET"
+  },
+  {
+   "category": "Sashimi",
+   "cogs": 3200.0,
+   "cost_pct": 88.9,
+   "description": "(B) แซลมอน",
+   "servings": 400.0,
+   "sku_code": "B0001"
+  }
+ ],
+ "falling_dishes": [
+  {
+   "delta": -10.0,
+   "delta_pct": -20.0,
+   "description": "(A) สเต๊ก",
+   "is_new": false,
+   "now": 40.0,
+   "sku_code": "A0001",
+   "was": 50.0
+  },
+  {
+   "delta": -100.0,
+   "delta_pct": -20.0,
+   "description": "(B) แซลมอน",
+   "is_new": false,
+   "now": 400.0,
+   "sku_code": "B0001",
+   "was": 500.0
+  },
+  {
+   "delta": -20.0,
+   "delta_pct": -20.0,
+   "description": "ค่าบุฟเฟ่ต์",
+   "is_new": false,
+   "now": 80.0,
+   "sku_code": "BUFFET",
+   "was": 100.0
+  }
+ ],
+ "month": "2026-06",
+ "prev_month": "2026-05",
+ "rising_dishes": [],
+ "summary": {
+  "cogs": 3600.0,
+  "dish_count": 3,
+  "food_cost_pct": 30.0,
+  "gp_margin_pct": 70.0,
+  "gross_profit": 8400.0,
+  "prev_cogs": 4500.0,
+  "prev_revenue": 15000.0,
+  "rev_delta_pct": -20.0,
+  "revenue": 12000.0
+ },
+ "top_ingredients": []
+}
