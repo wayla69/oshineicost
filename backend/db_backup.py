@@ -80,7 +80,14 @@ def cmd_backup(args) -> int:
     dst = sqlite3.connect(str(dest))
     with dst:
         src.backup(dst)
+    # the copy inherits the live DB's WAL mode and would leave -wal/-shm sidecars
+    # beside the archive (rotation never matches them); fold it into one file
+    dst.execute("PRAGMA journal_mode=DELETE")
     src.close(); dst.close()
+    for suf in ("-wal", "-shm"):
+        side = Path(str(dest) + suf)
+        if side.exists():
+            side.unlink()
 
     counts = _counts(dest)
     digest = _sha256(dest)

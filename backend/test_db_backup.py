@@ -36,6 +36,7 @@ def test_gzip_backup_and_restore_test_of_the_gz(tmp_path, capsys):
     assert rc == 0
     gz = out / "oshinei_2026-09-04_0730.db.gz"
     assert gz.exists() and not (out / "oshinei_2026-09-04_0730.db").exists()
+    assert sorted(p.name for p in out.iterdir()) == [gz.name, "oshinei_2026-09-04_0730.manifest.txt"]   # no -wal/-shm left
     man = (out / "oshinei_2026-09-04_0730.manifest.txt").read_text(encoding="utf-8")
     assert "gz_sha256:" in man and "sales_transaction: 3" in man
     with gzip.open(gz, "rb") as f:
