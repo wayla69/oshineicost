@@ -1991,12 +1991,14 @@ def period_compare(
             if _has(d_month_from, d_month_to, d_date_from, d_date_to) else None
 
     # Collect all branch names across active periods
-    all_names = set(
+    # sorted: a set iterates in hash order, which differs between processes
+    # (string hashing is randomised) — the golden harness found rows swapping.
+    all_names = sorted(set(
         [br["branch"] for br in a["top_branches"]] +
         [br["branch"] for br in b["top_branches"]] +
         ([br["branch"] for br in c["top_branches"]] if c else []) +
         ([br["branch"] for br in d["top_branches"]] if d else [])
-    )
+    ))
 
     rank_a = {br["branch"]: i + 1 for i, br in enumerate(a["top_branches"])}
     rank_b = {br["branch"]: i + 1 for i, br in enumerate(b["top_branches"])}
@@ -2321,8 +2323,9 @@ def analysis_anomalies(
                     "value": round(curr_pct, 1),
                     "message": f"✅ ต้นทุน BoM ลดในเดือน {m} — {curr_pct:.1f}% of revenue ({delta:.1f}pp จากเดือนก่อน)",
                 })
-    except Exception:
-        pass
+    except Exception as e:
+        # one bad month must not blank every insight — say which one broke
+        print(f"[anomalies] BoM cost-trend insight skipped: {e}")
 
     return {"insights": insights, "branch_growth": growths[:10]}
 
