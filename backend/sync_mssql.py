@@ -66,7 +66,7 @@ QTY_SANE = (f"(CASE WHEN ABS(CAST(si.Qty AS float)) > {MAX_SANE_LINE_QTY} "
 # here and a test stood guard against drift.) sku_cost holds the package PRICE
 # for these codes (BUFFET = ฿679.08), not a cost — the real cost is the itemised
 # dishes on the same bill, so booking the package too double-counts.
-from rules import ALL_TIER_CODES, ALL_TIER_CODES_SQL, raw_unit_cost_sql, tier_code_sql  # noqa: E402
+from rules import raw_unit_cost_sql, tier_code_sql  # noqa: E402
 from rules import is_tier_code  # noqa: E402,F401  the one package predicate, shared with the app
 
 
@@ -801,19 +801,7 @@ def main():
         print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
         print("       python refresh_fly_db.py --db oshinei.db.incoming")
 
-def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
-    """Stage POS report data into pos_* tables — server-side aggregates only.
-    IRON RULE: NO POS cost is staged. We keep quantities / revenue / counts /
-    timings; all COGS valuation is done later from our BoM."""
-    F = SALE_FILTER
-
-    def run(sql, params=None, col=None):
-        # col set → per-month chunked (sql must contain {RANGE}); keeps each heavy
-        # scan short so a transient MSSQL drop costs one cheap month-retry.
-        if col is not None:
-            return _chunk(mc, sql, windows, col)
-        mc.execute(sql, params or (since,)); return mc.fetchall()
-
+def _stage_void(*, bid_map, item_map, run, sq):
     # ── pos_void: cancelled/void items (qty + sale price; cost via BoM later) ──
     sq.executescript("DROP TABLE IF EXISTS pos_void; CREATE TABLE pos_void("
                      "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
@@ -837,7 +825,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
          for r in vdrows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_pvd ON pos_void_day(branch_id, day)")
     print(f"        pos_void_day: {len(vdrows)} groups")
+    return {}
 
+
+def _stage_payment(*, F, bid_map, run, sq):
     # ── pos_staff_month: items served per staff (upsell/performance) ──
     sq.executescript("DROP TABLE IF EXISTS pos_staff_month; CREATE TABLE pos_staff_month("
                      "branch_id INT, period_month TEXT, staff_id INT, staff_name TEXT, item_qty REAL);")
@@ -859,7 +850,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     sq.executemany("INSERT INTO pos_payment_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["pc"], round(r["amt"] or 0,2), r["n"]) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_payment_month: {len(rows)} groups")
+    return {}
 
+
+def _stage_channel_tab(*, F, bid_map, run, sq):
     # ── pos_payment_day: daily payment mix (powers daily reconciliation) ──
     # Same query as pos_payment_month but grouped by day (char(10)) instead of
     # month (char(7)). Lets the recon app reconcile POS tender vs bank/CC/Grab/
@@ -895,7 +889,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
         if grain == "day":
             sq.execute(f"CREATE INDEX IF NOT EXISTS ix_pcp ON {tbl}(branch_id, day)")
         print(f"        {tbl}: {len(rows)} groups")
+    return {}
 
+
+def _stage_coupon(*, F, bid_map, run, sq):
     # ── sale_payment: per-RECEIPT payment lines (powers the discount-bill drill) ──
     # Same SalePayment source as pos_payment_month, but kept per receipt instead of
     # rolled up — a bill can have >1 row (split payment: e.g. cash + credit).
@@ -924,7 +921,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     sq.executemany("INSERT INTO pos_table_turn_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["tabs"], r["cust"] or 0, round(r["avgmin"] or 0,1)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_table_turn_day: {len(rows)} groups")
+    return {}
 
+
+def _stage_cashcount(*, F, bid_map, run, sq):
     # ── pos_channel_month: dine-in vs delivery vs takeaway (from Sale, revenue side) ──
     # (SaleByDeliveryType uses varchar Thai branch names that mojibake under UTF-8,
     #  so we derive channel from Sale.DeliveryType / OrderChannel instead — int codes,
@@ -965,7 +965,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     sq.executemany("INSERT INTO pos_coupon_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_coupon_month: {len(rows)} groups")
+    return {}
 
+
+def _stage_discount(*, F, bid_map, mc, run, sq):
     # ── pos_coupon_day: same usage but per DAY (powers the by-day coupon drill) ──
     sq.executescript("DROP TABLE IF EXISTS pos_coupon_day; CREATE TABLE pos_coupon_day("
                      "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
@@ -999,7 +1002,14 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     sq.executemany("INSERT INTO pos_kitchen_month VALUES(?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], round(r["avgsec"] or 0,1), r["cooked"] or 0) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_kitchen_month: {len(rows)} groups")
+    return {}
 
+
+def _stage_daily(*, F, bid_map, item_map, mc, since, sq):
+    # names this stage hands on
+    _dt = None
+    dly_since = None
+    mx = None
     # ── sales_sku_daily: per-branch per-sku DAILY qty/revenue (rolling 120 days) ──
     #    Foundation for daily menu-spike anomaly (#5) and daily cost/head (#10,
     #    COGS via our BoM only). Bounded window keeps the DB push light.
@@ -1050,7 +1060,10 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
          for r in drows if bid_map.get(r["bid"]) and item_map.get(r["iid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_ssd ON sales_sku_daily(branch_id, day, sku_id)")
     print(f"        sales_sku_daily: {len(drows)} rows (since {dly_since})")
+    return {"_dt": _dt, "dly_since": dly_since, "mx": mx}
 
+
+def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, item_map, mc, mx, since, sq, windows):
     # ── sale_bill_cogs: per-BILL BoM COGS (rolling 31 days) → exact P&L per bill ──
     #    Per-sku unit cost from OUR data (sku_cost cost-management table first,
     #    then recipe → alias; tier codes=0 via is_tier_code). Same priority as main._unified_cogs_expr
@@ -1147,6 +1160,34 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
 
     # ── Extra POS-deep-dive tables (separate "Extra" report group) ──
     stage_extra(sq, mc, since, bid_map, item_map)
+    return {}
+
+
+def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
+    """Stage POS report data into pos_* tables — server-side aggregates only.
+    IRON RULE: NO POS cost is staged. We keep quantities / revenue / counts /
+    timings; all COGS valuation is done later from our BoM."""
+    F = SALE_FILTER
+
+    def run(sql, params=None, col=None):
+        # col set → per-month chunked (sql must contain {RANGE}); keeps each heavy
+        # scan short so a transient MSSQL drop costs one cheap month-retry.
+        if col is not None:
+            return _chunk(mc, sql, windows, col)
+        mc.execute(sql, params or (since,)); return mc.fetchall()
+
+    # Each table family is its own stage (_stage_*, Phase 6b 2026-09) — the
+    # [k/6] steps the log already names. They run in order and hand forward
+    # through `ctx`; backend/test_sync_golden.py pins every table they write.
+    ctx = {"F": F, "bid_map": bid_map, "item_map": item_map, "mc": mc, "name2bid": name2bid, "run": run, "since": since, "sq": sq, "windows": windows}
+    ctx.update(_stage_void(bid_map=ctx.get("bid_map"), item_map=ctx.get("item_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_payment(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_channel_tab(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_coupon(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_cashcount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_discount(F=ctx.get("F"), bid_map=ctx.get("bid_map"), mc=ctx.get("mc"), run=ctx.get("run"), sq=ctx.get("sq")))
+    ctx.update(_stage_daily(F=ctx.get("F"), bid_map=ctx.get("bid_map"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), since=ctx.get("since"), sq=ctx.get("sq")))
+    ctx.update(_stage_bill_cogs(F=ctx.get("F"), _dt=ctx.get("_dt"), bid_map=ctx.get("bid_map"), dly_since=ctx.get("dly_since"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), mx=ctx.get("mx"), since=ctx.get("since"), sq=ctx.get("sq"), windows=ctx.get("windows")))
 
 
 def _th(s):

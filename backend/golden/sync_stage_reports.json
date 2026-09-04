@@ -1,0 +1,487 @@
+{
+ "app_settings": {
+  "rows": 0,
+  "cols": [
+   "key",
+   "value"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "bom_ingredients": {
+  "rows": 0,
+  "cols": [
+   "sku_id",
+   "seq",
+   "ingredient_code",
+   "ingredient_name",
+   "qty_per_serving",
+   "unit",
+   "price_per_unit",
+   "ingredient_cost",
+   "ingredient_type",
+   "source_file"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "bom_sku_alias": {
+  "rows": 0,
+  "cols": [
+   "bom_sku_code",
+   "resolved_sku_id",
+   "match_method",
+   "confidence",
+   "notes"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "branch_targets": {
+  "rows": 0,
+  "cols": [
+   "id",
+   "branch_id",
+   "period_month",
+   "revenue_target",
+   "customer_target"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "branches": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "name",
+   "branch_type",
+   "active"
+  ],
+  "sha1": "e8b0a2c75183"
+ },
+ "categories": {
+  "rows": 1,
+  "cols": [
+   "category_id",
+   "name"
+  ],
+  "sha1": "fb1406d442bf"
+ },
+ "coupon_series": {
+  "rows": 1,
+  "cols": [
+   "coupon_series_id",
+   "name",
+   "code",
+   "active"
+  ],
+  "sha1": "b24d5704c371"
+ },
+ "pos_cancel_bill": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "reason_id",
+   "bills",
+   "amount"
+  ],
+  "sha1": "f16f72b6d67d"
+ },
+ "pos_cancel_bill_detail": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "sale_date",
+   "receipt_no",
+   "reason_id",
+   "amount",
+   "cancel_user",
+   "discount"
+  ],
+  "sha1": "7cd891b4c824"
+ },
+ "pos_cancel_reason": {
+  "rows": 1,
+  "cols": [
+   "reason_id",
+   "reason_desc"
+  ],
+  "sha1": "d45571290804"
+ },
+ "pos_cashcount_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "over_short",
+   "total_sales",
+   "pax",
+   "invoices",
+   "discount",
+   "cancel"
+  ],
+  "sha1": "bc9f31eadb5d"
+ },
+ "pos_channel_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "delivery_type",
+   "order_channel",
+   "bills",
+   "customers",
+   "total_inc_vat"
+  ],
+  "sha1": "a264c91e2cdc"
+ },
+ "pos_channel_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "delivery_type",
+   "order_channel",
+   "bills",
+   "customers",
+   "total_inc_vat"
+  ],
+  "sha1": "c5958254423a"
+ },
+ "pos_coupon_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "coupon_series_id",
+   "used_count",
+   "discount_amount"
+  ],
+  "sha1": "d162c0980c13"
+ },
+ "pos_coupon_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "coupon_series_id",
+   "used_count",
+   "discount_amount"
+  ],
+  "sha1": "80d82ddcdb0a"
+ },
+ "pos_coupon_payment_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "coupon_series_id",
+   "amount",
+   "txn_count"
+  ],
+  "sha1": "f69ec29b6e3f"
+ },
+ "pos_coupon_payment_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "coupon_series_id",
+   "amount",
+   "txn_count"
+  ],
+  "sha1": "f69ec29b6e3f"
+ },
+ "pos_customer_type_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "type_name",
+   "customers",
+   "net"
+  ],
+  "sha1": "6eff29806b12"
+ },
+ "pos_discount_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "reason_id",
+   "bills",
+   "amount"
+  ],
+  "sha1": "9fe503a7089d"
+ },
+ "pos_discount_reason": {
+  "rows": 1,
+  "cols": [
+   "reason_id",
+   "reason_desc",
+   "amount_percent"
+  ],
+  "sha1": "1a714851c954"
+ },
+ "pos_kitchen_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "avg_cook_sec",
+   "cooked_count"
+  ],
+  "sha1": "606f4da19927"
+ },
+ "pos_modifier": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "sku_id",
+   "choice_name",
+   "n",
+   "qty"
+  ],
+  "sha1": "79043a7dfaff"
+ },
+ "pos_payment_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "payment_code",
+   "amount",
+   "txn_count"
+  ],
+  "sha1": "93f80f739fdb"
+ },
+ "pos_payment_month": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "payment_code",
+   "amount",
+   "txn_count"
+  ],
+  "sha1": "ac68a6e3ebb6"
+ },
+ "pos_price_change": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "change_date",
+   "sku_id",
+   "item_desc",
+   "default_price",
+   "new_price",
+   "user_name"
+  ],
+  "sha1": "1e2c80cefc73"
+ },
+ "pos_staff_month": {
+  "rows": 0,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "staff_id",
+   "staff_name",
+   "item_qty"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "pos_table_turn_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "tabs",
+   "customers",
+   "avg_turn_min"
+  ],
+  "sha1": "c7bb00ef294a"
+ },
+ "pos_void": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "sku_id",
+   "reason_id",
+   "qty",
+   "ext_price"
+  ],
+  "sha1": "96c31e80c520"
+ },
+ "pos_void_day": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "day",
+   "sku_id",
+   "reason_id",
+   "qty",
+   "ext_price"
+  ],
+  "sha1": "6e1308aab506"
+ },
+ "pos_zone": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "zone_id",
+   "tables",
+   "seats"
+  ],
+  "sha1": "86165b99ec5d"
+ },
+ "sale_bill_cogs": {
+  "rows": 1,
+  "cols": [
+   "receipt_no",
+   "branch_id",
+   "day",
+   "cogs_bom"
+  ],
+  "sha1": "b52d458c35cc"
+ },
+ "sale_bill_item": {
+  "rows": 1,
+  "cols": [
+   "receipt_no",
+   "sku_id",
+   "qty",
+   "rev",
+   "bom_cost"
+  ],
+  "sha1": "f61736fbbfb6"
+ },
+ "sale_payment": {
+  "rows": 2,
+  "cols": [
+   "branch_id",
+   "receipt_no",
+   "payment_code",
+   "amount"
+  ],
+  "sha1": "2b16b9465b30"
+ },
+ "sales_month_summary": {
+  "rows": 0,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "gross_sales",
+   "refunds",
+   "discounts",
+   "voided",
+   "net_sales",
+   "cash",
+   "credit_card",
+   "transfer",
+   "qr",
+   "coupon",
+   "customer_count",
+   "transaction_count",
+   "source"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "sales_sku_daily": {
+  "rows": 8,
+  "cols": [
+   "branch_id",
+   "day",
+   "sku_id",
+   "qty",
+   "subtotal_ex_vat"
+  ],
+  "sha1": "275419fb2873"
+ },
+ "sales_sku_monthly": {
+  "rows": 0,
+  "cols": [
+   "branch_id",
+   "period_month",
+   "sku_id",
+   "qty",
+   "subtotal_ex_vat",
+   "tax_total",
+   "total_inc_vat",
+   "source"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "sales_transaction": {
+  "rows": 1,
+  "cols": [
+   "branch_id",
+   "receipt_no",
+   "sold_at",
+   "cashier",
+   "table_no",
+   "customer_count",
+   "food_subtotal",
+   "drink_subtotal",
+   "other_subtotal",
+   "tip",
+   "sp_discount",
+   "discount",
+   "service_charge",
+   "total_inc_vat",
+   "source",
+   "print_times"
+  ],
+  "sha1": "c2672ce44874"
+ },
+ "sku_cost": {
+  "rows": 1,
+  "cols": [
+   "sku_id",
+   "unit_cost",
+   "effective_from",
+   "updated_at"
+  ],
+  "sha1": "8e9720571bce"
+ },
+ "sku_cost_monthly": {
+  "rows": 0,
+  "cols": [
+   "sku_id",
+   "period_month",
+   "unit_cost",
+   "notes",
+   "updated_at"
+  ],
+  "sha1": "da39a3ee5e6b"
+ },
+ "sku_effective_cost": {
+  "rows": 1,
+  "cols": [
+   "sku_id",
+   "recipe_cost"
+  ],
+  "sha1": "9e6e4178f854"
+ },
+ "skus": {
+  "rows": 1,
+  "cols": [
+   "sku_id",
+   "sku_code",
+   "description",
+   "category_id",
+   "unit"
+  ],
+  "sha1": "454f426dd7dd"
+ },
+ "sync_qty_guard_log": {
+  "rows": 0,
+  "cols": [
+   "sale_date",
+   "branch",
+   "sale_id",
+   "item_code",
+   "qty",
+   "first_seen"
+  ],
+  "sha1": "da39a3ee5e6b"
+ }
+}
