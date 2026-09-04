@@ -1670,9 +1670,221 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, leak, par
     return {"clean": clean, "cmp_ok": cmp_ok, "cost_available": cost_available, "cost_src": cost_src, "cost_up": cost_up, "daily_min": daily_min, "food_sub": food_sub, "menu_out": menu_out, "sp": sp, "sw": sw, "tot_cur_cost": tot_cur_cost, "tot_prev_cost": tot_prev_cost}
 
 
-def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
-    # names this section hands on; None where a period path never assigns one
+def _mgt_tier_rows(*, TC, TP, has_prev, pax_c, pax_p, pct, th):
+    # names this section hands on; None where a path never assigns one
+    rows_t = None
     tier_out = None
+    TLBL = ({"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"} if th else
+            {"promo": "Promo/other price", "child": "Child-only/other"})
+    rows_t = []
+    for t in _PT_ORDER:
+        vc0 = TC.get(t); vp = TP.get(t)
+        # A tier with nobody on it in THIS period is not a finding,
+        # it is a retired price. The menu changed on 2026-09-01, so a
+        # September report was carrying all six old tiers as empty
+        # rows purely because the comparison week still had guests on
+        # them — six lines of "—" for prices that no longer exist.
+        # Symmetric: an August report drops the new tiers the same way.
+        if not vc0 or not (vc0.get("pax") or 0):
+            continue
+        vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
+        pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
+        rows_t.append({
+            "tier": t, "label": TLBL.get(t, f"฿{int(t):,}" if t.isdigit() else t),
+            "pax": round(pxc), "pax_prev": round(pxp) if has_prev else None,
+            "d_pax_pct": pct(pxc, pxp) if (has_prev and pxp) else None,
+            "share": round(pxc / pax_c * 100, 1),
+            "share_prev": round(pxp / pax_p * 100, 1) if pax_p else None,
+            "rev_head": round(vc["rev"] / pxc, 2) if pxc else None,
+            "cogs_head": round(vc["cogs"] / pxc, 2) if pxc else None,
+            "cogs_head_prev": round(vp["cogs"] / pxp, 2) if (vp and pxp) else None,
+            "gp_head": round((vc["rev"] - vc["cogs"]) / pxc, 2) if pxc else None,
+            "food_pct": round(vc["cogs"] / vc["rev"] * 100, 1) if vc["rev"] else None,
+        })
+    # mix effect on rev/head: current tier mix priced at the comparison
+    # period's per-tier rev/head, vs its blended rev/head — isolates
+    # "customers moved tier" from "tiers themselves changed".
+    mix_eff = None
+    rev_p = sum(v["rev"] for v in TP.values())
+    if pax_c and pax_p and rev_p:
+        # Only tiers that existed in BOTH periods can carry the
+        # comparison; the weights are re-based on those. When the menu
+        # itself was replaced (2026-09-01) barely any tier overlaps, so
+        # the weights summed to ~0.21 of the mix and the shortfall was
+        # reported as a ฿-520/head "customers moved to cheaper tiers"
+        # — an artefact of the missing 79%, not a shift in behaviour.
+        # Below near-full coverage there is no mix story to tell.
+        shared = [t for t in TC if TP.get(t, {}).get("pax", 0) > 0]
+        cover = sum(TC[t]["pax"] for t in shared) / pax_c
+        if cover >= 0.9:
+            at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
+                          for t in shared)
+            mix_eff = round(at_prev - rev_p / pax_p, 2)
+    tier_out = {"rows": rows_t, "pax": round(pax_c),
+                "pax_prev": round(pax_p) if has_prev else None,
+                "mix_effect": mix_eff}
+    return {"rows_t": rows_t, "tier_out": tier_out}
+
+
+def _mgt_tier_promo(*, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
+    # WHY the promo bucket is what it is. It is the one row on the
+    # table whose label explains nothing, and it is not small — so
+    # break it into the three things it actually contains, and name
+    # the branches behind the two that are not ordinary discounts.
+    #   free   whole bill comped
+    #   mixed  a free / half-price head riding along with paying ones,
+    #          which drags the bill average between two tiers
+    #   disc   one uniform price that is not a tier = a real discount
+    try:
+        pz_kind, pz_price, pz_branch = {}, {}, {}
+        for ent, brn, nb3, px3 in con.execute(
+                f"""SELECT d.ent, b.name, SUM(d.bills), SUM(d.pax)
+                                FROM menu_fact_day d JOIN branches b ON b.branch_id = d.branch_id
+                                WHERE d.day BETWEEN ? AND ? AND d.branch_id IN ({t_ph})
+                                  AND d.ent LIKE 'pz:%'
+                                GROUP BY d.ent, b.name""",
+                [cs.isoformat(), ce.isoformat()] + t_bids):
+            parts = str(ent).split(":")
+            if len(parts) < 3:
+                continue
+            kind, unit = parts[1], parts[2]
+            k = pz_kind.setdefault(kind, {"bills": 0, "pax": 0.0})
+            k["bills"] += nb3 or 0; k["pax"] += px3 or 0.0
+            if kind == "disc":
+                q = pz_price.setdefault(unit, {"bills": 0, "pax": 0.0})
+                q["bills"] += nb3 or 0; q["pax"] += px3 or 0.0
+            else:
+                bb = pz_branch.setdefault(kind, {}).setdefault(brn, {"bills": 0, "pax": 0.0})
+                bb["bills"] += nb3 or 0; bb["pax"] += px3 or 0.0
+        if pz_kind:
+            # only tiers actually SOLD in this period: both menus'
+            # price lists live in _PT_ORDER, so a September ฿395 would
+            # otherwise be matched against the retired ฿350 tier and
+            # reported as a 12.9% surcharge instead of a discount.
+            std = [int(x["tier"]) for x in rows_t
+                   if str(x["tier"]).isdigit() and (x["pax"] or 0) > 0]
+
+            def _near(u):
+                """nearest standard tier + what % of it this price is,
+                            so a bare ฿710 reads as '10% off ฿789'."""
+                if not std or not u:
+                    return None, None
+                n = min(std, key=lambda t: abs(u - t))
+                return n, round(u / n * 100, 1)
+
+            disc = []
+            for unit, v in sorted(pz_price.items(), key=lambda kv: -kv[1]["pax"])[:6]:
+                u = int(unit)
+                n, pctof = _near(u)
+                disc.append({"unit": u, "of_tier": n, "pct_of_tier": pctof,
+                             "off_pct": round(100 - pctof, 1) if pctof else None,
+                             "bills": v["bills"], "pax": round(v["pax"])})
+            tier_out["promo"] = {
+                "kinds": {k: {"bills": v["bills"], "pax": round(v["pax"])}
+                          for k, v in pz_kind.items()},
+                "discounts": disc,
+                "branches": {k: [{"branch": bn, "bills": bv["bills"],
+                                  "pax": round(bv["pax"])}
+                                 for bn, bv in sorted(v.items(),
+                                                      key=lambda kv: -kv[1]["pax"])[:5]]
+                             for k, v in pz_branch.items()},
+            }
+    except Exception as e:
+        print(f"[mgt] §11 promo breakdown unavailable: {e}")
+    return {}
+
+
+def _mgt_tier_drivers(*, TC, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
+    # cost drivers per mainstream tier: which ingredient groups /
+    # single menus push each tier's cost/head up — turns the Food%
+    # column into an actionable "because guests eat X". Computes a
+    # payload for EVERY mainstream tier (share>=5%) so the UI can
+    # switch/compare; `default_tier` = worst food%. Reads the
+    # tier-dimensioned menu_fact_day (ent LIKE 'g:%' = ingredient
+    # group, 's:%' = single menu). Optional: wrapped so a driver
+    # failure never nukes the tier table above.
+    try:
+        # Every tier that actually sold gets a driver breakdown. The 5%
+        # share floor used to sit here, which meant the small tiers —
+        # often the most interesting ones, ฿1,299 included — simply had
+        # no breakdown and no hint that one was missing. The floor now
+        # only decides which tier opens by DEFAULT (below), so a 45-cover
+        # tier can be inspected without being allowed to set the headline.
+        cand = [r for r in rows_t if r["tier"].isdigit()
+                and r["food_pct"] is not None and r["pax"]]
+        if cand:
+            lblmap = {e: (l or e) for e, l in con.execute(
+                "SELECT ent, label FROM menu_fact_meta")}
+
+            def _drv(kind_like, tier, pax):
+                d = {}
+                if not pax:
+                    return d
+                for ent, cg, q in con.execute(
+                        f"""SELECT ent, SUM(ent_cogs), SUM(qty)
+                                        FROM menu_fact_day
+                                        WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                                          AND tier=? AND ent LIKE ? GROUP BY ent""",
+                        [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
+                    d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
+                return d
+
+            def _build(frow):
+                ft = frow["tier"]; ftpax = TC[ft]["pax"]
+                fch = frow.get("cogs_head") or 0.0
+                lower = [x for x in cand if int(x["tier"]) < int(ft)]
+                ref = max(lower, key=lambda x: int(x["tier"])) if lower else None
+                rt = ref["tier"] if ref else None
+                rtpax = TC[rt]["pax"] if rt else 0.0
+                gF = _drv("g:%", ft, ftpax)
+                gR = _drv("g:%", rt, rtpax) if rt else {}
+                sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
+                grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                        "share_pct": sh(v[0]),
+                        "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
+                       for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
+                       if v[0] >= 1]
+                mF = _drv("s:%", ft, ftpax)
+                mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
+                        "share_pct": sh(v[0]), "qty_100": round(v[1], 1)}
+                       for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
+                       if v[0] >= 1]
+                if not (grp or mnu):
+                    return None
+                return {"focus_tier": ft, "focus_label": frow["label"],
+                        "focus_food_pct": frow["food_pct"],
+                        "focus_cogs_head": round(fch, 1),
+                        "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
+                        # carried so the reader can weigh the numbers: a
+                        # cost/head drawn from 45 covers swings hard.
+                        "focus_pax": round(frow["pax"] or 0),
+                        "focus_share": frow["share"],
+                        "groups": grp, "menus": mnu}
+
+            by_tier = {}
+            for frow in sorted(cand, key=lambda r: int(r["tier"])):
+                payload = _build(frow)
+                if payload:
+                    by_tier[frow["tier"]] = payload
+            if by_tier:
+                # The tier that OPENS is still picked from the mainstream
+                # ones — the headline "biggest lever" should not be a tier
+                # with a handful of covers and a noisy cost/head. Falls
+                # back to the full set when no tier clears the floor.
+                _pool = [r for r in cand
+                         if r["tier"] in by_tier and (r["share"] or 0) >= 5] \
+                        or [r for r in cand if r["tier"] in by_tier]
+                worst = max(_pool, key=lambda r: r["food_pct"])
+                tier_out["drivers"] = {
+                    "default_tier": worst["tier"],
+                    "tier_order": sorted(by_tier, key=lambda t: int(t)),
+                    "by_tier": by_tier}
+    except Exception as e:
+        print(f"[mgt] §11 cost drivers unavailable: {e}")
+    return {}
+
+
+def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
     # ---- buffet price-tier split (tier-dimensioned menu_fact_*; optional) ----
     # Same current-vs-comparison windows as the headline. None (section hidden)
     # when the fact tables are missing/old schema or the window predates their
@@ -1702,207 +1914,14 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
             pax_c = sum(v["pax"] for v in TC.values())
             pax_p = sum(v["pax"] for v in TP.values())
             if pax_c > 0:
-                TLBL = ({"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"} if th else
-                        {"promo": "Promo/other price", "child": "Child-only/other"})
-                rows_t = []
-                for t in _PT_ORDER:
-                    vc0 = TC.get(t); vp = TP.get(t)
-                    # A tier with nobody on it in THIS period is not a finding,
-                    # it is a retired price. The menu changed on 2026-09-01, so a
-                    # September report was carrying all six old tiers as empty
-                    # rows purely because the comparison week still had guests on
-                    # them — six lines of "—" for prices that no longer exist.
-                    # Symmetric: an August report drops the new tiers the same way.
-                    if not vc0 or not (vc0.get("pax") or 0):
-                        continue
-                    vc = vc0 or {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0}
-                    pxc = vc["pax"]; pxp = (vp or {}).get("pax", 0.0)
-                    rows_t.append({
-                        "tier": t, "label": TLBL.get(t, f"฿{int(t):,}" if t.isdigit() else t),
-                        "pax": round(pxc), "pax_prev": round(pxp) if has_prev else None,
-                        "d_pax_pct": pct(pxc, pxp) if (has_prev and pxp) else None,
-                        "share": round(pxc / pax_c * 100, 1),
-                        "share_prev": round(pxp / pax_p * 100, 1) if pax_p else None,
-                        "rev_head": round(vc["rev"] / pxc, 2) if pxc else None,
-                        "cogs_head": round(vc["cogs"] / pxc, 2) if pxc else None,
-                        "cogs_head_prev": round(vp["cogs"] / pxp, 2) if (vp and pxp) else None,
-                        "gp_head": round((vc["rev"] - vc["cogs"]) / pxc, 2) if pxc else None,
-                        "food_pct": round(vc["cogs"] / vc["rev"] * 100, 1) if vc["rev"] else None,
-                    })
-                # mix effect on rev/head: current tier mix priced at the comparison
-                # period's per-tier rev/head, vs its blended rev/head — isolates
-                # "customers moved tier" from "tiers themselves changed".
-                mix_eff = None
-                rev_p = sum(v["rev"] for v in TP.values())
-                if pax_c and pax_p and rev_p:
-                    # Only tiers that existed in BOTH periods can carry the
-                    # comparison; the weights are re-based on those. When the menu
-                    # itself was replaced (2026-09-01) barely any tier overlaps, so
-                    # the weights summed to ~0.21 of the mix and the shortfall was
-                    # reported as a ฿-520/head "customers moved to cheaper tiers"
-                    # — an artefact of the missing 79%, not a shift in behaviour.
-                    # Below near-full coverage there is no mix story to tell.
-                    shared = [t for t in TC if TP.get(t, {}).get("pax", 0) > 0]
-                    cover = sum(TC[t]["pax"] for t in shared) / pax_c
-                    if cover >= 0.9:
-                        at_prev = sum((TC[t]["pax"] / pax_c) * (TP[t]["rev"] / TP[t]["pax"])
-                                      for t in shared)
-                        mix_eff = round(at_prev - rev_p / pax_p, 2)
-                tier_out = {"rows": rows_t, "pax": round(pax_c),
-                            "pax_prev": round(pax_p) if has_prev else None,
-                            "mix_effect": mix_eff}
-
-                # WHY the promo bucket is what it is. It is the one row on the
-                # table whose label explains nothing, and it is not small — so
-                # break it into the three things it actually contains, and name
-                # the branches behind the two that are not ordinary discounts.
-                #   free   whole bill comped
-                #   mixed  a free / half-price head riding along with paying ones,
-                #          which drags the bill average between two tiers
-                #   disc   one uniform price that is not a tier = a real discount
-                try:
-                    pz_kind, pz_price, pz_branch = {}, {}, {}
-                    for ent, brn, nb3, px3 in con.execute(
-                            f"""SELECT d.ent, b.name, SUM(d.bills), SUM(d.pax)
-                                FROM menu_fact_day d JOIN branches b ON b.branch_id = d.branch_id
-                                WHERE d.day BETWEEN ? AND ? AND d.branch_id IN ({t_ph})
-                                  AND d.ent LIKE 'pz:%'
-                                GROUP BY d.ent, b.name""",
-                            [cs.isoformat(), ce.isoformat()] + t_bids):
-                        parts = str(ent).split(":")
-                        if len(parts) < 3:
-                            continue
-                        kind, unit = parts[1], parts[2]
-                        k = pz_kind.setdefault(kind, {"bills": 0, "pax": 0.0})
-                        k["bills"] += nb3 or 0; k["pax"] += px3 or 0.0
-                        if kind == "disc":
-                            q = pz_price.setdefault(unit, {"bills": 0, "pax": 0.0})
-                            q["bills"] += nb3 or 0; q["pax"] += px3 or 0.0
-                        else:
-                            bb = pz_branch.setdefault(kind, {}).setdefault(brn, {"bills": 0, "pax": 0.0})
-                            bb["bills"] += nb3 or 0; bb["pax"] += px3 or 0.0
-                    if pz_kind:
-                        # only tiers actually SOLD in this period: both menus'
-                        # price lists live in _PT_ORDER, so a September ฿395 would
-                        # otherwise be matched against the retired ฿350 tier and
-                        # reported as a 12.9% surcharge instead of a discount.
-                        std = [int(x["tier"]) for x in rows_t
-                               if str(x["tier"]).isdigit() and (x["pax"] or 0) > 0]
-
-                        def _near(u):
-                            """nearest standard tier + what % of it this price is,
-                            so a bare ฿710 reads as '10% off ฿789'."""
-                            if not std or not u:
-                                return None, None
-                            n = min(std, key=lambda t: abs(u - t))
-                            return n, round(u / n * 100, 1)
-
-                        disc = []
-                        for unit, v in sorted(pz_price.items(), key=lambda kv: -kv[1]["pax"])[:6]:
-                            u = int(unit)
-                            n, pctof = _near(u)
-                            disc.append({"unit": u, "of_tier": n, "pct_of_tier": pctof,
-                                         "off_pct": round(100 - pctof, 1) if pctof else None,
-                                         "bills": v["bills"], "pax": round(v["pax"])})
-                        tier_out["promo"] = {
-                            "kinds": {k: {"bills": v["bills"], "pax": round(v["pax"])}
-                                      for k, v in pz_kind.items()},
-                            "discounts": disc,
-                            "branches": {k: [{"branch": bn, "bills": bv["bills"],
-                                              "pax": round(bv["pax"])}
-                                             for bn, bv in sorted(v.items(),
-                                                                  key=lambda kv: -kv[1]["pax"])[:5]]
-                                         for k, v in pz_branch.items()},
-                        }
-                except Exception as e:
-                    print(f"[mgt] §11 promo breakdown unavailable: {e}")
-
-                # cost drivers per mainstream tier: which ingredient groups /
-                # single menus push each tier's cost/head up — turns the Food%
-                # column into an actionable "because guests eat X". Computes a
-                # payload for EVERY mainstream tier (share>=5%) so the UI can
-                # switch/compare; `default_tier` = worst food%. Reads the
-                # tier-dimensioned menu_fact_day (ent LIKE 'g:%' = ingredient
-                # group, 's:%' = single menu). Optional: wrapped so a driver
-                # failure never nukes the tier table above.
-                try:
-                    # Every tier that actually sold gets a driver breakdown. The 5%
-                    # share floor used to sit here, which meant the small tiers —
-                    # often the most interesting ones, ฿1,299 included — simply had
-                    # no breakdown and no hint that one was missing. The floor now
-                    # only decides which tier opens by DEFAULT (below), so a 45-cover
-                    # tier can be inspected without being allowed to set the headline.
-                    cand = [r for r in rows_t if r["tier"].isdigit()
-                            and r["food_pct"] is not None and r["pax"]]
-                    if cand:
-                        lblmap = {e: (l or e) for e, l in con.execute(
-                            "SELECT ent, label FROM menu_fact_meta")}
-
-                        def _drv(kind_like, tier, pax):
-                            d = {}
-                            if not pax:
-                                return d
-                            for ent, cg, q in con.execute(
-                                    f"""SELECT ent, SUM(ent_cogs), SUM(qty)
-                                        FROM menu_fact_day
-                                        WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
-                                          AND tier=? AND ent LIKE ? GROUP BY ent""",
-                                    [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
-                                d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
-                            return d
-
-                        def _build(frow):
-                            ft = frow["tier"]; ftpax = TC[ft]["pax"]
-                            fch = frow.get("cogs_head") or 0.0
-                            lower = [x for x in cand if int(x["tier"]) < int(ft)]
-                            ref = max(lower, key=lambda x: int(x["tier"])) if lower else None
-                            rt = ref["tier"] if ref else None
-                            rtpax = TC[rt]["pax"] if rt else 0.0
-                            gF = _drv("g:%", ft, ftpax)
-                            gR = _drv("g:%", rt, rtpax) if rt else {}
-                            sh = lambda ch: (round(ch / fch * 100, 1) if fch else None)
-                            grp = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                    "share_pct": sh(v[0]),
-                                    "vs_ref": (round(v[0] - gR.get(e, (0.0, 0.0))[0], 1) if rt else None)}
-                                   for e, v in sorted(gF.items(), key=lambda kv: -kv[1][0])[:6]
-                                   if v[0] >= 1]
-                            mF = _drv("s:%", ft, ftpax)
-                            mnu = [{"label": lblmap.get(e, e), "cogs_head": round(v[0], 1),
-                                    "share_pct": sh(v[0]), "qty_100": round(v[1], 1)}
-                                   for e, v in sorted(mF.items(), key=lambda kv: -kv[1][0])[:6]
-                                   if v[0] >= 1]
-                            if not (grp or mnu):
-                                return None
-                            return {"focus_tier": ft, "focus_label": frow["label"],
-                                    "focus_food_pct": frow["food_pct"],
-                                    "focus_cogs_head": round(fch, 1),
-                                    "ref_tier": rt, "ref_label": (ref["label"] if ref else None),
-                                    # carried so the reader can weigh the numbers: a
-                                    # cost/head drawn from 45 covers swings hard.
-                                    "focus_pax": round(frow["pax"] or 0),
-                                    "focus_share": frow["share"],
-                                    "groups": grp, "menus": mnu}
-
-                        by_tier = {}
-                        for frow in sorted(cand, key=lambda r: int(r["tier"])):
-                            payload = _build(frow)
-                            if payload:
-                                by_tier[frow["tier"]] = payload
-                        if by_tier:
-                            # The tier that OPENS is still picked from the mainstream
-                            # ones — the headline "biggest lever" should not be a tier
-                            # with a handful of covers and a noisy cost/head. Falls
-                            # back to the full set when no tier clears the floor.
-                            _pool = [r for r in cand
-                                     if r["tier"] in by_tier and (r["share"] or 0) >= 5] \
-                                    or [r for r in cand if r["tier"] in by_tier]
-                            worst = max(_pool, key=lambda r: r["food_pct"])
-                            tier_out["drivers"] = {
-                                "default_tier": worst["tier"],
-                                "tier_order": sorted(by_tier, key=lambda t: int(t)),
-                                "by_tier": by_tier}
-                except Exception as e:
-                    print(f"[mgt] §11 cost drivers unavailable: {e}")
+                # Each stage is its own function (_mgt_tier_*, Phase 8b 2026-09); they run in
+                # order and hand what they compute forward through `ctx`. The statements
+                # are the ones this block used to hold inline; the goldens pin the output.
+                ctx = {"TC": TC, "TP": TP, "ce": ce, "con": con, "cs": cs, "has_prev": has_prev, "pax_c": pax_c, "pax_p": pax_p, "pct": pct, "t_bids": t_bids, "t_ph": t_ph, "th": th, "tier_out": tier_out}
+                ctx.update(_mgt_tier_rows(TC=ctx.get("TC"), TP=ctx.get("TP"), has_prev=ctx.get("has_prev"), pax_c=ctx.get("pax_c"), pax_p=ctx.get("pax_p"), pct=ctx.get("pct"), th=ctx.get("th")))
+                ctx.update(_mgt_tier_promo(ce=ctx.get("ce"), con=ctx.get("con"), cs=ctx.get("cs"), rows_t=ctx.get("rows_t"), t_bids=ctx.get("t_bids"), t_ph=ctx.get("t_ph"), tier_out=ctx.get("tier_out")))
+                ctx.update(_mgt_tier_drivers(TC=ctx.get("TC"), ce=ctx.get("ce"), con=ctx.get("con"), cs=ctx.get("cs"), rows_t=ctx.get("rows_t"), t_bids=ctx.get("t_bids"), t_ph=ctx.get("t_ph"), tier_out=ctx.get("tier_out")))
+                tier_out = ctx["tier_out"]
     except Exception:
         tier_out = None
     return {"tier_out": tier_out}
@@ -2658,32 +2677,16 @@ _MGT_DEFS_TH = [
     ("เกณฑ์การจัดทำ", "ข้อมูลเพื่อการบริหาร ยังไม่ผ่านการตรวจสอบบัญชี จัดทำจากฐานข้อมูลการขาย POS · "
                      "การวิเคราะห์ tier ส่วนลด และต้นทุนต่อหัว นับเฉพาะบิลบุฟเฟ่ต์"),
 ]
-@router.get("/api/reports/management.xlsx")
-def report_management_xlsx(
-    period: str = Query("daily"),
-    date:   Optional[str] = Query(None),
-    week:   Optional[str] = Query(None),
-    month:  Optional[str] = Query(None),
-    branch: Optional[str] = Query(None),
-    group:  Optional[str] = Query(None),
-    lang:   str = Query("en"),               # match the on-screen language
-):
-    """Download the Daily/Weekly/Monthly Management Summary as a multi-sheet Excel
-    file. Reuses report_management() so the numbers match the on-screen report."""
-    try:
-        import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment
-        from openpyxl.utils import get_column_letter
-    except ImportError:
-        raise HTTPException(status_code=500, detail="openpyxl not installed")
-    # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
-    resp = report_management(period=period, date=date, week=week, month=month,
-                             branch=branch, group=group, lang=lang)
-    j = _json.loads(resp.body) if hasattr(resp, "body") else resp
-    if not j.get("available"):
-        raise HTTPException(status_code=404, detail="No sales data for this period")
-    th = (j.get("lang") == "th")          # the Definitions sheet follows the report language
-
+def _xlsx_setup(*, Alignment, Font, PatternFill, get_column_letter, j, openpyxl):
+    # names this section hands on; None where a path never assigns one
+    BOLD = None
+    H = None
+    NUM = None
+    NUM2 = None
+    P = None
+    PCT = None
+    pdelta = None
+    wb = None
     wb = openpyxl.Workbook()
     HDR    = Font(bold=True, color="FFFFFF")
     BOLD   = Font(bold=True)
@@ -2704,7 +2707,10 @@ def report_management_xlsx(
 
     H = j.get("headline", {}) or {}
     P = j.get("pace", {}) or {}
+    return {"BOLD": BOLD, "H": H, "NUM": NUM, "NUM2": NUM2, "P": P, "PCT": PCT, "autofit": autofit, "header": header, "pdelta": pdelta, "wb": wb}
 
+
+def _xlsx_summary(*, Font, H, NUM, P, PCT, autofit, header, j, pdelta, wb):
     # Sheet 1 — Summary
     ws = wb.active; ws.title = "Summary"
     ws.append(["Oshinei — Management Summary Report"]); ws["A1"].font = Font(bold=True, size=14)
@@ -2741,7 +2747,10 @@ def report_management_xlsx(
     ]:
         ws.append([name, val]); ws.cell(ws.max_row, 2).number_format = fmt
     autofit(ws)
+    return {}
 
+
+def _xlsx_branches(*, NUM, PCT, autofit, header, j, pdelta, wb):
     # Sheet 2 — Branch League
     ws = wb.create_sheet("Branch League")
     header(ws, ["Branch", "Net Sales", "Covers", "Spend/Head", "Share %", "vs prev %"])
@@ -2752,7 +2761,10 @@ def report_management_xlsx(
         for c in (2, 3, 4): ws.cell(r, c).number_format = NUM
         ws.cell(r, 5).number_format = PCT; ws.cell(r, 6).number_format = PCT
     autofit(ws)
+    return {}
 
+
+def _xlsx_leak(*, NUM, autofit, header, j, wb):
     # Sheet 3 — Money-Leak Radar
     ws = wb.create_sheet("Money-Leak Radar")
     header(ws, ["Signal", "Bills", "Baht", "Top branches"])
@@ -2766,7 +2778,10 @@ def report_management_xlsx(
         ws.append([lbl, o.get("bills", 0), o.get("baht", 0), tops])
         ws.cell(ws.max_row, 2).number_format = NUM; ws.cell(ws.max_row, 3).number_format = NUM
     autofit(ws)
+    return {}
 
+
+def _xlsx_menu(*, BOLD, NUM2, PCT, autofit, header, j, pdelta, wb):
     # Sheet 4 — Menu Cost per Head
     ws = wb.create_sheet("Menu Cost per Head")
     M = j.get("menu", {}) or {}
@@ -2788,7 +2803,10 @@ def report_management_xlsx(
     menu_block("Cost / head RISING (margin risk)", M.get("risers", []), True)
     menu_block("Cost / head FALLING", M.get("savers", []), True)
     autofit(ws)
+    return {}
 
+
+def _xlsx_trend(*, NUM, autofit, header, j, wb):
     # Sheet 5 — Trend
     ws = wb.create_sheet("Trend")
     header(ws, ["Period start", "Label", "Net Sales"])
@@ -2796,7 +2814,10 @@ def report_management_xlsx(
         ws.append([t.get("start"), t.get("label"), t.get("revenue")])
         ws.cell(ws.max_row, 3).number_format = NUM
     autofit(ws)
+    return {}
 
+
+def _xlsx_peak(*, NUM, PCT, autofit, header, j, pdelta, wb):
     # Sheet 6 — Peak Hours & Dayparts
     PK = j.get("peak", {}) or {}
     ws = wb.create_sheet("Peak & Dayparts")
@@ -2821,7 +2842,10 @@ def report_management_xlsx(
             ws.append([f"{hrow['hour']:02d}:00", hrow["revenue"], hrow["covers"], hrow["bills"]])
             ws.cell(ws.max_row, 2).number_format = NUM
     autofit(ws)
+    return {}
 
+
+def _xlsx_table(*, autofit, header, j, wb):
     # Sheet 7 — Table Turnover (only when available)
     TB = j.get("table", {}) or {}
     if TB.get("available"):
@@ -2835,7 +2859,10 @@ def report_management_xlsx(
         for b in TB.get("by_branch", []):
             ws.append([b["branch"], b["tables"], b["covers"], b["covers_per_table"], b["avg_turn_min"]])
         autofit(ws)
+    return {}
 
+
+def _xlsx_tier(*, BOLD, NUM, NUM2, PCT, autofit, header, j, pdelta, wb):
     # Sheet — Buffet Price Tiers (only when the tier fact tables cover the window)
     TIER = j.get("tier") or {}
     if TIER.get("rows"):
@@ -2891,7 +2918,10 @@ def report_management_xlsx(
                 ws.cell(ws.max_row, 3).number_format = PCT
                 ws.cell(ws.max_row, 4).number_format = NUM
         autofit(ws)
+    return {}
 
+
+def _xlsx_payment(*, BOLD, NUM, PCT, autofit, header, j, pdelta, wb):
     # Sheet — Payment Channels (§10 of the printed report; the workbook used to
     # stop at price tiers, so the tender mix was the one section you could read on
     # paper but not in Excel).
@@ -2925,7 +2955,10 @@ def report_management_xlsx(
                 for i in range(2, len(codes) + 3):
                     ws.cell(ws.max_row, i).number_format = NUM
         autofit(ws)
+    return {}
 
+
+def _xlsx_definitions(*, Alignment, BOLD, Font, P, header, j, th, wb):
     # Sheet — Definitions & Method. Same glossary the printed appendix carries, so a
     # workbook that leaves the building can still be read without the PDF next to it.
     ws = wb.create_sheet("Definitions")
@@ -2955,17 +2988,74 @@ def report_management_xlsx(
         ws.cell(ws.max_row, 2).alignment = Alignment(wrap_text=True, vertical="top")
     ws.column_dimensions["A"].width = 26
     ws.column_dimensions["B"].width = 92
+    return {}
 
+
+def _xlsx_actions(*, autofit, header, j, wb):
     # Sheet — Action Items
     ws = wb.create_sheet("Action Items")
     header(ws, ["Severity", "Action"])
     for a in j.get("actions", []):
         ws.append([a.get("sev", ""), a.get("text", "")])
     autofit(ws)
+    return {}
 
+
+def _xlsx_save(*, j, wb):
+    # names this section hands on; None where a path never assigns one
+    buf = None
+    fname = None
     buf = _io.BytesIO(); wb.save(buf); buf.seek(0)
     tag = j.get("selected_month") or j.get("selected_week") or j.get("focus") or "report"
     fname = f"management_{j['period']}_{tag}.xlsx"
+    return {"buf": buf, "fname": fname}
+
+
+@router.get("/api/reports/management.xlsx")
+def report_management_xlsx(
+    period: str = Query("daily"),
+    date:   Optional[str] = Query(None),
+    week:   Optional[str] = Query(None),
+    month:  Optional[str] = Query(None),
+    branch: Optional[str] = Query(None),
+    group:  Optional[str] = Query(None),
+    lang:   str = Query("en"),               # match the on-screen language
+):
+    """Download the Daily/Weekly/Monthly Management Summary as a multi-sheet Excel
+    file. Reuses report_management() so the numbers match the on-screen report."""
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment
+        from openpyxl.utils import get_column_letter
+    except ImportError:
+        raise HTTPException(status_code=500, detail="openpyxl not installed")
+    # report_management is @ttl_cache-wrapped → returns a Response(bytes); parse its body.
+    resp = report_management(period=period, date=date, week=week, month=month,
+                             branch=branch, group=group, lang=lang)
+    j = _json.loads(resp.body) if hasattr(resp, "body") else resp
+    if not j.get("available"):
+        raise HTTPException(status_code=404, detail="No sales data for this period")
+    th = (j.get("lang") == "th")          # the Definitions sheet follows the report language
+
+    # Each stage is its own function (_xlsx_*, Phase 8b 2026-09); they run in
+    # order and hand what they compute forward through `ctx`. The statements
+    # are the ones this block used to hold inline; the goldens pin the output.
+    ctx = {"Alignment": Alignment, "Font": Font, "PatternFill": PatternFill, "get_column_letter": get_column_letter, "j": j, "openpyxl": openpyxl, "th": th}
+    ctx.update(_xlsx_setup(Alignment=ctx.get("Alignment"), Font=ctx.get("Font"), PatternFill=ctx.get("PatternFill"), get_column_letter=ctx.get("get_column_letter"), j=ctx.get("j"), openpyxl=ctx.get("openpyxl")))
+    ctx.update(_xlsx_summary(Font=ctx.get("Font"), H=ctx.get("H"), NUM=ctx.get("NUM"), P=ctx.get("P"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_branches(NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_leak(NUM=ctx.get("NUM"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_menu(BOLD=ctx.get("BOLD"), NUM2=ctx.get("NUM2"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_trend(NUM=ctx.get("NUM"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_peak(NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_table(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_tier(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), NUM2=ctx.get("NUM2"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_payment(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_definitions(Alignment=ctx.get("Alignment"), BOLD=ctx.get("BOLD"), Font=ctx.get("Font"), P=ctx.get("P"), header=ctx.get("header"), j=ctx.get("j"), th=ctx.get("th"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_actions(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_save(j=ctx.get("j"), wb=ctx.get("wb")))
+    buf = ctx["buf"]
+    fname = ctx["fname"]
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

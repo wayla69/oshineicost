@@ -1,0 +1,270 @@
+{
+ "a_range": [
+  "2026-06-01",
+  "2026-06-03"
+ ],
+ "actions": [
+  {
+   "detail": "คนทานลดลง 16.7% เทียบช่วงก่อนหน้า (เหลือ 90 คน) — ตรวจสาขาหลักที่ขาย tier นี้, จัดโปรวันธรรมดา/ช่วง off-peak เฉพาะ tier, และเช็คว่าราคา/คู่แข่งในพื้นที่เปลี่ยนหรือไม่",
+   "title": "กู้ยอดลูกค้า Tier ฿789"
+  },
+  {
+   "detail": "สัดส่วนลูกค้าเลื่อนไป tier ราคาต่ำ ทำให้รายได้/หัวหายไป ฿11.96 ทั้งที่ราคาแต่ละ tier ไม่เปลี่ยน — เทรนพนักงานเชียร์อัปเกรด (เมนูเด่นเฉพาะ tier บน, ป้ายเทียบสิทธิ์ที่โต๊ะ), ตั้งเป้า % อัปเกรดรายสาขา",
+   "title": "ดัน upsell ไป tier ที่สูงขึ้น"
+  }
+ ],
+ "b_range": [
+  "2026-05-29",
+  "2026-05-31"
+ ],
+ "blend": {
+  "cogs_head_a": 194.21,
+  "cogs_head_b": 195.37,
+  "d_pax_pct": -7.3,
+  "food_pct_a": 27.9,
+  "food_pct_b": 27.6,
+  "pax_a": 171.0,
+  "pax_b": 184.0,
+  "rev_head_a": 695.26,
+  "rev_head_b": 707.22
+ },
+ "coverage": [
+  "2026-04-01",
+  "2026-06-03"
+ ],
+ "insights": [
+  "จำนวนคนทานรวม 171 คน ลดลง 7.3% เทียบช่วงก่อนหน้า (184 คน)",
+  "Tier ฿590 คนทานเพิ่มแรงสุด +14.3% (สัดส่วน 34.1% → 42.1%)",
+  "Tier ฿789 คนทานลดแรงสุด -16.7% (สัดส่วน 58.5% → 52.6%)",
+  "สัดส่วนบิลราคาโปรโมชัน/นอกราคามาตรฐาน 7.3% → 5.3% (-2.0 pp)",
+  "ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix อย่างเดียวกดรายได้/หัวลง ฿11.96"
+ ],
+ "mix_effect": -11.96,
+ "mode": "prev",
+ "ready": true,
+ "scope": "all",
+ "scope_label": "ทั้งหมด",
+ "tier_keys": [
+  "789",
+  "590",
+  "promo"
+ ],
+ "tier_labels": {
+  "590": "฿590",
+  "789": "฿789",
+  "promo": "โปรฯ/ราคาอื่น"
+ },
+ "tiers": [
+  {
+   "a": {
+    "bills": 39,
+    "cogs_head": 180.0,
+    "food_pct": 30.5,
+    "gp_head": 410.0,
+    "hc_head": 0.0,
+    "pax": 72,
+    "pax_bill": 1.85,
+    "rev_head": 590.0,
+    "share": 42.1
+   },
+   "b": {
+    "bills": 36,
+    "cogs_head": 180.0,
+    "food_pct": 30.5,
+    "gp_head": 410.0,
+    "hc_head": 0.0,
+    "pax": 63,
+    "pax_bill": 1.75,
+    "rev_head": 590.0,
+    "share": 34.1
+   },
+   "d_cogs_head": 0.0,
+   "d_hc_head": 0.0,
+   "d_pax_pct": 14.3,
+   "d_share_pp": 8.0,
+   "label": "฿590",
+   "tier": "590"
+  },
+  {
+   "a": {
+    "bills": 45,
+    "cogs_head": 210.0,
+    "food_pct": 26.6,
+    "gp_head": 579.0,
+    "hc_head": 0.0,
+    "pax": 90,
+    "pax_bill": 2.0,
+    "rev_head": 789.0,
+    "share": 52.6
+   },
+   "b": {
+    "bills": 54,
+    "cogs_head": 210.0,
+    "food_pct": 26.6,
+    "gp_head": 579.0,
+    "hc_head": 0.0,
+    "pax": 108,
+    "pax_bill": 2.0,
+    "rev_head": 789.0,
+    "share": 58.5
+   },
+   "d_cogs_head": 0.0,
+   "d_hc_head": 0.0,
+   "d_pax_pct": -16.7,
+   "d_share_pp": -5.9,
+   "label": "฿789",
+   "tier": "789"
+  },
+  {
+   "a": {
+    "bills": 9,
+    "cogs_head": 150.0,
+    "food_pct": 25.0,
+    "gp_head": 450.0,
+    "hc_head": 0.0,
+    "pax": 9,
+    "pax_bill": 1.0,
+    "rev_head": 600.0,
+    "share": 5.3
+   },
+   "b": {
+    "bills": 12,
+    "cogs_head": 150.0,
+    "food_pct": 25.0,
+    "gp_head": 450.0,
+    "hc_head": 0.0,
+    "pax": 14,
+    "pax_bill": 1.12,
+    "rev_head": 600.0,
+    "share": 7.3
+   },
+   "d_cogs_head": 0.0,
+   "d_hc_head": 0.0,
+   "d_pax_pct": -33.3,
+   "d_share_pp": -2.0,
+   "label": "โปรฯ/ราคาอื่น",
+   "tier": "promo"
+  }
+ ],
+ "top30": [
+  {
+   "cogs_head": 1.89,
+   "d_qty_head_pct": 2.2,
+   "ecogs": 324.0,
+   "ent": "s:3",
+   "label": "(A) สเต๊ก",
+   "qty": 32.0,
+   "qty_head": 0.189,
+   "tiers": {
+    "590": {
+     "d_pct": 0.0,
+     "qty_head": 0.2
+    },
+    "789": {
+     "d_pct": 0.0,
+     "qty_head": 0.2
+    },
+    "promo": {
+     "d_pct": null,
+     "qty_head": 0.0
+    }
+   },
+   "unit_cost": 10.0
+  },
+  {
+   "cogs_head": 11.37,
+   "d_qty_head_pct": 2.2,
+   "ecogs": 1944.0,
+   "ent": "s:2",
+   "label": "(B) แซลมอน",
+   "qty": 243.0,
+   "qty_head": 1.421,
+   "tiers": {
+    "590": {
+     "d_pct": 0.0,
+     "qty_head": 1.5
+    },
+    "789": {
+     "d_pct": 0.0,
+     "qty_head": 1.5
+    },
+    "promo": {
+     "d_pct": null,
+     "qty_head": 0.0
+    }
+   },
+   "unit_cost": 8.0
+  }
+ ],
+ "trend_month": [
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 630.0,
+     "rev_head": 590.0,
+     "share": 32.6
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 1170.0,
+     "rev_head": 789.0,
+     "share": 60.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 135.0,
+     "rev_head": 600.0,
+     "share": 7.0
+    }
+   },
+   "ym": "2026-04"
+  },
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 651.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 1116.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 140.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "ym": "2026-05"
+  },
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 72.0,
+     "rev_head": 590.0,
+     "share": 42.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 90.0,
+     "rev_head": 789.0,
+     "share": 52.6
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 9.0,
+     "rev_head": 600.0,
+     "share": 5.3
+    }
+   },
+   "ym": "2026-06"
+  }
+ ]
+}
