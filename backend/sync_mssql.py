@@ -435,9 +435,17 @@ def _chunk(mc, sql_tmpl, windows, col="s.SaleDate"):
     expression (or is keyed by a single-dated Sale), so the per-month result sets
     are disjoint and concatenation is identical to the full-range query."""
     pred = f"{col} >= %s AND {col} < %s"
+    # A template written as a plain string may carry the doubled {{RANGE}} an
+    # f-string needs: 2026-09-04 five of them had lost their f-prefix to a lint
+    # pass and the sync died at [4b/6] with "Incorrect syntax near '>'" — the
+    # fake-cursor tests never execute SQL. Accept both, and refuse to send a
+    # brace to the server; test_sync_main.py / test_sync_staging.py assert the same.
+    sql = sql_tmpl.replace("{{RANGE}}", "{RANGE}").replace("{RANGE}", pred)
+    if "{" in sql or "}" in sql:
+        raise ValueError(f"SQL template still carries a brace after the {{RANGE}} substitution: {sql[:200]!r}")
     out = []
     for lo, hi in windows:
-        mc.execute(sql_tmpl.replace("{RANGE}", pred), (lo, hi))
+        mc.execute(sql, (lo, hi))
         out.extend(mc.fetchall())
     return out
 
@@ -895,7 +903,7 @@ def _stage_void(*, bid_map, incr_from, item_map, run, sq):
                  "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL")
     rows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
-                 FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""", col="CancelDate")
+                 FROM CancelSaleItem WHERE {RANGE} GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""", col="CancelDate")
     sq.executemany("INSERT INTO pos_void VALUES(?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], item_map.get(r["iid"]), r["rid"], round(r["q"] or 0,2), round(r["ext"] or 0,2))
          for r in rows if bid_map.get(r["bid"])])
@@ -907,7 +915,7 @@ def _stage_void(*, bid_map, incr_from, item_map, run, sq):
                  "branch_id INT, day TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL")
     vdrows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(10),CancelDate,126) d, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
-                 FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(10),CancelDate,126), ReasonId""", col="CancelDate")
+                 FROM CancelSaleItem WHERE {RANGE} GROUP BY BranchId, ItemId, CONVERT(char(10),CancelDate,126), ReasonId""", col="CancelDate")
     sq.executemany("INSERT INTO pos_void_day VALUES(?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], item_map.get(r["iid"]), r["rid"], round(r["q"] or 0,2), round(r["ext"] or 0,2))
          for r in vdrows if bid_map.get(r["bid"])])
@@ -1004,7 +1012,7 @@ def _stage_coupon(*, F, bid_map, incr_from, run, sq):
                  "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL")
     rows = run("""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
                  CAST(AVG(CASE WHEN EndTime>StartTime THEN DATEDIFF(minute,StartTime,EndTime)*1.0 END) AS float) avgmin
-                 FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND {{RANGE}}
+                 FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND {RANGE}
                  GROUP BY BranchId, CONVERT(char(10),StartTime,126)""", col="StartTime")
     sq.executemany("INSERT INTO pos_table_turn_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["tabs"], r["cust"] or 0, round(r["avgmin"] or 0,1)) for r in rows if bid_map.get(r["bid"])])
@@ -1049,7 +1057,7 @@ def _stage_cashcount(*, F, bid_map, incr_from, run, sq):
                  "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL")
     rows = run("""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
-                 FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""", col="UsedDate")
+                 FROM CouponCardOutsideSystemUsed WHERE {RANGE} GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_month VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["ym"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in rows if bid_map.get(r["bid"])])
     print(f"        pos_coupon_month: {len(rows)} groups")
@@ -1062,7 +1070,7 @@ def _stage_discount(*, F, bid_map, incr_from, mc, run, sq):
                  "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL")
     drows = run("""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
-                 FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""", col="UsedDate")
+                 FROM CouponCardOutsideSystemUsed WHERE {RANGE} GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_day VALUES(?,?,?,?,?)",
         [(bid_map.get(r["bid"]), r["d"], r["cs"], r["n"], round(r["disc"] or 0,2)) for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_pcd ON pos_coupon_day(coupon_series_id, day)")

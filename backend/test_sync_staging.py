@@ -227,6 +227,9 @@ PATTERNS = [
 
 class FakeMC:
     def execute(self, sql, params=None):
+        # what the real server would reject: a {RANGE} left unsubstituted, or the
+        # doubled {{RANGE}} of a template that lost its f-prefix (2026-09-04)
+        assert "{" not in sql and "}" not in sql, f"brace in SQL sent to MSSQL: {sql[:160]!r}"
         self._rows = []
         for pat, rows in PATTERNS:
             if re.search(pat, sql):
@@ -531,3 +534,27 @@ def test_windows_real_lock_falls_back_then_publishes(staging_paths, monkeypatch)
     finally:
         if not holder.closed:
             holder.close()
+
+
+def test_chunk_accepts_the_doubled_range_spelling_and_refuses_a_stray_brace():
+    """A template written as a plain string may keep the doubled {{RANGE}} an
+    f-string needs (2026-09-04: five stagers lost their f-prefix to a lint pass
+    and MSSQL answered "Incorrect syntax near '>'"). Either spelling must reach
+    the server as the window predicate; any other brace must never reach it."""
+    class MC:
+        def __init__(self):
+            self.sql = []
+
+        def execute(self, sql, params=None):
+            self.sql.append(sql)
+
+        def fetchall(self):
+            return []
+
+    mc = MC()
+    win = [("2026-01-01", "2026-02-01")]
+    sync._chunk(mc, "SELECT 1 FROM T WHERE {{RANGE}}", win, col="d")
+    sync._chunk(mc, "SELECT 1 FROM T WHERE {RANGE}", win, col="d")
+    assert mc.sql == ["SELECT 1 FROM T WHERE d >= %s AND d < %s"] * 2
+    with pytest.raises(ValueError, match="brace"):
+        sync._chunk(mc, "SELECT 1 FROM T WHERE {RANGE} AND x IN {ids}", win, col="d")

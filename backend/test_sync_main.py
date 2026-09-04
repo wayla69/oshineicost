@@ -135,6 +135,9 @@ class FakeCursor:
         self._patterns, self._rows = patterns, []
 
     def execute(self, sql, params=None):
+        # what the real server would reject: a brace left in the SQL (2026-09-04:
+        # five templates that lost their f-prefix kept the doubled {{RANGE}})
+        assert "{" not in sql and "}" not in sql, f"brace in SQL sent to MSSQL: {sql[:160]!r}"
         rows = []
         for pat, canned in self._patterns:
             if re.search(pat, sql):
