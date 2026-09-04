@@ -43,6 +43,7 @@ SMOKE = [
     ("/api/sales/heavy-eaters", {}),
     ("/api/menu/action-board", {}),
     ("/api/menu/opportunities", {}),
+    ("/api/feedback/summary", {}),
     # ── management summary report (daily & weekly) ──
     ("/api/reports/management", {}),
     ("/api/reports/management", {"period": "weekly"}),

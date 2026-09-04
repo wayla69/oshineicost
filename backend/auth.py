@@ -56,6 +56,7 @@ MODULES: List[str] = [
     "system.settings",     # ตั้งค่า (targets, branch, sku active, closed hours)
     "system.admin",        # จัดการผู้ใช้
     "data.upload",         # อัปโหลด/seed ข้อมูล
+    "customer.feedback",   # เสียงลูกค้า: รีวิว/ความรู้สึก/เมนูที่ถูกพูดถึง
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -64,10 +65,11 @@ ROLE_MODULES: Dict[str, Set[str]] = {
     "management": set(MODULES),                       # ดูได้ทั้งหมด
     "marketing": {
         "sales.overview", "customer.buffet", "menu.analysis", "report.export",
+        "customer.feedback",
     },
     "operation": {
         "sales.overview", "ops.report", "ops.discounts", "ops.cash",
-        "ops.staff", "ops.posextra", "report.export",
+        "ops.staff", "ops.posextra", "report.export", "customer.feedback",
     },
     "analyst": {
         # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra are an
@@ -76,7 +78,7 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         # two if the owner wants a strict sales+cost-only analyst.
         "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
         "cost.simulator", "profit.pnl", "ops.discounts", "ops.posextra",
-        "report.export",
+        "report.export", "customer.feedback",
     },
     "accounting": {
         # Brief = "งานบัญชี". ops.cash (เงินขาด/เกิน) + ops.discounts are
@@ -86,7 +88,7 @@ ROLE_MODULES: Dict[str, Set[str]] = {
     },
     "innovation": {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
-        "bom.edit", "system.settings",
+        "bom.edit", "system.settings", "customer.feedback",
     },
 }
 
@@ -185,6 +187,7 @@ MODULE_RULES = [
     ("GET", "/api/menu/action-board",        {"cost.analysis"}),   # buckets dishes by margin → cost
     ("GET", "/api/menu/opportunities",       {"menu.analysis"}),   # qty/share/trend only, no COGS
     ("W",   "/api/menu/ai-ideas",            {"menu.analysis"}),   # AI menu concepts (+ write-token)
+    ("*",   "/api/feedback",                 {"customer.feedback"}),  # reviews: read + upload/delete (+ write-token)
     ("GET", "/api/finance/prime-cost",       {"cost.analysis", "profit.pnl"}),
     ("GET", "/api/branches/fixed-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
     ("GET", "/api/branches/labor-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),

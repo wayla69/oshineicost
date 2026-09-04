@@ -1,0 +1,22 @@
+{
+ "analysed_by": {},
+ "avg_rating": null,
+ "branches": [],
+ "by_month": [],
+ "filters": {
+  "branch": null,
+  "month_from": null,
+  "month_to": null
+ },
+ "menus": [],
+ "neg_pct": 0.0,
+ "recent_negative": [],
+ "sentiment": {
+  "neg": 0,
+  "neu": 0,
+  "pos": 0
+ },
+ "sources": {},
+ "themes": [],
+ "total": 0
+}
