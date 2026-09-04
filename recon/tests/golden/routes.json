@@ -96,6 +96,12 @@
   ]
  ],
  [
+  "/api/bank-lines/bulk-ignore",
+  [
+   "POST"
+  ]
+ ],
+ [
   "/api/bank-lines/{line_id}/ignore",
   [
    "PATCH"

@@ -2124,13 +2124,21 @@ def suggest_reclassifications(conn, branch_id, period_month, max_day_gap=1):
 _INTXFER_FLOOR = 100_000      # "ก้อนใหญ่" — real customer transfers sit far below this
 _INTXFER_ROUND = 10_000       # sweeps are round to the ten-thousand; sales totals aren't
 _INTXFER_SALES_KW = ("ขาย", "qr", "payment", "settlement", "sdch", "grab", "line")
+# KTB statement codes for transfers between own accounts / inter-bank receipts.
+# The chain has no POS tender code for transfers (customers pay QR or cash), so
+# a credit carrying one of these is never a sale — whatever its size. Staff
+# were finding the small ones by hand (B2, 2026-09). Still a suggestion only.
+_INTXFER_CODES = ("IORSDT", "NBSDT")
 
 
 def suggest_internal_transfers(conn, branch_id, period_month):
     """Unmatched bank credits that look like internal/own-account transfers rather
-    than revenue — large AND round AND without a sales descriptor. Each row carries
-    the line id so the UI can one-click PATCH /api/bank-lines/{id}/ignore. Pure
-    suggestion: nothing is excluded until staff act."""
+    than revenue: (reason "large_round") large AND round AND without a sales
+    descriptor, or (reason "code") carrying a KTB own-account transfer code
+    (_INTXFER_CODES) at any amount. Each row carries the line id so the UI can
+    exclude it (PATCH /api/bank-lines/{id}/ignore, or POST /api/bank-lines/
+    bulk-ignore for the whole list). Pure suggestion: nothing is excluded until
+    staff act."""
     out = []
     try:
         rows = conn.execute(
@@ -2143,12 +2151,16 @@ def suggest_internal_transfers(conn, branch_id, period_month):
     for r in rows:
         amt = float(r["credit"] or 0)
         desc = r["description"] or ""
-        if amt < _INTXFER_FLOOR or round(amt) % _INTXFER_ROUND != 0:
-            continue
-        if any(k in desc.lower() for k in _INTXFER_SALES_KW):
+        up = desc.upper()
+        if any(code in up for code in _INTXFER_CODES):
+            reason = "code"
+        elif (amt >= _INTXFER_FLOOR and round(amt) % _INTXFER_ROUND == 0
+              and not any(k in desc.lower() for k in _INTXFER_SALES_KW)):
+            reason = "large_round"
+        else:
             continue
         out.append({"id": r["id"], "date": r["txn_date"], "description": desc,
-                    "channel": r["channel"], "amount": round(amt, 2)})
+                    "channel": r["channel"], "amount": round(amt, 2), "reason": reason})
     return out
 
 
