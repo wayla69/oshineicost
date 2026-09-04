@@ -154,7 +154,6 @@ def buffet_tier_mix(
 
     # Build per-period detail + summary
     from collections import defaultdict
-    period_rows: dict = defaultdict(list)
     period_totals: dict = defaultdict(lambda: {"qty": 0, "revenue": 0.0, "revenue_ex_vat": 0.0, "cogs": 0.0, "gp": None, "has_cost": True})
 
     result_rows = []
@@ -1378,8 +1377,6 @@ def buffet_performance(
         """, params_sku).fetchall()
     adult_pax = next((float(r["qty"] or 0) for r in ac_rows if r["code"] == 'BUFFET'), 0.0)
     child_pax = next((float(r["qty"] or 0) for r in ac_rows if r["code"] == 'BUFFETCHILD'), 0.0)
-    adult_rev = next((float(r["rev"] or 0) for r in ac_rows if r["code"] == 'BUFFET'), 0.0)
-    child_rev = next((float(r["rev"] or 0) for r in ac_rows if r["code"] == 'BUFFETCHILD'), 0.0)
     buffet_billed_pax = adult_pax + child_pax  # buffet covers sold (tier rows)
     child_pct = (child_pax / buffet_billed_pax * 100) if buffet_billed_pax else 0
 
@@ -1589,7 +1586,6 @@ def buffet_performance(
         for t in ('BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799', 'BUFFETCHILD')
     }
     waste_total_qty = sum(w["qty"] for w in waste_trend)
-    waste_rate_overall = (waste_total_qty / total_buffet_pax * 100) if total_buffet_pax else 0
     bev_total = sum(b["drink_revenue"] for b in bev_trend)
     total_billed = sum(b["total_revenue"] for b in bev_trend)
     bev_attach_overall = (bev_total / total_billed * 100) if total_billed else 0
@@ -1630,7 +1626,6 @@ def buffet_performance(
     c_rev_ex      = float(crow["rev_ex"] or 0)
     c_rev_inc     = float(crow["rev_inc"] or 0)
     c_cogs        = float(crow["cogs"] or 0)
-    c_costed_rev  = float(crow["costed_rev_ex"] or 0)   # coverage diagnostic only
     c_gp          = c_rev_ex - c_cogs
     c_gp_pct      = (c_gp   / c_rev_ex * 100) if c_rev_ex > 0 else None
     c_food_pct    = (c_cogs / c_rev_ex * 100) if c_rev_ex > 0 else None
@@ -2463,7 +2458,6 @@ def buffet_plate_cost_dist(
             GROUP BY b.name, SUBSTR(st.sold_at,1,7)
         """, tx_params).fetchall()
 
-    from collections import defaultdict
     bom_map   = {(r["branch"], r["m"]): r["bom_cost"] or 0 for r in bom_rows}
     mrev_map  = {(r["branch"], r["m"]): r["monthly_rev"] or 1 for r in month_rev_rows}
 
@@ -2842,7 +2836,7 @@ def buffet_gp_export(
     """Export buffet GP analysis to Excel (.xlsx)."""
     try:
         import openpyxl
-        from openpyxl.styles import Font, PatternFill, Alignment, numbers
+        from openpyxl.styles import Font, PatternFill, Alignment
         from openpyxl.utils import get_column_letter
     except ImportError:
         raise HTTPException(status_code=500, detail="openpyxl not installed")
@@ -2865,7 +2859,6 @@ def buffet_gp_export(
     wb  = openpyxl.Workbook()
     HDR = Font(bold=True, color="FFFFFF")
     FILL_H = PatternFill("solid", fgColor="1F4E79")
-    FILL_GP = PatternFill("solid", fgColor="E8F5E9")
     NUM_FMT  = '#,##0'
     PCT_FMT  = '0.0%'
     CENTER   = Alignment(horizontal="center")

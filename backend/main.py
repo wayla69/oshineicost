@@ -6,7 +6,6 @@ Run: uvicorn backend.main:app --reload --port 8000
 
 import sqlite3
 import tempfile
-import shutil
 import threading
 import time as _time
 import functools
@@ -1728,7 +1727,7 @@ def upload_file(
         raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
+    except Exception:
         # Log full detail server-side; return a generic message to the client.
         import traceback, sys as _sys
         print("Ingest error:", traceback.format_exc(), file=_sys.stderr)
@@ -2751,7 +2750,6 @@ def _mpack_collect(month: str) -> dict:
         """, {"m": month}).fetchall()
 
         # For sparklines: last-12-month qty per SKU (top drivers only)
-        sku_ids_csv = ""  # unused
         spark_data: dict = {}
         if top_drivers:
             # Build SKU id list
@@ -2832,7 +2830,7 @@ def _mpack_collect(month: str) -> dict:
 
     # Derive
     def _enrich(s):
-        rev = s["revenue"]; cogs = s["cogs"]; cr = s["costed_rev"]
+        rev = s["revenue"]; cogs = s["cogs"]
         s["gp"]            = rev - cogs
         s["gp_pct"]        = (s["gp"]/rev*100) if rev > 0 else None
         s["food_cost_pct"] = (cogs/rev*100)    if rev > 0 else None
@@ -2942,7 +2940,7 @@ def _mpack_collect(month: str) -> dict:
 def _mpack_render_xlsx(pack: dict) -> bytes:
     """Render the Monthly Pack to an xlsx workbook."""
     import openpyxl
-    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
 
     HDR_FONT  = Font(bold=True, color="FFFFFF", size=11)
@@ -3113,7 +3111,7 @@ def _mpack_render_pdf(pack: dict) -> bytes:
 
     # ── Cover page ────────────────────────────────────────────────────────
     story.append(Spacer(1, 3*cm))
-    story.append(Paragraph(f"Oshinei Monthly Review Pack", h1))
+    story.append(Paragraph("Oshinei Monthly Review Pack", h1))
     story.append(Paragraph(f"{pack['month']}", h2))
     story.append(Spacer(1, 1*cm))
     story.append(Paragraph(f"<b>{sc['branch_count']}</b> สาขา · เป้า Food Cost <b>{pack['target_lo']:.0f}–{pack['target_hi']:.0f}%</b>", body))

@@ -109,7 +109,6 @@ def _menu_engineering_compute(
         cogs = r["cogs_total"]
         costed_qty = r["costed_qty"] or 0
         has_cost = cogs is not None and costed_qty > 0
-        unit_cost = (cogs / costed_qty) if has_cost else None
         popularity_pct = round(qty / total_qty * 100, 4) if total_qty else 0
         margin_per_unit = round((subtotal_ex - cogs) / qty, 2) if has_cost and qty and cogs is not None else None
         margin_pct = round((subtotal_ex - cogs) / subtotal_ex * 100, 2) if has_cost and subtotal_ex and cogs is not None else None
@@ -710,7 +709,6 @@ def menu_lifecycle(
 
         # Lifecycle classification
         recent_2 = qty_series[-2:] if n >= 2 else qty_series
-        early_months = [m for m in qty_series[:3] if m > 0]
         all_nonzero_start = next((i for i, v in enumerate(qty_series) if v > 0), None)
 
         is_dead = all(v == 0 for v in recent_2) and any(v > 0 for v in qty_series)

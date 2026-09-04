@@ -531,9 +531,7 @@ def main():
     # natural-key maps from the EXISTING (preserved) tables
     name2bid = {r["name"]: r["branch_id"] for r in sq.execute("SELECT branch_id,name FROM branches")}
     code2sid = {r["sku_code"]: r["sku_id"] for r in sq.execute("SELECT sku_id,sku_code FROM skus")}
-    cat_by_name = {r["name"]: r["category_id"] for r in sq.execute("SELECT category_id,name FROM categories")}
     max_sid = sq.execute("SELECT COALESCE(MAX(sku_id),0) m FROM skus").fetchone()["m"]
-    max_cid = sq.execute("SELECT COALESCE(MAX(category_id),0) m FROM categories").fetchone()["m"]
 
     print("[2/6] connect MSSQL + load Branch / Items / ItemCategory")
     mc = ResilientCursor(connect_mssql)   # auto-reconnects on dropped connection (err 20047)
@@ -831,7 +829,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # ── pos_void: cancelled/void items (qty + sale price; cost via BoM later) ──
     sq.executescript("DROP TABLE IF EXISTS pos_void; CREATE TABLE pos_void("
                      "branch_id INT, period_month TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
-    rows = run(f"""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
+    rows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(7),CancelDate,126) ym, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
                  FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(7),CancelDate,126), ReasonId""", col="CancelDate")
     sq.executemany("INSERT INTO pos_void VALUES(?,?,?,?,?,?)",
@@ -843,7 +841,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # Mirror of pos_void grouped by char(10) CancelDate instead of char(7).
     sq.executescript("DROP TABLE IF EXISTS pos_void_day; CREATE TABLE pos_void_day("
                      "branch_id INT, day TEXT, sku_id INT, reason_id INT, qty REAL, ext_price REAL);")
-    vdrows = run(f"""SELECT BranchId bid, ItemId iid, CONVERT(char(10),CancelDate,126) d, ReasonId rid,
+    vdrows = run("""SELECT BranchId bid, ItemId iid, CONVERT(char(10),CancelDate,126) d, ReasonId rid,
                  SUM(CAST(Qty AS float)) q, SUM(CAST(ExtendedPrice AS float)) ext
                  FROM CancelSaleItem WHERE {{RANGE}} GROUP BY BranchId, ItemId, CONVERT(char(10),CancelDate,126), ReasonId""", col="CancelDate")
     sq.executemany("INSERT INTO pos_void_day VALUES(?,?,?,?,?,?)",
@@ -931,7 +929,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # ── pos_table_turn_day: turnover / dwell ──
     sq.executescript("DROP TABLE IF EXISTS pos_table_turn_day; CREATE TABLE pos_table_turn_day("
                      "branch_id INT, day TEXT, tabs INT, customers INT, avg_turn_min REAL);")
-    rows = run(f"""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
+    rows = run("""SELECT BranchId bid, CONVERT(char(10),StartTime,126) d, COUNT(*) tabs, SUM(NumOfCust) cust,
                  CAST(AVG(CASE WHEN EndTime>StartTime THEN DATEDIFF(minute,StartTime,EndTime)*1.0 END) AS float) avgmin
                  FROM SaleTab WHERE ISNULL(IsCancel,0)=0 AND {{RANGE}}
                  GROUP BY BranchId, CONVERT(char(10),StartTime,126)""", col="StartTime")
@@ -973,7 +971,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # ── pos_coupon_month: promo / coupon usage ──
     sq.executescript("DROP TABLE IF EXISTS pos_coupon_month; CREATE TABLE pos_coupon_month("
                      "branch_id INT, period_month TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
-    rows = run(f"""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
+    rows = run("""SELECT BranchId bid, CONVERT(char(7),UsedDate,126) ym, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
                  FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(7),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_month VALUES(?,?,?,?,?)",
@@ -983,7 +981,7 @@ def stage_reports(sq, mc, since, bid_map, item_map, name2bid, windows):
     # ── pos_coupon_day: same usage but per DAY (powers the by-day coupon drill) ──
     sq.executescript("DROP TABLE IF EXISTS pos_coupon_day; CREATE TABLE pos_coupon_day("
                      "branch_id INT, day TEXT, coupon_series_id INT, used_count INT, discount_amount REAL);")
-    drows = run(f"""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
+    drows = run("""SELECT BranchId bid, CONVERT(char(10),UsedDate,126) d, CouponSeriesId cs,
                  COUNT(*) n, SUM(CAST(DiscountAmount AS float)) disc
                  FROM CouponCardOutsideSystemUsed WHERE {{RANGE}} GROUP BY BranchId, CONVERT(char(10),UsedDate,126), CouponSeriesId""", col="UsedDate")
     sq.executemany("INSERT INTO pos_coupon_day VALUES(?,?,?,?,?)",

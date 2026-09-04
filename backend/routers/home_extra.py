@@ -520,8 +520,6 @@ def home_brief(branch: Optional[str] = Query(None)):
             dow_names = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
             dow_label = dow_names[yd.weekday()]
             current_month = yd.strftime("%Y-%m")
-            wow_date = (_dt.strptime(yesterday, "%Y-%m-%d").replace(
-                day=yd.day) if True else None)
             import datetime as _dtt
             wow_date_str = (_dt.strptime(yesterday, "%Y-%m-%d") - _dtt.timedelta(days=7)).strftime("%Y-%m-%d")
         except Exception:
