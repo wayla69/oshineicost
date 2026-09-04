@@ -1,0 +1,7 @@
+{
+ "items": [],
+ "period_month": null,
+ "summary": [],
+ "total_amount": 0,
+ "total_count": 0
+}

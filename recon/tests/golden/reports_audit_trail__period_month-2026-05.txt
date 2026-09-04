@@ -1,0 +1,7 @@
+{
+ "branch_id": null,
+ "count": 0,
+ "period_month": "2026-05",
+ "rows": [],
+ "shown": 0
+}

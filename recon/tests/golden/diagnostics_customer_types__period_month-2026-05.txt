@@ -1,0 +1,4 @@
+{
+ "error": "no such table: pos_customer_type_month",
+ "hint": "pos_customer_type_month not found — run sync_mssql.py first"
+}

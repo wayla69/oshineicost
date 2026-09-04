@@ -1,0 +1,8 @@
+{
+ "branch_id": null,
+ "count": 0,
+ "missing_reason": 0,
+ "period_month": "2026-05",
+ "rows": [],
+ "total_abs_amount": 0
+}

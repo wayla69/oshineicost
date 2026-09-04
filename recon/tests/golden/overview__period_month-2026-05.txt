@@ -1,0 +1,24 @@
+[
+ {
+  "branch_id": 4,
+  "branch_name": "Korat1",
+  "ext_total": 0,
+  "open_issues": 0,
+  "pos_total": 0,
+  "session_id": null,
+  "status": "no_session",
+  "unmatched": 0,
+  "variance": 0
+ },
+ {
+  "branch_id": 5,
+  "branch_name": "อุดรธานี",
+  "ext_total": 0,
+  "open_issues": 0,
+  "pos_total": 0,
+  "session_id": null,
+  "status": "no_session",
+  "unmatched": 0,
+  "variance": 0
+ }
+]

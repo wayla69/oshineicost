@@ -1,0 +1,45 @@
+{
+ "branch_id": 4,
+ "branch_name": "Korat1",
+ "branches": [
+  {
+   "branch_id": 4,
+   "name": "Korat1"
+  },
+  {
+   "branch_id": 5,
+   "name": "อุดรธานี"
+  }
+ ],
+ "days": [],
+ "je_accounts": {
+  "BANK": [
+   "",
+   ""
+  ],
+  "DISCOUNT": [
+   "",
+   ""
+  ],
+  "FEE": [
+   "",
+   ""
+  ],
+  "REVENUE": [
+   "",
+   ""
+  ],
+  "VAT": [
+   "",
+   ""
+  ]
+ },
+ "period_month": "2026-05",
+ "totals": {
+  "discount": 0.0,
+  "fee": 0.0,
+  "gross": 0.0,
+  "net": 0.0,
+  "vat": 0.0
+ }
+}

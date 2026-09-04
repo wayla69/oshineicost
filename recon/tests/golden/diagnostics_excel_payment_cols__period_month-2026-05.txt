@@ -1,0 +1,6 @@
+{
+ "available": false,
+ "period_month": "2026-05",
+ "reason": "ยังไม่มี sales_month_summary ในฐานข้อมูลนี้ — ปรากฏหลัง sync ครั้งแรก",
+ "rows": []
+}

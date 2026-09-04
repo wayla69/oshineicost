@@ -1,0 +1,11 @@
+{
+ "by_branch": [],
+ "by_reason": [],
+ "count": 0,
+ "grand_total_abs": 0,
+ "items": [],
+ "over_count": 0,
+ "over_threshold": [],
+ "period_month": "2026-05",
+ "threshold": 1000.0
+}
