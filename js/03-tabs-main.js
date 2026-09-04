@@ -437,7 +437,7 @@ function setGranularity(g) {
     if (!document.getElementById('selDateFrom').value) {
       const days = g === 'daily' ? 30 : 91;
       const today = new Date();
-      const from  = new Date(today - days * 86400000);
+      const from  = new Date(today.getTime() - days * 86400000);
       document.getElementById('selDateTo').value   = today.toISOString().slice(0,10);
       document.getElementById('selDateFrom').value = from.toISOString().slice(0,10);
     }
