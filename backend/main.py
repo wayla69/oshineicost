@@ -124,6 +124,14 @@ def invalidate_cache(*prefixes: str):
 # Paths
 # ---------------------------------------------------------------------------
 HERE    = Path(__file__).parent.resolve()
+# Fly imports this file as `backend.main` (see start.sh); locally and in tests it is
+# top-level `main`. Sibling modules (rules, month_summary, auth, routers) resolve
+# by plain name only in the second layout, so make the first one match — the
+# alternative is a try/except around every sibling import. 2026-09-04: a bare
+# `from rules import …` took production down for eight minutes.
+import sys as _sys_path_fix
+if str(HERE) not in _sys_path_fix.path:
+    _sys_path_fix.path.insert(0, str(HERE))
 # DB location is overridable so the database can live on a mounted persistent
 # volume in hosted deployments (e.g. Fly.io: OSHINEI_DB=/data/oshinei.db).
 # Defaults to the in-repo path for local development.
