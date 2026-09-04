@@ -43,7 +43,7 @@ import reingest_raw_2026 as rr   # parse_es1/parse_es_tx/load_es1/load_es_tx/saf
 # Cleansed-raw exports carry the FULL POS branch names (e.g. 'ขอนแก่น (1)'),
 # while the live DB stores short canonical names. Reuse the proven alias map +
 # remapper from the May-26 ingest instead of redefining them here.
-from ingest_may26_update import BRANCH_ALIAS, _remap_branches as remap_branches
+from ingest_may26_update import _remap_branches as remap_branches
 
 HERE     = Path(__file__).parent.resolve()
 DB_PATH  = HERE / "oshinei.db"

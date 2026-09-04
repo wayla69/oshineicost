@@ -86,3 +86,20 @@ Only run `flyctl auth login` (interactive, needs a browser) if that still fails.
 
 > Code deploy ≠ data refresh. Deploying ships code only; the live SQLite lives on the Fly
 > volume and is untouched. Data syncs run separately (`Auto Sync Local.bat`).
+
+## Commit scopes
+
+One scope per area, always the same word. The Management Report alone has been
+committed as `mgt`, `mgt-report` and `mgmt-report`, which makes `git log --grep`
+and the fix-rate audit lie.
+
+| Area | Scope |
+|------|-------|
+| Management Report (daily/weekly/monthly) | `mgt` |
+| Cost / BoM / sku_cost / effective cost | `cost` |
+| Live MSSQL sync, staging, hot-swap | `sync` |
+| Recon (reconciliation app) | `recon` |
+| Ingredient order plan / order setup | `ordering` |
+| Dashboard tabs & charts (frontend) | `ui` |
+| Auth, roles, tokens | `auth` |
+| Reports other than the Management Report | `reports` |

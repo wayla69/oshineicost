@@ -487,7 +487,6 @@ def _init_settings_tables():
         # branch_type migration (idempotent). Guarded so a DB still missing the
         # core tables (schema.sql absent) can't crash import.
         branch_cols = [r[1] for r in con.execute("PRAGMA table_info(branches)").fetchall()]
-        cols = branch_cols
         if branch_cols and "branch_type" not in branch_cols:
             con.execute("ALTER TABLE branches ADD COLUMN branch_type TEXT DEFAULT 'master'")
         if branch_cols and "active" not in branch_cols:
@@ -796,11 +795,8 @@ def cost_analysis(
     # â"€â"€ Derived fields â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     total_revenue     = sum(r["revenue"]     or 0 for r in items)
     total_qty         = sum(r["qty"]         or 0 for r in items)
-    total_rev_ex      = sum(r["revenue_ex_vat"] or 0 for r in items)
     costed_items      = [r for r in items if r["has_cost"]]
     total_cogs        = sum(r["cogs"]        or 0 for r in costed_items)
-    total_gp          = sum(r["gross_profit"] or 0 for r in costed_items)
-    costed_rev_ex     = sum(r["revenue_ex_vat"] or 0 for r in costed_items)
     # Revenue-weighted margin EXCLUDING implausible items (margin < -100%, i.e.
     # cost > 2x revenue). Those are near-zero-revenue, high-qty buffet-component
     # SKUs that otherwise drag the headline KPI to nonsense (e.g. -7500%). They
@@ -1896,7 +1892,6 @@ def branch_bom_analysis(
     monthly_trend = []
     for r in trend_rows:
         m_cogs      = float(r["cogs"] or 0)
-        m_costed    = float(r["costed_rev_ex"] or 0)
         m_rev       = float(r["revenue_ex"] or 0)
         m_gp        = m_rev - m_cogs
         m_gp_pct    = (m_gp   / m_rev * 100) if m_rev > 0 else None
@@ -2239,7 +2234,6 @@ def bom_cost_overview(
     for r in hmap:
         rev    = float(r["rev"]    or 0)
         c      = float(r["cogs"]   or 0)
-        costed = float(r["costed"] or 0)
         fc     = (c / rev * 100) if rev > 0 else None
         heatmap.append({
             "branch": r["branch"], "month": r["m"],
@@ -2279,7 +2273,6 @@ def bom_cost_overview(
     for r in branch_rows:
         c      = float(r["cogs"]   or 0)
         svc    = svc_by_branch.get(r["branch"], 0.0)
-        costed = float(r["costed"] or 0) + svc
         full   = float(r["rev"] or 0) + svc
         fc     = (c / full * 100) if full > 0 else None
         branches_out.append({

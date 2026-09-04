@@ -2618,7 +2618,7 @@ def analysis_forecast(
         ).fetchone()
         if not latest or not latest["d"]:
             return {"available": False}
-        from datetime import datetime as _dt, timedelta as _td
+        from datetime import datetime as _dt
         from calendar import monthrange
         d = _dt.strptime(latest["d"], "%Y-%m-%d")
         period = d.strftime("%Y-%m")
@@ -3944,8 +3944,6 @@ def revenue_forecast(
 # GET /api/buffet/gp/export   🟢7
 # Download GP analysis as formatted Excel
 # ---------------------------------------------------------------------------
-from fastapi.responses import StreamingResponse
-import io as _io
 
 
 

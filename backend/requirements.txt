@@ -1,7 +1,16 @@
-fastapi
-uvicorn
-openpyxl
-python-multipart
-reportlab
-matplotlib
-pytest        # dev: run `python -m pytest test_invariants.py`
+# Pinned to the versions production was running on 2026-09-04 (Python 3.12.14,
+# fly release v487) — every probe that day passed on exactly this set. An
+# unpinned file meant each deploy took whatever PyPI had that morning, so a
+# breaking FastAPI/Starlette major could land with no commit behind it.
+# Upgrade deliberately: bump here, run `python -m pytest backend`, deploy, probe.
+fastapi==0.141.1
+starlette==1.6.0
+pydantic==2.13.5
+uvicorn==0.52.4
+python-multipart==0.0.32
+openpyxl==3.1.5
+reportlab==5.0.1
+matplotlib==3.11.1
+numpy==2.5.2
+pillow==12.3.0
+pytest==9.1.1        # dev: run `python -m pytest backend`

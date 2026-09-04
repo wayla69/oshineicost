@@ -231,7 +231,6 @@ def profit_summary(
     cogs           = row["cogs"]                   or 0   # BoM recipe COGS (real)
     qty_sold       = row["qty_sold"]               or 0
     costed_qty     = row["costed_qty"]             or 0
-    costed_rev_ex  = revenue_ex   # BoM applies across all revenue; kept for response compat
     gross_profit   = revenue_ex - cogs
     # Margin over TOTAL revenue (honest) — not just costed revenue, which inflated
     # GP to ~72%. With BoM coverage ~70-92%, this reflects the real ~42% margin.
@@ -1172,7 +1171,6 @@ def pnl_branch(
         filters.append("b.name = :branch"); params["branch"] = branch
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
     where = "WHERE " + " AND ".join(filters)
-    cogs_expr = _cogs_case()
 
     tf = ["b.name != 'ALL'", "st.source='Easy'", "st.customer_count > 0"]
     tp: dict = {}

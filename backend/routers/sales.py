@@ -1809,7 +1809,6 @@ def sales_dish_movers(
         })
 
     movers.sort(key=lambda m: abs(m["delta"]), reverse=True)
-    top = movers[:limit]
     # Independent top gainers / decliners (not a shared abs-delta top-N, which
     # was all gainers for high-volume dishes → empty decliners).
     gainers   = sorted([m for m in movers if m["delta"] > 0], key=lambda m: m["delta"], reverse=True)[:limit]

@@ -1,11 +1,14 @@
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-pydantic>=2.7.0
-openpyxl>=3.1.2
-xlrd>=2.0.1            # read legacy BIFF .xls (Krungsri RDB003 settlements)
-python-multipart>=0.0.9
-pdfplumber>=0.11.0
-pypdfium2>=4.30.0      # render no-text PDF pages to images for OCR
-pikepdf>=8.0.0         # decrypt password-locked statement PDFs (KTB per-branch lock)
-pytesseract>=0.3.10    # OCR fallback for image/Print-to-PDF KTB statements
-Pillow>=10.0.0         # image handling for the OCR pipeline
+# Pinned to production 2026-09-04 (see backend/requirements.txt for the why).
+# The web stack is shared with backend/ — keep those four lines identical.
+fastapi==0.141.1
+starlette==1.6.0
+pydantic==2.13.5
+uvicorn[standard]==0.52.4
+python-multipart==0.0.32
+openpyxl==3.1.5
+xlrd==2.0.2            # read legacy BIFF .xls (Krungsri RDB003 settlements)
+pdfplumber==0.11.10
+pypdfium2==5.13.0      # render no-text PDF pages to images for OCR
+pikepdf==10.12.0       # decrypt password-locked statement PDFs (KTB per-branch lock)
+pytesseract==0.3.13    # OCR fallback for image/Print-to-PDF KTB statements
+pillow==12.3.0         # image handling for the OCR pipeline
