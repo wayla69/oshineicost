@@ -1,0 +1,169 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: P&L DEEP DIVE
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-pnl" class="hidden">
+
+  <!-- Cost-coverage banner -->
+  <div id="pnlCoverageBanner" class="card p-3 mb-4 hidden" style="border-left:4px solid #f59e0b;background:#fffbeb">
+    <p class="text-xs text-amber-800">⚠ <span id="pnlCoverageMsg"></span></p>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="grid grid-cols-2 md:grid-cols-6 gap-3 mb-5">
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Revenue (ex-VAT)</p><p id="pnlRev" class="text-xl font-bold mt-1" style="color:#4f46e5">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">COGS</p><p id="pnlCogs" class="text-xl font-bold mt-1" style="color:#ef4444">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Gross Profit</p><p id="pnlGp" class="text-xl font-bold mt-1" style="color:#10b981">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Margin %</p><p id="pnlMargin" class="text-xl font-bold mt-1" style="color:#06b6d4">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">GP / Bill</p><p id="pnlPerBill" class="text-xl font-bold mt-1" style="color:#8b5cf6">—</p></div>
+    <div class="card p-4 kpi-card"><p class="text-xs text-slate-500 uppercase tracking-wide">Total Bills</p><p id="pnlBills" class="text-xl font-bold mt-1" style="color:#f59e0b">—</p></div>
+  </div>
+
+  <!-- Monthly trend + bill distribution -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <div class="card p-5">
+      <h2 class="section-title">Monthly P&amp;L Trend</h2>
+      <div style="height:280px"><canvas id="chartPnlTrend"></canvas></div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title">Revenue / Estimated GP per Bill</h2>
+      <p class="text-xs text-slate-400 mb-1" id="pnlBillDistNote">—</p>
+      <div style="height:250px"><canvas id="chartPnlBillDist"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Branch comparison table -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="section-title mb-0">Branch P&amp;L Comparison</h2>
+      <span class="text-xs text-slate-400">Click headers to sort</span>
+    </div>
+    <div class="overflow-auto">
+      <table class="text-xs w-full">
+        <thead>
+          <tr class="text-left text-slate-500 border-b border-slate-200 select-none">
+            <th class="py-2 pr-3 cursor-pointer hover:text-slate-800" onclick="sortPnlTable('branch')">Branch <span id="pnlSortBranch">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('revenue_ex_vat')">Revenue (ex-VAT) <span id="pnlSortRevenue_ex_vat">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('cogs')">COGS <span id="pnlSortCogs">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('gross_profit')">Gross Profit <span id="pnlSortGross_profit">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('margin_pct')">Margin % <span id="pnlSortMargin_pct">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('tx_count')">Bills <span id="pnlSortTx_count">↕</span></th>
+            <th class="py-2 pr-3 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('avg_ticket')">Avg Ticket <span id="pnlSortAvg_ticket">↕</span></th>
+            <th class="py-2 text-right cursor-pointer hover:text-slate-800" onclick="sortPnlTable('profit_per_bill')">GP/Bill <span id="pnlSortProfit_per_bill">↕</span></th>
+          </tr>
+        </thead>
+        <tbody id="pnlBranchBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- เจาะลึกรายสาขา -->
+  <div class="card p-5 mb-5">
+    <div class="flex flex-wrap items-center gap-3 mb-4">
+      <h2 class="section-title mb-0">เจาะลึกรายสาขา</h2>
+      <select id="pnlDeepBranchSel" class="border border-slate-200 rounded px-2 py-1.5 text-sm text-slate-700 bg-white" onchange="onPnlDeepBranchChange()">
+        <option value="">— Select a branch —</option>
+      </select>
+      <span class="text-xs text-slate-400" id="pnlDeepBranchHint">Select a branch to see detailed monthly P&amp;L, per-bill stats, and top SKUs</span>
+    </div>
+
+    <div id="pnlDeepContent" class="hidden">
+
+      <!-- Monthly trend + per-bill stats -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">Monthly P&amp;L</h3>
+          <div style="height:260px"><canvas id="chartPnlDeepTrend"></canvas></div>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">Per-Bill Revenue Stats</h3>
+          <div id="pnlBillStatsTable" class="text-xs mb-3 overflow-auto"></div>
+          <div style="height:160px"><canvas id="chartPnlDeepBillDist"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Profit distribution + Monthly KPI table -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-1">Estimated GP / Bill Distribution</h3>
+          <p class="text-xs text-slate-400 mb-2" id="pnlDeepProfitNote">—</p>
+          <div style="height:200px"><canvas id="chartPnlDeepProfitDist"></canvas></div>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">Monthly KPI Table</h3>
+          <div class="overflow-auto" style="max-height:240px">
+            <table class="text-xs w-full">
+              <thead class="sticky top-0 bg-white z-10">
+                <tr class="text-left text-slate-500 border-b border-slate-200">
+                  <th class="py-1 pr-2">Month</th>
+                  <th class="py-1 pr-2 text-right">Revenue</th>
+                  <th class="py-1 pr-2 text-right">COGS</th>
+                  <th class="py-1 pr-2 text-right">GP</th>
+                  <th class="py-1 pr-2 text-right">Margin%</th>
+                  <th class="py-1 pr-2 text-right">Bills</th>
+                  <th class="py-1 pr-2 text-right">Avg Ticket</th>
+                  <th class="py-1 text-right">GP/Bill</th>
+                </tr>
+              </thead>
+              <tbody id="pnlDeepMonthBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Per-branch ingredient + category cost breakdown (deeper view) -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+        <div class="card p-4" style="border-left:3px solid #ef4444">
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">🥩 วัตถุดิบที่ขับต้นทุนของสาขานี้</h3>
+          <div style="max-height:300px;overflow:auto">
+            <table class="w-full text-xs">
+              <thead><tr class="text-left text-slate-400 border-b">
+                <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">วัตถุดิบ</th>
+                <th class="py-1.5 pr-2 text-right">ต้นทุน</th><th class="py-1.5 text-right">%</th></tr></thead>
+              <tbody id="pnlDeepIngBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div class="card p-4" style="border-left:3px solid #4f46e5">
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">📊 ต้นทุนแยกตามหมวด (สาขานี้)</h3>
+          <div style="max-height:300px;overflow:auto">
+            <table class="w-full text-xs">
+              <thead><tr class="text-left text-slate-400 border-b">
+                <th class="py-1.5 pr-2">หมวด</th><th class="py-1.5 pr-2 text-right">รายได้</th>
+                <th class="py-1.5 pr-2 text-right">ต้นทุน</th><th class="py-1.5 text-right">% ต้นทุน</th></tr></thead>
+              <tbody id="pnlDeepCatBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top 60 dishes driving cost -->
+      <h3 class="text-sm font-semibold text-slate-700 mb-2">🍽️ 60 เมนูที่ขับต้นทุนสูงสุด (BoM) · % ของต้นทุนรวมสาขา</h3>
+      <p class="text-xs text-slate-400 mb-2" id="pnlDeepSkuNote">—</p>
+      <div class="overflow-auto" style="max-height:560px">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0 bg-white z-10">
+            <tr class="text-left text-slate-500 border-b border-slate-200">
+              <th class="py-1.5 pr-2 w-6">#</th>
+              <th class="py-1.5 pr-2">SKU</th>
+              <th class="py-1.5 pr-2">เมนู</th>
+              <th class="py-1.5 pr-2">หมวด</th>
+              <th class="py-1.5 pr-2 text-right">จำนวน</th>
+              <th class="py-1.5 pr-2 text-right">รายได้</th>
+              <th class="py-1.5 pr-2 text-right">ต้นทุน BoM</th>
+              <th class="py-1.5 pr-2 text-right">% ต้นทุนสาขา</th>
+              <th class="py-1.5 pr-2 text-right">กำไร</th>
+              <th class="py-1.5 text-right">Margin %</th>
+            </tr>
+          </thead>
+          <tbody id="pnlDeepSkuBody"></tbody>
+        </table>
+      </div>
+    </div><!-- /pnlDeepContent -->
+  </div>
+
+</div><!-- /tab-pnl -->
+
+
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 7 — SETTINGS
+══════════════════════════════════════════════════════════════════════════ -->

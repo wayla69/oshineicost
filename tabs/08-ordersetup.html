@@ -1,0 +1,84 @@
+<div id="tab-ordersetup" style="display:none">
+
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #4f46e5">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">⚙️</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#3730a3">ตั้งค่าการสั่งซื้อ (Order Setup)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          <b>ขนาดบรรจุ</b> = 1 หน่วยสั่ง เท่ากับกี่หน่วยนับ (ใช้ปัดปริมาณขึ้นเป็นจำนวนเต็มหน่วยสั่ง) ·
+          <b>ปฏิทินเทศกาล</b> = ช่วงที่ต้องสั่งเพิ่ม เช่น สงกรานต์ ปีใหม่ โปรโมชัน
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="subtab-bar mb-3">
+    <button class="subtab-btn active" data-osub="pack" onclick="osSetSub('pack')">📦 ขนาดบรรจุ</button>
+    <button class="subtab-btn"        data-osub="cal"  onclick="osSetSub('cal')">🎉 ปฏิทินเทศกาล/โปรโมชัน</button>
+  </div>
+
+  <!-- ── pack sizes ─────────────────────────────────────────────────── -->
+  <div id="os-pane-pack">
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <input type="search" id="osPackQ" placeholder="ค้นหารหัส/ชื่อวัตถุดิบ…" oninput="osRenderPacks()"
+             style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
+      <label class="text-xs flex items-center gap-1" style="color:var(--text-muted)">
+        <input type="checkbox" id="osPackOnlyMissing" checked onchange="osRenderPacks()"> แสดงเฉพาะที่ยังไม่ตั้ง
+      </label>
+      <span id="osPackSummary" class="text-xs" style="color:var(--text-muted)"></span>
+      <button onclick="osSavePacks()" class="ml-auto" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer">💾 บันทึกที่แก้ไข</button>
+    </div>
+    <div class="card p-3 mb-4 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+      กรอก <b>ขนาดบรรจุ</b> = จำนวนหน่วยนับต่อ 1 หน่วยสั่ง (เช่น แซลมอน 1 แพ็ค = 1,000 กรัม ให้กรอก 1000) ·
+      <b>ยกลัง</b> = สั่งเป็นจำนวนเท่าของกี่หน่วย (สั่งยกลัง 6 ให้กรอก 6) · <b>ขั้นต่ำ</b> = จำนวนหน่วยสั่งขั้นต่ำของผู้ขาย ·
+      รายการที่ยังไม่ตั้งจะใช้หน่วยมาตรฐาน กก./ลิตร ไปก่อน ไม่ได้พังแต่จะสั่งเป็นกิโลแทนแพ็ค
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th>
+          <th class="py-1.5 pr-2">หน่วยนับ</th><th class="py-1.5 pr-2 text-right">ใช้ในสูตร</th>
+          <th class="py-1.5 pr-2">ชื่อหน่วยสั่ง</th><th class="py-1.5 pr-2 text-right">ขนาดบรรจุ</th>
+          <th class="py-1.5 pr-2 text-right">ราคา/หน่วยสั่ง</th><th class="py-1.5 pr-2 text-right">ยกลัง</th>
+          <th class="py-1.5 pr-2 text-right">ขั้นต่ำ</th><th class="py-1.5">สถานะ</th>
+        </tr></thead><tbody id="osPackBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── demand calendar ────────────────────────────────────────────── -->
+  <div id="os-pane-cal" style="display:none">
+    <div class="card p-4 mb-4">
+      <h3 class="text-sm font-bold mb-2" style="color:var(--text-primary)">เพิ่มช่วงเทศกาล / โปรโมชัน</h3>
+      <div class="flex flex-wrap items-end gap-3">
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ชื่อ</label>
+          <input id="osCalName" placeholder="เช่น สงกรานต์" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:170px"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ตั้งแต่</label>
+          <input type="date" id="osCalFrom" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ถึง</label>
+          <input type="date" id="osCalTo" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">สาขา</label>
+          <select id="osCalBranch" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:150px"></select></div>
+        <div><label class="text-[11px] block" style="color:var(--text-muted)">ตัวคูณ (เว้นว่าง = คิดจากปีก่อน)</label>
+          <input type="number" id="osCalFactor" step="0.05" min="0.5" max="3" placeholder="อัตโนมัติ"
+                 style="width:120px;border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></div>
+        <button onclick="osAddEvent()" style="background:#4f46e5;color:#fff;border:0;border-radius:var(--r-sm);padding:7px 16px;font-size:13px;font-weight:600;cursor:pointer">+ เพิ่ม</button>
+        <span id="osCalStatus" class="text-xs" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-[11px] mt-2" style="color:var(--text-muted)">
+        เว้นตัวคูณว่างไว้ = ระบบคำนวณเองจาก<b>ยอดลูกค้าช่วงเดียวกันปีก่อน</b>เทียบกับช่วงปกติ (รายสาขา) ·
+        กรอกเองเมื่อเป็นโปรโมชันใหม่ที่ไม่มีข้อมูลปีก่อน
+      </p>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <table class="text-xs w-full">
+        <thead><tr class="text-left border-b" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">ชื่อ</th><th class="py-1.5 pr-2">ตั้งแต่</th><th class="py-1.5 pr-2">ถึง</th>
+          <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ตัวคูณ</th>
+          <th class="py-1.5 pr-2">หมายเหตุ</th><th class="py-1.5"></th>
+        </tr></thead><tbody id="osCalBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>

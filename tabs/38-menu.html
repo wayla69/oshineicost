@@ -1,0 +1,284 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 2 — MENU ANALYSIS
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-menu" class="hidden">
+  <!-- Sales-direction narrative: do menu movements line up with what's actually selling? -->
+  <div class="card p-4 mb-4">
+    <h2 class="section-title mb-2">📝 วิเคราะห์กับยอดขาย — เมนูที่ขยับ ไปทางเดียวกับยอดไหม <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· บุฟเฟต์ (รายได้หลัก) · ชุดราคา · à-la-carte · เทรนด์เมื่อวาน</span></h2>
+    <div id="menuSalesNarrative"></div>
+  </div>
+
+  <!-- 🔍 Menu Finder — search/filter/sort across all food menus (fixes "หาเมนูลำบาก") -->
+  <div class="card p-4 mb-4">
+    <h2 class="section-title mb-3">ค้นหาเมนูรายตัว</h2>
+    <div class="flex items-center gap-2 flex-wrap mb-3">
+      <div class="flex-1 min-w-[220px]">
+        <input id="menuFindSearch" oninput="renderMenuFinder()" autocomplete="off"
+               placeholder="🔍 พิมพ์ชื่อเมนูหรือรหัส SKU เพื่อค้นหา…"
+               class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-400 focus:outline-none">
+      </div>
+      <select id="menuFindCat" onchange="renderMenuFinder()" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
+        <option value="">ทุกหมวด</option>
+      </select>
+      <select id="menuFindSort" onchange="renderMenuFinder()" class="border border-slate-200 rounded-lg px-2 py-2 text-sm">
+        <option value="revenue">เรียงตาม: รายได้</option>
+        <option value="qty">เรียงตาม: จำนวนขาย</option>
+        <option value="margin_pct">เรียงตาม: กำไร/จาน %</option>
+      </select>
+      <span id="menuFindCount" class="text-xs text-slate-400 ml-auto"></span>
+    </div>
+    <div style="max-height:340px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">หมวด</th>
+          <th class="py-1.5 pr-2 text-right">จำนวนขาย</th><th class="py-1.5 pr-2 text-right">รายได้</th>
+          <th class="py-1.5 text-right">กำไร/จาน %</th></tr></thead>
+        <tbody id="menuFindBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="subtab-bar">
+    <button class="subtab-btn active" onclick="switchSubtab('mostOrdered')">สั่งบ่อยที่สุด</button>
+    <button class="subtab-btn" onclick="switchSubtab('mostCost')">Most Revenue</button>
+    <button class="subtab-btn" onclick="switchSubtab('engineering')">🔬 Menu Engineering</button>
+    <button class="subtab-btn" onclick="switchSubtab('persona')">ลักษณะลูกค้า</button>
+  </div>
+
+  <!-- Sub: สั่งบ่อยที่สุด — two Top-60 tables: sales share + cost-per-head -->
+  <div id="sub-mostOrdered">
+    <!-- Table 1 — Sales (share of total + qty change) -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
+        <h2 class="section-title mb-0">Top 60 เมนู — ยอดขาย <span class="text-xs font-normal text-slate-400">· % เทียบยอดรวม · <span id="orderedMomNote">MoM เทียบเดือนก่อน</span></span></h2>
+        <button onclick="exportTable('orderedTable','top60_sales.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
+      <p id="orderedCoverNote" class="text-[11px] text-slate-400 mb-2"></p>
+      <div class="overflow-auto" style="max-height:560px">
+        <table class="tbl-top60 w-full" id="orderedTable">
+          <thead><tr>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">เทรนด์</th>
+            <th class="num">จำนวนขาย</th>
+            <th class="num">% เทียบยอดรวม</th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
+            <th class="num">ต้นทุนรวม<span class="sub">฿ · BoM</span></th>
+            <th class="num">% สะสม COGS<span class="sub">Pareto</span></th>
+            <th class="num">เปลี่ยนแปลง %<span class="sub">จำนวนขาย</span></th>
+          </tr></thead>
+          <tbody id="orderedBody"></tbody>
+          <tfoot id="orderedFoot"></tfoot>
+        </table>
+      </div>
+    </div>
+    <!-- Table 2 — Cost per head (value + change vs same period last month) -->
+    <div class="card p-5">
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:10px">
+        <h2 class="section-title mb-0">Top 60 เมนู — เทียบต้นทุนต่อหัว <span class="text-xs font-normal text-slate-400">· <span id="costHeadMomNote">เทียบเดือนก่อน</span></span></h2>
+        <button onclick="exportTable('costHeadTable','top60_costhead.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      </div>
+      <p id="costHeadNote" class="text-[11px] text-slate-400 mb-2"></p>
+      <div class="overflow-auto" style="max-height:560px">
+        <table class="tbl-top60 w-full" id="costHeadTable">
+          <thead><tr>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">จำนวนเสิร์ฟ<span class="sub">จาน/ที่</span></th>
+            <th class="num">จำนวน %<span class="sub">เทียบเดือนก่อน</span></th>
+            <th class="num">ต้นทุน/หัว</th>
+            <th class="num">% ของต้นทุนรวม</th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
+            <th class="num">ต้นทุน/หัว<span class="sub">เดือนก่อน (ช่วงเดียวกัน)</span></th>
+            <th class="num">เปลี่ยนแปลง %<span class="sub">ต้นทุน/หัว · ขึ้น = แย่</span></th>
+          </tr></thead>
+          <tbody id="costHeadBody"></tbody>
+          <tfoot id="costHeadFoot"></tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sub: Most Revenue (à la carte only) -->
+  <div id="sub-mostCost" class="hidden">
+    <div class="card p-4 mb-4" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
+      <h2 class="text-base font-bold text-slate-800 mb-1">🍣 à la carte · รายได้ & กำไรขั้นต้น</h2>
+      <p class="text-xs text-slate-600">เฉพาะเมนู <b>à la carte</b> (ไม่รวมบุฟเฟ่ต์/เครื่องดื่ม เพราะบุฟเฟ่ต์บันทึกรายได้ระดับ tier ไม่ใช่ระดับเมนู) · กำไร% = (รายได้ − ต้นทุน BoM) ÷ รายได้</p>
+    </div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="card p-5">
+        <h2 class="section-title" id="mostRevChartTitle">Top 15 รายได้สูงสุด</h2>
+        <div style="height:360px"><canvas id="chartMostRev"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+          <h2 class="section-title mb-0">รายได้ & กำไรขั้นต้น</h2>
+          <div class="flex items-center gap-1 text-xs">
+            <span class="text-slate-400 mr-1">เรียง:</span>
+            <button class="revsort-btn active px-2 py-0.5 rounded border border-slate-200" data-sort="revenue" onclick="setMostRevSort('revenue')">รายได้</button>
+            <button class="revsort-btn px-2 py-0.5 rounded border border-slate-200" data-sort="margin" onclick="setMostRevSort('margin')">กำไร%</button>
+            <button class="revsort-btn px-2 py-0.5 rounded border border-slate-200" data-sort="qty" onclick="setMostRevSort('qty')">จำนวนขาย</button>
+          </div>
+        </div>
+        <p id="mostRevCoverage" class="text-[11px] text-slate-400 mb-2"></p>
+        <div class="overflow-auto" style="max-height:520px">
+          <table class="text-xs text-slate-700 w-full">
+            <thead><tr class="text-left text-slate-500">
+              <th class="py-2 pr-3">#</th>
+              <th class="py-2 pr-3">SKU</th>
+              <th class="py-2 pr-3">เมนู</th>
+              <th class="py-2 pr-3">หมวด</th>
+              <th class="py-2 pr-3 text-right">จำนวนขาย</th>
+              <th class="py-2 pr-3 text-right">รายได้</th>
+              <th class="py-2 pr-3 text-right">ต้นทุน/จาน</th>
+              <th class="py-2 text-right">กำไร %</th>
+            </tr></thead>
+            <tbody id="revBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sub: Menu Engineering (world-class BCG analysis) -->
+  <div id="sub-engineering" class="hidden">
+
+    <!-- What is this page? -->
+    <div class="card p-4 mb-5" style="background:linear-gradient(to right,#eef2ff 0%,#ffffff 65%);border-left:4px solid #4f46e5">
+      <h2 class="text-base font-bold text-slate-800 mb-1">⭐ วิเคราะห์เมนู — เมนูไหนควรดัน เมนูไหนควรแก้</h2>
+      <p class="text-xs text-slate-600">จัดเมนูเป็น <b>4 กลุ่ม</b> ตาม <b>ความนิยม (จำนวนขาย)</b> และ <b>กำไรต่อจาน</b> พร้อมบอกว่าควรทำอะไรกับแต่ละกลุ่ม · ดูตารางเต็มและกราฟ BCG ด้านล่างได้</p>
+    </div>
+
+    <!-- Summary KPIs (Thai) -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5" id="menuEngKpis">
+      <div class="card p-4 kpi-card"><p class="kpi-label">⭐ ดาวเด่น</p><p id="meStars" class="kpi-value" style="color:#10b981">—</p><p class="kpi-sub">ขายดี + กำไรดี → รักษาไว้</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">🐴 ม้างาน</p><p id="mePlow" class="kpi-value" style="color:#f59e0b">—</p><p class="kpi-sub">ขายดีแต่กำไรน้อย → แก้ต้นทุน</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">🔮 เพชรในตม</p><p id="mePuzzle" class="kpi-value" style="color:#4f46e5">—</p><p class="kpi-sub">กำไรดีแต่ขายน้อย → โปรโมท</p></div>
+      <div class="card p-4 kpi-card"><p class="kpi-label">🐕 ตัวถ่วง</p><p id="meDogs" class="kpi-value" style="color:#ef4444">—</p><p class="kpi-sub">ขายน้อย+กำไรน้อย → พิจารณาถอด</p></div>
+    </div>
+
+    <!-- Action board: 4 quadrant cards (the easy-to-read primary view) -->
+    <div class="mb-2 flex items-baseline justify-between flex-wrap gap-2">
+      <h2 class="section-title mb-0">🎯 เมนูแต่ละกลุ่ม ควรทำอะไร</h2>
+      <span id="meBoardNote" class="text-xs text-slate-400"></span>
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-6" id="meActionBoard"></div>
+
+    <!-- BCG matrix (advanced / collapsible) -->
+    <details class="card p-5 mb-5" ontoggle="if(this.open){setTimeout(()=>{try{chartInstances['chartMenuBcg'].resize()}catch(e){}},60)}">
+      <summary class="cursor-pointer select-none flex items-center justify-between">
+        <span class="section-title mb-0">📈 กราฟ BCG (สำหรับวิเคราะห์ลึก) — คลิกเพื่อเปิด</span>
+        <span id="meBranchTag" class="text-xs text-slate-400"></span>
+      </summary>
+      <p class="text-xs text-slate-400 mt-2 mb-2">แกน X = จำนวนขาย (log) · แกน Y = % กำไร · ขนาดวงกลม = ยอดขาย · เส้นประ = ค่ามัธยฐาน (เส้นแบ่งกลุ่ม) · จุดที่ค่าเกินกรอบจะถูกดึงมาที่ขอบเพื่อให้อ่านง่าย (ดูค่าจริงตอน hover)</p>
+      <div style="height:460px;position:relative"><canvas id="chartMenuBcg"></canvas></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4 text-xs">
+        <div class="rounded p-2" style="background:#dcfce7;border-left:3px solid #10b981"><b>⭐ ดาวเด่น</b> — ขายดี+กำไรดี รักษาไว้และคุมต้นทุน</div>
+        <div class="rounded p-2" style="background:#dbeafe;border-left:3px solid #4f46e5"><b>🔮 เพชรในตม</b> — กำไรดีแต่ขายน้อย ดันให้แรงขึ้น</div>
+        <div class="rounded p-2" style="background:#fef3c7;border-left:3px solid #f59e0b"><b>🐴 ม้างาน</b> — ขายดีแต่กำไรบาง ขึ้นราคา/ลดต้นทุน</div>
+        <div class="rounded p-2" style="background:#fee2e2;border-left:3px solid #ef4444"><b>🐕 ตัวถ่วง</b> — ขายน้อย+กำไรน้อย พิจารณาถอด/ปรับ</div>
+      </div>
+    </details>
+
+    <!-- Contribution-margin table (sortable) -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center gap-3 mb-3 flex-wrap">
+        <h2 class="section-title mb-0">📋 ตารางเมนูทั้งหมด (เรียง/ค้นได้)</h2>
+        <span id="meTableCount" class="text-xs text-slate-400 ml-auto"></span>
+        <button onclick="exportMenuEngTable()" class="text-xs border border-slate-200 hover:border-indigo-500 text-slate-600 hover:text-indigo-600 rounded px-2 py-1 transition-colors">⬇ Export CSV</button>
+      </div>
+      <div class="overflow-auto" style="max-height:500px">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0" style="background:var(--bg-card)">
+            <tr class="text-left text-slate-500 border-b border-slate-200">
+              <th class="py-2 pr-2 cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('description')">เมนู ↕</th>
+              <th class="py-2 pr-2 cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('category')">หมวด ↕</th>
+              <th class="py-2 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('qty')">จำนวนขาย ↕</th>
+              <th class="py-2 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('revenue')">ยอดขาย ↕</th>
+              <th class="py-2 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('unit_cost')">ต้นทุน/หน่วย ↕</th>
+              <th class="py-2 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('gross_profit')">กำไร ↕</th>
+              <th class="py-2 pr-2 text-right cursor-pointer hover:text-indigo-600" onclick="sortMenuEng('margin_pct')">% กำไร ↕</th>
+              <th class="py-2 text-center">กลุ่ม</th>
+            </tr>
+          </thead>
+          <tbody id="meTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Velocity bands breakdown -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      <div class="card p-4">
+        <h3 class="text-sm font-bold text-emerald-700 mb-2">🚀 ขายดีที่สุด (top 10%)</h3>
+        <ul id="meFastList" class="space-y-1 text-xs text-slate-600"></ul>
+      </div>
+      <div class="card p-4">
+        <h3 class="text-sm font-bold text-slate-700 mb-2">⚙️ ขายปานกลาง (กลาง 65%)</h3>
+        <ul id="meSteadyList" class="space-y-1 text-xs text-slate-600"></ul>
+      </div>
+      <div class="card p-4">
+        <h3 class="text-sm font-bold text-red-600 mb-2">🐢 ขายช้า (ล่าง 25%)</h3>
+        <ul id="meSlowList" class="space-y-1 text-xs text-slate-600"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sub: Customer Persona -->
+  <div id="sub-persona" class="hidden">
+    <!-- Overall persona stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+      <div class="card p-4 text-center">
+        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Avg Party Size</p>
+        <p id="pAvgParty" class="text-3xl font-bold text-indigo-600">—</p>
+        <p class="text-xs text-slate-400">people / receipt</p>
+      </div>
+      <div class="card p-4 text-center">
+        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Avg Spend / Head</p>
+        <p id="pAvgHead" class="text-3xl font-bold text-indigo-600">—</p>
+        <p class="text-xs text-slate-400">ต่อคน</p>
+      </div>
+      <div class="card p-4 text-center">
+        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Avg Ticket</p>
+        <p id="pAvgTicket" class="text-3xl font-bold text-indigo-600">—</p>
+        <p class="text-xs text-slate-400">ต่อโต๊ะ</p>
+      </div>
+      <div class="card p-4 text-center">
+        <p class="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Transactions</p>
+        <p id="pTxCount" class="text-3xl font-bold text-indigo-600">—</p>
+        <p class="text-xs text-slate-400">receipts</p>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <!-- Party size distribution -->
+      <div class="card p-5">
+        <h2 class="section-title">ขนาดกลุ่มลูกค้า</h2>
+        <div style="height:220px"><canvas id="chartParty"></canvas></div>
+      </div>
+      <!-- Food/Drink/Other -->
+      <div class="card p-5">
+        <h2 class="section-title">อาหาร · เครื่องดื่ม · อื่นๆ</h2>
+        <div style="height:220px"><canvas id="chartFdSplit"></canvas></div>
+      </div>
+      <!-- Busy hours -->
+      <div class="card p-5">
+        <h2 class="section-title">ชั่วโมงที่ขายดี</h2>
+        <div style="height:220px"><canvas id="chartHours"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Party size spend table -->
+    <div class="card p-5">
+      <h2 class="section-title" style="margin-bottom:12px">ค่าใช้จ่ายตามขนาดกลุ่ม</h2>
+      <table class="text-sm text-slate-700">
+        <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide">
+          <th class="py-2 pr-6">Party Size</th>
+          <th class="py-2 pr-6 text-right">Receipts</th>
+          <th class="py-2 pr-6 text-right">Avg Bill </th>
+          <th class="py-2 text-right">Avg / Head </th>
+        </tr></thead>
+        <tbody id="partyBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /tab-menu -->
+

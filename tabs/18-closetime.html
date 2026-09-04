@@ -1,0 +1,27 @@
+<!-- ══ 🧩 EXTRA: ⏰ เวลาปิดร้าน / ความสดของข้อมูล ══ -->
+<div id="tab-closetime" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เลือกวันที่:</span>
+    <input type="date" id="ctmDate" onchange="loadCloseTime(true)"
+      style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <button onclick="document.getElementById('ctmDate').value='';loadCloseTime(true)"
+      style="border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
+    <span id="ctmFresh" class="text-xs font-semibold" style="color:var(--text-secondary)"></span>
+    <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
+  </div>
+  <div id="ctmKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+
+  <!-- Integrity report: problems the headline numbers never show. Read-only by
+       design — these are real records (deleting destroys history) and missing
+       days can only return via a POS re-sync, never be invented. -->
+  <div class="card p-5 mb-4">
+    <h2 class="section-title mb-1">🩺 ตรวจสุขภาพข้อมูล</h2>
+    <p class="text-xs text-slate-400 mb-3">สิ่งที่ทำให้ตัวเลขเพี้ยนแบบเงียบ ๆ · ระบบ<b>รายงานอย่างเดียว ไม่แก้ไขข้อมูลให้</b> (เป็นบันทึกการเงินจริง และวันที่ขาดต้องกู้จาก POS เท่านั้น)</p>
+    <div id="dqFindings"></div>
+  </div>
+
+  <div class="card p-5 overflow-x-auto">
+    <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
+    <table class="text-xs w-full"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
+  </div>
+</div>

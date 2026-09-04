@@ -28,7 +28,7 @@ async function _opInitFilters() {
   const sel = document.getElementById('opBranch');
   if (!sel) return;
   try {
-    const branches = await fetch(`${API}/api/branches`).then(r => r.json());
+    const branches = await api(`${API}/api/branches`);
     sel.innerHTML = '<option value="">— ทุกสาขา (รวมเครือ) —</option>' +
       (branches || []).filter(b => b.active !== false && b.name !== 'ALL')
         .map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
@@ -68,7 +68,7 @@ async function loadOrderPlan(force) {
   const st = document.getElementById('opStatus');
   if (st) st.textContent = 'กำลังคำนวณ…';
   let d;
-  try { d = await fetch(`${API}/api/ingredients/order-plan?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/ingredients/order-plan?${p}`); }
   catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   if (!d || d.available === false) {
     if (st) st.textContent = 'ไม่มีข้อมูลยอดขายรายวันสำหรับคำนวณ';
@@ -336,7 +336,7 @@ function osSetSub(k) {
 async function loadOrderSetup(force) {
   if (!force && _osPacks.length) { osRenderPacks(); return; }
   try {
-    const d = await fetch(`${API}/api/ingredients/order-units`).then(r => r.json());
+    const d = await api(`${API}/api/ingredients/order-units`);
     _osPacks = d.rows || []; _osEdits = {};
     const s = d.summary || {};
     document.getElementById('osPackSummary').textContent =
@@ -412,14 +412,14 @@ async function osLoadCalendar() {
   const sel = document.getElementById('osCalBranch');
   if (sel && !sel.options.length) {
     try {
-      const bs = await fetch(`${API}/api/branches`).then(r => r.json());
+      const bs = await api(`${API}/api/branches`);
       sel.innerHTML = '<option value="">— ทุกสาขา —</option>' +
         (bs || []).filter(b => b.active !== false && b.name !== 'ALL')
           .map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
     } catch (e) {}
   }
   let d;
-  try { d = await fetch(`${API}/api/ingredients/demand-calendar`).then(r => r.json()); } catch (e) { return; }
+  try { d = await api(`${API}/api/ingredients/demand-calendar`); } catch (e) { return; }
   document.getElementById('osCalBody').innerHTML = (d.rows || []).map(r => `
     <tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2 font-semibold">${esc(r.name)}</td>
@@ -495,8 +495,8 @@ async function opLoadCycles() {
   const lbl = document.getElementById('opTolLabel'); if (lbl) lbl.textContent = tol;
   let d;
   try {
-    d = await fetch(`${API}/api/ingredients/order-cycles?limit=40`
-      + (branch ? `&branch=${encodeURIComponent(branch)}` : '')).then(r => r.json());
+    d = await api(`${API}/api/ingredients/order-cycles?limit=40`
+      + (branch ? `&branch=${encodeURIComponent(branch)}` : ''));
   } catch (e) { return; }
   const rows = d.rows || [];
   document.getElementById('opCycleBody').innerHTML = rows.map(r => {
@@ -523,7 +523,7 @@ async function opOpenCycle(issueId) {
   const el = document.getElementById('opCycleDetail');
   el.style.display = ''; el.innerHTML = '<p class="text-xs" style="color:var(--text-muted)">กำลังโหลด…</p>';
   let d;
-  try { d = await fetch(`${API}/api/ingredients/order-compliance?issue_id=${issueId}&tolerance_pct=${tol}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/ingredients/order-compliance?issue_id=${issueId}&tolerance_pct=${tol}`); }
   catch (e) { el.innerHTML = '<p class="text-xs" style="color:#b91c1c">โหลดไม่สำเร็จ</p>'; return; }
   const i = d.issue || {}, s = d.summary || {};
   const cls = { not_ordered: '#b91c1c', under: '#b45309', ok: '#059669' };
@@ -603,8 +603,8 @@ async function opLoadAccuracy() {
   if (!head) return;
   let d;
   try {
-    d = await fetch(`${API}/api/ingredients/order-accuracy?service_level=${sl}`
-      + (branch ? `&branch=${encodeURIComponent(branch)}` : '')).then(r => r.json());
+    d = await api(`${API}/api/ingredients/order-accuracy?service_level=${sl}`
+      + (branch ? `&branch=${encodeURIComponent(branch)}` : ''));
   } catch (e) { return; }
   if (!d || d.available === false) {
     _opAccSuggested = null;

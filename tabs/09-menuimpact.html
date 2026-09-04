@@ -1,0 +1,39 @@
+<div id="tab-menuimpact" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">วัตถุดิบ/เมนู:</span>
+    <input id="miSearch" placeholder="🔍 ค้นหาเมนู…" oninput="miFilterOptions()" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);width:130px">
+    <select id="miEnt" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:290px"></select>
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">ช่วง:</span>
+    <input type="date" id="miFrom" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs" style="color:var(--text-muted)">→</span>
+    <input type="date" id="miTo" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="miScope" onchange="loadMenuImpact(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุกสาขา</option>
+      <option value="master">Master (เจ้าของเอง)</option>
+      <option value="franchise">แฟรนไชส์</option>
+    </select>
+    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ (ราคาหน้าเมนู ไม่รวม VAT)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุก Tier ราคา</option>
+      <option value="350">Tier 350</option>
+      <option value="590">Tier 590</option>
+      <option value="649">Tier 649</option>
+      <option value="689">Tier 689</option>
+      <option value="799">Tier 799</option>
+      <option value="999">Tier 999</option>
+      <option value="promo">ราคาโปร/ส่วนลด</option>
+    </select>
+    <span id="miCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+  </div>
+  <p class="text-[11px] mb-3" style="color:var(--text-muted)">เทียบบิลบุฟเฟ่ต์ที่<b>มี</b> vs <b>ไม่มี</b> วัตถุดิบ/เมนูที่เลือก (ต่อหัว · คุมความต่างสาขา×วัน) จากข้อมูลบิลจริง POS/MSSQL · "เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · ต้นทุน BoM ตัดแพ็กเกจบุฟเฟ่ต์กันนับซ้ำ · อัปเดตข้อมูลด้วย <code>python backend/build_menu_fact.py</code> หลัง sync</p>
+  <div id="miBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
+
+  <!-- ── 🏷️ วิเคราะห์ Tier ราคาขาย (บุฟเฟ่ต์ผู้ใหญ่) — ใช้ช่วง+ขอบเขตจากตัวเลือกด้านบน ── -->
+  <div class="mt-8 pt-4" style="border-top:2px dashed var(--border)">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">🏷️ วิเคราะห์ Tier ราคาขาย (บุฟเฟ่ต์ผู้ใหญ่)</h2>
+      <span id="ptRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">แบ่งบิลตามราคาบุฟเฟ่ต์ผู้ใหญ่ (ex-VAT เช่น ฿799/฿689/฿649/฿590) · ช่วงที่เลือก (A) เทียบช่วงก่อนหน้าความยาวเท่ากัน (B) อัตโนมัติ · จำนวนคนทาน, การทาน Top-30 เมนูต้นทุน, เทรนด์ และข้อเสนอแนะ</p>
+    <div id="ptBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
+  </div>
+</div>

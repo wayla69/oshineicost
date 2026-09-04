@@ -25,8 +25,8 @@ async function renderReportCost(branch) {
   let cur, prev;
   try {
     [cur, prev] = await Promise.all([
-      fetch(`${API}/api/cost/analysis?${qpf(month)}`).then(r => r.json()),
-      fetch(`${API}/api/cost/analysis?${qpf(prevM)}`).then(r => r.json()).catch(() => ({ items: [] })),
+      api(`${API}/api/cost/analysis?${qpf(month)}`),
+      api(`${API}/api/cost/analysis?${qpf(prevM)}`).catch(() => ({ items: [] })),
     ]);
   } catch (e) { body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-red-500 text-xs">โหลดไม่ได้</td></tr>'; return; }
   const costItems = (cur.items || []).filter(r => r.cogs != null && r.cogs > 0);
@@ -98,7 +98,7 @@ async function renderReportTier(month) {
   const p = new URLSearchParams({ date_from: `${month}-01`, date_to: `${month}-${String(lastDay).padStart(2, '0')}`,
                                   scope: reportScope || 'all' });
   let d;
-  try { d = await fetch(`${API}/api/reports/price-tier?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/reports/price-tier?${p}`); }
   catch (e) { block.innerHTML = '<p class="text-xs text-slate-400">โหลดข้อมูล Tier ไม่สำเร็จ</p>'; return; }
   if (!d.ready || d.error || !(d.tiers || []).length) {
     block.innerHTML = `<p class="text-xs text-slate-400">${esc(d.error || d.hint || 'ไม่มีข้อมูล Tier สำหรับเดือนนี้')}</p>`;
@@ -267,22 +267,22 @@ async function loadReport() {
     // the small host simultaneously and OOM-killed it. _poolAll keeps the order
     // and rejects if a non-caught fetch fails (same as Promise.all did).
   ] = await _poolAll([
-    () => fetch(`${API}/api/summary${qpStr}`).then(r=>r.json()),
-    () => fetch(`${API}/api/sales/monthly${qpStr}`).then(r=>r.json()),
-    () => fetch(`${API}/api/sales/skus${_rptScopeQp(qp({limit:15}))}`).then(r=>r.json()),
-    () => fetch(`${API}/api/sales/category${qpStr}`).then(r=>r.json()),
-    () => fetch(`${API}/api/analysis/persona${qpStr}`).then(r=>r.json()),
-    () => fetch(`${API}/api/analysis/branches${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/analysis/yoy${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/cost/analysis${qpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
-    () => fetch(`${API}/api/cost/analysis${priorQpStr}`).then(r=>r.json()).catch(()=>({items:[],summary:{}})),
-    () => fetch(`${API}/api/analysis/hourly_open${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/analysis/dow${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/analysis/discounts${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/analysis/anomalies${qpStr}`).then(r=>r.json()).catch(()=>[]),
-    () => fetch(`${API}/api/forecast${_rptScopeQp(branch?'?branch='+encodeURIComponent(branch):'')}`).then(r=>r.json()).catch(()=>({available:false})),
-    () => fetch(`${API}/api/forecast?mode=branches${reportScope?'&group='+reportScope:''}`).then(r=>r.json()).catch(()=>({available:false})),
-    () => fetch(`${API}/api/sales/top_ordered${_rptScopeQp(qp({limit:60, sort:'cogs'}))}`).then(r=>r.json()).catch(()=>null),
+    () => api(`${API}/api/summary${qpStr}`),
+    () => api(`${API}/api/sales/monthly${qpStr}`),
+    () => api(`${API}/api/sales/skus${_rptScopeQp(qp({limit:15}))}`),
+    () => api(`${API}/api/sales/category${qpStr}`),
+    () => api(`${API}/api/analysis/persona${qpStr}`),
+    () => api(`${API}/api/analysis/branches${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/analysis/yoy${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/cost/analysis${qpStr}`).catch(()=>({items:[],summary:{}})),
+    () => api(`${API}/api/cost/analysis${priorQpStr}`).catch(()=>({items:[],summary:{}})),
+    () => api(`${API}/api/analysis/hourly_open${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/analysis/dow${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/analysis/discounts${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/analysis/anomalies${qpStr}`).catch(()=>[]),
+    () => api(`${API}/api/forecast${_rptScopeQp(branch?'?branch='+encodeURIComponent(branch):'')}`).catch(()=>({available:false})),
+    () => api(`${API}/api/forecast?mode=branches${reportScope?'&group='+reportScope:''}`).catch(()=>({available:false})),
+    () => api(`${API}/api/sales/top_ordered${_rptScopeQp(qp({limit:60, sort:'cogs'}))}`).catch(()=>null),
   ], 4);
 
   // Full monthly history (branch/group only, no month-range) so MoM/YTD framing
@@ -291,14 +291,14 @@ async function loadReport() {
   const _fullP = new URLSearchParams();
   if (branch) _fullP.set('branch', branch);
   const _fullQp = _rptScopeQp(_fullP.toString() ? '?' + _fullP.toString() : '');
-  const trendFull = await fetch(`${API}/api/sales/monthly${_fullQp}`).then(r=>r.json()).catch(()=>trend);
+  const trendFull = await api(`${API}/api/sales/monthly${_fullQp}`).catch(()=>trend);
   // Per-branch monthly revenue (scoped, full history) → powers §3 ranking
   // movement, per-branch MoM, and YTD sparklines.
-  const branchMonthlyRaw = await fetch(`${API}/api/gp/by-branch-month${_rptScopeQp('')}`).then(r=>r.json()).catch(()=>({rows:[]}));
+  const branchMonthlyRaw = await api(`${API}/api/gp/by-branch-month${_rptScopeQp('')}`).catch(()=>({rows:[]}));
   // Data window → the report must NOT headline a PARTIAL trailing month (e.g. data
   // through Jun-03) vs a full prior month (a misleading ~-90% MoM). Lead with the
   // last COMPLETE month; surface the partial month separately as MTD.
-  const dataWin = await fetch(`${API}/api/meta/data-window`).then(r=>r.json()).catch(()=>({}));
+  const dataWin = await api(`${API}/api/meta/data-window`).catch(()=>({}));
   const completeMonth = dataWin.last_complete_month || null;   // e.g. 2026-05
   const partialMonth  = dataWin.partial_month || null;         // e.g. 2026-06 (3 days)
 
@@ -924,8 +924,8 @@ async function loadReport() {
   try {
     const hasPrior = priorQpStr !== qpStr;   // distinct prior month only when a month/range is set
     const [compCur, compPrev] = await Promise.all([
-      fetch(`${API}/api/analysis/discount_composition${qpStr}`).then(r=>r.json()).catch(()=>({branches:[]})),
-      hasPrior ? fetch(`${API}/api/analysis/discount_composition${priorQpStr}`).then(r=>r.json()).catch(()=>({branches:[]})) : Promise.resolve({branches:[]}),
+      api(`${API}/api/analysis/discount_composition${qpStr}`).catch(()=>({branches:[]})),
+      hasPrior ? api(`${API}/api/analysis/discount_composition${priorQpStr}`).catch(()=>({branches:[]})) : Promise.resolve({branches:[]}),
     ]);
     const BK = [
       { k:'free',       label:'ฟรี/100%+', color:'#7f1d1d' },
@@ -1030,7 +1030,7 @@ async function loadReport() {
     // Target attainment (respects branch filter; empty-state when no target set)
     let targetTotal = 0;
     try {
-      const tg = await fetch(`${API}/api/targets?month=${forecast.period}`).then(r => r.json()).catch(() => []);
+      const tg = await api(`${API}/api/targets?month=${forecast.period}`).catch(() => []);
       const bsel = getBranch();
       targetTotal = (Array.isArray(tg) ? tg : [])
         .filter(t => !bsel || t.branch === bsel)
@@ -1203,7 +1203,7 @@ async function loadReport() {
 function openCostModal() {
   document.getElementById('costModal').classList.remove('hidden');
   document.getElementById('costModal').classList.add('flex');
-  fetch(`${API}/api/cost`).then(r=>r.json()).then(data => {
+  api(`${API}/api/cost`).then(data => {
     costModalSkuMap = {};
     data.forEach(s => { costModalSkuMap[s.sku_code] = s; });
   });
@@ -1294,7 +1294,7 @@ async function downloadCostTemplate() {
   const origText = btn?.innerHTML;
   if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Preparing…'; }
   try {
-    const data = await fetch(`${API}/api/cost/template`).then(r => r.json());
+    const data = await api(`${API}/api/cost/template`);
     const headers = [
       'sku_code',
       'unit_cost',          // ← fill this in (THB per portion)
@@ -1356,7 +1356,7 @@ async function loadMonthlyCost() {
   const status = document.getElementById('mcostStatus');
   status.textContent = 'กำลังโหลด…';
   try {
-    const data = await fetch(`${API}/api/cost/monthly?month=${month}`).then(r => r.json());
+    const data = await api(`${API}/api/cost/monthly?month=${month}`);
     mcRows = Array.isArray(data) ? data : [];
     mcEdits = {};
     document.getElementById('mcSaveBtn').disabled = true;
@@ -1586,7 +1586,7 @@ async function openMcHistory(sku) {
   document.getElementById('mcHistTitle').textContent = `ประวัติต้นทุน — ${sku}`;
   document.getElementById('mcHistBody').innerHTML = '<tr><td colspan="4" class="py-3 text-center text-slate-400">กำลังโหลด…</td></tr>';
   try {
-    const data = await fetch(`${API}/api/cost/monthly?sku=${encodeURIComponent(sku)}`).then(r => r.json());
+    const data = await api(`${API}/api/cost/monthly?sku=${encodeURIComponent(sku)}`);
     const monthly = (data || []).filter(r => r.source === 'monthly').sort((a,b)=>a.period_month.localeCompare(b.period_month));
     const def = (data || []).find(r => r.source === 'default');
     const tbody = document.getElementById('mcHistBody');
@@ -1685,7 +1685,7 @@ async function loadBuffetPerBill() {
   if (getMonthFrom()) p.set('month_from', getMonthFrom());
   if (getMonthTo())   p.set('month_to',   getMonthTo());
   p.set('granularity', _buffetPerBillGran);
-  const d = await fetch(`${API}/api/profit/buffet_per_bill?${p}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/profit/buffet_per_bill?${p}`).catch(() => null);
   if (!d || !d.rows) return;
 
   const ov = d.overall || {};
@@ -1810,10 +1810,10 @@ async function loadProfitAnalysis() {
 
   // Fetch endpoints in parallel (Top/Bottom-SKU removed 2026-06-01)
   const [summary, trend, byBranch, dist] = await Promise.all([
-    fetch(`${API}/api/profit/summary?${params}`).then(r=>r.json()),
-    fetch(`${API}/api/profit/trend?${params}`).then(r=>r.json()),
-    fetch(`${API}/api/profit/by-branch?${params}`).then(r=>r.json()),
-    fetch(`${API}/api/profit/per-bill-distribution?${params}`).then(r=>r.json()),
+    api(`${API}/api/profit/summary?${params}`),
+    api(`${API}/api/profit/trend?${params}`),
+    api(`${API}/api/profit/by-branch?${params}`),
+    api(`${API}/api/profit/per-bill-distribution?${params}`),
   ]);
 
   // KPI cards

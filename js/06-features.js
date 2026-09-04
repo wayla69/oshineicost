@@ -22,8 +22,8 @@ async function _diveEnhanceTrend(_cfg) {
   let gp, cats;
   try {
     [gp, cats] = await Promise.all([
-      fetch(`${API}/api/gp/by-branch-month?${p}`).then(r => r.json()),
-      fetch(`${API}/api/sales/category?${p}`).then(r => r.json()).catch(() => null),
+      api(`${API}/api/gp/by-branch-month?${p}`),
+      api(`${API}/api/sales/category?${p}`).catch(() => null),
     ]);
   } catch (e) {
     return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ: ${e.message}</p>`;
@@ -68,7 +68,7 @@ async function _diveEnhanceBranchCompare(_cfg) {
   if (getMonthTo())   p.set('month_to',   getMonthTo());
 
   let d;
-  try { d = await fetch(`${API}/api/gp/by-branch-month?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/gp/by-branch-month?${p}`); }
   catch (e) { return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ</p>`; }
 
   const branches = (d.rows || []).sort((a, b) => (b.total_revenue || 0) - (a.total_revenue || 0));
@@ -107,7 +107,7 @@ async function _diveEnhanceCategory(_cfg) {
   if (getMonthTo())   p.set('month_to',   getMonthTo());
 
   let cats;
-  try { cats = await fetch(`${API}/api/sales/category?${p}`).then(r => r.json()); }
+  try { cats = await api(`${API}/api/sales/category?${p}`); }
   catch (e) { return `<p class="text-xs text-red-400 p-2">โหลดไม่สำเร็จ</p>`; }
 
   if (!Array.isArray(cats)) return '';
@@ -281,7 +281,7 @@ async function diveMostOrdered() {
   modal.classList.remove('hidden');
 
   let d;
-  try { d = await fetch(`${API}/api/sales/top_ordered${qp({ limit: 50, sort: 'qty' })}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/sales/top_ordered${qp({ limit: 50, sort: 'qty' })}`); }
   catch (e) { body.innerHTML = `<p class="text-sm text-red-500" style="padding:24px">โหลดข้อมูลไม่สำเร็จ: ${e.message}</p>`; return; }
   const items = (d && d.items) ? d.items : [];
   if (!items.length) { body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">ไม่มีข้อมูล</p>'; return; }
@@ -826,8 +826,8 @@ async function loadHealthScores() {
   if (getMonthTo())   params.set('month_to',   getMonthTo());
   if (getGroup())     params.set('group',      getGroup());
   const [health, pcts] = await Promise.all([
-    fetch(`${API}/api/analysis/health?${params}`).then(r => r.json()),
-    fetch(`${API}/api/analysis/percentiles?${params}`).then(r => r.json()).catch(()=>[]),
+    api(`${API}/api/analysis/health?${params}`),
+    api(`${API}/api/analysis/percentiles?${params}`).catch(()=>[]),
   ]);
   const pctMap = Object.fromEntries(pcts.map(p => [p.branch, p]));
   const colorFor = s => s >= 75 ? '#10b981' : s >= 55 ? '#4f46e5' : s >= 40 ? '#f59e0b' : '#ef4444';
@@ -1011,7 +1011,7 @@ function onGlobalSearchInput(e) {
   if (!q) { hideSearchResults(); return; }
   searchTimer = setTimeout(async () => {
     try {
-      const data = await fetch(`${API}/api/search?q=${encodeURIComponent(q)}`).then(r => r.json());
+      const data = await api(`${API}/api/search?q=${encodeURIComponent(q)}`);
       renderSearchResults(data, q);
     } catch(err) { hideSearchResults(); }
   }, 200);
@@ -1077,10 +1077,10 @@ let _hoursState = {};   // {branch_id: {dow: {is_closed, hour_from, hour_to, hou
 async function loadClosedHours() {
   const sel = document.getElementById('hoursBranchSel');
   if (!sel.options.length) {
-    const branches = await fetch(`${API}/api/branches`).then(r => r.json());
+    const branches = await api(`${API}/api/branches`);
     sel.innerHTML = branches.map(b => `<option value="${b.id}">${esc(b.name)}</option>`).join('');
   }
-  const data = await fetch(`${API}/api/closed_hours`).then(r => r.json());
+  const data = await api(`${API}/api/closed_hours`);
   _hoursState = {};
   data.forEach(r => {
     const map = _hoursState[r.branch_id] = _hoursState[r.branch_id] || {};
@@ -1191,7 +1191,7 @@ async function loadCohort() {
   const params = new URLSearchParams();
   if (getBranch()) params.set('branch', getBranch());
   if (getGroup())  params.set('group',  getGroup());
-  const d = await fetch(`${API}/api/analysis/cohort?${params}`).then(r=>r.json());
+  const d = await api(`${API}/api/analysis/cohort?${params}`);
   document.getElementById('cohortNote').textContent = d.note || '';
   const M = d.matrix || [];
   const TH_M = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -1336,7 +1336,7 @@ async function loadAffinity() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const d = await fetch(`${API}/api/analysis/affinity?${params}`).then(r=>r.json());
+  const d = await api(`${API}/api/analysis/affinity?${params}`);
   status.textContent = `${d.baskets || 0} baskets found containing ${anchor}`;
   if (!d.items || !d.items.length) {
     body.innerHTML = '<p class="text-sm text-slate-400">No co-occurring items found. Try a different SKU.</p>';
@@ -1370,8 +1370,8 @@ async function loadAffinity() {
 // ════════════════════════════════════════════════════════════════
 let _wiBase = null;
 async function initWhatIf() {
-  const d = await fetch(`${API}/api/summary${qp()}`).then(r=>r.json());
-  const marg = await fetch(`${API}/api/sales/margin${qp()}`).then(r=>r.json()).catch(()=>({total:{margin_pct:30}}));
+  const d = await api(`${API}/api/summary${qp()}`);
+  const marg = await api(`${API}/api/sales/margin${qp()}`).catch(()=>({total:{margin_pct:30}}));
   _wiBase = {
     revenue: d.revenue || 0,
     tx:      d.tx_count || 0,
@@ -1461,7 +1461,7 @@ function showToast(msg, type = 'info', duration = 4500) {
 // ════════════════════════════════════════════════════════════════
 async function checkCostSpikes() {
   try {
-    const d = await fetch(`${API}/api/cost/diff?threshold_pct=10`).then(r=>r.json());
+    const d = await api(`${API}/api/cost/diff?threshold_pct=10`);
     if (d.recent_updates?.length) {
       const spikes = d.recent_updates.slice(0, 4);
       const lines = spikes.map(r => {
@@ -1611,7 +1611,7 @@ async function loadGpBranch() {
   if (gran !== 'month') params.set('granularity', gran);
   const qs = params.toString();
   try {
-    const data = await fetch(`${API}/api/gp/by-branch-month${qs?'?'+qs:''}`).then(r => r.json());
+    const data = await api(`${API}/api/gp/by-branch-month${qs?'?'+qs:''}`);
     _gpbData = data;
     document.getElementById('gpbTargetText').textContent = `${data.target_lo}–${data.target_hi}%`;
     _gpbRenderSummary(data);
@@ -1959,8 +1959,8 @@ async function _bbomInitFilters() {
   const mtSel = document.getElementById('bbomMonthTo');
   try {
     const [branches, months] = await Promise.all([
-      fetch(`${API}/api/branches`).then(r => r.json()),
-      fetch(`${API}/api/months`).then(r => r.json()),
+      api(`${API}/api/branches`),
+      api(`${API}/api/months`),
     ]);
     brSel.innerHTML = (branches || []).filter(b => b.active !== false)
       .map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
@@ -2052,7 +2052,7 @@ async function _bbomLoadBranchSummary(mf, mt) {
   if (mf) p.set('month_from', mf);
   if (mt) p.set('month_to', mt);
   try {
-    const d = await fetch(`${API}/api/gp/by-branch-month?${p}`).then(r=>r.json());
+    const d = await api(`${API}/api/gp/by-branch-month?${p}`);
     _bbomBranchRows = d.rows || [];
     _bbomGrand = d.grand_total || null;
     _bbomRenderBranchSummary();

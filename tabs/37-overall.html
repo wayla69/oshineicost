@@ -1,0 +1,129 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB 1 — OVERALL
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-overall" style="display:none">
+
+  <!-- Anomaly / Insight banner -->
+  <div id="anomalyBanner" class="hidden"></div>
+
+  <!-- Executive summary: this-month forecast vs target + GP health (one glance) -->
+  <div id="execSummary" class="hidden mb-5"></div>
+
+  <!-- Latest-month hero — leads with the latest month + MoM (not a cumulative sum) -->
+  <div id="kpiHeroWrap" class="mb-5 hidden">
+    <div class="flex items-baseline gap-2 mb-2">
+      <h2 class="section-title mb-0">ภาพรวมเดือนล่าสุด</h2>
+      <span id="kpiHeroMonth" class="text-xs text-slate-400"></span>
+    </div>
+    <div id="kpiHero" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4"></div>
+    <div id="kpiBranchHilite" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4"></div>
+  </div>
+
+  <!-- KPI cards — period totals, rendered by loadSummaryKpis() -->
+  <div class="flex items-baseline gap-2 mb-2">
+    <h2 class="section-title mb-0">ยอดรวมช่วงที่เลือก</h2>
+    <span class="text-xs text-slate-400">ผลรวมทั้งช่วงตามฟิลเตอร์ (ดู MoM ที่การ์ดด้านบน)</span>
+  </div>
+  <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6"></div>
+
+  <!-- Franchise vs Master breakdown -->
+  <div id="groupBreakdown" class="card p-4 mb-6 hidden">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="section-title mb-0">🏢 แยกตามประเภทสาขา (Master / Franchise)</h2>
+      <span class="text-xs text-slate-400">รายได้ไม่รวม VAT · ตามช่วงที่เลือก</span>
+    </div>
+    <div id="groupBreakdownBody" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+    <div id="groupBranchesList" class="mt-4 pt-3 border-t border-slate-100"></div>
+  </div>
+
+  <!-- Branch × Period Heatmap -->
+  <div class="card p-5 mb-5">
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <h2 class="section-title mb-0">Branch × Period Heatmap</h2>
+      <div class="flex items-center gap-2">
+        <select id="heatmapGran" onchange="loadBranchHeatmap()"
+          class="border border-slate-300 rounded-lg px-2 py-1 text-xs">
+          <option value="weekly">Weekly</option>
+          <option value="monthly" selected>Monthly</option>
+          <option value="daily">Daily</option>
+        </select>
+        <button onclick="exportTable('heatmapTable','branch_heatmap.csv')" class="text-xs text-slate-500 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5">⬇ CSV</button>
+      </div>
+    </div>
+    <div id="heatmapWrap" class="heatmap-wrap"></div>
+  </div>
+
+  <!-- Trend + Category -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+    <div class="card p-5 lg:col-span-2">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="section-title mb-0">แนวโน้มรายได้รายเดือน</h2>
+        <button onclick="resetZoom('chartTrend')" class="text-xs text-slate-400 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5 transition-colors">&#x27F3; Reset</button>
+      </div>
+      <div class="flex gap-4">
+        <div style="height:240px;flex:1;min-width:0"><canvas id="chartTrend"></canvas></div>
+        <div id="trendAnalysisBar" class="flex-shrink-0 border-l border-slate-100 pl-3 space-y-3" style="width:140px;overflow:hidden"></div>
+      </div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-0">สัดส่วนหมวดสินค้า</h2>
+      <p class="text-xs text-slate-400 mb-2">ยอด · %สัดส่วน · MoM (เดือนล่าสุดเทียบเดือนก่อน)</p>
+      <div style="height:200px"><canvas id="chartCat"></canvas></div>
+      <div id="catMixTable" class="mt-3 space-y-1 overflow-y-auto" style="max-height:120px"></div>
+    </div>
+  </div>
+
+  <!-- แยกรายได้ + SKU bar -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+    <div class="card p-5">
+      <h2 class="section-title mb-0">แยกรายได้ตามประเภท</h2>
+      <p class="text-xs text-slate-400 mb-2">บุฟเฟ่ต์ · อาหาร à la carte · เครื่องดื่ม · เดลิเวอรี · อื่นๆ</p>
+      <div style="height:200px"><canvas id="chartBreakdown"></canvas></div>
+    </div>
+    <div class="card p-5 lg:col-span-2">
+      <h2 class="section-title mb-0">Top 60 เมนูอาหาร (ตามต้นทุน BoM)</h2>
+      <p class="text-xs text-slate-400 mb-2">รายไอเทม · จำนวนที่ขาย (serving) · ต้นทุน BoM (COGS) · %สัดส่วนต้นทุน · MoM จำนวน — เรียงตามต้นทุน BoM</p>
+      <div class="overflow-auto" style="max-height:560px">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-3">#</th>
+            <th class="py-2 pr-3">SKU</th>
+            <th class="py-2 pr-3">เมนู</th>
+            <th class="py-2 pr-3 text-right">จำนวนที่ขาย</th>
+            <th class="py-2 pr-3 text-right">ต้นทุน BoM</th>
+            <th class="py-2 pr-3 text-right">% ต้นทุนรวม</th>
+            <th class="py-2 text-right">MoM จำนวน</th>
+          </tr></thead>
+          <tbody id="topSkusBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Category movers — MoM revenue change (reliable, no cost data needed) -->
+  <div id="moversCard" class="card hidden">
+    <div class="px-5 py-4 border-b border-slate-100">
+      <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">🔥 เมนูมาแรง / ตก · Top Menu Movers</h2>
+      <p id="moversPeriod" class="text-xs text-slate-400 mt-1"></p>
+      <div class="flex items-center gap-2 mt-2 text-xs flex-wrap">
+        <span class="text-slate-400">เทียบเดือน:</span>
+        <select id="moversCurMonth" onchange="loadMovers()" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)"></select>
+        <span class="text-slate-400">vs</span>
+        <select id="moversVsMonth" onchange="loadMovers()" class="border border-slate-300 rounded px-2 py-1 text-xs" style="background:var(--bg-input);color:var(--text-primary)"></select>
+        <span class="text-[10px] text-slate-400">(ว่าง = MoM อัตโนมัติ)</span>
+      </div>
+    </div>
+    <div class="grid md:grid-cols-2 gap-0">
+      <div class="p-5 md:border-r border-slate-100">
+        <p class="text-xs font-semibold text-emerald-600 uppercase tracking-wide mb-3">▲ มาแรง / Growing</p>
+        <div id="moversGainers" class="space-y-2" style="max-height:560px;overflow-y:auto;padding-right:4px"></div>
+      </div>
+      <div class="p-5">
+        <p class="text-xs font-semibold text-red-500 uppercase tracking-wide mb-3">▼ ตกลง / Declining</p>
+        <div id="moversDecliners" class="space-y-2" style="max-height:560px;overflow-y:auto;padding-right:4px"></div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /tab-overall -->
+

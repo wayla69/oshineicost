@@ -1,0 +1,26 @@
+<!-- ══ 🧩 EXTRA: 💵 เงินสดขาด/เกิน (CashCount) ══ -->
+<div id="tab-cashctl" style="display:none">
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
+    <select id="ccMonth" onchange="loadCashCtl(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <span id="ccRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    <span class="text-[11px] ml-auto" style="color:#92400e">⚠ เงินสดขาด = ความเสี่ยง (ตรวจสอบสาขา/กะ)</span>
+  </div>
+  <div id="ccKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายสาขา — เงินสดขาด/เกินสะสมในเดือน</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ขาด/เกิน</th><th class="py-1.5 pr-2 text-right">วันที่ขาด</th>
+        <th class="py-1.5 pr-2 text-right">ยอดขาย</th><th class="py-1.5 text-right">% ของยอด</th>
+      </tr></thead><tbody id="ccBody"></tbody></table>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">🔴 วันที่ขาดหนักสุด (Top 15)</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">วันที่</th><th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ขาด/เกิน</th>
+        <th class="py-1.5 pr-2 text-right">ยอดขาย</th><th class="py-1.5 text-right">ลูกค้า</th>
+      </tr></thead><tbody id="ccWorst"></tbody></table>
+    </div>
+  </div>
+</div>

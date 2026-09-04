@@ -1,0 +1,70 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: BRANCH P&L  (Revenue -> BoM COGS -> GP -> fixed -> Operating Profit)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-pnlbranch" style="display:none">
+  <p class="text-sm text-slate-500 mb-4">รายได้ → ต้นทุน BoM → กำไรขั้นต้น → หักค่าใช้จ่ายคงที่ → กำไรจากการดำเนินงาน · ต้นทุนคำนวณจากสูตร BoM จริง</p>
+  <div id="pnl-note" class="hidden mb-4 text-xs px-3 py-2 rounded-lg" style="background:#fffbeb;border-left:4px solid #f59e0b;color:#92400e"></div>
+  <div id="pnl-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+
+  <!-- 🏭 Prime Cost = Food% + Labor% (the two biggest controllable costs) -->
+  <div class="card p-5 mb-5" style="border-left:4px solid #7c3aed">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🏭 Prime Cost · ต้นทุนหลัก (Food% + Labor%)</h2>
+      <span id="primeChain" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">ต้นทุน<b>ที่ควบคุมได้</b>ที่ใหญ่สุด 2 ตัว · Food% (BoM จริง) + Labor% (จาก Settings) · เกณฑ์บุฟเฟ่ต์ AYCE: ดี &lt;70% · เฝ้าระวัง 70-78% · สูง &gt;78%</p>
+    <div id="primeBanner" class="mb-3"></div>
+    <div class="overflow-x-auto">
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th>
+        <th class="py-1.5 pr-2 text-right">รายได้</th>
+        <th class="py-1.5 pr-2 text-right">Food %</th>
+        <th class="py-1.5 pr-2 text-right">Labor %</th>
+        <th class="py-1.5 pr-2 text-right">Prime %</th>
+        <th class="py-1.5 text-right">กำไรดำเนินงาน %</th>
+      </tr></thead><tbody id="primeBody"></tbody></table>
+    </div>
+  </div>
+
+  <div class="card p-4">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+      <div class="text-sm font-semibold text-slate-700">P&amp;L รายสาขา (เรียงตามกำไรจากการดำเนินงาน)</div>
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-slate-500">แยกตามเดือน:</span>
+        <select id="pnlMonthSel" onchange="loadPnlBranch()" class="border border-slate-200 rounded px-2 py-1 text-xs bg-white">
+          <option value="">ทุกเดือน (ช่วงที่เลือก)</option>
+        </select>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mb-2">💡 คลิกชื่อสาขาเพื่อดูรายละเอียดต้นทุน BoM รายเมนู + เทียบเดือนก่อน</p>
+    <div style="max-height:460px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-left text-slate-400 text-xs border-b sticky top-0 bg-white">
+          <th class="py-1.5 pr-3">สาขา</th>
+          <th class="py-1.5 pr-3 text-right">รายได้</th>
+          <th class="py-1.5 pr-3 text-right">ต้นทุน BoM</th>
+          <th class="py-1.5 pr-3 text-right">กำไรขั้นต้น</th>
+          <th class="py-1.5 pr-3 text-right">GP%</th>
+          <th class="py-1.5 pr-3 text-right">ค่าใช้จ่ายคงที่</th>
+          <th class="py-1.5 pr-3 text-right">กำไรดำเนินงาน</th>
+          <th class="py-1.5 pr-3 text-right">OP%</th>
+          <th class="py-1.5 pr-3 text-right">ลูกค้า</th>
+          <th class="py-1.5 text-right">จุดคุ้มทุน</th>
+        </tr></thead>
+        <tbody id="pnl-branches"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Branch×Month drill modal -->
+  <div id="pnlDrillModal" class="hidden" onclick="if(event.target.id==='pnlDrillModal')closePnlDrill()"
+       style="position:fixed;inset:0;z-index:80;background:rgba(15,23,42,0.55);display:none;align-items:center;justify-content:center;padding:20px">
+    <div style="background:var(--bg-card);border-radius:14px;max-width:1000px;width:100%;max-height:90vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <div class="flex items-center justify-between px-5 py-3 border-b border-slate-100 sticky top-0 bg-white z-10">
+        <h3 id="pnlDrillTitle" class="text-base font-bold text-slate-800">รายละเอียดสาขา</h3>
+        <button onclick="closePnlDrill()" class="topbar-icon-btn" title="ปิด (Esc)">✕</button>
+      </div>
+      <div id="pnlDrillBody" class="p-5"></div>
+    </div>
+  </div>
+</div>

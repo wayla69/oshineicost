@@ -1,0 +1,149 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB — COMPARE (up to 4 periods)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-compare" class="hidden">
+  <div class="card p-5 mb-5">
+    <div class="flex items-center gap-3 mb-4 flex-wrap">
+      <h2 class="section-title mb-0">เปรียบเทียบช่วงเวลา</h2>
+      <span class="text-xs text-slate-400">Compare up to 4 periods — A &amp; B required, C &amp; D optional</span>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+
+      <!-- ── Period A ── -->
+      <div class="border-2 border-indigo-300 rounded-xl p-4" style="background:var(--indigo-soft)">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-indigo-700 tracking-widest">◉ A</span>
+          <span class="text-[10px] bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full font-semibold">Primary</span>
+        </div>
+        <select id="cmpA_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2">
+          <option value="month">Month range</option>
+          <option value="date">Date range</option>
+        </select>
+        <div id="cmpA_month" class="flex items-center gap-1">
+          <select id="cmpA_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <select id="cmpA_mto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
+        </div>
+        <div id="cmpA_date" class="hidden flex items-center gap-1">
+          <input type="date" id="cmpA_dfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1">
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <input type="date" id="cmpA_dto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1">
+        </div>
+      </div>
+
+      <!-- ── Period B ── -->
+      <div class="border-2 border-amber-300 rounded-xl p-4" style="background:#fef3c7">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-amber-700 tracking-widest">◉ B</span>
+          <span class="text-[10px] bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-semibold">Baseline</span>
+        </div>
+        <select id="cmpB_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2">
+          <option value="month">Month range</option>
+          <option value="date">Date range</option>
+        </select>
+        <div id="cmpB_month" class="flex items-center gap-1">
+          <select id="cmpB_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <select id="cmpB_mto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1"></select>
+        </div>
+        <div id="cmpB_date" class="hidden flex items-center gap-1">
+          <input type="date" id="cmpB_dfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1">
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <input type="date" id="cmpB_dto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1">
+        </div>
+      </div>
+
+      <!-- ── Period C (optional) ── -->
+      <div id="cmpC_card" class="border-2 border-emerald-200 rounded-xl p-4 transition-opacity" style="background:#ecfdf5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-emerald-700 tracking-widest">◉ C</span>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" id="cmpC_enabled" onchange="updateCompareUI()" class="rounded accent-emerald-600">
+            <span class="text-[10px] text-emerald-600 font-semibold select-none">Enable</span>
+          </label>
+        </div>
+        <select id="cmpC_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2" disabled>
+          <option value="month">Month range</option>
+          <option value="date">Date range</option>
+        </select>
+        <div id="cmpC_month" class="flex items-center gap-1">
+          <select id="cmpC_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <select id="cmpC_mto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
+        </div>
+        <div id="cmpC_date" class="hidden flex items-center gap-1">
+          <input type="date" id="cmpC_dfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <input type="date" id="cmpC_dto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled>
+        </div>
+      </div>
+
+      <!-- ── Period D (optional) ── -->
+      <div id="cmpD_card" class="border-2 border-rose-200 rounded-xl p-4 transition-opacity" style="background:#fff1f2">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-rose-700 tracking-widest">◉ D</span>
+          <label class="flex items-center gap-1.5 cursor-pointer">
+            <input type="checkbox" id="cmpD_enabled" onchange="updateCompareUI()" class="rounded accent-rose-600">
+            <span class="text-[10px] text-rose-600 font-semibold select-none">Enable</span>
+          </label>
+        </div>
+        <select id="cmpD_type" onchange="updateCompareUI()" class="border border-slate-300 rounded px-2 py-1 text-xs w-full mb-2" disabled>
+          <option value="month">Month range</option>
+          <option value="date">Date range</option>
+        </select>
+        <div id="cmpD_month" class="flex items-center gap-1">
+          <select id="cmpD_mfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <select id="cmpD_mto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled></select>
+        </div>
+        <div id="cmpD_date" class="hidden flex items-center gap-1">
+          <input type="date" id="cmpD_dfrom" class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled>
+          <span class="text-slate-400 text-xs px-0.5">–</span>
+          <input type="date" id="cmpD_dto"   class="border border-slate-300 rounded px-1 py-1 text-xs flex-1" disabled>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-2 mt-4 flex-wrap">
+      <button onclick="runComparison()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg flex items-center gap-2">
+        ⚖ Compare
+      </button>
+      <button onclick="exportComparison()" class="px-3 py-2 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">⬇ Export CSV</button>
+      <span id="cmpStatus" class="text-xs text-slate-400 ml-2"></span>
+    </div>
+  </div>
+
+  <div id="cmpResults" class="hidden">
+    <!-- KPI comparison table -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-3">ตัวชี้วัดหลัก</h2>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full" id="cmpKpiTable">
+          <thead id="cmpKpiHead"></thead>
+          <tbody id="cmpKpiBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="card p-5">
+        <h2 class="section-title">รายได้รายสาขา</h2>
+        <div style="height:320px"><canvas id="cmpBranchChart"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title">Top SKUs — Revenue by Period</h2>
+        <div class="overflow-x-auto">
+          <table class="text-xs w-full" id="cmpSkuTable">
+            <thead id="cmpSkuHead"></thead>
+            <tbody id="cmpSkuBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="card p-5 mt-5">
+      <h2 class="section-title">Branch Detail &amp; Rank Shift</h2>
+      <div id="cmpRankShift" class="overflow-x-auto"></div>
+    </div>
+  </div>
+</div>

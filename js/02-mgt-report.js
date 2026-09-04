@@ -231,12 +231,12 @@ async function loadMgtReport() {
       const qsM = new URLSearchParams(qs); qsM.set('group', 'master');
       const qsF = new URLSearchParams(qs); qsF.set('group', 'franchise');
       [j, jM, jF] = await Promise.all([
-        fetch(`${API}/api/reports/management?${qs}`).then(r => r.json()),
-        fetch(`${API}/api/reports/management?${qsM}`).then(r => r.json()).catch(() => null),
-        fetch(`${API}/api/reports/management?${qsF}`).then(r => r.json()).catch(() => null),
+        api(`${API}/api/reports/management?${qs}`),
+        api(`${API}/api/reports/management?${qsM}`).catch(() => null),
+        api(`${API}/api/reports/management?${qsF}`).catch(() => null),
       ]);
     } else {
-      j = await fetch(`${API}/api/reports/management?${qs}`).then(r => r.json());
+      j = await api(`${API}/api/reports/management?${qs}`);
     }
   } catch (e) {
     if (_gen !== _mgtGen) return;
@@ -1890,54 +1890,4 @@ function renderMgtReport(j, jM, jF) {
   }
 }
 
-function loadActiveTab() {
-  loadGen++;   // invalidate any in-flight responses from a previous tab/filter
-  cache = {};  // clear tab cache on filter change
-  if (activeTab === 'overall')     loadOverall();
-  if (activeTab === 'action')      loadActionCenter();
-  if (activeTab === 'menu')      { loadMenuSubtab(); renderMenuSalesNarrative(); }
-  if (activeTab === 'trend')       loadTrend();
-  if (activeTab === 'cost')        loadCostAnalysis();
-  if (activeTab === 'profit')      loadProfitAnalysis();
-  if (activeTab === 'pnl')         loadPnlTab();
-  if (activeTab === 'compare')     initCompare();
-  if (activeTab === 'report')      loadReport();
-  if (activeTab === 'mgtreport')   loadMgtReport();
-  if (activeTab === 'ops')         loadOpsSubtab();
-  if (activeTab === 'settings')    loadSettingsSubtab();
-  if (activeTab === 'home')        loadHome();
-  if (activeTab === 'dailysales')  loadDailySales();
-  if (activeTab === 'costhead')    loadCostHead();
-  if (activeTab === 'costheadtop60') loadCostHeadTop60();
-  if (activeTab === 'menuimpact') loadMenuImpact();
-  if (activeTab === 'pnlbill')     loadPnlBill();
-  if (activeTab === 'opsreport')   loadOpsReport();
-  if (activeTab === 'ordering')    loadOrderPlan();
-  if (activeTab === 'ordersetup')  loadOrderSetup();
-  if (activeTab === 'cashctl')     loadCashCtl();
-  if (activeTab === 'custtype')    loadCustType();
-  if (activeTab === 'modifiers')   loadModifiers();
-  if (activeTab === 'pricezone')   loadPriceZone();
-  if (activeTab === 'cancelbill')  loadCancelBill();
-  if (activeTab === 'closetime')   loadCloseTime();
-  if (activeTab === 'guest')       loadGuest();
-  if (activeTab === 'benchmark')   loadBenchmark();
-  if (activeTab === 'engineering') loadEngineering();
-  if (activeTab === 'buffetperf')  loadBuffetPerformance();
-  if (activeTab === 'staff')       loadStaff();
-  if (activeTab === 'discounts')   loadDiscountsTab();
-  if (activeTab === 'childbuffet') loadChildBuffet();
-  if (activeTab === 'timeflow')    loadTimeflow();
-  if (activeTab === 'gpbranch')    loadGpBranch();
-  if (activeTab === 'branchbom')   loadBranchBom();
-  if (activeTab === 'bomcost')     loadBomCostTab();
-  if (activeTab === 'simhub')      loadSimhub();
-  if (activeTab === 'menucompare')    loadMenuCompare();
-  if (activeTab === 'menuefficiency') loadMCE();
-  if (activeTab === 'menuactionboard') loadMenuActionBoard();
-  if (activeTab === 'menuopportunities') loadMenuOpportunities();
-  if (activeTab === 'coverage')       loadCostCoverage();
-  if (activeTab === 'pnlbranch')   loadPnlBranch();
-  if (activeTab === 'more')        loadMoreAnalytics();
-  if (activeTab === 'heavyeater')  loadHeavyEaters();
-}
+// loadActiveTab() now lives in 01-core.js and dispatches through TABS.

@@ -1,0 +1,640 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: BUFFET PERFORMANCE  (core business — seat utilization, tier mix, waste, etc.)
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-buffetperf" style="display:none">
+
+  <!-- Header strip — always visible -->
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fdf2f8 0%,#fff7ed 100%);border-left:4px solid #ec4899">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">🥘</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold text-pink-900">Buffet Performance Dashboard</h2>
+        <p class="text-xs text-slate-600 mt-1">วัดผลด้าน <b>core business ของบุฟเฟ่ต์</b> — ปริมาณ pax จริง, การใช้ที่นั่ง, food cost, อัตรา over-consumption, attach rate เครื่องดื่ม
+          <br>มาตรฐานอุตสาหกรรมร้านบุฟเฟ่ต์ไทย (2026): <b>Food Cost 55-70%</b> · <b>Seat utilization 60-80%</b> · <b>Beverage attach ≥15%</b></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI hero row — always visible -->
+  <div id="bperfKpiRow" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-4"></div>
+
+  <!-- Phase 15: Two-level navigation — 4 main groups + nested sub-tabs ── -->
+  <!-- Level 1: Group selector -->
+  <div class="subtab-bar mb-3" id="bperfGroupBar">
+    <button class="subtab-btn active" data-bgroup="overview"  onclick="switchBperfGroup('overview')">📊 ภาพรวม</button>
+    <button class="subtab-btn"        data-bgroup="customers" onclick="switchBperfGroup('customers')">👥 ลูกค้า &amp; ที่นั่ง</button>
+    <button class="subtab-btn"        data-bgroup="profit"    onclick="switchBperfGroup('profit')">💰 กำไร &amp; P&amp;L</button>
+    <button class="subtab-btn"        data-bgroup="bomsim"    onclick="switchBperfGroup('bomsim')">🔬 BoM &amp; จำลอง</button>
+  </div>
+  <!-- Level 2: Sub-tab nav (only shown for groups with >1 sub-tab) -->
+  <div id="bperfSubNav-customers" class="subtab-bar mb-5" style="display:none;background:rgba(79,70,229,0.04)">
+    <span id="bperftabBtn-tier" hidden></span>
+    <button class="subtab-btn active" data-btab="cover" onclick="switchBperfTab('cover')" id="bperftabBtn-cover">🪑 Cover &amp; RevPASH</button>
+  </div>
+  <div id="bperfSubNav-bomsim" class="subtab-bar mb-5" style="display:none;background:rgba(79,70,229,0.04)">
+    <button class="subtab-btn active" data-btab="bomdeep" onclick="switchBperfTab('bomdeep')" id="bperftabBtn-bomdeep">🔬 BoM Deep-dive</button>
+    <button class="subtab-btn"        data-btab="sim"     onclick="switchBperfTab('sim')"     id="bperftabBtn-sim">🔮 Breakeven & Forecast</button>
+  </div>
+  <!-- Single-tab groups still need an active marker, but no sub-nav needed -->
+  <span id="bperftabBtn-overview" hidden></span>
+  <span id="bperftabBtn-gppnl"    hidden></span>
+
+  <!-- ══ SUBTAB 1: OVERVIEW ══════════════════════════════════════════════ -->
+  <div id="bperftab-overview">
+
+    <!-- Food Cost vs Target + Seat Utilization -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
+      <div class="card p-5">
+        <h2 class="section-title mb-1">💰 Food Cost vs Target (Buffet only)</h2>
+        <p class="text-xs text-slate-400 mb-3">เทียบ % ต้นทุนจริงกับช่วงเป้าหมายร้านปัจจุบัน Oshinei (55-70%)</p>
+        <div style="height:220px"><canvas id="bperfFoodCost"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title mb-1">🪑 Seat Utilization (Proxy)</h2>
+        <p class="text-xs text-slate-400 mb-3">pax/วัน ของแต่ละสาขา เทียบกับ max ในช่วง — สูง = ใช้ที่นั่งคุ้ม</p>
+        <div style="height:220px"><canvas id="bperfSeatUtil"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Bills per Table (all branches) -->
+    <div class="card p-5">
+      <h2 class="section-title mb-1">🕐 Bills per Table (Turnover Proxy) — รายสาขา</h2>
+      <p class="text-xs text-slate-400 mb-3">จำนวนบิลต่อโต๊ะต่อวัน · สูง = turnover ดี · ต่ำ = ลูกค้านั่งนาน</p>
+      <div style="height:220px"><canvas id="bperfTurnover"></canvas></div>
+    </div>
+
+  </div><!-- /bperftab-overview -->
+
+  <!-- ══ SUBTAB 2: TIER ═══════════════════════════════════════════════════ -->
+  <div id="bperftab-tier" style="display:none">
+
+    <!-- Tier Mix trend + Premium Tier % -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-5">
+      <div class="card p-5 lg:col-span-2">
+        <h2 class="section-title mb-1">📊 Tier Mix รายเดือน (จำนวน pax)</h2>
+        <p class="text-xs text-slate-400 mb-3">การกระจาย tier ในแต่ละเดือน · เป็น 100% stacked เพื่อดูสัดส่วน</p>
+        <div style="height:240px"><canvas id="bperfTierTrend"></canvas></div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title mb-1">💎 Tier Mix Donut (ทุก tier)</h2>
+        <p class="text-xs text-slate-400 mb-3">% ของลูกค้าในแต่ละช่วงราคา · แยก 350/500/590/799/Child ครบ</p>
+        <div style="height:240px"><canvas id="bperfPremiumGauge"></canvas></div>
+      </div>
+    </div>
+
+    <!-- Per-tier % breakdown (350/500/590/799) -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">💎 สัดส่วนลูกค้า แยกตามช่วงราคา</h2>
+      <p class="text-xs text-slate-400 mb-3">% ของลูกค้าในแต่ละ tier ราคา · ดู mix ลึก ๆ ว่าลูกค้าเลือกช่วงไหนมากที่สุด</p>
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3" id="bperfTierSplitCards"></div>
+      <div style="height:200px"><canvas id="bperfTierSplitChart"></canvas></div>
+    </div>
+
+    <!-- Tier Mix by Daypart -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">⏰ Tier Mix by Daypart</h2>
+      <p class="text-xs text-slate-400 mb-3">ลูกค้า lunch vs dinner เลือก tier ต่างกันยังไง · ใช้สำหรับ dynamic pricing</p>
+      <div style="height:220px"><canvas id="bperfDaypartTier"></canvas></div>
+    </div>
+
+    <!-- GP per Cover by Tier -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center gap-2 mb-1">
+        <h2 class="section-title mb-0">💴 Gross Profit per Cover — รายละเอียดต่อ Tier</h2>
+        <span class="text-xs text-slate-400 ml-2">ต้องใส่ unit_cost ใน Settings → Cost Management</span>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">Revenue (ex-VAT) ÷ covers − COGS ÷ covers = GP/cover · ยิ่งสูงยิ่งดี เปรียบเทียบ tier ว่าอันไหนทำกำไรต่อหัวจริงๆ</p>
+      <div class="overflow-x-auto mb-4">
+        <table class="text-xs w-full" id="tierGpTable">
+          <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-4">Tier</th>
+            <th class="py-2 pr-4 text-right">Covers (qty)</th>
+            <th class="py-2 pr-4 text-right">Revenue/Cover</th>
+            <th class="py-2 pr-4 text-right">Unit Cost</th>
+            <th class="py-2 pr-4 text-right">COGS/Cover</th>
+            <th class="py-2 pr-4 text-right">GP/Cover</th>
+            <th class="py-2 text-right">Margin %</th>
+          </tr></thead>
+          <tbody id="tierGpBody"><tr><td colspan="7" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+      <div style="height:240px"><canvas id="chartTierGp"></canvas></div>
+    </div>
+
+    <!-- Pricing Recommendation -->
+    <div class="card p-5" style="background:linear-gradient(to right,#f0f9ff 0%,#ffffff 60%);border-left:4px solid #0ea5e9">
+      <h2 class="section-title mb-1">🎯 Pricing Optimization Recommendation</h2>
+      <p class="text-xs text-slate-400 mb-3">เปรียบเทียบ tier mix ปัจจุบันกับ "optimal mix" ที่เพิ่ม margin โดยไม่กระทบ volume มากเกินไป</p>
+      <div id="bperfPricingRec"></div>
+    </div>
+
+  </div><!-- /bperftab-tier -->
+
+  <!-- ══ SUBTAB 3: COVER & REVPASH ═══════════════════════════════════════ -->
+  <div id="bperftab-cover" style="display:none">
+
+    <!-- Party Size + Revenue/hour -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+      <div class="card p-5">
+        <h2 class="section-title mb-1">👥 Party Size Distribution</h2>
+        <p class="text-xs text-slate-400 mb-3">จำนวนโต๊ะต่อขนาดกลุ่ม · bubble = revenue รวม</p>
+        <div style="height:240px"><canvas id="chartPartySize"></canvas></div>
+        <div class="grid grid-cols-3 gap-2 mt-3 text-center text-xs" id="coverEconKpis"></div>
+      </div>
+      <div class="card p-5">
+        <h2 class="section-title mb-1">⏰ Revenue per Cover by Hour</h2>
+        <p class="text-xs text-slate-400 mb-3">ช่วงเวลาไหนที่ลูกค้าจ่ายต่อหัวสูงสุด</p>
+        <div style="height:240px"><canvas id="chartHourlyCover"></canvas></div>
+      </div>
+    </div>
+
+    <!-- RevPASH -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center gap-3 mb-1 flex-wrap">
+        <h2 class="section-title mb-0">🪑 RevPASH — Revenue per Available Seat Hour</h2>
+        <div class="flex items-center gap-2 ml-auto text-xs">
+          <label class="text-slate-500">จำนวนที่นั่ง:</label>
+          <input type="number" id="revpashSeats" value="120" min="10" max="1000"
+            onchange="loadRevPASH()"
+            class="w-20 border border-slate-200 rounded px-2 py-1 text-slate-700 text-center" />
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mb-4">RevPASH = Revenue ÷ (ที่นั่ง × ชั่วโมง) · มาตรฐาน hospitality ระดับโลก · ช่วง peak ควร > 50/seat/hr</p>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="revpashKpis"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">Hourly RevPASH (ทุกวัน รวม)</p>
+          <div style="height:220px"><canvas id="chartRevpashHourly"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">RevPASH เฉลี่ยต่อวันในสัปดาห์</p>
+          <div style="height:220px"><canvas id="chartRevpashDow"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Beverage Attach Rate -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">🥤 Beverage Attach Rate</h2>
+      <p class="text-xs text-slate-400 mb-3">% รายได้ของเครื่องดื่ม/แอลกอฮอล์ ใน buffet bills — profit center สำคัญ</p>
+      <div style="height:220px"><canvas id="bperfBevAttach"></canvas></div>
+    </div>
+
+    <!-- Drink Attach Rate per Branch -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">🥤 Drink Attach Rate — รายสาขา</h2>
+      <p class="text-xs text-slate-400 mb-4">% บิลที่สั่งเครื่องดื่ม + สัดส่วนรายได้เครื่องดื่ม · เป้า ≥ 40% attach rate</p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div style="height:300px"><canvas id="chartDrinkAttach"></canvas></div>
+        <div class="overflow-auto" style="max-height:300px">
+          <table class="text-xs w-full">
+            <thead><tr class="text-slate-500 border-b border-slate-200 text-left">
+              <th class="py-2 pr-3">Branch</th>
+              <th class="py-2 pr-3 text-right">Attach %</th>
+              <th class="py-2 pr-3 text-right">Drink Rev %</th>
+              <th class="py-2 text-right">Avg /บิล</th>
+            </tr></thead>
+            <tbody id="drinkAttachBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Child/Adult Cover Trend -->
+    <div class="card p-5">
+      <h2 class="section-title mb-1">👶 Child/Adult Cover Trend</h2>
+      <p class="text-xs text-slate-400 mb-4">% เด็กรายเดือน · เด็กจ่ายน้อยกว่าผู้ใหญ่ครึ่งหนึ่ง → เดือนไหนเด็กสูง GP จะต่ำ</p>
+      <div style="height:280px"><canvas id="chartChildTrend"></canvas></div>
+    </div>
+
+  </div><!-- /bperftab-cover -->
+
+  <!-- ══ SUBTAB 4: GP & P&L ═══════════════════════════════════════════════ -->
+  <div id="bperftab-gppnl" style="display:none">
+
+    <!-- GP Calendar Heatmap -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div>
+          <h2 class="section-title mb-0">📅 GP Calendar — รายวัน</h2>
+          <p class="text-xs text-slate-400 mt-0.5">แต่ละวันระบายสีตาม Margin % จริง · ต้องใส่ unit_cost ก่อน</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <label class="text-slate-500">เดือน:</label>
+          <select id="calMonth" onchange="loadGpCalendar()"
+            style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-3 text-xs mb-3 flex-wrap mt-2">
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#d1fae5"></span>GP ต่ำ</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#10b981"></span>GP ปานกลาง</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded" style="background:#065f46"></span>GP สูง</span>
+        <span class="flex items-center gap-1"><span class="inline-block w-3 h-3 rounded bg-slate-200"></span>ไม่มีข้อมูลต้นทุน</span>
+      </div>
+      <div id="gpCalendarGrid" class="overflow-x-auto"><p class="text-xs text-slate-400 py-2">กำลังโหลด…</p></div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4" id="gpCalKpis"></div>
+    </div>
+
+    <!-- Gross Profit from BoM -->
+    <div class="card p-5 mb-5" style="background:linear-gradient(135deg,#f0fdf4 0%,#ffffff 100%);border-left:4px solid #10b981">
+      <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
+        <div>
+          <h2 class="text-base font-bold text-emerald-900">📊 Gross Profit จากต้นทุนจริง (BoM)</h2>
+          <p class="text-xs text-slate-500 mt-0.5">Revenue (ex-VAT) เทียบกับต้นทุนตามรายการที่กดสั่งจริง · วัน/สัปดาห์ = pro-rate จาก monthly BoM
+            <span class="text-amber-600"> · ถ้า Margin % ติดลบอย่างมาก ให้ตรวจสอบ unit_cost ใน Settings — อาจใส่เป็นราคาขายแทนราคาต้นทุน</span></p>
+        </div>
+        <div class="flex items-center gap-2">
+          <div class="flex rounded-lg overflow-hidden border border-slate-200 text-xs font-medium">
+            <button id="gpGran-day"   onclick="setBgpGran('day')"   class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50">วัน</button>
+            <button id="gpGran-week"  onclick="setBgpGran('week')"  class="px-3 py-1.5 bg-white text-slate-600 hover:bg-emerald-50 border-l border-slate-200">สัปดาห์</button>
+            <button id="gpGran-month" onclick="setBgpGran('month')" class="px-3 py-1.5 bg-emerald-600 text-white border-l border-slate-200">เดือน</button>
+          </div>
+          <a id="gpExportBtn" href="#" onclick="exportGpExcel(event)" class="px-3 py-1.5 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded-lg font-medium flex items-center gap-1">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Export Excel
+          </a>
+        </div>
+      </div>
+      <div id="gpBomKpis" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-5"></div>
+      <div class="mb-5">
+        <p class="text-xs font-semibold text-slate-600 mb-2">Revenue vs BoM Cost (แท่ง) · Gross Profit (เส้น)</p>
+        <div style="height:300px"><canvas id="chartGpBomMain"></canvas></div>
+      </div>
+      <div class="mb-5">
+        <h3 class="text-sm font-semibold text-slate-700 mb-2">🏪 Gross Profit รายสาขา (ช่วงที่เลือก)</h3>
+        <div class="overflow-x-auto">
+          <table class="text-xs w-full" id="gpBomBranchTable">
+            <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+              <th class="py-2 pr-4">สาขา</th>
+              <th class="py-2 pr-4 text-right">Covers</th>
+              <th class="py-2 pr-4 text-right">Revenue</th>
+              <th class="py-2 pr-4 text-right">BoM Cost</th>
+              <th class="py-2 pr-4 text-right">GP</th>
+              <th class="py-2 pr-4 text-right">GP/Cover</th>
+              <th class="py-2 pr-4 text-right">Margin %</th>
+              <th class="py-2 text-right">vs เฉลี่ย</th>
+            </tr></thead>
+            <tbody id="gpBomBranchBody"><tr><td colspan="8" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <h3 class="text-sm font-semibold text-slate-700">🍽️ Top Cost-Driver SKUs (กินต้นทุนสูงสุด) <span class="text-[10px] font-normal text-slate-400">· คลิกแถวเพื่อดูส่วนผสม</span></h3>
+            <button onclick="gpbCostDriverDive()" class="dive-btn" title="Dive in (zoom + analysis)" style="position:static;opacity:.7">🔍</button>
+          </div>
+          <div class="overflow-auto" style="max-height:340px">
+            <table class="text-xs w-full" id="gpBomSkuTable">
+              <thead class="sticky top-0 bg-white">
+                <tr class="text-left text-slate-500 border-b border-slate-200">
+                  <th class="py-2 pr-3">SKU</th>
+                  <th class="py-2 pr-3">หมวด</th>
+                  <th class="py-2 pr-3 text-right">qty</th>
+                  <th class="py-2 pr-3 text-right">BoM Cost</th>
+                  <th class="py-2 text-right">% ต้นทุน</th>
+                </tr>
+              </thead>
+              <tbody id="gpBomSkuBody"><tr><td colspan="5" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div>
+          <h3 class="text-sm font-semibold text-slate-700 mb-2">💧 GP Waterfall — ต้นทุนไหลออกไปทางไหน</h3>
+          <div style="height:320px"><canvas id="chartGpWaterfall"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Net P&L per Branch -->
+    <div class="card p-5" style="background:linear-gradient(135deg,#eff6ff 0%,#ffffff 100%);border-left:4px solid #3b82f6">
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="text-base font-bold text-blue-900">💼 Net P&amp;L — กำไรสุทธิหลังหักค่าคงที่</h2>
+          <p class="text-xs text-slate-500 mt-0.5">GP − Fixed Costs = Net Profit · ตั้งค่าใช้จ่ายคงที่ได้ที่ Settings → Fixed Costs</p>
+        </div>
+      </div>
+      <div id="pnlKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5"></div>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full">
+          <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-4">สาขา</th>
+            <th class="py-2 pr-4 text-right">Revenue</th>
+            <th class="py-2 pr-4 text-right">BoM Cost</th>
+            <th class="py-2 pr-4 text-right">Gross Profit</th>
+            <th class="py-2 pr-4 text-right">Fixed Costs</th>
+            <th class="py-2 pr-4 text-right">Net Profit</th>
+            <th class="py-2 text-right">Net Margin %</th>
+          </tr></thead>
+          <tbody id="pnlBody"><tr><td colspan="7" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 🍖 Heavy-Eater Margin Tail — REAL per-cover margin (paid − actually ate) -->
+    <div class="card p-5 mt-5">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 class="section-title mb-0">🍖 Heavy-Eater Margin Tail · กำไรต่อหัวจริง (จ่าย − กินจริง)</h2>
+        <span id="hetWindow" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">ต้นทุน BoM ต่อบิลจริง (ไม่เฉลี่ยตามยอด) เทียบกับเงินที่จ่าย → หา <b>ลูกค้าที่กินจนขาดทุน</b> · แยกตามขนาดโต๊ะ/ช่วงเวลา/สาขา (คำนวณจากบิลที่มีต้นทุน ~31 วัน)</p>
+      <div id="hetKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3"></div>
+      <div id="hetInsight" class="mb-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">การกระจายกำไร/หัว</h3>
+          <div id="hetDist"></div>
+        </div>
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">ตามขนาดโต๊ะ (ยิ่งคนน้อยยิ่งเสี่ยง)</h3>
+          <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+            <th class="py-1 pr-2">คน/โต๊ะ</th><th class="py-1 pr-2 text-right">% ขาดทุน</th><th class="py-1 text-right">กำไร/หัว</th>
+          </tr></thead><tbody id="hetParty"></tbody></table>
+        </div>
+        <div>
+          <h3 class="text-xs font-bold text-slate-600 mb-2">สาขาเสี่ยงสุด (% หัวที่ขาดทุน)</h3>
+          <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+            <th class="py-1 pr-2">สาขา</th><th class="py-1 pr-2 text-right">% ขาดทุน</th><th class="py-1 text-right">เสียไป</th>
+          </tr></thead><tbody id="hetBranch"></tbody></table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ⏱️ Turn-Time & Table Throughput Efficiency -->
+    <div class="card p-5 mt-5">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 class="section-title mb-0">⏱️ Turn-Time & Table Throughput · ประสิทธิภาพการหมุนโต๊ะ</h2>
+        <span id="turnChain" class="text-[11px]" style="color:var(--text-muted)"></span>
+      </div>
+      <p class="text-xs text-slate-400 mb-3">โต๊ะที่นั่งนาน = เสียโอกาสรอบถัดไป · <b>GP/นาที-โต๊ะ</b> = กำไรที่โต๊ะสร้างต่อ 1 นาทีที่ถูกใช้ · 🔴 = นั่งนานกว่าเฉลี่ย <b>และ</b> กำไร/หัวต่ำกว่าเฉลี่ย (เสียสองต่อ) · ที่นั่งไม่มีในข้อมูล จึงวัดต่อ "โต๊ะ"</p>
+      <div id="turnInsight" class="mb-3"></div>
+      <div class="overflow-x-auto">
+        <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-1.5 pr-2">สาขา</th>
+          <th class="py-1.5 pr-2 text-right">เวลานั่งเฉลี่ย (นาที)</th>
+          <th class="py-1.5 pr-2 text-right">คน/โต๊ะ</th>
+          <th class="py-1.5 pr-2 text-right">กำไร/หัว</th>
+          <th class="py-1.5 pr-2 text-right">กำไร/รอบโต๊ะ</th>
+          <th class="py-1.5 text-right">GP/นาที-โต๊ะ</th>
+        </tr></thead><tbody id="turnBody"></tbody></table>
+      </div>
+    </div>
+
+  </div><!-- /bperftab-gppnl -->
+
+  <!-- ══ SUBTAB 5: BOM DEEP-DIVE ══════════════════════════════════════════ -->
+  <div id="bperftab-bomdeep" style="display:none">
+
+    <!-- ════ Phase 4: Ingredient-level BoM composition ════ -->
+    <div class="card p-5 mb-5" style="border-left:4px solid #f97316">
+      <div class="flex items-start justify-between mb-3 flex-wrap gap-3">
+        <div>
+          <h2 class="text-base font-bold text-orange-900">🥩 BoM Composition — ส่วนผสมระดับเมนู</h2>
+          <p class="text-xs text-slate-500 mt-0.5">เลือก SKU เพื่อดูองค์ประกอบวัตถุดิบ · ต้นทุนต่อจาน · สัดส่วนตามประเภท</p>
+        </div>
+        <div class="flex gap-2 items-center text-xs">
+          <label class="text-slate-600">เมนู (SKU):</label>
+          <select id="bomSkuPicker" onchange="loadBomComposition()" class="px-3 py-1.5 border border-slate-200 rounded-lg bg-white min-w-[280px]">
+            <option value="">— กำลังโหลด —</option>
+          </select>
+        </div>
+      </div>
+      <div id="bomCompHeader" class="text-xs text-slate-500 mb-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">ต้นทุนตามวัตถุดิบ (บาท)</p>
+          <div style="height:300px"><canvas id="bomCompBar"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">สัดส่วนตามประเภทวัตถุดิบ</p>
+          <div style="height:300px"><canvas id="bomCompDonut"></canvas></div>
+        </div>
+      </div>
+      <div class="mt-4 overflow-x-auto" style="max-height:340px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-2">#</th>
+            <th class="py-2 pr-2">รหัส</th>
+            <th class="py-2 pr-2">วัตถุดิบ</th>
+            <th class="py-2 pr-2 text-right">qty/จาน</th>
+            <th class="py-2 pr-2">หน่วย</th>
+            <th class="py-2 pr-2 text-right">ต้นทุน ()</th>
+            <th class="py-2 pr-2 text-right">% ของจาน</th>
+            <th class="py-2 pr-2">ประเภท</th>
+          </tr></thead>
+          <tbody id="bomCompTable"><tr><td colspan="8" class="py-4 text-center text-slate-400">—</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ Phase 4: Period consumption analysis ════ -->
+    <div class="card p-5 mb-5" style="border-left:4px solid #06b6d4">
+      <div class="mb-3 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="text-base font-bold text-cyan-900">📦 Period Consumption — วัตถุดิบที่ใช้มากสุดในช่วงเวลา</h2>
+          <p class="text-xs text-slate-500 mt-0.5">รวมยอดขาย × BoM เพื่อหาว่าวัตถุดิบใดเป็นตัวขับต้นทุนหลัก · ใช้ filter เดือน/สาขาที่ตั้งไว้</p>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-600 cursor-pointer select-none whitespace-nowrap mt-1">
+          <input type="checkbox" id="bomConsGroupFamily" onchange="loadBomConsumption()" class="accent-cyan-600 w-4 h-4">
+          รวมกลุ่มวัตถุดิบ (เช่น แซลมอนทุกชนิด → Salmon)
+        </label>
+      </div>
+      <div id="bomConsKpis" class="flex flex-wrap gap-2 mb-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="lg:col-span-2">
+          <p class="text-xs font-semibold text-slate-600 mb-2">Top 20 วัตถุดิบ (ตามต้นทุนรวม)</p>
+          <div style="height:420px"><canvas id="bomConsTopBar"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">สัดส่วนตามประเภท vs. benchmark</p>
+          <div style="height:280px"><canvas id="bomConsTypeDonut"></canvas></div>
+          <div id="bomConsBench" class="mt-3 text-xs space-y-1"></div>
+        </div>
+      </div>
+    </div>
+    <!-- ════ /Phase 4 ════ -->
+
+    <!-- ════ Menu Cost Efficiency — เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน ════ -->
+    <div class="card p-5 mb-5" style="border-left:4px solid #ef4444">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+        <h2 class="text-base font-bold text-rose-900">🎯 เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน — หาเป้าลดต้นทุน</h2>
+        <span id="mceScope" class="text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-700"></span>
+      </div>
+      <p class="text-xs text-slate-500 mb-3">เมนูที่ <b>เสิร์ฟเยอะ + ต้นทุนสูง</b> = เป้าหมายอันดับแรกที่ควรปรับสูตร/ลด portion เพื่อลดต้นทุนรวมมากที่สุด · กราฟ: แกนนอน = % จำนวนเสิร์ฟ, แกนตั้ง = % ต้นทุน, ขนาด = ต้นทุน/จาน</p>
+      <div id="mceKpis" class="flex flex-wrap gap-2 mb-3"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div><div style="height:340px"><canvas id="mceScatter"></canvas></div></div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">Top 20 เป้าลดต้นทุน (เรียงตาม % ต้นทุน)</p>
+          <div style="max-height:340px;overflow:auto">
+            <table class="w-full text-xs">
+              <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 border-b">
+                <th class="py-1.5 pr-2">#</th><th class="py-1.5 pr-2">เมนู</th>
+                <th class="py-1.5 pr-2 text-right">เสิร์ฟ</th><th class="py-1.5 pr-2 text-right">%เสิร์ฟ</th>
+                <th class="py-1.5 pr-2 text-right">%ต้นทุน</th><th class="py-1.5 text-right">/จาน</th></tr></thead>
+              <tbody id="mceBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Branch Cohort -->
+    <div class="card p-5 mb-5">
+      <h2 class="section-title mb-1">🌱 Branch Cohort — Performance by Months-Since-Open</h2>
+      <p class="text-xs text-slate-400 mb-3">เปรียบเทียบสาขาที่เปิดมานานต่างกัน · ดู ramp-up curve และ maturity</p>
+      <div style="height:260px"><canvas id="bperfCohort"></canvas></div>
+    </div>
+
+    <!-- Portion Velocity -->
+    <div class="card p-5 mb-5" style="border-left:4px solid #8b5cf6">
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="text-base font-bold text-violet-900">📈 Portion Velocity — qty ต่อ Cover</h2>
+          <p class="text-xs text-slate-500 mt-0.5">รายการไหนกดสั่งมากขึ้น/น้อยลง เมื่อ normalize ด้วยจำนวน cover</p>
+        </div>
+        <div class="flex gap-2 text-xs">
+          <button onclick="setPvFilter('all')"  id="pvFilter-all"  class="px-3 py-1.5 bg-violet-600 text-white rounded-lg font-medium">ทั้งหมด</button>
+          <button onclick="setPvFilter('up')"   id="pvFilter-up"   class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-violet-50">📈 เพิ่ม</button>
+          <button onclick="setPvFilter('down')" id="pvFilter-down" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-violet-50">📉 ลด</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-3">SKU</th>
+            <th class="py-2 pr-3">Description</th>
+            <th class="py-2 pr-3">Category</th>
+            <th class="py-2 pr-3 text-right">Qty/Cover (latest)</th>
+            <th class="py-2 pr-3 text-right">Trend</th>
+            <th class="py-2 text-right">% Change</th>
+          </tr></thead>
+          <tbody id="pvBody"><tr><td colspan="6" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Plate Cost Distribution -->
+    <div class="card p-5 mb-5" style="border-left:4px solid #ec4899">
+      <div class="mb-4">
+        <h2 class="text-base font-bold text-pink-900">🍽️ Plate Cost Distribution — ต้นทุนต่อโต๊ะ</h2>
+        <p class="text-xs text-slate-500 mt-0.5">ประมาณต้นทุน BoM ต่อใบเสร็จ (pro-rate) เพื่อดูการกระจายตัว</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">Histogram — ต้นทุนต่อบิล</p>
+          <div style="height:260px"><canvas id="chartPlateDist"></canvas></div>
+        </div>
+        <div id="plateDistKpis" class="space-y-2 self-center"></div>
+      </div>
+    </div>
+
+    <!-- SKU Lifecycle -->
+    <div class="card p-5" style="border-left:4px solid #10b981">
+      <div class="flex items-start justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h2 class="text-base font-bold text-emerald-900">🌱 SKU Lifecycle — วงจรชีวิตเมนู</h2>
+          <p class="text-xs text-slate-500 mt-0.5">จำแนก SKU ตาม trend ของ qty: new / growing / stable / declining / dead</p>
+        </div>
+        <div class="flex flex-wrap gap-2 text-xs">
+          <button onclick="setLcFilter('all')"       id="lcFilter-all"       class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-medium">All</button>
+          <button onclick="setLcFilter('new')"       id="lcFilter-new"       class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">🌱 New</button>
+          <button onclick="setLcFilter('growing')"   id="lcFilter-growing"   class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">📈 Growing</button>
+          <button onclick="setLcFilter('stable')"    id="lcFilter-stable"    class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">➡️ Stable</button>
+          <button onclick="setLcFilter('declining')" id="lcFilter-declining" class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">📉 Declining</button>
+          <button onclick="setLcFilter('dead')"      id="lcFilter-dead"      class="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-emerald-50">💀 Dead</button>
+        </div>
+      </div>
+      <div id="lcKpis" class="flex flex-wrap gap-3 mb-4"></div>
+      <div class="overflow-x-auto" style="max-height:400px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
+            <th class="py-2 pr-3">SKU</th>
+            <th class="py-2 pr-3">Description</th>
+            <th class="py-2 pr-3">Category</th>
+            <th class="py-2 pr-3 text-right">Latest Qty</th>
+            <th class="py-2 pr-3 text-right">Trend %/mo</th>
+            <th class="py-2 text-right">Status</th>
+          </tr></thead>
+          <tbody id="lcBody"><tr><td colspan="6" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /bperftab-bomdeep -->
+
+  <!-- ══ SUBTAB 6: SIMULATORS & FORECAST ═══════════════════════════════════ -->
+  <div id="bperftab-sim" style="display:none">
+
+    <!-- Breakeven Calculator -->
+    <div class="card p-5 mb-5" style="background:linear-gradient(to right,#fffbeb 0%,#ffffff 60%);border-left:4px solid #f59e0b">
+      <h2 class="section-title mb-1">💰 Breakeven Calculator</h2>
+      <p class="text-xs text-slate-400 mb-4">ใส่ Fixed Cost รายเดือน → คำนวณต้องขาย pax เท่าไหร่/วันถึงคุ้มทุน</p>
+      <div class="flex flex-wrap items-end gap-4 mb-5">
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">Fixed Cost รายเดือน ()</label>
+          <input type="number" id="beFixedCost" value="500000" step="10000" min="0"
+            onchange="loadBreakeven()"
+            class="border border-slate-200 rounded px-3 py-1.5 text-sm w-44 text-slate-700" />
+        </div>
+        <button onclick="loadBreakeven()" class="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-white text-sm rounded-lg font-medium transition-colors">คำนวณ</button>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="beKpis"></div>
+      <div style="height:240px"><canvas id="chartBreakeven"></canvas></div>
+    </div>
+
+    <!-- Cost Sensitivity Simulator — relocated into the 🎮 Simulators hub (adopted by id) -->
+    <div id="sensCard" class="card p-5 mb-5" style="border-left:4px solid #f59e0b">
+      <div class="mb-4">
+        <h2 class="text-base font-bold text-amber-900">🎛️ Cost Sensitivity Simulator — What-If</h2>
+        <p class="text-xs text-slate-500 mt-0.5">เลื่อน slider เพื่อดูว่าถ้า unit_cost ของ top SKU เปลี่ยน GP จะเป็นเท่าไร</p>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div class="lg:col-span-2" id="simSliders"><p class="text-xs text-slate-400">กำลังโหลด…</p></div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-3">ผลลัพธ์ Simulation</p>
+          <div id="simResult" class="space-y-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Forecast pax & Revenue -->
+    <div class="card p-5 mb-5">
+      <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+        <div>
+          <h2 class="section-title mb-0">🔮 พยากรณ์ Pax & Revenue (Linear Regression)</h2>
+          <p class="text-xs text-slate-400 mt-0.5">ใช้ข้อมูลย้อนหลังทั้งหมดทำ linear regression · เส้นประ = forecast</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs">
+          <label class="text-slate-500">พยากรณ์ล่วงหน้า:</label>
+          <select id="forecastPeriods" onchange="loadForecast()"
+            style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary)">
+            <option value="3">3 เดือน</option>
+            <option value="6">6 เดือน</option>
+            <option value="12">12 เดือน</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4" id="forecastKpis"></div>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">Pax Forecast</p>
+          <div style="height:260px"><canvas id="chartForecastPax"></canvas></div>
+        </div>
+        <div>
+          <p class="text-xs font-semibold text-slate-600 mb-2">Revenue Forecast</p>
+          <div style="height:260px"><canvas id="chartForecastRev"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- AI Action Items -->
+    <div class="card p-5">
+      <h2 class="section-title mb-3">🤖 Action Items อัตโนมัติ (อิงข้อมูลจริง)</h2>
+      <div id="bperfActions" class="space-y-2"></div>
+    </div>
+
+  </div><!-- /bperftab-sim -->
+
+</div>

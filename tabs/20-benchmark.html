@@ -1,0 +1,84 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: BRANCH BENCHMARK
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-benchmark" style="display:none">
+  <div id="benchmark-kpi-row" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+  <!-- Food-cost benchmark: each branch vs chain peer median + target band -->
+  <div class="card p-5 mb-5" id="benchFoodCostCard">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="section-title mb-0">🌐 Benchmark ต้นทุนอาหารรายสาขา</h2>
+      <span id="benchFcSummary" class="text-[11px] text-slate-500"></span>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">% ต้นทุนอาหารแต่ละสาขา เทียบ <b>ค่ากลางเครือ (peer)</b> และ <b>ช่วงเป้า</b> · เขียว = ดีกว่าเพื่อน (quartile บน), แดง = แย่กว่า · เส้นประ = ค่ากลางเครือ</p>
+    <div id="benchFoodCostBody"></div>
+  </div>
+
+  <!-- Score formula explainer -->
+  <div class="card p-4 mb-5" style="background:linear-gradient(135deg,#eef2ff 0%,#f0f9ff 100%);border-left:4px solid #4f46e5">
+    <div class="flex items-start gap-3">
+      <div style="font-size:24px;line-height:1">🏆</div>
+      <div class="flex-1">
+        <p class="font-semibold text-sm text-slate-800 mb-1">วิธีคำนวณคะแนนสาขา (Health Score 0–100)</p>
+        <p class="text-xs text-slate-600 mb-2">คะแนนรวมจาก 4 องค์ประกอบ ถ่วงน้ำหนักตามความสำคัญต่อผลประกอบการ</p>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
+            <div class="flex items-baseline gap-1.5"><span class="text-lg font-bold text-indigo-600">40%</span><span class="font-medium text-slate-700">รายได้</span></div>
+            <p class="text-[10px] text-slate-500 mt-0.5">เทียบกับสาขาสูงสุด</p>
+          </div>
+          <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
+            <div class="flex items-baseline gap-1.5"><span class="text-lg font-bold text-emerald-600">30%</span><span class="font-medium text-slate-700">การเติบโต</span></div>
+            <p class="text-[10px] text-slate-500 mt-0.5">% เปลี่ยนเทียบเดือนก่อน</p>
+          </div>
+          <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
+            <div class="flex items-baseline gap-1.5"><span class="text-lg font-bold text-cyan-600">20%</span><span class="font-medium text-slate-700">ความสม่ำเสมอ</span></div>
+            <p class="text-[10px] text-slate-500 mt-0.5">ความผันผวนต่ำ</p>
+          </div>
+          <div class="bg-white rounded-md px-3 py-2 border border-indigo-100">
+            <div class="flex items-baseline gap-1.5"><span class="text-lg font-bold text-amber-600">10%</span><span class="font-medium text-slate-700">โมเมนตัม</span></div>
+            <p class="text-[10px] text-slate-500 mt-0.5">แนวโน้ม 3 เดือนล่าสุด</p>
+          </div>
+        </div>
+        <p class="text-[11px] text-slate-500 mt-2">💡 รายได้ถ่วงน้ำหนักสูงสุดเพราะเป็นผลประกอบการที่จับต้องได้จริง การเติบโตและโมเมนตัมสะท้อนทิศทางอนาคต ความสม่ำเสมอลดความเสี่ยงของรายได้ที่แกว่งแรง</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Branch comparison table -->
+  <div class="card p-5 mb-5 overflow-x-auto">
+    <h2 class="section-title mb-1">เปรียบเทียบ KPI รายสาขา</h2>
+    <p id="benchCompareLabel" class="text-xs text-slate-400 mb-3">คลิกหัวคอลัมน์เพื่อเรียงลำดับ · ตัวเลขเล็กใต้ค่าคือเทียบเดือนก่อนหน้า (MoM)</p>
+    <table class="text-xs w-full" id="benchmarkTable">
+      <thead>
+        <tr class="text-left border-b border-slate-200">
+          <th class="py-2 pr-3 font-semibold cursor-pointer select-none" onclick="sortBench('branch')">สาขา <span class="bench-caret text-indigo-500" data-k="branch"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('revenue')">รายได้ <span class="bench-caret text-indigo-500" data-k="revenue"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('tx_count')">บิล <span class="bench-caret text-indigo-500" data-k="tx_count"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('avg_ticket')">ยอดบิลเฉลี่ย <span class="bench-caret text-indigo-500" data-k="avg_ticket"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('discount_rate')">% ส่วนลด <span class="bench-caret text-indigo-500" data-k="discount_rate"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('cust_per_tx')">ลูกค้า/บิล <span class="bench-caret text-indigo-500" data-k="cust_per_tx"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('revenue_score')">รายได้<br><span class="font-normal text-slate-400">40%</span> <span class="bench-caret text-indigo-500" data-k="revenue_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('growth_score')">เติบโต<br><span class="font-normal text-slate-400">30%</span> <span class="bench-caret text-indigo-500" data-k="growth_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('consistency_score')">สม่ำเสมอ<br><span class="font-normal text-slate-400">20%</span> <span class="bench-caret text-indigo-500" data-k="consistency_score"></span></th>
+          <th class="py-2 pr-3 text-right cursor-pointer select-none" onclick="sortBench('momentum_score')">โมเมนตัม<br><span class="font-normal text-slate-400">10%</span> <span class="bench-caret text-indigo-500" data-k="momentum_score"></span></th>
+          <th class="py-2 text-right cursor-pointer select-none" onclick="sortBench('score')">คะแนน <span class="bench-caret text-indigo-500" data-k="score"></span></th>
+        </tr>
+      </thead>
+      <tbody id="benchmarkBody"></tbody>
+    </table>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
+    <!-- Revenue bar -->
+    <div class="card p-5">
+      <h2 class="section-title mb-3">รายได้รายสาขา</h2>
+      <div style="height:220px"><canvas id="chartBenchRevenue"></canvas></div>
+    </div>
+    <!-- Health bar -->
+    <div class="card p-5">
+      <h2 class="section-title mb-3">คะแนนสาขา (Health Score)</h2>
+      <p class="text-xs text-slate-400 -mt-2 mb-2">เขียว ≥70 ดี · เหลือง 50–69 ระวัง · แดง &lt;50 ต้องปรับปรุง</p>
+      <div style="height:220px"><canvas id="chartBenchHealth"></canvas></div>
+    </div>
+  </div>
+</div>

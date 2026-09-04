@@ -50,8 +50,8 @@ async function loadGuest(force) {
   }
 
   const [sph, persona] = await Promise.all([
-    fetch(`${API}/api/analysis/sph?${params}`).then(r => r.json()),
-    fetch(`${API}/api/analysis/persona?${params}`).then(r => r.json()).catch(() => ({ overall: {}, party_sizes: [] })),
+    api(`${API}/api/analysis/sph?${params}`),
+    api(`${API}/api/analysis/persona?${params}`).catch(() => ({ overall: {}, party_sizes: [] })),
   ]);
 
   // KPI row
@@ -281,7 +281,7 @@ async function loadBuffetMix() {
     if (getMonthFrom()) params.set('month_from', getMonthFrom());
     if (getMonthTo())   params.set('month_to',   getMonthTo());
   }
-  const d = await fetch(`${API}/api/analysis/buffet_mix?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/buffet_mix?${params}`).catch(() => null);
   if (!d || !d.summary || !d.summary.length) return;
 
   // Graduated premium palette: entry tier (blue) → premium (rose); à-la-carte violet.
@@ -362,7 +362,7 @@ async function loadMCE() {
   if (bodyEl) bodyEl.innerHTML = '<tr><td colspan="8" class="py-8 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
 
   let d;
-  try { d = await fetch(`${API}/api/buffet/menu-cost-efficiency?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/buffet/menu-cost-efficiency?${p}`); }
   catch (e) {
     if (kpiEl) kpiEl.innerHTML = `<span class="text-xs text-red-500">โหลดไม่สำเร็จ: ${e.message}</span>`;
     return;
@@ -539,7 +539,7 @@ async function loadMce2Ingredients() {
   if (getMonthTo())   p.set('month_to',   getMonthTo());
 
   let d;
-  try { d = await fetch(`${API}/api/bom/consumption-analysis?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/bom/consumption-analysis?${p}`); }
   catch (e) { return; }
 
   const ing = d.ingredients || d.rows || [];
@@ -692,7 +692,7 @@ async function loadMce2Trend() {
   if (statusEl) statusEl.textContent = 'กำลังโหลด…';
 
   let d;
-  try { d = await fetch(`${API}/api/buffet/menu-cost-trend?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/buffet/menu-cost-trend?${p}`); }
   catch (e) { if (statusEl) statusEl.textContent = 'โหลดไม่สำเร็จ'; return; }
 
   window._mce2TrendData = d;
@@ -764,7 +764,7 @@ async function loadMce2BranchCompare(skuCode, description) {
   if (getMonthTo())   p.set('month_to',   getMonthTo());
 
   let d;
-  try { d = await fetch(`${API}/api/buffet/menu-cost-by-branch?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/buffet/menu-cost-by-branch?${p}`); }
   catch (e) { tblEl.innerHTML = `<p class="text-xs text-red-500 p-2">${e.message}</p>`; return; }
 
   const branches = d.branches || [];
@@ -906,7 +906,7 @@ async function loadMce2Coverage() {
   if (covBodyEl) covBodyEl.innerHTML = '<tr><td colspan="5" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
 
   let d;
-  try { d = await fetch(`${API}/api/buffet/menu-cost-coverage?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/buffet/menu-cost-coverage?${p}`); }
   catch (e) {
     if (covBodyEl) covBodyEl.innerHTML = `<tr><td colspan="5" class="py-4 text-center text-red-500">โหลดไม่สำเร็จ: ${esc(e.message)}</td></tr>`;
     return;
@@ -1095,7 +1095,7 @@ async function loadMenuCostEfficiency() {
   if (getMonthFrom()) p.set('month_from', getMonthFrom());
   if (getMonthTo())   p.set('month_to', getMonthTo());
   let d;
-  try { d = await fetch(`${API}/api/buffet/menu-cost-efficiency?${p}`).then(r=>r.json()); }
+  try { d = await api(`${API}/api/buffet/menu-cost-efficiency?${p}`); }
   catch(e){ return; }
   document.getElementById('mceScope').textContent = (getBranch()||'ทุกสาขา') + ' · ' + d.n_dishes + ' เมนู';
   // KPI chips
@@ -1151,7 +1151,7 @@ async function loadBuffetPerformance() {
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
   loadMenuCostEfficiency();
-  const d = await fetch(`${API}/api/buffet/performance?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/performance?${params}`).catch(() => null);
   if (!d || !d.kpis) {
     document.getElementById('bperfKpiRow').innerHTML = '<p class="text-slate-400 col-span-6 text-center py-8">ไม่มีข้อมูล</p>';
     return;
@@ -1594,7 +1594,7 @@ async function loadTierGp() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const data = await fetch(`${API}/api/buffet/tier-mix?${params}`).then(r => r.json()).catch(() => null);
+  const data = await api(`${API}/api/buffet/tier-mix?${params}`).catch(() => null);
   if (!data || !data.rows || !data.rows.length) {
     document.getElementById('tierGpBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล — กรุณาใส่ unit_cost ใน Settings → Cost Management</td></tr>';
     return;
@@ -1679,7 +1679,7 @@ async function loadCoverEconomics() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const data = await fetch(`${API}/api/buffet/cover-economics?${params}`).then(r => r.json()).catch(() => null);
+  const data = await api(`${API}/api/buffet/cover-economics?${params}`).catch(() => null);
   if (!data) return;
 
   // KPI chips
@@ -1752,7 +1752,7 @@ async function loadRevPASH() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const data = await fetch(`${API}/api/buffet/revpash?${params}`).then(r => r.json()).catch(() => null);
+  const data = await api(`${API}/api/buffet/revpash?${params}`).catch(() => null);
   if (!data) return;
 
   // KPI strip
@@ -1821,7 +1821,7 @@ async function loadUpgradeSimulator() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const data = await fetch(`${API}/api/buffet/upgrade-simulator?${params}`).then(r => r.json()).catch(() => null);
+  const data = await api(`${API}/api/buffet/upgrade-simulator?${params}`).catch(() => null);
   if (!data || !data.current) {
     document.getElementById('simKpis').innerHTML = '<div class="col-span-2 text-slate-400 text-sm py-4">ไม่มีข้อมูล — ต้องใส่ unit_cost ของ tier 590 และ 799 ก่อน</div>';
     return;
@@ -1900,7 +1900,7 @@ async function loadGpCalendar() {
 
   // Populate month selector from available months if empty
   if (!sel.options.length) {
-    const months = await fetch(`${API}/api/months`).then(r=>r.json()).catch(()=>[]);
+    const months = await api(`${API}/api/months`).catch(()=>[]);
     months.forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = fmtMonth(m); sel.appendChild(o); });
     if (sel.options.length) sel.value = sel.options[sel.options.length-1].value;
   }
@@ -1909,7 +1909,7 @@ async function loadGpCalendar() {
 
   const params = new URLSearchParams({ month });
   if (branch) params.set('branch', branch);
-  const d = await fetch(`${API}/api/buffet/gp-calendar?${params}`).then(r=>r.json()).catch(()=>null);
+  const d = await api(`${API}/api/buffet/gp-calendar?${params}`).catch(()=>null);
   if (!d || !d.days) { document.getElementById('gpCalendarGrid').innerHTML = '<p class="text-slate-400 text-sm py-4">ไม่มีข้อมูล</p>'; return; }
 
   const [y, m] = month.split('-').map(Number);
@@ -1984,7 +1984,7 @@ async function loadChildTrend() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const rows = await fetch(`${API}/api/buffet/child-trend?${params}`).then(r=>r.json()).catch(()=>[]);
+  const rows = await api(`${API}/api/buffet/child-trend?${params}`).catch(()=>[]);
   if (!rows.length) return;
 
   mkChart('chartChildTrend', {
@@ -2019,7 +2019,7 @@ async function loadDrinkAttach() {
   const params = new URLSearchParams();
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const rows = await fetch(`${API}/api/buffet/drink-attach-by-branch?${params}`).then(r=>r.json()).catch(()=>[]);
+  const rows = await api(`${API}/api/buffet/drink-attach-by-branch?${params}`).catch(()=>[]);
   if (!rows.length) return;
 
   mkChart('chartDrinkAttach', {
@@ -2066,7 +2066,7 @@ async function loadBreakeven() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const d = await fetch(`${API}/api/buffet/breakeven?${params}`).then(r=>r.json()).catch(()=>null);
+  const d = await api(`${API}/api/buffet/breakeven?${params}`).catch(()=>null);
   if (!d) return;
 
   const beUtil = d.breakeven_utilization_pct;
@@ -2121,7 +2121,7 @@ async function loadForecast() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const d = await fetch(`${API}/api/forecast?mode=buffet&${params}`).then(r=>r.json()).catch(()=>null);
+  const d = await api(`${API}/api/forecast?mode=buffet&${params}`).catch(()=>null);
   if (!d || d.error) {
     document.getElementById('forecastKpis').innerHTML = `<div class="col-span-4 text-slate-400 text-sm py-2">${d?.error || 'ไม่มีข้อมูลเพียงพอ (ต้องการ ≥3 เดือน)'}</div>`;
     return;
@@ -2197,7 +2197,7 @@ async function loadHeavyEaterTail() {
   const p = new URLSearchParams();
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/buffet/heavy-eater-tail?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/buffet/heavy-eater-tail?${p}`); } catch (e) { return; }
   const s = d.summary || {};
   const wEl = document.getElementById('hetWindow');
   if (wEl) wEl.textContent = d.window ? `ช่วงข้อมูล ${d.window[0]} → ${d.window[1]}` : '';
@@ -2244,7 +2244,7 @@ async function loadTurnEfficiency() {
   const p = new URLSearchParams();
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/buffet/turn-efficiency?${p}`).then(r => r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/buffet/turn-efficiency?${p}`); } catch (e) { return; }
   const ch = d.chain || {}; const rows = d.branches || [];
   const cw = document.getElementById('turnChain');
   if (cw) cw.textContent = ch.turn_min ? `เฉลี่ยเครือ: นั่ง ${ch.turn_min} นาที · กำไร/หัว ${fmt(ch.gp_cover)} · GP/นาที-โต๊ะ ${ch.gp_per_table_min}` : '';
@@ -2276,7 +2276,7 @@ async function loadBuffetGP() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const d = await fetch(`${API}/api/buffet/gp?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/gp?${params}`).catch(() => null);
   if (!d || !d.period_total) {
     document.getElementById('gpBomKpis').innerHTML = '<p class="col-span-6 text-slate-400 text-center py-6">ไม่มีข้อมูล — กรุณาใส่ unit_cost ใน Settings → Cost Management</p>';
     return;
@@ -2482,7 +2482,7 @@ async function loadBomPnl() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
-  const d = await fetch(`${API}/api/buffet/pnl?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/pnl?${params}`).catch(() => null);
   if (!d) { document.getElementById('pnlBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-red-400">โหลดไม่ได้</td></tr>'; return; }
 
   const rows = d.branches || [];
@@ -2566,7 +2566,7 @@ async function loadPortionVelocity() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await fetch(`${API}/api/buffet/portion-velocity?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/portion-velocity?${params}`).catch(() => null);
   if (!d || !d.skus) { document.getElementById('pvBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
   _pvData = d.skus;
   _renderPv();
@@ -2582,7 +2582,7 @@ async function loadPlateCostDist() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await fetch(`${API}/api/buffet/plate-cost-dist?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/plate-cost-dist?${params}`).catch(() => null);
   if (!d || !d.distribution) { return; }
 
   const hist = d.distribution || [];
@@ -2632,7 +2632,7 @@ async function loadCostSensitivity() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await fetch(`${API}/api/buffet/cost-sensitivity?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/buffet/cost-sensitivity?${params}`).catch(() => null);
   if (!d || !d.skus) { document.getElementById('simSliders').innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
   _simBase = d;
   _simAdjust = {};
@@ -2729,7 +2729,7 @@ async function loadSkuLifecycle(force) {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to', getMonthTo());
-  const d = await fetch(`${API}/api/menu/lifecycle?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/menu/lifecycle?${params}`).catch(() => null);
   if (!d || !d.skus) { document.getElementById('lcBody').innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>'; return; }
   _lcData = d.skus;
   const counts = d.summary || {};
@@ -2746,7 +2746,7 @@ async function loadBomAudit(force) {
   if (!force && _bomAuditLoaded) return;
   _bomAuditLoaded = true;
   document.getElementById('bomAuditBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-slate-400">กำลังโหลด…</td></tr>';
-  const d = await fetch(`${API}/api/cost/audit`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/cost/audit`).catch(() => null);
   if (!d) {
     document.getElementById('bomAuditBody').innerHTML = '<tr><td colspan="7" class="py-4 text-center text-red-400">โหลดไม่ได้</td></tr>';
     return;
@@ -2789,9 +2789,9 @@ async function loadBomAudit(force) {
 // ── Fixed Costs (Settings) ───────────────────────────────────────────────
 async function loadFixedCosts() {
   const [fcRes, lcRes, brRes] = await Promise.all([
-    fetch(`${API}/api/branches/fixed-costs`).then(r => r.json()).catch(() => ({})),
-    fetch(`${API}/api/branches/labor-costs`).then(r => r.json()).catch(() => ({})),
-    fetch(`${API}/api/branches`).then(r => r.json()).catch(() => []),
+    api(`${API}/api/branches/fixed-costs`).catch(() => ({})),
+    api(`${API}/api/branches/labor-costs`).catch(() => ({})),
+    api(`${API}/api/branches`).catch(() => []),
   ]);
   const fc = (fcRes && typeof fcRes === 'object' && !Array.isArray(fcRes)) ? fcRes : {};
   const lc = (lcRes && typeof lcRes === 'object' && !Array.isArray(lcRes)) ? lcRes : {};
@@ -2818,7 +2818,7 @@ async function loadFixedCosts() {
     }).join('');
 }
 async function saveFixedCosts() {
-  const brRes = await fetch(`${API}/api/branches`).then(r => r.json()).catch(() => []);
+  const brRes = await api(`${API}/api/branches`).catch(() => []);
   const branches = (Array.isArray(brRes) ? brRes : (brRes.branches || [])).filter(b => b.active && b.name !== 'ALL');
   const fcPayload = {}, lcPayload = {};
   branches.forEach(b => {
@@ -2830,8 +2830,8 @@ async function saveFixedCosts() {
   const st = document.getElementById('fixedCostStatus');
   st.textContent = 'กำลังบันทึก…'; st.style.color = '#94a3b8';
   const [r1, r2] = await Promise.all([
-    fetch(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).then(r => r.json()).catch(() => null),
-    fetch(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).then(r => r.json()).catch(() => null),
+    api(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).catch(() => null),
+    api(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).catch(() => null),
   ]);
   if (r1 && r1.saved != null && r2 && r2.saved != null) { st.textContent = '✅ บันทึกแล้ว (ค่าแรง + คงที่)'; st.style.color = '#10b981'; }
   else { st.textContent = '❌ บันทึกไม่ได้'; st.style.color = '#ef4444'; }
@@ -2843,7 +2843,7 @@ async function saveFixedCosts() {
 async function renderBenchFoodCost(params) {
   const body = document.getElementById('benchFoodCostBody'); if (!body) return;
   body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
-  let d; try { d = await fetch(`${API}/api/gp/by-branch-month?${params}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/gp/by-branch-month?${params}`); }
   catch (e) { body.innerHTML = '<p class="text-sm text-red-400 py-4 text-center">โหลดไม่สำเร็จ</p>'; return; }
   const rows = (d.rows || []).filter(b => b.total_food_cost_pct != null && (b.total_revenue || 0) > 0);
   if (!rows.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีข้อมูลในช่วงนี้</p>'; return; }
@@ -2883,8 +2883,8 @@ async function loadBenchmark() {
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
   const [branches, health] = await Promise.all([
-    fetch(`${API}/api/analysis/branches?${params}`).then(r => r.json()).catch(() => []),
-    fetch(`${API}/api/analysis/health?${params}`).then(r => r.json()).catch(() => []),
+    api(`${API}/api/analysis/branches?${params}`).catch(() => []),
+    api(`${API}/api/analysis/health?${params}`).catch(() => []),
   ]);
 
   const healthMap = {};
@@ -2904,12 +2904,12 @@ async function loadBenchmark() {
   renderBenchFoodCost(params);
 
   // ── Branch KPI table: latest month vs previous month (MoM), sortable ──
-  const curMonth = getMonthTo() || await fetch(`${API}/api/months`).then(r => r.json())
+  const curMonth = getMonthTo() || await api(`${API}/api/months`)
     .then(ms => Array.isArray(ms) && ms.length ? ms[ms.length - 1] : '').catch(() => '');
   const prevMonth = curMonth ? monthAdd(curMonth, -1) : '';
   const grp = getGroup() ? `&group=${encodeURIComponent(getGroup())}` : '';
   const snap = m => m
-    ? fetch(`${API}/api/analysis/branches?month_from=${m}&month_to=${m}${grp}`).then(r => r.json()).catch(() => [])
+    ? api(`${API}/api/analysis/branches?month_from=${m}&month_to=${m}${grp}`).catch(() => [])
     : Promise.resolve([]);
   const [curB, prevB] = await Promise.all([snap(curMonth), snap(prevMonth)]);
   const prevMap = {}; (prevB || []).forEach(b => prevMap[b.branch] = b);

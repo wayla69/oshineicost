@@ -23,9 +23,9 @@ async function loadPnlTab() {
   if (getGroup())     branchParams.set('group',      getGroup());
 
   const [summary, monthly, branchRows] = await Promise.all([
-    fetch(`${API}/api/profit/summary?${params}`).then(r => r.json()),
-    fetch(`${API}/api/pnl/monthly?${params}`).then(r => r.json()),
-    fetch(`${API}/api/pnl/branches?${branchParams}`).then(r => r.json()),
+    api(`${API}/api/profit/summary?${params}`),
+    api(`${API}/api/pnl/monthly?${params}`),
+    api(`${API}/api/pnl/branches?${branchParams}`),
   ]);
 
   renderPnlKpis(summary);
@@ -37,11 +37,11 @@ async function loadPnlTab() {
 
   // Bill distribution: use branch detail when branch is selected, else chain-wide estimate
   if (getBranch()) {
-    fetch(`${API}/api/pnl/branch-detail?${params}`).then(r => r.json()).then(d => {
+    api(`${API}/api/pnl/branch-detail?${params}`).then(d => {
       renderPnlBillDist(d.bill_stats, true);
     });
   } else {
-    fetch(`${API}/api/profit/per-bill-distribution?${params}`).then(r => r.json()).then(dist => {
+    api(`${API}/api/profit/per-bill-distribution?${params}`).then(dist => {
       renderPnlBillDistChain(dist);
     });
   }
@@ -209,7 +209,7 @@ async function loadPnlDeepDive(branch) {
   if (getMonthFrom()) p.set('month_from', getMonthFrom());
   if (getMonthTo())   p.set('month_to',   getMonthTo());
 
-  const data = await fetch(`${API}/api/pnl/branch-detail?${p}`).then(r => r.json());
+  const data = await api(`${API}/api/pnl/branch-detail?${p}`);
 
   document.getElementById('pnlDeepContent')?.classList.remove('hidden');
   document.getElementById('pnlDeepBranchHint')?.classList.add('hidden');
@@ -388,7 +388,7 @@ async function loadCostAnalysis() {
   if (getBranch())    params.set('branch',     getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  costData = await fetch(`${API}/api/cost/analysis?${params}`).then(r => r.json());
+  costData = await api(`${API}/api/cost/analysis?${params}`);
 
   // Populate category filter for รายละเอียดเมนู
   const cats = [...new Set(costData.items.map(r => r.category))].sort();
@@ -409,14 +409,14 @@ async function loadCostAnalysis() {
 async function renderCphCompare() {
   let month = getMonthTo() || getMonthFrom() || '';
   if (!month) {
-    try { const w = await fetch(`${API}/api/meta/data-window`).then(r=>r.json()); month = w.last_complete_month || w.max_month || ''; }
+    try { const w = await api(`${API}/api/meta/data-window`); month = w.last_complete_month || w.max_month || ''; }
     catch (e) {}
   }
   const p = new URLSearchParams(); p.set('gran', 'month');
   if (month) p.set('date', month + '-15');
   if (getBranch()) p.set('branch', getBranch());
   if (getGroup()) p.set('group', getGroup());
-  let d; try { d = await fetch(`${API}/api/sales/cost-per-head?${p}`).then(r=>r.json()); } catch (e) { return; }
+  let d; try { d = await api(`${API}/api/sales/cost-per-head?${p}`); } catch (e) { return; }
   const branches = (d.branches || []).filter(b => b.cost_per_head != null).sort((a,b)=>b.cost_per_head - a.cost_per_head);
   const avg = (d.total || {}).cost_per_head;
   const mLabel = (d.cur_range && d.cur_range[0]) ? (typeof fmtMonth==='function'?fmtMonth((d.cur_range[0]||'').slice(0,7)):(d.cur_range[0]||'').slice(0,7)) : (month||'');
@@ -463,7 +463,7 @@ async function loadFoodCostTrend() {
   const params = new URLSearchParams({ alert_threshold: threshold });
   if (getBranch())    params.set('branch', getBranch());
   if (getGroup())     params.set('group',  getGroup());
-  const d = await fetch(`${API}/api/analysis/food_cost_trend?${params}`).then(r => r.json()).catch(() => null);
+  const d = await api(`${API}/api/analysis/food_cost_trend?${params}`).catch(() => null);
   if (!d || !d.months || !d.months.length) return;
 
   // Alerts
@@ -1298,8 +1298,8 @@ async function loadTargets() {
   if (!month) return;
 
   const [targets, actuals] = await Promise.all([
-    fetch(`${API}/api/targets?month=${encodeURIComponent(month)}`).then(r => r.json()),
-    fetch(`${API}/api/analysis/branches?month=${encodeURIComponent(month)}`).then(r => r.json()),
+    api(`${API}/api/targets?month=${encodeURIComponent(month)}`),
+    api(`${API}/api/analysis/branches?month=${encodeURIComponent(month)}`),
   ]);
 
   const actualMap = {};
@@ -1373,7 +1373,7 @@ async function suggestTargets() {
   const status = document.getElementById('targetSaveStatus');
   if (!month) return;
   status.textContent = 'กำลังคำนวณ…'; status.className = 'text-sm text-slate-400';
-  let d; try { d = await fetch(`${API}/api/targets/suggest?month=${encodeURIComponent(month)}`).then(r => r.json()); }
+  let d; try { d = await api(`${API}/api/targets/suggest?month=${encodeURIComponent(month)}`); }
   catch (e) { status.textContent = '✗ ' + e.message; status.className = 'text-sm text-red-600'; return; }
   if (!d.suggestions || !d.suggestions.length) {
     status.textContent = 'ไม่มีข้อมูลย้อนหลังพอ'; status.className = 'text-sm text-amber-600'; return;
@@ -1423,7 +1423,7 @@ async function loadCosts() {
   if (sortBy)   params.set('sort', sortBy);
   if (bizType)  params.set('business_type', bizType);
 
-  const data = await fetch(`${API}/api/cost/detail?${params}`).then(r => r.json());
+  const data = await api(`${API}/api/cost/detail?${params}`);
   document.getElementById('costTotal').textContent = `${data.total.toLocaleString()} SKUs`;
 
   document.getElementById('costDetailBody').innerHTML = data.items.map(r => `
@@ -1582,7 +1582,7 @@ async function saveCostRow(skuId, skuCode) {
 }
 
 async function initCostCategories() {
-  const data = await fetch(`${API}/api/cost`).then(r => r.json());
+  const data = await api(`${API}/api/cost`);
   const cats = [...new Set(data.map(r => r.category))].sort();
   const sel  = document.getElementById('costCatFilter');
   cats.forEach(c => {
@@ -1596,7 +1596,7 @@ async function initCostCategories() {
 // ── Branch Config ─────────────────────────────────────────────
 
 async function loadBranchConfig() {
-  const data = await fetch(`${API}/api/branches?include_inactive=true`).then(r => r.json());
+  const data = await api(`${API}/api/branches?include_inactive=true`);
   document.getElementById('branchConfigBody').innerHTML = data.map(b => `
     <tr class="border-t border-slate-100">
       <td class="py-2.5 pr-4 text-slate-400 text-xs">#${b.id}</td>
@@ -1658,8 +1658,8 @@ let _deactivateSkus = [];  // cached full list
 
 async function loadDeactivate() {
   const [branches, skus] = await Promise.all([
-    fetch(`${API}/api/branches?include_inactive=true`).then(r => r.json()),
-    fetch(`${API}/api/skus?include_inactive=true`).then(r => r.json()),
+    api(`${API}/api/branches?include_inactive=true`),
+    api(`${API}/api/skus?include_inactive=true`),
   ]);
 
   // Branches
@@ -1745,7 +1745,7 @@ async function toggleBranchActive(branchId, active) {
     // Refresh branch dropdown throughout app
     if (typeof loadBranches === 'function') loadBranches();
     // Re-render label in place — reload the section
-    const branches = await fetch(`${API}/api/branches?include_inactive=true`).then(r => r.json());
+    const branches = await api(`${API}/api/branches?include_inactive=true`);
     const bl = document.getElementById('deactivateBranchList');
     bl.innerHTML = branches.map(b => `
       <div class="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
@@ -1793,8 +1793,8 @@ async function toggleSkuActive(skuCode, active, checkbox) {
 
 async function loadPreferences() {
   const [settings, branches] = await Promise.all([
-    fetch(`${API}/api/settings`).then(r => r.json()),
-    fetch(`${API}/api/branches`).then(r => r.json()),
+    api(`${API}/api/settings`),
+    api(`${API}/api/branches`),
   ]);
 
   // Populate branch dropdown
@@ -1906,7 +1906,7 @@ async function runComparison() {
   if (getBranch()) params.set('branch', getBranch());
   document.getElementById('cmpStatus').textContent = 'Loading…';
   try {
-    const data = await fetch(`${API}/api/analysis/period_compare?${params}`).then(r => r.json());
+    const data = await api(`${API}/api/analysis/period_compare?${params}`);
     document.getElementById('cmpStatus').textContent = '';
     renderComparison(data);
   } catch(e) {
@@ -2094,7 +2094,7 @@ async function loadAnomalyBanner() {
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
   try {
-    const data = await fetch(`${API}/api/analysis/anomalies?${params}`).then(r => r.json());
+    const data = await api(`${API}/api/analysis/anomalies?${params}`);
     if (!data.insights || data.insights.length === 0) {
       banner.classList.add('hidden');
       return;
@@ -2130,7 +2130,7 @@ async function loadHeavyEaters(force) {
   const status = document.getElementById('heStatus');
   if (status) status.textContent = 'กำลังโหลด…';
   let d;
-  try { d = await fetch(`${API}/api/sales/heavy-eaters?${p}`).then(r => r.json()); }
+  try { d = await api(`${API}/api/sales/heavy-eaters?${p}`); }
   catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ'; return; }
   if (fromEl && !fromEl.value && d.window?.lo) fromEl.value = d.window.lo;
   if (toEl && !toEl.value && d.window?.hi) toEl.value = d.window.hi;
@@ -2214,9 +2214,9 @@ async function loadActionCenter() {
   let an = { insights: [] }, dy = { branches: [] }, al = { flags: [] };
   try {
     [an, dy, al] = await Promise.all([
-      fetch(`${API}/api/analysis/anomalies?${p}`).then(r => r.json()),
-      fetch(`${API}/api/sales/daily?${dp}`).then(r => r.json()),
-      fetch(`${API}/api/analysis/discount_alerts?${p}`).then(r => r.json()).catch(() => ({ flags: [] })),
+      api(`${API}/api/analysis/anomalies?${p}`),
+      api(`${API}/api/sales/daily?${dp}`),
+      api(`${API}/api/analysis/discount_alerts?${p}`).catch(() => ({ flags: [] })),
     ]);
   } catch (e) {}
   const items = [];
@@ -2288,7 +2288,7 @@ async function loadBranchHeatmap() {
   const params = new URLSearchParams({ granularity });
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const data = await fetch(`${API}/api/analysis/heatmap_branch?${params}`).then(r => r.json());
+  const data = await api(`${API}/api/analysis/heatmap_branch?${params}`);
   if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">No data.</p>'; return; }
 
   // Build pivot: branch -> {period -> revenue}

@@ -1,0 +1,246 @@
+<div id="tab-report" class="hidden">
+
+  <!-- Report cover band -->
+  <div id="rptCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+       style="background:linear-gradient(135deg,#4338ca 0%,#7c3aed 55%,#9333ea 100%)">
+    <div class="flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
+        <h1 class="text-3xl font-bold leading-tight">Monthly Report <span class="text-lg font-medium opacity-80">· รายงานประจำเดือน</span></h1>
+        <p id="rptPeriod" class="text-sm opacity-90 mt-2">—</p>
+        <p id="rptBranch" class="text-sm opacity-90">—</p>
+        <!-- Scope: overview (all) / master only / franchise only. Report-local —
+             drives the `group` param on every report query without touching the
+             global top-bar filter. -->
+        <div id="rptScopeSel" class="no-print mt-3 inline-flex rounded-lg overflow-hidden text-xs font-semibold"
+             style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22)">
+          <button type="button" data-scope=""          onclick="setReportScope('')"          class="px-3.5 py-1.5 transition-colors">ภาพรวม · ทั้งหมด</button>
+          <button type="button" data-scope="master"    onclick="setReportScope('master')"    class="px-3.5 py-1.5 transition-colors">🏢 Master</button>
+          <button type="button" data-scope="franchise" onclick="setReportScope('franchise')" class="px-3.5 py-1.5 transition-colors">🤝 Franchise</button>
+        </div>
+      </div>
+      <div class="text-right text-xs opacity-90">
+        <div class="mb-3">Generated: <span id="rptDate">—</span></div>
+        <button onclick="openMonthlyReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 แบบสรุปง่าย (ใหม่)</button>
+        <button onclick="printReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI hero band -->
+  <div id="rptHero" class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-5"></div>
+
+  <!-- Sticky clickable section nav -->
+  <nav id="rptNav" class="no-print sticky top-0 z-20 mb-5 py-2 rounded-xl"
+       style="background:var(--bg-card);box-shadow:0 1px 0 var(--border)">
+    <div id="rptNavInner" class="flex flex-wrap gap-1.5 text-xs px-2"></div>
+  </nav>
+
+  <div id="reportContent" class="space-y-5">
+
+    <!-- §1 Executive Summary -->
+    <div class="card p-6" id="rpt1">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">1. Executive Summary</h2>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-5 mb-4" id="rptKpis"></div>
+      <div id="rptExecAlerts" class="space-y-2 text-sm"></div>
+    </div>
+
+    <!-- §2 Revenue Performance & Growth -->
+    <div class="card p-6" id="rpt2">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">2. Revenue Performance &amp; Growth</h2>
+      <div id="rptRevHeadline" class="text-sm text-slate-600 mb-3"></div>
+      <div class="overflow-auto">
+        <table class="text-sm text-slate-700 w-full">
+          <caption class="text-left text-[11px] text-slate-400 pb-1">ตัวเลขเล็กใต้แต่ละค่า = MoM เทียบเดือนก่อนหน้า</caption>
+          <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+            <th class="py-2 pr-6">Month</th>
+            <th class="py-2 pr-6 text-right">Revenue · MoM</th>
+            <th class="py-2 pr-6 text-right">Transactions · MoM</th>
+            <th class="py-2 pr-6 text-right">Customers · MoM</th>
+            <th class="py-2 text-right">Avg Ticket · MoM</th>
+          </tr></thead>
+          <tbody id="rptTrendBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- §3 Branch Performance Ranking -->
+    <div class="card p-6" id="rpt3">
+      <h2 class="text-base font-bold text-slate-700 mb-1 pb-2 border-b border-slate-100">3. Branch Performance Ranking</h2>
+      <p class="text-xs text-slate-400 mb-3" id="rptBranchRankSub">จัดอันดับตามรายได้เดือนล่าสุด · MoM = เทียบเดือนก่อน · ขยับ = การเปลี่ยนอันดับเทียบเดือนก่อน · YTD = แนวโน้มรายได้ปีนี้</p>
+      <div class="overflow-x-auto">
+      <table class="text-sm text-slate-700 w-full">
+        <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+          <th class="py-2 pr-4">Rank</th>
+          <th class="py-2 pr-4">สาขา</th>
+          <th class="py-2 pr-4 text-right">รายได้ (เดือนล่าสุด)</th>
+          <th class="py-2 pr-4 text-right">MoM</th>
+          <th class="py-2 pr-4 text-center">ขยับ</th>
+          <th class="py-2 pr-4 text-right">Share</th>
+          <th class="py-2 pr-4 text-right">Avg Ticket</th>
+          <th class="py-2 text-center">YTD Trend</th>
+        </tr></thead>
+        <tbody id="rptBranchBody"></tbody>
+      </table>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">โปรไฟล์รายสาขา — จุดเด่น/ผิดปกติเทียบเครือ</h3>
+      <p class="text-xs text-slate-400 mb-3">เทียบแต่ละสาขากับค่ากลาง (median) ของทั้งเครือ · แสดงเฉพาะจุดที่ต่างชัด (เกิน ±20%)</p>
+      <div id="rptBranchProfile"></div>
+    </div>
+
+    <!-- §4 Top 60 เมนู — เทียบต้นทุนต่อหัว (same view as Menu tab; shared renderer) -->
+    <div class="card p-6" id="rpt4">
+      <h2 class="text-base font-bold text-slate-700 mb-1 pb-2 border-b border-slate-100">4. Top 60 เมนู — เทียบต้นทุนต่อหัว <span class="text-xs font-normal text-slate-400">· <span id="rpt4MomNote">เทียบเดือนก่อน</span></span></h2>
+      <p id="rpt4Note" class="text-[11px] text-slate-400 mb-3"></p>
+      <div class="overflow-x-auto">
+        <table class="tbl-top60 w-full" id="rpt4Table">
+          <thead><tr>
+            <th class="num">#</th><th class="num">ABC</th><th>SKU</th><th>เมนู</th>
+            <th class="num">จำนวนเสิร์ฟ<span class="sub">จาน/ที่</span></th>
+            <th class="num">จำนวน %<span class="sub">เทียบเดือนก่อน</span></th>
+            <th class="num">ต้นทุน/หัว</th>
+            <th class="num">% ของต้นทุนรวม</th>
+            <th class="num">% สะสม<span class="sub">Pareto</span></th>
+            <th class="num">ต้นทุน/หัว<span class="sub">เดือนก่อน (ช่วงเดียวกัน)</span></th>
+            <th class="num">เปลี่ยนแปลง %<span class="sub">ต้นทุน/หัว · ขึ้น = แย่</span></th>
+          </tr></thead>
+          <tbody id="rpt4Body"></tbody>
+          <tfoot id="rpt4Foot"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- §5 Customer Behavior -->
+    <div class="card p-6" id="rpt5">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">5. Customer Behavior</h2>
+      <div id="rptPersona" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3"></div>
+      <p id="rptPersonaNarrative" class="text-sm text-slate-500 mb-4"></p>
+      <div id="rptPersonaRich"></div>
+    </div>
+
+    <!-- §6 Time & Operations -->
+    <div class="card p-6" id="rpt6">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">6. Time &amp; Operations (operating hours)</h2>
+      <div id="rptTimeKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3"></div>
+      <div id="rptTimeNarrative" class="text-sm text-slate-500"></div>
+    </div>
+
+    <!-- §7 รายได้ตามวันและเวลา -->
+    <div class="card p-6" id="rpt7">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">7. รายได้ตามวันและเวลา</h2>
+      <div id="rptDayTimeBlock" class="space-y-4 text-sm"></div>
+    </div>
+
+    <!-- §8 Cost Contribution — top 40 เมนูที่ทำให้ต้นทุนสูง -->
+    <div class="card p-6" id="rpt8">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-1 pb-2 border-b border-slate-100">
+        <h2 class="text-base font-bold text-slate-700">8. Cost Contribution — เมนูต้นทุนสูง 60 อันดับ</h2>
+        <div class="flex items-center gap-2 no-print">
+          <span class="text-xs text-slate-500">สาขา:</span>
+          <select id="rptCostBranch" onchange="renderReportCost(this.value)" class="border border-slate-200 rounded px-2 py-1 text-xs bg-white"></select>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mb-4" id="rptCostContribNote">เดือนล่าสุด · % = สัดส่วนของต้นทุนรวม · สะสม% บอกขนาดรวมของ Top 60 · MoM Δ = เทียบเดือนก่อน</p>
+      <div id="rptCostContribKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+      <div class="overflow-x-auto">
+        <table class="text-xs text-slate-700 w-full">
+          <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+            <th class="py-2 pr-3">#</th>
+            <th class="py-2 pr-3">เมนู</th>
+            <th class="py-2 pr-3">หมวด</th>
+            <th class="py-2 pr-3 text-right">Qty</th>
+            <th class="py-2 pr-3 text-right">COGS (฿)</th>
+            <th class="py-2 pr-3 text-right">% ต้นทุน</th>
+            <th class="py-2 pr-3 text-right">สะสม%</th>
+            <th class="py-2 pr-3 text-right">MoM Qty Δ</th>
+            <th class="py-2 text-right">MoM COGS Δ</th>
+          </tr></thead>
+          <tbody id="rptCostContribBody"></tbody>
+          <tfoot id="rptCostContribFoot" class="font-bold"></tfoot>
+        </table>
+      </div>
+    </div>
+
+    <!-- §9 Pricing & Discounts -->
+    <div class="card p-6" id="rpt9">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-4 pb-2 border-b border-slate-100">
+        <h2 class="text-base font-bold text-slate-700">9. Pricing &amp; Discounts</h2>
+        <button onclick="openDiscountBills({title:'บิลส่วนลดสูงสุด (ตามตัวกรองรายงาน)'})"
+                class="text-xs px-3 py-1.5 rounded-lg font-medium no-print" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">🔍 ดูบิลส่วนลดสูงสุด →</button>
+      </div>
+      <div id="rptDiscountSummary" class="text-sm text-slate-600 mb-3"></div>
+      <table class="text-sm text-slate-700 w-full">
+        <thead><tr class="text-left text-xs text-slate-500 uppercase tracking-wide border-b border-slate-200">
+          <th class="py-2 pr-4">สาขา</th>
+          <th class="py-2 pr-4 text-right">Gross Sales</th>
+          <th class="py-2 pr-4 text-right">Discounts</th>
+          <th class="py-2 text-right">Discount %</th>
+        </tr></thead>
+        <tbody id="rptDiscountBody"></tbody>
+      </table>
+
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">ลักษณะส่วนลดรายสาขา (Discount nature) · เทียบเดือนก่อน</h3>
+      <p class="text-xs text-slate-400 mb-2">แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p>
+      <div id="rptDiscountComposition" class="overflow-x-auto text-sm"></div>
+
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">🏷️ Tier ราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
+      <p class="text-xs text-slate-400 mb-2" id="rptTierNote">คนทาน สัดส่วน และต้นทุน/หัว แยกตามราคาบุฟเฟ่ต์บนบิล (ไม่รวม VAT) — เดือนที่รายงานเทียบช่วงก่อนหน้าความยาวเท่ากัน</p>
+      <div id="rptTierBlock" class="overflow-x-auto text-sm"></div>
+    </div>
+
+    <!-- §10 Forecasts & Action Items -->
+    <div class="card p-6" id="rpt10">
+      <h2 class="text-base font-bold text-slate-700 mb-4 pb-2 border-b border-slate-100">10. Forecasts &amp; Action Items</h2>
+
+      <!-- Next-month forecast (for real tracking — compare vs actuals at month-end) -->
+      <div id="rptNextMonth" class="mb-5"></div>
+
+      <div id="rptForecast" class="text-sm text-slate-700 mb-3"></div>
+
+      <!-- Forecast scorecard: projected / MoM / YoY / target attainment -->
+      <div id="rptForecastScorecard" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
+      <!-- Scenario: best / base / worst -->
+      <div id="rptScenario" class="mb-5"></div>
+
+      <!-- Per-branch month-end projection -->
+      <div id="rptForecastBranchWrap" class="mb-5 hidden">
+        <h3 class="text-sm font-bold text-slate-600 mb-2">พยากรณ์รายได้สิ้นเดือน · รายสาขา (run-rate)</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-slate-500 border-b border-slate-200">
+              <th class="py-2 pr-4">สาขา</th>
+              <th class="py-2 pr-4 text-right">MTD (ex-VAT)</th>
+              <th class="py-2 pr-4 text-right">คาดสิ้นเดือน</th>
+              <th class="py-2 pr-4 text-right">เดือนก่อน</th>
+              <th class="py-2 text-right">vs เดือนก่อน</th>
+            </tr></thead>
+            <tbody id="rptForecastBranchBody"></tbody>
+            <tfoot id="rptForecastBranchFoot"></tfoot>
+          </table>
+        </div>
+        <p id="rptInactiveNote" class="text-xs text-slate-400 mt-2"></p>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-600 mb-2">Anomalies (last 90 days)</h3>
+      <ul id="rptAnomalies" class="list-disc pl-5 text-sm text-slate-600 space-y-1 mb-4"></ul>
+      <h3 class="text-sm font-bold text-slate-600 mb-2">คำแนะนำเชิงปฏิบัติ (เรียงตามความสำคัญ)</h3>
+      <ul id="rptActions" class="text-sm text-slate-700 space-y-1.5"></ul>
+
+      <details class="mt-5 text-xs text-slate-500">
+        <summary class="cursor-pointer font-semibold text-slate-600 select-none">📐 วิธีคำนวณ (Methodology)</summary>
+        <div class="mt-2 space-y-1.5 pl-1 leading-relaxed">
+          <p><b>พยากรณ์รายได้ (run-rate):</b> คาดสิ้นเดือน = MTD ÷ จำนวนวันที่ผ่านไป × จำนวนวันในเดือน. ทุกสาขาใช้ตัวหาร "วันที่ผ่านไป" เท่ากัน (วันในปฏิทินของวันที่ขายล่าสุด) วันที่ปิดร้านนับเป็นรายได้ 0 → ผลรวมรายสาขาเท่ากับยอดรวมพอดี. รายได้เป็นแบบ <b>ไม่รวม VAT</b> (หารด้วย 1.07).</p>
+          <p><b>ช่วงความเชื่อมั่น (ทุกสาขา):</b> คาดสิ้นเดือน ± 1 SD ของรายได้รายวัน × √(จำนวนวันที่เหลือ).</p>
+          <p><b>vs เดือนก่อน (MoM):</b> (คาดสิ้นเดือน − ยอดจริงเดือนก่อนเต็มเดือน) ÷ ยอดจริงเดือนก่อน × 100.</p>
+          <p><b>Anomalies:</b> z-score ของรายได้รายวันเทียบค่าเฉลี่ย/ส่วนเบี่ยงเบนมาตรฐานของ 90 วันล่าสุด.</p>
+          <p><b>Action Items:</b> กฎอัตโนมัติจาก Menu Engineering quadrant (เส้นแบ่ง = median ปริมาณ × median margin), SKU ที่ยังไม่มีต้นทุน, อัตราส่วนลด, YoY, และพยากรณ์รายสาขา. ระดับ: 🔴 เร่งด่วน · 🟡 ควรทำ · 🟢 ข้อมูล.</p>
+        </div>
+      </details>
+    </div>
+
+  </div><!-- /reportContent -->
+
+</div><!-- /tab-report -->
+

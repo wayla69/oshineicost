@@ -1,0 +1,102 @@
+<!-- ══════════════════════════════════════════════════════════════════════════
+     TAB: 🆚 MENU COMPARE A/B — compare Top menus across two arbitrary periods
+══════════════════════════════════════════════════════════════════════════ -->
+<div id="tab-menucompare" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #6366f1">
+    <h2 class="text-base font-bold" style="color:#4338ca">🆚 เทียบเมนู A vs B</h2>
+    <p class="text-xs text-slate-500 mt-1">เลือกช่วง A กับ B (เดือน หรือ ช่วงวันที่) แล้วเทียบ Top เมนู · คลิกแถวเพื่อ dive-in (รายสาขา · เทรนด์ · BoM)</p>
+  </div>
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-bold" style="color:#6366f1">ช่วง A</span>
+      <select id="mcAmode" onchange="mcToggleMode('A')" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)"><option value="month">เดือน</option><option value="date">ช่วงวันที่</option></select>
+      <span id="mcAmonth" class="flex items-center gap-1"><input type="month" id="mcAmf" class="border border-slate-300 rounded px-2 py-1 text-xs"><span class="text-slate-400">–</span><input type="month" id="mcAmt" class="border border-slate-300 rounded px-2 py-1 text-xs"></span>
+      <span id="mcAdate" class="hidden items-center gap-1"><input type="date" id="mcAdf" class="border border-slate-300 rounded px-2 py-1 text-xs"><span class="text-slate-400">–</span><input type="date" id="mcAdt" class="border border-slate-300 rounded px-2 py-1 text-xs"></span>
+    </div>
+    <span class="text-sm font-bold text-slate-400">vs</span>
+    <div class="flex items-center gap-2">
+      <span class="text-xs font-bold" style="color:#0891b2">ช่วง B</span>
+      <select id="mcBmode" onchange="mcToggleMode('B')" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)"><option value="month">เดือน</option><option value="date">ช่วงวันที่</option></select>
+      <span id="mcBmonth" class="flex items-center gap-1"><input type="month" id="mcBmf" class="border border-slate-300 rounded px-2 py-1 text-xs"><span class="text-slate-400">–</span><input type="month" id="mcBmt" class="border border-slate-300 rounded px-2 py-1 text-xs"></span>
+      <span id="mcBdate" class="hidden items-center gap-1"><input type="date" id="mcBdf" class="border border-slate-300 rounded px-2 py-1 text-xs"><span class="text-slate-400">–</span><input type="date" id="mcBdt" class="border border-slate-300 rounded px-2 py-1 text-xs"></span>
+    </div>
+    <button onclick="loadMenuCompare(true)" class="px-4 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium">เปรียบเทียบ</button>
+    <button onclick="exportTable('mcTable','menu_compare.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+    <span id="mcStatus" class="text-[11px] text-slate-400 ml-auto"></span>
+  </div>
+  <!-- การ์ดสรุปอัตโนมัติ: มาแรง / ร่วงแรง / ใหม่ / หาย -->
+  <div id="mcInsights" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
+
+  <div class="card p-5">
+    <h3 class="text-sm font-bold mb-1" style="color:var(--text-primary)">📋 ตารางที่ 1 · เทียบเมนู A vs B — ยอดรวม
+      <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวนชิ้นรวม · สัดส่วน · ต้นทุน ของแต่ละช่วง · คลิกหัวคอลัมน์เพื่อเรียง)</span></h3>
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <span class="text-xs text-slate-500">มุมมองต้นทุน:</span>
+      <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+        <button class="gran-btn gran-active" id="mcModeTotal" onclick="mcSetCostMode(false)">ต้นทุนรวม</button>
+        <button class="gran-btn" id="mcModeHead" onclick="mcSetCostMode(true)">ต้นทุน/หัว</button>
+      </div>
+      <span class="text-xs text-slate-500 ml-2">หมวด:</span>
+      <select id="mcCatFilter" onchange="mcSetCat(this.value)" class="text-xs border border-slate-300 rounded px-2 py-1" style="background:var(--bg-input);color:var(--text-primary)"><option value="">ทั้งหมด</option></select>
+      <span id="mcCoversNote" class="text-[11px] text-slate-400"></span>
+    </div>
+    <div class="overflow-auto" style="max-height:640px">
+      <table class="tbl-top60 w-full" id="mcTable">
+        <thead id="mcHead"></thead>
+        <tbody id="mcBody"></tbody>
+        <tfoot id="mcFoot"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- ตารางที่ 2 — เกณฑ์ "ต่อหัว" เสมอ (เพิ่มเติม ไม่ทับตารางที่ 1) -->
+  <div class="card p-5 mt-4">
+    <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">📋 ตารางที่ 2 · เทียบเมนู A vs B — ต่อหัว
+        <span class="font-normal text-slate-400 text-xs">(เฉพาะเมนูบุฟเฟ่ต์ · จำนวน/คน &amp; ต้นทุน/หัว = หารด้วยจำนวนลูกค้าของแต่ละช่วง)</span></h3>
+      <button onclick="exportTable('mcTable2','menu_compare_per_head.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+    </div>
+    <div class="mb-3"><span id="mcCoversNote2" class="text-[11px] text-slate-400"></span></div>
+    <div class="overflow-auto" style="max-height:640px">
+      <table class="tbl-top60 w-full" id="mcTable2">
+        <thead id="mcHead2"></thead>
+        <tbody id="mcBody2"></tbody>
+        <tfoot id="mcFoot2"></tfoot>
+      </table>
+    </div>
+  </div>
+
+  <!-- Pareto สะสม — cost concentration A vs B -->
+  <div class="card p-5 mt-4" id="mcParetoCard" style="display:none">
+    <div class="flex items-center justify-between mb-2 flex-wrap gap-2">
+      <h3 class="text-sm font-bold" style="color:var(--text-primary)">📊 Pareto สะสม — การกระจุกตัวของต้นทุน (A vs B)</h3>
+      <div class="flex items-center gap-2 flex-wrap">
+        <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+          <button class="gran-btn gran-active" id="mcParetoModeConc" onclick="mcSetParetoMode('concentration')" title="แต่ละช่วงเรียงต้นทุนของตัวเอง — ดูการกระจุกตัว">การกระจุกตัว</button>
+          <button class="gran-btn" id="mcParetoModeAlign" onclick="mcSetParetoMode('aligned')" title="ใช้ลำดับเมนูชุดเดียวกันทั้ง A/B — เทียบเมนูตัวต่อตัว">เทียบตัวต่อตัว</button>
+        </div>
+        <span id="mcParetoSummary" class="text-[11px] text-slate-500"></span>
+      </div>
+    </div>
+    <p id="mcParetoHint" class="text-xs text-slate-400 mb-3">เส้นสะสม % ของต้นทุน เทียบกับจำนวนเมนู (เรียงต้นทุนมาก→น้อยในแต่ละช่วง) · เส้นที่ชันกว่า = ต้นทุนกระจุกในเมนูจำนวนน้อยกว่า · เส้นประ = 80%</p>
+    <div style="height:300px"><canvas id="mcParetoChart"></canvas></div>
+  </div>
+
+  <!-- dive-in detail panel — expands inline directly below the table -->
+  <div id="mcDrillModal" class="card p-5 mt-4 hidden" style="display:none;scroll-margin-top:16px">
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h3 id="mcDrillTitle" class="text-base font-bold text-slate-800"></h3>
+        <button onclick="mcCloseDrill()" class="topbar-icon-btn" aria-label="ปิด">✕</button>
+      </div>
+      <div class="flex flex-wrap gap-1 mb-4" id="mcDrillTabs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;width:fit-content">
+        <button class="gran-btn gran-active" onclick="mcDrillTab('branch')">🏪 รายสาขา (A vs B)</button>
+        <button class="gran-btn" onclick="mcDrillTab('trend')">📈 เทรนด์รายเดือน</button>
+        <button class="gran-btn" onclick="mcDrillTab('bom')">🧾 BoM/วัตถุดิบ</button>
+      </div>
+      <div id="mcDrillBranch"></div>
+      <div id="mcDrillTrend" class="hidden"><div style="height:320px"><canvas id="mcDrillChart"></canvas></div></div>
+      <div id="mcDrillBom" class="hidden"></div>
+    </div>
+  </div>
+</div>
