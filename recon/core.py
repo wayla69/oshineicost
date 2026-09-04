@@ -16,8 +16,15 @@ from .matcher import coupon_discount_total_daily
 from .matcher import daily_reconciliation
 from .matcher import point_pos_total_daily
 from .parsers.bank import STATEMENT_CODE_MAP
-from backend.auth import SESSION_COOKIE as _SESSION_COOKIE
-from backend.auth import parse_token as _parse_session
+# Session parsing comes from the dashboard's auth module when it is importable —
+# recon can also run standalone, in which case the audit "by" falls back to the
+# client value and /api/_diag/auth-wiring reports why.
+try:
+    from backend.auth import parse_token as _parse_session, SESSION_COOKIE as _SESSION_COOKIE
+    _AUTH_IMPORT_ERR = None
+except Exception as _e:                              # standalone recon
+    _parse_session, _SESSION_COOKIE = None, "oshinei_session"
+    _AUTH_IMPORT_ERR = repr(_e)
 from contextlib import contextmanager
 from datetime import datetime as _dt
 from fastapi import HTTPException
