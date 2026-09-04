@@ -8,7 +8,7 @@ routers/reports.py.
 from fastapi import Query
 from typing import Optional
 import json as _json
-from rules import net_revenue_row, net_revenue_sum, scope_filter
+from rules import net_revenue_row
 from core import (
     _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
     _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,

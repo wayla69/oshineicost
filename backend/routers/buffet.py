@@ -9,11 +9,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import io as _io
 from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
-from core import (
-    _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter,
-    _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, _ym_parts,
-    get_db, ttl_cache,
-)
+from core import _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter, _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, get_db, ttl_cache
 
 from fastapi import APIRouter
 router = APIRouter()

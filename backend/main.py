@@ -7,19 +7,15 @@ Run: uvicorn backend.main:app --reload --port 8000
 import sqlite3
 import tempfile
 import threading
-import time as _time
-import functools
-from contextlib import contextmanager, closing
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional
 
-from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Depends, Request, Response
+from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-import io as _io
-from pydantic import BaseModel
+from fastapi.responses import FileResponse, JSONResponse
 
 try:                                   # works as `backend.main:app`
     from . import auth as _auth
@@ -88,6 +84,103 @@ from rules import (VAT_RATE, VAT_DIVISOR, net_revenue_row, net_revenue_sum,  # n
                    EASY_TIER_CODES as _EASY_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL,
                    LEGACY_TIER_CODES as _LEGACY_TIER_CODES, ALL_TIER_CODES as _ALL_TIER_CODES,
                    ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL)
+
+# main.py is the compatibility facade: everything the routers share lives in
+# core.py and rules.py and is re-exported here so `main.X` keeps resolving for the
+# scripts and tests that spell it that way. Listing the names in __all__ is what
+# tells a static checker the re-exports are on purpose.
+__all__ = [
+    "BOM_TYPE_BENCHMARKS",
+    "COVERAGE_MIN_RATIO",
+    "CostEntry",
+    "DB_PATH",
+    "HERE",
+    "PRICE_AS_COST_HI",
+    "PRICE_AS_COST_LO",
+    "VAT_DIVISOR",
+    "VAT_RATE",
+    "_ALL_TIER_CODES",
+    "_ALL_TIER_CODES_SQL",
+    "_CACHE_TTL",
+    "_EASY_TIER_CODES",
+    "_EASY_TIER_CODES_SQL",
+    "_FOOD_CATEGORY_FILTER",
+    "_FOOD_SKU_WHITELIST",
+    "_FOOD_SKU_WHITELIST_SQL",
+    "_INGREDIENT_FAMILIES",
+    "_LEGACY_TIER_CODES",
+    "_NONFOOD_CATEGORY_KEYWORDS",
+    "_PRAGMAS",
+    "_REV_VIEWS",
+    "_RWLock",
+    "_accepted_tokens",
+    "_apply_incoming_live",
+    "_apply_period_filter",
+    "_bom_cogs_expr",
+    "_bom_cost_period_filters",
+    "_bom_costed_rev_expr",
+    "_build_sku_effective_cost",
+    "_cache_key",
+    "_cache_lock",
+    "_cache_stats",
+    "_cached_fn_names",
+    "_carry_forward_and_verify",
+    "_carry_forward_preserved",
+    "_cogs_case",
+    "_conn_reg",
+    "_conn_reg_lock",
+    "_costed_rev_case",
+    "_db_gen",
+    "_db_rw",
+    "_eff_month_range",
+    "_effective_cost_subquery",
+    "_ensure_rev_views",
+    "_group_filter",
+    "_ingredient_family",
+    "_iso_week_sql",
+    "_maybe_swap_incoming_db",
+    "_month_range_filter",
+    "_new_conn",
+    "_next_period_month",
+    "_ols_regression",
+    "_partial_months",
+    "_preserved_counts",
+    "_profit_filters",
+    "_raw_unit_cost_sql",
+    "_resp_cache",
+    "_rules_cogs_expr",
+    "_service_charge_map",
+    "_tls",
+    "_token_accepted",
+    "_tx_filters",
+    "_txn_fallback_counts",
+    "_unified_cogs_expr",
+    "_variant_filter",
+    "_ym_parts",
+    "effective_unit_cost_sql",
+    "ex_vat",
+    "get_db",
+    "invalidate_cache",
+    "is_price_as_cost",
+    "net_revenue_row",
+    "net_revenue_sum",
+    "require_write_token",
+    "scope_filter",
+    "ttl_cache",
+    "report_management",   # router internal re-exported for back-compat (tests import it through main)
+    "report_management_xlsx",   # router internal re-exported for back-compat (tests import it through main)
+    "_bom_unit_cost_sql",   # router internal re-exported for back-compat (tests import it through main)
+    "analysis_sph",   # router internal re-exported for back-compat (tests import it through main)
+    "analysis_forecast",   # router internal re-exported for back-compat (tests import it through main)
+    "analysis_forecast_branches",   # router internal re-exported for back-compat (tests import it through main)
+    "revenue_forecast",   # router internal re-exported for back-compat (tests import it through main)
+    "_mtd_window",   # router internal re-exported for back-compat (tests import it through main)
+    "_month_add",   # router internal re-exported for back-compat (tests import it through main)
+    "_menucmp_agg",   # router internal re-exported for back-compat (tests import it through main)
+    "get_cost_detail",   # router internal re-exported for back-compat (tests import it through main)
+    "branch_bom_analysis",   # router internal re-exported for back-compat (tests import it through main)
+    "buffet_per_bill",   # router internal re-exported for back-compat (tests import it through main)
+]
 
 
 app = FastAPI(title="Oshinei Dashboard API")

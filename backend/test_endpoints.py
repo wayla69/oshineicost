@@ -48,6 +48,8 @@ SMOKE = [
     ("/api/reports/management", {"period": "weekly"}),
     ("/api/reports/management", {"period": "daily", "branch": "BranchA"}),
     ("/api/reports/management", {"period": "weekly", "group": "master"}),
+    ("/api/reports/management", {"period": "monthly"}),
+    ("/api/reports/management", {"period": "monthly", "branch": "BranchB"}),
     # ── master/franchise scope on the Analysis Report endpoints (must 200 with group=) ──
     ("/api/analysis/anomalies", {"group": "master"}),
     ("/api/analysis/discount_composition", {"month_from": "2026-05", "month_to": "2026-06", "group": "franchise"}),
