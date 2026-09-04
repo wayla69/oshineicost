@@ -12,6 +12,7 @@ from pathlib import Path
 HERE = Path(__file__).parent.resolve()
 sys.path.insert(0, str(HERE))
 import main  # noqa: E402
+import core   # the swap machinery reads core.DB_PATH and calls core._carry_forward_preserved; patching main would miss it
 
 
 def _mk_live(p):
@@ -52,7 +53,7 @@ def test_fail_closed_on_dropped_rows(tmp_path, monkeypatch):
     """If carry-forward silently no-ops, the verify gate still aborts the swap."""
     live, inc = tmp_path / "live.db", tmp_path / "inc.db"
     _mk_live(live); _mk_incoming(inc)
-    monkeypatch.setattr(main, "_carry_forward_preserved", lambda l, i: None)
+    monkeypatch.setattr(core, "_carry_forward_preserved", lambda l, i: None)
     safe, reason = main._carry_forward_and_verify(str(live), str(inc))
     assert not safe and "drop" in reason.lower()
 
@@ -84,7 +85,7 @@ def _spy_connections(monkeypatch):
         opened.append(con)
         return con
 
-    monkeypatch.setattr(main.sqlite3, "connect", spy)
+    monkeypatch.setattr(core.sqlite3, "connect", spy)
     return opened
 
 
@@ -98,7 +99,7 @@ def test_startup_swap_discards_malformed_incoming_and_closes_probe(tmp_path, mon
     live = tmp_path / "oshinei.db"; _mk_live(live)
     inc = Path(str(live) + ".incoming")
     inc.write_bytes(b"this is not a database")    # probe raises mid-validation
-    monkeypatch.setattr(main, "DB_PATH", live)
+    monkeypatch.setattr(core, "DB_PATH", live)
     opened = _spy_connections(monkeypatch)
     main._maybe_swap_incoming_db()
     _assert_all_closed(opened)
@@ -109,7 +110,7 @@ def test_startup_swap_discards_malformed_incoming_and_closes_probe(tmp_path, mon
 def test_startup_swap_applies_good_incoming_and_closes_probe(tmp_path, monkeypatch):
     live = tmp_path / "oshinei.db"; _mk_live(live)
     inc = Path(str(live) + ".incoming"); _mk_incoming(inc)
-    monkeypatch.setattr(main, "DB_PATH", live)
+    monkeypatch.setattr(core, "DB_PATH", live)
     opened = _spy_connections(monkeypatch)
     main._maybe_swap_incoming_db()
     _assert_all_closed(opened)
@@ -124,7 +125,7 @@ def test_hot_swap_discards_malformed_incoming_and_closes_probe(tmp_path, monkeyp
     live = tmp_path / "oshinei.db"; _mk_live(live)
     inc = Path(str(live) + ".incoming")
     inc.write_bytes(b"this is not a database")
-    monkeypatch.setattr(main, "DB_PATH", live)
+    monkeypatch.setattr(core, "DB_PATH", live)
     opened = _spy_connections(monkeypatch)
     assert main._apply_incoming_live() is False
     _assert_all_closed(opened)
@@ -134,12 +135,12 @@ def test_hot_swap_discards_malformed_incoming_and_closes_probe(tmp_path, monkeyp
 def test_hot_swap_applies_good_incoming_and_closes_probe(tmp_path, monkeypatch):
     live = tmp_path / "oshinei.db"; _mk_live(live)
     inc = Path(str(live) + ".incoming"); _mk_incoming(inc)
-    monkeypatch.setattr(main, "DB_PATH", live)
-    gen_before = main._db_gen
+    monkeypatch.setattr(core, "DB_PATH", live)
+    gen_before = core._db_gen          # the swap bumps core's counter; main re-exports a snapshot
     opened = _spy_connections(monkeypatch)
     assert main._apply_incoming_live() is True
     _assert_all_closed(opened)
-    assert main._db_gen == gen_before + 1         # threads reconnect lazily
+    assert core._db_gen == gen_before + 1         # threads reconnect lazily
     con = sqlite3.connect(str(live))
     assert con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0] == 1
     assert con.execute("SELECT COUNT(*) FROM recon_uploads").fetchone()[0] == 3  # carried

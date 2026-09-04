@@ -9,34 +9,22 @@ imported as top-level `main` locally/in tests but as `backend.main` under the
 production uvicorn (`backend.main:app`) — resolved via sys.modules so we never
 double-import the app.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import HTTPException, Query, Response
+from fastapi.responses import StreamingResponse
+from typing import Optional
+import json as _json
+import io as _io
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, scope_filter
+from core import (
+    HERE,
+    _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _group_filter, _unified_cogs_expr,
+    get_db, ttl_cache,
+)
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    '_ALL_TIER_CODES_SQL',
-    'HTTPException',
-    'Optional',
-    'Query',
-    'Response',
-    'StreamingResponse',
-    '_EASY_TIER_CODES_SQL',
-    '_FOOD_CATEGORY_FILTER',
-    '__file__',
-    '_build_sku_effective_cost',
-    '_cogs_case',
-    '_group_filter',
-    '_io',
-    '_json',
-    '_unified_cogs_expr',
-    'get_db',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
-from rules import net_revenue_row, net_revenue_sum, scope_filter, effective_unit_cost_sql  # noqa: E402
 
 
 # ── Top-60 menu cost-per-head · MASTER branches (overview → per-branch → variance) ──
@@ -152,7 +140,7 @@ def _load_top60_gen():
     """Lazy-import the standalone report generator (presentation only: build_html /
     write_xlsx). Kept out of module import so the JSON tab endpoint never depends on it."""
     import importlib, sys as _sys, os as _os2
-    bd = _os2.path.dirname(_os2.path.abspath(__file__))
+    bd = str(HERE)
     if bd not in _sys.path:
         _sys.path.insert(0, bd)
     return importlib.import_module("gen_top60_cost_per_head_report")

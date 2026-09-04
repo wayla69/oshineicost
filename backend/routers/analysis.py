@@ -4,38 +4,21 @@ Same host-module pattern as routers/reports.py (see that docstring): shared
 infra still lives in main.py and is pulled off the already-initialized module
 below; local/tests import it as `main`, prod uvicorn as `backend.main`.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import HTTPException, Query
+from typing import Dict, List, Optional
+import json as _json
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from core import (
+    _FOOD_CATEGORY_FILTER, _apply_period_filter, _build_sku_effective_cost, _cogs_case, _eff_month_range,
+    _effective_cost_subquery, _group_filter, _iso_week_sql, _month_range_filter, _ols_regression,
+    _partial_months, _unified_cogs_expr, _ym_parts, ex_vat, get_db,
+    ttl_cache,
+)
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    'HTTPException',
-    'Optional',
-    'Query',
-    '_EASY_TIER_CODES_SQL',
-    '_FOOD_CATEGORY_FILTER',
-    '_apply_period_filter',
-    '_build_sku_effective_cost',
-    '_cogs_case',
-    '_eff_month_range',
-    '_effective_cost_subquery',
-    '_group_filter',
-    '_iso_week_sql',
-    '_json',
-    '_month_range_filter',
-    '_ols_regression',
-    '_partial_months',
-    '_unified_cogs_expr',
-    '_ym_parts',
-    'ex_vat',
-    'get_db',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
-from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 

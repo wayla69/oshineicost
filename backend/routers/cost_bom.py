@@ -5,49 +5,28 @@ step 7). No logic changes; URLs unchanged. The shared SQL core
 main.py — every router pulls it from there at import time. Same host-module
 pattern as routers/reports.py.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import Depends, HTTPException, Query
+from fastapi.responses import Response as _Response
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+from datetime import datetime, timezone
+import auth as _auth
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
+from core import (
+    BOM_TYPE_BENCHMARKS, CostEntry, DB_PATH, HERE, _FOOD_CATEGORY_FILTER,
+    _bom_cost_period_filters, _build_sku_effective_cost, _cogs_case, _costed_rev_case, _effective_cost_subquery,
+    _group_filter, _ingredient_family, _month_range_filter, _service_charge_map, _unified_cogs_expr,
+    get_db, invalidate_cache, is_price_as_cost, require_write_token, ttl_cache,
+)
+try:
+    from .sales import _mtd_window
+except ImportError:
+    from sales import _mtd_window
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    '_FOOD_CATEGORY_FILTER',
-    '_Response',
-    '_ALL_TIER_CODES_SQL',
-    'BOM_TYPE_BENCHMARKS',
-    'BaseModel',
-    'CostEntry',
-    'DB_PATH',
-    'Depends',
-    'HERE',
-    'HTTPException',
-    'List',
-    'Optional',
-    'Query',
-    '_EASY_TIER_CODES_SQL',
-    '_auth',
-    '_bom_cost_period_filters',
-    '_build_sku_effective_cost',
-    '_cogs_case',
-    '_costed_rev_case',
-    '_effective_cost_subquery',
-    '_group_filter',
-    '_ingredient_family',
-    '_month_range_filter',
-    '_mtd_window',
-    '_service_charge_map',
-    '_unified_cogs_expr',
-    'datetime',
-    'get_db',
-    'invalidate_cache',
-    'is_price_as_cost',
-    'require_write_token',
-    'timezone',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
 
 
 

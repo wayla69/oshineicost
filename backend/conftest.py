@@ -159,6 +159,8 @@ def app_db(tmp_path_factory):
     db = tmp_path_factory.mktemp("oshinei") / "test.db"
     _build_db(str(db))
     import main
+    import core
+    core.DB_PATH = db          # get_db() reads core.DB_PATH; main.DB_PATH is a copy
     main.DB_PATH = db
     if hasattr(main, "_tls"):
         main._tls.con = None

@@ -2,36 +2,21 @@
 of main.py (P1 structure refactor, step 5). No logic changes; URLs unchanged.
 Same host-module pattern as routers/reports.py.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import HTTPException, Query
+from fastapi.responses import StreamingResponse
+from typing import Optional
+import io as _io
+from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from core import (
+    _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter,
+    _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, _ym_parts,
+    get_db, ttl_cache,
+)
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    '_ols_regression',
-    '_ym_parts',
-    'HTTPException',
-    'Optional',
-    'Query',
-    'StreamingResponse',
-    '_ALL_TIER_CODES',
-    '_EASY_TIER_CODES_SQL',
-    '_FOOD_CATEGORY_FILTER',
-    '_cogs_case',
-    '_costed_rev_case',
-    '_effective_cost_subquery',
-    '_group_filter',
-    '_io',
-    '_month_range_filter',
-    '_next_period_month',
-    '_unified_cogs_expr',
-    'get_db',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
-from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 

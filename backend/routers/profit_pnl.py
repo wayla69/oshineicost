@@ -3,35 +3,24 @@
 step 8). No logic changes; URLs unchanged. Same host-module pattern as
 routers/reports.py.
 """
-import sys as _sys
+# Shared infrastructure and helpers come from core.py by name — the old
+# `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
+from fastapi import Query
+from typing import Optional
+import json as _json
+from rules import net_revenue_row, net_revenue_sum, scope_filter
+from core import (
+    _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
+    _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,
+    _unified_cogs_expr, _variant_filter, get_db, ttl_cache,
+)
+try:
+    from .sales import _month_add
+except ImportError:
+    from sales import _month_add
 
 from fastapi import APIRouter
-
 router = APIRouter()
-
-M = _sys.modules.get("backend.main") or _sys.modules["main"]
-_SHARED = (
-    'Optional',
-    'Query',
-    '_bom_cogs_expr',
-    '_bom_costed_rev_expr',
-    '_cogs_case',
-    '_costed_rev_case',
-    '_group_filter',
-    '_ingredient_family',
-    '_iso_week_sql',
-    '_json',
-    '_month_add',
-    '_month_range_filter',
-    '_profit_filters',
-    '_tx_filters',
-    '_unified_cogs_expr',
-    '_variant_filter',
-    'get_db',
-    'ttl_cache',
-)
-globals().update({_n: getattr(M, _n) for _n in _SHARED})
-from rules import net_revenue_row, net_revenue_sum, scope_filter  # noqa: E402
 
 
 
