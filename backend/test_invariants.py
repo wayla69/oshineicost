@@ -421,7 +421,11 @@ def test_effective_cost_never_carries_a_tier_package_price():
 def test_sync_rebuild_of_effective_cost_matches_main_and_zeroes_tiers():
     import sync_mssql
     # the duplicated tuple (sync is standalone-runnable) must never drift
-    assert set(sync_mssql.ALL_TIER_CODES) == set(main._ALL_TIER_CODES)
+    # Since 2026-09 there is ONE definition of "package code" (rules.py) and both
+    # the app and the sync use it — the old check compared two copies for drift.
+    import rules
+    assert sync_mssql.tier_code_sql is rules.tier_code_sql
+    assert tuple(main._ALL_TIER_CODES) == rules.ALL_TIER_CODES
 
     con = fresh_db()
     # widen the trap beyond BUFFET: a priced Easy tier, a priced LEGACY tier
