@@ -24,11 +24,22 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
   the default `Oshinei@2026` with must_change=1, so each is forced to set an
   individual password on first login — just have everyone log in once).
 
-### AUD-2 ◐ Backup + restore evidence
+### AUD-2 ☑ Backup + restore evidence
 - ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;
-  `verify` = restore test with PASS/FAIL). See SOP §3.
-- ☐ Operational: schedule daily to OneDrive, retention ≥ 90 daily + 12 monthly,
-  run one `verify` and keep the evidence. Include `/data/attachments`.
+  `verify` = restore test with PASS/FAIL; since 2026-09-04 `--gzip` (~314 MB a copy),
+  rotation `--keep-daily/--keep-monthly`, and `verify` opens the `.gz` it wrote). See SOP §3.
+- ☑ Operational (2026-09-04): Task Scheduler **"Oshinei DB Backup"** runs `Backup DB.bat auto`
+  daily at 07:30 (after the 06:00 local sync): backup of `backend\oshinei.db` to
+  `%USERPROFILE%\OneDrive\Oshinei Backups` (off-site: OneDrive syncs it), gitignored secrets
+  copied to `…\secrets\`, then a restore test of the file just written. Retention 7 daily +
+  6 monthly (≈3.3 GB; raise the two `--keep-*` flags in the bat if OneDrive has room —
+  90 daily would be ≈28 GB). Fly also keeps 5 daily volume snapshots (`flyctl volumes snapshots list`).
+- ☑ Evidence: every run logs `RESULT: PASS`/`FAIL` to `backend\logs\db_backup.log` (UTF-16, tee'd
+  like the sync logs) next to the manifest (`oshinei_<stamp>.manifest.txt`: row counts, sha256 of
+  the .db and the .gz). First run 2026-09-04 21:50: `oshinei_2026-09-04_2150.db.gz` 314.2 MB,
+  integrity_check ok, RESULT: PASS in 89 s.
+- ☐ `/data/attachments` on the Fly volume is empty today (4 KB) — add a pull to the bat when the
+  recon attachment feature is in use.
 
 ### AUD-3 ☐ Original document retention (operational, no code)
 - Keep "All recon data" branch/month in OneDrive ≥ 5 years. The export's SHA-256
@@ -86,6 +97,6 @@ disclosure · AUD-8 accept-reason + listing — plus AUD-2 backup script & AUD-9
 - **Code: none — all AUD code items are now done** (AUD-1,4,5,6,7,8 shipped +
   AUD-5 close snapshot + login-event logging in this pass). Optional code extras:
   audit-log hash-chain (AUD-6), close-snapshot UI button.
-- Operational (owner): turn AUD-2 schedule on + one restore test; AUD-3 retention;
+- Operational (owner): AUD-2 schedule + restore test DONE 2026-09-04 (see above); AUD-3 retention;
   have each user log in once to set an individual password (auth already enforced);
   quarterly access review (AUD-10); monitoring (AUD-11).

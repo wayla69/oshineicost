@@ -17,13 +17,26 @@ import recon.main as main  # noqa: E402
 GOLDEN = Path(__file__).parent / "golden" / "routes.json"
 
 
-def _routes():
-    out = []
-    for r in main.app.routes:
+def _walk(routes, prefix=""):
+    """Every (path, methods) under `routes`, descending into nested routers.
+    Starlette 1.6 / FastAPI 0.141 (production, CI) keep an include_router() as
+    a nested _IncludedRouter entry; older versions flatten it. Both must give
+    the same table — on 2026-09-04 the flat walk read an EMPTY table on CI."""
+    for r in routes:
+        sub = getattr(r, "routes", None)
+        if sub is None:                       # Starlette 1.6: _IncludedRouter wraps the APIRouter
+            sub = getattr(getattr(r, "original_router", None), "routes", None)
+        if sub is not None:
+            mount = prefix + (getattr(r, "path", "") if type(r).__name__ == "Mount" else "")
+            yield from _walk(sub, mount)
+            continue
         methods = sorted(m for m in (getattr(r, "methods", None) or set()) if m not in ("HEAD", "OPTIONS"))
         if methods:
-            out.append([r.path, methods])
-    return sorted(out)
+            yield [prefix + r.path, methods]
+
+
+def _routes():
+    return sorted(_walk(main.app.routes))
 
 
 def test_route_table_is_unchanged():
