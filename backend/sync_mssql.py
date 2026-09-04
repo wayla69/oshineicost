@@ -442,7 +442,9 @@ def _chunk(mc, sql_tmpl, windows, col="s.SaleDate"):
     return out
 
 
-def main():
+def _sync_args():
+    # names this section hands on; None where a path never assigns one
+    args = None
     ap = argparse.ArgumentParser()
     ap.add_argument("--since", default="2025-01-01", help="sync sales on/after this date")
     ap.add_argument("--apply-local", action="store_true",
@@ -457,7 +459,14 @@ def main():
                     help="with --window-days, still force a FULL rebuild when the last one "
                          "is older than D days (0 = never force)")
     args = ap.parse_args()
+    return {"args": args}
 
+
+def _sync_cutoff(*, args):
+    # names this section hands on; None where a path never assigns one
+    _dtm = None
+    incr_from = None
+    windows = None
     # ── INCREMENTAL cutoff ──────────────────────────────────────────────────
     # A full rebuild re-pulls 20 monthly chunks from MSSQL every run — measured at
     # ~7 min for the sku aggregate and ~10 min for the per-sale split, which is why
@@ -494,7 +503,16 @@ def main():
     if incr_from:
         print(f"      [incremental] re-pulling from {incr_from} "
               f"({len(windows)} month chunk(s)); older rows are kept from the copied DB")
+    return {"_dtm": _dtm, "incr_from": incr_from, "windows": windows}
 
+
+def _sync_copy():
+    # names this section hands on; None where a path never assigns one
+    code2sid = None
+    max_sid = None
+    name2bid = None
+    sq = None
+    staging = None
     if not DB.exists():
         sys.exit(f"current DB not found: {DB}")
 
@@ -520,7 +538,18 @@ def main():
     name2bid = {r["name"]: r["branch_id"] for r in sq.execute("SELECT branch_id,name FROM branches")}
     code2sid = {r["sku_code"]: r["sku_id"] for r in sq.execute("SELECT sku_id,sku_code FROM skus")}
     max_sid = sq.execute("SELECT COALESCE(MAX(sku_id),0) m FROM skus").fetchone()["m"]
+    return {"code2sid": code2sid, "max_sid": max_sid, "name2bid": name2bid, "sq": sq, "staging": staging}
 
+
+def _sync_masters(*, code2sid, name2bid, sq):
+    # names this section hands on; None where a path never assigns one
+    bid_map = None
+    cat_bucket = None
+    item_map = None
+    itemid2code = None
+    itemid2name = None
+    mc = None
+    new_skus = None
     print("[2/6] connect MSSQL + load Branch / Items / ItemCategory")
     mc = ResilientCursor(connect_mssql)   # auto-reconnects on dropped connection (err 20047)
     mc.execute("SELECT BranchId, BranchName FROM Branch")
@@ -581,7 +610,10 @@ def main():
 
     print(f"      branches mapped={len(bid_map)} (unmatched/skipped={len(unmatched_branches)}: {unmatched_branches[:6]})")
     print(f"      items pre-mapped={len(item_map)} of {len(itemid2code)}")
+    return {"bid_map": bid_map, "cat_bucket": cat_bucket, "item_map": item_map, "itemid2code": itemid2code, "itemid2name": itemid2name, "mc": mc, "new_skus": new_skus}
 
+
+def _sync_sku_monthly(*, bid_map, code2sid, incr_from, item_map, itemid2code, itemid2name, max_sid, mc, new_skus, sq, windows):
     print(f"[3/6] aggregate sales_sku_monthly (server-side GROUP BY · {len(windows)} monthly chunks)")
     skum_rows = _chunk(mc, f"""
         SELECT si.BranchId AS bid, si.ItemId AS iid,
@@ -620,7 +652,10 @@ def main():
     sq.executemany("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source) "
                    "VALUES (?,?,?,?,?,?,?,?)", skum)
     print(f"      inserted {len(skum):,} rows · new stub skus={new_skus} · skipped revenue (unmapped branch)=฿{skipped_rev:,.0f}")
+    return {}
 
+
+def _sync_transactions(*, bid_map, cat_bucket, incr_from, mc, sq, windows):
     print("[4/6] build sales_transaction (header + food/drink/other split)")
     # per-sale food/drink/other ex-VAT split via conditional SUM on SaleItem.CategoryId
     drink_ids = [c for c, b in cat_bucket.items() if b == "drink"]
@@ -725,7 +760,10 @@ def main():
          discount_reason_id,coupon_series_id,print_times,dwell_min)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", txr)
     print(f"      inserted {len(txr):,} transactions")
+    return {}
 
+
+def _sync_reports(*, args, bid_map, incr_from, item_map, mc, name2bid, sq, windows):
     print("[4b/6] stage report tables (void/staff/payment/table-turn/delivery/coupon/kitchen)")
     stage_reports(sq, mc, args.since, bid_map, item_map, name2bid, windows, incr_from=incr_from)
 
@@ -748,14 +786,20 @@ def main():
     sq.execute("ANALYZE")
     sq.execute("VACUUM")
     sq.isolation_level = ""
+    return {}
 
+
+def _sync_reconcile(*, sq, staging):
     print(f"[5/6] reconcile {staging.name} vs current DB")
     ok = reconcile(sq)
     sq.close()
     if not ok:
         print(f"[6/6] ⚠ RECONCILE FAILED — {staging.name} built but NOT safe to push. Investigate.")
         sys.exit(3)
+    return {}
 
+
+def _sync_publish(*, _dtm, args, incr_from, staging):
     # ── [5b/6] refresh menu_fact_* in the .incoming (🧪 วิเคราะห์วัตถุดิบ tab) ──
     # Rebuilds the last ~40 days (builder default) so the tab stays current on
     # every daily sync; older days ride along via the DB file copy in step 1.
@@ -800,6 +844,23 @@ def main():
     else:
         print("[6/6] done → oshinei.db.incoming ready & reconciled. Push with:")
         print("       python refresh_fly_db.py --db oshinei.db.incoming")
+    return {}
+
+
+def main():
+    # Each stage is its own function (_sync_*, Phase 8 2026-09); they run in
+    # order and hand what they compute forward through `ctx`. The statements
+    # are the ones this function used to hold inline; the tests pin the output.
+    ctx = {}
+    ctx.update(_sync_args())
+    ctx.update(_sync_cutoff(args=ctx.get("args")))
+    ctx.update(_sync_copy())
+    ctx.update(_sync_masters(code2sid=ctx.get("code2sid"), name2bid=ctx.get("name2bid"), sq=ctx.get("sq")))
+    ctx.update(_sync_sku_monthly(bid_map=ctx.get("bid_map"), code2sid=ctx.get("code2sid"), incr_from=ctx.get("incr_from"), item_map=ctx.get("item_map"), itemid2code=ctx.get("itemid2code"), itemid2name=ctx.get("itemid2name"), max_sid=ctx.get("max_sid"), mc=ctx.get("mc"), new_skus=ctx.get("new_skus"), sq=ctx.get("sq"), windows=ctx.get("windows")))
+    ctx.update(_sync_transactions(bid_map=ctx.get("bid_map"), cat_bucket=ctx.get("cat_bucket"), incr_from=ctx.get("incr_from"), mc=ctx.get("mc"), sq=ctx.get("sq"), windows=ctx.get("windows")))
+    ctx.update(_sync_reports(args=ctx.get("args"), bid_map=ctx.get("bid_map"), incr_from=ctx.get("incr_from"), item_map=ctx.get("item_map"), mc=ctx.get("mc"), name2bid=ctx.get("name2bid"), sq=ctx.get("sq"), windows=ctx.get("windows")))
+    ctx.update(_sync_reconcile(sq=ctx.get("sq"), staging=ctx.get("staging")))
+    ctx.update(_sync_publish(_dtm=ctx.get("_dtm"), args=ctx.get("args"), incr_from=ctx.get("incr_from"), staging=ctx.get("staging")))
 
 def _reset_table(sq, table, incr_from, date_col, cols):
     """Prepare a staged table for (re)filling from the HQ pull.
