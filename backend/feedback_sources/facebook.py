@@ -12,9 +12,10 @@ Config (backend/.feedback_config.json → "facebook"):
     {"api_version": "v21.0",
      "pages": [{"id": "1234567890", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น",
                 "token": "EAAB… (Page access token)",
-                "comments": false, "shares": true, "visitor_posts": true, "tagged": true}]}
+                "comments": false, "shares": true, "visitor_posts": true, "tagged": true,
+                "inbox": false}]}                     # inbox = Messenger conversations (pages_messaging)
 The token needs pages_show_list + pages_read_user_content + pages_read_engagement
-(+ pages_manage_engagement to reply); a Page token derived from a long-lived
+(+ pages_manage_engagement to reply, + pages_messaging for the inbox); a Page token derived from a long-lived
 user token does not expire. `pages facebook --user-token …` in fetch_feedback.py
 lists the pages a user token manages, with their Page tokens, and can write
 them into the config.
@@ -179,6 +180,65 @@ def share_to_row(share: dict, post: dict, page_id: str, branch: str = "", page_n
             "kind": "mention", "detect_branch": not branch, "ref": "", "sentiment_hint": None}
 
 
+def fetch_inbox(page_id: str, token: str, http, since: str = "", api_version: str = DEFAULT_VERSION,
+                platform: str = "messenger", self_ids=(), source: str = SOURCE, branch: str = "",
+                min_chars: int = 8, max_threads: int = 200) -> tuple:
+    """The page's inbox — Messenger, or Instagram DMs with platform='instagram'
+    (pages_messaging / instagram_manage_messages). What customers wrote is
+    aggregated per conversation per Thai day into one row of kind "message";
+    the page's own messages are not feedback but they say whether the day was
+    answered (the last page message after the customer's last one becomes
+    `reply`; a customer message after a reply reopens the day). Private by
+    nature: the sender is hashed, the row links to the thread, and nothing
+    is ever posted back through the API. Returns (rows, threads_read)."""
+    v = api_version
+    mine = {str(s) for s in self_ids if s} | {str(page_id)}
+    q = {"platform": platform, "fields": "id,link,updated_time,participants,message_count", "limit": 50, "access_token": token}
+    rows, n_threads = [], 0
+    for conv in _paged(f"{GRAPH}/{v}/{page_id}/conversations?" + urllib.parse.urlencode(q), http, "conversations", max_pages=10):
+        if since and thai_date(conv.get("updated_time")) < since:
+            break                                             # newest first: the rest is older
+        if n_threads >= max_threads or not conv.get("id"):
+            break
+        n_threads += 1
+        mq = {"fields": "id,created_time,from,message", "limit": 100, "access_token": token}
+        msgs = list(_paged(f"{GRAPH}/{v}/{conv['id']}/messages?" + urllib.parse.urlencode(mq), http, "messages", max_pages=2))
+        msgs.sort(key=lambda x: x.get("created_time") or "")
+        by_day = {}
+        for msg in msgs:
+            fid = str((msg.get("from") or {}).get("id") or "")
+            text = (msg.get("message") or "").strip()
+            when = msg.get("created_time") or ""
+            if fid in mine:
+                for d in by_day.values():                     # the page answered everything written before this
+                    if d["last"] <= when and not d["reply"]:
+                        d["reply"] = text or "(ตอบด้วยรูป/สติกเกอร์)"
+                        d["replied_at"] = thai_date(when)
+                continue
+            if len(text) < min_chars:
+                continue                                      # stickers, "สวัสดี", thumbs-up
+            day = thai_date(when)
+            if since and day < since:
+                continue
+            d = by_day.setdefault(day, {"texts": [], "customer": fid, "last": "", "reply": "", "replied_at": ""})
+            d["texts"].append(text)
+            d["last"] = when
+            if d["reply"]:
+                d["reply"], d["replied_at"] = "", ""          # a new message after the answer reopens the day
+        link = conv.get("link") or ""
+        if link.startswith("/"):
+            link = "https://www.facebook.com" + link
+        if not link:
+            link = f"https://business.facebook.com/latest/inbox/{'instagram' if platform == 'instagram' else 'all'}?asset_id={page_id}"
+        for day, d in sorted(by_day.items()):
+            rows.append({"date": day, "branch": branch or "", "source": source, "rating": None,
+                         "text": " | ".join(d["texts"])[:1000], "external_id": f"msg:{conv['id']}:{day}", "url": link,
+                         "author": _hash(d["customer"]), "reply": d["reply"], "replied_at": d["replied_at"],
+                         "location": "Inbox", "kind": "message", "detect_branch": not branch, "ref": "",
+                         "sentiment_hint": None})
+    return rows, n_threads
+
+
 def fetch_page(page: dict, http, since: str = "", api_version: str = DEFAULT_VERSION) -> tuple:
     """Rows of one page:
       • recommendations (newest first, stopped at `since`)                  always
@@ -194,7 +254,7 @@ def fetch_page(page: dict, http, since: str = "", api_version: str = DEFAULT_VER
     v = api_version
     rows = []
     m = {"id": pid, "name": name, "branch": branch, "ratings": 0, "comments": 0,
-         "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0}
+         "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0, "inbox_threads": 0, "inbox": 0}
     q = {"fields": "created_time,rating,recommendation_type,review_text,has_review,reviewer,open_graph_story",
          "limit": 100, "access_token": token}
     for item in _paged(f"{GRAPH}/{v}/{pid}/ratings?" + urllib.parse.urlencode(q), http, "ratings"):
@@ -243,6 +303,11 @@ def fetch_page(page: dict, http, since: str = "", api_version: str = DEFAULT_VER
             row = tagged_post_to_row(post, pid, branch, name)
             if row:
                 rows.append(row); m["tagged"] += 1
+    if page.get("inbox"):
+        got, n = fetch_inbox(pid, token, http, since, v, "messenger", (pid,), SOURCE, branch,
+                             int(page.get("inbox_min_chars") or 8))
+        rows.extend(got)
+        m["inbox_threads"], m["inbox"] = n, len(got)
     return rows, m
 
 
@@ -260,7 +325,8 @@ def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
         meta["pages"].append(m)
         meta["fetched"] += len(got)
         log(f"  {m['name'] or m['id']:<40} → {m['branch']:<16} {m['ratings']:>4} recommendation(s) {m['comments']:>4} comment(s) "
-            f"{m['visitor_posts']:>3} visitor post(s) {m['tagged']:>3} tag(s) {m['reshares']:>3}/{m['shares_total']} share(s)")
+            f"{m['visitor_posts']:>3} visitor post(s) {m['tagged']:>3} tag(s) {m['reshares']:>3}/{m['shares_total']} share(s)"
+            + (f" {m['inbox']:>3} inbox day(s) from {m['inbox_threads']} thread(s)" if m.get("inbox_threads") else ""))
     return rows, meta
 
 
@@ -295,5 +361,5 @@ def subscribe_page(page_id: str, page_token: str, http, api_version: str = DEFAU
 
 
 __all__ = ["rating_to_row", "comment_to_row", "visitor_post_to_row", "tagged_post_to_row", "share_to_row",
-           "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "subscribe_page", "page_for_comment",
-           "reply_to_comment", "SOURCE"]
+           "fetch_inbox", "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "subscribe_page",
+           "page_for_comment", "reply_to_comment", "SOURCE"]

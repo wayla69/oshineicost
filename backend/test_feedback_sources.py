@@ -213,7 +213,7 @@ def test_facebook_rows_paging_since_and_pages():
                       "shares": False, "visitor_posts": False, "tagged": False}]}
     rows, meta = F.fetch_rows(cfg, _fb_http)
     assert meta["pages"][0] == {"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "ratings": 3, "comments": 1,
-                                "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0}
+                                "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0, "inbox_threads": 0, "inbox": 0}
     by_ext = {r["external_id"]: r for r in rows}
     assert by_ext["rec:s1"]["sentiment_hint"] == "pos" and by_ext["rec:s1"]["rating"] is None
     assert by_ext["rec:s1"]["date"] == "2026-08-30" and by_ext["rec:s1"]["url"] == "https://www.facebook.com/PAGE1/reviews"
