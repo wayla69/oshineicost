@@ -35,11 +35,11 @@ TEMPLATE = r"""<!doctype html>
     @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 7.5pt "Sarabun", sans-serif; color: #7a8681; } }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { font: 9.4pt/1.36 "Sarabun", "Segoe UI", Tahoma, sans-serif; color: #1b232a; }
+  body { font: 9.3pt/1.36 "Sarabun", "Segoe UI", Tahoma, sans-serif; color: #1b232a; }
   h1, h2, h3 { font-family: "Bai Jamjuree", "Sarabun", sans-serif; margin: 0; }
   code, .cmd { font-family: "IBM Plex Mono", Consolas, monospace; }
   /* pastel palette: teal band, blue why, green done, rose stuck, yellow command, peach warning, lilac value */
-  .cmd { background: #fff1bf; color: #4a3a00; padding: 0 2.5pt; border-radius: 2.5pt; font-size: 8.4pt; }
+  .cmd { background: #fff1bf; color: #4a3a00; padding: 0 2.5pt; border-radius: 2.5pt; font-size: 8.3pt; overflow-wrap: anywhere; word-break: break-all; }
   mark.warn { background: #ffd8c4; color: #7a2b0c; padding: 0 2.5pt; border-radius: 2.5pt; font-weight: 700; }
   .val { background: #e8e1f7; color: #3b2a6b; padding: 0 2.5pt; border-radius: 2.5pt; font-weight: 700; }
   /* cover */
@@ -62,32 +62,37 @@ TEMPLATE = r"""<!doctype html>
   .legend span::before { content: ""; display: inline-block; width: 11pt; height: 7pt; border-radius: 1.5pt; margin-right: 3pt; vertical-align: -.5pt; }
   .l-plan::before { background: #a9d9d0; } .l-wait::before { background: repeating-linear-gradient(45deg, #e0a56a 0 2pt, transparent 2pt 4pt); border: .6pt solid #e0a56a; } .l-today::before { border-top: 1.2pt dashed #b91c1c; height: 0; }
   .keys { display: flex; flex-wrap: wrap; gap: 4pt 8pt; font-size: 8.4pt; margin-top: 4mm; }
-  /* body: two columns */
-  .cols { column-count: 2; column-gap: 6mm; column-fill: auto; }
-  .phase { column-span: all; break-inside: avoid; margin: 5mm 0 2mm; background: #d9efe9; border-left: 4pt solid #0f766e; padding: 3.5pt 7pt; }
+  /* body: one column, full width; pagination rules keep every unit whole:
+     a phase starts a new page and sticks to its first task, a task header sticks to
+     its first step, a step never splits across pages */
+  .phase { break-after: avoid; break-inside: avoid; margin: 5mm 0 2.5mm; background: #d9efe9; border-left: 4pt solid #0f766e; padding: 3.5pt 7pt; }
   .phase:first-child { margin-top: 0; }
-  .phase h2 { font-size: 12pt; line-height: 1.2; }
+  .phase h2 { font-size: 12.5pt; line-height: 1.2; }
   .phase .meta { font-size: 8.2pt; color: #3a4a45; margin-top: 1pt; }
-  .phase .why { font-size: 8.8pt; color: #22322d; margin-top: 2pt; }
-  .task { border: .6pt solid #c9d4cf; border-radius: 3pt; margin: 0 0 3.5mm; break-inside: auto; }
-  .task-h { background: #eaf0f4; padding: 3pt 6pt; border-bottom: .6pt solid #c9d4cf; break-inside: avoid; break-after: avoid; }
-  .task-h h3 { font-size: 10pt; line-height: 1.25; }
+  .phase .why { font-size: 8.9pt; color: #22322d; margin-top: 2pt; }
+  .task { border: .6pt solid #c9d4cf; border-radius: 3pt; margin: 0 0 3mm; break-inside: auto; }
+  .task-h { background: #eaf0f4; padding: 3pt 7pt; border-bottom: .6pt solid #c9d4cf; break-inside: avoid; break-after: avoid; display: grid; grid-template-columns: 1fr auto; gap: 2pt 8pt; align-items: baseline; }
+  .task-h h3 { font-size: 10.2pt; line-height: 1.25; }
   .task-h .est { font-weight: 400; color: #556; font-size: 8.4pt; }
-  .task-h .status { font-size: 8pt; color: #3a4a45; margin-top: 2pt; display: flex; flex-wrap: wrap; gap: 2pt 7pt; }
+  .task-h .status { font-size: 8pt; color: #3a4a45; display: flex; flex-wrap: wrap; gap: 2pt 7pt; white-space: nowrap; }
   .task-h .status i { font-style: normal; display: inline-block; width: 8pt; height: 8pt; border: .8pt solid #556; border-radius: 1.5pt; vertical-align: -1pt; margin-right: 2pt; }
-  .note { font-size: 8pt; color: #7a8681; padding: 2pt 6pt 3pt; border-bottom: .5pt dashed #d6ded9; break-inside: avoid; }
+  .note { font-size: 8pt; color: #7a8681; padding: 2pt 7pt 3pt; border-bottom: .5pt dashed #d6ded9; break-inside: avoid; break-after: avoid; display: grid; grid-template-columns: auto 1fr; gap: 6pt; align-items: end; }
   .note span { display: block; border-bottom: .5pt solid #c9d4cf; height: 9pt; }
-  .step { padding: 3pt 6pt 3.5pt; border-top: .5pt solid #e1e7e3; break-inside: avoid; }
+  .step { padding: 3pt 7pt 4pt; border-top: .5pt solid #e1e7e3; break-inside: avoid; }
   .step:first-of-type { border-top: 0; }
   .step .t { display: grid; grid-template-columns: 10pt 1fr; gap: 3pt; font-weight: 700; font-size: 9.6pt; }
   .step .t i { display: inline-block; width: 8.5pt; height: 8.5pt; border: 1pt solid #333; border-radius: 1.5pt; margin-top: 2pt; }
-  .d { display: grid; grid-template-columns: 13.5mm 1fr; gap: 1.2pt 3pt; margin: 1.5pt 0 0 13pt; font-size: 8.9pt; }
-  .d b { font: 700 7.2pt "Bai Jamjuree"; letter-spacing: .05em; text-transform: uppercase; color: #6b7680; padding-top: 1.8pt; }
-  .d ol { margin: 0; padding-left: 11pt; }
-  .d ol li { margin: .6pt 0; }
-  .d .why { background: #e7effa; padding: 1pt 4pt; border-radius: 2.5pt; }
-  .d .check { background: #dff3e6; padding: 1pt 4pt; border-radius: 2.5pt; color: #14532d; }
-  .d .stuck { background: #fbe4e4; padding: 1pt 4pt; border-radius: 2.5pt; color: #7f1d1d; }
+  .body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2pt 7pt; margin: 2pt 0 0 13pt; font-size: 8.9pt; align-items: start; }
+  .body.nohow { grid-template-columns: 1fr; }
+  .body b { display: block; font: 700 7pt "Bai Jamjuree"; letter-spacing: .05em; text-transform: uppercase; color: #6b7680; margin-bottom: 1pt; }
+  .body ol { margin: 0; padding-left: 11pt; }
+  .body ol li { margin: .6pt 0; }
+  .side > div { padding: 2pt 5pt 3pt; border-radius: 2.5pt; margin-bottom: 2.5pt; }
+  .side > div:last-child { margin-bottom: 0; }
+  .side .why { background: #e7effa; }
+  .side .check { background: #dff3e6; color: #14532d; }
+  .side .stuck { background: #fbe4e4; color: #7f1d1d; }
+  .side .check b { color: #2f6b45; } .side .stuck b { color: #9b3b3b; } .side .why b { color: #4a6591; }
 </style>
 </head>
 <body>
@@ -104,7 +109,7 @@ TEMPLATE = r"""<!doctype html>
     </ul></div>
     <div class="box"><h3>สัญลักษณ์และสีที่ใช้</h3><ul>
       <li><span class="cmd">สีเหลือง</span> = คำสั่ง ชื่อไฟล์ ลิงก์ ที่ต้องพิมพ์หรือเปิดให้ตรงทุกตัวอักษร</li>
-      <li><span class="d" style="display:inline-block;margin:0"><span class="why" style="display:inline">ฟ้า = ทำไมต้องทำ</span></span> &nbsp; <span class="d" style="display:inline-block;margin:0"><span class="check" style="display:inline">เขียว = รู้ว่าสำเร็จเมื่อ</span></span> &nbsp; <span class="d" style="display:inline-block;margin:0"><span class="stuck" style="display:inline">ชมพู = ถ้าติดให้ทำอย่างนี้</span></span></li>
+      <li><span style="background:#e7effa;padding:0 3pt;border-radius:2.5pt">ฟ้า = ทำไมต้องทำ</span> &nbsp; <span style="background:#dff3e6;color:#14532d;padding:0 3pt;border-radius:2.5pt">เขียว = รู้ว่าสำเร็จเมื่อ</span> &nbsp; <span style="background:#fbe4e4;color:#7f1d1d;padding:0 3pt;border-radius:2.5pt">ชมพู = ถ้าติดให้ทำอย่างนี้</span></li>
       <li><mark class="warn">พีช</mark> = ข้อควรระวัง ห้าม หรือจุดที่พลาดแล้วเสียเวลามาก &nbsp; <span class="val">ม่วง</span> = ค่า/ตัวเลขที่ต้องจด</li>
       <li>ช่อง ☐ ข้างขั้นตอน = ติ๊กเมื่อทำเสร็จ · แถบลายในไทม์ไลน์ = รอฝ่ายภายนอกอนุมัติ</li>
     </ul></div>
@@ -113,7 +118,7 @@ TEMPLATE = r"""<!doctype html>
   <div class="gantt"><div id="ganttHost"></div>
     <div class="legend"><span class="l-plan">ช่วงทำงานตามแผน</span><span class="l-wait">รอ Google / TikTok อนุมัติ</span><span class="l-today">วันที่พิมพ์</span><span id="ganttNote"></span></div></div>
 </section>
-<div class="cols" id="phases"></div>
+<div id="phases"></div>
 <script>
 __PLAN__
 /* ── highlight rules (pastel) ── */
@@ -125,7 +130,7 @@ function hl(s){
   t = t.replace(/(https?:\/\/[^\s"<>)]+)/g, '<span class="cmd">$1</span>');
   t = t.replace(/(py backend\\fetch_feedback\.py[^→(]*?)(?=\s*(?:→|\(|ต้อง|ดู|แล้ว|กด|ใส่|$))/g, (m, c) => '<span class="cmd">' + c.trim() + '</span>');
   t = t.replace(/(flyctl secrets (?:set|list)[^→(]*?)(?=\s*(?:→|\(|$))/g, '<span class="cmd">$1</span>');
-  t = t.replace(/(?<![\w\/">])((?:C:\\|backend\\|OneDrive\\)[^\s"&,()]+(?:\s[A-Za-z]+\.(?:bat|log|txt|json))?)/g, '<span class="cmd" style="white-space:nowrap">$1</span>');
+  t = t.replace(/(?<![\w\/">])((?:C:\\|backend\\|OneDrive\\)[^\s"&,()]+(?:\s[A-Za-z]+\.(?:bat|log|txt|json))?)/g, '<span class="cmd">$1</span>');
   t = t.replace(/(?<![\w\/">])([\w.-]+\.(?:json|env|bat|log|txt|zip|py|html|pdf)\b)/g, (m, f) => m.includes("cmd") ? m : '<span class="cmd">' + f + '</span>');
   WARN.forEach(re => { t = t.replace(re, m => '<mark class="warn">' + m + '</mark>'); });
   VAL.forEach(re => { t = t.replace(re, m => '<span class="val">' + m + '</span>'); });
@@ -137,13 +142,16 @@ let nSteps = 0, nTasks = 0;
 document.getElementById("phases").innerHTML = PLAN.map(ph => {
   const steps = ph.tasks.reduce((a, t) => a + t.steps.length, 0); nSteps += steps; nTasks += ph.tasks.length;
   return `<div class="phase"><h2>${esc(ph.name)}</h2><div class="meta">ผู้รับผิดชอบ: ${esc(ph.owner)} · วันที่ ${ph.days[0]+1}–${ph.days[1]} ของโครงการ${ph.wait ? " (รวมช่วงรออนุมัติ)" : ""} · ${ph.tasks.length} งาน ${steps} ขั้นตอน</div><div class="why">${hl(ph.why)}</div></div>` +
-    ph.tasks.map(t => `<div class="task"><div class="task-h"><h3>${esc(t.name)} <span class="est">· ${esc(t.est)}</span></h3><div class="status">สถานะ: ${statusBoxes} <span style="margin-left:auto">ผู้ทำ ________ วันที่ ______</span></div></div><div class="note">หมายเหตุ<span></span></div>` +
-      t.steps.map(s => `<div class="step"><div class="t"><i></i><span>${hl(s.t)}</span></div><div class="d">` +
-        (s.how && s.how.length ? `<b>ทำอย่างไร</b><ol>${s.how.map(h => `<li>${hl(h)}</li>`).join("")}</ol>` : "") +
-        (s.why ? `<b>ทำไม</b><div class="why">${hl(s.why)}</div>` : "") +
-        (s.check ? `<b>สำเร็จเมื่อ</b><div class="check">${hl(s.check)}</div>` : "") +
-        (s.stuck ? `<b>ถ้าติด</b><div class="stuck">${hl(s.stuck)}</div>` : "") +
-        `</div></div>`).join("") + `</div>`).join("");
+    ph.tasks.map(t => `<div class="task"><div class="task-h"><h3>${esc(t.name)} <span class="est">· ${esc(t.est)}</span></h3><div class="status">สถานะ: ${statusBoxes} <span>ผู้ทำ ________ วันที่ ______</span></div></div><div class="note">หมายเหตุ<span></span></div>` +
+      t.steps.map(s => {
+        const hasHow = s.how && s.how.length;
+        const side = (s.why ? `<div class="why"><b>ทำไม</b>${hl(s.why)}</div>` : "") +
+                     (s.check ? `<div class="check"><b>สำเร็จเมื่อ</b>${hl(s.check)}</div>` : "") +
+                     (s.stuck ? `<div class="stuck"><b>ถ้าติด</b>${hl(s.stuck)}</div>` : "");
+        return `<div class="step"><div class="t"><i></i><span>${hl(s.t)}</span></div><div class="body${hasHow ? "" : " nohow"}">` +
+          (hasHow ? `<div class="how"><b>ทำอย่างไร</b><ol>${s.how.map(h => `<li>${hl(h)}</li>`).join("")}</ol></div>` : "") +
+          (side ? `<div class="side">${side}</div>` : "") + `</div></div>`;
+      }).join("") + `</div>`).join("");
 }).join("");
 /* summary table */
 document.getElementById("sumTable").innerHTML = `<thead><tr><th>เฟส</th><th>ผู้รับผิดชอบ</th><th>ช่วง (วันของโครงการ)</th><th>งาน</th><th>ขั้นตอน</th><th>รอภายนอก</th></tr></thead><tbody>` +
