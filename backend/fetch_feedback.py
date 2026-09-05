@@ -9,6 +9,7 @@
     python backend/fetch_feedback.py locations google         # the listings the login manages (fill location_map)
     python backend/fetch_feedback.py pages facebook --user-token … [--save]   # pages + Page tokens into the config
     python backend/fetch_feedback.py test-telegram            # one message to the configured chat
+    python backend/fetch_feedback.py replies                  # post the replies queued in the tab now (run does it too)
 
 Where the rows go: the LIVE app (--api, default https://oshinei-dashboard.fly.dev)
 through POST /api/feedback/upload, which analyses and de-duplicates them. The
@@ -194,6 +195,12 @@ class ApiSink:
     def log(self, entry: dict) -> dict:
         return self._call("POST", "/api/feedback/sync-log", entry)
 
+    def reply_queue(self) -> dict:
+        return self._call("GET", "/api/feedback/reply-queue?status=pending")
+
+    def reply_result(self, fid: int, status: str, error: str = "") -> dict:
+        return self._call("POST", "/api/feedback/reply-result", {"id": fid, "status": status, "error": error})
+
 
 class DbSink:
     """Writes into a local SQLite file through the endpoint's own insert code."""
@@ -241,6 +248,85 @@ class DbSink:
         finally:
             con.close()
 
+    def reply_queue(self) -> dict:
+        con = self._con()
+        try:
+            return {"items": [dict(r) for r in con.execute(
+                "SELECT id, source, external_id, external_ref, branch_name, location, reply_draft, reply_status "
+                "FROM customer_feedback WHERE reply_status='pending' ORDER BY reply_requested_at, id")]}
+        finally:
+            con.close()
+
+    def reply_result(self, fid: int, status: str, error: str = "") -> dict:
+        con = self._con()
+        try:
+            if status == "sent":
+                con.execute("UPDATE customer_feedback SET reply_status='sent', reply_error=NULL, reply_text=reply_draft, "
+                            "replied_at=date('now','+7 hours') WHERE id=?", (fid,))
+            else:
+                con.execute("UPDATE customer_feedback SET reply_status='failed', reply_error=? WHERE id=?",
+                            ((error or "unknown error")[:300], fid))
+            con.commit()
+            return {"id": fid, "reply_status": status}
+        finally:
+            con.close()
+
+
+# ── queued replies ───────────────────────────────────────────────────────────
+def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
+    """Post every reply queued in the tab: Google reviews through the Business
+    Profile API, Facebook comments through the Graph API. Each row is reported
+    back as sent or failed (with the reason), so a reply never waits silently."""
+    items = (sink.reply_queue() or {}).get("items") or []
+    if not items:
+        return {"sent": 0, "failed": 0}
+    g_token = None
+    sent = failed = 0
+    for it in items:
+        src = (it.get("source") or "").strip().lower()
+        try:
+            text = (it.get("reply_draft") or "").strip()
+            if not text:
+                raise RuntimeError("empty reply text")
+            if src == "google":
+                if not cfg.get("google"):
+                    raise RuntimeError("google is not configured on this PC (backend/.feedback_config.json)")
+                if g_token is None:
+                    g_token = google_gbp.access_token(cfg["google"], http)
+                google_gbp.post_reply(g_token, it.get("external_ref") or "", text, http)
+            elif src == "facebook":
+                fb = cfg.get("facebook") or {}
+                page = facebook.page_for_comment(fb, it.get("external_ref") or "", it.get("location") or "")
+                if not page:
+                    raise RuntimeError("facebook is not configured on this PC for this page (backend/.feedback_config.json)")
+                facebook.reply_to_comment(page.get("token") or "", it.get("external_ref") or "", text, http,
+                                          fb.get("api_version") or facebook.DEFAULT_VERSION)
+            else:
+                raise RuntimeError(f"replies on {src or '?'} cannot be posted through an API")
+            sink.reply_result(it["id"], "sent")
+            sent += 1
+            log(f"  ✓ reply #{it['id']} sent ({src}, {it.get('branch_name') or it.get('location') or ''})")
+        except Exception as e:
+            try:
+                sink.reply_result(it["id"], "failed", str(e)[:300])
+            except Exception as e2:
+                log(f"  (could not record the failure of reply #{it['id']}: {e2})")
+            failed += 1
+            log(f"  ✗ reply #{it['id']} failed: {e}")
+    return {"sent": sent, "failed": failed}
+
+
+def _replies_step(args, cfg, sink, http, log):
+    if getattr(args, "dry_run", False):
+        return
+    try:
+        res = send_replies(cfg, sink, http, log)
+    except Exception as e:
+        log(f"  ✗ reply queue: {e}")
+        return
+    if res["sent"] or res["failed"]:
+        log(f"  replies: {res['sent']} sent, {res['failed']} failed")
+
 
 # ── the nightly run ──────────────────────────────────────────────────────────
 def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> int:
@@ -250,6 +336,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
     names = [args.source] if args.source != "all" else [k for k in SOURCES if cfg.get(k)]
     if not names:
         log("no review source configured yet — see docs/FEEDBACK_SOURCES.html (nothing to do)")
+        _replies_step(args, cfg, sink, http, log)   # queued replies fail with a reason instead of waiting forever
         return 0
     if args.since not in ("auto", "all", ""):
         datetime.date.fromisoformat(args.since)       # ValueError on a bad date
@@ -296,6 +383,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
         if neg and notifier and not getattr(args, "no_alert", False):
             sent = notifier(notify.negative_digest(neg, label, args.api))
             log(f"  alert: {len(neg)} negative review(s) → telegram {'sent' if sent else 'not configured'}")
+    _replies_step(args, cfg, sink, http, log)
     return 1 if failures else 0
 
 
@@ -406,6 +494,9 @@ def main(argv=None) -> int:
     pg.add_argument("--save", action="store_true")
     tg = sub.add_parser("test-telegram", help="send one test message")
     tg.add_argument("--text", default="Oshinei feedback sync: ทดสอบการแจ้งเตือน ✓")
+    rp = sub.add_parser("replies", help="post the replies queued in the tab now"); common(rp)
+    rp.add_argument("--api", default=DEFAULT_API); rp.add_argument("--db", default=None)
+    rp.add_argument("--token", default=None); rp.add_argument("--user", default=None); rp.add_argument("--password", default=None)
     args = ap.parse_args(argv)
 
     if args.cmd == "test-telegram":
@@ -431,6 +522,10 @@ def main(argv=None) -> int:
     else:
         login = get_login(SimpleNamespace(user=args.user, password=args.password))
         sink = ApiSink(args.api, resolve_token(args.token), login)
+    if args.cmd == "replies":
+        res = send_replies(cfg, sink, urllib_http)
+        print(f"replies: {res['sent']} sent, {res['failed']} failed")
+        return 0
     return run(args, cfg, sink, urllib_http, notifier=notify.send_telegram)
 
 

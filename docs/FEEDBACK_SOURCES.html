@@ -85,7 +85,7 @@ py backend\fetch_feedback.py run --source google --since all</pre></li>
 <h2>§3 Facebook Page</h2>
 <ol>
 <li>เข้า <a href="https://developers.facebook.com" target="_blank">developers.facebook.com</a> ด้วยบัญชีที่เป็นแอดมินของเพจ → My Apps → Create App → ประเภท <b>Business</b> → ชื่อ เช่น "Oshinei Reviews" (แอปอยู่โหมด Development ใช้กับเพจที่คุณเป็นแอดมินได้เลย ไม่ต้องส่ง App Review)</li>
-<li>Tools → <b>Graph API Explorer</b> → เลือกแอปนี้ → Permissions เพิ่ม <code>pages_show_list</code>, <code>pages_read_user_content</code>, <code>pages_read_engagement</code> → Generate Access Token → เลือกทุกเพจสาขา → คัดลอก token (User token)</li>
+<li>Tools → <b>Graph API Explorer</b> → เลือกแอปนี้ → Permissions เพิ่ม <code>pages_show_list</code>, <code>pages_read_user_content</code>, <code>pages_read_engagement</code> (และ <code>pages_manage_engagement</code> ถ้าจะให้ระบบตอบคอมเมนต์ §8) → Generate Access Token → เลือกทุกเพจสาขา → คัดลอก token (User token)</li>
 <li>ให้ระบบดึงรายชื่อเพจพร้อม Page token และบันทึกลงไฟล์:
 <pre>py backend\fetch_feedback.py pages facebook --user-token "EAAB..." --save</pre>
 แล้วเปิด <code>backend\.feedback_config.json</code> เติม <code>"branch"</code> ให้แต่ละเพจ (และ <code>"comments": true</code> ถ้าต้องการคอมเมนต์ใต้โพสต์ด้วย):
@@ -138,7 +138,16 @@ OSHINEI_TG_CHAT_ID=-100xxxxxxxx</pre></li>
 <tr><td><code>HTTP 403 A valid write token is required</code></td><td>ไม่พบ write token: ใส่ใน <code>backend\.seed_tokens.txt</code> หรือ env <code>OSHINEI_WRITE_TOKEN</code></td></tr>
 </table>
 
-<h2>§8 ช่องทางอื่น</h2>
+<h2>§8 ตอบรีวิวจากระบบ</h2>
+<ol>
+<li>ในแท็บ กด <b>✍ ตอบ</b> ที่รีวิว (ในรายการ "รีวิวเชิงลบล่าสุด" หรือ "รายการล่าสุด") — ระบบร่างคำตอบภาษาไทยให้ตามความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึง (ใช้ Claude ถ้าตั้ง <code>ANTHROPIC_API_KEY</code> ไว้ ไม่งั้นใช้แม่แบบ) แก้ไขได้ก่อนส่ง</li>
+<li>กด <b>ส่งในรอบถัดไป</b> → รีวิวขึ้นสถานะ "รอส่ง" และถูกส่งจริงในรอบดึง 09:00 (หรือสั่งส่งทันทีด้วย <code>py backend\fetch_feedback.py replies</code>) — Google: โพสต์เป็นคำตอบของเจ้าของร้านใต้รีวิว · Facebook: โพสต์ใต้คอมเมนต์ (token ต้องมีสิทธิ์ <code>pages_manage_engagement</code>)</li>
+<li>ผลการส่งกลับมาแสดงที่รีวิว: <b>ตอบแล้ว ✓</b> หรือ <b>ส่งไม่สำเร็จ</b> พร้อมเหตุผล (กด "ลองใหม่" ได้) — ถ้าเครื่องที่รันตัวดึงยังไม่ได้ตั้งค่า connector รีวิวจะขึ้น "ส่งไม่สำเร็จ: not configured" ไม่ค้างเงียบ ๆ</li>
+<li><b>Facebook Recommendation</b> (แนะนำ/ไม่แนะนำ) ตอบผ่าน API ไม่ได้ — ระบบเก็บข้อความไว้ให้คัดลอกไปตอบในแอป Facebook (สถานะ "ตอบเองใน Facebook")</li>
+<li>รีวิวที่สาขาตอบเองในแอป Google/Facebook จะถูกดึงกลับมาปิดคิวอัตโนมัติในรอบถัดไป</li>
+</ol>
+
+<h2>§9 ช่องทางอื่น</h2>
 <ul>
 <li><b>Grab / LINE MAN / foodpanda</b>: ไม่มี API สาธารณะ — คัดลอกรีวิวจาก merchant app/portal ลงไฟล์ CSV/XLSX (คอลัมน์ date, branch, source, rating, text) แล้วอัปโหลดในแท็บ สัปดาห์ละครั้งก็เพียงพอ</li>
 <li><b>TikTok</b>: ทำได้เฉพาะคอมเมนต์ใต้วิดีโอของบัญชี Business ของร้าน ผ่าน TikTok for Business API (ต้องสมัคร developer และรออนุมัติ) — แจ้งเมื่อพร้อมจะเพิ่ม connector ตัวที่สาม</li>

@@ -12,6 +12,12 @@
  "menus": [],
  "neg_pct": 0.0,
  "recent_negative": [],
+ "reply_queue": {
+  "failed": 0,
+  "manual": 0,
+  "pending": 0,
+  "sent": 0
+ },
  "sentiment": {
   "neg": 0,
   "neu": 0,

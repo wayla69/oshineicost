@@ -229,6 +229,10 @@ def test_facebook_rows_paging_since_and_pages():
     cfg2 = {}
     FF.facebook_pages(cfg2, _fb_http, "UT", save=True, log=lambda *a: None)
     assert cfg2["facebook"]["pages"] == [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "", "comments": False, "token": "PT"}]
+    # the page a comment belongs to: by the id prefix, else by the recorded page name
+    assert F.page_for_comment(cfg2["facebook"], "PAGE1_777_888")["id"] == "PAGE1"
+    assert F.page_for_comment(cfg2["facebook"], "999_1", "Oshinei ขอนแก่น")["id"] == "PAGE1"
+    assert F.page_for_comment(cfg2["facebook"], "999_1", "elsewhere") is None
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────
@@ -267,7 +271,8 @@ def test_upload_upserts_edited_reviews_and_replies(client):
 
 
 def test_sources_and_sync_log_endpoints(client):
-    assert client.get("/api/feedback/sources").json() == {"sources": [], "last_ok": {}, "runs": []}
+    assert client.get("/api/feedback/sources").json() == {"sources": [], "last_ok": {}, "runs": [],
+                                                          "reply_queue": {"pending": 0, "sent": 0, "failed": 0, "manual": 0}}
     client.post("/api/feedback/upload", json={"rows": [G.review_to_row(REVIEWS[1], "BranchA")]})
     ok = client.post("/api/feedback/sync-log", json={"source": "Google", "since": "2026-08-01", "fetched": 1, "inserted": 1,
                                                      "status": "ok", "message": "2 listing(s)", "by": "fetch_feedback"})
@@ -391,6 +396,123 @@ def test_auto_since_config_and_token_resolution(tmp_path, monkeypatch):
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "owner:abc123,other:def")
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
     assert FF.resolve_token() == "abc123" and FF.resolve_token(" explicit ") == "explicit"
+
+
+# ── replies ──────────────────────────────────────────────────────────────────
+def test_reply_drafts_from_templates():
+    from feedback_nlp import draft_reply, draft_reply_template
+    neg = draft_reply_template("neg", ["รอนาน", "บริการ", "รสชาติ"], [], "ขอนแก่น", 1)
+    assert "ขออภัย" in neg and "เรื่องการรอนานและเรื่องการบริการของพนักงาน" in neg and "สาขาขอนแก่น" in neg
+    pos = draft_reply_template("pos", [], ["แซลมอน"], "ระยอง", 5)
+    assert "ขอบคุณ" in pos and "โดยเฉพาะแซลมอน" in pos and "สาขาระยอง" in pos
+    assert "นำความคิดเห็นไปปรับปรุง" in draft_reply_template("neu", [], [], "", None)
+    assert "ขออภัย" in draft_reply_template("neu", [], [], "", 2)          # 2★ with a silent text reads as a complaint
+    text, engine = draft_reply({"sentiment": "neg", "themes": '["ความสด"]', "menus": "[]", "branch_name": "ขอนแก่น",
+                                "rating": 2, "text": "x"}, api_key="")
+    assert engine == "template" and "เรื่องความสดของวัตถุดิบ" in text
+
+
+def test_reply_queue_flow_through_the_endpoints(client):
+    client.post("/api/feedback/upload", json={"rows": [G.review_to_row(rv, "BranchA") for rv in REVIEWS]})
+    items = {i["external_id"]: i for i in client.get("/api/feedback/items", params={"source": "Google"}).json()["items"]}
+    r2, r4 = items["r2"]["id"], items["r4"]["id"]
+    d = client.get(f"/api/feedback/{r2}/reply-draft").json()
+    assert d["channel"] == "google" and d["engine"] == "template" and "ขออภัย" in d["draft"] and "เรื่องการรอนาน" in d["draft"]
+    assert d["text"].startswith("รอนานมาก") and d["branch"] == "BranchA" and d["rating"] == 1
+    assert client.post(f"/api/feedback/{r2}/reply", json={"text": ""}).status_code == 400
+    q = client.post(f"/api/feedback/{r2}/reply", json={"text": "ขออภัยค่ะ จะปรับปรุง", "by": "manager"}).json()
+    assert q["reply_status"] == "pending" and q["channel"] == "google" and "09:00" in q["note"]
+    queue = client.get("/api/feedback/reply-queue").json()
+    assert [i["id"] for i in queue["items"]] == [r2] and queue["items"][0]["external_ref"] == "accounts/1/locations/9/reviews/r2"
+    assert queue["items"][0]["reply_draft"] == "ขออภัยค่ะ จะปรับปรุง" and queue["counts"]["pending"] == 1
+    assert client.get("/api/feedback/reply-queue", params={"status": "bogus"}).status_code == 400
+    # queued → out of the "needs reply" list; the draft endpoint now hands back the saved text
+    assert [i["external_id"] for i in client.get("/api/feedback/items", params={"needs_reply": 1}).json()["items"]] == ["r4"]
+    assert client.get(f"/api/feedback/{r2}/reply-draft").json()["engine"] == "saved"
+    s = client.get("/api/feedback/summary", params={"month_from": "2026-07", "month_to": "2026-09"}).json()
+    assert s["reply_queue"]["pending"] == 1 and s["unreplied"] == 1
+    neg2 = [x for x in s["recent_negative"] if x["id"] == r2][0]
+    assert neg2["reply_status"] == "pending" and neg2["needs_reply"] is False
+    # the fetcher reports failure, then success
+    assert client.post("/api/feedback/reply-result", json={"id": r2, "status": "failed", "error": "boom"}).json()["reply_status"] == "failed"
+    assert client.get("/api/feedback/reply-queue", params={"status": "failed"}).json()["items"][0]["reply_error"] == "boom"
+    assert client.post("/api/feedback/reply-result", json={"id": r2, "status": "sent"}).json()["reply_status"] == "sent"
+    it = {i["external_id"]: i for i in client.get("/api/feedback/items", params={"source": "Google"}).json()["items"]}["r2"]
+    assert it["reply_status"] == "sent" and it["reply_text"] == "ขออภัยค่ะ จะปรับปรุง" and it["replied_at"] and it["needs_reply"] is False
+    assert client.delete(f"/api/feedback/{r2}/reply").status_code == 400          # sent → cannot cancel
+    assert client.post("/api/feedback/reply-result", json={"id": r2, "status": "bogus"}).status_code == 400
+    assert client.post("/api/feedback/reply-result", json={"id": 999999, "status": "sent"}).status_code == 404
+    # cancel a pending one
+    client.post(f"/api/feedback/{r4}/reply", json={"text": "x"})
+    assert client.delete(f"/api/feedback/{r4}/reply").json() == {"id": r4, "reply_status": None}
+    assert client.get("/api/feedback/reply-queue").json()["counts"]["pending"] == 0
+    # a reply that arrives from the platform closes a queued one
+    client.post(f"/api/feedback/{r4}/reply", json={"text": "ขออภัยค่ะ"})
+    replied = dict(REVIEWS[3], reviewReply={"comment": "ขออภัยค่ะ", "updateTime": "2026-08-31T01:00:00Z"})
+    client.post("/api/feedback/upload", json={"rows": [G.review_to_row(replied, "BranchA")]})
+    assert {i["external_id"]: i for i in client.get("/api/feedback/items", params={"source": "Google"}).json()["items"]}["r4"]["reply_status"] == "sent"
+    # a Facebook recommendation is manual; an uploaded row without an id cannot be queued at all
+    client.post("/api/feedback/upload", json={"rows": [
+        {"text": "ไม่แนะนำ", "branch": "BranchB", "source": "Facebook", "external_id": "rec:q", "date": "2026-08-02", "sentiment_hint": "neg"},
+        {"text": "วางเอง", "branch": "BranchB", "date": "2026-08-02"}]})
+    all_items = client.get("/api/feedback/items").json()["items"]
+    rec = [i for i in all_items if i["external_id"] == "rec:q"][0]["id"]
+    plain = [i for i in all_items if i["text"] == "วางเอง"][0]["id"]
+    m = client.post(f"/api/feedback/{rec}/reply", json={"text": "ขออภัย"}).json()
+    assert m["reply_status"] == "manual" and "Facebook" in m["note"]
+    assert client.post(f"/api/feedback/{plain}/reply", json={"text": "ขออภัย"}).status_code == 400
+    assert client.get("/api/feedback/sources").json()["reply_queue"] == {"pending": 0, "sent": 2, "failed": 0, "manual": 1}
+
+
+def test_send_replies_posts_to_google_and_facebook_and_reports(tmp_path):
+    db = tmp_path / "local.db"; _seed_db(db)
+    sink = FF.DbSink(db)
+    post = _FB_POSTS[0]
+    sink.upload([G.review_to_row(REVIEWS[1], "ขอนแก่น"),
+                 F.comment_to_row(post["comments"]["data"][0], post, "PAGE1", "ขอนแก่น", "Oshinei ขอนแก่น"),
+                 F.rating_to_row(_FB_ITEMS[1], "PAGE1", "ขอนแก่น")])
+    con = sqlite3.connect(str(db)); con.row_factory = sqlite3.Row
+    ids = {r["external_id"]: r["id"] for r in con.execute("SELECT id, external_id FROM customer_feedback")}
+    for eid in ("r2", "comment:c1"):
+        con.execute("UPDATE customer_feedback SET reply_status='pending', reply_draft=? WHERE id=?", (f"ตอบ {eid}", ids[eid]))
+    con.commit()
+    calls = []
+
+    def http(method, url, headers, body):
+        calls.append((method, url))
+        if url == G.TOKEN_URL:
+            return 200, {"access_token": "AT"}
+        if method == "PUT" and url.endswith("/accounts/1/locations/9/reviews/r2/reply"):
+            assert body == {"comment": "ตอบ r2"} and headers["Authorization"] == "Bearer AT"
+            return 200, {"comment": "ตอบ r2", "updateTime": "2026-09-05T02:00:00Z"}
+        if method == "POST" and url.endswith("/c1/comments"):
+            assert b"message=" in body and b"access_token=PT" in body
+            return 200, {"id": "c1_reply"}
+        return 500, {"error": {"message": "unexpected " + url}}
+    cfg = {"google": CFG, "facebook": {"pages": [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "token": "PT"}]}}
+    assert FF.send_replies(cfg, sink, http, log=lambda *a: None) == {"sent": 2, "failed": 0}
+    st = {r["external_id"]: dict(r) for r in con.execute("SELECT external_id, reply_status, reply_text, replied_at, reply_error FROM customer_feedback")}
+    assert st["r2"]["reply_status"] == "sent" and st["r2"]["reply_text"] == "ตอบ r2" and st["r2"]["replied_at"]
+    assert st["comment:c1"]["reply_status"] == "sent" and st["comment:c1"]["reply_text"] == "ตอบ comment:c1"
+    assert sum(1 for m, u in calls if m == "PUT") == 1 and sum(1 for m, u in calls if u.endswith("/comments")) == 1
+    # empty queue → nothing; a refusing platform marks the row failed with the reason
+    assert FF.send_replies(cfg, sink, http, log=lambda *a: None) == {"sent": 0, "failed": 0}
+    con.execute("UPDATE customer_feedback SET reply_status='pending', reply_draft='อีกครั้ง' WHERE id=?", (ids["r2"],)); con.commit()
+    denied = lambda m, u, h, b: (403, {"error": {"status": "PERMISSION_DENIED", "message": "nope"}})  # noqa: E731
+    assert FF.send_replies(cfg, sink, denied, log=lambda *a: None) == {"sent": 0, "failed": 1}
+    assert "PERMISSION_DENIED" in con.execute("SELECT reply_error FROM customer_feedback WHERE id=?", (ids["r2"],)).fetchone()[0]
+    # nothing configured on this PC: the row fails with a clear reason instead of waiting forever; run() still exits 0
+    con.execute("UPDATE customer_feedback SET reply_status='pending' WHERE id=?", (ids["r2"],)); con.commit()
+    lines = []
+    assert FF.run(_args(), {}, sink, http=http, log=lines.append) == 0
+    assert "not configured" in con.execute("SELECT reply_error FROM customer_feedback WHERE id=?", (ids["r2"],)).fetchone()[0]
+    assert any("replies: 0 sent, 1 failed" in ln for ln in lines)
+    # the API sink carries the queue calls too
+    seen = []
+    api = FF.ApiSink("https://app", "tok", http=lambda m, u, h, b: (seen.append((m, u, b)) or (200, {"items": [], "counts": {}})))
+    assert api.reply_queue()["items"] == [] and api.reply_result(5, "failed", "x")
+    assert seen[0][1].endswith("/api/feedback/reply-queue?status=pending") and seen[1][2] == {"id": 5, "status": "failed", "error": "x"}
+    con.close()
 
 
 # ── alerts ───────────────────────────────────────────────────────────────────

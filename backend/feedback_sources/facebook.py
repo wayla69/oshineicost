@@ -87,7 +87,36 @@ def comment_to_row(c: dict, post: dict, page_id: str, branch: str = "", page_nam
             "text": text, "external_id": f"comment:{c['id']}",
             "url": c.get("permalink_url") or post.get("permalink_url") or "",
             "author": _hash((c.get("from") or {}).get("name") or (c.get("from") or {}).get("id") or ""),
-            "reply": "", "replied_at": "", "location": page_name or "", "sentiment_hint": None}
+            "reply": "", "replied_at": "", "location": page_name or "", "sentiment_hint": None,
+            "ref": str(c["id"])}              # the comment id a reply is posted under
+
+
+def page_for_comment(cfg: dict, comment_id: str, location: str = ""):
+    """The configured page a comment belongs to: comment ids are
+    '<page_id>_<post>_<comment>' (the page id leads); failing that, the page
+    whose name is the row's `location` (the page name the fetcher recorded)."""
+    pages = (cfg or {}).get("pages") or []
+    pid = str(comment_id or "").split("_", 1)[0]
+    for page in pages:
+        if str(page.get("id")) == pid:
+            return page
+    if location:
+        for page in pages:
+            if (page.get("name") or "").strip() == location.strip():
+                return page
+    return None
+
+
+def reply_to_comment(page_token: str, comment_id: str, text: str, http, api_version: str = DEFAULT_VERSION) -> dict:
+    """Publish the page's reply under a visitor's comment (pages_manage_engagement).
+    Recommendations cannot be answered through the API — those stay manual."""
+    if not comment_id:
+        raise RuntimeError("no comment id to reply under")
+    body = urllib.parse.urlencode({"message": (text or "").strip()[:8000], "access_token": page_token}).encode("utf-8")
+    status, j = http("POST", f"{GRAPH}/{api_version}/{comment_id}/comments",
+                     {"Content-Type": "application/x-www-form-urlencoded"}, body)
+    _check(status, j, "comment reply")
+    return j or {}
 
 
 def fetch_page(page: dict, http, since: str = "", api_version: str = DEFAULT_VERSION) -> tuple:
@@ -152,4 +181,5 @@ def list_pages(user_token: str, http, api_version: str = DEFAULT_VERSION) -> lis
             for p in _paged(f"{GRAPH}/{api_version}/me/accounts?" + urllib.parse.urlencode(q), http, "pages")]
 
 
-__all__ = ["rating_to_row", "comment_to_row", "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "SOURCE"]
+__all__ = ["rating_to_row", "comment_to_row", "fetch_page", "fetch_rows", "extend_user_token", "list_pages",
+           "page_for_comment", "reply_to_comment", "SOURCE"]

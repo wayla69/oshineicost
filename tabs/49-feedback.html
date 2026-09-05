@@ -8,7 +8,7 @@
   <div class="card p-4 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h3 class="text-sm font-semibold">แหล่งข้อมูล &amp; การดึงอัตโนมัติ</h3>
-      <span class="text-[11px]" style="color:var(--text-muted)">รีวิวที่ดึงมาจะถูกอัปเดตเมื่อลูกค้าแก้ไขหรือสาขาตอบกลับ · รีวิวลบใหม่แจ้งเตือนทาง Telegram</span>
+      <span class="text-[11px]" style="color:var(--text-muted)">รีวิวที่ดึงมาจะถูกอัปเดตเมื่อลูกค้าแก้ไขหรือสาขาตอบกลับ · รีวิวลบใหม่แจ้งเตือนทาง Telegram · กด ✍ ตอบ ที่รีวิวเพื่อร่างและส่งคำตอบไป Google/Facebook ในรอบดึงถัดไป</span>
     </div>
     <div id="fbSources" class="mt-2 text-xs" style="color:var(--text-muted)">กำลังโหลด…</div>
   </div>
@@ -46,5 +46,6 @@
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายสาขา</h3><div id="fbBranches" style="max-height:340px;overflow:auto"></div></div>
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รีวิวเชิงลบล่าสุด</h3><div id="fbNeg" style="max-height:340px;overflow:auto"></div></div>
   </div>
+  <div id="fbReplyPanel" class="card p-4 mb-4" style="display:none;border-left:4px solid #0369a1"></div>
   <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายการล่าสุด</h3><div id="fbItems" style="max-height:420px;overflow:auto"></div></div>
 </div>
