@@ -1,0 +1,43 @@
+{
+ "aspects": [
+  "รสชาติ",
+  "ความสด",
+  "บริการ",
+  "รอนาน",
+  "ราคา/ความคุ้ม",
+  "ความสะอาด",
+  "ปริมาณ/ของหมด",
+  "บรรยากาศ"
+ ],
+ "contact_days": 90,
+ "links": [
+  {
+   "active": false,
+   "avg30": null,
+   "branch": "BranchA",
+   "branch_id": 1,
+   "code": null,
+   "google_review_url": "",
+   "n30": 0,
+   "neg30": 0,
+   "print_url": null,
+   "responses": 0,
+   "scans": 0,
+   "url": null
+  },
+  {
+   "active": false,
+   "avg30": null,
+   "branch": "BranchB",
+   "branch_id": 2,
+   "code": null,
+   "google_review_url": "",
+   "n30": 0,
+   "neg30": 0,
+   "print_url": null,
+   "responses": 0,
+   "scans": 0,
+   "url": null
+  }
+ ]
+}
