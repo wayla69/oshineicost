@@ -42,7 +42,10 @@ def _slug(path: str, params: dict) -> str:
 # Write timestamps are the one thing that legitimately differs run to run: an
 # earlier test in the session POSTs a cost, and /api/cost/diff echoes the
 # moment it did. The value carries no business meaning, so it is masked.
-_TS_KEYS = {"updated_at", "created_at", "issued_at", "generated_at", "captured_at"}
+# "today" as a STRING is the calendar day /api/extra/closing-time reports
+# (numeric "today" counts elsewhere are real figures and stay) — it turned the
+# golden red at midnight on 2026-09-05.
+_TS_KEYS = {"updated_at", "created_at", "issued_at", "generated_at", "captured_at", "today"}
 
 
 def _canon(obj):

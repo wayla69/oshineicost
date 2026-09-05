@@ -92,6 +92,7 @@ dispatch only (`deploy-clean.sh` stays the one deploy path).
 
 The nightly sync does **not** run from this checkout. It runs from the scheduler clone
 `C:\Users\ASUS\Oshinei` (Task Scheduler: *Oshinei Auto Sync* 06:00 local full run, *Oshinei
+DB Backup* 07:30, *Oshinei Feedback Sync* 09:00 review fetch → live app, *Oshinei
 Sync Live (Fly)* 10:00 incremental + push). That clone ran #90's code for a week while `main`
 moved 22 commits, and the first real run of the newer code failed (#115). So:
 

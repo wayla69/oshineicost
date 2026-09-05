@@ -46,7 +46,7 @@ REM Non-fatal: the DB copy above is the critical part; an empty folder writes no
 REM The gitignored secrets live only on this PC: without them a fresh clone
 REM cannot sync (the 2026-07-27 outage). Keep an off-site copy next to the DB.
 if not exist "%OUT%\secrets" mkdir "%OUT%\secrets"
-for %%F in ("backend\.env" "backend\.seed_tokens.txt" "backend\.manager_token.txt" "backend\.refresh_login.txt" "recon\.pdf_passwords.txt" "upload.bat") do (
+for %%F in ("backend\.env" "backend\.seed_tokens.txt" "backend\.manager_token.txt" "backend\.refresh_login.txt" "backend\.feedback_config.json" "recon\.pdf_passwords.txt" "upload.bat") do (
     if exist "%%~F" copy /y "%%~F" "%OUT%\secrets\" >nul
 )
 echo       secrets copied to "%OUT%\secrets"

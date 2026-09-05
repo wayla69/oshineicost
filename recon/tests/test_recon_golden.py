@@ -108,8 +108,17 @@ SMOKE = [
 @pytest.fixture(scope="module")
 def client(tmp_path_factory):
     core._DB_PATH = main._DB_PATH = _make_db(tmp_path_factory.mktemp("golden"), DEMO_POS)
-    with TestClient(main.app) as cl:
-        yield cl
+    # The open-items aging report buckets by age from TODAY, so its goldens
+    # turned red at midnight on 2026-09-05: pin the day they were generated.
+    import datetime
+    import recon.routers.reports as reports
+    mp = pytest.MonkeyPatch()
+    mp.setattr(reports, "_today", lambda: datetime.date(2026, 9, 4))
+    try:
+        with TestClient(main.app) as cl:
+            yield cl
+    finally:
+        mp.undo()
 
 
 def _slug(path, params):
