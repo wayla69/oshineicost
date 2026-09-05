@@ -83,7 +83,9 @@ def test_parse_rows_reads_a_csv_with_thai_headers_and_pasted_lines():
     assert [r["text"] for r in rows] == ["อร่อยมาก", "รอนาน", "บรรทัดที่วางเอง"]
     assert rows[0]["branch"] == "ขอนแก่น" and rows[0]["rating"] == 5.0 and rows[0]["date"] == "2026-08-03"
     assert rows[1]["branch"] == "ชลบุรี"          # default fills the blank
-    assert rows[2] == {"date": "2026-08-10", "branch": "ชลบุรี", "source": "หน้าร้าน", "rating": None, "text": "บรรทัดที่วางเอง"}
+    core = ("date", "branch", "source", "rating", "text")
+    assert {k: rows[2][k] for k in core} == {"date": "2026-08-10", "branch": "ชลบุรี", "source": "หน้าร้าน", "rating": None, "text": "บรรทัดที่วางเอง"}
+    assert rows[2]["external_id"] is None and rows[2]["sentiment_hint"] is None   # the connector-only fields stay empty
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────

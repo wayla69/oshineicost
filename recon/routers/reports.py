@@ -972,12 +972,18 @@ def _ic_prev_month(m, k):
     return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
 
 
+def _today():
+    """The day the aging is measured from — one seam so the golden test can pin it
+    (the report changes every midnight otherwise)."""
+    from datetime import date
+    return date.today()
+
+
 def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
     """Open (unresolved) reconciling items, aged from period-end to today, for the
     selected month + `lookback` prior months. Skips approved/closed (locked) sessions —
     those are signed off, not open. Each item = one reconcile_month todo. Read-only."""
-    from datetime import date
-    today = date.today()
+    today = _today()
     months = [period_month] + [_ic_prev_month(period_month, k)
                                for k in range(1, lookback + 1)]
     branches = [(r["branch_id"], r["name"]) for r in conn.execute(

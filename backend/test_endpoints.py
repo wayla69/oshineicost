@@ -44,6 +44,7 @@ SMOKE = [
     ("/api/menu/action-board", {}),
     ("/api/menu/opportunities", {}),
     ("/api/feedback/summary", {}),
+    ("/api/feedback/sources", {}),
     # ── management summary report (daily & weekly) ──
     ("/api/reports/management", {}),
     ("/api/reports/management", {"period": "weekly"}),

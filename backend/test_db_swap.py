@@ -21,6 +21,13 @@ def _mk_live(p):
     c.executemany("INSERT INTO recon_uploads(file_name) VALUES(?)", [("a",), ("b",), ("c",)])
     c.execute("CREATE TABLE app_user(id INTEGER PRIMARY KEY, name TEXT)")
     c.execute("INSERT INTO app_user(name) VALUES('admin')")
+    # reviews are written on the LIVE site (tab upload, nightly Google/Facebook
+    # fetch) and exist nowhere else — the 2026-09-05 fix
+    c.execute("CREATE TABLE customer_feedback(id INTEGER PRIMARY KEY AUTOINCREMENT, text TEXT NOT NULL, fingerprint TEXT UNIQUE)")
+    c.executemany("INSERT INTO customer_feedback(text, fingerprint) VALUES(?,?)", [("อร่อย", "f1"), ("รอนาน", "f2")])
+    c.execute("CREATE INDEX ix_cf_fp ON customer_feedback(fingerprint)")
+    c.execute("CREATE TABLE feedback_sync_log(id INTEGER PRIMARY KEY, source TEXT)")
+    c.execute("INSERT INTO feedback_sync_log(source) VALUES('Google')")
     c.commit(); c.close()
 
 
@@ -39,6 +46,13 @@ def test_carry_forward_preserves_and_verifies(tmp_path):
     assert safe, reason
     cnt = main._preserved_counts(str(inc))
     assert cnt["recon_uploads"] == 3 and cnt["app_user"] == 1
+    assert cnt["customer_feedback"] == 2 and cnt["feedback_sync_log"] == 1
+    c = sqlite3.connect(str(inc))
+    assert c.execute("SELECT text FROM customer_feedback ORDER BY id").fetchall() == [("อร่อย",), ("รอนาน",)]
+    assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='ix_cf_fp'").fetchone()[0] == 1
+    # the staged DB's own (sync-owned) tables are untouched
+    assert c.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0] == 1
+    c.close()
 
 
 def test_fail_closed_on_carry_forward_error(tmp_path):

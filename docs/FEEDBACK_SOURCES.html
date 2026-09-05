@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เสียงลูกค้า — ตั้งค่าการดึงรีวิวอัตโนมัติ</title>
+<style>
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1.2rem;color:#1f2937;line-height:1.6}
+  h1{font-size:1.5rem;color:#0c4a6e;border-bottom:3px solid #0369a1;padding-bottom:.4rem}
+  h2{font-size:1.15rem;color:#0c4a6e;margin-top:2rem}
+  h3{font-size:1rem;margin-top:1.2rem}
+  code,pre{font-family:Consolas,"Courier New",monospace;font-size:.9em;background:#f3f4f6;border-radius:4px}
+  code{padding:.05rem .3rem}
+  pre{padding:.7rem .9rem;overflow-x:auto;border-left:3px solid #0369a1}
+  table{border-collapse:collapse;width:100%;font-size:.92em;margin:.6rem 0}
+  th,td{border:1px solid #e5e7eb;padding:.35rem .5rem;text-align:left;vertical-align:top}
+  th{background:#eff6ff}
+  .note{background:#fffbeb;border-left:4px solid #ca8a04;padding:.6rem .9rem;margin:.8rem 0}
+  .ok{background:#ecfdf5;border-left:4px solid #047857;padding:.6rem .9rem;margin:.8rem 0}
+  .muted{color:#6b7280;font-size:.9em}
+  ol li,ul li{margin:.25rem 0}
+</style>
+</head>
+<body>
+<h1>💬 เสียงลูกค้า — ตั้งค่าการดึงรีวิวอัตโนมัติ</h1>
+<p class="muted">Oshinei Dashboard · แท็บ 💬 เสียงลูกค้า · เอกสารสำหรับเจ้าของ/ผู้ดูแลระบบ · ปรับปรุง 2026-09-05</p>
+
+<p>ระบบดึงรีวิวจากช่องทางที่ร้าน<b>เป็นเจ้าของ</b>ผ่าน API ทางการ (ไม่ใช่การกวาดหน้าเว็บ ซึ่งผิดเงื่อนไขและถูกบล็อกได้)
+แล้วส่งเข้าแท็บ 💬 เสียงลูกค้า ซึ่งวิเคราะห์ความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ</p>
+
+<table>
+<tr><th>ช่องทาง</th><th>ได้อะไร</th><th>ต้องตั้งค่า</th><th>สถานะ</th></tr>
+<tr><td><b>Google Business Profile</b> (Maps)</td><td>รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา</td><td>§1 (API — ครั้งเดียว) หรือ §2 (Takeout — ไม่ต้องตั้งค่า)</td><td>พร้อมใช้</td></tr>
+<tr><td><b>Facebook Page</b></td><td>Recommendations (แนะนำ/ไม่แนะนำ + ข้อความ) และคอมเมนต์ใต้โพสต์ของเพจ (เลือกได้)</td><td>§3</td><td>พร้อมใช้</td></tr>
+<tr><td>Grab · LINE MAN · foodpanda</td><td>รีวิวจาก merchant portal</td><td>ส่งออก/คัดลอกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ</td><td>อัปโหลดเอง</td></tr>
+<tr><td>TikTok</td><td>คอมเมนต์ใต้วิดีโอของร้าน</td><td>ต้องมีบัญชี TikTok Business + developer app (ยังไม่ทำ)</td><td>รอตัดสินใจ</td></tr>
+<tr><td>X (Twitter)</td><td>ทวีตที่พูดถึงร้าน</td><td>API เสียเงิน (~฿7,000/เดือน) — ไม่คุ้มสำหรับปริมาณที่มี</td><td>ข้าม</td></tr>
+</table>
+
+<div class="ok">ตัวเลือกที่เร็วที่สุด: <b>§2 Google Takeout</b> — ดาวน์โหลดรีวิวทั้งหมดเป็น zip แล้วอัปโหลดในแท็บ ใช้ได้ทันทีระหว่างรอสิทธิ์ API</div>
+
+<h2>§1 Google Business Profile API (ดึงทุกคืน)</h2>
+<h3>1.1 สิทธิ์จัดการลิสติ้ง</h3>
+<ol>
+<li>เข้า <a href="https://business.google.com" target="_blank">business.google.com</a> ด้วยบัญชี Google ของบริษัท — ต้องเห็น<b>ทุกสาขา</b> (ถ้ากระจายอยู่หลายบัญชี ให้โอนหรือเชิญเข้ากลุ่มธุรกิจเดียวกันก่อน)</li>
+<li>บัญชีนี้ต้องเป็น Owner/Manager ของลิสติ้ง (ไม่ใช่แค่ Site manager)</li>
+</ol>
+<h3>1.2 Google Cloud project + ขอสิทธิ์ API</h3>
+<ol>
+<li>เข้า <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> ด้วยบัญชีเดียวกัน → สร้าง project ใหม่ เช่น <code>oshinei-reviews</code></li>
+<li>ยื่นแบบฟอร์มขอสิทธิ์ Business Profile API (Google ต้องอนุมัติ project ก่อนจึงเรียก API ได้ — ปกติ 1–2 สัปดาห์): เริ่มที่
+    <a href="https://developers.google.com/my-business/content/prereqs" target="_blank">developers.google.com/my-business/content/prereqs</a> → "Request access" ระบุ Project number, ชื่อบริษัท, อีเมล, เว็บไซต์ และเหตุผล ("monitor and reply to reviews of our own 29 restaurant locations")</li>
+<li>เมื่อได้รับอีเมลอนุมัติ: APIs &amp; Services → Library → เปิดใช้ 3 ตัว: <b>My Business Account Management API</b>, <b>My Business Business Information API</b>, <b>Google My Business API</b></li>
+<li>APIs &amp; Services → OAuth consent screen → External → กรอกชื่อแอป/อีเมล → Scopes เพิ่ม <code>https://www.googleapis.com/auth/business.manage</code> → Test users เพิ่มอีเมลบัญชีบริษัท (อยู่โหมด Testing ได้ ไม่ต้องส่งตรวจ)</li>
+<li>Credentials → Create credentials → OAuth client ID → Application type <b>Desktop app</b> → จด <b>Client ID</b> และ <b>Client secret</b></li>
+</ol>
+<h3>1.3 ตั้งค่าบนเครื่องที่รัน sync (เครื่องเดียวกับ Sync Live Data)</h3>
+<ol>
+<li>สร้างไฟล์ <code>backend\.feedback_config.json</code> (ไฟล์นี้ถูก gitignore และถูกสำรองพร้อม secrets อื่นโดย Backup DB.bat):
+<pre>{
+  "google": {
+    "client_id": "xxxxxxxx.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-xxxxxxxx"
+  }
+}</pre></li>
+<li>ขอสิทธิ์ครั้งเดียว (เปิดเบราว์เซอร์ให้ล็อกอินและกดอนุญาต แล้วบันทึก refresh token ลงไฟล์):
+<pre>py backend\fetch_feedback.py auth google</pre>
+ถ้าเครื่องไม่มีเบราว์เซอร์ ใช้ <code>--manual</code> แล้ววาง code จาก address bar</li>
+<li>ดูรายชื่อลิสติ้งและสาขาที่จับคู่ได้:
+<pre>py backend\fetch_feedback.py locations google</pre>
+ลิสติ้งที่ชื่อ<b>มี</b>ชื่อสาขาอยู่แล้ว (เช่น "Oshinei Buffet ขอนแก่น") จับคู่อัตโนมัติ; ที่เหลือเพิ่มในไฟล์:
+<pre>"google": { ..., "location_map": { "Oshinei Buffet Korat": "โคราช1", "โอชิเน นครราชสีมา 2": "โคราช2" } }</pre></li>
+<li>ทดลองดึงทั้งหมดโดยยังไม่บันทึก แล้วดึงจริง:
+<pre>py backend\fetch_feedback.py run --source google --since all --dry-run
+py backend\fetch_feedback.py run --source google --since all</pre></li>
+</ol>
+
+<h2>§2 Google Takeout (ไม่ต้องตั้งค่าอะไร)</h2>
+<ol>
+<li>เข้า <a href="https://takeout.google.com" target="_blank">takeout.google.com</a> ด้วยบัญชีที่จัดการลิสติ้ง → Deselect all → เลือกเฉพาะ <b>Google Business Profile</b> → Next → Export once → ดาวน์โหลด zip</li>
+<li>ในแท็บ 💬 เสียงลูกค้า เลือกไฟล์ zip ที่ได้ → นำเข้าและวิเคราะห์ (ระบบอ่าน <code>location-*/reviews.json</code> ทุกสาขาในไฟล์ และใช้ชื่อลิสติ้งจับคู่สาขา; ถ้าเป็นบัญชีสาขาเดียว เลือกสาขาในช่องค่าเริ่มต้นได้)</li>
+<li>ทำซ้ำเดือนละครั้งได้ — รีวิวเดิมไม่ซ้ำ (ระบบจำ review id) และรีวิวที่แก้ไข/ตอบกลับแล้วจะถูกอัปเดต</li>
+</ol>
+
+<h2>§3 Facebook Page</h2>
+<ol>
+<li>เข้า <a href="https://developers.facebook.com" target="_blank">developers.facebook.com</a> ด้วยบัญชีที่เป็นแอดมินของเพจ → My Apps → Create App → ประเภท <b>Business</b> → ชื่อ เช่น "Oshinei Reviews" (แอปอยู่โหมด Development ใช้กับเพจที่คุณเป็นแอดมินได้เลย ไม่ต้องส่ง App Review)</li>
+<li>Tools → <b>Graph API Explorer</b> → เลือกแอปนี้ → Permissions เพิ่ม <code>pages_show_list</code>, <code>pages_read_user_content</code>, <code>pages_read_engagement</code> → Generate Access Token → เลือกทุกเพจสาขา → คัดลอก token (User token)</li>
+<li>ให้ระบบดึงรายชื่อเพจพร้อม Page token และบันทึกลงไฟล์:
+<pre>py backend\fetch_feedback.py pages facebook --user-token "EAAB..." --save</pre>
+แล้วเปิด <code>backend\.feedback_config.json</code> เติม <code>"branch"</code> ให้แต่ละเพจ (และ <code>"comments": true</code> ถ้าต้องการคอมเมนต์ใต้โพสต์ด้วย):
+<pre>"facebook": { "pages": [
+  { "id": "1234567890", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "token": "EAAB...", "comments": false }
+] }</pre></li>
+<li>ทดลองแล้วดึงจริง:
+<pre>py backend\fetch_feedback.py run --source facebook --since all --dry-run
+py backend\fetch_feedback.py run --source facebook --since all</pre></li>
+</ol>
+<div class="note">Page token ที่ได้จาก User token แบบสั้นจะหมดอายุใน ~1–2 ชั่วโมง ถ้าเห็น <code>OAuthException</code> ในผลการดึง ให้ทำข้อ 2–3 ซ้ำ หรือใช้ token จาก <b>Business Settings → System Users</b> (ไม่หมดอายุ) — ทางที่มั่นคงที่สุดสำหรับงานประจำ</div>
+
+<h2>§4 แจ้งเตือนรีวิวลบทาง Telegram</h2>
+<ol>
+<li>ใน Telegram คุยกับ <b>@BotFather</b> → <code>/newbot</code> → ตั้งชื่อ → ได้ <b>bot token</b></li>
+<li>สร้างกลุ่ม "Oshinei รีวิว" เชิญผู้จัดการที่ต้องรู้ + เชิญบอทเข้ากลุ่ม แล้วพิมพ์ข้อความอะไรก็ได้ในกลุ่ม 1 ข้อความ</li>
+<li>เปิด <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> ในเบราว์เซอร์ → ดูค่า <code>"chat":{"id": -100xxxxxxxx}</code> = chat id ของกลุ่ม</li>
+<li>เพิ่มใน <code>backend\.env</code>:
+<pre>OSHINEI_TG_TOKEN=123456:ABC-xxxx
+OSHINEI_TG_CHAT_ID=-100xxxxxxxx</pre></li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py test-telegram</code></li>
+</ol>
+<p>ทุกครั้งที่ดึงได้รีวิว<b>ใหม่</b>ที่เป็นเชิงลบหรือ ≤ 2 ดาว ระบบส่งสรุป (สาขา · ดาว · ข้อความ · ลิงก์) เข้ากลุ่มทันที</p>
+
+<h2>§5 ตารางเวลาและการทำงาน</h2>
+<ul>
+<li>Task Scheduler <b>"Oshinei Feedback Sync"</b> รัน <code>Fetch Feedback.bat auto</code> ทุกวัน 09:00 (ก่อน push DB 10:00) — log ที่ <code>backend\logs\fetch_feedback.log</code></li>
+<li>รันเองได้ทุกเมื่อ: ดับเบิลคลิก <code>Fetch Feedback.bat</code> หรือ <code>py backend\fetch_feedback.py run</code></li>
+<li><code>--since auto</code> (ค่าเริ่มต้น) = ดึงตั้งแต่การดึงสำเร็จครั้งล่าสุดย้อนไป 2 วัน (จับรีวิวที่ถูกแก้ไขและการตอบกลับที่มาทีหลัง); <code>--since all</code> = ทั้งหมด; <code>--since 2026-08-01</code> = ตั้งแต่วันที่</li>
+<li>รีวิวถูกส่งเข้า<b>เว็บที่ Fly โดยตรง</b> (ไม่ผ่านฐานข้อมูลในเครื่อง) และไม่หายเมื่อ push ยอดขายประจำวัน — ตารางรีวิวอยู่ในรายการที่ระบบเก็บไว้ข้ามการสลับฐานข้อมูล</li>
+<li>ยังไม่ตั้งค่าอะไรเลย = งานจบด้วยข้อความ "no review source configured" ไม่นับเป็นความล้มเหลว</li>
+<li>ในแท็บ การ์ด "แหล่งข้อมูล &amp; การดึงอัตโนมัติ" แสดงจำนวนรีวิว รีวิวล่าสุด จำนวน<b>รอสาขาตอบ</b> (รีวิวลบ/≤3 ดาวที่ยังไม่มีคำตอบ) และผลการดึงครั้งล่าสุดของแต่ละแหล่ง</li>
+</ul>
+
+<h2>§6 ข้อมูลส่วนบุคคลและการวิเคราะห์</h2>
+<ul>
+<li>ระบบเก็บเฉพาะข้อความ คะแนน วันที่ ลิงก์ และ<b>แฮช</b>ของชื่อผู้รีวิว — ไม่เก็บชื่อหรือรูป (PDPA)</li>
+<li>การวิเคราะห์ใช้พจนานุกรมไทยในตัว; ตั้ง <code>ANTHROPIC_API_KEY</code> เป็น Fly secret เมื่อไรก็ได้ ระบบจะสลับไปใช้ Claude (แม่นกว่ามากกับประโยคประชด/ผสมภาษา; รีวิวหลักพันข้อความไม่ถึง ฿50) — อย่าลืมสำรอง secret ตามกติกาเดิม</li>
+</ul>
+
+<h2>§7 ปัญหาที่พบบ่อย</h2>
+<table>
+<tr><th>อาการ</th><th>สาเหตุ / วิธีแก้</th></tr>
+<tr><td><code>PERMISSION_DENIED</code> ตอน <code>locations google</code></td><td>project ยังไม่ได้รับอนุมัติ API (§1.2 ข้อ 2) หรือบัญชีที่ล็อกอินไม่ได้จัดการลิสติ้ง</td></tr>
+<tr><td><code>Google returned no refresh_token</code></td><td>เคยอนุญาตแอปนี้แล้ว: ไปที่ <a href="https://myaccount.google.com/permissions" target="_blank">myaccount.google.com/permissions</a> ถอนสิทธิ์แอป แล้วรัน <code>auth google</code> ใหม่</td></tr>
+<tr><td><code>invalid_grant</code> ตอนดึง</td><td>refresh token ถูกถอน/หมดอายุ (แอป Testing มีอายุ 7 วันถ้าไม่ได้ตั้ง Publishing status เป็น In production) → กด "Publish app" ใน OAuth consent screen แล้ว <code>auth google</code> ใหม่</td></tr>
+<tr><td><code>OAuthException</code> จาก Facebook</td><td>token หมดอายุ → §3 ข้อ 2–3 ซ้ำ หรือใช้ System User token</td></tr>
+<tr><td>ผลการดึงบอก <code>no branch for: …</code></td><td>ชื่อลิสติ้ง/เพจไม่มีชื่อสาขา → เติม <code>location_map</code> (Google) หรือ <code>branch</code> (Facebook) แล้วรันใหม่ — รีวิวที่ดึงมาแล้วจะถูกย้ายเข้าสาขาอัตโนมัติในรอบถัดไป (ระบบอัปเดตตาม review id)</td></tr>
+<tr><td><code>HTTP 401</code> / <code>requires login</code></td><td>เว็บบังคับล็อกอิน: ใส่ <code>user:pass</code> ของบัญชีที่มีสิทธิ์ 💬 เสียงลูกค้า ใน <code>backend\.refresh_login.txt</code> (ไฟล์เดียวกับที่ refresh_fly_db.py ใช้)</td></tr>
+<tr><td><code>HTTP 403 A valid write token is required</code></td><td>ไม่พบ write token: ใส่ใน <code>backend\.seed_tokens.txt</code> หรือ env <code>OSHINEI_WRITE_TOKEN</code></td></tr>
+</table>
+
+<h2>§8 ช่องทางอื่น</h2>
+<ul>
+<li><b>Grab / LINE MAN / foodpanda</b>: ไม่มี API สาธารณะ — คัดลอกรีวิวจาก merchant app/portal ลงไฟล์ CSV/XLSX (คอลัมน์ date, branch, source, rating, text) แล้วอัปโหลดในแท็บ สัปดาห์ละครั้งก็เพียงพอ</li>
+<li><b>TikTok</b>: ทำได้เฉพาะคอมเมนต์ใต้วิดีโอของบัญชี Business ของร้าน ผ่าน TikTok for Business API (ต้องสมัคร developer และรออนุมัติ) — แจ้งเมื่อพร้อมจะเพิ่ม connector ตัวที่สาม</li>
+<li><b>X และการพูดถึงทั่วอินเทอร์เน็ต</b> (Pantip, YouTube, TikTok ของคนอื่น): ใช้บริการ social listening ไทย (เช่น Wisesight, Mandala) แล้วนำเข้าไฟล์ส่งออกในแท็บ</li>
+</ul>
+</body>
+</html>

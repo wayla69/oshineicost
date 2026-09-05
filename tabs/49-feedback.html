@@ -2,7 +2,15 @@
 <div id="tab-feedback" style="display:none">
   <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eff6ff 0%,#ecfeff 100%);border-left:4px solid #0369a1">
     <h2 class="text-base font-bold" style="color:#0c4a6e">💬 เสียงลูกค้า — รีวิวจาก Google / Facebook / Grab / LINE MAN</h2>
-    <p class="text-xs mt-1" style="color:var(--text-secondary)">วางรีวิว (บรรทัดละ 1 รีวิว) หรืออัปโหลด CSV/TSV ที่มีคอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) — ระบบแยกความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ แล้วสรุปเทียบกับข้อมูลขายในแท็บเมนู</p>
+    <p class="text-xs mt-1" style="color:var(--text-secondary)">ดึงอัตโนมัติทุกคืนจาก Google Business Profile และ Facebook Page ของร้าน (ตั้งค่าครั้งเดียว — <a href="/docs/FEEDBACK_SOURCES.html" target="_blank" style="color:#0369a1;text-decoration:underline">วิธีตั้งค่า</a>) หรือวางรีวิว (บรรทัดละ 1 รีวิว) / อัปโหลดไฟล์ CSV · XLSX · JSON ที่มีคอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) หรือไฟล์ zip จาก <b>Google Takeout</b> (Google Business Profile) — ระบบแยกความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ แล้วสรุปเทียบกับข้อมูลขายในแท็บเมนู</p>
+  </div>
+
+  <div class="card p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-semibold">แหล่งข้อมูล &amp; การดึงอัตโนมัติ</h3>
+      <span class="text-[11px]" style="color:var(--text-muted)">รีวิวที่ดึงมาจะถูกอัปเดตเมื่อลูกค้าแก้ไขหรือสาขาตอบกลับ · รีวิวลบใหม่แจ้งเตือนทาง Telegram</span>
+    </div>
+    <div id="fbSources" class="mt-2 text-xs" style="color:var(--text-muted)">กำลังโหลด…</div>
   </div>
 
   <div class="card p-4 mb-4">
@@ -18,7 +26,7 @@
           <option value="">— ช่องทาง —</option><option>Google</option><option>Facebook</option><option>Grab</option><option>LINE MAN</option><option>หน้าร้าน</option><option>อื่นๆ</option>
         </select>
         <input type="date" id="fbDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
-        <input type="file" id="fbFile" accept=".csv,.tsv,.txt" class="text-xs">
+        <input type="file" id="fbFile" accept=".csv,.tsv,.txt,.xlsx,.json,.zip" class="text-xs">
         <button class="btn-primary text-sm px-3 py-1.5 rounded" onclick="uploadFeedback()">⬆ นำเข้าและวิเคราะห์</button>
         <span id="fbUploadStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>

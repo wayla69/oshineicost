@@ -61,6 +61,8 @@ backend/.seed_token.txt
 backend/.seed_token*.txt
 backend/.manager_token*.txt
 backend/.refresh_login.txt
+# Review-platform credentials (Google OAuth refresh token, Facebook Page tokens)
+backend/.feedback_config.json
 # Local launcher with a hardcoded write token — must never reach the repo
 upload.bat
 backend/dbchunks/

@@ -39,12 +39,31 @@ async function loadFeedback(force) {
   _tabLastKey.feedback = fk;
   renderFeedback(d);
   loadFeedbackItems(qp);
+  loadFeedbackSources();
+}
+
+async function loadFeedbackSources() {
+  const el = document.getElementById('fbSources');
+  if (!el) return;
+  let d;
+  try { d = await api(`${API}/api/feedback/sources`); } catch (e) { el.textContent = 'โหลดแหล่งข้อมูลไม่สำเร็จ'; return; }
+  const rows = d.sources || [];
+  if (!rows.length) {
+    el.innerHTML = 'ยังไม่มีรีวิวจากแหล่งใด — ตั้งค่าการดึงอัตโนมัติตาม <a href="/docs/FEEDBACK_SOURCES.html" target="_blank" style="color:#0369a1;text-decoration:underline">คู่มือ</a> หรืออัปโหลด/วางรีวิวด้านล่าง';
+    return;
+  }
+  el.innerHTML = `<table class="text-xs w-full"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="py-1">แหล่ง</th><th class="text-right">รีวิว</th><th class="text-right">ดึงอัตโนมัติ</th><th>รีวิวล่าสุด</th><th class="text-right">รอสาขาตอบ</th><th>ดึงล่าสุด</th><th>ผล</th></tr></thead><tbody>` +
+    rows.map(s => {
+      const lr = s.last_run, ok = lr && lr.status === 'ok';
+      const result = lr ? (ok ? `✓ ใหม่ ${lr.inserted} · อัปเดต ${lr.updated}${lr.message ? ' · ' + _fbEsc(lr.message) : ''}` : '✗ ' + _fbEsc(lr.message || 'ล้มเหลว')) : '';
+      return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1">${_fbEsc(s.source)}</td><td class="text-right">${(s.n || 0).toLocaleString()}</td><td class="text-right">${(s.fetched || 0).toLocaleString()}</td><td>${_fbEsc(s.latest || '—')}</td><td class="text-right" style="color:${s.unreplied ? '#b91c1c' : 'inherit'}">${s.unreplied || 0}</td><td class="whitespace-nowrap">${lr ? _fbEsc(lr.ran_at || '') : '<span style="color:var(--text-muted)">อัปโหลดเอง</span>'}</td><td style="color:${lr ? (ok ? '#047857' : '#b91c1c') : 'inherit'}">${result}</td></tr>`;
+    }).join('') + '</tbody></table>';
 }
 
 function renderFeedback(d) {
   const st = document.getElementById('fbStatus');
   const eng = Object.entries(d.analysed_by || {}).map(([k, v]) => `${k} ${v}`).join(' · ');
-  if (st) st.textContent = d.total ? `${d.total.toLocaleString()} รีวิว · วิเคราะห์โดย ${eng || '—'}` : 'ยังไม่มีรีวิวในช่วงที่เลือก — วางหรืออัปโหลดด้านบน';
+  if (st) st.textContent = d.total ? `${d.total.toLocaleString()} รีวิว · วิเคราะห์โดย ${eng || '—'}${d.unreplied ? ` · รอสาขาตอบ ${d.unreplied}` : ''}` : 'ยังไม่มีรีวิวในช่วงที่เลือก — วางหรืออัปโหลดด้านบน';
   const s = d.sentiment || {};
   const kpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${c}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub || ''}</p></div>`;
   document.getElementById('fbKpis').innerHTML =
@@ -67,8 +86,8 @@ function renderFeedback(d) {
     (d.branches || []).map(b => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1">${_fbEsc(b.branch)}</td><td class="text-right">${b.n}</td><td class="text-right">${b.avg_rating != null ? b.avg_rating.toFixed(2) : '—'}</td><td class="text-right" style="color:${b.neg_pct >= 30 ? '#b91c1c' : 'inherit'}">${b.neg_pct}%</td></tr>`).join('') + '</tbody></table>' :
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล</p>';
   document.getElementById('fbNeg').innerHTML = (d.recent_negative || []).length ? (d.recent_negative || []).map(r =>
-    `<div class="text-xs py-1.5 border-b" style="border-color:var(--border)"><div style="color:var(--text-muted)">${_fbEsc(r.date || '')} · ${_fbEsc(r.branch || '')} · ${_fbEsc(r.source || '')}${r.rating != null ? ' · ' + r.rating + '★' : ''}</div>
-       <div>${_fbEsc(r.text)}</div><div class="mt-0.5">${(r.themes || []).map(t => `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef2f2;color:#b91c1c">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#eff6ff;color:#0369a1">${_fbEsc(m)}</span> `).join('')}</div></div>`).join('') :
+    `<div class="text-xs py-1.5 border-b" style="border-color:var(--border)"><div style="color:var(--text-muted)">${_fbEsc(r.date || '')} · ${_fbEsc(r.branch || '')} · ${_fbEsc(r.source || '')}${r.rating != null ? ' · ' + r.rating + '★' : ''}${r.url ? ` · <a href="${_fbEsc(r.url)}" target="_blank" rel="noopener" style="color:#0369a1">เปิดรีวิว ↗</a>` : ''}${r.needs_reply ? ' · <span style="color:#b91c1c;font-weight:600">รอสาขาตอบ</span>' : (r.replied ? ' · <span style="color:#047857">ตอบแล้ว</span>' : '')}</div>
+       <div>${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}</div><div class="mt-0.5">${(r.themes || []).map(t => `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef2f2;color:#b91c1c">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#eff6ff;color:#0369a1">${_fbEsc(m)}</span> `).join('')}</div></div>`).join('') :
     '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรีวิวเชิงลบในช่วงนี้</p>';
 }
 
@@ -81,8 +100,9 @@ async function loadFeedbackItems(qp, extra) {
   const el = document.getElementById('fbItems');
   el.innerHTML = (d.items || []).length ?
     (extra && extra.menu ? `<p class="text-xs mb-2" style="color:var(--text-muted)">กรองเมนู: <b>${_fbEsc(extra.menu)}</b> · <a href="#" onclick="loadFeedbackItems();return false;">ล้างตัวกรอง</a></p>` : '') +
-    `<table class="text-xs w-full"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="py-1">วันที่</th><th>สาขา</th><th>ช่องทาง</th><th>★</th><th>ความรู้สึก</th><th>ข้อความ</th><th></th></tr></thead><tbody>` +
-    d.items.map(r => `<tr class="border-b align-top" style="border-color:var(--border)"><td class="py-1 whitespace-nowrap">${_fbEsc(r.rated_at || '')}</td><td>${_fbEsc(r.branch_name || '')}</td><td>${_fbEsc(r.source || '')}</td><td>${r.rating != null ? r.rating : ''}</td><td>${_fbSentChip(r.sentiment)}</td><td>${_fbEsc(r.text)}<div>${(r.themes || []).map(t => `<span class="text-[10px] px-1 rounded" style="background:#f3f4f6">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="text-[10px] px-1 rounded" style="background:#eff6ff;color:#0369a1">${_fbEsc(m)}</span> `).join('')}</div></td>
+    `<table class="text-xs w-full"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="py-1">วันที่</th><th>สาขา</th><th>ช่องทาง</th><th>★</th><th>ความรู้สึก</th><th>ข้อความ</th><th>ตอบกลับ</th><th></th></tr></thead><tbody>` +
+    d.items.map(r => `<tr class="border-b align-top" style="border-color:var(--border)"><td class="py-1 whitespace-nowrap">${_fbEsc(r.rated_at || '')}</td><td>${_fbEsc(r.branch_name || '')}</td><td class="whitespace-nowrap">${_fbEsc(r.source || '')}${r.url ? ` <a href="${_fbEsc(r.url)}" target="_blank" rel="noopener" title="เปิดรีวิวต้นทาง" style="color:#0369a1">↗</a>` : ''}</td><td>${r.rating != null ? r.rating : ''}</td><td>${_fbSentChip(r.sentiment)}</td><td>${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}<div>${(r.themes || []).map(t => `<span class="text-[10px] px-1 rounded" style="background:#f3f4f6">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="text-[10px] px-1 rounded" style="background:#eff6ff;color:#0369a1">${_fbEsc(m)}</span> `).join('')}</div></td>
+      <td>${r.reply_text ? `<span title="${_fbEsc(r.replied_at || '')}" style="color:#047857">✓ ${_fbEsc(r.reply_text.slice(0, 80))}</span>` : (r.needs_reply ? '<span style="color:#b91c1c">รอสาขาตอบ</span>' : '')}</td>
       <td><button class="text-[11px]" style="color:#b91c1c" title="ลบรีวิวนี้" onclick="deleteFeedback(${r.id})">✕</button></td></tr>`).join('') + '</tbody></table>' :
     '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการ</p>';
 }
@@ -102,7 +122,8 @@ async function uploadFeedback() {
   try {
     const r = await api(`${API}/api/feedback/upload`, { method: 'POST', body: fd });
     if (r.detail) throw new Error(r.detail);
-    st.textContent = `นำเข้า ${r.inserted} รีวิว (ซ้ำ ${r.duplicates}) · วิเคราะห์โดย ${r.analysed_by}`;
+    st.textContent = `นำเข้า ${r.inserted} รีวิว (อัปเดต ${r.updated || 0} · ซ้ำ ${r.duplicates}) · วิเคราะห์โดย ${r.analysed_by}` +
+      ((r.unmatched || []).length ? ` · ไม่พบสาขาสำหรับ: ${r.unmatched.join(', ')}` : '');
     document.getElementById('fbText').value = '';
     document.getElementById('fbFile').value = '';
     loadFeedback(true);
