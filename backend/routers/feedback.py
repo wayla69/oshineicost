@@ -14,6 +14,11 @@ tabs cannot see from POS data: what guests say about the dishes and the branch.
   GET    /api/feedback/items       the rows behind a summary figure
   GET    /api/feedback/sources     per source: rows, latest review, the fetcher's last run
   POST   /api/feedback/sync-log    the fetcher's run record
+  GET    /api/feedback/{id}/reply-draft   a suggested reply (Claude when a key is set, else a Thai template)
+  POST   /api/feedback/{id}/reply         queue a reply — the fetcher posts it to Google / a Facebook comment
+  DELETE /api/feedback/{id}/reply         cancel a queued reply
+  GET    /api/feedback/reply-queue        what the fetcher must send (status=pending|failed|manual|sent)
+  POST   /api/feedback/reply-result       the fetcher reports sent / failed
   DELETE /api/feedback/{id}
 RBAC module customer.feedback (auth.py); writes need the write token like every
 upload. The tables are carried across the daily DB push (core._PRESERVED_EXACT /
@@ -30,7 +35,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 
 from core import get_db, require_write_token
-from feedback_nlp import analyse, clean_menu_name
+from feedback_nlp import analyse, clean_menu_name, draft_reply
 from feedback_sources.google_gbp import parse_reviews_json, parse_takeout_zip
 
 router = APIRouter()
@@ -71,7 +76,13 @@ CREATE TABLE IF NOT EXISTS feedback_sync_log(
 # columns added after the first release — ALTERed in when missing (the live DB
 # keeps its rows across deploys, so CREATE IF NOT EXISTS alone never adds them)
 _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT"), ("reply_text", "TEXT"),
-               ("replied_at", "TEXT"), ("location", "TEXT"), ("updated_at", "TEXT"))
+               ("replied_at", "TEXT"), ("location", "TEXT"), ("updated_at", "TEXT"),
+               # the reply queue: external_ref = where a reply is posted (Google review resource
+               # name / Facebook comment id); reply_status = pending → sent | failed, or manual
+               # (Facebook recommendations cannot be answered through the API)
+               ("external_ref", "TEXT"), ("reply_draft", "TEXT"), ("reply_status", "TEXT"),
+               ("reply_requested_at", "TEXT"), ("reply_requested_by", "TEXT"), ("reply_error", "TEXT"))
+REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 
 # header names the CSV/TSV/XLSX/JSON import understands (lower-cased, Thai or English)
 _COLS = {
@@ -238,7 +249,7 @@ def normalise_row(r: dict):
     return {"date": d[:10] if len(d) >= 10 else d, "branch": s("branch"), "source": s("source"),
             "rating": rating, "text": text, "external_id": ext, "url": s("url"), "author": s("author"),
             "reply": s("reply"), "replied_at": s("replied_at", 10), "location": s("location"),
-            "sentiment_hint": hint if hint in ("pos", "neg") else None}
+            "ref": s("ref"), "sentiment_hint": hint if hint in ("pos", "neg") else None}
 
 
 # ── storage ──────────────────────────────────────────────────────────────────
@@ -325,8 +336,10 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
         if kind == "same":
             unchanged += 1; continue
         if kind == "reply":
-            con.execute("UPDATE customer_feedback SET reply_text=?, replied_at=?, updated_at=? WHERE id=?",
-                        (r.get("reply") or None, r.get("replied_at") or None, now, existing[fp]["id"]))
+            # a reply that arrived from the platform closes a queued one (ours or a manual answer)
+            con.execute("UPDATE customer_feedback SET reply_text=?, replied_at=?, updated_at=?, "
+                        "reply_status=CASE WHEN ?!='' AND reply_status='pending' THEN 'sent' ELSE reply_status END WHERE id=?",
+                        (r.get("reply") or None, r.get("replied_at") or None, now, r.get("reply") or "", existing[fp]["id"]))
             updated += 1; continue
         bid, bname = _match_branch(r.get("branch") or "", table)
         if r.get("branch") and bid is None:
@@ -338,12 +351,13 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
         vals = (bid, bname, r.get("source") or "", r.get("date") or "", r.get("rating"), r["text"], sent, a["score"],
                 json.dumps(a["themes"], ensure_ascii=False), json.dumps(a["menus"], ensure_ascii=False), engine,
                 r.get("external_id"), r.get("url") or None, r.get("author") or None, r.get("reply") or None,
-                r.get("replied_at") or None, r.get("location") or None)
+                r.get("replied_at") or None, r.get("location") or None, r.get("ref") or None)
         if kind == "new":
             cur = con.execute(
                 "INSERT OR IGNORE INTO customer_feedback(branch_id, branch_name, source, rated_at, rating, text, "
                 "sentiment, score, themes, menus, analysed_by, external_id, url, author_hash, reply_text, replied_at, "
-                "location, uploaded_by, fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", vals + (by or "", fp))
+                "location, external_ref, uploaded_by, fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                vals + (by or "", fp))
             if cur.rowcount and cur.rowcount > 0:
                 inserted += 1
                 new_items.append({"id": cur.lastrowid, "date": r.get("date"), "branch": bname or r.get("branch") or "",
@@ -355,7 +369,9 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
             con.execute(
                 "UPDATE customer_feedback SET branch_id=?, branch_name=?, source=?, rated_at=?, rating=?, text=?, "
                 "sentiment=?, score=?, themes=?, menus=?, analysed_by=?, external_id=?, url=?, author_hash=?, "
-                "reply_text=?, replied_at=?, location=?, updated_at=? WHERE id=?", vals + (now, existing[fp]["id"]))
+                "reply_text=?, replied_at=?, location=?, external_ref=COALESCE(?, external_ref), updated_at=?, "
+                "reply_status=CASE WHEN ?!='' AND reply_status='pending' THEN 'sent' ELSE reply_status END WHERE id=?",
+                vals + (now, r.get("reply") or "", existing[fp]["id"]))
             updated += 1
     return {"rows": len(rows), "inserted": inserted, "updated": updated, "unchanged": unchanged,
             "duplicates": dups + unchanged, "analysed_by": engine or "none",
@@ -413,10 +429,25 @@ def _where(branch, month_from, month_to, sentiment=None, theme=None, menu=None, 
 
 
 def _needs_reply(r) -> bool:
-    """A fetched review (has an external id) that is negative or ≤3★ and the
-    branch has not answered — the queue the owner should work through."""
+    """A fetched review (has an external id) that is negative or ≤3★, the
+    branch has not answered and no reply is queued — the list to work through."""
     return bool(r.get("external_id")) and not (r.get("reply_text") or "") and \
+        r.get("reply_status") not in ("pending", "sent") and \
         (r.get("sentiment") == "neg" or (r.get("rating") is not None and float(r["rating"]) <= 3))
+
+
+def _reply_channel(row) -> str:
+    """Where a queued reply can go: google (review resource name), facebook (a
+    comment id), manual (a Facebook recommendation or a row without a ref —
+    the draft is kept for pasting by hand), none (no external id at all)."""
+    if not row.get("external_id"):
+        return "none"
+    src = (row.get("source") or "").strip().lower()
+    if src == "google" and (row.get("external_ref") or "").count("/reviews/"):
+        return "google"
+    if src == "facebook" and str(row.get("external_id")).startswith("comment:") and row.get("external_ref"):
+        return "facebook"
+    return "manual"
 
 
 @router.get("/api/feedback/summary")
@@ -427,10 +458,12 @@ def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[s
         where, params = _where(branch, month_from, month_to, source=source)
         rows = [dict(r) for r in con.execute(
             f"SELECT id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-            f"external_id, url, reply_text FROM customer_feedback WHERE {where} ORDER BY rated_at DESC, id DESC", params)]
+            f"external_id, url, reply_text, reply_status, reply_error FROM customer_feedback WHERE {where} "
+            f"ORDER BY rated_at DESC, id DESC", params)]
     total = len(rows)
     sent = {"pos": 0, "neg": 0, "neu": 0}
     themes, menus, branches, by_month, sources, engines = {}, {}, {}, {}, {}, {}
+    reply_queue = {s: 0 for s in REPLY_STATUSES}
     ratings, unreplied = [], 0
     for r in rows:
         s = r["sentiment"] or "neu"
@@ -438,6 +471,8 @@ def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[s
         if r["rating"] is not None:
             ratings.append(float(r["rating"]))
         unreplied += _needs_reply(r)
+        if r["reply_status"] in reply_queue:
+            reply_queue[r["reply_status"]] += 1
         for t in json.loads(r["themes"] or "[]"):
             d = themes.setdefault(t, {"theme": t, "n": 0, "neg": 0}); d["n"] += 1; d["neg"] += (s == "neg")
         for m in json.loads(r["menus"] or "[]"):
@@ -459,12 +494,13 @@ def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[s
     recent_neg = [{"id": r["id"], "date": r["rated_at"], "branch": r["branch_name"], "source": r["source"],
                    "rating": r["rating"], "text": r["text"][:300], "themes": json.loads(r["themes"] or "[]"),
                    "menus": json.loads(r["menus"] or "[]"), "url": r["url"] or "",
-                   "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r)}
+                   "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r),
+                   "external_id": r["external_id"], "reply_status": r["reply_status"], "reply_error": r["reply_error"]}
                   for r in rows if r["sentiment"] == "neg"][:12]
     return {
         "total": total, "avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
         "sentiment": sent, "neg_pct": round(sent["neg"] / total * 100, 1) if total else 0.0,
-        "unreplied": unreplied,
+        "unreplied": unreplied, "reply_queue": reply_queue,
         "themes": sorted(themes.values(), key=lambda d: -d["n"]),
         "menus": sorted(menus.values(), key=lambda d: -d["n"])[:30],
         "branches": sorted(branches.values(), key=lambda d: -d["n"]),
@@ -485,7 +521,7 @@ def feedback_items(branch: Optional[str] = Query(None), month_from: Optional[str
         where, params = _where(branch, month_from, month_to, sentiment, theme, menu, source)
         rows = con.execute(
             f"SELECT id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-            f"uploaded_at, external_id, url, reply_text, replied_at, location "
+            f"uploaded_at, external_id, url, reply_text, replied_at, location, reply_status, reply_draft, reply_error "
             f"FROM customer_feedback WHERE {where} ORDER BY rated_at DESC, id DESC LIMIT ?", params + [limit]).fetchall()
     items = [{**dict(r), "themes": json.loads(r["themes"] or "[]"), "menus": json.loads(r["menus"] or "[]")} for r in rows]
     for it in items:
@@ -510,6 +546,11 @@ def feedback_sources():
         logs = [dict(r) for r in con.execute(
             "SELECT source, ran_at, since, fetched, inserted, updated, unchanged, status, message "
             "FROM feedback_sync_log ORDER BY id DESC LIMIT 300")]
+        reply_queue = {s: 0 for s in REPLY_STATUSES}
+        for st, n in con.execute("SELECT reply_status, COUNT(*) FROM customer_feedback "
+                                 "WHERE reply_status IS NOT NULL GROUP BY reply_status"):
+            if st in reply_queue:
+                reply_queue[st] = n
     last, last_ok = {}, {}
     for entry in logs:
         last.setdefault(entry["source"], entry)
@@ -524,7 +565,128 @@ def feedback_sources():
     for s, entry in last.items():
         if s not in seen:
             out.append({"source": s, "n": 0, "latest": None, "fetched": 0, "unreplied": 0, "last_run": entry})
-    return {"sources": out, "last_ok": last_ok, "runs": logs[:20]}
+    return {"sources": out, "last_ok": last_ok, "runs": logs[:20], "reply_queue": reply_queue}
+
+
+# ── the reply queue ──────────────────────────────────────────────────────────
+def _get_row(con, fid: int) -> dict:
+    r = con.execute("SELECT * FROM customer_feedback WHERE id=?", (fid,)).fetchone()
+    if not r:
+        raise HTTPException(404, "not found")
+    return dict(r)
+
+
+@router.get("/api/feedback/reply-queue")
+def feedback_reply_queue(status: str = Query("pending")):
+    """What the fetcher (backend/fetch_feedback.py) must post, plus the counts
+    per status for the tab."""
+    if status not in REPLY_STATUSES:
+        raise HTTPException(400, f"status must be one of {', '.join(REPLY_STATUSES)}")
+    with get_db() as con:
+        _ensure(con)
+        items = [dict(r) for r in con.execute(
+            "SELECT id, source, external_id, external_ref, branch_name, location, reply_draft, reply_status, "
+            "reply_requested_at, reply_requested_by, reply_error FROM customer_feedback WHERE reply_status=? "
+            "ORDER BY reply_requested_at, id", (status,))]
+        counts = {s: 0 for s in REPLY_STATUSES}
+        for st, n in con.execute("SELECT reply_status, COUNT(*) FROM customer_feedback "
+                                 "WHERE reply_status IS NOT NULL GROUP BY reply_status"):
+            if st in counts:
+                counts[st] = n
+    return {"items": items, "counts": counts}
+
+
+@router.post("/api/feedback/reply-result", dependencies=[Depends(require_write_token)])
+async def feedback_reply_result(request: Request):
+    """The fetcher reports one queued reply: {id, status: sent|failed, error, reply_text}."""
+    b = await request.json()
+    try:
+        fid = int(b.get("id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "id required")
+    status = b.get("status")
+    if status not in ("sent", "failed"):
+        raise HTTPException(400, "status must be sent or failed")
+    with get_db() as con:
+        _ensure(con)
+        row = _get_row(con, fid)
+        if status == "sent":
+            con.execute("UPDATE customer_feedback SET reply_status='sent', reply_error=NULL, "
+                        "reply_text=COALESCE(?, reply_draft), replied_at=?, updated_at=? WHERE id=?",
+                        ((b.get("reply_text") or "").strip() or None, (b.get("replied_at") or _thai_today())[:10], _thai_now(), fid))
+        else:
+            con.execute("UPDATE customer_feedback SET reply_status='failed', reply_error=?, updated_at=? WHERE id=?",
+                        (str(b.get("error") or "unknown error")[:300], _thai_now(), fid))
+        con.commit()
+    return {"id": fid, "reply_status": status, "previous": row.get("reply_status")}
+
+
+@router.get("/api/feedback/{fid}/reply-draft")
+def feedback_reply_draft(fid: int):
+    """A suggested reply for the branch to edit: Claude when ANTHROPIC_API_KEY is
+    set, the Thai template otherwise. Also says where the reply can be sent."""
+    with get_db() as con:
+        _ensure(con)
+        row = _get_row(con, fid)
+    if row.get("reply_status") in ("pending", "manual", "failed") and row.get("reply_draft"):
+        draft, engine = row["reply_draft"], "saved"
+    else:
+        draft, engine = draft_reply(row)
+    ch = _reply_channel(row)
+    return {"id": fid, "draft": draft, "engine": engine, "channel": ch, "note": _reply_note(ch, row),
+            "reply_status": row.get("reply_status"), "reply_error": row.get("reply_error"),
+            "text": row.get("text") or "", "branch": row.get("branch_name") or "", "source": row.get("source") or "",
+            "rating": row.get("rating"), "date": row.get("rated_at"), "url": row.get("url") or ""}
+
+
+@router.post("/api/feedback/{fid}/reply", dependencies=[Depends(require_write_token)])
+async def feedback_reply(fid: int, request: Request):
+    """Queue a reply. Google reviews and Facebook comments are posted by the
+    next fetcher run; a Facebook recommendation (or a row without a resource
+    name) is kept as `manual` — the text to paste by hand."""
+    b = await request.json()
+    text = str(b.get("text") or "").strip()
+    if not text:
+        raise HTTPException(400, "ใส่ข้อความตอบกลับก่อน")
+    if len(text) > 4000:
+        raise HTTPException(400, "ข้อความตอบกลับยาวเกิน 4,000 ตัวอักษร")
+    with get_db() as con:
+        _ensure(con)
+        row = _get_row(con, fid)
+        ch = _reply_channel(row)
+        if ch == "none":
+            raise HTTPException(400, "รีวิวนี้ไม่ได้มาจากช่องทางที่ระบบตอบกลับได้ (ไม่มี review id)")
+        status = "pending" if ch in ("google", "facebook") else "manual"
+        con.execute("UPDATE customer_feedback SET reply_draft=?, reply_status=?, reply_requested_at=?, "
+                    "reply_requested_by=?, reply_error=NULL, updated_at=? WHERE id=?",
+                    (text, status, _thai_now(), str(b.get("by") or "")[:60], _thai_now(), fid))
+        con.commit()
+    return {"id": fid, "reply_status": status, "channel": ch, "note": _reply_note(ch, row)}
+
+
+def _reply_note(ch: str, row: dict) -> str:
+    if ch == "google":
+        return "ส่งถึง Google ในรอบดึงถัดไป (09:00)"
+    if ch == "facebook":
+        return "โพสต์ใต้คอมเมนต์ในรอบดึงถัดไป (09:00)"
+    if ch == "manual":
+        if (row.get("source") or "").strip().lower() == "facebook":
+            return "Facebook ไม่ให้ตอบ Recommendation ผ่าน API — คัดลอกข้อความไปตอบในแอป Facebook"
+        return "รีวิวนี้ไม่มี resource name (นำเข้าจากไฟล์ที่ไม่ใช่ Takeout/API?) — คัดลอกข้อความไปตอบในแอป"
+    return "รีวิวนี้ไม่มี review id จึงตอบผ่านระบบไม่ได้"
+
+
+@router.delete("/api/feedback/{fid}/reply", dependencies=[Depends(require_write_token)])
+def feedback_reply_cancel(fid: int):
+    with get_db() as con:
+        _ensure(con)
+        row = _get_row(con, fid)
+        if row.get("reply_status") == "sent":
+            raise HTTPException(400, "ส่งไปแล้ว — ยกเลิกไม่ได้")
+        con.execute("UPDATE customer_feedback SET reply_status=NULL, reply_draft=NULL, reply_error=NULL, "
+                    "reply_requested_at=NULL, reply_requested_by=NULL, updated_at=? WHERE id=?", (_thai_now(), fid))
+        con.commit()
+    return {"id": fid, "reply_status": None}
 
 
 @router.post("/api/feedback/sync-log", dependencies=[Depends(require_write_token)])
@@ -560,4 +722,4 @@ def feedback_delete(fid: int):
     return {"deleted": fid}
 
 
-__all__ = ["router", "parse_rows", "normalise_row", "insert_reviews", "clean_menu_name"]
+__all__ = ["router", "parse_rows", "normalise_row", "insert_reviews", "clean_menu_name", "REPLY_STATUSES"]

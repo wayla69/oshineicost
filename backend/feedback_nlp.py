@@ -171,3 +171,75 @@ def analyse(rows, menu_names, api_key=None) -> tuple:
         results.extend(done)
     engine = "claude" if engines == {"claude"} else ("lexicon" if engines == {"lexicon"} else "mixed")
     return results, engine
+
+
+# ── reply drafts ─────────────────────────────────────────────────────────────
+BRAND = "โอชิเน"
+_REPLY_THEME = {
+    "รอนาน": "เรื่องการรอนาน", "บริการ": "เรื่องการบริการของพนักงาน", "ความสด": "เรื่องความสดของวัตถุดิบ",
+    "ปริมาณ/ของหมด": "เรื่องเมนูหมดหรือปริมาณอาหาร", "ความสะอาด": "เรื่องความสะอาด",
+    "ราคา/ความคุ้ม": "เรื่องราคาและความคุ้มค่า", "รสชาติ": "เรื่องรสชาติอาหาร", "บรรยากาศ": "เรื่องบรรยากาศร้าน",
+}
+
+
+def draft_reply_template(sentiment, themes=(), menus=(), branch="", rating=None) -> str:
+    """A polite Thai reply the branch can send as-is or edit: apology naming
+    the themes for a negative review, thanks naming the dish for a positive one."""
+    where = f"สาขา{branch}" if branch else ""
+    sign = f"ทีมงาน{BRAND}" + (f" {where}" if where else "")
+    try:
+        r = float(rating) if rating is not None else None
+    except (TypeError, ValueError):
+        r = None
+    if sentiment == "neg" or (r is not None and r <= 2 and sentiment != "pos"):
+        issues = [_REPLY_THEME[t] for t in themes if t in _REPLY_THEME][:2]
+        about = ("ใน" + "และ".join(issues)) if issues else "ที่ไม่ประทับใจในครั้งนี้"
+        return (f"{sign}ต้องขออภัยอย่างสูงสำหรับประสบการณ์{about}ค่ะ เราได้แจ้งผู้จัดการสาขาให้ตรวจสอบและปรับปรุงทันที "
+                "หากสะดวก รบกวนแจ้งวันและเวลาที่มาใช้บริการทางข้อความส่วนตัว เพื่อให้เราดูแลได้ตรงจุด "
+                "ขอโอกาสให้เราได้ดูแลคุณลูกค้าอีกครั้งนะคะ 🙏")
+    if sentiment == "pos" or (r is not None and r >= 4):
+        dish = f" โดยเฉพาะ{menus[0]}" if menus else ""
+        return (f"ขอบคุณมากค่ะที่มาใช้บริการ{BRAND}" + (f" {where}" if where else "") +
+                f" และแบ่งปันความประทับใจ{dish} ทีมงานดีใจมากค่ะ หวังว่าจะได้ต้อนรับคุณลูกค้าอีกครั้งเร็ว ๆ นี้นะคะ 🙏")
+    return (f"ขอบคุณสำหรับรีวิวค่ะ {sign}จะนำความคิดเห็นไปปรับปรุงการบริการให้ดียิ่งขึ้น "
+            "หวังว่าจะได้ต้อนรับคุณลูกค้าอีกครั้งนะคะ 🙏")
+
+
+def draft_reply_with_claude(text, sentiment, themes, menus, branch, rating, api_key: str, timeout=30) -> str:
+    prompt = (
+        f"You write replies from the restaurant to customer reviews of {BRAND} (Oshinei), a Thai buffet and "
+        "à-la-carte chain. Write ONE reply in polite Thai (ค่ะ), 40-80 words, that addresses the specific points "
+        "of the review, apologises without excuses when something went wrong, never promises compensation, and "
+        f"invites the guest back. Sign as ทีมงาน{BRAND}" + (f" สาขา{branch}" if branch else "") + ". Reply text only.\n"
+        f"Review ({rating if rating is not None else '-'}★, {sentiment}; themes {', '.join(themes or [])}; "
+        f"menus {', '.join(menus or [])}): {text}"
+    )
+    req = urllib.request.Request(
+        "https://api.anthropic.com/v1/messages", method="POST",
+        headers={"Content-Type": "application/json", "x-api-key": api_key, "anthropic-version": "2023-06-01"},
+        data=json.dumps({"model": "claude-haiku-4-5-20251001", "max_tokens": 600,
+                         "messages": [{"role": "user", "content": prompt}]}).encode("utf-8"))
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    out = (data.get("content", [{}])[0].get("text", "") or "").strip()
+    if not out:
+        raise ValueError("empty reply")
+    return out
+
+
+def draft_reply(row: dict, api_key=None) -> tuple:
+    """(draft, engine): Claude when a key is available, the template otherwise."""
+    themes = row.get("themes") or []
+    menus = row.get("menus") or []
+    if isinstance(themes, str):
+        themes = json.loads(themes or "[]")
+    if isinstance(menus, str):
+        menus = json.loads(menus or "[]")
+    args = (row.get("sentiment") or "neu", themes, menus, row.get("branch") or row.get("branch_name") or "", row.get("rating"))
+    key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY")
+    if key:
+        try:
+            return draft_reply_with_claude(row.get("text") or "", *args, api_key=key), "claude"
+        except Exception:
+            pass
+    return draft_reply_template(*args), "template"

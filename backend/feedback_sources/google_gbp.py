@@ -119,7 +119,19 @@ def review_to_row(rv: dict, branch: str = "", location: str = "", url: str = "")
         "external_id": rid or None, "url": url or "", "location": location or "",
         "author": hashlib.sha1(author.encode("utf-8")).hexdigest()[:16] if author else "",
         "reply": (reply.get("comment") or "").strip(), "replied_at": thai_date(reply.get("updateTime")),
+        "ref": rv.get("name") or "",          # accounts/…/locations/…/reviews/… — what a reply is PUT to
     }
+
+
+def post_reply(token: str, ref: str, text: str, http) -> dict:
+    """Publish (or replace) the owner's reply to one review. `ref` is the
+    review's resource name; the reply is limited to 4,096 characters."""
+    if not ref or "/reviews/" not in ref:
+        raise RuntimeError("this review carries no resource name to reply to (uploaded from a file?)")
+    status, j = http("PUT", f"{REVIEWS_API}/{ref}/reply", {"Authorization": f"Bearer {token}"},
+                     {"comment": (text or "").strip()[:4096]})
+    _check(status, j, "reply")
+    return j or {}
 
 
 def reviews_url(place_id: str) -> str:
@@ -300,6 +312,6 @@ def parse_takeout_zip(data: bytes, default_branch: str = "", location_map: dict 
     return rows, locations
 
 
-__all__ = ["urllib_http", "thai_date", "original_text", "review_to_row", "auth_url", "exchange_code",
+__all__ = ["urllib_http", "thai_date", "original_text", "review_to_row", "post_reply", "auth_url", "exchange_code",
            "access_token", "list_accounts", "list_locations", "iter_reviews", "fetch_rows",
            "parse_reviews_json", "parse_takeout_zip", "SOURCE", "SCOPE"]

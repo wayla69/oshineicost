@@ -15,7 +15,8 @@ OUT = os.environ.get('VERIFY_OUT', os.path.join(os.path.dirname(__file__), '..',
 
 
 def _rv(rid, stars, comment, created, reply=None):
-    d = {"reviewId": rid, "reviewer": {"displayName": "Somchai"}, "starRating": stars, "createTime": created, "updateTime": created}
+    d = {"reviewId": rid, "name": f"accounts/1/locations/9/reviews/{rid}", "reviewer": {"displayName": "Somchai"},
+         "starRating": stars, "createTime": created, "updateTime": created}
     if comment is not None:
         d["comment"] = comment
     if reply:
@@ -61,7 +62,20 @@ with sync_playwright() as pw:
     links = pg.evaluate("() => document.querySelectorAll('#fbItems a[href*=\"search.google.com\"]').length")
     replies = pg.evaluate("() => document.getElementById('fbItems').innerText")
     pg.screenshot(path=os.path.join(os.path.dirname(OUT), '.tmp_feedback_sources.png'), full_page=False)
+    # ── the reply queue: ✍ ตอบ on the 1★ review → a drafted apology → queued → chip "รอส่ง" ──
+    v2 = pg.evaluate("() => { const a = [...document.querySelectorAll('#fbItems tr')].find(tr => tr.innerText.includes('รอนานมาก พนักงานไม่สนใจ')); const l = a && [...a.querySelectorAll('a')].find(x => x.textContent.includes('ตอบ')); if (l) { l.click(); return true; } return false; }")
+    pg.wait_for_function("document.getElementById('fbReplyPanel').innerText.includes('ตอบรีวิว')", timeout=30000)
+    draft = pg.evaluate("() => document.getElementById('fbReplyText').value")
+    pg.evaluate("() => { const b = [...document.querySelectorAll('#fbReplyPanel button')][0]; b && b.click(); }")
+    pg.wait_for_function("document.getElementById('fbReplyPanel').style.display === 'none'", timeout=30000)
+    pg.wait_for_timeout(2000)
+    queued = pg.evaluate("() => document.getElementById('fbItems').innerText")
+    sources2 = pg.evaluate("() => document.getElementById('fbSources').innerText")
+    pg.screenshot(path=os.path.join(os.path.dirname(OUT), '.tmp_feedback_reply.png'), full_page=False)
     b.close()
+print('reply link clicked:', v2)
+print('draft         :', draft.replace('\n', ' ')[:140])
+print('queued chip   :', 'รอส่ง' in queued, '| queue line:', 'คิวตอบรีวิว' in sources2)
 print('sources before:', before.replace('\n', ' | ')[:120])
 print('upload status :', status)
 print('status line   :', st)
@@ -72,6 +86,7 @@ print('google links  :', links)
 print('page errors   :', errors[:2])
 # 3 links: the ขอนแก่น listing carries a placeId, the ระยอง one does not
 ok = ('นำเข้า 4' in status and 'Google' in sources and 'รอสาขาตอบ' in st and links >= 3
-      and 'ขอบคุณค่ะ' in replies and 'ให้ดาวอย่างเดียว' in replies and not errors)
+      and 'ขอบคุณค่ะ' in replies and 'ให้ดาวอย่างเดียว' in replies and not errors
+      and v2 and 'ขออภัย' in draft and 'รอส่ง' in queued and 'คิวตอบรีวิว' in sources2)
 print('RESULT:', 'OK' if ok else 'PROBLEMS')
 sys.exit(0 if ok else 1)
