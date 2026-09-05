@@ -112,6 +112,11 @@
     <div id="fbActions" class="mt-2"></div>
   </div>
 
+  <details class="card p-4 mt-4" id="fbComp" ontoggle="if(this.open) loadFeedbackCompetitors()">
+    <summary class="text-sm font-semibold cursor-pointer">🏁 เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span></summary>
+    <div id="fbCompBody" class="mt-2 text-xs"></div>
+  </details>
+
   <details class="card p-4 mt-4" id="fbBiz" ontoggle="if(this.open) loadFeedbackBusiness()">
     <summary class="text-sm font-semibold cursor-pointer">📊 เสียงลูกค้า × ข้อมูลธุรกิจ <span id="fbBizHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— รอนานเกิดตอนแน่นไหม · เมนูที่ถูกบ่นขายดีแค่ไหน · สาขาที่เสียงลบซ้อนกับยอดขาย/ส่วนลด</span></summary>
     <div id="fbBizNotes" class="mt-2 text-sm" style="color:var(--text-secondary)"></div>
