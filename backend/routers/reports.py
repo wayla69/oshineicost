@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, scope_filter
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _unified_cogs_expr,
@@ -1067,11 +1067,7 @@ def _bom_unit_cost_sql(s: str = "s") -> str:
     """Per-serving effective unit cost for a SKU (alias `s` = skus). sku_cost
     (cost-management table, non-zero) → recipe → alias → 0; BUFFET tier = 0.
     Same priority as _unified_cogs_expr (cost-management first, 2026-06-11)."""
-    return (f"CASE WHEN {s}.sku_code LIKE 'BUFFET%' THEN 0 ELSE COALESCE("
-            f"(SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id={s}.sku_id),"
-            f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id={s}.sku_id),"
-            f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
-            f" JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code={s}.sku_code),0) END")
+    return f"CASE WHEN {tier_code_sql(s + '.sku_code')} THEN 0 ELSE {raw_unit_cost_sql(s)} END"
 
 
 
@@ -1143,7 +1139,7 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
         if _ok(ch_tbl):
             # pos_channel_day/_month is a POS roll-up with no service-charge column,
             # so this one revenue figure stays ex-VAT only. Disclosed, not silently mixed.
-            ch = con.execute(f"SELECT delivery_type dtype, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
+            ch = con.execute(f"SELECT delivery_type dtype, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/{VAT_DIVISOR})) rev "
                              f"FROM {ch_tbl} WHERE {dwhere()}{bfc} GROUP BY delivery_type", prm).fetchall()
             channel = [{"label": _DTYPE_LABEL.get(r["dtype"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
 
@@ -1447,7 +1443,7 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
     # leak_total/cash_heavy_total take an explicit [s,e] window so the SAME signal
     # can be measured for the current period AND the comparison period (last week /
     # same weekday last week) — the §6 cards then show a WoW delta.
-    lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    lk = discount_base_row('st')
     def leak_total(extra, s, e):
         r = con.execute(f"""
             SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht

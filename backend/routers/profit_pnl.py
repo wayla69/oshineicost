@@ -8,7 +8,7 @@ routers/reports.py.
 from fastapi import Query
 from typing import Optional
 import json as _json
-from rules import net_revenue_row
+from rules import avg_ticket_sql, net_revenue_row
 from core import (
     _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
     _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,
@@ -689,7 +689,7 @@ def pnl_monthly(
             SELECT strftime('%Y-%m', st.sold_at) AS period_month,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND((AVG(st.total_inc_vat)/1.07 - AVG(COALESCE(st.service_charge,0))), 2) AS avg_ticket
+                   ROUND({avg_ticket_sql('st')}, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}
@@ -751,7 +751,7 @@ def pnl_branches_deep(
             SELECT b.name AS branch,
                    COUNT(*) AS tx_count,
                    SUM(st.customer_count) AS customer_count,
-                   ROUND((AVG(st.total_inc_vat)/1.07 - AVG(COALESCE(st.service_charge,0))), 2) AS avg_ticket
+                   ROUND({avg_ticket_sql('st')}, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}

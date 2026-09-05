@@ -4,10 +4,10 @@
   {
    "avg_discount": 20.0,
    "branch": "BranchA",
-   "disc_pct": 2.05,
+   "disc_pct": 2.06,
    "discount_rate": 100.0,
    "discount_tx": 6,
-   "gross_base": 5839.63,
+   "gross_base": 5820.0,
    "is_abnormal": false,
    "ratio_vs_chain": 1.0,
    "top_reason": null,
@@ -21,10 +21,10 @@
   {
    "avg_discount": 20.0,
    "branch": "BranchB",
-   "disc_pct": 2.05,
+   "disc_pct": 2.06,
    "discount_rate": 100.0,
    "discount_tx": 6,
-   "gross_base": 5839.63,
+   "gross_base": 5820.0,
    "is_abnormal": false,
    "ratio_vs_chain": 1.0,
    "top_reason": null,
@@ -38,15 +38,15 @@
  ],
  "chain": {
   "branch_count": 2,
-  "disc_pct": 2.05,
+  "disc_pct": 2.06,
   "discount_rate": 100.0,
   "discount_tx": 12,
-  "gross_base": 11679.26,
-  "median_branch_pct": 2.05,
-  "threshold_pct": 3.07,
+  "gross_base": 11640.0,
+  "median_branch_pct": 2.06,
+  "threshold_pct": 3.09,
   "total_discount": 240.0,
   "total_tx": 12
  },
  "reasons_staged": false,
- "summary": "✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ 3.07% (ค่าเฉลี่ยทุกสาขา 2.05% ของยอดก่อนลด)"
+ "summary": "✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ 3.09% (ค่าเฉลี่ยทุกสาขา 2.06% ของยอดก่อนลด)"
 }

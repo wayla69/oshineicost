@@ -1,7 +1,7 @@
 {
  "bills": [
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -21,7 +21,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -41,7 +41,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -61,7 +61,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -81,7 +81,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -101,7 +101,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchA",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -121,7 +121,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -141,7 +141,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -161,7 +161,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -181,7 +181,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -201,7 +201,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,
@@ -221,7 +221,7 @@
    "total_inc_vat": 1070.0
   },
   {
-   "bill_base": 973.27,
+   "bill_base": 970.0,
    "branch": "BranchB",
    "cashier": null,
    "cogs_bom": 520.0,

@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -1567,7 +1567,7 @@ def summary(
         # net_sales is already VAT-EXCLUSIVE (ingest hard rule); reconstruct inc-VAT for the inc total (fix: B1)
         _net = r["net"] or 0
         total_rev_ex  += _net
-        total_rev_inc += _net * 1.07
+        total_rev_inc += _net * VAT_DIVISOR
         covered.add(k)
 
     # Tx + customers
