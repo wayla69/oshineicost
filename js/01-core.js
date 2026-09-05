@@ -1193,19 +1193,44 @@ const TAB_CLUSTERS = [
   { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
   { key: 'ops',      label: '🛒 ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','🏷️ ส่วนลด'],['ops','🔬 เชิงลึก'],['staff','👤 พนักงาน'],['cashctl','💵 เงินสด'],['cancelbill','🗑️ บิลยกเลิก'],['modifiers','🍽️ Modifiers'],['pricezone','🏷️ ราคา/โซน'],['closetime','⏰ ปิดร้าน/ข้อมูล']] },
 ];
+// ── Kill list, stage 1 (lean overhaul Phase 2 · docs/LEAN_KILL_LIST_2026-09.html) ──
+// The tabs nobody opened between 2026-07-20 and 2026-09-05 (47 days of usage
+// telemetry, Settings → 📈 การใช้งานจริง). Nothing is deleted: the panel, its
+// JS and its endpoints stay, switchTab / 🔍 / bookmarks still reach it, and the
+// cluster bar folds it behind a "⋯" chip so the working set is what people see.
+// On KILL_REVIEW_DATE, rerun `py scripts/usage_kill_list.py`: a tab still at
+// zero is deleted with the endpoints only it reaches; one that was opened
+// leaves this list. `action` and `pnl` had no menu entry before this and are
+// listed so the review sees them.
+const SOFT_KILL = new Set(['action', 'pnl', 'profit', 'compare', 'costhead', 'pnlbill', 'modifiers', 'pricezone',
+  'cancelbill', 'closetime', 'benchmark', 'staff', 'simhub', 'menuefficiency', 'menuopportunities', 'coverage',
+  'costheadtop60']);
+const KILL_REVIEW_DATE = '2026-10-05';
+let _clusterMoreOpen = false;
+
 function _updateClusterBar(name) {
   const bar = document.getElementById('clusterBar');
   if (!bar) return;
   const cl = TAB_CLUSTERS.find(c => c.tabs.some(t => t[0] === name));
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
+  const allowed = cl.tabs.filter(([t]) => tabAllowed(t));
+  const shown = allowed.filter(([t]) => !SOFT_KILL.has(t));
+  const folded = allowed.filter(([t]) => SOFT_KILL.has(t));
+  const open = _clusterMoreOpen || folded.some(([t]) => t === name);   // the active tab is never hidden
+  const chip = ([t, lbl], dim) => {
+    const on = t === name;
+    const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ (ทบทวน ${KILL_REVIEW_DATE})"` : '';
+    return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+      ? 'background:var(--indigo);color:#fff;font-weight:600'
+      : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${lbl}</button>`;
+  };
+  const more = !folded.length ? '' : open
+    ? folded.map(c => chip(c, true)).join('') +
+      `<button id="clusterFold" onclick="_clusterMoreOpen=false;_updateClusterBar('${name}')" title="ซ่อนแท็บที่ไม่ได้ใช้" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">‹</button>`
+    : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ, ทบทวน ${KILL_REVIEW_DATE}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
-    cl.tabs.filter(([t]) => tabAllowed(t)).map(([t, lbl]) => {
-      const on = t === name;
-      return `<button onclick="switchTab('${t}')" class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
-        ? 'background:var(--indigo);color:#fff;font-weight:600'
-        : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${lbl}</button>`;
-    }).join('');
+    shown.map(c => chip(c, false)).join('') + more;
 }
 
 function toggleSidebar() {
@@ -1338,9 +1363,12 @@ async function loadUsageStats() {
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
   const seen = new Set(tabs.map(t => t.name));
-  const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t));
-  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
+  const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t) && !SOFT_KILL.has(t));
+  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}${SOFT_KILL.has(t.name) ? ' <span class="text-[10px]" style="color:#dc2626">(kill list)</span>' : ''}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
   const apiRows = (d.api || []).slice(0, 20);
+  // stage 1 of the kill list: folded behind "⋯" in the cluster bars, counted here until the review date
+  const byName = Object.fromEntries(tabs.map(t => [t.name, t]));
+  const killRows = [...SOFT_KILL].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:#b45309' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
   el.innerHTML = `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
@@ -1348,7 +1376,9 @@ async function loadUsageStats() {
         <table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง</th><th class="py-1 pr-3 text-right">จำนวนวัน</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${tabs.map(row).join('') || '<tr><td class="py-2" colspan="4" style="color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มนับหลัง deploy เวอร์ชันนี้</td></tr>'}</tbody></table>
       </div>
       <div>
-        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บที่ยังไม่ถูกเปิดเลย (${never.length})</div>
+        <div class="text-xs font-semibold mb-2" style="color:#dc2626">🗑️ Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size}) · ทบทวน ${esc(KILL_REVIEW_DATE)} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
+        <table class="text-xs w-full mb-5"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง (${esc(days)} วัน)</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${killRows}</tbody></table>
+        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
         <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว 🎉</span>'}</div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 API endpoints</div>
         <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
