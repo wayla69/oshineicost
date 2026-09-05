@@ -63,9 +63,11 @@ def js_registry() -> dict:
     titles = dict(re.findall(r"\b([A-Za-z0-9_]+):\s*'([^']*)'", re.search(r"const PAGE_TITLES = \{(.*?)\};", src, re.S).group(1)))
     kill_m = re.search(r"const SOFT_KILL = new Set\(\[(.*?)\]\)", src, re.S)
     soft_kill = re.findall(r"'([a-z0-9]+)'", kill_m.group(1)) if kill_m else []
-    review = re.search(r"const KILL_REVIEW_DATE = '([0-9-]+)'", src)
-    return {"tabs": tabs, "clusters": clusters, "titles": titles, "soft_kill": soft_kill,
-            "review": review.group(1) if review else ""}
+    cand_m = re.search(r"const KILL_CANDIDATES = \[(.*?)\];", src, re.S)
+    candidates = re.findall(r"'([a-z0-9]+)'", cand_m.group(1)) if cand_m else []
+    review = re.search(r"const KILL_REVIEW_DATE = '([0-9-]*)'", src)
+    return {"tabs": tabs, "clusters": clusters, "titles": titles, "soft_kill": soft_kill, "candidates": candidates,
+            "on_hold": not soft_kill, "review": review.group(1) if review else ""}
 
 
 def routes() -> list:
@@ -216,9 +218,12 @@ def build(usage: dict, days: int, reg: dict, rts: list, reach: dict, refs: dict)
     total_tab_hits = sum(t["hits"] for t in tabs)
     ranked = sorted((t for t in tabs if t["hits"]), key=lambda t: -t["hits"])
     top6 = sum(t["hits"] for t in ranked[:6])
+    on_hold = reg.get("on_hold", False)
     return {"days": days, "tabs": tabs, "eps": eps, "total_tab_hits": total_tab_hits, "top6_share": (100 * top6 / total_tab_hits) if total_tab_hits else 0,
-            "active_days": max((t["days"] for t in tabs), default=0), "kill_tabs": sorted(kill_tabs),
-            "should_fold": sorted(kill_tabs - soft - set(ALWAYS_HIDDEN)), "folded_but_used": sorted(t["tab"] for t in tabs if t["folded"] and t["hits"]),
+            "active_days": max((t["days"] for t in tabs), default=0), "kill_tabs": sorted(kill_tabs), "on_hold": on_hold,
+            "should_fold": [] if on_hold else sorted(kill_tabs - soft - set(ALWAYS_HIDDEN)),
+            "folded_but_used": sorted(t["tab"] for t in tabs if t["folded"] and t["hits"]),
+            "candidates_opened_since": sorted(t["tab"] for t in tabs if t["tab"] in set(reg.get("candidates", [])) and t["hits"]),
             "review": reg["review"], "generated": dt.date.today().isoformat()}
 
 
@@ -234,10 +239,14 @@ def markdown(r: dict) -> str:
         out.append(f"### {g} ({len(rows)})")
         out += [f"- `{e['key']}` ← {', '.join(e['via']) or ', '.join(e['machine'])}" for e in rows]
         out.append("")
+    if r["on_hold"]:
+        out.append("ℹ kill list พักไว้ (เจ้าของ 2026-09-05) — ไม่มีแท็บถูกซ่อน/ลบ")
     if r["should_fold"]:
         out.append(f"⚠ ควรอยู่ใน SOFT_KILL แต่ยังไม่ได้ซ่อน: {', '.join(r['should_fold'])}")
     if r["folded_but_used"]:
         out.append(f"⚠ ซ่อนอยู่แต่มีคนเปิด: {', '.join(r['folded_but_used'])}")
+    if r["candidates_opened_since"]:
+        out.append(f"ℹ แท็บที่เฝ้าดูแล้วมีคนเปิด: {', '.join(r['candidates_opened_since'])}")
     return "\n".join(out)
 
 
@@ -263,10 +272,13 @@ def render_html(r: dict) -> str:
     used_real = [x for x in eps["used"] if not x["noise"]]
     head = [t for t in tabs if t["hits"]][:6]
 
+    hold = r.get("on_hold")
+    label = {"kill": "KILL · พัก" if hold else "KILL", "merge": "MERGE", "keep": "KEEP", "new": "NEW"}
+
     def tab_row(t):
         return (f"<tr class='{t['verdict']}'><td>{e(t['tab'])}<br><span style='color:var(--muted);font-size:11px'>{e(t['title'])}</span></td>"
                 f"<td>{e(t['cluster'])}</td><td class='n'>{t['hits']}</td><td class='n'>{t['days']}</td><td class='n'>{t['hits30']}</td><td>{e(t['last'])}</td>"
-                f"<td><span class='tag {t['verdict']}'>{t['verdict'].upper()}</span>{' · ซ่อนแล้ว' if t['folded'] else ''}</td><td>{e(t['why'])}</td></tr>")
+                f"<td><span class='tag {t['verdict']}'>{label[t['verdict']]}</span>{' · ซ่อนแล้ว' if t['folded'] else ''}</td><td>{e(t['why'])}</td></tr>")
 
     def ep_rows(rows):
         return "".join(f"<tr><td><code>{e(x['key'])}</code></td><td>{e(', '.join(x['via']) or ', '.join(x['machine']))}</td></tr>" for x in rows)
@@ -279,14 +291,16 @@ def render_html(r: dict) -> str:
              f"<div class='kpi'><b>{sum(1 for t in r['tabs'] if t['hits'])}</b><span>แท็บที่ถูกเปิดอย่างน้อย 1 ครั้ง</span></div>",
              f"<div class='kpi'><b>{r['total_tab_hits']}</b><span>ครั้งที่เปิดแท็บรวม · ใช้งาน {r['active_days']} วัน</span></div>",
              f"<div class='kpi'><b>{r['top6_share']:.0f}%</b><span>ของการเปิดทั้งหมดอยู่ใน 6 แท็บ</span></div>",
-             f"<div class='kpi'><b>{len(by_v['kill'])}</b><span>แท็บที่ไม่มีใครเปิดเลย → kill list</span></div>",
+             f"<div class='kpi'><b>{len(by_v['kill'])}</b><span>แท็บที่ไม่มีใครเปิดเลย → {'เฝ้าดู (พักการลบ)' if hold else 'kill list'}</span></div>",
              f"<div class='kpi'><b>{len(eps['dies_with_tab'])}</b><span>endpoints ที่หายไปพร้อมแท็บเหล่านั้น</span></div>",
              "</div>",
              "<h2>1) สรุป</h2><ul>",
              f"<li><b>แอปที่ใช้จริงคือ 6 หน้า:</b> {e(' · '.join(f'{t['tab']} ({t['hits']})' for t in head))} — รวม {r['top6_share']:.0f}% ของการเปิดแท็บทั้งหมด</li>",
              f"<li><b>{len(by_v['keep'])} แท็บ KEEP</b> (เปิดซ้ำหลายวัน) · <b>{len(by_v['merge'])} แท็บ MERGE</b> (เปิดวันเดียวครั้งเดียว — คงเนื้อหาไว้เป็นส่วนหนึ่งของหน้าแม่) · <b>{len(by_v['kill'])} แท็บ KILL</b> (0 ครั้งตลอด {r['days']} วัน) · {len(by_v['new'])} แท็บใหม่ยังไม่นับ</li>",
-             "<li><b>ขั้นที่ 1 (ทำแล้ววันนี้ ย้อนกลับได้):</b> แท็บใน kill list ถูกพับไว้หลังปุ่ม <b>⋯</b> ในแถบมุมมองย่อยของหมวด — โค้ด/ข้อมูลอยู่ครบ เปิดได้ด้วยคลิกเดียว bookmark เดิมใช้ได้</li>",
-             f"<li><b>ขั้นที่ 2 (ทบทวน {e(r['review'])}):</b> แท็บที่ยังเป็น 0 → ลบแท็บ + JS + endpoints ที่มีแต่แท็บนั้นเรียก ({len(eps['dies_with_tab'])} เส้น ตารางข้อ 4) · แท็บ MERGE ตัดสินทีละแท็บ</li>",
+             (f"<li><b>สถานะ: พักการซ่อน/ลบ</b> (เจ้าของตัดสิน 2026-09-05) — แอปยังมีคนใช้ไม่ครบทุกคน จึง<b>ไม่ซ่อนและไม่ลบแท็บใด</b> ทุกแท็บแสดงตามเดิม ตัวนับยังเดินต่อ; รายชื่อด้านล่างคือแท็บที่<b>เฝ้าดู</b> — กลับมาดูใหม่เมื่อทุกคนใช้งานแล้ว</li>"
+              f"<li><b>เมื่อพร้อม:</b> รัน <code>py scripts/usage_kill_list.py</code> อีกครั้ง → ซ่อนหลังปุ่ม ⋯ ก่อน 1 เดือน (ย้อนกลับได้) → แท็บที่ยัง 0 จึงลบพร้อม endpoints ที่มีแต่แท็บนั้นเรียก ({len(eps['dies_with_tab'])} เส้น ตารางข้อ 4)</li>") if hold else
+             ("<li><b>ขั้นที่ 1 (ทำแล้ว ย้อนกลับได้):</b> แท็บใน kill list ถูกพับไว้หลังปุ่ม <b>⋯</b> ในแถบมุมมองย่อยของหมวด — โค้ด/ข้อมูลอยู่ครบ เปิดได้ด้วยคลิกเดียว bookmark เดิมใช้ได้</li>"
+              f"<li><b>ขั้นที่ 2 (ทบทวน {e(r['review'])}):</b> แท็บที่ยังเป็น 0 → ลบแท็บ + JS + endpoints ที่มีแต่แท็บนั้นเรียก ({len(eps['dies_with_tab'])} เส้น ตารางข้อ 4) · แท็บ MERGE ตัดสินทีละแท็บ</li>"),
              "</ul>",
              "<div class='note'><b>ข้อควรระวังในการอ่านตัวเลข</b> — (1) นับเฉพาะการเปิดแท็บผ่านเมนู/แถบมุมมองย่อย (beacon ใน switchTab) จึงไม่เห็นการเปิดจากหน้า mobile ที่ไม่ผ่าน switchTab · "
              "(2) การเปิดวันที่ 2026-07-20/22 และ 2026-09-05 บางส่วนเป็นการทดสอบหลัง deploy ของผู้พัฒนา ไม่ใช่เจ้าของ (แท็บ report, pnlbranch, ops, cashctl 1 ครั้ง; feedback/checklist endpoints) · "
@@ -297,7 +311,7 @@ def render_html(r: dict) -> str:
              "<h3>KEEP — คงไว้ตามเดิม</h3><p>" + e(", ".join(t["tab"] for t in by_v["keep"])) + "</p>",
              "<h3>MERGE — เปิดครั้งเดียววันเดียว: เก็บเนื้อหาไว้เป็นส่วนย่อยของหน้าแม่ แล้วเอาแท็บออก</h3><ul>",
              "".join(f"<li><b>{e(t['tab'])}</b> ({e(t['title'])}) — หมวด {e(t['cluster'])} · เปิด {t['last']}</li>" for t in by_v["merge"]), "</ul>",
-             f"<h3>KILL — พับไว้แล้ว รอยืนยัน {e(r['review'])}</h3><ul>",
+             ("<h3>KILL candidates — พักไว้ ยังไม่ซ่อน ไม่ลบ (เจ้าของ 2026-09-05)</h3><ul>" if hold else f"<h3>KILL — พับไว้แล้ว รอยืนยัน {e(r['review'])}</h3><ul>"),
              "".join(f"<li><b>{e(t['tab'])}</b> ({e(t['title'])}) — {e(t['why'])}</li>" for t in by_v["kill"]), "</ul>",
              f"<h2>4) Endpoints — {len(r['eps'])} เส้น · ถูกเรียก {len(eps['used'])} (ไม่นับ login/months/branches/sync = {len(used_real)}) · 0 ครั้ง {len(r['eps']) - len(eps['used'])}</h2>",
              f"<h3>4.1 หายไปพร้อมแท็บ kill ({len(eps['dies_with_tab'])}) — ลบในขั้นที่ 2</h3><div class='wrap'><table><thead><tr><th>endpoint</th><th>เรียกจากแท็บ</th></tr></thead><tbody>{ep_rows(eps['dies_with_tab'])}</tbody></table></div>",
@@ -308,11 +322,14 @@ def render_html(r: dict) -> str:
              "".join(f"<tr><td><code>{e(x['key'])}</code></td><td class='n'>{x['hits']}</td><td class='n'>{x['days']}</td><td>{e(x['last'])}</td></tr>" for x in sorted(used_real, key=lambda x: -x['hits'])[:25]),
              "</tbody></table></div>",
              "<h2>5) ขั้นตอนถัดไป</h2><ol>",
-             "<li>เจ้าของทบทวนตาราง 3) — ถ้าแท็บใด KILL แต่ยังต้องการ ให้เปิดใช้ 1 ครั้ง (ตัวนับจะบันทึก) หรือแจ้งเอาออกจาก kill list</li>",
-             f"<li>{e(r['review'])}: รัน <code>py scripts/usage_kill_list.py</code> อีกครั้ง — แท็บที่ยัง 0 ลบจริงพร้อม endpoints ข้อ 4.1 (PR เดียว มี golden test คุม), อัปเดต RBAC/PAGE_TITLES/คู่มือ</li>",
+             ("<li><b>ตอนนี้: ไม่ทำอะไรกับแท็บ</b> — ให้ทุกคนใช้งานแอปจนครบ ตัวนับเก็บข้อมูลต่อเอง</li>"
+              "<li>เมื่อทุกคนใช้งานแล้ว: รัน <code>py scripts/usage_kill_list.py</code> อีกครั้ง แล้วค่อยตัดสินซ่อน (1 เดือน) → ลบ พร้อม endpoints ข้อ 4.1 (PR เดียว มี golden test คุม), อัปเดต RBAC/PAGE_TITLES/คู่มือ</li>") if hold else
+             ("<li>เจ้าของทบทวนตาราง 3) — ถ้าแท็บใด KILL แต่ยังต้องการ ให้เปิดใช้ 1 ครั้ง (ตัวนับจะบันทึก) หรือแจ้งเอาออกจาก kill list</li>"
+              f"<li>{e(r['review'])}: รัน <code>py scripts/usage_kill_list.py</code> อีกครั้ง — แท็บที่ยัง 0 ลบจริงพร้อม endpoints ข้อ 4.1 (PR เดียว มี golden test คุม), อัปเดต RBAC/PAGE_TITLES/คู่มือ</li>"),
              "<li>แท็บ MERGE: ยุบทีละหมวด (บุฟเฟ่ต์ → buffetperf, กำไร → gpbranch, ปฏิบัติการ → opsreport) หลังลบขั้นที่ 2 เสร็จ</li></ol>",
              "<h2>6) ลงชื่อรับทราบ</h2><table class='sign'><thead><tr><th>รายการ</th><th>เจ้าของ</th><th>วันที่</th><th>หมายเหตุ</th></tr></thead><tbody>",
-             "<tr><td>ขั้นที่ 1 — พับแท็บ kill list</td><td></td><td></td><td></td></tr><tr><td>ขั้นที่ 2 — ลบจริง</td><td></td><td></td><td></td></tr><tr><td>MERGE — ยุบหมวด</td><td></td><td></td><td></td></tr>",
+             ("<tr><td>พักการซ่อน/ลบ จนกว่าทุกคนจะใช้งานครบ</td><td>เจ้าของ</td><td>2026-09-05</td><td>ตัดสินแล้ว — ทุกแท็บยังแสดง</td></tr>" if hold else "")
+             + "<tr><td>ขั้นที่ 1 — พับแท็บ kill list</td><td></td><td></td><td></td></tr><tr><td>ขั้นที่ 2 — ลบจริง</td><td></td><td></td><td></td></tr><tr><td>MERGE — ยุบหมวด</td><td></td><td></td><td></td></tr>",
              "</tbody></table></main></body></html>"]
     return "\n".join(parts)
 
@@ -339,10 +356,14 @@ def main(argv=None) -> int:
     out.write_text(render_html(r), encoding="utf-8")
     print(f"✓ {out} — tabs {len(r['tabs'])}, opened {sum(1 for t in r['tabs'] if t['hits'])}, kill {len(r['kill_tabs'])}, "
           f"endpoints {len(r['eps'])} (0-hit {sum(1 for x in r['eps'] if not x['hits'])}, die with tabs {sum(1 for x in r['eps'] if x['group'] == 'dies_with_tab')})")
+    if r["on_hold"]:
+        print("ℹ kill list ON HOLD (owner, 2026-09-05): nothing folded or deleted; candidates listed for watching")
     if r["should_fold"]:
         print(f"⚠ in the kill list but not folded (add to SOFT_KILL): {', '.join(r['should_fold'])}")
     if r["folded_but_used"]:
         print(f"⚠ folded but opened since: {', '.join(r['folded_but_used'])}")
+    if r["candidates_opened_since"]:
+        print(f"ℹ candidates opened since the report: {', '.join(r['candidates_opened_since'])}")
     return 0
 
 

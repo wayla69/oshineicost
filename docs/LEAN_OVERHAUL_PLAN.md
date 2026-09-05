@@ -1,5 +1,5 @@
 # แผน Lean Overhaul — Oshinei Dashboard
-วันที่เสนอ: 2026-07-20 · สถานะ: **Phase 0–5 DEPLOYED LIVE 2026-07-20 (commit eecd402)** · **Kill list ขั้นที่ 1 ทำแล้ว 2026-09-05** — telemetry 47 วัน: 6 แท็บ = 73% ของการใช้งาน, 17 แท็บ 0 ครั้ง → พับหลังปุ่ม ⋯ (`SOFT_KILL` ใน js/01-core.js), รายงาน `docs/LEAN_KILL_LIST_2026-09.html` (สร้างด้วย `scripts/usage_kill_list.py`), **ทบทวน 2026-10-05 → ลบจริง** · ⚠️ โค้ด JS ของ dashboard อยู่ที่ **js/*.js** แล้ว (ไม่ใช่ index.html)
+วันที่เสนอ: 2026-07-20 · สถานะ: **Phase 0–5 DEPLOYED LIVE 2026-07-20 (commit eecd402)** · **Kill list: ทำรายงานแล้ว 2026-09-05 แต่ "พักไว้" ตามคำสั่งเจ้าของ (แอปยังมีคนใช้ไม่ครบ)** — telemetry 47 วัน: 6 แท็บ = 73% ของการใช้งาน, 17 แท็บ 0 ครั้ง = รายชื่อที่เฝ้าดู (`KILL_CANDIDATES` ใน js/01-core.js, `SOFT_KILL` ว่าง = ไม่ซ่อนอะไร), รายงาน `docs/LEAN_KILL_LIST_2026-09.html` (สร้างด้วย `scripts/usage_kill_list.py`) · **ไม่มีวันลบ** — กลับมาตัดสินเมื่อทุกคนใช้งานแล้ว · ⚠️ โค้ด JS ของ dashboard อยู่ที่ **js/*.js** แล้ว (ไม่ใช่ index.html)
 
 ---
 
