@@ -1,0 +1,85 @@
+{
+ "branch": null,
+ "branches": [
+  {
+   "avg_rating": null,
+   "branch": "BranchA",
+   "disc_share": 1.83,
+   "neg_pct": null,
+   "pax": 24,
+   "pax_delta_pct": null,
+   "rev": 6420,
+   "rev_delta_pct": null,
+   "signals": [],
+   "spend_head": 268.0,
+   "voices": 0
+  },
+  {
+   "avg_rating": null,
+   "branch": "BranchB",
+   "disc_share": 1.83,
+   "neg_pct": null,
+   "pax": 24,
+   "pax_delta_pct": null,
+   "rev": 6420,
+   "rev_delta_pct": null,
+   "signals": [],
+   "spend_head": 268.0,
+   "voices": 0
+  }
+ ],
+ "chain": {
+  "disc_share": 1.83,
+  "disc_share_median": 1.83,
+  "pax": 48,
+  "rev": 12840,
+  "spend_head_median": 268
+ },
+ "cost_p80": null,
+ "dishes_sold": 0,
+ "load": {
+  "branches": [],
+  "busy_days": 0,
+  "busy_factor": 1.2,
+  "days": 12,
+  "themes": [
+   {
+    "busy_share": null,
+    "matched": 0,
+    "n": 0,
+    "on_busy_days": 0,
+    "theme": "บริการ",
+    "verdict": "ยังน้อยเกินตัดสิน"
+   },
+   {
+    "busy_share": null,
+    "matched": 0,
+    "n": 0,
+    "on_busy_days": 0,
+    "theme": "ปริมาณ/ของหมด",
+    "verdict": "ยังน้อยเกินตัดสิน"
+   },
+   {
+    "busy_share": null,
+    "matched": 0,
+    "n": 0,
+    "on_busy_days": 0,
+    "theme": "รอนาน",
+    "verdict": "ยังน้อยเกินตัดสิน"
+   }
+  ]
+ },
+ "menus": [],
+ "notes": [
+  "ยังไม่มีสัญญาณที่ซ้อนกันระหว่างเสียงลูกค้ากับข้อมูลขาย — ต้องการเสียงราว 30 เสียง/สาขา/เดือน จึงจะอ่านได้ชัด"
+ ],
+ "prev_range": [
+  "2026-03-01",
+  "2026-04-30"
+ ],
+ "range": [
+  "2026-05-01",
+  "2026-06-30"
+ ],
+ "voices": 0
+}

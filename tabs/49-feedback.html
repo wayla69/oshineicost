@@ -112,6 +112,17 @@
     <div id="fbActions" class="mt-2"></div>
   </div>
 
+  <details class="card p-4 mt-4" id="fbBiz" ontoggle="if(this.open) loadFeedbackBusiness()">
+    <summary class="text-sm font-semibold cursor-pointer">📊 เสียงลูกค้า × ข้อมูลธุรกิจ <span id="fbBizHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— รอนานเกิดตอนแน่นไหม · เมนูที่ถูกบ่นขายดีแค่ไหน · สาขาที่เสียงลบซ้อนกับยอดขาย/ส่วนลด</span></summary>
+    <div id="fbBizNotes" class="mt-2 text-sm" style="color:var(--text-secondary)"></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
+      <div><h4 class="text-xs font-semibold mb-1">⏳ คำบ่น vs ความแน่นของวัน <span class="font-normal" style="color:var(--text-muted)">(แน่น = บิล ≥ 120% ของค่ากลางสาขา)</span></h4><div id="fbBizLoad" class="text-xs"></div></div>
+      <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึง vs ยอดขาย/ต้นทุน <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="switchTab('menuactionboard')">เปิด ⚡ปรับเมนู</button></h4><div id="fbBizMenus" class="text-xs"></div></div>
+    </div>
+    <h4 class="text-xs font-semibold mt-3 mb-1">🏪 สาขา: เสียง vs ยอดขาย vs ส่วนลด vs ยอด/หัว</h4>
+    <div id="fbBizBranches" class="text-xs" style="max-height:380px;overflow:auto"></div>
+  </details>
+
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
     <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">👥 พนักงานที่ถูกพูดถึง</h3><span class="text-[11px]" style="color:var(--text-muted)">ชมและบ่นเป็นรายชื่อ</span></div><div id="fbStaff" class="mt-1" style="max-height:340px;overflow:auto"></div></div>
