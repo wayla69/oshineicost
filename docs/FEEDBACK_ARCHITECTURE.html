@@ -1,0 +1,319 @@
+<title>เสียงลูกค้า Architecture Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@500;600;700&family=Sarabun:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #f6f8f6; --surface: #ffffff; --ink: #1b2530; --ink-2: #4b5863; --muted: #6f7b86;
+    --line: #d9e0dc; --line-strong: #b9c4bf;
+    --accent: #0f766e; --accent-ink: #0b5e58; --accent-soft: #e3f3f0;
+    --warn: #b45309; --warn-soft: #fdf3e3; --bad: #b91c1c; --bad-soft: #fdecec; --good: #15803d; --good-soft: #e6f6ea;
+    --code-bg: #eef2ef; --shadow: 0 1px 2px rgba(27,37,48,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #0f1517; --surface: #151d20; --ink: #e5eae7; --ink-2: #b7c1bc; --muted: #8b968f;
+      --line: #263135; --line-strong: #3a474c;
+      --accent: #5eead4; --accent-ink: #99f6e4; --accent-soft: #123a37;
+      --warn: #f5b76a; --warn-soft: #3a2a12; --bad: #f28b8b; --bad-soft: #3d1d1d; --good: #7ad39a; --good-soft: #14301f;
+      --code-bg: #1c2629; --shadow: none;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #0f1517; --surface: #151d20; --ink: #e5eae7; --ink-2: #b7c1bc; --muted: #8b968f;
+    --line: #263135; --line-strong: #3a474c;
+    --accent: #5eead4; --accent-ink: #99f6e4; --accent-soft: #123a37;
+    --warn: #f5b76a; --warn-soft: #3a2a12; --bad: #f28b8b; --bad-soft: #3d1d1d; --good: #7ad39a; --good-soft: #14301f;
+    --code-bg: #1c2629; --shadow: none;
+  }
+  * { box-sizing: border-box; }
+  body { background: var(--paper); color: var(--ink); font-family: "Sarabun", "Segoe UI", Tahoma, sans-serif; font-size: 16px; line-height: 1.7; margin: 0; }
+  a { color: var(--accent-ink); }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .wrap { display: grid; grid-template-columns: 1fr; gap: 2rem; max-width: 1180px; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+  @media (min-width: 1024px) { .wrap { grid-template-columns: 240px minmax(0, 1fr); } nav.toc { position: sticky; top: 1.5rem; align-self: start; } }
+  nav.toc { font-size: .9rem; border-left: 2px solid var(--line-strong); padding-left: 1rem; }
+  nav.toc p { margin: 0 0 .5rem; font-family: "Bai Jamjuree", sans-serif; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; font-size: .72rem; color: var(--muted); }
+  nav.toc a { display: block; color: var(--ink-2); text-decoration: none; padding: .18rem 0; }
+  nav.toc a:hover { color: var(--accent-ink); }
+  header.top { grid-column: 1 / -1; border-bottom: 1px solid var(--line); padding-bottom: 1.5rem; }
+  .eyebrow { font-family: "Bai Jamjuree", sans-serif; font-size: .74rem; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-ink); font-weight: 600; margin: 0 0 .5rem; }
+  h1 { font-family: "Bai Jamjuree", sans-serif; font-weight: 700; font-size: clamp(1.7rem, 3vw, 2.4rem); line-height: 1.2; margin: 0 0 .6rem; text-wrap: balance; }
+  h2 { font-family: "Bai Jamjuree", sans-serif; font-weight: 600; font-size: 1.35rem; margin: 3rem 0 .8rem; padding-top: .4rem; border-top: 1px solid var(--line); text-wrap: balance; }
+  h3 { font-family: "Bai Jamjuree", sans-serif; font-weight: 600; font-size: 1.05rem; margin: 1.6rem 0 .5rem; }
+  p, li { max-width: 72ch; }
+  .lede { font-size: 1.05rem; color: var(--ink-2); max-width: 78ch; margin: 0; }
+  .meta { color: var(--muted); font-size: .88rem; margin-top: .8rem; }
+  .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; margin: 1.5rem 0 0; }
+  .fact { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: .8rem .9rem; box-shadow: var(--shadow); }
+  .fact b { display: block; font-family: "Bai Jamjuree", sans-serif; font-size: 1.5rem; font-weight: 700; color: var(--accent-ink); font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .fact span { font-size: .8rem; color: var(--muted); }
+  .tw { overflow-x: auto; margin: .8rem 0 1.2rem; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .7rem; border-bottom: 1px solid var(--line); }
+  th { font-family: "Bai Jamjuree", sans-serif; font-weight: 600; font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); background: var(--code-bg); }
+  tr:last-child td { border-bottom: 0; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  code, pre { font-family: "IBM Plex Mono", Consolas, monospace; font-size: .86em; }
+  code { background: var(--code-bg); padding: .08rem .35rem; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: .9rem 1rem; border-radius: 6px; overflow-x: auto; line-height: 1.55; border-left: 3px solid var(--accent); }
+  pre code { background: none; padding: 0; }
+  .tag { display: inline-block; font-family: "Bai Jamjuree", sans-serif; font-size: .72rem; font-weight: 600; letter-spacing: .04em; padding: .1rem .5rem; border-radius: 999px; white-space: nowrap; }
+  .tag.ok { background: var(--good-soft); color: var(--good); }
+  .tag.warn { background: var(--warn-soft); color: var(--warn); }
+  .tag.bad { background: var(--bad-soft); color: var(--bad); }
+  .tag.info { background: var(--accent-soft); color: var(--accent-ink); }
+  .callout { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: .7rem 1rem; border-radius: 0 6px 6px 0; margin: 1rem 0; max-width: 78ch; }
+  .callout.warn { border-color: var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-color: var(--bad); background: var(--bad-soft); }
+  .mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 1rem; overflow-x: auto; }
+  ol.risks li { margin: .55rem 0; }
+  dl.kv { display: grid; grid-template-columns: max-content 1fr; gap: .3rem 1rem; max-width: 80ch; font-size: .95rem; }
+  dl.kv dt { font-family: "IBM Plex Mono", monospace; font-size: .84em; color: var(--accent-ink); }
+  dl.kv dd { margin: 0; }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <p class="eyebrow">Oshinei Dashboard · รีวิวงานและสถาปัตยกรรม</p>
+    <h1>💬 เสียงลูกค้า: โครงสร้าง ส่วนประกอบ และสิ่งที่ต้องรู้ก่อนเอาไปต่อยอดในแอปอื่น</h1>
+    <p class="lede">ระบบเก็บเสียงลูกค้าจาก 7 ช่องทางผ่าน API ทางการ วิเคราะห์ความรู้สึก/หัวข้อ/เมนู ร่างและส่งคำตอบกลับ และแยกประเภท รีวิว · คอมเมนต์ · การพูดถึง ทั้งหมดสร้างและขึ้น live ในวันเดียว (5 กันยายน 2569) ด้วย 6 PR เอกสารนี้คือรีวิวเชิงวิศวกรรมของงานทั้งชุด และเป็นแบบพิมพ์เขียวสำหรับยกไปใช้ในแอปอื่น</p>
+    <p class="meta">repo <code>wayla69/oshineicost</code> · main ณ PR #132 · gate เขียว · live ที่ oshinei-dashboard.fly.dev · ผู้เขียน Claude ร่วมกับเจ้าของระบบ</p>
+    <div class="facts">
+      <div class="fact"><b>7</b><span>ช่องทางที่ดึงได้ (Google, Facebook, Instagram, TikTok, X, YouTube, ข่าว/RSS)</span></div>
+      <div class="fact"><b>4</b><span>ช่องทางที่ตอบกลับได้จากแท็บ (Google, FB, IG, TikTok)</span></div>
+      <div class="fact"><b>17</b><span>endpoint ใหม่ใต้ /api/feedback</span></div>
+      <div class="fact"><b>43</b><span>เทสต์ในสี่ไฟล์ ทุก connector รันบน fake</span></div>
+      <div class="fact"><b>1</b><span>บั๊กร้ายแรงที่พบและแก้ (รีวิวจะถูกลบทุกเช้า)</span></div>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="สารบัญ">
+    <p>สารบัญ</p>
+    <a href="#s1">1 ภาพรวมสถาปัตยกรรม</a>
+    <a href="#s2">2 ส่วนประกอบ (ไฟล์และหน้าที่)</a>
+    <a href="#s3">3 โครงสร้างข้อมูล</a>
+    <a href="#s4">4 API</a>
+    <a href="#s5">5 สัญญาของ connector และรูปแบบแถว</a>
+    <a href="#s6">6 ระยะเวลาย้อนหลังสูงสุดของแต่ละแหล่ง</a>
+    <a href="#s7">7 รีวิวเชิงวิศวกรรม: จุดแข็ง ความเสี่ยง ข้อสมมติ</a>
+    <a href="#s8">8 คู่มือยกไปใช้ในแอปอื่น</a>
+    <a href="#s9">9 งานที่รอฝั่งเจ้าของ</a>
+    <a href="#s10">10 ลำดับ PR</a>
+  </nav>
+
+  <main>
+    <h2 id="s1">1 ภาพรวมสถาปัตยกรรม</h2>
+    <p>หลักการออกแบบสามข้อกำหนดทุกอย่างที่ตามมา: <b>(1)</b> ข้อมูลรีวิวอยู่ที่แดชบอร์ดบน Fly ที่เดียว เพราะฐานข้อมูลยอดขายถูก push ทับจากเครื่อง sync ทุกวัน ตารางรีวิวจึงต้องอยู่ในรายการ "เก็บข้ามการสลับฐานข้อมูล" <b>(2)</b> credential ของทุกแพลตฟอร์มอยู่บนเครื่อง sync ในไฟล์เดียว (สำรองพร้อม secrets อื่น) ตัวดึงจึงรันบนเครื่องนั้นแล้วโพสต์เข้าเว็บ ไม่ใช่รันบน Fly <b>(3)</b> ทุก connector คุยกับเครือข่ายผ่านฟังก์ชัน <code>http()</code> ที่ฉีดเข้าไปได้ ทำให้เทสต์ทั้งหมดรันบน fake โดยไม่แตะ API จริง</p>
+    <pre class="mermaid">
+flowchart LR
+  subgraph P["แพลตฟอร์ม (API ทางการ)"]
+    G[Google Business Profile]
+    FB[Facebook Pages]
+    IG[Instagram]
+    TT[TikTok]
+    XX[X]
+    YT[YouTube]
+    RS[Google News / Alerts RSS]
+  end
+  subgraph PC["เครื่อง sync · Task Scheduler 09:00"]
+    F["fetch_feedback.py<br/>run · replies · auth · pages · subscribe"]
+    CFG[(".feedback_config.json<br/>token ทุกแพลตฟอร์ม")]
+    F --- CFG
+  end
+  subgraph FLY["แดชบอร์ดบน Fly"]
+    API["/api/feedback/*"]
+    NLP["feedback_nlp<br/>Claude หรือพจนานุกรมไทย"]
+    DB[("customer_feedback<br/>feedback_sync_log<br/>feedback_webhook_events")]
+    UI["แท็บ 💬 เสียงลูกค้า"]
+    WH["/api/feedback/webhook/meta"]
+  end
+  P -- ดึง (pull) --> F
+  F -- "POST upload (JSON rows)" --> API --> NLP --> DB --> UI
+  IG -. "@mention (push)" .-> WH --> DB
+  UI -- "คิวตอบ" --> DB
+  DB -- "reply-queue" --> F -- "โพสต์คำตอบ" --> P
+  F -- "รีวิวลบใหม่" --> TG[Telegram]
+    </pre>
+    <p>วงจรที่เกิดขึ้นทุกวัน: ตัวดึงถามเว็บว่าแต่ละแหล่งดึงสำเร็จครั้งล่าสุดเมื่อไร (ถอยหลัง 2 วันเผื่อรีวิวที่ถูกแก้และคำตอบที่มาทีหลัง) → ดึงจากแพลตฟอร์ม → โพสต์แถวเข้าเว็บ ซึ่งวิเคราะห์เฉพาะแถวใหม่หรือแถวที่ข้อความเปลี่ยน → ส่งคำตอบที่ค้างในคิว → บันทึกผลรอบ → แจ้งเตือน Telegram ถ้ามีรีวิวลบใหม่</p>
+
+    <h2 id="s2">2 ส่วนประกอบ (ไฟล์และหน้าที่)</h2>
+    <div class="tw"><table>
+      <thead><tr><th>ส่วน</th><th>ไฟล์</th><th>หน้าที่</th><th>เอาไปใช้ที่อื่น</th></tr></thead>
+      <tbody>
+        <tr><td>API + ตรรกะจัดเก็บ</td><td><code>backend/routers/feedback.py</code></td><td>อัปโหลด/แยกไฟล์ (CSV·XLSX·JSON·Takeout zip), <code>insert_reviews()</code> upsert ตาม fingerprint, สรุป/รายการ/แหล่ง, คิวตอบ, ตัวรับ webhook, หน้า OAuth callback</td><td><span class="tag ok">ทั่วไป</span> ผูกกับ <code>get_db</code>, <code>require_write_token</code>, ตาราง <code>branches</code>, <code>skus</code></td></tr>
+        <tr><td>วิเคราะห์ข้อความ</td><td><code>backend/feedback_nlp.py</code></td><td>ความรู้สึก/คะแนน/หัวข้อ 8 กลุ่ม/เมนูที่ถูกพูดถึง (พจนานุกรมไทย + negation window) หรือ Claude เมื่อมี key; ร่างคำตอบ (แม่แบบหรือ Claude)</td><td><span class="tag ok">ทั่วไป</span> เปลี่ยน <code>BRAND</code> และรายการเมนู</td></tr>
+        <tr><td>Connectors</td><td><code>backend/feedback_sources/</code><br/>google_gbp · facebook · instagram · tiktok · x · youtube · rss</td><td>แต่ละไฟล์ = แพลตฟอร์มหนึ่ง: auth, ดึง, แปลงเป็นแถวมาตรฐาน, ตอบกลับ (ถ้าแพลตฟอร์มให้)</td><td><span class="tag ok">ทั่วไป</span> พึ่ง stdlib เท่านั้น</td></tr>
+        <tr><td>ตัวดึงฝั่งเครื่อง sync</td><td><code>backend/fetch_feedback.py</code></td><td>วนทุกแหล่งที่ตั้งค่า, since อัตโนมัติ, sink 2 แบบ (เว็บผ่าน HTTP / SQLite ตรง), ส่งคิวตอบ, แจ้งเตือน, คำสั่ง auth/pages/subscribe/locations</td><td><span class="tag warn">ปรับ</span> ส่วน login + write token ของแอปปลายทาง</td></tr>
+        <tr><td>แจ้งเตือน</td><td><code>backend/notify.py</code></td><td>Telegram bot: สรุปรีวิวลบใหม่ (ไม่ตั้งค่า = เงียบ ไม่ล้ม)</td><td><span class="tag ok">ทั่วไป</span></td></tr>
+        <tr><td>หน้าจอ</td><td><code>tabs/49-feedback.html</code>, <code>js/11-feedback.js</code></td><td>อัปโหลด, การ์ดแหล่งข้อมูล, ปุ่มกรองประเภท, KPI, หัวข้อ/เมนู/สาขา, รีวิวลบล่าสุด, รายการ, แผงร่างคำตอบ</td><td><span class="tag warn">เขียนใหม่</span> ตาม framework ของแอปปลายทาง โดยยึด API ข้อ 4</td></tr>
+        <tr><td>งานประจำ</td><td><code>Fetch Feedback.bat</code> + Task "Oshinei Feedback Sync"</td><td>รันตัวดึง 09:00 ทุกวัน log ผ่าน tee</td><td><span class="tag warn">ปรับ</span> cron/scheduler ของปลายทาง</td></tr>
+        <tr><td>กันข้อมูลหาย</td><td><code>backend/core.py</code> <code>_PRESERVED_*</code></td><td>ตารางรีวิวรอดข้ามการ push ฐานข้อมูลยอดขาย</td><td><span class="tag info">เฉพาะ Oshinei</span> จำเป็นเฉพาะแอปที่สลับฐานข้อมูลทั้งก้อน</td></tr>
+        <tr><td>เอกสาร</td><td><code>docs/FEEDBACK_SOURCES.html</code></td><td>คู่มือตั้งค่าทุกแพลตฟอร์ม 13 หัวข้อ + ปัญหาที่พบบ่อย</td><td><span class="tag ok">ใช้ต่อได้</span></td></tr>
+        <tr><td>เทสต์</td><td><code>backend/test_feedback*.py</code> (4 ไฟล์) + <code>scripts/verify_feedback_sources.py</code></td><td>43 เทสต์บน fake http (12 + 18 + 7 + 6) + Playwright ผ่านหน้าจอจริง (อัปโหลด → ตอบ → mention → กรอง)</td><td><span class="tag ok">ใช้ต่อได้</span></td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="s3">3 โครงสร้างข้อมูล</h2>
+    <h3>customer_feedback (หนึ่งแถว = หนึ่งเสียง)</h3>
+    <div class="tw"><table>
+      <thead><tr><th>คอลัมน์</th><th>ความหมาย</th></tr></thead>
+      <tbody>
+        <tr><td><code>id</code>, <code>fingerprint</code> UNIQUE</td><td>ตัวตนของแถว: <code>sha1(source#external_id)</code> เมื่อแพลตฟอร์มให้ id (คงที่แม้ผู้เขียนแก้ข้อความ) ไม่งั้น <code>sha1(branch|date|text)</code></td></tr>
+        <tr><td><code>kind</code></td><td><b>review</b> บนลิสติ้ง/เพจของร้าน · <b>comment</b> ใต้โพสต์/วิดีโอของร้าน · <b>mention</b> ที่อื่นบนอินเทอร์เน็ต (ไม่มีดาว ไม่เข้าคิวตอบ)</td></tr>
+        <tr><td><code>source</code>, <code>external_id</code>, <code>external_ref</code>, <code>url</code>, <code>location</code></td><td>แหล่ง, id ฝั่งแพลตฟอร์ม (มี prefix เช่น <code>comment:</code> <code>post:</code> <code>tweet:</code>), ที่อยู่สำหรับโพสต์คำตอบ (Google resource name / ig_user/comment / video/comment), ลิงก์ต้นทาง, ชื่อลิสติ้ง/เพจ/แคปชัน</td></tr>
+        <tr><td><code>branch_id</code>, <code>branch_name</code></td><td>จับคู่จากชื่อ (ตรง → มีชื่อสาขาอยู่ในชื่อลิสติ้ง → ตรวจจับจากข้อความสำหรับ mention) ถ้าไม่พบ เก็บชื่อดิบไว้และรายงาน <code>unmatched</code></td></tr>
+        <tr><td><code>rated_at</code>, <code>rating</code>, <code>text</code>, <code>author_hash</code></td><td>วันตามเวลาไทย, ดาว (ถ้ามี), ข้อความ (ว่างได้สำหรับรีวิวให้ดาวอย่างเดียว), แฮชของผู้เขียน — ไม่เก็บชื่อ (PDPA)</td></tr>
+        <tr><td><code>sentiment</code>, <code>score</code>, <code>themes</code>, <code>menus</code>, <code>analysed_by</code></td><td>ผลวิเคราะห์ (pos/neg/neu, −1..1, JSON list, JSON list) และเครื่องมือที่ใช้ (claude / lexicon)</td></tr>
+        <tr><td><code>reply_text</code>, <code>replied_at</code></td><td>คำตอบที่มีอยู่จริงบนแพลตฟอร์ม (ดึงมาหรือส่งแล้ว)</td></tr>
+        <tr><td><code>reply_draft</code>, <code>reply_status</code>, <code>reply_requested_at/by</code>, <code>reply_error</code></td><td>คิวตอบ: pending → sent | failed (พร้อมเหตุผล) หรือ manual (แพลตฟอร์มไม่ให้โพสต์ผ่าน API)</td></tr>
+        <tr><td><code>uploaded_at/by</code>, <code>updated_at</code></td><td>ร่องรอยการนำเข้า/อัปเดต</td></tr>
+      </tbody>
+    </table></div>
+    <h3>ตารางประกอบ</h3>
+    <dl class="kv">
+      <dt>feedback_sync_log</dt><dd>ผลการดึงแต่ละรอบต่อแหล่ง: since, fetched, inserted, updated, unchanged, status, message — การ์ดแหล่งข้อมูลอ่านจากที่นี่ และ since อัตโนมัติคำนวณจาก "สำเร็จครั้งล่าสุด"</dd>
+      <dt>feedback_webhook_events</dt><dd>เหตุการณ์ที่ Meta ส่งเข้ามา (platform, object_id, field, payload) รอตัวดึงมาอ่านเนื้อหาแล้วทำเครื่องหมาย processed (เก็บล่าสุด 5,000 รายการ)</dd>
+    </dl>
+    <p>ทั้งสามตารางถูกสร้าง/เพิ่มคอลัมน์อัตโนมัติเมื่อถูกเรียกครั้งแรก (<code>_ensure()</code> ใช้ <code>CREATE IF NOT EXISTS</code> + <code>ALTER TABLE ADD COLUMN</code> เมื่อขาด) จึงย้ายไปฐานข้อมูลใหม่ได้โดยไม่ต้องรัน migration แยก</p>
+
+    <h2 id="s4">4 API</h2>
+    <div class="tw"><table>
+      <thead><tr><th>Method · Path</th><th>ใช้ทำอะไร</th><th>สิทธิ์</th></tr></thead>
+      <tbody>
+        <tr><td><code>POST /api/feedback/upload</code></td><td>ไฟล์/ข้อความวาง (multipart) หรือ JSON <code>{rows:[…], by}</code> → วิเคราะห์ + upsert คืน inserted/updated/unchanged/unmatched/new_items</td><td>login + write token</td></tr>
+        <tr><td><code>GET /api/feedback/summary</code></td><td>KPI, ความรู้สึก, หัวข้อ, เมนู, สาขา, รายเดือน, แหล่ง, รอตอบ, คิวตอบ, kinds, รีวิวลบล่าสุด — พารามิเตอร์ branch, month_from/to, source, kind</td><td>login (โมดูล customer.feedback)</td></tr>
+        <tr><td><code>GET /api/feedback/items</code></td><td>แถวเบื้องหลังตัวเลข (+ sentiment, theme, menu, needs_reply, limit)</td><td>login</td></tr>
+        <tr><td><code>GET /api/feedback/sources</code></td><td>ต่อแหล่ง: จำนวน, ล่าสุด, ดึงอัตโนมัติ, รอตอบ, ผลรอบล่าสุด + คิวตอบรวม</td><td>login</td></tr>
+        <tr><td><code>POST /api/feedback/sync-log</code></td><td>ตัวดึงบันทึกผลรอบ</td><td>write token</td></tr>
+        <tr><td><code>GET /api/feedback/{id}/reply-draft</code></td><td>ร่างคำตอบ + ช่องทาง + ความยาวสูงสุด + หมายเหตุ</td><td>login</td></tr>
+        <tr><td><code>POST / DELETE /api/feedback/{id}/reply</code></td><td>เข้าคิว (pending/manual) / ยกเลิก</td><td>write token</td></tr>
+        <tr><td><code>GET /api/feedback/reply-queue</code> · <code>POST …/reply-result</code></td><td>ตัวดึงอ่านคิวและรายงาน sent/failed</td><td>login / write token</td></tr>
+        <tr><td><code>GET+POST /api/feedback/webhook/meta</code></td><td>ตัวรับ webhook ของ Meta: handshake ด้วย verify token, ตรวจ HMAC-SHA256 ของทุก body ด้วย app secret, เก็บเหตุการณ์</td><td>ไม่ต้อง login (ตรวจลายเซ็นเอง, fail-closed เมื่อไม่ตั้ง secret)</td></tr>
+        <tr><td><code>GET /api/feedback/webhook-events</code> · <code>POST …/ack</code></td><td>ตัวดึงอ่านเหตุการณ์ค้างและทำเครื่องหมายเสร็จ</td><td>login / write token</td></tr>
+        <tr><td><code>GET /api/feedback/oauth-callback</code></td><td>หน้าแสดง code สำหรับ OAuth ที่ต้องการ https redirect (TikTok)</td><td>login</td></tr>
+        <tr><td><code>DELETE /api/feedback/{id}</code></td><td>ลบแถว</td><td>write token</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="s5">5 สัญญาของ connector และรูปแบบแถว</h2>
+    <p>connector ทุกตัวมีฟังก์ชันเดียวที่ตัวดึงเรียก และคืนแถวรูปแบบเดียวกันที่ <code>POST /upload</code> รับ นี่คือจุดต่อขยายเพียงจุดเดียว: แพลตฟอร์มใหม่ = ไฟล์ใหม่หนึ่งไฟล์ + หนึ่งบรรทัดในทะเบียน <code>SOURCES</code></p>
+<pre><code>fetch_rows(cfg: dict, http, since: str = "", log=None) -> (rows: list, meta: dict)
+    http(method, url, headers, body) -> (status, json | text)     # ฉีด fake ในเทสต์ / urllib ในงานจริง
+    since = "YYYY-MM-DD" หรือ "" (ทั้งหมด)      meta = {&lt;list ของหน่วยที่ดึง&gt;, "fetched", "config_update"?}
+
+row = {
+  "date": "2026-09-04",          # วันตามเวลาไทย
+  "branch": "ขอนแก่น",             # ชื่อสาขา (ว่างได้ → ให้เซิร์ฟเวอร์ตรวจจับเมื่อ detect_branch)
+  "source": "Google",            # ป้ายแหล่ง
+  "kind": "review",              # review | comment | mention
+  "rating": 4,                   # หรือ None
+  "text": "แซลมอนสด บริการดี",
+  "external_id": "r2",           # id ฝั่งแพลตฟอร์ม (ทำ fingerprint คงที่)
+  "ref": "accounts/1/locations/9/reviews/r2",   # ที่อยู่สำหรับโพสต์คำตอบ (ว่าง = ตอบผ่าน API ไม่ได้)
+  "url": "https://…",            # ลิงก์ต้นทาง
+  "author": "9f1c…",             # แฮชของผู้เขียน
+  "reply": "ขอบคุณค่ะ", "replied_at": "2026-09-05",   # คำตอบที่มีอยู่แล้วบนแพลตฟอร์ม
+  "location": "Oshinei ขอนแก่น",  # ลิสติ้ง/เพจ/แคปชัน
+  "sentiment_hint": "neg",       # ใช้เมื่อข้อความไม่บอกอะไร (เช่น Facebook ไม่แนะนำ)
+  "detect_branch": True          # mention: ให้เซิร์ฟเวอร์หาชื่อสาขาในข้อความ
+}</code></pre>
+    <p>การตอบกลับใช้ <code>send_replies()</code> ซึ่งอ่านคิวแล้วเรียกฟังก์ชันตอบของแต่ละแพลตฟอร์ม (<code>post_reply</code> / <code>reply_to_comment</code>) ตาม <code>source</code> และ <code>external_ref</code> จำกัดความยาวต่อช่องทาง: Google 4,096 · Facebook 8,000 · Instagram 2,200 · TikTok 150</p>
+
+    <h2 id="s6">6 ระยะเวลาย้อนหลังสูงสุดของแต่ละแหล่ง</h2>
+    <p>กติกากลาง: <b>รอบแรก</b>ของแต่ละแหล่งดึงย้อนหลังเท่าที่แพลตฟอร์มให้ (ตาราง) <b>รอบถัดไป</b>ดึงตั้งแต่ "สำเร็จครั้งล่าสุด − 2 วัน" ทุกวัน 09:00 หรือสั่งด้วยมือด้วย <code>--since all</code> / <code>--since YYYY-MM-DD</code> ได้ตลอด</p>
+    <div class="tw"><table>
+      <thead><tr><th>แหล่ง</th><th>ย้อนหลังสูงสุด (รอบแรก)</th><th>ตัวจำกัด</th><th>ปรับได้ไหม</th></tr></thead>
+      <tbody>
+        <tr><td>Google Business Profile (API)</td><td class="num">ทั้งหมดตั้งแต่ลิสติ้งเปิด</td><td>ไม่มีเพดาน วนหน้าละ 50 รีวิวจนหมด (สาขาละราวสิบวินาที)</td><td>—</td></tr>
+        <tr><td>Google Takeout (ไฟล์)</td><td class="num">ทั้งหมด ณ วันส่งออก</td><td>ขึ้นกับไฟล์</td><td>ส่งออกใหม่ได้ทุกเมื่อ</td></tr>
+        <tr><td>Facebook Recommendations</td><td class="num">ทั้งหมด</td><td>วนทุกหน้า หยุดเมื่อถึง since</td><td>—</td></tr>
+        <tr><td>Facebook คอมเมนต์ · โพสต์บนเพจ · แท็ก · แชร์</td><td class="num">≈ 500 โพสต์ล่าสุดต่อ edge</td><td>เพดานหน้าในโค้ด (25×20 / 50×10) ปกติครอบคลุมหลายเดือนถึงปี</td><td><code>max_pages</code> ใน facebook.py</td></tr>
+        <tr><td>Instagram คอมเมนต์</td><td class="num">30 โพสต์ล่าสุด × ≤200 คอมเมนต์</td><td><code>max_media</code> ต่อบัญชี, หน้าคอมเมนต์ ≤4</td><td><code>max_media</code> ใน config</td></tr>
+        <tr><td>Instagram แท็ก</td><td class="num">≈ 500 โพสต์ล่าสุด</td><td>50×10 หน้า</td><td><code>max_pages</code></td></tr>
+        <tr><td>Instagram @mention</td><td class="num"><span class="tag warn">ไม่มีย้อนหลัง</span> ตั้งแต่วันเปิด webhook</td><td>Meta ส่งเฉพาะเหตุการณ์ใหม่</td><td>—</td></tr>
+        <tr><td>TikTok คอมเมนต์</td><td class="num">20 วิดีโอล่าสุด ทุกคอมเมนต์</td><td><code>max_videos</code> ต่อบัญชี; วนคอมเมนต์จนถึง since</td><td><code>max_videos</code> ใน config</td></tr>
+        <tr><td>X</td><td class="num"><span class="tag warn">7 วัน</span></td><td>recent search ของ Basic tier; full-archive ต้อง Pro (~$5,000/เดือน)</td><td>ไม่ได้ในทีม Basic</td></tr>
+        <tr><td>YouTube วิดีโอ</td><td class="num">ไม่จำกัดตามวันที่ แต่ ≤ 50 วิดีโอ/คำค้น/รอบ</td><td><code>max_pages</code> 2 × 25 (100 หน่วยโควตา/หน้า จาก 10,000/วัน) ค้นได้สูงสุด ~500 ต่อคำค้น</td><td><code>max_pages</code>, <code>max_results</code></td></tr>
+        <tr><td>YouTube คอมเมนต์</td><td class="num">50 อันดับความเกี่ยวข้อง/วิดีโอ</td><td><code>max_comments</code> ≤ 100</td><td>ใน config</td></tr>
+        <tr><td>Google News RSS</td><td class="num">≈ 100 รายการล่าสุด (มักราว 1–4 สัปดาห์)</td><td>Google กำหนดขนาดฟีด</td><td>เพิ่มคำค้นเพื่อกวาดกว้างขึ้น</td></tr>
+        <tr><td>Google Alerts RSS</td><td class="num">≈ 20 รายการล่าสุด ตั้งแต่สร้าง alert</td><td>ขนาดฟีดของ Alerts</td><td>สร้าง alert ให้เร็วที่สุด — ดึงทุกคืนแล้วไม่หาย</td></tr>
+      </tbody>
+    </table></div>
+    <div class="callout">สรุปสั้น: ช่องทางที่ร้าน<b>เป็นเจ้าของ</b> (Google, Facebook recommendations) ได้ประวัติทั้งหมด · ช่องทางแบบ "โพสต์ล่าสุด N รายการ" (Instagram, TikTok, Facebook edges) ได้หลายเดือนถึงปีตามความถี่โพสต์ · ช่องทางแบบค้นหา (X 7 วัน, YouTube/ข่าว ตามขนาดผลค้นหา) และ webhook (IG @mention) ให้เฉพาะของใหม่ — ดังนั้น<b>ยิ่งเปิดใช้เร็ว ประวัติที่สะสมยิ่งยาว</b> เพราะทุกอย่างที่ดึงมาแล้วอยู่ในฐานข้อมูลถาวร</div>
+
+    <h2 id="s7">7 รีวิวเชิงวิศวกรรม: จุดแข็ง ความเสี่ยง ข้อสมมติ</h2>
+    <h3>ที่ทำได้ดี</h3>
+    <ul>
+      <li><b>Idempotent ทุกทาง</b> — fingerprint ทำให้อัปโหลดซ้ำ/ดึงซ้ำไม่สร้างแถวซ้ำ แถวที่ไม่เปลี่ยนไม่เสียค่าวิเคราะห์ แถวที่แก้ไขวิเคราะห์ใหม่ คำตอบที่มาจากแพลตฟอร์มปิดคิวเอง</li>
+      <li><b>ล้มดังไม่ล้มเงียบ</b> — ทุกแหล่งบันทึกผลต่อรอบ (สำเร็จ/ล้มเหลว+เหตุผล) คิวตอบที่ส่งไม่ได้ขึ้น "ส่งไม่สำเร็จ" พร้อมเหตุผลบนรีวิวนั้น เครื่องที่ไม่ได้ตั้งค่าไม่ทำให้อะไรค้างเงียบ</li>
+      <li><b>ทดสอบได้โดยไม่แตะ API จริง</b> — <code>http()</code> ฉีดได้ 43 เทสต์ครอบคลุม paging, since, การหมุน token, การตอบ, webhook signature; gate เขียวก่อน merge ทุก PR</li>
+      <li><b>ปลอดภัยพอสมควร</b> — webhook ตรวจ HMAC และ fail-closed, จำกัดขนาด body, ตัวรับเปิดสาธารณะเฉพาะ path เดียว; ข้อมูลส่วนบุคคลเก็บเป็นแฮช; secrets อยู่ไฟล์เดียวที่สำรองอยู่แล้ว</li>
+      <li><b>ต่อขยายถูก</b> — แพลตฟอร์มใหม่ = ไฟล์เดียว + หนึ่งบรรทัดทะเบียน (พิสูจน์แล้ว 5 ครั้งในวันเดียว)</li>
+    </ul>
+    <h3>ความเสี่ยงและข้อสมมติ (เรียงตามผลกระทบ)</h3>
+    <ol class="risks">
+      <li><span class="tag bad">แก้แล้ว</span> ตาราง <code>customer_feedback</code> ไม่อยู่ในรายการเก็บข้ามการ push ฐานข้อมูล → รีวิวที่อัปโหลดจะหายทุก 10:00 พบระหว่างทำงานและแก้ใน PR #127 (มีเทสต์กันถอยหลัง) — บทเรียน: ตารางใหม่ใดที่เขียนบน Fly ต้องเข้า <code>_PRESERVED_*</code> เสมอ</li>
+      <li><span class="tag warn">กลาง</span> <b>TikTok</b>: ชื่อ endpoint/ฟิลด์อิงเอกสาร Business Account API v1.3 จากความจำ ยังไม่ได้ทดสอบกับแอปจริง (ต้องรอ TikTok อนุมัติ) ค่าคงที่ทั้งหมดรวมไว้ต้นไฟล์ ปรับที่เดียว และ parser อ่านฟิลด์แบบยืดหยุ่น</li>
+      <li><span class="tag warn">กลาง</span> <b>Google</b>: การอนุมัติ Business Profile API ใช้เวลา 1–2 สัปดาห์; แอป OAuth ที่อยู่สถานะ Testing มี refresh token อายุ 7 วัน ต้องกด Publish (อยู่ในคู่มือ §7) — ระหว่างรอใช้ Takeout</li>
+      <li><span class="tag warn">กลาง</span> <b>คุณภาพการวิเคราะห์</b>: พจนานุกรมไทยจับประชด/บริบทซับซ้อนไม่ได้ ตั้ง <code>ANTHROPIC_API_KEY</code> บน Fly เมื่อไรก็ได้ (โค้ดพร้อม, ค่าใช้จ่ายรีวิวหลักพันไม่ถึง ฿50) — จนกว่าจะตั้ง ให้อ่านตัวเลข neg% อย่างระวัง</li>
+      <li><span class="tag warn">กลาง</span> <b>Meta webhook</b>: ต้องตั้ง Fly secrets 2 ตัว + สมัครรับเหตุการณ์; แอปโหมด Development ได้เหตุการณ์เฉพาะบัญชีที่มีบทบาทในแอป (ครอบคลุมบัญชีร้าน) และ Meta ไม่ส่งย้อนหลัง</li>
+      <li><span class="tag info">ต่ำ</span> <b>Takeout</b>: สมมติโครงสร้าง <code>location-*/reviews.json + data.json</code> parser ทนต่อการเบี่ยงเบน (อ่านทุก reviews*.json, ชื่อจาก data.json หรือชื่อโฟลเดอร์)</li>
+      <li><span class="tag info">ต่ำ</span> <b>การตรวจจับสาขาจากข้อความ</b>: ใช้ชื่อสาขาที่ยาวที่สุดที่ปรากฏ; ชื่อซ้ำซ้อน (โคราช1/โคราช2) ไม่ถูกจับ และชื่อจังหวัดในบริบทอื่นอาจจับผิด — แก้ด้วยมือได้ (ลบ/อัปโหลดใหม่) และไม่กระทบรีวิวที่มีสาขาชัดเจน</li>
+      <li><span class="tag info">ต่ำ</span> <b>X</b>: ทีม Basic เสียเงินและเห็นแค่ 7 วัน; ระบบไม่ตอบทวีต (ต้อง user-context OAuth)</li>
+      <li><span class="tag info">ออกแบบ</span> <b>การตอบเป็นแบบ asynchronous</b> (รอบ 09:00 หรือสั่ง <code>replies</code> ด้วยมือ) เพราะ credential อยู่บนเครื่อง sync ไม่ใช่บนเว็บ ถ้าต้องการ "ส่งทันที" จากปุ่ม ต้องย้าย token ขึ้น Fly secrets และเพิ่ม endpoint ส่งตรง</li>
+      <li><span class="tag info">ประสิทธิภาพ</span> summary คำนวณใน Python เหนือทุกแถวในช่วง — สบายถึงระดับแสนแถว; เกินนั้นค่อยย้าย aggregation ลง SQL</li>
+    </ol>
+
+    <h2 id="s8">8 คู่มือยกไปใช้ในแอปอื่น</h2>
+    <p>ระบบพึ่งพาแอปแม่แค่ 5 จุด ที่เหลือคัดลอกได้ตรง ๆ (Python 3.12 stdlib + FastAPI; openpyxl เฉพาะการอ่าน XLSX)</p>
+    <div class="tw"><table>
+      <thead><tr><th>จุดที่ผูกกับ Oshinei</th><th>ในโค้ด</th><th>ต้องแทนด้วยอะไรในแอปปลายทาง</th></tr></thead>
+      <tbody>
+        <tr><td>การเชื่อมต่อฐานข้อมูล</td><td><code>from core import get_db</code></td><td>context manager ที่คืน SQLite connection ที่มี <code>row_factory = sqlite3.Row</code> (หรือ adapter ของ DB อื่น — SQL ในไฟล์เป็น SQLite มาตรฐาน ใช้ upsert แบบ INSERT OR IGNORE + UPDATE)</td></tr>
+        <tr><td>สิทธิ์เขียน</td><td><code>require_write_token</code> ใน dependencies ของ endpoint ที่แก้ข้อมูล</td><td>dependency ของแอปปลายทาง (token/JWT/session)</td></tr>
+        <tr><td>รายชื่อสาขา</td><td><code>SELECT branch_id, name FROM branches</code> ใน <code>_branches()</code></td><td>ตารางสาขา/ร้านค้าของแอปปลายทาง (ใช้จับคู่ชื่อและตรวจจับจากข้อความ)</td></tr>
+        <tr><td>รายชื่อเมนู</td><td><code>SELECT description FROM skus</code> ใน <code>_menu_names()</code></td><td>รายการสินค้า/เมนูของแอปปลายทาง (ใช้จับ "เมนูที่ถูกพูดถึง") หรือส่ง list ว่างถ้าไม่มี</td></tr>
+        <tr><td>login + write token ของตัวดึง</td><td><code>ApiSink</code> ใน fetch_feedback.py (อ่าน <code>.seed_tokens.txt</code>, <code>.refresh_login.txt</code>)</td><td>วิธี auth ของ API ปลายทาง — เปลี่ยนเฉพาะ <code>_do_login()</code> และ header</td></tr>
+      </tbody>
+    </table></div>
+    <h3>ลำดับการย้าย</h3>
+    <ol>
+      <li>คัดลอก <code>feedback_sources/</code>, <code>feedback_nlp.py</code>, <code>notify.py</code>, <code>fetch_feedback.py</code> ทั้งก้อน (ไม่แก้ยกเว้น <code>ApiSink</code> และ <code>BRAND</code>)</li>
+      <li>คัดลอก <code>routers/feedback.py</code> แล้วแทนที่ 4 จุดแรกในตารางด้านบน — endpoint ทั้ง 17 ตัวใช้ต่อได้ทันที</li>
+      <li>สร้างหน้าจอตาม API ข้อ 4: การ์ดแหล่งข้อมูล (<code>/sources</code>), ปุ่มกรอง kind, KPI/หัวข้อ/เมนู/สาขา (<code>/summary</code>), รายการ (<code>/items</code>), แผงตอบ (<code>/reply-draft</code> → <code>/reply</code>) — <code>js/11-feedback.js</code> ใช้เป็นตัวอย่างการต่อ</li>
+      <li>ตั้ง scheduler รัน <code>fetch_feedback.py run --since auto</code> วันละครั้ง ให้ credential อยู่ในไฟล์ config บนเครื่องนั้นและสำรองไว้</li>
+      <li>ถ้าแอปปลายทาง<b>สลับฐานข้อมูลทั้งก้อน</b>เหมือน Oshinei ต้องมีกลไกเก็บตาราง <code>customer_feedback</code>, <code>feedback_*</code> ข้ามการสลับ ไม่งั้นข้ามข้อนี้</li>
+      <li>รันเทสต์ทั้ง 4 ไฟล์ (ต้องแก้ fixture ให้ตรงตารางสาขา/เมนูของปลายทาง — ดู <code>_seed_db</code>)</li>
+    </ol>
+    <div class="callout warn">สิ่งที่<b>ไม่ควร</b>ย้ายไปด้วย: กฎ <code>_PRESERVED_*</code> (เฉพาะสถาปัตยกรรม push-DB ของ Oshinei), หน้า OAuth callback ถ้าปลายทางไม่มีโดเมน https, และ Telegram ถ้าปลายทางมีระบบแจ้งเตือนอยู่แล้ว (แทนที่ <code>notify.send_telegram</code> ด้วยของแอปนั้น — signature เดียว)</div>
+
+    <h2 id="s9">9 งานที่รอฝั่งเจ้าของ</h2>
+    <div class="tw"><table>
+      <thead><tr><th>แพลตฟอร์ม</th><th>ต้องทำ</th><th>คู่มือ</th><th>เวลารอ</th></tr></thead>
+      <tbody>
+        <tr><td>Google</td><td>Cloud project + ยื่นขอสิทธิ์ Business Profile API → client id/secret → <code>auth google</code> → <code>locations google</code> + location_map; ระหว่างรออัปโหลด Takeout</td><td>§1–§2</td><td>1–2 สัปดาห์ (Google)</td></tr>
+        <tr><td>Facebook + Instagram</td><td>สร้างแอป Meta → token พร้อมสิทธิ์ 6 ตัว → <code>pages facebook --save</code> → เติมสาขา; webhook: Fly secrets 2 ตัว (สำรองใน .env) + ตั้ง Webhooks ในแอป + <code>subscribe facebook</code></td><td>§3, §3.1, §3.2</td><td>ชั่วโมงเดียว</td></tr>
+        <tr><td>TikTok</td><td>Business account → developer app + review → client key/secret → <code>auth tiktok</code></td><td>§10</td><td>หลายวันถึงสัปดาห์ (TikTok)</td></tr>
+        <tr><td>X</td><td>ตัดสินใจสมัคร Basic (~$200/เดือน) → bearer token</td><td>§11</td><td>ทันที</td></tr>
+        <tr><td>YouTube</td><td>เปิด YouTube Data API v3 + สร้าง API key ใน Cloud project เดิม</td><td>§12.1</td><td>นาที</td></tr>
+        <tr><td>Google News / Alerts</td><td>ใส่ <code>"web": {}</code> ในไฟล์ config (Google News ทำงานทันที) + สร้าง alert แบบ RSS</td><td>§12.2</td><td>นาที</td></tr>
+        <tr><td>Telegram</td><td>@BotFather → token + chat id ใน backend/.env → <code>test-telegram</code></td><td>§4</td><td>นาที</td></tr>
+        <tr><td>Claude วิเคราะห์</td><td>ตั้ง <code>ANTHROPIC_API_KEY</code> เป็น Fly secret (+ สำรองตามกติกา)</td><td>§6</td><td>นาที</td></tr>
+      </tbody>
+    </table></div>
+
+    <h2 id="s10">10 ลำดับ PR (5 กันยายน 2569)</h2>
+    <div class="tw"><table>
+      <thead><tr><th>PR</th><th>เนื้อหา</th></tr></thead>
+      <tbody>
+        <tr><td class="num">#127</td><td>Google + Facebook connectors, Takeout/JSON/XLSX upload, upsert ตาม external id, Telegram, scheduler 09:00, คู่มือ — และแก้บั๊กตารางรีวิวหายตอน push</td></tr>
+        <tr><td class="num">#128</td><td>ตอบรีวิวจากแท็บ: ร่างคำตอบ, คิว, ตัวดึงโพสต์ไป Google / คอมเมนต์ Facebook, รายงานผลต่อรีวิว</td></tr>
+        <tr><td class="num">#129</td><td>TikTok, X, YouTube, Google News/Alerts RSS; ประเภท review/comment/mention; ตรวจจับสาขาจากข้อความ; ความยาวคำตอบต่อช่องทาง</td></tr>
+        <tr><td class="num">#130</td><td>ตัวดึงทนต่อ response ที่ไม่ใช่ JSON (พบจาก probe)</td></tr>
+        <tr><td class="num">#131</td><td>Facebook: โพสต์บนเพจ, โพสต์ที่แท็กเพจ, จำนวนแชร์ + การแชร์สาธารณะ</td></tr>
+        <tr><td class="num">#132</td><td>Instagram: คอมเมนต์ + ตอบกลับ, โพสต์ที่แท็ก, @mention ผ่าน Meta webhook (ตัวรับตรวจลายเซ็น), คำสั่ง subscribe; YouTube วนหน้าค้นหา</td></tr>
+      </tbody>
+    </table></div>
+    <p class="meta">ตัวเลขทุกตัวในเอกสารนี้อ้างอิงโค้ดบน main ณ วันที่เขียน — ตารางย้อนหลังในข้อ 6 คือค่าที่ตั้งไว้ในโค้ด/ config ปรับได้ตามที่ระบุ</p>
+  </main>
+</div>

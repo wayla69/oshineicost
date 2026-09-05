@@ -22,8 +22,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Query, Request
 
-import auth as _auth
-from core import get_db
+from feedback_host import branch_rows, get_db, sales_available, scope_branch
 from feedback_nlp import clean_menu_name
 from routers.feedback import _ROW_COLS, _ensure, _thai_today
 
@@ -86,7 +85,7 @@ def _median(xs):
 
 def _sales_by_dish(con, d_from: str, d_to: str, bids=None) -> dict:
     """{clean dish name: {qty, rev, cost, kinds}} over the window (sale_bill_item × bills × skus)."""
-    if not con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='sale_bill_item'").fetchone():
+    if not sales_available(con):
         return {}
     w, p = ["t.sold_at >= ?", "t.sold_at < ?"], [d_from, (_d(d_to) + datetime.timedelta(days=1)).isoformat()]
     if bids:
@@ -113,7 +112,7 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
     hit = _CACHE.get(key)
     if hit and hit[0] > time.time() - CACHE_SECONDS:
         return hit[1]
-    names = {r["branch_id"]: r["name"] for r in con.execute("SELECT branch_id, name FROM branches")}
+    names = {b["branch_id"]: b["name"] for b in branch_rows(con)}
     ids = {v: k for k, v in names.items()}
     bids = [ids[branch]] if branch and branch in ids else None
     if branch and branch not in ids:
@@ -124,7 +123,10 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
     voices = [dict(r) for r in con.execute(f"SELECT {_ROW_COLS} FROM customer_feedback WHERE {' AND '.join(w)}", p)]
     for v in voices:
         v["themes"] = json.loads(v["themes"] or "[]"); v["menus"] = json.loads(v["menus"] or "[]")
-    daily, daily_prev = _daily(con, d_from, d_to, bids), _daily(con, p_from, p_to, bids)
+    if sales_available(con):
+        daily, daily_prev = _daily(con, d_from, d_to, bids), _daily(con, p_from, p_to, bids)
+    else:                                       # a host without bill tables: the voices alone
+        daily, daily_prev = {}, {}
 
     # ── load: complaints against how busy the day was ──────────────────────
     per_branch_bills = {}
@@ -294,7 +296,7 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
 @router.get("/api/feedback/business")
 def feedback_business(request: Request, month_from: Optional[str] = Query(None), month_to: Optional[str] = Query(None),
                       branch: Optional[str] = Query(None), today: Optional[str] = Query(None), fresh: int = Query(0)):
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     if scope:
         branch = scope
     if fresh:

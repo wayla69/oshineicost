@@ -27,8 +27,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
-import auth as _auth
-from core import get_db, require_write_token
+from feedback_host import branch_rows, get_db, require_write_token, scope_branch
 from routers.feedback import _ensure as _ensure_feedback, _thai_today, insert_reviews
 
 router = APIRouter()
@@ -295,7 +294,7 @@ def _links_table(con, base: str) -> list:
         "FROM customer_feedback WHERE COALESCE(kind,'review')='survey' AND rated_at >= ? GROUP BY branch_name", (since,))}
     links = {r["branch_id"]: dict(r) for r in con.execute("SELECT * FROM feedback_survey_link")}
     out = []
-    for b in con.execute("SELECT branch_id, name FROM branches WHERE COALESCE(active,1)=1 ORDER BY branch_id"):
+    for b in [x for x in branch_rows(con) if x["active"]]:
         lk = links.get(b["branch_id"])
         st = stats.get(b["name"], {})
         out.append({"branch_id": b["branch_id"], "branch": b["name"], "code": lk["code"] if lk else None,
@@ -309,7 +308,7 @@ def _links_table(con, base: str) -> list:
 
 @router.get("/api/feedback/survey-links")
 def survey_links(request: Request):
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     with get_db() as con:
         _ensure(con)
         links = _links_table(con, _base_url(request))
@@ -323,7 +322,7 @@ async def survey_link_save(request: Request):
     """{branch_id, google_review_url?, active?, by?} — creates the branch's code
     on first call; later calls update the url / the switch."""
     body = await request.json()
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     if body.get("all"):                      # every active branch without a code gets one
         if scope:
             raise HTTPException(403, "สร้างได้เฉพาะสาขาของคุณ")
@@ -331,7 +330,7 @@ async def survey_link_save(request: Request):
             _ensure(con)
             have = {r[0] for r in con.execute("SELECT branch_id FROM feedback_survey_link")}
             made = 0
-            for b in con.execute("SELECT branch_id, name FROM branches WHERE COALESCE(active,1)=1 ORDER BY branch_id").fetchall():
+            for b in [x for x in branch_rows(con) if x["active"]]:
                 if b["branch_id"] in have:
                     continue
                 code = _new_code()
@@ -348,7 +347,7 @@ async def survey_link_save(request: Request):
         raise HTTPException(400, "branch_id")
     with get_db() as con:
         _ensure(con)
-        b = con.execute("SELECT branch_id, name FROM branches WHERE branch_id=?", (bid,)).fetchone()
+        b = next((x for x in branch_rows(con) if x["branch_id"] == bid), None)
         if not b:
             raise HTTPException(404, "ไม่พบสาขา")
         if scope and b["name"] != scope:

@@ -11,9 +11,8 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-import auth as _auth
 import feedback_nlp as N
-from core import get_db
+from feedback_host import get_db, scope_branch
 from routers.feedback_actions import _branch_names, _rows_between, _shift, compute_digest
 
 router = APIRouter()
@@ -24,7 +23,7 @@ ASK_MAX_ROWS = 150
 @router.get("/api/feedback/narrative")
 def feedback_narrative(request: Request, days: int = Query(7, ge=1, le=92), branch: Optional[str] = Query(None),
                        group: Optional[str] = Query(None), today: Optional[str] = Query(None)):
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     if scope:
         branch, group = scope, None
     with get_db() as con:
@@ -46,7 +45,7 @@ async def feedback_ask(request: Request):
         days = 30
     branch = str(body.get("branch") or "").strip() or None
     group = str(body.get("group") or "").strip() or None
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     if scope:
         branch, group = scope, None
     with get_db() as con:

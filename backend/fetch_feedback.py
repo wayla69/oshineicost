@@ -247,11 +247,10 @@ class DbSink:
         return con
 
     def branches(self) -> list:
+        from feedback_host import branch_rows
         con = self._con()
         try:
-            return [r[0] for r in con.execute("SELECT name FROM branches WHERE COALESCE(active,1)=1 ORDER BY branch_id")]
-        except sqlite3.OperationalError:
-            return [r[0] for r in con.execute("SELECT name FROM branches")]
+            return [b["name"] for b in branch_rows(con) if b["active"]]
         finally:
             con.close()
 
