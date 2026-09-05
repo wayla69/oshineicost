@@ -1,0 +1,763 @@
+{
+ "tag": "grand_gap_2026-09",
+ "applied_at": "2026-09-05T14:40:59",
+ "categories": [
+  {
+   "sku_id": 3193,
+   "code": "OTHALAPP00014",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3294,
+   "code": "OTHALBVR00001",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3475,
+   "code": "OTHALBVR00002",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3488,
+   "code": "OTHALBVR00003",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3482,
+   "code": "OTHALBVR00004",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3221,
+   "code": "OTHALBVR00005",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3208,
+   "code": "OTHALBVR00006",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3558,
+   "code": "OTHALBVR00007",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3061,
+   "code": "OTHALBVR00008",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3166,
+   "code": "OTHALBVR00009",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3589,
+   "code": "OTHALBVR00010",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3194,
+   "code": "OTHALBVR00011",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3707,
+   "code": "OTHALBVR00012",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3160,
+   "code": "OTHALBVR00015",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3205,
+   "code": "OTHALBVR00016",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3074,
+   "code": "OTHALBVR00017",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3574,
+   "code": "OTHALBVR00018",
+   "prev": null,
+   "new": 2
+  },
+  {
+   "sku_id": 3198,
+   "code": "OTHALBVR00019",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3458,
+   "code": "OTHALBVR00020",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3276,
+   "code": "OTHALBVR00021",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3231,
+   "code": "OTHALBVR00022",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3473,
+   "code": "OTHALBVR00023",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3464,
+   "code": "OTHALBVR00024",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3472,
+   "code": "OTHALBVR00025",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3236,
+   "code": "OTHALBVR00026",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3070,
+   "code": "OTHALBVR00027",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3239,
+   "code": "OTHALBVR00028",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3634,
+   "code": "OTHALBVR00029",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3480,
+   "code": "OTHALBVR00030",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3593,
+   "code": "OTHALBVR00031",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3230,
+   "code": "OTHALBVR00032",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3605,
+   "code": "OTHALBVR00033",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3635,
+   "code": "OTHALBVR00034",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3596,
+   "code": "OTHALBVR00038",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3678,
+   "code": "OTHALSPC00038",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3669,
+   "code": "OTHALSPC00087",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3643,
+   "code": "OTHALSPC00098",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3461,
+   "code": "OTHALSPC00104",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3459,
+   "code": "OTHALSPC00105",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3572,
+   "code": "OTHALSPC00132",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3525,
+   "code": "OTHBFAPP00012",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3499,
+   "code": "OTHBFAPP00013",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3517,
+   "code": "OTHBFAPP00014",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3534,
+   "code": "OTHBFAPP00015",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3521,
+   "code": "OTHBFAPP00016",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3538,
+   "code": "OTHBFAPP00017",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3519,
+   "code": "OTHBFAPP00018",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3509,
+   "code": "OTHBFAPP00019",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3653,
+   "code": "OTHBFAPP00020",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3507,
+   "code": "OTHBFBVR00001",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3533,
+   "code": "OTHBFBVR00002",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3485,
+   "code": "OTHBFBVR00003",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3487,
+   "code": "OTHBFBVR00004",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3271,
+   "code": "OTHBFBVR00005",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3477,
+   "code": "OTHBFBVR00006",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3674,
+   "code": "OTHBFBVR00007",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3660,
+   "code": "OTHBFBVR00008",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3716,
+   "code": "OTHBFBVR00009",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3564,
+   "code": "OTHBFBVR00010",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3514,
+   "code": "OTHBFSPC00010",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3505,
+   "code": "OTHBFSPC00016",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3513,
+   "code": "OTHBFSPC00038",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3541,
+   "code": "OTHBFSPC00044",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3584,
+   "code": "OTHBFSPC00066",
+   "prev": null,
+   "new": 15
+  },
+  {
+   "sku_id": 3630,
+   "code": "OTHBFSPC00068",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3650,
+   "code": "OTHBFSPC00093",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3616,
+   "code": "OTHDLSPC00034",
+   "prev": null,
+   "new": 55
+  },
+  {
+   "sku_id": 3486,
+   "code": "OTHOTOTH00002",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3608,
+   "code": "OTHOTOTH00006",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3677,
+   "code": "OTHOTOTH00008",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3469,
+   "code": "OTHOTOTH00009",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3470,
+   "code": "OTHOTOTH00011",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3468,
+   "code": "OTHOTOTH00012",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3493,
+   "code": "OTHOTOTH00013",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3489,
+   "code": "OTHOTOTH00014",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3467,
+   "code": "OTHOTOTH00015",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3647,
+   "code": "OTHOTOTH00017",
+   "prev": null,
+   "new": 12
+  },
+  {
+   "sku_id": 3598,
+   "code": "OTHOTOTH00018",
+   "prev": null,
+   "new": 12
+  }
+ ],
+ "sku_cost": [
+  {
+   "sku_id": 3012,
+   "code": "OTHALCOM00004",
+   "unit_cost": 10.92,
+   "source": "alias:THALOPE00002",
+   "prev": null
+  },
+  {
+   "sku_id": 3069,
+   "code": "OTHALSOU00004",
+   "unit_cost": 27.3059,
+   "source": "alias:THBFSOU00002+THBFSOU00003",
+   "prev": null
+  },
+  {
+   "sku_id": 3629,
+   "code": "OTHALSPC00023",
+   "unit_cost": 68.9252,
+   "source": "alias:A0024",
+   "prev": null
+  },
+  {
+   "sku_id": 3578,
+   "code": "OTHALSPC00024",
+   "unit_cost": 69.4342,
+   "source": "alias:A0023",
+   "prev": null
+  },
+  {
+   "sku_id": 3491,
+   "code": "OTHALSPC00068",
+   "unit_cost": 100.0,
+   "source": "alias:A0136",
+   "prev": null
+  },
+  {
+   "sku_id": 3460,
+   "code": "OTHALSPC00074",
+   "unit_cost": 118.0836,
+   "source": "alias:A0032",
+   "prev": null
+  },
+  {
+   "sku_id": 3496,
+   "code": "OTHALSPC00114",
+   "unit_cost": 33.1013,
+   "source": "alias:A0154",
+   "prev": null
+  },
+  {
+   "sku_id": 3490,
+   "code": "OTHALSPC00117",
+   "unit_cost": 19.15,
+   "source": "alias:B0155",
+   "prev": null
+  },
+  {
+   "sku_id": 3008,
+   "code": "OTHBFSOU00002",
+   "unit_cost": 2.4335,
+   "source": "alias:THBFSOU00002",
+   "prev": null
+  },
+  {
+   "sku_id": 3092,
+   "code": "OTHBFSOU00003",
+   "unit_cost": 24.8724,
+   "source": "alias:THBFSOU00003",
+   "prev": null
+  },
+  {
+   "sku_id": 3551,
+   "code": "OTHBFSPC00004",
+   "unit_cost": 35.72,
+   "source": "alias:P0005",
+   "prev": null
+  },
+  {
+   "sku_id": 3613,
+   "code": "OTHBFSPC00028",
+   "unit_cost": 40.4861,
+   "source": "alias:THBFGNT00032",
+   "prev": null
+  },
+  {
+   "sku_id": 3603,
+   "code": "OTHBFSPC00029",
+   "unit_cost": 68.9252,
+   "source": "alias:A0024",
+   "prev": null
+  },
+  {
+   "sku_id": 3537,
+   "code": "OTHBFSPC00030",
+   "unit_cost": 69.4342,
+   "source": "alias:A0023",
+   "prev": null
+  },
+  {
+   "sku_id": 3636,
+   "code": "OTHBFSPC00036",
+   "unit_cost": 118.0836,
+   "source": "alias:A0032",
+   "prev": null
+  },
+  {
+   "sku_id": 3654,
+   "code": "OTHBFSPC00040",
+   "unit_cost": 35.6576,
+   "source": "alias:A0048",
+   "prev": null
+  },
+  {
+   "sku_id": 3557,
+   "code": "OTHBFSPC00041",
+   "unit_cost": 78.4314,
+   "source": "alias:A0046",
+   "prev": null
+  },
+  {
+   "sku_id": 3529,
+   "code": "OTHBFSPC00045",
+   "unit_cost": 409.25,
+   "source": "alias:UBN002",
+   "prev": null
+  },
+  {
+   "sku_id": 3592,
+   "code": "OTHBFSPC00054",
+   "unit_cost": 53.71,
+   "source": "alias:B0029",
+   "prev": null
+  },
+  {
+   "sku_id": 3663,
+   "code": "OTHBFSPC00070",
+   "unit_cost": 33.1013,
+   "source": "alias:A0154",
+   "prev": null
+  },
+  {
+   "sku_id": 3595,
+   "code": "OTHBFSPC00071",
+   "unit_cost": 45.5747,
+   "source": "alias:A0053",
+   "prev": null
+  },
+  {
+   "sku_id": 3609,
+   "code": "OTHBFSPC00072",
+   "unit_cost": 56.7626,
+   "source": "alias:A0137",
+   "prev": null
+  },
+  {
+   "sku_id": 3571,
+   "code": "OTHBFSPC00074",
+   "unit_cost": 19.15,
+   "source": "alias:B0155",
+   "prev": null
+  },
+  {
+   "sku_id": 3633,
+   "code": "OTHBFSPC00091",
+   "unit_cost": 118.0836,
+   "source": "alias:A0032",
+   "prev": null
+  },
+  {
+   "sku_id": 3620,
+   "code": "OTHBFSPC00108",
+   "unit_cost": 54.4611,
+   "source": "alias:A0118",
+   "prev": null
+  },
+  {
+   "sku_id": 3522,
+   "code": "OTHBFSPC00110",
+   "unit_cost": 12.4758,
+   "source": "alias:B0119",
+   "prev": null
+  },
+  {
+   "sku_id": 3235,
+   "code": "OTHDLPMO00001",
+   "unit_cost": 310.4,
+   "source": "estimate:salmon 500g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3503,
+   "code": "OTHDLPMO00002",
+   "unit_cost": 620.8,
+   "source": "estimate:salmon 1000g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3478,
+   "code": "OTHDLPMO00004",
+   "unit_cost": 124.16,
+   "source": "estimate:salmon 200g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3621,
+   "code": "OTHDLPMO00005",
+   "unit_cost": 310.4,
+   "source": "estimate:salmon 500g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3687,
+   "code": "OTHDLPMO00011",
+   "unit_cost": 130.0,
+   "source": "estimate:12xTHBFSUS00030",
+   "prev": null
+  },
+  {
+   "sku_id": 3599,
+   "code": "OTHDLPMO00012",
+   "unit_cost": 122.6457,
+   "source": "estimate:12xTHBFSUS00024",
+   "prev": null
+  },
+  {
+   "sku_id": 3680,
+   "code": "OTHDLPMO00013",
+   "unit_cost": 130.0,
+   "source": "estimate:12xTHBFSUS00030",
+   "prev": null
+  },
+  {
+   "sku_id": 3627,
+   "code": "OTHDLSPC00008",
+   "unit_cost": 56.7626,
+   "source": "alias:A0137",
+   "prev": null
+  },
+  {
+   "sku_id": 3501,
+   "code": "OTHDLSPC00015",
+   "unit_cost": 33.1013,
+   "source": "alias:A0154",
+   "prev": null
+  },
+  {
+   "sku_id": 3696,
+   "code": "OTHDLSPC00035",
+   "unit_cost": 48.2863,
+   "source": "alias:A0130",
+   "prev": null
+  },
+  {
+   "sku_id": 3543,
+   "code": "OTHTWPMO00001",
+   "unit_cost": 310.4,
+   "source": "estimate:salmon 500g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3540,
+   "code": "OTHTWPMO00002",
+   "unit_cost": 620.8,
+   "source": "estimate:salmon 1000g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3658,
+   "code": "OTHTWPMO00004",
+   "unit_cost": 124.16,
+   "source": "estimate:salmon 200g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3500,
+   "code": "OTHTWPMO00005",
+   "unit_cost": 310.4,
+   "source": "estimate:salmon 500g x 0.6208/g",
+   "prev": null
+  },
+  {
+   "sku_id": 3702,
+   "code": "OTHTWPMO00037",
+   "unit_cost": 156.5099,
+   "source": "alias:A0006",
+   "prev": null
+  }
+ ]
+}
