@@ -1,52 +1,135 @@
-<!-- ══ 💬 เสียงลูกค้า (Customer Feedback) ══ -->
+<!-- ══ 💬 เสียงลูกค้า (Customer Feedback) — a working screen: pulse · queue · insight ══ -->
 <div id="tab-feedback" style="display:none">
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#eff6ff 0%,#ecfeff 100%);border-left:4px solid #0369a1">
-    <h2 class="text-base font-bold" style="color:#0c4a6e">💬 เสียงลูกค้า — รีวิวจาก Google / Facebook / Grab / LINE MAN</h2>
-    <p class="text-xs mt-1" style="color:var(--text-secondary)">ดึงอัตโนมัติทุกคืนจาก Google Business Profile และ Facebook Page ของร้าน (ตั้งค่าครั้งเดียว — <a href="/docs/FEEDBACK_SOURCES.html" target="_blank" style="color:#0369a1;text-decoration:underline">วิธีตั้งค่า</a>) หรือวางรีวิว (บรรทัดละ 1 รีวิว) / อัปโหลดไฟล์ CSV · XLSX · JSON ที่มีคอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) หรือไฟล์ zip จาก <b>Google Takeout</b> (Google Business Profile) — ระบบแยกความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ แล้วสรุปเทียบกับข้อมูลขายในแท็บเมนู</p>
-  </div>
+<style>
+  #tab-feedback .fb-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
+  #tab-feedback .fb-head h2 { font-size: 1.05rem; font-weight: 800; margin: 0; }
+  #tab-feedback .fb-btn { background: #0f766e; color: #fff; border: 1px solid #0f766e; border-radius: 6px; padding: .35rem .8rem; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  #tab-feedback .fb-btn:hover { filter: brightness(1.08); }
+  #tab-feedback .fb-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .3rem .6rem; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  #tab-feedback .fb-ghost.on { border-color: #0f766e; color: #065f46; background: #ecfdf5; }
+  #tab-feedback .fb-chip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .55rem; font-size: 11px; color: var(--text-secondary); background: var(--bg-input); cursor: pointer; }
+  #tab-feedback .fb-chip.on { border-color: #0369a1; background: #eff6ff; color: #0369a1; font-weight: 600; }
+  #tab-feedback .fb-kpis { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+  @media (min-width: 900px) { #tab-feedback .fb-kpis { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+  #tab-feedback .fb-kpi { border-top: 3px solid var(--border); padding: .7rem .9rem; }
+  #tab-feedback .fb-kpi .l { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); }
+  #tab-feedback .fb-kpi .v { font-size: 1.55rem; font-weight: 800; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  #tab-feedback .fb-kpi .d { font-size: 11px; color: var(--text-muted); margin-top: .15rem; }
+  #tab-feedback .fb-delta { display: inline-block; font-size: 11px; font-weight: 700; padding: 0 .35rem; border-radius: 4px; margin-right: .3rem; }
+  #tab-feedback .fb-delta.good { background: #d1fae5; color: #065f46; } #tab-feedback .fb-delta.bad { background: #fee2e2; color: #991b1b; } #tab-feedback .fb-delta.flat { background: var(--bg-input); color: var(--text-muted); }
+  #tab-feedback .fb-queue-item { display: grid; grid-template-columns: 1fr auto; gap: .35rem .8rem; padding: .65rem .2rem; border-bottom: 1px solid var(--border); }
+  #tab-feedback .fb-queue-item.hot { background: #fffbeb; }
+  #tab-feedback .fb-queue-item .meta { font-size: 11px; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: .25rem .6rem; align-items: center; }
+  #tab-feedback .fb-queue-item .txt { font-size: 13px; margin-top: .15rem; }
+  #tab-feedback .fb-queue-item .acts { display: flex; flex-direction: column; gap: .3rem; align-items: flex-end; }
+  #tab-feedback .fb-src { display: inline-block; font-size: 10px; font-weight: 700; padding: 0 .35rem; border-radius: 3px; background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border); }
+  #tab-feedback .fb-age { font-weight: 600; } #tab-feedback .fb-age.late { color: #b91c1c; }
+  #tab-feedback .fb-tag { font-size: 10px; padding: .05rem .35rem; border-radius: 3px; background: #f3f4f6; color: #374151; }
+  #tab-feedback .fb-tag.neg { background: #fef2f2; color: #b91c1c; } #tab-feedback .fb-tag.menu { background: #eff6ff; color: #0369a1; } #tab-feedback .fb-tag.flag { background: #fef3c7; color: #92400e; }
+  #tab-feedback .fb-theme { display: grid; grid-template-columns: 7.5rem 1fr auto auto; gap: .5rem; align-items: center; font-size: 12px; padding: .3rem .2rem; border-radius: 6px; cursor: pointer; }
+  #tab-feedback .fb-theme:hover, #tab-feedback .fb-theme.on { background: var(--bg-input); }
+  #tab-feedback .fb-bar { height: 9px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
+  #tab-feedback .fb-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #047857 var(--pos, 50%), #b91c1c var(--pos, 50%)); }
+  #tab-feedback table.fb-t { width: 100%; font-size: 12px; border-collapse: collapse; }
+  #tab-feedback table.fb-t th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; padding: .3rem .4rem; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
+  #tab-feedback table.fb-t td { padding: .35rem .4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  #tab-feedback table.fb-t tr.row { cursor: pointer; } #tab-feedback table.fb-t tr.row:hover { background: var(--bg-input); }
+  #tab-feedback .fb-quote { border-left: 3px solid #a7f3d0; padding: .3rem .6rem; margin: .35rem 0; font-size: 12.5px; background: #f0fdf4; border-radius: 0 6px 6px 0; }
+  #tab-feedback .fb-quote .m { font-size: 11px; color: var(--text-muted); }
+  #tab-feedback details > summary { cursor: pointer; font-size: 13px; font-weight: 600; list-style: none; }
+  #tab-feedback details > summary::before { content: '▸ '; color: var(--text-muted); } #tab-feedback details[open] > summary::before { content: '▾ '; }
+  #tab-feedback .fb-empty { text-align: center; padding: 2rem 1rem; color: var(--text-secondary); }
+</style>
 
-  <div class="card p-4 mb-4">
-    <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">แหล่งข้อมูล &amp; การดึงอัตโนมัติ</h3>
-      <span class="text-[11px]" style="color:var(--text-muted)">รีวิวที่ดึงมาจะถูกอัปเดตเมื่อลูกค้าแก้ไขหรือสาขาตอบกลับ · รีวิวลบใหม่แจ้งเตือนทาง Telegram · กด ✍ ตอบ ที่รีวิวเพื่อร่างและส่งคำตอบไป Google/Facebook ในรอบดึงถัดไป</span>
+  <div class="card p-4 fb-head">
+    <div style="flex:1;min-width:240px">
+      <h2>💬 เสียงลูกค้า <span class="text-xs font-normal" style="color:var(--text-muted)" id="fbPeriod"></span></h2>
+      <p class="text-xs mt-0.5" style="color:var(--text-secondary)" id="fbStatus">กำลังโหลด…</p>
+      <div class="flex flex-wrap items-center gap-1.5 mt-1.5"><span id="fbKindChips" class="flex flex-wrap gap-1"></span><span id="fbBranchChip"></span></div>
     </div>
-    <div id="fbSources" class="mt-2 text-xs" style="color:var(--text-muted)">กำลังโหลด…</div>
+    <div class="flex flex-wrap gap-1.5">
+      <button class="fb-ghost" onclick="switchTab('checklist')">✅ Checklist เปิดใช้</button>
+      <button class="fb-ghost" onclick="exportFeedbackCsv()">⬇ CSV</button>
+      <button class="fb-ghost" onclick="toggleFeedbackImport()">⬆ นำเข้าเอง</button>
+      <a class="fb-ghost" href="/docs/FEEDBACK_SOURCES.html" target="_blank">คู่มือ</a>
+    </div>
   </div>
 
-  <div class="card p-4 mb-4">
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+  <div id="fbEmpty" class="card p-4 mt-4" style="display:none"></div>
+
+  <div id="fbKpis" class="fb-kpis mt-4"></div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
+    <div class="card p-4 lg:col-span-2">
+      <div class="flex items-baseline justify-between flex-wrap gap-2"><h3 class="text-sm font-semibold">แนวโน้ม</h3><span class="text-[11px]" style="color:var(--text-muted)" id="fbTrendHint"></span></div>
+      <div style="position:relative;height:210px"><canvas id="fbTrend"></canvas></div>
+    </div>
+    <div class="card p-4">
+      <h3 class="text-sm font-semibold mb-2">ส่วนผสมของเสียง</h3>
+      <div id="fbMix" class="text-xs"></div>
+    </div>
+  </div>
+
+  <div class="card p-4 mt-4" id="fbQueueCard">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-semibold">📥 กล่องงาน — ต้องตอบ</h3>
+      <div class="flex flex-wrap gap-1" id="fbQueueFilters"></div>
+    </div>
+    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เรียงตามความเร่งด่วน: ยังไม่ตอบ → เกิน <span id="fbSlaDays">1</span> วัน → ปักหมุด → ดาวต่ำสุด → เก่าสุด · ตอบผ่านระบบได้กับ Google · Facebook · Instagram · TikTok ส่วน Inbox/การพูดถึงให้ตอบในแอปแล้วกด "ตอบแล้ว"</p>
+    <div id="fbReplyPanel" class="mt-3 rounded p-3" style="display:none;border:1px solid #93c5fd;background:#eff6ff"></div>
+    <div id="fbNeg" class="mt-2"></div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+    <div class="card p-4">
+      <div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">หัวข้อที่ลูกค้าพูดถึง</h3><span class="text-[11px]" style="color:var(--text-muted)">คลิกหัวข้อเพื่อดูตัวอย่างและสาขาต้นเหตุ</span></div>
+      <div id="fbThemes" class="mt-2"></div>
+      <div id="fbThemeDetail" class="mt-2"></div>
+    </div>
+    <div class="card p-4">
+      <div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">ตารางสาขา</h3><span class="text-[11px]" style="color:var(--text-muted)">คลิกสาขาเพื่อเจาะดู · Δ เทียบช่วงก่อน</span></div>
+      <div id="fbBranches" class="mt-2" style="max-height:380px;overflow:auto"></div>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
+    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">🌟 เสียงชม</h3><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>
+  </div>
+
+  <details class="card p-4 mt-4" id="fbAllCard">
+    <summary>รายการทั้งหมดในช่วงที่เลือก <span class="text-[11px] font-normal" style="color:var(--text-muted)" id="fbItemsHint"></span></summary>
+    <div class="flex flex-wrap gap-1.5 mt-2" id="fbItemFilters"></div>
+    <div id="fbItems" class="mt-2" style="max-height:520px;overflow:auto"></div>
+  </details>
+
+  <details class="card p-4 mt-4" id="fbImport">
+    <summary>นำเข้าเอง — วางรีวิว หรืออัปโหลด CSV · XLSX · JSON · Google Takeout zip</summary>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3">
       <div class="lg:col-span-2">
         <label class="text-xs font-semibold" style="color:var(--text-secondary)">วางรีวิว (บรรทัดละ 1 รีวิว)</label>
-        <textarea id="fbText" rows="5" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="เช่น  แซลมอนสดมาก บริการดี จะกลับมาอีก&#10;      รอนานมาก พนักงานไม่สนใจ ทุเรียนหมดตั้งแต่ทุ่มนึง"></textarea>
+        <textarea id="fbText" rows="4" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="เช่น  แซลมอนสดมาก บริการดี จะกลับมาอีก&#10;      รอนานมาก พนักงานไม่สนใจ ทุเรียนหมดตั้งแต่ทุ่มนึง"></textarea>
+        <p class="text-[11px] mt-1" style="color:var(--text-muted)">ไฟล์ตาราง: คอลัมน์ <b>text/รีวิว</b> (และ date · branch · source · rating ถ้ามี) · Takeout: takeout.google.com → เลือกเฉพาะ Google Business Profile</p>
       </div>
       <div class="flex flex-col gap-2">
         <label class="text-xs font-semibold" style="color:var(--text-secondary)">ค่าเริ่มต้นสำหรับบรรทัดที่ไม่ระบุ</label>
         <select id="fbBranch" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"><option value="">— สาขา —</option></select>
         <select id="fbSource" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
-          <option value="">— ช่องทาง —</option><option>Google</option><option>Facebook</option><option>Grab</option><option>LINE MAN</option><option>หน้าร้าน</option><option>อื่นๆ</option>
+          <option value="">— ช่องทาง —</option><option>Google</option><option>Facebook</option><option>Instagram</option><option>Grab</option><option>LINE MAN</option><option>foodpanda</option><option>หน้าร้าน</option><option>อื่นๆ</option>
         </select>
         <input type="date" id="fbDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
         <input type="file" id="fbFile" accept=".csv,.tsv,.txt,.xlsx,.json,.zip" class="text-xs">
-        <button class="btn-primary text-sm px-3 py-1.5 rounded" onclick="uploadFeedback()">⬆ นำเข้าและวิเคราะห์</button>
+        <button class="fb-btn" onclick="uploadFeedback()">⬆ นำเข้าและวิเคราะห์</button>
         <span id="fbUploadStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>
     </div>
-  </div>
+  </details>
 
-  <div class="flex items-center gap-3 mb-3 flex-wrap">
-    <span id="fbKindChips" class="flex gap-1 flex-wrap"></span>
-    <span id="fbStatus" class="text-xs" style="color:var(--text-muted)"></span>
-    <span class="text-xs" style="color:var(--text-muted)">ตามช่วงเดือน/สาขาของแถบด้านบน</span>
+  <div class="card p-4 mt-4">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-semibold">แหล่งข้อมูล &amp; การดึงอัตโนมัติ</h3>
+      <span class="text-[11px]" style="color:var(--text-muted)">ดึงทุกคืน 09:00 จากเครื่อง sync · ตั้งค่าตาม <button class="fb-ghost" onclick="switchTab('checklist')">Checklist</button></span>
+    </div>
+    <div id="fbSources" class="mt-2 text-xs" style="color:var(--text-muted)">กำลังโหลด…</div>
   </div>
-  <div id="fbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">หัวข้อที่ถูกพูดถึง</h3><div id="fbThemes"></div></div>
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
-  </div>
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายสาขา</h3><div id="fbBranches" style="max-height:340px;overflow:auto"></div></div>
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รีวิวเชิงลบล่าสุด</h3><div id="fbNeg" style="max-height:340px;overflow:auto"></div></div>
-  </div>
-  <div id="fbReplyPanel" class="card p-4 mb-4" style="display:none;border-left:4px solid #0369a1"></div>
-  <div class="card p-4"><h3 class="text-sm font-semibold mb-2">รายการล่าสุด</h3><div id="fbItems" style="max-height:420px;overflow:auto"></div></div>
 </div>

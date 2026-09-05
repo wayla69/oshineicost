@@ -97,7 +97,10 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                ("reply_requested_at", "TEXT"), ("reply_requested_by", "TEXT"), ("reply_error", "TEXT"),
                # review = on the chain's own listing/page; comment = under the chain's own post/video;
                # mention = anywhere else (X, YouTube, news, blogs) — no rating, no reply channel
-               ("kind", "TEXT"))
+               ("kind", "TEXT"),
+               # flag = a serious case pinned by a manager (food safety, fraud…) with the reason
+               ("flag", "INTEGER DEFAULT 0"), ("flag_note", "TEXT"))
+SLA_DAYS = 1                # a negative voice waits at most this long for the branch's answer
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 KINDS = ("review", "comment", "mention", "message")   # message = a private inbox conversation (Messenger / IG DM), per day
 REPLY_MAX = {"google": 4096, "facebook": 8000, "tiktok": 150, "instagram": 2200}   # characters the platform accepts; others 4000
@@ -491,71 +494,165 @@ def _reply_channel(row) -> str:
     return "manual"
 
 
-@router.get("/api/feedback/summary")
-def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
-                     month_to: Optional[str] = Query(None), source: Optional[str] = Query(None),
-                     kind: Optional[str] = Query(None)):
-    if kind and kind not in KINDS:
-        raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
-    with get_db() as con:
-        _ensure(con)
-        where, params = _where(branch, month_from, month_to, source=source, kind=kind)
-        rows = [dict(r) for r in con.execute(
-            f"SELECT id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-            f"external_id, url, reply_text, reply_status, reply_error, kind FROM customer_feedback WHERE {where} "
-            f"ORDER BY rated_at DESC, id DESC", params)]
-        # the kind chips count every kind under the OTHER filters, so a selected kind never hides the rest
-        where_k, params_k = _where(branch, month_from, month_to, source=source)
-        kinds = {k: n for k, n in con.execute(
-            f"SELECT COALESCE(kind,'review'), COUNT(*) FROM customer_feedback WHERE {where_k} GROUP BY 1", params_k)}
+_ROW_COLS = ("id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
+             "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location")
+
+
+def _age_days(rated_at: str, today: str):
+    try:
+        return (datetime.date.fromisoformat(today) - datetime.date.fromisoformat((rated_at or "")[:10])).days
+    except ValueError:
+        return None
+
+
+def _sla_breached(r, today: str) -> bool:
+    age = _age_days(r.get("rated_at"), today)
+    return _needs_reply(r) and age is not None and age > SLA_DAYS
+
+
+def _prev_range(month_from, month_to):
+    """The window of the same length right before [month_from, month_to]; (None, None) when unbounded."""
+    if not month_from or not month_to:
+        return None, None
+    try:
+        ya, ma, yb, mb = int(month_from[:4]), int(month_from[5:7]), int(month_to[:4]), int(month_to[5:7])
+    except ValueError:
+        return None, None
+    span = (yb * 12 + mb) - (ya * 12 + ma) + 1
+    if span <= 0:
+        return None, None
+    end = ya * 12 + (ma - 1) - 1              # 0-based month index of the month before month_from
+    start = end - span + 1
+    if start < 0:
+        return None, None
+    return f"{start // 12:04d}-{start % 12 + 1:02d}", f"{end // 12:04d}-{end % 12 + 1:02d}"
+
+
+def _brief(r, today: str) -> dict:
+    """One voice as the tab lists it (queue, negatives, positives)."""
+    return {"id": r["id"], "date": r["rated_at"], "branch": r["branch_name"], "source": r["source"],
+            "rating": r["rating"], "text": (r["text"] or "")[:300], "themes": json.loads(r["themes"] or "[]"),
+            "menus": json.loads(r["menus"] or "[]"), "url": r["url"] or "", "sentiment": r["sentiment"],
+            "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r), "kind": r["kind"] or "review",
+            "external_id": r["external_id"], "reply_status": r["reply_status"], "reply_error": r["reply_error"],
+            "flag": bool(r.get("flag")), "flag_note": r.get("flag_note") or "", "age_days": _age_days(r["rated_at"], today),
+            "sla_breached": _sla_breached(r, today), "location": r.get("location") or ""}
+
+
+def _aggregate(rows: list, today: str) -> dict:
+    """Everything the tab shows for one window of rows."""
     total = len(rows)
     sent = {"pos": 0, "neg": 0, "neu": 0}
-    themes, menus, branches, by_month, sources, engines = {}, {}, {}, {}, {}, {}
+    themes, menus, branches, by_month, by_day, sources, engines = {}, {}, {}, {}, {}, {}, {}
     reply_queue = {s: 0 for s in REPLY_STATUSES}
-    ratings, unreplied = [], 0
+    ratings, unreplied, sla, flagged = [], 0, 0, 0
+    answerable = answered = 0
+    reply_days = []
     for r in rows:
         s = r["sentiment"] or "neu"
         sent[s] = sent.get(s, 0) + 1
         if r["rating"] is not None:
             ratings.append(float(r["rating"]))
-        unreplied += _needs_reply(r)
+        nr = _needs_reply(r)
+        unreplied += nr
+        sla += _sla_breached(r, today)
+        flagged += 1 if r.get("flag") else 0
         if r["reply_status"] in reply_queue:
             reply_queue[r["reply_status"]] += 1
+        # the answer rate: fetched negative / ≤3★ voices the branch could answer, and did
+        if r.get("external_id") and (r["kind"] or "review") in ("review", "comment", "message") and \
+                (s == "neg" or (r["rating"] is not None and float(r["rating"]) <= 3)):
+            answerable += 1
+            if r["reply_text"] or r["reply_status"] == "sent":
+                answered += 1
+                try:
+                    reply_days.append((datetime.date.fromisoformat((r["replied_at"] or "")[:10])
+                                       - datetime.date.fromisoformat((r["rated_at"] or "")[:10])).days)
+                except ValueError:
+                    pass
+        bn = r["branch_name"] or "(ไม่ระบุสาขา)"
+        b = branches.setdefault(bn, {"branch": bn, "n": 0, "neg": 0, "pos": 0, "ratings": [], "unreplied": 0, "flagged": 0, "themes": {}})
+        b["n"] += 1; b["neg"] += (s == "neg"); b["pos"] += (s == "pos"); b["unreplied"] += nr; b["flagged"] += 1 if r.get("flag") else 0
+        if r["rating"] is not None:
+            b["ratings"].append(float(r["rating"]))
         for t in json.loads(r["themes"] or "[]"):
-            d = themes.setdefault(t, {"theme": t, "n": 0, "neg": 0}); d["n"] += 1; d["neg"] += (s == "neg")
+            d = themes.setdefault(t, {"theme": t, "n": 0, "neg": 0, "pos": 0, "branches": {}, "examples": []})
+            d["n"] += 1; d["neg"] += (s == "neg"); d["pos"] += (s == "pos")
+            d["branches"][bn] = d["branches"].get(bn, 0) + 1
+            if s == "neg" and len(d["examples"]) < 3:
+                d["examples"].append({"id": r["id"], "date": r["rated_at"], "branch": r["branch_name"], "text": (r["text"] or "")[:160]})
+            if s == "neg":
+                b["themes"][t] = b["themes"].get(t, 0) + 1
         for m in json.loads(r["menus"] or "[]"):
             d = menus.setdefault(m, {"menu": m, "n": 0, "pos": 0, "neg": 0}); d["n"] += 1; d["pos"] += (s == "pos"); d["neg"] += (s == "neg")
-        bn = r["branch_name"] or "(ไม่ระบุสาขา)"
-        d = branches.setdefault(bn, {"branch": bn, "n": 0, "neg": 0, "ratings": []}); d["n"] += 1; d["neg"] += (s == "neg")
-        if r["rating"] is not None:
-            d["ratings"].append(float(r["rating"]))
         ym = (r["rated_at"] or "")[:7] or "ไม่ระบุ"
         d = by_month.setdefault(ym, {"month": ym, "n": 0, "pos": 0, "neg": 0}); d["n"] += 1; d["pos"] += (s == "pos"); d["neg"] += (s == "neg")
+        day = (r["rated_at"] or "")[:10]
+        if len(day) == 10:
+            d = by_day.setdefault(day, {"day": day, "n": 0, "neg": 0}); d["n"] += 1; d["neg"] += (s == "neg")
         sources[r["source"] or "(ไม่ระบุ)"] = sources.get(r["source"] or "(ไม่ระบุ)", 0) + 1
         engines[r["analysed_by"] or "?"] = engines.get(r["analysed_by"] or "?", 0) + 1
-    for d in branches.values():
-        d["avg_rating"] = round(sum(d["ratings"]) / len(d["ratings"]), 2) if d["ratings"] else None
-        d["neg_pct"] = round(d["neg"] / d["n"] * 100, 1) if d["n"] else 0.0
-        del d["ratings"]
+    for b in branches.values():
+        b["avg_rating"] = round(sum(b["ratings"]) / len(b["ratings"]), 2) if b["ratings"] else None
+        b["neg_pct"] = round(b["neg"] / b["n"] * 100, 1) if b["n"] else 0.0
+        b["top_theme"] = max(b["themes"].items(), key=lambda kv: kv[1])[0] if b["themes"] else None
+        del b["ratings"], b["themes"]
     for d in themes.values():
         d["neg_pct"] = round(d["neg"] / d["n"] * 100, 1) if d["n"] else 0.0
-    recent_neg = [{"id": r["id"], "date": r["rated_at"], "branch": r["branch_name"], "source": r["source"],
-                   "rating": r["rating"], "text": r["text"][:300], "themes": json.loads(r["themes"] or "[]"),
-                   "menus": json.loads(r["menus"] or "[]"), "url": r["url"] or "",
-                   "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r), "kind": r["kind"] or "review",
-                   "external_id": r["external_id"], "reply_status": r["reply_status"], "reply_error": r["reply_error"]}
-                  for r in rows if r["sentiment"] == "neg"][:12]
+        d["branches"] = [k for k, _ in sorted(d["branches"].items(), key=lambda kv: -kv[1])[:3]]
+    reply_days.sort()
     return {
         "total": total, "avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
         "sentiment": sent, "neg_pct": round(sent["neg"] / total * 100, 1) if total else 0.0,
-        "unreplied": unreplied, "reply_queue": reply_queue, "kinds": kinds,
+        "unreplied": unreplied, "sla_breached": sla, "flagged": flagged, "reply_queue": reply_queue,
+        "response": {"answerable": answerable, "answered": answered,
+                     "rate": round(answered / answerable * 100) if answerable else None,
+                     "median_days": reply_days[len(reply_days) // 2] if reply_days else None},
         "themes": sorted(themes.values(), key=lambda d: -d["n"]),
         "menus": sorted(menus.values(), key=lambda d: -d["n"])[:30],
-        "branches": sorted(branches.values(), key=lambda d: -d["n"]),
+        "branches": sorted(branches.values(), key=lambda d: (-d["neg_pct"], -d["n"])),
         "by_month": sorted(by_month.values(), key=lambda d: d["month"]),
-        "sources": sources, "analysed_by": engines, "recent_negative": recent_neg,
-        "filters": {"branch": branch, "month_from": month_from, "month_to": month_to, "source": source, "kind": kind},
+        "by_day": sorted(by_day.values(), key=lambda d: d["day"]),
+        "sources": sources, "analysed_by": engines,
+        "recent_negative": [_brief(r, today) for r in rows if r["sentiment"] == "neg"][:12],
+        "recent_positive": [_brief(r, today) for r in rows if r["sentiment"] == "pos" and (r["kind"] or "review") != "mention" and (r["text"] or "").strip()][:6],
     }
+
+
+@router.get("/api/feedback/summary")
+def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
+                     month_to: Optional[str] = Query(None), source: Optional[str] = Query(None),
+                     kind: Optional[str] = Query(None)):
+    """The window's numbers plus the same window right before it (`prev`), so
+    the tab can say which way every figure moved."""
+    if kind and kind not in KINDS:
+        raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
+    today = _thai_today()
+    pf, pt = _prev_range(month_from, month_to)
+    with get_db() as con:
+        _ensure(con)
+        where, params = _where(branch, month_from, month_to, source=source, kind=kind)
+        rows = [dict(r) for r in con.execute(f"SELECT {_ROW_COLS} FROM customer_feedback WHERE {where} "
+                                             f"ORDER BY rated_at DESC, id DESC", params)]
+        prev_rows = []
+        if pf:
+            wp, pp = _where(branch, pf, pt, source=source, kind=kind)
+            prev_rows = [dict(r) for r in con.execute(f"SELECT {_ROW_COLS} FROM customer_feedback WHERE {wp}", pp)]
+        # the kind chips count every kind under the OTHER filters, so a selected kind never hides the rest
+        where_k, params_k = _where(branch, month_from, month_to, source=source)
+        kinds = {k: n for k, n in con.execute(
+            f"SELECT COALESCE(kind,'review'), COUNT(*) FROM customer_feedback WHERE {where_k} GROUP BY 1", params_k)}
+    out = _aggregate(rows, today)
+    prev = None
+    if pf:
+        p = _aggregate(prev_rows, today)
+        prev = {"range": [pf, pt], "total": p["total"], "avg_rating": p["avg_rating"], "neg_pct": p["neg_pct"],
+                "sentiment": p["sentiment"], "response_rate": p["response"]["rate"], "sla_breached": p["sla_breached"],
+                "themes": {t["theme"]: t["n"] for t in p["themes"]},
+                "branches": {b["branch"]: {"avg_rating": b["avg_rating"], "neg_pct": b["neg_pct"], "n": b["n"]} for b in p["branches"]}}
+    out.update({"kinds": kinds, "prev": prev, "today": today, "sla_days": SLA_DAYS,
+                "filters": {"branch": branch, "month_from": month_from, "month_to": month_to, "source": source, "kind": kind}})
+    return out
 
 
 @router.get("/api/feedback/items")
@@ -563,23 +660,73 @@ def feedback_items(branch: Optional[str] = Query(None), month_from: Optional[str
                    month_to: Optional[str] = Query(None), sentiment: Optional[str] = Query(None),
                    theme: Optional[str] = Query(None), menu: Optional[str] = Query(None),
                    source: Optional[str] = Query(None), kind: Optional[str] = Query(None),
-                   needs_reply: int = Query(0), limit: int = Query(200, ge=1, le=2000)):
+                   needs_reply: int = Query(0), flagged: int = Query(0), sla: int = Query(0),
+                   sort: str = Query("newest"), limit: int = Query(200, ge=1, le=2000)):
+    """sort: newest (default) · oldest · worst (lowest stars first) · priority
+    (unanswered first, SLA breaches before the rest, then the worst, then the oldest)."""
     if kind and kind not in KINDS:
         raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
+    if sort not in ("newest", "oldest", "worst", "priority"):
+        raise HTTPException(400, "sort must be newest, oldest, worst or priority")
+    today = _thai_today()
     with get_db() as con:
         _ensure(con)
         where, params = _where(branch, month_from, month_to, sentiment, theme, menu, source, kind)
+        if flagged:
+            where += " AND flag=1"
         rows = con.execute(
-            f"SELECT id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-            f"uploaded_at, external_id, url, reply_text, replied_at, location, reply_status, reply_draft, reply_error, kind "
+            f"SELECT {_ROW_COLS}, uploaded_at, reply_draft "
             f"FROM customer_feedback WHERE {where} ORDER BY rated_at DESC, id DESC LIMIT ?", params + [limit]).fetchall()
     items = [{**dict(r), "themes": json.loads(r["themes"] or "[]"), "menus": json.loads(r["menus"] or "[]")} for r in rows]
     for it in items:
         it["kind"] = it.get("kind") or "review"
+        it["flag"] = bool(it.get("flag"))
         it["needs_reply"] = _needs_reply(it)
+        it["age_days"] = _age_days(it["rated_at"], today)
+        it["sla_breached"] = _sla_breached(it, today)
     if needs_reply:
         items = [it for it in items if it["needs_reply"]]
-    return {"items": items}
+    if sla:
+        items = [it for it in items if it["sla_breached"]]
+    if sort == "oldest":
+        items.sort(key=lambda it: (it["rated_at"] or "", it["id"]))
+    elif sort == "worst":
+        items.sort(key=lambda it: (it["rating"] if it["rating"] is not None else 6, -(it["age_days"] or 0)))
+    elif sort == "priority":
+        items.sort(key=lambda it: (not it["needs_reply"], not it["sla_breached"], not it["flag"],
+                                   it["rating"] if it["rating"] is not None else 6, -(it["age_days"] or 0)))
+    return {"items": items, "today": today}
+
+
+@router.post("/api/feedback/{fid}/handled", dependencies=[Depends(require_write_token)])
+async def feedback_handled(fid: int, request: Request):
+    """The branch answered outside the system (in the app, by phone): record it
+    so the voice leaves the queue and counts as answered."""
+    b = await request.json()
+    with get_db() as con:
+        _ensure(con)
+        _get_row(con, fid)
+        note = str(b.get("note") or "").strip()[:2000] or "(ตอบแล้วนอกระบบ)"
+        con.execute("UPDATE customer_feedback SET reply_status='sent', reply_text=COALESCE(NULLIF(reply_text,''), ?), "
+                    "replied_at=COALESCE(replied_at, ?), reply_requested_by=?, reply_error=NULL, updated_at=? WHERE id=?",
+                    (note, _thai_today(), str(b.get("by") or "")[:60], _thai_now(), fid))
+        con.commit()
+    return {"id": fid, "reply_status": "sent"}
+
+
+@router.post("/api/feedback/{fid}/flag", dependencies=[Depends(require_write_token)])
+async def feedback_flag(fid: int, request: Request):
+    """Pin a serious case (food safety, fraud, harassment) with the reason — it
+    stays on top of the queue and in the branch league until unpinned."""
+    b = await request.json()
+    on = bool(b.get("flag", True))
+    with get_db() as con:
+        _ensure(con)
+        _get_row(con, fid)
+        con.execute("UPDATE customer_feedback SET flag=?, flag_note=?, updated_at=? WHERE id=?",
+                    (1 if on else 0, (str(b.get("note") or "").strip()[:500] or None) if on else None, _thai_now(), fid))
+        con.commit()
+    return {"id": fid, "flag": on}
 
 
 @router.get("/api/feedback/sources")
