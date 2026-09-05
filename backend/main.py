@@ -252,6 +252,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db") \
+            or path.startswith("/api/_admin/export-state") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
         # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
@@ -561,6 +562,48 @@ def app_js():
 #     bad/partial upload can never corrupt the running DB. Caller restarts the
 #     machine after a successful upload (see backend/refresh_fly_db.py).
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# /api/_admin/export-state — the tables that live ONLY on Fly (core._PRESERVED_*:
+# users, customer voices, survey links, actions, competitor snapshots, checklist
+# ticks, recon uploads) as gzip'd NDJSON for the nightly off-site pull
+# (backend/pull_fly_state.py, AUD-2). Same token gate as seed-db: OSHINEI_SEED_TOKEN
+# unset → 404, wrong token → 404. Streams row by row, so memory stays flat.
+# ---------------------------------------------------------------------------
+@app.get("/api/_admin/export-state", include_in_schema=False)
+def _export_state(token: str = Query("")):
+    import base64 as _b64, datetime as _dt, json as _json, sqlite3 as _sq, zlib as _zlib
+    from fastapi.responses import StreamingResponse as _Stream
+    from core import _preserved_pred as _pp
+    toks = _accepted_tokens()
+    if not toks or not _token_accepted(token):
+        raise HTTPException(status_code=404, detail="not found")
+
+    def _cell(v):
+        return {"b64": _b64.b64encode(v).decode("ascii")} if isinstance(v, (bytes, bytearray, memoryview)) else v
+
+    def gen():
+        z = _zlib.compressobj(6, _zlib.DEFLATED, 31)          # 31 = gzip container
+        con = _sq.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        counts = {}
+        try:
+            names = [r[0] for r in con.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND {_pp('name')} ORDER BY name")]
+            for t in names:
+                cols = [r[1] for r in con.execute(f"PRAGMA table_info([{t}])")]
+                yield z.compress((_json.dumps({"table": t, "columns": cols}, ensure_ascii=False) + "\n").encode("utf-8"))
+                n = 0
+                for row in con.execute(f"SELECT {', '.join('[' + c + ']' for c in cols)} FROM [{t}]"):
+                    n += 1
+                    yield z.compress((_json.dumps({"t": t, "r": [_cell(v) for v in row]}, ensure_ascii=False) + "\n").encode("utf-8"))
+                counts[t] = n
+        finally:
+            con.close()
+        now = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+        yield z.compress((_json.dumps({"done": True, "counts": counts, "exported_at": now}) + "\n").encode("utf-8"))
+        yield z.flush()
+    return _Stream(gen(), media_type="application/gzip",
+                   headers={"Content-Disposition": "attachment; filename=fly_state.ndjson.gz", "Cache-Control": "no-store"})
+
+
 @app.post("/api/_admin/seed-db", include_in_schema=False)
 async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     import gzip, shutil, tempfile, os as _os2
