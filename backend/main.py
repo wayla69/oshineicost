@@ -1792,6 +1792,11 @@ else:
     from routers.feedback_actions import router as _feedback_actions_router
 app.include_router(_feedback_actions_router)
 if __package__:
+    from .routers.feedback_ai import router as _feedback_ai_router
+else:
+    from routers.feedback_ai import router as _feedback_ai_router
+app.include_router(_feedback_ai_router)
+if __package__:
     from .routers.buffet import router as _buffet_router
     from .routers.buffet import buffet_forecast  # noqa: F401  (/api/forecast facade)
 else:

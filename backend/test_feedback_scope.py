@@ -28,6 +28,12 @@ def auth_on(monkeypatch):
     yield
 
 
+def _wipe(con, table):
+    """Empty a table if it exists — never create a stub that would shadow the real DDL."""
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+        con.execute(f"DELETE FROM {table}")
+
+
 @pytest.fixture(autouse=True)
 def _clean(request):
     yield
@@ -35,10 +41,8 @@ def _clean(request):
         return
     import core
     con = sqlite3.connect(str(core.DB_PATH))
-    for t, sql in (("customer_feedback", "CREATE TABLE IF NOT EXISTS customer_feedback(id INTEGER PRIMARY KEY, text TEXT)"),
-                   ("feedback_action", "CREATE TABLE IF NOT EXISTS feedback_action(id INTEGER PRIMARY KEY)"),
-                   ("feedback_survey_link", "CREATE TABLE IF NOT EXISTS feedback_survey_link(branch_id INTEGER PRIMARY KEY)")):
-        con.execute(sql); con.execute(f"DELETE FROM {t}")
+    for t in ("customer_feedback", "feedback_action", "feedback_survey_link"):
+        _wipe(con, t)
     con.execute("DELETE FROM app_user WHERE username IN ('mgr_a', 'mgr_x')")
     con.commit(); con.close()
     try:

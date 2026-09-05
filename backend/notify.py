@@ -48,9 +48,10 @@ def send_telegram(text: str, token: str = None, chat_id: str = None, http=None, 
 def negative_digest(items: list, source: str, app_url: str = "") -> str:
     """The alert text for newly collected negative reviews."""
     lines = [f"⚠️ <b>รีวิวเชิงลบใหม่ {len(items)} รายการ</b> ({html.escape(source or '')})"]
-    for it in items[:15]:
+    for it in sorted(items, key=lambda x: x.get("severity") != "high")[:15]:
         stars = f"{it['rating']:g}★ · " if it.get("rating") is not None else ""
-        lines.append(f"• <b>{html.escape(str(it.get('branch') or '-'))}</b> · {stars}{html.escape((it.get('text') or '')[:160])}")
+        fire = f"🔥 <b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
+        lines.append(f"• {fire}<b>{html.escape(str(it.get('branch') or '-'))}</b> · {stars}{html.escape((it.get('text') or '')[:160])}")
         if it.get("url"):
             lines.append(f"  {html.escape(it['url'])}")
     if len(items) > 15:
@@ -93,6 +94,8 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
         waiting.append(f"รอสาขาตอบตอนนี้ <b>{d['unreplied']}</b>")
     if d.get("sla_breached"):
         waiting.append(f"เกิน SLA <b>{d['sla_breached']}</b> ⚠️")
+    if d.get("severe"):
+        waiting.append(f"🔥 ร้ายแรง <b>{d['severe']}</b>")
     if d.get("flagged"):
         waiting.append(f"🚩 {d['flagged']}")
     if waiting:

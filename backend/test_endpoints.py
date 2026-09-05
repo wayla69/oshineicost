@@ -48,6 +48,7 @@ SMOKE = [
     ("/api/feedback/survey-links", {}),
     ("/api/feedback/actions", {}),
     ("/api/feedback/digest", {"days": 7, "today": "2026-09-05"}),
+    ("/api/feedback/narrative", {"days": 7, "today": "2026-09-05"}),
     ("/api/checklist/feedback_rollout", {}),
     # ── management summary report (daily & weekly) ──
     ("/api/reports/management", {}),

@@ -329,6 +329,7 @@ def compute_digest(con, days: int = 7, today: str = None, branch: str = None, gr
             "positives": cur["sentiment"].get("pos", 0), "negatives": cur["sentiment"].get("neg", 0),
             "response": cur["response"], "prev_response_rate": prev["response"]["rate"],
             "unreplied": now["unreplied"], "sla_breached": now["sla_breached"], "flagged": now["flagged"],
+            "severe": cur.get("severe", 0), "staff": cur.get("staff", [])[:6],
             "themes": themes, "branches_watch": watch, "branches_praised": praised,
             "response_by_branch": response_by_branch[:8],
             "survey": {"n": len(survey_rows), "prev_n": survey_prev,

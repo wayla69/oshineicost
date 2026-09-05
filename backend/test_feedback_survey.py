@@ -15,6 +15,12 @@ sys.path.insert(0, str(HERE))
 from routers import survey as S  # noqa: E402
 
 
+def _wipe(con, table):
+    """Empty a table if it exists — never create a stub that would shadow the real DDL."""
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+        con.execute(f"DELETE FROM {table}")
+
+
 @pytest.fixture(autouse=True)
 def _clean(request):
     """The session DB is shared with every other module: leave no answer or link behind."""
@@ -25,10 +31,8 @@ def _clean(request):
         return
     import core
     con = sqlite3.connect(str(core.DB_PATH))
-    con.execute("CREATE TABLE IF NOT EXISTS customer_feedback(id INTEGER PRIMARY KEY, text TEXT)")
-    con.execute("DELETE FROM customer_feedback")
-    con.execute("CREATE TABLE IF NOT EXISTS feedback_survey_link(branch_id INTEGER PRIMARY KEY)")
-    con.execute("DELETE FROM feedback_survey_link")
+    _wipe(con, "customer_feedback")
+    _wipe(con, "feedback_survey_link")
     con.commit(); con.close()
     try:
         import main

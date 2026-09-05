@@ -62,7 +62,9 @@
    "rate": null
   },
   "response_by_branch": [],
+  "severe": 0,
   "sla_breached": 0,
+  "staff": [],
   "survey": {
    "avg_rating": null,
    "n": 0,

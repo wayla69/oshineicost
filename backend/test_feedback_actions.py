@@ -18,6 +18,12 @@ from routers import feedback_actions as A  # noqa: E402
 from test_feedback_sources import _args, _seed_db  # noqa: E402
 
 
+def _wipe(con, table):
+    """Empty a table if it exists — never create a stub that would shadow the real DDL."""
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+        con.execute(f"DELETE FROM {table}")
+
+
 @pytest.fixture(autouse=True)
 def _clean(request, monkeypatch):
     yield
@@ -25,10 +31,8 @@ def _clean(request, monkeypatch):
         return
     import core
     con = sqlite3.connect(str(core.DB_PATH))
-    con.execute("CREATE TABLE IF NOT EXISTS customer_feedback(id INTEGER PRIMARY KEY, text TEXT)")
-    con.execute("DELETE FROM customer_feedback")
-    con.execute("CREATE TABLE IF NOT EXISTS feedback_action(id INTEGER PRIMARY KEY)")
-    con.execute("DELETE FROM feedback_action")
+    _wipe(con, "customer_feedback")
+    _wipe(con, "feedback_action")
     con.commit(); con.close()
     try:
         import main

@@ -102,7 +102,9 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                # flag = a serious case pinned by a manager (food safety, fraud…) with the reason
                ("flag", "INTEGER DEFAULT 0"), ("flag_note", "TEXT"),
                # contact = a QR-survey guest's phone / LINE id for the call back (blanked after survey.CONTACT_DAYS)
-               ("contact", "TEXT"))
+               ("contact", "TEXT"),
+               # E5: severity high|med|low (+ the reason when high) and the staff named in the voice (JSON list)
+               ("severity", "TEXT"), ("severity_note", "TEXT"), ("staff", "TEXT"))
 SLA_DAYS = 1                # a negative voice waits at most this long for the branch's answer
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 KINDS = ("review", "comment", "mention", "message", "survey")   # message = a private inbox conversation (Messenger / IG DM), per day; survey = the QR form (routers/survey.py)
@@ -387,29 +389,34 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
         if r.get("sentiment_hint") and sent == "neu":
             sent = r["sentiment_hint"]
         themes = list(a["themes"]) + [t for t in (r.get("themes_extra") or []) if t not in a["themes"]]   # a survey's tapped aspects
+        sev, sev_note = a.get("severity") or "low", a.get("severity_note") or ""
         vals = (bid, bname, r.get("source") or "", r.get("date") or "", r.get("rating"), r["text"], sent, a["score"],
                 json.dumps(themes, ensure_ascii=False), json.dumps(a["menus"], ensure_ascii=False), engine,
                 r.get("external_id"), r.get("url") or None, r.get("author") or None, r.get("reply") or None,
                 r.get("replied_at") or None, r.get("location") or None, r.get("ref") or None, r.get("kind") or "review",
-                r.get("contact") or None)
+                r.get("contact") or None, sev, sev_note or None, json.dumps(a.get("staff") or [], ensure_ascii=False))
         if kind == "new":
             cur = con.execute(
                 "INSERT OR IGNORE INTO customer_feedback(branch_id, branch_name, source, rated_at, rating, text, "
                 "sentiment, score, themes, menus, analysed_by, external_id, url, author_hash, reply_text, replied_at, "
-                "location, external_ref, kind, contact, uploaded_by, fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "location, external_ref, kind, contact, severity, severity_note, staff, uploaded_by, fingerprint) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 vals + (by or "", fp))
             if cur.rowcount and cur.rowcount > 0:
                 inserted += 1
+                if sev == "high":              # a safety / integrity matter pins itself for management
+                    con.execute("UPDATE customer_feedback SET flag=1, flag_note=? WHERE id=?",
+                                (f"อัตโนมัติ: ร้ายแรง ({sev_note or 'ตรวจพบคำสำคัญ'})", cur.lastrowid))
                 new_items.append({"id": cur.lastrowid, "date": r.get("date"), "branch": bname or r.get("branch") or "",
                                   "source": r.get("source") or "", "rating": r.get("rating"), "text": r["text"][:300],
-                                  "sentiment": sent, "url": r.get("url") or ""})
+                                  "sentiment": sent, "url": r.get("url") or "", "severity": sev, "severity_note": sev_note})
             else:
                 dups += 1
         else:
             con.execute(
                 "UPDATE customer_feedback SET branch_id=?, branch_name=?, source=?, rated_at=?, rating=?, text=?, "
                 "sentiment=?, score=?, themes=?, menus=?, analysed_by=?, external_id=?, url=?, author_hash=?, "
-                "reply_text=?, replied_at=?, location=?, external_ref=COALESCE(?, external_ref), kind=?, contact=COALESCE(?, contact), updated_at=?, "
+                "reply_text=?, replied_at=?, location=?, external_ref=COALESCE(?, external_ref), kind=?, contact=COALESCE(?, contact), severity=?, severity_note=?, staff=?, updated_at=?, "
                 "reply_status=CASE WHEN ?!='' AND reply_status='pending' THEN 'sent' ELSE reply_status END WHERE id=?",
                 vals + (now, r.get("reply") or "", existing[fp]["id"]))
             updated += 1
@@ -507,7 +514,8 @@ def _reply_channel(row) -> str:
 
 
 _ROW_COLS = ("id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-             "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location, contact")
+             "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location, contact, "
+             "severity, severity_note, staff")
 
 
 def _age_days(rated_at: str, today: str):
@@ -548,16 +556,18 @@ def _brief(r, today: str) -> dict:
             "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r), "kind": r["kind"] or "review",
             "external_id": r["external_id"], "reply_status": r["reply_status"], "reply_error": r["reply_error"],
             "flag": bool(r.get("flag")), "flag_note": r.get("flag_note") or "", "age_days": _age_days(r["rated_at"], today),
-            "sla_breached": _sla_breached(r, today), "location": r.get("location") or "", "contact": r.get("contact") or ""}
+            "sla_breached": _sla_breached(r, today), "location": r.get("location") or "", "contact": r.get("contact") or "",
+            "severity": r.get("severity") or "low", "severity_note": r.get("severity_note") or "",
+            "staff": json.loads(r.get("staff") or "[]") if isinstance(r.get("staff"), str) else (r.get("staff") or [])}
 
 
 def _aggregate(rows: list, today: str) -> dict:
     """Everything the tab shows for one window of rows."""
     total = len(rows)
     sent = {"pos": 0, "neg": 0, "neu": 0}
-    themes, menus, branches, by_month, by_day, sources, engines = {}, {}, {}, {}, {}, {}, {}
+    themes, menus, branches, by_month, by_day, sources, engines, staff = {}, {}, {}, {}, {}, {}, {}, {}
     reply_queue = {s: 0 for s in REPLY_STATUSES}
-    ratings, unreplied, sla, flagged = [], 0, 0, 0
+    ratings, unreplied, sla, flagged, severe = [], 0, 0, 0, 0
     answerable = answered = 0
     reply_days = []
     for r in rows:
@@ -569,6 +579,13 @@ def _aggregate(rows: list, today: str) -> dict:
         unreplied += nr
         sla += _sla_breached(r, today)
         flagged += 1 if r.get("flag") else 0
+        severe += 1 if r.get("severity") == "high" else 0
+        for nm in (json.loads(r.get("staff") or "[]") if isinstance(r.get("staff"), str) else (r.get("staff") or [])):
+            st = staff.setdefault(nm, {"name": nm, "n": 0, "pos": 0, "neg": 0, "branches": {}, "examples": []})
+            st["n"] += 1; st["pos"] += (s == "pos"); st["neg"] += (s == "neg")
+            st["branches"][r["branch_name"] or "-"] = st["branches"].get(r["branch_name"] or "-", 0) + 1
+            if len(st["examples"]) < 2:
+                st["examples"].append({"id": r["id"], "text": (r["text"] or "")[:120], "sentiment": s})
         if r["reply_status"] in reply_queue:
             reply_queue[r["reply_status"]] += 1
         # the answer rate: fetched negative / ≤3★ voices the branch could answer, and did
@@ -613,10 +630,14 @@ def _aggregate(rows: list, today: str) -> dict:
         d["neg_pct"] = round(d["neg"] / d["n"] * 100, 1) if d["n"] else 0.0
         d["branches"] = [k for k, _ in sorted(d["branches"].items(), key=lambda kv: -kv[1])[:3]]
     reply_days.sort()
+    for st in staff.values():
+        st["branch"] = max(st["branches"].items(), key=lambda kv: kv[1])[0] if st["branches"] else ""
+        del st["branches"]
     return {
         "total": total, "avg_rating": round(sum(ratings) / len(ratings), 2) if ratings else None,
         "sentiment": sent, "neg_pct": round(sent["neg"] / total * 100, 1) if total else 0.0,
-        "unreplied": unreplied, "sla_breached": sla, "flagged": flagged, "reply_queue": reply_queue,
+        "unreplied": unreplied, "sla_breached": sla, "flagged": flagged, "severe": severe, "reply_queue": reply_queue,
+        "staff": sorted(staff.values(), key=lambda d: (-d["n"], d["name"]))[:12],
         "response": {"answerable": answerable, "answered": answered,
                      "rate": round(answered / answerable * 100) if answerable else None,
                      "median_days": reply_days[len(reply_days) // 2] if reply_days else None},
@@ -676,7 +697,7 @@ def feedback_items(request: Request, branch: Optional[str] = Query(None), month_
                    needs_reply: int = Query(0), flagged: int = Query(0), sla: int = Query(0),
                    sort: str = Query("newest"), limit: int = Query(200, ge=1, le=2000)):
     """sort: newest (default) · oldest · worst (lowest stars first) · priority
-    (unanswered first, SLA breaches before the rest, then the worst, then the oldest)."""
+    (unanswered first, then pinned / severe, then SLA breaches, then the worst, then the oldest)."""
     if kind and kind not in KINDS:
         raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
     if sort not in ("newest", "oldest", "worst", "priority"):
@@ -691,7 +712,9 @@ def feedback_items(request: Request, branch: Optional[str] = Query(None), month_
         rows = con.execute(
             f"SELECT {_ROW_COLS}, uploaded_at, reply_draft "
             f"FROM customer_feedback WHERE {where} ORDER BY rated_at DESC, id DESC LIMIT ?", params + [limit]).fetchall()
-    items = [{**dict(r), "themes": json.loads(r["themes"] or "[]"), "menus": json.loads(r["menus"] or "[]")} for r in rows]
+    items = [{**dict(r), "themes": json.loads(r["themes"] or "[]"), "menus": json.loads(r["menus"] or "[]"),
+              "staff": json.loads(r["staff"] or "[]") if "staff" in r.keys() else [], "severity": (r["severity"] if "severity" in r.keys() else None) or "low"}
+             for r in rows]
     for it in items:
         it["kind"] = it.get("kind") or "review"
         it["flag"] = bool(it.get("flag"))
@@ -707,7 +730,7 @@ def feedback_items(request: Request, branch: Optional[str] = Query(None), month_
     elif sort == "worst":
         items.sort(key=lambda it: (it["rating"] if it["rating"] is not None else 6, -(it["age_days"] or 0)))
     elif sort == "priority":
-        items.sort(key=lambda it: (not it["needs_reply"], not it["sla_breached"], not it["flag"],
+        items.sort(key=lambda it: (not it["needs_reply"], not (it["flag"] or it.get("severity") == "high"), not it["sla_breached"],
                                    it["rating"] if it["rating"] is not None else 6, -(it["age_days"] or 0)))
     return {"items": items, "today": today}
 
