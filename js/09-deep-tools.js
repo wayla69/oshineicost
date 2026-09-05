@@ -2182,6 +2182,38 @@ async function loadMobileSummary(force) {
     (br || 'ทุกสาขา') + ' · ' + (m.mtd ? `MTD ถึงวันที่ ${m.mtd_cutoff_day}` : 'เดือนล่าสุด') + ` (${(m.focus || '').slice(0, 7)})`;
   if (status) status.textContent = `${m.mom_basis === 'dow' ? 'เทียบเดือนก่อนถ่วงตามวันในสัปดาห์ (weekday-fair)' : 'เทียบเดือนก่อนแบบ MTD-fair'} · อัปเดต ${(m.focus || '').slice(0, 10)}`;
   msRenderActive();
+  msLoadVoice();
+}
+
+// ── the customer-voice queue on the phone (E4): what waits for an answer, the
+// branch's own when the login is scoped, else the selected branch / the chain ──
+async function msLoadVoice() {
+  const wrap = document.getElementById('msVoiceWrap'), box = document.getElementById('msVoice');
+  if (!wrap || !box) return;
+  if (window.AUTH && window.AUTH.enabled && !(window.AUTH.modules || []).includes('customer.feedback')) { wrap.style.display = 'none'; return; }
+  const p = new URLSearchParams({ needs_reply: '1', sort: 'priority', limit: '5' });
+  const br = (window.AUTH && window.AUTH.branch) || msBranch(); if (br) p.set('branch', br);
+  let d;
+  try { const r = await fetch(`${API}/api/feedback/items?${p}`); if (!r.ok) { wrap.style.display = 'none'; return; } d = await r.json(); }
+  catch (e) { wrap.style.display = 'none'; return; }
+  const items = d.items || [];
+  wrap.style.display = '';
+  document.getElementById('msVoiceCount').textContent = items.length ? `(${items.length}${items.length >= 5 ? '+' : ''})` : '';
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
+      <div style="font-size:11px;color:var(--text-muted,#64748b)">${esc(r.source)} · <b style="color:var(--text-primary,#1e293b)">${esc(r.branch_name || '')}</b>${r.rating != null ? ` · ${r.rating}★` : ''} · ${r.age_days === 0 ? 'วันนี้' : (r.age_days || 0) + ' วัน'}${r.sla_breached ? ' <span style="color:#dc2626;font-weight:600">เกิน SLA</span>' : ''}${r.contact ? ` · 📞 ${esc(r.contact)}` : ''}</div>
+      <div style="font-size:13px;margin:3px 0">${r.text ? esc(r.text.slice(0, 160)) : '<i style="color:var(--text-muted,#64748b)">(ให้ดาวอย่างเดียว)</i>'}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard(); switchTab('feedback')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">✍ ตอบในแอป</button></div>
+    </div>`).join('') : `<div style="font-size:12px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ 🎉</div>`;
+}
+async function msVoiceHandled(id) {
+  const note = prompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ) — เว้นว่างได้');
+  if (note === null) return;
+  try {
+    const r = await fetch(`${API}/api/feedback/${id}/handled`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ note }) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    msLoadVoice();
+  } catch (e) { alert('บันทึกไม่สำเร็จ: ' + e.message); }
 }
 
 // ── VIEW: สรุป ──

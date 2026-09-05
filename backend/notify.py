@@ -107,6 +107,10 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
     p = d.get("branches_praised") or []
     if p:
         lines.append("ชมมากสุด: " + " · ".join(f"{html.escape(b['branch'])} ★{b['avg_rating']:.2f} (n={b['n']})" for b in p))
+    rb = [x for x in (d.get("response_by_branch") or []) if (x.get("answerable") or 0) >= 2][:3]
+    if rb:
+        lines.append("ตอบช้าสุด: " + " · ".join(f"{html.escape(x['branch'])} {x.get('rate') or 0}% ({x.get('answered', 0)}/{x['answerable']}"
+                                              + (f", กลาง {x['median_days']} วัน" if x.get('median_days') is not None else "") + ")" for x in rb))
     sv = d.get("survey") or {}
     if sv.get("n"):
         lines.append(f"แบบสอบถาม QR: {sv['n']} คำตอบ{_arrow(sv['n'], sv.get('prev_n'))}"

@@ -37,6 +37,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+import auth as _auth
 from core import get_db, require_write_token
 from feedback_nlp import analyse, clean_menu_name, draft_reply
 from feedback_sources.google_gbp import parse_reviews_json, parse_takeout_zip
@@ -441,6 +442,11 @@ async def feedback_upload(request: Request, file: Optional[UploadFile] = File(No
         raise HTTPException(400, "ไม่พบข้อความรีวิว — วางข้อความบรรทัดละ 1 รีวิว หรือแนบไฟล์ CSV/XLSX/JSON/Takeout zip ที่มีรีวิว")
     if len(rows) > MAX_ROWS:
         raise HTTPException(400, f"ครั้งละไม่เกิน {MAX_ROWS:,} รีวิว")
+    scope = _scope(request)
+    if scope:                                  # a branch login can only feed its own branch
+        for r in rows:
+            r["branch"] = scope
+            r["detect_branch"] = False
     with get_db() as con:
         _ensure(con)
         out = insert_reviews(con, rows, by)
@@ -626,7 +632,7 @@ def _aggregate(rows: list, today: str) -> dict:
 
 
 @router.get("/api/feedback/summary")
-def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
+def feedback_summary(request: Request, branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
                      month_to: Optional[str] = Query(None), source: Optional[str] = Query(None),
                      kind: Optional[str] = Query(None)):
     """The window's numbers plus the same window right before it (`prev`), so
@@ -634,6 +640,7 @@ def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[s
     if kind and kind not in KINDS:
         raise HTTPException(400, f"kind must be one of {', '.join(KINDS)}")
     today = _thai_today()
+    branch = _scope(request) or branch
     pf, pt = _prev_range(month_from, month_to)
     with get_db() as con:
         _ensure(con)
@@ -662,7 +669,7 @@ def feedback_summary(branch: Optional[str] = Query(None), month_from: Optional[s
 
 
 @router.get("/api/feedback/items")
-def feedback_items(branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
+def feedback_items(request: Request, branch: Optional[str] = Query(None), month_from: Optional[str] = Query(None),
                    month_to: Optional[str] = Query(None), sentiment: Optional[str] = Query(None),
                    theme: Optional[str] = Query(None), menu: Optional[str] = Query(None),
                    source: Optional[str] = Query(None), kind: Optional[str] = Query(None),
@@ -675,6 +682,7 @@ def feedback_items(branch: Optional[str] = Query(None), month_from: Optional[str
     if sort not in ("newest", "oldest", "worst", "priority"):
         raise HTTPException(400, "sort must be newest, oldest, worst or priority")
     today = _thai_today()
+    branch = _scope(request) or branch
     with get_db() as con:
         _ensure(con)
         where, params = _where(branch, month_from, month_to, sentiment, theme, menu, source, kind)
@@ -711,7 +719,7 @@ async def feedback_handled(fid: int, request: Request):
     b = await request.json()
     with get_db() as con:
         _ensure(con)
-        _get_row(con, fid)
+        _get_row(con, fid, request)
         note = str(b.get("note") or "").strip()[:2000] or "(ตอบแล้วนอกระบบ)"
         con.execute("UPDATE customer_feedback SET reply_status='sent', reply_text=COALESCE(NULLIF(reply_text,''), ?), "
                     "replied_at=COALESCE(replied_at, ?), reply_requested_by=?, reply_error=NULL, updated_at=? WHERE id=?",
@@ -728,7 +736,7 @@ async def feedback_flag(fid: int, request: Request):
     on = bool(b.get("flag", True))
     with get_db() as con:
         _ensure(con)
-        _get_row(con, fid)
+        _get_row(con, fid, request)
         con.execute("UPDATE customer_feedback SET flag=?, flag_note=?, updated_at=? WHERE id=?",
                     (1 if on else 0, (str(b.get("note") or "").strip()[:500] or None) if on else None, _thai_now(), fid))
         con.commit()
@@ -775,11 +783,25 @@ def feedback_sources():
 
 
 # ── the reply queue ──────────────────────────────────────────────────────────
-def _get_row(con, fid: int) -> dict:
+def _get_row(con, fid: int, request: Request = None) -> dict:
     r = con.execute("SELECT * FROM customer_feedback WHERE id=?", (fid,)).fetchone()
     if not r:
         raise HTTPException(404, "not found")
-    return dict(r)
+    row = dict(r)
+    if request is not None:
+        _guard(request, row)
+    return row
+
+
+def _scope(request: Request):
+    """The branch this login is confined to (E4), or None."""
+    return _auth.scope_branch(request) if request is not None else None
+
+
+def _guard(request: Request, row: dict):
+    b = _scope(request)
+    if b and (row.get("branch_name") or "") != b:
+        raise HTTPException(403, "รายการนี้อยู่นอกสาขาของคุณ")
 
 
 @router.get("/api/feedback/reply-queue")
@@ -828,12 +850,12 @@ async def feedback_reply_result(request: Request):
 
 
 @router.get("/api/feedback/{fid}/reply-draft")
-def feedback_reply_draft(fid: int):
+def feedback_reply_draft(fid: int, request: Request):
     """A suggested reply for the branch to edit: Claude when ANTHROPIC_API_KEY is
     set, the Thai template otherwise. Also says where the reply can be sent."""
     with get_db() as con:
         _ensure(con)
-        row = _get_row(con, fid)
+        row = _get_row(con, fid, request)
     if row.get("reply_status") in ("pending", "manual", "failed") and row.get("reply_draft"):
         draft, engine = row["reply_draft"], "saved"
     else:
@@ -857,7 +879,7 @@ async def feedback_reply(fid: int, request: Request):
         raise HTTPException(400, "ใส่ข้อความตอบกลับก่อน")
     with get_db() as con:
         _ensure(con)
-        row = _get_row(con, fid)
+        row = _get_row(con, fid, request)
         ch = _reply_channel(row)
         if ch == "none":
             raise HTTPException(400, "รีวิวนี้ไม่ได้มาจากช่องทางที่ระบบตอบกลับได้ (ไม่มี review id)")
@@ -993,10 +1015,10 @@ def feedback_oauth_callback(code: str = Query(""), state: str = Query(""), error
 
 
 @router.delete("/api/feedback/{fid}/reply", dependencies=[Depends(require_write_token)])
-def feedback_reply_cancel(fid: int):
+def feedback_reply_cancel(fid: int, request: Request):
     with get_db() as con:
         _ensure(con)
-        row = _get_row(con, fid)
+        row = _get_row(con, fid, request)
         if row.get("reply_status") == "sent":
             raise HTTPException(400, "ส่งไปแล้ว — ยกเลิกไม่ได้")
         con.execute("UPDATE customer_feedback SET reply_status=NULL, reply_draft=NULL, reply_error=NULL, "
@@ -1028,9 +1050,10 @@ async def feedback_sync_log(request: Request):
 
 
 @router.delete("/api/feedback/{fid}", dependencies=[Depends(require_write_token)])
-def feedback_delete(fid: int):
+def feedback_delete(fid: int, request: Request):
     with get_db() as con:
         _ensure(con)
+        _get_row(con, fid, request)
         n = con.execute("DELETE FROM customer_feedback WHERE id=?", (fid,)).rowcount
         con.commit()
     if not n:

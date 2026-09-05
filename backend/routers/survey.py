@@ -27,6 +27,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
+import auth as _auth
 from core import get_db, require_write_token
 from routers.feedback import _ensure as _ensure_feedback, _thai_today, insert_reviews
 
@@ -308,10 +309,13 @@ def _links_table(con, base: str) -> list:
 
 @router.get("/api/feedback/survey-links")
 def survey_links(request: Request):
+    scope = _auth.scope_branch(request)
     with get_db() as con:
         _ensure(con)
-        return {"links": _links_table(con, _base_url(request)), "aspects": [k for k, _ in ASPECTS],
-                "contact_days": CONTACT_DAYS}
+        links = _links_table(con, _base_url(request))
+        if scope:
+            links = [x for x in links if x["branch"] == scope]
+        return {"links": links, "aspects": [k for k, _ in ASPECTS], "contact_days": CONTACT_DAYS}
 
 
 @router.post("/api/feedback/survey-links", dependencies=[Depends(require_write_token)])
@@ -319,7 +323,10 @@ async def survey_link_save(request: Request):
     """{branch_id, google_review_url?, active?, by?} — creates the branch's code
     on first call; later calls update the url / the switch."""
     body = await request.json()
+    scope = _auth.scope_branch(request)
     if body.get("all"):                      # every active branch without a code gets one
+        if scope:
+            raise HTTPException(403, "สร้างได้เฉพาะสาขาของคุณ")
         with get_db() as con:
             _ensure(con)
             have = {r[0] for r in con.execute("SELECT branch_id FROM feedback_survey_link")}
@@ -344,6 +351,8 @@ async def survey_link_save(request: Request):
         b = con.execute("SELECT branch_id, name FROM branches WHERE branch_id=?", (bid,)).fetchone()
         if not b:
             raise HTTPException(404, "ไม่พบสาขา")
+        if scope and b["name"] != scope:
+            raise HTTPException(403, "สาขานี้อยู่นอกสิทธิ์ของคุณ")
         row = con.execute("SELECT * FROM feedback_survey_link WHERE branch_id=?", (bid,)).fetchone()
         if row is None:
             code = _new_code()

@@ -19,6 +19,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
+import auth as _auth
 from core import get_db, require_write_token
 from routers.checklist import _who
 from routers.feedback import _ROW_COLS, _aggregate, _ensure as _ensure_feedback, _thai_now, _thai_today
@@ -159,9 +160,10 @@ def _list(con, today: str, status=None, branch=None, theme=None) -> list:
 
 
 @router.get("/api/feedback/actions")
-def feedback_actions(status: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+def feedback_actions(request: Request, status: Optional[str] = Query(None), branch: Optional[str] = Query(None),
                      theme: Optional[str] = Query(None)):
     today = _today()
+    branch = _auth.scope_branch(request) or branch
     with get_db() as con:
         _ensure(con)
         items = _list(con, today, status, branch, theme)
@@ -185,6 +187,7 @@ async def feedback_action_create(request: Request):
     branch = str(body.get("branch") or "").strip()[:80] or None
     if branch == NO_BRANCH:                  # the tab's placeholder for voices without a branch
         branch = None
+    branch = _auth.scope_branch(request) or branch
     theme = str(body.get("theme") or "").strip()[:80] or None
     today = _today()
     with get_db() as con:
@@ -211,6 +214,9 @@ async def feedback_action_update(aid: int, request: Request):
         row = con.execute("SELECT * FROM feedback_action WHERE id=?", (aid,)).fetchone()
         if not row:
             raise HTTPException(404, "ไม่พบงาน")
+        scope = _auth.scope_branch(request)
+        if scope and (row["branch_name"] or "") != scope:
+            raise HTTPException(403, "งานนี้อยู่นอกสาขาของคุณ")
         sets, vals = ["updated_at=?"], [_thai_now()]
         for k in ("title", "detail", "owner", "due", "note"):
             if k in body:
@@ -280,6 +286,17 @@ def compute_digest(con, days: int = 7, today: str = None, branch: str = None, gr
              for b in sorted(eligible, key=lambda b: (-b["neg_pct"], -b["neg"])) if b["neg"]][:3]
     praised = [{"branch": b["branch"], "n": b["n"], "avg_rating": b["avg_rating"]}
                for b in sorted([b for b in eligible if b["avg_rating"] is not None], key=lambda b: -b["avg_rating"])][:3]
+    # who answers how fast: per branch, the answerable voices of the window and the median days to the answer
+    by_branch = {}
+    for r in _rows_between(con, start, end, branch, names):
+        by_branch.setdefault(r.get("branch_name") or "", []).append(r)
+    response_by_branch = []
+    for bname, rs in by_branch.items():
+        resp = _aggregate(rs, today)["response"]
+        if bname and resp.get("answerable"):
+            response_by_branch.append({"branch": bname, "answerable": resp["answerable"], "answered": resp["answered"],
+                                       "rate": resp["rate"], "median_days": resp.get("median_days")})
+    response_by_branch.sort(key=lambda x: ((x["rate"] or 0), -(x["median_days"] or 0), x["branch"]))
     survey_rows = [r for r in _rows_between(con, start, end, branch, names) if (r.get("kind") or "review") == "survey"]
     survey_rated = [r["rating"] for r in survey_rows if r.get("rating") is not None]
     survey_prev = sum(1 for r in _rows_between(con, prev_start, prev_end, branch, names) if (r.get("kind") or "review") == "survey")
@@ -313,15 +330,19 @@ def compute_digest(con, days: int = 7, today: str = None, branch: str = None, gr
             "response": cur["response"], "prev_response_rate": prev["response"]["rate"],
             "unreplied": now["unreplied"], "sla_breached": now["sla_breached"], "flagged": now["flagged"],
             "themes": themes, "branches_watch": watch, "branches_praised": praised,
+            "response_by_branch": response_by_branch[:8],
             "survey": {"n": len(survey_rows), "prev_n": survey_prev,
                        "avg_rating": round(sum(survey_rated) / len(survey_rated), 2) if survey_rated else None},
             "actions": a_out}
 
 
 @router.get("/api/feedback/digest")
-def feedback_digest(days: int = Query(7, ge=1, le=92), branch: Optional[str] = Query(None),
+def feedback_digest(request: Request, days: int = Query(7, ge=1, le=92), branch: Optional[str] = Query(None),
                     group: Optional[str] = Query(None), today: Optional[str] = Query(None)):
     """`today` pins the window (YYYY-MM-DD) — for reproducible reads; default = the Thai calendar day."""
+    scope = _auth.scope_branch(request)
+    if scope:
+        branch, group = scope, None
     with get_db() as con:
         out = compute_digest(con, days=days, branch=branch, group=group, today=(today or "")[:10] or None)
         con.commit()
