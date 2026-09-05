@@ -11,9 +11,9 @@
    Data: /api/feedback/summary (+prev), /api/feedback/items, /api/feedback/sources.
    Follows the global branch + month range; a branch clicked here narrows further.
    ═══════════════════════════════════════════════════════════════════ */
-const _FB_KINDS = [['', 'ทั้งหมด'], ['review', 'รีวิว'], ['comment', 'คอมเมนต์'], ['mention', 'การพูดถึง'], ['message', 'ข้อความ Inbox']];
+const _FB_KINDS = [['', 'ทั้งหมด'], ['review', 'รีวิว'], ['comment', 'คอมเมนต์'], ['mention', 'การพูดถึง'], ['message', 'ข้อความ Inbox'], ['survey', 'แบบสอบถาม']];
 const _FB_QUEUE = [['open', 'ต้องตอบ'], ['sla', 'เกิน SLA'], ['flag', '🚩 ปักหมุด'], ['neg', 'เชิงลบทั้งหมด']];
-const _FB_KIND_LABEL = { review: 'รีวิว', comment: 'คอมเมนต์', mention: 'พูดถึง', message: 'Inbox' };
+const _FB_KIND_LABEL = { review: 'รีวิว', comment: 'คอมเมนต์', mention: 'พูดถึง', message: 'Inbox', survey: 'แบบสอบถาม' };
 let _fbKind = '', _fbBranchLocal = '', _fbQueueFilter = 'open', _fbTheme = '', _fbSummary = null, _fbBranchSort = 'neg_pct', _fbItemFilter = {};
 
 function _fbEsc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -210,7 +210,7 @@ async function loadFeedbackQueue() {
   if (!items.length) { host.innerHTML = `<p class="text-xs py-3" style="color:var(--text-muted)">${{ open: 'ไม่มีรายการรอตอบ 🎉', sla: 'ไม่มีรายการเกิน SLA', flag: 'ไม่มีรายการปักหมุด', neg: 'ไม่มีเสียงลบในช่วงนี้' }[_fbQueueFilter]}</p>`; return; }
   host.innerHTML = items.map(r => `<div class="fb-queue-item${r.flag ? ' hot' : ''}" id="fbq-${r.id}">
       <div>
-        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}</div>
+        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}${r.contact ? `<span class="fb-tag flag" title="ลูกค้าฝากช่องทางติดต่อกลับ">📞 ${_fbEsc(r.contact)}</span>` : ''}</div>
         <div class="txt">${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}</div>
         <div class="mt-1">${(r.themes || []).map(t => `<span class="fb-tag neg">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="fb-tag menu">${_fbEsc(m)}</span> `).join('')}${r.reply_text ? `<div class="text-[11px] mt-0.5" style="color:#047857">↳ ${_fbEsc(r.reply_text.slice(0, 120))}</div>` : ''}</div>
       </div>
@@ -367,4 +367,34 @@ async function cancelFeedbackReply(id) {
     if (r.detail) throw new Error(r.detail);
     loadFeedback(true);
   } catch (e) { alert('ไม่สำเร็จ: ' + e.message); }
+}
+
+/* ── the chain's own channel: a QR survey per branch (routers/survey.py) ── */
+async function loadSurveyLinks() {
+  const el = document.getElementById('fbSurveyLinks');
+  if (!el) return;
+  let d;
+  try { d = await api(`${API}/api/feedback/survey-links`); } catch (e) { el.textContent = 'โหลดไม่สำเร็จ'; return; }
+  const links = d.links || [], made = links.filter(l => l.code).length;
+  document.getElementById('fbSurveyDays').textContent = d.contact_days;
+  document.getElementById('fbSurveyHint').textContent = made ? `· ${made}/${links.length} สาขามีลิงก์แล้ว` : '· ยังไม่มีสาขาใดสร้างลิงก์';
+  const sm = 'padding:0 .4rem;font-size:10px';
+  el.innerHTML = (made < links.length ? `<div class="mb-2"><button class="fb-btn" onclick="createSurveyLinksAll()">สร้างลิงก์ให้ทุกสาขาที่ยังไม่มี (${links.length - made})</button></div>` : '') + `<table class="fb-t"><thead><tr><th>สาขา</th><th>ลิงก์ (รหัส 8 ตัว)</th><th style="text-align:right">สแกน</th><th style="text-align:right">ตอบ</th><th style="text-align:right">30 วันล่าสุด</th><th>ลิงก์รีวิว Google</th><th></th></tr></thead><tbody>` +
+    links.map(l => `<tr${l.code && !l.active ? ' style="opacity:.55"' : ''}><td>${_fbEsc(l.branch)}</td>
+      <td>${l.code ? `<code>${_fbEsc(l.code)}</code> <button class="fb-ghost" style="${sm}" onclick="fbCopy(this, ${JSON.stringify(l.url).replace(/"/g, '&quot;')})">คัดลอกลิงก์</button> <a class="fb-ghost" style="${sm}" href="${_fbEsc(l.print_url)}" target="_blank" rel="noopener">โปสเตอร์ ↗</a>${l.active ? '' : ' <span class="fb-tag">ปิดใช้</span>'}` : `<button class="fb-ghost" style="${sm}" onclick="createSurveyLink(${l.branch_id})">สร้างลิงก์</button>`}</td>
+      <td style="text-align:right">${l.scans || 0}</td><td style="text-align:right">${l.responses || 0}</td>
+      <td style="text-align:right">${l.n30 ? `${l.n30} · ${l.avg30 != null ? l.avg30.toFixed(2) + '★' : ''}${l.neg30 ? ` · <span style="color:#b91c1c">ลบ ${l.neg30}</span>` : ''}` : '—'}</td>
+      <td>${l.code ? `<input id="fbGurl-${l.branch_id}" value="${_fbEsc(l.google_review_url)}" placeholder="https://g.page/r/…/review" class="rounded border px-1 text-[11px]" style="width:210px;border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"> <button class="fb-ghost" style="${sm}" onclick="saveSurveyUrl(${l.branch_id})">บันทึก</button>` : ''}</td>
+      <td>${l.code ? `<button class="fb-ghost" style="${sm}" onclick="toggleSurveyLink(${l.branch_id}, ${l.active ? 'false' : 'true'})">${l.active ? 'ปิดใช้' : 'เปิดใช้'}</button>` : ''}</td></tr>`).join('') + '</tbody></table>';
+}
+async function _fbSurveySave(body) {
+  try { await _fbPost('/api/feedback/survey-links', body); loadSurveyLinks(); }
+  catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
+}
+function createSurveyLink(bid) { _fbSurveySave({ branch_id: bid }); }
+function createSurveyLinksAll() { _fbSurveySave({ all: true }); }
+function saveSurveyUrl(bid) { _fbSurveySave({ branch_id: bid, google_review_url: (document.getElementById('fbGurl-' + bid) || {}).value || '' }); }
+function toggleSurveyLink(bid, on) {
+  if (!on && !confirm('ปิดลิงก์นี้? QR ที่พิมพ์ไว้จะใช้ไม่ได้จนกว่าจะเปิดใหม่')) return;
+  _fbSurveySave({ branch_id: bid, active: on });
 }

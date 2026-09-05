@@ -99,10 +99,12 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                # mention = anywhere else (X, YouTube, news, blogs) — no rating, no reply channel
                ("kind", "TEXT"),
                # flag = a serious case pinned by a manager (food safety, fraud…) with the reason
-               ("flag", "INTEGER DEFAULT 0"), ("flag_note", "TEXT"))
+               ("flag", "INTEGER DEFAULT 0"), ("flag_note", "TEXT"),
+               # contact = a QR-survey guest's phone / LINE id for the call back (blanked after survey.CONTACT_DAYS)
+               ("contact", "TEXT"))
 SLA_DAYS = 1                # a negative voice waits at most this long for the branch's answer
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
-KINDS = ("review", "comment", "mention", "message")   # message = a private inbox conversation (Messenger / IG DM), per day
+KINDS = ("review", "comment", "mention", "message", "survey")   # message = a private inbox conversation (Messenger / IG DM), per day; survey = the QR form (routers/survey.py)
 REPLY_MAX = {"google": 4096, "facebook": 8000, "tiktok": 150, "instagram": 2200}   # characters the platform accepts; others 4000
 
 # header names the CSV/TSV/XLSX/JSON import understands (lower-cased, Thai or English)
@@ -383,15 +385,17 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
         sent = a["sentiment"]
         if r.get("sentiment_hint") and sent == "neu":
             sent = r["sentiment_hint"]
+        themes = list(a["themes"]) + [t for t in (r.get("themes_extra") or []) if t not in a["themes"]]   # a survey's tapped aspects
         vals = (bid, bname, r.get("source") or "", r.get("date") or "", r.get("rating"), r["text"], sent, a["score"],
-                json.dumps(a["themes"], ensure_ascii=False), json.dumps(a["menus"], ensure_ascii=False), engine,
+                json.dumps(themes, ensure_ascii=False), json.dumps(a["menus"], ensure_ascii=False), engine,
                 r.get("external_id"), r.get("url") or None, r.get("author") or None, r.get("reply") or None,
-                r.get("replied_at") or None, r.get("location") or None, r.get("ref") or None, r.get("kind") or "review")
+                r.get("replied_at") or None, r.get("location") or None, r.get("ref") or None, r.get("kind") or "review",
+                r.get("contact") or None)
         if kind == "new":
             cur = con.execute(
                 "INSERT OR IGNORE INTO customer_feedback(branch_id, branch_name, source, rated_at, rating, text, "
                 "sentiment, score, themes, menus, analysed_by, external_id, url, author_hash, reply_text, replied_at, "
-                "location, external_ref, kind, uploaded_by, fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "location, external_ref, kind, contact, uploaded_by, fingerprint) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 vals + (by or "", fp))
             if cur.rowcount and cur.rowcount > 0:
                 inserted += 1
@@ -404,7 +408,7 @@ def insert_reviews(con, rows: list, by: str = "", today: str = None) -> dict:
             con.execute(
                 "UPDATE customer_feedback SET branch_id=?, branch_name=?, source=?, rated_at=?, rating=?, text=?, "
                 "sentiment=?, score=?, themes=?, menus=?, analysed_by=?, external_id=?, url=?, author_hash=?, "
-                "reply_text=?, replied_at=?, location=?, external_ref=COALESCE(?, external_ref), kind=?, updated_at=?, "
+                "reply_text=?, replied_at=?, location=?, external_ref=COALESCE(?, external_ref), kind=?, contact=COALESCE(?, contact), updated_at=?, "
                 "reply_status=CASE WHEN ?!='' AND reply_status='pending' THEN 'sent' ELSE reply_status END WHERE id=?",
                 vals + (now, r.get("reply") or "", existing[fp]["id"]))
             updated += 1
@@ -469,7 +473,9 @@ def _needs_reply(r) -> bool:
     """A fetched review or comment (has an external id) that is negative or
     ≤3★, the branch has not answered and no reply is queued — the list to work
     through. Mentions elsewhere on the web are read, not answered."""
-    return bool(r.get("external_id")) and (r.get("kind") or "review") in ("review", "comment", "message") and \
+    kind = r.get("kind") or "review"
+    answerable = bool(r.get("contact")) if kind == "survey" else kind in ("review", "comment", "message")
+    return bool(r.get("external_id")) and answerable and \
         not (r.get("reply_text") or "") and r.get("reply_status") not in ("pending", "sent") and \
         (r.get("sentiment") == "neg" or (r.get("rating") is not None and float(r["rating"]) <= 3))
 
@@ -495,7 +501,7 @@ def _reply_channel(row) -> str:
 
 
 _ROW_COLS = ("id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
-             "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location")
+             "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location, contact")
 
 
 def _age_days(rated_at: str, today: str):
@@ -536,7 +542,7 @@ def _brief(r, today: str) -> dict:
             "replied": bool(r["reply_text"]), "needs_reply": _needs_reply(r), "kind": r["kind"] or "review",
             "external_id": r["external_id"], "reply_status": r["reply_status"], "reply_error": r["reply_error"],
             "flag": bool(r.get("flag")), "flag_note": r.get("flag_note") or "", "age_days": _age_days(r["rated_at"], today),
-            "sla_breached": _sla_breached(r, today), "location": r.get("location") or ""}
+            "sla_breached": _sla_breached(r, today), "location": r.get("location") or "", "contact": r.get("contact") or ""}
 
 
 def _aggregate(rows: list, today: str) -> dict:
@@ -876,6 +882,9 @@ def _reply_note(ch: str, row: dict) -> str:
     if ch == "instagram":
         return "โพสต์ตอบใต้คอมเมนต์ Instagram ในรอบดึงถัดไป (09:00)"
     if ch == "manual":
+        if (row.get("kind") or "review") == "survey":
+            return (f"แบบสอบถามหน้าร้าน — ลูกค้าฝากช่องทางติดต่อไว้: {row.get('contact') or '-'} "
+                    "โทรหรือทัก LINE กลับด้วยข้อความนี้ แล้วกด ✓ ตอบแล้ว ในกล่องงาน (ระบบไม่ส่งข้อความแทน)")
         if (row.get("kind") or "review") == "message":
             return "ข้อความส่วนตัวจาก Inbox — ระบบไม่ส่งแทน บันทึกร่างไว้แล้วไปตอบในกล่องข้อความของ Meta Business Suite (เปิดลิงก์ ↗)"
         if (row.get("kind") or "review") == "mention":

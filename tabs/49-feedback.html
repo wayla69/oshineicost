@@ -125,6 +125,13 @@
     </div>
   </details>
 
+  <details class="card p-4 mt-4" id="fbSurvey" ontoggle="if(this.open) loadSurveyLinks()">
+    <summary class="text-sm font-semibold cursor-pointer">📱 QR แบบสอบถามหน้าร้าน — ช่องทางของเราเอง <span id="fbSurveyHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></summary>
+    <p class="text-xs mt-2" style="color:var(--text-secondary)">ลูกค้าสแกน QR ที่โต๊ะหรือใบเสร็จแล้วตอบใน 20 วินาที (หน้า 1–5 · เรื่องที่พูดถึง · ข้อความ · ช่องทางติดต่อกลับถ้าต้องการ) คำตอบเข้าหน้านี้เป็นประเภท "แบบสอบถาม" — คำตอบเชิงลบที่ฝากเบอร์ไว้ขึ้นในกล่องงานให้สาขาโทรกลับ · คะแนน 4–5 จะเห็นปุ่มชวนรีวิวบน Google เมื่อใส่ลิงก์รีวิวของสาขา</p>
+    <div id="fbSurveyLinks" class="mt-2 text-xs">กำลังโหลด…</div>
+    <p class="text-[11px] mt-2" style="color:var(--text-muted)">ลิงก์รีวิว Google ของสาขา: Google Business Profile → "ขอรีวิว" → คัดลอกลิงก์ (รูปแบบ https://g.page/r/…/review) · ข้อมูลติดต่อของลูกค้าถูกลบอัตโนมัติหลัง <span id="fbSurveyDays">90</span> วัน · โปสเตอร์เปิดในแท็บใหม่ กดพิมพ์ A5</p>
+  </details>
+
   <div class="card p-4 mt-4">
     <div class="flex items-center justify-between flex-wrap gap-2">
       <h3 class="text-sm font-semibold">แหล่งข้อมูล &amp; การดึงอัตโนมัติ</h3>
