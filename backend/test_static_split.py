@@ -1,11 +1,13 @@
-"""P2 structure refactor: the SPA JS is split into 9 sequential slices under
-/js/ (shared global scope — index.html must load 01→09 in order). /app.js
+"""P2 structure refactor: the SPA JS is split into sequential slices under
+/js/ (shared global scope — index.html must load them in name order; the
+09-deep-tools slice became 09/09b/09c/09d/09e on 2026-09-05). /app.js
 stays as a back-compat concatenation for stale cached shells. Everything is
 served no-cache so deploys can never leave stale JS in browser caches."""
 
 _SLICES = ["01-core.js", "02-mgt-report.js", "03-tabs-main.js", "04-report-cost.js",
            "05-pnl-settings.js", "06-features.js", "07-home.js", "08-guest-buffet.js",
-           "09-deep-tools.js"]
+           "09-analysis-tabs.js", "09b-cost-pnl.js", "09c-mobile.js", "09d-bom-tools.js",
+           "09e-menu-compare-bom.js", "10-ordering.js", "11-feedback.js", "12-checklist.js"]
 
 
 def test_root_references_all_slices_in_order_with_hashes(client):
@@ -19,7 +21,7 @@ def test_root_references_all_slices_in_order_with_hashes(client):
         m = re.search(rf'<script src="/js/{re.escape(s)}\?v=[0-9a-f]{{8}}"></script>', html)
         assert m, f"shell must reference {s} with a content hash"
         pos.append(m.start())
-    assert pos == sorted(pos), "slices must load in 01→09 order (shared global scope)"
+    assert pos == sorted(pos), "slices must load in name order (shared global scope)"
     # the application code itself must not be inlined in the shell
     assert "function switchTab" not in html
 
