@@ -51,6 +51,16 @@ for %%F in ("backend\.env" "backend\.seed_tokens.txt" "backend\.manager_token.tx
 )
 echo       secrets copied to "%OUT%\secrets"
 
+REM The tables that live ONLY on Fly (users, customer voices, survey links, actions,
+REM competitor snapshots, checklist ticks, recon uploads) never reach this PC:
+REM pull them through the token-gated export and restore-test the file (AUD-2, part 3).
+"%PY%" -u backend\pull_fly_state.py pull --out "%OUT%" --stamp %STAMP% --keep 14
+if errorlevel 1 (
+    echo *** FLY STATE PULL FAILED - the Fly-only tables were NOT backed up today ***
+) else (
+    "%PY%" -u backend\pull_fly_state.py verify --file "%OUT%\fly_state_%STAMP%.ndjson.gz"
+)
+
 echo.
 echo [2/2] restore test of the file just written
 "%PY%" -u backend\db_backup.py verify --backup "%OUT%\oshinei_%STAMP%.db.gz"
