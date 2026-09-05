@@ -17,6 +17,7 @@ A star-only review has no `comment`; it is still kept (the rating is the
 feedback) with an empty text.
 """
 import datetime
+import email.utils
 import hashlib
 import io
 import json
@@ -51,14 +52,23 @@ def urllib_http(method, url, headers=None, body=None, timeout=60):
     req = urllib.request.Request(url, method=method, data=data, headers=headers or {})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            raw = r.read()
-            return r.status, (json.loads(raw.decode("utf-8")) if raw.strip() else {})
+            return r.status, _parse_body(r.read())
     except urllib.error.HTTPError as e:
         raw = e.read()
         try:
             return e.code, json.loads(raw.decode("utf-8"))
         except Exception:
             return e.code, {"error": raw.decode("utf-8", errors="replace")[:500]}
+
+
+def _parse_body(raw: bytes):
+    """JSON when it is JSON, else the text — RSS/Atom feeds come through the same door."""
+    if not raw.strip():
+        return {}
+    try:
+        return json.loads(raw.decode("utf-8"))
+    except ValueError:
+        return raw.decode("utf-8", errors="replace")
 
 
 def _check(status, body, what):
@@ -71,16 +81,24 @@ def _check(status, body, what):
 
 # ── helpers shared with the Takeout path ─────────────────────────────────────
 def thai_date(iso) -> str:
-    """'2026-08-30T20:02:03.123Z' → '2026-08-31' (the day in Thailand, UTC+7)."""
-    s = (iso or "").strip()
+    """ISO 8601 ('2026-08-30T20:02:03.123Z', '+0000'), RFC 822 (RSS pubDate) or
+    unix seconds (TikTok) → the calendar day in Thailand (UTC+7), e.g. '2026-08-31'."""
+    if isinstance(iso, (int, float)) and not isinstance(iso, bool):
+        return datetime.datetime.fromtimestamp(float(iso), tz=datetime.timezone.utc).astimezone(_TH).strftime("%Y-%m-%d")
+    s = iso.strip() if isinstance(iso, str) else ""
     if not s:
         return ""
+    if s.isdigit():
+        return thai_date(int(s))
     if re.search(r"[+-]\d{4}$", s):            # Facebook writes +0000, not +00:00
         s = s[:-2] + ":" + s[-2:]
     try:
         dt = datetime.datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
-        return s[:10]
+        try:
+            dt = email.utils.parsedate_to_datetime(s)
+        except (TypeError, ValueError):
+            return s[:10]
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=datetime.timezone.utc)
     return dt.astimezone(_TH).strftime("%Y-%m-%d")

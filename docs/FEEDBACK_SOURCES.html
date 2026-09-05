@@ -33,9 +33,12 @@
 <tr><td><b>Google Business Profile</b> (Maps)</td><td>รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา</td><td>§1 (API — ครั้งเดียว) หรือ §2 (Takeout — ไม่ต้องตั้งค่า)</td><td>พร้อมใช้</td></tr>
 <tr><td><b>Facebook Page</b></td><td>Recommendations (แนะนำ/ไม่แนะนำ + ข้อความ) และคอมเมนต์ใต้โพสต์ของเพจ (เลือกได้)</td><td>§3</td><td>พร้อมใช้</td></tr>
 <tr><td>Grab · LINE MAN · foodpanda</td><td>รีวิวจาก merchant portal</td><td>ส่งออก/คัดลอกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ</td><td>อัปโหลดเอง</td></tr>
-<tr><td>TikTok</td><td>คอมเมนต์ใต้วิดีโอของร้าน</td><td>ต้องมีบัญชี TikTok Business + developer app (ยังไม่ทำ)</td><td>รอตัดสินใจ</td></tr>
-<tr><td>X (Twitter)</td><td>ทวีตที่พูดถึงร้าน</td><td>API เสียเงิน (~฿7,000/เดือน) — ไม่คุ้มสำหรับปริมาณที่มี</td><td>ข้าม</td></tr>
+<tr><td><b>TikTok</b></td><td>คอมเมนต์ใต้วิดีโอของร้าน (+ ตอบกลับ)</td><td>§10 (developer app ต้องผ่านการตรวจของ TikTok)</td><td>พร้อมใช้</td></tr>
+<tr><td><b>X (Twitter)</b></td><td>โพสต์สาธารณะที่พูดถึงร้าน (7 วันล่าสุด)</td><td>§11 — API Basic tier <b>เสียเงิน ~$200/เดือน</b></td><td>พร้อมใช้ (ต้องสมัคร)</td></tr>
+<tr><td><b>YouTube</b></td><td>วิดีโอที่พูดถึงร้าน + คอมเมนต์ใต้วิดีโอเหล่านั้น</td><td>§12 — API key ฟรี</td><td>พร้อมใช้</td></tr>
+<tr><td><b>ทั่วเว็บ</b> (ข่าว บล็อก เว็บบอร์ดที่ Google เก็บ)</td><td>การพูดถึงจาก Google News (ในตัว) และ Google Alerts</td><td>§12 — ไม่ต้องตั้งค่า / เพิ่มฟีด Alerts</td><td>พร้อมใช้</td></tr>
 </table>
+<p class="muted">ในแท็บ ปุ่มกรอง <b>ทั้งหมด / รีวิว / คอมเมนต์ / การพูดถึง</b> แยกสามประเภท: <b>รีวิว</b> = บนลิสติ้ง/เพจของร้านเอง · <b>คอมเมนต์</b> = ใต้โพสต์/วิดีโอของร้านเอง (และใต้วิดีโอ YouTube ที่พูดถึงร้าน) · <b>การพูดถึง</b> = ที่อื่นบนอินเทอร์เน็ต (X, YouTube, ข่าว, บล็อก) ซึ่งไม่มีคะแนนดาว และระบบไม่โพสต์ตอบแทน — สาขาถูกตรวจจับจากชื่อสาขาในข้อความ</p>
 
 <div class="ok">ตัวเลือกที่เร็วที่สุด: <b>§2 Google Takeout</b> — ดาวน์โหลดรีวิวทั้งหมดเป็น zip แล้วอัปโหลดในแท็บ ใช้ได้ทันทีระหว่างรอสิทธิ์ API</div>
 
@@ -147,11 +150,47 @@ OSHINEI_TG_CHAT_ID=-100xxxxxxxx</pre></li>
 <li>รีวิวที่สาขาตอบเองในแอป Google/Facebook จะถูกดึงกลับมาปิดคิวอัตโนมัติในรอบถัดไป</li>
 </ol>
 
-<h2>§9 ช่องทางอื่น</h2>
+<h2>§10 TikTok — คอมเมนต์ใต้วิดีโอของร้าน</h2>
+<ol>
+<li>บัญชี TikTok ของร้านต้องเป็น <b>Business account</b> (ตั้งค่า → บัญชี → สลับเป็นบัญชีธุรกิจ)</li>
+<li>เข้า <a href="https://developers.tiktok.com" target="_blank">developers.tiktok.com</a> ด้วยบัญชีนั้น → Manage apps → Create app → เพิ่ม product <b>Login Kit</b> และ <b>Business Account</b> (บางบัญชีชื่อ "Content Posting / Business Account API") → Scopes: <code>user.info.basic</code>, <code>video.list</code>, <code>comment.list</code>, <code>comment.list.manage</code> → Redirect URI ใส่ <code>https://oshinei-dashboard.fly.dev/api/feedback/oauth-callback</code> (ต้องเป็น https ที่ลงทะเบียน — localhost ใช้ไม่ได้) → Submit for review (TikTok ตรวจแอปก่อนเปิดสิทธิ์ ใช้เวลาหลายวันถึงหลายสัปดาห์)</li>
+<li>เมื่ออนุมัติ: จด <b>Client key</b> / <b>Client secret</b> ใส่ในไฟล์ config:
+<pre>"tiktok": { "client_key": "aw…", "client_secret": "…", "branch": "" }</pre>
+(ถ้าบัญชี TikTok เป็นของสาขาเดียว ใส่ชื่อสาขาใน <code>branch</code>; ถ้าเป็นบัญชีรวมของเครือ เว้นว่างไว้ ระบบจะจับชื่อสาขาจากข้อความคอมเมนต์)</li>
+<li>ขอสิทธิ์ครั้งเดียว: <code>py backend\fetch_feedback.py auth tiktok</code> → เปิดลิงก์ ล็อกอินบัญชีร้าน กดอนุญาต → เบราว์เซอร์มาที่หน้า callback ของแดชบอร์ด (ต้องล็อกอินแดชบอร์ดอยู่) แสดง code → คัดลอกมาวางในหน้าต่างคำสั่ง (token ถูกบันทึกและต่ออายุอัตโนมัติทุกรอบ)</li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py run --source tiktok --since all --dry-run</code></li>
+</ol>
+<div class="note">ระบบดึงได้เฉพาะคอมเมนต์ใต้วิดีโอ<b>ของบัญชีร้านเอง</b> — วิดีโอของคนอื่นที่พูดถึงร้านไม่มี API ทางการให้ (Research API ให้เฉพาะนักวิชาการ) การตอบคอมเมนต์ TikTok จำกัด 150 ตัวอักษร ชื่อ endpoint อิงตาม Business Account API v1.3 — ถ้าแอปที่ได้รับอนุมัติเป็นเวอร์ชันอื่น ค่าคงที่ทั้งหมดอยู่ตอนต้นไฟล์ <code>backend/feedback_sources/tiktok.py</code></div>
+
+<h2>§11 X (Twitter) — โพสต์ที่พูดถึงร้าน</h2>
+<ol>
+<li>เข้า <a href="https://developer.x.com" target="_blank">developer.x.com</a> → สมัคร <b>Basic</b> tier (ประมาณ $200/เดือน — ทีม Free อ่านค้นหาไม่ได้ ระบบจะรายงาน "search needs the Basic tier") → สร้าง Project + App → Keys and tokens → <b>Bearer Token</b></li>
+<li>ใส่ในไฟล์ config (คำค้นปรับได้):
+<pre>"x": { "bearer_token": "AAAA…", "keywords": ["โอชิเน", "oshinei"], "lang": "th" }</pre></li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py run --source x --since all --dry-run</code> — API ค้นย้อนหลังได้ 7 วัน การดึงทุกคืนจึงไม่พลาดโพสต์</li>
+</ol>
+<div class="note">คุ้มไหม: ทีมนี้อ่านได้ 10,000 โพสต์/เดือน สำหรับแบรนด์ร้านอาหารไทยปริมาณการพูดถึงบน X มักไม่กี่สิบโพสต์ต่อเดือน — ตัดสินใจจากงบ ถ้าไม่สมัคร ข้ามส่วนนี้ได้โดยไม่กระทบส่วนอื่น</div>
+
+<h2>§12 YouTube และการพูดถึงทั่วเว็บ (Google News / Google Alerts)</h2>
+<h3>12.1 YouTube (API key ฟรี)</h3>
+<ol>
+<li>ใน Google Cloud project เดียวกับ §1 → APIs &amp; Services → Library → เปิด <b>YouTube Data API v3</b> → Credentials → Create credentials → <b>API key</b> (จำกัดให้ใช้ได้เฉพาะ YouTube Data API)</li>
+<li>ใส่ในไฟล์ config:
+<pre>"youtube": { "api_key": "AIza…", "keywords": ["โอชิเน", "oshinei buffet"], "comments": true }</pre>
+<code>comments: true</code> = ดึงคอมเมนต์ยอดนิยมใต้วิดีโอที่พูดถึงร้านด้วย (เสียโควตาน้อยมาก: ค้นหา 100 หน่วย/คำ คอมเมนต์ 1 หน่วย/วิดีโอ จากโควตาฟรี 10,000/วัน)</li>
+</ol>
+<h3>12.2 Google News (ในตัว) และ Google Alerts</h3>
+<ol>
+<li>ไม่ต้องตั้งค่า: ระบบดึง Google News search ของคำค้น (<code>"web": {"keywords": [...]}</code>, ค่าเริ่มต้น โอชิเน / oshinei) ทุกคืนอยู่แล้วเมื่อมีส่วน <code>"web"</code> ในไฟล์ config (ใส่ <code>"web": {}</code> ก็พอ)</li>
+<li>Google Alerts ครอบคลุมบล็อก เว็บบอร์ด และหน้าเว็บที่ Google เก็บ (กว้างกว่าข่าว): เข้า <a href="https://www.google.com/alerts" target="_blank">google.com/alerts</a> → สร้าง alert คำว่า "โอชิเน" → Show options → <b>Deliver to: RSS feed</b> → คัดลอก URL ฟีด (ไอคอน RSS) → เพิ่มในไฟล์:
+<pre>"web": { "keywords": ["โอชิเน"], "feeds": [ { "url": "https://www.google.com/alerts/feeds/…", "name": "Google Alerts โอชิเน" } ] }</pre></li>
+<li>ฟีด RSS/Atom อื่นใส่เพิ่มในรายการเดียวกันได้ (เช่น ฟีดช่อง YouTube ของร้าน <code>https://www.youtube.com/feeds/videos.xml?channel_id=…</code>)</li>
+</ol>
+
+<h2>§13 ช่องทางอื่น</h2>
 <ul>
 <li><b>Grab / LINE MAN / foodpanda</b>: ไม่มี API สาธารณะ — คัดลอกรีวิวจาก merchant app/portal ลงไฟล์ CSV/XLSX (คอลัมน์ date, branch, source, rating, text) แล้วอัปโหลดในแท็บ สัปดาห์ละครั้งก็เพียงพอ</li>
-<li><b>TikTok</b>: ทำได้เฉพาะคอมเมนต์ใต้วิดีโอของบัญชี Business ของร้าน ผ่าน TikTok for Business API (ต้องสมัคร developer และรออนุมัติ) — แจ้งเมื่อพร้อมจะเพิ่ม connector ตัวที่สาม</li>
-<li><b>X และการพูดถึงทั่วอินเทอร์เน็ต</b> (Pantip, YouTube, TikTok ของคนอื่น): ใช้บริการ social listening ไทย (เช่น Wisesight, Mandala) แล้วนำเข้าไฟล์ส่งออกในแท็บ</li>
+<li><b>Pantip / Wongnai / TikTok ของคนอื่น / Instagram</b>: ไม่มี API สำหรับค้นหาการพูดถึง — Google Alerts (§12.2) เก็บกระทู้ Pantip และรีวิว Wongnai ที่ Google index ได้ส่วนหนึ่ง; ถ้าต้องการครบถ้วนใช้บริการ social listening ไทย (Wisesight, Mandala) แล้วนำเข้าไฟล์ส่งออกในแท็บ</li>
 </ul>
 </body>
 </html>

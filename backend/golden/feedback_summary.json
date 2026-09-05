@@ -5,10 +5,12 @@
  "by_month": [],
  "filters": {
   "branch": null,
+  "kind": null,
   "month_from": null,
   "month_to": null,
   "source": null
  },
+ "kinds": {},
  "menus": [],
  "neg_pct": 0.0,
  "recent_negative": [],
