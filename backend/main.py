@@ -1801,6 +1801,14 @@ else:
         analysis_forecast_branches, revenue_forecast)            # noqa: F401  (back-compat: tests + /api/forecast facade)
 app.include_router(_analysis_router)
 if __package__:
+    from .routers.analysis_discounts import router as _analysis_discounts_router
+    from .routers.analysis_time import router as _analysis_time_router
+else:
+    from routers.analysis_discounts import router as _analysis_discounts_router
+    from routers.analysis_time import router as _analysis_time_router
+app.include_router(_analysis_discounts_router)
+app.include_router(_analysis_time_router)
+if __package__:
     from .routers.sales import router as _sales_router
     from .routers.sales import (_mtd_window, _month_add, _menucmp_agg)  # noqa: F401
 else:
