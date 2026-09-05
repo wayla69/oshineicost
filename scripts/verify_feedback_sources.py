@@ -47,9 +47,10 @@ with sync_playwright() as pw:
     pg.goto(BASE, wait_until='networkidle', timeout=90000)
     pg.wait_for_function("typeof switchTab === 'function' && typeof TABS === 'object' && TABS.feedback", timeout=30000)
     pg.wait_for_function("document.querySelectorAll('#tabsRoot > div[id^=\"tab-\"]').length >= 49", timeout=30000)
-    pg.evaluate("() => { document.body.classList.add('force-desktop'); switchTab('feedback'); }")
+    pg.evaluate("() => { document.body.classList.add('force-desktop'); switchTab('feedback'); const c = document.getElementById('fbAllCard'); if (c) c.open = true; }")
     pg.wait_for_timeout(1500)
     before = pg.evaluate("() => document.getElementById('fbSources').innerText")
+    pg.evaluate("() => toggleFeedbackImport()")
     pg.set_input_files('#fbFile', OUT)
     pg.evaluate("() => uploadFeedback()")
     pg.wait_for_function("document.getElementById('fbUploadStatus').textContent.includes('นำเข้า') || document.getElementById('fbUploadStatus').textContent.includes('ไม่สำเร็จ')", timeout=60000)
@@ -63,7 +64,11 @@ with sync_playwright() as pw:
     replies = pg.evaluate("() => document.getElementById('fbItems').innerText")
     pg.screenshot(path=os.path.join(os.path.dirname(OUT), '.tmp_feedback_sources.png'), full_page=False)
     # ── the reply queue: ✍ ตอบ on the 1★ review → a drafted apology → queued → chip "รอส่ง" ──
-    v2 = pg.evaluate("() => { const a = [...document.querySelectorAll('#fbItems tr')].find(tr => tr.innerText.includes('รอนานมาก พนักงานไม่สนใจ')); const l = a && [...a.querySelectorAll('a')].find(x => x.textContent.includes('ตอบ')); if (l) { l.click(); return true; } return false; }")
+    # a previous run may have left the fixture's reply queued — cancel it so the flow starts clean
+    undone = pg.evaluate("() => { const a = [...document.querySelectorAll('#fbItems tr')].find(tr => tr.innerText.includes('รอนานมาก พนักงานไม่สนใจ') && tr.innerText.includes('รอส่ง')); const l = a && [...a.querySelectorAll('a')].find(x => x.textContent.includes('ยกเลิก')); if (l) { l.click(); return true; } return false; }")
+    if undone:
+        pg.wait_for_timeout(3000)
+    v2 = pg.evaluate("() => { const a = [...document.querySelectorAll('#fbItems tr')].find(tr => tr.innerText.includes('รอนานมาก พนักงานไม่สนใจ') && [...tr.querySelectorAll('a')].some(x => x.textContent.includes('ตอบ'))); const l = a && [...a.querySelectorAll('a')].find(x => x.textContent.includes('ตอบ')); if (l) { l.click(); return true; } return false; }")
     pg.wait_for_function("document.getElementById('fbReplyPanel').innerText.includes('ตอบรีวิว')", timeout=30000)
     draft = pg.evaluate("() => document.getElementById('fbReplyText').value")
     pg.evaluate("() => { const b = [...document.querySelectorAll('#fbReplyPanel button')][0]; b && b.click(); }")
