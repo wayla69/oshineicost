@@ -22,7 +22,7 @@ with sync_playwright() as pw:
     n_default = pg.evaluate("() => document.querySelectorAll('#clPhases input[type=checkbox]').length")     # one phase at a time by default
     next_up = pg.evaluate("() => document.getElementById('clNext').innerText")
     pg.evaluate("() => clSelectPhase('all')")
-    pg.wait_for_function("document.querySelectorAll('#clPhases input[type=checkbox]').length >= 80", timeout=30000)
+    pg.wait_for_function("document.querySelectorAll('#clPhases input[type=checkbox]').length >= 83", timeout=30000)
     n_steps = pg.evaluate("() => document.querySelectorAll('#clPhases input[type=checkbox]').length")
     copy_btns = pg.evaluate("() => document.querySelectorAll('#clPhases .cl-copy').length")
     chips = pg.evaluate("() => document.querySelectorAll('#clPhaseChips .cl-chip').length")
@@ -32,7 +32,7 @@ with sync_playwright() as pw:
       for (const id of Object.keys(st.steps)) { if (st.steps[id].done) await _clPost(`/api/checklist/feedback_rollout/step/${id}`, _clBody({done: false})); } }""")
     pg.fill('#clWho', 'ทดสอบ')
     pg.evaluate("() => loadChecklist(true)")
-    pg.wait_for_function("document.getElementById('clLine').textContent.startsWith('0/80')", timeout=30000)
+    pg.wait_for_function("document.getElementById('clLine').textContent.startsWith('0/83')", timeout=30000)
     pg.evaluate("() => clSelectPhase('all')")
     disabled_before = pg.evaluate("() => document.getElementById('clComplete').disabled")
     pg.click('#clcb-s0101')
@@ -75,7 +75,7 @@ print('banner          :', banner.replace('\n', ' ')[:120])
 print('locked/reopened :', locked_cb, '/', reopened_cb)
 print('log head        :', log.replace('\n', ' | ')[:120])
 print('page errors     :', errors[:2])
-ok = (shown and n_steps == 80 and 0 < n_default < 80 and chips == 10 and copy_btns > 10 and 'ทำต่อเลย' in next_up
+ok = (shown and n_steps == 83 and 0 < n_default < 83 and chips == 10 and copy_btns > 10 and 'ทำต่อเลย' in next_up
       and disabled_before and pct1 != '0%' and 'ทดสอบ' in line1 and task_auto == 'เสร็จ' and 'ยังไม่ครบ' in refused
       and not disabled_full and 'ปิดสมบูรณ์แล้ว' in banner and locked_cb and not reopened_cb and 'เปิดแก้ไขอีกครั้ง' in log and not errors)
 print('RESULT:', 'OK' if ok else 'PROBLEMS')

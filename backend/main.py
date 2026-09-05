@@ -252,7 +252,11 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db") \
-            or path.startswith("/api/feedback/webhook/"):
+            or path.startswith("/api/feedback/webhook/") \
+            or path.startswith("/api/feedback/survey/"):
+        # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
+        # code in the URL is the only credential a guest has; routers/survey.py rate-limits
+        # and bot-guards it. The trailing slash keeps /api/feedback/survey-links gated.
         # …and so is the Meta webhook receiver (/api/feedback/webhook/meta): Meta
         # calls it without a session; it verifies its own HMAC signature / verify token
         # (routers/feedback.py). The trailing slash keeps /api/feedback/webhook-events gated.
@@ -1777,6 +1781,11 @@ if __package__:
 else:
     from routers.checklist import router as _checklist_router
 app.include_router(_checklist_router)
+if __package__:
+    from .routers.survey import router as _survey_router
+else:
+    from routers.survey import router as _survey_router
+app.include_router(_survey_router)
 if __package__:
     from .routers.buffet import router as _buffet_router
     from .routers.buffet import buffet_forecast  # noqa: F401  (/api/forecast facade)

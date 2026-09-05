@@ -38,8 +38,8 @@ def test_plan_file_is_the_source_and_is_well_formed():
     plan = C.load_plan(NAME)
     steps, tasks = C.step_index(plan), C.task_index(plan)
     assert plan["name"] == NAME and plan["default_start"] and plan["horizon_days"] > 0 and set(plan["statuses"]) == {"todo", "doing", "blocked", "done"}
-    assert len(plan["phases"]) == 10 and len(tasks) == 28 and len(steps) == 80
-    assert len(set(steps)) == 80 and all(s.startswith("s") for s in steps)      # ids unique
+    assert len(plan["phases"]) == 10 and len(tasks) == 29 and len(steps) == 83
+    assert len(set(steps)) == 83 and all(s.startswith("s") for s in steps)      # ids unique
     for ph in plan["phases"]:
         assert ph["days"][0] < ph["days"][1] and ph["owner"] and ph["why"]
         for t in ph["tasks"]:
@@ -52,7 +52,7 @@ def test_plan_file_is_the_source_and_is_well_formed():
 def test_ticks_tasks_meta_and_the_completion_rule(client):
     assert client.get(f"/api/checklist/{NAME}/plan").json()["phases"][0]["id"] == "p0"
     s0 = client.get(f"/api/checklist/{NAME}").json()
-    assert s0["progress"]["total"] == 80 and s0["progress"]["done"] == 0 and s0["locked"] is False and s0["complete"] is None
+    assert s0["progress"]["total"] == 83 and s0["progress"]["done"] == 0 and s0["locked"] is False and s0["complete"] is None
     assert s0["meta"]["start"] == "2026-09-07" and s0["log"] == []
     # the sign-off is refused while anything is open, and says what
     r = client.post(f"/api/checklist/{NAME}/complete", json={"by": "owner"})
@@ -81,11 +81,11 @@ def test_ticks_tasks_meta_and_the_completion_rule(client):
         for t in ph["tasks"]:
             for s in t["steps"]:
                 assert client.post(f"/api/checklist/{NAME}/step/{s['id']}", json={"done": True, "by": "ทีม"}).status_code == 200
-    assert client.get(f"/api/checklist/{NAME}").json()["progress"] == {"done": 80, "total": 80, "pct": 100, "missing": []}
+    assert client.get(f"/api/checklist/{NAME}").json()["progress"] == {"done": 83, "total": 83, "pct": 100, "missing": []}
     r = client.post(f"/api/checklist/{NAME}/complete", json={"by": "owner"}).json()
     assert r["complete"]["done"] is True and r["complete"]["by"] == "owner" and r["already"] is False
     s2 = client.get(f"/api/checklist/{NAME}").json()
-    assert s2["locked"] is True and s2["complete"]["by"] == "owner" and s2["log"][0]["action"] == "complete" and s2["log"][0]["detail"] == "80/80"
+    assert s2["locked"] is True and s2["complete"]["by"] == "owner" and s2["log"][0]["action"] == "complete" and s2["log"][0]["detail"] == "83/83"
     assert client.post(f"/api/checklist/{NAME}/step/s0101", json={"done": False}).status_code == 409
     assert client.post(f"/api/checklist/{NAME}/task/t01", json={"status": "todo"}).status_code == 409
     assert client.post(f"/api/checklist/{NAME}/meta", json={"start": "2026-10-01"}).status_code == 409
