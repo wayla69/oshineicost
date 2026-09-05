@@ -1,15 +1,23 @@
 # -*- coding: utf-8 -*-
-"""Facebook Pages — recommendations (what replaced star reviews in 2018) and,
-per page when enabled, comments on the page's own posts.
+"""Facebook Pages — everything the Graph API lets a page see about itself:
+recommendations (what replaced star reviews in 2018), comments under the
+page's own posts, posts by others on the page's timeline, posts elsewhere
+that tag the page, and the shares of the page's posts (count + the public
+reshares). What it does NOT give: reshares by people whose privacy is
+friends-only, and posts/comments/groups that talk about the brand without
+tagging the page — there is no public search (Meta closed CrowdTangle in 2024;
+the Content Library is for researchers).
 
 Config (backend/.feedback_config.json → "facebook"):
     {"api_version": "v21.0",
      "pages": [{"id": "1234567890", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น",
-                "token": "EAAB… (Page access token)", "comments": false}]}
-The token needs pages_show_list + pages_read_user_content (+ pages_read_engagement
-for comments); a Page token derived from a long-lived user token does not
-expire. `pages facebook --user-token …` in fetch_feedback.py lists the pages a
-user token manages, with their Page tokens, and can write them into the config.
+                "token": "EAAB… (Page access token)",
+                "comments": false, "shares": true, "visitor_posts": true, "tagged": true}]}
+The token needs pages_show_list + pages_read_user_content + pages_read_engagement
+(+ pages_manage_engagement to reply); a Page token derived from a long-lived
+user token does not expire. `pages facebook --user-token …` in fetch_feedback.py
+lists the pages a user token manages, with their Page tokens, and can write
+them into the config.
 
 A recommendation looks like:
     {"created_time": "2026-08-30T11:02:03+0000", "recommendation_type": "positive",
@@ -108,7 +116,8 @@ def page_for_comment(cfg: dict, comment_id: str, location: str = ""):
 
 
 def reply_to_comment(page_token: str, comment_id: str, text: str, http, api_version: str = DEFAULT_VERSION) -> dict:
-    """Publish the page's reply under a visitor's comment (pages_manage_engagement).
+    """Publish the page's reply under a visitor's comment or a visitor's post on
+    the page (POST /{object-id}/comments, pages_manage_engagement).
     Recommendations cannot be answered through the API — those stay manual."""
     if not comment_id:
         raise RuntimeError("no comment id to reply under")
@@ -119,33 +128,122 @@ def reply_to_comment(page_token: str, comment_id: str, text: str, http, api_vers
     return j or {}
 
 
+def _from(obj: dict) -> tuple:
+    f = obj.get("from") or {}
+    return str(f.get("id") or ""), f.get("name") or ""
+
+
+def visitor_post_to_row(post: dict, page_id: str, branch: str = "", page_name: str = ""):
+    """A post someone else wrote ON the page's timeline (the /feed edge carries
+    the page's own posts too — those are skipped). Kind "comment": on the
+    chain's own property, so a negative one joins the reply list; the page can
+    answer under it (POST /{post-id}/comments)."""
+    fid, fname = _from(post)
+    text = (post.get("message") or "").strip()
+    if not text or not post.get("id") or fid == str(page_id):
+        return None
+    return {"date": thai_date(post.get("created_time")), "branch": branch or "", "source": SOURCE, "rating": None,
+            "text": text, "external_id": f"post:{post['id']}", "url": post.get("permalink_url") or "",
+            "author": _hash(fname or fid), "reply": "", "replied_at": "", "location": "โพสต์บนเพจ",
+            "kind": "comment", "detect_branch": not branch, "ref": str(post["id"]), "sentiment_hint": None}
+
+
+def tagged_post_to_row(post: dict, page_id: str, branch: str = "", page_name: str = ""):
+    """A post elsewhere on Facebook that tags (@mentions) the page — the /tagged
+    edge. Kind "mention": read, not answered through the API (commenting on
+    another person's post depends on their privacy settings)."""
+    fid, fname = _from(post)
+    text = (post.get("message") or "").strip()
+    if not text or not post.get("id") or fid == str(page_id):
+        return None
+    return {"date": thai_date(post.get("tagged_time") or post.get("created_time")), "branch": branch or "",
+            "source": SOURCE, "rating": None, "text": text, "external_id": f"tagged:{post['id']}",
+            "url": post.get("permalink_url") or "", "author": _hash(fname or fid), "reply": "", "replied_at": "",
+            "location": "แท็กเพจ", "kind": "mention", "detect_branch": not branch, "ref": "", "sentiment_hint": None}
+
+
+def share_to_row(share: dict, post: dict, page_id: str, branch: str = "", page_name: str = ""):
+    """A PUBLIC reshare of one of the page's posts (/{post-id}/sharedposts).
+    Facebook hides reshares by people whose privacy is friends-only, so only
+    the count (post.shares.count) is complete; the visible ones become
+    mentions, with the sharer's own words when there are any."""
+    fid, fname = _from(share)
+    if not share.get("id") or fid == str(page_id):
+        return None
+    own = (post.get("message") or "").strip().replace("\n", " ")
+    text = (share.get("message") or "").strip() or f"แชร์โพสต์ของเพจ: {own[:80]}"
+    return {"date": thai_date(share.get("created_time")), "branch": branch or "", "source": SOURCE, "rating": None,
+            "text": text, "external_id": f"share:{share['id']}",
+            "url": share.get("permalink_url") or post.get("permalink_url") or "",
+            "author": _hash(fname or fid), "reply": "", "replied_at": "", "location": "แชร์โพสต์",
+            "kind": "mention", "detect_branch": not branch, "ref": "", "sentiment_hint": None}
+
+
 def fetch_page(page: dict, http, since: str = "", api_version: str = DEFAULT_VERSION) -> tuple:
-    """Rows of one page: recommendations (newest first, stopped at `since`) and,
-    when page['comments'] is true, comments on posts published since `since`."""
+    """Rows of one page:
+      • recommendations (newest first, stopped at `since`)                  always
+      • comments under the page's own posts since `since`                   page['comments'] (default off)
+      • shares of those posts: the count + the public reshares as mentions  page['shares'] (default on)
+      • posts by others on the page's timeline (/feed)                      page['visitor_posts'] (default on)
+      • posts elsewhere that tag the page (/tagged)                         page['tagged'] (default on)
+    """
     pid, token = str(page.get("id") or ""), page.get("token") or ""
     if not pid or not token:
         raise RuntimeError("facebook page config needs id and token")
     branch, name = page.get("branch") or "", page.get("name") or ""
-    rows, n_rec, n_com = [], 0, 0
+    v = api_version
+    rows = []
+    m = {"id": pid, "name": name, "branch": branch, "ratings": 0, "comments": 0,
+         "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0}
     q = {"fields": "created_time,rating,recommendation_type,review_text,has_review,reviewer,open_graph_story",
          "limit": 100, "access_token": token}
-    for item in _paged(f"{GRAPH}/{api_version}/{pid}/ratings?" + urllib.parse.urlencode(q), http, "ratings"):
+    for item in _paged(f"{GRAPH}/{v}/{pid}/ratings?" + urllib.parse.urlencode(q), http, "ratings"):
         if since and thai_date(item.get("created_time")) < since:
             break
         row = rating_to_row(item, pid, branch, name)
         if row:
-            rows.append(row); n_rec += 1
-    if page.get("comments"):
-        q = {"fields": "id,created_time,message,permalink_url,comments.limit(100){id,created_time,message,from,permalink_url}",
-             "limit": 25, "access_token": token}
+            rows.append(row); m["ratings"] += 1
+    want_comments, want_shares = bool(page.get("comments")), page.get("shares", True)
+    if want_comments or want_shares:
+        fields = "id,created_time,message,permalink_url,shares"
+        if want_comments:
+            fields += ",comments.limit(100){id,created_time,message,from,permalink_url}"
+        q = {"fields": fields, "limit": 25, "access_token": token}
         if since:
             q["since"] = since
-        for post in _paged(f"{GRAPH}/{api_version}/{pid}/posts?" + urllib.parse.urlencode(q), http, "posts", max_pages=20):
-            for c in ((post.get("comments") or {}).get("data") or []):
-                row = comment_to_row(c, post, pid, branch, name)
-                if row:
-                    rows.append(row); n_com += 1
-    return rows, {"id": pid, "name": name, "branch": branch, "ratings": n_rec, "comments": n_com}
+        for post in _paged(f"{GRAPH}/{v}/{pid}/posts?" + urllib.parse.urlencode(q), http, "posts", max_pages=20):
+            if want_comments:
+                for c in ((post.get("comments") or {}).get("data") or []):
+                    row = comment_to_row(c, post, pid, branch, name)
+                    if row:
+                        rows.append(row); m["comments"] += 1
+            if want_shares:
+                n_shares = int(((post.get("shares") or {}).get("count") or 0))
+                m["shares_total"] += n_shares
+                if n_shares and post.get("id"):
+                    sq = {"fields": "id,from,message,created_time,permalink_url", "limit": 50, "access_token": token}
+                    for sp in _paged(f"{GRAPH}/{v}/{post['id']}/sharedposts?" + urllib.parse.urlencode(sq), http,
+                                     "sharedposts", max_pages=5):
+                        row = share_to_row(sp, post, pid, branch, name)
+                        if row:
+                            rows.append(row); m["reshares"] += 1
+    if page.get("visitor_posts", True):
+        q = {"fields": "id,from,message,created_time,permalink_url", "limit": 50, "access_token": token}
+        if since:
+            q["since"] = since
+        for post in _paged(f"{GRAPH}/{v}/{pid}/feed?" + urllib.parse.urlencode(q), http, "feed", max_pages=10):
+            row = visitor_post_to_row(post, pid, branch, name)
+            if row:
+                rows.append(row); m["visitor_posts"] += 1
+    if page.get("tagged", True):
+        q = {"fields": "id,from,message,created_time,permalink_url,tagged_time", "limit": 50, "access_token": token}
+        if since:
+            q["since"] = since
+        for post in _paged(f"{GRAPH}/{v}/{pid}/tagged?" + urllib.parse.urlencode(q), http, "tagged", max_pages=10):
+            row = tagged_post_to_row(post, pid, branch, name)
+            if row:
+                rows.append(row); m["tagged"] += 1
+    return rows, m
 
 
 def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
@@ -161,7 +259,8 @@ def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
         rows.extend(got)
         meta["pages"].append(m)
         meta["fetched"] += len(got)
-        log(f"  {m['name'] or m['id']:<40} → {m['branch']:<16} {m['ratings']:>4} recommendation(s) {m['comments']:>4} comment(s)")
+        log(f"  {m['name'] or m['id']:<40} → {m['branch']:<16} {m['ratings']:>4} recommendation(s) {m['comments']:>4} comment(s) "
+            f"{m['visitor_posts']:>3} visitor post(s) {m['tagged']:>3} tag(s) {m['reshares']:>3}/{m['shares_total']} share(s)")
     return rows, meta
 
 
@@ -181,5 +280,5 @@ def list_pages(user_token: str, http, api_version: str = DEFAULT_VERSION) -> lis
             for p in _paged(f"{GRAPH}/{api_version}/me/accounts?" + urllib.parse.urlencode(q), http, "pages")]
 
 
-__all__ = ["rating_to_row", "comment_to_row", "fetch_page", "fetch_rows", "extend_user_token", "list_pages",
-           "page_for_comment", "reply_to_comment", "SOURCE"]
+__all__ = ["rating_to_row", "comment_to_row", "visitor_post_to_row", "tagged_post_to_row", "share_to_row",
+           "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "page_for_comment", "reply_to_comment", "SOURCE"]

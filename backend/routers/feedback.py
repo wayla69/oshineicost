@@ -470,7 +470,7 @@ def _reply_channel(row) -> str:
     ext, ref = str(row.get("external_id")), row.get("external_ref") or ""
     if src == "google" and ref.count("/reviews/"):
         return "google"
-    if src == "facebook" and ext.startswith("comment:") and ref:
+    if src == "facebook" and ext.startswith(("comment:", "post:")) and ref:     # a comment, or a visitor's post on the page
         return "facebook"
     if src == "tiktok" and ext.startswith("comment:") and "/" in ref:
         return "tiktok"

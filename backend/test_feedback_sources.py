@@ -209,9 +209,11 @@ def _fb_http(method, url, headers, body):
 
 
 def test_facebook_rows_paging_since_and_pages():
-    cfg = {"pages": [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "token": "PT", "comments": True}]}
+    cfg = {"pages": [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "token": "PT", "comments": True,
+                      "shares": False, "visitor_posts": False, "tagged": False}]}
     rows, meta = F.fetch_rows(cfg, _fb_http)
-    assert meta["pages"][0] == {"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "ratings": 3, "comments": 1}
+    assert meta["pages"][0] == {"id": "PAGE1", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "ratings": 3, "comments": 1,
+                                "visitor_posts": 0, "tagged": 0, "reshares": 0, "shares_total": 0}
     by_ext = {r["external_id"]: r for r in rows}
     assert by_ext["rec:s1"]["sentiment_hint"] == "pos" and by_ext["rec:s1"]["rating"] is None
     assert by_ext["rec:s1"]["date"] == "2026-08-30" and by_ext["rec:s1"]["url"] == "https://www.facebook.com/PAGE1/reviews"
@@ -233,6 +235,60 @@ def test_facebook_rows_paging_since_and_pages():
     assert F.page_for_comment(cfg2["facebook"], "PAGE1_777_888")["id"] == "PAGE1"
     assert F.page_for_comment(cfg2["facebook"], "999_1", "Oshinei ขอนแก่น")["id"] == "PAGE1"
     assert F.page_for_comment(cfg2["facebook"], "999_1", "elsewhere") is None
+
+
+def test_facebook_visitor_posts_tags_and_shares():
+    """What the Graph API shows a page about itself beyond reviews: posts by
+    others on its timeline, posts that tag it, and the shares of its posts."""
+    calls = []
+
+    def http(method, url, headers, body):
+        calls.append(url)
+        if "/ratings" in url:
+            return 200, {"data": []}
+        if "/posts?" in url:
+            return 200, {"data": [
+                {"id": "PAGE1_p1", "message": "โปรทุเรียนเดือนนี้", "created_time": "2026-09-01T00:00:00+0000",
+                 "permalink_url": "https://fb/p1", "shares": {"count": 12}},
+                {"id": "PAGE1_p2", "message": "ไม่มีใครแชร์", "created_time": "2026-09-02T00:00:00+0000", "shares": {"count": 0}}]}
+        if "/PAGE1_p1/sharedposts" in url:
+            return 200, {"data": [
+                {"id": "u9_s1", "from": {"id": "u9", "name": "Nid"}, "message": "โอชิเน ระยอง ไปกันมั้ย", "created_time": "2026-09-03T01:00:00+0000", "permalink_url": "https://fb/s1"},
+                {"id": "u8_s2", "from": {"id": "u8"}, "created_time": "2026-09-03T02:00:00+0000"},          # a bare reshare
+                {"id": "PAGE1_s3", "from": {"id": "PAGE1"}, "message": "เพจแชร์เอง"}]}
+        if "/feed?" in url:
+            return 200, {"data": [
+                {"id": "PAGE1_v1", "from": {"id": "u7", "name": "Ploy"}, "message": "สาขาขอนแก่น รอนานมาก ไม่มีคนดูแล", "created_time": "2026-09-04T03:00:00+0000", "permalink_url": "https://fb/v1"},
+                {"id": "PAGE1_p1", "from": {"id": "PAGE1", "name": "Oshinei"}, "message": "โปรทุเรียนเดือนนี้"}]}   # the page's own post, skipped
+        if "/tagged?" in url:
+            return 200, {"data": [
+                {"id": "u6_t1", "from": {"id": "u6", "name": "Bee"}, "message": "มื้อเย็นที่ @Oshinei อุดรธานี ฟินมาก", "created_time": "2026-09-04T05:00:00+0000",
+                 "tagged_time": "2026-09-04T05:30:00+0000", "permalink_url": "https://fb/t1"}]}
+        return 400, {"error": {"type": "GraphMethodException", "message": "unexpected " + url}}
+    cfg = {"pages": [{"id": "PAGE1", "name": "Oshinei", "branch": "", "token": "PT"}]}       # a chain-wide page: no branch → detected from the text
+    rows, meta = F.fetch_rows(cfg, http, since="2026-08-25")
+    m = meta["pages"][0]
+    assert (m["visitor_posts"], m["tagged"], m["reshares"], m["shares_total"]) == (1, 1, 2, 12)
+    by = {r["external_id"]: r for r in rows}
+    v = by["post:PAGE1_v1"]
+    assert v["kind"] == "comment" and v["ref"] == "PAGE1_v1" and v["location"] == "โพสต์บนเพจ" and v["detect_branch"] is True
+    assert v["url"] == "https://fb/v1" and v["author"] and v["author"] != "Ploy" and v["date"] == "2026-09-04"
+    t = by["tagged:u6_t1"]
+    assert t["kind"] == "mention" and t["ref"] == "" and t["location"] == "แท็กเพจ" and t["date"] == "2026-09-04"
+    s1, s2 = by["share:u9_s1"], by["share:u8_s2"]
+    assert s1["text"] == "โอชิเน ระยอง ไปกันมั้ย" and s1["url"] == "https://fb/s1" and s1["kind"] == "mention"
+    assert s2["text"] == "แชร์โพสต์ของเพจ: โปรทุเรียนเดือนนี้" and s2["url"] == "https://fb/p1"
+    assert "share:PAGE1_s3" not in by and "post:PAGE1_p1" not in by                   # the page's own activity is not feedback
+    assert not any("/PAGE1_p2/sharedposts" in u for u in calls)                      # zero shares → no call
+    assert all("since=2026-08-25" in u for u in calls if "/feed?" in u or "/tagged?" in u or "/posts?" in u)
+    # the page can answer under a visitor's post with the same call as a comment
+    assert F.page_for_comment(cfg["facebook"] if "facebook" in cfg else cfg, "PAGE1_v1")["id"] == "PAGE1"
+    posted = []
+    F.reply_to_comment("PT", "PAGE1_v1", "ขออภัยค่ะ", lambda m_, u, h, b: (posted.append(u) or (200, {"id": "x"})))
+    assert posted[0].endswith("/PAGE1_v1/comments")
+    # every extra edge can be switched off per page
+    rows2, meta2 = F.fetch_rows({"pages": [{"id": "PAGE1", "name": "Oshinei", "token": "PT", "shares": False, "visitor_posts": False, "tagged": False}]}, http)
+    assert rows2 == [] and meta2["pages"][0]["shares_total"] == 0
 
 
 # ── endpoints ────────────────────────────────────────────────────────────────

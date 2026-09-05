@@ -100,6 +100,16 @@ py backend\fetch_feedback.py run --source google --since all</pre></li>
 py backend\fetch_feedback.py run --source facebook --since all</pre></li>
 </ol>
 <div class="note">Page token ที่ได้จาก User token แบบสั้นจะหมดอายุใน ~1–2 ชั่วโมง ถ้าเห็น <code>OAuthException</code> ในผลการดึง ให้ทำข้อ 2–3 ซ้ำ หรือใช้ token จาก <b>Business Settings → System Users</b> (ไม่หมดอายุ) — ทางที่มั่นคงที่สุดสำหรับงานประจำ</div>
+<h3>3.1 การแชร์และการ mention บน Facebook — ได้แค่ไหน</h3>
+<table>
+<tr><th>สิ่งที่เกิดขึ้น</th><th>API ให้เพจเห็นไหม</th><th>ระบบทำอะไร</th></tr>
+<tr><td>คนมา<b>โพสต์บนเพจ</b> (visitor post)</td><td>ได้ (<code>/feed</code>)</td><td>ดึงเป็น "คอมเมนต์" · ถ้าเป็นลบเข้าคิวรอสาขาตอบ · ตอบใต้โพสต์ได้จากแท็บ</td></tr>
+<tr><td>คนโพสต์ที่อื่นแล้ว<b>แท็ก/@mention เพจ</b></td><td>ได้ (<code>/tagged</code>) เฉพาะโพสต์ที่ผู้โพสต์เปิดสาธารณะหรืออนุญาต</td><td>ดึงเป็น "การพูดถึง" (ตอบเองในแอป)</td></tr>
+<tr><td>คน<b>แชร์โพสต์ของเพจ</b></td><td>จำนวนแชร์ได้ครบ (<code>shares.count</code>) · ตัวโพสต์ที่แชร์เห็นเฉพาะที่ตั้งค่า<b>สาธารณะ</b></td><td>จำนวนแชร์แสดงใน log ของการดึง · การแชร์สาธารณะดึงเป็น "การพูดถึง" พร้อมข้อความที่ผู้แชร์เขียน</td></tr>
+<tr><td>คนพูดถึงร้านในโพสต์/คอมเมนต์/กลุ่ม <b>โดยไม่แท็กเพจ</b></td><td><b>ไม่ได้</b> — Facebook ไม่มี API ค้นหาเนื้อหาสาธารณะ (CrowdTangle ปิดปี 2024, Content Library เฉพาะนักวิจัย)</td><td>ใช้ Google Alerts (§12) เท่าที่ Google index หรือบริการ social listening</td></tr>
+<tr><td>แชร์โดยคนที่ตั้งค่าเห็นเฉพาะเพื่อน</td><td><b>ไม่ได้</b> (ความเป็นส่วนตัว) นับอยู่ในจำนวนแชร์เท่านั้น</td><td>—</td></tr>
+</table>
+<p class="muted">เปิด/ปิดได้ต่อเพจในไฟล์ config: <code>"visitor_posts": true, "tagged": true, "shares": true</code> (ค่าเริ่มต้นเปิดทั้งสาม) · <code>"comments": true</code> สำหรับคอมเมนต์ใต้โพสต์ของเพจ · เพจรวมของเครือที่ไม่ระบุ <code>branch</code> ระบบจับชื่อสาขาจากข้อความให้</p>
 
 <h2>§4 แจ้งเตือนรีวิวลบทาง Telegram</h2>
 <ol>
