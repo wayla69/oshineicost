@@ -267,7 +267,8 @@
        "t": "จด Project ID และ Project number",
        "how": [
         "เมนูซ้าย ☰ → Cloud overview → Dashboard",
-        "การ์ด Project info มี Project ID และ Project number คัดลอกทั้งสองไว้"
+        "การ์ด Project info มี Project ID และ Project number คัดลอกทั้งสองไว้",
+        "(ทางเลือก ทำได้ทันทีโดยไม่ต้องรอสิทธิ์ Business Profile) เปิด \"Places API (New)\" ใน project เดียวกัน สร้าง API key แล้วใส่ใน backend\\.feedback_config.json ส่วน \"places\" → py backend\\fetch_feedback.py places = ภาพถ่ายคู่แข่งรอบทุกสาขาในแท็บ (คู่มือ §20)"
        ],
        "why": "ต้องใช้กรอกแบบฟอร์มขอสิทธิ์",
        "check": "มีค่าทั้งสองในหมายเหตุของงานนี้"

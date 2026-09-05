@@ -78,7 +78,7 @@ def _load_env(path=HERE / ".env"):
 
 _load_env()
 
-from feedback_sources import facebook, google_gbp, instagram, rss, tiktok, x, youtube  # noqa: E402
+from feedback_sources import facebook, google_gbp, instagram, places, rss, tiktok, x, youtube  # noqa: E402
 from feedback_sources.google_gbp import _parse_body, urllib_http  # noqa: E402
 import notify  # noqa: E402
 from refresh_fly_db import _parse_token_file, get_login  # noqa: E402
@@ -188,6 +188,15 @@ class ApiSink:
     def sources(self) -> dict:
         return self._call("GET", "/api/feedback/sources")
 
+    def branches(self) -> list:
+        return [b["name"] for b in (self._call("GET", "/api/branches") or []) if b.get("active", True)]
+
+    def competitors_month(self):
+        return (self._call("GET", "/api/feedback/competitors/status") or {}).get("latest_month")
+
+    def competitors_post(self, month: str, rows: list) -> dict:
+        return self._call("POST", "/api/feedback/competitors", {"month": month, "rows": rows})
+
     def digest(self, days: int = 7, branch: str = None) -> dict:
         q = f"/api/feedback/digest?days={int(days)}"
         if branch:
@@ -236,6 +245,33 @@ class DbSink:
         con.row_factory = sqlite3.Row
         self.fb._ensure(con)
         return con
+
+    def branches(self) -> list:
+        con = self._con()
+        try:
+            return [r[0] for r in con.execute("SELECT name FROM branches WHERE COALESCE(active,1)=1 ORDER BY branch_id")]
+        except sqlite3.OperationalError:
+            return [r[0] for r in con.execute("SELECT name FROM branches")]
+        finally:
+            con.close()
+
+    def competitors_month(self):
+        from routers.feedback_competitors import latest_month
+        con = self._con()
+        try:
+            return latest_month(con)
+        finally:
+            con.close()
+
+    def competitors_post(self, month: str, rows: list) -> dict:
+        from routers.feedback_competitors import store_snapshot
+        con = self._con()
+        try:
+            n = store_snapshot(con, month, rows)
+            con.commit()
+            return {"month": month, "stored": n}
+        finally:
+            con.close()
 
     def digest(self, days: int = 7, branch: str = None) -> dict:
         from routers.feedback_actions import compute_digest
@@ -441,6 +477,45 @@ def _digest_step(args, sink, notifier, log, force: bool = False, cfg: dict = Non
         return False
 
 
+def _this_month() -> str:
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime("%Y-%m")
+
+
+def _places_step(args, cfg, sink, http, log, force: bool = False) -> bool:
+    """Once a month (the first run that finds no snapshot for this month, or
+    --places / the `places` command) the competitors around every branch are
+    captured from Google Places into feedback_competitor."""
+    pc = (cfg or {}).get("places") or {}
+    if not pc.get("api_key") or getattr(args, "dry_run", False):
+        return False
+    month = _this_month()
+    if not (force or getattr(args, "places", False)):
+        try:
+            if sink.competitors_month() == month:
+                return False
+        except Exception as e:
+            log(f"  ✗ places: cannot read the snapshot status: {e}")
+            return False
+    try:
+        branches = [b for b in sink.branches() if b and b != "ALL"]
+        only = pc.get("only") or []
+        if only:
+            branches = [b for b in branches if b in only]
+        rows, meta = places.snapshot(pc, http, branches, log)
+        res = sink.competitors_post(month, rows)
+        log(f"  ✓ places: {res.get('stored', 0)} row(s) for {month} across {len(meta['branches'])} branch(es)")
+        sink.log({"source": places.SOURCE, "since": month, "fetched": meta["fetched"], "inserted": res.get("stored", 0),
+                  "status": "ok", "message": f"{len(branches)} branch(es), snapshot {month}", "by": "fetch_feedback"})
+        return True
+    except Exception as e:
+        log(f"  ✗ places: {e}")
+        try:
+            sink.log({"source": places.SOURCE, "since": month, "status": "error", "message": str(e)[:300], "by": "fetch_feedback"})
+        except Exception:
+            pass
+        return False
+
+
 def _replies_step(args, cfg, sink, http, log):
     if getattr(args, "dry_run", False):
         return
@@ -528,6 +603,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print, notif
             log(f"  alert: {len(neg)} negative review(s) → telegram {'sent' if sent else 'not configured'}")
             _branch_alerts(neg, cfg, label, args.api, notifier_to, log)
     _replies_step(args, cfg, sink, http, log)
+    _places_step(args, cfg, sink, http, log)
     _digest_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     return 1 if failures else 0
 
@@ -680,6 +756,7 @@ def main(argv=None) -> int:
     r.add_argument("--token", default=None); r.add_argument("--user", default=None); r.add_argument("--password", default=None)
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--no-alert", action="store_true")
     r.add_argument("--digest", action="store_true", help="send the weekly digest after this run (else Mondays only)")
+    r.add_argument("--places", action="store_true", help="capture the competitor snapshot now (else once a month)")
     a = sub.add_parser("auth", help="one-time consent"); common(a)
     a.add_argument("source", choices=["google", "tiktok"]); a.add_argument("--manual", action="store_true")
     a.add_argument("--port", type=int, default=8765)
@@ -697,6 +774,9 @@ def main(argv=None) -> int:
     dg.add_argument("--api", default=DEFAULT_API); dg.add_argument("--db", default=None)
     dg.add_argument("--token", default=None); dg.add_argument("--user", default=None); dg.add_argument("--password", default=None)
     dg.add_argument("--days", type=int, default=7)
+    pl = sub.add_parser("places", help="capture the competitors around every branch now (Google Places)"); common(pl)
+    pl.add_argument("--api", default=DEFAULT_API); pl.add_argument("--db", default=None)
+    pl.add_argument("--token", default=None); pl.add_argument("--user", default=None); pl.add_argument("--password", default=None)
     rp = sub.add_parser("replies", help="post the replies queued in the tab now"); common(rp)
     rp.add_argument("--api", default=DEFAULT_API); rp.add_argument("--db", default=None)
     rp.add_argument("--token", default=None); rp.add_argument("--user", default=None); rp.add_argument("--password", default=None)
@@ -746,6 +826,9 @@ def main(argv=None) -> int:
             okb = notify.send_telegram(notify.weekly_digest(db, args.api), chat_id=chat)
             print(f"  → {bname}: {'sent' if okb else 'not sent'}")
         return 0
+    if args.cmd == "places":
+        ok = _places_step(args, cfg, sink, urllib_http, print, force=True)
+        return 0 if ok else 1
     if args.cmd == "replies":
         res = send_replies(cfg, sink, urllib_http)
         print(f"replies: {res['sent']} sent, {res['failed']} failed")

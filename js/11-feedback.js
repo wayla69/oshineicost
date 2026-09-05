@@ -541,3 +541,31 @@ async function loadFeedbackBusiness() {
     `<div class="mt-1" style="color:var(--text-muted)">ทั้งเครือ: ส่วนลด ${d.chain.disc_share != null ? d.chain.disc_share + '%' : '—'} (ค่ากลางสาขา ${d.chain.disc_share_median != null ? d.chain.disc_share_median + '%' : '—'}) · ยอด/หัว ค่ากลาง ${d.chain.spend_head_median != null ? '฿' + d.chain.spend_head_median.toLocaleString() : '—'} · Δ เทียบช่วงก่อนหน้าที่ยาวเท่ากัน (${d.prev_range[0]} → ${d.prev_range[1]}) · ยอดขายรวม VAT จากบิล</div>` :
     '<p style="color:var(--text-muted)">ไม่มีข้อมูลขายในช่วงนี้</p>';
 }
+
+/* ── the competitors around each branch (E6): the monthly Google Places snapshot ── */
+async function loadFeedbackCompetitors(branch) {
+  const el = document.getElementById('fbCompBody'), hint = document.getElementById('fbCompHint');
+  if (!el) return;
+  el.innerHTML = '<span style="color:var(--text-muted)">กำลังโหลด…</span>';
+  const p = new URLSearchParams();
+  const b = branch || _fbBranchLocal || getBranch(); if (b) p.set('branch', b);
+  let d; try { d = await api(`${API}/api/feedback/competitors?${p}`); } catch (e) { el.textContent = 'โหลดไม่สำเร็จ'; return; }
+  if (!d.available) {
+    hint.textContent = '— ยังไม่มีภาพถ่ายคู่แข่ง';
+    el.innerHTML = `<p style="color:var(--text-secondary)">ยังไม่มีข้อมูล — ใส่ Google Places API key ใน backend\\.feedback_config.json ("places": {"api_key": …}) แล้วรัน <code>py backend\\fetch_feedback.py places</code> ครั้งแรก หลังจากนั้นระบบถ่ายภาพเองเดือนละครั้ง (คู่มือ §20)</p>`;
+    return;
+  }
+  hint.textContent = `— ภาพถ่าย ${d.month}${d.prev_month ? ` · เทียบ ${d.prev_month}` : ''}`;
+  const dl = (cur, prev, digits) => (cur == null || prev == null) ? '' : (Math.abs(cur - prev) < (digits ? 0.005 : 0.5) ? '' : `<span class="fb-delta ${cur > prev ? 'good' : 'bad'}">${cur > prev ? '▲' : '▼'}${Math.abs(cur - prev).toFixed(digits)}</span>`);
+  const rows = d.branches || [];
+  el.innerHTML = rows.length ? `<table class="fb-t"><thead><tr><th>สาขา</th><th>ลิสติ้งของเรา</th><th style="text-align:right">★ เรา</th><th style="text-align:right">รีวิว</th><th style="text-align:right">★ กลางคู่แข่ง</th><th style="text-align:right">ห่าง</th><th style="text-align:right">อันดับ</th><th>คู่แข่งที่ดีที่สุด</th><th></th></tr></thead><tbody>` +
+    rows.map(r => { const me = r.self || {}, pv = r.prev || {};
+      return `<tr class="row" onclick="loadFeedbackCompetitors('${_fbEsc(r.branch).replace(/'/g, "\\'")}')"><td><b>${_fbEsc(r.branch)}</b></td><td class="text-[11px]" style="color:var(--text-muted)">${_fbEsc(me.name || '—')}</td>
+        <td style="text-align:right;font-weight:600">${me.rating != null ? me.rating.toFixed(1) : '—'} ${dl(me.rating, pv.rating, 1)}</td><td style="text-align:right">${(me.ratings_total || 0).toLocaleString()} ${dl(me.ratings_total, pv.ratings_total, 0)}</td>
+        <td style="text-align:right">${r.median_rating != null ? r.median_rating.toFixed(1) : '—'} <span style="color:var(--text-muted)">(${r.rated_competitors})</span></td>
+        <td style="text-align:right;color:${r.gap == null ? 'inherit' : r.gap >= 0.2 ? '#047857' : r.gap <= -0.2 ? '#b91c1c' : 'inherit'}">${r.gap != null ? (r.gap > 0 ? '+' : '') + r.gap.toFixed(2) : '—'}</td>
+        <td style="text-align:right">${r.rank ? `#${r.rank}/${r.of}` : '—'}</td><td class="text-[11px]">${r.best ? `${_fbEsc(r.best.name)} ★${r.best.rating.toFixed(1)} (${r.best.ratings_total.toLocaleString()}) · ${(r.best.distance_m / 1000).toFixed(1)} กม.` : '—'}</td><td class="text-[11px]" style="color:#0369a1">${(r.list || []).length ? '' : 'ดูรายชื่อ →'}</td></tr>` +
+        ((r.list || []).length ? `<tr><td colspan="9"><div class="pl-3" style="color:var(--text-secondary)">${r.list.map(c => `${_fbEsc(c.name)} ★${c.rating != null ? c.rating.toFixed(1) : '—'} (${(c.ratings_total || 0).toLocaleString()}) · ${(c.distance_m / 1000).toFixed(1)} กม.${c.price_level != null ? ' · ' + '฿'.repeat(Math.max(1, c.price_level)) : ''}`).join('<br>')}</div></td></tr>` : ''); }).join('') + '</tbody></table>' +
+    `<div class="mt-1" style="color:var(--text-muted)">★ กลางคู่แข่ง = ค่ากลางของร้านที่มีรีวิว ≥ 20 ในรัศมี · ห่าง = ★ เรา − ★ กลางคู่แข่ง · อันดับนับเฉพาะร้านที่มีรีวิว ≥ 20 · คลิกสาขาเพื่อดูรายชื่อ</div>` :
+    '<p style="color:var(--text-muted)">ไม่มีข้อมูลสำหรับสาขาที่เลือก</p>';
+}
