@@ -92,6 +92,16 @@
     </div>
   </div>
 
+  <div class="card p-4 mt-4" id="fbActionsCard">
+    <div class="flex items-baseline justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-semibold">🔁 งานแก้ไข — ปิดวงจร <span id="fbActionsHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
+      <div class="flex items-center gap-2"><span id="fbActionFilters" class="flex gap-1"></span><button class="fb-btn" onclick="openActionForm({})">➕ งานใหม่</button></div>
+    </div>
+    <p class="text-[11px] mt-1" style="color:var(--text-muted)">หัวข้อบนสาขาหนึ่งกลายเป็นงานที่มีเจ้าของและกำหนดเสร็จ ระบบวัดหัวข้อนั้น 28 วันก่อนสร้างงาน (ฐาน) และ 28 วันหลังเสร็จ แล้วตัดสิน ดีขึ้น / เท่าเดิม / แย่ลง จาก "เสียงลบต่อ 100 เสียง" — งานแก้เป็นแค่คำอ้างจนกว่าลูกค้าจะยืนยัน</p>
+    <div id="fbActionForm" class="mt-2 rounded p-3" style="display:none;border:1px solid #99f6e4;background:#f0fdfa"></div>
+    <div id="fbActions" class="mt-2"></div>
+  </div>
+
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
     <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">🌟 เสียงชม</h3><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>

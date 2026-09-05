@@ -75,6 +75,7 @@ async function loadFeedback(force) {
   loadFeedbackQueue();
   loadFeedbackItems(_fbQp());
   loadFeedbackSources();
+  loadFeedbackActions();
 }
 function setFeedbackKind(k) { _fbKind = k || ''; loadFeedback(true); }
 function setFeedbackBranch(name) { _fbBranchLocal = name || ''; _fbTheme = ''; loadFeedback(true); }
@@ -178,7 +179,7 @@ function showFeedbackTheme(name, keep) {
   if (!t) { box.innerHTML = ''; return; }
   box.innerHTML = `<div class="rounded p-3" style="background:var(--bg-input)"><div class="flex items-baseline justify-between flex-wrap gap-2"><b class="text-sm">${_fbEsc(t.theme)}</b><span class="text-[11px]" style="color:var(--text-muted)">${t.n} เสียง · ลบ ${t.neg} · บวก ${t.pos || 0}${(t.branches || []).length ? ' · สาขาที่พูดถึงมากสุด: ' + t.branches.map(_fbEsc).join(', ') : ''}</span></div>` +
     ((t.examples || []).length ? t.examples.map(e => `<div class="text-xs mt-1.5 pl-2" style="border-left:3px solid #fca5a5">"${_fbEsc(e.text)}" <span style="color:var(--text-muted)">— ${_fbEsc(e.branch || '')} ${_fbEsc(e.date || '')}</span></div>`).join('') : '<p class="text-xs mt-1" style="color:var(--text-muted)">ไม่มีเสียงลบในหัวข้อนี้</p>') +
-    `<div class="mt-2 flex gap-2"><button class="fb-ghost" onclick="loadFeedbackItems(null,{theme:'${_fbEsc(t.theme).replace(/'/g, "\\'")}'});document.getElementById('fbAllCard').open=true;document.getElementById('fbAllCard').scrollIntoView({behavior:'smooth'})">ดูทุกเสียงในหัวข้อนี้ →</button>${(t.branches || []).length ? `<button class="fb-ghost" onclick="setFeedbackBranch('${_fbEsc(t.branches[0]).replace(/'/g, "\\'")}')">เจาะสาขา ${_fbEsc(t.branches[0])}</button>` : ''}</div></div>`;
+    `<div class="mt-2 flex gap-2 flex-wrap"><button class="fb-btn" onclick="openActionForm({theme:'${_fbEsc(t.theme).replace(/'/g, "\\'")}', branch:'${_fbEsc(_fbBranchLocal || (t.branches || [])[0] || '').replace(/'/g, "\\'")}'})">➕ สร้างงานแก้</button><button class="fb-ghost" onclick="loadFeedbackItems(null,{theme:'${_fbEsc(t.theme).replace(/'/g, "\\'")}'});document.getElementById('fbAllCard').open=true;document.getElementById('fbAllCard').scrollIntoView({behavior:'smooth'})">ดูทุกเสียงในหัวข้อนี้ →</button>${(t.branches || []).length ? `<button class="fb-ghost" onclick="setFeedbackBranch('${_fbEsc(t.branches[0]).replace(/'/g, "\\'")}')">เจาะสาขา ${_fbEsc(t.branches[0])}</button>` : ''}</div></div>`;
 }
 
 /* ── INSIGHT: branch league ── */
@@ -218,6 +219,7 @@ async function loadFeedbackQueue() {
         <span>${_fbReplyChip(r, true)}</span>
         ${r.needs_reply ? `<button class="fb-ghost" onclick="markFeedbackHandled(${r.id})" title="สาขาตอบไปแล้วในแอป/โทรแล้ว">✓ ตอบแล้ว</button>` : ''}
         <button class="fb-ghost${r.flag ? ' on' : ''}" onclick="flagFeedback(${r.id}, ${r.flag ? 'false' : 'true'})">${r.flag ? 'ยกเลิกหมุด' : '🚩 ปักหมุด'}</button>
+        <button class="fb-ghost" onclick="openActionForm({from_id:${r.id}, branch:${JSON.stringify(r.branch_name || '').replace(/"/g, '&quot;')}, theme:${JSON.stringify((r.themes || [])[0] || '').replace(/"/g, '&quot;')}})" title="สร้างงานแก้จากเสียงนี้">➕ งานแก้</button>
         ${r.url ? `<a class="fb-ghost" href="${_fbEsc(r.url)}" target="_blank" rel="noopener">เปิดต้นทาง ↗</a>` : ''}
       </div></div>`).join('') + (items.length >= 80 ? '<p class="text-[11px] mt-2" style="color:var(--text-muted)">แสดง 80 รายการแรก — ตอบให้หมดแล้วรีเฟรช</p>' : '');
 }
@@ -397,4 +399,85 @@ function saveSurveyUrl(bid) { _fbSurveySave({ branch_id: bid, google_review_url:
 function toggleSurveyLink(bid, on) {
   if (!on && !confirm('ปิดลิงก์นี้? QR ที่พิมพ์ไว้จะใช้ไม่ได้จนกว่าจะเปิดใหม่')) return;
   _fbSurveySave({ branch_id: bid, active: on });
+}
+
+/* ── the fix loop: a theme on a branch becomes an action; the guests verify it (routers/feedback_actions.py) ── */
+let _fbActionFilter = 'active';
+const _FB_ACT_STATUS = { open: ['เปิด', '#0369a1'], doing: ['กำลังทำ', '#b45309'], done: ['เสร็จ', '#047857'], dropped: ['ยกเลิก', '#6b7280'] };
+const _FB_ACT_RESULT = { better: ['✓ ดีขึ้น', '#047857'], same: ['= เท่าเดิม', '#6b7280'], worse: ['✗ แย่ลง', '#b91c1c'], no_data: ['ไม่มีข้อมูล', '#9ca3af'] };
+function setFeedbackActionFilter(f) { _fbActionFilter = f; loadFeedbackActions(); }
+async function loadFeedbackActions() {
+  const el = document.getElementById('fbActions');
+  if (!el) return;
+  const p = new URLSearchParams();
+  const b = _fbBranchLocal || getBranch(); if (b) p.set('branch', b);
+  let d; try { d = await api(`${API}/api/feedback/actions?${p}`); } catch (e) { el.innerHTML = '<p class="text-xs" style="color:#b91c1c">โหลดงานแก้ไม่สำเร็จ</p>'; return; }
+  const c = d.counts || {};
+  document.getElementById('fbActionsHint').textContent = `· ค้าง ${(c.open || 0) + (c.doing || 0)}${c.overdue ? ` (เกินกำหนด ${c.overdue})` : ''} · เสร็จ ${c.done || 0}${(c.better || c.same || c.worse) ? ` · พิสูจน์แล้ว ดีขึ้น ${c.better || 0} / เท่าเดิม ${c.same || 0} / แย่ลง ${c.worse || 0}` : ''}`;
+  document.getElementById('fbActionFilters').innerHTML = [['active', 'ค้างอยู่'], ['done', 'เสร็จ/พิสูจน์'], ['all', 'ทั้งหมด']].map(([k, l]) => `<button type="button" class="fb-chip${_fbActionFilter === k ? ' on' : ''}" onclick="setFeedbackActionFilter('${k}')">${l}</button>`).join('');
+  let items = d.actions || [];
+  if (_fbActionFilter === 'active') items = items.filter(a => a.status === 'open' || a.status === 'doing');
+  if (_fbActionFilter === 'done') items = items.filter(a => a.status === 'done');
+  if (!items.length) { el.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">${_fbActionFilter === 'active' ? 'ไม่มีงานค้าง — สร้างจากหัวข้อที่ลูกค้าพูดถึง หรือจากรายการในกล่องงาน' : 'ยังไม่มีรายการ'}</p>`; return; }
+  const today = d.today;
+  el.innerHTML = `<table class="fb-t"><thead><tr><th>งาน</th><th>สาขา · หัวข้อ</th><th>ผู้รับผิดชอบ</th><th>กำหนด</th><th>สถานะ</th><th style="text-align:right">ก่อน → หลัง (ลบ/100 เสียง)</th><th>ผล</th><th></th></tr></thead><tbody>` +
+    items.map(a => { const st = _FB_ACT_STATUS[a.status] || [a.status, '#6b7280'];
+      const seg = ['open', 'doing', 'done'].map(s => `<button type="button" class="fb-chip${a.status === s ? ' on' : ''}" style="padding:0 .4rem;font-size:10px" onclick="setActionStatus(${a.id}, '${s}')">${_FB_ACT_STATUS[s][0]}</button>`).join('');
+      const res = a.result ? `<span class="fb-tag" style="color:${_FB_ACT_RESULT[a.result][1]};background:transparent;border:1px solid ${_FB_ACT_RESULT[a.result][1]}">${_FB_ACT_RESULT[a.result][0]}</span>` : (a.status === 'done' ? `<span class="text-[11px]" style="color:#b45309">รอครบ 28 วัน${a.after_days_left ? ` (อีก ${a.after_days_left})` : ''}</span>` : '');
+      const before = a.baseline_rate != null ? `${a.baseline_rate}` : '—', after = a.after_rate != null ? `${a.after_rate}` : (a.status === 'done' ? '…' : '');
+      return `<tr class="align-top${a.status === 'dropped' ? '" style="opacity:.55' : ''}"><td><b>${_fbEsc(a.title)}</b>${a.detail ? `<div class="text-[11px]" style="color:var(--text-muted)">${_fbEsc(a.detail.slice(0, 160))}</div>` : ''}${a.note ? `<div class="text-[11px]" style="color:#047857">↳ ${_fbEsc(a.note.slice(0, 160))}</div>` : ''}</td>
+        <td>${_fbEsc(a.branch_name || 'ทุกสาขา')}${a.theme ? `<div><span class="fb-tag">${_fbEsc(a.theme)}</span></div>` : ''}</td>
+        <td>${_fbEsc(a.owner || '—')}</td><td class="whitespace-nowrap${a.overdue ? '" style="color:#b91c1c;font-weight:600' : ''}">${_fbEsc(a.due || '—')}${a.overdue ? ' ⚠' : ''}</td>
+        <td>${a.status === 'dropped' ? `<span style="color:${st[1]}">${st[0]}</span>` : `<div class="flex gap-1">${seg}</div>`}</td>
+        <td style="text-align:right;white-space:nowrap" title="ฐาน ${_fbEsc(a.baseline_from || '')} → ${_fbEsc(a.baseline_to || '')}: ${a.baseline_neg || 0} ลบ / ${a.baseline_total || 0} เสียง${a.after ? ` · หลัง: ${a.after.neg} ลบ / ${a.after.total} เสียง` : ''}">${before} → ${after}</td>
+        <td>${res}</td>
+        <td class="whitespace-nowrap"><button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="editFeedbackAction(${a.id})">แก้ไข</button> ${a.status !== 'dropped' ? `<button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="setActionStatus(${a.id}, 'dropped')">ยกเลิก</button>` : ''}</td></tr>`; }).join('') + '</tbody></table>' +
+    `<p class="text-[11px] mt-1" style="color:var(--text-muted)">วันนี้ ${_fbEsc(today || '')} · หน้าต่างวัด ${d.window_days} วัน · ตัดสินจากเสียงลบต่อ 100 เสียงในสาขา (ลดลง ≥20% = ดีขึ้น, เพิ่มขึ้น ≥20% = แย่ลง)</p>`;
+}
+function openActionForm(o) {
+  const f = document.getElementById('fbActionForm');
+  if (!f) return;
+  const themes = ((_fbSummary || {}).themes || []).map(t => t.theme);
+  const branches = ((_fbSummary || {}).branches || []).map(b => b.branch).filter(b => b && b !== '(ไม่ระบุสาขา)');
+  const opt = (list, cur) => `<option value="">— ไม่ระบุ —</option>` + list.map(x => `<option value="${_fbEsc(x)}"${x === cur ? ' selected' : ''}>${_fbEsc(x)}</option>`).join('') + (cur && !list.includes(cur) ? `<option value="${_fbEsc(cur)}" selected>${_fbEsc(cur)}</option>` : '');
+  if (o.branch === '(ไม่ระบุสาขา)') o.branch = '';
+  const title = o.title || (o.theme ? `แก้เรื่อง "${o.theme}"${o.branch ? ' ที่ ' + o.branch : ''}` : '');
+  const inp = 'class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"';
+  f.style.display = '';
+  f.innerHTML = `<div class="flex items-baseline justify-between"><b class="text-sm">➕ งานแก้ใหม่</b><a href="#" onclick="closeActionForm();return false;" style="color:var(--text-muted)">✕</a></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-xs">
+      <label>ชื่องาน <input id="faTitle" ${inp} class="w-full rounded border px-2 py-1 text-sm" value="${_fbEsc(title)}" placeholder="เช่น เพิ่มคนเติมไลน์ซาชิมิช่วง 18–20 น."></label>
+      <label>รายละเอียด <input id="faDetail" ${inp} class="w-full rounded border px-2 py-1 text-sm" placeholder="ทำอะไร อย่างไร"></label>
+      <label>สาขา <select id="faBranch" ${inp} class="w-full rounded border px-2 py-1 text-sm">${opt(branches, o.branch || _fbBranchLocal || '')}</select></label>
+      <label>หัวข้อที่วัดผล <select id="faTheme" ${inp} class="w-full rounded border px-2 py-1 text-sm">${opt(themes, o.theme || '')}</select></label>
+      <label>ผู้รับผิดชอบ <input id="faOwner" ${inp} class="w-full rounded border px-2 py-1 text-sm" placeholder="ชื่อผู้จัดการ"></label>
+      <label>กำหนดเสร็จ <input id="faDue" type="date" ${inp} class="w-full rounded border px-2 py-1 text-sm"></label>
+    </div>
+    <div class="flex items-center gap-2 mt-2"><button class="fb-btn" onclick="saveFeedbackAction(${o.from_id || 'null'})">บันทึกงาน</button><span class="text-[11px]" style="color:var(--text-muted)">ระบบเก็บฐาน 28 วันก่อนหน้าของหัวข้อ/สาขานี้ให้ทันที</span></div>`;
+  f.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  document.getElementById('faTitle').focus();
+}
+function closeActionForm() { const f = document.getElementById('fbActionForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } }
+async function saveFeedbackAction(fromId) {
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const body = { title: g('faTitle'), detail: g('faDetail'), branch: g('faBranch'), theme: g('faTheme'), owner: g('faOwner'), due: g('faDue'), from_id: fromId || undefined };
+  if (!body.title.trim()) { notifyError('ใส่ชื่องานก่อน'); return; }
+  try { await _fbPost('/api/feedback/actions', body); closeActionForm(); _fbActionFilter = 'active'; loadFeedbackActions(); notifySuccess('บันทึกงานแล้ว'); }
+  catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
+}
+async function setActionStatus(id, status) {
+  if (status === 'dropped' && !confirm('ยกเลิกงานนี้?')) return;
+  let note;
+  if (status === 'done') { note = prompt('เสร็จแล้ว — สรุปสั้น ๆ ว่าทำอะไรไป (เว้นว่างได้)'); if (note === null) return; }
+  try { await _fbPost(`/api/feedback/actions/${id}`, note !== undefined ? { status, note } : { status }); loadFeedbackActions(); }
+  catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
+}
+async function editFeedbackAction(id) {
+  const owner = prompt('ผู้รับผิดชอบ (เว้นว่าง = ไม่เปลี่ยน)'); if (owner === null) return;
+  const due = prompt('กำหนดเสร็จ YYYY-MM-DD (เว้นว่าง = ไม่เปลี่ยน)'); if (due === null) return;
+  const note = prompt('บันทึกความคืบหน้า (เว้นว่าง = ไม่เปลี่ยน)'); if (note === null) return;
+  const body = {}; if (owner.trim()) body.owner = owner.trim(); if (due.trim()) body.due = due.trim(); if (note.trim()) body.note = note.trim();
+  if (!Object.keys(body).length) return;
+  try { await _fbPost(`/api/feedback/actions/${id}`, body); loadFeedbackActions(); }
+  catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
 }

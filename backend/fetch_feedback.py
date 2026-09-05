@@ -188,6 +188,9 @@ class ApiSink:
     def sources(self) -> dict:
         return self._call("GET", "/api/feedback/sources")
 
+    def digest(self, days: int = 7) -> dict:
+        return self._call("GET", f"/api/feedback/digest?days={int(days)}")
+
     def upload(self, rows: list, by: str = "") -> dict:
         total = {"rows": 0, "inserted": 0, "updated": 0, "unchanged": 0, "duplicates": 0,
                  "analysed_by": set(), "unmatched": set(), "new_items": []}
@@ -230,6 +233,16 @@ class DbSink:
         con.row_factory = sqlite3.Row
         self.fb._ensure(con)
         return con
+
+    def digest(self, days: int = 7) -> dict:
+        from routers.feedback_actions import compute_digest
+        con = self._con()
+        try:
+            out = compute_digest(con, days=days)
+            con.commit()
+            return out
+        finally:
+            con.close()
 
     def sources(self) -> dict:
         con = self._con()
@@ -374,6 +387,27 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
     return {"sent": sent, "failed": failed}
 
 
+def _weekday() -> int:            # seam: 0 = Monday, Thai clock
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).weekday()
+
+
+def _digest_step(args, sink, notifier, log, force: bool = False):
+    """Every Monday (or on --digest) the week's voices go to the group chat:
+    counts against the week before, what waits, and whether the fixes held."""
+    if getattr(args, "dry_run", False) or not notifier:
+        return False
+    if not (force or getattr(args, "digest", False) or _weekday() == 0):
+        return False
+    try:
+        d = sink.digest(7)
+        sent = notifier(notify.weekly_digest(d, getattr(args, "api", "") or ""))
+        log(f"  digest: {d.get('voices', 0)} voice(s) in {d.get('range')} → telegram {'sent' if sent else 'not configured'}")
+        return bool(sent)
+    except Exception as e:
+        log(f"  ✗ digest: {e}")
+        return False
+
+
 def _replies_step(args, cfg, sink, http, log):
     if getattr(args, "dry_run", False):
         return
@@ -460,6 +494,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
             sent = notifier(notify.negative_digest(neg, label, args.api))
             log(f"  alert: {len(neg)} negative review(s) → telegram {'sent' if sent else 'not configured'}")
     _replies_step(args, cfg, sink, http, log)
+    _digest_step(args, sink, notifier, log)
     return 1 if failures else 0
 
 
@@ -610,6 +645,7 @@ def main(argv=None) -> int:
     r.add_argument("--db", default=None, help="write into this local SQLite file instead of the live app")
     r.add_argument("--token", default=None); r.add_argument("--user", default=None); r.add_argument("--password", default=None)
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--no-alert", action="store_true")
+    r.add_argument("--digest", action="store_true", help="send the weekly digest after this run (else Mondays only)")
     a = sub.add_parser("auth", help="one-time consent"); common(a)
     a.add_argument("source", choices=["google", "tiktok"]); a.add_argument("--manual", action="store_true")
     a.add_argument("--port", type=int, default=8765)
@@ -623,6 +659,10 @@ def main(argv=None) -> int:
     tg.add_argument("--text", default="Oshinei feedback sync: ทดสอบการแจ้งเตือน ✓")
     sw = sub.add_parser("subscribe", help="subscribe the Meta app to the configured pages' webhooks"); common(sw)
     sw.add_argument("source", choices=["facebook"])
+    dg = sub.add_parser("digest", help="send the weekly voice digest to Telegram now"); common(dg)
+    dg.add_argument("--api", default=DEFAULT_API); dg.add_argument("--db", default=None)
+    dg.add_argument("--token", default=None); dg.add_argument("--user", default=None); dg.add_argument("--password", default=None)
+    dg.add_argument("--days", type=int, default=7)
     rp = sub.add_parser("replies", help="post the replies queued in the tab now"); common(rp)
     rp.add_argument("--api", default=DEFAULT_API); rp.add_argument("--db", default=None)
     rp.add_argument("--token", default=None); rp.add_argument("--user", default=None); rp.add_argument("--password", default=None)
@@ -661,6 +701,13 @@ def main(argv=None) -> int:
     else:
         login = get_login(SimpleNamespace(user=args.user, password=args.password))
         sink = ApiSink(args.api, resolve_token(args.token), login)
+    if args.cmd == "digest":
+        d = sink.digest(args.days)
+        text = notify.weekly_digest(d, args.api)
+        ok = notify.send_telegram(text)
+        print(text)
+        print("telegram:", "sent" if ok else "not configured (OSHINEI_TG_TOKEN / OSHINEI_TG_CHAT_ID)")
+        return 0
     if args.cmd == "replies":
         res = send_replies(cfg, sink, urllib_http)
         print(f"replies: {res['sent']} sent, {res['failed']} failed")

@@ -1,0 +1,66 @@
+# -*- coding: utf-8 -*-
+"""🔁 fix-loop acceptance (Playwright, dev server on :8021): open a theme, create
+an action from it, see it in the card with its baseline, move it to done, and
+see the Management Report's §12 Customer Voice render with the same numbers."""
+import os, sys
+from playwright.sync_api import sync_playwright
+
+BASE = os.environ.get('MGT_BASE', 'http://localhost:8021/')
+SC = os.environ.get('SHOT_DIR', os.path.dirname(os.path.abspath(__file__)))
+errors = []
+with sync_playwright() as pw:
+    b = pw.chromium.launch(channel='chrome', headless=True)
+    pg = b.new_page(viewport={'width': 1400, 'height': 1000})
+    pg.on('pageerror', lambda e: errors.append(str(e)))
+    pg.on('dialog', lambda d: d.accept('ทดสอบ: เพิ่มคน 1 คน'))
+    pg.goto(BASE, wait_until='networkidle', timeout=90000)
+    pg.wait_for_function("typeof switchTab === 'function' && TABS.feedback", timeout=30000)
+    pg.evaluate("() => { document.body.classList.add('force-desktop'); switchTab('feedback'); }")
+    pg.wait_for_function("document.getElementById('fbThemes').innerText.length > 0", timeout=30000)
+    pg.wait_for_timeout(1500)
+    theme = pg.evaluate("() => { const t = (_fbSummary.themes || [])[0]; showFeedbackTheme(t.theme); return t.theme; }")
+    pg.wait_for_function("document.getElementById('fbThemeDetail').innerText.includes('สร้างงานแก้')", timeout=30000)
+    pg.evaluate("() => document.querySelector('#fbThemeDetail .fb-btn').click()")
+    pg.wait_for_function("document.getElementById('fbActionForm').style.display !== 'none' && document.getElementById('faTitle')", timeout=30000)
+    title = pg.evaluate("() => document.getElementById('faTitle').value")
+    pg.fill('#faOwner', 'เก่ง')
+    pg.fill('#faDue', '2026-09-30')
+    pg.evaluate("() => saveFeedbackAction(null)")
+    pg.wait_for_function("document.getElementById('fbActions').innerText.includes('เก่ง')", timeout=30000)
+    pg.wait_for_timeout(800)
+    card = pg.evaluate("() => document.getElementById('fbActions').innerText")
+    hint = pg.evaluate("() => document.getElementById('fbActionsHint').innerText")
+    pg.evaluate("() => document.getElementById('fbActionsCard').scrollIntoView()")
+    pg.screenshot(path=os.path.join(SC, '.tmp_actions_card.png'))
+    aid = pg.evaluate("() => { const b = document.querySelector('#fbActions button[onclick^=\"setActionStatus\"]'); return b ? +b.getAttribute('onclick').match(/\\d+/)[0] : 0; }")
+    pg.evaluate(f"() => setActionStatus({aid}, 'done')")
+    pg.wait_for_function("document.getElementById('fbActions').innerText.includes('รอครบ 28 วัน') || document.getElementById('fbActions').innerText.includes('ไม่มีงานค้าง')", timeout=30000)
+    pg.evaluate("() => setFeedbackActionFilter('done')")
+    pg.wait_for_function("document.getElementById('fbActions').innerText.includes('รอครบ 28 วัน')", timeout=30000)
+    done_card = pg.evaluate("() => document.getElementById('fbActions').innerText")
+    pg.screenshot(path=os.path.join(SC, '.tmp_actions_done.png'))
+    # the management report: §12 renders from the same digest
+    pg.evaluate("() => switchTab('mgtreport')")
+    pg.wait_for_function("document.getElementById('mgt-s12') && document.getElementById('mgt-s12').innerText.length > 40", timeout=90000)
+    pg.wait_for_timeout(1000)
+    s12 = pg.evaluate("() => document.getElementById('mgt-s12').innerText")
+    s13 = pg.evaluate("() => (document.getElementById('mgt-s13') || {}).innerText || ''")
+    toc = pg.evaluate("() => [...document.querySelectorAll('a[href=\"#mgt-s12\"], a[href=\"#mgt-s13\"]')].map(a => a.innerText.trim())")
+    pg.evaluate("() => document.getElementById('mgt-s12').scrollIntoView()")
+    pg.wait_for_timeout(500)
+    pg.screenshot(path=os.path.join(SC, '.tmp_mgt_s12.png'))
+    b.close()
+
+print('theme / title  :', theme, '/', title)
+print('card           :', card.replace('\n', ' | ')[:260])
+print('hint           :', hint)
+print('done view      :', done_card.replace('\n', ' | ')[:200])
+print('§12            :', s12.replace('\n', ' | ')[:300])
+print('§13 appendix   :', s13[:60].replace('\n', ' | '))
+print('toc            :', toc)
+print('page errors    :', errors[:3])
+ok = (theme and 'แก้เรื่อง' in title and 'เก่ง' in card and '2026-09-30' in card and 'ค้าง 1' in hint
+      and 'รอครบ 28 วัน' in done_card and '12.' in s12 and ('งานแก้' in s12 or 'fix loop' in s12.lower() or 'วงจรการแก้' in s12)
+      and s13.startswith('13.') and len(toc) == 2 and not errors)
+print('RESULT:', 'OK' if ok else 'PROBLEMS')
+sys.exit(0 if ok else 1)

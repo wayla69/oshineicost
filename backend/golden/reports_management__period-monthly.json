@@ -34,6 +34,54 @@
  "comp_label": "previous month",
  "comp_range": null,
  "days_in_period": 31,
+ "feedback": {
+  "actions": {
+   "better": 0,
+   "doing": 0,
+   "done": 0,
+   "items": [],
+   "no_data": 0,
+   "open": 0,
+   "overdue": 0,
+   "same": 0,
+   "worse": 0
+  },
+  "avg_rating": null,
+  "branches_praised": [],
+  "branches_watch": [],
+  "days": 31,
+  "flagged": 0,
+  "neg_pct": 0.0,
+  "negatives": 0,
+  "positives": 0,
+  "prev_avg_rating": null,
+  "prev_neg_pct": null,
+  "prev_range": [
+   "2026-03-31",
+   "2026-04-30"
+  ],
+  "prev_response_rate": null,
+  "prev_voices": 0,
+  "range": [
+   "2026-05-01",
+   "2026-05-31"
+  ],
+  "response": {
+   "answerable": 0,
+   "answered": 0,
+   "median_days": null,
+   "rate": null
+  },
+  "sla_breached": 0,
+  "survey": {
+   "avg_rating": null,
+   "n": 0,
+   "prev_n": 0
+  },
+  "themes": [],
+  "unreplied": 0,
+  "voices": 0
+ },
  "focus": "2026-06-03",
  "gp": {
   "cost_basis": "daily",

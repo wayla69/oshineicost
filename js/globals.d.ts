@@ -14,7 +14,6 @@ declare const marked: any;
 // ── globals the shell / the slices define on `window` rather than as names ──
 declare var __vendorErr: string[];      // index.html: vendor scripts that failed to load
 declare var allMonths: string[];        // 01-core.js: Object.defineProperty(window, 'allMonths', …)
-declare var notifySuccess: any;         // optional hook, always guarded by `typeof … === 'function'`
 
 // Slices keep per-feature state on window (window.gpbGranularity, …) and read it
 // back as a property — any name is allowed there.
