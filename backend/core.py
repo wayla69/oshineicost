@@ -179,7 +179,9 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      line — the next 10:00 push would have wiped every review)
 #   feedback_*         its sync log and source tables
 #   checklist_*        go-live checklist ticks and sign-offs (routers/checklist.py)
-_PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets")   # branch_targets: typed on the site, 2026-09-05
+# app_settings + branch_targets: edited on the running site (role permissions, discount ceiling,
+# fixed/labor costs, targets) — the daily push used to overwrite them with the local copy (found 2026-09-05)
+_PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings")
 _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
 
 
