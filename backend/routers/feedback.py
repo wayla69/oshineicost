@@ -27,13 +27,15 @@ _PRESERVED_PREFIXES): the live site is the only place these rows exist.
 import csv
 import datetime
 import hashlib
+import hmac
 import io
 import json
+import os
 import zipfile
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse
 
 from core import get_db, require_write_token
 from feedback_nlp import analyse, clean_menu_name, draft_reply
@@ -73,6 +75,16 @@ CREATE TABLE IF NOT EXISTS feedback_sync_log(
   message   TEXT,
   by        TEXT
 );
+CREATE TABLE IF NOT EXISTS feedback_webhook_events(
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  received_at  TEXT DEFAULT (datetime('now','+7 hours')),
+  platform     TEXT,
+  object_id    TEXT,
+  field        TEXT,
+  payload      TEXT,
+  processed_at TEXT,
+  result       TEXT
+);
 """
 # columns added after the first release — ALTERed in when missing (the live DB
 # keeps its rows across deploys, so CREATE IF NOT EXISTS alone never adds them)
@@ -88,7 +100,7 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                ("kind", "TEXT"))
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 KINDS = ("review", "comment", "mention")
-REPLY_MAX = {"google": 4096, "facebook": 8000, "tiktok": 150}     # characters the platform accepts; others 4000
+REPLY_MAX = {"google": 4096, "facebook": 8000, "tiktok": 150, "instagram": 2200}   # characters the platform accepts; others 4000
 
 # header names the CSV/TSV/XLSX/JSON import understands (lower-cased, Thai or English)
 _COLS = {
@@ -474,6 +486,8 @@ def _reply_channel(row) -> str:
         return "facebook"
     if src == "tiktok" and ext.startswith("comment:") and "/" in ref:
         return "tiktok"
+    if src == "instagram" and ext.startswith("comment:") and "/" in ref:
+        return "instagram"
     return "manual"
 
 
@@ -697,7 +711,7 @@ async def feedback_reply(fid: int, request: Request):
         limit = REPLY_MAX.get(ch, 4000)
         if len(text) > limit:
             raise HTTPException(400, f"ข้อความตอบกลับยาวเกิน {limit:,} ตัวอักษร ({ch} รับได้เท่านั้น) — ตอนนี้ {len(text):,}")
-        status = "pending" if ch in ("google", "facebook", "tiktok") else "manual"
+        status = "pending" if ch in ("google", "facebook", "tiktok", "instagram") else "manual"
         con.execute("UPDATE customer_feedback SET reply_draft=?, reply_status=?, reply_requested_at=?, "
                     "reply_requested_by=?, reply_error=NULL, updated_at=? WHERE id=?",
                     (text, status, _thai_now(), str(b.get("by") or "")[:60], _thai_now(), fid))
@@ -712,6 +726,8 @@ def _reply_note(ch: str, row: dict) -> str:
         return "โพสต์ใต้คอมเมนต์ในรอบดึงถัดไป (09:00)"
     if ch == "tiktok":
         return "โพสต์ตอบใต้คอมเมนต์ TikTok ในรอบดึงถัดไป (09:00) — TikTok รับไม่เกิน 150 ตัวอักษร"
+    if ch == "instagram":
+        return "โพสต์ตอบใต้คอมเมนต์ Instagram ในรอบดึงถัดไป (09:00)"
     if ch == "manual":
         if (row.get("kind") or "review") == "mention":
             return "เป็นการพูดถึงบนเว็บ/โซเชียลของคนอื่น — ระบบไม่โพสต์แทน บันทึกข้อความไว้แล้วไปตอบเองในแพลตฟอร์มนั้น"
@@ -719,6 +735,87 @@ def _reply_note(ch: str, row: dict) -> str:
             return "Facebook ไม่ให้ตอบ Recommendation ผ่าน API — คัดลอกข้อความไปตอบในแอป Facebook"
         return "รีวิวนี้ไม่มี resource name (นำเข้าจากไฟล์ที่ไม่ใช่ Takeout/API?) — คัดลอกข้อความไปตอบในแอป"
     return "รีวิวนี้ไม่มี review id จึงตอบผ่านระบบไม่ได้"
+
+
+# ── the Meta webhook (Instagram @mentions) ───────────────────────────────────
+# Meta pushes events here; there is no session (main.py exempts the path), so the
+# endpoint carries its own two checks: the verify token on the subscription
+# handshake and the HMAC-SHA256 of every body with the app secret. Both come
+# from env (Fly secrets META_APP_SECRET / META_WEBHOOK_VERIFY_TOKEN); unset =
+# fail closed. Events are only STORED — the nightly fetcher resolves them with
+# the Page token it holds and marks them processed.
+@router.get("/api/feedback/webhook/meta", include_in_schema=False)
+def meta_webhook_verify(hub_mode: str = Query("", alias="hub.mode"), hub_challenge: str = Query("", alias="hub.challenge"),
+                        hub_verify_token: str = Query("", alias="hub.verify_token")):
+    expected = os.environ.get("META_WEBHOOK_VERIFY_TOKEN", "")
+    if hub_mode == "subscribe" and expected and hmac.compare_digest(hub_verify_token, expected):
+        return PlainTextResponse(hub_challenge)
+    raise HTTPException(403, "verify token mismatch")
+
+
+@router.post("/api/feedback/webhook/meta", include_in_schema=False)
+async def meta_webhook(request: Request):
+    secret = os.environ.get("META_APP_SECRET", "")
+    if not secret:
+        raise HTTPException(503, "webhook not configured (META_APP_SECRET)")
+    raw = await request.body()
+    if len(raw) > 262144:
+        raise HTTPException(413, "payload too large")
+    expected = "sha256=" + hmac.new(secret.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(request.headers.get("x-hub-signature-256", ""), expected):
+        raise HTTPException(403, "bad signature")
+    try:
+        payload = json.loads(raw.decode("utf-8") or "{}")
+    except ValueError:
+        raise HTTPException(400, "not JSON")
+    platform = str(payload.get("object") or "")
+    n = 0
+    with get_db() as con:
+        _ensure(con)
+        for entry in payload.get("entry") or []:
+            for ch in (entry.get("changes") or []) if isinstance(entry, dict) else []:
+                con.execute("INSERT INTO feedback_webhook_events(platform, object_id, field, payload) VALUES (?,?,?,?)",
+                            (platform, str(entry.get("id") or ""), str(ch.get("field") or ""),
+                             json.dumps(ch.get("value") or {}, ensure_ascii=False)[:4000]))
+                n += 1
+        con.execute("DELETE FROM feedback_webhook_events WHERE id NOT IN "
+                    "(SELECT id FROM feedback_webhook_events ORDER BY id DESC LIMIT 5000)")
+        con.commit()
+    return {"stored": n}
+
+
+@router.get("/api/feedback/webhook-events")
+def feedback_webhook_events(platform: str = Query("instagram"), unprocessed: int = Query(1),
+                            limit: int = Query(500, ge=1, le=2000)):
+    """What the webhook kept — the fetcher reads the unprocessed ones."""
+    with get_db() as con:
+        _ensure(con)
+        where = "platform=?" + (" AND processed_at IS NULL" if unprocessed else "")
+        rows = con.execute(f"SELECT id, received_at, platform, object_id, field, payload, processed_at, result "
+                           f"FROM feedback_webhook_events WHERE {where} ORDER BY id LIMIT ?", (platform, limit)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["payload"] = json.loads(d.get("payload") or "{}")
+        except ValueError:
+            d["payload"] = {}
+        out.append(d)
+    return {"events": out}
+
+
+@router.post("/api/feedback/webhook-events/ack", dependencies=[Depends(require_write_token)])
+async def feedback_webhook_ack(request: Request):
+    b = await request.json()
+    ids = [int(i) for i in (b.get("ids") or []) if str(i).isdigit()]
+    if not ids:
+        raise HTTPException(400, "ids required")
+    with get_db() as con:
+        _ensure(con)
+        con.executemany("UPDATE feedback_webhook_events SET processed_at=?, result=? WHERE id=?",
+                        [(_thai_now(), str(b.get("result") or "ok")[:200], i) for i in ids])
+        con.commit()
+    return {"acked": len(ids)}
 
 
 @router.get("/api/feedback/oauth-callback", include_in_schema=False)

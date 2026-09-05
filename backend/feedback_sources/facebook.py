@@ -275,10 +275,25 @@ def extend_user_token(app_id: str, app_secret: str, short_token: str, http, api_
 def list_pages(user_token: str, http, api_version: str = DEFAULT_VERSION) -> list:
     """[{id, name, access_token}] — the pages the user administers, each with
     its Page token (never expires when the user token was long-lived)."""
-    q = {"fields": "id,name,access_token", "limit": 100, "access_token": user_token}
-    return [{"id": str(p.get("id") or ""), "name": p.get("name") or "", "token": p.get("access_token") or ""}
-            for p in _paged(f"{GRAPH}/{api_version}/me/accounts?" + urllib.parse.urlencode(q), http, "pages")]
+    q = {"fields": "id,name,access_token,instagram_business_account{id,username}", "limit": 100, "access_token": user_token}
+    out = []
+    for p in _paged(f"{GRAPH}/{api_version}/me/accounts?" + urllib.parse.urlencode(q), http, "pages"):
+        ig = p.get("instagram_business_account") or {}
+        out.append({"id": str(p.get("id") or ""), "name": p.get("name") or "", "token": p.get("access_token") or "",
+                    "instagram": {"id": str(ig.get("id")), "username": ig.get("username") or ""} if ig.get("id") else None})
+    return out
+
+
+def subscribe_page(page_id: str, page_token: str, http, api_version: str = DEFAULT_VERSION, fields: str = "feed") -> dict:
+    """Subscribe the app to a page's webhooks (POST /{page-id}/subscribed_apps) —
+    needed once per page before Meta delivers events to the dashboard."""
+    body = urllib.parse.urlencode({"subscribed_fields": fields, "access_token": page_token}).encode("utf-8")
+    status, j = http("POST", f"{GRAPH}/{api_version}/{page_id}/subscribed_apps",
+                     {"Content-Type": "application/x-www-form-urlencoded"}, body)
+    _check(status, j, "webhook subscription")
+    return j or {}
 
 
 __all__ = ["rating_to_row", "comment_to_row", "visitor_post_to_row", "tagged_post_to_row", "share_to_row",
-           "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "page_for_comment", "reply_to_comment", "SOURCE"]
+           "fetch_page", "fetch_rows", "extend_user_token", "list_pages", "subscribe_page", "page_for_comment",
+           "reply_to_comment", "SOURCE"]

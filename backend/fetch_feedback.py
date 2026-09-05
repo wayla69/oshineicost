@@ -21,7 +21,8 @@ Config — backend/.feedback_config.json (gitignored; Backup DB.bat copies it):
   {"google":   {"client_id", "client_secret", "refresh_token",
                 "account"?: "accounts/123", "location_map"?: {"<listing title>": "<สาขา>"}},
    "facebook": {"api_version"?: "v21.0",
-                "pages": [{"id", "name", "branch", "token", "comments"?: false}]},
+                "pages": [{"id", "name", "branch", "token", "comments"?: false, "shares"?, "visitor_posts"?, "tagged"?}]},
+   "instagram": {"accounts": [{"ig_user_id", "username", "page_id", "token", "branch", "comments"?, "tags"?}]},  # pages --save fills it
    "tiktok":   {"client_key", "client_secret", "access_token", "refresh_token", "business_id"},  # auth tiktok fills the tokens
    "x":        {"bearer_token", "keywords"?: ["โอชิเน", "oshinei"]},                          # Basic tier (paid)
    "youtube":  {"api_key", "keywords"?: [...], "comments"?: true},
@@ -77,7 +78,7 @@ def _load_env(path=HERE / ".env"):
 
 _load_env()
 
-from feedback_sources import facebook, google_gbp, rss, tiktok, x, youtube  # noqa: E402
+from feedback_sources import facebook, google_gbp, instagram, rss, tiktok, x, youtube  # noqa: E402
 from feedback_sources.google_gbp import _parse_body, urllib_http  # noqa: E402
 import notify  # noqa: E402
 from refresh_fly_db import _parse_token_file, get_login  # noqa: E402
@@ -85,6 +86,7 @@ from refresh_fly_db import _parse_token_file, get_login  # noqa: E402
 # config key → (source label in the DB, fetch(cfg, http, since, log) -> (rows, meta))
 SOURCES = {"google": (google_gbp.SOURCE, google_gbp.fetch_rows),
            "facebook": (facebook.SOURCE, facebook.fetch_rows),
+           "instagram": (instagram.SOURCE, instagram.fetch_rows),
            "tiktok": (tiktok.SOURCE, tiktok.fetch_rows),
            "x": (x.SOURCE, x.fetch_rows),
            "youtube": (youtube.SOURCE, youtube.fetch_rows),
@@ -209,6 +211,12 @@ class ApiSink:
     def reply_result(self, fid: int, status: str, error: str = "") -> dict:
         return self._call("POST", "/api/feedback/reply-result", {"id": fid, "status": status, "error": error})
 
+    def webhook_events(self, platform: str) -> dict:
+        return self._call("GET", f"/api/feedback/webhook-events?platform={urllib.parse.quote(platform)}&unprocessed=1")
+
+    def ack_events(self, ids: list, result: str = "ok") -> dict:
+        return self._call("POST", "/api/feedback/webhook-events/ack", {"ids": list(ids), "result": result})
+
 
 class DbSink:
     """Writes into a local SQLite file through the endpoint's own insert code."""
@@ -279,6 +287,32 @@ class DbSink:
         finally:
             con.close()
 
+    def webhook_events(self, platform: str) -> dict:
+        con = self._con()
+        try:
+            out = []
+            for r in con.execute("SELECT id, received_at, platform, object_id, field, payload FROM feedback_webhook_events "
+                                 "WHERE platform=? AND processed_at IS NULL ORDER BY id", (platform,)):
+                d = dict(r)
+                try:
+                    d["payload"] = json.loads(d.get("payload") or "{}")
+                except ValueError:
+                    d["payload"] = {}
+                out.append(d)
+            return {"events": out}
+        finally:
+            con.close()
+
+    def ack_events(self, ids: list, result: str = "ok") -> dict:
+        con = self._con()
+        try:
+            con.executemany("UPDATE feedback_webhook_events SET processed_at=datetime('now','+7 hours'), result=? WHERE id=?",
+                            [(result[:200], i) for i in ids])
+            con.commit()
+            return {"acked": len(ids)}
+        finally:
+            con.close()
+
 
 # ── queued replies ───────────────────────────────────────────────────────────
 def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
@@ -304,6 +338,14 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
                 vid, _, cid = (it.get("external_ref") or "").partition("/")
                 tiktok.reply_to_comment(tt_tok["access_token"], tt_tok.get("business_id") or cfg["tiktok"].get("business_id") or "",
                                         vid, cid, text, http)
+            elif src == "instagram":
+                ig_cfg = cfg.get("instagram") or {}
+                accs = {str(a.get("ig_user_id")): a for a in ig_cfg.get("accounts") or []}
+                igid, _, cid = (it.get("external_ref") or "").partition("/")
+                acc = accs.get(igid)
+                if not acc:
+                    raise RuntimeError("instagram is not configured on this PC for this account (backend/.feedback_config.json)")
+                instagram.reply_to_comment(acc.get("token") or "", cid, text, http, ig_cfg.get("api_version") or facebook.DEFAULT_VERSION)
             elif src == "google":
                 if not cfg.get("google"):
                     raise RuntimeError("google is not configured on this PC (backend/.feedback_config.json)")
@@ -373,6 +415,21 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
                 log(f"  (could not record the failure: {e2})")
             failures += 1
             continue
+        if name == "instagram" and not args.dry_run:
+            # @mentions arrive through the dashboard's Meta webhook; resolve what it kept since the last run
+            try:
+                events = (sink.webhook_events("instagram") or {}).get("events") or []
+                if events:
+                    m_rows, done, failed = instagram.resolve_mentions(cfg[name], events, http, log)
+                    rows.extend(m_rows)
+                    meta["mentions"] = len(m_rows)
+                    if done:
+                        sink.ack_events(done, "ok")
+                    for eid, why in failed:
+                        sink.ack_events([eid], f"failed: {why}")
+                    log(f"  webhook: {len(events)} mention event(s) → {len(m_rows)} row(s), {len(failed)} failed")
+            except Exception as e:
+                log(f"  webhook events: {e}")
         log(f"  fetched {len(rows)} row(s) in {time.time() - t0:.0f}s")
         if meta.get("config_update") and getattr(args, "config", None):
             cfg[name].update(meta["config_update"])          # rotated tokens (TikTok) go back into the file
@@ -494,19 +551,48 @@ def google_locations(cfg: dict, http, log=print) -> list:
 
 
 def facebook_pages(cfg: dict, http, user_token: str, save: bool = False, log=print) -> list:
+    """The pages (and their linked Instagram accounts) a user token manages;
+    --save writes both into the config, keeping branches already filled in."""
     pages = facebook.list_pages(user_token, http)
     fb = cfg.setdefault("facebook", {})
     have = {str(p.get("id")): p for p in fb.get("pages") or []}
+    ig_cfg = cfg.setdefault("instagram", {}) if save else {}
+    have_ig = {str(a.get("ig_user_id")): a for a in ig_cfg.get("accounts") or []} if save else {}
     for p in pages:
-        log(f"  {p['name']:<40} id {p['id']}  page token: {'yes' if p['token'] else 'NO'}")
+        ig = p.get("instagram")
+        log(f"  {p['name']:<40} id {p['id']}  page token: {'yes' if p['token'] else 'NO'}"
+            + (f"  IG @{ig['username']} ({ig['id']})" if ig else "  (no Instagram account linked)"))
         if save:
             entry = have.get(p["id"]) or {"id": p["id"], "name": p["name"], "branch": "", "comments": False}
             entry["token"], entry["name"] = p["token"], p["name"]
             have[p["id"]] = entry
+            if ig:
+                acc = have_ig.get(ig["id"]) or {"ig_user_id": ig["id"], "username": ig["username"], "page_id": p["id"],
+                                                 "branch": entry.get("branch") or "", "comments": True, "tags": True}
+                acc["token"], acc["username"], acc["page_id"] = p["token"], ig["username"] or acc.get("username", ""), p["id"]
+                have_ig[ig["id"]] = acc
     if save:
         fb["pages"] = list(have.values())
-        log('saved — now fill "branch" for each page in backend/.feedback_config.json')
+        if have_ig:
+            ig_cfg["accounts"] = list(have_ig.values())
+        elif not ig_cfg:
+            cfg.pop("instagram", None)
+        log('saved — now fill "branch" for each page / account in backend/.feedback_config.json')
     return pages
+
+
+def subscribe_webhooks(cfg: dict, http, log=print) -> int:
+    """Subscribe the app to every configured page's webhooks (once per page)."""
+    n = 0
+    for p in (cfg.get("facebook") or {}).get("pages") or []:
+        try:
+            facebook.subscribe_page(str(p.get("id")), p.get("token") or "", http,
+                                    (cfg.get("facebook") or {}).get("api_version") or facebook.DEFAULT_VERSION)
+            log(f"  ✓ {p.get('name') or p.get('id')}: subscribed")
+            n += 1
+        except Exception as e:
+            log(f"  ✗ {p.get('name') or p.get('id')}: {e}")
+    return n
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -535,6 +621,8 @@ def main(argv=None) -> int:
     pg.add_argument("--save", action="store_true")
     tg = sub.add_parser("test-telegram", help="send one test message")
     tg.add_argument("--text", default="Oshinei feedback sync: ทดสอบการแจ้งเตือน ✓")
+    sw = sub.add_parser("subscribe", help="subscribe the Meta app to the configured pages' webhooks"); common(sw)
+    sw.add_argument("source", choices=["facebook"])
     rp = sub.add_parser("replies", help="post the replies queued in the tab now"); common(rp)
     rp.add_argument("--api", default=DEFAULT_API); rp.add_argument("--db", default=None)
     rp.add_argument("--token", default=None); rp.add_argument("--user", default=None); rp.add_argument("--password", default=None)
@@ -563,6 +651,11 @@ def main(argv=None) -> int:
         if args.save:
             save_config(cfg, args.config)
         return 0
+    if args.cmd == "subscribe":
+        n = subscribe_webhooks(cfg, urllib_http)
+        print(f"{n} page(s) subscribed — the dashboard receives Meta webhooks at /api/feedback/webhook/meta "
+              "(META_APP_SECRET + META_WEBHOOK_VERIFY_TOKEN must be set on Fly, docs/FEEDBACK_SOURCES.html §3.2)")
+        return 0 if n else 1
     if args.db:
         sink = DbSink(args.db)
     else:

@@ -223,7 +223,7 @@ def test_facebook_rows_paging_since_and_pages():
     assert "comment:c2" not in by_ext                       # the page's own reply is not feedback
     rows2, _ = F.fetch_rows(cfg, _fb_http, since="2026-08-01")
     assert len([r for r in rows2 if r["external_id"].startswith("rec:")]) == 2   # stopped before July
-    assert F.list_pages("UT", _fb_http) == [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "token": "PT"}]
+    assert F.list_pages("UT", _fb_http) == [{"id": "PAGE1", "name": "Oshinei ขอนแก่น", "token": "PT", "instagram": None}]
     with pytest.raises(RuntimeError, match="OAuthException"):
         F.fetch_page({"id": "P2", "token": "bad"}, lambda *a: (400, {"error": {"type": "OAuthException", "message": "bad token"}}))
     with pytest.raises(RuntimeError, match="no pages"):
