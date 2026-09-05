@@ -78,7 +78,7 @@ def _load_env(path=HERE / ".env"):
 _load_env()
 
 from feedback_sources import facebook, google_gbp, rss, tiktok, x, youtube  # noqa: E402
-from feedback_sources.google_gbp import urllib_http  # noqa: E402
+from feedback_sources.google_gbp import _parse_body, urllib_http  # noqa: E402
 import notify  # noqa: E402
 from refresh_fly_db import _parse_token_file, get_login  # noqa: E402
 
@@ -146,8 +146,7 @@ def _cookie_http():
         req = urllib.request.Request(url, method=method, data=data, headers=headers)
         try:
             with opener.open(req, timeout=300) as r:
-                raw = r.read()
-                return r.status, (json.loads(raw.decode("utf-8")) if raw.strip() else {})
+                return r.status, _parse_body(r.read())      # HTML from a proxy error page must not crash the run
         except urllib.error.HTTPError as e:
             raw = e.read()
             try:
