@@ -188,8 +188,11 @@ class ApiSink:
     def sources(self) -> dict:
         return self._call("GET", "/api/feedback/sources")
 
-    def digest(self, days: int = 7) -> dict:
-        return self._call("GET", f"/api/feedback/digest?days={int(days)}")
+    def digest(self, days: int = 7, branch: str = None) -> dict:
+        q = f"/api/feedback/digest?days={int(days)}"
+        if branch:
+            q += "&branch=" + urllib.parse.quote(branch)
+        return self._call("GET", q)
 
     def upload(self, rows: list, by: str = "") -> dict:
         total = {"rows": 0, "inserted": 0, "updated": 0, "unchanged": 0, "duplicates": 0,
@@ -234,11 +237,11 @@ class DbSink:
         self.fb._ensure(con)
         return con
 
-    def digest(self, days: int = 7) -> dict:
+    def digest(self, days: int = 7, branch: str = None) -> dict:
         from routers.feedback_actions import compute_digest
         con = self._con()
         try:
-            out = compute_digest(con, days=days)
+            out = compute_digest(con, days=days, branch=branch)
             con.commit()
             return out
         finally:
@@ -391,9 +394,30 @@ def _weekday() -> int:            # seam: 0 = Monday, Thai clock
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).weekday()
 
 
-def _digest_step(args, sink, notifier, log, force: bool = False):
+def _branch_chats(cfg: dict) -> dict:
+    """{branch name: telegram chat id} — each branch's own group, on top of the
+    chain's chat (`telegram.branches` in .feedback_config.json)."""
+    return dict(((cfg or {}).get("telegram") or {}).get("branches") or {})
+
+
+def _branch_alerts(neg: list, cfg: dict, label: str, api: str, notifier_to, log) -> int:
+    """The negative voices of a branch also go to that branch's own chat."""
+    chats = _branch_chats(cfg)
+    if not chats or not notifier_to:
+        return 0
+    sent = 0
+    for bname, chat in chats.items():
+        mine = [it for it in neg if (it.get("branch") or "") == bname]
+        if mine and notifier_to(notify.negative_digest(mine, label, api), chat):
+            sent += 1
+            log(f"  alert → {bname}: {len(mine)} negative review(s) to the branch chat")
+    return sent
+
+
+def _digest_step(args, sink, notifier, log, force: bool = False, cfg: dict = None, notifier_to=None):
     """Every Monday (or on --digest) the week's voices go to the group chat:
-    counts against the week before, what waits, and whether the fixes held."""
+    counts against the week before, what waits, and whether the fixes held.
+    Branches with their own chat get their own digest."""
     if getattr(args, "dry_run", False) or not notifier:
         return False
     if not (force or getattr(args, "digest", False) or _weekday() == 0):
@@ -402,6 +426,15 @@ def _digest_step(args, sink, notifier, log, force: bool = False):
         d = sink.digest(7)
         sent = notifier(notify.weekly_digest(d, getattr(args, "api", "") or ""))
         log(f"  digest: {d.get('voices', 0)} voice(s) in {d.get('range')} → telegram {'sent' if sent else 'not configured'}")
+        if notifier_to:
+            for bname, chat in _branch_chats(cfg).items():
+                try:
+                    db = sink.digest(7, bname)
+                    if db.get("voices") or (db.get("actions") or {}).get("open"):
+                        notifier_to(notify.weekly_digest(db, getattr(args, "api", "") or ""), chat)
+                        log(f"  digest → {bname}: {db.get('voices', 0)} voice(s)")
+                except Exception as e:      # one branch's chat must not stop the others
+                    log(f"  ✗ digest → {bname}: {e}")
         return bool(sent)
     except Exception as e:
         log(f"  ✗ digest: {e}")
@@ -421,7 +454,7 @@ def _replies_step(args, cfg, sink, http, log):
 
 
 # ── the nightly run ──────────────────────────────────────────────────────────
-def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> int:
+def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print, notifier_to=None) -> int:
     if args.source != "all" and not cfg.get(args.source):
         log(f"{args.source}: not configured in backend/.feedback_config.json — see docs/FEEDBACK_SOURCES.html")
         return 1
@@ -493,8 +526,9 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
         if neg and notifier and not getattr(args, "no_alert", False):
             sent = notifier(notify.negative_digest(neg, label, args.api))
             log(f"  alert: {len(neg)} negative review(s) → telegram {'sent' if sent else 'not configured'}")
+            _branch_alerts(neg, cfg, label, args.api, notifier_to, log)
     _replies_step(args, cfg, sink, http, log)
-    _digest_step(args, sink, notifier, log)
+    _digest_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     return 1 if failures else 0
 
 
@@ -707,12 +741,17 @@ def main(argv=None) -> int:
         ok = notify.send_telegram(text)
         print(text)
         print("telegram:", "sent" if ok else "not configured (OSHINEI_TG_TOKEN / OSHINEI_TG_CHAT_ID)")
+        for bname, chat in _branch_chats(cfg).items():
+            db = sink.digest(args.days, bname)
+            okb = notify.send_telegram(notify.weekly_digest(db, args.api), chat_id=chat)
+            print(f"  → {bname}: {'sent' if okb else 'not sent'}")
         return 0
     if args.cmd == "replies":
         res = send_replies(cfg, sink, urllib_http)
         print(f"replies: {res['sent']} sent, {res['failed']} failed")
         return 0
-    return run(args, cfg, sink, urllib_http, notifier=notify.send_telegram)
+    return run(args, cfg, sink, urllib_http, notifier=notify.send_telegram,
+               notifier_to=lambda text, chat: notify.send_telegram(text, chat_id=chat))
 
 
 if __name__ == "__main__":

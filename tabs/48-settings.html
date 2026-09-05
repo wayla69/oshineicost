@@ -39,13 +39,15 @@
           <input id="newUserPass" type="text" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)" placeholder="รหัสผ่าน"></div>
         <div><label class="block text-xs font-medium mb-1" style="color:var(--text-muted)">บทบาท</label>
           <select id="newUserRole" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></select></div>
+        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">สาขา (เว้นว่าง = ทุกสาขา)</label>
+          <select id="newUserBranch" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"><option value="">ทุกสาขา</option></select></div>
         <button onclick="createUser()" class="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg">+ เพิ่มผู้ใช้</button>
         <span id="userSaveStatus" class="text-sm"></span>
       </div>
       <div class="overflow-x-auto">
         <table class="text-sm w-full">
           <thead><tr class="text-left text-xs border-b" style="color:var(--text-muted);border-color:var(--border)">
-            <th class="py-2 pr-4">ชื่อผู้ใช้</th><th class="py-2 pr-4">บทบาท</th>
+            <th class="py-2 pr-4">ชื่อผู้ใช้</th><th class="py-2 pr-4">บทบาท</th><th class="py-2 pr-4">สาขา</th>
             <th class="py-2 pr-4">สถานะ</th><th class="py-2 pr-4">สร้างเมื่อ</th><th class="py-2 text-right">การจัดการ</th>
           </tr></thead>
           <tbody id="userTableBody"></tbody>

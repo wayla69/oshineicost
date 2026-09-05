@@ -3002,6 +3002,12 @@ def _xlsx_voice(*, BOLD, NUM, PCT, autofit, header, j, th, wb):
     header(ws, ["Branch to watch" if not th else "สาขาที่ต้องดู", "Voices" if not th else "เสียง", "Negative" if not th else "ลบ", "Negative %" if not th else "ลบ %", "Main theme" if not th else "หัวข้อหลัก"])
     for b in v.get("branches_watch") or []:
         ws.append([b["branch"], b["n"], b["neg"], b["neg_pct"], b.get("top_theme") or ""])
+    if v.get("response_by_branch"):
+        ws.append([])
+        header(ws, ["Answered by branch" if not th else "ตอบกลับรายสาขา", "Answerable" if not th else "ตอบได้", "Answered" if not th else "ตอบแล้ว",
+                    "Rate %" if not th else "อัตรา %", "Median days" if not th else "เวลากลาง (วัน)"])
+        for x in v["response_by_branch"]:
+            ws.append([x["branch"], x["answerable"], x["answered"], x.get("rate"), x.get("median_days")])
     a = v.get("actions") or {}
     ws.append([])
     header(ws, ["Fix loop" if not th else "งานแก้", "Open" if not th else "ค้าง", "Overdue" if not th else "เกินกำหนด", "Done" if not th else "เสร็จ",

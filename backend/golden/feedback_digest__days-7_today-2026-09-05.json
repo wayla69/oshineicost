@@ -36,6 +36,7 @@
   "median_days": null,
   "rate": null
  },
+ "response_by_branch": [],
  "sla_breached": 0,
  "survey": {
   "avg_rating": null,

@@ -60,7 +60,9 @@ async function _fbFillBranches() {
 }
 
 /* ── load ── */
+function _fbScope() { return (window.AUTH && window.AUTH.branch) || ''; }
 async function loadFeedback(force) {
+  if (_fbScope()) _fbBranchLocal = _fbScope();          // E4: this login sees its own branch only
   await _fbFillBranches();
   const fk = _filterKey() + '|' + _fbKind + '|' + _fbBranchLocal;
   if (!force && _tabLastKey.feedback === fk) return;
@@ -78,7 +80,7 @@ async function loadFeedback(force) {
   loadFeedbackActions();
 }
 function setFeedbackKind(k) { _fbKind = k || ''; loadFeedback(true); }
-function setFeedbackBranch(name) { _fbBranchLocal = name || ''; _fbTheme = ''; loadFeedback(true); }
+function setFeedbackBranch(name) { if (_fbScope()) return; _fbBranchLocal = name || ''; _fbTheme = ''; loadFeedback(true); }
 
 /* ── PULSE ── */
 function _fbDelta(cur, prev, { pct = false, goodUp = true, digits = 1, unit = '' } = {}) {
@@ -99,7 +101,8 @@ function renderFeedback(d) {
   // kind chips + local branch chip
   const kinds = d.kinds || {}, total = Object.values(kinds).reduce((a, x) => a + x, 0);
   document.getElementById('fbKindChips').innerHTML = _FB_KINDS.map(([k, label]) => `<button type="button" class="fb-chip${k === _fbKind ? ' on' : ''}" onclick="setFeedbackKind('${k}')">${label} ${k ? (kinds[k] || 0) : total}</button>`).join('');
-  document.getElementById('fbBranchChip').innerHTML = _fbBranchLocal ? `<button type="button" class="fb-chip on" onclick="setFeedbackBranch('')" title="ล้างตัวกรองสาขา">สาขา: ${_fbEsc(_fbBranchLocal)} ✕</button>` : '';
+  document.getElementById('fbBranchChip').innerHTML = _fbScope() ? `<span class="fb-chip on" title="บัญชีนี้เห็นเฉพาะสาขาของตน">🏪 สาขาของคุณ: ${_fbEsc(_fbScope())}</span>` :
+    (_fbBranchLocal ? `<button type="button" class="fb-chip on" onclick="setFeedbackBranch('')" title="ล้างตัวกรองสาขา">สาขา: ${_fbEsc(_fbBranchLocal)} ✕</button>` : '');
   // empty state
   const empty = document.getElementById('fbEmpty');
   if (!d.total) {

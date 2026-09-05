@@ -300,6 +300,14 @@ async function loadUsers() {
   }
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  // E4: a login can be confined to one branch — the feedback module then shows only that branch
+  if (!window._userBranches) {
+    try { window._userBranches = ((await api(`${API}/api/branches`)) || []).filter(b => b.active !== false).map(b => b.name); }
+    catch (e) { window._userBranches = []; }
+    const bs = document.getElementById('newUserBranch');
+    if (bs && bs.options.length <= 1) window._userBranches.forEach(b => bs.add(new Option(b, b)));
+  }
+  const branchOpts = cur => `<option value="">ทุกสาขา</option>` + (window._userBranches || []).map(b => `<option value="${b}" ${b === cur ? 'selected' : ''}>${b}</option>`).join('');
   let users = [];
   try { users = await api(`${API}/api/auth/users`); }
   catch(e) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">โหลดรายชื่อผู้ใช้ไม่ได้</td></tr>'; return; }
@@ -311,6 +319,7 @@ async function loadUsers() {
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-2 pr-4 font-medium" style="color:var(--text-primary)">${u.username}${me?' <span class=\"text-xs\" style=\"color:var(--text-muted)\">(คุณ)</span>':''}</td>
       <td class="py-2 pr-4"><select onchange="updateUserRole('${u.username}', this.value)" ${me?'disabled title="เปลี่ยนบทบาทตัวเองไม่ได้"':''} class="border rounded px-2 py-1 text-xs ${me?'opacity-50 cursor-not-allowed':''}" style="border-color:var(--border)">${opts}</select></td>
+      <td class="py-2 pr-4"><select onchange="updateUserBranch('${u.username}', this.value)" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border)" title="เสียงลูกค้าจะเห็นเฉพาะสาขานี้">${branchOpts(u.branch || '')}</select></td>
       <td class="py-2 pr-4">${u.active
         ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">ใช้งาน</span>'
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ปิด</span>'}</td>
@@ -439,10 +448,11 @@ async function createUser() {
   const username = document.getElementById('newUserName').value.trim();
   const password = document.getElementById('newUserPass').value;
   const role = document.getElementById('newUserRole').value;
+  const branch = (document.getElementById('newUserBranch') || {}).value || '';
   if (!username || !password) { _userStatus('กรอกชื่อผู้ใช้และรหัสผ่าน', false); return; }
   const res = await fetch(`${API}/api/auth/users`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ username, password, role }) });
+    body: JSON.stringify({ username, password, role, branch }) });
   if (res.ok) {
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserPass').value = '';
@@ -458,6 +468,7 @@ async function _putUser(username, body, okMsg) {
   else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'บันทึกไม่สำเร็จ', false); }
 }
 function updateUserRole(username, role) { _putUser(username, { role }, `เปลี่ยนบทบาท ${username} แล้ว`); }
+function updateUserBranch(username, branch) { _putUser(username, { branch }, branch ? `${username} เห็นเฉพาะสาขา ${branch}` : `${username} เห็นทุกสาขา`); }
 function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
 function resetUserPassword(username) {
   const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);

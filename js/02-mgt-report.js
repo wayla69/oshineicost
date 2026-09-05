@@ -335,6 +335,7 @@ const MGT_I18N = {
     vWatch:'Branches to watch', vPraised:'Most praised', vSurvey:'QR survey', vAnswers:'answers', vActions:'Fix loop', vOpen:'open', vOverdue:'overdue',
     vDone:'done this period', vBetter:'better', vSame:'same', vWorse:'worse', vPending:'window still running', vRate:'neg / 100 voices',
     vNoActions:'No fixes recorded yet — create one from a theme in the 💬 tab, and this section will show whether it worked.',
+    vRespBranch:'Answered by branch', vMedian:'median',
     tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
     tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
     tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
@@ -440,6 +441,7 @@ const MGT_I18N = {
     vWatch:'สาขาที่ต้องดู', vPraised:'ชมมากสุด', vSurvey:'แบบสอบถาม QR', vAnswers:'คำตอบ', vActions:'วงจรการแก้', vOpen:'ค้าง', vOverdue:'เกินกำหนด',
     vDone:'เสร็จในช่วงนี้', vBetter:'ดีขึ้น', vSame:'เท่าเดิม', vWorse:'แย่ลง', vPending:'รอครบ 28 วัน', vRate:'ลบ / 100 เสียง',
     vNoActions:'ยังไม่มีงานแก้ที่บันทึกไว้ — สร้างจากหัวข้อในแท็บ 💬 แล้วส่วนนี้จะบอกว่าแก้แล้วได้ผลไหม',
+    vRespBranch:'ตอบกลับรายสาขา', vMedian:'กลาง',
     tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
     tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
     tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
@@ -1533,13 +1535,15 @@ function renderMgtReport(j, jM, jF) {
       V.branches_watch.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#dc2626">${b.neg_pct}% (${b.neg}/${b.n})${b.top_theme ? ` <span class="text-slate-400">· ${esc(b.top_theme)}</span>` : ''}</span></div>`).join('') : '';
     const praised = (V.branches_praised || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vPraised}</p>` +
       V.branches_praised.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#059669">★${b.avg_rating.toFixed(2)} <span class="text-slate-400">(n=${b.n})</span></span></div>`).join('') : '';
+    const respB = (V.response_by_branch || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vRespBranch}</p>` +
+      V.response_by_branch.map(x => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(x.branch)}</span><span class="tabular-nums" style="color:${(x.rate || 0) >= 80 ? '#059669' : (x.rate || 0) >= 50 ? '#b45309' : '#dc2626'}">${x.rate != null ? x.rate + '%' : '—'} <span class="text-slate-400">(${x.answered}/${x.answerable}${x.median_days != null ? ` · ${T.vMedian} ${x.median_days}d` : ''})</span></span></div>`).join('') : '';
     const survey = S.n ? `<p class="text-[11px] text-slate-500 mt-3">${T.vSurvey}: <b>${S.n}</b> ${T.vAnswers} ${delta(S.n, S.prev_n, 0)}${S.avg_rating != null ? ` · ★${S.avg_rating.toFixed(2)}` : ''}</p>` : '';
     const resTag = r => ({ better: ['#059669', T.vBetter], same: ['#64748b', T.vSame], worse: ['#dc2626', T.vWorse], no_data: ['#94a3b8', '—'] }[r] || ['#b45309', T.vPending]);
     const loop = `<p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">${T.vActions}</p>` +
       `<p class="text-[12px] text-slate-700">${T.vOpen} <b>${(A.open || 0) + (A.doing || 0)}</b>${A.overdue ? ` <span style="color:#dc2626">(${A.overdue} ${T.vOverdue})</span>` : ''} · ${T.vDone} <b>${A.done || 0}</b>` +
       ((A.better || A.same || A.worse) ? ` · <span style="color:#059669">${T.vBetter} ${A.better || 0}</span> / ${T.vSame} ${A.same || 0} / <span style="color:#dc2626">${T.vWorse} ${A.worse || 0}</span>` : '') + `</p>` +
       ((A.items || []).length ? `<table class="w-full text-[12px] mt-1"><tbody>` + A.items.map(it => { const [c, l] = resTag(it.result); return `<tr class="border-t border-slate-100"><td class="py-1 text-slate-700">${esc(it.title)}${it.branch ? ` <span class="text-slate-400">· ${esc(it.branch)}</span>` : ''}${it.theme ? ` <span class="text-slate-400">· ${esc(it.theme)}</span>` : ''}</td><td class="py-1 text-right tabular-nums whitespace-nowrap">${it.before_rate != null && it.after_rate != null ? `${it.before_rate} → ${it.after_rate} <span class="text-slate-400 text-[10px]">${T.vRate}</span>` : (it.days_left ? `<span class="text-slate-400 text-[10px]">${T.vPending} (${it.days_left})</span>` : '')}</td><td class="py-1 pl-2 text-right"><span class="text-[10px] font-semibold" style="color:${c}">${l}</span></td></tr>`; }).join('') + '</tbody></table>' : `<p class="text-[11px] text-slate-400 mt-1">${T.vNoActions}</p>`);
-    return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}</div></div><div class="mt-4">${loop}</div>`;
+    return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}${respB}</div></div><div class="mt-4">${loop}</div>`;
   })();
 
   // -- The report plan ------------------------------------------------------

@@ -344,8 +344,10 @@ def _unb64(s: str) -> bytes:
     return base64.urlsafe_b64decode(s + pad)
 
 
-def make_token(uid: int, username: str, role: str, ttl: int = SESSION_TTL) -> str:
+def make_token(uid: int, username: str, role: str, ttl: int = SESSION_TTL, branch: Optional[str] = None) -> str:
     payload = {"uid": uid, "u": username, "r": role, "exp": int(time.time()) + ttl}
+    if branch:
+        payload["b"] = branch          # the branch this login is scoped to (feedback endpoints enforce it)
     body = _b64(json.dumps(payload, separators=(",", ":")).encode("utf-8"))
     sig = _b64(hmac.new(_secret(), body.encode("ascii"), hashlib.sha256).digest())
     return f"{body}.{sig}"
@@ -367,6 +369,15 @@ def parse_token(token: str) -> Optional[Dict]:
     if int(payload.get("exp", 0)) < int(time.time()):
         return None
     return payload
+
+
+def scope_branch(request) -> Optional[str]:
+    """The branch a logged-in user is confined to, or None (the whole chain,
+    or auth off). Read from the signed cookie — no DB hit per request."""
+    if not auth_enabled():
+        return None
+    payload = parse_token(request.cookies.get(SESSION_COOKIE, "")) or {}
+    return (payload.get("b") or None) if payload else None
 
 
 def auth_enabled() -> bool:
@@ -417,6 +428,8 @@ def init_auth(con: sqlite3.Connection) -> None:
     cols = {r[1] for r in con.execute("PRAGMA table_info(app_user)")}
     if "must_change" not in cols:
         con.execute("ALTER TABLE app_user ADD COLUMN must_change INTEGER NOT NULL DEFAULT 0")
+    if "branch" not in cols:      # E4: a login scoped to one branch (NULL = the whole chain)
+        con.execute("ALTER TABLE app_user ADD COLUMN branch TEXT")
     con.commit()
 
 
@@ -467,27 +480,46 @@ def get_user(con: sqlite3.Connection, username: str) -> Optional[sqlite3.Row]:
 
 def list_users(con: sqlite3.Connection) -> List[Dict]:
     rows = con.execute(
-        "SELECT id, username, role, active, must_change, created_at "
+        "SELECT id, username, role, active, must_change, created_at, branch "
         "FROM app_user ORDER BY role, username"
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def create_user(con: sqlite3.Connection, username: str, password: str, role: str) -> None:
+def branch_exists(con: sqlite3.Connection, name: str) -> bool:
+    try:
+        return bool(con.execute("SELECT 1 FROM branches WHERE name = ?", (name,)).fetchone())
+    except sqlite3.OperationalError:
+        return False
+
+
+def create_user(con: sqlite3.Connection, username: str, password: str, role: str,
+                branch: Optional[str] = None) -> None:
     if role not in ROLES:
         raise ValueError("invalid role")
     check_password_policy(password)                       # AUD-1
+    branch = (branch or "").strip() or None
+    if branch and not branch_exists(con, branch):
+        raise ValueError("ไม่พบสาขานี้")
     h = hash_password(password)
     con.execute(
-        "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change) VALUES (?,?,?,?,1)",
-        (username.strip(), h["hash"], h["salt"], role),   # new accounts must set their own password
+        "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change, branch) VALUES (?,?,?,?,1,?)",
+        (username.strip(), h["hash"], h["salt"], role, branch),   # new accounts must set their own password
     )
     con.commit()
 
 
+UNSET = object()
+
+
 def update_user(con: sqlite3.Connection, username: str, *, role: Optional[str] = None,
-                password: Optional[str] = None, active: Optional[bool] = None) -> None:
+                password: Optional[str] = None, active: Optional[bool] = None, branch=UNSET) -> None:
     sets, vals = [], []
+    if branch is not UNSET:
+        b = (branch or "").strip() or None
+        if b and not branch_exists(con, b):
+            raise ValueError("ไม่พบสาขานี้")
+        sets.append("branch = ?"); vals.append(b)
     if role is not None:
         if role not in ROLES:
             raise ValueError("invalid role")
