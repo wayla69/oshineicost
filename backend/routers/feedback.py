@@ -99,7 +99,7 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                # mention = anywhere else (X, YouTube, news, blogs) — no rating, no reply channel
                ("kind", "TEXT"))
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
-KINDS = ("review", "comment", "mention")
+KINDS = ("review", "comment", "mention", "message")   # message = a private inbox conversation (Messenger / IG DM), per day
 REPLY_MAX = {"google": 4096, "facebook": 8000, "tiktok": 150, "instagram": 2200}   # characters the platform accepts; others 4000
 
 # header names the CSV/TSV/XLSX/JSON import understands (lower-cased, Thai or English)
@@ -466,7 +466,7 @@ def _needs_reply(r) -> bool:
     """A fetched review or comment (has an external id) that is negative or
     ≤3★, the branch has not answered and no reply is queued — the list to work
     through. Mentions elsewhere on the web are read, not answered."""
-    return bool(r.get("external_id")) and (r.get("kind") or "review") in ("review", "comment") and \
+    return bool(r.get("external_id")) and (r.get("kind") or "review") in ("review", "comment", "message") and \
         not (r.get("reply_text") or "") and r.get("reply_status") not in ("pending", "sent") and \
         (r.get("sentiment") == "neg" or (r.get("rating") is not None and float(r["rating"]) <= 3))
 
@@ -592,7 +592,7 @@ def feedback_sources():
             "SELECT source, COUNT(*) AS n, MAX(rated_at) AS latest, "
             "SUM(CASE WHEN external_id IS NOT NULL THEN 1 ELSE 0 END) AS fetched, "
             "SUM(CASE WHEN external_id IS NOT NULL AND (reply_text IS NULL OR reply_text='') "
-            "         AND COALESCE(kind,'review') IN ('review','comment') "
+            "         AND COALESCE(kind,'review') IN ('review','comment','message') "
             "         AND COALESCE(reply_status,'') NOT IN ('pending','sent') "
             "         AND (sentiment='neg' OR rating<=3) THEN 1 ELSE 0 END) AS unreplied "
             "FROM customer_feedback GROUP BY source ORDER BY n DESC")]
@@ -729,6 +729,8 @@ def _reply_note(ch: str, row: dict) -> str:
     if ch == "instagram":
         return "โพสต์ตอบใต้คอมเมนต์ Instagram ในรอบดึงถัดไป (09:00)"
     if ch == "manual":
+        if (row.get("kind") or "review") == "message":
+            return "ข้อความส่วนตัวจาก Inbox — ระบบไม่ส่งแทน บันทึกร่างไว้แล้วไปตอบในกล่องข้อความของ Meta Business Suite (เปิดลิงก์ ↗)"
         if (row.get("kind") or "review") == "mention":
             return "เป็นการพูดถึงบนเว็บ/โซเชียลของคนอื่น — ระบบไม่โพสต์แทน บันทึกข้อความไว้แล้วไปตอบเองในแพลตฟอร์มนั้น"
         if (row.get("source") or "").strip().lower() == "facebook":

@@ -6,7 +6,8 @@ the dashboard exposes — posts and comments that @mention it.
 
 Config (backend/.feedback_config.json → "instagram"):
     {"accounts": [{"ig_user_id": "17841…", "username": "oshinei.official", "page_id": "123",
-                   "token": "<Page token>", "branch": "", "comments": true, "tags": true, "max_media": 30}]}
+                   "token": "<Page token>", "branch": "", "comments": true, "tags": true, "max_media": 30,
+                   "inbox": false}]}                  # inbox = Instagram DMs (instagram_manage_messages)
 `pages facebook --user-token … --save` fills the accounts from each page's
 instagram_business_account. Permissions: instagram_basic,
 instagram_manage_comments (+ pages_show_list, pages_read_engagement).
@@ -20,7 +21,7 @@ import hashlib
 import json
 import urllib.parse
 
-from feedback_sources.facebook import DEFAULT_VERSION, GRAPH, _check, _paged
+from feedback_sources.facebook import DEFAULT_VERSION, GRAPH, _check, _paged, fetch_inbox
 from feedback_sources.google_gbp import thai_date
 
 SOURCE = "Instagram"
@@ -90,7 +91,8 @@ def fetch_account(acc: dict, http, since: str = "", api_version: str = DEFAULT_V
         raise RuntimeError("instagram account config needs ig_user_id and token")
     branch, own, v = acc.get("branch") or "", acc.get("username") or "", api_version
     rows = []
-    m = {"ig_user_id": ig, "username": own, "branch": branch, "media": 0, "comments": 0, "tagged": 0}
+    m = {"ig_user_id": ig, "username": own, "branch": branch, "media": 0, "comments": 0, "tagged": 0,
+         "inbox_threads": 0, "inbox": 0}
     if acc.get("comments", True):
         max_media = int(acc.get("max_media") or 30)
         q = {"fields": "id,caption,timestamp,permalink,media_type,comments_count", "limit": min(50, max_media), "access_token": token}
@@ -115,6 +117,12 @@ def fetch_account(acc: dict, http, since: str = "", api_version: str = DEFAULT_V
             row = tagged_to_row(media, branch)
             if row:
                 rows.append(row); m["tagged"] += 1
+    if acc.get("inbox") and acc.get("page_id"):
+        # Instagram DMs ride the linked page's conversations edge (instagram_manage_messages)
+        got, n = fetch_inbox(str(acc["page_id"]), token, http, since, v, "instagram", (ig, acc["page_id"]), SOURCE,
+                             branch, int(acc.get("inbox_min_chars") or 8))
+        rows.extend(got)
+        m["inbox_threads"], m["inbox"] = n, len(got)
     return rows, m
 
 
@@ -131,7 +139,8 @@ def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
         rows.extend(got)
         meta["accounts"].append(m)
         meta["fetched"] += len(got)
-        log(f"  @{(m['username'] or m['ig_user_id']):<30} → {m['branch']:<16} {m['media']:>3} post(s) {m['comments']:>4} comment(s) {m['tagged']:>3} tag(s)")
+        log(f"  @{(m['username'] or m['ig_user_id']):<30} → {m['branch']:<16} {m['media']:>3} post(s) {m['comments']:>4} comment(s) {m['tagged']:>3} tag(s)"
+            + (f" {m['inbox']:>3} DM day(s) from {m['inbox_threads']} thread(s)" if m.get("inbox_threads") else ""))
     return rows, meta
 
 

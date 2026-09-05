@@ -90,7 +90,8 @@ def test_instagram_comments_and_tags():
     assert c["location"] == "ทุเรียนมาแล้ว คืนนี้" and c["detect_branch"] is True and c["author"] and c["author"] != "ploy_eats"
     t = by["tagged:t1"]
     assert t["kind"] == "mention" and t["ref"] == "" and t["location"] == "แท็กบัญชี" and t["date"] == "2026-09-03"
-    assert meta["accounts"][0] == {"ig_user_id": "17841", "username": "oshinei.official", "branch": "", "media": 2, "comments": 1, "tagged": 1}
+    assert meta["accounts"][0] == {"ig_user_id": "17841", "username": "oshinei.official", "branch": "", "media": 2, "comments": 1, "tagged": 1,
+                                   "inbox_threads": 0, "inbox": 0}
     assert I.reply_to_comment("PT", "c1", "ขออภัยค่ะ", ig_http) == {"id": "r1"}
     with pytest.raises(RuntimeError, match="no accounts"):
         I.fetch_rows({}, ig_http)

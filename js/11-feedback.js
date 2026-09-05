@@ -37,9 +37,10 @@ async function _fbFillBranches() {
 }
 
 /* review = on the chain's own listing/page · comment = under the chain's own post/video ·
-   mention = anywhere else on the web (X, YouTube, news, blogs). '' = every kind. */
+   mention = anywhere else on the web (X, YouTube, news, blogs) · message = a private inbox
+   conversation (Messenger / IG DM), one row per thread per day. '' = every kind. */
 let _fbKind = '';
-const _FB_KINDS = [['', 'ทั้งหมด'], ['review', 'รีวิว'], ['comment', 'คอมเมนต์'], ['mention', 'การพูดถึง']];
+const _FB_KINDS = [['', 'ทั้งหมด'], ['review', 'รีวิว'], ['comment', 'คอมเมนต์'], ['mention', 'การพูดถึง'], ['message', 'ข้อความ Inbox']];
 function setFeedbackKind(k) { _fbKind = k || ''; loadFeedback(true); }
 function _fbRenderKindChips(kinds) {
   const el = document.getElementById('fbKindChips');
