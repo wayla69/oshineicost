@@ -269,3 +269,13 @@ reconciling documents / method).
 - Verified against a copy of the live DB (36 codes, ฿16.4M KNNQR, real cash
   T+1 deposits incl. the ฿14–34 daily skims the ฿50 tolerance used to hide);
   90 tests green (82 run + 8 skipped sample-file tests).
+
+## 2026-09-05 — the engine is a package
+`recon/matcher.py` (2,707 lines, every money lane in one file) became `recon/matcher/`:
+`_shared` (tolerances, channel→category, method config, POS totals) → `cash` → `buckets` →
+`points` → `payout` → `coupon` → `credit` → `category` → `lines` → `coverage` → `suggest` →
+`board` → `auto`. A module imports only from the layers before it (no cycles), and
+`recon/matcher/__init__.py` re-exports every name, so `from ..matcher import X` and the tests'
+`from recon.matcher import X` are unchanged. Same code, moved verbatim; 234 tests + the 58-route
+golden identical.
+
