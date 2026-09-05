@@ -1031,7 +1031,8 @@ async function loadDiscountsTab() {
     { label: 'Total Discounted', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% of all transactions`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
     { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
     { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7c3aed' },
-    { label: 'Total Transactions', value: fmtN(o.total_tx||0), sub: 'in period', color: '#64748b' },
+    { label: `เกินเพดานส่วนลด ${o.policy_pct != null ? o.policy_pct : (d.policy_pct != null ? d.policy_pct : 2.5)}%`, value: `${fmt(o.excess_baht||0)}`,
+      sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? '#dc2626' : '#16a34a' },
   ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?' 🔍':''}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   // Trend chart
@@ -1195,12 +1196,13 @@ function renderDiscCashiers() {
   body.innerHTML = branches.map(br => {
     const bt = bTot[br] || {};
     const rows = groups[br].sort((x,y)=>(y.total_discount||0)-(x.total_discount||0));
-    const flag = bt.disc_pct_of_sales != null && bt.disc_pct_of_sales >= (_discData.outlier_threshold_pct||99);
+    const over = !!bt.over_policy;
+    const flag = over || (bt.disc_pct_of_sales != null && bt.disc_pct_of_sales >= (_discData.outlier_threshold_pct||99));
     const header = `<tr style="background:#eef2ff"><td colspan="5" class="py-1.5 pr-3 font-bold text-indigo-800">
         ${flag?'🚩 ':'📍 '}${esc(br)} <span class="font-normal text-slate-500">· ${rows.length} แคชเชียร์</span></td>
       <td class="py-1.5 pr-3 text-right font-bold ${flag?'text-red-600':'text-indigo-800'}">${bt.disc_pct_of_sales!=null?bt.disc_pct_of_sales.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right font-bold text-indigo-800">${fmt(bt.total_discount||0)}</td>
-      <td class="py-1.5"></td></tr>`;
+      <td class="py-1.5 text-right text-xs ${over?'text-red-600 font-semibold':'text-slate-400'}" title="ส่วนลดที่ให้เกินเพดานนโยบาย ${_discData.policy_pct != null ? _discData.policy_pct : ''}% ของยอดขายก่อนลด">${over ? 'เกินเพดาน ' + fmt(bt.excess_baht||0) : ''}</td></tr>`;
     return header + rows.map(_discCashierRow).join('');
   }).join('') || '<tr><td colspan="8" class="py-3 text-center text-slate-400">—</td></tr>';
 }

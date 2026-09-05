@@ -97,7 +97,9 @@
   "cust_wow_pct": null,
   "customers": 4,
   "discount": 20.0,
+  "discount_excess": 0.0,
   "discount_pct": 2.1,
+  "discount_policy_pct": 2.5,
   "prev": {
    "avg_ticket": null,
    "bills": 0,

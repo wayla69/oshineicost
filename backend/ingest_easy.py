@@ -631,8 +631,10 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
         )
         # net_sales must be VAT-EXCLUSIVE (hard rule: VAT is never revenue).
         # Use total_exc_tax (col 29, t[13]); fall back to inc-VAT/1.07 only if
-        # the ex-VAT column is missing/zero for a row.
-        net_sales = sum((t[13] if t[13] else t[12] / 1.07) for t in txns)
+        # the ex-VAT column is missing/zero for a row. The service charge (t[11])
+        # sits INSIDE the ex-VAT total and is not revenue — subtracted, exactly as
+        # month_summary.BACKFILL_SQL does for live-synced months (rules.net_revenue).
+        net_sales = sum((t[13] if t[13] else t[12] / 1.07) - (t[11] or 0) for t in txns)
         # VERIFY: col 40 (pay_other / other_pay) is mapped to qr below.
         # If it contains bank transfer or a mix, split accordingly after inspection.
         cur.execute(

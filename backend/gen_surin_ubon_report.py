@@ -9,6 +9,9 @@ Usage: python gen_surin_ubon_report.py [--db oshinei.db] [--out ../docs/SURIN_UB
 import sqlite3, sys, os, argparse
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from rules import discount_excess, discount_policy_pct  # noqa: E402
+
 DATE_FROM, DATE_TO = "2026-01-01", "2026-05-31"
 BRANCH_IDS = {"surin": 24, "ubon": 26}
 BRANCH_TH = {"surin": "สุรินทร์", "ubon": "อุบลราชธานี"}
@@ -61,6 +64,9 @@ def load_db(db_path):
     data["chain_disc_pct"] = con.execute(
         f"SELECT round(100.0*sum(discount)/nullif(sum({REV_BASE}),0),2) FROM sales_transaction WHERE {W}"
     ).fetchone()[0] or 0
+    # The owner's policy ceiling (Settings → เพดานส่วนลด, default 2.5%): each branch's
+    # ฿ beyond it is the one figure that turns "high" into an amount to recover.
+    data["policy_pct"] = discount_policy_pct(con)
 
     for branch, bid in BRANCH_IDS.items():
         b = {}
@@ -75,6 +81,7 @@ def load_db(db_path):
         b["total_bills"] = tot["c"]
         b["total_rev"] = tot["rev"] or 0
         b["disc_pct"] = round(100 * b["disc_total"] / b["total_rev"], 2) if b["total_rev"] else 0
+        b["excess_baht"] = discount_excess(b["disc_total"], b["total_rev"], data["policy_pct"])
 
         # ── Discount-channel breakdown: coupon-series vs has-reason vs unexplained ──
         coup = con.execute(
@@ -245,6 +252,7 @@ def generate(db_data):
     sd = db_data["surin"]
     ud = db_data["ubon"]
     chain = db_data["chain_disc_pct"]
+    policy = db_data["policy_pct"]
     now = datetime.now().strftime("%d %b %Y")
     months = ["2026-01", "2026-02", "2026-03", "2026-04", "2026-05"]
 
@@ -309,11 +317,13 @@ def generate(db_data):
 โดยจำแนกทุกบิลออกเป็น 3 ช่องทาง: (1) คูปองโปรโมชันที่นิยามไว้ในระบบ (2) มีรหัสเหตุผลกำกับ และ (3) ยังไม่มีที่มา (ไม่มีทั้งคูปองและเหตุผล)
 การวิเคราะห์อยู่ในระดับสาขาเท่านั้น ไม่พาดพิงตัวบุคคล</div>
 <div class="kpi-grid">
-  <div class="kpi"><div class="kpi-val">{sd['disc_pct']}%</div><div class="kpi-lbl">% ส่วนลด สุรินทร์ (บริบทเชน {chain}%)</div></div>
-  <div class="kpi"><div class="kpi-val">{ud['disc_pct']}%</div><div class="kpi-lbl">% ส่วนลด อุบลฯ (บริบทเชน {chain}%)</div></div>
+  <div class="kpi"><div class="kpi-val">{sd['disc_pct']}%</div><div class="kpi-lbl">% ส่วนลด สุรินทร์ (บริบทเชน {chain}% · เพดานนโยบาย {policy}%)</div></div>
+  <div class="kpi"><div class="kpi-val">{ud['disc_pct']}%</div><div class="kpi-lbl">% ส่วนลด อุบลฯ (บริบทเชน {chain}% · เพดานนโยบาย {policy}%)</div></div>
   <div class="kpi"><div class="kpi-val am">{fmt(sd['ch_unexp']['d'])}</div><div class="kpi-lbl">สุรินทร์: ส่วนลดที่ยังไม่มีที่มา ({sd['ch_unexp']['n']:,} บิล)</div></div>
   <div class="kpi"><div class="kpi-val em">100%</div><div class="kpi-lbl">อุบลฯ: ผูกคูปองโปรฯ ({ud['ch_coupon']['n']:,} บิล)</div></div>
 </div>
+<div class="alert alert-teal"><strong>เทียบเพดานนโยบาย {policy}% ของยอดขายก่อนลด:</strong> สุรินทร์ให้ส่วนลดเกินเพดาน <strong>{fmt(sd['excess_baht'])}</strong> · อุบลฯ <strong>{fmt(ud['excess_baht'])}</strong>
+(ช่วง ม.ค.–พ.ค. 2569 — ตัวเลขนี้คือส่วนที่เกินนโยบาย ไม่ใช่ส่วนลดทั้งหมด; เพดานตั้งได้ที่ Settings ของแดชบอร์ด)</div>
 <div class="two-col">
 <div>
 <strong style="color:#d97706;font-size:14px">สาขาสุรินทร์ — พบช่องว่างการควบคุม (ไม่ใช่ข้อกล่าวหา)</strong>

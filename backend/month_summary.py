@@ -33,7 +33,9 @@ never an Excel-ingested one (Excel covers only historical months) — so this
 never disturbs the manually-ingested history.
 
 Column definitions mirror ingest_easy.load_es_typeb EXACTLY so the two
-ingestion paths stay identical:
+ingestion paths stay identical (until 2026-09-05 the Excel path did not subtract
+the service charge from net_sales — rows ingested before then carry it; a
+re-ingest of those months rewrites them under the shared rule):
   gross_sales       = Σ(food+drink+other)      (ex-VAT subtotals)
   discounts         = Σ(sp_discount+discount)
   net_sales         = Σ(total_inc_vat)/1.07 − Σ(service_charge)
