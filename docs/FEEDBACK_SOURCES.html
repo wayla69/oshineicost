@@ -33,6 +33,7 @@
 <tr><td><b>Google Business Profile</b> (Maps)</td><td>รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา</td><td>§1 (API — ครั้งเดียว) หรือ §2 (Takeout — ไม่ต้องตั้งค่า)</td><td>พร้อมใช้</td></tr>
 <tr><td><b>Facebook Page</b></td><td>Recommendations (แนะนำ/ไม่แนะนำ + ข้อความ) และคอมเมนต์ใต้โพสต์ของเพจ (เลือกได้)</td><td>§3</td><td>พร้อมใช้</td></tr>
 <tr><td>Grab · LINE MAN · foodpanda</td><td>รีวิวจาก merchant portal</td><td>ส่งออก/คัดลอกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ</td><td>อัปโหลดเอง</td></tr>
+<tr><td><b>Instagram</b> (บัญชี Business ที่ผูกกับเพจ)</td><td>คอมเมนต์ใต้โพสต์ของร้าน (+ ตอบกลับ), โพสต์ที่แท็กบัญชี, @mention ผ่าน webhook</td><td>§3.2 — แอป Meta และ token เดิม + ตั้ง webhook ครั้งเดียว</td><td>พร้อมใช้</td></tr>
 <tr><td><b>TikTok</b></td><td>คอมเมนต์ใต้วิดีโอของร้าน (+ ตอบกลับ)</td><td>§10 (developer app ต้องผ่านการตรวจของ TikTok)</td><td>พร้อมใช้</td></tr>
 <tr><td><b>X (Twitter)</b></td><td>โพสต์สาธารณะที่พูดถึงร้าน (7 วันล่าสุด)</td><td>§11 — API Basic tier <b>เสียเงิน ~$200/เดือน</b></td><td>พร้อมใช้ (ต้องสมัคร)</td></tr>
 <tr><td><b>YouTube</b></td><td>วิดีโอที่พูดถึงร้าน + คอมเมนต์ใต้วิดีโอเหล่านั้น</td><td>§12 — API key ฟรี</td><td>พร้อมใช้</td></tr>
@@ -110,6 +111,26 @@ py backend\fetch_feedback.py run --source facebook --since all</pre></li>
 <tr><td>แชร์โดยคนที่ตั้งค่าเห็นเฉพาะเพื่อน</td><td><b>ไม่ได้</b> (ความเป็นส่วนตัว) นับอยู่ในจำนวนแชร์เท่านั้น</td><td>—</td></tr>
 </table>
 <p class="muted">เปิด/ปิดได้ต่อเพจในไฟล์ config: <code>"visitor_posts": true, "tagged": true, "shares": true</code> (ค่าเริ่มต้นเปิดทั้งสาม) · <code>"comments": true</code> สำหรับคอมเมนต์ใต้โพสต์ของเพจ · เพจรวมของเครือที่ไม่ระบุ <code>branch</code> ระบบจับชื่อสาขาจากข้อความให้</p>
+
+<h3>3.2 Instagram (บัญชี Business ที่ผูกกับเพจ — ใช้แอปและ token เดิม)</h3>
+<table>
+<tr><th>สิ่งที่เกิดขึ้น</th><th>API ให้เห็นไหม</th><th>ระบบทำอะไร</th></tr>
+<tr><td>คอมเมนต์ใต้โพสต์ของบัญชีร้าน</td><td>ได้</td><td>ดึงเป็น "คอมเมนต์" · ตอบใต้คอมเมนต์ได้จากแท็บ (ไม่เกิน 2,200 ตัวอักษร)</td></tr>
+<tr><td>คนโพสต์แล้ว<b>แท็ก</b>บัญชีร้าน</td><td>ได้ (<code>/tags</code>)</td><td>ดึงเป็น "การพูดถึง"</td></tr>
+<tr><td>คน <b>@mention</b> บัญชีร้านในแคปชันหรือคอมเมนต์ของโพสต์คนอื่น</td><td>ได้ แต่ผ่าน <b>webhook</b> เท่านั้น (Meta ส่ง id มาให้ตอนเกิดเหตุ) — จึงเก็บได้ตั้งแต่วันที่เปิด webhook ไม่มีย้อนหลัง</td><td>แดชบอร์ดรับ webhook เก็บ id ไว้ ตัวดึงคืนนั้นไปอ่านเนื้อหาแล้วบันทึกเป็น "การพูดถึง"</td></tr>
+<tr><td>Story ที่ mention บัญชี, DM</td><td>webhook/messaging เท่านั้น</td><td>ยังไม่ทำ</td></tr>
+</table>
+<ol>
+<li>ผูกบัญชี Instagram (Business/Creator) กับเพจ Facebook ของร้าน แล้วขอสิทธิ์ใน Graph API Explorer เพิ่ม <code>instagram_basic</code>, <code>instagram_manage_comments</code> → รัน <code>pages facebook --user-token … --save</code> อีกครั้ง ระบบจะเติมส่วน <code>"instagram": {"accounts": [...]}</code> ให้เอง (เติม <code>branch</code> ถ้าเป็นบัญชีของสาขาเดียว)</li>
+<li><b>Webhook สำหรับ @mention</b> (ทำครั้งเดียว):
+  <ol type="a">
+  <li>ใน Meta app → App settings → Basic → จด <b>App secret</b> · ตั้งค่า verify token เป็นข้อความอะไรก็ได้ที่คุณเลือก</li>
+  <li>ใส่สองค่านี้ใน <code>backend\.env</code> (ถูกสำรองพร้อม secrets อื่น) และตั้งเป็น Fly secret ชื่อเดียวกัน: <code>META_APP_SECRET</code>, <code>META_WEBHOOK_VERIFY_TOKEN</code> (แจ้งได้ ระบบตั้งให้ตามกติกาสำรอง secret)</li>
+  <li>Meta app → Products → <b>Webhooks</b> → Instagram → Callback URL <code>https://oshinei-dashboard.fly.dev/api/feedback/webhook/meta</code> · Verify token = ค่าที่ตั้งไว้ → Verify and save → Subscribe field <code>mentions</code> (และ <code>comments</code> ถ้าต้องการให้เร็วกว่ารอบคืน)</li>
+  <li>รัน <code>py backend\fetch_feedback.py subscribe facebook</code> ให้แอปสมัครรับเหตุการณ์ของทุกเพจที่ตั้งค่าไว้</li>
+  </ol>
+  ถ้าแอปยังอยู่โหมด Development Meta ส่งเหตุการณ์ให้เฉพาะบัญชีที่มีบทบาทในแอป (เจ้าของ/ผู้ทดสอบ) ซึ่งครอบคลุมบัญชีร้านเองอยู่แล้ว</li>
+</ol>
 
 <h2>§4 แจ้งเตือนรีวิวลบทาง Telegram</h2>
 <ol>

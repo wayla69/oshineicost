@@ -87,24 +87,33 @@ def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
                   "regionCode": "TH", "relevanceLanguage": "th", "key": key}
         if since:
             params["publishedAfter"] = f"{since}T00:00:00Z"
-        status, j = http("GET", f"{API}/search?" + urllib.parse.urlencode(params), {}, None)
-        if status >= 400 or not isinstance(j, dict):
-            raise RuntimeError(_err(status, j))
-        n_v = n_c = 0
-        for it in j.get("items") or []:
-            vid = (it.get("id") or {}).get("videoId")
-            if not vid or vid in seen:
-                continue
-            seen.add(vid)
-            row = video_to_row(vid, it.get("snippet") or {})
-            if row:
-                rows.append(row)
-                n_v += 1
-            if cfg.get("comments"):
-                got = list_comments(key, vid, http, int(cfg.get("max_comments") or 50))
-                rows.extend(got)
-                n_c += len(got)
-        meta["queries"].append({"keyword": kw, "videos": n_v, "comments": n_c})
+        n_v = n_c = pages = 0
+        token = None
+        while pages < max(1, int(cfg.get("max_pages") or 2)):        # 100 quota units per page
+            p = dict(params)
+            if token:
+                p["pageToken"] = token
+            status, j = http("GET", f"{API}/search?" + urllib.parse.urlencode(p), {}, None)
+            if status >= 400 or not isinstance(j, dict):
+                raise RuntimeError(_err(status, j))
+            pages += 1
+            for it in j.get("items") or []:
+                vid = (it.get("id") or {}).get("videoId")
+                if not vid or vid in seen:
+                    continue
+                seen.add(vid)
+                row = video_to_row(vid, it.get("snippet") or {})
+                if row:
+                    rows.append(row)
+                    n_v += 1
+                if cfg.get("comments"):
+                    got = list_comments(key, vid, http, int(cfg.get("max_comments") or 50))
+                    rows.extend(got)
+                    n_c += len(got)
+            token = j.get("nextPageToken")
+            if not token:
+                break
+        meta["queries"].append({"keyword": kw, "videos": n_v, "comments": n_c, "pages": pages})
         log(f"  {kw[:40]:<40} {n_v:>4} video(s) {n_c:>4} comment(s)")
     meta["fetched"] = len(rows)
     return rows, meta

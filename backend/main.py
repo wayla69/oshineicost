@@ -251,7 +251,11 @@ async def enforce_auth(request: Request, call_next):
     if not (path.startswith("/api/") or docs_req) or path.startswith("/api/auth/login") \
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
-            or path.startswith("/api/_admin/seed-db"):
+            or path.startswith("/api/_admin/seed-db") \
+            or path.startswith("/api/feedback/webhook/"):
+        # …and so is the Meta webhook receiver (/api/feedback/webhook/meta): Meta
+        # calls it without a session; it verifies its own HMAC signature / verify token
+        # (routers/feedback.py). The trailing slash keeps /api/feedback/webhook-events gated.
         # seed-db is a headless machine-to-machine endpoint with its OWN token auth
         # (?token=, returns 404 on mismatch). It must bypass the login middleware,
         # else enabling OSHINEI_AUTH silently breaks the hosted data-refresh push.

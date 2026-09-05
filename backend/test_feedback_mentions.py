@@ -137,7 +137,7 @@ def test_youtube_videos_and_comments():
     assert rows[0]["kind"] == "mention" and rows[0]["url"] == "https://www.youtube.com/watch?v=v1" and rows[0]["date"] == "2026-09-02"
     assert rows[1]["kind"] == "comment" and rows[1]["url"] == "https://www.youtube.com/watch?v=v1&lc=c9"
     assert rows[1]["author"] and rows[1]["author"] != "a1"
-    assert meta["queries"] == [{"keyword": "โอชิเน", "videos": 1, "comments": 1}] and meta["fetched"] == 2
+    assert meta["queries"] == [{"keyword": "โอชิเน", "videos": 1, "comments": 1, "pages": 1}] and meta["fetched"] == 2
     assert Y.list_comments("K", "v2", http) == []                  # comments disabled → none, not an error
     with pytest.raises(RuntimeError, match="quotaExceeded"):
         Y.fetch_rows({"api_key": "K"}, lambda *a: (403, {"error": {"errors": [{"reason": "quotaExceeded"}], "message": "quota"}}))
