@@ -360,6 +360,8 @@ async def usage_counter(request: Request, call_next):
             route = request.scope.get("route")
             name = getattr(route, "path", None) or path
             _usage_bump("api", f"{request.method} {name}", _usage_user(request))
+            if name == "/api/home/brief":          # someone opened the app: Monday → this week's adoption digest
+                _maybe_weekly_adoption_digest()
     except Exception:
         pass
     return response
@@ -407,8 +409,7 @@ _MACHINE_API = ("/api/_admin/", "/api/usage", "/api/auth/", "/api/feedback/webho
                 "/api/feedback/reply-result")
 
 
-@app.get("/api/usage/users")
-def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
+def _usage_people(days: int) -> dict:
     """The adoption view (Settings → 📈 การใช้งานจริง → การเข้าใช้รายคน): every
     account with its last login, logins and failures in the window, the days it
     opened the dashboard, tab opens and its three most-opened tabs. Status:
@@ -416,13 +417,7 @@ def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
     password), 'idle' = has logged in before but not opened anything in the
     window, 'active' = opened a tab or logged in within the window. Machine
     paths (sync push, backup export, auth) are left out of the per-user API
-    count so a person's row is what THEY did. Admin-gated like /api/auth/users
-    (per-person login times are personal data); open when auth is off."""
-    if __package__:
-        from .routers.auth_api import _require_admin
-    else:
-        from routers.auth_api import _require_admin
-    _require_admin(request)
+    count so a person's row is what THEY did."""
     out: dict = {"days": days, "users": [], "summary": {}}
     accounts: list = []
     auth: dict = {}
@@ -506,6 +501,197 @@ def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
                       "idle": sum(1 for x in users if x["status"] == "idle"),
                       "never": sum(1 for x in users if x["status"] == "never")}
     return out
+
+
+def _usage_admin(request: Request) -> None:
+    """Admin-gated like /api/auth/users (per-person login times are personal
+    data); a no-op when auth is off."""
+    if __package__:
+        from .routers.auth_api import _require_admin
+    else:
+        from routers.auth_api import _require_admin
+    _require_admin(request)
+
+
+@app.get("/api/usage/users")
+def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
+    """See _usage_people."""
+    _usage_admin(request)
+    return _usage_people(days)
+
+
+@app.get("/api/usage/me")
+def usage_me(request: Request):
+    """The caller's own footprint — first_time = has never opened a tab, which is
+    when the role start card shows (js: maybeShowStartCard). Anonymous ('')
+    when auth is off, so the card never shows locally by itself."""
+    user = _usage_user(request)
+    hits, days_seen = 0, 0
+    if user:
+        try:
+            con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+            try:
+                if con.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_user_daily'").fetchone():
+                    r = con.execute("SELECT COALESCE(SUM(hits), 0), COUNT(DISTINCT day) FROM usage_user_daily"
+                                    " WHERE user = ? AND kind = 'tab'", (user,)).fetchone()
+                    hits, days_seen = int(r[0] or 0), int(r[1] or 0)
+            finally:
+                con.close()
+        except Exception:
+            pass
+    role = ""
+    try:
+        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+        role = (payload or {}).get("r", "")
+    except Exception:
+        pass
+    return {"username": user, "role": role, "tab_hits": hits, "days_seen": days_seen,
+            "first_time": bool(user) and hits == 0}
+
+
+# ── the weekly adoption digest ───────────────────────────────────────────────
+# Every Monday (Thai clock), on the first request that opens the app, the
+# people view is summarised — who has never logged in, who has been away more
+# than ADOPTION_AWAY_DAYS — stored in usage.db (survives the daily DB push) for
+# the home banner, and sent to Telegram when OSHINEI_TG_TOKEN / _CHAT_ID exist.
+ADOPTION_AWAY_DAYS = 14
+APP_URL = "https://oshinei-dashboard.fly.dev"
+
+
+def _thai_now():
+    from datetime import timedelta as _td
+    return datetime.utcnow() + _td(hours=7)
+
+
+def _usage_meta_get(key: str):
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        try:
+            if not con.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_meta'").fetchone():
+                return None
+            r = con.execute("SELECT value FROM usage_meta WHERE key = ?", (key,)).fetchone()
+            return r[0] if r else None
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _usage_meta_set(key: str, value: str) -> None:
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        try:
+            con.execute("CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY, value TEXT)")
+            con.execute("INSERT INTO usage_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
+def _iso_week(now) -> str:
+    y, w, _ = now.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def _adoption_lists(people: dict, now=None, away_days: int = ADOPTION_AWAY_DAYS) -> dict:
+    """never = no successful login on record; away = has logged in before but
+    neither logged in nor opened a tab for `away_days`; active = the rest that
+    used the app in the window."""
+    from datetime import timedelta as _td
+    now = now or _thai_now()
+    cutoff = (now - _td(days=away_days)).strftime("%Y-%m-%d %H:%M:%S")
+    never, away, active = [], [], []
+    for u in people["users"]:
+        if u["status"] == "anonymous":
+            continue
+        if u["status"] == "never":
+            never.append(u)
+        elif (u.get("last_login") or "") < cutoff and (u.get("last_seen") or "") < cutoff[:10]:
+            away.append(u)
+        elif u["status"] == "active":
+            active.append(u)
+    return {"never": never, "away": away, "active": active}
+
+
+def _adoption_digest_text(people: dict, lists: dict, week: str) -> str:
+    s = people["summary"]
+    L = [f"📣 <b>สรุปการเข้าใช้แดชบอร์ด</b> สัปดาห์ {week} (นับ {people['days']} วัน)",
+         f"ใช้งานอยู่ {s['active']} · ไม่ได้ใช้ในช่วงนี้ {s['idle']} · ยังไม่เคยเข้า {s['never']} · จาก {s['accounts']} บัญชี"]
+    if lists["never"]:
+        L.append(f"🚫 <b>ยังไม่เคยเข้าใช้</b> ({len(lists['never'])}): " + ", ".join(f"{u['username']} ({u['role']})" for u in lists["never"]))
+    if lists["away"]:
+        L.append(f"💤 <b>หายไปเกิน {ADOPTION_AWAY_DAYS} วัน</b> ({len(lists['away'])}): "
+                 + ", ".join(f"{u['username']} — ล่าสุด {(u.get('last_login') or '')[:10] or '—'}" for u in lists["away"]))
+    if lists["active"]:
+        L.append("✅ ใช้งานอยู่: " + ", ".join(f"{u['username']} ({u['days_seen']} วัน)" for u in lists["active"]))
+    L.append(f"รายละเอียด: {APP_URL} → Settings → 📈 การใช้งานจริง")
+    return "\n".join(L)
+
+
+def _adoption_digest_build(days: int = 30, now=None, send=None, force: bool = False):
+    """Build this week's digest, store it, send it to Telegram when configured.
+    Once per ISO week unless `force`. Returns the record, or None when this
+    week's already exists."""
+    import notify as _notify
+    now = now or _thai_now()
+    week = _iso_week(now)
+    if not force and _usage_meta_get("adoption_digest_week") == week:
+        return None
+    people = _usage_people(days)
+    lists = _adoption_lists(people, now)
+    text = _adoption_digest_text(people, lists, week)
+    configured = bool(_notify.telegram_config()[0] and _notify.telegram_config()[1])
+    sent = False
+    if configured:
+        try:
+            sent = bool((send or _notify.send_telegram)(text))
+        except Exception as e:
+            print(f"[adoption] telegram failed: {e}")
+    rec = {"week": week, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "text": text, "sent": sent,
+           "telegram_configured": configured, "summary": people["summary"],
+           "never": [u["username"] for u in lists["never"]], "away": [u["username"] for u in lists["away"]],
+           "active": [u["username"] for u in lists["active"]]}
+    _usage_meta_set("adoption_digest_week", week)
+    _usage_meta_set("adoption_digest", _json.dumps(rec, ensure_ascii=False))
+    return rec
+
+
+def _maybe_weekly_adoption_digest(now=None, send=None):
+    """Monday on the Thai clock, first request of the week → build + store (+ send). Best-effort."""
+    try:
+        now = now or _thai_now()
+        if now.weekday() != 0:
+            return None
+        return _adoption_digest_build(now=now, send=send)
+    except Exception as e:
+        print(f"[adoption] weekly digest failed: {e}")
+        return None
+
+
+@app.get("/api/usage/adoption-digest")
+def usage_adoption_digest(request: Request, days: int = Query(30, ge=1, le=365)):
+    """The latest stored digest (home banner, Settings) plus a live preview."""
+    _usage_admin(request)
+    import notify as _notify
+    now = _thai_now()
+    people = _usage_people(days)
+    lists = _adoption_lists(people, now)
+    latest = _usage_meta_get("adoption_digest")
+    tok, chat = _notify.telegram_config()
+    return {"week": _iso_week(now), "latest": _json.loads(latest) if latest else None,
+            "preview": _adoption_digest_text(people, lists, _iso_week(now)),
+            "never": [u["username"] for u in lists["never"]], "away": [u["username"] for u in lists["away"]],
+            "telegram_configured": bool(tok and chat)}
+
+
+@app.post("/api/usage/adoption-digest/send")
+def usage_adoption_digest_send(request: Request):
+    """Build and store the digest now (and send it when Telegram is configured)."""
+    _usage_admin(request)
+    rec = _adoption_digest_build(force=True)
+    return {"ok": True, **rec}
 
 
 # Serve vendor JS/CSS

@@ -1313,17 +1313,24 @@ async function loadTargets() {
       ? (act.customer_count / t.customer_target * 100) : null;
     const pillClass = revPct == null ? '' : revPct >= 100 ? 'pill-up' : revPct >= 80 ? 'pill-warn' : 'pill-down';
     const pillText  = revPct == null ? '—' : revPct.toFixed(0) + '%';
+    // the owner's rule (2026-09-05): blank = automatic = this branch's actual of the same month last year;
+    // a typed figure wins; 0 goes back to automatic
+    const manual = t.source === 'manual';
+    const src = manual ? '<span class="pill pill-warn">ตั้งเอง</span>'
+      : t.source === 'last_year' ? `<span class="pill pill-up">อัตโนมัติ</span> <span class="text-slate-500">= ยอดจริง ${fmtMonth(t.basis_month)}</span>`
+      : `<span class="pill">ไม่มีข้อมูล ${fmtMonth(t.basis_month)}</span>`;
     return `<tr class="border-t border-slate-100">
       <td class="py-2.5 pr-4 font-medium text-slate-700">${t.branch}</td>
+      <td class="py-2.5 pr-4 text-xs whitespace-nowrap">${src}</td>
       <td class="py-2.5 pr-4 text-right">
         <input type="number" min="0" step="10000"
           class="target-rev-input w-36 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          data-branch="${t.branch}" value="${t.revenue_target || ''}">
+          data-branch="${t.branch}" value="${manual ? t.revenue_target : ''}" placeholder="${t.source === 'last_year' ? fmtN(t.revenue_target) : '—'}" title="เว้นว่าง = ใช้ยอดจริงของ ${fmtMonth(t.basis_month)} (${fmtN(t.basis_revenue || 0)})">
       </td>
       <td class="py-2.5 pr-4 text-right">
         <input type="number" min="0" step="100"
           class="target-cust-input w-28 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          data-branch="${t.branch}" value="${t.customer_target || ''}">
+          data-branch="${t.branch}" value="${manual ? t.customer_target : ''}" placeholder="${t.source === 'last_year' ? fmtN(t.customer_target) : '—'}">
       </td>
       <td class="py-2.5 pr-4 text-right text-slate-600">${act.revenue != null ? fmtN(act.revenue) : '—'}</td>
       <td class="py-2.5 pr-4 text-right text-slate-600">${act.customer_count != null ? fmtN(act.customer_count) : '—'}</td>

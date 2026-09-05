@@ -1,16 +1,24 @@
 [
  {
+  "basis_customers": 0,
+  "basis_month": "2025-06",
+  "basis_revenue": 0.0,
   "branch": "BranchA",
   "branch_id": 1,
   "customer_target": 0,
-  "period_month": "",
-  "revenue_target": 0
+  "period_month": "2026-06",
+  "revenue_target": 0.0,
+  "source": "none"
  },
  {
+  "basis_customers": 0,
+  "basis_month": "2025-06",
+  "basis_revenue": 0.0,
   "branch": "BranchB",
   "branch_id": 2,
   "customer_target": 0,
-  "period_month": "",
-  "revenue_target": 0
+  "period_month": "2026-06",
+  "revenue_target": 0.0,
+  "source": "none"
  }
 ]
