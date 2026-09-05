@@ -1,0 +1,49 @@
+<!-- ══ ✅ Checklist เปิดใช้งานเสียงลูกค้า (Go-live checklist) ══ -->
+<div id="tab-checklist" style="display:none">
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#ecfdf5 0%,#f0f9ff 100%);border-left:4px solid #0f766e">
+    <h2 class="text-base font-bold" style="color:#134e4a" id="clTitle">✅ Checklist เปิดใช้งานเสียงลูกค้าให้ครบทุกช่องทาง</h2>
+    <p class="text-xs mt-1" style="color:var(--text-secondary)">คู่มือแบบจับมือทำ ทีละคลิก สถานะที่ติ๊กเก็บในระบบและแชร์กับทุกคนที่ล็อกอิน (ชื่อผู้ติ๊กมาจากบัญชีที่ล็อกอิน) เมื่อครบทุกขั้นตอนจึงกด <b>ปิดสมบูรณ์</b> ได้ ระบบตรวจสอบเองว่าครบจริง · ฉบับพิมพ์: <a href="/docs/FEEDBACK_ROLLOUT_CHECKLIST.pdf" target="_blank" style="color:#0369a1;text-decoration:underline">PDF</a> · รายละเอียดเชิงเทคนิค: <a href="/docs/FEEDBACK_SOURCES.html" target="_blank" style="color:#0369a1;text-decoration:underline">คู่มือตั้งค่า</a></p>
+  </div>
+
+  <div id="clDone" class="card p-4 mb-4" style="display:none;background:#ecfdf5;border:1px solid #6ee7b7"></div>
+
+  <div class="card p-4 mb-4">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+      <div class="md:col-span-2">
+        <p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">ความคืบหน้า</p>
+        <p class="text-2xl font-bold" style="color:#0f766e" id="clPct">0%</p>
+        <div style="height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden"><div id="clBar" style="height:100%;width:0;background:#0f766e;transition:width .3s"></div></div>
+        <p class="text-xs mt-1" style="color:var(--text-muted)" id="clLine">กำลังโหลด…</p>
+      </div>
+      <div>
+        <label class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">วันเริ่มโครงการ</label>
+        <input type="date" id="clStart" class="w-full rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+        <div id="clWhoWrap" style="display:none" class="mt-2"><label class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">ชื่อคุณ (ไม่ได้ล็อกอิน)</label><input id="clWho" class="w-full rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="เช่น คุณเก่ง"></div>
+      </div>
+      <div class="flex flex-col gap-2">
+        <button class="btn-primary text-sm px-3 py-2 rounded" id="clComplete" onclick="completeChecklist()" disabled title="ต้องติ๊กครบทุกขั้นตอนก่อน">✅ ปิดสมบูรณ์ (Complete)</button>
+        <div class="flex gap-2">
+          <button class="text-xs px-2 py-1 rounded border" style="border-color:var(--border)" id="clToggleDone" onclick="toggleChecklistDone()">ซ่อนที่เสร็จแล้ว</button>
+          <button class="text-xs px-2 py-1 rounded border" style="border-color:var(--border)" onclick="loadChecklist(true)">รีเฟรช</button>
+        </div>
+        <span class="text-[11px]" style="color:var(--text-muted)" id="clMe"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-4 mb-4">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+      <h3 class="text-sm font-semibold">ไทม์ไลน์</h3>
+      <span class="text-[11px]" style="color:var(--text-muted)" id="clToday"></span>
+    </div>
+    <div id="clGantt" style="overflow-x:auto"></div>
+    <p class="text-[11px] mt-2" style="color:var(--text-muted)">แถบเติมตาม % ขั้นตอนที่ติ๊ก · เขียว = เฟสเสร็จ · แดง = มีงานติดปัญหา · กรอบส้ม = เลยกำหนดแต่ยังไม่เสร็จ · แถบลาย = รอฝ่ายภายนอกอนุมัติ · เส้นประแดง = วันนี้</p>
+  </div>
+
+  <div id="clPhases"></div>
+
+  <div class="card p-4 mt-4">
+    <h3 class="text-sm font-semibold mb-2">ประวัติล่าสุด</h3>
+    <div id="clLog" class="text-xs" style="max-height:260px;overflow:auto;color:var(--text-secondary)"></div>
+  </div>
+</div>

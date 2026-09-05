@@ -28,6 +28,8 @@ def _mk_live(p):
     c.execute("CREATE INDEX ix_cf_fp ON customer_feedback(fingerprint)")
     c.execute("CREATE TABLE feedback_sync_log(id INTEGER PRIMARY KEY, source TEXT)")
     c.execute("INSERT INTO feedback_sync_log(source) VALUES('Google')")
+    c.execute("CREATE TABLE checklist_state(checklist TEXT, item_id TEXT, done INTEGER, PRIMARY KEY(checklist, item_id))")
+    c.execute("INSERT INTO checklist_state VALUES('feedback_rollout','s0101',1)")
     c.commit(); c.close()
 
 
@@ -46,7 +48,7 @@ def test_carry_forward_preserves_and_verifies(tmp_path):
     assert safe, reason
     cnt = main._preserved_counts(str(inc))
     assert cnt["recon_uploads"] == 3 and cnt["app_user"] == 1
-    assert cnt["customer_feedback"] == 2 and cnt["feedback_sync_log"] == 1
+    assert cnt["customer_feedback"] == 2 and cnt["feedback_sync_log"] == 1 and cnt["checklist_state"] == 1
     c = sqlite3.connect(str(inc))
     assert c.execute("SELECT text FROM customer_feedback ORDER BY id").fetchall() == [("อร่อย",), ("รอนาน",)]
     assert c.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name='ix_cf_fp'").fetchone()[0] == 1
