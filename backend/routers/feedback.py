@@ -37,8 +37,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-import auth as _auth
-from core import get_db, require_write_token
+from feedback_host import branch_rows, get_db, menu_names as _host_menu_names, require_write_token, scope_branch, thai_now, thai_today
 from feedback_nlp import analyse, clean_menu_name, draft_reply
 from feedback_sources.google_gbp import parse_reviews_json, parse_takeout_zip
 
@@ -125,11 +124,11 @@ MAX_ROWS = 5000
 
 
 def _thai_today() -> str:
-    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime("%Y-%m-%d")
+    return thai_today()
 
 
 def _thai_now() -> str:
-    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+    return thai_now()
 
 
 def _ensure(con):
@@ -292,7 +291,7 @@ def _detect_branch(text: str, table: dict):
 
 # ── storage ──────────────────────────────────────────────────────────────────
 def _branches(con) -> dict:
-    return {row["name"]: row["branch_id"] for row in con.execute("SELECT branch_id, name FROM branches")}
+    return {row["name"]: row["branch_id"] for row in branch_rows(con)}
 
 
 def _match_branch(name: str, table: dict):
@@ -308,7 +307,7 @@ def _match_branch(name: str, table: dict):
 
 
 def _menu_names(con) -> list:
-    return [r[0] for r in con.execute("SELECT description FROM skus WHERE description IS NOT NULL")]
+    return _host_menu_names(con)
 
 
 def _fingerprint(r) -> str:
@@ -818,7 +817,7 @@ def _get_row(con, fid: int, request: Request = None) -> dict:
 
 def _scope(request: Request):
     """The branch this login is confined to (E4), or None."""
-    return _auth.scope_branch(request) if request is not None else None
+    return scope_branch(request) if request is not None else None
 
 
 def _guard(request: Request, row: dict):

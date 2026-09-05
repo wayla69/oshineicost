@@ -12,8 +12,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
-import auth as _auth
-from core import get_db, require_write_token
+from feedback_host import get_db, require_write_token, scope_branch
 from routers.feedback import _ensure as _ensure_feedback, _thai_now, _thai_today
 
 router = APIRouter()
@@ -123,7 +122,7 @@ def competitors_status():
 
 @router.get("/api/feedback/competitors")
 def competitors_get(request: Request, month: Optional[str] = Query(None), branch: Optional[str] = Query(None)):
-    scope = _auth.scope_branch(request)
+    scope = scope_branch(request)
     if scope:
         branch = scope
     with get_db() as con:
