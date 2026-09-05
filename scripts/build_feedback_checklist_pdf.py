@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
 """Build the PRINT edition of the customer-feedback go-live checklist.
 
-The interactive page (docs/FEEDBACK_ROLLOUT_CHECKLIST.html, also the team
-artifact) is the single source of the plan — its `const PLAN = […]` block is
-lifted verbatim into a print template designed for paper: two columns, a
-compact type scale, no forced page breaks, and pastel highlights that mark
-what matters (commands and files, why, done-when, if-stuck, warnings).
+The plan the dashboard tab renders (backend/checklists/feedback_rollout.json,
+served by /api/checklist/feedback_rollout/plan) is the single source; it is
+inlined into a print template designed for paper: one column, every step an
+unbreakable unit, a compact type scale, and pastel highlights that mark what
+matters (commands and files, why, done-when, if-stuck, warnings).
 
     py scripts/build_feedback_checklist_pdf.py            # → docs/FEEDBACK_ROLLOUT_CHECKLIST_PRINT.html + .pdf
     py scripts/build_feedback_checklist_pdf.py --no-pdf   # HTML only
 """
 import argparse
 import io
-import re
+import json
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-SRC = ROOT / "docs" / "FEEDBACK_ROLLOUT_CHECKLIST.html"
+PLAN_JSON = ROOT / "backend" / "checklists" / "feedback_rollout.json"
 OUT_HTML = ROOT / "docs" / "FEEDBACK_ROLLOUT_CHECKLIST_PRINT.html"
 OUT_PDF = ROOT / "docs" / "FEEDBACK_ROLLOUT_CHECKLIST.pdf"
 CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
@@ -182,12 +182,15 @@ document.getElementById("sumTable").innerHTML = `<thead><tr><th>เฟส</th><t
 """
 
 
-def build(no_pdf: bool = False, start: str = "2026-09-07") -> int:
-    html = io.open(SRC, encoding="utf-8").read()
-    m = re.search(r"(const CMD = .*?\nconst HORIZON = \d+;[^\n]*\n)", html, re.S)
-    if not m:
-        sys.exit("could not find the PLAN block in " + str(SRC))
-    page = TEMPLATE.replace("__PLAN__", m.group(1)).replace("__START__", start)
+def build(no_pdf: bool = False, start: str = "") -> int:
+    """The plan is the server's JSON (backend/checklists/feedback_rollout.json —
+    what the dashboard tab renders); it is inlined as JS constants."""
+    plan = json.loads(io.open(PLAN_JSON, encoding="utf-8").read())
+    start = start or plan.get("default_start") or "2026-09-07"
+    consts = ("const PLAN = " + json.dumps(plan["phases"], ensure_ascii=False) + ";\n"
+              "const STATUS = " + json.dumps(plan["statuses"], ensure_ascii=False) + ";\n"
+              f"const HORIZON = {int(plan.get('horizon_days') or 36)};\n")
+    page = TEMPLATE.replace("__PLAN__", consts).replace("__START__", start)
     io.open(OUT_HTML, "w", encoding="utf-8").write(page)
     print(f"html → {OUT_HTML.relative_to(ROOT)} ({len(page)/1024:.0f} KB)")
     if no_pdf:
@@ -212,6 +215,6 @@ def build(no_pdf: bool = False, start: str = "2026-09-07") -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-pdf", action="store_true")
-    ap.add_argument("--start", default="2026-09-07", help="project start date drawn on the cover Gantt")
+    ap.add_argument("--start", default="", help="project start date drawn on the cover Gantt (default: the plan's)")
     a = ap.parse_args()
     sys.exit(build(a.no_pdf, a.start))

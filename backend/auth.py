@@ -188,6 +188,7 @@ MODULE_RULES = [
     ("GET", "/api/menu/opportunities",       {"menu.analysis"}),   # qty/share/trend only, no COGS
     ("W",   "/api/menu/ai-ideas",            {"menu.analysis"}),   # AI menu concepts (+ write-token)
     ("*",   "/api/feedback",                 {"customer.feedback"}),  # reviews: read + upload/delete (+ write-token)
+    ("*",   "/api/checklist",                {"customer.feedback"}),  # go-live checklist ticks (who = the session)
     ("GET", "/api/finance/prime-cost",       {"cost.analysis", "profit.pnl"}),
     ("GET", "/api/branches/fixed-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
     ("GET", "/api/branches/labor-costs",     {"cost.analysis", "profit.pnl", "system.settings"}),
