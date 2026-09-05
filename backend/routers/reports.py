@@ -2596,6 +2596,20 @@ def report_management(
     if not actions:
         actions = [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]
 
+    # §12 — what the guests said over the same window (customer_feedback), the
+    # window before, what waits now, and whether the fix loop held. Never lets
+    # a feedback problem take the whole report down.
+    voice = None
+    try:
+        from routers.feedback_actions import compute_digest as _voice_digest
+        with get_db() as _vcon:
+            voice = _voice_digest(_vcon, start=cs.isoformat(), end=ce.isoformat(),
+                                  prev_start=(ps.isoformat() if has_prev else None), prev_end=(pe.isoformat() if has_prev else None),
+                                  branch=branch, group=group)
+            _vcon.commit()
+    except Exception as e:      # pragma: no cover — degraded, not broken
+        print(f"[mgt] §12 customer voice unavailable: {e}")
+
     return {
         "available": True,
         "period": period,
@@ -2629,6 +2643,7 @@ def report_management(
         "tier": tier_out,
         "trend": trend,
         "actions": actions,
+        "feedback": voice,
     }
 
 
@@ -2958,6 +2973,48 @@ def _xlsx_payment(*, BOLD, NUM, PCT, autofit, header, j, pdelta, wb):
     return {}
 
 
+def _xlsx_voice(*, BOLD, NUM, PCT, autofit, header, j, th, wb):
+    # Sheet — Customer Voice (§12): the window's voices against the window before,
+    # the themes, the branches to watch, and the fix loop with its verdicts.
+    v = j.get("feedback")
+    if not v:
+        return {}
+    ws = wb.create_sheet("Customer Voice")
+    ws.append(["Customer voice" if not th else "เสียงลูกค้า", f"{v['range'][0]} → {v['range'][1]}",
+               ("vs " if not th else "เทียบ ") + f"{v['prev_range'][0]} → {v['prev_range'][1]}"])
+    ws["A1"].font = BOLD
+    ws.append([])
+    header(ws, ["Metric" if not th else "ตัวชี้วัด", "This period" if not th else "ช่วงนี้", "Previous" if not th else "ช่วงก่อน"])
+    resp = v.get("response") or {}
+    for k, a, b in [("Voices" if not th else "เสียง", v.get("voices"), v.get("prev_voices")),
+                    ("Negative %" if not th else "เชิงลบ %", v.get("neg_pct"), v.get("prev_neg_pct")),
+                    ("Avg rating" if not th else "คะแนนเฉลี่ย", v.get("avg_rating"), v.get("prev_avg_rating")),
+                    ("Answered %" if not th else "ตอบกลับ %", resp.get("rate"), v.get("prev_response_rate")),
+                    ("Awaiting reply now" if not th else "รอสาขาตอบตอนนี้", v.get("unreplied"), None),
+                    ("Past SLA now" if not th else "เกิน SLA ตอนนี้", v.get("sla_breached"), None),
+                    ("QR survey answers" if not th else "คำตอบแบบสอบถาม QR", (v.get("survey") or {}).get("n"), (v.get("survey") or {}).get("prev_n"))]:
+        ws.append([k, a, b])
+    ws.append([])
+    header(ws, ["Theme" if not th else "หัวข้อ", "Voices" if not th else "เสียง", "Negative" if not th else "ลบ", "Previous" if not th else "ช่วงก่อน"])
+    for t in v.get("themes") or []:
+        ws.append([t["theme"], t["n"], t["neg"], t.get("prev_n")])
+    ws.append([])
+    header(ws, ["Branch to watch" if not th else "สาขาที่ต้องดู", "Voices" if not th else "เสียง", "Negative" if not th else "ลบ", "Negative %" if not th else "ลบ %", "Main theme" if not th else "หัวข้อหลัก"])
+    for b in v.get("branches_watch") or []:
+        ws.append([b["branch"], b["n"], b["neg"], b["neg_pct"], b.get("top_theme") or ""])
+    a = v.get("actions") or {}
+    ws.append([])
+    header(ws, ["Fix loop" if not th else "งานแก้", "Open" if not th else "ค้าง", "Overdue" if not th else "เกินกำหนด", "Done" if not th else "เสร็จ",
+                "Better" if not th else "ดีขึ้น", "Same" if not th else "เท่าเดิม", "Worse" if not th else "แย่ลง"])
+    ws.append(["", (a.get("open") or 0) + (a.get("doing") or 0), a.get("overdue") or 0, a.get("done") or 0,
+               a.get("better") or 0, a.get("same") or 0, a.get("worse") or 0])
+    for it in a.get("items") or []:
+        ws.append([it["title"], it.get("branch") or "", it.get("theme") or "", it.get("result") or "",
+                   it.get("before_rate"), it.get("after_rate")])
+    autofit(ws)
+    return {}
+
+
 def _xlsx_definitions(*, Alignment, BOLD, Font, P, header, j, th, wb):
     # Sheet — Definitions & Method. Same glossary the printed appendix carries, so a
     # workbook that leaves the building can still be read without the PDF next to it.
@@ -3051,6 +3108,7 @@ def report_management_xlsx(
     ctx.update(_xlsx_table(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
     ctx.update(_xlsx_tier(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), NUM2=ctx.get("NUM2"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
     ctx.update(_xlsx_payment(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_voice(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), th=ctx.get("th"), wb=ctx.get("wb")))
     ctx.update(_xlsx_definitions(Alignment=ctx.get("Alignment"), BOLD=ctx.get("BOLD"), Font=ctx.get("Font"), P=ctx.get("P"), header=ctx.get("header"), j=ctx.get("j"), th=ctx.get("th"), wb=ctx.get("wb")))
     ctx.update(_xlsx_actions(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
     ctx.update(_xlsx_save(j=ctx.get("j"), wb=ctx.get("wb")))

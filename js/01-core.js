@@ -703,6 +703,23 @@ function notifyError(msg) {
   el._t = setTimeout(() => el.remove(), 8000);
 }
 
+// The quiet counterpart: a green toast for "saved / done" (two tabs already probe for it).
+function notifySuccess(msg) {
+  let el = document.getElementById('globalOkToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'globalOkToast';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
+      'background:#065f46;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
+    el.onclick = () => el.remove();
+    document.body.appendChild(el);
+  }
+  el.textContent = '✓ ' + msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.remove(), 3500);
+}
+
 window.addEventListener('unhandledrejection', e => {
   if (e.reason === STALE) { e.preventDefault(); return; }            // expected — ignore
   const msg = (e.reason && e.reason.message) || String(e.reason || '');

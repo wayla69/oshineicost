@@ -154,6 +154,49 @@ C13	4
 A14	'Sun'			
 B14	950	#,##0		
 C14	4			
+## Customer Voice 17x7 widths={'A': 20.0, 'B': 25.0, 'C': 28.0, 'D': 12.0, 'E': 12.0, 'F': 6.0, 'G': 7.0}
+A1	'Customer voice'		b	
+B1	'2026-05-01 → 2026-05-31'			
+C1	'vs 2026-03-31 → 2026-04-30'			
+A3	'Metric'		bc	0F766E
+B3	'This period'		bc	0F766E
+C3	'Previous'		bc	0F766E
+A4	'Voices'			
+B4	0			
+C4	0			
+A5	'Negative %'			
+B5	0			
+A6	'Avg rating'			
+A7	'Answered %'			
+A8	'Awaiting reply now'			
+B8	0			
+A9	'Past SLA now'			
+B9	0			
+A10	'QR survey answers'			
+B10	0			
+C10	0			
+A12	'Theme'		bc	0F766E
+B12	'Voices'		bc	0F766E
+C12	'Negative'		bc	0F766E
+D12	'Previous'		bc	0F766E
+A14	'Branch to watch'		bc	0F766E
+B14	'Voices'		bc	0F766E
+C14	'Negative'		bc	0F766E
+D14	'Negative %'		bc	0F766E
+E14	'Main theme'		bc	0F766E
+A16	'Fix loop'		bc	0F766E
+B16	'Open'		bc	0F766E
+C16	'Overdue'		bc	0F766E
+D16	'Done'		bc	0F766E
+E16	'Better'		bc	0F766E
+F16	'Same'		bc	0F766E
+G16	'Worse'		bc	0F766E
+B17	0			
+C17	0			
+D17	0			
+E17	0			
+F17	0			
+G17	0			
 ## Definitions 26x2 widths={'A': 26.0, 'B': 92.0}
 A1	'Report information'		b	
 A2	'Report'		b	

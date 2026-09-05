@@ -330,6 +330,11 @@ const MGT_I18N = {
     s5:'5. Branch League Table', s6:'6. Money-Leak Radar', s7:'7. Menu Cost / Head (by dish)',
     s8:'8. Peak Hours & Dayparts', s9:'9. Table Turnover & Occupancy', s10:'10. Payment Channels — ',
     s11:'11. Buffet Price Tiers — Guests & Cost/Head',
+    s12v:'12. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the 💬 tab.',
+    vVoices:'Voices', vNeg:'Negative', vStars:'Avg ★', vResp:'Answered', vWait:'Awaiting reply now', vSla:'past SLA', vThemes:'Top themes',
+    vWatch:'Branches to watch', vPraised:'Most praised', vSurvey:'QR survey', vAnswers:'answers', vActions:'Fix loop', vOpen:'open', vOverdue:'overdue',
+    vDone:'done this period', vBetter:'better', vSame:'same', vWorse:'worse', vPending:'window still running', vRate:'neg / 100 voices',
+    vNoActions:'No fixes recorded yet — create one from a theme in the 💬 tab, and this section will show whether it worked.',
     tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
     tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'Food %', tierBuffetGuests:'buffet guests',
     tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
@@ -348,7 +353,7 @@ const MGT_I18N = {
     naTable:'Table-turnover data is not available for this period — no table sessions were recorded.',
     naPay:'Payment-channel detail is not available for this period.',
     naTier:'Buffet price-tier data is not available for this period.',
-    s12:'12. Appendix — Definitions & Method',
+    s12:'13. Appendix — Definitions & Method',
     defs:[
       ['Net sales','bill total including VAT ÷ 1.07. VAT is never counted as revenue.'],
       ['Gross profit (GP)','net sales − food COGS. Labour, rent and utilities are NOT deducted here.'],
@@ -430,6 +435,11 @@ const MGT_I18N = {
     s5:'5. ตารางจัดอันดับสาขา', s6:'6. เรดาร์จุดรั่วไหล', s7:'7. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'8. ชั่วโมงพีค & ช่วงเวลา', s9:'9. รอบหมุนเวียนโต๊ะ', s10:'10. ช่องทางการชำระเงิน — ',
     s11:'11. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
+    s12v:'12. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ 💬',
+    vVoices:'เสียง', vNeg:'เชิงลบ', vStars:'★ เฉลี่ย', vResp:'ตอบกลับ', vWait:'รอสาขาตอบตอนนี้', vSla:'เกิน SLA', vThemes:'หัวข้อที่พูดถึงมากสุด',
+    vWatch:'สาขาที่ต้องดู', vPraised:'ชมมากสุด', vSurvey:'แบบสอบถาม QR', vAnswers:'คำตอบ', vActions:'วงจรการแก้', vOpen:'ค้าง', vOverdue:'เกินกำหนด',
+    vDone:'เสร็จในช่วงนี้', vBetter:'ดีขึ้น', vSame:'เท่าเดิม', vWorse:'แย่ลง', vPending:'รอครบ 28 วัน', vRate:'ลบ / 100 เสียง',
+    vNoActions:'ยังไม่มีงานแก้ที่บันทึกไว้ — สร้างจากหัวข้อในแท็บ 💬 แล้วส่วนนี้จะบอกว่าแก้แล้วได้ผลไหม',
     tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
     tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'Food %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
     tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
@@ -447,7 +457,7 @@ const MGT_I18N = {
     naTable:'ไม่มีข้อมูลรอบหมุนเวียนโต๊ะในช่วงนี้',
     naPay:'ไม่มีรายละเอียดช่องทางการชำระเงินในช่วงนี้',
     naTier:'ไม่มีข้อมูล tier ราคาบุฟเฟ่ต์ในช่วงนี้',
-    s12:'12. ภาคผนวก — นิยามและวิธีคำนวณ',
+    s12:'13. ภาคผนวก — นิยามและวิธีคำนวณ',
     defs:[
       ['ยอดขายสุทธิ','ยอดบิลรวม VAT ÷ 1.07 — ไม่นับ VAT เป็นรายได้'],
       ['กำไรขั้นต้น (GP)','ยอดขายสุทธิ − ต้นทุนอาหาร ยังไม่หักค่าแรง ค่าเช่า ค่าสาธารณูปโภค'],
@@ -1497,6 +1507,41 @@ function renderMgtReport(j, jM, jF) {
          <span class="text-[12px] text-slate-500"> &mdash; ${v}</span></div>`).join('')
     }</div><p class="text-[11px] text-slate-400 mt-3">${T.defsNote}</p>`;
 
+  // 12 - Customer voice: the window's voices against the window before, the
+  // themes and the branches behind them, and the fix loop with its verdicts —
+  // the one section where the guests, not the till, grade the period.
+  const voiceHtml = (() => {
+    const V = j.feedback;
+    if (!V || !(V.voices || (V.actions && (V.actions.open || V.actions.doing || V.actions.done)))) return '';
+    const delta = (cur, prev, digits, unit, invert) => {
+      if (cur == null || prev == null) return '';
+      const d = cur - prev; if (Math.abs(d) < (digits ? 0.05 : 0.5)) return `<span class="text-slate-400 text-[10px]">=</span>`;
+      const good = invert ? d < 0 : d > 0;
+      return `<span class="text-[10px] font-semibold" style="color:${good ? '#059669' : '#dc2626'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(digits)}${unit || ''}</span>`;
+    };
+    const R = V.response || {}, A = V.actions || {}, S = V.survey || {};
+    const tile = (l, v, d, sub) => `<div class="rounded-lg p-3" style="background:var(--bg-card);border:1px solid var(--border)"><p class="text-[10px] uppercase tracking-wide text-slate-400">${l}</p><p class="text-lg font-bold text-slate-800 leading-tight">${v} ${d}</p>${sub ? `<p class="text-[10px] text-slate-500 mt-0.5">${sub}</p>` : ''}</div>`;
+    const tiles = `<div class="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">` +
+      tile(T.vVoices, V.voices, delta(V.voices, V.prev_voices, 0), `${V.positives || 0} 😊 · ${V.negatives || 0} 😟`) +
+      tile(T.vNeg, V.neg_pct != null ? V.neg_pct + '%' : '—', delta(V.neg_pct, V.prev_neg_pct, 1, ' pt', true), '') +
+      tile(T.vStars, V.avg_rating != null ? V.avg_rating.toFixed(2) : '—', delta(V.avg_rating, V.prev_avg_rating, 2), '') +
+      tile(T.vResp, R.answerable ? R.rate + '%' : '—', delta(R.rate, V.prev_response_rate, 0, ' pt'), R.answerable ? `${R.answered}/${R.answerable}${R.median_days != null ? ' · ' + R.median_days + 'd' : ''}` : '') +
+      tile(T.vWait, V.unreplied || 0, '', V.sla_breached ? `<span style="color:#dc2626;font-weight:600">${V.sla_breached} ${T.vSla}</span>` : '') + `</div>`;
+    const themes = (V.themes || []).length ? `<table class="w-full text-[12px]"><thead><tr class="text-slate-400 text-[10px] uppercase"><th class="text-left py-1">${T.vThemes}</th><th class="text-right">${T.vVoices}</th><th class="text-right">${T.vNeg}</th><th class="text-right">Δ</th></tr></thead><tbody>` +
+      V.themes.map(t => `<tr class="border-t border-slate-100"><td class="py-1 font-medium text-slate-700">${esc(t.theme)}</td><td class="text-right tabular-nums">${t.n}</td><td class="text-right tabular-nums" style="color:${t.neg ? '#dc2626' : 'inherit'}">${t.neg}</td><td class="text-right">${delta(t.n, t.prev_n, 0, '', true)}</td></tr>`).join('') + '</tbody></table>' : '';
+    const watch = (V.branches_watch || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vWatch}</p>` +
+      V.branches_watch.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#dc2626">${b.neg_pct}% (${b.neg}/${b.n})${b.top_theme ? ` <span class="text-slate-400">· ${esc(b.top_theme)}</span>` : ''}</span></div>`).join('') : '';
+    const praised = (V.branches_praised || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vPraised}</p>` +
+      V.branches_praised.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#059669">★${b.avg_rating.toFixed(2)} <span class="text-slate-400">(n=${b.n})</span></span></div>`).join('') : '';
+    const survey = S.n ? `<p class="text-[11px] text-slate-500 mt-3">${T.vSurvey}: <b>${S.n}</b> ${T.vAnswers} ${delta(S.n, S.prev_n, 0)}${S.avg_rating != null ? ` · ★${S.avg_rating.toFixed(2)}` : ''}</p>` : '';
+    const resTag = r => ({ better: ['#059669', T.vBetter], same: ['#64748b', T.vSame], worse: ['#dc2626', T.vWorse], no_data: ['#94a3b8', '—'] }[r] || ['#b45309', T.vPending]);
+    const loop = `<p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">${T.vActions}</p>` +
+      `<p class="text-[12px] text-slate-700">${T.vOpen} <b>${(A.open || 0) + (A.doing || 0)}</b>${A.overdue ? ` <span style="color:#dc2626">(${A.overdue} ${T.vOverdue})</span>` : ''} · ${T.vDone} <b>${A.done || 0}</b>` +
+      ((A.better || A.same || A.worse) ? ` · <span style="color:#059669">${T.vBetter} ${A.better || 0}</span> / ${T.vSame} ${A.same || 0} / <span style="color:#dc2626">${T.vWorse} ${A.worse || 0}</span>` : '') + `</p>` +
+      ((A.items || []).length ? `<table class="w-full text-[12px] mt-1"><tbody>` + A.items.map(it => { const [c, l] = resTag(it.result); return `<tr class="border-t border-slate-100"><td class="py-1 text-slate-700">${esc(it.title)}${it.branch ? ` <span class="text-slate-400">· ${esc(it.branch)}</span>` : ''}${it.theme ? ` <span class="text-slate-400">· ${esc(it.theme)}</span>` : ''}</td><td class="py-1 text-right tabular-nums whitespace-nowrap">${it.before_rate != null && it.after_rate != null ? `${it.before_rate} → ${it.after_rate} <span class="text-slate-400 text-[10px]">${T.vRate}</span>` : (it.days_left ? `<span class="text-slate-400 text-[10px]">${T.vPending} (${it.days_left})</span>` : '')}</td><td class="py-1 pl-2 text-right"><span class="text-[10px] font-semibold" style="color:${c}">${l}</span></td></tr>`; }).join('') + '</tbody></table>' : `<p class="text-[11px] text-slate-400 mt-1">${T.vNoActions}</p>`);
+    return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}</div></div><div class="mt-4">${loop}</div>`;
+  })();
+
   // -- The report plan ------------------------------------------------------
   // ONE declarative list drives three things that used to drift apart: the
   // on-screen order, the table of contents, and the printed page plan.
@@ -1519,7 +1564,8 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s9',  c:'#9333ea', t:T.s9,  h:tableHtml ? (v9 + tableWithSplit) : naBox(T.naTable) },
     { id:'mgt-s10', c:'#0d9488', land:!!payHtml,  t:T.s10 + _payScope, h:payHtml ? (v10 + payHtml) : naBox(T.naPay) },
     { id:'mgt-s11', c:'#b45309', land:!!tierHtml, t:T.s11, h:tierHtml || naBox(T.naTier) },
-    { id:'mgt-s12', c:'#475569', t:T.s12, h:appendix },
+    { id:'mgt-s12', c:'#0f766e', t:T.s12v, h:voiceHtml || naBox(T.naVoice) },
+    { id:'mgt-s13', c:'#475569', t:T.s12, h:appendix },
   ];
 
   // Cover page: contents + the report-information block (period, comparison basis,

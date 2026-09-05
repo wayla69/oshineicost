@@ -60,4 +60,76 @@ def negative_digest(items: list, source: str, app_url: str = "") -> str:
     return "\n".join(lines)
 
 
-__all__ = ["send_telegram", "negative_digest", "telegram_config"]
+def _arrow(cur, prev, digits=0, unit="", invert=False):
+    if cur is None or prev is None:
+        return ""
+    d = cur - prev
+    if abs(d) < (0.05 if digits else 0.5):
+        return " (=)"
+    good = (d < 0) if invert else (d > 0)
+    return f" ({'▲' if d > 0 else '▼'}{abs(d):.{digits}f}{unit}{' ✓' if good else ''})"
+
+
+def weekly_digest(d: dict, app_url: str = "") -> str:
+    """The week in numbers for the group chat — this window against the one
+    before, what waits now, and whether the fixes moved the voices
+    (routers/feedback_actions.compute_digest shape)."""
+    r = d.get("range") or ["", ""]
+    lines = [f"📊 <b>สรุปเสียงลูกค้า {d.get('days', 7)} วัน</b> ({html.escape(r[0])} → {html.escape(r[1])})"]
+    v, pv = d.get("voices") or 0, d.get("prev_voices")
+    line = f"เสียง <b>{v}</b>{_arrow(v, pv)}"
+    if d.get("neg_pct") is not None and v:
+        line += f" · ลบ <b>{d['neg_pct']:g}%</b>{_arrow(d['neg_pct'], d.get('prev_neg_pct'), 1, ' pt', invert=True)}"
+    if d.get("avg_rating") is not None:
+        line += f" · ★ <b>{d['avg_rating']:.2f}</b>{_arrow(d['avg_rating'], d.get('prev_avg_rating'), 2)}"
+    lines.append(line)
+    resp = d.get("response") or {}
+    if resp.get("answerable"):
+        lines.append(f"ตอบกลับ <b>{resp.get('rate') or 0}%</b> ({resp.get('answered', 0)}/{resp['answerable']})"
+                     f"{_arrow(resp.get('rate'), d.get('prev_response_rate'), 0, ' pt')}"
+                     + (f" · เวลากลาง {resp['median_days']} วัน" if resp.get("median_days") is not None else ""))
+    waiting = []
+    if d.get("unreplied"):
+        waiting.append(f"รอสาขาตอบตอนนี้ <b>{d['unreplied']}</b>")
+    if d.get("sla_breached"):
+        waiting.append(f"เกิน SLA <b>{d['sla_breached']}</b> ⚠️")
+    if d.get("flagged"):
+        waiting.append(f"🚩 {d['flagged']}")
+    if waiting:
+        lines.append(" · ".join(waiting))
+    th = d.get("themes") or []
+    if th:
+        lines.append("หัวข้อ: " + " · ".join(f"{html.escape(t['theme'])} {t['n']}{_arrow(t['n'], t.get('prev_n'), invert=True)}" for t in th[:5]))
+    w = d.get("branches_watch") or []
+    if w:
+        lines.append("สาขาที่ต้องดู: " + " · ".join(f"<b>{html.escape(b['branch'])}</b> ลบ {b['neg_pct']:g}% ({b['neg']}/{b['n']})"
+                                                 + (f" — {html.escape(b['top_theme'])}" if b.get("top_theme") else "") for b in w))
+    p = d.get("branches_praised") or []
+    if p:
+        lines.append("ชมมากสุด: " + " · ".join(f"{html.escape(b['branch'])} ★{b['avg_rating']:.2f} (n={b['n']})" for b in p))
+    sv = d.get("survey") or {}
+    if sv.get("n"):
+        lines.append(f"แบบสอบถาม QR: {sv['n']} คำตอบ{_arrow(sv['n'], sv.get('prev_n'))}"
+                     + (f" · ★{sv['avg_rating']:.2f}" if sv.get("avg_rating") is not None else ""))
+    a = d.get("actions") or {}
+    if any(a.get(k) for k in ("open", "doing", "done", "better", "same", "worse", "no_data")):
+        bits = [f"ค้าง {a.get('open', 0) + a.get('doing', 0)}" + (f" (เกินกำหนด {a['overdue']})" if a.get("overdue") else "")]
+        if a.get("done"):
+            bits.append(f"เสร็จสัปดาห์นี้ {a['done']}")
+        ver = [f"ดีขึ้น {a['better']}" if a.get("better") else "", f"เท่าเดิม {a['same']}" if a.get("same") else "",
+               f"แย่ลง {a['worse']} ⚠️" if a.get("worse") else ""]
+        ver = [x for x in ver if x]
+        if ver:
+            bits.append("พิสูจน์ผล: " + " / ".join(ver))
+        lines.append("งานแก้: " + " · ".join(bits))
+        for it in (a.get("items") or [])[:4]:
+            res = {"better": "✓ ดีขึ้น", "same": "= เท่าเดิม", "worse": "✗ แย่ลง", "no_data": "ไม่มีข้อมูล"}.get(it.get("result") or "", "")
+            rate = (f" {it['before_rate']:g} → {it['after_rate']:g} ลบ/100 เสียง" if it.get("before_rate") is not None and it.get("after_rate") is not None else "")
+            left = f" (อีก {it['days_left']} วัน)" if it.get("days_left") else ""
+            lines.append(f"  • {html.escape(it['title'])}{' · ' + html.escape(it['branch']) if it.get('branch') else ''}: {res or 'รอครบ 28 วัน'}{rate}{left}")
+    if app_url:
+        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+    return "\n".join(lines)
+
+
+__all__ = ["send_telegram", "negative_digest", "weekly_digest", "telegram_config"]
