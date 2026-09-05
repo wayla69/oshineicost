@@ -117,7 +117,7 @@ function renderFeedback(d) {
     tile('รีวิวทั้งหมด', (d.total || 0).toLocaleString(), _fbDelta(d.total, prev && prev.total, { digits: 0, goodUp: true }), `บวก ${s.pos || 0} · กลาง ${s.neu || 0} · ลบ ${s.neg || 0}`, '#0369a1') +
     tile('เชิงลบ', `${d.neg_pct}%`, _fbDelta(d.neg_pct, prev && prev.neg_pct, { pct: true, goodUp: false, unit: ' pt' }), `${s.neg || 0} เสียง`, '#b91c1c') +
     tile('อัตราตอบกลับ', resp.rate != null ? resp.rate + '%' : '—', _fbDelta(resp.rate, prev && prev.response_rate, { pct: true, goodUp: true, digits: 0, unit: ' pt' }), resp.answerable ? `ตอบแล้ว ${resp.answered}/${resp.answerable}${resp.median_days != null ? ` · กลาง ${resp.median_days} วัน` : ''}` : 'ยังไม่มีเสียงลบที่ตอบผ่านระบบได้', '#047857') +
-    tile('รอสาขาตอบ', `${d.unreplied || 0}`, _fbDelta(d.sla_breached, prev && prev.sla_breached, { digits: 0, goodUp: false }), d.sla_breached ? `<span style="color:#b91c1c;font-weight:600">เกิน ${d.sla_days} วัน ${d.sla_breached}</span>` : `ทุกรายการยังอยู่ใน SLA ${d.sla_days} วัน`, d.sla_breached ? '#b91c1c' : '#0f766e');
+    tile('รอสาขาตอบ', `${d.unreplied || 0}`, _fbDelta(d.sla_breached, prev && prev.sla_breached, { digits: 0, goodUp: false }), (d.sla_breached ? `<span style="color:#b91c1c;font-weight:600">เกิน ${d.sla_days} วัน ${d.sla_breached}</span>` : `ทุกรายการยังอยู่ใน SLA ${d.sla_days} วัน`) + (d.severe ? ` · <span style="color:#b91c1c;font-weight:600">🔥 ร้ายแรง ${d.severe}</span>` : ''), (d.sla_breached || d.severe) ? '#b91c1c' : '#0f766e');
   document.getElementById('fbSlaDays').textContent = d.sla_days || 1;
   _fbTrend(d);
   // mix
@@ -137,6 +137,12 @@ function renderFeedback(d) {
     `<table class="fb-t"><thead><tr><th>เมนู</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">บวก</th><th style="text-align:right">ลบ</th><th></th></tr></thead><tbody>` +
     (d.menus || []).map(m => `<tr class="row" onclick="loadFeedbackItems(null,{menu:'${_fbEsc(m.menu).replace(/'/g, "\\'")}'});document.getElementById('fbAllCard').open=true;"><td>${_fbEsc(m.menu)}</td><td style="text-align:right">${m.n}</td><td style="text-align:right;color:#047857">${m.pos}</td><td style="text-align:right;color:#b91c1c">${m.neg}</td><td class="text-[11px]" style="color:var(--text-muted)">${m.neg > m.pos ? '⚠ ลบมากกว่าบวก' : ''}</td></tr>`).join('') + '</tbody></table>' :
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่พบเมนูในเสียงลูกค้า (จับจากชื่อเมนูในระบบ)</p>';
+  // staff named in the voices
+  const staffEl = document.getElementById('fbStaff');
+  if (staffEl) staffEl.innerHTML = (d.staff || []).length ?
+    `<table class="fb-t"><thead><tr><th>ชื่อ</th><th>สาขา</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">ชม</th><th style="text-align:right">บ่น</th></tr></thead><tbody>` +
+    d.staff.map(s => `<tr class="row" title="${_fbEsc((s.examples || []).map(e => e.text).join(' | '))}"><td><b>${_fbEsc(s.name)}</b></td><td class="text-[11px]" style="color:var(--text-muted)">${_fbEsc(s.branch || '')}</td><td style="text-align:right">${s.n}</td><td style="text-align:right;color:#047857">${s.pos}</td><td style="text-align:right;color:#b91c1c">${s.neg}</td></tr>`).join('') + '</tbody></table>' :
+    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่พบชื่อพนักงานในเสียงลูกค้า (จับจาก "พนักงานชื่อ…", "น้อง…", "คุณ…")</p>';
   // positives
   document.getElementById('fbPos').innerHTML = (d.recent_positive || []).length ? (d.recent_positive || []).map(r =>
     `<div class="fb-quote"><div>${_fbEsc(r.text)}</div><div class="m">${_fbEsc(r.branch || '')} · ${_fbEsc(r.source || '')} · ${_fbEsc(r.date || '')}${r.rating != null ? ' · ' + r.rating + '★' : ''} <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="fbCopy(this, ${JSON.stringify(`${r.text} — ลูกค้า ${r.branch || ''} (${r.source || ''} ${r.date || ''})`).replace(/"/g, '&quot;')})">คัดลอก</button></div></div>`).join('') :
@@ -214,7 +220,7 @@ async function loadFeedbackQueue() {
   if (!items.length) { host.innerHTML = `<p class="text-xs py-3" style="color:var(--text-muted)">${{ open: 'ไม่มีรายการรอตอบ 🎉', sla: 'ไม่มีรายการเกิน SLA', flag: 'ไม่มีรายการปักหมุด', neg: 'ไม่มีเสียงลบในช่วงนี้' }[_fbQueueFilter]}</p>`; return; }
   host.innerHTML = items.map(r => `<div class="fb-queue-item${r.flag ? ' hot' : ''}" id="fbq-${r.id}">
       <div>
-        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}${r.contact ? `<span class="fb-tag flag" title="ลูกค้าฝากช่องทางติดต่อกลับ">📞 ${_fbEsc(r.contact)}</span>` : ''}</div>
+        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.severity === 'high' ? `<span class="fb-tag flag" style="background:#7f1d1d;color:#fff" title="ตรวจพบเรื่องร้ายแรง">🔥 ${_fbEsc(r.severity_note || 'ร้ายแรง')}</span>` : ''}${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${(r.staff || []).length ? `<span class="fb-tag" title="พนักงานที่ถูกพูดถึง">👥 ${_fbEsc(r.staff.join(', '))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}${r.contact ? `<span class="fb-tag flag" title="ลูกค้าฝากช่องทางติดต่อกลับ">📞 ${_fbEsc(r.contact)}</span>` : ''}</div>
         <div class="txt">${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}</div>
         <div class="mt-1">${(r.themes || []).map(t => `<span class="fb-tag neg">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="fb-tag menu">${_fbEsc(m)}</span> `).join('')}${r.reply_text ? `<div class="text-[11px] mt-0.5" style="color:#047857">↳ ${_fbEsc(r.reply_text.slice(0, 120))}</div>` : ''}</div>
       </div>
@@ -483,4 +489,28 @@ async function editFeedbackAction(id) {
   if (!Object.keys(body).length) return;
   try { await _fbPost(`/api/feedback/actions/${id}`, body); loadFeedbackActions(); }
   catch (e) { notifyError('บันทึกไม่สำเร็จ: ' + e.message); }
+}
+
+/* ── AI depth (E5): the narrative and "ask the data" — Claude when the key is set, rules / search otherwise ── */
+async function loadFeedbackNarrative() {
+  const el = document.getElementById('fbNarrative'), eng = document.getElementById('fbAiEngine');
+  if (!el) return;
+  el.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังสรุป…</span>';
+  const p = new URLSearchParams({ days: (document.getElementById('fbAiDays') || {}).value || '7' });
+  const b = _fbBranchLocal || getBranch(); if (b) p.set('branch', b);
+  let d; try { d = await api(`${API}/api/feedback/narrative?${p}`); } catch (e) { el.textContent = 'สรุปไม่สำเร็จ'; return; }
+  eng.textContent = `· ${d.range[0]} → ${d.range[1]} · เขียนโดย ${d.engine === 'claude' ? 'Claude' : 'กฎ (ตั้ง ANTHROPIC_API_KEY เพื่อใช้ Claude)'}`;
+  el.innerHTML = `<p>${_fbEsc(d.overview)}</p>${d.fix ? `<p class="mt-1"><b>ต้องแก้:</b> ${_fbEsc(d.fix)}</p>` : ''}${d.praise ? `<p class="mt-1"><b>ทำได้ดี:</b> ${_fbEsc(d.praise)}</p>` : ''}` +
+    ((d.actions || []).length ? `<ol class="mt-1 pl-5 list-decimal">${d.actions.map(a => `<li>${_fbEsc(a)}</li>`).join('')}</ol>` : '') +
+    `<div class="mt-1"><button class="fb-ghost" onclick="fbCopy(this, ${JSON.stringify([d.overview, d.fix, d.praise, ...(d.actions || []).map((a, i) => `${i + 1}. ${a}`)].filter(Boolean).join('\n')).replace(/"/g, '&quot;')})">คัดลอกส่งกลุ่ม</button></div>`;
+}
+async function askFeedback() {
+  const q = (document.getElementById('fbAskQ') || {}).value || '', out = document.getElementById('fbAskA');
+  if (!q.trim() || !out) return;
+  out.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังหาคำตอบ…</span>';
+  const body = { question: q.trim(), days: +((document.getElementById('fbAiDays') || {}).value || 7) * 4 };
+  const b = _fbBranchLocal || getBranch(); if (b) body.branch = b;
+  let d; try { d = await _fbPost('/api/feedback/ask', body); } catch (e) { out.innerHTML = `<span class="text-xs" style="color:#b91c1c">ถามไม่สำเร็จ: ${_fbEsc(e.message)}</span>`; return; }
+  out.innerHTML = `<div class="rounded p-3" style="background:var(--bg-input)"><p class="text-sm">${_fbEsc(d.answer)}</p><p class="text-[11px] mt-1" style="color:var(--text-muted)">${d.range[0]} → ${d.range[1]} · ${d.engine === 'claude' ? 'ตอบโดย Claude' : 'ค้นหาคำ (ตั้ง ANTHROPIC_API_KEY เพื่อให้ AI ตอบเป็นประโยค)'}${d.matches != null ? ` · ตรงกัน ${d.matches} เสียง` : ''}</p>` +
+    ((d.cites || []).length ? d.cites.map(c => `<div class="text-xs mt-1 pl-2" style="border-left:3px solid ${c.sentiment === 'neg' ? '#fca5a5' : '#a7f3d0'}">"${_fbEsc(c.text)}" <span style="color:var(--text-muted)">— ${_fbEsc(c.branch || '')} ${_fbEsc(c.date || '')}${c.rating != null ? ' · ' + c.rating + '★' : ''}</span></div>`).join('') : '') + '</div>';
 }

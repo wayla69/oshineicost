@@ -35,9 +35,11 @@
   "neu": 0,
   "pos": 0
  },
+ "severe": 0,
  "sla_breached": 0,
  "sla_days": 1,
  "sources": {},
+ "staff": [],
  "themes": [],
  "today": "<ts>",
  "total": 0,
