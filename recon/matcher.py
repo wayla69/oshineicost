@@ -1063,15 +1063,37 @@ def _credit_bank_candidates(conn, branch_id, period_month, bank, exclude_ids=Non
     return out
 
 
-def credit_three_way(conn, branch_id, period_month, exclude_ids=None):
+def _carried_bank_line_ids(conn, branch_id, period_month) -> set:
+    """Bank credits dated IN this month that LAST month's matchers already
+    claimed: the T+1 deposit of the 30th/31st (cash) and the payout sweeps that
+    land in the first days of the month (Grab / LINE MAN / card). They are last
+    month's money — nothing in this month may consume them again."""
+    ids = set(prev_month_consumed_ids(conn, branch_id, period_month))
+    for s in _prev_payout_consumed_ids(conn, branch_id, period_month).values():
+        ids |= set(s)
+    return ids
+
+
+def credit_three_way(conn, branch_id, period_month, exclude_ids=None, _dedup=True):
     """Per-acquirer 3-document credit reconciliation. Returns
     {rows: [...], bank_line_ids: set}. Each row:
       acquirer, bank, pos_gross, settle_gross, settle_refund, settle_fee (MDR+VAT,
       auto-pulled), settle_net, bank_credit, pos_leg, bank_leg, fee_variance,
       bank_groups (day-traces of the bank match).
-    `exclude_ids` are bank-line ids already claimed elsewhere (e.g. by cash
-    matching) so they aren't double-counted as a card settlement."""
+    `exclude_ids` are bank-line ids the caller already knows are claimed. On top
+    of them the matcher always drops this month's cash deposits and everything
+    last month's cash / payout matchers carried into this month (their windows
+    reach past the 1st; this one is strictly in-month, so until 2026-09 a 1-July
+    credit that June had already consumed could be booked again as a July card
+    settlement whenever a July net happened to equal it — the bank leg read
+    'matched' with money that was June's). `_dedup=False` skips that lookup."""
     exclude_ids = set(exclude_ids or set())
+    if _dedup:
+        try:
+            exclude_ids |= set(cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"])
+        except sqlite3.OperationalError:
+            pass
+        exclude_ids |= _carried_bank_line_ids(conn, branch_id, period_month)
     cfgs = method_config(conn)
     pos, _unmapped = pos_category_totals(conn, branch_id, period_month)
     pos_credit = {bank: amt for (cat, bank), amt in pos.items() if cat == "CREDIT"}

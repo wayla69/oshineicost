@@ -3141,3 +3141,55 @@ def test_ic_audit_trail_xlsx_and_enforcement(client, monkeypatch):
     assert r.status_code == 200 and r.headers["content-type"] == "application/zip"
     names = _zip.ZipFile(_io.BytesIO(r.content)).namelist()
     assert len(names) == 7 and any(n.startswith("00_README") for n in names)
+
+
+def test_credit_three_way_excludes_credit_carried_from_prev_month(client):
+    """REGRESSION (2026-07 audit item 'credit-3way exclude_ids'): the cash and payout
+    matchers reach into the first days of NEXT month (a T+1 deposit, a payout sweep),
+    so a bank credit dated 1 July can already be June's money. The card matcher's
+    window is strictly in-month, so July's credit_three_way saw that line as a fresh
+    candidate and, whenever a July settlement net matched it within tolerance, booked
+    it as July's card settlement: bank_credit inflated, a genuine 'awaiting' flipped
+    to 'matched', the line counted twice. It must drop everything last month's
+    matchers claimed on EVERY call path (bank_statement_coverage passed this month's
+    cash ids; reconcile_month passed nothing)."""
+    from recon.matcher import credit_three_way, cash_deposit_matching, bank_statement_coverage
+    from recon.reconcile_v2 import reconcile_month
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['Cash']['id']}", json={"category": "CASH", "bank": "KBANK"})
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE IF NOT EXISTS pos_payment_day"
+              "(branch_id INT, day TEXT, payment_code TEXT, amount REAL, txn_count INT DEFAULT 0)")
+    c.execute("INSERT INTO pos_payment_day VALUES(4,'2026-06-30','Cash',480,3)")      # June's last cash day
+    c.commit(); c.close()
+    _add_bank_line(db, "kbank", "TRANSFER", 480, date="2026-07-01")                     # banked T+1, on 1 July
+    with main.get_db() as conn:
+        june_cash = cash_deposit_matching(conn, 4, "2026-06")
+        carried = set(june_cash["consumed_ids"])
+        assert carried, "precondition: June's cash matcher claims the 1-July deposit"
+    # July: a KBANK card settlement whose net is the same 480, dated 1 July, its own credit not yet landed
+    c = sqlite3.connect(db)
+    up = c.execute("INSERT INTO recon_uploads(source_type,branch_id,provider,file_name,period_month,row_count,status)"
+                   " VALUES('credit_card',4,'KBANK','f','2026-07',0,'confirmed')").lastrowid
+    c.execute("INSERT INTO recon_cc_lines(upload_id,branch_id,settlement_date,acquirer,gross_amount,refund_amount,mdr_fee,vat_amount,net_amount)"
+              " VALUES(?,4,'2026-07-01','KBANK',500,0,18.69,1.31,480)", (up,))
+    c.commit(); c.close()
+    with main.get_db() as conn:
+        # the bug, reproduced on purpose: with the carry-over lookup off, June's deposit is re-consumed
+        naive = next(r for r in credit_three_way(conn, 4, "2026-07", _dedup=False)["rows"] if r["acquirer"] == "KBANK")
+        assert naive["bank_leg"] == "matched" and naive["bank_credit"] == 480
+        # the fix, on both call paths
+        july = next(r for r in credit_three_way(conn, 4, "2026-07")["rows"] if r["acquirer"] == "KBANK")
+        assert july["bank_credit"] == 0 and july["bank_leg"] == "awaiting", july
+        credit_ch = next(ch for ch in reconcile_month(conn, 4, "2026-07")["channels"] if ch["key"] == "CREDIT")
+        rm = next(r for r in credit_ch["three_way"] if r["acquirer"] == "KBANK")
+        assert rm["bank_credit"] == 0 and rm["bank_leg"] == "awaiting"
+        cov = next(r for r in bank_statement_coverage(conn, 4, "2026-07")["credit_three_way"] if r["acquirer"] == "KBANK")
+        assert cov["bank_credit"] == 0 and cov["bank_leg"] == "awaiting"
+    # July's own settlement credit, landing the next day, still matches normally
+    _add_bank_line(db, "kbank", "CC_SETTLE", 480, date="2026-07-02")
+    with main.get_db() as conn:
+        july = next(r for r in credit_three_way(conn, 4, "2026-07")["rows"] if r["acquirer"] == "KBANK")
+        assert july["bank_credit"] == 480 and july["bank_leg"] == "matched"
+        assert not (set(credit_three_way(conn, 4, "2026-07")["bank_line_ids"]) & carried)
