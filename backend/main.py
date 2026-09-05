@@ -325,6 +325,18 @@ def _usage_bump(kind: str, name: str, user: str = "") -> None:
                 " ON CONFLICT(day, kind, name) DO UPDATE SET"
                 " hits = hits + 1, last_user = excluded.last_user",
                 (kind, name[:120], (user or "")[:40]))
+            # the same count per USER (2026-09-05): who uses what, for the adoption
+            # view — usage_daily kept only the last user of each row. '' = no login
+            # (auth off locally, or a machine caller without a session cookie).
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS usage_user_daily("
+                " day TEXT NOT NULL, user TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, name TEXT NOT NULL,"
+                " hits INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day, user, kind, name))")
+            con.execute(
+                "INSERT INTO usage_user_daily(day, user, kind, name, hits)"
+                " VALUES (date('now','+7 hours'), ?, ?, ?, 1)"
+                " ON CONFLICT(day, user, kind, name) DO UPDATE SET hits = hits + 1",
+                ((user or "")[:40], kind, name[:120]))
             con.commit()
         finally:
             con.close()
@@ -388,6 +400,111 @@ def usage_summary(days: int = Query(30, ge=1, le=365)):
             con.close()
     except Exception:
         pass
+    return out
+
+
+_MACHINE_API = ("/api/_admin/", "/api/usage", "/api/auth/", "/api/feedback/webhook", "/api/feedback/sync-log",
+                "/api/feedback/reply-result")
+
+
+@app.get("/api/usage/users")
+def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
+    """The adoption view (Settings → 📈 การใช้งานจริง → การเข้าใช้รายคน): every
+    account with its last login, logins and failures in the window, the days it
+    opened the dashboard, tab opens and its three most-opened tabs. Status:
+    'never' = no successful login on record (still on the shared default
+    password), 'idle' = has logged in before but not opened anything in the
+    window, 'active' = opened a tab or logged in within the window. Machine
+    paths (sync push, backup export, auth) are left out of the per-user API
+    count so a person's row is what THEY did. Admin-gated like /api/auth/users
+    (per-person login times are personal data); open when auth is off."""
+    if __package__:
+        from .routers.auth_api import _require_admin
+    else:
+        from routers.auth_api import _require_admin
+    _require_admin(request)
+    out: dict = {"days": days, "users": [], "summary": {}}
+    accounts: list = []
+    auth: dict = {}
+    with get_db() as con:
+        try:
+            rows = con.execute("SELECT username, role, active, must_change, COALESCE(branch, '') AS branch, created_at"
+                               " FROM app_user ORDER BY role, username").fetchall()
+        except sqlite3.OperationalError:
+            rows = con.execute("SELECT username, role, active, must_change, '' AS branch, created_at"
+                               " FROM app_user ORDER BY role, username").fetchall()
+        accounts = [dict(r) for r in rows]
+        try:
+            for r in con.execute(
+                    "SELECT by AS u, action, MAX(ts) AS last,"
+                    " SUM(CASE WHEN ts >= datetime('now', ?) THEN 1 ELSE 0 END) AS n"
+                    " FROM recon_audit_log WHERE entity = 'auth' AND action IN ('login', 'login_fail')"
+                    " GROUP BY by, action", (f"-{int(days)} days",)):
+                auth.setdefault(r["u"], {})[r["action"]] = {"last": r["last"], "n": r["n"] or 0}
+        except sqlite3.OperationalError:
+            pass
+    usage: dict = {}
+    top: dict = {}
+    try:
+        ucon = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        ucon.row_factory = sqlite3.Row
+        try:
+            if ucon.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_user_daily'").fetchone():
+                since = f"-{int(days)} day"
+                for r in ucon.execute(
+                        "SELECT user, kind, SUM(hits) AS hits, COUNT(DISTINCT day) AS days_seen, MAX(day) AS last_seen"
+                        " FROM usage_user_daily WHERE day >= date('now', '+7 hours', ?)"
+                        " GROUP BY user, kind", (since,)):
+                    usage.setdefault(r["user"], {})[r["kind"]] = dict(r)
+                for r in ucon.execute(
+                        "SELECT user, SUM(hits) AS hits FROM usage_user_daily"
+                        " WHERE kind = 'api' AND day >= date('now', '+7 hours', ?)"
+                        " AND (" + " AND ".join(f"name NOT LIKE '% {p}%'" for p in _MACHINE_API) + ")"
+                        " GROUP BY user", (since,)):
+                    usage.setdefault(r["user"], {})["api_human"] = r["hits"] or 0
+                for r in ucon.execute(
+                        "SELECT user, name, SUM(hits) AS h FROM usage_user_daily"
+                        " WHERE kind = 'tab' AND day >= date('now', '+7 hours', ?)"
+                        " GROUP BY user, name ORDER BY user, h DESC", (since,)):
+                    if len(top.setdefault(r["user"], [])) < 3:
+                        top[r["user"]].append({"tab": r["name"], "hits": r["h"]})
+        finally:
+            ucon.close()
+    except Exception:
+        pass
+
+    def row(username, a):
+        u = usage.get(username, {})
+        tab = u.get("tab", {})
+        logins = auth.get(username, {}).get("login", {})
+        fails = auth.get(username, {}).get("login_fail", {})
+        tab_hits = int(tab.get("hits") or 0)
+        days_seen = int(tab.get("days_seen") or 0)
+        if not logins.get("last") and a.get("must_change", 0):
+            status = "never"
+        elif tab_hits or int(logins.get("n") or 0):
+            status = "active"
+        else:
+            status = "idle"
+        return {"username": username, "role": a.get("role", ""), "branch": a.get("branch", "") or "",
+                "active": int(a.get("active", 1) or 0), "must_change": int(a.get("must_change", 0) or 0),
+                "created_at": a.get("created_at", ""),
+                "last_login": logins.get("last"), "logins": int(logins.get("n") or 0), "failed": int(fails.get("n") or 0),
+                "tab_hits": tab_hits, "days_seen": days_seen, "last_seen": tab.get("last_seen"),
+                "api_hits": int(u.get("api_human") or 0), "top_tabs": top.get(username, []), "status": status}
+    users = [row(a["username"], a) for a in accounts]
+    known = {a["username"] for a in accounts}
+    for u in sorted(usage):                       # activity by a name that is not an account: '' (no login) or a removed user
+        if u not in known and (usage[u].get("tab") or usage[u].get("api_human")):
+            r = row(u, {"role": "", "must_change": 0, "active": 1})
+            r["username"] = u or "(ไม่ระบุ — ไม่มี login)"
+            r["status"] = "anonymous"
+            users.append(r)
+    out["users"] = users
+    out["summary"] = {"accounts": len(accounts),
+                      "active": sum(1 for x in users if x["status"] == "active"),
+                      "idle": sum(1 for x in users if x["status"] == "idle"),
+                      "never": sum(1 for x in users if x["status"] == "never")}
     return out
 
 

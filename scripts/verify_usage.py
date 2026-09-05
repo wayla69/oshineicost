@@ -19,7 +19,7 @@ with sync_playwright() as pw:
     pg.wait_for_timeout(2500)
     txt = pg.evaluate("() => (document.getElementById('usageStatsBody') || {}).innerText || ''")
     b.close()
-ok = ('ไม่สำเร็จ' not in txt) and ('Top 20 API endpoints' in txt)
+ok = ('ไม่สำเร็จ' not in txt) and ('Top 20 API endpoints' in txt) and ('การเข้าใช้รายคน' in txt) and ('ยังไม่เคยเข้าใช้' in txt)
 print('usage panel text (head):', txt[:120].replace('\n', ' | '))
 print('page errors:', errors[:2])
 print('RESULT:', 'OK — panel renders' if ok and not errors else 'BROKEN')

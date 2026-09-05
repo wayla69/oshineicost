@@ -1358,9 +1358,10 @@ async function loadUsageStats() {
   if (!el) return;
   el.textContent = 'กำลังโหลด…';
   const days = document.getElementById('usageDays')?.value || 30;
-  let d = null;
+  let d = null, people = null;
   try { d = await api(`${API}/api/usage/summary?days=${days}`); } catch(e) {}
   if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  try { people = await api(`${API}/api/usage/users?days=${days}`); } catch(e) {}
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
   const seen = new Set(tabs.map(t => t.name));
@@ -1376,7 +1377,28 @@ async function loadUsageStats() {
   const killHead = onHold
     ? `🗑️ Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
     : `🗑️ Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
-  el.innerHTML = `
+  // ── who uses it: the adoption view (the owner's question — who has and hasn't started) ──
+  const STATUS = { active: ['ใช้งานอยู่', '#15803d', '#dcfce7'], idle: ['ไม่ได้ใช้ในช่วงนี้', '#b45309', '#fef3c7'],
+                   never: ['ยังไม่เคยเข้าใช้ (รหัสเริ่มต้น)', '#b91c1c', '#fee2e2'], anonymous: ['ไม่มี login', '#6b7280', '#e5e7eb'] };
+  const fmtTs = t => t ? esc(String(t).slice(0, 16).replace('T', ' ')) : '—';
+  const personRow = u => { const st = STATUS[u.status] || STATUS.anonymous; return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-3 font-semibold">${esc(u.username)}${u.active ? '' : ' <span class="text-[10px]" style="color:var(--text-muted)">(ปิดใช้)</span>'}</td>
+      <td class="py-1.5 pr-3">${esc(u.role || '')}${u.branch ? '<br><span class="text-[10px]" style="color:var(--text-muted)">' + esc(u.branch) + '</span>' : ''}</td>
+      <td class="py-1.5 pr-3"><span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:${st[1]};background:${st[2]}">${st[0]}</span></td>
+      <td class="py-1.5 pr-3" style="color:var(--text-muted)">${fmtTs(u.last_login)}</td>
+      <td class="py-1.5 pr-3 text-right">${(+u.logins).toLocaleString()}${u.failed ? ` <span title="login ไม่สำเร็จ" style="color:#b91c1c">(✗${u.failed})</span>` : ''}</td>
+      <td class="py-1.5 pr-3 text-right">${(+u.days_seen).toLocaleString()}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold">${(+u.tab_hits).toLocaleString()}</td>
+      <td class="py-1.5 text-[11px]" style="color:var(--text-secondary)">${(u.top_tabs || []).map(t => esc(PAGE_TITLES[t.tab] || t.tab) + ' (' + t.hits + ')').join(' · ') || '—'}</td></tr>`; };
+  const ps = people && people.summary ? people.summary : null;
+  const peopleHtml = people ? `
+    <div class="mb-6">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">👥 การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
+      <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">login ล่าสุด</th><th class="py-1 pr-3 text-right">login</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
+      <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
+    </div>` : '';
+  el.innerHTML = peopleHtml + `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">แท็บที่ถูกเปิด (${esc(days)} วันล่าสุด)</div>
