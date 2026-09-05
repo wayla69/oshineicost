@@ -9,7 +9,7 @@ below; local/tests import it as `main`, prod uvicorn as `backend.main`.
 from fastapi import HTTPException, Query
 from typing import Dict, List, Optional
 import json as _json
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, avg_ticket_sql, discount_base_row, net_revenue_row, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, avg_ticket_sql, discount_base_row, discount_excess, discount_policy_pct, net_revenue_row, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _apply_period_filter, _build_sku_effective_cost, _cogs_case, _eff_month_range,
     _effective_cost_subquery, _group_filter, _iso_week_sql, _month_range_filter, _ols_regression,
@@ -1055,8 +1055,9 @@ def analysis_discounts(
                          / COUNT(*), 1) AS rate,
                    ROUND(SUM(discount), 2) AS total_discount,
                    ROUND(AVG(CASE WHEN discount > 0 THEN discount END), 0) AS avg_discount,
+                   ROUND(SUM({discount_base_row('')}), 2) AS gross_base,
                    ROUND(100.0 * SUM(discount)
-                         / NULLIF(SUM(({net_revenue_row('')}) + discount),0), 1) AS disc_pct_of_sales
+                         / NULLIF(SUM({discount_base_row('')}),0), 1) AS disc_pct_of_sales
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
@@ -1065,6 +1066,14 @@ def analysis_discounts(
             """,
             params,
         ).fetchall()
+        # the policy ceiling and what each branch gave beyond it (฿, never negative)
+        policy = discount_policy_pct(con)
+        branches = []
+        for r in by_branch:
+            row = dict(r)
+            row["excess_baht"] = discount_excess(row.get("total_discount") or 0, row.get("gross_base") or 0, policy)
+            row["over_policy"] = (row.get("disc_pct_of_sales") or 0) > policy
+            branches.append(row)
 
         trend = con.execute(
             f"""
@@ -1157,9 +1166,13 @@ def analysis_discounts(
         _gs = ov.get("gross_sales") or 0
         ov["discount_rate"] = round(100.0 * (ov.get("discount_tx") or 0) / _tt, 1) if _tt else 0
         ov["disc_pct_of_sales"] = round(100.0 * (ov.get("total_discount") or 0) / _gs, 2) if _gs else 0
+        ov["policy_pct"] = policy
+        ov["excess_baht"] = round(sum(b["excess_baht"] for b in branches), 2)
+        ov["branches_over_policy"] = sum(1 for b in branches if b["over_policy"])
     return {
         "overall":      ov,
-        "by_branch":    [dict(r) for r in by_branch],
+        "by_branch":    branches,
+        "policy_pct":   policy,
         "trend":        [dict(r) for r in trend],
         "top_cashiers": cashiers,
         "pattern_groups": [dict(r) for r in pattern_groups],

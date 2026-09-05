@@ -49,6 +49,30 @@ def avg_ticket_sql(a: str = "st") -> str:
     return f"(AVG({p}total_inc_vat)/{VAT_DIVISOR} - AVG(COALESCE({p}service_charge,0)))"
 
 
+# ─── Discount policy ─────────────────────────────────────────────────────────
+# The owner's ceiling (2026-07): discounts should stay within 2.5% of pre-discount
+# net sales. Every reading of discount share — the Discounts tab, the management
+# report, the discount review — compares against this ONE number and reports the
+# baht given beyond it, so "high" means the same thing on every page.
+DISCOUNT_POLICY_PCT = 2.5
+
+
+def discount_policy_pct(con) -> float:
+    """The ceiling in force: app_settings['discount_policy_pct'] (Settings →
+    ค่าเริ่มต้น), else DISCOUNT_POLICY_PCT. Out-of-range or unreadable → default."""
+    try:
+        row = con.execute("SELECT value FROM app_settings WHERE key='discount_policy_pct'").fetchone()
+        v = float(row[0]) if row and row[0] not in (None, "") else DISCOUNT_POLICY_PCT
+    except Exception:
+        return DISCOUNT_POLICY_PCT
+    return v if 0 <= v <= 100 else DISCOUNT_POLICY_PCT
+
+
+def discount_excess(discount: float, base: float, policy_pct: float) -> float:
+    """Baht given beyond the ceiling: discount − policy% × pre-discount base, never negative."""
+    return round(max(0.0, (discount or 0.0) - (policy_pct / 100.0) * (base or 0.0)), 2)
+
+
 def discount_base_row(a: str = "st") -> str:
     """Per-bill PRE-discount net revenue — what the bill was worth ex-VAT and
     ex-service before the discount came off; the denominator of every discount

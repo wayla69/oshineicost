@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _unified_cogs_expr,
@@ -1379,7 +1379,12 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where,
     cur  = agg(cs, ce)
     prev = agg(ps, pe) if has_prev else None
     headline = dict(cur)
-    headline["discount_pct"] = round(cur["discount"]/cur["revenue"]*100, 1) if cur["revenue"] else None
+    # share of PRE-discount sales (revenue + discount) — the same base the Discounts
+    # tab uses, so the two pages agree; then the ceiling and the baht beyond it.
+    _base = (cur["revenue"] or 0) + (cur["discount"] or 0)
+    headline["discount_pct"] = round(cur["discount"]/_base*100, 1) if _base else None
+    headline["discount_policy_pct"] = discount_policy_pct(con)
+    headline["discount_excess"] = discount_excess(cur["discount"], _base, headline["discount_policy_pct"])
     if prev:
         headline["prev"] = prev
         headline["rev_wow_pct"]   = pct(cur["revenue"], prev["revenue"])

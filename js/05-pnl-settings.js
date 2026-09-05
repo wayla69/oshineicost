@@ -1809,6 +1809,7 @@ async function loadPreferences() {
   branchSel.value = settings.default_branch || '';
   document.getElementById('prefDefaultMonth').value  = settings.default_month  || '';
   document.getElementById('prefFiscalStart').value   = settings.fiscal_year_start || '1';
+  document.getElementById('prefDiscountPolicy').value = settings.discount_policy_pct || '2.5';
 }
 
 async function savePreferences() {
@@ -1817,6 +1818,7 @@ async function savePreferences() {
     default_branch:      document.getElementById('prefDefaultBranch').value,
     default_month:       document.getElementById('prefDefaultMonth').value,
     fiscal_year_start:   document.getElementById('prefFiscalStart').value,
+    discount_policy_pct: document.getElementById('prefDiscountPolicy').value || '2.5',
   };
   try {
     status.textContent = 'Saving…'; status.className = 'text-sm text-slate-400';
@@ -1827,6 +1829,9 @@ async function savePreferences() {
     });
     status.textContent = '✓ Saved'; status.className = 'text-sm text-emerald-600';
     setTimeout(() => { status.textContent = ''; }, 2500);
+    // settings feed other tabs (the discount ceiling → Discounts, Management Report);
+    // drop every tab's "same filter, skip the fetch" key so the next open refetches
+    Object.keys(_tabLastKey).forEach(k => { delete _tabLastKey[k]; });
   } catch(e) {
     status.textContent = '✗ ' + e.message; status.className = 'text-sm text-red-600';
   }

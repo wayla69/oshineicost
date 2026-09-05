@@ -103,7 +103,9 @@
   "bills": 6,
   "customers": 24,
   "discount": 120.0,
+  "discount_excess": 0.0,
   "discount_pct": 2.1,
+  "discount_policy_pct": 2.5,
   "rev_per_head": 237.5,
   "revenue": 5700.0
  },

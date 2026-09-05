@@ -212,8 +212,9 @@ def load_es_tx(con, parsed: dict, fname: str) -> tuple:
             agg_svc   += t["svc"]
             agg_cust  += t["cust"]
             n_tx      += 1
-            # net_sales must be ex-VAT (VAT is never revenue)
-            net_sales += t["total_ex"] if t["total_ex"] else t["total_iv"] / 1.07
+            # net_sales must be ex-VAT (VAT is never revenue) and ex-service-charge
+            # (it sits inside the ex-VAT total) — the same rule as month_summary.BACKFILL_SQL
+            net_sales += (t["total_ex"] if t["total_ex"] else t["total_iv"] / 1.07) - (t["svc"] or 0)
         cur.execute(
             "DELETE FROM sales_month_summary WHERE branch_id=? AND period_month=? AND source=?",
             (branch_id, period, SOURCE),

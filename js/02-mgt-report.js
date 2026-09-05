@@ -1139,10 +1139,12 @@ function renderMgtReport(j, jM, jF) {
 
   // 7 — Discount discipline
   if (isTH) {
-    const dd = H.discount_pct != null ? ' ราว <b>' + H.discount_pct.toFixed(1) + '%</b> ของยอดขายสุทธิ — ' + (H.discount_pct > 5 ? 'ค่อนข้างสูง ควรทบทวนเพดานการอนุมัติ' : 'อยู่ในเกณฑ์ปกติ') : '';
+    const pol = H.discount_policy_pct != null ? H.discount_policy_pct : 5;
+    const dd = H.discount_pct != null ? ' ราว <b>' + H.discount_pct.toFixed(1) + '%</b> ของยอดขายก่อนลด — ' + (H.discount_pct > pol ? 'เกินเพดานนโยบาย ' + pol + '% อยู่ <b>' + baht(H.discount_excess || 0) + '</b> ควรทบทวนการอนุมัติส่วนลด' : 'อยู่ในเพดานนโยบาย ' + pol + '%') : '';
     ex.push({c:'#db2777', lead:'วินัยส่วนลด', body:'ส่วนลดรวมทั้งสิ้น <b>' + baht(H.discount) + '</b>' + dd});
   } else {
-    const dd = H.discount_pct != null ? ', about <b>' + H.discount_pct.toFixed(1) + '%</b> of net sales — ' + (H.discount_pct > 5 ? 'elevated; worth reviewing approval limits' : 'within a normal range') : '';
+    const pol = H.discount_policy_pct != null ? H.discount_policy_pct : 5;
+    const dd = H.discount_pct != null ? ', about <b>' + H.discount_pct.toFixed(1) + '%</b> of pre-discount sales — ' + (H.discount_pct > pol ? '<b>' + baht(H.discount_excess || 0) + '</b> above the ' + pol + '% policy ceiling; worth reviewing discount approvals' : 'within the ' + pol + '% policy ceiling') : '';
     ex.push({c:'#db2777', lead:'Discount discipline.', body:'Total discounts were <b>' + baht(H.discount) + '</b>' + dd + '.'});
   }
 
