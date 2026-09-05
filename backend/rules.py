@@ -42,6 +42,22 @@ def net_revenue_sum(a: str = "st") -> str:
     return f"(SUM({a}.total_inc_vat)/{VAT_DIVISOR} - SUM(COALESCE({a}.service_charge,0)))"
 
 
+def avg_ticket_sql(a: str = "st") -> str:
+    """Average net revenue per bill over a GROUP — net_revenue_row averaged,
+    written as two AVGs so SQLite keeps a single pass."""
+    p = f"{a}." if a else ""
+    return f"(AVG({p}total_inc_vat)/{VAT_DIVISOR} - AVG(COALESCE({p}service_charge,0)))"
+
+
+def discount_base_row(a: str = "st") -> str:
+    """Per-bill PRE-discount net revenue — what the bill was worth ex-VAT and
+    ex-service before the discount came off; the denominator of every discount
+    share. Until 2026-09 six copies wrote ((total - service)/1.07 + discount),
+    which de-VATs the service charge as well; the charge is already ex-VAT."""
+    p = f"{a}." if a else ""
+    return f"({net_revenue_row(a)} + {p}discount)"
+
+
 # ─── Buffet tier codes ───────────────────────────────────────────────────────
 # A buffet bill carries the tier as its own line (BUFFET799…) AND the dishes the
 # guest ate as B0xxx lines. Revenue is on the tier line; consumption (and so

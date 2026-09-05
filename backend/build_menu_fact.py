@@ -52,7 +52,7 @@ QTY2 = QTY1.replace("si.", "si2.")                    # SaleItem alias `si2`
 TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
               'BUFFETCHILD', 'BUFFETCHILDFREE', 'B01', 'B02', 'B07', 'B11')
 HC_COST = 30.0   # unit BoM cost >= this = "เมนูต้นทุนสูง" (high-cost consumption metric)
-VAT = 1.07
+from rules import VAT_DIVISOR as VAT   # noqa: E402  — one VAT rule, not a second literal
 # Buffet price tiers. The adult BUFFET line's ExtendedPrice is the menu price with
 # BOTH the 5% service charge and the 7% VAT stripped out — the POS stores the base and
 # adds SC then VAT on top. Bills whose adult unit price matches none of the canonical

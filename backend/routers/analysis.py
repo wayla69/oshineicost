@@ -9,7 +9,7 @@ below; local/tests import it as `main`, prod uvicorn as `backend.main`.
 from fastapi import HTTPException, Query
 from typing import Dict, List, Optional
 import json as _json
-from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, avg_ticket_sql, discount_base_row, net_revenue_row, net_revenue_sum, scope_filter
 from core import (
     _FOOD_CATEGORY_FILTER, _apply_period_filter, _build_sku_effective_cost, _cogs_case, _eff_month_range,
     _effective_cost_subquery, _group_filter, _iso_week_sql, _month_range_filter, _ols_regression,
@@ -609,7 +609,7 @@ def analysis_compare(
             p["s"] = f"{period}-01"; p["e"] = f"{period}-{mtd_cut:02d}"
             r = con.execute(f"""
                 SELECT ROUND({net_revenue_sum('st')}, 2) revenue, COUNT(*) tx_count,
-                       SUM(st.customer_count) customer_count, ROUND((AVG(st.total_inc_vat)/1.07 - AVG(COALESCE(st.service_charge,0))), 2) avg_ticket
+                       SUM(st.customer_count) customer_count, ROUND({avg_ticket_sql('st')}, 2) avg_ticket
                 FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                 WHERE b.name!='ALL' AND st.source='Easy'
                   AND date(st.sold_at) BETWEEN :s AND :e {branch_filter}""", p).fetchone()
@@ -636,7 +636,7 @@ def analysis_compare(
             f"""
             SELECT COUNT(*) AS tx_count,
                    SUM(customer_count) AS customer_count,
-                   ROUND((AVG(total_inc_vat)/1.07 - AVG(COALESCE(service_charge,0))), 2) AS avg_ticket
+                   ROUND({avg_ticket_sql('')}, 2) AS avg_ticket
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             WHERE b.name != 'ALL' AND strftime('%Y-%m', st.sold_at) = :period
@@ -805,7 +805,7 @@ def analysis_persona(
             SELECT COUNT(*)                          AS tx_count,
                    ROUND(AVG(customer_count), 2)    AS avg_party_size,
                    ROUND(AVG({net_revenue_row('')}), 2)     AS avg_ticket,
-                   ROUND((SUM(total_inc_vat)/1.07 - SUM(COALESCE(service_charge,0))) /
+                   ROUND({net_revenue_sum('st')} /
                          NULLIF(SUM(customer_count), 0), 2) AS avg_per_head
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
@@ -1210,7 +1210,7 @@ def analysis_discount_bills(
     #  8,851 bill). Reconstruct the real base from what was actually paid
     # (total_inc_vat, minus service, de-VATed) plus the discount added back.
     # For à-la-carte bills this reproduces the subtotal to within ~0.3%.
-    base_expr = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
+    base_expr = discount_base_row('st')
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
     if branch:
@@ -1395,7 +1395,7 @@ def analysis_discount_composition(
     Buckets mirror the discounts-tab pattern groups. Amounts are baht of discount.
     """
     # fix D2: use reconstructed pre-discount base to avoid overstating disc% on buffet bills
-    gross = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
+    gross = discount_base_row('st')
     bucket = f"""CASE
         WHEN {gross} <= 0            THEN 'zero_gross'
         WHEN st.discount >= {gross}  THEN 'free'
@@ -1462,7 +1462,7 @@ def analysis_discount_leakage(
     disc% (see discount_bills for the rationale). So this %, by design, will not
     match the legacy /api/analysis/discounts disc_pct_of_sales.
     """
-    base_expr = "((st.total_inc_vat - COALESCE(st.service_charge,0)) / 1.07 + st.discount)"
+    base_expr = discount_base_row('st')
     filters = ["b.name != 'ALL'"]
     params: dict = {}
     _apply_period_filter(filters, params, date_from, date_to, month_from, month_to, month)
@@ -1594,7 +1594,7 @@ def analysis_payment_discount(
     at query level (POS has 'CASH'/'Cash' dups). Needs the per-bill sale_payment
     table (sync_mssql) → returns available=False if it isn't synced yet.
     """
-    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    base = discount_base_row('st')
     HEAVY = 0.20   # discount >= 20% of the (pre-discount) bill = "heavy"
     filters = ["b.name != 'ALL'", "st.discount > 0"]
     params: dict = {}
@@ -1678,7 +1678,7 @@ def analysis_discount_alerts(
     Reconstructed pre-discount base; cash signals need sale_payment (degrade gracefully).
     Each flag carries a `drill` so the UI can open the matching discount_bills view.
     """
-    base = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    base = discount_base_row('st')
     TH = {"cash_pct": 20, "cash_min": 50000, "untyped_pct": 80, "untyped_min": 50000,  # DEFAULTS
           "cashier_mult": 2.0, "cashier_floor": 5.0, "cashier_min_disc": 30000,
           "repeat_min": 30, "late_from": 22, "late_min_bills": 40, "late_min_share": 25.0,
@@ -1702,8 +1702,8 @@ def analysis_discount_alerts(
                     if _k in stored:
                         try: TH[_k] = float(stored[_k])
                         except (TypeError, ValueError): pass
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[discount-alerts] stored thresholds unreadable, defaults used: {e}")
         has_pay = bool(con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='sale_payment'").fetchone())
         dom = ("WITH dom AS (SELECT branch_id, receipt_no, "
                "CASE WHEN UPPER(payment_code)='CASH' THEN 'Cash' ELSE payment_code END code, "

@@ -382,7 +382,7 @@ _FOOD_CATEGORY_FILTER = (
     " AND sk.sku_code NOT GLOB 'OTHOT*'"
     " AND sk.sku_code NOT GLOB 'DEL[0-9]*'"
     " AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE','SP','SERVICE','DISCOUNT','DEPOSIT')"
-    " AND sk.sku_code NOT LIKE 'BUFFET%'"
+    f" AND NOT {_tier_code_sql('sk.sku_code')}"
     # … OR an explicitly whitelisted real-food SKU that a category keyword caught.
     f" OR sk.sku_code IN {_FOOD_SKU_WHITELIST_SQL})"
 )

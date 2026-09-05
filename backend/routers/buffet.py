@@ -8,7 +8,7 @@ from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import io as _io
-from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, net_revenue_row, net_revenue_sum, scope_filter
 from core import _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter, _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, get_db, ttl_cache
 
 from fastapi import APIRouter
@@ -729,14 +729,14 @@ def buffet_gp_calendar(
     monthly_cogs = (mon_row["cogs"] or None) if mon_row else None
 
     total_rev_inc = sum(r["revenue_inc"] or 0.0 for r in day_rows)
-    total_rev_ex  = round(total_rev_inc / 1.07, 2)
+    total_rev_ex  = round(ex_vat(total_rev_inc), 2)
 
     days_out = []
     for r in day_rows:
         day_rev = r["revenue_inc"] or 0.0
         weight  = day_rev / total_rev_inc if total_rev_inc else 0.0
 
-        day_rev_ex = round(day_rev / 1.07, 2)
+        day_rev_ex = round(ex_vat(day_rev), 2)
         day_cogs   = round(monthly_cogs * weight, 2) if monthly_cogs is not None else None
 
         if day_cogs is not None and day_rev_ex:
