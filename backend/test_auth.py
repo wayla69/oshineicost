@@ -276,7 +276,17 @@ def test_fail_closed_when_enabled_without_secret(client, app_db, monkeypatch):
 
 
 # ── matrix fidelity + session lifecycle ─────────────────────────────────────
-def test_role_modules_matrix_resolves_exactly():
+def test_role_modules_matrix_resolves_exactly(client):
+    # the permission cache is filled at boot from whatever DB was bound at import
+    # time; re-read it from the fixture DB (no override row) so this asserts the
+    # code defaults, not a matrix someone saved in the real local DB
+    import sqlite3
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    try:
+        auth.refresh_perm_cache(con)
+    finally:
+        con.close()
     for role, mods in auth.ROLE_MODULES.items():
         assert auth.modules_for_role(role) == set(mods), role
     assert auth.modules_for_role("management") == set(auth.MODULES)

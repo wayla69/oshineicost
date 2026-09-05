@@ -51,7 +51,7 @@ def test_export_is_token_gated_and_streams_every_preserved_table(client, monkeyp
         assert r.status_code == 200 and r.headers["content-type"].startswith("application/gzip")
         tables, rows, done = _parse(r.content)
         assert "customer_feedback" in tables and "app_user" in tables          # checklist_* appear once that router has run
-        assert all(t.startswith(("feedback_", "checklist_", "recon_")) or t in ("app_user", "customer_feedback", "branch_targets") for t in tables)
+        assert all(t.startswith(("feedback_", "checklist_", "recon_")) or t in ("app_user", "customer_feedback", "branch_targets", "app_settings") for t in tables)
         assert "sales_transaction" not in tables and "skus" not in tables
         voices = [o for o in rows if o["t"] == "customer_feedback"]
         assert len(voices) == 1 and voices[0]["r"][tables["customer_feedback"].index("text")] == "รอนานมาก"
