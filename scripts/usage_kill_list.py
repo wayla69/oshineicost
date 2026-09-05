@@ -272,7 +272,7 @@ def render_html(r: dict) -> str:
         return "".join(f"<tr><td><code>{e(x['key'])}</code></td><td>{e(', '.join(x['via']) or ', '.join(x['machine']))}</td></tr>" for x in rows)
     parts = [f"<!doctype html><html lang='th'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width,initial-scale=1'>"
              f"<title>Lean Kill List {r['generated'][:7]}</title><style>{CSS}</style></head><body><main>",
-             f"<h1>Lean Kill List — แท็บที่ใช้จริง vs แท็บที่ไม่มีใครเปิด</h1>",
+             "<h1>Lean Kill List — แท็บที่ใช้จริง vs แท็บที่ไม่มีใครเปิด</h1>",
              f"<div class='sub'>ข้อมูลการใช้งานจริง {e(TELEMETRY_SINCE)} → {e(r['generated'])} ({r['days']} วันย้อนหลัง) · สร้างโดย <code>scripts/usage_kill_list.py</code> · แผนแม่: docs/LEAN_OVERHAUL_PLAN.md Phase 2</div>",
              "<div class='kpis'>",
              f"<div class='kpi'><b>{len(r['tabs'])}</b><span>แท็บทั้งหมด</span></div>",
@@ -285,7 +285,7 @@ def render_html(r: dict) -> str:
              "<h2>1) สรุป</h2><ul>",
              f"<li><b>แอปที่ใช้จริงคือ 6 หน้า:</b> {e(' · '.join(f'{t['tab']} ({t['hits']})' for t in head))} — รวม {r['top6_share']:.0f}% ของการเปิดแท็บทั้งหมด</li>",
              f"<li><b>{len(by_v['keep'])} แท็บ KEEP</b> (เปิดซ้ำหลายวัน) · <b>{len(by_v['merge'])} แท็บ MERGE</b> (เปิดวันเดียวครั้งเดียว — คงเนื้อหาไว้เป็นส่วนหนึ่งของหน้าแม่) · <b>{len(by_v['kill'])} แท็บ KILL</b> (0 ครั้งตลอด {r['days']} วัน) · {len(by_v['new'])} แท็บใหม่ยังไม่นับ</li>",
-             f"<li><b>ขั้นที่ 1 (ทำแล้ววันนี้ ย้อนกลับได้):</b> แท็บใน kill list ถูกพับไว้หลังปุ่ม <b>⋯</b> ในแถบมุมมองย่อยของหมวด — โค้ด/ข้อมูลอยู่ครบ เปิดได้ด้วยคลิกเดียว bookmark เดิมใช้ได้</li>",
+             "<li><b>ขั้นที่ 1 (ทำแล้ววันนี้ ย้อนกลับได้):</b> แท็บใน kill list ถูกพับไว้หลังปุ่ม <b>⋯</b> ในแถบมุมมองย่อยของหมวด — โค้ด/ข้อมูลอยู่ครบ เปิดได้ด้วยคลิกเดียว bookmark เดิมใช้ได้</li>",
              f"<li><b>ขั้นที่ 2 (ทบทวน {e(r['review'])}):</b> แท็บที่ยังเป็น 0 → ลบแท็บ + JS + endpoints ที่มีแต่แท็บนั้นเรียก ({len(eps['dies_with_tab'])} เส้น ตารางข้อ 4) · แท็บ MERGE ตัดสินทีละแท็บ</li>",
              "</ul>",
              "<div class='note'><b>ข้อควรระวังในการอ่านตัวเลข</b> — (1) นับเฉพาะการเปิดแท็บผ่านเมนู/แถบมุมมองย่อย (beacon ใน switchTab) จึงไม่เห็นการเปิดจากหน้า mobile ที่ไม่ผ่าน switchTab · "
@@ -324,7 +324,7 @@ def main(argv=None) -> int:
     ap.add_argument("--days", type=int, default=90)
     ap.add_argument("--from-json", help="a saved /api/usage/summary bundle {days: summary} instead of pulling")
     ap.add_argument("--save-json", help="write the pulled bundle here")
-    ap.add_argument("--out", help=f"HTML report path (default docs/LEAN_KILL_LIST_<YYYY-MM>.html)")
+    ap.add_argument("--out", help="HTML report path (default docs/LEAN_KILL_LIST_<YYYY-MM>.html)")
     ap.add_argument("--md", action="store_true", help="print markdown tables instead of writing HTML")
     args = ap.parse_args(argv)
     usage = json.load(open(args.from_json, encoding="utf-8")) if args.from_json else pull_usage(args.api, args.days)
