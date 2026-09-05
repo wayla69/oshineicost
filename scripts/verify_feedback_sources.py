@@ -72,7 +72,27 @@ with sync_playwright() as pw:
     queued = pg.evaluate("() => document.getElementById('fbItems').innerText")
     sources2 = pg.evaluate("() => document.getElementById('fbSources').innerText")
     pg.screenshot(path=os.path.join(os.path.dirname(OUT), '.tmp_feedback_reply.png'), full_page=False)
+    # ── mentions from X / YouTube / the web: posted as the fetcher would, then the kind chips filter them ──
+    posted = pg.evaluate("""async () => {
+      const rows = [
+        {text: 'โอชิเน ขอนแก่น คิวยาวแต่คุ้ม', source: 'X', external_id: 'tweet:9001', date: '2026-09-04', kind: 'mention', detect_branch: true, url: 'https://x.com/i/web/status/9001'},
+        {text: 'รีวิวโอชิเน ระยอง บุฟเฟ่ต์ญี่ปุ่นคุ้มไหม', source: 'YouTube', external_id: 'video:abc', date: '2026-09-03', kind: 'mention', detect_branch: true, location: 'กินไปเรื่อย'},
+        {text: 'โอชิเน เปิดสาขาใหม่ - ข่าวสด', source: 'Google News', external_id: 'item:n1', date: '2026-09-02', kind: 'mention', detect_branch: true}];
+      const r = await fetch('/api/feedback/upload', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({rows, by: 'verify'})});
+      return await r.json();
+    }""")
+    pg.evaluate("() => setFeedbackKind('mention')")
+    pg.wait_for_function("document.getElementById('fbKindChips').innerText.includes('การพูดถึง 3')", timeout=30000)
+    pg.wait_for_timeout(1500)
+    chips = pg.evaluate("() => document.getElementById('fbKindChips').innerText")
+    mention_items = pg.evaluate("() => document.getElementById('fbItems').innerText")
+    pg.evaluate("() => setFeedbackKind('')")
+    pg.wait_for_timeout(1500)
+    pg.screenshot(path=os.path.join(os.path.dirname(OUT), '.tmp_feedback_mentions.png'), full_page=False)
     b.close()
+print('mentions posted:', posted.get('inserted'), 'unmatched', posted.get('unmatched'))
+print('kind chips    :', chips.replace('\n', ' | '))
+print('mention rows  :', 'ขอนแก่น' in mention_items and 'ระยอง' in mention_items, '| no reviews inside:', 'แซลมอนสดมาก' not in mention_items)
 print('reply link clicked:', v2)
 print('draft         :', draft.replace('\n', ' ')[:140])
 print('queued chip   :', 'รอส่ง' in queued, '| queue line:', 'คิวตอบรีวิว' in sources2)
@@ -87,6 +107,8 @@ print('page errors   :', errors[:2])
 # 3 links: the ขอนแก่น listing carries a placeId, the ระยอง one does not
 ok = ('นำเข้า 4' in status and 'Google' in sources and 'รอสาขาตอบ' in st and links >= 3
       and 'ขอบคุณค่ะ' in replies and 'ให้ดาวอย่างเดียว' in replies and not errors
-      and v2 and 'ขออภัย' in draft and 'รอส่ง' in queued and 'คิวตอบรีวิว' in sources2)
+      and v2 and 'ขออภัย' in draft and 'รอส่ง' in queued and 'คิวตอบรีวิว' in sources2
+      and posted.get('inserted') == 3 and 'การพูดถึง 3' in chips and 'รีวิว 4' in chips
+      and 'ขอนแก่น' in mention_items and 'แซลมอนสดมาก' not in mention_items)
 print('RESULT:', 'OK' if ok else 'PROBLEMS')
 sys.exit(0 if ok else 1)

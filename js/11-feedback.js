@@ -36,9 +36,24 @@ async function _fbFillBranches() {
   } catch (e) {}
 }
 
+/* review = on the chain's own listing/page · comment = under the chain's own post/video ·
+   mention = anywhere else on the web (X, YouTube, news, blogs). '' = every kind. */
+let _fbKind = '';
+const _FB_KINDS = [['', 'ทั้งหมด'], ['review', 'รีวิว'], ['comment', 'คอมเมนต์'], ['mention', 'การพูดถึง']];
+function setFeedbackKind(k) { _fbKind = k || ''; loadFeedback(true); }
+function _fbRenderKindChips(kinds) {
+  const el = document.getElementById('fbKindChips');
+  if (!el) return;
+  const total = Object.values(kinds || {}).reduce((a, b) => a + b, 0);
+  el.innerHTML = _FB_KINDS.map(([k, label]) => {
+    const n = k ? ((kinds || {})[k] || 0) : total, on = k === _fbKind;
+    return `<button class="text-[11px] px-2 py-0.5 rounded-full" style="border:1px solid ${on ? '#0369a1' : 'var(--border)'};background:${on ? '#eff6ff' : 'transparent'};color:${on ? '#0369a1' : 'var(--text-secondary)'}" onclick="setFeedbackKind('${k}')">${label} ${n}</button>`;
+  }).join(' ');
+}
+
 async function loadFeedback(force) {
   await _fbFillBranches();
-  const fk = _filterKey();
+  const fk = _filterKey() + '|' + _fbKind;
   if (!force && _tabLastKey.feedback === fk) return;
   const st = document.getElementById('fbStatus');
   if (st) st.textContent = 'กำลังโหลด…';
@@ -46,10 +61,12 @@ async function loadFeedback(force) {
   if (getBranch())    qp.set('branch', getBranch());
   if (getMonthFrom()) qp.set('month_from', getMonthFrom());
   if (getMonthTo())   qp.set('month_to', getMonthTo());
+  if (_fbKind)        qp.set('kind', _fbKind);
   let d;
   try { d = await api(`${API}/api/feedback/summary?${qp}`); }
   catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   _tabLastKey.feedback = fk;
+  _fbRenderKindChips(d.kinds);
   renderFeedback(d);
   loadFeedbackItems(qp);
   loadFeedbackSources();
@@ -109,7 +126,7 @@ function renderFeedback(d) {
 }
 
 async function loadFeedbackItems(qp, extra) {
-  const p = qp ? new URLSearchParams(qp) : (() => { const q = new URLSearchParams(); if (getBranch()) q.set('branch', getBranch()); if (getMonthFrom()) q.set('month_from', getMonthFrom()); if (getMonthTo()) q.set('month_to', getMonthTo()); return q; })();
+  const p = qp ? new URLSearchParams(qp) : (() => { const q = new URLSearchParams(); if (getBranch()) q.set('branch', getBranch()); if (getMonthFrom()) q.set('month_from', getMonthFrom()); if (getMonthTo()) q.set('month_to', getMonthTo()); if (_fbKind) q.set('kind', _fbKind); return q; })();
   Object.entries(extra || {}).forEach(([k, v]) => p.set(k, v));
   p.set('limit', '100');
   let d;
@@ -172,13 +189,23 @@ async function openFeedbackReply(id) {
       <a href="#" onclick="closeFeedbackReply();return false;" style="color:var(--text-muted)">✕</a></div>
     <p class="text-xs my-1 px-2 py-1 rounded" style="background:var(--bg-input);color:var(--text-secondary)">${d.text ? _fbEsc(d.text) : '<i>(ให้ดาวอย่างเดียว)</i>'}</p>
     ${d.reply_status === 'failed' ? `<p class="text-xs" style="color:#b91c1c">ครั้งก่อนส่งไม่สำเร็จ: ${_fbEsc(d.reply_error || '')}</p>` : ''}
-    <textarea id="fbReplyText" rows="4" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">${_fbEsc(d.draft || '')}</textarea>
+    <textarea id="fbReplyText" rows="4" class="w-full mt-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" oninput="_fbReplyCount(${d.max_len || 4000})">${_fbEsc(d.draft || '')}</textarea>
     <div class="flex items-center gap-3 mt-2 flex-wrap">
       ${d.channel === 'none' ? '' : `<button class="btn-primary text-sm px-3 py-1.5 rounded" onclick="sendFeedbackReply(${id})">${manual ? 'บันทึกข้อความ' : 'ส่งในรอบถัดไป'}</button>`}
+      <span id="fbReplyCount" class="text-[11px]" style="color:var(--text-muted)"></span>
       <span class="text-[11px]" style="color:var(--text-muted)">ร่างโดย ${d.engine === 'claude' ? 'Claude' : (d.engine === 'saved' ? 'ข้อความที่บันทึกไว้' : 'แม่แบบ')} · แก้ไขได้ก่อนส่ง · ${_fbEsc(target)}</span>
       <span id="fbReplyStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
     </div>`;
+  _fbReplyCount(d.max_len || 4000);
   p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function _fbReplyCount(max) {
+  const ta = document.getElementById('fbReplyText'), c = document.getElementById('fbReplyCount');
+  if (!ta || !c) return;
+  const n = ta.value.length;
+  c.textContent = `${n}/${max} ตัวอักษร`;
+  c.style.color = n > max ? '#b91c1c' : 'var(--text-muted)';
 }
 
 function closeFeedbackReply() {

@@ -21,7 +21,11 @@ Config — backend/.feedback_config.json (gitignored; Backup DB.bat copies it):
   {"google":   {"client_id", "client_secret", "refresh_token",
                 "account"?: "accounts/123", "location_map"?: {"<listing title>": "<สาขา>"}},
    "facebook": {"api_version"?: "v21.0",
-                "pages": [{"id", "name", "branch", "token", "comments"?: false}]}}
+                "pages": [{"id", "name", "branch", "token", "comments"?: false}]},
+   "tiktok":   {"client_key", "client_secret", "access_token", "refresh_token", "business_id"},  # auth tiktok fills the tokens
+   "x":        {"bearer_token", "keywords"?: ["โอชิเน", "oshinei"]},                          # Basic tier (paid)
+   "youtube":  {"api_key", "keywords"?: [...], "comments"?: true},
+   "web":      {"keywords"?: [...], "feeds"?: [{"url", "name", "source"}]}}                   # Google News built in + Google Alerts RSS
 Posting needs the write token (--token → env OSHINEI_WRITE_TOKEN / OSHINEI_SEED_TOKEN
 → backend/.seed_token(s).txt) and, when the site enforces login,
 backend/.refresh_login.txt — the same files refresh_fly_db.py uses. New negative
@@ -73,13 +77,18 @@ def _load_env(path=HERE / ".env"):
 
 _load_env()
 
-from feedback_sources import facebook, google_gbp  # noqa: E402
+from feedback_sources import facebook, google_gbp, rss, tiktok, x, youtube  # noqa: E402
 from feedback_sources.google_gbp import urllib_http  # noqa: E402
 import notify  # noqa: E402
 from refresh_fly_db import _parse_token_file, get_login  # noqa: E402
 
+# config key → (source label in the DB, fetch(cfg, http, since, log) -> (rows, meta))
 SOURCES = {"google": (google_gbp.SOURCE, google_gbp.fetch_rows),
-           "facebook": (facebook.SOURCE, facebook.fetch_rows)}
+           "facebook": (facebook.SOURCE, facebook.fetch_rows),
+           "tiktok": (tiktok.SOURCE, tiktok.fetch_rows),
+           "x": (x.SOURCE, x.fetch_rows),
+           "youtube": (youtube.SOURCE, youtube.fetch_rows),
+           "web": (rss.SOURCE, rss.fetch_rows)}
 
 
 # ── config & secrets ─────────────────────────────────────────────────────────
@@ -280,7 +289,7 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
     items = (sink.reply_queue() or {}).get("items") or []
     if not items:
         return {"sent": 0, "failed": 0}
-    g_token = None
+    g_token, tt_tok = None, None
     sent = failed = 0
     for it in items:
         src = (it.get("source") or "").strip().lower()
@@ -288,7 +297,15 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
             text = (it.get("reply_draft") or "").strip()
             if not text:
                 raise RuntimeError("empty reply text")
-            if src == "google":
+            if src == "tiktok":
+                if not cfg.get("tiktok"):
+                    raise RuntimeError("tiktok is not configured on this PC (backend/.feedback_config.json)")
+                if tt_tok is None:
+                    tt_tok = tiktok.refresh(cfg["tiktok"], http)
+                vid, _, cid = (it.get("external_ref") or "").partition("/")
+                tiktok.reply_to_comment(tt_tok["access_token"], tt_tok.get("business_id") or cfg["tiktok"].get("business_id") or "",
+                                        vid, cid, text, http)
+            elif src == "google":
                 if not cfg.get("google"):
                     raise RuntimeError("google is not configured on this PC (backend/.feedback_config.json)")
                 if g_token is None:
@@ -358,6 +375,9 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
             failures += 1
             continue
         log(f"  fetched {len(rows)} row(s) in {time.time() - t0:.0f}s")
+        if meta.get("config_update") and getattr(args, "config", None):
+            cfg[name].update(meta["config_update"])          # rotated tokens (TikTok) go back into the file
+            save_config(cfg, args.config)
         if args.dry_run:
             for r in rows[:10]:
                 log(f"    {r['date']} {r['branch']:<14} {str(r['rating'] if r['rating'] is not None else '-'):>4}  {r['text'][:70]}")
@@ -365,8 +385,8 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print) -> in
         try:
             res = sink.upload(rows, by=f"fetch:{name}") if rows else \
                 {"inserted": 0, "updated": 0, "unchanged": 0, "unmatched": [], "new_items": [], "analysed_by": "none"}
-            listings = meta.get("locations") or meta.get("pages") or []
-            msg = f"{len(listings)} listing(s), {time.time() - t0:.0f}s, analysed by {res.get('analysed_by')}"
+            units = next((v for v in meta.values() if isinstance(v, list)), [])   # locations / pages / videos / queries / feeds
+            msg = f"{len(units)} listing(s), {time.time() - t0:.0f}s, analysed by {res.get('analysed_by')}"
             if res.get("unmatched"):
                 msg += "; no branch for: " + ", ".join(res["unmatched"])
             sink.log({"source": label, "since": since, "fetched": len(rows), "inserted": res["inserted"],
@@ -436,6 +456,27 @@ def google_auth(cfg: dict, http, port: int = 8765, manual: bool = False, open_br
     return cfg
 
 
+def tiktok_auth(cfg: dict, http, redirect_uri: str = None, log=print, code: str = None) -> dict:
+    """TikTok's consent must land on a registered https URL, so the dashboard's
+    own /api/feedback/oauth-callback page shows the code and the owner pastes
+    it here (no localhost listener)."""
+    t = cfg.setdefault("tiktok", {})
+    if not (t.get("client_key") and t.get("client_secret")):
+        raise SystemExit("fill tiktok.client_key and tiktok.client_secret in backend/.feedback_config.json first "
+                         "(docs/FEEDBACK_SOURCES.html §10)")
+    redirect = redirect_uri or t.get("redirect_uri") or f"{DEFAULT_API}/api/feedback/oauth-callback"
+    url = tiktok.auth_url(t["client_key"], redirect)
+    log("1. open this URL, log in to the brand's TikTok account, allow:\n   " + url)
+    log(f"2. the browser lands on {redirect} (register exactly this URL in the TikTok app) and shows a code")
+    code = (code or input("3. paste the code: ")).strip()
+    if not code:
+        raise SystemExit("no code")
+    tok = tiktok.exchange_code(t["client_key"], t["client_secret"], code, redirect, http)
+    t.update(tok)
+    t["redirect_uri"] = redirect
+    return cfg
+
+
 def google_locations(cfg: dict, http, log=print) -> list:
     g = cfg.get("google") or {}
     token = google_gbp.access_token(g, http)
@@ -485,8 +526,9 @@ def main(argv=None) -> int:
     r.add_argument("--token", default=None); r.add_argument("--user", default=None); r.add_argument("--password", default=None)
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--no-alert", action="store_true")
     a = sub.add_parser("auth", help="one-time consent"); common(a)
-    a.add_argument("source", choices=["google"]); a.add_argument("--manual", action="store_true")
+    a.add_argument("source", choices=["google", "tiktok"]); a.add_argument("--manual", action="store_true")
     a.add_argument("--port", type=int, default=8765)
+    a.add_argument("--redirect", default=None, help="tiktok: the registered https redirect URL (default: the live app's callback page)")
     lo = sub.add_parser("locations", help="listings the login manages"); common(lo)
     lo.add_argument("source", choices=["google"])
     pg = sub.add_parser("pages", help="pages a user token manages"); common(pg)
@@ -505,6 +547,11 @@ def main(argv=None) -> int:
         return 0 if ok else 1
     cfg = load_config(args.config)
     if args.cmd == "auth":
+        if args.source == "tiktok":
+            cfg = tiktok_auth(cfg, urllib_http, args.redirect)
+            save_config(cfg, args.config)
+            print(f"✓ TikTok tokens saved to {args.config}\n  next: python backend/fetch_feedback.py run --source tiktok --since all --dry-run")
+            return 0
         cfg = google_auth(cfg, urllib_http, args.port, args.manual)
         save_config(cfg, args.config)
         print(f"✓ refresh token saved to {args.config}\n  next: python backend/fetch_feedback.py locations google")
