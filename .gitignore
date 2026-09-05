@@ -75,3 +75,6 @@ Reconciliation Data Udon/
 
 # Raw recon documents live in the OneDrive archive, never in the repo
 All recon data/
+
+# Invisible Voice adapter key (never commit)
+backend/.invisible_key.txt
