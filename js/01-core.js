@@ -93,6 +93,45 @@ const TAB_MODULE = {
   cancelbill:'ops.posextra', closetime:'ops.posextra',
   report:'report.export', mgtreport:'report.export', settings:'system.settings',
 };
+// ── First-login start card: the three tabs each role should open first ──────
+// Shown once, on the first login that has never opened a tab (/api/usage/me →
+// first_time), on top of the home page; "เข้าใจแล้ว" dismisses it for good.
+const ROLE_START = {
+  management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
+  accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['opsreport', 'การชำระเงิน บิลยกเลิก โต๊ะ โปรโมชัน'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
+  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
+  marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
+  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['dailysales', 'ยอดขายรายวัน เทียบเดือน / ปีก่อน'], ['cost', 'ต้นทุนและ food cost']],
+  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['menuimpact', 'วัตถุดิบ: มี vs ไม่มี กระทบอะไร'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
+};
+function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
+function showStartCard(role) {
+  const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 3);
+  const host = document.getElementById('tab-home'); if (!host || !items.length) return;
+  let card = document.getElementById('homeStartCard');
+  if (!card) { card = document.createElement('div'); card.id = 'homeStartCard'; host.insertBefore(card, host.firstChild); }
+  card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
+  card.innerHTML = `<div class="flex items-start justify-between gap-3"><div>
+      <div class="text-base font-bold" style="color:var(--text-primary)">🚀 เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
+      <div class="text-xs mt-1" style="color:var(--text-muted)">สามหน้าที่บทบาทนี้ใช้บ่อยที่สุด กดเปิดได้เลย — การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
+      <button onclick="dismissStartCard()" class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary)">เข้าใจแล้ว ✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why], i) => `<button onclick="switchTab('${t}')" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
+      <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(PAGE_TITLES[t] || t)}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
+    <div class="text-xs mt-3" style="color:var(--text-muted)">คู่มือฉบับเต็ม: <a href="#" onclick="switchTab('manual');return false" class="underline">📖 คู่มือการใช้งาน</a></div>`;
+  card.hidden = false;
+}
+function dismissStartCard() {
+  try { localStorage.setItem(_startKey(), '1'); } catch(e) {}
+  const c = document.getElementById('homeStartCard'); if (c) c.remove();
+}
+async function maybeShowStartCard() {
+  if (!window.AUTH || !window.AUTH.enabled || !window.AUTH.authenticated) return;
+  try { if (localStorage.getItem(_startKey())) return; } catch(e) {}
+  let me = null;
+  try { me = await api(`${API}/api/usage/me`); } catch(e) { return; }
+  if (me && me.first_time) { switchTab('home'); showStartCard(window.AUTH.role || me.role); }
+}
+
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
@@ -1362,6 +1401,8 @@ async function loadUsageStats() {
   try { d = await api(`${API}/api/usage/summary?days=${days}`); } catch(e) {}
   if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   try { people = await api(`${API}/api/usage/users?days=${days}`); } catch(e) {}
+  let digest = null;
+  if (people) { try { digest = await api(`${API}/api/usage/adoption-digest?days=${days}`); } catch(e) {} }
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
   const seen = new Set(tabs.map(t => t.name));
@@ -1395,6 +1436,8 @@ async function loadUsageStats() {
     <div class="mb-6">
       <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">👥 การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
       <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
+      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">📣 สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
+        <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">📣 สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
       <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">login ล่าสุด</th><th class="py-1 pr-3 text-right">login</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
       <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
     </div>` : '';
@@ -1413,6 +1456,15 @@ async function loadUsageStats() {
         <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
       </div>
     </div>`;
+}
+
+async function sendAdoptionDigest() {
+  const st = document.getElementById('adoptionDigestStatus'); if (st) st.textContent = 'กำลังสร้าง…';
+  try {
+    const r = await api(`${API}/api/usage/adoption-digest/send`, { method: 'POST' });
+    if (st) st.textContent = `✓ สัปดาห์ ${r.week}: ${r.sent ? 'ส่ง Telegram แล้ว' : (r.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'เก็บในแอปแล้ว (ยังไม่มี Telegram)')}`;
+    setTimeout(loadUsageStats, 1500);
+  } catch (e) { if (st) st.textContent = '✗ ' + (e.message || e); }
 }
 
 

@@ -8,6 +8,7 @@ host-module pattern as routers/reports.py.
 from fastapi import Query
 from typing import Optional
 from rules import VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql
+from targets import targets_for_month
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
 )
@@ -596,15 +597,9 @@ def home_brief(branch: Optional[str] = Query(None)):
             ORDER BY mtd_revenue DESC
         """, mtd_params).fetchall()
 
-        # Branch targets for current month
+        # Branch targets for current month — typed, else last year's same month (targets.py)
         try:
-            target_rows = con.execute("""
-                SELECT b.name AS branch, bt.revenue_target
-                FROM branch_targets bt
-                JOIN branches b ON b.branch_id = bt.branch_id
-                WHERE bt.period_month = :month
-            """, {"month": current_month}).fetchall()
-            target_map = {r["branch"]: r["revenue_target"] for r in target_rows}
+            target_map = {r["branch"]: r["revenue_target"] for r in targets_for_month(con, current_month) if r["revenue_target"]}
         except Exception:
             target_map = {}
 

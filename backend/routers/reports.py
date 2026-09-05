@@ -17,6 +17,7 @@ from typing import Optional
 import json as _json
 import io as _io
 from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from targets import target_revenue_total
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _unified_cogs_expr,
@@ -2079,14 +2080,8 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
                     if cur_month == maxd[:7] else days_total)
     month_complete = days_elapsed >= days_total
     projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
-    tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
-    scope_filter(tb, tp, branch, group)
-    tw = " AND ".join(tb)
-    tgt_row = con.execute(f"""
-        SELECT COALESCE(SUM(bt.revenue_target),0) tgt
-        FROM branch_targets bt JOIN branches b ON b.branch_id=bt.branch_id
-        WHERE {tw}""", tp).fetchone()
-    target = tgt_row["tgt"] or 0
+    # typed targets, else each branch's actual of the same month last year (targets.py)
+    target = target_revenue_total(con, cur_month, branch, group)
     pace = {
         "month": cur_month, "mtd_revenue": mtd_rev, "mtd_days": mtd_days,
         "days_elapsed": days_elapsed, "days_total": days_total, "month_complete": month_complete,

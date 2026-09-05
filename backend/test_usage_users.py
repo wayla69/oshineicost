@@ -94,3 +94,73 @@ def test_users_view_survives_missing_tables(client):
     j = client.get("/api/usage/users", params={"days": 7}).json()
     assert j["days"] == 7 and j["summary"]["accounts"] >= 12
     assert all(u["tab_hits"] == 0 for u in j["users"])
+
+
+def test_usage_me_reports_first_time_only_for_a_logged_in_user_with_no_tabs(client, monkeypatch):
+    import main
+    j = client.get("/api/usage/me").json()
+    assert j["username"] == "" and j["first_time"] is False                 # auth off: anonymous, never "first time"
+    _seed("adoption_first")
+    try:
+        monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret-stable")
+        c = TestClient(main.app)
+        assert c.post("/api/auth/login", json={"username": "adoption_first", "password": auth.DEFAULT_PASSWORD}).status_code == 200
+        j = c.get("/api/usage/me").json()
+        assert j["username"] == "adoption_first" and j["role"] == "marketing" and j["first_time"] is True and j["tab_hits"] == 0
+        assert c.post("/api/usage/tab", json={"tab": "feedback"}).json()["ok"]
+        j = c.get("/api/usage/me").json()
+        assert j["first_time"] is False and j["tab_hits"] == 1 and j["days_seen"] == 1
+    finally:
+        monkeypatch.delenv("OSHINEI_AUTH", raising=False)
+        _drop("adoption_first")
+
+
+def test_weekly_adoption_digest_builds_once_per_week_and_sends_when_configured(client, monkeypatch):
+    import datetime as dt
+    import main
+    _seed("adoption_never")
+    sent = []
+    fake_send = lambda text: (sent.append(text), True)[1]          # noqa: E731
+    monkeypatch.setenv("OSHINEI_TG_TOKEN", "t"); monkeypatch.setenv("OSHINEI_TG_CHAT_ID", "c")
+    try:
+        ucon = sqlite3.connect(str(main._usage_db_path()))
+        ucon.execute("DROP TABLE IF EXISTS usage_meta"); ucon.commit(); ucon.close()
+        monday = dt.datetime(2026, 9, 7, 8, 30)                     # a Monday on the Thai clock
+        assert main._maybe_weekly_adoption_digest(now=dt.datetime(2026, 9, 6, 8, 30), send=fake_send) is None   # Sunday: nothing
+        rec = main._maybe_weekly_adoption_digest(now=monday, send=fake_send)
+        assert rec and rec["week"] == "2026-W37" and rec["sent"] is True and rec["telegram_configured"] is True
+        assert "adoption_never" in rec["never"] and "ยังไม่เคยเข้าใช้" in rec["text"] and "2026-W37" in rec["text"]
+        assert len(sent) == 1 and sent[0] == rec["text"]
+        assert main._maybe_weekly_adoption_digest(now=monday, send=fake_send) is None        # same week: once
+        assert len(sent) == 1
+        # the stored record feeds the endpoint; sending now forces a new one
+        j = client.get("/api/usage/adoption-digest").json()
+        assert j["latest"]["week"] == "2026-W37" and "adoption_never" in j["never"] and j["preview"].startswith("📣")
+        import notify
+        monkeypatch.setattr(notify, "send_telegram", fake_send)      # the endpoint sends through notify
+        r = client.post("/api/usage/adoption-digest/send").json()
+        assert r["ok"] and r["week"] and "adoption_never" in r["never"]
+        assert main._usage_meta_get("adoption_digest_week") == r["week"]
+        # away: someone who logged in long ago and has not opened a tab since
+        people = {"days": 30, "summary": {"accounts": 3, "active": 1, "idle": 1, "never": 1},
+                  "users": [{"username": "a", "role": "x", "status": "active", "last_login": "2026-09-06 01:00:00", "last_seen": "2026-09-06", "days_seen": 3},
+                            {"username": "b", "role": "x", "status": "idle", "last_login": "2026-08-01 01:00:00", "last_seen": None, "days_seen": 0},
+                            {"username": "n", "role": "x", "status": "never", "last_login": None, "last_seen": None, "days_seen": 0}]}
+        lists = main._adoption_lists(people, now=monday)
+        assert [u["username"] for u in lists["never"]] == ["n"] and [u["username"] for u in lists["away"]] == ["b"] and [u["username"] for u in lists["active"]] == ["a"]
+        text = main._adoption_digest_text(people, lists, "2026-W37")
+        assert "💤" in text and "b — ล่าสุด 2026-08-01" in text and "✅ ใช้งานอยู่: a (3 วัน)" in text
+    finally:
+        _drop("adoption_never")
+
+
+def test_adoption_endpoints_are_admin_gated_when_auth_is_on(client, monkeypatch):
+    import main
+    monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret-stable")
+    try:
+        anon = TestClient(main.app)
+        assert anon.get("/api/usage/adoption-digest").status_code == 401
+        assert anon.post("/api/usage/adoption-digest/send").status_code == 401
+        assert anon.get("/api/usage/me").status_code == 401                    # me needs a session too (it describes the caller)
+    finally:
+        monkeypatch.delenv("OSHINEI_AUTH", raising=False)

@@ -14,6 +14,7 @@ const PALETTE_6 = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed'];
 async function loadHome() {
   const _fk = _filterKey(); if (_tabLastKey.home === _fk) return; _tabLastKey.home = _fk;
   const loading = document.getElementById('home-brief-loading');
+  try { renderAdoptionBanner(); } catch(e) {}     // admins: this week's adoption digest, once per week
   const content = document.getElementById('home-brief-content');
   if (loading) loading.classList.remove('hidden');
   if (content) content.classList.add('hidden');
@@ -2093,4 +2094,25 @@ async function renderMarketBenchmark(b) {
       <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${pctColor}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาด ~+${ind}%/ปี <span style="color:var(--text-muted)">(ยังไม่ครบ 12 เดือนสำหรับ YoY)</span></p>
     </div>`;
   }
+}
+
+
+
+// ── Weekly adoption banner (admins): this week's digest from /api/usage/adoption-digest ──
+async function renderAdoptionBanner() {
+  if (!window.AUTH || !window.AUTH.enabled || !hasModule('system.admin')) return;
+  let d = null;
+  try { d = await api(`${API}/api/usage/adoption-digest`); } catch(e) { return; }
+  const rec = d && d.latest;
+  if (!rec || rec.week !== d.week) return;
+  const key = 'adoptionBanner:' + rec.week;
+  try { if (localStorage.getItem(key)) return; } catch(e) {}
+  const host = document.getElementById('tab-home'); if (!host) return;
+  let b = document.getElementById('homeAdoptionBanner');
+  if (!b) { b = document.createElement('div'); b.id = 'homeAdoptionBanner'; host.insertBefore(b, host.firstChild); }
+  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3';
+  b.style.cssText = 'background:#fffbeb;border:1px solid #fcd34d;color:#78350f';
+  const never = rec.never || [], away = rec.away || [];
+  b.innerHTML = `<div>📣 <b>สรุปการเข้าใช้สัปดาห์ ${esc(rec.week)}</b> — ยังไม่เคยเข้าใช้ <b>${never.length}</b> คน${never.length ? ' (' + never.slice(0, 6).map(esc).join(', ') + (never.length > 6 ? ' …' : '') + ')' : ''} · หายไปเกิน 14 วัน <b>${away.length}</b> คน${away.length ? ' (' + away.slice(0, 6).map(esc).join(', ') + ')' : ''}${rec.sent ? ' · ส่ง Telegram แล้ว' : ' · ยังไม่ได้ตั้ง Telegram'} — <a href="#" onclick="switchTab('settings');switchSettingsTab('usage');return false" class="underline">ดูรายชื่อ</a></div>
+    <button onclick="(function(){try{localStorage.setItem('${key}','1')}catch(e){};var el=document.getElementById('homeAdoptionBanner');if(el)el.remove()})()" class="text-xs" style="color:#92400e" title="ซ่อนสัปดาห์นี้">✕</button>`;
 }
