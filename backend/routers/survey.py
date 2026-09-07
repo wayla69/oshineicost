@@ -214,40 +214,40 @@ def _poster_page(link: dict, url: str) -> str:
 <style>
 @page{{size:A5 portrait;margin:0}}
 *{{box-sizing:border-box}}
-body{{margin:0;background:#eef2f1;color:#10312c;
+body{{margin:0;background:#f0f4f8;color:#0f172a;
      font-family:'IBM Plex Sans Thai','Noto Sans Thai','Segoe UI',Tahoma,system-ui,sans-serif}}
 
 /* the sheet is exactly A5 so what you see is what the printer puts on the card */
 .sheet{{width:148mm;height:210mm;margin:8mm auto;background:#fff;position:relative;overflow:hidden;
        display:flex;flex-direction:column;align-items:center;
-       padding:16mm 12mm 12mm;box-shadow:0 6px 28px rgba(16,49,44,.16)}}
+       padding:16mm 12mm 12mm;box-shadow:0 6px 28px rgba(15,23,42,.16)}}
 
-/* a band of colour at the top so the card reads as "ours" from across the room */
+/* the brand indigo (--indigo/--indigo-mid in docs/ui-kit/tokens.css) so the card reads as ours */
 .sheet::before{{content:"";position:absolute;inset:0 0 auto 0;height:9mm;
-               background:linear-gradient(90deg,#0f766e 0%,#14b8a6 55%,#5eead4 100%)}}
+               background:linear-gradient(90deg,#4f46e5 0%,#6366f1 55%,#a5b4fc 100%)}}
 
-.brand{{font-size:11pt;font-weight:700;letter-spacing:.16em;color:#0f766e;text-transform:uppercase}}
-.branch{{font-size:12pt;font-weight:600;color:#3f5b56;margin-top:1mm}}
+.brand{{font-size:11pt;font-weight:700;letter-spacing:.16em;color:#4f46e5;text-transform:uppercase}}
+.branch{{font-size:12pt;font-weight:600;color:#475569;margin-top:1mm}}
 
 h1{{font-size:27pt;line-height:1.15;font-weight:700;margin:9mm 0 0;text-align:center;letter-spacing:-.01em}}
-.sub{{font-size:12.5pt;line-height:1.5;color:#4a635e;text-align:center;margin-top:4mm;max-width:104mm}}
+.sub{{font-size:12.5pt;line-height:1.5;color:#475569;text-align:center;margin-top:4mm;max-width:104mm}}
 
 /* the QR is the thing the poster exists for, so nothing competes with it */
 .qr-wrap{{margin-top:auto;margin-bottom:auto;padding:7mm;background:#fff;border-radius:6mm;
-         border:2px solid #0f766e;box-shadow:0 3px 14px rgba(15,118,110,.13)}}
+         border:2px solid #4f46e5;box-shadow:0 3px 14px rgba(79,70,229,.13)}}
 .qr-wrap svg{{display:block}}
-.scan{{margin-top:5mm;font-size:12pt;font-weight:600;color:#0f766e;text-align:center;letter-spacing:.01em}}
+.scan{{margin-top:5mm;font-size:12pt;font-weight:600;color:#4f46e5;text-align:center;letter-spacing:.01em}}
 
-.foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #dbe6e3;text-align:center}}
-.foot .thanks{{font-size:11.5pt;color:#3f5b56}}
-.foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#8aa39e;word-break:break-all;
+.foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #e2e8f0;text-align:center}}
+.foot .thanks{{font-size:11.5pt;color:#475569}}
+.foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#94a3b8;word-break:break-all;
            font-family:'IBM Plex Sans Thai',Consolas,monospace}}
-.foot .code{{font-weight:700;color:#0f766e;letter-spacing:.06em}}
+.foot .code{{font-weight:700;color:#4f46e5;letter-spacing:.06em}}
 
 .tools{{text-align:center;margin:10px 0 0}}
-.tools button{{padding:9px 20px;font-size:14px;font-weight:600;color:#fff;background:#0f766e;
+.tools button{{padding:9px 20px;font-size:14px;font-weight:600;color:#fff;background:#4f46e5;
               border:0;border-radius:8px;cursor:pointer}}
-.tools .hint{{display:block;margin-top:6px;font-size:12px;color:#5b7873}}
+.tools .hint{{display:block;margin-top:6px;font-size:12px;color:#475569}}
 @media print{{
   body{{background:#fff}}
   .sheet{{margin:0;box-shadow:none;width:148mm;height:210mm}}
