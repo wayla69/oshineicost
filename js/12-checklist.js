@@ -13,7 +13,11 @@
    Plan from /api/checklist/{name}/plan, state from /api/checklist/{name};
    every write is attributed to the login by the server.
    ═══════════════════════════════════════════════════════════════════ */
-const CL_NAME = 'feedback_rollout';
+const CL_PLANS = [
+  { name: 'feedback_rollout', short: 'เปิดใช้งานระบบ (Go-live)', pdf: '/docs/FEEDBACK_ROLLOUT_CHECKLIST.pdf' },
+  { name: 'feedback_marketing_prep', short: 'การตลาด: ไปขอข้อมูล', pdf: '/docs/FEEDBACK_MARKETING_PREP_CHECKLIST.pdf' },
+];
+let CL_NAME = 'feedback_rollout';
 let _clPlan = null, _clState = null, _clMe = null, _clHideDone = false;
 let _clView = 'auto';                 // 'auto' | phase id | 'all' | 'open'
 let _clOpen = new Set();              // expanded step ids
@@ -68,7 +72,22 @@ async function loadChecklist(force) {
     if (!_clPlan || force) _clPlan = await getJSON(`/api/checklist/${CL_NAME}/plan`);
     _clState = await getJSON(`/api/checklist/${CL_NAME}`);
   } catch (e) { if (line) line.textContent = 'โหลดไม่สำเร็จ: ' + e.message; return; }
+  _clRenderPicker();
   _clRender();
+}
+
+/* ── which plan: a small picker above the header, same tab for every plan ── */
+function _clRenderPicker() {
+  const host = document.getElementById('clPicker');
+  if (!host) return;
+  host.innerHTML = CL_PLANS.map(p => `<button type="button" class="cl-ghost${p.name === CL_NAME ? ' on' : ''}" onclick="clSwitchPlan('${p.name}')">${_clEsc(p.short)}</button>`).join('');
+  const pdf = document.getElementById('clPdfLink');
+  if (pdf) { const cur = CL_PLANS.find(p => p.name === CL_NAME); pdf.href = (cur || CL_PLANS[0]).pdf; }
+}
+function clSwitchPlan(name) {
+  if (name === CL_NAME) return;
+  CL_NAME = name; _clPlan = null; _clState = null; _clView = 'auto'; _clOpen = new Set(); _clAutoOpened = '';
+  loadChecklist(true);
 }
 
 /* ── derived state ── */

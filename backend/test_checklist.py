@@ -49,6 +49,29 @@ def test_plan_file_is_the_source_and_is_well_formed():
         C.load_plan("../etc")
 
 
+def test_marketing_prep_plan_is_well_formed_and_shares_the_same_engine(client):
+    """A second plan (backend/checklists/feedback_marketing_prep.json) proves the
+    engine is generic: no server code changed, only a new plan file — the CRUD
+    flow itself is already covered end-to-end above, against feedback_rollout."""
+    name = "feedback_marketing_prep"
+    plan = C.load_plan(name)
+    steps, tasks = C.step_index(plan), C.task_index(plan)
+    assert plan["name"] == name and plan["default_start"] and plan["horizon_days"] > 0
+    assert set(plan["statuses"]) == {"todo", "doing", "blocked", "done"}
+    assert len(steps) == len(set(steps)) > 0 and len(tasks) > 0 and len(plan["phases"]) > 0
+    for ph in plan["phases"]:
+        assert ph["days"][0] < ph["days"][1] and ph["owner"] and ph["why"]
+        for t in ph["tasks"]:
+            for s in t["steps"]:
+                assert s["t"] and s.get("how") and s.get("check")
+    s0 = client.get(f"/api/checklist/{name}").json()
+    assert s0["progress"]["total"] == len(steps) and s0["progress"]["done"] == 0 and s0["locked"] is False
+    r = client.post(f"/api/checklist/{name}/step/{next(iter(steps))}", json={"done": True, "by": "เก่ง"}).json()
+    assert r["done"] is True and r["progress"]["done"] == 1
+    # the two plans keep independent state — feedback_rollout is untouched by the tick above
+    assert client.get("/api/checklist/feedback_rollout").json()["progress"]["done"] == 0
+
+
 def test_ticks_tasks_meta_and_the_completion_rule(client):
     assert client.get(f"/api/checklist/{NAME}/plan").json()["phases"][0]["id"] == "p0"
     s0 = client.get(f"/api/checklist/{NAME}").json()

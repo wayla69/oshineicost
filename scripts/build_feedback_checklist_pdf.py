@@ -1,14 +1,19 @@
 # -*- coding: utf-8 -*-
-"""Build the PRINT edition of the customer-feedback go-live checklist.
+"""Build the PRINT edition of a customer-feedback checklist (any plan the
+dashboard's ✅ Checklist tab can render).
 
-The plan the dashboard tab renders (backend/checklists/feedback_rollout.json,
-served by /api/checklist/feedback_rollout/plan) is the single source; it is
-inlined into a print template designed for paper: one column, every step an
-unbreakable unit, a compact type scale, and pastel highlights that mark what
-matters (commands and files, why, done-when, if-stuck, warnings).
+The plan the tab renders (backend/checklists/<plan>.json, served by
+/api/checklist/<plan>/plan) is the single source; it is inlined into a print
+template designed for paper: one column, every step an unbreakable unit, a
+compact type scale, and pastel highlights that mark what matters (commands
+and files, why, done-when, if-stuck, warnings). Cover title/lede/how-to come
+from the plan JSON itself ("title"/"lede"/"how_to"/"box2_title"/"box2") so a
+new plan needs no change here — only feedback_rollout predates those fields
+and falls back to its original hardcoded cover text.
 
-    py scripts/build_feedback_checklist_pdf.py            # → docs/FEEDBACK_ROLLOUT_CHECKLIST_PRINT.html + .pdf
-    py scripts/build_feedback_checklist_pdf.py --no-pdf   # HTML only
+    py scripts/build_feedback_checklist_pdf.py                                    # feedback_rollout (default)
+    py scripts/build_feedback_checklist_pdf.py --plan feedback_marketing_prep
+    py scripts/build_feedback_checklist_pdf.py --no-pdf                           # HTML only
 """
 import argparse
 import io
@@ -18,20 +23,41 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PLAN_JSON = ROOT / "backend" / "checklists" / "feedback_rollout.json"
-OUT_HTML = ROOT / "docs" / "FEEDBACK_ROLLOUT_CHECKLIST_PRINT.html"
-OUT_PDF = ROOT / "docs" / "FEEDBACK_ROLLOUT_CHECKLIST.pdf"
+PLANS_DIR = ROOT / "backend" / "checklists"
+DOCS = ROOT / "docs"
 CHROME = Path(r"C:\Program Files\Google\Chrome\Application\chrome.exe")
+
+# feedback_rollout.json predates the lede/how_to/box2 fields — this is its
+# original cover text, kept as the fallback so that plan's PDF is unchanged.
+_ROLLOUT_LEDE = ('คู่มือแบบจับมือทำ ทีละคลิก: ตั้งค่าแต่ละแพลตฟอร์ม ทดสอบ วางกระบวนการประจำ และตรวจรับ '
+                  'พิมพ์ฉบับนี้ไว้ทำงานคู่กับหน้า interactive (สถานะติ๊กร่วมกันทั้งทีม) — '
+                  'ทุกขั้นตอนบอกว่าทำอย่างไร ทำไม สำเร็จเมื่อไร และถ้าติดทำอย่างไร')
+_ROLLOUT_HOW_TO = [
+    'ทำตามลำดับเฟส 0 ก่อน จากนั้นเฟส 1, 2, 4, 6 ทำคู่ขนานได้ในสัปดาห์แรก เฟส 1 และ 3 มีช่วงรออนุมัติ ยื่นให้เร็วแล้วไปทำเฟสอื่น',
+    'ทุกงานมีช่องสถานะ 4 ช่องและบรรทัดหมายเหตุ ติ๊กและจดบนกระดาษ แล้วไปติ๊กในหน้า interactive เพื่อให้ทีมเห็นสด',
+    r'คำสั่งทั้งหมดพิมพ์ในหน้าต่าง Command Prompt ที่โฟลเดอร์ <span class="cmd">C:\Users\ASUS\Oshinei</span> บนเครื่อง sync',
+    r'ไฟล์ตั้งค่า <span class="cmd">backend\.feedback_config.json</span> และ <span class="cmd">backend\.env</span> เป็นความลับ แก้บนเครื่องนั้นเท่านั้น ห้ามส่งทางแชท',
+]
+_ROLLOUT_BOX2_TITLE = 'สัญลักษณ์และสีที่ใช้'
+_ROLLOUT_BOX2 = [
+    '<span class="cmd">สีเหลือง</span> = คำสั่ง ชื่อไฟล์ ลิงก์ ที่ต้องพิมพ์หรือเปิดให้ตรงทุกตัวอักษร',
+    '<span style="background:#e7effa;padding:0 3pt;border-radius:2.5pt">ฟ้า = ทำไมต้องทำ</span> &nbsp; '
+    '<span style="background:#dff3e6;color:#14532d;padding:0 3pt;border-radius:2.5pt">เขียว = รู้ว่าสำเร็จเมื่อ</span> &nbsp; '
+    '<span style="background:#fbe4e4;color:#7f1d1d;padding:0 3pt;border-radius:2.5pt">ชมพู = ถ้าติดให้ทำอย่างนี้</span>',
+    '<mark class="warn">พีช</mark> = ข้อควรระวัง ห้าม หรือจุดที่พลาดแล้วเสียเวลามาก &nbsp; <span class="val">ม่วง</span> = ค่า/ตัวเลขที่ต้องจด',
+    'ช่อง ☐ ข้างขั้นตอน = ติ๊กเมื่อทำเสร็จ · แถบลายในไทม์ไลน์ = รอฝ่ายภายนอกอนุมัติ',
+]
+_ROLLOUT_SOURCE_NOTE = f'Oshinei · Checklist เปิดใช้งานเสียงลูกค้า · ฉบับพิมพ์'
 
 TEMPLATE = r"""<!doctype html>
 <html lang="th">
 <head>
 <meta charset="utf-8">
-<title>Checklist เปิดใช้งานเสียงลูกค้า — ฉบับพิมพ์</title>
+<title>__TITLE__ — ฉบับพิมพ์</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=Sarabun:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
 <style>
   @page { size: A4; margin: 11mm 11mm 13mm 11mm;
-    @bottom-left { content: "Oshinei · Checklist เปิดใช้งานเสียงลูกค้า · ฉบับพิมพ์"; font: 7.5pt "Sarabun", sans-serif; color: #7a8681; }
+    @bottom-left { content: "__FOOTNOTE__"; font: 7.5pt "Sarabun", sans-serif; color: #7a8681; }
     @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 7.5pt "Sarabun", sans-serif; color: #7a8681; } }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
@@ -98,20 +124,14 @@ TEMPLATE = r"""<!doctype html>
 <body>
 <section class="cover">
   <div class="brand">Oshinei Dashboard · โมดูล 💬 เสียงลูกค้า</div>
-  <h1>Checklist เปิดใช้งานเสียงลูกค้าให้ครบทุกช่องทาง</h1>
-  <p class="lede">คู่มือแบบจับมือทำ ทีละคลิก: ตั้งค่าแต่ละแพลตฟอร์ม ทดสอบ วางกระบวนการประจำ และตรวจรับ พิมพ์ฉบับนี้ไว้ทำงานคู่กับหน้า interactive (สถานะติ๊กร่วมกันทั้งทีม) — ทุกขั้นตอนบอกว่าทำอย่างไร ทำไม สำเร็จเมื่อไร และถ้าติดทำอย่างไร</p>
+  <h1>__TITLE__</h1>
+  <p class="lede">__LEDE__</p>
   <div class="cover-grid">
     <div class="box"><h3>วิธีใช้เอกสารนี้</h3><ul>
-      <li>ทำตามลำดับเฟส 0 ก่อน จากนั้นเฟส 1, 2, 4, 6 ทำคู่ขนานได้ในสัปดาห์แรก เฟส 1 และ 3 มีช่วงรออนุมัติ ยื่นให้เร็วแล้วไปทำเฟสอื่น</li>
-      <li>ทุกงานมีช่องสถานะ 4 ช่องและบรรทัดหมายเหตุ ติ๊กและจดบนกระดาษ แล้วไปติ๊กในหน้า interactive เพื่อให้ทีมเห็นสด</li>
-      <li>คำสั่งทั้งหมดพิมพ์ในหน้าต่าง Command Prompt ที่โฟลเดอร์ <span class="cmd">C:\Users\ASUS\Oshinei</span> บนเครื่อง sync</li>
-      <li>ไฟล์ตั้งค่า <span class="cmd">backend\.feedback_config.json</span> และ <span class="cmd">backend\.env</span> เป็นความลับ แก้บนเครื่องนั้นเท่านั้น ห้ามส่งทางแชท</li>
+__HOWTO__
     </ul></div>
-    <div class="box"><h3>สัญลักษณ์และสีที่ใช้</h3><ul>
-      <li><span class="cmd">สีเหลือง</span> = คำสั่ง ชื่อไฟล์ ลิงก์ ที่ต้องพิมพ์หรือเปิดให้ตรงทุกตัวอักษร</li>
-      <li><span style="background:#e7effa;padding:0 3pt;border-radius:2.5pt">ฟ้า = ทำไมต้องทำ</span> &nbsp; <span style="background:#dff3e6;color:#14532d;padding:0 3pt;border-radius:2.5pt">เขียว = รู้ว่าสำเร็จเมื่อ</span> &nbsp; <span style="background:#fbe4e4;color:#7f1d1d;padding:0 3pt;border-radius:2.5pt">ชมพู = ถ้าติดให้ทำอย่างนี้</span></li>
-      <li><mark class="warn">พีช</mark> = ข้อควรระวัง ห้าม หรือจุดที่พลาดแล้วเสียเวลามาก &nbsp; <span class="val">ม่วง</span> = ค่า/ตัวเลขที่ต้องจด</li>
-      <li>ช่อง ☐ ข้างขั้นตอน = ติ๊กเมื่อทำเสร็จ · แถบลายในไทม์ไลน์ = รอฝ่ายภายนอกอนุมัติ</li>
+    <div class="box"><h3>__BOX2_TITLE__</h3><ul>
+__BOX2__
     </ul></div>
   </div>
   <table class="sum" id="sumTable"></table>
@@ -182,39 +202,65 @@ document.getElementById("sumTable").innerHTML = `<thead><tr><th>เฟส</th><t
 """
 
 
-def build(no_pdf: bool = False, start: str = "") -> int:
-    """The plan is the server's JSON (backend/checklists/feedback_rollout.json —
-    what the dashboard tab renders); it is inlined as JS constants."""
-    plan = json.loads(io.open(PLAN_JSON, encoding="utf-8").read())
+def _esc(s: str) -> str:
+    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;"))
+
+
+def build(plan_name: str = "feedback_rollout", no_pdf: bool = False, start: str = "") -> int:
+    """The plan is the server's JSON (backend/checklists/<plan_name>.json — what
+    the dashboard tab renders); it is inlined as JS constants. Cover title/lede/
+    how-to come from the plan JSON ("lede"/"how_to"/"box2_title"/"box2"); only
+    feedback_rollout predates those fields and falls back to its original text."""
+    plan_json = PLANS_DIR / f"{plan_name}.json"
+    if not plan_json.exists():
+        sys.exit(f"no such plan: {plan_json}")
+    plan = json.loads(io.open(plan_json, encoding="utf-8").read())
+    is_rollout = plan_name == "feedback_rollout"
+    stem = plan_name.upper()
+    out_html = DOCS / f"{stem}_CHECKLIST_PRINT.html"
+    out_pdf = DOCS / f"{stem}_CHECKLIST.pdf"
     start = start or plan.get("default_start") or "2026-09-07"
+    title = plan.get("title") or plan_name
+    # lede/how_to/box2 are author-controlled HTML (this JSON is server content,
+    # not user input) — inserted as-is, same trust level as the Python fallbacks.
+    lede = plan.get("lede") or (_ROLLOUT_LEDE if is_rollout else "")
+    how_to = plan.get("how_to") or (_ROLLOUT_HOW_TO if is_rollout else [])
+    box2_title = plan.get("box2_title") or _ROLLOUT_BOX2_TITLE
+    box2 = plan.get("box2") or _ROLLOUT_BOX2          # the colour legend is the same convention on every checklist
+    how_to_html = "\n".join(f"      <li>{h}</li>" for h in how_to)
+    box2_html = "\n".join(f"      <li>{b}</li>" for b in box2)
     consts = ("const PLAN = " + json.dumps(plan["phases"], ensure_ascii=False) + ";\n"
               "const STATUS = " + json.dumps(plan["statuses"], ensure_ascii=False) + ";\n"
               f"const HORIZON = {int(plan.get('horizon_days') or 36)};\n")
-    page = TEMPLATE.replace("__PLAN__", consts).replace("__START__", start)
-    io.open(OUT_HTML, "w", encoding="utf-8").write(page)
-    print(f"html → {OUT_HTML.relative_to(ROOT)} ({len(page)/1024:.0f} KB)")
+    page = (TEMPLATE.replace("__PLAN__", consts).replace("__START__", start)
+            .replace("__TITLE__", _esc(title)).replace("__LEDE__", lede)
+            .replace("__HOWTO__", how_to_html).replace("__BOX2_TITLE__", _esc(box2_title)).replace("__BOX2__", box2_html)
+            .replace("__FOOTNOTE__", _esc(f"Oshinei · {title} · ฉบับพิมพ์")))
+    io.open(out_html, "w", encoding="utf-8").write(page)
+    print(f"html → {out_html.relative_to(ROOT)} ({len(page)/1024:.0f} KB)")
     if no_pdf:
         return 0
     if not CHROME.exists():
         sys.exit("Chrome not found — HTML only")
     cmd = [str(CHROME), "--headless=new", "--disable-gpu", "--no-pdf-header-footer", "--virtual-time-budget=10000",
-           f"--print-to-pdf={OUT_PDF}", OUT_HTML.resolve().as_uri()]
+           f"--print-to-pdf={out_pdf}", out_html.resolve().as_uri()]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=240)
-    if r.returncode or not OUT_PDF.exists():
+    if r.returncode or not out_pdf.exists():
         sys.exit(f"chrome failed ({r.returncode}): {r.stderr[-400:]}")
     try:
         import pikepdf
-        with pikepdf.open(str(OUT_PDF)) as p:
+        with pikepdf.open(str(out_pdf)) as p:
             pages = len(p.pages)
     except Exception:
         pages = "?"
-    print(f"pdf  → {OUT_PDF.relative_to(ROOT)} ({OUT_PDF.stat().st_size/1024:.0f} KB, {pages} pages)")
+    print(f"pdf  → {out_pdf.relative_to(ROOT)} ({out_pdf.stat().st_size/1024:.0f} KB, {pages} pages)")
     return 0
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
+    ap.add_argument("--plan", default="feedback_rollout", help="backend/checklists/<plan>.json to build")
     ap.add_argument("--no-pdf", action="store_true")
     ap.add_argument("--start", default="", help="project start date drawn on the cover Gantt (default: the plan's)")
     a = ap.parse_args()
-    sys.exit(build(a.no_pdf, a.start))
+    sys.exit(build(a.plan, a.no_pdf, a.start))

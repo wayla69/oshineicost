@@ -53,6 +53,7 @@ SMOKE = [
     ("/api/feedback/competitors", {}),
     ("/api/feedback/competitors/status", {}),
     ("/api/checklist/feedback_rollout", {}),
+    ("/api/checklist/feedback_marketing_prep", {}),
     # ── management summary report (daily & weekly) ──
     ("/api/reports/management", {}),
     ("/api/reports/management", {"period": "weekly"}),
