@@ -23,7 +23,7 @@ Config — backend/.feedback_config.json (gitignored; Backup DB.bat copies it):
    "facebook": {"api_version"?: "v21.0",
                 "pages": [{"id", "name", "branch", "token", "comments"?: false, "shares"?, "visitor_posts"?, "tagged"?}]},
    "instagram": {"accounts": [{"ig_user_id", "username", "page_id", "token", "branch", "comments"?, "tags"?}]},  # pages --save fills it
-   "tiktok":   {"client_key", "client_secret", "access_token", "refresh_token", "business_id"},  # auth tiktok fills the tokens
+   "tiktok":   {"accounts": [{"client_key", "client_secret", "access_token", "refresh_token", "business_id", "branch"?}]},  # auth tiktok --branch fills one account
    "x":        {"bearer_token", "keywords"?: ["โอชิเน", "oshinei"]},                          # Basic tier (paid)
    "youtube":  {"api_key", "keywords"?: [...], "comments"?: true},
    "web":      {"keywords"?: [...], "feeds"?: [{"url", "name", "source"}]}}                   # Google News built in + Google Alerts RSS
@@ -384,7 +384,7 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
     items = (sink.reply_queue() or {}).get("items") or []
     if not items:
         return {"sent": 0, "failed": 0}
-    g_token, tt_tok = None, None
+    g_token, tt_tokens = None, {}                    # tt_tokens: business_id → refreshed {access_token, ...}, one refresh per account
     sent = failed = 0
     for it in items:
         src = (it.get("source") or "").strip().lower()
@@ -393,13 +393,17 @@ def send_replies(cfg: dict, sink, http=urllib_http, log=print) -> dict:
             if not text:
                 raise RuntimeError("empty reply text")
             if src == "tiktok":
-                if not cfg.get("tiktok"):
-                    raise RuntimeError("tiktok is not configured on this PC (backend/.feedback_config.json)")
-                if tt_tok is None:
-                    tt_tok = tiktok.refresh(cfg["tiktok"], http)
-                vid, _, cid = (it.get("external_ref") or "").partition("/")
-                tiktok.reply_to_comment(tt_tok["access_token"], tt_tok.get("business_id") or cfg["tiktok"].get("business_id") or "",
-                                        vid, cid, text, http)
+                tt_cfg = cfg.get("tiktok") or {}
+                accounts = {str(a.get("business_id")): a for a in tiktok.accounts_of(tt_cfg) if a.get("business_id")}
+                business_id, _, rest = (it.get("external_ref") or "").partition("/")
+                vid, _, cid = rest.partition("/")
+                account = accounts.get(business_id)
+                if not account:
+                    raise RuntimeError(f"tiktok is not configured on this PC for account {business_id or '(unknown)'} (backend/.feedback_config.json)")
+                if business_id not in tt_tokens:
+                    tt_tokens[business_id] = tiktok.refresh(account, http)
+                tok = tt_tokens[business_id]
+                tiktok.reply_to_comment(tok["access_token"], tok.get("business_id") or business_id, vid, cid, text, http)
             elif src == "instagram":
                 ig_cfg = cfg.get("instagram") or {}
                 accs = {str(a.get("ig_user_id")): a for a in ig_cfg.get("accounts") or []}
@@ -671,23 +675,38 @@ def google_auth(cfg: dict, http, port: int = 8765, manual: bool = False, open_br
     return cfg
 
 
-def tiktok_auth(cfg: dict, http, redirect_uri: str = None, log=print, code: str = None) -> dict:
+def tiktok_auth(cfg: dict, http, redirect_uri: str = None, log=print, code: str = None, branch: str = None) -> dict:
     """TikTok's consent must land on a registered https URL, so the dashboard's
     own /api/feedback/oauth-callback page shows the code and the owner pastes
-    it here (no localhost listener)."""
+    it here (no localhost listener). One developer app (client_key/secret) can
+    authorize many accounts, so with --branch this adds/replaces that branch's
+    account in tiktok.accounts instead of overwriting the whole section —
+    every branch with its own TikTok account runs this once, same app."""
     t = cfg.setdefault("tiktok", {})
-    if not (t.get("client_key") and t.get("client_secret")):
+    accounts = t.setdefault("accounts", [])
+    existing = next((a for a in accounts if (a.get("branch") or None) == branch), None) if branch else None
+    # client_key/secret: this account's own (re-auth), else the branch-less
+    # legacy fields, else whatever the first configured account already has
+    client_key = (existing or {}).get("client_key") or t.get("client_key") or next((a.get("client_key") for a in accounts if a.get("client_key")), None)
+    client_secret = (existing or {}).get("client_secret") or t.get("client_secret") or next((a.get("client_secret") for a in accounts if a.get("client_secret")), None)
+    if not (client_key and client_secret):
         raise SystemExit("fill tiktok.client_key and tiktok.client_secret in backend/.feedback_config.json first "
-                         "(docs/FEEDBACK_SOURCES.html §10)")
+                         "(docs/FEEDBACK_SOURCES.html §10) — one TikTok developer app, reused for every branch's account")
     redirect = redirect_uri or t.get("redirect_uri") or f"{DEFAULT_API}/api/feedback/oauth-callback"
-    url = tiktok.auth_url(t["client_key"], redirect)
-    log("1. open this URL, log in to the brand's TikTok account, allow:\n   " + url)
+    url = tiktok.auth_url(client_key, redirect)
+    log(f"1. open this URL, log in to {'the ' + branch + ' branch' if branch else 'the brand'}'s TikTok account, allow:\n   " + url)
     log(f"2. the browser lands on {redirect} (register exactly this URL in the TikTok app) and shows a code")
     code = (code or input("3. paste the code: ")).strip()
     if not code:
         raise SystemExit("no code")
-    tok = tiktok.exchange_code(t["client_key"], t["client_secret"], code, redirect, http)
-    t.update(tok)
+    tok = tiktok.exchange_code(client_key, client_secret, code, redirect, http)
+    account = {**(existing or {}), "client_key": client_key, "client_secret": client_secret, **tok}
+    if branch:
+        account["branch"] = branch
+    if existing:
+        accounts[accounts.index(existing)] = account
+    else:
+        accounts.append(account)
     t["redirect_uri"] = redirect
     return cfg
 
@@ -775,6 +794,7 @@ def main(argv=None) -> int:
     a.add_argument("source", choices=["google", "tiktok"]); a.add_argument("--manual", action="store_true")
     a.add_argument("--port", type=int, default=8765)
     a.add_argument("--redirect", default=None, help="tiktok: the registered https redirect URL (default: the live app's callback page)")
+    a.add_argument("--branch", default=None, help="tiktok: which branch's account this authorizes (adds/replaces it in tiktok.accounts; omit for a single branch-less account)")
     lo = sub.add_parser("locations", help="listings the login manages"); common(lo)
     lo.add_argument("source", choices=["google"])
     pg = sub.add_parser("pages", help="pages a user token manages"); common(pg)
@@ -803,9 +823,11 @@ def main(argv=None) -> int:
     cfg = load_config(args.config)
     if args.cmd == "auth":
         if args.source == "tiktok":
-            cfg = tiktok_auth(cfg, urllib_http, args.redirect)
+            cfg = tiktok_auth(cfg, urllib_http, args.redirect, branch=args.branch)
             save_config(cfg, args.config)
-            print(f"✓ TikTok tokens saved to {args.config}\n  next: python backend/fetch_feedback.py run --source tiktok --since all --dry-run")
+            who = f" for {args.branch}" if args.branch else ""
+            print(f"✓ TikTok account{who} saved to {args.config}\n  next: python backend/fetch_feedback.py run --source tiktok --since all --dry-run"
+                 + ("\n  another branch: python backend/fetch_feedback.py auth tiktok --branch <ชื่อสาขาถัดไป>" if not args.branch else ""))
             return 0
         cfg = google_auth(cfg, urllib_http, args.port, args.manual)
         save_config(cfg, args.config)

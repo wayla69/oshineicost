@@ -5,11 +5,17 @@ Account product and the scopes user.info.basic, video.list, comment.list,
 comment.list.manage — TikTok reviews the app before granting them). Mentions
 in other people's videos are not available through any official API.
 
-Config (backend/.feedback_config.json → "tiktok"):
-    {"client_key", "client_secret", "access_token", "refresh_token",
-     "business_id" (the account's open_id), "branch"?: "", "max_videos"?: 20}
-`auth tiktok` in fetch_feedback.py fills the tokens; access tokens last a day,
-so every run refreshes first and hands the new tokens back (meta.config_update).
+Config (backend/.feedback_config.json → "tiktok"), one account per branch —
+the same shape as facebook.pages / instagram.accounts:
+    {"accounts": [{"client_key", "client_secret", "access_token", "refresh_token",
+                   "business_id" (the account's open_id), "branch"?: "", "max_videos"?: 20}]}
+A config written before multi-account support (the flat single-account dict,
+no "accounts" key) still works — accounts_of() wraps it as one implicit
+account with no branch. `auth tiktok [--branch ชื่อสาขา]` in fetch_feedback.py
+adds or replaces one account's tokens; access tokens last a day, so every run
+refreshes each account first and writes the whole accounts list back
+(meta.config_update = {"accounts": [...]}) — the file self-upgrades to the
+multi-account shape on its first run under this code.
 
 The endpoint paths and field names follow the Business Account API v1.3
 reference; they are gathered in the constants below, the one place to adjust
@@ -123,7 +129,7 @@ def iter_comments(token, business_id, video_id, http, since: str = "", max_count
         cursor = d.get("cursor") or (cursor + len(comments))
 
 
-def comment_to_row(c: dict, video: dict, branch: str = ""):
+def comment_to_row(c: dict, video: dict, branch: str = "", business_id: str = ""):
     """One comment → one row (None for the account's own comments or empty ones)."""
     text = (c.get("text") or c.get("comment") or "").strip()
     if not text or c.get("owner"):
@@ -136,32 +142,63 @@ def comment_to_row(c: dict, video: dict, branch: str = ""):
             "external_id": f"comment:{cid}", "url": video.get("share_url") or f"https://www.tiktok.com/video/{vid}",
             "author": _hash(c.get("username") or c.get("user_id")), "reply": "", "replied_at": "",
             "location": (video.get("caption") or "")[:80], "kind": "comment", "detect_branch": not branch,
-            "ref": f"{vid}/{cid}"}          # what a reply is posted under
+            "ref": f"{business_id}/{vid}/{cid}"}          # account/video/comment — what a reply is posted under
 
 
-def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
-    """Refresh the token, list the account's videos, read their comments →
-    (rows, {videos: [...], fetched, config_update: {tokens to store}})."""
+def fetch_account(account: dict, http, since: str = "", log=None) -> tuple:
+    """One TikTok Business account: refresh its token, list its videos, read
+    their comments → (rows, {videos: [...], fetched, config_update: {tokens}})."""
     log = log or (lambda *a: None)
-    tok = refresh(cfg, http)
+    tok = refresh(account, http)
     token = tok["access_token"]
-    business_id = tok.get("business_id") or cfg.get("business_id") or ""
+    business_id = tok.get("business_id") or account.get("business_id") or ""
     if not business_id:
-        raise RuntimeError("tiktok config lacks business_id (the account's open_id from auth tiktok)")
+        raise RuntimeError("tiktok account config lacks business_id (the account's open_id from auth tiktok)")
     rows, meta = [], {"videos": [], "fetched": 0, "config_update": tok}
-    for v in list_videos(token, business_id, http, int(cfg.get("max_videos") or 20)):
+    for v in list_videos(token, business_id, http, int(account.get("max_videos") or 20)):
         vid = str(v.get("item_id") or v.get("id") or "")
         n = 0
         for c in iter_comments(token, business_id, vid, http, since):
             if since and thai_date(c.get("create_time")) < since:
                 continue
-            row = comment_to_row(c, v, cfg.get("branch") or "")
+            row = comment_to_row(c, v, account.get("branch") or "", business_id)
             if row:
                 rows.append(row)
                 n += 1
         meta["videos"].append({"id": vid, "caption": (v.get("caption") or "")[:60], "comments": n})
         meta["fetched"] += n
         log(f"  video {vid:<20} {(v.get('caption') or '')[:30]:<30} {n:>4} comment(s)")
+    return rows, meta
+
+
+def accounts_of(cfg: dict) -> list:
+    """cfg["accounts"] when present (multi-account, one per branch — the
+    Facebook/Instagram shape); else the config itself as a single implicit
+    account, for a config file that predates multi-account support."""
+    accs = cfg.get("accounts")
+    if accs:
+        return accs
+    return [cfg] if cfg.get("client_key") else []
+
+
+def fetch_rows(cfg: dict, http, since: str = "", log=None) -> tuple:
+    """Every configured account → (rows, {accounts: [...], fetched, config_update:
+    {"accounts": [...]} — each account's rotated tokens, written back as a unit
+    so a config file self-upgrades to the multi-account shape on first run)."""
+    log = log or (lambda *a: None)
+    accounts = accounts_of(cfg)
+    if not accounts:
+        raise RuntimeError("tiktok config has no accounts — run: python backend/fetch_feedback.py auth tiktok [--branch ชื่อสาขา]")
+    rows, meta, updated = [], {"accounts": [], "fetched": 0}, []
+    for account in accounts:
+        got, m = fetch_account(account, http, since, log)
+        rows.extend(got)
+        meta["accounts"].append(m)
+        meta["fetched"] += len(got)
+        updated.append({**account, **m["config_update"]})
+        label = account.get("branch") or m["config_update"].get("business_id") or "?"
+        log(f"  account {label:<16} → {len(got)} comment(s) across {len(m['videos'])} video(s)")
+    meta["config_update"] = {"accounts": updated}
     return rows, meta
 
 
@@ -178,5 +215,5 @@ def reply_to_comment(token: str, business_id: str, video_id: str, comment_id: st
     return _data(status, j, "comment reply")
 
 
-__all__ = ["auth_url", "exchange_code", "refresh", "list_videos", "iter_comments", "comment_to_row", "fetch_rows",
-           "reply_to_comment", "SOURCE", "SCOPES", "REPLY_MAX"]
+__all__ = ["auth_url", "exchange_code", "refresh", "list_videos", "iter_comments", "comment_to_row", "fetch_account",
+           "accounts_of", "fetch_rows", "reply_to_comment", "SOURCE", "SCOPES", "REPLY_MAX"]

@@ -200,13 +200,12 @@ OSHINEI_TG_CHAT_ID=-100xxxxxxxx</pre></li>
 <ol>
 <li>บัญชี TikTok ของร้านต้องเป็น <b>Business account</b> (ตั้งค่า → บัญชี → สลับเป็นบัญชีธุรกิจ)</li>
 <li>เข้า <a href="https://developers.tiktok.com" target="_blank">developers.tiktok.com</a> ด้วยบัญชีนั้น → Manage apps → Create app → เพิ่ม product <b>Login Kit</b> และ <b>Business Account</b> (บางบัญชีชื่อ "Content Posting / Business Account API") → Scopes: <code>user.info.basic</code>, <code>video.list</code>, <code>comment.list</code>, <code>comment.list.manage</code> → Redirect URI ใส่ <code>https://oshinei-dashboard.fly.dev/api/feedback/oauth-callback</code> (ต้องเป็น https ที่ลงทะเบียน — localhost ใช้ไม่ได้) → Submit for review (TikTok ตรวจแอปก่อนเปิดสิทธิ์ ใช้เวลาหลายวันถึงหลายสัปดาห์)</li>
-<li>เมื่ออนุมัติ: จด <b>Client key</b> / <b>Client secret</b> ใส่ในไฟล์ config:
-<pre>"tiktok": { "client_key": "aw…", "client_secret": "…", "branch": "" }</pre>
-(ถ้าบัญชี TikTok เป็นของสาขาเดียว ใส่ชื่อสาขาใน <code>branch</code>; ถ้าเป็นบัญชีรวมของเครือ เว้นว่างไว้ ระบบจะจับชื่อสาขาจากข้อความคอมเมนต์)</li>
-<li>ขอสิทธิ์ครั้งเดียว: <code>py backend\fetch_feedback.py auth tiktok</code> → เปิดลิงก์ ล็อกอินบัญชีร้าน กดอนุญาต → เบราว์เซอร์มาที่หน้า callback ของแดชบอร์ด (ต้องล็อกอินแดชบอร์ดอยู่) แสดง code → คัดลอกมาวางในหน้าต่างคำสั่ง (token ถูกบันทึกและต่ออายุอัตโนมัติทุกรอบ)</li>
+<li>เมื่ออนุมัติ: จด <b>Client key</b> / <b>Client secret</b> ใส่ในไฟล์ config (หนึ่ง developer app ใช้ขอสิทธิ์ได้หลายบัญชี — จำเป็นก็ต่อเมื่อแต่ละสาขามีบัญชี TikTok ของตัวเอง):
+<pre>"tiktok": { "client_key": "aw…", "client_secret": "…" }</pre></li>
+<li>ขอสิทธิ์ครั้งเดียวต่อบัญชี: <code>py backend\fetch_feedback.py auth tiktok</code> (บัญชีรวมของเครือ ไม่ใส่ <code>--branch</code> — ระบบจะจับชื่อสาขาจากข้อความคอมเมนต์แทน) หรือ <code>py backend\fetch_feedback.py auth tiktok --branch เชียงใหม่</code> (บัญชีของสาขาเดียว) → เปิดลิงก์ ล็อกอินบัญชีนั้น กดอนุญาต → เบราว์เซอร์มาที่หน้า callback ของแดชบอร์ด (ต้องล็อกอินแดชบอร์ดอยู่) แสดง code → คัดลอกมาวางในหน้าต่างคำสั่ง — token ถูกเพิ่ม (หรือแทนที่ถ้ามีของสาขานั้นอยู่แล้ว) ลงใน <code>tiktok.accounts</code> และต่ออายุอัตโนมัติทุกรอบ ทำซ้ำขั้นนี้ทีละสาขาถ้ามีหลายบัญชี — ใช้ client_key/secret เดิมซ้ำได้ ไม่ต้องยื่นแอปใหม่</li>
 <li>ทดสอบ: <code>py backend\fetch_feedback.py run --source tiktok --since all --dry-run</code></li>
 </ol>
-<div class="note">ระบบดึงได้เฉพาะคอมเมนต์ใต้วิดีโอ<b>ของบัญชีร้านเอง</b> — วิดีโอของคนอื่นที่พูดถึงร้านไม่มี API ทางการให้ (Research API ให้เฉพาะนักวิชาการ) การตอบคอมเมนต์ TikTok จำกัด 150 ตัวอักษร ชื่อ endpoint อิงตาม Business Account API v1.3 — ถ้าแอปที่ได้รับอนุมัติเป็นเวอร์ชันอื่น ค่าคงที่ทั้งหมดอยู่ตอนต้นไฟล์ <code>backend/feedback_sources/tiktok.py</code></div>
+<div class="note">ระบบดึงได้เฉพาะคอมเมนต์ใต้วิดีโอ<b>ของบัญชีร้านเอง</b> (ทุกบัญชีที่ตั้งไว้ใน <code>tiktok.accounts</code>) — วิดีโอของคนอื่นที่พูดถึงร้านไม่มี API ทางการให้ (Research API ให้เฉพาะนักวิชาการ) การตอบคอมเมนต์ TikTok จำกัด 150 ตัวอักษร ชื่อ endpoint อิงตาม Business Account API v1.3 — ถ้าแอปที่ได้รับอนุมัติเป็นเวอร์ชันอื่น ค่าคงที่ทั้งหมดอยู่ตอนต้นไฟล์ <code>backend/feedback_sources/tiktok.py</code></div>
 
 <h2>§11 X (Twitter) — โพสต์ที่พูดถึงร้าน</h2>
 <ol>

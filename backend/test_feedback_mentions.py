@@ -179,13 +179,15 @@ class FakeTikTok:
 
 def test_tiktok_comments_reply_and_auth():
     http = FakeTikTok()
+    # a flat, pre-multi-account config (no "accounts" key) still works: accounts_of() wraps it as one implicit account
     cfg = {"client_key": "ck", "client_secret": "cs", "refresh_token": "RT1", "business_id": "biz1", "max_videos": 5}
+    assert T.accounts_of(cfg) == [cfg] and T.accounts_of({"accounts": [{"a": 1}]}) == [{"a": 1}] and T.accounts_of({}) == []
     rows, meta = T.fetch_rows(cfg, http, since="2026-01-01")
     assert [r["external_id"] for r in rows] == ["comment:c1"]      # the account's own reply and the 2023 comment are skipped
-    assert rows[0]["kind"] == "comment" and rows[0]["ref"] == "vid1/c1" and rows[0]["detect_branch"] is True
+    assert rows[0]["kind"] == "comment" and rows[0]["ref"] == "biz1/vid1/c1" and rows[0]["detect_branch"] is True
     assert rows[0]["location"] == "แซลมอนไม่อั้น" and rows[0]["url"].endswith("/video/vid1") and rows[0]["author"] != "user1"
-    assert meta["config_update"] == {"access_token": "AT2", "refresh_token": "RT2", "business_id": "biz1"}
-    assert meta["videos"][0]["comments"] == 1
+    assert meta["config_update"] == {"accounts": [{**cfg, "access_token": "AT2", "refresh_token": "RT2", "business_id": "biz1"}]}
+    assert meta["accounts"][0]["videos"][0]["comments"] == 1 and meta["fetched"] == 1
     assert T.reply_to_comment("AT2", "biz1", "vid1", "c1", "ขออภัยค่ะ", http) == {"comment_id": "reply1"}
     with pytest.raises(RuntimeError, match="150"):
         T.reply_to_comment("AT2", "biz1", "vid1", "c1", "x" * 151, http)
@@ -196,10 +198,19 @@ def test_tiktok_comments_reply_and_auth():
     assert T.exchange_code("ck", "cs", "CODE", "https://app/cb", http) == {"access_token": "AT1", "refresh_token": "RT1", "business_id": "biz1"}
     url = T.auth_url("ck", "https://app/cb")
     assert "client_key=ck" in url and "comment.list.manage" in url
+    # auth (no --branch): one branch-less account
     cfg2 = FF.tiktok_auth({"tiktok": {"client_key": "ck", "client_secret": "cs"}}, http, code="CODE", log=lambda *a: None)
-    assert cfg2["tiktok"]["access_token"] == "AT1" and cfg2["tiktok"]["redirect_uri"].endswith("/api/feedback/oauth-callback")
+    accs2 = cfg2["tiktok"]["accounts"]
+    assert len(accs2) == 1 and accs2[0]["access_token"] == "AT1" and "branch" not in accs2[0]
+    assert cfg2["tiktok"]["redirect_uri"].endswith("/api/feedback/oauth-callback")
     with pytest.raises(SystemExit):
         FF.tiktok_auth({}, http, code="CODE", log=lambda *a: None)
+    # auth --branch: a second account is appended, reusing the app's client_key/secret; re-auth of the same branch replaces it in place
+    cfg3 = FF.tiktok_auth(cfg2, http, code="CODE", branch="ขอนแก่น", log=lambda *a: None)
+    accs3 = cfg3["tiktok"]["accounts"]
+    assert len(accs3) == 2 and accs3[1]["branch"] == "ขอนแก่น" and accs3[1]["client_key"] == "ck"
+    cfg4 = FF.tiktok_auth(cfg3, http, code="CODE", branch="ขอนแก่น", log=lambda *a: None)
+    assert len(cfg4["tiktok"]["accounts"]) == 2                    # re-auth replaces the ขอนแก่น entry, does not append a third
 
 
 def test_fetch_run_saves_tiktok_tokens_and_sends_tiktok_replies(tmp_path):
@@ -209,10 +220,12 @@ def test_fetch_run_saves_tiktok_tokens_and_sends_tiktok_replies(tmp_path):
     FF.save_config({"tiktok": {"client_key": "ck", "client_secret": "cs", "refresh_token": "RT1", "business_id": "biz1"}}, cfgp)
     cfg, http = FF.load_config(cfgp), FakeTikTok()
     assert FF.run(_args(config=str(cfgp), since="all"), cfg, sink, http=http, log=lambda *a: None) == 0
-    assert FF.load_config(cfgp)["tiktok"]["refresh_token"] == "RT2"          # the rotated token was written back
+    # the flat config self-upgrades: rotated tokens land in the new accounts list, not the stale top-level keys
+    saved = FF.load_config(cfgp)["tiktok"]
+    assert saved["accounts"][0]["refresh_token"] == "RT2" and saved["refresh_token"] == "RT1"
     con = sqlite3.connect(str(db)); con.row_factory = sqlite3.Row
     row = con.execute("SELECT * FROM customer_feedback").fetchone()
-    assert row["source"] == "TikTok" and row["kind"] == "comment" and row["external_ref"] == "vid1/c1"
+    assert row["source"] == "TikTok" and row["kind"] == "comment" and row["external_ref"] == "biz1/vid1/c1"
     assert row["branch_name"] == "ขอนแก่น" and row["branch_id"] == 1            # detected from the comment text
     con.execute("UPDATE customer_feedback SET reply_status='pending', reply_draft='ขออภัยค่ะ' WHERE id=?", (row["id"],)); con.commit()
     assert FF.send_replies(cfg, sink, http, log=lambda *a: None) == {"sent": 1, "failed": 0}
