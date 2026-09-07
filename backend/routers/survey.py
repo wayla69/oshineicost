@@ -222,30 +222,31 @@ body{{margin:0;background:#f0f4f8;color:#0f172a;
        display:flex;flex-direction:column;align-items:center;
        padding:16mm 12mm 12mm;box-shadow:0 6px 28px rgba(15,23,42,.16)}}
 
-/* the brand indigo (--indigo/--indigo-mid in docs/ui-kit/tokens.css) so the card reads as ours */
+/* the brand indigo (--indigo in docs/ui-kit/tokens.css), taken darker: ink on paper does not have a
+   backlit screen behind it, so the shade that reads as brand on the dashboard reads as pale in print */
 .sheet::before{{content:"";position:absolute;inset:0 0 auto 0;height:9mm;
-               background:linear-gradient(90deg,#4f46e5 0%,#6366f1 55%,#a5b4fc 100%)}}
+               background:linear-gradient(90deg,#1e1b4b 0%,#3730a3 55%,#4f46e5 100%)}}
 
-.brand{{font-size:11pt;font-weight:700;letter-spacing:.16em;color:#4f46e5;text-transform:uppercase}}
-.branch{{font-size:12pt;font-weight:600;color:#475569;margin-top:1mm}}
+.brand{{font-size:11pt;font-weight:700;letter-spacing:.16em;color:#312e81;text-transform:uppercase}}
+.branch{{font-size:12pt;font-weight:600;color:#334155;margin-top:1mm}}
 
 h1{{font-size:27pt;line-height:1.15;font-weight:700;margin:9mm 0 0;text-align:center;letter-spacing:-.01em}}
-.sub{{font-size:12.5pt;line-height:1.5;color:#475569;text-align:center;margin-top:4mm;max-width:104mm}}
+.sub{{font-size:12.5pt;line-height:1.5;color:#334155;text-align:center;margin-top:4mm;max-width:104mm}}
 
 /* the QR is the thing the poster exists for, so nothing competes with it */
 .qr-wrap{{margin-top:auto;margin-bottom:auto;padding:7mm;background:#fff;border-radius:6mm;
-         border:2px solid #4f46e5;box-shadow:0 3px 14px rgba(79,70,229,.13)}}
+         border:2.5px solid #312e81;box-shadow:0 3px 14px rgba(30,27,75,.16)}}
 .qr-wrap svg{{display:block}}
-.scan{{margin-top:5mm;font-size:12pt;font-weight:600;color:#4f46e5;text-align:center;letter-spacing:.01em}}
+.scan{{margin-top:5mm;font-size:12pt;font-weight:600;color:#312e81;text-align:center;letter-spacing:.01em}}
 
-.foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #e2e8f0;text-align:center}}
-.foot .thanks{{font-size:11.5pt;color:#475569}}
-.foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#94a3b8;word-break:break-all;
+.foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #cbd5e1;text-align:center}}
+.foot .thanks{{font-size:11.5pt;color:#334155}}
+.foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#64748b;word-break:break-all;
            font-family:'IBM Plex Sans Thai',Consolas,monospace}}
-.foot .code{{font-weight:700;color:#4f46e5;letter-spacing:.06em}}
+.foot .code{{font-weight:700;color:#312e81;letter-spacing:.06em}}
 
 .tools{{text-align:center;margin:10px 0 0}}
-.tools button{{padding:9px 20px;font-size:14px;font-weight:600;color:#fff;background:#4f46e5;
+.tools button{{padding:9px 20px;font-size:14px;font-weight:600;color:#fff;background:#312e81;
               border:0;border-radius:8px;cursor:pointer}}
 .tools .hint{{display:block;margin-top:6px;font-size:12px;color:#475569}}
 @media print{{
