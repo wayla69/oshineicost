@@ -12,19 +12,31 @@ summary — ที่นี่แค่เป็นหน้าต่าง [dat
 หรือเท่ากับ date) คือ "รายงานประจำวัน" เดิม — ใส่ date_to ให้ต่างจาก date จะได้
 รายงานตามช่วงที่เลือก (สัปดาห์/เดือน/กำหนดเอง แล้วแต่หน้าเว็บส่งมา).
 
+ต่อกับ routers/feedback_actions.py (โมดูล 🔁 ปิดวงจร) เพื่อสี่ส่วนนี้:
+  - new_issues:      (สาขา,หัวข้อ) ที่มีเสียงลบในช่วงนี้ แต่ยังไม่มี action ใดรับผิดชอบ — "ปัญหามาใหม่"
+  - resolved_issues: action ที่ปิด (done_at) อยู่ในช่วงนี้ — พร้อมระยะเวลาที่ใช้แก้และผลตรวจ (better/same/worse)
+  - open_issues:     action ที่ยังเปิดอยู่ (open/doing) ณ วันนี้จริง — ไม่ผูกกับช่วงรายงาน เพราะเป็นสถานะสด
+  - chronic_branches:(สาขา,หัวข้อ) ที่มีเสียงลบใน >=3 จาก CHRONIC_LOOKBACK ช่วงล่าสุด (ช่วงนี้+ก่อนหน้า ยาวเท่ากัน) — "ผิดซ้ำสม่ำเสมอ"
+
   GET /api/feedback/daily-report?date=&date_to=&branch=          JSON (ใช้ render ในแอป)
   GET /api/feedback/daily-report.print?date=&date_to=&branch=      ฉบับพิมพ์ A4 (พิมพ์/บันทึก PDF)
 """
 import datetime
 import html
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Query, Request, Response
 
 from feedback_host import branch_rows, get_db, scope_branch, thai_today
 from routers.feedback import _ROW_COLS, _aggregate, _ensure
+from routers.feedback_actions import _ensure as _ensure_actions
+from routers.feedback_actions import _list as _list_actions
 
 router = APIRouter()
+
+CHRONIC_LOOKBACK = 4          # this period + 3 before it, same length each
+CHRONIC_MIN_HITS = 3          # a (branch, theme) showing up in >=3 of those 4 counts as "chronic"
 
 
 def _esc(s) -> str:
@@ -81,6 +93,7 @@ def compute_daily_report(con, date: str, branch: Optional[str] = None, date_to: 
     calendar day), through the same _aggregate() the tab's /api/feedback/summary
     uses — so the numbers never drift apart."""
     _ensure(con)
+    _ensure_actions(con)
     date_from = date
     date_to = date_to or date_from
     if date_to < date_from:
@@ -96,9 +109,17 @@ def compute_daily_report(con, date: str, branch: Optional[str] = None, date_to: 
         wp.append("branch_name = ?"); pp.append(branch)
     prev_total = con.execute(f"SELECT COUNT(*) FROM customer_feedback WHERE {' AND '.join(wp)}", pp).fetchone()[0]
     all_branches = [b["name"] for b in branch_rows(con) if b["active"]]
+    today_real = thai_today()
+    new_issues = _new_issues(con, rows, date_from, date_to)
+    resolved_issues = _resolved_issues(con, today_real, date_from, date_to, branch)
+    open_issues = _open_issues(con, today_real, branch)
+    chronic_branches = _chronic_branches(con, date_from, date_to, branch)
+    con.commit()
     return {"date_from": date_from, "date_to": date_to, "branch": branch, "branch_count": 1 if branch else len(all_branches),
             "prev_period": {"date_from": p_from, "date_to": p_to, "total": prev_total},
-            "headline": _headline(agg, date_from, date_to, branch), **agg}
+            "headline": _headline(agg, date_from, date_to, branch),
+            "new_issues": new_issues, "resolved_issues": resolved_issues,
+            "open_issues": open_issues, "chronic_branches": chronic_branches, **agg}
 
 
 @router.get("/api/feedback/daily-report")
@@ -162,6 +183,86 @@ def _group_by_branch(items: list) -> list:
     for it in items:
         groups.setdefault(it.get("branch") or "(ไม่ระบุสาขา)", []).append(it)
     return sorted(groups.items(), key=lambda kv: -len(kv[1]))
+
+
+def _new_issues(con, rows: list, date_from: str, date_to: str) -> list:
+    """(สาขา, หัวข้อ) ที่มีเสียงลบในช่วงนี้ แต่ไม่มี action (open/doing) ใดรับผิดชอบ
+    อยู่เลย — คือปัญหาที่ "มาใหม่" จริงๆ ยังไม่มีใครเริ่มตาม (ต่างจาก "ต้องติดตาม"
+    ด้านบนซึ่งรวมทุกเสียงลบ ไม่ว่าจะมีคนตามอยู่แล้วหรือไม่)."""
+    claimed = {(r["branch_name"] or "", r["theme"] or "") for r in
+               con.execute("SELECT branch_name, theme FROM feedback_action WHERE status IN ('open','doing')")}
+    tally: dict = {}
+    for r in rows:
+        if r.get("sentiment") != "neg":
+            continue
+        b = r.get("branch_name") or ""
+        for t in json.loads(r.get("themes") or "[]"):
+            if (b, t) in claimed:
+                continue
+            d = tally.setdefault((b, t), {"branch": b, "theme": t, "n": 0, "examples": []})
+            d["n"] += 1
+            if len(d["examples"]) < 2 and r.get("text"):
+                d["examples"].append(r["text"][:140])
+    return sorted(tally.values(), key=lambda x: -x["n"])
+
+
+def _resolved_issues(con, today: str, date_from: str, date_to: str, branch: Optional[str]) -> list:
+    """Action ที่ถูกปิด (done_at) ในช่วงรายงานนี้ — ระยะเวลาที่ใช้แก้ (จากวันสร้างถึง
+    วันปิด) และผลตรวจ (better/same/worse/no_data, วัดจากเสียงลบ/100 ก่อน-หลัง)."""
+    out = []
+    for a in _list_actions(con, today, status="done", branch=branch):
+        done_at = (a.get("done_at") or "")[:10]
+        if not (done_at and date_from <= done_at <= date_to):
+            continue
+        created = (a.get("created_at") or "")[:10]
+        days = (_d(done_at) - _d(created)).days if created else None
+        out.append({"id": a["id"], "title": a["title"], "branch": a.get("branch_name") or "", "theme": a.get("theme") or "",
+                    "owner": a.get("owner") or "", "created_at": created, "done_at": done_at, "days_to_fix": days,
+                    "result": a.get("result"), "after_days_left": a.get("after_days_left"),
+                    "baseline_rate": a.get("baseline_rate"), "after_rate": a.get("after_rate"), "note": a.get("note") or ""})
+    out.sort(key=lambda x: x["done_at"], reverse=True)
+    return out
+
+
+def _open_issues(con, today: str, branch: Optional[str]) -> list:
+    """Action ที่ยังไม่ปิด (open/doing) ณ วันนี้จริง — เป็นสถานะสด ไม่ผูกกับช่วง
+    ของรายงาน (ปัญหาที่ยังไม่ได้แก้ไม่ใช่สิ่งที่ "เกิดเฉพาะวันนั้น")."""
+    out = []
+    for a in _list_actions(con, today, branch=branch):
+        if a["status"] not in ("open", "doing"):
+            continue
+        created = (a.get("created_at") or "")[:10]
+        days_open = (_d(today) - _d(created)).days if created else None
+        out.append({"id": a["id"], "title": a["title"], "branch": a.get("branch_name") or "", "theme": a.get("theme") or "",
+                    "owner": a.get("owner") or "", "due": a.get("due"), "overdue": a.get("overdue"),
+                    "status": a["status"], "created_at": created, "days_open": days_open})
+    out.sort(key=lambda x: (not x["overdue"], x["days_open"] is None, -(x["days_open"] or 0)))
+    return out
+
+
+def _chronic_branches(con, date_from: str, date_to: str, branch: Optional[str]) -> list:
+    """(สาขา, หัวข้อ) ที่มีเสียงลบใน >=CHRONIC_MIN_HITS จาก CHRONIC_LOOKBACK ช่วง
+    ล่าสุด (ช่วงนี้ + ช่วงก่อนหน้าที่ยาวเท่ากันติดต่อกัน) — สาขาที่ปัญหาเดิมวนกลับมา
+    ซ้ำๆ ไม่ใช่แค่เกิดครั้งเดียวแล้วหาย."""
+    span = (_d(date_to) - _d(date_from)).days + 1
+    windows, f, t = [], date_from, date_to
+    for _ in range(CHRONIC_LOOKBACK):
+        windows.append((f, t))
+        t = (_d(f) - datetime.timedelta(days=1)).isoformat()
+        f = (_d(t) - datetime.timedelta(days=span - 1)).isoformat()
+    seen: dict = {}
+    for i, (wf, wt) in enumerate(windows):
+        w, p = ["rated_at >= ?", "rated_at < ?", "sentiment = 'neg'"], [wf, (_d(wt) + datetime.timedelta(days=1)).isoformat()]
+        if branch:
+            w.append("branch_name = ?"); p.append(branch)
+        for r in con.execute(f"SELECT branch_name, themes FROM customer_feedback WHERE {' AND '.join(w)}", p):
+            b = r["branch_name"] or ""
+            for th in json.loads(r["themes"] or "[]"):
+                seen.setdefault((b, th), set()).add(i)
+    out = [{"branch": b, "theme": th, "periods": len(idxs), "of_periods": CHRONIC_LOOKBACK}
+           for (b, th), idxs in seen.items() if len(idxs) >= CHRONIC_MIN_HITS]
+    out.sort(key=lambda x: (-x["periods"], x["branch"], x["theme"]))
+    return out
 
 
 def _build_print_html(data: dict) -> str:
@@ -233,6 +334,59 @@ def _build_print_html(data: dict) -> str:
         return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_pos_card(q) for q in items)
                        for b, items in _group_by_branch(data["recent_positive"]))
 
+    def _star_line(rate):
+        return f"{rate}/100" if rate is not None else "—"
+
+    def new_issues_block():
+        items = data["new_issues"]
+        if not items:
+            return f'<p class="empty">ไม่มีปัญหาใหม่ที่ยังไม่มีคนตาม{pw} 🎉</p>'
+        rows = []
+        for it in items[:12]:
+            ex = f' — “{_esc(it["examples"][0])}”' if it.get("examples") else ""
+            branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
+            rows.append(f'<div class="item">{branch_bit}<b>{_esc(it["theme"])}</b> ({it["n"]} เสียงลบ){ex}</div>')
+        return "".join(rows)
+
+    def open_issues_block():
+        items = data["open_issues"]
+        if not items:
+            return '<p class="empty">ไม่มีปัญหาที่ค้างอยู่ 🎉</p>'
+        rows = []
+        for it in items[:15]:
+            branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
+            due = f' · กำหนด {_esc(it["due"])}' if it.get("due") else ""
+            overdue = ' <span class="tag">⏰ เกินกำหนด</span>' if it.get("overdue") else ""
+            status = "กำลังทำ" if it["status"] == "doing" else "ยังไม่เริ่ม"
+            days = f' · เปิดมา {it["days_open"]} วัน' if it.get("days_open") is not None else ""
+            rows.append(f'<div class="item">{branch_bit}<b>{_esc(it["title"])}</b>{overdue}'
+                       f'<div class="m">{_esc(it.get("theme") or "-")} · {status} · {_esc(it.get("owner") or "ยังไม่มอบหมาย")}{due}{days}</div></div>')
+        return "".join(rows)
+
+    _RESULT_TH = {"better": "✅ ดีขึ้น", "same": "➖ เท่าเดิม", "worse": "❌ แย่ลง", "no_data": "⏳ รอผล"}
+
+    def resolved_issues_block():
+        items = data["resolved_issues"]
+        if not items:
+            return '<p class="empty">ไม่มีปัญหาที่ปิดในช่วงนี้</p>'
+        rows = []
+        for it in items[:15]:
+            branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
+            days = f'{it["days_to_fix"]} วัน' if it.get("days_to_fix") is not None else "—"
+            result = _RESULT_TH.get(it.get("result"), "⏳ รอผล" if it.get("after_days_left") is not None else "—")
+            rate_line = f' (ก่อน {_star_line(it.get("baseline_rate"))} → หลัง {_star_line(it.get("after_rate"))})' if it.get("after_rate") is not None else ""
+            rows.append(f'<div class="quote">{branch_bit}<b>{_esc(it["title"])}</b><div class="m">{_esc(it.get("theme") or "-")} · '
+                       f'ปิดเมื่อ {_esc(it["done_at"])} · ใช้เวลาแก้ {days} · ผล {result}{rate_line}</div></div>')
+        return "".join(rows)
+
+    def chronic_block():
+        items = data["chronic_branches"]
+        if not items:
+            return f'<p class="empty">ไม่มีสาขาที่ปัญหาเดิมวนซ้ำใน {CHRONIC_LOOKBACK} ช่วงล่าสุด</p>'
+        rows = "".join(f'<tr><td>{_esc(it["branch"] or "-")}</td><td>{_esc(it["theme"])}</td><td>{it["periods"]}/{it["of_periods"]} ช่วง</td></tr>'
+                       for it in items[:15])
+        return f'<table><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th></tr></thead><tbody>{rows}</tbody></table>'
+
     def branch_table():
         if data["branch"] or not data["branches"]:
             return ""
@@ -276,6 +430,14 @@ def _build_print_html(data: dict) -> str:
 </div>
 <h2 class="sec">🚩 ต้องติดตาม{pw} ({len(data['recent_negative'])})</h2>
 {negative_items()}
+<h2 class="sec">🆕 ปัญหาใหม่{pw} ยังไม่มีคนตาม ({len(data['new_issues'])})</h2>
+{new_issues_block()}
+<h2 class="sec">🔧 ปัญหาที่ยังไม่ได้แก้ ({len(data['open_issues'])})</h2>
+{open_issues_block()}
+<h2 class="sec">✅ ปัญหาที่แก้แล้วช่วงนี้ ({len(data['resolved_issues'])})</h2>
+{resolved_issues_block()}
+<h2 class="sec">🔁 สาขาที่มีความผิดซ้ำสม่ำเสมอ ({len(data['chronic_branches'])})</h2>
+{chronic_block()}
 <h2 class="sec">🌟 เสียงชมที่หยิบไปใช้ได้ ({len(data['recent_positive'])})</h2>
 {positive_quotes()}
 <div class="three">

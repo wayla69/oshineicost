@@ -6,12 +6,15 @@
  "branches": [],
  "by_day": [],
  "by_month": [],
+ "chronic_branches": [],
  "date_from": "2026-07-01",
  "date_to": "2026-07-01",
  "flagged": 0,
  "headline": "ไม่มีเสียงลูกค้าเข้ามาในช่วง 2026-07-01",
  "menus": [],
  "neg_pct": 0.0,
+ "new_issues": [],
+ "open_issues": [],
  "prev_period": {
   "date_from": "2026-06-24",
   "date_to": "2026-06-24",
@@ -25,6 +28,7 @@
   "pending": 0,
   "sent": 0
  },
+ "resolved_issues": [],
  "response": {
   "answerable": 0,
   "answered": 0,

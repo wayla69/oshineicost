@@ -29,6 +29,7 @@ def _clean(request):
     import core
     con = sqlite3.connect(str(core.DB_PATH))
     _wipe(con, "customer_feedback")
+    _wipe(con, "feedback_action")
     con.commit(); con.close()
 
 
@@ -43,6 +44,16 @@ def _seed(con, rows):
                     (branch, "Google", rated_at, rating, text, sentiment,
                      json.dumps(themes, ensure_ascii=False), json.dumps(menus, ensure_ascii=False),
                      f"dr:{i}", contact, severity))
+
+
+def _seed_action(con, **kw):
+    from routers.feedback_actions import _ensure as _ensure_actions
+    _ensure_actions(con)
+    kw.setdefault("created_at", f"{DAY} 08:00:00")
+    kw.setdefault("status", "open")
+    cols = ", ".join(kw.keys())
+    marks = ", ".join("?" for _ in kw)
+    con.execute(f"INSERT INTO feedback_action({cols}) VALUES ({marks})", list(kw.values()))
 
 
 def test_tel_href_dials_a_phone_but_not_a_line_id():
@@ -169,3 +180,75 @@ def test_print_groups_by_branch_only_on_the_all_branches_view(client):
     assert "🏪 BranchA" not in one_body and "🏪 BranchB" not in one_body and "แย่ที่ A" in one_body   # scoped: no grouping needed
     # detail sections added alongside branch grouping
     assert "ช่องทางที่มาวันนี้" in all_body and "อัตราตอบกลับ" in all_body and "พนักงานที่ถูกพูดถึง" in all_body
+
+
+def test_new_issues_skips_themes_that_already_have_an_open_action(client):
+    """A negative theme this period is "new" only if nobody has claimed it yet
+    (feedback_actions §🔁) — once an open/doing action exists for that
+    (branch, theme), it drops out of new_issues (it shows in open_issues instead)."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [
+        ("BranchA", f"{DAY} 09:00:00", 1, "รอนานมาก", "neg", ["รอนาน"], [], None, "low"),
+        ("BranchA", f"{DAY} 10:00:00", 2, "อาหารเย็นชืด", "neg", ["คุณภาพอาหาร"], [], None, "low"),
+    ])
+    _seed_action(con, branch_name="BranchA", theme="คุณภาพอาหาร", title="ตามครัวเรื่องอาหารเย็น", status="doing")
+    con.commit(); con.close()
+    with core.get_db() as con:
+        d = D.compute_daily_report(con, DAY, branch="BranchA")
+    new_themes = {it["theme"] for it in d["new_issues"]}
+    assert new_themes == {"รอนาน"}                       # คุณภาพอาหาร already has a doing action → not "new"
+    open_titles = {it["title"] for it in d["open_issues"]}
+    assert open_titles == {"ตามครัวเรื่องอาหารเย็น"}
+
+
+def test_resolved_issues_shows_days_to_fix_and_result_within_the_period(client):
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed_action(con, branch_name="BranchA", theme="รอนาน", title="เพิ่มพนักงานช่วงพีค",
+                 created_at="2026-06-01 08:00:00", status="done", done_at="2026-06-10",
+                 baseline_total=100, baseline_n=20, baseline_neg=10,
+                 after_total=100, after_n=10, after_neg=2, result="better", verified_at="2026-07-10")
+    _seed_action(con, branch_name="BranchA", theme="ที่จอดรถ", title="ปิดนอกช่วงรายงาน",
+                 created_at="2026-05-01 08:00:00", status="done", done_at="2026-05-15")
+    con.commit(); con.close()
+    with core.get_db() as con:
+        d = D.compute_daily_report(con, "2026-06-01", date_to="2026-06-30")
+    assert len(d["resolved_issues"]) == 1
+    it = d["resolved_issues"][0]
+    assert it["title"] == "เพิ่มพนักงานช่วงพีค" and it["days_to_fix"] == 9 and it["result"] == "better"
+    assert it["baseline_rate"] == 10.0 and it["after_rate"] == 2.0
+
+
+def test_open_issues_are_a_live_snapshot_not_scoped_to_the_report_window(client):
+    """Open/doing actions are an ongoing status, not something that happened
+    "this period" — an old still-open action must show up on any period's report."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed_action(con, branch_name="BranchB", theme="ความสะอาด", title="ล้างพื้นครัวใหญ่",
+                 created_at="2026-01-01 08:00:00", status="open", due="2026-01-10")
+    con.commit(); con.close()
+    with core.get_db() as con:
+        d = D.compute_daily_report(con, DAY)
+    it = next(x for x in d["open_issues"] if x["title"] == "ล้างพื้นครัวใหญ่")
+    assert it["overdue"] is True and it["status"] == "open" and it["days_open"] > 100
+
+
+def test_chronic_branches_flags_a_theme_repeating_across_periods(client):
+    """A (branch, theme) with a negative voice in >=3 of the 4 most recent
+    equal-length periods (this week + the 3 weeks before it) is "chronic"."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [
+        ("BranchA", "2026-06-22 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),   # this week
+        ("BranchA", "2026-06-15 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),   # 1 week before
+        ("BranchA", "2026-06-01 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),   # 3 weeks before
+        ("BranchA", "2026-06-08 09:00:00", 5, "สัปดาห์นี้ดี", "pos", [], [], None, "low"),           # 2 weeks before: no รอนาน negative
+        ("BranchA", "2026-06-22 10:00:00", 1, "จานสกปรก", "neg", ["ความสะอาด"], [], None, "low"),    # only this week: not chronic
+    ])
+    con.commit(); con.close()
+    with core.get_db() as con:
+        d = D.compute_daily_report(con, "2026-06-22", date_to="2026-06-28")
+    chronic = {(it["branch"], it["theme"]): it["periods"] for it in d["chronic_branches"]}
+    assert chronic.get(("BranchA", "รอนาน")) == 3
+    assert ("BranchA", "ความสะอาด") not in chronic

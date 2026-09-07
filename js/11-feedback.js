@@ -744,6 +744,17 @@ async function loadDailyReport() {
     `<div class="flex justify-between"><span>อัตราตอบกลับ</span><b>${r.rate != null ? r.rate + '%' : '—'}</b></div><div class="flex justify-between"><span>ตอบไวเฉลี่ย</span><b>${r.median_days != null ? r.median_days + ' วัน' : '—'}</b></div>`;
   const staffRows = (d.staff || []).length ? d.staff.slice(0, 8).map(s => `<div class="flex justify-between"><span>${_fbEsc(s.name)} <span class="text-[11px]" style="color:var(--text-muted)">(${_fbEsc(s.branch)})</span></span><b>👍${s.pos} 👎${s.neg}</b></div>`).join('') :
     `<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีพนักงานถูกระบุชื่อ${pw}</p>`;
+  const newIssues = (d.new_issues || []).length ? d.new_issues.slice(0, 12).map(it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}<b>${_fbEsc(it.theme)}</b> (${it.n} เสียงลบ)${it.examples && it.examples[0] ? ` — “${_fbEsc(it.examples[0])}”` : ''}</div>`).join('') :
+    `<p class="text-xs" style="color:var(--text-muted)">ไม่มีปัญหาใหม่ที่ยังไม่มีคนตาม${pw} 🎉</p>`;
+  const openIssues = (d.open_issues || []).length ? d.open_issues.slice(0, 15).map(it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}<b>${_fbEsc(it.title)}</b>${it.overdue ? ' <span class="fb-tag flag">⏰ เกินกำหนด</span>' : ''}<div class="m">${_fbEsc(it.theme || '-')} · ${it.status === 'doing' ? 'กำลังทำ' : 'ยังไม่เริ่ม'} · ${_fbEsc(it.owner || 'ยังไม่มอบหมาย')}${it.due ? ` · กำหนด ${_fbEsc(it.due)}` : ''}${it.days_open != null ? ` · เปิดมา ${it.days_open} วัน` : ''}</div></div>`).join('') :
+    `<p class="text-xs" style="color:var(--text-muted)">ไม่มีปัญหาที่ค้างอยู่ 🎉</p>`;
+  const RESULT_TH = { better: '✅ ดีขึ้น', same: '➖ เท่าเดิม', worse: '❌ แย่ลง', no_data: '⏳ รอผล' };
+  const resolvedIssues = (d.resolved_issues || []).length ? d.resolved_issues.slice(0, 15).map(it => {
+    const rate = it.after_rate != null ? ` (ก่อน ${it.baseline_rate != null ? it.baseline_rate + '/100' : '—'} → หลัง ${it.after_rate}/100)` : '';
+    return `<div class="fb-quote">${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}<b>${_fbEsc(it.title)}</b><div class="m">${_fbEsc(it.theme || '-')} · ปิดเมื่อ ${_fbEsc(it.done_at)} · ใช้เวลาแก้ ${it.days_to_fix != null ? it.days_to_fix + ' วัน' : '—'} · ผล ${RESULT_TH[it.result] || (it.after_days_left != null ? '⏳ รอผล' : '—')}${rate}</div></div>`;
+  }).join('') : `<p class="text-xs" style="color:var(--text-muted)">ไม่มีปัญหาที่ปิดในช่วงนี้</p>`;
+  const chronicTable = (d.chronic_branches || []).length ? `<table class="fb-t"><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th></tr></thead><tbody>${d.chronic_branches.slice(0, 15).map(it => `<tr><td>${_fbEsc(it.branch || '-')}</td><td>${_fbEsc(it.theme)}</td><td>${it.periods}/${it.of_periods} ช่วง</td></tr>`).join('')}</tbody></table>` :
+    `<p class="text-xs" style="color:var(--text-muted)">ไม่มีสาขาที่ปัญหาเดิมวนซ้ำในช่วงล่าสุด</p>`;
   const branchTable = (!d.branch && (d.branches || []).length) ? `<h4 class="text-xs font-semibold mt-3 mb-1">🏪 รายสาขาที่มีเสียง${pw} (${d.branches.length})</h4>
     <table class="fb-t"><thead><tr><th>สาขา</th><th style="text-align:right">เสียง</th><th style="text-align:right">ลบ%</th><th style="text-align:right">★</th><th style="text-align:right">รอตอบ</th><th style="text-align:right">ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>${d.branches.map(x => `<tr class="row" onclick="document.getElementById('fbDrBranch').value='${_fbEsc(x.branch).replace(/'/g, "\\'")}';document.getElementById('fbDrBranch').dataset.touched='1';loadDailyReport()"><td>${_fbEsc(x.branch)}</td><td style="text-align:right">${x.n}</td><td style="text-align:right;color:${x.neg_pct >= 30 ? '#b91c1c' : 'inherit'}">${x.neg_pct}%</td><td style="text-align:right">${x.avg_rating != null ? x.avg_rating.toFixed(2) : '—'}</td><td style="text-align:right">${x.unreplied}</td><td style="text-align:right">${x.flagged}</td><td class="text-[11px]">${_fbEsc(x.top_theme || '—')}</td></tr>`).join('')}</tbody></table>` : '';
   host.innerHTML = `
@@ -754,6 +765,10 @@ async function loadDailyReport() {
       <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึง${pw}</h4>${menuRows}</div>
     </div>
     <h4 class="text-xs font-semibold mt-3 mb-1">🚩 ต้องติดตาม${pw} (${(d.recent_negative || []).length})</h4>${negItems}
+    <h4 class="text-xs font-semibold mt-3 mb-1">🆕 ปัญหาใหม่${pw} ยังไม่มีคนตาม (${(d.new_issues || []).length})</h4>${newIssues}
+    <h4 class="text-xs font-semibold mt-3 mb-1">🔧 ปัญหาที่ยังไม่ได้แก้ (${(d.open_issues || []).length})</h4>${openIssues}
+    <h4 class="text-xs font-semibold mt-3 mb-1">✅ ปัญหาที่แก้แล้วช่วงนี้ (${(d.resolved_issues || []).length})</h4>${resolvedIssues}
+    <h4 class="text-xs font-semibold mt-3 mb-1">🔁 สาขาที่มีความผิดซ้ำสม่ำเสมอ (${(d.chronic_branches || []).length})</h4>${chronicTable}
     <h4 class="text-xs font-semibold mt-3 mb-1">🌟 เสียงชมที่หยิบไปใช้ได้ (${(d.recent_positive || []).length})</h4>${posQuotes}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3 text-xs">
       <div><h4 class="text-xs font-semibold mb-1">📡 ช่องทางที่มา${pw}</h4>${sourcesRows}</div>
