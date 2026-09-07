@@ -360,7 +360,12 @@ def _args(**kw):
     return SimpleNamespace(**base)
 
 
-def test_fetch_run_end_to_end_with_a_local_db_and_the_alert(tmp_path):
+def test_fetch_run_end_to_end_with_a_local_db_and_the_alert(tmp_path, monkeypatch):
+    # Pin the weekday. `_digest_step` also sends the weekly digest when it is a Monday, so this
+    # test — which asserts that exactly one message went out, the new-negatives alert — passed six
+    # days a week and failed on the seventh. The seam exists for this; test_feedback_actions.py and
+    # test_feedback_scope.py already use it, and this one was simply missed.
+    monkeypatch.setattr(FF, "_weekday", lambda: 2)                   # a Wednesday: no weekly digest
     db = tmp_path / "local.db"; _seed_db(db)
     sink, sent, log = FF.DbSink(db), [], []
     cfg = {"google": CFG}
