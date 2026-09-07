@@ -139,6 +139,25 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
     return "\n".join(lines)
 
 
+def sla_alert_digest(items: list, app_url: str = "") -> str:
+    """The alert text for cases that just crossed the SLA — same shape as
+    negative_digest() but framed around "still waiting", since these can be
+    old cases from earlier fetches, not necessarily today's new reviews."""
+    lines = [f"⏰ <b>เกิน SLA {len(items)} รายการ</b> (ยังไม่มีคนตอบ)"]
+    for it in sorted(items, key=lambda x: -(x.get("age_days") or 0))[:15]:
+        stars = f"{it['rating']:g}★ · " if it.get("rating") is not None else ""
+        fire = f"🔥 <b>ร้ายแรง{(' — ' + html.escape(it['severity_note'])) if it.get('severity_note') else ''}</b> · " if it.get("severity") == "high" else ""
+        age = f"{it.get('age_days', 0)} วัน · " if it.get("age_days") is not None else ""
+        lines.append(f"• {fire}<b>{html.escape(str(it.get('branch') or '-'))}</b> · {age}{stars}{html.escape((it.get('text') or '')[:160])}")
+        if it.get("url"):
+            lines.append(f"  {html.escape(it['url'])}")
+    if len(items) > 15:
+        lines.append(f"… และอีก {len(items) - 15} รายการ")
+    if app_url:
+        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+    return "\n".join(lines)
+
+
 def daily_report_digest(d: dict, app_url: str = "") -> str:
     """One day's (or period's) 📰 report, compact for a daily Telegram push —
     complements weekly_digest() (the week-over-week numbers + action verdicts,
@@ -175,4 +194,4 @@ def daily_report_digest(d: dict, app_url: str = "") -> str:
     return "\n".join(lines)
 
 
-__all__ = ["send_telegram", "negative_digest", "weekly_digest", "daily_report_digest", "telegram_config"]
+__all__ = ["send_telegram", "negative_digest", "sla_alert_digest", "weekly_digest", "daily_report_digest", "telegram_config"]

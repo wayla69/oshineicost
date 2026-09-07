@@ -252,3 +252,23 @@ def test_chronic_branches_flags_a_theme_repeating_across_periods(client):
     chronic = {(it["branch"], it["theme"]): it["periods"] for it in d["chronic_branches"]}
     assert chronic.get(("BranchA", "รอนาน")) == 3
     assert ("BranchA", "ความสะอาด") not in chronic
+
+
+def test_chronic_status_reflects_whether_an_action_already_claims_it(client):
+    """The print/xlsx editions mark each chronic (branch, theme) as already
+    having an open/doing action or not — so a reader knows whether it still
+    needs the "🚀 มอบหมาย" the in-app view offers (js/11-feedback.js)."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [
+        ("BranchA", "2026-06-22 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),
+        ("BranchA", "2026-06-15 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),
+        ("BranchA", "2026-06-01 09:00:00", 1, "รอนานอีกแล้ว", "neg", ["รอนาน"], [], None, "low"),
+        ("BranchA", "2026-06-22 10:00:00", 1, "จานสกปรก", "neg", ["ความสะอาด"], [], None, "low"),
+        ("BranchA", "2026-06-15 10:00:00", 1, "จานสกปรกอีก", "neg", ["ความสะอาด"], [], None, "low"),
+        ("BranchA", "2026-06-01 10:00:00", 1, "จานสกปรกอีกแล้ว", "neg", ["ความสะอาด"], [], None, "low"),
+    ])
+    _seed_action(con, branch_name="BranchA", theme="ความสะอาด", title="ล้างจาน", status="doing")
+    con.commit(); con.close()
+    body = client.get("/api/feedback/daily-report.print", params={"date": "2026-06-22", "date_to": "2026-06-28"}).text
+    assert "รอนาน" in body and "ยังไม่มีงาน" in body and "ความสะอาด" in body and "มีงานอยู่แล้ว" in body

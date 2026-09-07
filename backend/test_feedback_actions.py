@@ -164,3 +164,20 @@ def test_fetcher_sends_the_daily_report_every_run_unless_opted_out(tmp_path):
                  "text": "รอคิวนานมาก", "external_id": "d2", "themes_extra": ["รอนาน"], "sentiment_hint": "neg"}], by="t")
     assert FF._daily_report_step(_args(no_daily_report=False, date="2026-09-03"), sink, notifier, lines.append) is True
     assert "🆕 ปัญหาใหม่ยังไม่มีคนตาม" in sent[-1] and "รอนาน" in sent[-1]
+
+
+def test_fetcher_sla_alert_pings_once_per_case(tmp_path):
+    """A case that just crossed the SLA gets an immediate ping (its own
+    --no-sla-alert flag, separate from --no-alert's new-negatives alert) and
+    is acked so it never re-fires on a later run."""
+    db = tmp_path / "local.db"; _seed_db(db)
+    sink = FF.DbSink(db)
+    sink.upload([{"branch": "ขอนแก่น", "date": "2026-01-01", "source": "Google", "rating": 1, "text": "รอนานมาก", "external_id": "s1"}], by="t")
+    sent, lines = [], []
+    notifier = lambda text: (sent.append(text), True)[1]            # noqa: E731
+    assert FF._sla_alert_step(_args(no_sla_alert=False), sink, notifier, lines.append) is True
+    assert len(sent) == 1 and "เกิน SLA 1 รายการ" in sent[0] and "รอนานมาก" in sent[0] and "ขอนแก่น" in sent[0]
+    assert FF._sla_alert_step(_args(no_sla_alert=False), sink, notifier, lines.append) is False   # acked: nothing left to alert
+    assert len(sent) == 1
+    assert FF._sla_alert_step(_args(), sink, notifier, lines.append) is False   # default (_args): opted out
+    assert any("sla alert:" in ln for ln in lines)

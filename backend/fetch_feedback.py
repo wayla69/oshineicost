@@ -215,6 +215,12 @@ class ApiSink:
         q = "/api/feedback/daily-report" + (("?" + "&".join(params)) if params else "")
         return self._call("GET", q)
 
+    def sla_alerts(self) -> dict:
+        return self._call("GET", "/api/feedback/sla-alerts")
+
+    def sla_alerts_ack(self, ids: list) -> dict:
+        return self._call("POST", "/api/feedback/sla-alerts/ack", {"ids": list(ids)})
+
     def upload(self, rows: list, by: str = "") -> dict:
         total = {"rows": 0, "inserted": 0, "updated": 0, "unchanged": 0, "duplicates": 0,
                  "analysed_by": set(), "unmatched": set(), "new_items": []}
@@ -310,6 +316,31 @@ class DbSink:
             out = compute_daily_report(con, date or thai_today(), branch)
             con.commit()
             return out
+        finally:
+            con.close()
+
+    def sla_alerts(self) -> dict:
+        today = self.fb._thai_today()
+        con = self._con()
+        try:
+            rows = [dict(r) for r in con.execute(
+                "SELECT id, branch_name, source, rated_at, rating, text, sentiment, external_id, url, kind, "
+                "reply_text, reply_status, contact, severity, severity_note FROM customer_feedback WHERE sla_alerted_at IS NULL")]
+            items = [{"id": r["id"], "branch": r["branch_name"], "source": r["source"], "rating": r["rating"],
+                     "text": (r["text"] or "")[:200], "url": r.get("url") or "", "age_days": self.fb._age_days(r["rated_at"], today),
+                     "severity": r.get("severity") or "low", "severity_note": r.get("severity_note") or ""}
+                     for r in rows if self.fb._sla_breached(r, today)]
+            return {"items": items, "today": today}
+        finally:
+            con.close()
+
+    def sla_alerts_ack(self, ids: list) -> dict:
+        con = self._con()
+        try:
+            now = self.fb._thai_now()
+            con.executemany("UPDATE customer_feedback SET sla_alerted_at=? WHERE id=?", [(now, i) for i in ids])
+            con.commit()
+            return {"acked": len(ids)}
         finally:
             con.close()
 
@@ -511,6 +542,36 @@ def _digest_step(args, sink, notifier, log, force: bool = False, cfg: dict = Non
         return False
 
 
+def _sla_alert_step(args, sink, notifier, log, cfg: dict = None, notifier_to=None):
+    """Cases that just crossed the SLA get an immediate ping — same spirit as
+    the new-negatives alert in run(), but keyed off age rather than "fetched
+    this run" (a case can sit unanswered for days before it actually breaches,
+    long after the run that fetched it). Each case pings once (ack marks
+    sla_alerted_at). Its own --no-sla-alert flag, separate from --no-alert:
+    a run can want the new-negatives alert without the (potentially noisier,
+    backlog-clearing) SLA alert, or vice versa."""
+    if getattr(args, "dry_run", False) or not notifier or getattr(args, "no_sla_alert", False):
+        return False
+    try:
+        items = (sink.sla_alerts() or {}).get("items") or []
+        if not items:
+            return False
+        sent = notifier(notify.sla_alert_digest(items, getattr(args, "api", "") or ""))
+        log(f"  sla alert: {len(items)} case(s) → telegram {'sent' if sent else 'not configured'}")
+        if not sent:
+            return False          # unconfigured: leave un-acked so the next run tries again
+        if notifier_to:
+            for bname, chat in _branch_chats(cfg).items():
+                mine = [it for it in items if (it.get("branch") or "") == bname]
+                if mine and notifier_to(notify.sla_alert_digest(mine, getattr(args, "api", "") or ""), chat):
+                    log(f"  sla alert → {bname}: {len(mine)} case(s)")
+        sink.sla_alerts_ack([it["id"] for it in items])
+        return True
+    except Exception as e:
+        log(f"  ✗ sla alert: {e}")
+        return False
+
+
 def _yesterday() -> str:
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=7) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
@@ -680,6 +741,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print, notif
             _branch_alerts(neg, cfg, label, args.api, notifier_to, log)
     _replies_step(args, cfg, sink, http, log)
     _places_step(args, cfg, sink, http, log)
+    _sla_alert_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     _digest_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     _daily_report_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     return 1 if failures else 0
@@ -847,6 +909,7 @@ def main(argv=None) -> int:
     r.add_argument("--db", default=None, help="write into this local SQLite file instead of the live app")
     r.add_argument("--token", default=None); r.add_argument("--user", default=None); r.add_argument("--password", default=None)
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--no-alert", action="store_true")
+    r.add_argument("--no-sla-alert", action="store_true", help="skip the immediate SLA-breach alert after this run")
     r.add_argument("--digest", action="store_true", help="send the weekly digest after this run (else Mondays only)")
     r.add_argument("--no-daily-report", action="store_true", help="skip the daily report push after this run (else every run, for yesterday)")
     r.add_argument("--places", action="store_true", help="capture the competitor snapshot now (else once a month)")
@@ -873,6 +936,9 @@ def main(argv=None) -> int:
     dr.add_argument("--token", default=None); dr.add_argument("--user", default=None); dr.add_argument("--password", default=None)
     dr.add_argument("--date", default=None, help="YYYY-MM-DD (default: yesterday, Thai clock)")
     dr.add_argument("--branch", default=None)
+    sa = sub.add_parser("sla-alert", help="send the SLA-breach alert to Telegram now (and ack the pushed cases)"); common(sa)
+    sa.add_argument("--api", default=DEFAULT_API); sa.add_argument("--db", default=None)
+    sa.add_argument("--token", default=None); sa.add_argument("--user", default=None); sa.add_argument("--password", default=None)
     pl = sub.add_parser("places", help="capture the competitors around every branch now (Google Places)"); common(pl)
     pl.add_argument("--api", default=DEFAULT_API); pl.add_argument("--db", default=None)
     pl.add_argument("--token", default=None); pl.add_argument("--user", default=None); pl.add_argument("--password", default=None)
@@ -934,6 +1000,18 @@ def main(argv=None) -> int:
         ok = notify.send_telegram(text)
         print(text)
         print("telegram:", "sent" if ok else "not configured (OSHINEI_TG_TOKEN / OSHINEI_TG_CHAT_ID)")
+        return 0
+    if args.cmd == "sla-alert":
+        items = (sink.sla_alerts() or {}).get("items") or []
+        if not items:
+            print("no case has just crossed the SLA")
+            return 0
+        text = notify.sla_alert_digest(items, args.api)
+        ok = notify.send_telegram(text)
+        print(text)
+        print("telegram:", "sent" if ok else "not configured (OSHINEI_TG_TOKEN / OSHINEI_TG_CHAT_ID)")
+        if ok:
+            sink.sla_alerts_ack([it["id"] for it in items])
         return 0
     if args.cmd == "places":
         ok = _places_step(args, cfg, sink, urllib_http, print, force=True)

@@ -355,10 +355,12 @@ def _seed_db(path):
 
 
 def _args(**kw):
-    # no_daily_report=True by default: _daily_report_step sends on every run (not just
-    # a weekday like the weekly digest), so a test that isn't specifically exercising it
-    # opts out here — same reason _weekday is pinned below for the weekly digest.
-    base = dict(source="all", since="auto", dry_run=False, no_alert=False, no_daily_report=True, api="https://app")
+    # no_daily_report / no_sla_alert default True: both fire on every run (not gated
+    # to a weekday like the weekly digest, and not gated to "fetched this run" like the
+    # new-negatives alert), so a test that isn't specifically exercising one opts out
+    # here — same reason _weekday is pinned below for the weekly digest.
+    base = dict(source="all", since="auto", dry_run=False, no_alert=False, no_daily_report=True,
+               no_sla_alert=True, api="https://app")
     base.update(kw)
     return SimpleNamespace(**base)
 

@@ -385,9 +385,11 @@ def _build_print_html(data: dict) -> str:
         items = data["chronic_branches"]
         if not items:
             return f'<p class="empty">ไม่มีสาขาที่ปัญหาเดิมวนซ้ำใน {CHRONIC_LOOKBACK} ช่วงล่าสุด</p>'
-        rows = "".join(f'<tr><td>{_esc(it["branch"] or "-")}</td><td>{_esc(it["theme"])}</td><td>{it["periods"]}/{it["of_periods"]} ช่วง</td></tr>'
+        claimed = {(it["branch"] or "", it["theme"] or "") for it in data["open_issues"]}
+        rows = "".join(f'<tr><td>{_esc(it["branch"] or "-")}</td><td>{_esc(it["theme"])}</td><td>{it["periods"]}/{it["of_periods"]} ช่วง</td>'
+                       f'<td>{"🔧 มีงานอยู่แล้ว" if (it["branch"] or "", it["theme"] or "") in claimed else "🆕 ยังไม่มีงาน"}</td></tr>'
                        for it in items[:15])
-        return f'<table><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th></tr></thead><tbody>{rows}</tbody></table>'
+        return f'<table><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th><th>สถานะ</th></tr></thead><tbody>{rows}</tbody></table>'
 
     def branch_table():
         if data["branch"] or not data["branches"]:
@@ -531,9 +533,11 @@ def _build_xlsx(data: dict):
     autofit(ws)
 
     ws = wb.create_sheet("ปัญหาซ้ำซาก")
-    header(ws, ["สาขา", "หัวข้อ", "ความถี่"])
+    header(ws, ["สาขา", "หัวข้อ", "ความถี่", "สถานะ"])
+    claimed = {(it["branch"] or "", it["theme"] or "") for it in data["open_issues"]}
     for it in data["chronic_branches"]:
-        ws.append([it["branch"] or "-", it["theme"], f'{it["periods"]}/{it["of_periods"]} ช่วง'])
+        status = "มีงานอยู่แล้ว" if (it["branch"] or "", it["theme"] or "") in claimed else "ยังไม่มีงาน"
+        ws.append([it["branch"] or "-", it["theme"], f'{it["periods"]}/{it["of_periods"]} ช่วง', status])
     autofit(ws)
 
     if not data["branch"] and data["branches"]:

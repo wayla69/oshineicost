@@ -19,6 +19,8 @@ tabs cannot see from POS data: what guests say about the dishes and the branch.
   DELETE /api/feedback/{id}/reply         cancel a queued reply
   GET    /api/feedback/reply-queue        what the fetcher must send (status=pending|failed|manual|sent)
   POST   /api/feedback/reply-result       the fetcher reports sent / failed
+  GET    /api/feedback/sla-alerts         cases that just crossed the SLA, not yet pushed (the fetcher's immediate alert)
+  POST   /api/feedback/sla-alerts/ack     the fetcher marks the ids it just alerted, so they don't re-fire
   DELETE /api/feedback/{id}
 RBAC module customer.feedback (auth.py); writes need the write token like every
 upload. The tables are carried across the daily DB push (core._PRESERVED_EXACT /
@@ -106,7 +108,10 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                ("severity", "TEXT"), ("severity_note", "TEXT"), ("staff", "TEXT"),
                # a staff member called the guest back about this voice — who, and when (independent of
                # flag/reply; a QR contact can be "called back" without a written reply, or vice versa)
-               ("contacted_at", "TEXT"), ("contacted_by", "TEXT"))
+               ("contacted_at", "TEXT"), ("contacted_by", "TEXT"),
+               # set the first time this row is pushed as an SLA-breach alert, so the fetcher pings
+               # once per case (not once per run for every day it stays unanswered)
+               ("sla_alerted_at", "TEXT"))
 SLA_DAYS = 1                # a negative voice waits at most this long for the branch's answer
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 KINDS = ("review", "comment", "mention", "message", "survey")   # message = a private inbox conversation (Messenger / IG DM), per day; survey = the QR form (routers/survey.py)
@@ -784,6 +789,45 @@ async def feedback_contacted(fid: int, request: Request):
                     (_thai_now() if on else None, by or None if on else None, _thai_now(), fid))
         con.commit()
     return {"id": fid, "contacted": on}
+
+
+@router.get("/api/feedback/sla-alerts")
+def feedback_sla_alerts(request: Request):
+    """Cases that have just crossed the SLA (_sla_breached) and have not been
+    pushed yet — the fetcher's immediate ping, on top of the daily/weekly
+    reports, so a branch that goes quiet is flagged the same run it breaches,
+    not the next time someone reads a report. Ack (below) once pushed."""
+    today = _thai_today()
+    branch = _scope(request)
+    with get_db() as con:
+        _ensure(con)
+        w, p = ["sla_alerted_at IS NULL"], []
+        if branch:
+            w.append("branch_name = ?"); p.append(branch)
+        rows = [dict(r) for r in con.execute(
+            f"SELECT id, branch_name, source, rated_at, rating, text, sentiment, external_id, url, kind, "
+            f"reply_text, reply_status, contact, severity, severity_note FROM customer_feedback WHERE {' AND '.join(w)}", p)]
+    items = [{"id": r["id"], "branch": r["branch_name"], "source": r["source"], "rating": r["rating"],
+             "text": (r["text"] or "")[:200], "url": r.get("url") or "", "age_days": _age_days(r["rated_at"], today),
+             "severity": r.get("severity") or "low", "severity_note": r.get("severity_note") or ""}
+             for r in rows if _sla_breached(r, today)]
+    return {"items": items, "today": today}
+
+
+@router.post("/api/feedback/sla-alerts/ack", dependencies=[Depends(require_write_token)])
+async def feedback_sla_alerts_ack(request: Request):
+    """The fetcher marks the ids it just pushed — sla_alerted_at stamps once
+    so the same breach never re-fires on a later run."""
+    b = await request.json()
+    ids = [int(i) for i in (b.get("ids") or []) if str(i).lstrip("-").isdigit()]
+    if not ids:
+        return {"acked": 0}
+    with get_db() as con:
+        _ensure(con)
+        now = _thai_now()
+        con.executemany("UPDATE customer_feedback SET sla_alerted_at=? WHERE id=?", [(now, i) for i in ids])
+        con.commit()
+    return {"acked": len(ids)}
 
 
 @router.get("/api/feedback/sources")

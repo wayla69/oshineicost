@@ -168,6 +168,27 @@ def test_contacted_toggle_is_independent_of_flag_and_reply(client):
     assert client.post("/api/feedback/999999/contacted", json={"contacted": True}).status_code == 404
 
 
+def test_sla_alerts_lists_new_breaches_and_ack_stops_repeats(client):
+    """A case that has waited past SLA_DAYS shows up once; acking it (the
+    fetcher's job after it pushes the Telegram alert) removes it for good —
+    it must not re-alert every day it keeps waiting for an answer."""
+    old = client.post("/api/feedback/upload", json={"rows": [
+        {"text": "รอนานมาก", "branch": "BranchA", "rating": 1, "date": "2026-01-01", "external_id": "sla:1"}]}).json()
+    fid = old["new_items"][0]["id"]
+    fresh = client.post("/api/feedback/upload", json={"rows": [
+        {"text": "วันนี้แย่มาก", "branch": "BranchA", "rating": 1, "external_id": "sla:2"}]}).json()   # today: not yet breached
+    fresh_id = fresh["new_items"][0]["id"]
+    alerts = client.get("/api/feedback/sla-alerts").json()
+    ids = {it["id"] for it in alerts["items"]}
+    assert fid in ids and fresh_id not in ids
+    it = next(x for x in alerts["items"] if x["id"] == fid)
+    assert it["branch"] == "BranchA" and it["age_days"] > 1
+    assert client.post("/api/feedback/sla-alerts/ack", json={"ids": [fid]}).json() == {"acked": 1}
+    ids2 = {it["id"] for it in client.get("/api/feedback/sla-alerts").json()["items"]}
+    assert fid not in ids2                                            # acked → no longer surfaced
+    assert client.post("/api/feedback/sla-alerts/ack", json={"ids": []}).json() == {"acked": 0}
+
+
 def test_rbac_module_gates_the_feedback_endpoints(client, app_db, monkeypatch):
     import test_auth as TA
     monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret")
