@@ -31,6 +31,8 @@ def _clean(request):
     import core
     con = sqlite3.connect(str(core.DB_PATH))
     _wipe(con, "feedback_competitor")
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='app_settings'").fetchone():
+        con.execute("DELETE FROM app_settings WHERE key='feedback_places'")
     con.commit(); con.close()
 
 
@@ -102,6 +104,43 @@ def test_snapshot_endpoints_and_league(client, monkeypatch):
     assert one["month"] == "2026-07" and one["prev_month"] is None and len(one["branches"][0]["list"]) == 3
     assert one["branches"][0]["list"][0]["name"] == "ชาบูอิ่มดี" and one["branches"][0]["prev"] is None
     assert client.post("/api/feedback/competitors", json={"month": "2026-09", "rows": "x"}).status_code == 400
+
+
+def test_places_settings_default_validate_and_persist(client):
+    d = client.get("/api/feedback/competitors/settings").json()
+    assert d == {"radius_m": P.RADIUS_M, "keywords": list(P.DEFAULT_KEYWORDS),
+                 "radius_m_default": P.RADIUS_M, "keywords_default": list(P.DEFAULT_KEYWORDS)}
+    assert client.post("/api/feedback/competitors/settings", json={"radius_m": 100}).status_code == 400   # below 500
+    assert client.post("/api/feedback/competitors/settings", json={"keywords": []}).status_code == 400    # empty list
+    r = client.post("/api/feedback/competitors/settings", json={"radius_m": 5000, "keywords": ["ปิ้งย่าง", " หมูกระทะ "]})
+    assert r.json() == {"radius_m": 5000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"]}                              # trimmed
+    again = client.get("/api/feedback/competitors/settings").json()
+    assert again["radius_m"] == 5000 and again["keywords"] == ["ปิ้งย่าง", "หมูกระทะ"]
+    assert again["radius_m_default"] == P.RADIUS_M                                                        # the shipped default is unaffected
+    only_radius = client.post("/api/feedback/competitors/settings", json={"radius_m": 2000}).json()
+    assert only_radius == {"radius_m": 2000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"]}                          # partial update keeps the other field
+
+
+def test_fetcher_merges_the_settings_override_over_the_config_file(tmp_path, monkeypatch):
+    """radius_m/keywords saved through the app (Settings) win over .feedback_config.json's
+    "places" section — the api_key stays file-only since the override never sets it."""
+    db = tmp_path / "local.db"; _seed_db(db)
+    sink = FF.DbSink(db)
+    from routers.feedback_competitors import set_places_settings
+    con = sqlite3.connect(str(db))
+    set_places_settings(con, radius_m=6000, keywords=["ปิ้งย่าง"])
+    con.commit(); con.close()
+    cfg = {"places": {"api_key": "KEY", "keywords": ["ชาบู"], "radius_m": 3000, "only": ["ขอนแก่น"]}}
+    seen = {}
+
+    def fake_snapshot(pc, http, branches, log):
+        seen.update(pc)
+        return [], {"branches": [], "fetched": 0}
+
+    monkeypatch.setattr(FF, "_this_month", lambda: "2026-09")
+    monkeypatch.setattr(FF.places, "snapshot", fake_snapshot)
+    assert FF._places_step(_args(), cfg, sink, fake_http, print) is True
+    assert seen["radius_m"] == 6000 and seen["keywords"] == ["ปิ้งย่าง"] and seen["api_key"] == "KEY"
 
 
 def test_fetcher_captures_once_a_month(tmp_path, monkeypatch):

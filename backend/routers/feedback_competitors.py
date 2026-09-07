@@ -6,13 +6,19 @@ competitors' median and best, its rank, and the move since the last snapshot.
   POST /api/feedback/competitors          {month, rows: [...]} — the fetcher's snapshot (replaces the month)
   GET  /api/feedback/competitors?month=&branch=    the league per branch (+ the branch's list)
   GET  /api/feedback/competitors/status   the latest snapshot month (the fetcher asks before running)
-Table feedback_competitor — preserved across the DB push by the "feedback" prefix.
+  GET  /api/feedback/competitors/settings          the search radius + keywords in force
+  POST /api/feedback/competitors/settings          {radius_m?, keywords?} — Settings-editable, the
+                                                     fetcher's api_key stays in .feedback_config.json
+Table feedback_competitor — preserved across the DB push by the "feedback" prefix; the radius/keyword
+override lives in app_settings (also preserved) under key "feedback_places".
 """
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 
 from feedback_host import get_db, require_write_token, scope_branch
+from feedback_sources.places import DEFAULT_KEYWORDS, RADIUS_M
 from routers.feedback import _ensure as _ensure_feedback, _thai_now, _thai_today
 
 router = APIRouter()
@@ -45,6 +51,36 @@ def _ensure(con):
 def _median(xs):
     xs = sorted(xs)
     return xs[len(xs) // 2] if xs else None
+
+
+def get_places_settings(con) -> dict:
+    """{"radius_m": int, "keywords": [str,...]} overrides, or {} keys omitted
+    when unset — the connector (feedback_sources/places.py) falls back to its
+    own RADIUS_M/DEFAULT_KEYWORDS. The fetcher reads this through the sink
+    (ApiSink/DbSink.places_settings()) and merges it over .feedback_config.json's
+    "places" section, so the api_key stays file-only but radius/keywords are
+    Settings-editable without touching that file."""
+    con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
+    row = con.execute("SELECT value FROM app_settings WHERE key='feedback_places'").fetchone()
+    if not row or not row[0]:
+        return {}
+    try:
+        cur = json.loads(row[0])
+        return cur if isinstance(cur, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def set_places_settings(con, radius_m=None, keywords=None) -> dict:
+    cur = get_places_settings(con)
+    if radius_m is not None:
+        cur["radius_m"] = int(radius_m)
+    if keywords is not None:
+        cur["keywords"] = [str(k).strip() for k in keywords if str(k).strip()][:12]
+    con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
+    con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('feedback_places', ?)",
+               (json.dumps(cur, ensure_ascii=False),))
+    return cur
 
 
 def latest_month(con) -> Optional[str]:
@@ -129,6 +165,28 @@ def competitors_get(request: Request, month: Optional[str] = Query(None), branch
         return league(con, (month or "")[:7] or None, branch)
 
 
+@router.get("/api/feedback/competitors/settings")
+def competitors_settings_get():
+    with get_db() as con:
+        cur = get_places_settings(con)
+    return {"radius_m": cur.get("radius_m", RADIUS_M), "keywords": cur.get("keywords") or list(DEFAULT_KEYWORDS),
+            "radius_m_default": RADIUS_M, "keywords_default": list(DEFAULT_KEYWORDS)}
+
+
+@router.post("/api/feedback/competitors/settings", dependencies=[Depends(require_write_token)])
+async def competitors_settings_post(request: Request):
+    body = await request.json()
+    radius_m, keywords = body.get("radius_m"), body.get("keywords")
+    if radius_m is not None and not (500 <= int(radius_m) <= 10000):
+        raise HTTPException(400, "radius_m must be 500–10000")
+    if keywords is not None and (not isinstance(keywords, list) or not keywords):
+        raise HTTPException(400, "keywords must be a non-empty list")
+    with get_db() as con:
+        cur = set_places_settings(con, radius_m, keywords)
+        con.commit()
+    return {"radius_m": cur.get("radius_m", RADIUS_M), "keywords": cur.get("keywords") or list(DEFAULT_KEYWORDS)}
+
+
 @router.post("/api/feedback/competitors", dependencies=[Depends(require_write_token)])
 async def competitors_post(request: Request):
     body = await request.json()
@@ -142,4 +200,4 @@ async def competitors_post(request: Request):
     return {"month": month, "stored": n}
 
 
-__all__ = ["router", "league", "store_snapshot", "latest_month"]
+__all__ = ["router", "league", "store_snapshot", "latest_month", "get_places_settings", "set_places_settings"]

@@ -40,9 +40,20 @@ def _d(s):
     return datetime.date.fromisoformat(s[:10])
 
 
-def _window(month_from: Optional[str], month_to: Optional[str], today: str):
-    """[from, to] dates for the tab's month range (default: this month and the two before)."""
+def _window(month_from: Optional[str], month_to: Optional[str], today: str,
+            date_from: Optional[str] = None, date_to: Optional[str] = None):
+    """[from, to] dates for the tab's range. date_from/date_to (day precision, the
+    same params qp() sends for daily/weekly granularity — see js/01-core.js) take
+    priority when given, so the section can follow the global Day/Week picker or
+    a custom range; otherwise falls back to the month range (default: this month
+    and the two before)."""
     t = _d(today)
+    if date_from or date_to:
+        to = min(_d(date_to), t) if date_to else t
+        frm = _d(date_from) if date_from else to
+        if frm > to:
+            frm = to
+        return frm.isoformat(), to.isoformat()
     if month_to:
         y, m = int(month_to[:4]), int(month_to[5:7])
         last = (datetime.date(y + (m // 12), (m % 12) + 1, 1) - datetime.timedelta(days=1))
@@ -103,10 +114,10 @@ def _sales_by_dish(con, d_from: str, d_to: str, bids=None) -> dict:
     return out
 
 
-def compute_business(con, month_from=None, month_to=None, branch=None, today=None) -> dict:
+def compute_business(con, month_from=None, month_to=None, branch=None, today=None, date_from=None, date_to=None) -> dict:
     _ensure(con)
     today = today or _thai_today()
-    d_from, d_to = _window(month_from, month_to, today)
+    d_from, d_to = _window(month_from, month_to, today, date_from, date_to)
     p_from, p_to = _prev_window(d_from, d_to)
     key = (d_from, d_to, branch or "")
     hit = _CACHE.get(key)
@@ -117,7 +128,9 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
     bids = [ids[branch]] if branch and branch in ids else None
     if branch and branch not in ids:
         bids = [-1]
-    w, p = ["rated_at >= ?", "rated_at <= ?"], [d_from, d_to]
+    # exclusive upper bound (matches _daily()'s sold_at filter below) — rated_at can carry a
+    # time-of-day (fetched reviews/comments), so a plain "<= d_to" would drop d_to's own rows
+    w, p = ["rated_at >= ?", "rated_at < ?"], [d_from, (_d(d_to) + datetime.timedelta(days=1)).isoformat()]
     if branch:
         w.append("branch_name = ?"); p.append(branch)
     voices = [dict(r) for r in con.execute(f"SELECT {_ROW_COLS} FROM customer_feedback WHERE {' AND '.join(w)}", p)]
@@ -295,6 +308,7 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
 
 @router.get("/api/feedback/business")
 def feedback_business(request: Request, month_from: Optional[str] = Query(None), month_to: Optional[str] = Query(None),
+                      date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                       branch: Optional[str] = Query(None), today: Optional[str] = Query(None), fresh: int = Query(0)):
     scope = scope_branch(request)
     if scope:
@@ -302,4 +316,5 @@ def feedback_business(request: Request, month_from: Optional[str] = Query(None),
     if fresh:
         _CACHE.clear()
     with get_db() as con:
-        return compute_business(con, month_from, month_to, branch, today=(today or "")[:10] or None)
+        return compute_business(con, month_from, month_to, branch, today=(today or "")[:10] or None,
+                                date_from=(date_from or "")[:10] or None, date_to=(date_to or "")[:10] or None)

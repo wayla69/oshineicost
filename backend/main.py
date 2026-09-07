@@ -2161,6 +2161,11 @@ else:
     from routers.feedback_competitors import router as _feedback_competitors_router
 app.include_router(_feedback_competitors_router)
 if __package__:
+    from .routers.feedback_daily_report import router as _feedback_daily_report_router
+else:
+    from routers.feedback_daily_report import router as _feedback_daily_report_router
+app.include_router(_feedback_daily_report_router)
+if __package__:
     from .routers.buffet import router as _buffet_router
     from .routers.buffet import buffet_forecast  # noqa: F401  (/api/forecast facade)
 else:

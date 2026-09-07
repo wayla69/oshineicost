@@ -52,6 +52,8 @@ SMOKE = [
     ("/api/feedback/business", {"month_from": "2026-05", "month_to": "2026-06", "today": "2026-07-01"}),
     ("/api/feedback/competitors", {}),
     ("/api/feedback/competitors/status", {}),
+    ("/api/feedback/competitors/settings", {}),
+    ("/api/feedback/daily-report", {"date": "2026-07-01"}),
     ("/api/checklist/feedback_rollout", {}),
     ("/api/checklist/feedback_marketing_prep", {}),
     # ── management summary report (daily & weekly) ──

@@ -54,6 +54,13 @@ def test_windows():
     assert B._window(None, None, "2026-09-05") == ("2026-07-01", "2026-09-05")
     assert B._window("2026-09", "2026-09", "2026-09-05") == ("2026-09-01", "2026-09-05")
     assert B._prev_window("2026-05-01", "2026-06-30") == ("2026-03-01", "2026-04-30")
+    # date_from/date_to (day precision — the app's global Day/Week picker, see qp() in js/01-core.js)
+    # take priority over month_from/month_to, and support a single day or a custom range
+    assert B._window(None, None, TODAY, date_from="2026-06-15", date_to="2026-06-15") == ("2026-06-15", "2026-06-15")
+    assert B._window(None, None, TODAY, date_from="2026-06-10", date_to="2026-06-20") == ("2026-06-10", "2026-06-20")
+    assert B._window("2026-05", "2026-06", TODAY, date_from="2026-06-15", date_to="2026-06-15") == ("2026-06-15", "2026-06-15")
+    assert B._window(None, None, TODAY, date_to="2026-06-15") == ("2026-06-15", "2026-06-15")           # date_to alone: that one day
+    assert B._window(None, None, "2026-06-10", date_from="2026-06-15") == ("2026-06-10", "2026-06-10")  # can't run past "today"
 
 
 def test_voices_against_the_till(client):
@@ -100,6 +107,25 @@ def test_voices_against_the_till(client):
     assert jb["voices"] == 2 and [b["branch"] for b in jb["branches"]] == ["BranchB"] and jb["menus"][0]["menu"] == "แซลมอน"
     assert client.get("/api/feedback/business", params={"month_from": "2026-06", "month_to": "2026-06", "branch": "BranchB", "today": TODAY}).json() == jb
     assert client.get("/api/feedback/business", params={"month_from": "2026-06", "month_to": "2026-06", "branch": "Nowhere", "today": TODAY, "fresh": 1}).json()["voices"] == 0
+
+
+def test_date_range_is_day_precise_and_includes_a_timestamped_last_day(client):
+    """A fetched review (Google/Facebook/…) can carry a time-of-day in rated_at,
+    unlike a manually-uploaded one (normalise_row truncates to a bare date) — the
+    window must still include it on date_to, and a single day (date_from==date_to)
+    must resolve to exactly that day, not the whole enclosing month."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    con.execute("INSERT INTO customer_feedback(branch_id, branch_name, source, rated_at, rating, text, sentiment, external_id) "
+               "VALUES (1, 'BranchA', 'Google', '2026-06-15 21:47:00', 4, 'ok', 'pos', 'e2:ts:1')")
+    con.commit(); con.close()
+    j = client.get("/api/feedback/business", params={"date_from": "2026-06-15", "date_to": "2026-06-15", "today": TODAY}).json()
+    assert j["range"] == ["2026-06-15", "2026-06-15"] and j["voices"] == 1
+    # a day outside the row's date sees nothing, and date_from/date_to beats month_from/month_to when both are given
+    assert client.get("/api/feedback/business", params={"date_from": "2026-06-16", "date_to": "2026-06-16", "today": TODAY}).json()["voices"] == 0
+    j2 = client.get("/api/feedback/business", params={"month_from": "2026-05", "month_to": "2026-06",
+                                                       "date_from": "2026-06-15", "date_to": "2026-06-15", "today": TODAY}).json()
+    assert j2["range"] == ["2026-06-15", "2026-06-15"] and j2["voices"] == 1
 
 
 def test_empty_window_reads_cleanly(client):

@@ -194,6 +194,9 @@ class ApiSink:
     def competitors_month(self):
         return (self._call("GET", "/api/feedback/competitors/status") or {}).get("latest_month")
 
+    def places_settings(self) -> dict:
+        return self._call("GET", "/api/feedback/competitors/settings")
+
     def competitors_post(self, month: str, rows: list) -> dict:
         return self._call("POST", "/api/feedback/competitors", {"month": month, "rows": rows})
 
@@ -259,6 +262,14 @@ class DbSink:
         con = self._con()
         try:
             return latest_month(con)
+        finally:
+            con.close()
+
+    def places_settings(self) -> dict:
+        from routers.feedback_competitors import get_places_settings
+        con = self._con()
+        try:
+            return get_places_settings(con)
         finally:
             con.close()
 
@@ -484,9 +495,13 @@ def _places_step(args, cfg, sink, http, log, force: bool = False) -> bool:
     """Once a month (the first run that finds no snapshot for this month, or
     --places / the `places` command) the competitors around every branch are
     captured from Google Places into feedback_competitor."""
-    pc = (cfg or {}).get("places") or {}
+    pc = dict((cfg or {}).get("places") or {})
     if not pc.get("api_key") or getattr(args, "dry_run", False):
         return False
+    try:                                        # radius_m/keywords set from the app (Settings) override the file
+        pc.update({k: v for k, v in (sink.places_settings() or {}).items() if v})
+    except Exception as e:
+        log(f"  places: could not read the Settings override, using .feedback_config.json as-is ({e})")
     month = _this_month()
     if not (force or getattr(args, "places", False)):
         try:

@@ -55,6 +55,18 @@
     </div>
   </div>
 
+  <div class="card p-4 mt-4" id="fbDrCard">
+    <div class="flex items-center justify-between flex-wrap gap-2">
+      <h3 class="text-sm font-semibold">📰 รายงานประจำวัน <span class="text-[11px] font-normal" style="color:var(--text-muted)">— สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตามวันนี้ · เสียงชมที่หยิบไปใช้ได้ · หัวข้อ/เมนูที่ถูกพูดถึง</span></h3>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input type="date" id="fbDrDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+        <button class="fb-btn" onclick="loadDailyReport()">สร้างรายงาน</button>
+        <a class="fb-ghost" id="fbDrPrint" href="#" target="_blank" rel="noopener" style="display:none">🖨 พิมพ์ ↗</a>
+      </div>
+    </div>
+    <div id="fbDailyReport" class="mt-3 text-sm"><p class="text-xs" style="color:var(--text-muted)">เลือกวันที่แล้วกด "สร้างรายงาน" — ค่าเริ่มต้นคือวันนี้</p></div>
+  </div>
+
   <div id="fbEmpty" class="card p-4 mt-4" style="display:none"></div>
 
   <div id="fbKpis" class="fb-kpis mt-4"></div>
@@ -113,7 +125,8 @@
   </div>
 
   <details class="card p-4 mt-4" id="fbComp" ontoggle="if(this.open) loadFeedbackCompetitors()">
-    <summary class="text-sm font-semibold cursor-pointer">🏁 เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span></summary>
+    <summary class="text-sm font-semibold cursor-pointer">🏁 เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span> <a href="#" class="fb-ghost" style="font-size:10px;padding:0 .4rem" onclick="event.preventDefault();event.stopPropagation();toggleCompSettings()">⚙ ตั้งค่า</a></summary>
+    <div id="fbCompSettings" class="mt-2 text-xs" style="display:none;border:1px solid var(--border);border-radius:8px;padding:.7rem;background:var(--bg-input)"></div>
     <div id="fbCompBody" class="mt-2 text-xs"></div>
   </details>
 
