@@ -130,3 +130,38 @@ def test_reconcile_skips_history_tables_the_db_does_not_have_yet(tmp_path, monke
     sq = sqlite3.connect(str(inc)); sq.row_factory = sqlite3.Row
     assert sync.reconcile(sq) is True
     sq.close()
+
+
+# ── console output must stream line by line (the "10:00 sync hangs" bug) ─────
+# Under Task Scheduler the console is cp1252, so ingest_easy's UTF-8 guard used
+# to replace sys.stdout with a fresh, block-buffered TextIOWrapper; `python -u`
+# was silently undone and the sync printed nothing for 20-50 minutes.
+
+def _cp1252_console():
+    """A stand-in for the scheduler's console: non-UTF-8, unbuffered (-u)."""
+    import io
+    raw = io.BytesIO()
+    return raw, io.TextIOWrapper(raw, encoding="cp1252", write_through=True)
+
+
+def test_ingest_easy_import_keeps_stdout_streaming(monkeypatch):
+    import importlib
+    import ingest_easy
+    raw, console = _cp1252_console()
+    monkeypatch.setattr(sys, "stdout", console)
+    importlib.reload(ingest_easy)
+    out = sys.stdout
+    assert out.encoding.lower() == "utf-8"          # Thai still prints
+    print("progress → line", file=out)              # no flush=True on purpose
+    assert "progress".encode() in raw.getvalue(), "print() must reach the console at once"
+
+
+def test_unbuffer_console_makes_a_block_buffered_stdout_line_buffered(monkeypatch):
+    import io
+    raw = io.BytesIO()
+    monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="utf-8"))
+    print("held back", file=sys.stdout)
+    assert raw.getvalue() == b""                    # the trap: nothing reaches the pipe
+    sync._unbuffer_console()
+    print("now visible", file=sys.stdout)
+    assert b"held back" in raw.getvalue() and b"now visible" in raw.getvalue()

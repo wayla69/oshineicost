@@ -70,6 +70,25 @@ from rules import raw_unit_cost_sql, tier_code_sql  # noqa: E402
 from rules import is_tier_code  # noqa: E402,F401  the one package predicate, shared with the app
 
 
+def _unbuffer_console():
+    """Make every progress line reach the console/log the moment it is printed.
+
+    The scheduler bats run `python -u`, but an import above (ingest_easy, via
+    reingest_raw_2026) used to swap sys.stdout for a fresh TextIOWrapper on a
+    non-UTF-8 console — and a fresh wrapper is block-buffered, so the whole
+    sync stayed silent until it exited. The task window then looked hung and
+    got closed mid-run (0xC000013A), which is what "the 10:00 sync always
+    hangs" was. Line-buffering is idempotent and cheap: one flush per line."""
+    for _s in (sys.stdout, sys.stderr):
+        try:
+            _s.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
+
+
+_unbuffer_console()
+
+
 def refresh_sku_effective_cost(sq):
     """(Re)build sku_effective_cost in the staged DB — MIRROR of
     main._build_sku_effective_cost: same COALESCE chain AND the same tier-code
