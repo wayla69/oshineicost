@@ -17,6 +17,12 @@ const _FB_KIND_LABEL = { review: 'รีวิว', comment: 'คอมเมน
 let _fbKind = '', _fbBranchLocal = '', _fbQueueFilter = 'open', _fbTheme = '', _fbSummary = null, _fbBranchSort = 'neg_pct', _fbItemFilter = {};
 
 function _fbEsc(s) { return String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+/* survey.contact is a guest's phone OR LINE id (backend/routers/feedback.py) — link only what's dialable */
+function _fbContactHtml(c) {
+  const digits = String(c || '').replace(/[\s\-().]/g, '');
+  const tel = /^\+?\d{8,15}$/.test(digits) ? 'tel:' + digits : null;
+  return tel ? `<a href="${tel}" style="color:inherit;text-decoration:underline" onclick="event.stopPropagation()" title="โทรออก">${_fbEsc(c)}</a>` : _fbEsc(c);
+}
 function _fbSentChip(s) {
   const m = { pos: ['😊 บวก', '#047857', '#ecfdf5'], neg: ['😟 ลบ', '#b91c1c', '#fef2f2'], neu: ['😐 กลาง', '#6b7280', '#f3f4f6'] }[s] || ['—', '#6b7280', '#f3f4f6'];
   return `<span class="text-[11px] px-2 py-0.5 rounded-full" style="color:${m[1]};background:${m[2]}">${m[0]}</span>`;
@@ -220,7 +226,7 @@ async function loadFeedbackQueue() {
   if (!items.length) { host.innerHTML = `<p class="text-xs py-3" style="color:var(--text-muted)">${{ open: 'ไม่มีรายการรอตอบ 🎉', sla: 'ไม่มีรายการเกิน SLA', flag: 'ไม่มีรายการปักหมุด', neg: 'ไม่มีเสียงลบในช่วงนี้' }[_fbQueueFilter]}</p>`; return; }
   host.innerHTML = items.map(r => `<div class="fb-queue-item${r.flag ? ' hot' : ''}" id="fbq-${r.id}">
       <div>
-        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.severity === 'high' ? `<span class="fb-tag flag" style="background:#7f1d1d;color:#fff" title="ตรวจพบเรื่องร้ายแรง">🔥 ${_fbEsc(r.severity_note || 'ร้ายแรง')}</span>` : ''}${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${(r.staff || []).length ? `<span class="fb-tag" title="พนักงานที่ถูกพูดถึง">👥 ${_fbEsc(r.staff.join(', '))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}${r.contact ? `<span class="fb-tag flag" title="ลูกค้าฝากช่องทางติดต่อกลับ">📞 ${_fbEsc(r.contact)}</span>` : ''}</div>
+        <div class="meta"><span class="fb-src">${_fbEsc(r.source || '')}</span><b style="color:var(--text-primary)">${_fbEsc(r.branch_name || '(ไม่ระบุสาขา)')}</b>${r.rating != null ? `<span>${'★'.repeat(Math.round(r.rating))}<span style="opacity:.35">${'★'.repeat(5 - Math.round(r.rating))}</span></span>` : ''}<span>${_FB_KIND_LABEL[r.kind] || r.kind}</span><span class="fb-age${r.sla_breached ? ' late' : ''}">${r.age_days == null ? '' : r.age_days === 0 ? 'วันนี้' : r.age_days + ' วัน'}${r.sla_breached ? ' · เกิน SLA' : ''}</span>${r.severity === 'high' ? `<span class="fb-tag flag" style="background:#7f1d1d;color:#fff" title="ตรวจพบเรื่องร้ายแรง">🔥 ${_fbEsc(r.severity_note || 'ร้ายแรง')}</span>` : ''}${r.flag ? `<span class="fb-tag flag" title="${_fbEsc(r.flag_note || '')}">🚩 ${_fbEsc((r.flag_note || 'ปักหมุด').slice(0, 40))}</span>` : ''}${(r.staff || []).length ? `<span class="fb-tag" title="พนักงานที่ถูกพูดถึง">👥 ${_fbEsc(r.staff.join(', '))}</span>` : ''}${r.location ? `<span>${_fbEsc(r.location.slice(0, 40))}</span>` : ''}${r.contact ? `<span class="fb-tag flag" title="ลูกค้าฝากช่องทางติดต่อกลับ">📞 ${_fbContactHtml(r.contact)}</span>` : ''}</div>
         <div class="txt">${r.text ? _fbEsc(r.text) : '<i style="color:var(--text-muted)">(ให้ดาวอย่างเดียว)</i>'}</div>
         <div class="mt-1">${(r.themes || []).map(t => `<span class="fb-tag neg">${_fbEsc(t)}</span> `).join('')}${(r.menus || []).map(m => `<span class="fb-tag menu">${_fbEsc(m)}</span> `).join('')}${r.reply_text ? `<div class="text-[11px] mt-0.5" style="color:#047857">↳ ${_fbEsc(r.reply_text.slice(0, 120))}</div>` : ''}</div>
       </div>
