@@ -628,14 +628,34 @@ async function saveCompSettings() {
 
 /* ── daily report (marketing): one calendar day, rendered in-app + a print edition ── */
 function _fbDrStar(v) { return v != null ? ` · ${v}★` : ''; }
+async function _fbDrFillBranches() {
+  const sel = document.getElementById('fbDrBranch');
+  if (!sel || sel.dataset.loaded) return;
+  try {
+    const bs = await api(`${API}/api/branches`);
+    (bs || []).filter(b => b.active !== false).forEach(b => { const o = document.createElement('option'); o.value = b.name; o.textContent = b.name; sel.appendChild(o); });
+    sel.dataset.loaded = '1';
+  } catch (e) {}
+}
+/* items grouped by branch (descending count) — the ทุกสาขา view groups the negative/positive
+   lists per branch instead of one blended list; a single-branch view returns [[branch, items]] */
+function _fbDrGroupByBranch(items) {
+  if (!items.length) return [];
+  const groups = {};
+  items.forEach(it => { const b = it.branch || '(ไม่ระบุสาขา)'; (groups[b] = groups[b] || []).push(it); });
+  return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
+}
 async function loadDailyReport() {
   const host = document.getElementById('fbDailyReport'), printLink = document.getElementById('fbDrPrint');
   const dateEl = document.getElementById('fbDrDate');
   if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
   const date = dateEl.value;
+  await _fbDrFillBranches();
+  const branchSel = document.getElementById('fbDrBranch');
+  if (branchSel && !branchSel.dataset.touched) branchSel.value = _fbBranchLocal || getBranch() || '';
   host.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังสร้างรายงาน…</span>';
   const p = new URLSearchParams({ date });
-  const b = _fbBranchLocal || getBranch(); if (b) p.set('branch', b);
+  const b = branchSel ? branchSel.value : (_fbBranchLocal || getBranch()); if (b) p.set('branch', b);
   let d; try { d = await api(`${API}/api/feedback/daily-report?${p}`); } catch (e) { host.innerHTML = 'สร้างรายงานไม่สำเร็จ: ' + _fbEsc(e.message); return; }
   printLink.href = `${API}/api/feedback/daily-report.print?${p}`;
   printLink.style.display = '';
@@ -646,14 +666,24 @@ async function loadDailyReport() {
     kpi('เกิน SLA', d.sla_breached, d.sla_breached ? '#b91c1c' : '') + kpi('ร้ายแรง', d.severe, d.severe ? '#b91c1c' : '');
   const pw = d.prev_week_same_day;
   const cmp = pw.total ? ` · เทียบวันเดียวกันสัปดาห์ก่อน (${pw.date}): ${pw.total} เสียง` : '';
-  const negItems = (d.recent_negative || []).length ? d.recent_negative.map(it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">“${_fbEsc(it.text)}”${it.severity === 'high' ? ' <span class="fb-tag flag">🔥 ร้ายแรง</span>' : ''}<div class="m">${_fbEsc(it.branch || '-')} · ${_fbEsc(it.source || '')}${_fbDrStar(it.rating)} · ${it.replied ? 'ตอบแล้ว' : it.sla_breached ? 'เกิน SLA' : 'รอตอบ'}${it.contact ? ` · 📞 ${_fbContactHtml(it.contact)}` : ''}</div></div>`).join('') :
-    '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเชิงลบที่ต้องติดตามวันนี้ 🎉</p>';
-  const posQuotes = (d.recent_positive || []).length ? d.recent_positive.map(q => `<div class="fb-quote">“${_fbEsc(q.text)}”<div class="m">— ${_fbEsc(q.branch || '-')} · ${_fbEsc(q.source || '')}${_fbDrStar(q.rating)}</div></div>`).join('') :
-    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมที่หยิบไปใช้ได้วันนี้</p>';
-  const themeRows = (d.themes || []).length ? `<table class="fb-t"><thead><tr><th>หัวข้อ</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">ลบ</th></tr></thead><tbody>${d.themes.slice(0, 8).map(t => `<tr><td>${_fbEsc(t.theme)}</td><td style="text-align:right">${t.n}</td><td style="text-align:right;color:#b91c1c">${t.neg}</td></tr>`).join('')}</tbody></table>` :
+  const negCard = it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">“${_fbEsc(it.text)}”${it.severity === 'high' ? ' <span class="fb-tag flag">🔥 ร้ายแรง</span>' : ''}<div class="m">${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}${_fbEsc(it.source || '')}${_fbDrStar(it.rating)} · ${it.replied ? 'ตอบแล้ว' : it.sla_breached ? 'เกิน SLA' : 'รอตอบ'}${it.contact ? ` · 📞 ${_fbContactHtml(it.contact)}` : ''}</div></div>`;
+  const posCard = q => `<div class="fb-quote">“${_fbEsc(q.text)}”<div class="m">— ${d.branch ? '' : _fbEsc(q.branch || '-') + ' · '}${_fbEsc(q.source || '')}${_fbDrStar(q.rating)}</div></div>`;
+  const grouped = (items, card) => d.branch ? items.map(card).join('') :
+    _fbDrGroupByBranch(items).map(([br, its]) => `<div class="text-xs font-semibold mt-2" style="color:#0f766e">🏪 ${_fbEsc(br)} (${its.length})</div>${its.map(card).join('')}`).join('');
+  const negItems = (d.recent_negative || []).length ? grouped(d.recent_negative, negCard) : '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเชิงลบที่ต้องติดตามวันนี้ 🎉</p>';
+  const posQuotes = (d.recent_positive || []).length ? grouped(d.recent_positive, posCard) : '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมที่หยิบไปใช้ได้วันนี้</p>';
+  const themeRows = (d.themes || []).length ? `<table class="fb-t"><thead><tr><th>หัวข้อ</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">ลบ</th><th>สาขา</th><th>ตัวอย่าง</th></tr></thead><tbody>${d.themes.slice(0, 12).map(t => `<tr><td>${_fbEsc(t.theme)}</td><td style="text-align:right">${t.n}</td><td style="text-align:right;color:#b91c1c">${t.neg}</td><td class="text-[11px]" style="color:var(--text-muted)">${(t.branches || []).map(_fbEsc).join(', ')}</td><td class="text-[11px] italic" style="color:var(--text-muted)">${(t.examples || [])[0] ? '“' + _fbEsc(t.examples[0].text) + '”' : ''}</td></tr>`).join('')}</tbody></table>` :
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีหัวข้อที่ถูกพูดถึงวันนี้</p>';
-  const menuRows = (d.menus || []).length ? `<table class="fb-t"><thead><tr><th>เมนู</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">บวก</th><th style="text-align:right">ลบ</th></tr></thead><tbody>${d.menus.slice(0, 8).map(m => `<tr><td>${_fbEsc(m.menu)}</td><td style="text-align:right">${m.n}</td><td style="text-align:right;color:#047857">${m.pos}</td><td style="text-align:right;color:#b91c1c">${m.neg}</td></tr>`).join('')}</tbody></table>` :
+  const menuRows = (d.menus || []).length ? `<table class="fb-t"><thead><tr><th>เมนู</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">บวก</th><th style="text-align:right">ลบ</th></tr></thead><tbody>${d.menus.slice(0, 12).map(m => `<tr><td>${_fbEsc(m.menu)}</td><td style="text-align:right">${m.n}</td><td style="text-align:right;color:#047857">${m.pos}</td><td style="text-align:right;color:#b91c1c">${m.neg}</td></tr>`).join('')}</tbody></table>` :
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเมนูที่ถูกพูดถึงวันนี้</p>';
+  const sourcesRows = Object.entries(d.sources || {}).sort((a, b) => b[1] - a[1]).map(([s, n]) => `<div class="flex justify-between"><span>${_fbEsc(s)}</span><b>${n}</b></div>`).join('') || '<p class="text-xs" style="color:var(--text-muted)">—</p>';
+  const r = d.response || {};
+  const responseRows = `<div class="flex justify-between"><span>ตอบได้ทั้งหมด</span><b>${r.answerable || 0}</b></div><div class="flex justify-between"><span>ตอบแล้ว</span><b>${r.answered || 0}</b></div>` +
+    `<div class="flex justify-between"><span>อัตราตอบกลับ</span><b>${r.rate != null ? r.rate + '%' : '—'}</b></div><div class="flex justify-between"><span>ตอบไวเฉลี่ย</span><b>${r.median_days != null ? r.median_days + ' วัน' : '—'}</b></div>`;
+  const staffRows = (d.staff || []).length ? d.staff.slice(0, 8).map(s => `<div class="flex justify-between"><span>${_fbEsc(s.name)} <span class="text-[11px]" style="color:var(--text-muted)">(${_fbEsc(s.branch)})</span></span><b>👍${s.pos} 👎${s.neg}</b></div>`).join('') :
+    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีพนักงานถูกระบุชื่อวันนี้</p>';
+  const branchTable = (!d.branch && (d.branches || []).length) ? `<h4 class="text-xs font-semibold mt-3 mb-1">🏪 รายสาขาที่มีเสียงวันนี้ (${d.branches.length})</h4>
+    <table class="fb-t"><thead><tr><th>สาขา</th><th style="text-align:right">เสียง</th><th style="text-align:right">ลบ%</th><th style="text-align:right">★</th><th style="text-align:right">รอตอบ</th><th style="text-align:right">ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>${d.branches.map(x => `<tr class="row" onclick="document.getElementById('fbDrBranch').value='${_fbEsc(x.branch).replace(/'/g, "\\'")}';document.getElementById('fbDrBranch').dataset.touched='1';loadDailyReport()"><td>${_fbEsc(x.branch)}</td><td style="text-align:right">${x.n}</td><td style="text-align:right;color:${x.neg_pct >= 30 ? '#b91c1c' : 'inherit'}">${x.neg_pct}%</td><td style="text-align:right">${x.avg_rating != null ? x.avg_rating.toFixed(2) : '—'}</td><td style="text-align:right">${x.unreplied}</td><td style="text-align:right">${x.flagged}</td><td class="text-[11px]">${_fbEsc(x.top_theme || '—')}</td></tr>`).join('')}</tbody></table>` : '';
   host.innerHTML = `
     <div class="rounded p-2.5" style="background:#f0fdfa;border:1px solid #99f6e4"><b>${_fbEsc(d.headline)}</b><span style="color:var(--text-muted)">${_fbEsc(cmp)}</span></div>
     <div class="fb-kpis mt-3">${kpis}</div>
@@ -662,5 +692,11 @@ async function loadDailyReport() {
       <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึงวันนี้</h4>${menuRows}</div>
     </div>
     <h4 class="text-xs font-semibold mt-3 mb-1">🚩 ต้องติดตามวันนี้ (${(d.recent_negative || []).length})</h4>${negItems}
-    <h4 class="text-xs font-semibold mt-3 mb-1">🌟 เสียงชมที่หยิบไปใช้ได้ (${(d.recent_positive || []).length})</h4>${posQuotes}`;
+    <h4 class="text-xs font-semibold mt-3 mb-1">🌟 เสียงชมที่หยิบไปใช้ได้ (${(d.recent_positive || []).length})</h4>${posQuotes}
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3 text-xs">
+      <div><h4 class="text-xs font-semibold mb-1">📡 ช่องทางที่มาวันนี้</h4>${sourcesRows}</div>
+      <div><h4 class="text-xs font-semibold mb-1">⏱️ อัตราตอบกลับ</h4>${responseRows}</div>
+      <div><h4 class="text-xs font-semibold mb-1">👥 พนักงานที่ถูกพูดถึง</h4>${staffRows}</div>
+    </div>
+    ${branchTable}`;
 }

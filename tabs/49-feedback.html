@@ -60,6 +60,7 @@
       <h3 class="text-sm font-semibold">📰 รายงานประจำวัน <span class="text-[11px] font-normal" style="color:var(--text-muted)">— สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตามวันนี้ · เสียงชมที่หยิบไปใช้ได้ · หัวข้อ/เมนูที่ถูกพูดถึง</span></h3>
       <div class="flex items-center gap-2 flex-wrap">
         <input type="date" id="fbDrDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+        <select id="fbDrBranch" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" onchange="this.dataset.touched='1';loadDailyReport()"><option value="">ทุกสาขา</option></select>
         <button class="fb-btn" onclick="loadDailyReport()">สร้างรายงาน</button>
         <a class="fb-ghost" id="fbDrPrint" href="#" target="_blank" rel="noopener" style="display:none">🖨 พิมพ์ ↗</a>
       </div>

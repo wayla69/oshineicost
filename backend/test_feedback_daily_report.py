@@ -108,3 +108,18 @@ def test_print_edition_is_html_with_the_headline_and_a_tel_link(client):
     body = r.text
     assert DAY in body and "แย่มาก" in body and 'href="tel:0812345678"' in body
     assert "<script" not in body.lower()                                       # a static print page, not a client-rendered one
+
+
+def test_print_groups_by_branch_only_on_the_all_branches_view(client):
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [("BranchA", f"{DAY} 09:00:00", 1, "แย่ที่ A", "neg", [], [], None, "low"),
+                ("BranchA", f"{DAY} 10:00:00", 5, "ดีที่ A", "pos", [], [], None, "low"),
+                ("BranchB", f"{DAY} 11:00:00", 2, "แย่ที่ B", "neg", [], [], None, "low")])
+    con.commit(); con.close()
+    all_body = client.get("/api/feedback/daily-report.print", params={"date": DAY}).text
+    assert "🏪 BranchA" in all_body and "🏪 BranchB" in all_body      # grouped: a branch header per branch
+    one_body = client.get("/api/feedback/daily-report.print", params={"date": DAY, "branch": "BranchA"}).text
+    assert "🏪 BranchA" not in one_body and "🏪 BranchB" not in one_body and "แย่ที่ A" in one_body   # scoped: no grouping needed
+    # detail sections added alongside branch grouping
+    assert "ช่องทางที่มาวันนี้" in all_body and "อัตราตอบกลับ" in all_body and "พนักงานที่ถูกพูดถึง" in all_body

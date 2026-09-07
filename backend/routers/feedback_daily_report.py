@@ -100,7 +100,11 @@ td { padding: 3pt 5pt; border-bottom: .5pt solid #e2e8f0; vertical-align: top; }
 .item .m a { color: inherit; text-decoration: underline; }
 .tag { display: inline-block; font-size: 7.4pt; background: #fef3c7; color: #92400e; border-radius: 3pt; padding: 0 4pt; margin-right: 2pt; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 0 14pt; }
+.three { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0 12pt; break-inside: avoid-page; }
 .empty { color: #94a3b8; font-size: 9pt; font-style: italic; }
+.branch-h { font: 700 8.6pt "Bai Jamjuree"; color: #0f766e; margin: 7pt 0 2pt; padding-top: 3pt; border-top: .5pt dashed #cbd5e1; }
+.branch-h:first-child { border-top: 0; padding-top: 0; }
+.ex { font-size: 7.6pt; color: #64748b; font-style: italic; }
 .foot { margin-top: 10pt; font-size: 7.6pt; color: #94a3b8; }
 """
 
@@ -108,6 +112,16 @@ td { padding: 3pt 5pt; border-bottom: .5pt solid #e2e8f0; vertical-align: top; }
 def _tel_href(contact: str):
     digits = "".join(c for c in (contact or "") if c.isdigit() or c == "+")
     return "tel:" + digits if digits and 8 <= len(digits.lstrip("+")) <= 15 else None
+
+
+def _group_by_branch(items: list) -> list:
+    """[(branch, [items…]), …] in descending count order — used to break the
+    negative/positive lists out per branch on the ทุกสาขา view (a flat blended
+    list across many branches is hard to scan for a branch manager)."""
+    groups: dict = {}
+    for it in items:
+        groups.setdefault(it.get("branch") or "(ไม่ระบุสาขา)", []).append(it)
+    return sorted(groups.items(), key=lambda kv: -len(kv[1]))
 
 
 def _build_print_html(data: dict) -> str:
@@ -129,45 +143,79 @@ def _build_print_html(data: dict) -> str:
     def theme_rows():
         if not data["themes"]:
             return '<p class="empty">ยังไม่มีหัวข้อที่ถูกพูดถึงวันนี้</p>'
-        rows = "".join(f'<tr><td>{_esc(t["theme"])}</td><td>{t["n"]}</td><td>{t["neg"]}</td><td>{", ".join(_esc(b) for b in t["branches"])}</td></tr>'
-                       for t in data["themes"][:8])
-        return f'<table><thead><tr><th>หัวข้อ</th><th>พูดถึง</th><th>ลบ</th><th>สาขา</th></tr></thead><tbody>{rows}</tbody></table>'
+        rows = []
+        for t in data["themes"][:12]:
+            ex = t["examples"][0]["text"] if t.get("examples") else ""
+            rows.append(f'<tr><td>{_esc(t["theme"])}</td><td>{t["n"]}</td><td>{t["neg"]}</td><td>{", ".join(_esc(b) for b in t["branches"])}</td>'
+                       f'<td class="ex">{f"“{_esc(ex)}”" if ex else ""}</td></tr>')
+        return f'<table><thead><tr><th>หัวข้อ</th><th>พูดถึง</th><th>ลบ</th><th>สาขา</th><th>ตัวอย่าง</th></tr></thead><tbody>{"".join(rows)}</tbody></table>'
 
     def menu_rows():
         if not data["menus"]:
             return '<p class="empty">ยังไม่มีเมนูที่ถูกพูดถึงวันนี้</p>'
-        rows = "".join(f'<tr><td>{_esc(m["menu"])}</td><td>{m["n"]}</td><td>{m["pos"]}</td><td>{m["neg"]}</td></tr>' for m in data["menus"][:8])
+        rows = "".join(f'<tr><td>{_esc(m["menu"])}</td><td>{m["n"]}</td><td>{m["pos"]}</td><td>{m["neg"]}</td></tr>' for m in data["menus"][:12])
         return f'<table><thead><tr><th>เมนู</th><th>พูดถึง</th><th>บวก</th><th>ลบ</th></tr></thead><tbody>{rows}</tbody></table>'
 
     def _star(v):
         return f" · {v}★" if v is not None else ""
 
+    def _neg_card(it):
+        tel = _tel_href(it.get("contact") or "")
+        contact_html = f' · 📞 <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · 📞 {_esc(it["contact"])}' if it.get("contact") else "")
+        sev = ' <span class="tag">🔥 ร้ายแรง</span>' if it.get("severity") == "high" else ""
+        status = "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ")
+        branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
+        return (f'<div class="item">“{_esc(it["text"])}”{sev}<div class="m">{branch_bit}{_esc(it["source"] or "")}'
+               f'{_star(it.get("rating"))} · {status}{contact_html}</div></div>')
+
+    def _pos_card(q):
+        branch_bit = "" if data["branch"] else f'{_esc(q["branch"] or "-")} · '
+        return f'<div class="quote">“{_esc(q["text"])}”<div class="m">— {branch_bit}{_esc(q["source"] or "")}{_star(q.get("rating"))}</div></div>'
+
     def negative_items():
         if not data["recent_negative"]:
             return '<p class="empty">ไม่มีรายการเชิงลบที่ต้องติดตามวันนี้ 🎉</p>'
-        out = []
-        for it in data["recent_negative"]:
-            tel = _tel_href(it.get("contact") or "")
-            contact_html = f' · 📞 <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · 📞 {_esc(it["contact"])}' if it.get("contact") else "")
-            sev = ' <span class="tag">🔥 ร้ายแรง</span>' if it.get("severity") == "high" else ""
-            status = "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ")
-            out.append(f'<div class="item">“{_esc(it["text"])}”{sev}<div class="m">{_esc(it["branch"] or "-")} · {_esc(it["source"] or "")}'
-                       f'{_star(it.get("rating"))} · {status}{contact_html}</div></div>')
-        return "".join(out)
+        if data["branch"]:
+            return "".join(_neg_card(it) for it in data["recent_negative"])
+        return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_neg_card(it) for it in items)
+                       for b, items in _group_by_branch(data["recent_negative"]))
 
     def positive_quotes():
         if not data["recent_positive"]:
             return '<p class="empty">ยังไม่มีเสียงชมที่หยิบไปใช้ได้วันนี้</p>'
-        return "".join(f'<div class="quote">“{_esc(q["text"])}”<div class="m">— {_esc(q["branch"] or "-")} · {_esc(q["source"] or "")}'
-                       f'{_star(q.get("rating"))}</div></div>'
-                       for q in data["recent_positive"][:5])
+        if data["branch"]:
+            return "".join(_pos_card(q) for q in data["recent_positive"][:5])
+        return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_pos_card(q) for q in items)
+                       for b, items in _group_by_branch(data["recent_positive"]))
 
     def branch_table():
         if data["branch"] or not data["branches"]:
             return ""
-        rows = "".join(f'<tr><td>{_esc(b["branch"])}</td><td>{b["n"]}</td><td>{b["neg_pct"]}%</td><td>{b["avg_rating"] if b["avg_rating"] is not None else "—"}</td></tr>'
-                       for b in data["branches"][:10])
-        return f'<h2 class="sec">🏪 รายสาขาที่มีเสียงวันนี้</h2><table><thead><tr><th>สาขา</th><th>เสียง</th><th>ลบ%</th><th>★</th></tr></thead><tbody>{rows}</tbody></table>'
+        rows = "".join(f'<tr><td>{_esc(b["branch"])}</td><td>{b["n"]}</td><td>{b["neg_pct"]}%</td><td>{b["avg_rating"] if b["avg_rating"] is not None else "—"}</td>'
+                       f'<td>{b["unreplied"]}</td><td>{b["flagged"]}</td><td>{_esc(b["top_theme"] or "—")}</td></tr>' for b in data["branches"][:15])
+        return (f'<h2 class="sec">🏪 รายสาขาที่มีเสียงวันนี้ ({len(data["branches"])})</h2>'
+               f'<table><thead><tr><th>สาขา</th><th>เสียง</th><th>ลบ%</th><th>★</th><th>รอตอบ</th><th>ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>{rows}</tbody></table>')
+
+    def sources_block():
+        if not data["sources"]:
+            return '<p class="empty">—</p>'
+        items = sorted(data["sources"].items(), key=lambda kv: -kv[1])
+        return "".join(f'<div style="display:flex;justify-content:space-between"><span>{_esc(s)}</span><b>{n}</b></div>' for s, n in items)
+
+    def response_block():
+        r = data["response"]
+        rate = f'{r["rate"]}%' if r["rate"] is not None else "—"
+        median = f'{r["median_days"]} วัน' if r["median_days"] is not None else "—"
+        return (f'<div style="display:flex;justify-content:space-between"><span>ตอบได้ทั้งหมด</span><b>{r["answerable"]}</b></div>'
+               f'<div style="display:flex;justify-content:space-between"><span>ตอบแล้ว</span><b>{r["answered"]}</b></div>'
+               f'<div style="display:flex;justify-content:space-between"><span>อัตราตอบกลับ</span><b>{rate}</b></div>'
+               f'<div style="display:flex;justify-content:space-between"><span>ตอบไวเฉลี่ย</span><b>{median}</b></div>')
+
+    def staff_block():
+        if not data["staff"]:
+            return '<p class="empty">ยังไม่มีพนักงานถูกระบุชื่อวันนี้</p>'
+        return "".join(f'<div style="display:flex;justify-content:space-between"><span>{_esc(s["name"])} <span class="ex">({_esc(s["branch"])})</span></span>'
+                       f'<b>👍{s["pos"]} 👎{s["neg"]}</b></div>' for s in data["staff"][:8])
 
     return f"""<!doctype html>
 <html lang="th"><head><meta charset="utf-8"><title>{_esc(title)}</title>
@@ -185,6 +233,11 @@ def _build_print_html(data: dict) -> str:
 {negative_items()}
 <h2 class="sec">🌟 เสียงชมที่หยิบไปใช้ได้ ({len(data['recent_positive'])})</h2>
 {positive_quotes()}
+<div class="three">
+<div><h2 class="sec">📡 ช่องทางที่มาวันนี้</h2>{sources_block()}</div>
+<div><h2 class="sec">⏱️ อัตราตอบกลับ</h2>{response_block()}</div>
+<div><h2 class="sec">👥 พนักงานที่ถูกพูดถึง</h2>{staff_block()}</div>
+</div>
 {branch_table()}
 <div class="foot">Oshinei · รายงานประจำวันเสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ 💬 เสียงลูกค้าในแอป</div>
 </body></html>"""
