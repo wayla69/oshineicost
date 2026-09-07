@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
-"""📰 รายงานประจำวัน — เสียงลูกค้า, ออกแบบให้ทีมการตลาดใช้ได้ทันที: เลือกวัน
-(และสาขาถ้าต้องการ) แล้วได้สรุปพร้อมใช้ — คะแนน/สัดส่วนความรู้สึกของวันนั้น
-กี่รายการตอบแล้ว/รอตอบ/เกิน SLA เคสร้ายแรงที่ต้องรู้ หัวข้อ/เมนูที่ถูกพูดถึง
-เสียงชมที่หยิบไปใช้ต่อได้ และรายชื่อที่ต้องติดตามวันนี้ (รวมเบอร์โทรกลับจาก
-QR — ดู js/11-feedback.js:_fbContactHtml สำหรับ tel: link ฝั่งแอป).
+"""📰 รายงานประจำวัน/สัปดาห์/เดือน — เสียงลูกค้า, ออกแบบให้ทีมการตลาดใช้ได้ทันที:
+เลือกช่วง (วันเดียว, สัปดาห์, เดือน หรือกำหนดเอง — และสาขาถ้าต้องการ) แล้วได้
+สรุปพร้อมใช้ — คะแนน/สัดส่วนความรู้สึกของช่วงนั้น กี่รายการตอบแล้ว/รอตอบ/เกิน
+SLA เคสร้ายแรงที่ต้องรู้ หัวข้อ/เมนูที่ถูกพูดถึง เสียงชมที่หยิบไปใช้ต่อได้ และ
+รายชื่อที่ต้องติดตาม (รวมเบอร์โทรกลับจาก QR — ดู js/11-feedback.js:_fbContactHtml
+สำหรับ tel: link ฝั่งแอป).
 
 _aggregate() (routers/feedback.py) คำนวณให้ทุกอย่างอยู่แล้วสำหรับ /api/feedback/
-summary — วันนี้เป็นแค่หน้าต่าง 1 วันของฟังก์ชันเดียวกัน ไม่ใช่โมเดลใหม่ จึง
-รับประกันว่าตัวเลขตรงกับที่แท็บโชว์เป๊ะ.
+summary — ที่นี่แค่เป็นหน้าต่าง [date_from, date_to] ของฟังก์ชันเดียวกัน ไม่ใช่
+โมเดลใหม่ จึงรับประกันว่าตัวเลขตรงกับที่แท็บโชว์เป๊ะ. วันเดียว (date_to ไม่ใส่
+หรือเท่ากับ date) คือ "รายงานประจำวัน" เดิม — ใส่ date_to ให้ต่างจาก date จะได้
+รายงานตามช่วงที่เลือก (สัปดาห์/เดือน/กำหนดเอง แล้วแต่หน้าเว็บส่งมา).
 
-  GET /api/feedback/daily-report?date=&branch=          JSON (ใช้ render ในแอป)
-  GET /api/feedback/daily-report.print?date=&branch=      ฉบับพิมพ์ A4 (พิมพ์/บันทึก PDF)
+  GET /api/feedback/daily-report?date=&date_to=&branch=          JSON (ใช้ render ในแอป)
+  GET /api/feedback/daily-report.print?date=&date_to=&branch=      ฉบับพิมพ์ A4 (พิมพ์/บันทึก PDF)
 """
 import datetime
 import html
@@ -28,9 +31,39 @@ def _esc(s) -> str:
     return html.escape(str(s if s is not None else ""))
 
 
-def _headline(agg: dict, date: str, branch: Optional[str]) -> str:
+def _d(s: str) -> datetime.date:
+    return datetime.date.fromisoformat(s)
+
+
+def _period_label(date_from: str, date_to: str) -> str:
+    return date_from if date_from == date_to else f"{date_from} – {date_to}"
+
+
+def _period_word(date_from: str, date_to: str) -> str:
+    """วันนี้ for a single day, ช่วงนี้ for any range — used everywhere a section
+    heading would otherwise hard-code "today" for what may be a week or month."""
+    return "วันนี้" if date_from == date_to else "ช่วงนี้"
+
+
+def _prev_period(date_from: str, date_to: str) -> tuple:
+    """The comparison window: for one day, the SAME WEEKDAY 7 days back (a
+    Friday-vs-Thursday comparison is meaningless for restaurant traffic — see
+    mtd_weekday_fair_baseline); for a range, the immediately preceding period
+    of equal length (a week/month already balances weekdays on its own)."""
+    d_from, d_to = _d(date_from), _d(date_to)
+    span = (d_to - d_from).days + 1
+    if span == 1:
+        p = d_from - datetime.timedelta(days=7)
+        return p.isoformat(), p.isoformat()
+    pe = d_from - datetime.timedelta(days=1)
+    ps = pe - datetime.timedelta(days=span - 1)
+    return ps.isoformat(), pe.isoformat()
+
+
+def _headline(agg: dict, date_from: str, date_to: str, branch: Optional[str]) -> str:
+    label = _period_label(date_from, date_to)
     if not agg["total"]:
-        return f"ไม่มีเสียงลูกค้าเข้ามาในวันที่ {date}" + (f" ที่สาขา {branch}" if branch else "")
+        return f"ไม่มีเสียงลูกค้าเข้ามาในช่วง {label}" + (f" ที่สาขา {branch}" if branch else "")
     bits = [f"{agg['total']} เสียง", f"บวก {agg['sentiment']['pos']} · ลบ {agg['sentiment']['neg']} · กลาง {agg['sentiment']['neu']}"]
     if agg["avg_rating"] is not None:
         bits.append(f"เฉลี่ย {agg['avg_rating']}★")
@@ -43,34 +76,41 @@ def _headline(agg: dict, date: str, branch: Optional[str]) -> str:
     return " · ".join(bits)
 
 
-def compute_daily_report(con, date: str, branch: Optional[str] = None) -> dict:
-    """One calendar day of customer_feedback, through the same _aggregate() the
-    tab's /api/feedback/summary uses — so the numbers never drift apart."""
+def compute_daily_report(con, date: str, branch: Optional[str] = None, date_to: Optional[str] = None) -> dict:
+    """[date, date_to] of customer_feedback (date_to defaults to date — one
+    calendar day), through the same _aggregate() the tab's /api/feedback/summary
+    uses — so the numbers never drift apart."""
     _ensure(con)
-    w, p = ["substr(rated_at,1,10) = ?"], [date]
+    date_from = date
+    date_to = date_to or date_from
+    if date_to < date_from:
+        date_from, date_to = date_to, date_from
+    w, p = ["rated_at >= ?", "rated_at < ?"], [date_from, (_d(date_to) + datetime.timedelta(days=1)).isoformat()]
     if branch:
         w.append("branch_name = ?"); p.append(branch)
     rows = [dict(r) for r in con.execute(f"SELECT {_ROW_COLS} FROM customer_feedback WHERE {' AND '.join(w)}", p)]
-    agg = _aggregate(rows, today=date)
-    prev_date = (datetime.date.fromisoformat(date) - datetime.timedelta(days=7)).isoformat()
-    wp, pp = ["substr(rated_at,1,10) = ?"], [prev_date]
+    agg = _aggregate(rows, today=date_to)
+    p_from, p_to = _prev_period(date_from, date_to)
+    wp, pp = ["rated_at >= ?", "rated_at < ?"], [p_from, (_d(p_to) + datetime.timedelta(days=1)).isoformat()]
     if branch:
         wp.append("branch_name = ?"); pp.append(branch)
     prev_total = con.execute(f"SELECT COUNT(*) FROM customer_feedback WHERE {' AND '.join(wp)}", pp).fetchone()[0]
     all_branches = [b["name"] for b in branch_rows(con) if b["active"]]
-    return {"date": date, "branch": branch, "branch_count": 1 if branch else len(all_branches),
-            "prev_week_same_day": {"date": prev_date, "total": prev_total},
-            "headline": _headline(agg, date, branch), **agg}
+    return {"date_from": date_from, "date_to": date_to, "branch": branch, "branch_count": 1 if branch else len(all_branches),
+            "prev_period": {"date_from": p_from, "date_to": p_to, "total": prev_total},
+            "headline": _headline(agg, date_from, date_to, branch), **agg}
 
 
 @router.get("/api/feedback/daily-report")
-def feedback_daily_report(request: Request, date: Optional[str] = Query(None), branch: Optional[str] = Query(None)):
+def feedback_daily_report(request: Request, date: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                          branch: Optional[str] = Query(None)):
     scope = scope_branch(request)
     if scope:
         branch = scope
     d = (date or "")[:10] or thai_today()
+    dt = (date_to or "")[:10] or None
     with get_db() as con:
-        return compute_daily_report(con, d, branch)
+        return compute_daily_report(con, d, branch, date_to=dt)
 
 
 # ── print edition: one A4 page, teal/indigo to match the tab, testimonial-ready quotes ──
@@ -125,8 +165,10 @@ def _group_by_branch(items: list) -> list:
 
 
 def _build_print_html(data: dict) -> str:
-    date, branch = data["date"], data["branch"]
-    title = f"รายงานประจำวัน {date}" + (f" · {branch}" if branch else " · ทุกสาขา")
+    date_from, date_to, branch = data["date_from"], data["date_to"], data["branch"]
+    label, pw = _period_label(date_from, date_to), _period_word(date_from, date_to)
+    kind = "รายงานประจำวัน" if date_from == date_to else "รายงานตามช่วง"
+    title = f"{kind} {label}" + (f" · {branch}" if branch else " · ทุกสาขา")
     kpis = [
         ("เสียงทั้งหมด", data["total"], ""),
         ("คะแนนเฉลี่ย", f"{data['avg_rating']:.2f}★" if data["avg_rating"] is not None else "—", ""),
@@ -136,13 +178,14 @@ def _build_print_html(data: dict) -> str:
         ("ร้ายแรง", data["severe"], "bad" if data["severe"] else ""),
     ]
     kpi_html = "".join(f'<div class="kpi"><div class="l">{_esc(l)}</div><div class="v {c}">{_esc(v)}</div></div>' for l, v, c in kpis)
-    pw = data["prev_week_same_day"]
-    cmp_line = f"เทียบวันเดียวกันสัปดาห์ก่อน ({pw['date']}): {pw['total']} เสียง" + \
-               (f" ({'มากขึ้น' if data['total'] > pw['total'] else 'น้อยลง' if data['total'] < pw['total'] else 'เท่าเดิม'})" if pw["total"] else "")
+    pp_ = data["prev_period"]
+    pp_label = _period_label(pp_["date_from"], pp_["date_to"])
+    cmp_line = f"เทียบช่วงก่อนหน้าที่ยาวเท่ากัน ({pp_label}): {pp_['total']} เสียง" + \
+               (f" ({'มากขึ้น' if data['total'] > pp_['total'] else 'น้อยลง' if data['total'] < pp_['total'] else 'เท่าเดิม'})" if pp_["total"] else "")
 
     def theme_rows():
         if not data["themes"]:
-            return '<p class="empty">ยังไม่มีหัวข้อที่ถูกพูดถึงวันนี้</p>'
+            return f'<p class="empty">ยังไม่มีหัวข้อที่ถูกพูดถึง{pw}</p>'
         rows = []
         for t in data["themes"][:12]:
             ex = t["examples"][0]["text"] if t.get("examples") else ""
@@ -152,7 +195,7 @@ def _build_print_html(data: dict) -> str:
 
     def menu_rows():
         if not data["menus"]:
-            return '<p class="empty">ยังไม่มีเมนูที่ถูกพูดถึงวันนี้</p>'
+            return f'<p class="empty">ยังไม่มีเมนูที่ถูกพูดถึง{pw}</p>'
         rows = "".join(f'<tr><td>{_esc(m["menu"])}</td><td>{m["n"]}</td><td>{m["pos"]}</td><td>{m["neg"]}</td></tr>' for m in data["menus"][:12])
         return f'<table><thead><tr><th>เมนู</th><th>พูดถึง</th><th>บวก</th><th>ลบ</th></tr></thead><tbody>{rows}</tbody></table>'
 
@@ -164,17 +207,19 @@ def _build_print_html(data: dict) -> str:
         contact_html = f' · 📞 <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · 📞 {_esc(it["contact"])}' if it.get("contact") else "")
         sev = ' <span class="tag">🔥 ร้ายแรง</span>' if it.get("severity") == "high" else ""
         status = "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ")
+        date_bit = f'{_esc((it.get("date") or "")[:10])} · ' if date_from != date_to else ""
         branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
-        return (f'<div class="item">“{_esc(it["text"])}”{sev}<div class="m">{branch_bit}{_esc(it["source"] or "")}'
+        return (f'<div class="item">“{_esc(it["text"])}”{sev}<div class="m">{date_bit}{branch_bit}{_esc(it["source"] or "")}'
                f'{_star(it.get("rating"))} · {status}{contact_html}</div></div>')
 
     def _pos_card(q):
+        date_bit = f'{_esc((q.get("date") or "")[:10])} · ' if date_from != date_to else ""
         branch_bit = "" if data["branch"] else f'{_esc(q["branch"] or "-")} · '
-        return f'<div class="quote">“{_esc(q["text"])}”<div class="m">— {branch_bit}{_esc(q["source"] or "")}{_star(q.get("rating"))}</div></div>'
+        return f'<div class="quote">“{_esc(q["text"])}”<div class="m">— {date_bit}{branch_bit}{_esc(q["source"] or "")}{_star(q.get("rating"))}</div></div>'
 
     def negative_items():
         if not data["recent_negative"]:
-            return '<p class="empty">ไม่มีรายการเชิงลบที่ต้องติดตามวันนี้ 🎉</p>'
+            return f'<p class="empty">ไม่มีรายการเชิงลบที่ต้องติดตาม{pw} 🎉</p>'
         if data["branch"]:
             return "".join(_neg_card(it) for it in data["recent_negative"])
         return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_neg_card(it) for it in items)
@@ -182,7 +227,7 @@ def _build_print_html(data: dict) -> str:
 
     def positive_quotes():
         if not data["recent_positive"]:
-            return '<p class="empty">ยังไม่มีเสียงชมที่หยิบไปใช้ได้วันนี้</p>'
+            return f'<p class="empty">ยังไม่มีเสียงชมที่หยิบไปใช้ได้{pw}</p>'
         if data["branch"]:
             return "".join(_pos_card(q) for q in data["recent_positive"][:5])
         return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_pos_card(q) for q in items)
@@ -193,7 +238,7 @@ def _build_print_html(data: dict) -> str:
             return ""
         rows = "".join(f'<tr><td>{_esc(b["branch"])}</td><td>{b["n"]}</td><td>{b["neg_pct"]}%</td><td>{b["avg_rating"] if b["avg_rating"] is not None else "—"}</td>'
                        f'<td>{b["unreplied"]}</td><td>{b["flagged"]}</td><td>{_esc(b["top_theme"] or "—")}</td></tr>' for b in data["branches"][:15])
-        return (f'<h2 class="sec">🏪 รายสาขาที่มีเสียงวันนี้ ({len(data["branches"])})</h2>'
+        return (f'<h2 class="sec">🏪 รายสาขาที่มีเสียง{pw} ({len(data["branches"])})</h2>'
                f'<table><thead><tr><th>สาขา</th><th>เสียง</th><th>ลบ%</th><th>★</th><th>รอตอบ</th><th>ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>{rows}</tbody></table>')
 
     def sources_block():
@@ -213,7 +258,7 @@ def _build_print_html(data: dict) -> str:
 
     def staff_block():
         if not data["staff"]:
-            return '<p class="empty">ยังไม่มีพนักงานถูกระบุชื่อวันนี้</p>'
+            return f'<p class="empty">ยังไม่มีพนักงานถูกระบุชื่อ{pw}</p>'
         return "".join(f'<div style="display:flex;justify-content:space-between"><span>{_esc(s["name"])} <span class="ex">({_esc(s["branch"])})</span></span>'
                        f'<b>👍{s["pos"]} 👎{s["neg"]}</b></div>' for s in data["staff"][:8])
 
@@ -226,31 +271,33 @@ def _build_print_html(data: dict) -> str:
 <div class="headline">{_esc(data['headline'])}<br><span style="font-weight:400;font-size:9pt;color:#3a4a45">{_esc(cmp_line)}</span></div>
 <div class="kpis">{kpi_html}</div>
 <div class="two">
-<div><h2 class="sec">🏷️ หัวข้อที่ถูกพูดถึงวันนี้</h2>{theme_rows()}</div>
-<div><h2 class="sec">🍣 เมนูที่ถูกพูดถึงวันนี้</h2>{menu_rows()}</div>
+<div><h2 class="sec">🏷️ หัวข้อที่ถูกพูดถึง{pw}</h2>{theme_rows()}</div>
+<div><h2 class="sec">🍣 เมนูที่ถูกพูดถึง{pw}</h2>{menu_rows()}</div>
 </div>
-<h2 class="sec">🚩 ต้องติดตามวันนี้ ({len(data['recent_negative'])})</h2>
+<h2 class="sec">🚩 ต้องติดตาม{pw} ({len(data['recent_negative'])})</h2>
 {negative_items()}
 <h2 class="sec">🌟 เสียงชมที่หยิบไปใช้ได้ ({len(data['recent_positive'])})</h2>
 {positive_quotes()}
 <div class="three">
-<div><h2 class="sec">📡 ช่องทางที่มาวันนี้</h2>{sources_block()}</div>
+<div><h2 class="sec">📡 ช่องทางที่มา{pw}</h2>{sources_block()}</div>
 <div><h2 class="sec">⏱️ อัตราตอบกลับ</h2>{response_block()}</div>
 <div><h2 class="sec">👥 พนักงานที่ถูกพูดถึง</h2>{staff_block()}</div>
 </div>
 {branch_table()}
-<div class="foot">Oshinei · รายงานประจำวันเสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ 💬 เสียงลูกค้าในแอป</div>
+<div class="foot">Oshinei · {_esc(kind)}เสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ 💬 เสียงลูกค้าในแอป</div>
 </body></html>"""
 
 
 @router.get("/api/feedback/daily-report.print")
-def feedback_daily_report_print(request: Request, date: Optional[str] = Query(None), branch: Optional[str] = Query(None)):
+def feedback_daily_report_print(request: Request, date: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                                branch: Optional[str] = Query(None)):
     scope = scope_branch(request)
     if scope:
         branch = scope
     d = (date or "")[:10] or thai_today()
+    dt = (date_to or "")[:10] or None
     with get_db() as con:
-        data = compute_daily_report(con, d, branch)
+        data = compute_daily_report(con, d, branch, date_to=dt)
     return Response(_build_print_html(data), media_type="text/html")
 
 

@@ -5,11 +5,13 @@ level, distance. Once a month the fetcher looks up each branch's own listing
 ("โอชิเน <branch>"), then searches the buffet / shabu / Japanese keywords
 around it and keeps every other restaurant within RADIUS_M. The snapshot
 lands in feedback_competitor and the tab shows where each branch stands.
-Config (backend/.feedback_config.json):
+Config (backend/.feedback_config.json), radius_m/keywords chain-wide unless a
+branch overrides them (in the app's ⚙ ตั้งค่า panel, or here directly):
   "places": {"api_key": "AIza…", "radius_m": 3000,
              "keywords": ["บุฟเฟ่ต์ญี่ปุ่น", "ชาบู", "หมูกระทะ", "ปิ้งย่าง"],
              "self_query": "โอชิเน {branch}",           # optional template
-             "branches": {"ขอนแก่น": {"query": "Oshinei Khon Kaen"}}}   # optional overrides
+             "branches": {"ขอนแก่น": {"query": "Oshinei Khon Kaen",       # find_self() override
+                                     "radius_m": 5000, "keywords": [...]}}}   # this branch only
 Every call goes through the injected http(method, url, headers, body).
 """
 import math
@@ -67,10 +69,14 @@ def find_self(branch: str, cfg: dict, http) -> dict:
     return own[0]
 
 
-def competitors_near(center, cfg: dict, http) -> list:
-    radius = int(cfg.get("radius_m") or RADIUS_M)
+def competitors_near(center, cfg: dict, http, branch: str = None) -> list:
+    """radius_m/keywords: this branch's override (cfg["branches"][branch]) when
+    it has one, else the config's chain-wide values, else the shipped defaults —
+    same three-level fallback as find_self()'s query override."""
+    ov = ((cfg.get("branches") or {}).get(branch) or {}) if branch else {}
+    radius = int(ov.get("radius_m") or cfg.get("radius_m") or RADIUS_M)
     seen, out = set(), []
-    for kw in (cfg.get("keywords") or DEFAULT_KEYWORDS):
+    for kw in (ov.get("keywords") or cfg.get("keywords") or DEFAULT_KEYWORDS):
         for p in text_search(kw, cfg["api_key"], http, center=center, radius_m=radius):
             if not p["place_id"] or p["place_id"] in seen or is_own(p["name"]) or p.get("lat") is None:
                 continue
@@ -99,7 +105,7 @@ def snapshot(cfg: dict, http, branches: list, log=None) -> tuple:
             log(f"  {b}: {e}")
             meta["branches"].append({"branch": b, "error": str(e)[:160]})
             continue
-        comps = competitors_near((me["lat"], me["lng"]), cfg, http)
+        comps = competitors_near((me["lat"], me["lng"]), cfg, http, branch=b)
         rows.append({**me, "branch": b, "is_self": 1, "distance_m": 0, "keyword": ""})
         rows.extend({**c, "branch": b, "is_self": 0} for c in comps)
         meta["branches"].append({"branch": b, "self": me["name"], "competitors": len(comps)})

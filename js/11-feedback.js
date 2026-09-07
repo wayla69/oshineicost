@@ -587,7 +587,7 @@ async function loadFeedbackCompetitors(branch) {
     '<p style="color:var(--text-muted)">ไม่มีข้อมูลสำหรับสาขาที่เลือก</p>';
 }
 
-/* ── competitor search settings (radius/keywords) — Settings-editable, api_key stays file-only ── */
+/* ── competitor search settings (radius/keywords) — chain-wide or per-branch override, api_key stays file-only ── */
 async function toggleCompSettings() {
   const el = document.getElementById('fbCompSettings');
   if (!el) return;
@@ -595,34 +595,72 @@ async function toggleCompSettings() {
   el.style.display = show ? '' : 'none';
   if (show && !el.dataset.loaded) await loadCompSettings();
 }
+async function _fbCompFillBranches(sel) {
+  if (sel.dataset.loaded) return;
+  try {
+    const bs = await api(`${API}/api/branches`);
+    (bs || []).filter(b => b.active !== false).forEach(b => { const o = document.createElement('option'); o.value = b.name; o.textContent = b.name; sel.appendChild(o); });
+    sel.dataset.loaded = '1';
+  } catch (e) {}
+}
 async function loadCompSettings() {
   const el = document.getElementById('fbCompSettings');
   if (!el) return;
   el.innerHTML = '<span style="color:var(--text-muted)">กำลังโหลด…</span>';
-  let d; try { d = await api(`${API}/api/feedback/competitors/settings`); } catch (e) { el.innerHTML = 'โหลดไม่สำเร็จ'; return; }
   el.dataset.loaded = '1';
-  el.innerHTML = `
+  el.innerHTML = `<div class="flex items-center gap-2 mb-2"><label class="text-[11px]" style="color:var(--text-muted)">ตั้งค่าให้</label>
+    <select id="fbCompBranchSel" class="rounded border px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" onchange="loadCompSettingsForBranch()"><option value="">ทุกสาขา (ค่าเริ่มต้นของเครือ)</option></select></div>
+    <div id="fbCompSettingsBody"></div>`;
+  await _fbCompFillBranches(document.getElementById('fbCompBranchSel'));
+  await loadCompSettingsForBranch();
+}
+async function loadCompSettingsForBranch() {
+  const body = document.getElementById('fbCompSettingsBody');
+  const branch = (document.getElementById('fbCompBranchSel') || {}).value || '';
+  if (!body) return;
+  body.innerHTML = '<span style="color:var(--text-muted)">กำลังโหลด…</span>';
+  const p = new URLSearchParams(); if (branch) p.set('branch', branch);
+  let d; try { d = await api(`${API}/api/feedback/competitors/settings?${p}`); } catch (e) { body.innerHTML = 'โหลดไม่สำเร็จ'; return; }
+  const hint = branch
+    ? (d.overridden ? `กำหนดเฉพาะสาขานี้ — ถ้าไม่ตั้ง จะใช้ค่าเริ่มต้นของเครือ: รัศมี ${d.radius_m_default} ม. · คำค้น ${_fbEsc((d.keywords_default || []).join(', '))}`
+                    : `ยังไม่ได้กำหนดเฉพาะสาขานี้ — ค่าด้านล่างคือค่าเริ่มต้นของเครือที่ใช้อยู่ แก้แล้วบันทึกเพื่อตั้งเฉพาะสาขานี้`)
+    : `ค่านี้ใช้กับทุกสาขาที่ไม่ได้ตั้งเฉพาะของตัวเอง${(d.branches_overridden || []).length ? ` — ตั้งเฉพาะแล้ว: ${d.branches_overridden.map(_fbEsc).join(', ')}` : ''} — มีผลกับการถ่ายภาพครั้งถัดไป (เดือนละครั้ง) ไม่กระทบภาพที่ถ่ายไปแล้ว`;
+  body.innerHTML = `
     <div class="flex flex-wrap items-end gap-3">
       <label>รัศมีค้นหา (เมตร)<br><input id="fbCompRadius" type="number" min="500" max="10000" step="100" value="${d.radius_m}" class="rounded border px-2 py-1 text-sm mt-0.5" style="width:110px;border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"></label>
       <label class="flex-1" style="min-width:220px">คำค้น (คั่นด้วยจุลภาค)<br><input id="fbCompKeywords" type="text" value="${_fbEsc((d.keywords || []).join(', '))}" class="rounded border px-2 py-1 text-sm mt-0.5 w-full" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"></label>
       <button class="fb-btn" onclick="saveCompSettings()">บันทึก</button>
+      ${branch && d.overridden ? '<button class="fb-ghost" onclick="clearCompSettings()">ใช้ค่าเริ่มต้นของเครือ</button>' : ''}
       <span id="fbCompSetStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
     </div>
-    <p class="text-[11px] mt-1" style="color:var(--text-muted)">ค่าเริ่มต้นของระบบ: รัศมี ${d.radius_m_default} ม. · คำค้น ${_fbEsc((d.keywords_default || []).join(', '))} — มีผลกับการถ่ายภาพครั้งถัดไป (เดือนละครั้ง) ไม่กระทบภาพที่ถ่ายไปแล้ว</p>`;
+    <p class="text-[11px] mt-1" style="color:var(--text-muted)">${hint}</p>`;
 }
 async function saveCompSettings() {
   const status = document.getElementById('fbCompSetStatus');
+  const branch = (document.getElementById('fbCompBranchSel') || {}).value || '';
   const radius_m = parseInt((document.getElementById('fbCompRadius') || {}).value, 10);
   const keywords = ((document.getElementById('fbCompKeywords') || {}).value || '').split(',').map(s => s.trim()).filter(Boolean);
   if (status) status.textContent = 'กำลังบันทึก…';
   try {
-    await _fbPost('/api/feedback/competitors/settings', { radius_m, keywords });
-    delete document.getElementById('fbCompSettings').dataset.loaded;
-    if (status) status.textContent = 'บันทึกแล้ว ✓';
-    if (typeof notifySuccess === 'function') notifySuccess('บันทึกการตั้งค่าคู่แข่งแล้ว');
+    const p = new URLSearchParams(); if (branch) p.set('branch', branch);
+    await _fbPost(`/api/feedback/competitors/settings?${p}`, { radius_m, keywords });
+    await loadCompSettingsForBranch();
+    if (typeof notifySuccess === 'function') notifySuccess(branch ? `บันทึกการตั้งค่าคู่แข่งของ${branch}แล้ว` : 'บันทึกการตั้งค่าคู่แข่งของเครือแล้ว');
   } catch (e) {
     if (status) status.textContent = '';
     notifyError('บันทึกไม่สำเร็จ: ' + e.message);
+  }
+}
+async function clearCompSettings() {
+  const branch = (document.getElementById('fbCompBranchSel') || {}).value || '';
+  if (!branch || !confirm(`ล้างค่าเฉพาะของ ${branch} แล้วกลับไปใช้ค่าเริ่มต้นของเครือ?`)) return;
+  try {
+    const p = new URLSearchParams({ branch });
+    await _fbPost(`/api/feedback/competitors/settings?${p}`, { clear: true });
+    await loadCompSettingsForBranch();
+    if (typeof notifySuccess === 'function') notifySuccess(`ล้างค่าเฉพาะของ ${branch} แล้ว`);
+  } catch (e) {
+    notifyError('ล้างค่าไม่สำเร็จ: ' + e.message);
   }
 }
 
@@ -645,56 +683,80 @@ function _fbDrGroupByBranch(items) {
   items.forEach(it => { const b = it.branch || '(ไม่ระบุสาขา)'; (groups[b] = groups[b] || []).push(it); });
   return Object.entries(groups).sort((a, b) => b[1].length - a[1].length);
 }
+/* d.toISOString() converts to UTC first — in UTC+7 (Thailand) that silently steps local
+   midnight back a day. Format from the local getFullYear/Month/Date instead. */
+function _fbIsoLocal(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+/* วันนี้/สัปดาห์นี้/เดือนนี้ quick-fill — sets both date inputs then generates */
+function setDailyReportPeriod(kind) {
+  const dateEl = document.getElementById('fbDrDate'), toEl = document.getElementById('fbDrDateTo');
+  const base = dateEl.value ? new Date(dateEl.value + 'T00:00:00') : new Date();
+  const iso = _fbIsoLocal;
+  if (kind === 'day') { dateEl.value = iso(new Date()); toEl.value = ''; }
+  else if (kind === 'week') {
+    const dow = (base.getDay() + 6) % 7;                       // Monday-start week
+    const mon = new Date(base); mon.setDate(base.getDate() - dow);
+    const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+    dateEl.value = iso(mon); toEl.value = iso(sun);
+  } else if (kind === 'month') {
+    const first = new Date(base.getFullYear(), base.getMonth(), 1);
+    const last = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    dateEl.value = iso(first); toEl.value = iso(last);
+  }
+  loadDailyReport();
+}
 async function loadDailyReport() {
   const host = document.getElementById('fbDailyReport'), printLink = document.getElementById('fbDrPrint');
-  const dateEl = document.getElementById('fbDrDate');
-  if (!dateEl.value) dateEl.value = new Date().toISOString().slice(0, 10);
-  const date = dateEl.value;
+  const dateEl = document.getElementById('fbDrDate'), toEl = document.getElementById('fbDrDateTo');
+  if (!dateEl.value) dateEl.value = _fbIsoLocal(new Date());
+  const date = dateEl.value, dateTo = toEl.value && toEl.value !== date ? toEl.value : '';
   await _fbDrFillBranches();
   const branchSel = document.getElementById('fbDrBranch');
   if (branchSel && !branchSel.dataset.touched) branchSel.value = _fbBranchLocal || getBranch() || '';
   host.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังสร้างรายงาน…</span>';
-  const p = new URLSearchParams({ date });
+  const p = new URLSearchParams({ date }); if (dateTo) p.set('date_to', dateTo);
   const b = branchSel ? branchSel.value : (_fbBranchLocal || getBranch()); if (b) p.set('branch', b);
   let d; try { d = await api(`${API}/api/feedback/daily-report?${p}`); } catch (e) { host.innerHTML = 'สร้างรายงานไม่สำเร็จ: ' + _fbEsc(e.message); return; }
   printLink.href = `${API}/api/feedback/daily-report.print?${p}`;
   printLink.style.display = '';
+  const oneDay = d.date_from === d.date_to;
+  const pw = oneDay ? 'วันนี้' : 'ช่วงนี้';                       // matches _period_word() server-side
   if (!d.total) { host.innerHTML = `<p class="text-sm" style="color:var(--text-secondary)">${_fbEsc(d.headline)}</p>`; return; }
   const kpi = (l, v, cls) => `<div class="fb-kpi" style="border-top-color:#0f766e"><div class="l">${l}</div><div class="v"${cls ? ` style="color:${cls}"` : ''}>${v}</div></div>`;
   const kpis = kpi('เสียงทั้งหมด', d.total) + kpi('คะแนนเฉลี่ย', d.avg_rating != null ? d.avg_rating.toFixed(2) + '★' : '—') +
     kpi('เชิงลบ', d.neg_pct + '%', d.neg_pct >= 30 ? '#b91c1c' : '') + kpi('รอตอบ', d.unreplied, d.unreplied ? '#b45309' : '') +
     kpi('เกิน SLA', d.sla_breached, d.sla_breached ? '#b91c1c' : '') + kpi('ร้ายแรง', d.severe, d.severe ? '#b91c1c' : '');
-  const pw = d.prev_week_same_day;
-  const cmp = pw.total ? ` · เทียบวันเดียวกันสัปดาห์ก่อน (${pw.date}): ${pw.total} เสียง` : '';
-  const negCard = it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">“${_fbEsc(it.text)}”${it.severity === 'high' ? ' <span class="fb-tag flag">🔥 ร้ายแรง</span>' : ''}<div class="m">${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}${_fbEsc(it.source || '')}${_fbDrStar(it.rating)} · ${it.replied ? 'ตอบแล้ว' : it.sla_breached ? 'เกิน SLA' : 'รอตอบ'}${it.contact ? ` · 📞 ${_fbContactHtml(it.contact)}` : ''}</div></div>`;
-  const posCard = q => `<div class="fb-quote">“${_fbEsc(q.text)}”<div class="m">— ${d.branch ? '' : _fbEsc(q.branch || '-') + ' · '}${_fbEsc(q.source || '')}${_fbDrStar(q.rating)}</div></div>`;
+  const pp = d.prev_period, ppLabel = pp.date_from === pp.date_to ? pp.date_from : `${pp.date_from} – ${pp.date_to}`;
+  const cmp = pp.total ? ` · เทียบช่วงก่อนหน้าที่ยาวเท่ากัน (${ppLabel}): ${pp.total} เสียง` : '';
+  const dateBit = it => oneDay ? '' : _fbEsc((it.date || '').slice(0, 10)) + ' · ';
+  const negCard = it => `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2">“${_fbEsc(it.text)}”${it.severity === 'high' ? ' <span class="fb-tag flag">🔥 ร้ายแรง</span>' : ''}<div class="m">${dateBit(it)}${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}${_fbEsc(it.source || '')}${_fbDrStar(it.rating)} · ${it.replied ? 'ตอบแล้ว' : it.sla_breached ? 'เกิน SLA' : 'รอตอบ'}${it.contact ? ` · 📞 ${_fbContactHtml(it.contact)}` : ''}</div></div>`;
+  const posCard = q => `<div class="fb-quote">“${_fbEsc(q.text)}”<div class="m">— ${dateBit(q)}${d.branch ? '' : _fbEsc(q.branch || '-') + ' · '}${_fbEsc(q.source || '')}${_fbDrStar(q.rating)}</div></div>`;
   const grouped = (items, card) => d.branch ? items.map(card).join('') :
     _fbDrGroupByBranch(items).map(([br, its]) => `<div class="text-xs font-semibold mt-2" style="color:#0f766e">🏪 ${_fbEsc(br)} (${its.length})</div>${its.map(card).join('')}`).join('');
-  const negItems = (d.recent_negative || []).length ? grouped(d.recent_negative, negCard) : '<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเชิงลบที่ต้องติดตามวันนี้ 🎉</p>';
-  const posQuotes = (d.recent_positive || []).length ? grouped(d.recent_positive, posCard) : '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมที่หยิบไปใช้ได้วันนี้</p>';
+  const negItems = (d.recent_negative || []).length ? grouped(d.recent_negative, negCard) : `<p class="text-xs" style="color:var(--text-muted)">ไม่มีรายการเชิงลบที่ต้องติดตาม${pw} 🎉</p>`;
+  const posQuotes = (d.recent_positive || []).length ? grouped(d.recent_positive, posCard) : '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมที่หยิบไปใช้ได้</p>';
   const themeRows = (d.themes || []).length ? `<table class="fb-t"><thead><tr><th>หัวข้อ</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">ลบ</th><th>สาขา</th><th>ตัวอย่าง</th></tr></thead><tbody>${d.themes.slice(0, 12).map(t => `<tr><td>${_fbEsc(t.theme)}</td><td style="text-align:right">${t.n}</td><td style="text-align:right;color:#b91c1c">${t.neg}</td><td class="text-[11px]" style="color:var(--text-muted)">${(t.branches || []).map(_fbEsc).join(', ')}</td><td class="text-[11px] italic" style="color:var(--text-muted)">${(t.examples || [])[0] ? '“' + _fbEsc(t.examples[0].text) + '”' : ''}</td></tr>`).join('')}</tbody></table>` :
-    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีหัวข้อที่ถูกพูดถึงวันนี้</p>';
+    `<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีหัวข้อที่ถูกพูดถึง${pw}</p>`;
   const menuRows = (d.menus || []).length ? `<table class="fb-t"><thead><tr><th>เมนู</th><th style="text-align:right">พูดถึง</th><th style="text-align:right">บวก</th><th style="text-align:right">ลบ</th></tr></thead><tbody>${d.menus.slice(0, 12).map(m => `<tr><td>${_fbEsc(m.menu)}</td><td style="text-align:right">${m.n}</td><td style="text-align:right;color:#047857">${m.pos}</td><td style="text-align:right;color:#b91c1c">${m.neg}</td></tr>`).join('')}</tbody></table>` :
-    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเมนูที่ถูกพูดถึงวันนี้</p>';
+    `<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเมนูที่ถูกพูดถึง${pw}</p>`;
   const sourcesRows = Object.entries(d.sources || {}).sort((a, b) => b[1] - a[1]).map(([s, n]) => `<div class="flex justify-between"><span>${_fbEsc(s)}</span><b>${n}</b></div>`).join('') || '<p class="text-xs" style="color:var(--text-muted)">—</p>';
   const r = d.response || {};
   const responseRows = `<div class="flex justify-between"><span>ตอบได้ทั้งหมด</span><b>${r.answerable || 0}</b></div><div class="flex justify-between"><span>ตอบแล้ว</span><b>${r.answered || 0}</b></div>` +
     `<div class="flex justify-between"><span>อัตราตอบกลับ</span><b>${r.rate != null ? r.rate + '%' : '—'}</b></div><div class="flex justify-between"><span>ตอบไวเฉลี่ย</span><b>${r.median_days != null ? r.median_days + ' วัน' : '—'}</b></div>`;
   const staffRows = (d.staff || []).length ? d.staff.slice(0, 8).map(s => `<div class="flex justify-between"><span>${_fbEsc(s.name)} <span class="text-[11px]" style="color:var(--text-muted)">(${_fbEsc(s.branch)})</span></span><b>👍${s.pos} 👎${s.neg}</b></div>`).join('') :
-    '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีพนักงานถูกระบุชื่อวันนี้</p>';
-  const branchTable = (!d.branch && (d.branches || []).length) ? `<h4 class="text-xs font-semibold mt-3 mb-1">🏪 รายสาขาที่มีเสียงวันนี้ (${d.branches.length})</h4>
+    `<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีพนักงานถูกระบุชื่อ${pw}</p>`;
+  const branchTable = (!d.branch && (d.branches || []).length) ? `<h4 class="text-xs font-semibold mt-3 mb-1">🏪 รายสาขาที่มีเสียง${pw} (${d.branches.length})</h4>
     <table class="fb-t"><thead><tr><th>สาขา</th><th style="text-align:right">เสียง</th><th style="text-align:right">ลบ%</th><th style="text-align:right">★</th><th style="text-align:right">รอตอบ</th><th style="text-align:right">ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>${d.branches.map(x => `<tr class="row" onclick="document.getElementById('fbDrBranch').value='${_fbEsc(x.branch).replace(/'/g, "\\'")}';document.getElementById('fbDrBranch').dataset.touched='1';loadDailyReport()"><td>${_fbEsc(x.branch)}</td><td style="text-align:right">${x.n}</td><td style="text-align:right;color:${x.neg_pct >= 30 ? '#b91c1c' : 'inherit'}">${x.neg_pct}%</td><td style="text-align:right">${x.avg_rating != null ? x.avg_rating.toFixed(2) : '—'}</td><td style="text-align:right">${x.unreplied}</td><td style="text-align:right">${x.flagged}</td><td class="text-[11px]">${_fbEsc(x.top_theme || '—')}</td></tr>`).join('')}</tbody></table>` : '';
   host.innerHTML = `
     <div class="rounded p-2.5" style="background:#f0fdfa;border:1px solid #99f6e4"><b>${_fbEsc(d.headline)}</b><span style="color:var(--text-muted)">${_fbEsc(cmp)}</span></div>
     <div class="fb-kpis mt-3">${kpis}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
-      <div><h4 class="text-xs font-semibold mb-1">🏷️ หัวข้อที่ถูกพูดถึงวันนี้</h4>${themeRows}</div>
-      <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึงวันนี้</h4>${menuRows}</div>
+      <div><h4 class="text-xs font-semibold mb-1">🏷️ หัวข้อที่ถูกพูดถึง${pw}</h4>${themeRows}</div>
+      <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึง${pw}</h4>${menuRows}</div>
     </div>
-    <h4 class="text-xs font-semibold mt-3 mb-1">🚩 ต้องติดตามวันนี้ (${(d.recent_negative || []).length})</h4>${negItems}
+    <h4 class="text-xs font-semibold mt-3 mb-1">🚩 ต้องติดตาม${pw} (${(d.recent_negative || []).length})</h4>${negItems}
     <h4 class="text-xs font-semibold mt-3 mb-1">🌟 เสียงชมที่หยิบไปใช้ได้ (${(d.recent_positive || []).length})</h4>${posQuotes}
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-3 text-xs">
-      <div><h4 class="text-xs font-semibold mb-1">📡 ช่องทางที่มาวันนี้</h4>${sourcesRows}</div>
+      <div><h4 class="text-xs font-semibold mb-1">📡 ช่องทางที่มา${pw}</h4>${sourcesRows}</div>
       <div><h4 class="text-xs font-semibold mb-1">⏱️ อัตราตอบกลับ</h4>${responseRows}</div>
       <div><h4 class="text-xs font-semibold mb-1">👥 พนักงานที่ถูกพูดถึง</h4>${staffRows}</div>
     </div>

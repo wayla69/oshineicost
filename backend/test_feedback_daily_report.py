@@ -66,7 +66,7 @@ def test_compute_daily_report_is_one_day_of_the_same_aggregate(client):
     con.commit(); con.close()
     with core.get_db() as con:
         d = D.compute_daily_report(con, DAY)
-    assert d["date"] == DAY and d["total"] == 3 and d["sentiment"] == {"pos": 1, "neg": 2, "neu": 0}
+    assert d["date_from"] == DAY and d["date_to"] == DAY and d["total"] == 3 and d["sentiment"] == {"pos": 1, "neg": 2, "neu": 0}
     assert d["severe"] == 1 and "3 เสียง" in d["headline"] and "⚠ ร้ายแรง 1" in d["headline"]
     assert any(m["menu"] == "แซลมอน" for m in d["menus"]) and any(t["theme"] == "รอนาน" for t in d["themes"])
     neg_texts = {it["text"] for it in d["recent_negative"]}
@@ -74,14 +74,15 @@ def test_compute_daily_report_is_one_day_of_the_same_aggregate(client):
     sev = next(it for it in d["recent_negative"] if it["text"] == "อาหารมีปัญหา")
     assert sev["severity"] == "high" and sev["contact"] == "081-999-8888"
     assert d["recent_positive"][0]["text"] == "แซลมอนสดมาก"
-    assert d["prev_week_same_day"]["date"] == "2026-06-08"                     # 7 days earlier
+    assert d["date_from"] == DAY and d["date_to"] == DAY
+    assert d["prev_period"] == {"date_from": "2026-06-08", "date_to": "2026-06-08", "total": 0}   # one day → the same weekday 7 days earlier
 
 
 def test_empty_day_headline(client):
     import core
     with core.get_db() as con:
         d = D.compute_daily_report(con, DAY, branch="BranchZ")
-    assert d["total"] == 0 and d["headline"] == f"ไม่มีเสียงลูกค้าเข้ามาในวันที่ {DAY} ที่สาขา BranchZ"
+    assert d["total"] == 0 and d["headline"] == f"ไม่มีเสียงลูกค้าเข้ามาในช่วง {DAY} ที่สาขา BranchZ"
 
 
 def test_endpoint_defaults_to_today_and_scopes_by_branch(client):
@@ -95,7 +96,7 @@ def test_endpoint_defaults_to_today_and_scopes_by_branch(client):
     j_all = client.get("/api/feedback/daily-report", params={"date": DAY}).json()
     assert j_all["total"] == 2
     j_default = client.get("/api/feedback/daily-report").json()               # no date → today, no crash
-    assert "date" in j_default and "headline" in j_default
+    assert j_default["date_from"] == j_default["date_to"] and "headline" in j_default
 
 
 def test_print_edition_is_html_with_the_headline_and_a_tel_link(client):
@@ -108,6 +109,51 @@ def test_print_edition_is_html_with_the_headline_and_a_tel_link(client):
     body = r.text
     assert DAY in body and "แย่มาก" in body and 'href="tel:0812345678"' in body
     assert "<script" not in body.lower()                                       # a static print page, not a client-rendered one
+
+
+def test_date_to_extends_it_to_a_range(client):
+    """date_to turns the "daily" report into a period report (week/month/custom
+    range from the UI) — same engine, just a wider [date_from, date_to] window,
+    and the comparison period becomes the immediately preceding one of equal
+    length instead of "the same weekday last week"."""
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [
+        ("BranchA", "2026-06-01 09:00:00", 1, "แย่วันแรก", "neg", [], [], None, "low"),
+        ("BranchA", "2026-06-04 12:00:00", 5, "ดีกลางสัปดาห์", "pos", [], [], None, "low"),
+        ("BranchA", "2026-06-07 23:00:00", 4, "ดีวันสุดท้าย", "pos", [], [], None, "low"),
+        ("BranchA", "2026-05-31 12:00:00", 5, "ก่อนช่วง ไม่นับปัจจุบัน แต่นับช่วงก่อนหน้า", "pos", [], [], None, "low"),  # excluded from THIS period, counted in the prev one (its last day)
+        ("BranchA", "2026-06-08 00:00:01", 1, "หลังช่วง ไม่นับ", "neg", [], [], None, "low"),   # just after: excluded
+        ("BranchA", "2026-05-25 10:00:00", 3, "ช่วงก่อนหน้า", "neu", [], [], None, "low"),      # the prev period's first day
+    ])
+    con.commit(); con.close()
+    with core.get_db() as con:
+        d = D.compute_daily_report(con, "2026-06-01", date_to="2026-06-07")
+    assert d["date_from"] == "2026-06-01" and d["date_to"] == "2026-06-07" and d["total"] == 3
+    assert d["prev_period"] == {"date_from": "2026-05-25", "date_to": "2026-05-31", "total": 2}   # 7 days immediately before, not "same weekday"
+    assert "แย่วันแรก" not in {q["text"] for q in d["recent_positive"]}
+    # date_from == date_to (still the default single-day path) keeps the old weekday-fair comparison
+    with core.get_db() as con:
+        one_day = D.compute_daily_report(con, "2026-06-01", date_to="2026-06-01")
+    assert one_day["prev_period"]["date_from"] == "2026-05-25" and one_day["prev_period"]["date_to"] == "2026-05-25"
+    # a reversed range is swapped back into order rather than returning nothing
+    with core.get_db() as con:
+        swapped = D.compute_daily_report(con, "2026-06-07", date_to="2026-06-01")
+    assert swapped["date_from"] == "2026-06-01" and swapped["date_to"] == "2026-06-07" and swapped["total"] == 3
+
+
+def test_print_period_wording_and_date_shown_per_item(client):
+    import core
+    con = sqlite3.connect(str(core.DB_PATH))
+    _seed(con, [("BranchA", "2026-06-01 09:00:00", 1, "แย่วันแรก", "neg", [], [], None, "low"),
+                ("BranchA", "2026-06-07 10:00:00", 5, "ดีวันท้าย", "pos", [], [], None, "low")])
+    con.commit(); con.close()
+    body = client.get("/api/feedback/daily-report.print", params={"date": "2026-06-01", "date_to": "2026-06-07"}).text
+    assert "รายงานตามช่วง 2026-06-01 – 2026-06-07" in body
+    assert "ต้องติดตามช่วงนี้" in body and "ช่องทางที่มาช่วงนี้" in body       # "วันนี้" only makes sense for a single day
+    assert "2026-06-01 ·" in body and "2026-06-07 ·" in body                # each item shows its own date across a multi-day range
+    single = client.get("/api/feedback/daily-report.print", params={"date": "2026-06-01"}).text
+    assert "รายงานประจำวัน 2026-06-01" in single and "ต้องติดตามวันนี้" in single
 
 
 def test_print_groups_by_branch_only_on_the_all_branches_view(client):

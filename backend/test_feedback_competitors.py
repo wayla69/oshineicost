@@ -108,17 +108,56 @@ def test_snapshot_endpoints_and_league(client, monkeypatch):
 
 def test_places_settings_default_validate_and_persist(client):
     d = client.get("/api/feedback/competitors/settings").json()
-    assert d == {"radius_m": P.RADIUS_M, "keywords": list(P.DEFAULT_KEYWORDS),
-                 "radius_m_default": P.RADIUS_M, "keywords_default": list(P.DEFAULT_KEYWORDS)}
+    assert d == {"radius_m": P.RADIUS_M, "keywords": list(P.DEFAULT_KEYWORDS), "overridden": False,
+                 "radius_m_default": P.RADIUS_M, "keywords_default": list(P.DEFAULT_KEYWORDS), "branches_overridden": []}
     assert client.post("/api/feedback/competitors/settings", json={"radius_m": 100}).status_code == 400   # below 500
     assert client.post("/api/feedback/competitors/settings", json={"keywords": []}).status_code == 400    # empty list
     r = client.post("/api/feedback/competitors/settings", json={"radius_m": 5000, "keywords": ["ปิ้งย่าง", " หมูกระทะ "]})
-    assert r.json() == {"radius_m": 5000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"]}                              # trimmed
+    assert r.json()["radius_m"] == 5000 and r.json()["keywords"] == ["ปิ้งย่าง", "หมูกระทะ"]                # trimmed
     again = client.get("/api/feedback/competitors/settings").json()
     assert again["radius_m"] == 5000 and again["keywords"] == ["ปิ้งย่าง", "หมูกระทะ"]
-    assert again["radius_m_default"] == P.RADIUS_M                                                        # the shipped default is unaffected
+    assert again["radius_m_default"] == 5000                                # _default = the chain-wide value a branch falls back to, not the shipped constant
     only_radius = client.post("/api/feedback/competitors/settings", json={"radius_m": 2000}).json()
-    assert only_radius == {"radius_m": 2000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"]}                          # partial update keeps the other field
+    assert only_radius["radius_m"] == 2000 and only_radius["keywords"] == ["ปิ้งย่าง", "หมูกระทะ"]          # partial update keeps the other field
+
+
+def test_places_settings_per_branch_override(client):
+    # chain-wide defaults first (5000/ปิ้งย่าง+หมูกระทะ), then a branch-specific override on top
+    client.post("/api/feedback/competitors/settings", json={"radius_m": 5000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"]})
+    khonkaen = client.post("/api/feedback/competitors/settings?branch=ขอนแก่น", json={"radius_m": 8000}).json()
+    assert khonkaen == {"radius_m": 8000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"], "overridden": True,
+                        "radius_m_default": 5000, "keywords_default": ["ปิ้งย่าง", "หมูกระทะ"], "branches_overridden": ["ขอนแก่น"]}
+    # an unoverridden branch still reads the chain-wide defaults, with overridden: False
+    other = client.get("/api/feedback/competitors/settings", params={"branch": "เชียงใหม่"}).json()
+    assert other["radius_m"] == 5000 and other["overridden"] is False
+    # chain-wide GET (no branch) is unaffected by the branch override, but lists it
+    chain = client.get("/api/feedback/competitors/settings").json()
+    assert chain["radius_m"] == 5000 and chain["branches_overridden"] == ["ขอนแก่น"]
+    # no radius_m/keywords and no clear:true is refused; clear:true removes the override
+    assert client.post("/api/feedback/competitors/settings?branch=ขอนแก่น", json={}).status_code == 400
+    cleared = client.post("/api/feedback/competitors/settings?branch=ขอนแก่น", json={"clear": True}).json()
+    assert cleared == {"radius_m": 5000, "keywords": ["ปิ้งย่าง", "หมูกระทะ"], "overridden": False,
+                       "radius_m_default": 5000, "keywords_default": ["ปิ้งย่าง", "หมูกระทะ"], "branches_overridden": []}
+
+
+def test_places_connector_uses_the_branch_override(monkeypatch):
+    """competitors_near() picks radius_m/keywords from cfg["branches"][branch]
+    over the chain-wide cfg values — the same three-level fallback find_self()
+    already uses for its query override."""
+    cfg = {"api_key": "KEY", "radius_m": 3000, "keywords": ["ชาบู"],
+          "branches": {"ขอนแก่น": {"radius_m": 9000, "keywords": ["ปิ้งย่าง"]}}}
+    seen = []
+
+    def http(method, url, headers, body):
+        seen.append(body)
+        assert body["locationBias"]["circle"]["radius"] in (3000.0, 9000.0)
+        return 200, {"places": []}
+
+    P.competitors_near(KK, cfg, http, branch="ขอนแก่น")
+    assert seen[0]["textQuery"] == "ปิ้งย่าง" and seen[0]["locationBias"]["circle"]["radius"] == 9000.0
+    seen.clear()
+    P.competitors_near(KK, cfg, http, branch="โคราช1")             # no override → the chain-wide values
+    assert seen[0]["textQuery"] == "ชาบู" and seen[0]["locationBias"]["circle"]["radius"] == 3000.0
 
 
 def test_fetcher_merges_the_settings_override_over_the_config_file(tmp_path, monkeypatch):

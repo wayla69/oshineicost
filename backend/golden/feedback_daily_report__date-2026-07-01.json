@@ -6,13 +6,15 @@
  "branches": [],
  "by_day": [],
  "by_month": [],
- "date": "2026-07-01",
+ "date_from": "2026-07-01",
+ "date_to": "2026-07-01",
  "flagged": 0,
- "headline": "ไม่มีเสียงลูกค้าเข้ามาในวันที่ 2026-07-01",
+ "headline": "ไม่มีเสียงลูกค้าเข้ามาในช่วง 2026-07-01",
  "menus": [],
  "neg_pct": 0.0,
- "prev_week_same_day": {
-  "date": "2026-06-24",
+ "prev_period": {
+  "date_from": "2026-06-24",
+  "date_to": "2026-06-24",
   "total": 0
  },
  "recent_negative": [],

@@ -502,8 +502,13 @@ def _places_step(args, cfg, sink, http, log, force: bool = False) -> bool:
     pc = dict((cfg or {}).get("places") or {})
     if not pc.get("api_key") or getattr(args, "dry_run", False):
         return False
-    try:                                        # radius_m/keywords set from the app (Settings) override the file
-        pc.update({k: v for k, v in (sink.places_settings() or {}).items() if v})
+    try:                                        # radius_m/keywords set from the app (Settings) override the file —
+        override = sink.places_settings() or {}  # chain-wide keys replace outright; "branches" merges per-branch so a
+        for k, v in override.items():             # file-set find_self() query override for that branch survives
+            if k != "branches" and v:
+                pc[k] = v
+        for b, ov in (override.get("branches") or {}).items():
+            pc.setdefault("branches", {}).setdefault(b, {}).update({k: v for k, v in ov.items() if v})
     except Exception as e:
         log(f"  places: could not read the Settings override, using .feedback_config.json as-is ({e})")
     month = _this_month()

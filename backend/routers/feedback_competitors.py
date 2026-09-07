@@ -6,9 +6,12 @@ competitors' median and best, its rank, and the move since the last snapshot.
   POST /api/feedback/competitors          {month, rows: [...]} — the fetcher's snapshot (replaces the month)
   GET  /api/feedback/competitors?month=&branch=    the league per branch (+ the branch's list)
   GET  /api/feedback/competitors/status   the latest snapshot month (the fetcher asks before running)
-  GET  /api/feedback/competitors/settings          the search radius + keywords in force
-  POST /api/feedback/competitors/settings          {radius_m?, keywords?} — Settings-editable, the
-                                                     fetcher's api_key stays in .feedback_config.json
+  GET  /api/feedback/competitors/settings?branch=  the search radius + keywords in force (chain-wide,
+                                                     or one branch's effective settings with &branch=)
+  POST /api/feedback/competitors/settings?branch=  {radius_m?, keywords?} — Settings-editable, the
+                                                     fetcher's api_key stays in .feedback_config.json;
+                                                     &branch= edits that branch's override instead of
+                                                     the chain-wide defaults ({"clear": true} removes it)
 Table feedback_competitor — preserved across the DB push by the "feedback" prefix; the radius/keyword
 override lives in app_settings (also preserved) under key "feedback_places".
 """
@@ -54,9 +57,11 @@ def _median(xs):
 
 
 def get_places_settings(con) -> dict:
-    """{"radius_m": int, "keywords": [str,...]} overrides, or {} keys omitted
-    when unset — the connector (feedback_sources/places.py) falls back to its
-    own RADIUS_M/DEFAULT_KEYWORDS. The fetcher reads this through the sink
+    """{"radius_m": int, "keywords": [str,...], "branches": {branch: {"radius_m"?, "keywords"?}}}
+    — the chain-wide defaults plus any per-branch override, keys omitted when
+    unset. The connector (feedback_sources/places.py) falls back to its own
+    RADIUS_M/DEFAULT_KEYWORDS for the chain-wide ones, and to those for any
+    branch without its own override. The fetcher reads this through the sink
     (ApiSink/DbSink.places_settings()) and merges it over .feedback_config.json's
     "places" section, so the api_key stays file-only but radius/keywords are
     Settings-editable without touching that file."""
@@ -71,16 +76,46 @@ def get_places_settings(con) -> dict:
         return {}
 
 
-def set_places_settings(con, radius_m=None, keywords=None) -> dict:
+def set_places_settings(con, radius_m=None, keywords=None, branch=None) -> dict:
+    """With branch=None, edits the chain-wide defaults (radius_m/keywords at the
+    top level). With a branch given, edits that branch's override instead —
+    radius_m=None *and* keywords=None for a branch clears its override back to
+    the chain-wide defaults (an explicit "use the default again")."""
     cur = get_places_settings(con)
-    if radius_m is not None:
-        cur["radius_m"] = int(radius_m)
-    if keywords is not None:
-        cur["keywords"] = [str(k).strip() for k in keywords if str(k).strip()][:12]
+    if branch:
+        branches = cur.setdefault("branches", {})
+        if radius_m is None and keywords is None:
+            branches.pop(branch, None)
+        else:
+            ov = branches.setdefault(branch, {})
+            if radius_m is not None:
+                ov["radius_m"] = int(radius_m)
+            if keywords is not None:
+                ov["keywords"] = [str(k).strip() for k in keywords if str(k).strip()][:12]
+        if not branches:
+            cur.pop("branches", None)
+    else:
+        if radius_m is not None:
+            cur["radius_m"] = int(radius_m)
+        if keywords is not None:
+            cur["keywords"] = [str(k).strip() for k in keywords if str(k).strip()][:12]
     con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '')")
     con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES('feedback_places', ?)",
                (json.dumps(cur, ensure_ascii=False),))
     return cur
+
+
+def effective_places_settings(cur: dict, branch: Optional[str] = None) -> dict:
+    """The radius_m/keywords actually in force for one branch (or the
+    chain-wide defaults when branch is None) — the override merged over the
+    defaults merged over the connector's own shipped defaults."""
+    radius_m, keywords = cur.get("radius_m", RADIUS_M), cur.get("keywords") or list(DEFAULT_KEYWORDS)
+    ov = (cur.get("branches") or {}).get(branch) if branch else None
+    overridden = bool(ov)
+    if ov:
+        radius_m = ov.get("radius_m", radius_m)
+        keywords = ov.get("keywords") or keywords
+    return {"radius_m": radius_m, "keywords": keywords, "overridden": overridden}
 
 
 def latest_month(con) -> Optional[str]:
@@ -165,26 +200,34 @@ def competitors_get(request: Request, month: Optional[str] = Query(None), branch
         return league(con, (month or "")[:7] or None, branch)
 
 
+def _settings_response(cur: dict, branch: Optional[str]) -> dict:
+    out = effective_places_settings(cur, branch)
+    out.update({"radius_m_default": cur.get("radius_m", RADIUS_M), "keywords_default": cur.get("keywords") or list(DEFAULT_KEYWORDS),
+                "branches_overridden": sorted((cur.get("branches") or {}).keys())})
+    return out
+
+
 @router.get("/api/feedback/competitors/settings")
-def competitors_settings_get():
+def competitors_settings_get(branch: Optional[str] = Query(None)):
     with get_db() as con:
         cur = get_places_settings(con)
-    return {"radius_m": cur.get("radius_m", RADIUS_M), "keywords": cur.get("keywords") or list(DEFAULT_KEYWORDS),
-            "radius_m_default": RADIUS_M, "keywords_default": list(DEFAULT_KEYWORDS)}
+    return _settings_response(cur, branch)
 
 
 @router.post("/api/feedback/competitors/settings", dependencies=[Depends(require_write_token)])
-async def competitors_settings_post(request: Request):
+async def competitors_settings_post(request: Request, branch: Optional[str] = Query(None)):
     body = await request.json()
     radius_m, keywords = body.get("radius_m"), body.get("keywords")
     if radius_m is not None and not (500 <= int(radius_m) <= 10000):
         raise HTTPException(400, "radius_m must be 500–10000")
     if keywords is not None and (not isinstance(keywords, list) or not keywords):
         raise HTTPException(400, "keywords must be a non-empty list")
+    if branch and radius_m is None and keywords is None and not body.get("clear"):
+        raise HTTPException(400, "give radius_m and/or keywords, or clear:true to remove this branch's override")
     with get_db() as con:
-        cur = set_places_settings(con, radius_m, keywords)
+        cur = set_places_settings(con, radius_m, keywords, branch=branch)
         con.commit()
-    return {"radius_m": cur.get("radius_m", RADIUS_M), "keywords": cur.get("keywords") or list(DEFAULT_KEYWORDS)}
+    return _settings_response(cur, branch)
 
 
 @router.post("/api/feedback/competitors", dependencies=[Depends(require_write_token)])
@@ -200,4 +243,4 @@ async def competitors_post(request: Request):
     return {"month": month, "stored": n}
 
 
-__all__ = ["router", "league", "store_snapshot", "latest_month", "get_places_settings", "set_places_settings"]
+__all__ = ["router", "league", "store_snapshot", "latest_month", "get_places_settings", "set_places_settings", "effective_places_settings"]
