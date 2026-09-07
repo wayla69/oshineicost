@@ -69,7 +69,16 @@ def test_link_form_answer_queue_and_guards(client, monkeypatch):
     assert "รอนาน / คิว" in page.text and str(S.CONTACT_DAYS) in page.text
     assert client.get("/s/nope").status_code == 404
     poster = client.get(f"/s/{code}/print")
-    assert poster.status_code == 200 and f"/s/{code}" in poster.text and "qrcode.min.js" in poster.text
+    assert poster.status_code == 200 and f"/s/{code}" in poster.text
+    # The QR is drawn here, not by a script in whatever browser the poster is printed from — a blank
+    # square on a card already taped to a counter is only noticed a month of missing answers later.
+    assert "<svg" in poster.text and "qrcode.min.js" not in poster.text
+    # …and it carries the survey URL, not merely some QR: the same bytes segno would draw for that URL
+    # have to appear in the page, so a wrong `_base_url` or a stale code fails here and not in the field.
+    import segno
+    want = segno.make(f"http://testserver/s/{code}", error="m").svg_inline(
+        scale=1, border=0, svgclass=None, lineclass=None, omitsize=True)
+    assert want[want.index("<path"):] in poster.text
 
     # a negative answer with a contact → kind survey, the tapped aspect is a theme, it waits in the queue
     assert _answer(client, code).json() == {"ok": True, "review_url": None, "callback": True}
