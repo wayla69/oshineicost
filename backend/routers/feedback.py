@@ -103,7 +103,10 @@ _EXTRA_COLS = (("external_id", "TEXT"), ("url", "TEXT"), ("author_hash", "TEXT")
                # contact = a QR-survey guest's phone / LINE id for the call back (blanked after survey.CONTACT_DAYS)
                ("contact", "TEXT"),
                # E5: severity high|med|low (+ the reason when high) and the staff named in the voice (JSON list)
-               ("severity", "TEXT"), ("severity_note", "TEXT"), ("staff", "TEXT"))
+               ("severity", "TEXT"), ("severity_note", "TEXT"), ("staff", "TEXT"),
+               # a staff member called the guest back about this voice — who, and when (independent of
+               # flag/reply; a QR contact can be "called back" without a written reply, or vice versa)
+               ("contacted_at", "TEXT"), ("contacted_by", "TEXT"))
 SLA_DAYS = 1                # a negative voice waits at most this long for the branch's answer
 REPLY_STATUSES = ("pending", "sent", "failed", "manual")
 KINDS = ("review", "comment", "mention", "message", "survey")   # message = a private inbox conversation (Messenger / IG DM), per day; survey = the QR form (routers/survey.py)
@@ -514,7 +517,7 @@ def _reply_channel(row) -> str:
 
 _ROW_COLS = ("id, branch_name, source, rated_at, rating, text, sentiment, score, themes, menus, analysed_by, "
              "external_id, url, reply_text, replied_at, reply_status, reply_error, kind, flag, flag_note, location, contact, "
-             "severity, severity_note, staff")
+             "severity, severity_note, staff, contacted_at, contacted_by")
 
 
 def _age_days(rated_at: str, today: str):
@@ -557,7 +560,8 @@ def _brief(r, today: str) -> dict:
             "flag": bool(r.get("flag")), "flag_note": r.get("flag_note") or "", "age_days": _age_days(r["rated_at"], today),
             "sla_breached": _sla_breached(r, today), "location": r.get("location") or "", "contact": r.get("contact") or "",
             "severity": r.get("severity") or "low", "severity_note": r.get("severity_note") or "",
-            "staff": json.loads(r.get("staff") or "[]") if isinstance(r.get("staff"), str) else (r.get("staff") or [])}
+            "staff": json.loads(r.get("staff") or "[]") if isinstance(r.get("staff"), str) else (r.get("staff") or []),
+            "contacted": bool(r.get("contacted_at")), "contacted_at": r.get("contacted_at") or "", "contacted_by": r.get("contacted_by") or ""}
 
 
 def _aggregate(rows: list, today: str) -> dict:
@@ -763,6 +767,23 @@ async def feedback_flag(fid: int, request: Request):
                     (1 if on else 0, (str(b.get("note") or "").strip()[:500] or None) if on else None, _thai_now(), fid))
         con.commit()
     return {"id": fid, "flag": on}
+
+
+@router.post("/api/feedback/{fid}/contacted", dependencies=[Depends(require_write_token)])
+async def feedback_contacted(fid: int, request: Request):
+    """Mark (or unmark) that a staff member actually called the guest back —
+    independent of flag/reply: a QR contact can be called without a written
+    reply logged, or answered in-app without ever picking up the phone."""
+    b = await request.json()
+    on = bool(b.get("contacted", True))
+    by = str(b.get("by") or "").strip()[:60]
+    with get_db() as con:
+        _ensure(con)
+        _get_row(con, fid, request)
+        con.execute("UPDATE customer_feedback SET contacted_at=?, contacted_by=?, updated_at=? WHERE id=?",
+                    (_thai_now() if on else None, by or None if on else None, _thai_now(), fid))
+        con.commit()
+    return {"id": fid, "contacted": on}
 
 
 @router.get("/api/feedback/sources")

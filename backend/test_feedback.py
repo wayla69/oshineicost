@@ -145,6 +145,29 @@ def test_upload_without_text_is_400(client):
     assert client.post("/api/feedback/upload", json={"rows": []}).status_code == 400
 
 
+def test_contacted_toggle_is_independent_of_flag_and_reply(client):
+    """A staff member calling the guest back is tracked separately from the
+    flag (pinned) and reply (written) states — either can be true without
+    the other (E: item #4 of the daily-report follow-ups)."""
+    r = client.post("/api/feedback/upload", json={"rows": [
+        {"text": "รอนานมาก", "branch": "BranchA", "rating": 1, "contact": "081-234-5678"}]}).json()
+    fid = r["new_items"][0]["id"]
+    item = client.get("/api/feedback/items").json()["items"][0]
+    assert not item["contacted_at"] and not item["contacted_by"]
+    on = client.post(f"/api/feedback/{fid}/contacted", json={"contacted": True, "by": "ผจก.สาขา"}).json()
+    assert on == {"id": fid, "contacted": True}
+    item = client.get("/api/feedback/items").json()["items"][0]
+    assert item["contacted_at"] and item["contacted_by"] == "ผจก.สาขา"
+    assert item["flag"] is False and not item["reply_text"]           # unrelated to flag/reply
+    summary_item = next(x for x in client.get("/api/feedback/summary").json()["recent_negative"] if x["id"] == fid)
+    assert summary_item["contacted"] is True and summary_item["contacted_by"] == "ผจก.สาขา"
+    off = client.post(f"/api/feedback/{fid}/contacted", json={"contacted": False}).json()
+    assert off == {"id": fid, "contacted": False}
+    item = client.get("/api/feedback/items").json()["items"][0]
+    assert not item["contacted_at"] and not item["contacted_by"]
+    assert client.post("/api/feedback/999999/contacted", json={"contacted": True}).status_code == 404
+
+
 def test_rbac_module_gates_the_feedback_endpoints(client, app_db, monkeypatch):
     import test_auth as TA
     monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret")

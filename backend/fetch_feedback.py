@@ -206,6 +206,15 @@ class ApiSink:
             q += "&branch=" + urllib.parse.quote(branch)
         return self._call("GET", q)
 
+    def daily_report(self, date: str = None, branch: str = None) -> dict:
+        params = []
+        if date:
+            params.append("date=" + urllib.parse.quote(date))
+        if branch:
+            params.append("branch=" + urllib.parse.quote(branch))
+        q = "/api/feedback/daily-report" + (("?" + "&".join(params)) if params else "")
+        return self._call("GET", q)
+
     def upload(self, rows: list, by: str = "") -> dict:
         total = {"rows": 0, "inserted": 0, "updated": 0, "unchanged": 0, "duplicates": 0,
                  "analysed_by": set(), "unmatched": set(), "new_items": []}
@@ -288,6 +297,17 @@ class DbSink:
         con = self._con()
         try:
             out = compute_digest(con, days=days, branch=branch)
+            con.commit()
+            return out
+        finally:
+            con.close()
+
+    def daily_report(self, date: str = None, branch: str = None) -> dict:
+        from feedback_host import thai_today
+        from routers.feedback_daily_report import compute_daily_report
+        con = self._con()
+        try:
+            out = compute_daily_report(con, date or thai_today(), branch)
             con.commit()
             return out
         finally:
@@ -491,6 +511,39 @@ def _digest_step(args, sink, notifier, log, force: bool = False, cfg: dict = Non
         return False
 
 
+def _yesterday() -> str:
+    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7) - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+
+
+def _daily_report_step(args, sink, notifier, log, force: bool = False, cfg: dict = None, notifier_to=None):
+    """Every run (unless --no-daily-report), yesterday's 📰 report — brand-new
+    unclaimed problems and any chronic pattern — goes to the group chat, so
+    marketing sees them without opening the app and clicking "สร้างรายงาน".
+    Complements _digest_step (the week-over-week numbers, Mondays only)."""
+    if getattr(args, "dry_run", False) or not notifier:
+        return False
+    if not force and getattr(args, "no_daily_report", False):
+        return False
+    date = getattr(args, "date", None) or _yesterday()
+    try:
+        d = sink.daily_report(date)
+        sent = notifier(notify.daily_report_digest(d, getattr(args, "api", "") or ""))
+        log(f"  daily report: {d.get('total', 0)} voice(s) on {date} → telegram {'sent' if sent else 'not configured'}")
+        if notifier_to:
+            for bname, chat in _branch_chats(cfg).items():
+                try:
+                    db = sink.daily_report(date, bname)
+                    if db.get("total") or db.get("new_issues") or db.get("chronic_branches"):
+                        notifier_to(notify.daily_report_digest(db, getattr(args, "api", "") or ""), chat)
+                        log(f"  daily report → {bname}: {db.get('total', 0)} voice(s)")
+                except Exception as e:      # one branch's chat must not stop the others
+                    log(f"  ✗ daily report → {bname}: {e}")
+        return bool(sent)
+    except Exception as e:
+        log(f"  ✗ daily report: {e}")
+        return False
+
+
 def _this_month() -> str:
     return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime("%Y-%m")
 
@@ -628,6 +681,7 @@ def run(args, cfg: dict, sink, http=urllib_http, notifier=None, log=print, notif
     _replies_step(args, cfg, sink, http, log)
     _places_step(args, cfg, sink, http, log)
     _digest_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
+    _daily_report_step(args, sink, notifier, log, cfg=cfg, notifier_to=notifier_to)
     return 1 if failures else 0
 
 
@@ -794,6 +848,7 @@ def main(argv=None) -> int:
     r.add_argument("--token", default=None); r.add_argument("--user", default=None); r.add_argument("--password", default=None)
     r.add_argument("--dry-run", action="store_true"); r.add_argument("--no-alert", action="store_true")
     r.add_argument("--digest", action="store_true", help="send the weekly digest after this run (else Mondays only)")
+    r.add_argument("--no-daily-report", action="store_true", help="skip the daily report push after this run (else every run, for yesterday)")
     r.add_argument("--places", action="store_true", help="capture the competitor snapshot now (else once a month)")
     a = sub.add_parser("auth", help="one-time consent"); common(a)
     a.add_argument("source", choices=["google", "tiktok"]); a.add_argument("--manual", action="store_true")
@@ -813,6 +868,11 @@ def main(argv=None) -> int:
     dg.add_argument("--api", default=DEFAULT_API); dg.add_argument("--db", default=None)
     dg.add_argument("--token", default=None); dg.add_argument("--user", default=None); dg.add_argument("--password", default=None)
     dg.add_argument("--days", type=int, default=7)
+    dr = sub.add_parser("daily-report", help="send one day's (or period's) 📰 report to Telegram now"); common(dr)
+    dr.add_argument("--api", default=DEFAULT_API); dr.add_argument("--db", default=None)
+    dr.add_argument("--token", default=None); dr.add_argument("--user", default=None); dr.add_argument("--password", default=None)
+    dr.add_argument("--date", default=None, help="YYYY-MM-DD (default: yesterday, Thai clock)")
+    dr.add_argument("--branch", default=None)
     pl = sub.add_parser("places", help="capture the competitors around every branch now (Google Places)"); common(pl)
     pl.add_argument("--api", default=DEFAULT_API); pl.add_argument("--db", default=None)
     pl.add_argument("--token", default=None); pl.add_argument("--user", default=None); pl.add_argument("--password", default=None)
@@ -866,6 +926,14 @@ def main(argv=None) -> int:
             db = sink.digest(args.days, bname)
             okb = notify.send_telegram(notify.weekly_digest(db, args.api), chat_id=chat)
             print(f"  → {bname}: {'sent' if okb else 'not sent'}")
+        return 0
+    if args.cmd == "daily-report":
+        date = args.date or _yesterday()
+        d = sink.daily_report(date, args.branch)
+        text = notify.daily_report_digest(d, args.api)
+        ok = notify.send_telegram(text)
+        print(text)
+        print("telegram:", "sent" if ok else "not configured (OSHINEI_TG_TOKEN / OSHINEI_TG_CHAT_ID)")
         return 0
     if args.cmd == "places":
         ok = _places_step(args, cfg, sink, urllib_http, print, force=True)

@@ -66,6 +66,7 @@
         <select id="fbDrBranch" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" onchange="this.dataset.touched='1';loadDailyReport()"><option value="">ทุกสาขา</option></select>
         <button class="fb-btn" onclick="loadDailyReport()">สร้างรายงาน</button>
         <a class="fb-ghost" id="fbDrPrint" href="#" target="_blank" rel="noopener" style="display:none">🖨 พิมพ์ ↗</a>
+        <a class="fb-ghost" id="fbDrXlsx" href="#" style="display:none">⬇ Excel</a>
       </div>
     </div>
     <div id="fbDailyReport" class="mt-3 text-sm"><p class="text-xs" style="color:var(--text-muted)">เลือกช่วงแล้วกด "สร้างรายงาน" — ค่าเริ่มต้นคือวันนี้ (ไม่ใส่ "ถึง" = วันเดียว)</p></div>

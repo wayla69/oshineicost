@@ -142,3 +142,25 @@ def test_fetcher_sends_the_digest_on_mondays_and_on_demand(tmp_path, monkeypatch
     assert FF._digest_step(_args(dry_run=True), sink, notifier, lines.append) is False
     assert any("digest:" in ln for ln in lines)
     assert sink.digest(7)["voices"] == 1
+
+
+def test_fetcher_sends_the_daily_report_every_run_unless_opted_out(tmp_path):
+    """Unlike the weekly digest (Mondays only), _daily_report_step fires on
+    every run — the scheduled fetch already runs once a day, so this rides
+    that same cadence rather than needing its own day-of-week gate."""
+    db = tmp_path / "local.db"; _seed_db(db)
+    sink = FF.DbSink(db)
+    sink.upload([{"branch": "ขอนแก่น", "date": "2026-09-03", "source": "Google", "rating": 1, "text": "รอนานมาก", "external_id": "d1"}], by="t")
+    sent, lines = [], []
+    notifier = lambda text: (sent.append(text), True)[1]            # noqa: E731
+    assert FF._daily_report_step(_args(no_daily_report=False, date="2026-09-03"), sink, notifier, lines.append) is True
+    assert len(sent) == 1 and "รายงานเสียงลูกค้า 2026-09-03" in sent[0] and "1 เสียง" in sent[0]
+    assert FF._daily_report_step(_args(date="2026-09-03"), sink, notifier, lines.append) is False   # default (_args): opted out
+    assert len(sent) == 1                                            # the opt-out really opts out
+    assert FF._daily_report_step(_args(no_daily_report=False, dry_run=True, date="2026-09-03"), sink, notifier, lines.append) is False
+    assert any("daily report:" in ln for ln in lines)
+    # a theme with no open/doing action shows up as "new" in the pushed text
+    sink.upload([{"branch": "ขอนแก่น", "date": "2026-09-03", "source": "Google", "rating": 1,
+                 "text": "รอคิวนานมาก", "external_id": "d2", "themes_extra": ["รอนาน"], "sentiment_hint": "neg"}], by="t")
+    assert FF._daily_report_step(_args(no_daily_report=False, date="2026-09-03"), sink, notifier, lines.append) is True
+    assert "🆕 ปัญหาใหม่ยังไม่มีคนตาม" in sent[-1] and "รอนาน" in sent[-1]

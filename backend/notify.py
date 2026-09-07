@@ -139,4 +139,40 @@ def weekly_digest(d: dict, app_url: str = "") -> str:
     return "\n".join(lines)
 
 
-__all__ = ["send_telegram", "negative_digest", "weekly_digest", "telegram_config"]
+def daily_report_digest(d: dict, app_url: str = "") -> str:
+    """One day's (or period's) 📰 report, compact for a daily Telegram push —
+    complements weekly_digest() (the week-over-week numbers + action verdicts,
+    Mondays only) with the brand-new / recurring problems the report surfaces,
+    so marketing doesn't have to open the app and click "สร้างรายงาน" to see
+    them (routers/feedback_daily_report.compute_daily_report shape)."""
+    label = d["date_from"] if d.get("date_from") == d.get("date_to") else f"{d.get('date_from')} – {d.get('date_to')}"
+    branch_bit = f" · {html.escape(d['branch'])}" if d.get("branch") else ""
+    lines = [f"📰 <b>รายงานเสียงลูกค้า {html.escape(label)}</b>{branch_bit}"]
+    lines.append(html.escape(d.get("headline") or ""))
+    if d.get("total"):
+        new_i, open_i, done_i, chronic = d.get("new_issues") or [], d.get("open_issues") or [], d.get("resolved_issues") or [], d.get("chronic_branches") or []
+        bits = []
+        if new_i:
+            bits.append(f"🆕 ใหม่ {len(new_i)}")
+        if open_i:
+            bits.append(f"🔧 ค้าง {len(open_i)}")
+        if done_i:
+            bits.append(f"✅ ปิดแล้ว {len(done_i)}")
+        if chronic:
+            bits.append(f"🔁 ซ้ำซาก {len(chronic)}")
+        if bits:
+            lines.append(" · ".join(bits))
+        if new_i:
+            lines.append("🆕 ปัญหาใหม่ยังไม่มีคนตาม:")
+            for it in new_i[:3]:
+                lines.append(f"• {html.escape(it.get('branch') or '-')}: {html.escape(it['theme'])} ({it['n']})")
+        if chronic:
+            lines.append("🔁 สาขาที่ปัญหาเดิมวนซ้ำ:")
+            for it in chronic[:3]:
+                lines.append(f"• {html.escape(it.get('branch') or '-')}: {html.escape(it['theme'])} ({it['periods']}/{it['of_periods']} ช่วง)")
+    if app_url:
+        lines.append(f"เปิดแท็บ 💬 เสียงลูกค้า: {html.escape(app_url.rstrip('/'))}/")
+    return "\n".join(lines)
+
+
+__all__ = ["send_telegram", "negative_digest", "weekly_digest", "daily_report_digest", "telegram_config"]

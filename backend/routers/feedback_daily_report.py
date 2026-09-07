@@ -23,6 +23,7 @@ summary — ที่นี่แค่เป็นหน้าต่าง [dat
 """
 import datetime
 import html
+import io
 import json
 from typing import Optional
 
@@ -306,12 +307,13 @@ def _build_print_html(data: dict) -> str:
     def _neg_card(it):
         tel = _tel_href(it.get("contact") or "")
         contact_html = f' · 📞 <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · 📞 {_esc(it["contact"])}' if it.get("contact") else "")
+        contacted_html = ' · <span style="color:#166534">✅ โทรกลับแล้ว</span>' if it.get("contacted") else ""
         sev = ' <span class="tag">🔥 ร้ายแรง</span>' if it.get("severity") == "high" else ""
         status = "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ")
         date_bit = f'{_esc((it.get("date") or "")[:10])} · ' if date_from != date_to else ""
         branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
         return (f'<div class="item">“{_esc(it["text"])}”{sev}<div class="m">{date_bit}{branch_bit}{_esc(it["source"] or "")}'
-               f'{_star(it.get("rating"))} · {status}{contact_html}</div></div>')
+               f'{_star(it.get("rating"))} · {status}{contact_html}{contacted_html}</div></div>')
 
     def _pos_card(q):
         date_bit = f'{_esc((q.get("date") or "")[:10])} · ' if date_from != date_to else ""
@@ -448,6 +450,119 @@ def _build_print_html(data: dict) -> str:
 {branch_table()}
 <div class="foot">Oshinei · {_esc(kind)}เสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ 💬 เสียงลูกค้าในแอป</div>
 </body></html>"""
+
+
+def _build_xlsx(data: dict):
+    """The same report as a workbook — one sheet per section, for marketing to
+    paste into a deck/sheet themselves (the print edition is for reading/PDF,
+    this is for reuse). Mirrors reports.py's header()/autofit() styling."""
+    import openpyxl
+    from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+
+    wb = openpyxl.Workbook()
+    HDR = Font(bold=True, color="FFFFFF")
+    BOLD = Font(bold=True)
+    FILL_H = PatternFill("solid", fgColor="0F766E")
+    CENTER = Alignment(horizontal="center")
+
+    def header(ws, cols):
+        ws.append(cols)
+        for c in ws[ws.max_row]:
+            c.font = HDR; c.fill = FILL_H; c.alignment = CENTER
+
+    def autofit(ws):
+        for col in ws.columns:
+            mx = max((len(str(c.value or "")) for c in col), default=8)
+            ws.column_dimensions[get_column_letter(col[0].column)].width = min(mx + 2, 60)
+
+    label = _period_label(data["date_from"], data["date_to"])
+    ws = wb.active; ws.title = "Summary"
+    ws.append(["Oshinei — รายงานเสียงลูกค้า"]); ws["A1"].font = Font(bold=True, size=14)
+    ws.append(["ช่วง", label]); ws.append(["สาขา", data["branch"] or "ทุกสาขา"])
+    ws.append([]); ws.append([data["headline"]]); ws["A5"].font = BOLD
+    pp = data["prev_period"]
+    ws.append(["เทียบช่วงก่อนหน้า", f'{pp["date_from"]} – {pp["date_to"]}', pp["total"]])
+    ws.append([])
+    header(ws, ["ตัวชี้วัด", "ค่า"])
+    for l, v in (("เสียงทั้งหมด", data["total"]), ("คะแนนเฉลี่ย", data["avg_rating"]), ("บวก", data["sentiment"]["pos"]),
+                ("ลบ", data["sentiment"]["neg"]), ("กลาง", data["sentiment"]["neu"]), ("เชิงลบ %", data["neg_pct"]),
+                ("รอตอบ", data["unreplied"]), ("เกิน SLA", data["sla_breached"]), ("ร้ายแรง", data["severe"])):
+        ws.append([l, v])
+    autofit(ws)
+
+    ws = wb.create_sheet("หัวข้อ")
+    header(ws, ["หัวข้อ", "พูดถึง", "ลบ", "บวก", "สาขา", "ตัวอย่าง"])
+    for t in data["themes"]:
+        ws.append([t["theme"], t["n"], t["neg"], t["pos"], ", ".join(t["branches"]), (t["examples"][0]["text"] if t.get("examples") else "")])
+    autofit(ws)
+
+    ws = wb.create_sheet("เมนู")
+    header(ws, ["เมนู", "พูดถึง", "บวก", "ลบ"])
+    for m in data["menus"]:
+        ws.append([m["menu"], m["n"], m["pos"], m["neg"]])
+    autofit(ws)
+
+    ws = wb.create_sheet("ต้องติดตาม")
+    header(ws, ["วันที่", "สาขา", "แหล่ง", "ดาว", "ข้อความ", "สถานะ", "ติดต่อกลับ", "โทรกลับแล้ว"])
+    for it in data["recent_negative"]:
+        ws.append([(it.get("date") or "")[:10], it.get("branch") or "-", it.get("source") or "", it.get("rating"), it.get("text") or "",
+                  "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ"), it.get("contact") or "",
+                  "ใช่" if it.get("contacted") else ""])
+    autofit(ws)
+
+    ws = wb.create_sheet("เสียงชม")
+    header(ws, ["วันที่", "สาขา", "แหล่ง", "ดาว", "ข้อความ"])
+    for q in data["recent_positive"]:
+        ws.append([(q.get("date") or "")[:10], q.get("branch") or "-", q.get("source") or "", q.get("rating"), q.get("text") or ""])
+    autofit(ws)
+
+    ws = wb.create_sheet("งานแก้ปัญหา")
+    header(ws, ["สถานะ", "สาขา", "หัวข้อ/ชื่องาน", "รายละเอียด", "วันที่/ผล"])
+    for it in data["new_issues"]:
+        ws.append(["🆕 ใหม่ ยังไม่มีคนตาม", it["branch"] or "-", it["theme"], f'{it["n"]} เสียงลบ', ""])
+    for it in data["open_issues"]:
+        ws.append(["🔧 ยังไม่ได้แก้" + (" (เกินกำหนด)" if it.get("overdue") else ""), it["branch"] or "-", it["title"],
+                  it.get("theme") or "", f'{it.get("owner") or "ยังไม่มอบหมาย"} · กำหนด {it.get("due") or "-"}'])
+    for it in data["resolved_issues"]:
+        result = {"better": "ดีขึ้น", "same": "เท่าเดิม", "worse": "แย่ลง"}.get(it.get("result"), "รอผล")
+        ws.append(["✅ แก้แล้ว", it["branch"] or "-", it["title"], it.get("theme") or "",
+                  f'ปิดเมื่อ {it["done_at"]} · ใช้เวลา {it.get("days_to_fix")} วัน · ผล {result}'])
+    autofit(ws)
+
+    ws = wb.create_sheet("ปัญหาซ้ำซาก")
+    header(ws, ["สาขา", "หัวข้อ", "ความถี่"])
+    for it in data["chronic_branches"]:
+        ws.append([it["branch"] or "-", it["theme"], f'{it["periods"]}/{it["of_periods"]} ช่วง'])
+    autofit(ws)
+
+    if not data["branch"] and data["branches"]:
+        ws = wb.create_sheet("รายสาขา")
+        header(ws, ["สาขา", "เสียง", "ลบ %", "★", "รอตอบ", "ปักหมุด", "หัวข้อเด่น"])
+        for b in data["branches"]:
+            ws.append([b["branch"], b["n"], b["neg_pct"], b["avg_rating"], b["unreplied"], b["flagged"], b["top_theme"] or "—"])
+        autofit(ws)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+@router.get("/api/feedback/daily-report.xlsx")
+def feedback_daily_report_xlsx(request: Request, date: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+                               branch: Optional[str] = Query(None)):
+    scope = scope_branch(request)
+    if scope:
+        branch = scope
+    d = (date or "")[:10] or thai_today()
+    dt = (date_to or "")[:10] or None
+    with get_db() as con:
+        data = compute_daily_report(con, d, branch, date_to=dt)
+    buf = _build_xlsx(data)
+    fname = f"FEEDBACK_REPORT_{data['date_from']}_{data['date_to']}" + (f"_{branch}" if branch else "") + ".xlsx"
+    return Response(buf.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename={fname}"})
 
 
 @router.get("/api/feedback/daily-report.print")
