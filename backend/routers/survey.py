@@ -21,6 +21,8 @@ import collections
 import datetime
 import html
 import secrets
+
+import segno
 import time
 import uuid
 
@@ -185,30 +187,94 @@ def _survey_page(link: dict, code: str) -> str:
 </script></body></html>"""
 
 
+def _qr_svg(url: str, size_mm: int = 62) -> str:
+    """The QR as inline SVG, drawn here rather than by a script in the reader's browser.
+
+    It used to be built client-side by a CDN copy of qrcode.js. On a screen a missing script is an
+    empty box you notice; on the poster somebody already printed and taped to a counter it is an
+    empty box nobody notices until a month of answers has not arrived. Inline SVG also prints at the
+    printer's own resolution instead of a 300px bitmap, which is what makes a small code scan on the
+    first try. `error="m"` recovers ~15% — enough to survive a scuff or a thumbprint on a card that
+    lives next to a till.
+    """
+    qr = segno.make(url, error="m")
+    # omitsize drops width/height and leaves only the viewBox, so the CSS below sizes it in mm and the
+    # printer rasterises the vector itself
+    svg = qr.svg_inline(scale=1, border=0, svgclass=None, lineclass=None, omitsize=True)
+    return svg.replace("<svg ", f'<svg width="{size_mm}mm" height="{size_mm}mm" role="img" aria-label="QR code" ', 1)
+
+
 def _poster_page(link: dict, url: str) -> str:
     b = html.escape(link["branch_name"] or "")
     u = html.escape(url)
+    code = html.escape(link["code"] or "")
     return f"""<!doctype html><html lang="th"><head><meta charset="utf-8"><title>โปสเตอร์ QR · {b}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-@page{{size:A5 portrait;margin:10mm}} body{{margin:0;font-family:'Segoe UI',Tahoma,system-ui,sans-serif;color:#1f2937;background:#fff}}
-.sheet{{width:128mm;min-height:190mm;margin:0 auto;padding:12mm 10mm;text-align:center;border:1px dashed #d1d5db}}
-@media print{{.sheet{{border:0}} .tools{{display:none}}}}
-.brand{{font-weight:800;color:#0f766e;letter-spacing:.08em;font-size:14px}} h1{{font-size:26px;margin:6px 0 2px}} .sub{{color:#4b5563;font-size:14px;margin-bottom:10mm}}
-#qr{{display:inline-block;padding:6mm;border:3px solid #0f766e;border-radius:16px}} #qr img,#qr canvas{{display:block}}
-.link{{font-family:Consolas,monospace;font-size:13px;color:#374151;margin-top:6mm;word-break:break-all}}
-.foot{{color:#6b7280;font-size:12px;margin-top:8mm}} .tools{{text-align:center;margin:12px}} .tools button{{padding:8px 16px;font-size:14px}}
+@page{{size:A5 portrait;margin:0}}
+*{{box-sizing:border-box}}
+body{{margin:0;background:#f0f4f8;color:#0f172a;
+     font-family:'IBM Plex Sans Thai','Noto Sans Thai','Segoe UI',Tahoma,system-ui,sans-serif}}
+
+/* the sheet is exactly A5 so what you see is what the printer puts on the card */
+.sheet{{width:148mm;height:210mm;margin:8mm auto;background:#fff;position:relative;overflow:hidden;
+       display:flex;flex-direction:column;align-items:center;
+       padding:16mm 12mm 12mm;box-shadow:0 6px 28px rgba(15,23,42,.16)}}
+
+/* the brand indigo (--indigo in docs/ui-kit/tokens.css), taken darker: ink on paper does not have a
+   backlit screen behind it, so the shade that reads as brand on the dashboard reads as pale in print */
+.sheet::before{{content:"";position:absolute;inset:0 0 auto 0;height:9mm;
+               background:linear-gradient(90deg,#1e1b4b 0%,#3730a3 55%,#4f46e5 100%)}}
+
+.brand{{font-size:11pt;font-weight:700;letter-spacing:.16em;color:#312e81;text-transform:uppercase}}
+.branch{{font-size:12pt;font-weight:600;color:#334155;margin-top:1mm}}
+
+h1{{font-size:27pt;line-height:1.15;font-weight:700;margin:9mm 0 0;text-align:center;letter-spacing:-.01em}}
+.sub{{font-size:12.5pt;line-height:1.5;color:#334155;text-align:center;margin-top:4mm;max-width:104mm}}
+
+/* the QR is the thing the poster exists for, so nothing competes with it */
+.qr-wrap{{margin-top:auto;margin-bottom:auto;padding:7mm;background:#fff;border-radius:6mm;
+         border:2.5px solid #312e81;box-shadow:0 3px 14px rgba(30,27,75,.16)}}
+.qr-wrap svg{{display:block}}
+.scan{{margin-top:5mm;font-size:12pt;font-weight:600;color:#312e81;text-align:center;letter-spacing:.01em}}
+
+.foot{{width:100%;margin-top:auto;padding-top:6mm;border-top:1px solid #cbd5e1;text-align:center}}
+.foot .thanks{{font-size:11.5pt;color:#334155}}
+.foot .url{{margin-top:2.5mm;font-size:8.5pt;color:#64748b;word-break:break-all;
+           font-family:'IBM Plex Sans Thai',Consolas,monospace}}
+.foot .code{{font-weight:700;color:#312e81;letter-spacing:.06em}}
+
+.tools{{text-align:center;margin:10px 0 0}}
+.tools button{{padding:9px 20px;font-size:14px;font-weight:600;color:#fff;background:#312e81;
+              border:0;border-radius:8px;cursor:pointer}}
+.tools .hint{{display:block;margin-top:6px;font-size:12px;color:#475569}}
+@media print{{
+  body{{background:#fff}}
+  .sheet{{margin:0;box-shadow:none;width:148mm;height:210mm}}
+  .tools{{display:none}}
+}}
 </style></head><body>
-<div class="tools"><button onclick="window.print()">🖨 พิมพ์ (A5)</button></div>
-<div class="sheet">
-<div class="brand">OSHINEI · {b}</div>
-<h1>วันนี้เป็นอย่างไรบ้าง?</h1>
-<div class="sub">สแกนเพื่อบอกเรา ใช้เวลาไม่ถึง 20 วินาที<br>ทุกคำตอบถึงผู้จัดการสาขาโดยตรง</div>
-<div id="qr"></div>
-<div class="link">{u}</div>
-<div class="foot">ขอบคุณที่ช่วยให้เราดีขึ้นทุกวัน 🙏</div>
+<div class="tools">
+  <button onclick="window.print()">🖨 พิมพ์การ์ด A5</button>
+  <span class="hint">ตั้งค่าเครื่องพิมพ์: ขนาด A5 · ขอบกระดาษ "ไม่มี" (None) · ปิด "ปรับขนาดให้พอดี"</span>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>new QRCode(document.getElementById('qr'), {{text: {url!r}, width: 300, height: 300, correctLevel: QRCode.CorrectLevel.M}});</script>
+
+<div class="sheet">
+  <div class="brand">OSHINEI</div>
+  <div class="branch">สาขา{b}</div>
+
+  <h1>วันนี้เป็นอย่างไรบ้าง?</h1>
+  <div class="sub">สแกนเพื่อบอกเรา ใช้เวลาไม่ถึง 20 วินาที<br>ทุกคำตอบส่งถึงผู้จัดการสาขาโดยตรง</div>
+
+  <div class="qr-wrap">{_qr_svg(url)}</div>
+  <div class="scan">📷 เปิดกล้องมือถือแล้วสแกนได้เลย</div>
+
+  <div class="foot">
+    <div class="thanks">ขอบคุณที่ช่วยให้เราดีขึ้นทุกวัน 🙏</div>
+    <div class="url">{u}<br><span class="code">รหัส {code}</span></div>
+  </div>
+</div>
 </body></html>"""
 
 
