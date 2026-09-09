@@ -1,56 +1,40 @@
 {
  "buckets": {
   "feature": [],
-  "fix_margin": [
+  "fix_margin": [],
+  "market": [],
+  "needs_cost": [],
+  "review_cut": [
    {
-    "action": "fix_margin",
-    "category": "Sashimi",
-    "description": "(B) แซลมอน",
-    "margin_pct": null,
-    "popularity_pct": 90.9091,
-    "priority_score": 0,
-    "qty": 2800.0,
-    "quadrant": "plowhorse",
-    "reason": "ขายดีแต่กำไรบาง (มาร์จิ้น None% · ส่วนแบ่ง 90.91%) → ขึ้นราคาเล็กน้อยหรือลดต้นทุน",
-    "revenue": 0,
-    "sku_code": "B0001",
-    "slope_pct": -10.7,
-    "stage": "declining"
-   }
-  ],
-  "market": [
-   {
-    "action": "market",
+    "action": "review_cut",
     "category": "A La Carte",
     "description": "(A) สเต๊ก",
     "margin_pct": 90.0,
-    "popularity_pct": 9.0909,
+    "popularity_pct": 100.0,
     "priority_score": 28000.0,
     "qty": 280.0,
-    "quadrant": "puzzle",
-    "reason": "กำไรดีแต่ยังขายน้อย (มาร์จิ้น 90.0% · ส่วนแบ่ง 9.09%) → โปรโมต/วางตำแหน่งเมนู/อัปเซล",
+    "quadrant": "dog",
+    "reason": "ขายน้อย กำไรบาง และกำลังลดลง (มาร์จิ้น 90.0% · ส่วนแบ่ง 100.0%) → ทบทวน/พิจารณาตัด",
     "revenue": 28000.0,
     "sku_code": "A0001",
     "slope_pct": -10.7,
     "stage": "declining"
    }
-  ],
-  "needs_cost": [],
-  "review_cut": []
+  ]
  },
- "costed_skus": 2,
+ "costed_skus": 1,
  "counts": {
   "feature": 0,
-  "fix_margin": 1,
-  "market": 1,
+  "fix_margin": 0,
+  "market": 0,
   "needs_cost": 0,
-  "review_cut": 0
+  "review_cut": 1
  },
- "median_margin": 41.0,
- "median_popularity_pct": 50.0,
+ "median_margin": 90.0,
+ "median_popularity_pct": 100.0,
  "month_range": [
   null,
   null
  ],
- "total_skus": 2
+ "total_skus": 1
 }

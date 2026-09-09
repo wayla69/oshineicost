@@ -62,6 +62,15 @@ def _menu_engineering_compute(
         )
         for i, c in enumerate(EXCLUDED_CATS):
             params[f"_excl_{i}"] = c
+    # "(B) …" dishes are eaten as part of the buffet — their revenue lives in the
+    # package price, not against this SKU, so subtotal_ex_vat is near-zero while
+    # cogs_total (summed over every refill, sometimes hundreds of thousands) is
+    # real. Dividing by that near-zero denominator produced margin_pct in the
+    # millions of percent (e.g. -21,713,531%) and could misclassify the dish as
+    # a "cut this" dog/plowhorse. The EXCLUDED_CATS filter above only drops the
+    # BUFFET-category package SKU itself, not these — filter on the naming
+    # convention every other buffet-aware query in this codebase already uses.
+    filters.append("COALESCE(s.description,'') NOT LIKE '(B)%'")
     where = "WHERE " + " AND ".join(filters) if filters else ""
 
     with get_db() as con:
