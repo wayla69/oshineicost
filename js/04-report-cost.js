@@ -104,8 +104,9 @@ async function renderReportTier(month) {
     block.innerHTML = `<p class="text-xs text-slate-400">${esc(d.error || d.hint || 'ไม่มีข้อมูล Tier สำหรับเดือนนี้')}</p>`;
     return;
   }
-  if (note) note.textContent =
-    `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
+  if (note) note.textContent = d.comparison_available === false
+    ? `เดือน ${fmtMonth(month)} · ${d.scope_label || ''} · ยังไม่มีเดือนก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูเปลี่ยน 1 ก.ย. 2569) · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT)`
+    : `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
   const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
   const paxD = v => v == null ? '—' : `<span style="color:${v >= 0 ? '#059669' : '#dc2626'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
   const rows = d.tiers.map(x => `<tr class="border-t border-slate-100">
@@ -115,6 +116,7 @@ async function renderReportTier(month) {
     <td class="py-2 pr-4 text-right">${x.a.share ?? '—'}%<span class="text-[10px] text-slate-400"> (${x.d_share_pp != null ? (x.d_share_pp > 0 ? '+' : '') + x.d_share_pp : '—'}pp)</span></td>
     <td class="py-2 pr-4 text-right">${x.a.rev_head != null ? '฿' + fmtN(x.a.rev_head) : '—'}</td>
     <td class="py-2 pr-4 text-right">${x.a.cogs_head != null ? '฿' + fmtN(x.a.cogs_head) : '—'}<span class="text-[10px]"> (${sgn(x.d_cogs_head)})</span></td>
+    <td class="py-2 pr-4 text-right">${x.bom_avg_cost != null ? '฿' + fmtN(x.bom_avg_cost) : '—'}${x.bom_dish_count ? `<span class="text-[10px] text-slate-400"> (${x.bom_dish_count} จาน)</span>` : ''}</td>
     <td class="py-2 pr-4 text-right font-semibold">${x.a.gp_head != null ? '฿' + fmtN(x.a.gp_head) : '—'}</td>
     <td class="py-2 text-right">${x.a.food_pct ?? '—'}%</td></tr>`).join('');
   const mix = (d.mix_effect != null && Math.abs(d.mix_effect) >= 1)
@@ -125,10 +127,11 @@ async function renderReportTier(month) {
         <th class="py-2 pr-4">Tier</th><th class="py-2 pr-4 text-right">คนทาน (A)</th>
         <th class="py-2 pr-4 text-right">Δ คนทาน</th><th class="py-2 pr-4 text-right">สัดส่วน (Δpp)</th>
         <th class="py-2 pr-4 text-right">รายได้/หัว</th><th class="py-2 pr-4 text-right">ต้นทุน/หัว (Δ)</th>
+        <th class="py-2 pr-4 text-right">BoM เฉลี่ย/จาน</th>
         <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
       </tr></thead><tbody>${rows}</tbody></table>
     ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
-    <p class="text-[11px] text-slate-400 mt-2">ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
+    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของเมนูใน tier นั้น (ไม่ใช่ยอดขายจริง) มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
 }
 
 // Run async thunks with bounded concurrency, preserving input order. Used by the

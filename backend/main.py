@@ -1338,7 +1338,8 @@ GRAND_MENU_COST_FILE = HERE / "data" / "grand_menu_costs_2026-09.csv"
 
 
 def _load_grand_menu_costs(path=None):
-    """Upsert the Grand Menu master costs into sku_cost. Returns a summary dict."""
+    """Upsert the Grand Menu master costs into sku_cost, and each buffet dish's
+    price tier into sku_tier (à la carte rows carry no tier). Returns a summary dict."""
     import csv as _csv
     path = Path(path) if path else GRAND_MENU_COST_FILE
     out = {"applied": 0, "unknown_sku": 0, "rejected_price_as_cost": 0, "bad_value": 0}
@@ -1360,13 +1361,22 @@ def _load_grand_menu_costs(path=None):
                 if cost <= 0:
                     out["bad_value"] += 1
                     continue
-                rows.append((code, cost))
+                # à la carte rows carry the literal text "None" in this column
+                # (Master Item Grand Menu.xlsx), not a blank — see grand-menu-2026-09.
+                tier = (rec.get("tier") or "").strip()
+                if tier.lower() == "none":
+                    tier = ""
+                rows.append((code, cost, tier))
 
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         with get_db() as con:
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS sku_tier("
+                "sku_id INTEGER PRIMARY KEY REFERENCES skus(sku_id), tier TEXT NOT NULL)"
+            )
             ids = {r[1]: r[0] for r in con.execute(
                 "SELECT sku_id, sku_code FROM skus WHERE sku_code IN (%s)"
-                % ",".join("?" * len(rows)), [c for c, _ in rows])} if rows else {}
+                % ",".join("?" * len(rows)), [c for c, _, _ in rows])} if rows else {}
             # A selling price pasted into a cost column has reached this project
             # three separate times. Where the SKU has actually sold we can tell
             # the difference, so we check — and refuse the row rather than book
@@ -1384,7 +1394,7 @@ def _load_grand_menu_costs(path=None):
                     if (r[2] or 0) >= 10 and (r[1] or 0) > 0:
                         price[r[0]] = r[1] / r[2]
 
-            for code, cost in rows:
+            for code, cost, tier in rows:
                 sku_id = ids.get(code)
                 if sku_id is None:
                     out["unknown_sku"] += 1
@@ -1398,6 +1408,11 @@ def _load_grand_menu_costs(path=None):
                     " VALUES(?, ?, ?, ?)",
                     (sku_id, cost, "2026-09-01", now),
                 )
+                if tier:
+                    con.execute(
+                        "INSERT OR REPLACE INTO sku_tier(sku_id, tier) VALUES(?, ?)",
+                        (sku_id, tier),
+                    )
                 out["applied"] += 1
             con.commit()
         print(f"[grand-menu] master costs: {out}")

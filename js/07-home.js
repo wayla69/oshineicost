@@ -1170,8 +1170,9 @@ async function loadPriceTier(force) {
   const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
   const tcolor = {}; d.tier_keys.forEach((t, i) => tcolor[t] = PAL[i % PAL.length]);
   const modeLbl = d.mode === 'prev' ? 'ช่วงก่อนหน้า' : 'ครึ่งแรกของช่วง (ประวัติไม่พอ)';
-  document.getElementById('ptRange').textContent =
-    `A: ${d.a_range[0]} → ${d.a_range[1]} · เทียบ B (${modeLbl}): ${d.b_range[0]} → ${d.b_range[1]} · ${d.scope_label}`;
+  document.getElementById('ptRange').textContent = d.comparison_available === false
+    ? `A: ${d.a_range[0]} → ${d.a_range[1]} · ${d.scope_label} · ยังไม่เทียบช่วงก่อนหน้า (คนละเมนูกัน)`
+    : `A: ${d.a_range[0]} → ${d.a_range[1]} · เทียบ B (${modeLbl}): ${d.b_range[0]} → ${d.b_range[1]} · ${d.scope_label}`;
 
   const B = d.blend;
   const kpi = (l, v, dv, sub, inv) => `<div class="card p-4" style="border-top:3px solid ${dc(dv, inv)}">
@@ -1180,7 +1181,7 @@ async function loadPriceTier(force) {
     <p class="text-[11px] font-semibold" style="color:${dc(dv, inv)}">${sub}</p></div>`;
   const dd = (a, b) => (a != null && b != null) ? a - b : null;
   const kpis =
-    kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${n0(B.pax_b)} คน)`, false) +
+    kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${B.pax_b == null ? '-' : n0(B.pax_b)} คน)`, false) +
     kpi('รายได้/หัว (ex-VAT)', b1(B.rev_head_a), dd(B.rev_head_a, B.rev_head_b), `B: ${b1(B.rev_head_b)} · Δ ${sg(dd(B.rev_head_a, B.rev_head_b))}`, false) +
     kpi('ต้นทุนอาหาร/หัว', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
     kpi('Food cost %', (B.food_pct_a ?? '-') + '%', dd(B.food_pct_a, B.food_pct_b), `B: ${B.food_pct_b ?? '-'}% · Δ ${sg(dd(B.food_pct_a, B.food_pct_b), ' pp')}`, true);
@@ -1188,12 +1189,13 @@ async function loadPriceTier(force) {
   const tierRows = d.tiers.map(x => `<tr class="border-t border-slate-100">
     <td class="py-1.5 pr-2 font-bold" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">${esc(x.label)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.a.pax)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.b.pax)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${x.b ? n0(x.b.pax) : '-'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${dc(x.d_pax_pct)}">${sg(x.d_pax_pct, '%')}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.a.share ?? '-'}%<span class="text-[10px]" style="color:${dc(x.d_share_pp)}"> (${sg(x.d_share_pp)})</span></td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.a.pax_bill ?? '-'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.rev_head)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.cogs_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_cogs_head, true)}"> (${sg(x.d_cogs_head)})</span></td>
+    <td class="py-1.5 pr-2 text-right tabular-nums">${x.bom_avg_cost != null ? b1(x.bom_avg_cost) : '-'}${x.bom_dish_count ? `<span class="text-[10px]" style="color:var(--text-muted)"> (${x.bom_dish_count} จาน)</span>` : ''}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.hc_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_hc_head, true)}"> (${sg(x.d_hc_head)})</span></td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${b1(x.a.gp_head)}</td>
     <td class="py-1.5 text-right tabular-nums">${x.a.food_pct ?? '-'}%</td></tr>`).join('');
@@ -1225,10 +1227,10 @@ async function loadPriceTier(force) {
         <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">คนทาน A</th><th class="py-1.5 pr-2 text-right">คนทาน B</th>
         <th class="py-1.5 pr-2 text-right">Δ คนทาน</th><th class="py-1.5 pr-2 text-right">สัดส่วน (Δpp)</th>
         <th class="py-1.5 pr-2 text-right">คน/บิล</th><th class="py-1.5 pr-2 text-right">รายได้/หัว</th>
-        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
+        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">Food%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>

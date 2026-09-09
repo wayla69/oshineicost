@@ -438,6 +438,12 @@ _PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
 _PT_ORDER = ("1299", "999", "799", "789", "689", "649", "629", "590", "459", "350",
              "promo", "child")
 _PT_LABEL = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
+# Grand Menu switch-over [[grand_menu_2026_09]]. A comparison whose baseline period
+# falls entirely before this date while the current period is on/after it would
+# silently blend two different menus under one label (both eras use "999", say) —
+# guarded in price_tier_report and _mgt_tier by turning the comparison off rather
+# than showing a delta that isn't really the same product on both sides.
+_PT_NEW_MENU_FROM = "2026-09-01"
 
 
 def _pt_label(t):
@@ -454,6 +460,25 @@ def _pt_sum_tiers(con, ph, bids, d_from, d_to):
             [d_from, d_to] + bids):
         out[str(t or "promo")] = {"bills": nb or 0, "pax": px or 0.0, "cogs": cg or 0.0,
                                   "rev": rv or 0.0, "hc": hc or 0.0}
+    return out
+
+
+def _pt_bom_cost_by_tier(con):
+    """{tier: {bom_avg_cost, bom_dish_count}} — average RECIPE cost of the dishes
+    assigned to each tier (sku_tier x sku_effective_cost), independent of what
+    actually sold in any date range. Only the 2026-09-01+ Grand Menu carries a
+    tier per SKU (à la carte and the pre-Sep menu have none), so older tiers
+    simply have no entry here."""
+    out = {}
+    try:
+        for tier, avg_cost, n in con.execute(
+                """SELECT st.tier, AVG(sec.recipe_cost), COUNT(*)
+                   FROM sku_tier st JOIN sku_effective_cost sec USING(sku_id)
+                   GROUP BY st.tier"""):
+            out[str(tier)] = {"bom_avg_cost": round(avg_cost, 2) if avg_cost is not None else None,
+                              "bom_dish_count": n}
+    except Exception:
+        pass                      # sku_tier not created yet (pre-migration DB copy)
     return out
 
 
@@ -504,18 +529,24 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             dA_from = mid
             a_from = dA_from.isoformat()
         b_from, b_to = b_from_d.isoformat(), b_to_d.isoformat()
+        # A wholesale menu change makes the previous period a different product
+        # lineup, not a baseline — comparing September to August "789 → promo"
+        # isn't a mix shift, it's a menu that stopped existing. Only compare when
+        # both windows sit on the same side of the switch-over.
+        comparison_available = not (a_from >= _PT_NEW_MENU_FROM > b_to)
 
         bids = _mi_branch_ids(con, scope)
         ph = ",".join("?" * len(bids))
         FA = _pt_sum_tiers(con, ph, bids, a_from, a_to)
-        FB = _pt_sum_tiers(con, ph, bids, b_from, b_to)
+        FB = _pt_sum_tiers(con, ph, bids, b_from, b_to) if comparison_available else {}
         pax_a = sum(v["pax"] for v in FA.values())
         pax_b = sum(v["pax"] for v in FB.values())
         if pax_a <= 0:
             return {"ready": True, "error": "ไม่มีข้อมูลบิลบุฟเฟ่ต์ในช่วง/ขอบเขตที่เลือก",
                     "coverage": [lo, hi]}
-        tier_keys = [t for t in _PT_ORDER
-                     if FA.get(t, {}).get("pax", 0) > 0 or FB.get(t, {}).get("pax", 0) > 0]
+        # A tier with nobody on it THIS period is not a finding, it's a retired
+        # price — matches _mgt_tier's rule so the two reports agree.
+        tier_keys = [t for t in _PT_ORDER if FA.get(t, {}).get("pax", 0) > 0]
 
         # per costed menu SKU x tier for both windows (groups g:* excluded — they
         # would double-count their member SKUs in the Top-30 ranking)
@@ -544,6 +575,8 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                                     {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
             m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
 
+        bom_by_tier = _pt_bom_cost_by_tier(con)
+
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
     pct = lambda c, p: round((c - p) / p * 100, 1) if p else None
 
@@ -551,15 +584,24 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     for t in tier_keys:
         va = FA.get(t, {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0, "hc": 0.0})
         vb = FB.get(t, {"bills": 0, "pax": 0.0, "cogs": 0.0, "rev": 0.0, "hc": 0.0})
-        A, B = _pt_metrics(va), _pt_metrics(vb)
+        A = _pt_metrics(va)
         A["share"] = rd(va["pax"] / pax_a * 100, 1) if pax_a else None
-        B["share"] = rd(vb["pax"] / pax_b * 100, 1) if pax_b else None
+        B = None
+        if comparison_available:
+            B = _pt_metrics(vb)
+            B["share"] = rd(vb["pax"] / pax_b * 100, 1) if pax_b else None
+        bt = bom_by_tier.get(t)
         tiers.append({
             "tier": t, "label": _pt_label(t), "a": A, "b": B,
-            "d_pax_pct": pct(va["pax"], vb["pax"]),
-            "d_share_pp": rd((A["share"] or 0) - (B["share"] or 0), 1) if A["share"] is not None and B["share"] is not None else None,
-            "d_cogs_head": rd(A["cogs_head"] - B["cogs_head"]) if A["cogs_head"] is not None and B["cogs_head"] is not None else None,
-            "d_hc_head": rd(A["hc_head"] - B["hc_head"]) if A["hc_head"] is not None and B["hc_head"] is not None else None,
+            "bom_avg_cost": bt["bom_avg_cost"] if bt else None,
+            "bom_dish_count": bt["bom_dish_count"] if bt else None,
+            "d_pax_pct": pct(va["pax"], vb["pax"]) if comparison_available else None,
+            "d_share_pp": (rd((A["share"] or 0) - (B["share"] or 0), 1)
+                           if comparison_available and A["share"] is not None and B["share"] is not None else None),
+            "d_cogs_head": (rd(A["cogs_head"] - B["cogs_head"])
+                            if comparison_available and A["cogs_head"] is not None and B["cogs_head"] is not None else None),
+            "d_hc_head": (rd(A["hc_head"] - B["hc_head"])
+                          if comparison_available and A["hc_head"] is not None and B["hc_head"] is not None else None),
         })
 
     # ── Top-30 menus by COGS in A: per-tier consumption/head + Δ vs B ──
@@ -600,16 +642,18 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     # ── blended per-head + mix effect ──
     cogs_a = sum(v["cogs"] for v in FA.values()); cogs_b = sum(v["cogs"] for v in FB.values())
     rev_a = sum(v["rev"] for v in FA.values()); rev_b = sum(v["rev"] for v in FB.values())
-    blend = {"pax_a": rd(pax_a, 0), "pax_b": rd(pax_b, 0), "d_pax_pct": pct(pax_a, pax_b),
+    blend = {"pax_a": rd(pax_a, 0),
+             "pax_b": rd(pax_b, 0) if comparison_available else None,
+             "d_pax_pct": pct(pax_a, pax_b) if comparison_available else None,
              "rev_head_a": rd(rev_a / pax_a) if pax_a else None,
-             "rev_head_b": rd(rev_b / pax_b) if pax_b else None,
+             "rev_head_b": rd(rev_b / pax_b) if comparison_available and pax_b else None,
              "cogs_head_a": rd(cogs_a / pax_a) if pax_a else None,
-             "cogs_head_b": rd(cogs_b / pax_b) if pax_b else None,
+             "cogs_head_b": rd(cogs_b / pax_b) if comparison_available and pax_b else None,
              "food_pct_a": rd(cogs_a / rev_a * 100, 1) if rev_a else None,
-             "food_pct_b": rd(cogs_b / rev_b * 100, 1) if rev_b else None}
+             "food_pct_b": rd(cogs_b / rev_b * 100, 1) if comparison_available and rev_b else None}
     # mix effect on rev/head: A's tier mix priced at B's per-tier rev/head vs B blended
     mix_effect = None
-    if pax_a and pax_b and rev_b:
+    if comparison_available and pax_a and pax_b and rev_b:
         at_b_prices = sum((FA[t]["pax"] / pax_a) * (FB[t]["rev"] / FB[t]["pax"])
                           for t in FA if FB.get(t, {}).get("pax", 0) > 0)
         mix_effect = rd(at_b_prices - rev_b / pax_b)
@@ -617,6 +661,19 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     # ── insights + actions (Thai) ──
     period_word = "ช่วงก่อนหน้า" if mode == "prev" else "ครึ่งแรกของช่วงเดียวกัน"
     fb = lambda x: f"฿{x:,.2f}" if x is not None else "-"
+    if not comparison_available:
+        insights = [f"ยังไม่มีช่วงก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM}) "
+                    f"— ตัวเลขด้านล่างเป็นข้อมูลช่วง {a_from} ถึง {a_to} เดี่ยวๆ ระบบจะกลับมาเปรียบเทียบอัตโนมัติ "
+                    f"เมื่อทั้งสองช่วงอยู่หลังวันที่เมนูเปลี่ยนแล้ว (เช่น ต.ค. เทียบ ก.ย.)"]
+        actions = []
+        return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
+                "coverage": [lo, hi], "mode": mode, "comparison_available": False,
+                "a_range": [a_from, a_to], "b_range": [b_from, b_to],
+                "blend": blend, "mix_effect": mix_effect,
+                "tiers": tiers, "tier_keys": tier_keys,
+                "tier_labels": {t: _pt_label(t) for t in tier_keys},
+                "top30": top30, "trend_month": trend_month,
+                "insights": insights, "actions": actions}
     insights, actions = [], []
     if blend["d_pax_pct"] is not None:
         up = blend["d_pax_pct"] >= 0
@@ -696,7 +753,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                   "และติดตามสัดส่วน tier กับต้นทุน/หัวรายเดือนต่อไป"})
 
     return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
-            "coverage": [lo, hi], "mode": mode,
+            "coverage": [lo, hi], "mode": mode, "comparison_available": True,
             "a_range": [a_from, a_to], "b_range": [b_from, b_to],
             "blend": blend, "mix_effect": mix_effect,
             "tiers": tiers, "tier_keys": tier_keys,
@@ -1890,6 +1947,12 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
     # when the fact tables are missing/old schema or the window predates their
     # coverage. pax here counts BUFFET bills only (menu_fact universe), so the
     # total can sit slightly under the headline covers.
+    if has_prev and cs.isoformat() >= _PT_NEW_MENU_FROM > pe.isoformat():
+        # The comparison period predates the Grand Menu switch-over while the
+        # current one is on/after it — a different menu, not a baseline (both
+        # eras even share the "999" label for two different products). Drop
+        # the comparison rather than show a delta that isn't the same dish.
+        has_prev = False
     tier_out = None
     try:
         if con.execute("SELECT 1 FROM pragma_table_info('menu_fact_total') "

@@ -83,6 +83,20 @@ def test_unknown_skus_and_junk_values_are_counted_not_fatal(monkeypatch, tmp_pat
                    "rejected_price_as_cost": 0, "bad_value": 2}
 
 
+def test_tier_column_is_recorded_for_buffet_skus(monkeypatch, tmp_path):
+    """Each buffet dish's price tier lands in sku_tier so /api/reports/price-tier
+    can average recipe cost by tier — see _pt_bom_cost_by_tier in routers/reports.py."""
+    con = _db()
+    con.execute("CREATE TABLE sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFYAM00011', '(BF) ยำไทยปูอัด')")
+    con.execute("INSERT INTO skus VALUES(2, 'OTHALSKS00002', '(AL) หัวปลาแซลมอน')")
+    _run(monkeypatch, tmp_path, con,
+         HEADER + "OTHBFYAM00011,459,x,10.5745\nOTHALSKS00002,None,y,18.13\n")
+    # buffet dish gets its tier; à la carte's literal "None" text must NOT
+    # become a fake tier value (Master Item Grand Menu.xlsx quirk)
+    assert dict(con.execute("SELECT sku_id, tier FROM sku_tier").fetchall()) == {1: "459"}
+
+
 def test_missing_file_is_a_no_op(monkeypatch, tmp_path):
     con = _db()
     monkeypatch.setattr(main, "invalidate_cache", lambda *a, **k: None)
@@ -238,3 +252,27 @@ def test_a_few_promo_sales_do_not_veto_the_owners_cost(monkeypatch, tmp_path):
     con.execute("INSERT INTO sales_sku_monthly VALUES(1, '2026-09', 3, 150.0)")   # ฿50 each, 3 sold
     out = _run(monkeypatch, tmp_path, con, HEADER + "OTHALHAR00006,,x,53.25\n")
     assert out["applied"] == 1 and out["rejected_price_as_cost"] == 0
+
+
+# ─── BoM cost averaged by price tier (routers/reports.py) ───────────────────
+
+def test_bom_cost_by_tier_averages_recipe_cost_per_tier():
+    """_pt_bom_cost_by_tier is a static (non-date-scoped) average of recipe cost
+    across the dishes assigned to each tier — independent of what actually sold."""
+    from routers.reports import _pt_bom_cost_by_tier
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
+    con.execute("CREATE TABLE sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
+    con.executemany("INSERT INTO sku_tier VALUES(?,?)", [(1, "459"), (2, "459"), (3, "629")])
+    con.executemany("INSERT INTO sku_effective_cost VALUES(?,?)", [(1, 10.0), (2, 12.0), (3, 20.0)])
+    out = _pt_bom_cost_by_tier(con)
+    assert out == {"459": {"bom_avg_cost": 11.0, "bom_dish_count": 2},
+                   "629": {"bom_avg_cost": 20.0, "bom_dish_count": 1}}
+
+
+def test_bom_cost_by_tier_is_empty_before_the_table_exists():
+    """A DB copy from before this feature (or the shared test fixture) has no
+    sku_tier table yet — must degrade to no BoM figures, not crash the report."""
+    from routers.reports import _pt_bom_cost_by_tier
+    con = sqlite3.connect(":memory:")
+    assert _pt_bom_cost_by_tier(con) == {}

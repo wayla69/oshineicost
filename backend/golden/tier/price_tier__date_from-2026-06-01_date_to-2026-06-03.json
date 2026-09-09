@@ -28,6 +28,7 @@
   "rev_head_a": 695.26,
   "rev_head_b": 707.22
  },
+ "comparison_available": true,
  "coverage": [
   "2026-04-01",
   "2026-06-03"
@@ -78,6 +79,8 @@
     "rev_head": 590.0,
     "share": 34.1
    },
+   "bom_avg_cost": null,
+   "bom_dish_count": null,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": 14.3,
@@ -108,6 +111,8 @@
     "rev_head": 789.0,
     "share": 58.5
    },
+   "bom_avg_cost": null,
+   "bom_dish_count": null,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": -16.7,
@@ -138,6 +143,8 @@
     "rev_head": 600.0,
     "share": 7.3
    },
+   "bom_avg_cost": null,
+   "bom_dish_count": null,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": -33.3,
