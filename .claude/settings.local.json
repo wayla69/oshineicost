@@ -120,7 +120,14 @@
       "mcp__visualize__read_me",
       "mcp__visualize__show_widget",
       "Bash(python -m pytest recon/tests/test_recon.py -q)",
-      "Bash(python -c \"import recon.tests.test_recon; print\\('end of file ok'\\)\")"
+      "Bash(python -c \"import recon.tests.test_recon; print\\('end of file ok'\\)\")",
+      "PowerShell(Get-ScheduledTask -TaskName 'Oshinei Auto Sync')",
+      "PowerShell(Get-ScheduledTaskInfo)",
+      "PowerShell($p='C:\\\\Users\\\\ASUS\\\\Oshinei\\\\backend\\\\logs\\\\auto_sync_local.log'; $l=Get-Content $p; $s=\\($l | Select-String -Pattern '^====================' | Select-Object -Last 2 | Select-Object -First 1\\).LineNumber; $l[\\($s-1\\)..\\($s+3\\)]; $l[\\($s-1\\)..498] | Select-String -Pattern 'coverage|inserted 6|LIVE rev|LIVE bills|SETTLED rev 2026-07|SETTLED bills' | Select-Object -First 12)",
+      "PowerShell(& \"C:\\\\Users\\\\ASUS\\\\AppData\\\\Local\\\\Python\\\\bin\\\\python.exe\" -u \"C:\\\\Users\\\\ASUS\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-ASUS-OneDrive-Daiki-2026-Cost-Analysis\\\\95f405d2-abca-4f82-b69a-4903dd387872\\\\scratchpad\\\\chk.py\")",
+      "Bash(cd \"/c/Users/ASUS/.claude/projects/C--Users-ASUS-OneDrive-Daiki-2026-Cost-Analysis/memory\" && tail -14 live_mssql_sync.md)",
+      "PowerShell(Get-CimInstance Win32_Process -Filter \"Name like '%python%'\")",
+      "PowerShell($i = Get-ScheduledTask -TaskName 'Oshinei Auto Sync' | Get-ScheduledTaskInfo; \"LastRunTime : $\\($i.LastRunTime\\)\"; \"LastTaskResult : $\\($i.LastTaskResult\\)\"; \"NextRunTime : $\\($i.NextRunTime\\)\"; \"Now : $\\(Get-Date\\)\")"
     ]
   }
 }
