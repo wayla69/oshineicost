@@ -1230,14 +1230,19 @@ async function loadPriceTier(force) {
 
   const tl = t => (d.tier_labels || {})[t] || t;
   const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>ชิ้น/หัว (Δ%)</th>`).join('');
+  // The menu name is frozen (sticky) while the tier columns scroll — with 5-8
+  // tiers this table gets very wide, and losing track of which dish a column
+  // belongs to made it unreadable.
+  const STICKY_NUM_W = 22, STICKY_LBL_W = 190;
+  const stickyTh = (left, w, extra = '') => `position:sticky;left:${left}px;width:${w}px;min-width:${w}px;background:var(--bg-card);z-index:2;${extra}`;
   const topRows = (d.top30 || []).map((r, i) => {
     const cells = d.tier_keys.map(t => {
       const c = r.tiers[t] || {};
       return `<td class="py-1 pr-2 text-right tabular-nums">${c.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
     }).join('');
     return `<tr class="border-t border-slate-100">
-      <td class="py-1 pr-1 text-slate-400">${i + 1}</td>
-      <td class="py-1 pr-2 font-semibold">${esc(r.label)}</td>
+      <td class="py-1 pr-1 text-slate-400" style="${stickyTh(0, STICKY_NUM_W)}">${i + 1}</td>
+      <td class="py-1 pr-2 font-semibold" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W, 'box-shadow:2px 0 3px -2px rgba(0,0,0,.15)')}">${esc(r.label)}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b1(r.unit_cost)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.cogs_head)}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${r.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
@@ -1248,11 +1253,18 @@ async function loadPriceTier(force) {
   // driving it, so list them richest-cost-first (server already sorts).
   const bomDetailTiers = d.tiers.filter(x => (x.bom_dishes || []).length > 0);
   const bomDetailSections = bomDetailTiers.map((x, ti) => {
-    const rows = x.bom_dishes.map((r, i) => `<tr class="border-t border-slate-100">
+    // A dish costing more than double its own tier's average is the one
+    // pulling that average up — flag it instead of leaving the reader to
+    // eyeball 40-plus rows of raw numbers.
+    const outlierAt = x.bom_avg_cost ? x.bom_avg_cost * 2 : null;
+    const rows = x.bom_dishes.map((r, i) => {
+      const isOutlier = outlierAt != null && r.bom_cost != null && r.bom_cost > outlierAt;
+      return `<tr class="border-t border-slate-100"${isOutlier ? ' style="background:rgba(220,38,38,.07)"' : ''}>
       <td class="py-1 pr-1 text-slate-400">${i + 1}</td>
-      <td class="py-1 pr-2">${esc(r.label)}</td>
+      <td class="py-1 pr-2">${esc(r.label)}${isOutlier ? ' <span title="ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้">🔺</span>' : ''}</td>
       <td class="py-1 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.sku_code)}</td>
-      <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.bom_cost)}</td></tr>`).join('');
+      <td class="py-1 pr-2 text-right tabular-nums font-semibold"${isOutlier ? ' style="color:#dc2626"' : ''}>${b1(r.bom_cost)}</td></tr>`;
+    }).join('');
     return `<details class="mb-2"${ti === 0 ? ' open' : ''}>
       <summary class="cursor-pointer text-xs font-bold py-1" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">
         ${esc(x.label)} — ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)})
@@ -1260,6 +1272,7 @@ async function loadPriceTier(force) {
       <table class="text-xs w-full mt-1"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1 pr-1">#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
       </tr></thead><tbody>${rows}</tbody></table>
+      <p class="text-[10px] mt-1" style="color:var(--text-muted)">🔺 = ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้</p>
     </details>`;
   }).join('');
 
@@ -1267,7 +1280,13 @@ async function loadPriceTier(force) {
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
     <div class="card p-5 mb-5 overflow-x-auto">
       <h2 class="section-title mb-3">Tier ราคา — คนทาน & ต้นทุน/หัว (A เทียบ B)</h2>
-      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <table class="text-xs w-full"><thead>
+        <tr class="text-center" style="color:var(--text-muted)">
+          <th></th>
+          <th colspan="5" class="py-1 border-b-2" style="background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.35)">👥 ลูกค้า</th>
+          <th colspan="6" class="py-1 border-b-2" style="background:rgba(176,71,45,.07);border-color:rgba(176,71,45,.35)">฿ ต้นทุน &amp; กำไร/หัว</th>
+        </tr>
+        <tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">คนทาน A</th><th class="py-1.5 pr-2 text-right">คนทาน B</th>
         <th class="py-1.5 pr-2 text-right">Δ คนทาน</th><th class="py-1.5 pr-2 text-right">สัดส่วน (Δpp)</th>
         <th class="py-1.5 pr-2 text-right">คน/บิล</th><th class="py-1.5 pr-2 text-right">รายได้/หัว</th>
@@ -1290,10 +1309,10 @@ async function loadPriceTier(force) {
         <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
       </div>
       <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-        <th class="py-1.5 pr-1">#</th><th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
+        <th class="py-1.5 pr-1" style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">ชิ้น/หัว รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น)</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น</p>
     </div>
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละ Tier</h2>
