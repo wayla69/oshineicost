@@ -1259,9 +1259,9 @@ function renderSuggestions() {
             <ul class="text-xs text-slate-700 space-y-1">
               <li>• <b>BoM Tracking</b> — บันทึกต้นทุนวัตถุดิบบุฟเฟ่ต์รายเดือน (เนื้อแซลมอน เนื้อวากิว ของหวาน) → ตอบโจทย์ว่า margin ตกหรือไม่</li>
               <li>• <b>Portion Control</b> — บุฟเฟ่ต์ที่ "all-you-can-eat" ต้องมีระบบ <b>ค่าปรับเหลือ</b> (มี SKU OT0012/0013/0016 อยู่แล้ว) เก็บอย่างเข้มงวด</li>
-              <li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (350) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (590/799) เพื่อเพิ่ม margin</li>
+              <li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (฿459) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (฿789/฿999) เพื่อเพิ่ม margin</li>
               <li>• <b>Premium Add-on</b> — ขาย add-on margin สูง เช่น แซลมอนพรีเมียม เครื่องดื่ม alcohol → ลูกค้าบุฟเฟ่ต์ตัดสินใจง่ายเพราะอารมณ์ "เปย์มาแล้ว"</li>
-              <li>• <b>Buffet Mix Optimization</b> — Tier 590 เป็น sweet spot (78% volume) — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li>
+              <li>• <b>Buffet Mix Optimization</b> — Tier ฿629 เป็น sweet spot ของเมนูใหม่ — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li>
             </ul>
           </div>
         </div>
