@@ -84,3 +84,26 @@ def test_cost_head_top60_scope(client):
     # exports honour scope
     x = client.get("/api/reports/cost-head-top60.xlsx", params={"month": "2026-05", "scope": "franchise"})
     assert x.status_code == 200 and "spreadsheetml" in x.headers["content-type"]
+
+
+# ─── the "เมนูที่ดันต้นทุนขึ้น" driver labels in `analysis.ranked[].drivers` ───
+# A bare desc[:20] slice used to cut a dish name mid-word with no ellipsis —
+# "(B) แซลมอน ซาชิมิ (1" looked like broken data, not a shortened label.
+
+def test_short_label_leaves_short_names_alone():
+    from routers.reports import _short_label
+    assert _short_label("(B) กุ้งสด (5 ชิ้น )") == "(B) กุ้งสด (5 ชิ้น )"
+
+
+def test_short_label_cuts_on_a_word_boundary_with_an_ellipsis():
+    from routers.reports import _short_label
+    out = _short_label("(B) แซลมอน ซาชิมิ (1 ชิ้น)", n=20)
+    assert out.endswith("…")
+    assert "(1" not in out          # must not stop mid-parenthetical like the old [:20]
+    assert len(out) <= 21           # n chars + the ellipsis mark
+
+
+def test_short_label_falls_back_to_a_hard_cut_with_no_word_boundary():
+    from routers.reports import _short_label
+    out = _short_label("a" * 40, n=10)
+    assert out == "a" * 10 + "…"

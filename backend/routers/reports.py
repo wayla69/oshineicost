@@ -119,6 +119,17 @@ def _cost_head_scopes(con, month: str, scope: str = "master"):
     return overview, branches
 
 
+def _short_label(desc, n=28):
+    """Truncate a dish name on a word boundary, marking it with '…' when it
+    actually happens — a bare desc[:n] slice cut names mid-word with no
+    indicator ("แซลมอน ซาชิมิ (1"), which read as a data error rather than
+    a shortened label."""
+    if len(desc) <= n:
+        return desc
+    cut = desc[:n].rsplit(" ", 1)[0] or desc[:n]
+    return cut.rstrip() + "…"
+
+
 def _cost_head_deviation(scope, overview):
     """Per-menu contribution to (branch cph − overview cph), most-positive / most-negative."""
     ov = overview["by_sku"]
@@ -881,7 +892,7 @@ def report_cost_head_top60(month: Optional[str] = Query(None),
                                   "d": round(x["d"], 2)}
                 h["highs"] = [pack(x) for x in highs[:6]]
                 h["lows"] = [pack(x) for x in lows[:6]]
-                h["drivers"] = " · ".join(f'{x["desc"][:20]} {x["d"]:+.1f}' for x in highs[:3])
+                h["drivers"] = " · ".join(f'{_short_label(x["desc"])} {x["d"]:+.1f}' for x in highs[:3])
             return h
 
         ov_out = scope_head(overview, False)
