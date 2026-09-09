@@ -1836,10 +1836,19 @@ def analysis_sph(
         """, params2).fetchall()
     trend = [dict(r) for r in trend_rows]
 
-    # Dominant tier + share above 590
+    # Most common spend band + the shares at each end of it.
+    # The "high spender" cut is the ฿700 bucket boundary, stated as the SPEND it
+    # is and not as a tier name: it used to be reported as "above Buffet 590",
+    # which named a price the menu retired on 2026-09-01 AND was never the
+    # threshold anyway (the buckets that pass it start at ฿700). ฿700 per head
+    # ex-VAT and ex-service-charge is ≈ ฿789 net, the Grand Menu's mainstream
+    # tier, so the band keeps its meaning across the menu change.
+    HIGH_SPEND_FROM = 700
+    LOW_SPEND_UNDER = 380
     dom_tier = max(distribution, key=lambda d: d["count"]) if distribution else None
-    above_590_count = sum(b["count"] for b in distribution if b["lo"] >= 620)
-    below_350_count = sum(b["count"] for b in distribution if (b.get("hi") or float("inf")) < 380)
+    above_590_count = sum(b["count"] for b in distribution if b["lo"] >= HIGH_SPEND_FROM)
+    below_350_count = sum(b["count"] for b in distribution
+                          if (b.get("hi") or float("inf")) < LOW_SPEND_UNDER)
     return {
         "by_branch": by_branch,
         "distribution": distribution,
@@ -1853,6 +1862,11 @@ def analysis_sph(
             "total_tx": n,
             "dominant_tier": dom_tier["bucket"] if dom_tier else None,
             "dominant_pct":  round(dom_tier["count"] / n * 100, 1) if dom_tier and n else 0,
+            # pct_above_700 / pct_below_350 are the names that say what these are.
+            # pct_above_590 is kept as a deprecated alias so a cached frontend
+            # keeps working; it has always carried this same number.
+            "high_spend_from": HIGH_SPEND_FROM,
+            "pct_above_700": round(above_590_count / n * 100, 1) if n else 0,
             "pct_above_590": round(above_590_count / n * 100, 1) if n else 0,
             "pct_below_350": round(below_350_count / n * 100, 1) if n else 0,
             "sph_min":      round(min(sphs), 2) if sphs else 0,

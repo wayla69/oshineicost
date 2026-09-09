@@ -114,3 +114,31 @@ def test_buffet_mix_prices_a_september_cover_on_the_new_list():
     # The same stored price in August is not a tier at all; it is a promo price
     # against the old base list.
     assert rules.tier_of_price(702.27, "2026-08") == "promo"
+
+
+# ─── the spend-band KPI names a spend, not a retired tier ────────────────────
+
+def test_spend_head_high_band_is_named_by_its_spend(client):
+    """The Guest tab's 'high spender' KPI used to read '% เกิน Buffet 590'.
+
+    Two things were wrong with it and only one was the retired price: the
+    threshold has never been ฿590 either — the bands that clear it start at
+    ฿700. The payload now carries the cut-off it actually uses, under a name
+    that says so, with the old key kept as an alias.
+    """
+    r = client.get("/api/analysis/sph")
+    assert r.status_code == 200
+    ov = r.json().get("overall") or {}
+    assert ov.get("high_spend_from") == 700
+    assert "pct_above_700" in ov
+    # the alias still carries the identical number, so a cached page keeps working
+    assert ov["pct_above_700"] == ov["pct_above_590"]
+
+
+def test_spend_bands_are_plain_ranges_not_tier_names(client):
+    """A band must never be labelled with a tier, or a September bill lands in a
+    bucket named after a price it could not have been sold at."""
+    r = client.get("/api/analysis/sph")
+    for b in r.json().get("distribution") or []:
+        assert "tier" not in b["bucket"].lower()
+        assert "buffet" not in b["bucket"].lower()
