@@ -457,7 +457,7 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 # window right before it (or the first vs second half of the range when there
 # is not enough history before it).
 # ---------------------------------------------------------------------------
-_PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
+_PT_TOP_N = 45          # "45 เมนูหลักในต้นทุน"
 # Buffet price tiers, richest first, from rules.tier_codes_between — the one place
 # that knows which prices are on sale when. TWO eras live side by side in this
 # unbounded list: the Grand Menu from 2026-09-01 quotes NET prices
@@ -507,6 +507,26 @@ def _pt_bom_cost_by_tier(con):
                    GROUP BY st.tier"""):
             out[str(tier)] = {"bom_avg_cost": round(avg_cost, 2) if avg_cost is not None else None,
                               "bom_dish_count": n}
+    except Exception:
+        pass                      # sku_tier not created yet (pre-migration DB copy)
+    return out
+
+
+def _pt_bom_dishes_by_tier(con):
+    """{tier: [{sku_code, label, bom_cost}, …]}, richest recipe cost first —
+    every dish assigned to that tier with its OWN cost, so a reader can see
+    which dishes pull a tier's average up or down instead of only the blend.
+    Same source/scope as _pt_bom_cost_by_tier (sku_tier x sku_effective_cost)."""
+    out = {}
+    try:
+        for tier, code, label, cost in con.execute(
+                """SELECT st.tier, s.sku_code, s.description, sec.recipe_cost
+                   FROM sku_tier st JOIN skus s USING(sku_id)
+                   JOIN sku_effective_cost sec USING(sku_id)
+                   ORDER BY st.tier, sec.recipe_cost DESC"""):
+            out.setdefault(str(tier), []).append(
+                {"sku_code": code, "label": label or code,
+                 "bom_cost": round(cost, 2) if cost is not None else None})
     except Exception:
         pass                      # sku_tier not created yet (pre-migration DB copy)
     return out
@@ -606,6 +626,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
 
         bom_by_tier = _pt_bom_cost_by_tier(con)
+        bom_dishes_by_tier = _pt_bom_dishes_by_tier(con)
 
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
     pct = lambda c, p: round((c - p) / p * 100, 1) if p else None
@@ -625,6 +646,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             "tier": t, "label": _pt_label(t), "a": A, "b": B,
             "bom_avg_cost": bt["bom_avg_cost"] if bt else None,
             "bom_dish_count": bt["bom_dish_count"] if bt else None,
+            "bom_dishes": bom_dishes_by_tier.get(t, []),
             "d_pax_pct": pct(va["pax"], vb["pax"]) if comparison_available else None,
             "d_share_pp": (rd((A["share"] or 0) - (B["share"] or 0), 1)
                            if comparison_available and A["share"] is not None and B["share"] is not None else None),
@@ -695,7 +717,21 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         insights = [f"ยังไม่มีช่วงก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM}) "
                     f"— ตัวเลขด้านล่างเป็นข้อมูลช่วง {a_from} ถึง {a_to} เดี่ยวๆ ระบบจะกลับมาเปรียบเทียบอัตโนมัติ "
                     f"เมื่อทั้งสองช่วงอยู่หลังวันที่เมนูเปลี่ยนแล้ว (เช่น ต.ค. เทียบ ก.ย.)"]
+        # No "vs previous period" is possible yet, but A's own numbers don't need
+        # one — surface the highest food-cost tier as a real, actionable finding
+        # rather than leaving this card empty until next month.
         actions = []
+        real_now = [x for x in tiers if str(x["tier"]).isdigit() and x["a"]["food_pct"] is not None]
+        worst_now = max(real_now, key=lambda x: x["a"]["food_pct"], default=None)
+        if worst_now and worst_now["a"]["food_pct"] >= 40:
+            actions.append({"title": f"ทบทวนความคุ้มของ tier {worst_now['label']}",
+                            "detail": f"food cost {worst_now['a']['food_pct']}% ของรายได้ "
+                                      f"(GP {fb(worst_now['a']['gp_head'])}/หัว) ในช่วง {a_from} ถึง {a_to} — "
+                                      f"ยังไม่มีเดือนก่อนเทียบเพื่อดูเทรนด์ แต่ใช้ตัวเลขนี้ตั้งเป็นเป้าคุมต้นทุนของเมนูใหม่ได้เลย"})
+        if not actions:
+            actions.append({"title": "เก็บตัวเลขเดือนนี้ไว้เป็นฐาน (baseline)",
+                            "detail": f"เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM} — ต้นทุน/หัวและ BoM เฉลี่ย/จานต่อ tier "
+                                      f"ด้านล่างคือฐานของเมนูใหม่ พอถึงเดือนถัดไปที่มีข้อมูลเทียบได้ ระบบจะวิเคราะห์แนวโน้มให้อัตโนมัติ"})
         return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
                 "coverage": [lo, hi], "mode": mode, "comparison_available": False,
                 "a_range": [a_from, a_to], "b_range": [b_from, b_to],

@@ -1244,6 +1244,25 @@ async function loadPriceTier(force) {
       ${cells}</tr>`;
   }).join('');
 
+  // Per-dish BoM cost inside each tier — the average hides which dishes are
+  // driving it, so list them richest-cost-first (server already sorts).
+  const bomDetailTiers = d.tiers.filter(x => (x.bom_dishes || []).length > 0);
+  const bomDetailSections = bomDetailTiers.map((x, ti) => {
+    const rows = x.bom_dishes.map((r, i) => `<tr class="border-t border-slate-100">
+      <td class="py-1 pr-1 text-slate-400">${i + 1}</td>
+      <td class="py-1 pr-2">${esc(r.label)}</td>
+      <td class="py-1 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.sku_code)}</td>
+      <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.bom_cost)}</td></tr>`).join('');
+    return `<details class="mb-2"${ti === 0 ? ' open' : ''}>
+      <summary class="cursor-pointer text-xs font-bold py-1" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">
+        ${esc(x.label)} — ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)})
+      </summary>
+      <table class="text-xs w-full mt-1"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1 pr-1">#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
+      </tr></thead><tbody>${rows}</tbody></table>
+    </details>`;
+  }).join('');
+
   body.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
     <div class="card p-5 mb-5 overflow-x-auto">
@@ -1275,6 +1294,11 @@ async function loadPriceTier(force) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">ชิ้น/หัว รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
       <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น)</p>
+    </div>
+    <div class="card p-5 overflow-x-auto">
+      <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละ Tier</h2>
+      ${bomDetailSections || '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล BoM รายจาน — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569</p>'}
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">ต้นทุนสูตรของแต่ละจานเรียงจากแพงไปถูก ใช้ดูว่าจานไหนใน tier ดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>
     </div>`;
 
   if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }

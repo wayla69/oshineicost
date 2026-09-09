@@ -270,6 +270,41 @@ def test_bom_cost_by_tier_averages_recipe_cost_per_tier():
                    "629": {"bom_avg_cost": 20.0, "bom_dish_count": 1}}
 
 
+def test_bom_dishes_by_tier_lists_each_dish_richest_first():
+    """_pt_bom_dishes_by_tier backs the per-tier drilldown — every dish in a
+    tier with its OWN cost, sorted so the priciest (the ones pulling the
+    average up) come first."""
+    from routers.reports import _pt_bom_dishes_by_tier
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT)")
+    con.execute("CREATE TABLE sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
+    con.execute("CREATE TABLE sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBF00001', 'ยำไทยปูอัด')")
+    con.execute("INSERT INTO skus VALUES(2, 'OTHBF00002', 'หัวปลาแซลมอนย่างเกลือ')")
+    con.execute("INSERT INTO skus VALUES(3, 'OTHBF00003', 'สเต๊กหอยเชลล์')")
+    con.executemany("INSERT INTO sku_tier VALUES(?,?)", [(1, "459"), (2, "459"), (3, "629")])
+    con.executemany("INSERT INTO sku_effective_cost VALUES(?,?)", [(1, 10.0), (2, 18.13), (3, 60.0)])
+    out = _pt_bom_dishes_by_tier(con)
+    assert out == {
+        "459": [{"sku_code": "OTHBF00002", "label": "หัวปลาแซลมอนย่างเกลือ", "bom_cost": 18.13},
+                {"sku_code": "OTHBF00001", "label": "ยำไทยปูอัด", "bom_cost": 10.0}],
+        "629": [{"sku_code": "OTHBF00003", "label": "สเต๊กหอยเชลล์", "bom_cost": 60.0}],
+    }
+
+
+def test_bom_dishes_by_tier_falls_back_to_sku_code_without_a_description():
+    from routers.reports import _pt_bom_dishes_by_tier
+    con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT)")
+    con.execute("CREATE TABLE sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
+    con.execute("CREATE TABLE sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBF00009', NULL)")
+    con.execute("INSERT INTO sku_tier VALUES(1, '459')")
+    con.execute("INSERT INTO sku_effective_cost VALUES(1, 5.0)")
+    out = _pt_bom_dishes_by_tier(con)
+    assert out["459"][0]["label"] == "OTHBF00009"
+
+
 def test_bom_cost_by_tier_is_empty_before_the_table_exists():
     """A DB copy from before this feature (or the shared test fixture) has no
     sku_tier table yet — must degrade to no BoM figures, not crash the report."""

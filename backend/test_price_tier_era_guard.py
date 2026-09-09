@@ -46,8 +46,10 @@ def _seed(db: Path):
     for day in NEW_DAYS:
         con.execute("INSERT INTO menu_fact_total VALUES(1,?,?,?,?,?,?,0)",
                     (day, "459", 6, 12.0, 458.0, 4908.0))
+        # 999's food cost is deliberately over 40% (1600/3596 = 44.5%) so a
+        # test can exercise the cross-era "flag the worst tier" action path.
         con.execute("INSERT INTO menu_fact_total VALUES(1,?,?,?,?,?,?,0)",
-                    (day, "999", 2, 4.0, 900.0, 3596.0))
+                    (day, "999", 2, 4.0, 1600.0, 3596.0))
     con.commit()
     con.close()
 
@@ -90,7 +92,14 @@ def test_september_vs_auto_previous_august_disables_comparison(era_client):
         assert row["d_pax_pct"] is None and row["d_cogs_head"] is None
     assert j["blend"]["pax_b"] is None and j["blend"]["d_pax_pct"] is None
     assert j["mix_effect"] is None
-    assert j["actions"] == []
+    # no comparison is possible yet, but the action card is never left empty:
+    # tier 999 clears the 40% food-cost bar on THIS period's numbers alone
+    # (no "b" data needed), so that real finding replaces the generic
+    # "bank this month as a baseline" fallback.
+    assert len(j["actions"]) == 1
+    assert "999" in j["actions"][0]["title"]
+    row999 = next(r for r in j["tiers"] if r["tier"] == "999")
+    assert row999["a"]["food_pct"] > 40   # sanity: the fixture really does clear the bar
     assert len(j["insights"]) == 1 and "1 ก.ย." in j["insights"][0] or "2026-09-01" in j["insights"][0]
 
 
