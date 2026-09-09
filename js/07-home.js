@@ -1004,6 +1004,29 @@ function miFilterOptions() {
   sel.innerHTML = `<optgroup label="กลุ่มวัตถุดิบ">${g}</optgroup><optgroup label="เมนูรายตัว (Top ตามยอดขาย)">${s}</optgroup>`;
   if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
 }
+// Tier picker options for the chosen range. The Grand Menu (1 Sep 2026) replaced
+// the old price list, so a September window must not offer ฿590 — the backend
+// decides which prices were on sale, this only renders them. A tier that leaves
+// the list (the range moved past the changeover) falls back to "ทุก Tier ราคา".
+let _miTierKey = null;
+async function miFillTiers(df, dt2) {
+  const key = `${df || ''}|${dt2 || ''}`;
+  if (_miTierKey === key) return;
+  const sel = document.getElementById('miTier');
+  if (!sel) return;
+  const p = new URLSearchParams();
+  if (df) p.set('date_from', df); if (dt2) p.set('date_to', dt2);
+  let d;
+  try { d = await api(`${API}/api/reports/menu-impact/tiers?${p}`); }
+  catch (e) { return; }                      // keep whatever is in the box
+  _miTierKey = key;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="all">ทุก Tier ราคา</option>' +
+    (d.tiers || []).map(t => `<option value="${esc(t.tier)}">${
+      /^\d+$/.test(t.tier) ? 'Tier ' + esc(t.label) : esc(t.label)}</option>`).join('');
+  sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+}
+
 async function loadMenuImpact(force) {
   loadPriceTier(force);   // 🏷️ tier section shares the same range/scope pickers
   const body = document.getElementById('miBody');
@@ -1027,6 +1050,7 @@ async function loadMenuImpact(force) {
   const ent = document.getElementById('miEnt').value;
   if (!ent) { body.innerHTML = '<p class="text-center text-slate-400 py-10">เลือกวัตถุดิบ/เมนูก่อน</p>'; return; }
   const df = document.getElementById('miFrom').value, dt2 = document.getElementById('miTo').value;
+  await miFillTiers(df, dt2);   // prices on sale in THIS window, nothing retired
   const scope = document.getElementById('miScope').value;
   const tier = document.getElementById('miTier').value;
   const key = `${ent}|${df}|${dt2}|${scope}|${tier}`;

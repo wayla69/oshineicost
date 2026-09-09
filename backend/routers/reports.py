@@ -17,6 +17,7 @@ from typing import Optional
 import json as _json
 import io as _io
 from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import GRAND_MENU_FROM, TIER_EXTRA, price_tiers_between, tier_codes_between, tier_label
 from targets import target_revenue_total
 from core import (
     HERE,
@@ -238,7 +239,29 @@ def menu_impact_entities():
                 "hc_cost": float(state.get("hc_cost") or 30), "groups": groups, "skus": skus[:400]}
 
 
-_MI_TIER_ORDER = ("350", "590", "649", "689", "799", "999", "promo", "child")
+# Every tier code the fact tables can hold, richest first — BOTH menus, because a
+# range can end before the Grand Menu or start after it. Which of them a given
+# request may actually filter on is narrowed to the era of ITS window by
+# _mi_tiers_for (a September request cannot ask for a retired ฿590 tier).
+_MI_TIER_ORDER = tier_codes_between(None, None)
+
+
+def _mi_tiers_for(date_from=None, date_to=None) -> tuple:
+    """The tier codes on sale in [date_from, date_to] — what the tier picker on
+    the 🧪 tab offers, and the only values the filter accepts for that window."""
+    return tier_codes_between(date_from, date_to)
+
+
+@router.get("/api/reports/menu-impact/tiers")
+def menu_impact_tiers(date_from: Optional[str] = Query(None),
+                      date_to: Optional[str] = Query(None)):
+    """Tier options for the chosen window: prices actually sold in it, richest
+    first, each with its display label. Feeds the tier <select>, so the picker
+    stops offering prices the menu retired on 2026-09-01."""
+    codes = _mi_tiers_for(date_from, date_to)
+    return {"grand_menu_from": GRAND_MENU_FROM,
+            "tiers": [{"tier": t, "label": tier_label(t)} for t in codes
+                      if t != "child"]}
 
 
 @router.get("/api/reports/menu-impact")
@@ -246,7 +269,7 @@ _MI_TIER_ORDER = ("350", "590", "649", "689", "799", "999", "promo", "child")
 def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<slug>"),
                 date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                 scope: str = Query("all", description="master | franchise | all"),
-                tier: str = Query("all", description="all | 350|590|649|689|799|999|promo|child")):
+                tier: str = Query("all", description="all | <price on sale in the window> | promo | child")):
     """เลือกวัตถุดิบ/เมนู + ช่วงเวลา (+Tier ราคาบุฟเฟ่ต์) → เทียบบิลที่มี vs ไม่มี
     (ต่อหัว, คุมสาขา×วัน×tier)."""
     if scope not in _MI_SCOPE_LABEL:
@@ -257,13 +280,17 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
         # tier column arrived in fact-schema v2 — degrade gracefully on a v1 DB
         has_tier = bool(con.execute(
             "SELECT 1 FROM pragma_table_info('menu_fact_total') WHERE name='tier'").fetchone())
-        if tier != "all" and (tier not in _MI_TIER_ORDER or not has_tier):
-            tier = "all"
         lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
         if not lo:
             return {"ready": False, "hint": "ตารางข้อมูลว่าง — รัน build_menu_fact.py"}
         date_from = date_from or lo
         date_to = date_to or hi
+        # A tier is only selectable if that price was on sale somewhere in THIS
+        # window. A stale ฿590 left in the picker after the window moves into
+        # September falls back to "all" instead of silently returning an empty
+        # comparison for a price that is no longer sold.
+        if tier != "all" and (tier not in _mi_tiers_for(date_from, date_to) or not has_tier):
+            tier = "all"
         meta = con.execute("SELECT label, kind, unit_cost, members FROM menu_fact_meta WHERE ent=?",
                            (ent,)).fetchone()
         if not meta:
@@ -431,18 +458,20 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 # is not enough history before it).
 # ---------------------------------------------------------------------------
 _PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
-# Buffet price tiers, richest first. TWO eras live side by side here: the Grand Menu
-# from 2026-09-01 quotes NET prices (459/629/789/999/1299 - service charge and VAT are
-# already inside), while the menu before it quoted the price BEFORE both
-# (350/590/649/689/799/999). A tier missing from this tuple is silently dropped from
-# the report, so it must carry BOTH lists. 999 exists in both eras and shares one row.
-_PT_ORDER = ("1299", "999", "799", "789", "689", "649", "629", "590", "459", "350",
-             "promo", "child")
-_PT_LABEL = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
+# Buffet price tiers, richest first, from rules.tier_codes_between — the one place
+# that knows which prices are on sale when. TWO eras live side by side in this
+# unbounded list: the Grand Menu from 2026-09-01 quotes NET prices
+# (459/629/789/999/1299 - service charge and VAT already inside), the menu before it
+# quoted the price BEFORE both (350/590/649/689/799/999). A tier missing here is
+# silently dropped from the report, so the full list is what belongs; the rows a
+# given period actually shows are filtered to the tiers with guests on them, which
+# is what keeps a retired price off a September report.
+_PT_ORDER = tier_codes_between(None, None)
+_PT_LABEL = {t: tier_label(t) for t in TIER_EXTRA}
 
 
 def _pt_label(t):
-    return _PT_LABEL.get(t, f"฿{int(t):,}" if str(t).isdigit() else str(t))
+    return tier_label(t)
 
 
 def _pt_sum_tiers(con, ph, bids, d_from, d_to):

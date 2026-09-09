@@ -12,15 +12,12 @@
       <option value="master">Master (เจ้าของเอง)</option>
       <option value="franchise">แฟรนไชส์</option>
     </select>
-    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ (ราคาหน้าเมนู ไม่รวม VAT)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <!-- Options are filled by miFillTiers() from /api/reports/menu-impact/tiers for the
+         chosen date range: only prices actually on sale in that window. The old menu
+         (350/590/649/689/799/999) was withdrawn on 1 Sep 2026, so a September range
+         offers the Grand Menu's net prices (459/629/789/999/1299) and nothing else. -->
+    <select id="miTier" onchange="loadMenuImpact(true)" title="กรองตาม Tier ราคาบุฟเฟ่ต์ตามเมนูที่ขายจริงในช่วงที่เลือก" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <option value="all">ทุก Tier ราคา</option>
-      <option value="350">Tier 350</option>
-      <option value="590">Tier 590</option>
-      <option value="649">Tier 649</option>
-      <option value="689">Tier 689</option>
-      <option value="799">Tier 799</option>
-      <option value="999">Tier 999</option>
-      <option value="promo">ราคาโปร/ส่วนลด</option>
     </select>
     <span id="miCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
   </div>
@@ -33,7 +30,7 @@
       <h2 class="text-base font-bold" style="color:var(--text-primary)">🏷️ วิเคราะห์ Tier ราคาขาย (บุฟเฟ่ต์ผู้ใหญ่)</h2>
       <span id="ptRange" class="text-[11px]" style="color:var(--text-muted)"></span>
     </div>
-    <p class="text-[11px] mb-3" style="color:var(--text-muted)">แบ่งบิลตามราคาบุฟเฟ่ต์ผู้ใหญ่ (ex-VAT เช่น ฿799/฿689/฿649/฿590) · ช่วงที่เลือก (A) เทียบช่วงก่อนหน้าความยาวเท่ากัน (B) อัตโนมัติ · จำนวนคนทาน, การทาน Top-30 เมนูต้นทุน, เทรนด์ และข้อเสนอแนะ</p>
+    <p class="text-[11px] mb-3" style="color:var(--text-muted)">แบ่งบิลตามราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ตามเมนูของช่วงนั้น</b> — ถึง ส.ค. 2026 คือราคาก่อนบวก service charge 5% + VAT 7% (฿799/฿689/฿649/฿590/฿350) · ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) คือราคา NET รวมทั้งสองอย่างแล้ว (฿1,299/฿999/฿789/฿629/฿459) และราคาเก่าไม่มีขายแล้ว · ช่วงที่เลือก (A) เทียบช่วงก่อนหน้าความยาวเท่ากัน (B) อัตโนมัติ · จำนวนคนทาน, การทาน Top-30 เมนูต้นทุน, เทรนด์ และข้อเสนอแนะ</p>
     <div id="ptBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
   </div>
 </div>

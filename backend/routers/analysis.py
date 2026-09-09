@@ -11,6 +11,8 @@ registered by main.py right after this one). URLs unchanged.
 from fastapi import HTTPException, Query
 from typing import Dict, List, Optional
 from rules import avg_ticket_sql, net_revenue_row, net_revenue_sum
+from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
+                   tier_of_price)
 from core import (
     _FOOD_CATEGORY_FILTER,
     _cogs_case,
@@ -1963,9 +1965,12 @@ def buffet_mix(
     branch:     Optional[str] = Query(None),
 ):
     """
-    Buffet price-tier mix from SKU sales.
-    Detects tiers by matching '350','500','590','799' in category or sku_code or description.
-    Also flags a la carte (อลาคาท / Ala Carte) separately.
+    Buffet price-tier mix from SKU sales, per the menu in force in each month.
+
+    Two price lists, never mixed: months up to 2026-08 are bucketed into the old
+    350/500/590/799; months from 2026-09 into the Grand Menu's NET prices
+    (459/629/789/999/1299), which the old code could not name at all — it read a
+    ฿789 cover as the retired ฿799 tier. Also flags a la carte separately.
     Returns tier revenue share, qty share, and trend.
     """
     filters = ["b.name != 'ALL'"]
@@ -1997,7 +2002,8 @@ def buffet_mix(
             params,
         ).fetchall()
 
-    TIERS = ['350', '500', '590', '799']
+    TIERS_LEGACY = ['350', '500', '590', '799']            # until 2026-08-31
+    TIERS_GRAND  = [str(t) for t in PRICE_TIERS_GRAND]     # from 2026-09-01, NET prices
     ALACARTE_KEYWORDS = ['อลาคาท', 'ala carte', 'a la carte', 'alacarte', 'อา ลา คาร์ท']
     # Buffet "charge" SKUs = a per-cover price (vs the B0xxx food-item rows that
     # are logged at 0 baht). In this data the whole adult buffet is booked under
@@ -2005,29 +2011,41 @@ def buffet_mix(
     CHARGE_CODES = {'BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
                     'B01', 'B02', 'B07', 'B11'}
 
-    def price_tier(unit_price_ex_vat):
-        """Map a per-head ex-VAT price to the nearest legacy tier (midpoints
-        425/545/695 between 350·500·590·799)."""
+    def price_tier(unit_price_ex_vat, month):
+        """Bucket a per-head ex-VAT price into the tier its month's menu sells.
+
+        Before the Grand Menu: nearest legacy tier (midpoints 425/545/695 between
+        350·500·590·799). From 2026-09-01: the stored ex-VAT price is grossed back
+        up by service charge and VAT (฿702.27 → ฿789) and matched against the NET
+        price list, so the tier carries the number actually printed on the menu.
+        A September price that matches none of them is a discount ('promo'),
+        NOT a resurrected old tier.
+        """
         up = unit_price_ex_vat or 0
+        if is_grand_menu(month):
+            return tier_of_price(base_to_net(up), month)
         if up < 425: return '350'
         if up < 545: return '500'
         if up < 695: return '590'
         return '799'
 
-    def classify(cat, sku, desc, qty, rev):
+    def classify(cat, sku, desc, qty, rev, month):
         combined = f"{cat} {sku} {desc}".lower()
         for kw in ALACARTE_KEYWORDS:
             if kw.lower() in combined:
                 return 'à la carte'
         if sku == 'BUFFETCHILD' or ('เด็ก' in combined and 'บุฟเฟ' in combined):
             return 'เด็ก (Child)'
-        for t in TIERS:                       # explicit tier in code/desc wins
+        # An explicit tier number in the code/description wins — but only a price
+        # that month's menu still sells, so a legacy 'BUFFET590' code appearing in
+        # a September row is priced, not taken at face value.
+        for t in (TIERS_GRAND if is_grand_menu(month) else TIERS_LEGACY):
             if t in combined:
                 return t
         is_buffet_charge = (sku in CHARGE_CODES) or ('บุฟเฟ' in combined) or ('buffet' in combined)
         if is_buffet_charge:
             if qty and rev and rev > 0:        # priced buffet cover → bucket by price
-                return price_tier(rev / qty)
+                return price_tier(rev / qty, month)
             return None                        # 0-baht buffet food item → not a price level
         # Non-buffet regular menu / à-la-carte food: not a buffet price level —
         # exclude so this chart is purely the buffet price-tier mix (covers & ฿).
@@ -2039,7 +2057,7 @@ def buffet_mix(
 
     for r in rows:
         tier = classify(r["category"], r["sku_code"], r["description"],
-                        r["qty"] or 0, r["revenue"] or 0)
+                        r["qty"] or 0, r["revenue"] or 0, r["period_month"])
         if tier is None:
             continue
         t = totals.setdefault(tier, {"qty": 0.0, "revenue": 0.0})
@@ -2071,7 +2089,11 @@ def buffet_mix(
         for mo in all_months
     ]
 
-    return {"summary": summary, "trend": trend, "tiers": all_tiers, "months": all_months}
+    return {"summary": summary, "trend": trend, "tiers": all_tiers, "months": all_months,
+            # so the chart can say WHICH menu each month is on, and never draw a
+            # retired price as a live one
+            "grand_menu_from": GRAND_MENU_FROM,
+            "menu_era": {mo: ("grand" if is_grand_menu(mo) else "legacy") for mo in all_months}}
 
 
 # ---------------------------------------------------------------------------

@@ -101,7 +101,9 @@
    "BUFFETCHILD": 0.0
   },
   "current_revenue": 0,
+  "grand_menu_from": "2026-09-01",
   "margin_gain": 0.0,
+  "menu_era": "legacy",
   "revenue_gain": 0.0,
   "target_margin": 0.0,
   "target_margin_pct": 0,
@@ -112,7 +114,10 @@
    "BUFFET799": 0.0,
    "BUFFETCHILD": 0.0
   },
-  "target_revenue": 0.0
+  "target_revenue": 0.0,
+  "unavailable": false,
+  "upsell_from": "590",
+  "upsell_to": "799"
  },
  "seat_util": [
   {

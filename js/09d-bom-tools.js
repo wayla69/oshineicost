@@ -559,7 +559,8 @@ function simhubBuildTier() {
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h2 class="text-base font-bold" style="color:#6d28d9">🍣 Tier Upgrade Simulator</h2>
-          <p class="text-xs text-slate-400 mt-0.5">จำลองการดันลูกค้าขึ้น tier สูงกว่า (590/799) แล้วดู GP ที่เพิ่ม — ต้องมี unit_cost ของ tier 590 และ 799</p>
+          <p class="text-xs text-slate-400 mt-0.5">จำลองการดันลูกค้าขึ้น tier สูงกว่าแล้วดู GP ที่เพิ่ม — คู่ tier ใช้ตามเมนูที่ขายจริงในช่วงที่เลือก (ถึง ส.ค. 2026 = ฿590 → ฿799 · ตั้งแต่ 1 ก.ย. 2026 = ฿629 → ฿789)</p>
+          <p id="simScenarioNote" class="text-[11px] text-indigo-500 mt-0.5"></p>
         </div>
         <label class="text-xs flex items-center gap-2 whitespace-nowrap">ดัน % ลูกค้าขึ้น tier:
           <input id="simShiftPct" type="number" min="0" max="100" value="10" step="5"
