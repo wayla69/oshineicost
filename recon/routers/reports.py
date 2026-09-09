@@ -361,7 +361,8 @@ def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> 
     for bid, bn in branches:
         try:
             rm = reconcile_month(conn, bid, period_month)
-        except Exception:
+        except Exception as e:
+            print(f"[recon-report] reconcile_month branch={bid} {period_month} failed, branch skipped: {e}")
             continue
         for ch in rm.get("channels", []):
             ch_th = ch["label"]
@@ -391,8 +392,8 @@ def _all_errors_items(conn, period_month: str, branch_id: int | None = None) -> 
                         _CH_LABEL.get(p["category"], p["category"]),
                         f"สุทธิควรได้ {p['report_net']:,.0f} · เข้าจริง {p['bank_payout']:,.0f}",
                         p["variance"], "open")
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[recon-report] payout rows skipped: {e}")
 
     items.sort(key=lambda x: (x["branch_name"], x["status"] != "open", x["type"]))
     return items
@@ -709,7 +710,8 @@ def _outstanding_docs_report(conn, period_month: str, branch_id: int | None = No
     for b in masters:
         try:
             rm = reconcile_month(conn, b["branch_id"], period_month)
-        except Exception:
+        except Exception as e:
+            print(f"[recon-report] reconcile_month branch={b['branch_id']} {period_month} failed, branch skipped: {e}")
             continue
         chmap = {c["key"]: c for c in rm.get("channels", [])}
         miss = defaultdict(list)            # channel -> [missing/partial doc labels]
@@ -972,12 +974,18 @@ def _ic_prev_month(m, k):
     return f"{idx // 12:04d}-{idx % 12 + 1:02d}"
 
 
+def _today():
+    """The day the aging is measured from — one seam so the golden test can pin it
+    (the report changes every midnight otherwise)."""
+    from datetime import date
+    return date.today()
+
+
 def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
     """Open (unresolved) reconciling items, aged from period-end to today, for the
     selected month + `lookback` prior months. Skips approved/closed (locked) sessions —
     those are signed off, not open. Each item = one reconcile_month todo. Read-only."""
-    from datetime import date
-    today = date.today()
+    today = _today()
     months = [period_month] + [_ic_prev_month(period_month, k)
                                for k in range(1, lookback + 1)]
     branches = [(r["branch_id"], r["name"]) for r in conn.execute(
@@ -996,7 +1004,8 @@ def _open_items_aging(conn, period_month, branch_id=None, lookback=2):
                 continue
             try:
                 r = reconcile_month(conn, bid, m)
-            except Exception:
+            except Exception as e:
+                print(f"[recon-report] reconcile_month branch={bid} {m} failed, month skipped: {e}")
                 continue
             for t in r["todo"]:
                 items.append({"branch_id": bid, "branch_name": bname,

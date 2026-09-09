@@ -156,8 +156,11 @@ def test_parse_and_load_es_tx_builds_receipts_and_summary(tmp_path):
     assert (tx_n, summ_n) == (2, 1)
     s = con.execute("SELECT * FROM sales_month_summary WHERE period_month='2026-03'").fetchone()
     assert s["transaction_count"] == 2 and s["customer_count"] == 8
-    # net_sales must be EX-VAT (VAT is never revenue)
-    assert s["net_sales"] == 1900.0
+    # net_sales must be EX-VAT (VAT is never revenue) and EX-SERVICE-CHARGE: the
+    # two bills' ex-VAT totals sum to 1900 and carry 100 of service charge, which
+    # sits inside that total and is not revenue (rules.net_revenue — the same
+    # rule month_summary.BACKFILL_SQL applies to live-synced months, 2026-09-05)
+    assert s["net_sales"] == 1800.0
     assert s["discounts"] == 40.0
     # idempotent re-run
     rr.load_es_tx(con, parsed, f.name)

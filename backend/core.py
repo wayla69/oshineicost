@@ -167,17 +167,35 @@ HERE    = Path(__file__).parent.resolve()
 DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 
 
-def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
-    """Copy locally-owned tables from the live DB into a staged refresh before it
-    replaces the live DB.
+# Tables that live in the shared oshinei.db but are NOT produced by the MSSQL
+# sync / data refresh. A wholesale swap would wipe them, so the LIVE copy wins:
+#   recon_*            staff reconciliation work (uploads, payment-code maps,
+#                      bank/acquirer registries, sessions, discrepancies)
+#   app_user           login accounts (passwords, roles, deactivations); without
+#                      it every live-side user edit is lost on each refresh and
+#                      the seeded defaults silently return (backend/auth.py)
+#   customer_feedback  reviews uploaded on the live site or fetched from Google /
+#                      Facebook (2026-09-05: the tab shipped a day without this
+#                      line — the next 10:00 push would have wiped every review)
+#   feedback_*         its sync log and source tables
+#   checklist_*        go-live checklist ticks and sign-offs (routers/checklist.py)
+# app_settings + branch_targets: edited on the running site (role permissions, discount ceiling,
+# fixed/labor costs, targets) — the daily push used to overwrite them with the local copy (found 2026-09-05)
+_PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings")
+_PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
 
-    These tables live in the shared oshinei.db but are NOT produced by the MSSQL
-    sync / data refresh, so a wholesale swap would wipe them:
-      • recon_*   — staff reconciliation work (uploads, payment-code maps,
-                    bank/acquirer registries, sessions, discrepancies)
-      • app_user  — login accounts (passwords, roles, deactivations). Without
-                    this, every live-side user edit is lost on each data refresh
-                    and the seeded defaults silently return (see backend/auth.py).
+
+def _preserved_pred(col: str) -> str:
+    """SQL predicate on `col` (name / tbl_name of sqlite_master) selecting the
+    preserved tables — one definition for the carry-forward and its verify."""
+    parts = [f"{col} LIKE '{p}\\_%' ESCAPE '\\'" for p in _PRESERVED_PREFIXES]
+    parts += [f"{col}='{n}'" for n in _PRESERVED_EXACT]
+    return "(" + " OR ".join(parts) + ")"
+
+
+def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
+    """Copy locally-owned tables (see _PRESERVED_EXACT / _PRESERVED_PREFIXES)
+    from the live DB into a staged refresh before it replaces the live DB.
     The LIVE copy wins (edits made on the running site survive the swap). We
     recreate each table with its full DDL (preserving PK / UNIQUE / CHECK / FK
     and explicit indexes) and copy its rows.
@@ -189,8 +207,8 @@ def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
         objs = live.execute(
             "SELECT type, name, sql FROM sqlite_master "
             "WHERE sql IS NOT NULL AND ("
-            "  (type='table' AND (name     LIKE 'recon\\_%' ESCAPE '\\' OR name='app_user')) OR "
-            "  (type='index' AND (tbl_name LIKE 'recon\\_%' ESCAPE '\\' OR tbl_name='app_user')))"
+            f"  (type='table' AND {_preserved_pred('name')}) OR "
+            f"  (type='index' AND {_preserved_pred('tbl_name')}))"
             "ORDER BY (type='index')"            # tables first, then their indexes
         ).fetchall()
         if not any(o[0] == "table" for o in objs):
@@ -218,15 +236,15 @@ def _carry_forward_preserved(live_path: str, inc_path: str) -> None:
 
 def _preserved_counts(db_path: str) -> dict:
     """Row counts of the locally-owned tables that MUST survive a refresh
-    (recon_* + app_user). Used to verify a staged swap won't drop any of them."""
+    (_PRESERVED_EXACT / _PRESERVED_PREFIXES). Used to verify a staged swap
+    won't drop any of them."""
     counts: dict = {}
     if not _os_db.path.exists(db_path):
         return counts
     c = sqlite3.connect(db_path)
     try:
         names = [r[0] for r in c.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND "
-            "(name LIKE 'recon\\_%' ESCAPE '\\' OR name='app_user')")]
+            f"SELECT name FROM sqlite_master WHERE type='table' AND {_preserved_pred('name')}")]
         for n in names:
             try:
                 counts[n] = c.execute(f'SELECT COUNT(*) FROM "{n}"').fetchone()[0]
@@ -366,7 +384,7 @@ _FOOD_CATEGORY_FILTER = (
     " AND sk.sku_code NOT GLOB 'OTHOT*'"
     " AND sk.sku_code NOT GLOB 'DEL[0-9]*'"
     " AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE','SP','SERVICE','DISCOUNT','DEPOSIT')"
-    " AND sk.sku_code NOT LIKE 'BUFFET%'"
+    f" AND NOT {_tier_code_sql('sk.sku_code')}"
     # … OR an explicitly whitelisted real-food SKU that a category keyword caught.
     f" OR sk.sku_code IN {_FOOD_SKU_WHITELIST_SQL})"
 )

@@ -27,14 +27,26 @@ import openpyxl
 # Guarded: only when the streams expose a real binary .buffer (a console). Under
 # pytest/imported-as-library, stdout is a capture object without .buffer — touching
 # it there detaches pytest's capture and crashes teardown, so we skip it.
+#
+# reconfigure() IN PLACE — never wrap sys.stdout in a fresh TextIOWrapper. A new
+# wrapper starts block-buffered (8 KB), which silently undoes `python -u` for
+# every importer: sync_mssql (via reingest_raw_2026) printed nothing to the
+# Task Scheduler window for 20-50 min at a time, the window looked hung, and
+# closing it killed the sync (0xC000013A, 6 runs in Aug–Sep 2026). The harness
+# that developed this never saw it because PYTHONIOENCODING=utf-8 there makes
+# the guard skip; the scheduler's console is cp1252, so it did not.
 for _name in ("stdout", "stderr"):
     _s = getattr(sys, _name, None)
     _buf = getattr(_s, "buffer", None)
     if _buf is not None and getattr(_s, "encoding", "").lower() not in ("utf-8", "utf8"):
         try:
-            setattr(sys, _name, io.TextIOWrapper(_buf, encoding="utf-8", errors="replace"))
+            _s.reconfigure(encoding="utf-8", errors="replace")
         except (ValueError, AttributeError):
-            pass
+            try:   # a stream without reconfigure(): wrap, but keep it line-buffered
+                setattr(sys, _name, io.TextIOWrapper(_buf, encoding="utf-8",
+                                                     errors="replace", line_buffering=True))
+            except (ValueError, AttributeError):
+                pass
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -631,8 +643,10 @@ def load_es_typeb(con: sqlite3.Connection, result: dict, filename: str) -> tuple
         )
         # net_sales must be VAT-EXCLUSIVE (hard rule: VAT is never revenue).
         # Use total_exc_tax (col 29, t[13]); fall back to inc-VAT/1.07 only if
-        # the ex-VAT column is missing/zero for a row.
-        net_sales = sum((t[13] if t[13] else t[12] / 1.07) for t in txns)
+        # the ex-VAT column is missing/zero for a row. The service charge (t[11])
+        # sits INSIDE the ex-VAT total and is not revenue — subtracted, exactly as
+        # month_summary.BACKFILL_SQL does for live-synced months (rules.net_revenue).
+        net_sales = sum((t[13] if t[13] else t[12] / 1.07) - (t[11] or 0) for t in txns)
         # VERIFY: col 40 (pay_other / other_pay) is mapped to qr below.
         # If it contains bank transfer or a mix, split accordingly after inspection.
         cur.execute(

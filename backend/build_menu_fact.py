@@ -52,7 +52,7 @@ QTY2 = QTY1.replace("si.", "si2.")                    # SaleItem alias `si2`
 TIER_CODES = ('BUFFET', 'BUFFET350', 'BUFFET500', 'BUFFET590', 'BUFFET799',
               'BUFFETCHILD', 'BUFFETCHILDFREE', 'B01', 'B02', 'B07', 'B11')
 HC_COST = 30.0   # unit BoM cost >= this = "เมนูต้นทุนสูง" (high-cost consumption metric)
-VAT = 1.07
+from rules import VAT_DIVISOR as VAT   # noqa: E402  — one VAT rule, not a second literal
 # Buffet price tiers. The adult BUFFET line's ExtendedPrice is the menu price with
 # BOTH the 5% service charge and the 7% VAT stripped out — the POS stores the base and
 # adds SC then VAT on top. Bills whose adult unit price matches none of the canonical
@@ -63,13 +63,14 @@ VAT = 1.07
 # 702.27. Matching a net price list against the stored base put 99% of 1-Sep bills in
 # 'promo' (1,265 of 1,277 bills). So each era gets its own list, matched on its own
 # basis, and the label stays the number printed on that menu.
-PRICE_TIERS = (350, 590, 649, 689, 799, 999)   # until 2026-08-31 — menu price BEFORE SC + VAT
-TIER_TOL = 3.0   # ฿ tolerance around a canonical price
-
-NEW_MENU_FROM = "2026-09-01"                   # Grand Menu 2026-09 [[grand_menu_2026_09]]
-PRICE_TIERS_NEW = (459, 629, 789, 999, 1299)   # from 2026-09-01 — NET price (SC + VAT inside)
-TIER_TOL_NET = 4.0   # ฿ tolerance, on the net price (the ±3 base tolerance grossed up)
-SC_MULT = 1.05       # service charge, when the bill carries one
+# The two price lists, the changeover date and the tolerances all live in
+# rules.py — the ONE place that says which prices are on sale on a given day, so
+# the fact tables and every report that reads them cannot drift apart.
+from rules import (GRAND_MENU_FROM as NEW_MENU_FROM,                 # noqa: E402
+                   PRICE_TIERS_LEGACY as PRICE_TIERS,                # noqa: E402
+                   PRICE_TIERS_GRAND as PRICE_TIERS_NEW,             # noqa: E402
+                   SERVICE_CHARGE_MULT as SC_MULT,                   # noqa: E402
+                   TIER_TOL, TIER_TOL_NET)                           # noqa: E402
 
 # Ingredient groups: slug -> (thai label, SQL LIKE patterns on skus.description,
 # extra exact sku_codes). Only (B)-prefixed buffet menus + whitelisted codes join

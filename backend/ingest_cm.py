@@ -23,15 +23,19 @@ Re-running is idempotent.
 
 import sqlite3
 import sys
-import io
 import re
 from pathlib import Path
 from datetime import datetime
 
 import openpyxl
 
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+# UTF-8 console for Thai output. reconfigure() in place — a fresh TextIOWrapper
+# would come back block-buffered and undo `python -u` (see ingest_easy.py).
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 # ---------------------------------------------------------------------------
 # Paths

@@ -80,7 +80,7 @@ const TAB_MODULE = {
   dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
   buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
   menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
-  menuactionboard:'cost.analysis', menuopportunities:'menu.analysis',
+  menuactionboard:'cost.analysis', menuopportunities:'menu.analysis', feedback:'customer.feedback', checklist:'customer.feedback',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis', costheadtop60:'cost.analysis',
   menuimpact:'cost.analysis',
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
@@ -93,6 +93,45 @@ const TAB_MODULE = {
   cancelbill:'ops.posextra', closetime:'ops.posextra',
   report:'report.export', mgtreport:'report.export', settings:'system.settings',
 };
+// ── First-login start card: the three tabs each role should open first ──────
+// Shown once, on the first login that has never opened a tab (/api/usage/me →
+// first_time), on top of the home page; "เข้าใจแล้ว" dismisses it for good.
+const ROLE_START = {
+  management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
+  accounting: [['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['opsreport', 'การชำระเงิน บิลยกเลิก โต๊ะ โปรโมชัน'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
+  operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
+  marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
+  analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['dailysales', 'ยอดขายรายวัน เทียบเดือน / ปีก่อน'], ['cost', 'ต้นทุนและ food cost']],
+  innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['menuimpact', 'วัตถุดิบ: มี vs ไม่มี กระทบอะไร'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
+};
+function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
+function showStartCard(role) {
+  const items = (ROLE_START[role] || ROLE_START.management).filter(([t]) => tabAllowed(t)).slice(0, 3);
+  const host = document.getElementById('tab-home'); if (!host || !items.length) return;
+  let card = document.getElementById('homeStartCard');
+  if (!card) { card = document.createElement('div'); card.id = 'homeStartCard'; host.insertBefore(card, host.firstChild); }
+  card.className = 'card p-5 mb-5'; card.style.borderLeft = '4px solid var(--indigo)';
+  card.innerHTML = `<div class="flex items-start justify-between gap-3"><div>
+      <div class="text-base font-bold" style="color:var(--text-primary)">🚀 เริ่มต้นใช้งาน — ${esc(ROLE_LABEL_TH[role] || role)}</div>
+      <div class="text-xs mt-1" style="color:var(--text-muted)">สามหน้าที่บทบาทนี้ใช้บ่อยที่สุด กดเปิดได้เลย — การ์ดนี้แสดงจนกว่าจะกด "เข้าใจแล้ว"</div></div>
+      <button onclick="dismissStartCard()" class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary)">เข้าใจแล้ว ✕</button></div>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">${items.map(([t, why], i) => `<button onclick="switchTab('${t}')" class="text-left p-3 rounded-xl transition-colors hover:ring-2 hover:ring-indigo-200" style="background:var(--bg-input);border:1px solid var(--border)">
+      <div class="text-[11px] font-semibold" style="color:var(--indigo)">ขั้นที่ ${i + 1}</div><div class="font-semibold text-sm mt-0.5" style="color:var(--text-primary)">${esc(PAGE_TITLES[t] || t)}</div><div class="text-xs mt-1" style="color:var(--text-muted)">${esc(why)}</div></button>`).join('')}</div>
+    <div class="text-xs mt-3" style="color:var(--text-muted)">คู่มือฉบับเต็ม: <a href="#" onclick="switchTab('manual');return false" class="underline">📖 คู่มือการใช้งาน</a></div>`;
+  card.hidden = false;
+}
+function dismissStartCard() {
+  try { localStorage.setItem(_startKey(), '1'); } catch(e) {}
+  const c = document.getElementById('homeStartCard'); if (c) c.remove();
+}
+async function maybeShowStartCard() {
+  if (!window.AUTH || !window.AUTH.enabled || !window.AUTH.authenticated) return;
+  try { if (localStorage.getItem(_startKey())) return; } catch(e) {}
+  let me = null;
+  try { me = await api(`${API}/api/usage/me`); } catch(e) { return; }
+  if (me && me.first_time) { switchTab('home'); showStartCard(window.AUTH.role || me.role); }
+}
+
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
@@ -300,6 +339,14 @@ async function loadUsers() {
   }
   const tb = document.getElementById('userTableBody');
   if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  // E4: a login can be confined to one branch — the feedback module then shows only that branch
+  if (!window._userBranches) {
+    try { window._userBranches = ((await api(`${API}/api/branches`)) || []).filter(b => b.active !== false).map(b => b.name); }
+    catch (e) { window._userBranches = []; }
+    const bs = document.getElementById('newUserBranch');
+    if (bs && bs.options.length <= 1) window._userBranches.forEach(b => bs.add(new Option(b, b)));
+  }
+  const branchOpts = cur => `<option value="">ทุกสาขา</option>` + (window._userBranches || []).map(b => `<option value="${b}" ${b === cur ? 'selected' : ''}>${b}</option>`).join('');
   let users = [];
   try { users = await api(`${API}/api/auth/users`); }
   catch(e) { if (tb) tb.innerHTML = '<tr><td class="py-3 text-sm text-rose-500">โหลดรายชื่อผู้ใช้ไม่ได้</td></tr>'; return; }
@@ -311,6 +358,7 @@ async function loadUsers() {
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-2 pr-4 font-medium" style="color:var(--text-primary)">${u.username}${me?' <span class=\"text-xs\" style=\"color:var(--text-muted)\">(คุณ)</span>':''}</td>
       <td class="py-2 pr-4"><select onchange="updateUserRole('${u.username}', this.value)" ${me?'disabled title="เปลี่ยนบทบาทตัวเองไม่ได้"':''} class="border rounded px-2 py-1 text-xs ${me?'opacity-50 cursor-not-allowed':''}" style="border-color:var(--border)">${opts}</select></td>
+      <td class="py-2 pr-4"><select onchange="updateUserBranch('${u.username}', this.value)" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border)" title="เสียงลูกค้าจะเห็นเฉพาะสาขานี้">${branchOpts(u.branch || '')}</select></td>
       <td class="py-2 pr-4">${u.active
         ? '<span class="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">ใช้งาน</span>'
         : '<span class="text-xs px-2 py-0.5 rounded-full bg-slate-200 text-slate-600">ปิด</span>'}</td>
@@ -439,10 +487,11 @@ async function createUser() {
   const username = document.getElementById('newUserName').value.trim();
   const password = document.getElementById('newUserPass').value;
   const role = document.getElementById('newUserRole').value;
+  const branch = (document.getElementById('newUserBranch') || {}).value || '';
   if (!username || !password) { _userStatus('กรอกชื่อผู้ใช้และรหัสผ่าน', false); return; }
   const res = await fetch(`${API}/api/auth/users`, {
     method:'POST', headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({ username, password, role }) });
+    body: JSON.stringify({ username, password, role, branch }) });
   if (res.ok) {
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserPass').value = '';
@@ -458,6 +507,7 @@ async function _putUser(username, body, okMsg) {
   else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'บันทึกไม่สำเร็จ', false); }
 }
 function updateUserRole(username, role) { _putUser(username, { role }, `เปลี่ยนบทบาท ${username} แล้ว`); }
+function updateUserBranch(username, branch) { _putUser(username, { branch }, branch ? `${username} เห็นเฉพาะสาขา ${branch}` : `${username} เห็นทุกสาขา`); }
 function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
 function resetUserPassword(username) {
   const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);
@@ -701,6 +751,23 @@ function notifyError(msg) {
   el.textContent = '⚠ ' + msg + '  (คลิกเพื่อปิด)';
   clearTimeout(el._t);
   el._t = setTimeout(() => el.remove(), 8000);
+}
+
+// The quiet counterpart: a green toast for "saved / done" (two tabs already probe for it).
+function notifySuccess(msg) {
+  let el = document.getElementById('globalOkToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'globalOkToast';
+    el.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:9999;max-width:360px;' +
+      'background:#065f46;color:#fff;padding:10px 14px;border-radius:10px;font-size:12px;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.3);cursor:pointer;line-height:1.4';
+    el.onclick = () => el.remove();
+    document.body.appendChild(el);
+  }
+  el.textContent = '✓ ' + msg;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.remove(), 3500);
 }
 
 window.addEventListener('unhandledrejection', e => {
@@ -1001,7 +1068,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', feedback:'💬 เสียงลูกค้า (Customer Feedback)', checklist:'✅ Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -1053,6 +1120,8 @@ const TABS = {
   menuefficiency: { load: () => loadMCE() },
   menuactionboard: { load: () => loadMenuActionBoard() },
   menuopportunities: { load: () => loadMenuOpportunities() },
+  feedback: { load: () => loadFeedback() },
+  checklist: { load: () => loadChecklist() },
   coverage: { load: () => loadCostCoverage() },
   pnlbranch: { load: () => loadPnlBranch(), follow: { month: 'pnlMonthSel', prepare: () => _pnlFillMonths() } },
   more: { load: () => loadMoreAnalytics() },
@@ -1163,19 +1232,45 @@ const TAB_CLUSTERS = [
   { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
   { key: 'ops',      label: '🛒 ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','🏷️ ส่วนลด'],['ops','🔬 เชิงลึก'],['staff','👤 พนักงาน'],['cashctl','💵 เงินสด'],['cancelbill','🗑️ บิลยกเลิก'],['modifiers','🍽️ Modifiers'],['pricezone','🏷️ ราคา/โซน'],['closetime','⏰ ปิดร้าน/ข้อมูล']] },
 ];
+// ── Kill list — ON HOLD (owner's call, 2026-09-05) ─────────────────────────
+// 47 days of usage telemetry (2026-07-20 → 09-05, Settings → 📈 การใช้งานจริง)
+// found 17 tabs nobody opened (docs/LEAN_KILL_LIST_2026-09.html). The app is
+// not yet used by everyone, so NOTHING is hidden or deleted: every tab shows in
+// its cluster bar as before and the counters keep running. KILL_CANDIDATES is
+// the list under watch (the Settings panel shows it with live counts);
+// SOFT_KILL — what the cluster bar folds behind a "⋯" chip — stays EMPTY. To
+// resume stage 1 later, move names from KILL_CANDIDATES into SOFT_KILL and set
+// KILL_REVIEW_DATE. `action` and `pnl` have had no menu entry since before.
+const KILL_CANDIDATES = ['action', 'pnl', 'profit', 'compare', 'costhead', 'pnlbill', 'modifiers', 'pricezone',
+  'cancelbill', 'closetime', 'benchmark', 'staff', 'simhub', 'menuefficiency', 'menuopportunities', 'coverage',
+  'costheadtop60'];
+const SOFT_KILL = new Set([]);          // on hold — nothing folded
+const KILL_REVIEW_DATE = '';            // no deletion date while on hold
+let _clusterMoreOpen = false;
+
 function _updateClusterBar(name) {
   const bar = document.getElementById('clusterBar');
   if (!bar) return;
   const cl = TAB_CLUSTERS.find(c => c.tabs.some(t => t[0] === name));
   if (!cl) { bar.classList.add('hidden'); bar.classList.remove('flex'); bar.innerHTML = ''; return; }
   bar.classList.remove('hidden'); bar.classList.add('flex');
+  const allowed = cl.tabs.filter(([t]) => tabAllowed(t));
+  const shown = allowed.filter(([t]) => !SOFT_KILL.has(t));
+  const folded = allowed.filter(([t]) => SOFT_KILL.has(t));
+  const open = _clusterMoreOpen || folded.some(([t]) => t === name);   // the active tab is never hidden
+  const chip = ([t, lbl], dim) => {
+    const on = t === name;
+    const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
+    return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
+      ? 'background:var(--indigo);color:#fff;font-weight:600'
+      : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${lbl}</button>`;
+  };
+  const more = !folded.length ? '' : open
+    ? folded.map(c => chip(c, true)).join('') +
+      `<button id="clusterFold" onclick="_clusterMoreOpen=false;_updateClusterBar('${name}')" title="ซ่อนแท็บที่ไม่ได้ใช้" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">‹</button>`
+    : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
   bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
-    cl.tabs.filter(([t]) => tabAllowed(t)).map(([t, lbl]) => {
-      const on = t === name;
-      return `<button onclick="switchTab('${t}')" class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
-        ? 'background:var(--indigo);color:#fff;font-weight:600'
-        : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}">${lbl}</button>`;
-    }).join('');
+    shown.map(c => chip(c, false)).join('') + more;
 }
 
 function toggleSidebar() {
@@ -1302,28 +1397,74 @@ async function loadUsageStats() {
   if (!el) return;
   el.textContent = 'กำลังโหลด…';
   const days = document.getElementById('usageDays')?.value || 30;
-  let d = null;
+  let d = null, people = null;
   try { d = await api(`${API}/api/usage/summary?days=${days}`); } catch(e) {}
   if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  try { people = await api(`${API}/api/usage/users?days=${days}`); } catch(e) {}
+  let digest = null;
+  if (people) { try { digest = await api(`${API}/api/usage/adoption-digest?days=${days}`); } catch(e) {} }
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
   const seen = new Set(tabs.map(t => t.name));
-  const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t));
-  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
-  const api = (d.api || []).slice(0, 20);
-  el.innerHTML = `
+  const watched = new Set(SOFT_KILL.size ? SOFT_KILL : KILL_CANDIDATES);
+  const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t) && !watched.has(t));
+  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}${watched.has(t.name) ? ' <span class="text-[10px]" style="color:#b45309">(เฝ้าดู)</span>' : ''}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
+  const apiRows = (d.api || []).slice(0, 20);
+  // the kill list: ON HOLD while adoption is incomplete (nothing hidden/deleted) — the
+  // candidates are listed with live counts; when SOFT_KILL is non-empty, that is what is folded
+  const onHold = SOFT_KILL.size === 0;
+  const byName = Object.fromEntries(tabs.map(t => [t.name, t]));
+  const killRows = [...watched].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:#b45309' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
+  const killHead = onHold
+    ? `🗑️ Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
+    : `🗑️ Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
+  // ── who uses it: the adoption view (the owner's question — who has and hasn't started) ──
+  const STATUS = { active: ['ใช้งานอยู่', '#15803d', '#dcfce7'], idle: ['ไม่ได้ใช้ในช่วงนี้', '#b45309', '#fef3c7'],
+                   never: ['ยังไม่เคยเข้าใช้ (รหัสเริ่มต้น)', '#b91c1c', '#fee2e2'], anonymous: ['ไม่มี login', '#6b7280', '#e5e7eb'] };
+  const fmtTs = t => t ? esc(String(t).slice(0, 16).replace('T', ' ')) : '—';
+  const personRow = u => { const st = STATUS[u.status] || STATUS.anonymous; return `<tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-3 font-semibold">${esc(u.username)}${u.active ? '' : ' <span class="text-[10px]" style="color:var(--text-muted)">(ปิดใช้)</span>'}</td>
+      <td class="py-1.5 pr-3">${esc(u.role || '')}${u.branch ? '<br><span class="text-[10px]" style="color:var(--text-muted)">' + esc(u.branch) + '</span>' : ''}</td>
+      <td class="py-1.5 pr-3"><span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="color:${st[1]};background:${st[2]}">${st[0]}</span></td>
+      <td class="py-1.5 pr-3" style="color:var(--text-muted)">${fmtTs(u.last_login)}</td>
+      <td class="py-1.5 pr-3 text-right">${(+u.logins).toLocaleString()}${u.failed ? ` <span title="login ไม่สำเร็จ" style="color:#b91c1c">(✗${u.failed})</span>` : ''}</td>
+      <td class="py-1.5 pr-3 text-right">${(+u.days_seen).toLocaleString()}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold">${(+u.tab_hits).toLocaleString()}</td>
+      <td class="py-1.5 text-[11px]" style="color:var(--text-secondary)">${(u.top_tabs || []).map(t => esc(PAGE_TITLES[t.tab] || t.tab) + ' (' + t.hits + ')').join(' · ') || '—'}</td></tr>`; };
+  const ps = people && people.summary ? people.summary : null;
+  const peopleHtml = people ? `
+    <div class="mb-6">
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">👥 การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:#b91c1c">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
+      <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
+      ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">📣 สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
+        <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">📣 สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
+      <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">login ล่าสุด</th><th class="py-1 pr-3 text-right">login</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
+      <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
+    </div>` : '';
+  el.innerHTML = peopleHtml + `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">แท็บที่ถูกเปิด (${esc(days)} วันล่าสุด)</div>
         <table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง</th><th class="py-1 pr-3 text-right">จำนวนวัน</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${tabs.map(row).join('') || '<tr><td class="py-2" colspan="4" style="color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มนับหลัง deploy เวอร์ชันนี้</td></tr>'}</tbody></table>
       </div>
       <div>
-        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บที่ยังไม่ถูกเปิดเลย (${never.length})</div>
+        <div class="text-xs font-semibold mb-2" style="color:${onHold ? '#b45309' : '#dc2626'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
+        <table class="text-xs w-full mb-5"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง (${esc(days)} วัน)</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${killRows}</tbody></table>
+        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
         <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว 🎉</span>'}</div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 API endpoints</div>
-        <table class="text-xs w-full"><tbody>${api.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
+        <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
       </div>
     </div>`;
+}
+
+async function sendAdoptionDigest() {
+  const st = document.getElementById('adoptionDigestStatus'); if (st) st.textContent = 'กำลังสร้าง…';
+  try {
+    const r = await api(`${API}/api/usage/adoption-digest/send`, { method: 'POST' });
+    if (st) st.textContent = `✓ สัปดาห์ ${r.week}: ${r.sent ? 'ส่ง Telegram แล้ว' : (r.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'เก็บในแอปแล้ว (ยังไม่มี Telegram)')}`;
+    setTimeout(loadUsageStats, 1500);
+  } catch (e) { if (st) st.textContent = '✗ ' + (e.message || e); }
 }
 
 

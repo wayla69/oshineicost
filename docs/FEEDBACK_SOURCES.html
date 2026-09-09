@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>เสียงลูกค้า — ตั้งค่าการดึงรีวิวอัตโนมัติ</title>
+<style>
+  body{font-family:"Segoe UI",Tahoma,system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1.2rem;color:#1f2937;line-height:1.6}
+  h1{font-size:1.5rem;color:#0c4a6e;border-bottom:3px solid #0369a1;padding-bottom:.4rem}
+  h2{font-size:1.15rem;color:#0c4a6e;margin-top:2rem}
+  h3{font-size:1rem;margin-top:1.2rem}
+  code,pre{font-family:Consolas,"Courier New",monospace;font-size:.9em;background:#f3f4f6;border-radius:4px}
+  code{padding:.05rem .3rem}
+  pre{padding:.7rem .9rem;overflow-x:auto;border-left:3px solid #0369a1}
+  table{border-collapse:collapse;width:100%;font-size:.92em;margin:.6rem 0}
+  th,td{border:1px solid #e5e7eb;padding:.35rem .5rem;text-align:left;vertical-align:top}
+  th{background:#eff6ff}
+  .note{background:#fffbeb;border-left:4px solid #ca8a04;padding:.6rem .9rem;margin:.8rem 0}
+  .ok{background:#ecfdf5;border-left:4px solid #047857;padding:.6rem .9rem;margin:.8rem 0}
+  .muted{color:#6b7280;font-size:.9em}
+  ol li,ul li{margin:.25rem 0}
+</style>
+</head>
+<body>
+<h1>💬 เสียงลูกค้า — ตั้งค่าการดึงรีวิวอัตโนมัติ</h1>
+<p class="muted">Oshinei Dashboard · แท็บ 💬 เสียงลูกค้า · เอกสารสำหรับเจ้าของ/ผู้ดูแลระบบ · ปรับปรุง 2026-09-05</p>
+
+<p>ระบบดึงรีวิวจากช่องทางที่ร้าน<b>เป็นเจ้าของ</b>ผ่าน API ทางการ (ไม่ใช่การกวาดหน้าเว็บ ซึ่งผิดเงื่อนไขและถูกบล็อกได้)
+แล้วส่งเข้าแท็บ 💬 เสียงลูกค้า ซึ่งวิเคราะห์ความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึงให้อัตโนมัติ</p>
+
+<table>
+<tr><th>ช่องทาง</th><th>ได้อะไร</th><th>ต้องตั้งค่า</th><th>สถานะ</th></tr>
+<tr><td><b>Google Business Profile</b> (Maps)</td><td>รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา</td><td>§1 (API — ครั้งเดียว) หรือ §2 (Takeout — ไม่ต้องตั้งค่า)</td><td>พร้อมใช้</td></tr>
+<tr><td><b>Facebook Page</b></td><td>Recommendations (แนะนำ/ไม่แนะนำ + ข้อความ) และคอมเมนต์ใต้โพสต์ของเพจ (เลือกได้)</td><td>§3</td><td>พร้อมใช้</td></tr>
+<tr><td><b>แบบสอบถาม QR หน้าร้าน</b> (ช่องทางของเราเอง)</td><td>หน้า 1–5 + เรื่องที่พูดถึง + ข้อความ + ช่องทางติดต่อกลับ จากทุกโต๊ะ · ชวนคนที่ประทับใจไปรีวิว Google</td><td>§15 — สร้างลิงก์ในแท็บ พิมพ์โปสเตอร์ ไม่ต้องขอสิทธิ์ใคร</td><td>พร้อมใช้</td></tr>
+<tr><td>Grab · LINE MAN · foodpanda</td><td>รีวิวจาก merchant portal</td><td>ส่งออก/คัดลอกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ</td><td>อัปโหลดเอง</td></tr>
+<tr><td><b>Instagram</b> (บัญชี Business ที่ผูกกับเพจ)</td><td>คอมเมนต์ใต้โพสต์ของร้าน (+ ตอบกลับ), โพสต์ที่แท็กบัญชี, @mention ผ่าน webhook</td><td>§3.2 — แอป Meta และ token เดิม + ตั้ง webhook ครั้งเดียว</td><td>พร้อมใช้</td></tr>
+<tr><td><b>TikTok</b></td><td>คอมเมนต์ใต้วิดีโอของร้าน (+ ตอบกลับ)</td><td>§10 (developer app ต้องผ่านการตรวจของ TikTok)</td><td>พร้อมใช้</td></tr>
+<tr><td><b>X (Twitter)</b></td><td>โพสต์สาธารณะที่พูดถึงร้าน (7 วันล่าสุด)</td><td>§11 — API Basic tier <b>เสียเงิน ~$200/เดือน</b></td><td>พร้อมใช้ (ต้องสมัคร)</td></tr>
+<tr><td><b>YouTube</b></td><td>วิดีโอที่พูดถึงร้าน + คอมเมนต์ใต้วิดีโอเหล่านั้น</td><td>§12 — API key ฟรี</td><td>พร้อมใช้</td></tr>
+<tr><td><b>ทั่วเว็บ</b> (ข่าว บล็อก เว็บบอร์ดที่ Google เก็บ)</td><td>การพูดถึงจาก Google News (ในตัว) และ Google Alerts</td><td>§12 — ไม่ต้องตั้งค่า / เพิ่มฟีด Alerts</td><td>พร้อมใช้</td></tr>
+</table>
+<p class="muted">ในแท็บ ปุ่มกรอง <b>ทั้งหมด / รีวิว / คอมเมนต์ / การพูดถึง / ข้อความ Inbox / แบบสอบถาม</b> แยกประเภท: <b>รีวิว</b> = บนลิสติ้ง/เพจของร้านเอง · <b>คอมเมนต์</b> = ใต้โพสต์/วิดีโอของร้านเอง (และใต้วิดีโอ YouTube ที่พูดถึงร้าน) · <b>การพูดถึง</b> = ที่อื่นบนอินเทอร์เน็ต (X, YouTube, ข่าว, บล็อก) ซึ่งไม่มีคะแนนดาว และระบบไม่โพสต์ตอบแทน — สาขาถูกตรวจจับจากชื่อสาขาในข้อความ</p>
+
+<div class="ok">ตัวเลือกที่เร็วที่สุด: <b>§2 Google Takeout</b> — ดาวน์โหลดรีวิวทั้งหมดเป็น zip แล้วอัปโหลดในแท็บ ใช้ได้ทันทีระหว่างรอสิทธิ์ API</div>
+<div class="note">ทำตามลำดับแบบจับมือทำพร้อมติ๊กสถานะร่วมกันทั้งทีม: แท็บ <b>✅ Checklist เปิดใช้</b> ในแดชบอร์ด (สถานะเก็บในระบบ ชื่อผู้ติ๊กจากบัญชีที่ล็อกอิน กด "ปิดสมบูรณ์" ได้เมื่อครบทุกขั้นตอน) · ฉบับพิมพ์: <a href="FEEDBACK_ROLLOUT_CHECKLIST.pdf">PDF</a> — เอกสารนี้คือรายละเอียดเชิงเทคนิคที่ checklist อ้างถึง</div>
+
+<h2>§1 Google Business Profile API (ดึงทุกคืน)</h2>
+<h3>1.1 สิทธิ์จัดการลิสติ้ง</h3>
+<ol>
+<li>เข้า <a href="https://business.google.com" target="_blank">business.google.com</a> ด้วยบัญชี Google ของบริษัท — ต้องเห็น<b>ทุกสาขา</b> (ถ้ากระจายอยู่หลายบัญชี ให้โอนหรือเชิญเข้ากลุ่มธุรกิจเดียวกันก่อน)</li>
+<li>บัญชีนี้ต้องเป็น Owner/Manager ของลิสติ้ง (ไม่ใช่แค่ Site manager)</li>
+</ol>
+<h3>1.2 Google Cloud project + ขอสิทธิ์ API</h3>
+<ol>
+<li>เข้า <a href="https://console.cloud.google.com" target="_blank">console.cloud.google.com</a> ด้วยบัญชีเดียวกัน → สร้าง project ใหม่ เช่น <code>oshinei-reviews</code></li>
+<li>ยื่นแบบฟอร์มขอสิทธิ์ Business Profile API (Google ต้องอนุมัติ project ก่อนจึงเรียก API ได้ — ปกติ 1–2 สัปดาห์): เริ่มที่
+    <a href="https://developers.google.com/my-business/content/prereqs" target="_blank">developers.google.com/my-business/content/prereqs</a> → "Request access" ระบุ Project number, ชื่อบริษัท, อีเมล, เว็บไซต์ และเหตุผล ("monitor and reply to reviews of our own 29 restaurant locations")</li>
+<li>เมื่อได้รับอีเมลอนุมัติ: APIs &amp; Services → Library → เปิดใช้ 3 ตัว: <b>My Business Account Management API</b>, <b>My Business Business Information API</b>, <b>Google My Business API</b></li>
+<li>APIs &amp; Services → OAuth consent screen → External → กรอกชื่อแอป/อีเมล → Scopes เพิ่ม <code>https://www.googleapis.com/auth/business.manage</code> → Test users เพิ่มอีเมลบัญชีบริษัท (อยู่โหมด Testing ได้ ไม่ต้องส่งตรวจ)</li>
+<li>Credentials → Create credentials → OAuth client ID → Application type <b>Desktop app</b> → จด <b>Client ID</b> และ <b>Client secret</b></li>
+</ol>
+<h3>1.3 ตั้งค่าบนเครื่องที่รัน sync (เครื่องเดียวกับ Sync Live Data)</h3>
+<ol>
+<li>สร้างไฟล์ <code>backend\.feedback_config.json</code> (ไฟล์นี้ถูก gitignore และถูกสำรองพร้อม secrets อื่นโดย Backup DB.bat):
+<pre>{
+  "google": {
+    "client_id": "xxxxxxxx.apps.googleusercontent.com",
+    "client_secret": "GOCSPX-xxxxxxxx"
+  }
+}</pre></li>
+<li>ขอสิทธิ์ครั้งเดียว (เปิดเบราว์เซอร์ให้ล็อกอินและกดอนุญาต แล้วบันทึก refresh token ลงไฟล์):
+<pre>py backend\fetch_feedback.py auth google</pre>
+ถ้าเครื่องไม่มีเบราว์เซอร์ ใช้ <code>--manual</code> แล้ววาง code จาก address bar</li>
+<li>ดูรายชื่อลิสติ้งและสาขาที่จับคู่ได้:
+<pre>py backend\fetch_feedback.py locations google</pre>
+ลิสติ้งที่ชื่อ<b>มี</b>ชื่อสาขาอยู่แล้ว (เช่น "Oshinei Buffet ขอนแก่น") จับคู่อัตโนมัติ; ที่เหลือเพิ่มในไฟล์:
+<pre>"google": { ..., "location_map": { "Oshinei Buffet Korat": "โคราช1", "โอชิเน นครราชสีมา 2": "โคราช2" } }</pre></li>
+<li>ทดลองดึงทั้งหมดโดยยังไม่บันทึก แล้วดึงจริง:
+<pre>py backend\fetch_feedback.py run --source google --since all --dry-run
+py backend\fetch_feedback.py run --source google --since all</pre></li>
+</ol>
+
+<h2>§2 Google Takeout (ไม่ต้องตั้งค่าอะไร)</h2>
+<ol>
+<li>เข้า <a href="https://takeout.google.com" target="_blank">takeout.google.com</a> ด้วยบัญชีที่จัดการลิสติ้ง → Deselect all → เลือกเฉพาะ <b>Google Business Profile</b> → Next → Export once → ดาวน์โหลด zip</li>
+<li>ในแท็บ 💬 เสียงลูกค้า เลือกไฟล์ zip ที่ได้ → นำเข้าและวิเคราะห์ (ระบบอ่าน <code>location-*/reviews.json</code> ทุกสาขาในไฟล์ และใช้ชื่อลิสติ้งจับคู่สาขา; ถ้าเป็นบัญชีสาขาเดียว เลือกสาขาในช่องค่าเริ่มต้นได้)</li>
+<li>ทำซ้ำเดือนละครั้งได้ — รีวิวเดิมไม่ซ้ำ (ระบบจำ review id) และรีวิวที่แก้ไข/ตอบกลับแล้วจะถูกอัปเดต</li>
+</ol>
+
+<h2>§3 Facebook Page</h2>
+<ol>
+<li>เข้า <a href="https://developers.facebook.com" target="_blank">developers.facebook.com</a> ด้วยบัญชีที่เป็นแอดมินของเพจ → My Apps → Create App → ประเภท <b>Business</b> → ชื่อ เช่น "Oshinei Reviews" (แอปอยู่โหมด Development ใช้กับเพจที่คุณเป็นแอดมินได้เลย ไม่ต้องส่ง App Review)</li>
+<li>Tools → <b>Graph API Explorer</b> → เลือกแอปนี้ → Permissions เพิ่ม <code>pages_show_list</code>, <code>pages_read_user_content</code>, <code>pages_read_engagement</code> (และ <code>pages_manage_engagement</code> ถ้าจะให้ระบบตอบคอมเมนต์ §8) → Generate Access Token → เลือกทุกเพจสาขา → คัดลอก token (User token)</li>
+<li>ให้ระบบดึงรายชื่อเพจพร้อม Page token และบันทึกลงไฟล์:
+<pre>py backend\fetch_feedback.py pages facebook --user-token "EAAB..." --save</pre>
+แล้วเปิด <code>backend\.feedback_config.json</code> เติม <code>"branch"</code> ให้แต่ละเพจ (และ <code>"comments": true</code> ถ้าต้องการคอมเมนต์ใต้โพสต์ด้วย):
+<pre>"facebook": { "pages": [
+  { "id": "1234567890", "name": "Oshinei ขอนแก่น", "branch": "ขอนแก่น", "token": "EAAB...", "comments": false }
+] }</pre></li>
+<li>ทดลองแล้วดึงจริง:
+<pre>py backend\fetch_feedback.py run --source facebook --since all --dry-run
+py backend\fetch_feedback.py run --source facebook --since all</pre></li>
+</ol>
+<div class="note">Page token ที่ได้จาก User token แบบสั้นจะหมดอายุใน ~1–2 ชั่วโมง ถ้าเห็น <code>OAuthException</code> ในผลการดึง ให้ทำข้อ 2–3 ซ้ำ หรือใช้ token จาก <b>Business Settings → System Users</b> (ไม่หมดอายุ) — ทางที่มั่นคงที่สุดสำหรับงานประจำ</div>
+<h3>3.1 การแชร์และการ mention บน Facebook — ได้แค่ไหน</h3>
+<table>
+<tr><th>สิ่งที่เกิดขึ้น</th><th>API ให้เพจเห็นไหม</th><th>ระบบทำอะไร</th></tr>
+<tr><td>คนมา<b>โพสต์บนเพจ</b> (visitor post)</td><td>ได้ (<code>/feed</code>)</td><td>ดึงเป็น "คอมเมนต์" · ถ้าเป็นลบเข้าคิวรอสาขาตอบ · ตอบใต้โพสต์ได้จากแท็บ</td></tr>
+<tr><td>คนโพสต์ที่อื่นแล้ว<b>แท็ก/@mention เพจ</b></td><td>ได้ (<code>/tagged</code>) เฉพาะโพสต์ที่ผู้โพสต์เปิดสาธารณะหรืออนุญาต</td><td>ดึงเป็น "การพูดถึง" (ตอบเองในแอป)</td></tr>
+<tr><td>คน<b>แชร์โพสต์ของเพจ</b></td><td>จำนวนแชร์ได้ครบ (<code>shares.count</code>) · ตัวโพสต์ที่แชร์เห็นเฉพาะที่ตั้งค่า<b>สาธารณะ</b></td><td>จำนวนแชร์แสดงใน log ของการดึง · การแชร์สาธารณะดึงเป็น "การพูดถึง" พร้อมข้อความที่ผู้แชร์เขียน</td></tr>
+<tr><td>คนพูดถึงร้านในโพสต์/คอมเมนต์/กลุ่ม <b>โดยไม่แท็กเพจ</b></td><td><b>ไม่ได้</b> — Facebook ไม่มี API ค้นหาเนื้อหาสาธารณะ (CrowdTangle ปิดปี 2024, Content Library เฉพาะนักวิจัย)</td><td>ใช้ Google Alerts (§12) เท่าที่ Google index หรือบริการ social listening</td></tr>
+<tr><td>แชร์โดยคนที่ตั้งค่าเห็นเฉพาะเพื่อน</td><td><b>ไม่ได้</b> (ความเป็นส่วนตัว) นับอยู่ในจำนวนแชร์เท่านั้น</td><td>—</td></tr>
+</table>
+<p class="muted">เปิด/ปิดได้ต่อเพจในไฟล์ config: <code>"visitor_posts": true, "tagged": true, "shares": true</code> (ค่าเริ่มต้นเปิดทั้งสาม) · <code>"comments": true</code> สำหรับคอมเมนต์ใต้โพสต์ของเพจ · เพจรวมของเครือที่ไม่ระบุ <code>branch</code> ระบบจับชื่อสาขาจากข้อความให้</p>
+
+<h3>3.2 Instagram (บัญชี Business ที่ผูกกับเพจ — ใช้แอปและ token เดิม)</h3>
+<table>
+<tr><th>สิ่งที่เกิดขึ้น</th><th>API ให้เห็นไหม</th><th>ระบบทำอะไร</th></tr>
+<tr><td>คอมเมนต์ใต้โพสต์ของบัญชีร้าน</td><td>ได้</td><td>ดึงเป็น "คอมเมนต์" · ตอบใต้คอมเมนต์ได้จากแท็บ (ไม่เกิน 2,200 ตัวอักษร)</td></tr>
+<tr><td>คนโพสต์แล้ว<b>แท็ก</b>บัญชีร้าน</td><td>ได้ (<code>/tags</code>)</td><td>ดึงเป็น "การพูดถึง"</td></tr>
+<tr><td>คน <b>@mention</b> บัญชีร้านในแคปชันหรือคอมเมนต์ของโพสต์คนอื่น</td><td>ได้ แต่ผ่าน <b>webhook</b> เท่านั้น (Meta ส่ง id มาให้ตอนเกิดเหตุ) — จึงเก็บได้ตั้งแต่วันที่เปิด webhook ไม่มีย้อนหลัง</td><td>แดชบอร์ดรับ webhook เก็บ id ไว้ ตัวดึงคืนนั้นไปอ่านเนื้อหาแล้วบันทึกเป็น "การพูดถึง"</td></tr>
+<tr><td>Story ที่ mention บัญชี, DM</td><td>webhook/messaging เท่านั้น</td><td>ยังไม่ทำ</td></tr>
+</table>
+<ol>
+<li>ผูกบัญชี Instagram (Business/Creator) กับเพจ Facebook ของร้าน แล้วขอสิทธิ์ใน Graph API Explorer เพิ่ม <code>instagram_basic</code>, <code>instagram_manage_comments</code> → รัน <code>pages facebook --user-token … --save</code> อีกครั้ง ระบบจะเติมส่วน <code>"instagram": {"accounts": [...]}</code> ให้เอง (เติม <code>branch</code> ถ้าเป็นบัญชีของสาขาเดียว)</li>
+<li><b>Webhook สำหรับ @mention</b> (ทำครั้งเดียว):
+  <ol type="a">
+  <li>ใน Meta app → App settings → Basic → จด <b>App secret</b> · ตั้งค่า verify token เป็นข้อความอะไรก็ได้ที่คุณเลือก</li>
+  <li>ใส่สองค่านี้ใน <code>backend\.env</code> (ถูกสำรองพร้อม secrets อื่น) และตั้งเป็น Fly secret ชื่อเดียวกัน: <code>META_APP_SECRET</code>, <code>META_WEBHOOK_VERIFY_TOKEN</code> (แจ้งได้ ระบบตั้งให้ตามกติกาสำรอง secret)</li>
+  <li>Meta app → Products → <b>Webhooks</b> → Instagram → Callback URL <code>https://oshinei-dashboard.fly.dev/api/feedback/webhook/meta</code> · Verify token = ค่าที่ตั้งไว้ → Verify and save → Subscribe field <code>mentions</code> (และ <code>comments</code> ถ้าต้องการให้เร็วกว่ารอบคืน)</li>
+  <li>รัน <code>py backend\fetch_feedback.py subscribe facebook</code> ให้แอปสมัครรับเหตุการณ์ของทุกเพจที่ตั้งค่าไว้</li>
+  </ol>
+  ถ้าแอปยังอยู่โหมด Development Meta ส่งเหตุการณ์ให้เฉพาะบัญชีที่มีบทบาทในแอป (เจ้าของ/ผู้ทดสอบ) ซึ่งครอบคลุมบัญชีร้านเองอยู่แล้ว</li>
+</ol>
+
+<h3>3.3 ข้อความจากกล่องข้อความ (Messenger และ Instagram DM)</h3>
+<p>ลูกค้าจำนวนมากบ่นทาง inbox ไม่ใช่รีวิวสาธารณะ ระบบรวมข้อความเหล่านี้เข้ามาเป็นประเภทที่ 4 <b>"ข้อความ Inbox"</b> ได้ โดยมีกติกาต่างจากรีวิว:</p>
+<table>
+<tr><th>เรื่อง</th><th>กติกา</th></tr>
+<tr><td>สิทธิ์ที่ token ต้องมีเพิ่ม</td><td><code>pages_messaging</code> (Messenger) และ <code>instagram_manage_messages</code> (IG DM) — เพิ่มตอนสร้าง token ใน §3 ข้อ 2</td></tr>
+<tr><td>เปิดใช้</td><td>ในไฟล์ config ใส่ <code>"inbox": true</code> ที่เพจ (ส่วน facebook.pages) และ/หรือที่บัญชี (ส่วน instagram.accounts) — ค่าเริ่มต้นปิด</td></tr>
+<tr><td>สิ่งที่เก็บ</td><td>ข้อความของ<b>ลูกค้า</b>ต่อบทสนทนาต่อวัน รวมเป็น 1 รายการ (ข้อความสั้นกว่า 8 ตัวอักษร เช่น สวัสดี/สติกเกอร์ ไม่นับ ปรับด้วย <code>"inbox_min_chars"</code>) · ผู้ส่งเก็บเป็นแฮช ไม่เก็บชื่อ · มีลิงก์เปิดบทสนทนาใน Business Suite</td></tr>
+<tr><td>ตอบแล้วหรือยัง</td><td>ถ้าเพจตอบหลังข้อความล่าสุดของลูกค้าในวันนั้น ระบบบันทึกคำตอบและถือว่าตอบแล้ว · ถ้าลูกค้าเขียนมาอีกหลังคำตอบ วันนั้นกลับเป็น "รอสาขาตอบ" · ข้อความลบที่ยังไม่ตอบเข้าคิว "รอสาขาตอบ" และแจ้งเตือน Telegram เหมือนรีวิว</td></tr>
+<tr><td>การตอบ</td><td><b>ระบบไม่ส่งข้อความแทน</b> (เป็นบทสนทนาส่วนตัวและ Messenger มีกติกาหน้าต่าง 24 ชั่วโมง) — กด ✍ ตอบ เพื่อร่างข้อความ แล้วไปวางในกล่องข้อความของ Meta Business Suite ตามลิงก์ ↗</td></tr>
+<tr><td>ความเป็นส่วนตัว</td><td>ข้อความ inbox เป็นข้อมูลส่วนบุคคล ดูได้เฉพาะผู้ใช้ที่มีสิทธิ์โมดูลเสียงลูกค้า · ลบรายการที่ลูกค้าขอให้ลบด้วยปุ่ม ✕ · ทบทวนความจำเป็นในการเปิดใช้ทุกไตรมาส (§13)</td></tr>
+<tr><td>ย้อนหลัง</td><td>รอบแรกอ่านบทสนทนาที่มีความเคลื่อนไหวล่าสุด ≤ 200 บทสนทนาต่อเพจ (ปรับด้วย <code>max_threads</code> ในโค้ด) รอบถัดไปเฉพาะบทสนทนาที่มีข้อความใหม่ตั้งแต่รอบล่าสุด −2 วัน</td></tr>
+</table>
+
+<h2>§4 แจ้งเตือนรีวิวลบทาง Telegram</h2>
+<ol>
+<li>ใน Telegram คุยกับ <b>@BotFather</b> → <code>/newbot</code> → ตั้งชื่อ → ได้ <b>bot token</b></li>
+<li>สร้างกลุ่ม "Oshinei รีวิว" เชิญผู้จัดการที่ต้องรู้ + เชิญบอทเข้ากลุ่ม แล้วพิมพ์ข้อความอะไรก็ได้ในกลุ่ม 1 ข้อความ</li>
+<li>เปิด <code>https://api.telegram.org/bot&lt;token&gt;/getUpdates</code> ในเบราว์เซอร์ → ดูค่า <code>"chat":{"id": -100xxxxxxxx}</code> = chat id ของกลุ่ม</li>
+<li>เพิ่มใน <code>backend\.env</code>:
+<pre>OSHINEI_TG_TOKEN=123456:ABC-xxxx
+OSHINEI_TG_CHAT_ID=-100xxxxxxxx</pre></li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py test-telegram</code></li>
+</ol>
+<p>ทุกครั้งที่ดึงได้รีวิว<b>ใหม่</b>ที่เป็นเชิงลบหรือ ≤ 2 ดาว ระบบส่งสรุป (สาขา · ดาว · ข้อความ · ลิงก์) เข้ากลุ่มทันที</p>
+
+<h2>§5 ตารางเวลาและการทำงาน</h2>
+<ul>
+<li>Task Scheduler <b>"Oshinei Feedback Sync"</b> รัน <code>Fetch Feedback.bat auto</code> ทุกวัน 09:00 (ก่อน push DB 10:00) — log ที่ <code>backend\logs\fetch_feedback.log</code></li>
+<li>รันเองได้ทุกเมื่อ: ดับเบิลคลิก <code>Fetch Feedback.bat</code> หรือ <code>py backend\fetch_feedback.py run</code></li>
+<li><code>--since auto</code> (ค่าเริ่มต้น) = ดึงตั้งแต่การดึงสำเร็จครั้งล่าสุดย้อนไป 2 วัน (จับรีวิวที่ถูกแก้ไขและการตอบกลับที่มาทีหลัง); <code>--since all</code> = ทั้งหมด; <code>--since 2026-08-01</code> = ตั้งแต่วันที่</li>
+<li>รีวิวถูกส่งเข้า<b>เว็บที่ Fly โดยตรง</b> (ไม่ผ่านฐานข้อมูลในเครื่อง) และไม่หายเมื่อ push ยอดขายประจำวัน — ตารางรีวิวอยู่ในรายการที่ระบบเก็บไว้ข้ามการสลับฐานข้อมูล</li>
+<li>ยังไม่ตั้งค่าอะไรเลย = งานจบด้วยข้อความ "no review source configured" ไม่นับเป็นความล้มเหลว</li>
+<li>ในแท็บ การ์ด "แหล่งข้อมูล &amp; การดึงอัตโนมัติ" แสดงจำนวนรีวิว รีวิวล่าสุด จำนวน<b>รอสาขาตอบ</b> (รีวิวลบ/≤3 ดาวที่ยังไม่มีคำตอบ) และผลการดึงครั้งล่าสุดของแต่ละแหล่ง</li>
+</ul>
+
+<h2>§6 ข้อมูลส่วนบุคคลและการวิเคราะห์</h2>
+<ul>
+<li>ระบบเก็บเฉพาะข้อความ คะแนน วันที่ ลิงก์ และ<b>แฮช</b>ของชื่อผู้รีวิว — ไม่เก็บชื่อหรือรูป (PDPA)</li>
+<li>การวิเคราะห์ใช้พจนานุกรมไทยในตัว; ตั้ง <code>ANTHROPIC_API_KEY</code> เป็น Fly secret เมื่อไรก็ได้ ระบบจะสลับไปใช้ Claude (แม่นกว่ามากกับประโยคประชด/ผสมภาษา; รีวิวหลักพันข้อความไม่ถึง ฿50) — อย่าลืมสำรอง secret ตามกติกาเดิม</li>
+</ul>
+
+<h2>§7 ปัญหาที่พบบ่อย</h2>
+<table>
+<tr><th>อาการ</th><th>สาเหตุ / วิธีแก้</th></tr>
+<tr><td><code>PERMISSION_DENIED</code> ตอน <code>locations google</code></td><td>project ยังไม่ได้รับอนุมัติ API (§1.2 ข้อ 2) หรือบัญชีที่ล็อกอินไม่ได้จัดการลิสติ้ง</td></tr>
+<tr><td><code>Google returned no refresh_token</code></td><td>เคยอนุญาตแอปนี้แล้ว: ไปที่ <a href="https://myaccount.google.com/permissions" target="_blank">myaccount.google.com/permissions</a> ถอนสิทธิ์แอป แล้วรัน <code>auth google</code> ใหม่</td></tr>
+<tr><td><code>invalid_grant</code> ตอนดึง</td><td>refresh token ถูกถอน/หมดอายุ (แอป Testing มีอายุ 7 วันถ้าไม่ได้ตั้ง Publishing status เป็น In production) → กด "Publish app" ใน OAuth consent screen แล้ว <code>auth google</code> ใหม่</td></tr>
+<tr><td><code>OAuthException</code> จาก Facebook</td><td>token หมดอายุ → §3 ข้อ 2–3 ซ้ำ หรือใช้ System User token</td></tr>
+<tr><td>ผลการดึงบอก <code>no branch for: …</code></td><td>ชื่อลิสติ้ง/เพจไม่มีชื่อสาขา → เติม <code>location_map</code> (Google) หรือ <code>branch</code> (Facebook) แล้วรันใหม่ — รีวิวที่ดึงมาแล้วจะถูกย้ายเข้าสาขาอัตโนมัติในรอบถัดไป (ระบบอัปเดตตาม review id)</td></tr>
+<tr><td><code>HTTP 401</code> / <code>requires login</code></td><td>เว็บบังคับล็อกอิน: ใส่ <code>user:pass</code> ของบัญชีที่มีสิทธิ์ 💬 เสียงลูกค้า ใน <code>backend\.refresh_login.txt</code> (ไฟล์เดียวกับที่ refresh_fly_db.py ใช้)</td></tr>
+<tr><td><code>HTTP 403 A valid write token is required</code></td><td>ไม่พบ write token: ใส่ใน <code>backend\.seed_tokens.txt</code> หรือ env <code>OSHINEI_WRITE_TOKEN</code></td></tr>
+</table>
+
+<h2>§8 ตอบรีวิวจากระบบ</h2>
+<ol>
+<li>ในแท็บ กด <b>✍ ตอบ</b> ที่รายการใน "กล่องงาน" (หรือใน "รายการทั้งหมดในช่วงที่เลือก" ท้ายหน้า) — ระบบร่างคำตอบภาษาไทยให้ตามความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึง (ใช้ Claude ถ้าตั้ง <code>ANTHROPIC_API_KEY</code> ไว้ ไม่งั้นใช้แม่แบบ) แก้ไขได้ก่อนส่ง</li>
+<li>กด <b>ส่งในรอบถัดไป</b> → รีวิวขึ้นสถานะ "รอส่ง" และถูกส่งจริงในรอบดึง 09:00 (หรือสั่งส่งทันทีด้วย <code>py backend\fetch_feedback.py replies</code>) — Google: โพสต์เป็นคำตอบของเจ้าของร้านใต้รีวิว · Facebook: โพสต์ใต้คอมเมนต์ (token ต้องมีสิทธิ์ <code>pages_manage_engagement</code>)</li>
+<li>ผลการส่งกลับมาแสดงที่รีวิว: <b>ตอบแล้ว ✓</b> หรือ <b>ส่งไม่สำเร็จ</b> พร้อมเหตุผล (กด "ลองใหม่" ได้) — ถ้าเครื่องที่รันตัวดึงยังไม่ได้ตั้งค่า connector รีวิวจะขึ้น "ส่งไม่สำเร็จ: not configured" ไม่ค้างเงียบ ๆ</li>
+<li><b>Facebook Recommendation</b> (แนะนำ/ไม่แนะนำ) ตอบผ่าน API ไม่ได้ — ระบบเก็บข้อความไว้ให้คัดลอกไปตอบในแอป Facebook (สถานะ "ตอบเองในแอป") — เช่นเดียวกับข้อความ Inbox และการพูดถึง: ตอบในแอปของแพลตฟอร์มแล้วกด <b>✓ ตอบแล้ว</b> ในกล่องงานเพื่อปิดคิว</li>
+<li>รีวิวที่สาขาตอบเองในแอป Google/Facebook จะถูกดึงกลับมาปิดคิวอัตโนมัติในรอบถัดไป</li>
+</ol>
+
+<h2>§10 TikTok — คอมเมนต์ใต้วิดีโอของร้าน</h2>
+<ol>
+<li>บัญชี TikTok ของร้านต้องเป็น <b>Business account</b> (ตั้งค่า → บัญชี → สลับเป็นบัญชีธุรกิจ)</li>
+<li>เข้า <a href="https://developers.tiktok.com" target="_blank">developers.tiktok.com</a> ด้วยบัญชีนั้น → Manage apps → Create app → เพิ่ม product <b>Login Kit</b> และ <b>Business Account</b> (บางบัญชีชื่อ "Content Posting / Business Account API") → Scopes: <code>user.info.basic</code>, <code>video.list</code>, <code>comment.list</code>, <code>comment.list.manage</code> → Redirect URI ใส่ <code>https://oshinei-dashboard.fly.dev/api/feedback/oauth-callback</code> (ต้องเป็น https ที่ลงทะเบียน — localhost ใช้ไม่ได้) → Submit for review (TikTok ตรวจแอปก่อนเปิดสิทธิ์ ใช้เวลาหลายวันถึงหลายสัปดาห์)</li>
+<li>เมื่ออนุมัติ: จด <b>Client key</b> / <b>Client secret</b> ใส่ในไฟล์ config (หนึ่ง developer app ใช้ขอสิทธิ์ได้หลายบัญชี — จำเป็นก็ต่อเมื่อแต่ละสาขามีบัญชี TikTok ของตัวเอง):
+<pre>"tiktok": { "client_key": "aw…", "client_secret": "…" }</pre></li>
+<li>ขอสิทธิ์ครั้งเดียวต่อบัญชี: <code>py backend\fetch_feedback.py auth tiktok</code> (บัญชีรวมของเครือ ไม่ใส่ <code>--branch</code> — ระบบจะจับชื่อสาขาจากข้อความคอมเมนต์แทน) หรือ <code>py backend\fetch_feedback.py auth tiktok --branch เชียงใหม่</code> (บัญชีของสาขาเดียว) → เปิดลิงก์ ล็อกอินบัญชีนั้น กดอนุญาต → เบราว์เซอร์มาที่หน้า callback ของแดชบอร์ด (ต้องล็อกอินแดชบอร์ดอยู่) แสดง code → คัดลอกมาวางในหน้าต่างคำสั่ง — token ถูกเพิ่ม (หรือแทนที่ถ้ามีของสาขานั้นอยู่แล้ว) ลงใน <code>tiktok.accounts</code> และต่ออายุอัตโนมัติทุกรอบ ทำซ้ำขั้นนี้ทีละสาขาถ้ามีหลายบัญชี — ใช้ client_key/secret เดิมซ้ำได้ ไม่ต้องยื่นแอปใหม่</li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py run --source tiktok --since all --dry-run</code></li>
+</ol>
+<div class="note">ระบบดึงได้เฉพาะคอมเมนต์ใต้วิดีโอ<b>ของบัญชีร้านเอง</b> (ทุกบัญชีที่ตั้งไว้ใน <code>tiktok.accounts</code>) — วิดีโอของคนอื่นที่พูดถึงร้านไม่มี API ทางการให้ (Research API ให้เฉพาะนักวิชาการ) การตอบคอมเมนต์ TikTok จำกัด 150 ตัวอักษร ชื่อ endpoint อิงตาม Business Account API v1.3 — ถ้าแอปที่ได้รับอนุมัติเป็นเวอร์ชันอื่น ค่าคงที่ทั้งหมดอยู่ตอนต้นไฟล์ <code>backend/feedback_sources/tiktok.py</code></div>
+
+<h2>§11 X (Twitter) — โพสต์ที่พูดถึงร้าน</h2>
+<ol>
+<li>เข้า <a href="https://developer.x.com" target="_blank">developer.x.com</a> → สมัคร <b>Basic</b> tier (ประมาณ $200/เดือน — ทีม Free อ่านค้นหาไม่ได้ ระบบจะรายงาน "search needs the Basic tier") → สร้าง Project + App → Keys and tokens → <b>Bearer Token</b></li>
+<li>ใส่ในไฟล์ config (คำค้นปรับได้):
+<pre>"x": { "bearer_token": "AAAA…", "keywords": ["โอชิเน", "oshinei"], "lang": "th" }</pre></li>
+<li>ทดสอบ: <code>py backend\fetch_feedback.py run --source x --since all --dry-run</code> — API ค้นย้อนหลังได้ 7 วัน การดึงทุกคืนจึงไม่พลาดโพสต์</li>
+</ol>
+<div class="note">คุ้มไหม: ทีมนี้อ่านได้ 10,000 โพสต์/เดือน สำหรับแบรนด์ร้านอาหารไทยปริมาณการพูดถึงบน X มักไม่กี่สิบโพสต์ต่อเดือน — ตัดสินใจจากงบ ถ้าไม่สมัคร ข้ามส่วนนี้ได้โดยไม่กระทบส่วนอื่น</div>
+
+<h2>§12 YouTube และการพูดถึงทั่วเว็บ (Google News / Google Alerts)</h2>
+<h3>12.1 YouTube (API key ฟรี)</h3>
+<ol>
+<li>ใน Google Cloud project เดียวกับ §1 → APIs &amp; Services → Library → เปิด <b>YouTube Data API v3</b> → Credentials → Create credentials → <b>API key</b> (จำกัดให้ใช้ได้เฉพาะ YouTube Data API)</li>
+<li>ใส่ในไฟล์ config:
+<pre>"youtube": { "api_key": "AIza…", "keywords": ["โอชิเน", "oshinei buffet"], "comments": true }</pre>
+<code>comments: true</code> = ดึงคอมเมนต์ยอดนิยมใต้วิดีโอที่พูดถึงร้านด้วย (เสียโควตาน้อยมาก: ค้นหา 100 หน่วย/คำ คอมเมนต์ 1 หน่วย/วิดีโอ จากโควตาฟรี 10,000/วัน)</li>
+</ol>
+<h3>12.2 Google News (ในตัว) และ Google Alerts</h3>
+<ol>
+<li>ไม่ต้องตั้งค่า: ระบบดึง Google News search ของคำค้น (<code>"web": {"keywords": [...]}</code>, ค่าเริ่มต้น โอชิเน / oshinei) ทุกคืนอยู่แล้วเมื่อมีส่วน <code>"web"</code> ในไฟล์ config (ใส่ <code>"web": {}</code> ก็พอ)</li>
+<li>Google Alerts ครอบคลุมบล็อก เว็บบอร์ด และหน้าเว็บที่ Google เก็บ (กว้างกว่าข่าว): เข้า <a href="https://www.google.com/alerts" target="_blank">google.com/alerts</a> → สร้าง alert คำว่า "โอชิเน" → Show options → <b>Deliver to: RSS feed</b> → คัดลอก URL ฟีด (ไอคอน RSS) → เพิ่มในไฟล์:
+<pre>"web": { "keywords": ["โอชิเน"], "feeds": [ { "url": "https://www.google.com/alerts/feeds/…", "name": "Google Alerts โอชิเน" } ] }</pre></li>
+<li>ฟีด RSS/Atom อื่นใส่เพิ่มในรายการเดียวกันได้ (เช่น ฟีดช่อง YouTube ของร้าน <code>https://www.youtube.com/feeds/videos.xml?channel_id=…</code>)</li>
+</ol>
+
+<h2>§13 ช่องทางอื่น</h2>
+<ul>
+<li><b>Grab / LINE MAN / foodpanda</b>: ไม่มี API สาธารณะ — คัดลอกรีวิวจาก merchant app/portal ลงไฟล์ CSV/XLSX (คอลัมน์ date, branch, source, rating, text) แล้วอัปโหลดในแท็บ สัปดาห์ละครั้งก็เพียงพอ</li>
+<li><b>Pantip / Wongnai / TikTok ของคนอื่น / Instagram</b>: ไม่มี API สำหรับค้นหาการพูดถึง — Google Alerts (§12.2) เก็บกระทู้ Pantip และรีวิว Wongnai ที่ Google index ได้ส่วนหนึ่ง; ถ้าต้องการครบถ้วนใช้บริการ social listening ไทย (Wisesight, Mandala) แล้วนำเข้าไฟล์ส่งออกในแท็บ</li>
+</ul>
+<h2>§14 หน้าจอ 💬 เสียงลูกค้า — อ่านยังไง ทำอะไรได้บ้าง</h2>
+<p>หน้าจอเรียงจาก "ภาพรวม → งานที่ต้องทำ → เจาะสาเหตุ" ตามตัวกรองสาขาและช่วงเดือนด้านบน (คลิกสาขาในหน้านี้เพื่อเจาะแคบลงอีก) ทุกตัวเลขเทียบกับ<b>ช่วงก่อนหน้าที่ยาวเท่ากัน</b> (เช่น เลือก ก.ค.–ก.ย. → เทียบ เม.ย.–มิ.ย.)</p>
+<table>
+<tr><th>ส่วน</th><th>บอกอะไร</th><th>ทำอะไรได้</th></tr>
+<tr><td><b>ตัวเลขชีพจร</b> 5 ช่อง</td><td>คะแนนเฉลี่ย · จำนวนเสียง · % เชิงลบ · อัตราตอบกลับ (ตอบแล้ว/ตอบได้ + เวลากลาง) · รอสาขาตอบ พร้อมลูกศร ▲▼ เทียบช่วงก่อน (สีเขียว = ดีขึ้น)</td><td>—</td></tr>
+<tr><td><b>แนวโน้ม</b></td><td>แท่ง = จำนวนเสียงต่อวัน (หรือต่อเดือนเมื่อช่วงยาวกว่า 70 วัน) เส้นแดง = % เชิงลบ</td><td>เห็นวันที่เสียงลบพุ่ง แล้วไปดูกล่องงานของวันนั้น</td></tr>
+<tr><td><b>กล่องงาน</b></td><td>รายการที่ต้องตอบ เรียงตามความเร่งด่วน: ยังไม่ตอบ → 🔥 ร้ายแรง / 🚩 ปักหมุด → เกิน SLA (<b>1 วัน</b>) → ดาวต่ำสุด → เก่าสุด · ปุ่มกรอง ต้องตอบ / เกิน SLA / ปักหมุด / เชิงลบทั้งหมด</td><td><b>✍ ตอบ</b> = ร่างและส่งผ่านระบบ (§8) · <b>✓ ตอบแล้ว</b> = สาขาตอบไปแล้วในแอป/โทรแล้ว บันทึกสรุปสั้น ๆ แล้วปิดคิว · <b>🚩 ปักหมุด</b> = เรื่องร้ายแรงที่ผู้บริหารต้องเห็น (ระบุเหตุผล) · <b>เปิดต้นทาง ↗</b></td></tr>
+<tr><td><b>หัวข้อที่ลูกค้าพูดถึง</b></td><td>แถบเขียว/แดง = สัดส่วนบวก/ลบ ของหัวข้อ · ▲▼ = จำนวนเทียบช่วงก่อน (แดง = พูดถึงมากขึ้น)</td><td>คลิกหัวข้อ → ตัวอย่างข้อความลบ 3 รายการ + สาขาที่พูดถึงมากสุด → "ดูทุกเสียงในหัวข้อนี้" หรือ "เจาะสาขา"</td></tr>
+<tr><td><b>ตารางสาขา</b></td><td>เสียง · ★ (Δ) · ลบ % (Δ) · รอตอบ · 🚩 · ปัญหาหลักของสาขา — คลิกหัวคอลัมน์เพื่อเรียง</td><td>คลิกสาขา → ทั้งหน้าจอเจาะสาขานั้น (ชิป "สาขา: … ✕" ล้างได้)</td></tr>
+<tr><td><b>เมนูที่ถูกพูดถึง / เสียงชม</b></td><td>เมนูที่ลบมากกว่าบวกถูกทำเครื่องหมาย ⚠ · เสียงชมล่าสุด (เฉพาะรีวิว/คอมเมนต์/Inbox ไม่รวมข่าวหรือโพสต์ที่พูดถึง)</td><td>คลิกเมนู → รายการทั้งหมดที่พูดถึงเมนูนั้น · "คัดลอก" เสียงชมส่งให้ทีมสาขา</td></tr>
+<tr><td><b>รายการทั้งหมด</b> (พับไว้)</td><td>ทุกเสียงในช่วงที่เลือก กรอง ทั้งหมด/ลบ/บวก/🚩 พร้อมสถานะการตอบ</td><td>ปุ่ม <b>CSV</b> ด้านบนส่งออกช่วงที่เลือก (เปิดใน Excel ได้ ภาษาไทยถูกต้อง)</td></tr>
+<tr><td><b>นำเข้าเอง / แหล่งข้อมูล</b> (ท้ายหน้า)</td><td>วาง/อัปโหลดรีวิว · ตารางแหล่งข้อมูลกับผลการดึงล่าสุดและคิวตอบรีวิว</td><td>ตั้งค่าการดึงอัตโนมัติตาม ✅ Checklist เปิดใช้</td></tr>
+</table>
+<div class="note">SLA 1 วัน นับจากวันที่รีวิว: รายการที่ยังไม่ตอบและเก่ากว่านั้นขึ้น "เกิน SLA" สีแดงและถูกนับในช่อง "รอสาขาตอบ" — ข้อความ Inbox และการพูดถึงตอบผ่านระบบไม่ได้ ให้ตอบในแอปแล้วกด ✓ ตอบแล้ว</div>
+<h2>§15 แบบสอบถาม QR หน้าร้าน — ช่องทางของเราเอง</h2>
+<p>รีวิวสาธารณะต่อสาขาต่อเดือนมีน้อยเกินกว่าจะสรุปอะไรได้ ช่องทางของเราเองเก็บได้ทุกโต๊ะ: ลูกค้าสแกน QR แล้วตอบใน 20 วินาที (หน้า 1–5 · เรื่องที่พูดถึง · ข้อความ · ช่องทางติดต่อกลับถ้าต้องการ) คำตอบเข้าตารางเดียวกับรีวิว เป็นประเภท <b>แบบสอบถาม</b> วิเคราะห์เหมือนเสียงอื่นทุกประการ</p>
+<table>
+<tr><th>ส่วน</th><th>ทำงานอย่างไร</th></tr>
+<tr><td>ลิงก์ต่อสาขา</td><td>แท็บเสียงลูกค้า → แผง "📱 QR แบบสอบถามหน้าร้าน" → สร้างลิงก์ = รหัส 8 ตัว (ไม่มีตัวที่สับสน 0/o 1/l) ลิงก์ <code>/s/&lt;รหัส&gt;</code> เปิดได้โดยไม่ต้องล็อกอิน · ปิดใช้ได้เมื่อรหัสหลุดหรือเลิกใช้</td></tr>
+<tr><td>โปสเตอร์</td><td><code>/s/&lt;รหัส&gt;/print</code> = A5 พร้อม QR (วาดในเบราว์เซอร์ด้วยสคริปต์จาก cdnjs) กดพิมพ์ได้เลย</td></tr>
+<tr><td>คำตอบ</td><td>เข้าเป็น kind <code>survey</code> ที่มา "Survey (QR)" คะแนน = หน้า 1–5 · เรื่องที่เลือกรวมเข้า themes โดยตรง (ชื่อเดียวกับพจนานุกรม) · 1–2 หน้า = ลบ, 4–5 = บวก · คำตอบลบที่มีช่องทางติดต่อ = "รอสาขาตอบ" ในกล่องงาน (ช่องทางตอบ = โทร/LINE กลับ แล้วกด ✓ ตอบแล้ว) · 4–5 หน้าจะได้ปุ่มชวนรีวิวบน Google ถ้าใส่ลิงก์รีวิวของสาขาไว้</td></tr>
+<tr><td>การป้องกัน</td><td>รหัสต้องมีและเปิดใช้ · ช่อง honeypot และเวลาบนหน้าน้อยกว่า 2 วินาที = บอท (รับแต่ไม่บันทึก) · จำกัด 60 คำตอบ/ชม./สาขา และ 10/ชม./ที่อยู่ · ตัดความยาวทุกช่อง · เบอร์/LINE ถูกลบอัตโนมัติหลัง 90 วัน (ตั้งใน <code>routers/survey.py</code>) · ไม่ส่งออกใน CSV</td></tr>
+</table>
+<div class="note">ตำแหน่งที่ได้ผล: กรอบตั้งโต๊ะช่วงรออาหาร และที่เคาน์เตอร์เช็คบิล · ให้พนักงานพูดประโยคเดียว "สแกนบอกเราหน่อยนะคะ ใช้ 20 วิ" อัตราตอบต่างกันหลายเท่า</div>
+<h2>§16 ปิดวงจรงาน — จากเสียงถึงการแก้ ถึงการพิสูจน์ผล และสรุปรายสัปดาห์</h2>
+<p>หน้าจอบอกว่าลูกค้าบ่นเรื่องอะไรที่สาขาไหน ส่วนนี้คือบันทึกว่าทำอะไรไปแล้ว และลูกค้ายืนยันไหมว่าดีขึ้นจริง</p>
+<table>
+<tr><th>ส่วน</th><th>ทำงานอย่างไร</th></tr>
+<tr><td>สร้างงานแก้</td><td>ในแท็บ: การ์ด "🔁 งานแก้ไข" → ➕ งานใหม่, หรือกด ➕ สร้างงานแก้ ในรายละเอียดหัวข้อ, หรือ ➕ งานแก้ ที่รายการในกล่องงาน (ผูกกับเสียงนั้น) · ระบุชื่องาน สาขา หัวข้อที่วัดผล ผู้รับผิดชอบ กำหนดเสร็จ · ระบบเก็บ<b>ฐาน</b>ทันที = เสียงทั้งหมด / เสียงที่มีหัวข้อนั้น / เสียงลบที่มีหัวข้อนั้น ใน 28 วันก่อนสร้างงาน</td></tr>
+<tr><td>สถานะ</td><td>เปิด → กำลังทำ → เสร็จ (บันทึกสรุปสั้น ๆ) · ยกเลิกได้ · เกินกำหนดขึ้นสีแดง</td></tr>
+<tr><td>พิสูจน์ผล</td><td>หลังเสร็จ ระบบวัดหัวข้อเดิมในสาขาเดิมอีก 28 วัน แล้วตัดสินจาก "เสียงลบที่มีหัวข้อนั้นต่อ 100 เสียง": ลดลง ≥ 20% = <b>ดีขึ้น</b> · เพิ่มขึ้น ≥ 20% = <b>แย่ลง</b> · ระหว่างนั้น = เท่าเดิม · ไม่มีเสียงในช่วงหลัง = ไม่มีข้อมูล · ระหว่างรอครบ 28 วันแสดงตัวเลขบางส่วนพร้อมจำนวนวันที่เหลือ</td></tr>
+<tr><td>สรุปรายสัปดาห์</td><td>ทุกวันจันทร์ รอบดึง 09:00 ส่งสรุป 7 วันเข้ากลุ่ม Telegram: เสียง / ลบ% / ★ เทียบสัปดาห์ก่อน, อัตราตอบกลับ, ที่รอตอบและเกิน SLA ตอนนี้, หัวข้อ 5 อันดับพร้อมลูกศร, สาขาที่ต้องดู, ชมมากสุด, แบบสอบถาม QR, งานแก้ค้าง/เสร็จ/ผลพิสูจน์ · สั่งส่งเองได้: <code>py backend\fetch_feedback.py digest</code> (หรือ <code>run --digest</code>) · API: <code>GET /api/feedback/digest?days=7</code></td></tr>
+<tr><td>Management Report §12</td><td>"เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้" ในรายงานผู้บริหาร (รายวัน/สัปดาห์/เดือน) ใช้ช่วงเดียวกับรายงานเทียบช่วงก่อน + ชีต "Customer Voice" ในไฟล์ .xlsx</td></tr>
+</table>
+<div class="note">งานแก้เป็นแค่คำอ้างจนกว่าลูกค้าจะยืนยัน — ถ้าผล "เท่าเดิม/แย่ลง" ให้เปิดงานใหม่ด้วยวิธีอื่น ไม่ใช่ปิดเรื่อง</div>
+<h2>§17 ผู้จัดการสาขาใช้เอง — บัญชีเฉพาะสาขา มือถือ และกลุ่มแจ้งเตือนของสาขา</h2>
+<table>
+<tr><th>ส่วน</th><th>ทำงานอย่างไร</th></tr>
+<tr><td>บัญชีเฉพาะสาขา</td><td>ตั้งค่า → 👥 ผู้ใช้งาน → ช่อง "สาขา" ของบัญชี (เว้นว่าง = ทุกสาขา) · บัญชีที่ผูกสาขาจะเห็น<b>เสียงลูกค้าเฉพาะสาขาตน</b>: ภาพรวม กล่องงาน รายการ งานแก้ สรุปรายสัปดาห์ และลิงก์ QR — บังคับที่เซิร์ฟเวอร์ (ใส่ ?branch= สาขาอื่นก็ไม่ได้ผล; แตะรายการของสาขาอื่นได้ 403) · สิทธิ์เมนูอื่นยังเป็นไปตามบทบาท (แนะนำบทบาท operation) · ต้องล็อกอินใหม่หลังเปลี่ยนสาขาของบัญชี</td></tr>
+<tr><td>มือถือ</td><td>หน้าแรกบนมือถือมีกล่อง "💬 เสียงลูกค้า — รอตอบ" 5 รายการเร่งด่วนที่สุดของสาขา (หรือสาขาที่เลือก) กด ✓ ตอบแล้ว ได้ทันที หรือ ✍ ตอบในแอป เพื่อเปิดหน้าจอเต็ม</td></tr>
+<tr><td>กลุ่ม Telegram ของสาขา</td><td>ใน <code>backend\.feedback_config.json</code> เพิ่ม <code>"telegram": {"branches": {"ขอนแก่น": "-100…", "ระยอง": "-100…"}}</code> (chat id ของกลุ่มแต่ละสาขา บอทตัวเดิมต้องอยู่ในกลุ่ม) → รีวิวลบใหม่ของสาขาส่งเข้ากลุ่มสาขานั้นด้วย และสรุปวันจันทร์ของสาขาส่งแยกให้ · กลุ่มรวมยังได้ทุกอย่างเหมือนเดิม</td></tr>
+<tr><td>เวลาตอบรายสาขา</td><td>สรุปรายสัปดาห์และ Management Report §12 มี "ตอบกลับรายสาขา": อัตราตอบและเวลากลาง (วัน) ต่อสาขา เรียงช้าสุดก่อน ใช้เป็นตัวชี้วัดผู้จัดการ</td></tr>
+</table>
+<h2>§18 AI เชิงลึก — ความร้ายแรง ชื่อพนักงาน สรุปเป็นย่อหน้า และถามข้อมูล</h2>
+<table>
+<tr><th>ส่วน</th><th>ไม่มี API key</th><th>เมื่อตั้ง <code>ANTHROPIC_API_KEY</code> (เฟส 7 ของ checklist)</th></tr>
+<tr><td>ความร้ายแรง</td><td>พจนานุกรมคำสำคัญ: อาหารเป็นพิษ ท้องเสีย แมลง เส้นผม เศษแก้ว คิดเงินเกิน ทุจริต คุกคาม ตะคอก บาดเจ็บ … = <b>ร้ายแรง</b> → ระบบ<b>ปักหมุดให้อัตโนมัติ</b> (🚩 "อัตโนมัติ: ร้ายแรง (เหตุผล)") ขึ้นบนสุดของกล่องงาน แจ้งเตือน Telegram ด้วย 🔥 และนับในสรุปสัปดาห์</td><td>Claude ตัดสินจากบริบท (รวมประชด) พร้อมเหตุผลสั้น ๆ</td></tr>
+<tr><td>ชื่อพนักงาน</td><td>จับจากรูปแบบ "พนักงานชื่อ…", "น้อง…", "คุณ…", "ผู้จัดการ…" → การ์ด "👥 พนักงานที่ถูกพูดถึง" (ชม/บ่น รายชื่อ) และป้าย 👥 ในกล่องงาน</td><td>Claude ดึงชื่อตามที่เขียนจริง</td></tr>
+<tr><td>สรุปช่วงนี้</td><td>ย่อหน้าจากกฎ: ภาพรวม / ต้องแก้ / ทำได้ดี + 3 สิ่งที่ควรทำ จากตัวเลขสรุปสัปดาห์ (คัดลอกส่งกลุ่มได้)</td><td>Claude เขียนจากตัวเลขเดียวกัน อ่านลื่นและเจาะจงกว่า (ห้ามใช้ตัวเลขนอกสรุป)</td></tr>
+<tr><td>ถามข้อมูล</td><td>ค้นคำในเสียงลูกค้าช่วงที่เลือก: จำนวนที่ตรง เชิงลบกี่เสียง สาขาที่พูดถึงมากสุด + ตัวอย่าง</td><td>Claude อ่านเสียงล่าสุด (สูงสุด 150) และตอบเป็นประโยคพร้อมอ้างอิงข้อความจริง</td></tr>
+</table>
+<p class="muted">API: <code>GET /api/feedback/narrative?days=7</code> · <code>POST /api/feedback/ask {question, days, branch}</code> · ทุกคำตอบบอก <code>engine</code> (claude / template / search) · บัญชีที่ผูกสาขาเห็นเฉพาะสาขาตน · ค่าใช้จ่าย Claude ต่ำ (haiku, ข้อความสั้น) — ตั้งเพดานงบใน console ตาม s7101</p>
+<h2>§19 เสียงลูกค้า × ข้อมูลธุรกิจ — อ่านเสียงคู่กับยอดขาย</h2>
+<p>สิ่งที่เครื่องมือรีวิวทั่วไปทำไม่ได้: แผง "📊 เสียงลูกค้า × ข้อมูลธุรกิจ" ในแท็บ (พับไว้ เปิดเมื่อต้องการ) อ่านเสียงลูกค้าคู่กับบิลขายในช่วงเดือนที่เลือก</p>
+<table>
+<tr><th>ส่วน</th><th>วิธีอ่าน</th></tr>
+<tr><td>คำบ่น vs ความแน่นของวัน</td><td>วันที่ "แน่น" = บิลของสาขาวันนั้น ≥ 120% ของค่ากลางในช่วง · ถ้า "รอนาน" ≥ 60% เกิดในวันแน่น = ปัญหากำลังคน/เตรียมของช่วงพีค · ≤ 30% = ปัญหามาตรฐานงาน (เกิดแม้ไม่แน่น) · ต้องมี ≥ 3 เสียงจึงตัดสิน · แสดงรายสาขาด้วย</td></tr>
+<tr><td>เมนู vs ยอดขาย/ต้นทุน</td><td>เมนูที่ลูกค้าพูดถึง จับคู่กับยอดขายจากรายการในบิล (sale_bill_item) ตามชื่อเมนูที่ตัดคำนำหน้า (A)/(B) และขนาดออก · อันดับขาย = ลำดับตามจำนวนชิ้นในช่วง · ต้นทุน/ชิ้น = BoM ÷ จำนวน · สัญญาณ: <b>ขายดีแต่ถูกบ่น</b> (ลบ ≥ 2 และอยู่ top 20%) แก้ก่อน · <b>ขายดีและได้คำชม</b> รักษาไว้ · <b>ต้นทุน/ชิ้นสูง</b> (≥ เส้น top 20% ของเมนูที่ขาย ≥ 20 ชิ้น) และมีเสียงลบ ทบทวนสเปก · "ไม่พบยอดขาย" = ชื่อเมนูในระบบต่างจากที่ลูกค้าเรียก</td></tr>
+<tr><td>สาขา</td><td>เสียง/ลบ%/★ คู่กับยอดขาย (รวม VAT จากบิล) และลูกค้า เทียบช่วงก่อนหน้าที่ยาวเท่ากัน, สัดส่วนส่วนลด, ยอด/หัว · สัญญาณ: <b>เสียงลบสูงและยอดขายลด</b> (ลบ ≥ 30% และยอด ≤ −5%) · <b>ส่วนลดสูงกว่าเครือ 1.5 เท่า</b> (ดูคู่กับเรดาร์จุดรั่วในรายงานผู้บริหาร) · <b>บ่นราคา + ยอด/หัวสูงกว่าค่ากลาง</b> · <b>รอนานเพิ่มพร้อมลูกค้าเพิ่ม</b></td></tr>
+</table>
+<p class="muted">API: <code>GET /api/feedback/business?month_from=&amp;month_to=&amp;branch=</code> (ผลถูกแคช 15 นาทีต่อช่วง เพราะการรวมรายการในบิลเป็นการอ่านที่หนักที่สุดของโมดูล; <code>fresh=1</code> ล้างแคช) · ต้องการเสียงราว 30 เสียง/สาขา/เดือน จึงอ่านความสัมพันธ์ได้ชัด (ช่องทาง QR §15 ช่วยเรื่องนี้)</p>
+<h2>§20 เทียบคู่แข่งรอบสาขา — Google Places</h2>
+<p>ข้อมูลสาธารณะของลิสติ้งบน Google Maps (คะแนน จำนวนรีวิว ระดับราคา ระยะทาง) ของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. รอบแต่ละสาขา ถ่ายภาพเดือนละครั้งเพื่อรู้ว่าสาขาอยู่ตรงไหนในละแวก และขยับขึ้นหรือลง</p>
+<table>
+<tr><th>ขั้น</th><th>ทำอย่างไร</th></tr>
+<tr><td>1. เปิด API</td><td>Google Cloud project เดียวกับ §1 → APIs &amp; Services → Enable "Places API (New)" → Credentials → API key (จำกัดสิทธิ์ให้ใช้ได้เฉพาะ Places API) · ตั้งเพดานงบใน Billing (การใช้งานระดับนี้ ≈ 30 สาขา × 6 คำค้น × 12 ครั้ง/ปี อยู่ในโควตาฟรีรายเดือนของ Text Search ในเกือบทุกกรณี)</td></tr>
+<tr><td>2. ตั้งค่า</td><td><code>backend\.feedback_config.json</code> เพิ่ม <code>"places": {"api_key": "AIza…", "radius_m": 3000, "keywords": ["บุฟเฟ่ต์ญี่ปุ่น","ชาบู","หมูกระทะ","ปิ้งย่าง"]}</code> · ถ้าลิสติ้งของสาขาชื่อไม่ตรงกับ "โอชิเน &lt;สาขา&gt;" ใส่ <code>"branches": {"ชื่อสาขา": {"query": "ชื่อที่ค้นแล้วเจอ"}}</code> · <code>"only": ["ขอนแก่น"]</code> เพื่อจำกัดสาขาตอนทดสอบ</td></tr>
+<tr><td>3. ถ่ายภาพครั้งแรก</td><td><code>py backend\fetch_feedback.py places</code> → บันทึกลง feedback_competitor ของเดือนนี้ (รันซ้ำ = แทนที่ของเดือนเดิม) · หลังจากนั้นรอบดึง 09:00 จะถ่ายภาพเองเมื่อขึ้นเดือนใหม่ (หรือ <code>run --places</code>)</td></tr>
+<tr><td>4. อ่านในแท็บ</td><td>แผง "🏁 เทียบคู่แข่งรอบสาขา": ★ เรา และจำนวนรีวิว (ลูกศรเทียบเดือนก่อน), ★ กลางของคู่แข่งที่มีรีวิว ≥ 20, ห่าง (เรา − กลาง), อันดับในละแวก, คู่แข่งที่ดีที่สุด · คลิกสาขาเพื่อดูรายชื่อ · ห่างติดลบ ≥ 0.2 = สาขาแพ้ละแวกตัวเอง ควรตั้งเป้ายกคะแนนคู่กับการเพิ่มรีวิว (QR §15 ชวนรีวิว Google)</td></tr>
+</table>
+<p class="muted">API: <code>GET /api/feedback/competitors[?branch=&amp;month=]</code> · <code>GET /api/feedback/competitors/status</code> · <code>POST /api/feedback/competitors</code> (ตัวดึง) · ไม่ดึงข้อความรีวิวของคู่แข่ง (เงื่อนไขการใช้งาน Places อนุญาตเฉพาะข้อมูลลิสติ้งและห้ามเก็บถาวรเกิน 30 วัน ยกเว้น place id — ระบบเก็บเฉพาะตัวเลขสรุปรายเดือนที่ใช้เทียบ)</p>
+<h2>§21 ย้ายโมดูลไปใช้ในแอปอื่น (porting kit)</h2>
+<p>ทุกจุดที่โมดูลพึ่งพาแอปแม่รวมอยู่ในไฟล์เดียว <code>backend/feedback_host.py</code> (9 ฟังก์ชัน: การเชื่อมต่อฐานข้อมูล, ตัวกันการเขียน, สาขาของบัญชี, ชื่อผู้ทำรายการ, รายชื่อสาขา, ชื่อเมนู, วัน/เวลาธุรกิจ, มีตารางบิลไหม) · <code>backend/test_feedback_kit.py</code> ล้มทันทีถ้าไฟล์ของโมดูล import แอปแม่ตรง ๆ · รายการไฟล์ที่ต้องคัดลอก การต่อสาย (router, ยกเว้นล็อกอิน, สิทธิ์, ตารางที่ต้องรอดจากการแทนที่ DB, ความลับ, ตัวช่วย JS ที่แท็บใช้) และสิ่งที่ยังผูกกับแบรนด์นี้ อยู่ใน <a href="FEEDBACK_PORTING_KIT.md">FEEDBACK_PORTING_KIT.md</a> · สถาปัตยกรรมและเหตุผลการออกแบบ: <a href="FEEDBACK_ARCHITECTURE.html">FEEDBACK_ARCHITECTURE.html</a></p>
+</body>
+</html>

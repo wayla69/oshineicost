@@ -1476,6 +1476,10 @@ async function loadBuffetPerformance() {
 
   // ── Pricing recommendation card ─────────────────────────────────────
   const pr = d.pricing_rec;
+  // From the Grand Menu on, the tier SKU codes below carry prices that are no
+  // longer sold, so the backend blanks the baht projection. Show the mix and say
+  // why rather than rendering "+฿0" as if it were a real number.
+  const prBaht = pr && !pr.unavailable;
   const tierMixDelta = tierKeys.map(t => ({
     tier: TIER_LABELS[t],
     color: TIER_COLORS[t],
@@ -1500,7 +1504,7 @@ async function loadBuffetPerformance() {
       </div>
       <div>
         <p class="text-xs font-semibold text-slate-600 mb-2">ผลกระทบทางการเงิน (ถ้าทำได้ตามเป้า)</p>
-        <div class="grid grid-cols-2 gap-3 mb-3">
+        ${prBaht ? `<div class="grid grid-cols-2 gap-3 mb-3">
           <div class="bg-emerald-50 rounded-lg p-3 border border-emerald-100">
             <p class="text-[10px] text-emerald-700 font-semibold">รายได้เพิ่ม</p>
             <p class="text-xl font-bold text-emerald-700">+${fmt(pr.revenue_gain)}</p>
@@ -1511,10 +1515,12 @@ async function loadBuffetPerformance() {
             <p class="text-xl font-bold text-indigo-700">+${fmt(pr.margin_gain)}</p>
             <p class="text-[10px] text-slate-500">Margin ${pr.current_margin_pct}% → ${pr.target_margin_pct}%</p>
           </div>
-        </div>
+        </div>` : `<div class="rounded-lg p-3 mb-3 bg-amber-50 border border-amber-200">
+          <p class="text-xs text-amber-800">ยังประเมินเป็นตัวเงินไม่ได้ในช่วงนี้ — ตั้งแต่ <b>1 ก.ย. 2026</b> ใช้ราคาเมนูใหม่ (Grand Menu) ราคาเก่า 350/500/590/799 <b>ไม่มีขายแล้ว</b> จึงไม่นำมาคิดรายได้</p>
+        </div>`}
         <p class="text-xs text-slate-500 bg-slate-50 rounded p-2 border border-slate-200">
           📌 <b>สมมุติฐาน:</b> ${pr.assumption}<br>
-          💡 <b>กลยุทธ์ที่ได้ผล:</b> Up-sell ที่หน้าจอ POS · เมนูแนะนำ "ขายดี" บน tier 590 · staff training · combo set ที่รวม tier 590+ กับ premium add-on</p>
+          💡 <b>กลยุทธ์ที่ได้ผล:</b> Up-sell ที่หน้าจอ POS · เมนูแนะนำ "ขายดี" บน tier ฿${pr.upsell_from || '590'} · staff training · combo set ที่รวม tier ฿${pr.upsell_from || '590'}+ กับ premium add-on เพื่อดันขึ้น ฿${pr.upsell_to || '799'}</p>
       </div>
     </div>`;
 
@@ -1822,10 +1828,19 @@ async function loadUpgradeSimulator() {
   if (getMonthTo())   params.set('month_to', getMonthTo());
 
   const data = await api(`${API}/api/buffet/upgrade-simulator?${params}`).catch(() => null);
+  // The pair being simulated follows the menu in force over the window
+  // (฿590→฿799 up to Aug 2026, ฿629→฿789 from the Grand Menu on 1 Sep 2026),
+  // so every label below reads it off the response instead of hard-coding it.
+  const upFrom = (data && data.from_tier) || '590', upTo = (data && data.to_tier) || '799';
   if (!data || !data.current) {
-    document.getElementById('simKpis').innerHTML = '<div class="col-span-2 text-slate-400 text-sm py-4">ไม่มีข้อมูล — ต้องใส่ unit_cost ของ tier 590 และ 799 ก่อน</div>';
+    document.getElementById('simKpis').innerHTML = `<div class="col-span-2 text-slate-400 text-sm py-4">ไม่มีข้อมูล — ต้องใส่ unit_cost ของ tier ${upFrom} และ ${upTo} ก่อน</div>`;
     return;
   }
+  const simNoteEl = document.getElementById('simScenarioNote');
+  if (simNoteEl) simNoteEl.textContent =
+    `จำลอง: ย้ายลูกค้า ${shiftPct}% จาก tier ฿${upFrom} ขึ้นไป ฿${upTo}` +
+    (data.menu_era === 'grand' ? ' (Grand Menu ตั้งแต่ 1 ก.ย. 2026 — ราคาเก่าไม่มีขายแล้ว)' : '') +
+    (data.note ? ` · ${data.note}` : '');
 
   const cur = data.current, sim = data.simulated;
   const deltaGp  = data.delta_gp  || 0;

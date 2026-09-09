@@ -13,6 +13,9 @@
  },
  "delta_gp": 0.0,
  "delta_pct": 0.0,
+ "from_tier": "590",
+ "grand_menu_from": "2026-09-01",
+ "menu_era": "legacy",
  "note": "590 or 799 tier data not found; simulation unchanged",
  "shift_pct": 10.0,
  "simulated": {
@@ -26,5 +29,6 @@
    }
   ],
   "total_gp": 56000.0
- }
+ },
+ "to_tier": "799"
 }

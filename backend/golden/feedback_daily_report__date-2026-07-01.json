@@ -1,0 +1,50 @@
+{
+ "analysed_by": {},
+ "avg_rating": null,
+ "branch": null,
+ "branch_count": 2,
+ "branches": [],
+ "by_day": [],
+ "by_month": [],
+ "chronic_branches": [],
+ "date_from": "2026-07-01",
+ "date_to": "2026-07-01",
+ "flagged": 0,
+ "headline": "ไม่มีเสียงลูกค้าเข้ามาในช่วง 2026-07-01",
+ "menus": [],
+ "neg_pct": 0.0,
+ "new_issues": [],
+ "open_issues": [],
+ "prev_period": {
+  "date_from": "2026-06-24",
+  "date_to": "2026-06-24",
+  "total": 0
+ },
+ "recent_negative": [],
+ "recent_positive": [],
+ "reply_queue": {
+  "failed": 0,
+  "manual": 0,
+  "pending": 0,
+  "sent": 0
+ },
+ "resolved_issues": [],
+ "response": {
+  "answerable": 0,
+  "answered": 0,
+  "median_days": null,
+  "rate": null
+ },
+ "sentiment": {
+  "neg": 0,
+  "neu": 0,
+  "pos": 0
+ },
+ "severe": 0,
+ "sla_breached": 0,
+ "sources": {},
+ "staff": [],
+ "themes": [],
+ "total": 0,
+ "unreplied": 0
+}

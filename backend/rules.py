@@ -42,6 +42,46 @@ def net_revenue_sum(a: str = "st") -> str:
     return f"(SUM({a}.total_inc_vat)/{VAT_DIVISOR} - SUM(COALESCE({a}.service_charge,0)))"
 
 
+def avg_ticket_sql(a: str = "st") -> str:
+    """Average net revenue per bill over a GROUP — net_revenue_row averaged,
+    written as two AVGs so SQLite keeps a single pass."""
+    p = f"{a}." if a else ""
+    return f"(AVG({p}total_inc_vat)/{VAT_DIVISOR} - AVG(COALESCE({p}service_charge,0)))"
+
+
+# ─── Discount policy ─────────────────────────────────────────────────────────
+# The owner's ceiling (2026-07): discounts should stay within 2.5% of pre-discount
+# net sales. Every reading of discount share — the Discounts tab, the management
+# report, the discount review — compares against this ONE number and reports the
+# baht given beyond it, so "high" means the same thing on every page.
+DISCOUNT_POLICY_PCT = 2.5
+
+
+def discount_policy_pct(con) -> float:
+    """The ceiling in force: app_settings['discount_policy_pct'] (Settings →
+    ค่าเริ่มต้น), else DISCOUNT_POLICY_PCT. Out-of-range or unreadable → default."""
+    try:
+        row = con.execute("SELECT value FROM app_settings WHERE key='discount_policy_pct'").fetchone()
+        v = float(row[0]) if row and row[0] not in (None, "") else DISCOUNT_POLICY_PCT
+    except Exception:
+        return DISCOUNT_POLICY_PCT
+    return v if 0 <= v <= 100 else DISCOUNT_POLICY_PCT
+
+
+def discount_excess(discount: float, base: float, policy_pct: float) -> float:
+    """Baht given beyond the ceiling: discount − policy% × pre-discount base, never negative."""
+    return round(max(0.0, (discount or 0.0) - (policy_pct / 100.0) * (base or 0.0)), 2)
+
+
+def discount_base_row(a: str = "st") -> str:
+    """Per-bill PRE-discount net revenue — what the bill was worth ex-VAT and
+    ex-service before the discount came off; the denominator of every discount
+    share. Until 2026-09 six copies wrote ((total - service)/1.07 + discount),
+    which de-VATs the service charge as well; the charge is already ex-VAT."""
+    p = f"{a}." if a else ""
+    return f"({net_revenue_row(a)} + {p}discount)"
+
+
 # ─── Buffet tier codes ───────────────────────────────────────────────────────
 # A buffet bill carries the tier as its own line (BUFFET799…) AND the dishes the
 # guest ate as B0xxx lines. Revenue is on the tier line; consumption (and so
@@ -142,3 +182,110 @@ def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
     if group:
         filters.append(f"COALESCE({alias}.branch_type,'master') = :branch_group")
         params["branch_group"] = group
+
+
+# ─── Buffet menu eras: the price list in force on a given day ────────────────
+# The Grand Menu went live on 2026-09-01 and REPLACED the old price list — the
+# old prices are not sold any more. The two lists are also quoted on different
+# bases, which is why a single tuple cannot serve both:
+#
+#   until 2026-08-31   350 / 590 / 649 / 689 / 799 / 999   price BEFORE the 5%
+#                                                          service charge and 7% VAT
+#   from  2026-09-01   459 / 629 / 789 / 999 / 1299        NET price — service
+#                                                          charge and VAT already in
+#
+# Everything that names a buffet price — the management report §11, the price-tier
+# report, the menu-impact tier filter, the buffet mix chart, the up-sell simulator —
+# reads the list from HERE, keyed on the day it is reporting, so no section can go
+# on offering a retired price after 1 Sep 2026.
+
+GRAND_MENU_FROM = "2026-09-01"          # Grand Menu 2026-09 [[grand_menu_2026_09]]
+PRICE_TIERS_LEGACY = (350, 590, 649, 689, 799, 999)   # base price (pre SC + VAT)
+PRICE_TIERS_GRAND = (459, 629, 789, 999, 1299)        # NET price (SC + VAT inside)
+SERVICE_CHARGE_MULT = 1.05              # 5% service charge, when the bill carries one
+TIER_TOL = 3.0                          # ฿ tolerance around a legacy (base) price
+TIER_TOL_NET = 4.0                      # ฿ tolerance on a net price (±3 grossed up)
+# Non-price buckets every tier list carries, in display order after the prices.
+TIER_EXTRA = ("promo", "child")
+TIER_LABEL_TH = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
+TIER_LABEL_EN = {"promo": "Promo/other price", "child": "Child-only/other"}
+
+
+def _as_day(day) -> str:
+    """A day as an ISO string. Accepts date/datetime, 'YYYY-MM-DD' or 'YYYY-MM'."""
+    s = day.isoformat() if hasattr(day, "isoformat") else str(day or "")
+    return f"{s}-01" if len(s) == 7 else s
+
+
+def is_grand_menu(day) -> bool:
+    """True when `day` (date, 'YYYY-MM-DD' or month 'YYYY-MM') is on the Grand Menu."""
+    return _as_day(day) >= GRAND_MENU_FROM
+
+
+def price_tiers(day) -> tuple:
+    """The price list actually on sale on `day` — never both."""
+    return PRICE_TIERS_GRAND if is_grand_menu(day) else PRICE_TIERS_LEGACY
+
+
+def price_tiers_between(d_from=None, d_to=None) -> tuple:
+    """The prices sold anywhere in [d_from, d_to], richest first.
+
+    A window that ends before 1 Sep 2026 gets the legacy list only; one that
+    starts on or after it gets the Grand Menu only; a window straddling the
+    changeover legitimately carries both, because both were sold in it.
+    """
+    lo, hi = _as_day(d_from) if d_from else "", _as_day(d_to) if d_to else "9999-12-31"
+    tiers: set = set()
+    if lo < GRAND_MENU_FROM:
+        tiers |= set(PRICE_TIERS_LEGACY)
+    if hi >= GRAND_MENU_FROM:
+        tiers |= set(PRICE_TIERS_GRAND)
+    return tuple(sorted(tiers, reverse=True))
+
+
+def tier_codes_between(d_from=None, d_to=None, extra: bool = True) -> tuple:
+    """price_tiers_between as the string tier codes the fact tables store,
+    followed by the 'promo' / 'child' buckets."""
+    codes = tuple(str(p) for p in price_tiers_between(d_from, d_to))
+    return codes + TIER_EXTRA if extra else codes
+
+
+def tier_label(t, th: bool = True) -> str:
+    """'789' → '฿789'; 'promo'/'child' → the bucket's name."""
+    lbl = (TIER_LABEL_TH if th else TIER_LABEL_EN).get(t)
+    if lbl:
+        return lbl
+    return f"฿{int(t):,}" if str(t).isdigit() else str(t)
+
+
+def net_to_base(net: float, service_charge: bool = True) -> float:
+    """A Grand Menu net price back to the base the POS stores: ฿789 → ฿702.27."""
+    return (net or 0.0) / VAT_DIVISOR / (SERVICE_CHARGE_MULT if service_charge else 1.0)
+
+
+def base_to_net(base: float, service_charge: bool = True) -> float:
+    """The inverse — a stored base price up to what the Grand Menu quotes."""
+    return (base or 0.0) * VAT_DIVISOR * (SERVICE_CHARGE_MULT if service_charge else 1.0)
+
+
+def tier_of_price(price: float, day, tol: Optional[float] = None) -> str:
+    """Bucket a per-head price into the tier on sale that day, or 'promo'.
+
+    `price` is on the basis that day's menu quotes: the stored base price before
+    2026-09-01, the net price on and after it. Nothing within tolerance = 'promo',
+    which is the whole point — a ฿590 head in September is a discount off ฿629,
+    not a ฿590 tier, because ฿590 is not sold any more.
+    """
+    grand = is_grand_menu(day)
+    tol = tol if tol is not None else (TIER_TOL_NET if grand else TIER_TOL)
+    tiers = PRICE_TIERS_GRAND if grand else PRICE_TIERS_LEGACY
+    best = min(tiers, key=lambda t: abs((price or 0.0) - t))
+    return str(best) if abs((price or 0.0) - best) <= tol else "promo"
+
+
+def upsell_pair(day) -> tuple:
+    """(from_tier, to_tier) for the up-sell what-if: the mainstream tier and the
+    one above it on the menu in force — ('590','799') before the Grand Menu,
+    ('629','789') from 1 Sep 2026. Stated once so the simulator cannot keep
+    modelling a shift between two prices that no longer exist."""
+    return ("629", "789") if is_grand_menu(day) else ("590", "799")

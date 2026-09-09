@@ -304,6 +304,8 @@ async function startApp() {
     // hides the period controls home doesn't use).
     switchTab('home');
     initDataCoverageNote();
+    // First login of a person: the role's three tabs, on top of the home page
+    try { await maybeShowStartCard(); } catch(e) { console.warn('start card:', e); }
     // Phone-first: load the mobile owner summary when on a small screen
     try { if (window.matchMedia('(max-width:700px)').matches && !document.body.classList.contains('force-desktop')) loadMobileSummary(); } catch(e) {}
     // Periodic health check every 30 s (silent badge update only)
@@ -437,7 +439,7 @@ function setGranularity(g) {
     if (!document.getElementById('selDateFrom').value) {
       const days = g === 'daily' ? 30 : 91;
       const today = new Date();
-      const from  = new Date(today - days * 86400000);
+      const from  = new Date(today.getTime() - days * 86400000);
       document.getElementById('selDateTo').value   = today.toISOString().slice(0,10);
       document.getElementById('selDateFrom').value = from.toISOString().slice(0,10);
     }
@@ -2060,7 +2062,8 @@ function renderSphDistribution(sph) {
     return;
   }
 
-  // KPI strip — median, p75, % above 590, dominant tier
+  // KPI strip — median, p75, % of bills in the high-spend band, most common band
+  const hiFrom = ov.high_spend_from || 700;
   const kpi = (lbl, val, sub, color) =>
     `<div class="rounded-lg p-2.5 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide">${lbl}</p>
@@ -2070,8 +2073,12 @@ function renderSphDistribution(sph) {
   stripEl.innerHTML = [
     kpi('Median (มัธยฐาน)', fmtN(ov.median_sph), `ครึ่งหนึ่งของลูกค้าจ่ายเกินค่านี้`, '#4f46e5'),
     kpi('P75 (ลูกค้าเกรด A)', fmtN(ov.p75), `25% บนสุดจ่ายเกิน ${fmtN(ov.p75)}`, '#10b981'),
-    kpi('% เกิน Buffet 590', `${(ov.pct_above_590 || 0).toFixed(1)}%`, `บิลที่ทำกำไรสูง`, '#f59e0b'),
-    kpi('Tier ที่นิยม', ov.dominant_tier || '—', `${(ov.dominant_pct || 0).toFixed(1)}% ของบิลทั้งหมด`, '#8b5cf6'),
+    // Stated as the spend it is, not as a tier name: the old label said
+    // "เกิน Buffet 590" — a price withdrawn on 1 Sep 2026, and not the cut-off
+    // either (the bands that pass it start at ฿700 ≈ ฿789 net on the new menu).
+    kpi(`% จ่าย ≥ ฿${hiFrom}/หัว`, `${(ov.pct_above_700 ?? ov.pct_above_590 ?? 0).toFixed(1)}%`,
+        `บิลที่ทำกำไรสูง (≈ tier ฿789 เมนูใหม่)`, '#f59e0b'),
+    kpi('ช่วงราคาที่นิยม', ov.dominant_tier || '—', `${(ov.dominant_pct || 0).toFixed(1)}% ของบิลทั้งหมด`, '#8b5cf6'),
   ].join('');
 
   // 100% stacked horizontal bar — colored segments per tier

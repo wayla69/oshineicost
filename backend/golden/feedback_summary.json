@@ -1,0 +1,47 @@
+{
+ "analysed_by": {},
+ "avg_rating": null,
+ "branches": [],
+ "by_day": [],
+ "by_month": [],
+ "filters": {
+  "branch": null,
+  "kind": null,
+  "month_from": null,
+  "month_to": null,
+  "source": null
+ },
+ "flagged": 0,
+ "kinds": {},
+ "menus": [],
+ "neg_pct": 0.0,
+ "prev": null,
+ "recent_negative": [],
+ "recent_positive": [],
+ "reply_queue": {
+  "failed": 0,
+  "manual": 0,
+  "pending": 0,
+  "sent": 0
+ },
+ "response": {
+  "answerable": 0,
+  "answered": 0,
+  "median_days": null,
+  "rate": null
+ },
+ "sentiment": {
+  "neg": 0,
+  "neu": 0,
+  "pos": 0
+ },
+ "severe": 0,
+ "sla_breached": 0,
+ "sla_days": 1,
+ "sources": {},
+ "staff": [],
+ "themes": [],
+ "today": "<ts>",
+ "total": 0,
+ "unreplied": 0
+}

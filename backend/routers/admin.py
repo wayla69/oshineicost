@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from core import get_db
 from core import invalidate_cache
 from core import require_write_token
+from targets import targets_for_month
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
@@ -147,7 +148,7 @@ def put_settings(body: Dict[str, str]):
             )
         con.commit()
     # settings feed cached endpoints (e.g. discount_alerts thresholds) → drop stale
-    invalidate_cache("analysis_discount_alerts")
+    invalidate_cache("analysis_discount_alerts", "analysis_discounts", "report_management")
     return {"ok": True}
 
 
@@ -229,27 +230,17 @@ def update_sku_active(sku_code: str, body: ActiveUpdate):
 # ---------------------------------------------------------------------------
 @router.get("/api/targets")
 def get_targets(month: Optional[str] = Query(None)):
-    """Returns all branches with their targets for the given month (0 if unset)."""
-    params: dict = {"month": month or ""}
-    month_join = "AND bt.period_month = :month" if month else ""
-
+    """Every branch with its target for the month: a figure typed here wins
+    (source 'manual'), otherwise the branch's own actual of the same month
+    last year (source 'last_year' — the owner's rule, see targets.py), else 0
+    (source 'none'). No month → the latest data month."""
     with get_db() as con:
-        rows = con.execute(
-            f"""
-            SELECT b.branch_id,
-                   b.name AS branch,
-                   COALESCE(bt.period_month, :month) AS period_month,
-                   COALESCE(bt.revenue_target,  0)   AS revenue_target,
-                   COALESCE(bt.customer_target, 0)   AS customer_target
-            FROM branches b
-            LEFT JOIN branch_targets bt
-                   ON bt.branch_id = b.branch_id {month_join}
-            WHERE b.name != 'ALL'
-            ORDER BY b.name
-            """,
-            params,
-        ).fetchall()
-    return [dict(r) for r in rows]
+        if not month:
+            row = con.execute("SELECT MAX(strftime('%Y-%m', sold_at)) AS m FROM sales_transaction WHERE source = 'Easy'").fetchone()
+            month = (row["m"] if row else None) or ""
+        if not month:
+            return []
+        return targets_for_month(con, month)
 
 
 @router.get("/api/targets/suggest")

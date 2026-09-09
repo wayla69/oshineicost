@@ -911,12 +911,13 @@ async function loadBranch(bid){
   if(!closed&&xfers.length){
     const sum=xfers.reduce((a,x)=>a+x.amount,0);
     html+=`<div class="card" style="margin-bottom:12px;background:#fffbeb;border-left:4px solid var(--warn)">
-      <div class="row"><b style="font-size:13.5px">⇄ พบยอดโอนเข้าก้อนใหญ่ที่น่าจะเป็น "การโอนกันเอง" ${xfers.length} รายการ (รวม ${fmt(sum)})</b>
+      <div class="row"><b style="font-size:13.5px">⇄ พบยอดโอนเข้าที่น่าจะเป็น "การโอนกันเอง" ${xfers.length} รายการ (รวม ${fmt(sum)})</b>
         ${xfers.length>1?`<button class="btn btn-sm" style="margin-left:auto" onclick="excludeAllXfers()">ตัดออกทั้งหมด</button>`:''}</div>
       <div class="muted" style="margin:2px 0 8px">ยอดก้อนใหญ่ + เลขกลม + ไม่มีคำว่า "ขาย" ในรายละเอียด — ตัดออกแล้วจะไม่ถูกนำมากระทบยอด (ย้ายไปกล่อง "โอนภายใน" · ย้อนกลับได้)</div>
       ${xfers.map(x=>`<div class="todo-item">
         <span style="flex:1">${x.date} · <b class="mono">${fmt(x.amount)}</b>
-          <span class="lbl">${esc(x.description||'')}${x.channel?' · '+esc(x.channel):''}</span></span>
+          <span class="lbl">${esc(x.description||'')}${x.channel?' · '+esc(x.channel):''}</span>
+          <span class="chip ${x.reason==='code'?'c-warn':'c-mut'}" title="${x.reason==='code'?'รหัสโอนระหว่างบัญชี/ระหว่างธนาคาร (IORSDT/NBSDT) — ไม่ใช่ยอดขาย':'ก้อนใหญ่ เลขกลม ไม่มีคำว่าขาย'}">${x.reason==='code'?'รหัสโอนภายใน':'ก้อนใหญ่เลขกลม'}</span></span>
         <button class="btn btn-sm" onclick="excludeXfer(${x.id})">ตัดออก (ไม่ใช่ยอดขาย)</button>
       </div>`).join('')}</div>`;
   }
@@ -1364,9 +1365,10 @@ async function excludeAllXfers(){
   const xfers=(DATA.internal_transfer_suggestions||[]);
   if(!xfers.length)return;
   if(!confirm(`ตัด ${xfers.length} รายการโอนกันเองออกจากการกระทบยอด? (ย้อนกลับได้ที่กล่อง "โอนภายใน")`))return;
-  try{for(const x of xfers)await excludeXfer(x.id,true);
-      toast(`ตัดออก ${xfers.length} รายการแล้ว`);route();}
-  catch(e){toast('บางรายการไม่สำเร็จ: '+e.message);route();}
+  try{const r=await api('/api/bank-lines/bulk-ignore',{method:'POST',body:{line_ids:xfers.map(x=>x.id),ignored:true,note:'v2: internal transfer (bulk)'}});
+      const n=(r.ignored||[]).length, sk=(r.skipped||[]).length;
+      toast(sk?`ตัดออก ${n} รายการ · ข้าม ${sk} รายการ (${esc(r.skipped[0].reason)})`:`ตัดออก ${n} รายการแล้ว`);route();}
+  catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);route();}
 }
 
 /* ── จับคู่: การ์ดแนะนำ + เลือกเองในวัน ── */

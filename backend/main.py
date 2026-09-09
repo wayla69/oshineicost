@@ -251,7 +251,16 @@ async def enforce_auth(request: Request, call_next):
     if not (path.startswith("/api/") or docs_req) or path.startswith("/api/auth/login") \
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
-            or path.startswith("/api/_admin/seed-db"):
+            or path.startswith("/api/_admin/seed-db") \
+            or path.startswith("/api/_admin/export-state") \
+            or path.startswith("/api/feedback/webhook/") \
+            or path.startswith("/api/feedback/survey/"):
+        # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
+        # code in the URL is the only credential a guest has; routers/survey.py rate-limits
+        # and bot-guards it. The trailing slash keeps /api/feedback/survey-links gated.
+        # …and so is the Meta webhook receiver (/api/feedback/webhook/meta): Meta
+        # calls it without a session; it verifies its own HMAC signature / verify token
+        # (routers/feedback.py). The trailing slash keeps /api/feedback/webhook-events gated.
         # seed-db is a headless machine-to-machine endpoint with its OWN token auth
         # (?token=, returns 404 on mismatch). It must bypass the login middleware,
         # else enabling OSHINEI_AUTH silently breaks the hosted data-refresh push.
@@ -316,6 +325,18 @@ def _usage_bump(kind: str, name: str, user: str = "") -> None:
                 " ON CONFLICT(day, kind, name) DO UPDATE SET"
                 " hits = hits + 1, last_user = excluded.last_user",
                 (kind, name[:120], (user or "")[:40]))
+            # the same count per USER (2026-09-05): who uses what, for the adoption
+            # view — usage_daily kept only the last user of each row. '' = no login
+            # (auth off locally, or a machine caller without a session cookie).
+            con.execute(
+                "CREATE TABLE IF NOT EXISTS usage_user_daily("
+                " day TEXT NOT NULL, user TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, name TEXT NOT NULL,"
+                " hits INTEGER NOT NULL DEFAULT 0, PRIMARY KEY(day, user, kind, name))")
+            con.execute(
+                "INSERT INTO usage_user_daily(day, user, kind, name, hits)"
+                " VALUES (date('now','+7 hours'), ?, ?, ?, 1)"
+                " ON CONFLICT(day, user, kind, name) DO UPDATE SET hits = hits + 1",
+                ((user or "")[:40], kind, name[:120]))
             con.commit()
         finally:
             con.close()
@@ -339,6 +360,8 @@ async def usage_counter(request: Request, call_next):
             route = request.scope.get("route")
             name = getattr(route, "path", None) or path
             _usage_bump("api", f"{request.method} {name}", _usage_user(request))
+            if name == "/api/home/brief":          # someone opened the app: Monday → this week's adoption digest
+                _maybe_weekly_adoption_digest()
     except Exception:
         pass
     return response
@@ -380,6 +403,295 @@ def usage_summary(days: int = Query(30, ge=1, le=365)):
     except Exception:
         pass
     return out
+
+
+_MACHINE_API = ("/api/_admin/", "/api/usage", "/api/auth/", "/api/feedback/webhook", "/api/feedback/sync-log",
+                "/api/feedback/reply-result")
+
+
+def _usage_people(days: int) -> dict:
+    """The adoption view (Settings → 📈 การใช้งานจริง → การเข้าใช้รายคน): every
+    account with its last login, logins and failures in the window, the days it
+    opened the dashboard, tab opens and its three most-opened tabs. Status:
+    'never' = no successful login on record (still on the shared default
+    password), 'idle' = has logged in before but not opened anything in the
+    window, 'active' = opened a tab or logged in within the window. Machine
+    paths (sync push, backup export, auth) are left out of the per-user API
+    count so a person's row is what THEY did."""
+    out: dict = {"days": days, "users": [], "summary": {}}
+    accounts: list = []
+    auth: dict = {}
+    with get_db() as con:
+        try:
+            rows = con.execute("SELECT username, role, active, must_change, COALESCE(branch, '') AS branch, created_at"
+                               " FROM app_user ORDER BY role, username").fetchall()
+        except sqlite3.OperationalError:
+            rows = con.execute("SELECT username, role, active, must_change, '' AS branch, created_at"
+                               " FROM app_user ORDER BY role, username").fetchall()
+        accounts = [dict(r) for r in rows]
+        try:
+            for r in con.execute(
+                    "SELECT by AS u, action, MAX(ts) AS last,"
+                    " SUM(CASE WHEN ts >= datetime('now', ?) THEN 1 ELSE 0 END) AS n"
+                    " FROM recon_audit_log WHERE entity = 'auth' AND action IN ('login', 'login_fail')"
+                    " GROUP BY by, action", (f"-{int(days)} days",)):
+                auth.setdefault(r["u"], {})[r["action"]] = {"last": r["last"], "n": r["n"] or 0}
+        except sqlite3.OperationalError:
+            pass
+    usage: dict = {}
+    top: dict = {}
+    try:
+        ucon = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        ucon.row_factory = sqlite3.Row
+        try:
+            if ucon.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_user_daily'").fetchone():
+                since = f"-{int(days)} day"
+                for r in ucon.execute(
+                        "SELECT user, kind, SUM(hits) AS hits, COUNT(DISTINCT day) AS days_seen, MAX(day) AS last_seen"
+                        " FROM usage_user_daily WHERE day >= date('now', '+7 hours', ?)"
+                        " GROUP BY user, kind", (since,)):
+                    usage.setdefault(r["user"], {})[r["kind"]] = dict(r)
+                for r in ucon.execute(
+                        "SELECT user, SUM(hits) AS hits FROM usage_user_daily"
+                        " WHERE kind = 'api' AND day >= date('now', '+7 hours', ?)"
+                        " AND (" + " AND ".join(f"name NOT LIKE '% {p}%'" for p in _MACHINE_API) + ")"
+                        " GROUP BY user", (since,)):
+                    usage.setdefault(r["user"], {})["api_human"] = r["hits"] or 0
+                for r in ucon.execute(
+                        "SELECT user, name, SUM(hits) AS h FROM usage_user_daily"
+                        " WHERE kind = 'tab' AND day >= date('now', '+7 hours', ?)"
+                        " GROUP BY user, name ORDER BY user, h DESC", (since,)):
+                    if len(top.setdefault(r["user"], [])) < 3:
+                        top[r["user"]].append({"tab": r["name"], "hits": r["h"]})
+        finally:
+            ucon.close()
+    except Exception:
+        pass
+
+    def row(username, a):
+        u = usage.get(username, {})
+        tab = u.get("tab", {})
+        logins = auth.get(username, {}).get("login", {})
+        fails = auth.get(username, {}).get("login_fail", {})
+        tab_hits = int(tab.get("hits") or 0)
+        days_seen = int(tab.get("days_seen") or 0)
+        if not logins.get("last") and a.get("must_change", 0):
+            status = "never"
+        elif tab_hits or int(logins.get("n") or 0):
+            status = "active"
+        else:
+            status = "idle"
+        return {"username": username, "role": a.get("role", ""), "branch": a.get("branch", "") or "",
+                "active": int(a.get("active", 1) or 0), "must_change": int(a.get("must_change", 0) or 0),
+                "created_at": a.get("created_at", ""),
+                "last_login": logins.get("last"), "logins": int(logins.get("n") or 0), "failed": int(fails.get("n") or 0),
+                "tab_hits": tab_hits, "days_seen": days_seen, "last_seen": tab.get("last_seen"),
+                "api_hits": int(u.get("api_human") or 0), "top_tabs": top.get(username, []), "status": status}
+    users = [row(a["username"], a) for a in accounts]
+    known = {a["username"] for a in accounts}
+    for u in sorted(usage):                       # activity by a name that is not an account: '' (no login) or a removed user
+        if u not in known and (usage[u].get("tab") or usage[u].get("api_human")):
+            r = row(u, {"role": "", "must_change": 0, "active": 1})
+            r["username"] = u or "(ไม่ระบุ — ไม่มี login)"
+            r["status"] = "anonymous"
+            users.append(r)
+    out["users"] = users
+    out["summary"] = {"accounts": len(accounts),
+                      "active": sum(1 for x in users if x["status"] == "active"),
+                      "idle": sum(1 for x in users if x["status"] == "idle"),
+                      "never": sum(1 for x in users if x["status"] == "never")}
+    return out
+
+
+def _usage_admin(request: Request) -> None:
+    """Admin-gated like /api/auth/users (per-person login times are personal
+    data); a no-op when auth is off."""
+    if __package__:
+        from .routers.auth_api import _require_admin
+    else:
+        from routers.auth_api import _require_admin
+    _require_admin(request)
+
+
+@app.get("/api/usage/users")
+def usage_users(request: Request, days: int = Query(30, ge=1, le=365)):
+    """See _usage_people."""
+    _usage_admin(request)
+    return _usage_people(days)
+
+
+@app.get("/api/usage/me")
+def usage_me(request: Request):
+    """The caller's own footprint — first_time = has never opened a tab, which is
+    when the role start card shows (js: maybeShowStartCard). Anonymous ('')
+    when auth is off, so the card never shows locally by itself."""
+    user = _usage_user(request)
+    hits, days_seen = 0, 0
+    if user:
+        try:
+            con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+            try:
+                if con.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_user_daily'").fetchone():
+                    r = con.execute("SELECT COALESCE(SUM(hits), 0), COUNT(DISTINCT day) FROM usage_user_daily"
+                                    " WHERE user = ? AND kind = 'tab'", (user,)).fetchone()
+                    hits, days_seen = int(r[0] or 0), int(r[1] or 0)
+            finally:
+                con.close()
+        except Exception:
+            pass
+    role = ""
+    try:
+        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+        role = (payload or {}).get("r", "")
+    except Exception:
+        pass
+    return {"username": user, "role": role, "tab_hits": hits, "days_seen": days_seen,
+            "first_time": bool(user) and hits == 0}
+
+
+# ── the weekly adoption digest ───────────────────────────────────────────────
+# Every Monday (Thai clock), on the first request that opens the app, the
+# people view is summarised — who has never logged in, who has been away more
+# than ADOPTION_AWAY_DAYS — stored in usage.db (survives the daily DB push) for
+# the home banner, and sent to Telegram when OSHINEI_TG_TOKEN / _CHAT_ID exist.
+ADOPTION_AWAY_DAYS = 14
+APP_URL = "https://oshinei-dashboard.fly.dev"
+
+
+def _thai_now():
+    from datetime import timedelta as _td
+    return datetime.utcnow() + _td(hours=7)
+
+
+def _usage_meta_get(key: str):
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        try:
+            if not con.execute("SELECT 1 FROM sqlite_master WHERE name = 'usage_meta'").fetchone():
+                return None
+            r = con.execute("SELECT value FROM usage_meta WHERE key = ?", (key,)).fetchone()
+            return r[0] if r else None
+        finally:
+            con.close()
+    except Exception:
+        return None
+
+
+def _usage_meta_set(key: str, value: str) -> None:
+    try:
+        con = sqlite3.connect(str(_usage_db_path()), timeout=5)
+        try:
+            con.execute("CREATE TABLE IF NOT EXISTS usage_meta(key TEXT PRIMARY KEY, value TEXT)")
+            con.execute("INSERT INTO usage_meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+            con.commit()
+        finally:
+            con.close()
+    except Exception:
+        pass
+
+
+def _iso_week(now) -> str:
+    y, w, _ = now.isocalendar()
+    return f"{y}-W{w:02d}"
+
+
+def _adoption_lists(people: dict, now=None, away_days: int = ADOPTION_AWAY_DAYS) -> dict:
+    """never = no successful login on record; away = has logged in before but
+    neither logged in nor opened a tab for `away_days`; active = the rest that
+    used the app in the window."""
+    from datetime import timedelta as _td
+    now = now or _thai_now()
+    cutoff = (now - _td(days=away_days)).strftime("%Y-%m-%d %H:%M:%S")
+    never, away, active = [], [], []
+    for u in people["users"]:
+        if u["status"] == "anonymous":
+            continue
+        if u["status"] == "never":
+            never.append(u)
+        elif (u.get("last_login") or "") < cutoff and (u.get("last_seen") or "") < cutoff[:10]:
+            away.append(u)
+        elif u["status"] == "active":
+            active.append(u)
+    return {"never": never, "away": away, "active": active}
+
+
+def _adoption_digest_text(people: dict, lists: dict, week: str) -> str:
+    s = people["summary"]
+    L = [f"📣 <b>สรุปการเข้าใช้แดชบอร์ด</b> สัปดาห์ {week} (นับ {people['days']} วัน)",
+         f"ใช้งานอยู่ {s['active']} · ไม่ได้ใช้ในช่วงนี้ {s['idle']} · ยังไม่เคยเข้า {s['never']} · จาก {s['accounts']} บัญชี"]
+    if lists["never"]:
+        L.append(f"🚫 <b>ยังไม่เคยเข้าใช้</b> ({len(lists['never'])}): " + ", ".join(f"{u['username']} ({u['role']})" for u in lists["never"]))
+    if lists["away"]:
+        L.append(f"💤 <b>หายไปเกิน {ADOPTION_AWAY_DAYS} วัน</b> ({len(lists['away'])}): "
+                 + ", ".join(f"{u['username']} — ล่าสุด {(u.get('last_login') or '')[:10] or '—'}" for u in lists["away"]))
+    if lists["active"]:
+        L.append("✅ ใช้งานอยู่: " + ", ".join(f"{u['username']} ({u['days_seen']} วัน)" for u in lists["active"]))
+    L.append(f"รายละเอียด: {APP_URL} → Settings → 📈 การใช้งานจริง")
+    return "\n".join(L)
+
+
+def _adoption_digest_build(days: int = 30, now=None, send=None, force: bool = False):
+    """Build this week's digest, store it, send it to Telegram when configured.
+    Once per ISO week unless `force`. Returns the record, or None when this
+    week's already exists."""
+    import notify as _notify
+    now = now or _thai_now()
+    week = _iso_week(now)
+    if not force and _usage_meta_get("adoption_digest_week") == week:
+        return None
+    people = _usage_people(days)
+    lists = _adoption_lists(people, now)
+    text = _adoption_digest_text(people, lists, week)
+    configured = bool(_notify.telegram_config()[0] and _notify.telegram_config()[1])
+    sent = False
+    if configured:
+        try:
+            sent = bool((send or _notify.send_telegram)(text))
+        except Exception as e:
+            print(f"[adoption] telegram failed: {e}")
+    rec = {"week": week, "generated_at": now.strftime("%Y-%m-%d %H:%M"), "text": text, "sent": sent,
+           "telegram_configured": configured, "summary": people["summary"],
+           "never": [u["username"] for u in lists["never"]], "away": [u["username"] for u in lists["away"]],
+           "active": [u["username"] for u in lists["active"]]}
+    _usage_meta_set("adoption_digest_week", week)
+    _usage_meta_set("adoption_digest", _json.dumps(rec, ensure_ascii=False))
+    return rec
+
+
+def _maybe_weekly_adoption_digest(now=None, send=None):
+    """Monday on the Thai clock, first request of the week → build + store (+ send). Best-effort."""
+    try:
+        now = now or _thai_now()
+        if now.weekday() != 0:
+            return None
+        return _adoption_digest_build(now=now, send=send)
+    except Exception as e:
+        print(f"[adoption] weekly digest failed: {e}")
+        return None
+
+
+@app.get("/api/usage/adoption-digest")
+def usage_adoption_digest(request: Request, days: int = Query(30, ge=1, le=365)):
+    """The latest stored digest (home banner, Settings) plus a live preview."""
+    _usage_admin(request)
+    import notify as _notify
+    now = _thai_now()
+    people = _usage_people(days)
+    lists = _adoption_lists(people, now)
+    latest = _usage_meta_get("adoption_digest")
+    tok, chat = _notify.telegram_config()
+    return {"week": _iso_week(now), "latest": _json.loads(latest) if latest else None,
+            "preview": _adoption_digest_text(people, lists, _iso_week(now)),
+            "never": [u["username"] for u in lists["never"]], "away": [u["username"] for u in lists["away"]],
+            "telegram_configured": bool(tok and chat)}
+
+
+@app.post("/api/usage/adoption-digest/send")
+def usage_adoption_digest_send(request: Request):
+    """Build and store the digest now (and send it when Telegram is configured)."""
+    _usage_admin(request)
+    rec = _adoption_digest_build(force=True)
+    return {"ok": True, **rec}
 
 
 # Serve vendor JS/CSS
@@ -553,6 +865,48 @@ def app_js():
 #     bad/partial upload can never corrupt the running DB. Caller restarts the
 #     machine after a successful upload (see backend/refresh_fly_db.py).
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# /api/_admin/export-state — the tables that live ONLY on Fly (core._PRESERVED_*:
+# users, customer voices, survey links, actions, competitor snapshots, checklist
+# ticks, recon uploads) as gzip'd NDJSON for the nightly off-site pull
+# (backend/pull_fly_state.py, AUD-2). Same token gate as seed-db: OSHINEI_SEED_TOKEN
+# unset → 404, wrong token → 404. Streams row by row, so memory stays flat.
+# ---------------------------------------------------------------------------
+@app.get("/api/_admin/export-state", include_in_schema=False)
+def _export_state(token: str = Query("")):
+    import base64 as _b64, datetime as _dt, json as _json, sqlite3 as _sq, zlib as _zlib
+    from fastapi.responses import StreamingResponse as _Stream
+    from core import _preserved_pred as _pp
+    toks = _accepted_tokens()
+    if not toks or not _token_accepted(token):
+        raise HTTPException(status_code=404, detail="not found")
+
+    def _cell(v):
+        return {"b64": _b64.b64encode(v).decode("ascii")} if isinstance(v, (bytes, bytearray, memoryview)) else v
+
+    def gen():
+        z = _zlib.compressobj(6, _zlib.DEFLATED, 31)          # 31 = gzip container
+        con = _sq.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+        counts = {}
+        try:
+            names = [r[0] for r in con.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND {_pp('name')} ORDER BY name")]
+            for t in names:
+                cols = [r[1] for r in con.execute(f"PRAGMA table_info([{t}])")]
+                yield z.compress((_json.dumps({"table": t, "columns": cols}, ensure_ascii=False) + "\n").encode("utf-8"))
+                n = 0
+                for row in con.execute(f"SELECT {', '.join('[' + c + ']' for c in cols)} FROM [{t}]"):
+                    n += 1
+                    yield z.compress((_json.dumps({"t": t, "r": [_cell(v) for v in row]}, ensure_ascii=False) + "\n").encode("utf-8"))
+                counts[t] = n
+        finally:
+            con.close()
+        now = (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).strftime("%Y-%m-%d %H:%M:%S")
+        yield z.compress((_json.dumps({"done": True, "counts": counts, "exported_at": now}) + "\n").encode("utf-8"))
+        yield z.flush()
+    return _Stream(gen(), media_type="application/gzip",
+                   headers={"Content-Disposition": "attachment; filename=fly_state.ndjson.gz", "Cache-Control": "no-store"})
+
+
 @app.post("/api/_admin/seed-db", include_in_schema=False)
 async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
     import gzip, shutil, tempfile, os as _os2
@@ -1765,6 +2119,14 @@ else:
         analysis_forecast_branches, revenue_forecast)            # noqa: F401  (back-compat: tests + /api/forecast facade)
 app.include_router(_analysis_router)
 if __package__:
+    from .routers.analysis_discounts import router as _analysis_discounts_router
+    from .routers.analysis_time import router as _analysis_time_router
+else:
+    from routers.analysis_discounts import router as _analysis_discounts_router
+    from routers.analysis_time import router as _analysis_time_router
+app.include_router(_analysis_discounts_router)
+app.include_router(_analysis_time_router)
+if __package__:
     from .routers.sales import router as _sales_router
     from .routers.sales import (_mtd_window, _month_add, _menucmp_agg)  # noqa: F401
 else:
@@ -1778,6 +2140,46 @@ if __package__:
 else:
     from routers.menu import router as _menu_router
 app.include_router(_menu_router)
+if __package__:
+    from .routers.feedback import router as _feedback_router
+else:
+    from routers.feedback import router as _feedback_router
+app.include_router(_feedback_router)
+if __package__:
+    from .routers.checklist import router as _checklist_router
+else:
+    from routers.checklist import router as _checklist_router
+app.include_router(_checklist_router)
+if __package__:
+    from .routers.survey import router as _survey_router
+else:
+    from routers.survey import router as _survey_router
+app.include_router(_survey_router)
+if __package__:
+    from .routers.feedback_actions import router as _feedback_actions_router
+else:
+    from routers.feedback_actions import router as _feedback_actions_router
+app.include_router(_feedback_actions_router)
+if __package__:
+    from .routers.feedback_ai import router as _feedback_ai_router
+else:
+    from routers.feedback_ai import router as _feedback_ai_router
+app.include_router(_feedback_ai_router)
+if __package__:
+    from .routers.feedback_business import router as _feedback_business_router
+else:
+    from routers.feedback_business import router as _feedback_business_router
+app.include_router(_feedback_business_router)
+if __package__:
+    from .routers.feedback_competitors import router as _feedback_competitors_router
+else:
+    from routers.feedback_competitors import router as _feedback_competitors_router
+app.include_router(_feedback_competitors_router)
+if __package__:
+    from .routers.feedback_daily_report import router as _feedback_daily_report_router
+else:
+    from routers.feedback_daily_report import router as _feedback_daily_report_router
+app.include_router(_feedback_daily_report_router)
 if __package__:
     from .routers.buffet import router as _buffet_router
     from .routers.buffet import buffet_forecast  # noqa: F401  (/api/forecast facade)

@@ -16,7 +16,9 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, scope_filter
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
+from targets import target_revenue_total
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _unified_cogs_expr,
@@ -237,7 +239,29 @@ def menu_impact_entities():
                 "hc_cost": float(state.get("hc_cost") or 30), "groups": groups, "skus": skus[:400]}
 
 
-_MI_TIER_ORDER = ("350", "590", "649", "689", "799", "999", "promo", "child")
+# Every tier code the fact tables can hold, richest first — BOTH menus, because a
+# range can end before the Grand Menu or start after it. Which of them a given
+# request may actually filter on is narrowed to the era of ITS window by
+# _mi_tiers_for (a September request cannot ask for a retired ฿590 tier).
+_MI_TIER_ORDER = tier_codes_between(None, None)
+
+
+def _mi_tiers_for(date_from=None, date_to=None) -> tuple:
+    """The tier codes on sale in [date_from, date_to] — what the tier picker on
+    the 🧪 tab offers, and the only values the filter accepts for that window."""
+    return tier_codes_between(date_from, date_to)
+
+
+@router.get("/api/reports/menu-impact/tiers")
+def menu_impact_tiers(date_from: Optional[str] = Query(None),
+                      date_to: Optional[str] = Query(None)):
+    """Tier options for the chosen window: prices actually sold in it, richest
+    first, each with its display label. Feeds the tier <select>, so the picker
+    stops offering prices the menu retired on 2026-09-01."""
+    codes = _mi_tiers_for(date_from, date_to)
+    return {"grand_menu_from": GRAND_MENU_FROM,
+            "tiers": [{"tier": t, "label": tier_label(t)} for t in codes
+                      if t != "child"]}
 
 
 @router.get("/api/reports/menu-impact")
@@ -245,7 +269,7 @@ _MI_TIER_ORDER = ("350", "590", "649", "689", "799", "999", "promo", "child")
 def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<slug>"),
                 date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                 scope: str = Query("all", description="master | franchise | all"),
-                tier: str = Query("all", description="all | 350|590|649|689|799|999|promo|child")):
+                tier: str = Query("all", description="all | <price on sale in the window> | promo | child")):
     """เลือกวัตถุดิบ/เมนู + ช่วงเวลา (+Tier ราคาบุฟเฟ่ต์) → เทียบบิลที่มี vs ไม่มี
     (ต่อหัว, คุมสาขา×วัน×tier)."""
     if scope not in _MI_SCOPE_LABEL:
@@ -256,13 +280,17 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
         # tier column arrived in fact-schema v2 — degrade gracefully on a v1 DB
         has_tier = bool(con.execute(
             "SELECT 1 FROM pragma_table_info('menu_fact_total') WHERE name='tier'").fetchone())
-        if tier != "all" and (tier not in _MI_TIER_ORDER or not has_tier):
-            tier = "all"
         lo, hi = con.execute("SELECT MIN(day), MAX(day) FROM menu_fact_total").fetchone()
         if not lo:
             return {"ready": False, "hint": "ตารางข้อมูลว่าง — รัน build_menu_fact.py"}
         date_from = date_from or lo
         date_to = date_to or hi
+        # A tier is only selectable if that price was on sale somewhere in THIS
+        # window. A stale ฿590 left in the picker after the window moves into
+        # September falls back to "all" instead of silently returning an empty
+        # comparison for a price that is no longer sold.
+        if tier != "all" and (tier not in _mi_tiers_for(date_from, date_to) or not has_tier):
+            tier = "all"
         meta = con.execute("SELECT label, kind, unit_cost, members FROM menu_fact_meta WHERE ent=?",
                            (ent,)).fetchone()
         if not meta:
@@ -430,24 +458,26 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
 # is not enough history before it).
 # ---------------------------------------------------------------------------
 _PT_TOP_N = 30          # "30 เมนูหลักในต้นทุน"
-# Buffet price tiers, richest first. TWO eras live side by side here: the Grand Menu
-# from 2026-09-01 quotes NET prices (459/629/789/999/1299 - service charge and VAT are
-# already inside), while the menu before it quoted the price BEFORE both
-# (350/590/649/689/799/999). A tier missing from this tuple is silently dropped from
-# the report, so it must carry BOTH lists. 999 exists in both eras and shares one row.
-_PT_ORDER = ("1299", "999", "799", "789", "689", "649", "629", "590", "459", "350",
-             "promo", "child")
-_PT_LABEL = {"promo": "โปรฯ/ราคาอื่น", "child": "เด็กล้วน/อื่นๆ"}
-# Grand Menu switch-over [[grand_menu_2026_09]]. A comparison whose baseline period
-# falls entirely before this date while the current period is on/after it would
-# silently blend two different menus under one label (both eras use "999", say) —
-# guarded in price_tier_report and _mgt_tier by turning the comparison off rather
-# than showing a delta that isn't really the same product on both sides.
-_PT_NEW_MENU_FROM = "2026-09-01"
+# Buffet price tiers, richest first, from rules.tier_codes_between — the one place
+# that knows which prices are on sale when. TWO eras live side by side in this
+# unbounded list: the Grand Menu from 2026-09-01 quotes NET prices
+# (459/629/789/999/1299 - service charge and VAT already inside), the menu before it
+# quoted the price BEFORE both (350/590/649/689/799/999). A tier missing here is
+# silently dropped from the report, so the full list is what belongs; the rows a
+# given period actually shows are filtered to the tiers with guests on them, which
+# is what keeps a retired price off a September report.
+_PT_ORDER = tier_codes_between(None, None)
+_PT_LABEL = {t: tier_label(t) for t in TIER_EXTRA}
+# A comparison whose baseline period falls entirely before GRAND_MENU_FROM while
+# the current period is on/after it would silently blend two different menus
+# under one label (both eras use "999", say) — guarded in price_tier_report and
+# _mgt_tier by turning the comparison off rather than showing a delta that isn't
+# really the same product on both sides.
+_PT_NEW_MENU_FROM = GRAND_MENU_FROM
 
 
 def _pt_label(t):
-    return _PT_LABEL.get(t, f"฿{int(t):,}" if str(t).isdigit() else str(t))
+    return tier_label(t)
 
 
 def _pt_sum_tiers(con, ph, bids, d_from, d_to):
@@ -1124,11 +1154,7 @@ def _bom_unit_cost_sql(s: str = "s") -> str:
     """Per-serving effective unit cost for a SKU (alias `s` = skus). sku_cost
     (cost-management table, non-zero) → recipe → alias → 0; BUFFET tier = 0.
     Same priority as _unified_cogs_expr (cost-management first, 2026-06-11)."""
-    return (f"CASE WHEN {s}.sku_code LIKE 'BUFFET%' THEN 0 ELSE COALESCE("
-            f"(SELECT NULLIF(sc.unit_cost,0) FROM sku_cost sc WHERE sc.sku_id={s}.sku_id),"
-            f"(SELECT SUM(bi.ingredient_cost) FROM bom_ingredients bi WHERE bi.sku_id={s}.sku_id),"
-            f"(SELECT SUM(bi2.ingredient_cost) FROM bom_ingredients bi2 "
-            f" JOIN bom_sku_alias a ON a.resolved_sku_id=bi2.sku_id WHERE a.bom_sku_code={s}.sku_code),0) END")
+    return f"CASE WHEN {tier_code_sql(s + '.sku_code')} THEN 0 ELSE {raw_unit_cost_sql(s)} END"
 
 
 
@@ -1200,7 +1226,7 @@ def reports_ops(month: Optional[str] = Query(None), branch: Optional[str] = Quer
         if _ok(ch_tbl):
             # pos_channel_day/_month is a POS roll-up with no service-charge column,
             # so this one revenue figure stays ex-VAT only. Disclosed, not silently mixed.
-            ch = con.execute(f"SELECT delivery_type dtype, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/1.07)) rev "
+            ch = con.execute(f"SELECT delivery_type dtype, SUM(bills) bills, SUM(customers) cust, ROUND(SUM(total_inc_vat/{VAT_DIVISOR})) rev "
                              f"FROM {ch_tbl} WHERE {dwhere()}{bfc} GROUP BY delivery_type", prm).fetchall()
             channel = [{"label": _DTYPE_LABEL.get(r["dtype"], "อื่น ๆ"), "bills": r["bills"], "customers": r["cust"], "revenue": r["rev"] or 0} for r in ch]
 
@@ -1440,7 +1466,12 @@ def _mgt_headline(con, *, ce, cs, has_prev, has_yoy, params, pct, pe, ps, where,
     cur  = agg(cs, ce)
     prev = agg(ps, pe) if has_prev else None
     headline = dict(cur)
-    headline["discount_pct"] = round(cur["discount"]/cur["revenue"]*100, 1) if cur["revenue"] else None
+    # share of PRE-discount sales (revenue + discount) — the same base the Discounts
+    # tab uses, so the two pages agree; then the ceiling and the baht beyond it.
+    _base = (cur["revenue"] or 0) + (cur["discount"] or 0)
+    headline["discount_pct"] = round(cur["discount"]/_base*100, 1) if _base else None
+    headline["discount_policy_pct"] = discount_policy_pct(con)
+    headline["discount_excess"] = discount_excess(cur["discount"], _base, headline["discount_policy_pct"])
     if prev:
         headline["prev"] = prev
         headline["rev_wow_pct"]   = pct(cur["revenue"], prev["revenue"])
@@ -1504,7 +1535,7 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
     # leak_total/cash_heavy_total take an explicit [s,e] window so the SAME signal
     # can be measured for the current period AND the comparison period (last week /
     # same weekday last week) — the §6 cards then show a WoW delta.
-    lk = "((st.total_inc_vat - COALESCE(st.service_charge,0))/1.07 + st.discount)"
+    lk = discount_base_row('st')
     def leak_total(extra, s, e):
         r = con.execute(f"""
             SELECT COUNT(*) bills, ROUND(COALESCE(SUM(st.discount),0)) baht
@@ -2141,14 +2172,8 @@ def _mgt_pace(con, *, _cal, branch, clean, food_sub, group, latest_day, maxd, pa
                     if cur_month == maxd[:7] else days_total)
     month_complete = days_elapsed >= days_total
     projected = round(mtd_rev/days_elapsed*days_total, 2) if (mtd_rev and days_elapsed) else None
-    tb = ["bt.period_month=:month", "b.name!='ALL'"]; tp: dict = {"month": cur_month}
-    scope_filter(tb, tp, branch, group)
-    tw = " AND ".join(tb)
-    tgt_row = con.execute(f"""
-        SELECT COALESCE(SUM(bt.revenue_target),0) tgt
-        FROM branch_targets bt JOIN branches b ON b.branch_id=bt.branch_id
-        WHERE {tw}""", tp).fetchone()
-    target = tgt_row["tgt"] or 0
+    # typed targets, else each branch's actual of the same month last year (targets.py)
+    target = target_revenue_total(con, cur_month, branch, group)
     pace = {
         "month": cur_month, "mtd_revenue": mtd_rev, "mtd_days": mtd_days,
         "days_elapsed": days_elapsed, "days_total": days_total, "month_complete": month_complete,
@@ -2659,6 +2684,20 @@ def report_management(
     if not actions:
         actions = [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]
 
+    # §12 — what the guests said over the same window (customer_feedback), the
+    # window before, what waits now, and whether the fix loop held. Never lets
+    # a feedback problem take the whole report down.
+    voice = None
+    try:
+        from routers.feedback_actions import compute_digest as _voice_digest
+        with get_db() as _vcon:
+            voice = _voice_digest(_vcon, start=cs.isoformat(), end=ce.isoformat(),
+                                  prev_start=(ps.isoformat() if has_prev else None), prev_end=(pe.isoformat() if has_prev else None),
+                                  branch=branch, group=group)
+            _vcon.commit()
+    except Exception as e:      # pragma: no cover — degraded, not broken
+        print(f"[mgt] §12 customer voice unavailable: {e}")
+
     return {
         "available": True,
         "period": period,
@@ -2692,6 +2731,7 @@ def report_management(
         "tier": tier_out,
         "trend": trend,
         "actions": actions,
+        "feedback": voice,
     }
 
 
@@ -3021,6 +3061,54 @@ def _xlsx_payment(*, BOLD, NUM, PCT, autofit, header, j, pdelta, wb):
     return {}
 
 
+def _xlsx_voice(*, BOLD, NUM, PCT, autofit, header, j, th, wb):
+    # Sheet — Customer Voice (§12): the window's voices against the window before,
+    # the themes, the branches to watch, and the fix loop with its verdicts.
+    v = j.get("feedback")
+    if not v:
+        return {}
+    ws = wb.create_sheet("Customer Voice")
+    ws.append(["Customer voice" if not th else "เสียงลูกค้า", f"{v['range'][0]} → {v['range'][1]}",
+               ("vs " if not th else "เทียบ ") + f"{v['prev_range'][0]} → {v['prev_range'][1]}"])
+    ws["A1"].font = BOLD
+    ws.append([])
+    header(ws, ["Metric" if not th else "ตัวชี้วัด", "This period" if not th else "ช่วงนี้", "Previous" if not th else "ช่วงก่อน"])
+    resp = v.get("response") or {}
+    for k, a, b in [("Voices" if not th else "เสียง", v.get("voices"), v.get("prev_voices")),
+                    ("Negative %" if not th else "เชิงลบ %", v.get("neg_pct"), v.get("prev_neg_pct")),
+                    ("Avg rating" if not th else "คะแนนเฉลี่ย", v.get("avg_rating"), v.get("prev_avg_rating")),
+                    ("Answered %" if not th else "ตอบกลับ %", resp.get("rate"), v.get("prev_response_rate")),
+                    ("Awaiting reply now" if not th else "รอสาขาตอบตอนนี้", v.get("unreplied"), None),
+                    ("Past SLA now" if not th else "เกิน SLA ตอนนี้", v.get("sla_breached"), None),
+                    ("QR survey answers" if not th else "คำตอบแบบสอบถาม QR", (v.get("survey") or {}).get("n"), (v.get("survey") or {}).get("prev_n"))]:
+        ws.append([k, a, b])
+    ws.append([])
+    header(ws, ["Theme" if not th else "หัวข้อ", "Voices" if not th else "เสียง", "Negative" if not th else "ลบ", "Previous" if not th else "ช่วงก่อน"])
+    for t in v.get("themes") or []:
+        ws.append([t["theme"], t["n"], t["neg"], t.get("prev_n")])
+    ws.append([])
+    header(ws, ["Branch to watch" if not th else "สาขาที่ต้องดู", "Voices" if not th else "เสียง", "Negative" if not th else "ลบ", "Negative %" if not th else "ลบ %", "Main theme" if not th else "หัวข้อหลัก"])
+    for b in v.get("branches_watch") or []:
+        ws.append([b["branch"], b["n"], b["neg"], b["neg_pct"], b.get("top_theme") or ""])
+    if v.get("response_by_branch"):
+        ws.append([])
+        header(ws, ["Answered by branch" if not th else "ตอบกลับรายสาขา", "Answerable" if not th else "ตอบได้", "Answered" if not th else "ตอบแล้ว",
+                    "Rate %" if not th else "อัตรา %", "Median days" if not th else "เวลากลาง (วัน)"])
+        for x in v["response_by_branch"]:
+            ws.append([x["branch"], x["answerable"], x["answered"], x.get("rate"), x.get("median_days")])
+    a = v.get("actions") or {}
+    ws.append([])
+    header(ws, ["Fix loop" if not th else "งานแก้", "Open" if not th else "ค้าง", "Overdue" if not th else "เกินกำหนด", "Done" if not th else "เสร็จ",
+                "Better" if not th else "ดีขึ้น", "Same" if not th else "เท่าเดิม", "Worse" if not th else "แย่ลง"])
+    ws.append(["", (a.get("open") or 0) + (a.get("doing") or 0), a.get("overdue") or 0, a.get("done") or 0,
+               a.get("better") or 0, a.get("same") or 0, a.get("worse") or 0])
+    for it in a.get("items") or []:
+        ws.append([it["title"], it.get("branch") or "", it.get("theme") or "", it.get("result") or "",
+                   it.get("before_rate"), it.get("after_rate")])
+    autofit(ws)
+    return {}
+
+
 def _xlsx_definitions(*, Alignment, BOLD, Font, P, header, j, th, wb):
     # Sheet — Definitions & Method. Same glossary the printed appendix carries, so a
     # workbook that leaves the building can still be read without the PDF next to it.
@@ -3114,6 +3202,7 @@ def report_management_xlsx(
     ctx.update(_xlsx_table(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
     ctx.update(_xlsx_tier(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), NUM2=ctx.get("NUM2"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
     ctx.update(_xlsx_payment(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_voice(BOLD=ctx.get("BOLD"), NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), th=ctx.get("th"), wb=ctx.get("wb")))
     ctx.update(_xlsx_definitions(Alignment=ctx.get("Alignment"), BOLD=ctx.get("BOLD"), Font=ctx.get("Font"), P=ctx.get("P"), header=ctx.get("header"), j=ctx.get("j"), th=ctx.get("th"), wb=ctx.get("wb")))
     ctx.update(_xlsx_actions(autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
     ctx.update(_xlsx_save(j=ctx.get("j"), wb=ctx.get("wb")))

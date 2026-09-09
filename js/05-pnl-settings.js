@@ -1077,7 +1077,7 @@ function renderSuggestions() {
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
         <div class="rounded-lg p-3 border border-indigo-100" style="background:#eef2ff">
           <p class="text-xs text-indigo-600 font-semibold mb-1">Pareto 80/20</p>
-          <p class="text-sm text-slate-700">SKU เพียง <b>${topPct}%</b> ทำรายได้ 80% — ${topPct <= 20 ? 'กระจุกตัวสมเหตุสมผล' : 'กระจายเกินไป (ปกติ ≤20%)'}</p>
+          <p class="text-sm text-slate-700">SKU เพียง <b>${topPct}%</b> ทำรายได้ 80% — ${Number(topPct) <= 20 ? 'กระจุกตัวสมเหตุสมผล' : 'กระจายเกินไป (ปกติ ≤20%)'}</p>
           <p class="text-xs text-slate-500 mt-1">Top 5 รวม <b>${top5Pct}%</b> ของยอดทั้งหมด</p>
         </div>
         <div class="rounded-lg p-3 border" style="background:#fff7ed;border-color:#fed7aa">
@@ -1259,9 +1259,9 @@ function renderSuggestions() {
             <ul class="text-xs text-slate-700 space-y-1">
               <li>• <b>BoM Tracking</b> — บันทึกต้นทุนวัตถุดิบบุฟเฟ่ต์รายเดือน (เนื้อแซลมอน เนื้อวากิว ของหวาน) → ตอบโจทย์ว่า margin ตกหรือไม่</li>
               <li>• <b>Portion Control</b> — บุฟเฟ่ต์ที่ "all-you-can-eat" ต้องมีระบบ <b>ค่าปรับเหลือ</b> (มี SKU OT0012/0013/0016 อยู่แล้ว) เก็บอย่างเข้มงวด</li>
-              <li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (350) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (590/799) เพื่อเพิ่ม margin</li>
+              <li>• <b>Daypart Pricing</b> — ลด tier ราคาตอน lunch (฿459) เพื่อดึงคน เพิ่ม tier ราคาตอน dinner (฿789/฿999) เพื่อเพิ่ม margin</li>
               <li>• <b>Premium Add-on</b> — ขาย add-on margin สูง เช่น แซลมอนพรีเมียม เครื่องดื่ม alcohol → ลูกค้าบุฟเฟ่ต์ตัดสินใจง่ายเพราะอารมณ์ "เปย์มาแล้ว"</li>
-              <li>• <b>Buffet Mix Optimization</b> — Tier 590 เป็น sweet spot (78% volume) — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li>
+              <li>• <b>Buffet Mix Optimization</b> — Tier ฿629 เป็น sweet spot ของเมนูใหม่ — ปรับ menu mix ในนี้เพื่อ <b>ลด BoM 5% = +${fmt(buffetCost * 0.05)}/เดือน</b></li>
             </ul>
           </div>
         </div>
@@ -1313,17 +1313,24 @@ async function loadTargets() {
       ? (act.customer_count / t.customer_target * 100) : null;
     const pillClass = revPct == null ? '' : revPct >= 100 ? 'pill-up' : revPct >= 80 ? 'pill-warn' : 'pill-down';
     const pillText  = revPct == null ? '—' : revPct.toFixed(0) + '%';
+    // the owner's rule (2026-09-05): blank = automatic = this branch's actual of the same month last year;
+    // a typed figure wins; 0 goes back to automatic
+    const manual = t.source === 'manual';
+    const src = manual ? '<span class="pill pill-warn">ตั้งเอง</span>'
+      : t.source === 'last_year' ? `<span class="pill pill-up">อัตโนมัติ</span> <span class="text-slate-500">= ยอดจริง ${fmtMonth(t.basis_month)}</span>`
+      : `<span class="pill">ไม่มีข้อมูล ${fmtMonth(t.basis_month)}</span>`;
     return `<tr class="border-t border-slate-100">
       <td class="py-2.5 pr-4 font-medium text-slate-700">${t.branch}</td>
+      <td class="py-2.5 pr-4 text-xs whitespace-nowrap">${src}</td>
       <td class="py-2.5 pr-4 text-right">
         <input type="number" min="0" step="10000"
           class="target-rev-input w-36 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          data-branch="${t.branch}" value="${t.revenue_target || ''}">
+          data-branch="${t.branch}" value="${manual ? t.revenue_target : ''}" placeholder="${t.source === 'last_year' ? fmtN(t.revenue_target) : '—'}" title="เว้นว่าง = ใช้ยอดจริงของ ${fmtMonth(t.basis_month)} (${fmtN(t.basis_revenue || 0)})">
       </td>
       <td class="py-2.5 pr-4 text-right">
         <input type="number" min="0" step="100"
           class="target-cust-input w-28 border border-slate-200 rounded-lg px-2 py-1 text-sm text-right focus:outline-none focus:ring-2 focus:ring-indigo-400"
-          data-branch="${t.branch}" value="${t.customer_target || ''}">
+          data-branch="${t.branch}" value="${manual ? t.customer_target : ''}" placeholder="${t.source === 'last_year' ? fmtN(t.customer_target) : '—'}">
       </td>
       <td class="py-2.5 pr-4 text-right text-slate-600">${act.revenue != null ? fmtN(act.revenue) : '—'}</td>
       <td class="py-2.5 pr-4 text-right text-slate-600">${act.customer_count != null ? fmtN(act.customer_count) : '—'}</td>
@@ -1809,6 +1816,7 @@ async function loadPreferences() {
   branchSel.value = settings.default_branch || '';
   document.getElementById('prefDefaultMonth').value  = settings.default_month  || '';
   document.getElementById('prefFiscalStart').value   = settings.fiscal_year_start || '1';
+  document.getElementById('prefDiscountPolicy').value = settings.discount_policy_pct || '2.5';
 }
 
 async function savePreferences() {
@@ -1817,6 +1825,7 @@ async function savePreferences() {
     default_branch:      document.getElementById('prefDefaultBranch').value,
     default_month:       document.getElementById('prefDefaultMonth').value,
     fiscal_year_start:   document.getElementById('prefFiscalStart').value,
+    discount_policy_pct: document.getElementById('prefDiscountPolicy').value || '2.5',
   };
   try {
     status.textContent = 'Saving…'; status.className = 'text-sm text-slate-400';
@@ -1827,6 +1836,9 @@ async function savePreferences() {
     });
     status.textContent = '✓ Saved'; status.className = 'text-sm text-emerald-600';
     setTimeout(() => { status.textContent = ''; }, 2500);
+    // settings feed other tabs (the discount ceiling → Discounts, Management Report);
+    // drop every tab's "same filter, skip the fetch" key so the next open refetches
+    Object.keys(_tabLastKey).forEach(k => { delete _tabLastKey[k]; });
   } catch(e) {
     status.textContent = '✗ ' + e.message; status.className = 'text-sm text-red-600';
   }

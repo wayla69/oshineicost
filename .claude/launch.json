@@ -1,12 +1,12 @@
 {
   "version": "0.0.1",
-  "_comment": "runtimeExecutable is 'py -3.14', never bare 'python': PATH resolves 'python' to Programs\\Python\\Python312, which has NO fastapi/uvicorn/pymssql. The real environment is the Python Install Manager build (pythoncore-3.14) that also carries pytest. Same root cause _python.bat documents for the scheduled syncs - keep the two in lockstep.",
+  "_comment": "runtimeExecutable is 'py -3.12', never bare 'python': 3.12 carries the PINNED production versions (fastapi 0.141 / starlette 1.6, same as Fly and CI); the 3.14 install has an older FastAPI that behaves differently (a recon route test passed there and failed on CI, 2026-09-04). PATH's bare 'python' may be an interpreter without fastapi/uvicorn/pymssql - see _python.bat. Keep in lockstep with scripts/gate.sh.",
   "configurations": [
     {
       "name": "oshinei-backend",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "main:app",
@@ -20,7 +20,7 @@
       "name": "oshinei-tier",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "main:app",
@@ -34,7 +34,7 @@
       "name": "oshinei-auth",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "main:app",
@@ -52,7 +52,7 @@
       "name": "docs-static",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "http.server",
         "8011"
@@ -64,7 +64,7 @@
       "name": "recon",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "recon.main:app",
@@ -81,7 +81,7 @@
       "name": "recon-preview",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "recon.main:app",
@@ -98,7 +98,7 @@
       "name": "recon-ux",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "recon.main:app",
@@ -115,7 +115,7 @@
       "name": "oshinei-sep",
       "runtimeExecutable": "py",
       "runtimeArgs": [
-        "-3.14",
+        "-3.12",
         "-m",
         "uvicorn",
         "main:app",

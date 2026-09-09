@@ -7,7 +7,8 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter
+from rules import VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql
+from targets import targets_for_month
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
 )
@@ -596,15 +597,9 @@ def home_brief(branch: Optional[str] = Query(None)):
             ORDER BY mtd_revenue DESC
         """, mtd_params).fetchall()
 
-        # Branch targets for current month
+        # Branch targets for current month — typed, else last year's same month (targets.py)
         try:
-            target_rows = con.execute("""
-                SELECT b.name AS branch, bt.revenue_target
-                FROM branch_targets bt
-                JOIN branches b ON b.branch_id = bt.branch_id
-                WHERE bt.period_month = :month
-            """, {"month": current_month}).fetchall()
-            target_map = {r["branch"]: r["revenue_target"] for r in target_rows}
+            target_map = {r["branch"]: r["revenue_target"] for r in targets_for_month(con, current_month) if r["revenue_target"]}
         except Exception:
             target_map = {}
 
@@ -824,7 +819,7 @@ def home_menu_movers(date: Optional[str] = Query(None), branch: Optional[str] = 
                    COALESCE(SUM(CASE WHEN d.day<:focus THEN d.qty END),0) cov_h,
                    COUNT(DISTINCT CASE WHEN d.day<:focus THEN d.day END) hdays
             FROM v_sales_sku_daily d JOIN branches b ON b.branch_id=d.branch_id JOIN skus s ON s.sku_id=d.sku_id
-            WHERE d.day>=:ws AND d.day<=:focus AND s.sku_code LIKE 'BUFFET%' {bf}""", p).fetchone()
+            WHERE d.day>=:ws AND d.day<=:focus AND {tier_code_sql('s.sku_code')} {bf}""", p).fetchone()
         hd = (bp["hdays"] or 1) if bp else 1
         buf = {
             "rev_today": round(bp["rev_t"]), "rev_avg": round(bp["rev_h"] / hd),

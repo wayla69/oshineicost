@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import auth as _auth
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, tier_code_sql
 from core import (
     BOM_TYPE_BENCHMARKS, CostEntry, DB_PATH, HERE, _FOOD_CATEGORY_FILTER,
     _bom_cost_period_filters, _build_sku_effective_cost, _cogs_case, _costed_rev_case, _effective_cost_subquery,
@@ -630,7 +630,7 @@ def cost_template():
     """
     with get_db() as con:
         rows = con.execute(
-            """
+            f"""
             SELECT sk.sku_code,
                    COALESCE(sk.description, sk.sku_code) AS description,
                    c.name AS category,
@@ -643,7 +643,7 @@ def cost_template():
             JOIN v_sales_sku_monthly ssm ON ssm.sku_id = sk.sku_id AND ssm.source = 'Easy'
             LEFT JOIN sku_cost sc ON sc.sku_id = sk.sku_id
             WHERE COALESCE(sk.active, 1) = 1
-              AND sk.sku_code NOT LIKE 'BUFFET%'
+              AND NOT {tier_code_sql('sk.sku_code')}
               AND c.name NOT IN ('Payment', 'Other', 'Oshinei DELIVERY', 'Special DELIVERY')
               AND UPPER(sk.sku_code) NOT IN ('SERVICECHARGE', 'SP', 'SERVICE')
             GROUP BY sk.sku_id

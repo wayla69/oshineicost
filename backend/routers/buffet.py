@@ -8,7 +8,9 @@ from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import io as _io
-from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, net_revenue_row, net_revenue_sum, scope_filter
+from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, net_revenue_row, net_revenue_sum, scope_filter
+from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
+                   tier_of_price, upsell_pair)
 from core import _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter, _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, get_db, ttl_cache
 
 from fastapi import APIRouter
@@ -508,7 +510,13 @@ def buffet_upgrade_simulator(
     month:      Optional[str] = Query(None),
     shift_pct:  float         = Query(10.0),
 ):
-    """What-if simulator: shift shift_pct% of 590-tier covers to 799-tier."""
+    """What-if simulator: shift shift_pct% of covers up one buffet tier.
+
+    Which two tiers that is comes from the menu in force over the requested
+    window — ฿590 → ฿799 up to Aug 2026, ฿629 → ฿789 from 1 Sep 2026, when the
+    Grand Menu replaced the old price list. Simulating a move between two prices
+    that are no longer sold is not a what-if, it is a wrong answer.
+    """
     filters: list = ["c.name = 'BUFFET'"]
     params: dict = {}
 
@@ -529,7 +537,8 @@ def buffet_upgrade_simulator(
             SUM(sm.subtotal_ex_vat) AS revenue_ex_vat,
             SUM({_cogs_case(ssm='sm', sk='sk', sc='sc')}) AS cogs_total,
             SUM(CASE WHEN {_effective_cost_subquery(ssm='sm', sc='sc')} IS NOT NULL
-                     THEN sm.qty ELSE 0 END)               AS costed_qty
+                     THEN sm.qty ELSE 0 END)               AS costed_qty,
+            MAX(sm.period_month)                           AS last_month
         FROM v_sales_sku_monthly sm
         JOIN branches b   ON b.branch_id  = sm.branch_id
         JOIN skus sk      ON sk.sku_id    = sm.sku_id
@@ -543,12 +552,29 @@ def buffet_upgrade_simulator(
     with get_db() as con:
         rows = con.execute(sql, params).fetchall()
 
-    # Map sku_code to tier price label
-    def _tier_label(sku_code: str, description: str) -> str:
+    # The era this request is reporting: the LAST month with buffet sales in the
+    # window decides which price list is on the menu. Read from the data, not from
+    # today's date — an unbounded request ending in August is still the old menu.
+    _era_month = max((r["last_month"] for r in rows if r["last_month"]), default=None) \
+        or month_to or month or month_from
+    _grand = is_grand_menu(_era_month) if _era_month else False
+
+    # Map a sold buffet row to its tier price label, on the menu of that era.
+    def _tier_label(sku_code: str, description: str, qty=0, revenue_ex_vat=0.0) -> str:
         code = sku_code.upper()
         desc = description.upper() if description else ""
         if code in ("B04", "B05", "B12") or "BUFFETCHILD" in code or "CHILD" in desc or "เด็ก" in desc:
             return "child"
+        if _grand:
+            # Grand Menu: the retired B01/B02/B11 code names mean nothing any more,
+            # so price the cover instead — the stored ex-VAT price grossed back up
+            # by service charge and VAT, matched against the NET list.
+            for t in (str(x) for x in PRICE_TIERS_GRAND):
+                if t in code or t in desc:
+                    return t
+            if qty and revenue_ex_vat:
+                return tier_of_price(base_to_net(revenue_ex_vat / qty), _era_month)
+            return code
         if code == "B01" or "350" in code or "350" in desc:
             return "350"
         if code == "B07" or "500" in code or "500" in desc:
@@ -566,8 +592,8 @@ def buffet_upgrade_simulator(
     tier_data: dict = defaultdict(lambda: {"qty": 0, "revenue": 0.0, "revenue_ex_vat": 0.0, "cogs": 0.0, "has_cost": True, "unit_cost": None})
 
     for r in rows:
-        label      = _tier_label(r["sku_code"], r["description"])
         qty        = r["qty"] or 0
+        label      = _tier_label(r["sku_code"], r["description"], qty, r["revenue_ex_vat"] or 0.0)
         revenue    = r["revenue"] or 0.0
         rev_ex     = r["revenue_ex_vat"] or 0.0
         cogs_total = r["cogs_total"]
@@ -607,40 +633,41 @@ def buffet_upgrade_simulator(
     current_tiers = _build_tier_list(tier_data)
     current_gp    = sum(t["gp"] for t in current_tiers if t["gp"] is not None)
 
-    # Simulate: shift shift_pct% of 590 qty → 799
+    # Simulate: shift shift_pct% of the mainstream tier's qty up one tier.
     import copy
     sim_data = copy.deepcopy(tier_data)
 
-    tier_590 = sim_data.get("590")
-    tier_799 = sim_data.get("799")
+    from_tier, to_tier = upsell_pair(_era_month or "2026-01")
+    tier_from = sim_data.get(from_tier)
+    tier_to = sim_data.get(to_tier)
 
     delta_gp   = 0.0
     delta_note = None
 
-    if tier_590 and tier_799:
-        shift_qty = tier_590["qty"] * (shift_pct / 100.0)
+    if tier_from and tier_to:
+        shift_qty = tier_from["qty"] * (shift_pct / 100.0)
 
-        # Revenue impact: shift_qty covers move from 590 tier price to 799 tier price
-        avg_rev_590 = tier_590["revenue"] / tier_590["qty"] if tier_590["qty"] else 0
-        avg_rev_799 = tier_799["revenue"] / tier_799["qty"] if tier_799["qty"] else 0
-        avg_rev_ex_590 = tier_590["revenue_ex_vat"] / tier_590["qty"] if tier_590["qty"] else 0
-        avg_rev_ex_799 = tier_799["revenue_ex_vat"] / tier_799["qty"] if tier_799["qty"] else 0
+        # Revenue impact: shift_qty covers move up from the lower tier price to the higher
+        avg_rev_from = tier_from["revenue"] / tier_from["qty"] if tier_from["qty"] else 0
+        avg_rev_to = tier_to["revenue"] / tier_to["qty"] if tier_to["qty"] else 0
+        avg_rev_ex_from = tier_from["revenue_ex_vat"] / tier_from["qty"] if tier_from["qty"] else 0
+        avg_rev_ex_to = tier_to["revenue_ex_vat"] / tier_to["qty"] if tier_to["qty"] else 0
 
-        # Adjust 590 tier
-        tier_590["qty"]           -= shift_qty
-        tier_590["revenue"]       -= shift_qty * avg_rev_590
-        tier_590["revenue_ex_vat"] -= shift_qty * avg_rev_ex_590
-        if tier_590["has_cost"] and tier_590["unit_cost"] is not None:
-            tier_590["cogs"] -= shift_qty * tier_590["unit_cost"]
+        # Adjust the tier they left
+        tier_from["qty"]           -= shift_qty
+        tier_from["revenue"]       -= shift_qty * avg_rev_from
+        tier_from["revenue_ex_vat"] -= shift_qty * avg_rev_ex_from
+        if tier_from["has_cost"] and tier_from["unit_cost"] is not None:
+            tier_from["cogs"] -= shift_qty * tier_from["unit_cost"]
 
-        # Adjust 799 tier
-        tier_799["qty"]           += shift_qty
-        tier_799["revenue"]       += shift_qty * avg_rev_799
-        tier_799["revenue_ex_vat"] += shift_qty * avg_rev_ex_799
-        if tier_799["has_cost"] and tier_799["unit_cost"] is not None:
-            tier_799["cogs"] += shift_qty * tier_799["unit_cost"]
+        # Adjust the tier they moved up to
+        tier_to["qty"]           += shift_qty
+        tier_to["revenue"]       += shift_qty * avg_rev_to
+        tier_to["revenue_ex_vat"] += shift_qty * avg_rev_ex_to
+        if tier_to["has_cost"] and tier_to["unit_cost"] is not None:
+            tier_to["cogs"] += shift_qty * tier_to["unit_cost"]
     else:
-        delta_note = "590 or 799 tier data not found; simulation unchanged"
+        delta_note = f"{from_tier} or {to_tier} tier data not found; simulation unchanged"
 
     simulated_tiers = _build_tier_list(sim_data)
     simulated_gp    = sum(t["gp"] for t in simulated_tiers if t["gp"] is not None)
@@ -654,6 +681,11 @@ def buffet_upgrade_simulator(
         "delta_gp":  delta_gp,
         "delta_pct": delta_pct,
         "shift_pct": shift_pct,
+        # which pair was modelled, and on which menu — so the tab can label the
+        # scenario instead of hard-coding "590 → 799"
+        "from_tier": from_tier, "to_tier": to_tier,
+        "menu_era": "grand" if _grand else "legacy",
+        "grand_menu_from": GRAND_MENU_FROM,
     }
     if delta_note:
         result["note"] = delta_note
@@ -729,14 +761,14 @@ def buffet_gp_calendar(
     monthly_cogs = (mon_row["cogs"] or None) if mon_row else None
 
     total_rev_inc = sum(r["revenue_inc"] or 0.0 for r in day_rows)
-    total_rev_ex  = round(total_rev_inc / 1.07, 2)
+    total_rev_ex  = round(ex_vat(total_rev_inc), 2)
 
     days_out = []
     for r in day_rows:
         day_rev = r["revenue_inc"] or 0.0
         weight  = day_rev / total_rev_inc if total_rev_inc else 0.0
 
-        day_rev_ex = round(day_rev / 1.07, 2)
+        day_rev_ex = round(ex_vat(day_rev), 2)
         day_cogs   = round(monthly_cogs * weight, 2) if monthly_cogs is not None else None
 
         if day_cogs is not None and day_rev_ex:
@@ -1556,12 +1588,19 @@ def _bp_cohort(*, bcohort_rows, branch_first, defaultdict):
     return {"cohort_curve": cohort_curve}
 
 
-def _bp_pricing(*, bf_cost_by_month, tier_list, tier_trend):
+def _bp_pricing(*, bf_cost_by_month, months, tier_list, tier_trend):
     # names this section hands on; None where a path never assigns one
     actual_pax = None
     pricing_rec = None
     # ── Pricing recommendation ──────────────────────────────────────────────
+    # The tier SKU codes below carry the OLD menu's prices, and that menu was
+    # withdrawn on 2026-09-01. Pricing a September cover at ฿590 because it sits
+    # on a BUFFET590 code states revenue that was never taken, so from the Grand
+    # Menu on, this card reports the mix it can see and says plainly that the
+    # baht projection needs the new menu's tier SKUs — it does not invent one.
     TIER_PRICES = {'BUFFET350': 350, 'BUFFET500': 500, 'BUFFET590': 590, 'BUFFET799': 799, 'BUFFETCHILD': 295}
+    era_month = (months or [None])[-1]
+    grand = is_grand_menu(era_month) if era_month else False
     # fix E6: use actual food-cost ratio from BoM data instead of raw sku_cost
     # (sku_cost.unit_cost ≈ selling price for tier SKUs, not ingredient cost)
     _fc_rev_total  = sum(v[0] for v in bf_cost_by_month.values())
@@ -1586,7 +1625,7 @@ def _bp_pricing(*, bf_cost_by_month, tier_list, tier_trend):
     actual_total_margin = sum(tier_margin_actual.values())
     actual_margin_pct   = (actual_total_margin / actual_total_rev * 100) if actual_total_rev else 0
 
-    # Optimal mix: shift 10% of 350/500 pax to 590, and 5% to 799 (conservative up-sell scenario)
+    # Optimal mix: shift 30% of the two cheapest tiers up (conservative up-sell scenario)
     target_pax = dict(actual_pax)
     shift_350 = actual_pax.get('BUFFET350', 0) * 0.30  # 30% of 350 customers upgrade
     shift_500 = actual_pax.get('BUFFET500', 0) * 0.30
@@ -1614,6 +1653,27 @@ def _bp_pricing(*, bf_cost_by_month, tier_list, tier_trend):
         "margin_gain":     round(margin_gain, 0),
         "assumption":      "30% ของลูกค้า tier 350/500 ขยับขึ้นไป 590 (70%) และ 799 (30%)",
     }
+    if grand:
+        # Grand Menu window: the mix is real, the baht are not. Blank the
+        # projection and say why, rather than quoting retired prices.
+        up_from, up_to = upsell_pair(era_month)
+        for k in ("current_revenue", "current_margin", "current_margin_pct",
+                  "target_revenue", "target_margin", "target_margin_pct",
+                  "revenue_gain", "margin_gain"):
+            pricing_rec[k] = None
+        pricing_rec["target_mix"] = dict(pricing_rec["current_mix"])
+        pricing_rec["unavailable"] = True
+        pricing_rec["assumption"] = (
+            f"เมนูใหม่ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) — ราคาเก่า 350/500/590/799 "
+            f"ไม่มีขายแล้ว จึงยังประเมินผลเป็นตัวเงินไม่ได้จากรหัส tier เดิม "
+            f"(แนวทาง up-sell ของเมนูใหม่คือ ฿{up_from} → ฿{up_to})")
+        pricing_rec["upsell_from"] = up_from
+        pricing_rec["upsell_to"] = up_to
+    else:
+        pricing_rec["unavailable"] = False
+        pricing_rec["upsell_from"], pricing_rec["upsell_to"] = upsell_pair(era_month or "2026-01")
+    pricing_rec["menu_era"] = "grand" if grand else "legacy"
+    pricing_rec["grand_menu_from"] = GRAND_MENU_FROM
     return {"actual_pax": actual_pax, "pricing_rec": pricing_rec}
 
 
@@ -1751,7 +1811,7 @@ def buffet_performance(
     ctx.update(_bp_beverage(bev_rows=ctx.get("bev_rows")))
     ctx.update(_bp_daypart(daypart_rows=ctx.get("daypart_rows"), defaultdict=ctx.get("defaultdict"), tier_list=ctx.get("tier_list")))
     ctx.update(_bp_cohort(bcohort_rows=ctx.get("bcohort_rows"), branch_first=ctx.get("branch_first"), defaultdict=ctx.get("defaultdict")))
-    ctx.update(_bp_pricing(bf_cost_by_month=ctx.get("bf_cost_by_month"), tier_list=ctx.get("tier_list"), tier_trend=ctx.get("tier_trend")))
+    ctx.update(_bp_pricing(bf_cost_by_month=ctx.get("bf_cost_by_month"), months=ctx.get("months"), tier_list=ctx.get("tier_list"), tier_trend=ctx.get("tier_trend")))
     ctx.update(_bp_kpis(actual_pax=ctx.get("actual_pax"), adult_pax=ctx.get("adult_pax"), bev_rows=ctx.get("bev_rows"), bev_trend=ctx.get("bev_trend"), branch=ctx.get("branch"), branch_bills=ctx.get("branch_bills"), branch_pax=ctx.get("branch_pax"), buffet_billed_pax=ctx.get("buffet_billed_pax"), child_pax=ctx.get("child_pax"), child_pct=ctx.get("child_pct"), daily_pax_rows=ctx.get("daily_pax_rows"), food_cost_target_hi=ctx.get("food_cost_target_hi"), food_cost_target_lo=ctx.get("food_cost_target_lo"), food_cost_trend=ctx.get("food_cost_trend"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to"), pricing_rec=ctx.get("pricing_rec"), waste_trend=ctx.get("waste_trend")))
     bev_trend = ctx["bev_trend"]
     cohort_curve = ctx["cohort_curve"]

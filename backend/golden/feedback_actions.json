@@ -1,0 +1,16 @@
+{
+ "actions": [],
+ "counts": {
+  "better": 0,
+  "doing": 0,
+  "done": 0,
+  "dropped": 0,
+  "no_data": 0,
+  "open": 0,
+  "overdue": 0,
+  "same": 0,
+  "worse": 0
+ },
+ "today": "<ts>",
+ "window_days": 28
+}

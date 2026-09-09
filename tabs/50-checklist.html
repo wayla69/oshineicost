@@ -1,0 +1,119 @@
+<!-- ══ ✅ Checklist เปิดใช้งานเสียงลูกค้า (Go-live checklist) ══ -->
+<div id="tab-checklist" style="display:none">
+<style>
+  /* scoped to the checklist tab: a working screen, not a document */
+  #tab-checklist .cl-head { display: grid; grid-template-columns: auto 1fr auto; gap: 1rem 1.25rem; align-items: center; }
+  @media (max-width: 900px) { #tab-checklist .cl-head { grid-template-columns: auto 1fr; } #tab-checklist .cl-actions { grid-column: 1 / -1; } }
+  #tab-checklist .cl-ring { width: 92px; height: 92px; position: relative; }
+  #tab-checklist .cl-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  #tab-checklist .cl-ring .n { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.25rem; color: #0f766e; }
+  #tab-checklist .cl-chips { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .5rem; }
+  #tab-checklist .cl-chip { border: 1px solid var(--border); background: var(--bg-input); color: var(--text-secondary); border-radius: 999px; padding: .15rem .6rem .15rem .35rem; font-size: 11px; cursor: pointer; display: inline-flex; align-items: center; gap: .35rem; line-height: 1.5; }
+  #tab-checklist .cl-chip b { display: inline-flex; width: 18px; height: 18px; border-radius: 50%; align-items: center; justify-content: center; font-size: 10px; background: #e5e7eb; color: #374151; }
+  #tab-checklist .cl-chip.done b { background: #047857; color: #fff; } #tab-checklist .cl-chip.doing b { background: #0f766e; color: #fff; }
+  #tab-checklist .cl-chip.blocked b { background: #b91c1c; color: #fff; } #tab-checklist .cl-chip.waiting b { background: repeating-linear-gradient(45deg, #b45309 0 3px, #fde68a 3px 6px); color: #fff; }
+  #tab-checklist .cl-chip.late { border-color: #b45309; }
+  #tab-checklist .cl-chip.active { border-color: #0f766e; background: #ecfdf5; color: #065f46; font-weight: 600; }
+  #tab-checklist .cl-actions { display: flex; flex-direction: column; gap: .4rem; align-items: stretch; min-width: 220px; }
+  #tab-checklist .cl-primary { background: #0f766e; color: #fff; border: 0; border-radius: 8px; padding: .6rem .9rem; font-weight: 700; font-size: 14px; cursor: pointer; }
+  #tab-checklist .cl-primary:disabled { background: #cbd5d1; color: #4b5563; cursor: not-allowed; }
+  #tab-checklist .cl-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .3rem .6rem; font-size: 12px; cursor: pointer; }
+  #tab-checklist .cl-ghost.on { border-color: #0f766e; color: #065f46; background: #ecfdf5; }
+  #tab-checklist .cl-body { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 1rem; align-items: start; margin-top: 1rem; }
+  @media (max-width: 1023px) { #tab-checklist .cl-body { grid-template-columns: 1fr; } #tab-checklist .cl-rail { position: static !important; } }
+  #tab-checklist .cl-rail { position: sticky; top: .75rem; }
+  #tab-checklist .cl-nav { display: flex; flex-direction: column; gap: .25rem; }
+  #tab-checklist .cl-nav button { text-align: left; border: 1px solid transparent; background: transparent; border-radius: 8px; padding: .45rem .6rem; cursor: pointer; color: var(--text-primary); font-size: 13px; display: grid; grid-template-columns: 1fr auto; gap: .15rem .5rem; }
+  #tab-checklist .cl-nav button:hover { background: var(--bg-input); }
+  #tab-checklist .cl-nav button.active { border-color: #0f766e; background: #ecfdf5; }
+  #tab-checklist .cl-nav .bar { grid-column: 1 / -1; height: 4px; background: #e5e7eb; border-radius: 2px; overflow: hidden; }
+  #tab-checklist .cl-nav .bar > i { display: block; height: 100%; background: #0f766e; }
+  #tab-checklist .cl-nav .bar.done > i { background: #047857; } #tab-checklist .cl-nav .bar.blocked > i { background: #b91c1c; }
+  #tab-checklist .cl-nav small { color: var(--text-muted); font-size: 11px; }
+  #tab-checklist .cl-next { border-left: 4px solid #0f766e; }
+  #tab-checklist .cl-next-item { display: grid; grid-template-columns: auto 1fr auto; gap: .6rem; align-items: center; padding: .5rem 0; border-top: 1px solid var(--border); font-size: 13px; }
+  #tab-checklist .cl-next-item:first-of-type { border-top: 0; }
+  #tab-checklist .cl-next-item .k { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+  #tab-checklist .cl-phase-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem; }
+  #tab-checklist .cl-task { border: 1px solid var(--border); border-radius: 10px; margin-top: .9rem; overflow: hidden; }
+  #tab-checklist .cl-task.blocked { border-color: #fca5a5; } #tab-checklist .cl-task.done { border-color: #a7f3d0; }
+  #tab-checklist .cl-task-h { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1rem; padding: .6rem .85rem; background: var(--bg-input); border-bottom: 1px solid var(--border); }
+  #tab-checklist .cl-task-h h4 { font-size: 14px; font-weight: 700; margin: 0; flex: 1; min-width: 200px; }
+  #tab-checklist .cl-seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  #tab-checklist .cl-seg button { border: 0; background: transparent; padding: .25rem .55rem; font-size: 11px; cursor: pointer; color: var(--text-secondary); border-right: 1px solid var(--border); }
+  #tab-checklist .cl-seg button:last-child { border-right: 0; }
+  #tab-checklist .cl-seg button.on.todo { background: #e5e7eb; color: #374151; } #tab-checklist .cl-seg button.on.doing { background: #ccfbf1; color: #115e59; }
+  #tab-checklist .cl-seg button.on.blocked { background: #fee2e2; color: #991b1b; } #tab-checklist .cl-seg button.on.done { background: #d1fae5; color: #065f46; }
+  #tab-checklist .cl-seg button:disabled { cursor: not-allowed; opacity: .6; }
+  #tab-checklist .cl-note { padding: .4rem .85rem; border-bottom: 1px solid var(--border); }
+  #tab-checklist .cl-note textarea { width: 100%; font-size: 12px; border: 1px solid transparent; background: transparent; color: var(--text-primary); resize: vertical; min-height: 1.6rem; padding: .15rem .3rem; border-radius: 4px; }
+  #tab-checklist .cl-note textarea:focus { border-color: var(--border); background: var(--bg-input); outline: none; }
+  #tab-checklist .cl-step { border-bottom: 1px solid var(--border); }
+  #tab-checklist .cl-step:last-child { border-bottom: 0; }
+  #tab-checklist .cl-step-row { display: grid; grid-template-columns: 1.6rem 1fr auto; gap: .5rem; align-items: start; padding: .55rem .85rem; cursor: pointer; }
+  #tab-checklist .cl-step-row:hover { background: var(--bg-input); }
+  #tab-checklist .cl-step-row input { width: 1.15rem; height: 1.15rem; margin-top: .15rem; accent-color: #0f766e; cursor: pointer; }
+  #tab-checklist .cl-step-row .t { font-size: 13.5px; font-weight: 600; }
+  #tab-checklist .cl-step.done .t { color: var(--text-muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+  #tab-checklist .cl-step-row .by { font-size: 11px; color: var(--text-muted); font-weight: 400; margin-left: .35rem; }
+  #tab-checklist .cl-step-row .chev { font-size: 11px; color: var(--text-muted); padding-top: .2rem; transition: transform .15s; }
+  #tab-checklist .cl-step.open .chev { transform: rotate(90deg); }
+  #tab-checklist .cl-step.hot .cl-step-row { background: #fffbeb; }
+  #tab-checklist .cl-detail { display: none; padding: 0 .85rem .7rem 2.95rem; font-size: 12.5px; }
+  #tab-checklist .cl-step.open .cl-detail { display: grid; grid-template-columns: 1.4fr 1fr; gap: .5rem .9rem; }
+  @media (max-width: 900px) { #tab-checklist .cl-step.open .cl-detail { grid-template-columns: 1fr; } }
+  #tab-checklist .cl-detail b.l { display: block; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: .15rem; }
+  #tab-checklist .cl-detail ol { margin: 0; padding-left: 1.15rem; }
+  #tab-checklist .cl-detail li { margin: .15rem 0; }
+  #tab-checklist .cl-side > div { padding: .35rem .55rem; border-radius: 6px; margin-bottom: .35rem; }
+  #tab-checklist .cl-why { background: #eff6ff; } #tab-checklist .cl-check { background: #ecfdf5; color: #065f46; } #tab-checklist .cl-stuck { background: #fef2f2; color: #991b1b; }
+  #tab-checklist .cl-cmd { font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; background: #fef3c7; color: #78350f; padding: .05rem .3rem; border-radius: 4px; overflow-wrap: anywhere; }
+  #tab-checklist .cl-copy { font-size: 10px; border: 1px solid #fcd34d; background: #fffbeb; color: #92400e; border-radius: 4px; padding: 0 .35rem; margin-left: .25rem; cursor: pointer; vertical-align: middle; }
+  #tab-checklist mark.cl-warn { background: #ffedd5; color: #9a3412; padding: 0 .2rem; border-radius: 3px; font-weight: 600; }
+  #tab-checklist .cl-val { background: #ede9fe; color: #5b21b6; padding: 0 .25rem; border-radius: 3px; font-weight: 600; }
+  #tab-checklist .cl-log div { padding: .2rem 0; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-secondary); }
+  #tab-checklist .cl-empty { color: var(--text-muted); font-size: 12px; }
+  #tab-checklist input[type=date], #tab-checklist input[type=text] { font: inherit; font-size: 12px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-primary); border-radius: 6px; padding: .25rem .4rem; }
+</style>
+
+  <div class="flex gap-1.5 flex-wrap items-center" style="margin-bottom:.5rem">
+    <span class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">Checklist:</span>
+    <div id="clPicker" class="flex gap-1.5 flex-wrap"></div>
+  </div>
+  <div class="card p-4 cl-head">
+    <div class="cl-ring" id="clRing" aria-label="ความคืบหน้า"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#e5e7eb" stroke-width="3.5"/><circle id="clRingArc" cx="18" cy="18" r="15.5" fill="none" stroke="#0f766e" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="0 100"/></svg><div class="n" id="clPct">0%</div></div>
+    <div style="min-width:0">
+      <h2 class="text-base font-bold" id="clTitle">✅ Checklist เปิดใช้งานเสียงลูกค้าให้ครบทุกช่องทาง</h2>
+      <p class="text-xs mt-0.5" style="color:var(--text-secondary)" id="clLine">กำลังโหลด…</p>
+      <div class="cl-chips" id="clPhaseChips"></div>
+    </div>
+    <div class="cl-actions">
+      <button class="cl-primary" id="clComplete" onclick="completeChecklist()" disabled>✅ ปิดสมบูรณ์</button>
+      <label class="text-[11px]" style="color:var(--text-muted)">วันเริ่มโครงการ <input type="date" id="clStart" style="margin-left:.3rem"></label>
+      <div id="clWhoWrap" style="display:none"><input type="text" id="clWho" placeholder="ชื่อคุณ (ไม่ได้ล็อกอิน)" style="width:100%"></div>
+      <span class="text-[11px]" style="color:var(--text-muted)" id="clMe"></span>
+      <div class="flex gap-1.5 flex-wrap"><button class="cl-ghost" id="clToggleDone" onclick="toggleChecklistDone()">ซ่อนที่เสร็จแล้ว</button><button class="cl-ghost" onclick="loadChecklist(true)">รีเฟรช</button><a class="cl-ghost" id="clPdfLink" href="/docs/FEEDBACK_ROLLOUT_CHECKLIST.pdf" target="_blank" style="text-decoration:none">PDF ฉบับพิมพ์</a><a class="cl-ghost" href="/docs/FEEDBACK_SOURCES.html" target="_blank" style="text-decoration:none">คู่มือเทคนิค</a></div>
+    </div>
+  </div>
+
+  <div id="clDone" class="card p-4 mt-4" style="display:none;background:#ecfdf5;border:1px solid #6ee7b7"></div>
+
+  <div class="cl-body">
+    <aside class="card p-3 cl-rail">
+      <p class="text-[11px] uppercase tracking-wide mb-2" style="color:var(--text-muted)">เฟส</p>
+      <div class="cl-nav" id="clNav"></div>
+      <p class="text-[11px] uppercase tracking-wide mt-3 mb-1" style="color:var(--text-muted)">มุมมอง</p>
+      <div class="cl-nav" id="clViews"></div>
+    </aside>
+    <main style="min-width:0">
+      <section class="card p-4 cl-next" id="clNext"></section>
+      <section class="card p-4 mt-4">
+        <div class="flex items-center justify-between flex-wrap gap-2 cursor-pointer" onclick="toggleChecklistGantt()"><h3 class="text-sm font-semibold">ไทม์ไลน์ <span class="text-[11px] font-normal" style="color:var(--text-muted)" id="clGanttHint">(ซ่อน/แสดง)</span></h3><span class="text-[11px]" style="color:var(--text-muted)" id="clToday"></span></div>
+        <div id="clGanttWrap"><div id="clGantt" style="overflow-x:auto" class="mt-2"></div>
+        <p class="text-[11px] mt-2" style="color:var(--text-muted)">แถบเติมตาม % ขั้นตอนที่ติ๊ก · เขียว = เฟสเสร็จ · แดง = มีงานติดปัญหา · กรอบส้ม = เลยกำหนดแต่ยังไม่เสร็จ · แถบลาย = รอฝ่ายภายนอกอนุมัติ · เส้นประแดง = วันนี้</p></div>
+      </section>
+      <div id="clPhases"></div>
+      <section class="card p-4 mt-4"><h3 class="text-sm font-semibold mb-2">ประวัติล่าสุด</h3><div id="clLog" class="cl-log" style="max-height:240px;overflow:auto"></div></section>
+    </main>
+  </div>
+</div>

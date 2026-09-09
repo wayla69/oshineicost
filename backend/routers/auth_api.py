@@ -30,12 +30,14 @@ class _UserCreate(BaseModel):
     username: str
     password: str
     role: str
+    branch: Optional[str] = None          # E4: confine this login to one branch
 
 
 class _UserUpdate(BaseModel):
     role: Optional[str] = None
     password: Optional[str] = None
     active: Optional[bool] = None
+    branch: Optional[str] = None          # "" clears the scope
 
 
 def _set_session_cookie(response: Response, request: Request, token: str):
@@ -107,9 +109,10 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
             raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
         _auth.clear_login_failures(ip, body.username)
         _log_auth_event(con, "login", row["username"], ip)
-    token = _auth.make_token(row["id"], row["username"], row["role"])
+    branch = row["branch"] if "branch" in row.keys() else None
+    token = _auth.make_token(row["id"], row["username"], row["role"], branch=branch)
     _set_session_cookie(response, request, token)
-    return {"username": row["username"], "role": row["role"],
+    return {"username": row["username"], "role": row["role"], "branch": branch,
             "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
 
@@ -165,6 +168,7 @@ def auth_me(request: Request):
         return {"enabled": True, "authenticated": False, "modules": []}
     return {"enabled": True, "authenticated": True,
             "username": row["username"], "role": row["role"],
+            "branch": row["branch"] if "branch" in row.keys() else None,
             "must_change": bool(row["must_change"]),
             "modules": sorted(_auth.modules_for_role(row["role"]))}
 
@@ -184,7 +188,7 @@ def auth_users_create(body: _UserCreate, request: Request):
         with get_db() as con:
             if _auth.get_user(con, body.username):
                 raise HTTPException(status_code=409, detail="มีชื่อผู้ใช้นี้แล้ว.")
-            _auth.create_user(con, body.username, body.password, body.role)
+            _auth.create_user(con, body.username, body.password, body.role, branch=body.branch)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True}
@@ -213,7 +217,8 @@ def auth_users_update(username: str, body: _UserUpdate, request: Request):
                     raise HTTPException(status_code=400,
                         detail="ต้องมีผู้ดูแล (Management) ที่ใช้งานได้อย่างน้อย 1 บัญชี.")
             _auth.update_user(con, username, role=body.role,
-                              password=body.password, active=body.active)
+                              password=body.password, active=body.active,
+                              branch=(body.branch if body.branch is not None else _auth.UNSET))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"ok": True}
