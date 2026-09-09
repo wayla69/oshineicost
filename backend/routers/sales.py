@@ -730,8 +730,23 @@ def _menucmp_agg(con, gb_select, gb_col, extra_where, p_base, mfrom, mto, dfrom,
     return [dict(r) for r in con.execute(sql, p).fetchall()]
 
 
+# Below this min/max ratio, one side is a near-zero residual next to the other
+# (e.g. a retired SKU code that keeps posting a handful of leftover transactions
+# for a few days after a menu-cutover rename) — dividing by it produces a
+# nonsensical, direction-flipping delta (a real collapse reads as a huge "▲
+# increase") rather than a real swing. Treated the same as the pv==0 "vanished"
+# case below (→ None, rendered as "—"). A relative ratio (vs. an absolute unit
+# cutoff) is used because this helper compares qty, revenue and cogs alike,
+# which sit at very different absolute scales.
+_CMP_RESIDUAL_RATIO = 0.01
+
+
 def _cmp_pct(c, pv):
-    return round((c - pv) / pv * 100, 1) if pv else None
+    if not pv:
+        return None
+    if c and min(abs(c), abs(pv)) / max(abs(c), abs(pv)) < _CMP_RESIDUAL_RATIO:
+        return None
+    return round((c - pv) / pv * 100, 1)
 
 
 def _covers_by_branch(con, mfrom, mto, dfrom, dto, group):

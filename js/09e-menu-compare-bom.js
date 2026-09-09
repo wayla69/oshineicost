@@ -64,9 +64,20 @@ function mcSetCostMode(perHead) {
 // alongside, not replacing). Both share one category filter + one sort order so
 // a given row sits at the same position in both — easy side-by-side reading.
 const MC_NOISE_QTY = 50;                       // Δ% on volumes below this = noise → dimmed
+// Below this min/max ratio, one side is a near-zero residual next to the other (e.g. a
+// retired SKU code posting a handful of leftover transactions after a menu-cutover rename)
+// — dividing by it produces a nonsensical, direction-flipping delta. Mirrors the backend's
+// _CMP_RESIDUAL_RATIO guard in routers/sales.py so the table shows the same "—" it would get
+// from the API instead of recomputing the raw (and here, un-guarded) ratio itself.
+const MC_RESIDUAL_RATIO = 0.01;
 let _mcCatSel = '';                            // category filter ('' = all)
 let _mcSort = { key: 'vol', dir: -1 };         // sort key + direction (-1 desc, 1 asc)
-const _dpRaw  = (a, b) => b ? (a - b) / b * 100 : null;                 // raw Δ% A vs B
+function _cmpPctSafe(a, b) {                   // Δ% of a vs b, guarding the residual-ratio blowup
+  if (!b) return null;
+  if (a && Math.min(Math.abs(a), Math.abs(b)) / Math.max(Math.abs(a), Math.abs(b)) < MC_RESIDUAL_RATIO) return null;
+  return (a - b) / b * 100;
+}
+const _dpRaw  = (a, b) => _cmpPctSafe(a, b);                            // raw Δ% A vs B
 function _mcTotals(items) {
   const s = k => items.reduce((a, r) => a + (r[k] || 0), 0);
   return { qty_a: s('qty_a'), qty_b: s('qty_b'), cogs_a: s('cogs_a'), cogs_b: s('cogs_b') };
@@ -154,7 +165,7 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
   const vD = (x, C) => ph ? (C ? x / C : null) : x;          // divide by covers when per-head
   const nQ = v => v == null ? '—' : (ph ? v.toFixed(2) : fmtN(v));
   const nM = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
-  const dp = (a, b) => (a != null && b) ? (a - b) / b * 100 : null;
+  const dp = (a, b) => a != null ? _cmpPctSafe(a, b) : null;
   const badge = r => r.only_in_b
     ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:6px;margin-left:5px;font-weight:700">ใหม่</span>'
     : r.only_in_a

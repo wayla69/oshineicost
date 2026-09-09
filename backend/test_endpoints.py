@@ -418,6 +418,27 @@ def test_menu_compare_drill_branches_and_chronological_trend(client):
     assert months == sorted(months), "trend not in chronological order"
 
 
+def test_cmp_pct_residual_denominator_suppressed():
+    """A SKU renamed at a menu cutover keeps posting a handful of leftover
+    transactions under its old code for a few days after — e.g. a period-A qty
+    of 746,993 vs a period-B residual of 39 (real 2026-09-01 grand-menu cutover
+    case). Dividing by that residual used to produce a ~1.9M% "increase" for a
+    dish that actually collapsed to near zero. min/max ratio here is
+    39/746993 ≈ 0.00005, far below the 0.01 residual-ratio guard → None (the
+    same "—" already shown for the pv==0 vanished case)."""
+    from routers.sales import _cmp_pct, _CMP_RESIDUAL_RATIO
+    assert _cmp_pct(746993, 39) is None
+    assert _cmp_pct(39, 746993) is None          # symmetric: reverse direction too
+    # already-covered case: exact-zero denominator ⇒ None (unchanged behaviour)
+    assert _cmp_pct(100, 0) is None
+    # a real, non-residual swing within an order of magnitude must NOT be
+    # suppressed — only an extreme (>100x, sub-1%) mismatch should trip the guard
+    assert _cmp_pct(300, 50) == 500.0
+    assert _cmp_pct(150, 100) == 50.0
+    # sanity: the guard constant itself is the small ratio described above
+    assert _CMP_RESIDUAL_RATIO == 0.01
+
+
 def test_scenario_savings_ledger(client):
     """Phase B ROI: adopt a scenario → realized stays 0 until the cheaper cost is
     actually in the data, then accrues = (baseline−current) × qty since adoption."""
