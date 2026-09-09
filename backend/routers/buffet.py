@@ -10,7 +10,7 @@ from typing import Optional
 import io as _io
 from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, net_revenue_row, net_revenue_sum, scope_filter
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
-                   tier_label as _rules_tier_label, tier_of_price, upsell_pair)
+                   tier_of_price, upsell_pair)
 from core import _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter, _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, get_db, ttl_cache
 
 from fastapi import APIRouter

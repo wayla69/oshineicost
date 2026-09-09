@@ -17,7 +17,7 @@ from typing import Optional
 import json as _json
 import io as _io
 from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
-from rules import GRAND_MENU_FROM, TIER_EXTRA, price_tiers_between, tier_codes_between, tier_label
+from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
 from targets import target_revenue_total
 from core import (
     HERE,
