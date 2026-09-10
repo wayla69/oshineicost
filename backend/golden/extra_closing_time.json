@@ -23,6 +23,26 @@
    "total_bills": 6
   }
  ],
+ "daily": [
+  {
+   "bills": 2,
+   "branches": 2,
+   "day": "2026-06-01",
+   "missing": 0
+  },
+  {
+   "bills": 2,
+   "branches": 2,
+   "day": "2026-06-02",
+   "missing": 0
+  },
+  {
+   "bills": 2,
+   "branches": 2,
+   "day": "2026-06-03",
+   "missing": 0
+  }
+ ],
  "data_max": "2026-06-03T12:00:00",
  "data_max_date": "2026-06-03",
  "data_min_date": "2026-05-01",
@@ -31,7 +51,10 @@
   "behind": 0,
   "branch_count": 2,
   "current": 2,
-  "max_days_behind": 0
+  "gap_days": 0,
+  "max_days_behind": 0,
+  "window_days": 3
  },
- "today": "<ts>"
+ "today": "<ts>",
+ "window_from": "2026-05-04"
 }

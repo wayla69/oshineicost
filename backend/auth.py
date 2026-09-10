@@ -455,6 +455,60 @@ def count_active_admins(con: sqlite3.Connection) -> int:
     ).fetchone()[0]
 
 
+def provision_user(con: sqlite3.Connection, username: str, role: str,
+                   branch: Optional[str] = None,
+                   password: Optional[str] = None,
+                   reset_existing: bool = False) -> str:
+    """Provision ONE account on the shared DEFAULT_PASSWORD with must_change=1.
+
+    This is the seeding path, not the admin-create path: like seed_users() it
+    deliberately bypasses check_password_policy() when handing out the shared
+    default, because the default is only ever a one-shot credential — the user
+    is forced off it at first login (must_change=1 → the frontend opens the
+    change-password dialog before anything else).
+
+    Idempotent: an existing account is left alone and "exists" is returned,
+    unless reset_existing=True, in which case its password is put back to the
+    default and must_change is re-armed ("reset"). A brand-new account returns
+    "created".
+
+    Passing an explicit `password` opts back INTO the policy (≥ MIN_PASSWORD_LEN
+    and not the shared default) — that path is an ordinary temporary password,
+    still with must_change=1.
+    """
+    username = (username or "").strip()
+    if not username:
+        raise ValueError("username required")
+    if role not in ROLES:
+        raise ValueError("invalid role")
+    branch = (branch or "").strip() or None
+    if branch and not branch_exists(con, branch):
+        raise ValueError("ไม่พบสาขานี้")
+    if password:
+        check_password_policy(password)       # explicit password → normal policy
+    pw = password or DEFAULT_PASSWORD
+
+    existing = get_user(con, username)
+    if existing and not reset_existing:
+        return "exists"
+    h = hash_password(pw)
+    if existing:
+        con.execute(
+            "UPDATE app_user SET pw_hash=?, pw_salt=?, must_change=1, active=1 "
+            "WHERE username=?",
+            (h["hash"], h["salt"], username),
+        )
+        con.commit()
+        return "reset"
+    con.execute(
+        "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change, branch) "
+        "VALUES (?,?,?,?,1,?)",
+        (username, h["hash"], h["salt"], role, branch),
+    )
+    con.commit()
+    return "created"
+
+
 def seed_users(con: sqlite3.Connection) -> None:
     """Create the 12 default users iff the table is empty (idempotent)."""
     n = con.execute("SELECT COUNT(*) FROM app_user").fetchone()[0]

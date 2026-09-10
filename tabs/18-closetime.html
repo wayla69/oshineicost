@@ -20,8 +20,24 @@
     <div id="dqFindings"></div>
   </div>
 
+  <!-- The per-branch table cannot show a branch that is current today but went
+       silent for three days last week — that hole only appears over time. -->
+  <div id="ctmCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
+    <div class="card p-5">
+      <h2 class="section-title mb-3">สาขาที่มีข้อมูล ต่อวัน (30 วันล่าสุด)</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุป · แท่งแดง = วันที่มีสาขาไม่ส่งข้อมูล</p>
+      <div style="height:260px"><canvas id="ctmChartDays"></canvas></div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-3">เวลาปิดเฉลี่ยรายสาขา (30 วันล่าสุด)</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · แท่งแดง = เวลาปิดหลุดกรอบเทียบสาขาอื่น · เวลาก่อน 06:00 นับเป็นปิดหลังเที่ยงคืน</p>
+      <div style="height:260px"><canvas id="ctmChartClose"></canvas></div>
+    </div>
+  </div>
+
   <div class="card p-5 overflow-x-auto">
     <h2 id="ctmTitle" class="section-title mb-3">รายสาขา — เรียงตามความล่าช้า (บนสุด = ค้างนานสุด)</h2>
-    <table class="text-xs w-full"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น</p>
+    <table class="text-xs w-full" id="ctmTable"><thead id="ctmHead"></thead><tbody id="ctmRows"></tbody></table>
   </div>
 </div>

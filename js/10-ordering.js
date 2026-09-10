@@ -12,6 +12,9 @@ let _opFiltersReady = false;
 // The rows exactly as the table is showing them, kept so the bulk controls act
 // on what the user can see rather than on a second, differently-filtered fetch.
 let _opLastRows = [];
+// The meta of the last successful load — the range pickers and the quick-range
+// buttons seed themselves from it rather than guessing at today's date.
+let _opLastMeta = null;
 
 const OP_TYPE_TH = { protein:'โปรตีน', carb:'คาร์โบไฮเดรต', veg:'ผัก',
   sauce:'ซอส', oil:'น้ำมัน', seasoning:'เครื่องปรุง', other:'อื่นๆ' };
@@ -38,11 +41,48 @@ async function _opInitFilters() {
   _opFiltersReady = true;
 }
 
+// The window has two shapes. "ย้อนหลัง N วัน" rolls with the data and is right
+// for a standing view; an explicit range is right for an ORDER CYCLE, which has
+// a start and an end that have nothing to do with when the last bill landed.
+function opToggleRange() {
+  const on = !!document.getElementById('opUseRange')?.checked;
+  const dw = document.getElementById('opDaysWrap'), rw = document.getElementById('opRangeWrap');
+  if (dw) dw.style.display = on ? 'none' : '';
+  if (rw) rw.style.display = on ? '' : 'none';
+  // First switch: seed the pickers from the window the server just used, so
+  // turning it on doesn't blank the tab.
+  const f = document.getElementById('opFrom'), t = document.getElementById('opTo');
+  if (on && f && t && !f.value && _opLastMeta) { f.value = _opLastMeta.date_from; t.value = _opLastMeta.date_to; }
+  loadOrderPlan(true);
+}
+
+function opQuickRange(kind) {
+  const f = document.getElementById('opFrom'), t = document.getElementById('opTo');
+  if (!f || !t || !_opLastMeta) return;
+  const dataTo = _opLastMeta.date_to;
+  if (kind === 'menu') {
+    f.value = _opLastMeta.menu_era_from || dataTo;
+    t.value = dataTo;
+  } else {                                    // the last COMPLETE month of data
+    const d = new Date(dataTo + 'T00:00:00');
+    const first = new Date(d.getFullYear(), d.getMonth(), 1);
+    const prevLast = new Date(first.getTime() - 86400000);
+    f.value = new Date(prevLast.getFullYear(), prevLast.getMonth(), 1).toISOString().slice(0, 10);
+    t.value = prevLast.toISOString().slice(0, 10);
+  }
+  loadOrderPlan(true);
+}
+
 function _opParams() {
   const p = new URLSearchParams();
   const br = document.getElementById('opBranch')?.value || '';
   if (br) p.set('branch', br);
   if (!br && typeof getGroup === 'function' && getGroup()) p.set('group', getGroup());
+  const useRange = !!document.getElementById('opUseRange')?.checked;
+  const df = document.getElementById('opFrom')?.value || '';
+  const dt = document.getElementById('opTo')?.value || '';
+  if (useRange && df) p.set('date_from', df);
+  if (useRange && dt) p.set('date_to', dt);
   p.set('days', document.getElementById('opDays')?.value || '28');
   p.set('basis', _opBasis);
   p.set('buffer_pct', document.getElementById('opBuffer')?.value || '10');
@@ -53,6 +93,9 @@ function _opParams() {
   if (document.getElementById('opFamily')?.checked) p.set('group_family', 'true');
   const inc = document.getElementById('opInclude')?.value || 'all';
   if (inc !== 'all') p.set('include', inc);
+  // Per-branch columns only mean something for the chain view — with one branch
+  // picked the table IS that branch.
+  if (!br && document.getElementById('opSplit')?.checked) p.set('split_branches', 'true');
   if (document.getElementById('opSeason')?.checked) p.set('season', 'auto');
   const cs = document.getElementById('opCycleStart')?.value || '';
   if (cs) p.set('cycle_start', cs);
@@ -76,7 +119,17 @@ async function loadOrderPlan(force) {
     return;
   }
   const m = d.meta || {}, t = d.totals || {}, cov = m.coverage || {};
+  _opLastMeta = m;
   const brLabel = m.branch || 'ทุกสาขา';
+  // A window reaching across the menu changeover averages two different recipe
+  // books — say it where the numbers are, with the fix one click away.
+  const eraEl = document.getElementById('opEraNote');
+  if (eraEl) eraEl.innerHTML = m.era && m.era.straddles
+    ? `<div class="card p-3 text-xs flex flex-wrap items-center gap-2" style="background:#fff7ed;border-left:4px solid #ea580c;color:#9a3412">
+         <span>⚠️ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> — ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</span>
+         <button onclick="opUseEraFrom()" style="background:#ea580c;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer">ใช้เฉพาะเมนูใหม่ (เริ่ม ${esc(m.era.suggest_from)})</button>
+       </div>`
+    : '';
   // a branch that opened mid-window is averaged over the days it actually sold —
   // say so, otherwise "28 วัน" looks like it undercounted
   const partial = (m.branch && m.trading_days && m.trading_days < m.days)
@@ -127,6 +180,23 @@ async function loadOrderPlan(force) {
 
   _opLastRows = d.rows || [];
   opRenderBulkNote();
+  // Per-branch columns: one line per ingredient, every branch's own quantity
+  // beside it. Only the branches that actually use the ingredient are non-zero,
+  // so a blank cell means "this branch doesn't order it", not "no data".
+  const splitOn = !m.branch && !!document.getElementById('opSplit')?.checked;
+  const bnames = splitOn ? (m.branch_names || []) : [];
+  const headRow = document.querySelector('#opTable thead tr');
+  if (headRow) {
+    headRow.querySelectorAll('.op-br-th').forEach(th => th.remove());
+    bnames.forEach(b => {
+      const th = document.createElement('th');
+      th.className = 'py-1.5 pr-2 text-right op-br-th';
+      th.style.color = '#0f766e';
+      th.title = `ปริมาณสั่ง/เดือน ของ ${b}`;
+      th.textContent = b;
+      headRow.appendChild(th);
+    });
+  }
   document.getElementById('opBody').innerHTML = (d.rows || []).map(r => {
     const tr = r.trend_pct;
     const trHtml = tr == null ? '<span style="color:var(--text-muted)">—</span>'
@@ -148,8 +218,30 @@ async function loadOrderPlan(force) {
       <td class="py-1.5 pr-2 text-right">${fmtN(r.value_month)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${fmtN(r.n_menus)}</td>
       <td class="py-1.5 text-right">${trHtml}</td>
+      ${bnames.map(b => {
+        const c = (r.by_branch || {})[b];
+        const v = c ? (c.order_month_units != null ? c.order_month_units : c.order_month) : null;
+        return `<td class="py-1.5 pr-2 text-right tabular-nums" data-sort="${v == null ? '' : v}"
+          style="color:${v ? 'var(--text-primary)' : 'var(--text-muted)'}"
+          title="${c ? esc(b + ' · สั่ง/สัปดาห์ ' + (c.order_week_units != null ? c.order_week_units : c.order_week)) : esc(b + ' ไม่ได้ใช้วัตถุดิบนี้')}">${v == null ? '—' : fmtN(v)}</td>`;
+      }).join('')}
     </tr>`;
-  }).join('') || '<tr><td colspan="11" class="py-4 text-center" style="color:var(--text-muted)">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>';
+  }).join('') || `<tr><td colspan="${11 + bnames.length}" class="py-4 text-center" style="color:var(--text-muted)">ไม่พบข้อมูลตามเงื่อนไขที่เลือก</td></tr>`;
+  makeSortable('opTable');
+}
+
+// The era banner's one-click fix: switch to an explicit range that starts at the
+// changeover and keeps the end where it is.
+function opUseEraFrom() {
+  const from = _opLastMeta?.era?.suggest_from;
+  if (!from) return;
+  const box = document.getElementById('opUseRange');
+  const f = document.getElementById('opFrom'), t = document.getElementById('opTo');
+  if (!box || !f || !t) return;
+  box.checked = true;
+  f.value = from;
+  if (!t.value) t.value = _opLastMeta.date_to;
+  opToggleRange();
 }
 
 function opJumpBranch(name) {
@@ -158,12 +250,30 @@ function opJumpBranch(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function opPrintLetter() {
+function opPrintLetter(preview) {
   const p = _opParams();
-  p.delete('type'); p.delete('q'); p.delete('group_family');
+  p.delete('type'); p.delete('q'); p.delete('group_family'); p.delete('split_branches');
   p.set('horizon', document.getElementById('opHorizon')?.value === 'month' ? 'month' : 'week');
   p.set('top', '40');
-  window.open(`${API}/api/ingredients/order-letter.print?${p}`, '_blank');
+  // §3 of the letter cites the franchise agreement. The clause number is typed
+  // here or left blank for hand-writing — never guessed by the app.
+  const cref = (document.getElementById('opContractRef')?.value || '').trim();
+  if (cref) p.set('contract_ref', cref);
+  const rby = (document.getElementById('opReplyBy')?.value || '').trim();
+  if (rby) p.set('reply_by', rby);
+  const url = `${API}/api/ingredients/order-letter.print?${p}`;
+  if (!preview) { window.open(url, '_blank'); return; }
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write('<p style="font-family:sans-serif;padding:24px">กำลังสร้างร่างจดหมาย…</p>');
+  fetch(url).then(r => r.text()).then(html => {
+    w.document.open(); w.document.write(html); w.document.close();
+  }).catch(e => {
+    w.document.open();
+    w.document.write('<p style="font-family:sans-serif;padding:24px;color:#b91c1c">สร้างร่างไม่สำเร็จ: '
+                     + String(e).slice(0, 200) + '</p>');
+    w.document.close();
+  });
 }
 
 function opExportXlsx() {
@@ -408,6 +518,20 @@ async function osSavePacks() {
   }
 }
 
+// Setting a few hundred pack sizes one input at a time is not a thing anyone
+// does on a screen — the sheet goes out already carrying what is set, comes back
+// edited, and the rows it does not mention are left alone.
+function osPackTemplate(onlyMissing) {
+  const p = new URLSearchParams();
+  if (onlyMissing) p.set('only_missing', 'true');
+  window.open(`${API}/api/ingredients/order-units.template.xlsx?${p}`, '_blank');
+}
+
+async function osImportPacks(input) {
+  await _opImportFile(input, `${API}/api/ingredients/order-units/import`,
+                      'osImportStatus', 'osImportReport', () => loadOrderSetup(true));
+}
+
 async function osLoadCalendar() {
   const sel = document.getElementById('osCalBranch');
   if (sel && !sel.options.length) {
@@ -587,6 +711,123 @@ function opWarnLetter() {
   window.open(`${API}/api/ingredients/compliance-letter.print?${p}`, '_blank');
 }
 
+// The same notice, read before it is sent. A warning letter names a branch and
+// asks it to answer for a shortfall, so seeing WHO is on it and WHY — before
+// anything is printed or handed over — is the difference between a review step
+// and an accident.
+function opDraftWarnLetter() {
+  const tol = document.getElementById('opTolerance')?.value || '20';
+  const hz = document.getElementById('opHorizon')?.value || 'week';
+  const due = (document.getElementById('opDueDate')?.value || '').trim();
+  const p = new URLSearchParams({ horizon: hz, tolerance_pct: tol, preview: '1' });
+  if (due) p.set('due_date', due);
+  const cs = document.getElementById('opCycleStart')?.value || '';
+  if (cs) p.set('period_start', cs);
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write('<p style="font-family:sans-serif;padding:24px">กำลังสร้างร่างจดหมาย…</p>');
+  fetch(`${API}/api/ingredients/compliance-letter.print?${p}`)
+    .then(r => r.text())
+    .then(html => {
+      w.document.open();
+      w.document.write(html);
+      w.document.close();
+    })
+    .catch(e => {
+      w.document.open();
+      w.document.write('<p style="font-family:sans-serif;padding:24px;color:#b91c1c">สร้างร่างไม่สำเร็จ: '
+                       + String(e).slice(0, 200) + '</p>');
+      w.document.close();
+    });
+}
+
+
+// ── ปริมาณที่สั่งจริง: Excel out, Excel back in ────────────────────────────
+function opActualTemplate() {
+  const p = new URLSearchParams();
+  const br = document.getElementById('opBranch')?.value || '';
+  if (br) p.set('branch', br);
+  const cs = document.getElementById('opCycleStart')?.value || '';
+  if (cs) p.set('period_start', cs);
+  window.open(`${API}/api/ingredients/order-actual.template.xlsx?${p}`, '_blank');
+}
+
+async function opImportActual(input) {
+  await _opImportFile(input, `${API}/api/ingredients/order-actual/import`,
+                      'opImportStatus', 'opImportReport', () => {
+                        opLoadCycles();
+                        opLoadAccuracy();
+                      });
+}
+
+// Shared by every "upload the filled sheet" button on this tab. Always runs a
+// dry run FIRST and shows what would happen: an import that silently drops the
+// rows it could not read is worse than one that refuses, and the operator is the
+// only one who can tell a typo from a genuinely new ingredient.
+async function _opImportFile(input, url, statusId, reportId, after) {
+  const file = input?.files?.[0];
+  const st = document.getElementById(statusId);
+  const rep = document.getElementById(reportId);
+  if (!file) return;
+  const show = (msg, color) => { if (st) { st.textContent = msg; st.style.color = color || 'var(--text-muted)'; } };
+  const send = async (dry) => {
+    const fd = new FormData();
+    fd.append('file', file, file.name);
+    const r = await fetch(`${url}?dry_run=${dry ? 'true' : 'false'}`, { method: 'POST', body: fd });
+    const text = await r.text();
+    let j;
+    try { j = JSON.parse(text); } catch (e) { j = null; }
+    if (!r.ok) throw new Error((j && j.detail) || text.slice(0, 200));
+    return j;
+  };
+  try {
+    show('กำลังตรวจไฟล์…');
+    const pre = await send(true);
+    const n = pre.would_save || 0;
+    const errs = pre.errors || [];
+    if (rep) rep.innerHTML = _opImportReportHtml(pre, true);
+    if (!n) {
+      show(`ไม่มีแถวที่นำเข้าได้ (อ่านได้ ${pre.rows_read || 0} แถว)`, '#b91c1c');
+      input.value = '';
+      return;
+    }
+    if (errs.length && !confirm(`อ่านไฟล์ได้ ${n} แถว แต่มี ${errs.length} แถวที่มีปัญหาและจะถูกข้าม\n\n`
+        + errs.slice(0, 5).map(e => `• แถว ${e.row || '-'}: ${e.why}`).join('\n')
+        + `\n\nต้องการนำเข้า ${n} แถวที่เหลือหรือไม่?`)) {
+      show('ยกเลิกการนำเข้า');
+      input.value = '';
+      return;
+    }
+    show('กำลังนำเข้า…');
+    const res = await send(false);
+    if (rep) rep.innerHTML = _opImportReportHtml(res, false);
+    show(`✓ นำเข้าแล้ว ${res.saved || 0} แถว` + (res.blank ? ` · เว้นว่าง ${res.blank}` : ''), '#059669');
+    if (typeof after === 'function') after();
+  } catch (e) {
+    show('นำเข้าไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), '#b91c1c');
+  } finally {
+    input.value = '';        // let the same file be picked again after a fix
+  }
+}
+
+function _opImportReportHtml(d, dry) {
+  const errs = d.errors || [];
+  const head = dry
+    ? `ตรวจไฟล์ <b>${esc(d.sheet || '')}</b> · อ่านได้ ${fmtN(d.rows_read || 0)} แถว · นำเข้าได้ ${fmtN(d.would_save || 0)} แถว`
+    : `นำเข้าแล้ว <b>${fmtN(d.saved || 0)}</b> แถว จากไฟล์ <b>${esc(d.sheet || '')}</b>`;
+  const blank = d.blank ? ` · เว้นว่าง ${fmtN(d.blank)} แถว (ยังไม่กรอก — ไม่ถูกแก้ไข)` : '';
+  if (!errs.length) {
+    return `<div class="card p-3 text-[11px]" style="background:#f0fdf4;border-left:3px solid #16a34a;color:#166534">
+      ✓ ${head}${blank}</div>`;
+  }
+  return `<div class="card p-3 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+    ${head}${blank}<br><b>แถวที่มีปัญหา (${errs.length}) — ถูกข้าม ไม่ได้บันทึก:</b>
+    <ul style="margin:.35em 0 0;padding-left:1.2em">
+      ${errs.slice(0, 12).map(e => `<li>แถว ${esc(e.row || e.issue_id || '-')}${e.code || e.branch ? ' · ' + esc(e.code || e.branch) : ''} — ${esc(e.why)}</li>`).join('')}
+      ${errs.length > 12 ? `<li>… และอีก ${errs.length - 12} แถว</li>` : ''}
+    </ul></div>`;
+}
+
 
 // ── forecast accuracy ──────────────────────────────────────────────────────
 // Compliance answers "did they order what we said". This answers "was what we
@@ -643,4 +884,205 @@ function opApplySuggestedBuffer() {
   if (_opAccSuggested == null) { alert('ยังไม่มีค่าที่แนะนำ — ต้องมีรอบสั่งที่ปิดแล้วอย่างน้อย 1 รอบ'); return; }
   const el = document.getElementById('opBuffer');
   if (el) { el.value = _opAccSuggested; loadOrderPlan(true); }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)
+// What each branch SPENT on ingredients comes from the purchasing system as a
+// spreadsheet; sales for the same week are ours. The pair gives the ratio ops
+// actually manage to. Deliberately NOT the BoM food cost: that says what the
+// recipes should have consumed, this says what was bought — buying runs ahead
+// of selling, so a single week swings and the period average is the honest read.
+// ═══════════════════════════════════════════════════════════════════════════
+let _ipReady = false, _ipLast = null, _ipChartPct = null, _ipChartAmt = null;
+
+async function _ipInitFilters() {
+  if (_ipReady) return;
+  const sel = document.getElementById('ipBranch');
+  if (!sel) return;
+  try {
+    const branches = await api(`${API}/api/branches`);
+    sel.innerHTML = '<option value="">— ทุกสาขา —</option>' +
+      (branches || []).filter(b => b.active !== false && b.name !== 'ALL')
+        .map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('');
+    const cur = (typeof getBranch === 'function') ? getBranch() : '';
+    if (cur && (branches || []).some(b => b.name === cur)) sel.value = cur;
+  } catch (e) { sel.innerHTML = '<option value="">— ทุกสาขา —</option>'; }
+  _ipReady = true;
+}
+
+function _ipParams() {
+  const p = new URLSearchParams();
+  const br = document.getElementById('ipBranch')?.value || '';
+  if (br) p.set('branch', br);
+  if (!br && typeof getGroup === 'function' && getGroup()) p.set('group', getGroup());
+  const f = document.getElementById('ipFrom')?.value || '';
+  const t = document.getElementById('ipTo')?.value || '';
+  if (f) p.set('date_from', f);
+  if (t) p.set('date_to', t);
+  return p;
+}
+
+async function loadIngPurchase(force) {
+  await _ipInitFilters();
+  const p = _ipParams();
+  const key = p.toString();
+  if (!force && _tabLastKey.ingpurchase === key) return;
+  _tabLastKey.ingpurchase = key;
+  const st = document.getElementById('ipStatus');
+  if (st) st.textContent = 'กำลังโหลด…';
+  let d;
+  try { d = await api(`${API}/api/ingredients/purchases?${p}`); }
+  catch (e) { if (st) st.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
+  _ipLast = d;
+  const m = d.meta || {}, t = d.totals || {};
+  // Seed the pickers from the window the server resolved, so they show the same
+  // range the numbers are for instead of staying blank.
+  const fEl = document.getElementById('ipFrom'), tEl = document.getElementById('ipTo');
+  if (fEl && !fEl.value) fEl.value = m.date_from;
+  if (tEl && !tEl.value) tEl.value = m.date_to;
+  if (st) st.textContent = `สัปดาห์ ${m.week_from} → ${m.week_to} · ${m.branch || 'ทุกสาขา'} · `
+    + `นำเข้าแล้ว ${fmtN(m.imported_weeks || 0)} ช่อง · ยังไม่นำเข้า ${fmtN(m.missing_weeks || 0)} ช่อง`;
+
+  const pctCol = v => v == null ? '#94a3b8' : v >= 40 ? '#dc2626' : v >= 33 ? '#f59e0b' : '#059669';
+  document.getElementById('ipKpis').innerHTML = [
+    { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7c3aed' },
+    { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2' },
+    { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct) },
+    { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981') },
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
+
+  // The gaps ARE the finding: a ratio computed over half the weeks is not a
+  // small ratio, it is an unknown one.
+  const gaps = (d.rows || []).filter(r => r.amount == null);
+  document.getElementById('ipGaps').innerHTML = gaps.length
+    ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+        <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> — สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ
+        จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด:
+        ${gaps.slice(0, 6).map(g => `${esc(g.branch)} ${esc(g.week_start)}`).join(' · ')}${gaps.length > 6 ? ' …' : ''}
+       </div>` : '';
+
+  // ── per-branch summary ──
+  const brs = d.branches || [];
+  const bOut = _miOutlierSet(brs.map(b => b.pct));
+  document.getElementById('ipBranchBody').innerHTML = brs.map((b, i) => {
+    const odd = bOut.has(i);
+    return `<tr class="border-b${odd ? ' mi-outlier' : ''}" style="border-color:var(--border)">
+      <td class="py-1.5 pr-2 font-semibold" data-sort="${esc(b.branch)}">${esc(b.branch)}${odd ? ' <span class="mi-flag bad" title="% ต่อยอดขายหลุดกรอบเทียบสาขาอื่น">⚠ ผิดปกติ</span>' : ''}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">฿${fmtN(b.amount)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">฿${fmtN(b.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${pctCol(b.pct)}">${b.pct == null ? '—' : b.pct + '%'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b.per_cover == null ? '—' : '฿' + fmtN(b.per_cover)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(b.weeks)}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:${b.weeks_missing ? '#b45309' : 'var(--text-muted)'}">${fmtN(b.weeks_missing)}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีข้อมูล — โหลด template แล้วนำเข้ายอดซื้อ</td></tr>';
+
+  // ── week × branch, with the amount editable in place ──
+  document.getElementById('ipWeekBody').innerHTML = (d.rows || []).map(r => `
+    <tr class="border-b" style="border-color:var(--border)">
+      <td class="py-1.5 pr-2 tabular-nums">${esc(r.week_start)}</td>
+      <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2 text-right" data-sort="${r.amount == null ? '' : r.amount}">
+        <input type="number" step="0.01" min="0" value="${r.amount == null ? '' : r.amount}"
+               placeholder="ยังไม่นำเข้า"
+               onkeydown="if(event.key==='Enter')ipSaveOne(this)" onblur="ipSaveOne(this)"
+               data-ipbranch="${jsAttr(r.branch)}" data-ipweek="${jsAttr(r.week_start)}"
+               data-ipwas="${r.amount == null ? '' : r.amount}"
+               style="width:110px;text-align:right;border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 6px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)"></td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">฿${fmtN(r.revenue)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${pctCol(r.pct)}">${r.pct == null ? '—' : r.pct + '%'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${r.per_cover == null ? '—' : '฿' + fmtN(r.per_cover)}</td>
+      <td class="py-1.5" style="color:var(--text-muted)">${r.source === 'excel' ? '📄 Excel' : r.source === 'manual' ? '✍️ กรอกเอง' : '—'}</td>
+    </tr>`).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีสัปดาห์ในช่วงที่เลือก</td></tr>';
+
+  ['ipBranchTbl', 'ipWeekTbl'].forEach(makeSortable);
+  _ipRenderCharts(d);
+}
+
+function _ipRenderCharts(d) {
+  const weeks = (d.meta || {}).weeks || [];
+  if (!weeks.length) {
+    if (_ipChartPct) { _ipChartPct.destroy(); _ipChartPct = null; }
+    if (_ipChartAmt) { _ipChartAmt.destroy(); _ipChartAmt = null; }
+    return;
+  }
+  const PAL = ['#7c3aed', '#0891b2', '#b0472d', '#1f7a4d', '#d97706', '#be185d', '#64748b'];
+  const names = [...new Set((d.rows || []).map(r => r.branch))].sort();
+  const at = {};
+  (d.rows || []).forEach(r => { at[r.branch + '|' + r.week_start] = r; });
+
+  // % per branch per week — one line each, outlier weeks called out on the line.
+  const dsPct = names.map((b, i) => {
+    const series = weeks.map(w => at[b + '|' + w]?.pct ?? null);
+    const out = _miOutlierSet(series);
+    return { label: b, data: series, spanGaps: true, tension: .25,
+             borderColor: PAL[i % PAL.length], backgroundColor: PAL[i % PAL.length],
+             pointRadius: series.map((_, k) => out.has(k) ? 6 : 3),
+             pointBackgroundColor: series.map((_, k) => out.has(k) ? '#dc2626' : PAL[i % PAL.length]),
+             pointBorderColor: series.map((_, k) => out.has(k) ? '#dc2626' : PAL[i % PAL.length]) };
+  });
+  _ipChartPct = mkChart('ipChartPct', {
+    type: 'line', data: { labels: weeks, datasets: dsPct },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { y: { title: { display: true, text: '% ของยอดขาย' } } },
+      plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
+
+  // Chain totals: sales as bars, imported spend as a line over them. A week with
+  // nothing imported leaves a visible hole rather than dropping to zero.
+  const rev = weeks.map(w => (d.rows || []).filter(r => r.week_start === w)
+                                           .reduce((a, r) => a + (r.revenue || 0), 0));
+  const amt = weeks.map(w => {
+    const rs = (d.rows || []).filter(r => r.week_start === w && r.amount != null);
+    return rs.length ? rs.reduce((a, r) => a + r.amount, 0) : null;
+  });
+  _ipChartAmt = mkChart('ipChartAmt', {
+    type: 'bar',
+    data: { labels: weeks, datasets: [
+      { type: 'bar', label: 'ยอดขาย (ex-VAT)', data: rev, backgroundColor: 'rgba(8,145,178,.45)' },
+      { type: 'line', label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: amt, borderColor: '#7c3aed',
+        backgroundColor: '#7c3aed', tension: .25, spanGaps: false }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      scales: { y: { title: { display: true, text: '฿' } } } } });
+}
+
+function ipTemplate() {
+  const p = new URLSearchParams();
+  const br = document.getElementById('ipBranch')?.value || '';
+  if (br) p.set('branch', br);
+  p.set('weeks', document.getElementById('ipWeeks')?.value || '8');
+  const t = document.getElementById('ipTo')?.value || '';
+  if (t) p.set('date_to', t);
+  window.open(`${API}/api/ingredients/purchases.template.xlsx?${p}`, '_blank');
+}
+
+async function ipImport(input) {
+  await _opImportFile(input, `${API}/api/ingredients/purchases/import`,
+                      'ipStatus', 'ipImportReport', () => loadIngPurchase(true));
+}
+
+// Single-cell edit. Only writes when the value actually changed, so tabbing
+// through the table doesn't rewrite every row (and stamp them all 'manual').
+async function ipSaveOne(el) {
+  const was = el.dataset.ipwas || '';
+  const now = (el.value || '').trim();
+  if (now === was) return;
+  const st = document.getElementById('ipStatus');
+  if (now === '') { el.value = was; return; }   // clearing is a delete — not from here
+  try {
+    const r = await fetch(`${API}/api/ingredients/purchases?source=manual`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify([{ branch: el.dataset.ipbranch, week_start: el.dataset.ipweek,
+                              amount: parseFloat(now) }]) });
+    if (!r.ok) throw new Error(await r.text());
+    const j = await r.json();
+    if (j.errors && j.errors.length) throw new Error(j.errors[0].why);
+    el.dataset.ipwas = now;
+    await loadIngPurchase(true);
+    if (st) st.textContent = `✓ บันทึก ${el.dataset.ipbranch} สัปดาห์ ${el.dataset.ipweek} แล้ว`;
+  } catch (e) {
+    el.value = was;
+    if (st) { st.textContent = 'บันทึกไม่สำเร็จ — ' + String(e.message || e).slice(0, 140); st.style.color = '#b91c1c'; }
+  }
 }

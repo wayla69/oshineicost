@@ -14,11 +14,14 @@ from core import require_write_token
 from core import ttl_cache
 from datetime import datetime
 from fastapi import Depends
+from fastapi import File
+from fastapi import UploadFile
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi import Response
 from pydantic import BaseModel
 from rules import EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL
+from rules import GRAND_MENU_FROM
 from typing import Dict
 from typing import List
 from typing import Optional
@@ -54,17 +57,58 @@ def _ing_pretty(qty: float, unit: str):
     return q, u, f"{q:,.{dec}f} {u}".rstrip()
 
 
-def _ing_window(con, days: int, date_to: Optional[str]):
-    """Resolve the lookback window on sales_sku_daily. Returns (start, end, days)."""
+def _ing_window(con, days: int, date_to: Optional[str], date_from: Optional[str] = None):
+    """Resolve the lookback window on sales_sku_daily. Returns (start, end, days).
+
+    Two ways to say it: a LENGTH (`days` back from `date_to`, the rolling default)
+    or an explicit `date_from` … `date_to` range, which wins when given and makes
+    `days` the measured span. The explicit form exists because a rolling window is
+    the wrong shape for an order cycle — "28 วันล่าสุด" straddles a month end, a
+    menu change, or the cycle the branch is actually ordering for."""
     maxd = con.execute("SELECT MAX(day) FROM v_sales_sku_daily").fetchone()[0]
     if not maxd:
         return None, None, 0
     end = date_to or maxd
     if end > maxd:
         end = maxd
+    if date_from:
+        start = min(str(date_from)[:10], end)
+        days = con.execute("SELECT julianday(:e) - julianday(:s) + 1",
+                           {"e": end, "s": start}).fetchone()[0]
+        return start, end, max(1, int(days or 1))
     days = max(1, min(int(days or 28), 365))
     start = con.execute("SELECT date(:e, :off)", {"e": end, "off": f"-{days - 1} day"}).fetchone()[0]
     return start, end, days
+
+
+def _ing_letter_menu_era_line(start: str, end: str) -> str:
+    """§2 of the order letter: which recipe book the quantities came from.
+
+    Three cases, and the middle one is why the line exists — a reference window
+    spanning the changeover averages a menu that was withdrawn with one that had
+    just launched, so the branch is told the number is provisional instead of
+    ordering against a blend it cannot see."""
+    if start >= GRAND_MENU_FROM:
+        return f"อ้างอิงเมนูปัจจุบัน (Grand Menu) ที่เริ่มใช้ตั้งแต่ {GRAND_MENU_FROM} เป็นต้นไป"
+    if end >= GRAND_MENU_FROM:
+        return (f"<b style='color:#b91c1c'>ช่วงอ้างอิงคาบเกี่ยววันเปลี่ยนเมนู {GRAND_MENU_FROM}</b> "
+                f"— ปริมาณข้างต้นเป็นค่าเฉลี่ยของสูตรเมนูเดิมและเมนูปัจจุบันรวมกัน "
+                f"กรุณาใช้เป็นค่าประมาณเบื้องต้น และยืนยันปริมาณจริงกับสาขาอีกครั้ง")
+    return "อ้างอิงเมนูที่ใช้อยู่ในช่วงวันที่ระบุข้างต้น"
+
+
+def _ing_era_note(start: str, end: str) -> Optional[dict]:
+    """A window straddling the Grand Menu changeover averages demand for dishes
+    that were withdrawn with dishes that had just launched — the recipes behind
+    the two halves are different, so the per-day figure is a blend of two menus,
+    not a forecast of either. Flag it (the caller decides whether to cut)."""
+    if not (start and end) or not (start < GRAND_MENU_FROM <= end):
+        return None
+    return {"straddles": True, "menu_era_from": GRAND_MENU_FROM,
+            "suggest_from": GRAND_MENU_FROM,
+            "reason": (f"ช่วงที่เลือกคร่อมวันเปลี่ยนเมนู {GRAND_MENU_FROM} — "
+                       f"ปริมาณที่ได้เป็นค่าเฉลี่ยของเมนูเก่ากับเมนูใหม่ปนกัน "
+                       f"แนะนำให้เริ่มช่วงที่ {GRAND_MENU_FROM}")}
 
 
 _ING_ORDER_DDL = """
@@ -413,6 +457,8 @@ def ingredients_order_plan(
     group:        Optional[str] = Query(None),
     days:         int           = Query(28, description="lookback window in days"),
     date_to:      Optional[str] = Query(None),
+    date_from:    Optional[str] = Query(None, description="explicit window start — wins over `days`"),
+    split_branches: bool        = Query(False, description="also return every branch's own quantity per ingredient"),
     basis:        str           = Query("avg", description="avg = whole window · recent = last 7 days"),
     buffer_pct:   float         = Query(10.0, description="safety buffer added on top of forecast demand"),
     type:         Optional[str] = Query(None, description="ingredient_type filter"),
@@ -431,7 +477,7 @@ def ingredients_order_plan(
     buffer_pct = max(0.0, min(float(buffer_pct or 0), 100.0))
     basis = "recent" if str(basis).lower() == "recent" else "avg"
     with get_db() as con:
-        start, end, days = _ing_window(con, days, date_to)
+        start, end, days = _ing_window(con, days, date_to, date_from)
         if not start:
             return {"available": False, "reason": "no daily sales data"}
         include = include if include in ("all", "central", "local") else "all"
@@ -455,7 +501,7 @@ def ingredients_order_plan(
                     r[k] = round(r[k] * sf, 4)
                 r["season_factor"] = sf
             _ing_reapply_order_units(con, rows)
-        by_branch = []
+        by_branch, branch_names = [], []
         if not branch:
             per_b = _ing_plan_rows(con, start, end, days, None, group, basis, buffer_pct,
                                    type, q, False, per_branch=True, include=include)
@@ -470,6 +516,20 @@ def ingredients_order_plan(
             for a in by_branch:
                 a["value_week"] = round(a["value_week"], 2)
                 a["value_month"] = round(a["value_month"], 2)
+            if split_branches:
+                # One line per ingredient with every branch's own quantity beside
+                # it: the chain total says what to buy, this says who it is for.
+                # Keyed on code|name because a family rollup blanks the code.
+                branch_names = [a["branch"] for a in by_branch]
+                per_ing: Dict[str, dict] = {}
+                for r in per_b:
+                    per_ing.setdefault(f"{r['code']}|{r['name']}", {})[r["branch"]] = {
+                        "per_day": r["per_day"], "order_week": r["order_week"],
+                        "order_month": r["order_month"], "value_month": r["value_month"],
+                        "order_week_units": r.get("order_week_units"),
+                        "order_month_units": r.get("order_month_units")}
+                for r in rows:
+                    r["by_branch"] = per_ing.get(f"{r['code']}|{r['name']}", {})
 
     totals = {
         "ingredients": len(rows),
@@ -481,6 +541,9 @@ def ingredients_order_plan(
         "meta": {"date_from": start, "date_to": end, "days": days, "branch": branch or "",
                  "group": group or "", "basis": basis, "buffer_pct": buffer_pct,
                  "include": include, "local_count": n_local, "season": season_info,
+                 "window_mode": "range" if date_from else "rolling",
+                 "era": _ing_era_note(start, end), "menu_era_from": GRAND_MENU_FROM,
+                 "branch_names": branch_names,
                  "trading_days": _ing_trading_days(con, start, end, branch) if branch else days,
                  "coverage": cov, "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M")},
         "totals": totals,
@@ -495,6 +558,7 @@ def ingredients_order_plan_xlsx(
     group:      Optional[str] = Query(None),
     days:       int           = Query(28),
     date_to:    Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
     basis:      str           = Query("avg"),
     buffer_pct: float         = Query(10.0),
 ):
@@ -509,7 +573,7 @@ def ingredients_order_plan_xlsx(
     buffer_pct = max(0.0, min(float(buffer_pct or 0), 100.0))
     basis = "recent" if str(basis).lower() == "recent" else "avg"
     with get_db() as con:
-        start, end, days = _ing_window(con, days, date_to)
+        start, end, days = _ing_window(con, days, date_to, date_from)
         if not start:
             raise HTTPException(status_code=404, detail="ไม่มีข้อมูลยอดขายรายวัน")
         rows = _ing_plan_rows(con, start, end, days, branch, group, basis, buffer_pct,
@@ -566,12 +630,15 @@ def ingredients_order_letter(
     group:      Optional[str] = Query(None),
     days:       int           = Query(28),
     date_to:    Optional[str] = Query(None),
+    date_from:  Optional[str] = Query(None),
     basis:      str           = Query("avg"),
     buffer_pct: float         = Query(10.0),
     horizon:    str           = Query("week", description="week | month"),
     top:        int           = Query(40, description="ingredients listed per branch"),
     issuer:     Optional[str] = Query(None, description="department line on the signature block"),
     note:       Optional[str] = Query(None, description="extra paragraph before the table"),
+    contract_ref: Optional[str] = Query(None, description="ข้อสัญญาแฟรนไชส์ที่อ้างถึง เช่น 'ข้อ 7.2 และ 9.1'"),
+    reply_by:   Optional[str] = Query(None, description="กำหนดยืนยันปริมาณสั่งกลับ (YYYY-MM-DD)"),
 ):
     """Printable Thai notice to each branch: how much of each ingredient to order.
 
@@ -586,7 +653,7 @@ def ingredients_order_letter(
     esc = lambda s: _html_ing.escape(str(s or ""))
 
     with get_db() as con:
-        start, end, days = _ing_window(con, days, date_to)
+        start, end, days = _ing_window(con, days, date_to, date_from)
         if not start:
             raise HTTPException(status_code=404, detail="ไม่มีข้อมูลยอดขายรายวัน")
         if branch:
@@ -599,6 +666,11 @@ def ingredients_order_letter(
                 bp["branch_group"] = group
             names = [r["name"] for r in con.execute(
                 f"SELECT name FROM branches WHERE {' AND '.join(bf)} ORDER BY name", bp)]
+        # Which branches are franchisees: the franchise-obligation section is a
+        # contractual reference and must NOT print on a company-owned branch's
+        # copy — that branch has no franchise agreement to be reminded of.
+        btype = {r["name"]: (r["branch_type"] or "master") for r in con.execute(
+            "SELECT name, branch_type FROM branches WHERE name != 'ALL'")}
         pages = []
         for nm in names:
             allrows = _ing_plan_rows(con, start, end, days, nm, None, basis, buffer_pct,
@@ -618,6 +690,17 @@ def ingredients_order_letter(
     issuer_line = esc(issuer or "ฝ่ายวิเคราะห์ต้นทุนและจัดซื้อ")
     basis_label = "ค่าเฉลี่ย 7 วันล่าสุด" if basis == "recent" else f"ค่าเฉลี่ยตลอด {days} วัน"
 
+    # ── §2 ข้อมูลอ้างอิงการออกเมนู ──────────────────────────────────────────
+    # Where the quantities came from, stated as facts the branch can check
+    # against its own POS. The menu era matters most: a recipe book changed on
+    # GRAND_MENU_FROM, so a reference window reaching before it produced these
+    # numbers from two different menus and the letter has to say so rather than
+    # let the branch order against a blend.
+    era_line = _ing_letter_menu_era_line(start, end)
+    reply_line = (f'<li>กรุณา<b>ยืนยันปริมาณที่จะสั่งกลับภายในวันที่ {esc(reply_by)}</b> '
+                  f'หากไม่ยืนยันภายในกำหนด จะถือตามปริมาณที่แนะนำในเอกสารนี้</li>'
+                  if reply_by else '')
+
     body = []
     for nm, rows, cov, local in pages:
         total_val = sum(r[val_key] for r in rows)
@@ -632,6 +715,40 @@ def ingredients_order_letter(
                 f"<td>{esc(r['name'])}</td><td class='r'>{esc(r['per_day_disp'])}</td>"
                 f"<td class='r b'>{esc(r[qty_key])}</td>"
                 f"<td class='r'>{r[val_key]:,.0f}</td><td class='c'>{trend_html}</td></tr>")
+        # ── §3 หน้าที่ตามสัญญาแฟรนไชส์ ──────────────────────────────────────
+        # Only on a franchisee's copy. The obligations below are the substance
+        # the agreement covers; the CLAUSE NUMBERS are not invented here — the
+        # caller passes contract_ref, and until it does the letter prints a blank
+        # to be filled in by hand. A fabricated clause citation in a notice sent
+        # to a franchisee is worse than no citation.
+        is_franchise = btype.get(nm, "master") == "franchise"
+        ref_txt = (f"ตามสัญญาแฟรนไชส์ {esc(contract_ref)}" if contract_ref
+                   else "ตามสัญญาแฟรนไชส์ ข้อ ................")
+        franchise_block = (f"""
+  <div class="sec duty">
+    <div class="sec-h">๓. หน้าที่ของสาขาตามสัญญาแฟรนไชส์</div>
+    <p class="lead" style="text-indent:0;margin-bottom:6px">{ref_txt}
+       สาขามีหน้าที่ที่เกี่ยวข้องกับเอกสารฉบับนี้ ดังนี้</p>
+    <ol class="duties">
+      <li><b>จัดหาวัตถุดิบผ่านช่องทางที่บริษัทกำหนด</b> — วัตถุดิบที่อยู่ในรายการข้างต้น
+          ต้องสั่งผ่านส่วนกลางหรือผู้จำหน่ายที่บริษัทรับรอง เพื่อรักษามาตรฐานรสชาติ
+          ความปลอดภัยของอาหาร และเงื่อนไขราคาที่ตกลงร่วมกัน
+          (รายการที่ระบุว่า “สาขาจัดหาเอง” ไม่อยู่ในข้อนี้)</li>
+      <li><b>คงสูตรและปริมาณการเสิร์ฟตามมาตรฐาน</b> — ปริมาณที่แนะนำคำนวณจากสูตรมาตรฐาน
+          การเปลี่ยนวัตถุดิบ ผู้จำหน่าย หรือขนาดเสิร์ฟเองโดยไม่ได้รับอนุมัติเป็นลายลักษณ์อักษร
+          ถือเป็นการไม่ปฏิบัติตามมาตรฐานที่ตกลงไว้</li>
+      <li><b>สั่งซื้อให้เพียงพอต่อการให้บริการ</b> — สาขาต้องมีวัตถุดิบเพียงพอตลอดเวลาทำการ
+          การสั่งต่ำกว่าปริมาณที่แนะนำอย่างมีนัยสำคัญจนทำให้ของขาดระหว่างให้บริการ
+          กระทบต่อลูกค้าและชื่อเสียงของแบรนด์โดยรวม</li>
+      <li><b>ส่งข้อมูลการขายและการสั่งซื้อตามรอบ</b> — ข้อมูลยอดขายรายวันคือฐานของการคำนวณนี้
+          หากข้อมูลขาดหรือส่งล่าช้า ปริมาณที่แนะนำจะคลาดเคลื่อน
+          และสาขาต้องบันทึกปริมาณที่สั่งจริงกลับเข้าระบบทุกรอบ</li>
+      <li><b>ให้ความร่วมมือในการตรวจสอบ</b> — บริษัทอาจขอตรวจสอบเอกสารการสั่งซื้อ
+          ใบส่งของ และสต๊อกคงเหลือ เพื่อสอบทานกับปริมาณที่แนะนำในเอกสารฉบับนี้</li>
+    </ol>
+    <p class="fineprint">หมายเหตุ: ข้อความข้างต้นเป็นการสรุปสาระสำคัญเพื่อความสะดวกในการปฏิบัติงาน
+       ไม่ได้แทนที่ข้อความในสัญญาแฟรนไชส์ หากมีข้อความใดขัดหรือแย้งกัน ให้ยึดตามสัญญาเป็นสำคัญ</p>
+  </div>""" if is_franchise else "")
         body.append(f"""
 <section class="page">
   <div class="head">
@@ -644,10 +761,11 @@ def ingredients_order_letter(
     <td><b>เรื่อง</b> ปริมาณวัตถุดิบที่ควรสั่งประจำ{hz_label}</td>
     <td><b>อ้างอิงยอดขายจริง</b> {start} ถึง {end} ({days} วัน)</td></tr>
   </table>
-  <p class="lead">ตามที่{issuer_line}ได้วิเคราะห์ปริมาณการใช้วัตถุดิบจริงของสาขา{esc(nm)}
+  <p class="lead">ตามที่{issuer_line}ได้วิเคราะห์ปริมาณการใช้วัตถุดิบจริงของสาขา {esc(nm)}
      จากยอดขายรายวันคูณกับสูตรมาตรฐาน (BoM) จึงขอแจ้งปริมาณที่ควรสั่งประจำ{hz_label}
      โดยคำนวณจาก{basis_label} และเผื่อความผันผวนไว้ {buffer_pct:g}% ดังรายการต่อไปนี้</p>
   {('<p class="lead">' + esc(note) + '</p>') if note else ''}
+  <div class="sec-h">๑. ปริมาณวัตถุดิบที่แนะนำให้สั่ง ประจำ{hz_label}</div>
   <table class="grid">
     <thead><tr><th>ลำดับ</th><th>รหัส</th><th>วัตถุดิบ</th><th>ใช้เฉลี่ย/วัน</th>
       <th>ควรสั่ง/{hz_label}</th><th>มูลค่าโดยประมาณ (บาท)</th><th>แนวโน้ม</th></tr></thead>
@@ -659,19 +777,33 @@ def ingredients_order_letter(
      + esc(' · '.join(x['name'] for x in local[:14]))
      + (f" และอื่น ๆ อีก {len(local) - 14} รายการ" if len(local) > 14 else '')
      + '</p>') if local else ''}
-  <div class="notes">
-    <b>หมายเหตุสำคัญ</b>
-    <ol>
-      <li><b>ตัวเลขนี้คือปริมาณที่คาดว่าจะ “ใช้” ยังไม่ได้หักสต๊อกคงเหลือในร้าน</b>
-          กรุณาตรวจนับของคงเหลือก่อนออกใบสั่งซื้อทุกครั้ง</li>
-      <li>คำนวณจากสูตร BoM ที่ครอบคลุม {cov['pct']:g}% ของจำนวนจานที่ขายในช่วงอ้างอิง
-          (เมนูที่ยังไม่มีสูตรจะไม่ปรากฏในรายการนี้)</li>
-      <li>ปริมาณข้างต้นเป็นการประมาณการจากยอดขายที่ผ่านมา หากมีเทศกาล โปรโมชัน
-          หรือการปิดปรับปรุง กรุณาปรับเพิ่ม–ลดตามความเหมาะสม</li>
-      <li>ช่อง “ควรสั่ง” ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่งแล้ว (ในวงเล็บคือปริมาณจริงที่จะได้รับ)
-          รายการที่ยังไม่ได้ตั้งขนาดบรรจุจะแสดงเป็นหน่วยมาตรฐาน (กก./ลิตร)</li>
-      <li>คอลัมน์ “แนวโน้ม” เทียบการใช้ 7 วันล่าสุดกับ 7 วันก่อนหน้า
-          (▲ = ใช้เพิ่มขึ้น ควรเผื่อเพิ่ม · ▼ = ใช้ลดลง ควรลดปริมาณสั่ง)</li>
+  <div class="sec">
+    <div class="sec-h">๒. ข้อมูลอ้างอิงและวิธีคำนวณ</div>
+    <table class="ref"><tbody>
+      <tr><td>ยอดขายที่ใช้อ้างอิง</td><td>{start} ถึง {end} ({days} วัน) · สาขา {esc(nm)}</td></tr>
+      <tr><td>ฐานการคำนวณ</td><td>{basis_label} × สูตรมาตรฐาน (BoM) และเผื่อความผันผวน {buffer_pct:g}%</td></tr>
+      <tr><td>เมนูที่อ้างอิง</td><td>{era_line}</td></tr>
+      <tr><td>ความครอบคลุมของสูตร</td><td>{cov['pct']:g}% ของจำนวนจานที่ขายในช่วงอ้างอิง
+          (เมนูที่ยังไม่มีสูตร BoM จะไม่ปรากฏในรายการนี้)</td></tr>
+      <tr><td>หน่วยสั่ง</td><td>ช่อง “ควรสั่ง” ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่งแล้ว
+          (ในวงเล็บคือปริมาณจริงที่จะได้รับ) · รายการที่ยังไม่ได้ตั้งขนาดบรรจุแสดงเป็นหน่วยมาตรฐาน (กก./ลิตร)</td></tr>
+      <tr><td>คอลัมน์แนวโน้ม</td><td>เทียบการใช้ 7 วันล่าสุดกับ 7 วันก่อนหน้า
+          (▲ = ใช้เพิ่มขึ้น ควรเผื่อเพิ่ม · ▼ = ใช้ลดลง ควรลดปริมาณสั่ง)</td></tr>
+    </tbody></table>
+    <p class="warn"><b>ข้อควรทราบ:</b> ตัวเลขนี้คือปริมาณที่คาดว่าจะ<b>ใช้</b>
+       <b>ยังไม่ได้หักสต๊อกคงเหลือในร้าน</b> กรุณาตรวจนับของคงเหลือก่อนออกใบสั่งซื้อทุกครั้ง ·
+       เป็นการประมาณการจากยอดขายที่ผ่านมา หากมีเทศกาล โปรโมชัน หรือการปิดปรับปรุง
+       กรุณาปรับเพิ่ม–ลดตามความเหมาะสม</p>
+  </div>
+  {franchise_block}
+  <div class="sec">
+    <div class="sec-h">สิ่งที่ขอให้สาขาดำเนินการ</div>
+    <ol class="duties">
+      <li>ตรวจนับสต๊อกคงเหลือ แล้วหักออกจากปริมาณที่แนะนำก่อนออกใบสั่งซื้อ</li>
+      {reply_line}
+      <li>เมื่อสั่งแล้ว บันทึก<b>ปริมาณที่สั่งจริง</b>กลับเข้าระบบ เพื่อใช้สอบทานความแม่นของการพยากรณ์รอบถัดไป</li>
+      <li>หากปริมาณที่แนะนำไม่สอดคล้องกับหน้างาน (เช่น มีจัดเลี้ยง ปิดปรับปรุง หรือโปรโมชันเฉพาะสาขา)
+          กรุณาแจ้ง{issuer_line}ก่อนถึงรอบสั่ง</li>
     </ol>
   </div>
   <div class="sign">
@@ -720,6 +852,19 @@ def ingredients_order_letter(
   .notes {{ margin-top:10px; font-size:10.5px; background:#fffbeb; border-left:3px solid #f59e0b;
             padding:7px 10px; line-height:1.6; }}
   .notes ol {{ margin:4px 0 0 16px; padding:0; }}
+  .sec {{ margin-top:12px; }}
+  .sec-h {{ font-size:12.5px; font-weight:700; color:#0f766e; margin:0 0 5px;
+            border-left:4px solid #0f766e; padding-left:7px; }}
+  table.ref {{ width:100%; border-collapse:collapse; font-size:10.5px; }}
+  table.ref td {{ border:1px solid #e2e8f0; padding:4px 7px; vertical-align:top;
+                  line-height:1.55; }}
+  table.ref td:first-child {{ width:27%; background:#f8fafc; font-weight:600; color:#334155; }}
+  .warn {{ margin:7px 0 0; font-size:10.5px; background:#fffbeb; border-left:3px solid #f59e0b;
+           padding:7px 10px; line-height:1.6; }}
+  .duty {{ background:#f8fafc; border:1px solid #cbd5e1; border-radius:5px; padding:8px 10px; }}
+  ol.duties {{ margin:4px 0 0 17px; padding:0; font-size:10.5px; line-height:1.65; }}
+  ol.duties li {{ margin-bottom:3px; }}
+  .fineprint {{ margin:7px 0 0; font-size:9.5px; color:#64748b; line-height:1.55; }}
   .sign {{ display:flex; justify-content:space-between; gap:24px; margin-top:24px; }}
   .sign > div {{ width:46%; text-align:center; }}
   .line {{ border-bottom:1px dotted #475569; height:34px; }}
@@ -1154,6 +1299,7 @@ def ingredients_compliance_letter(
     due_date:      Optional[str] = Query(None, description="deadline to correct"),
     issuer:        Optional[str] = Query(None),
     note:          Optional[str] = Query(None),
+    preview:       bool          = Query(False, description="stamp it ร่าง — for reading before it is sent"),
 ):
     """Warning notice to branches that did not order centrally, or ordered more
     than `tolerance_pct` below the recommendation.
@@ -1278,8 +1424,24 @@ def ingredients_compliance_letter(
   </div>
 </section>""")
 
+    # A draft is read, not sent: it is stamped ร่าง on every page and says so in
+    # the toolbar, so a preview can never be mistaken for the issued notice —
+    # this letter names a branch and asks it to answer for a shortfall.
+    # Plain string, single braces: it is substituted INTO the f-string below, so
+    # its braces are never re-processed and must not be doubled.
+    draft_css = ("""
+  .draftmark { color:#b91c1c; border:2px dashed #b91c1c; border-radius:6px;
+               padding:3px 10px; font-size:12px; font-weight:700; display:inline-block;
+               margin-bottom:8px; letter-spacing:.5px; }
+""" if preview else "")
+    draft_bar = ('<span style="color:#b91c1c;font-weight:700;font-size:12px;'
+                 'margin-right:10px">📝 ร่าง — ตรวจก่อนออกจริง</span>' if preview else "")
+    if preview:
+        body = [b.replace('<div class="head">',
+                          '<div class="draftmark">ร่าง (DRAFT) — ยังไม่ได้ออกจดหมายฉบับนี้</div>'
+                          '<div class="head">', 1) for b in body]
     html_out = f"""<!doctype html><html lang="th"><head><meta charset="utf-8">
-<title>หนังสือแจ้งเตือนการสั่งวัตถุดิบ · {len(pages)} สาขา</title>
+<title>{'ร่าง · ' if preview else ''}หนังสือแจ้งเตือนการสั่งวัตถุดิบ · {len(pages)} สาขา</title>
 <style>
   @page {{ size: A4; margin: 14mm 12mm; }}
   * {{ box-sizing: border-box; }}
@@ -1323,8 +1485,9 @@ def ingredients_compliance_letter(
   @media print {{ body {{ background:#fff; }} .toolbar {{ display:none; }}
                   .page {{ margin:0; box-shadow:none; width:auto; min-height:0; padding:0; }}
                   table.grid th {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
+{draft_css}
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+<div class="toolbar">{draft_bar}<button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
   &nbsp;<span style="font-size:11px;color:#64748b">{len(pages)} สาขาที่ต้องแจ้งเตือน · 1 หน้าต่อสาขา</span></div>
 {''.join(body)}
 </body></html>"""
@@ -1643,3 +1806,669 @@ def ingredients_order_accuracy(
     return {"available": True, "headline": headline,
             "by_ingredient": ings[:max(1, min(int(limit or 200), 1000))],
             "by_branch": sorted(brs, key=lambda b: -b["short_pct"])}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Excel round-trips — download a template, fill it in, import it back
+# ═══════════════════════════════════════════════════════════════════════════
+# The numbers ops actually work with live in another system, and the exchange
+# format is a spreadsheet. Everything below is one shape: a GET that hands out a
+# sheet already carrying the keys (so nobody types a code by hand) plus the blank
+# column to fill, and a POST that reads that sheet back.
+#
+# Import is deliberately tolerant about the file it gets — a sheet that has been
+# through another system arrives with renamed headers, a title row above them,
+# stray columns and numbers stored as text. Columns are matched by header ALIAS
+# (below), the header row is located rather than assumed, and a row that can't be
+# read is REPORTED, never silently dropped: a half-imported order round that
+# looks complete is worse than a refusal.
+
+_XLSX_MEDIA = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+def _xlsx_attachment(wb, filename: str):
+    """A workbook as a download. HTTP headers are latin-1, so a Thai filename
+    goes out RFC 5987-encoded with an ASCII fallback (same rule as the exports
+    above — a Thai branch name in a bare filename= raises UnicodeEncodeError)."""
+    import io as _io
+    from urllib.parse import quote as _q
+    from fastapi.responses import StreamingResponse as _SR
+    buf = _io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    ascii_name = filename.encode("ascii", "ignore").decode() or "template.xlsx"
+    return _SR(buf, media_type=_XLSX_MEDIA,
+               headers={"Content-Disposition":
+                        f"attachment; filename={ascii_name}; "
+                        f"filename*=UTF-8''{_q(filename)}"})
+
+
+def _wb_new(title: str):
+    try:
+        from openpyxl import Workbook
+    except Exception as e:                                   # pragma: no cover
+        raise HTTPException(status_code=503, detail=f"openpyxl unavailable: {e}")
+    wb = Workbook()
+    wb.active.title = title[:31]
+    return wb
+
+
+def _style_header(ws, row: int, color: str = "0F766E"):
+    from openpyxl.styles import Alignment, Font, PatternFill
+    for c in ws[row]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor=color)
+        c.alignment = Alignment(horizontal="center", wrap_text=True)
+    # The string form, not ws.cell(...): touching a cell MATERIALISES that row,
+    # so a later ws.append() would start one row below it and leave a blank line
+    # between the header and the data.
+    ws.freeze_panes = f"A{row + 1}"
+
+
+def _norm_head(s) -> str:
+    """A header cell reduced to something comparable: lowercased, stripped of
+    spaces and the punctuation a round trip through another system adds."""
+    t = str(s or "").strip().lower()
+    for ch in " \t\n\r_-.·:()[]/\\*฿%":
+        t = t.replace(ch, "")
+    return t
+
+
+def _to_num(v):
+    """A cell as a number, or None. Tolerates '1,234.50', '฿1,234', ' 12 ' and
+    the text-formatted numbers exports produce."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    t = str(v).strip().replace(",", "").replace("฿", "").replace(" ", "")
+    if not t:
+        return None
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+def _to_day(v) -> Optional[str]:
+    """A cell as an ISO date, or None. Accepts a real date/datetime cell and the
+    usual typed forms (2026-09-08, 08/09/2026, 8 Sep 2026 is NOT accepted — an
+    ambiguous month/day order is refused rather than guessed)."""
+    from datetime import date as _date, datetime as _dt
+    if isinstance(v, _dt):
+        return v.date().isoformat()
+    if isinstance(v, _date):
+        return v.isoformat()
+    t = str(v or "").strip()[:10]
+    if not t:
+        return None
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d", "%d/%m/%Y", "%d-%m-%Y"):
+        try:
+            return _dt.strptime(t, fmt).date().isoformat()
+        except ValueError:
+            continue
+    return None
+
+
+def _monday(day: str) -> Optional[str]:
+    """The Monday of `day`'s week — the key weekly figures are stored under, so
+    the same week entered as Wednesday or as Sunday lands on one row."""
+    from datetime import date as _date, timedelta as _td
+    try:
+        d = _date.fromisoformat(day)
+    except (TypeError, ValueError):
+        return None
+    return (d - _td(days=d.weekday())).isoformat()
+
+
+async def _read_upload_table(file, aliases: Dict[str, tuple], max_rows: int = 20000):
+    """Read an uploaded .xlsx/.xlsm/.csv into dicts keyed by the names in
+    `aliases` ({key: (header alias, ...)}).
+
+    The header row is FOUND, not assumed: exports from other systems put a title,
+    a date stamp or a blank line above it. The first row within the first 20 that
+    matches at least half the requested keys wins. Unmatched columns are ignored.
+    Returns (rows, header_map, sheet_name)."""
+    import io as _io
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(400, "ไฟล์ว่าง")
+    if len(raw) > 12 * 1024 * 1024:
+        raise HTTPException(400, "ไฟล์ใหญ่เกิน 12 MB")
+    name = (getattr(file, "filename", "") or "").lower()
+    grid: List[list] = []
+    sheet = ""
+    if name.endswith(".csv") or name.endswith(".txt"):
+        import csv as _csv
+        for enc in ("utf-8-sig", "utf-8", "cp874", "latin-1"):
+            try:
+                text = raw.decode(enc)
+                break
+            except UnicodeDecodeError:
+                continue
+        else:                                                # pragma: no cover
+            raise HTTPException(400, "อ่านไฟล์ CSV ไม่ได้ (encoding ไม่รองรับ)")
+        grid = [row for row in _csv.reader(_io.StringIO(text))][:max_rows + 40]
+        sheet = "CSV"
+    else:
+        try:
+            from openpyxl import load_workbook
+        except Exception as e:                               # pragma: no cover
+            raise HTTPException(503, f"openpyxl unavailable: {e}")
+        try:
+            wb = load_workbook(_io.BytesIO(raw), data_only=True, read_only=True)
+        except Exception as e:
+            raise HTTPException(400, f"อ่านไฟล์ Excel ไม่ได้: {e}")
+        ws = wb.active
+        sheet = ws.title
+        for i, row in enumerate(ws.iter_rows(values_only=True)):
+            if i > max_rows + 40:
+                break
+            grid.append(list(row))
+    if not grid:
+        raise HTTPException(400, "ไม่พบข้อมูลในไฟล์")
+
+    want = {k: tuple(_norm_head(a) for a in al) for k, al in aliases.items()}
+    head_at, header_map = -1, {}
+    for i, row in enumerate(grid[:20]):
+        cells = [_norm_head(c) for c in row]
+        m = {}
+        # Exact alias first; then a prefix match, because a header that survived
+        # another system usually keeps its name and gains a unit — "ยอดซื้อ
+        # วัตถุดิบ (บาท)", "Amount THB". Prefix, not containment: "ยอดขาย" must
+        # never satisfy "ยอดซื้อ".
+        for exact in (True, False):
+            for k, al in want.items():
+                if k in m:
+                    continue
+                for j, c in enumerate(cells):
+                    if not c or j in m.values():
+                        continue
+                    if (c in al) if exact else any(len(a) >= 4 and c.startswith(a) for a in al):
+                        m[k] = j
+                        break
+        if len(m) >= max(1, (len(want) + 1) // 2):
+            head_at, header_map = i, m
+            break
+    if head_at < 0:
+        raise HTTPException(400, "ไม่พบหัวตารางที่รู้จักในไฟล์ — กรุณาใช้ template ที่ดาวน์โหลดจากระบบ")
+
+    rows = []
+    for row in grid[head_at + 1:head_at + 1 + max_rows]:
+        if not any(str(c or "").strip() for c in row):
+            continue
+        rows.append({k: (row[j] if j < len(row) else None) for k, j in header_map.items()})
+    return rows, header_map, sheet
+
+
+# ── ตั้งค่าการสั่งซื้อ (pack sizes) — template + import ──────────────────────
+_ORDER_UNIT_ALIASES = {
+    "code":       ("รหัส", "รหัสวัตถุดิบ", "code", "ingredientcode", "sku"),
+    "name":       ("วัตถุดิบ", "ชื่อวัตถุดิบ", "name", "ingredientname"),
+    "base_unit":  ("หน่วยนับ", "หน่วยฐาน", "baseunit", "unit"),
+    "order_unit": ("หน่วยสั่ง", "orderunit", "packunit"),
+    "qty_per_order": ("ขนาดบรรจุ", "ปริมาณต่อหน่วยสั่ง", "qtyperorder", "packsize"),
+    "price_per_order": ("ราคาต่อหน่วยสั่ง", "ราคาหน่วยสั่ง", "priceperorder", "packprice"),
+    "moq":        ("ขั้นต่ำ", "moq", "minorder"),
+    "round_step": ("ปัดเป็นทวีคูณของ", "roundstep", "step"),
+    "note":       ("หมายเหตุ", "note", "remark"),
+}
+
+
+@router.get("/api/ingredients/order-units.template.xlsx")
+def ingredients_order_units_template(only_missing: bool = Query(False)):
+    """The pack-size sheet, pre-filled with what is already set so an import is
+    an EDIT of the current state and never a silent reset of the rows the
+    spreadsheet happened not to carry."""
+    data = ingredients_order_units(None)
+    rows = [r for r in data["rows"] if not (only_missing and r["pack_known"])]
+    wb = _wb_new("ตั้งค่าการสั่งซื้อ")
+    ws = wb.active
+    ws.append(["ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ) — แก้ไขค่าในไฟล์นี้แล้วนำเข้ากลับ"])
+    ws.append(["กรอก 'ขนาดบรรจุ' = กี่หน่วยนับต่อ 1 หน่วยสั่ง (เช่น กล่อง 5 กก. → หน่วยสั่ง=กล่อง, ขนาดบรรจุ=5) "
+               "· ห้ามแก้คอลัมน์ 'รหัส' · แถวที่ไม่ต้องการเปลี่ยน ลบทิ้งได้"])
+    ws.append(["รหัส", "วัตถุดิบ", "หน่วยนับ", "หน่วยสั่ง", "ขนาดบรรจุ",
+               "ราคาต่อหน่วยสั่ง", "ขั้นต่ำ", "ปัดเป็นทวีคูณของ", "หมายเหตุ", "สถานะปัจจุบัน"])
+    _style_header(ws, 3)
+    for r in rows:
+        ws.append([r["code"], r["name"], r["base_unit"], r["order_unit"], r["qty_per_order"],
+                   r["price_per_order"], r["moq"], r["round_step"], r["note"],
+                   "ตั้งแล้ว" if r["pack_known"] else "ยังไม่ตั้ง (ใช้ค่ามาตรฐาน)"])
+    for i, w in enumerate([14, 34, 10, 12, 12, 15, 10, 16, 24, 22], start=1):
+        ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = w
+    return _xlsx_attachment(wb, "ORDER_UNITS_TEMPLATE.xlsx")
+
+
+@router.post("/api/ingredients/order-units/import",
+             dependencies=[Depends(require_write_token)])
+async def ingredients_order_units_import(file: UploadFile = File(...),
+                                         dry_run: bool = Query(False)):
+    """Import the filled pack-size sheet. A row with no code, or a pack size that
+    is not > 0, is rejected with its row number — qty_per_order divides in the
+    ceil(), so a zero would silently become "1 base unit per pack"."""
+    rows, hmap, sheet = await _read_upload_table(file, _ORDER_UNIT_ALIASES)
+    if "code" not in hmap or "qty_per_order" not in hmap:
+        raise HTTPException(400, "ไฟล์ต้องมีคอลัมน์ 'รหัส' และ 'ขนาดบรรจุ'")
+    known = {r["code"]: r for r in ingredients_order_units(None)["rows"]}
+    ok, errors = [], []
+    for i, r in enumerate(rows, start=1):
+        code = str(r.get("code") or "").strip()
+        if not code:
+            continue                       # a blank line under the table, not an error
+        qpo = _to_num(r.get("qty_per_order"))
+        if code not in known:
+            errors.append({"row": i, "code": code, "why": "ไม่พบรหัสนี้ในสูตร BoM"})
+            continue
+        if qpo is None or qpo <= 0:
+            errors.append({"row": i, "code": code, "why": "ขนาดบรรจุต้องเป็นตัวเลขมากกว่า 0"})
+            continue
+        base = known[code]
+        ok.append(OrderUnitRow(
+            ingredient_code=code,
+            base_unit=str(r.get("base_unit") or base["base_unit"] or "").strip() or base["base_unit"],
+            order_unit=str(r.get("order_unit") or base["order_unit"] or "").strip() or base["order_unit"],
+            qty_per_order=qpo,
+            price_per_order=_to_num(r.get("price_per_order")),
+            moq=_to_num(r.get("moq")) or 1,
+            round_step=_to_num(r.get("round_step")) or 1,
+            note=(str(r.get("note")).strip() if r.get("note") is not None else None)))
+    if dry_run:
+        return {"ok": True, "dry_run": True, "sheet": sheet,
+                "would_save": len(ok), "rows_read": len(rows), "errors": errors}
+    if ok:
+        ingredients_order_units_save(ok)
+    return {"ok": True, "sheet": sheet, "saved": len(ok),
+            "rows_read": len(rows), "errors": errors}
+
+
+# ── ปริมาณที่สั่งจริง (per issued cycle) — template + import ─────────────────
+_ACTUAL_ALIASES = {
+    "issue_id":  ("รอบสั่งid", "issueid", "รอบที่", "cycleid"),
+    "branch":    ("สาขา", "branch", "shop", "store"),
+    "code":      ("รหัส", "รหัสวัตถุดิบ", "code", "ingredientcode", "sku"),
+    "name":      ("วัตถุดิบ", "ชื่อวัตถุดิบ", "name", "ingredientname"),
+    "qty_units": ("สั่งจริงหน่วยสั่ง", "สั่งจริง", "จำนวนที่สั่ง", "ปริมาณสั่ง",
+                  "qtyunits", "actual", "orderqty", "qty"),
+    "note":      ("หมายเหตุ", "note", "remark"),
+}
+
+
+def _ing_open_issues(con, issue_id: Optional[int], branch: Optional[str],
+                     period_start: Optional[str], limit: int = 40):
+    f, p = [], {"lim": max(1, min(int(limit), 200))}
+    if issue_id:
+        f.append("issue_id = :iid"); p["iid"] = int(issue_id)
+    if branch:
+        f.append("branch = :br"); p["br"] = branch
+    if period_start:
+        f.append("period_start = :ps"); p["ps"] = period_start
+    where = ("WHERE " + " AND ".join(f)) if f else ""
+    return con.execute(f"SELECT * FROM ingredient_order_issue {where} "
+                       f"ORDER BY period_start DESC, branch LIMIT :lim", p).fetchall()
+
+
+@router.get("/api/ingredients/order-actual.template.xlsx")
+def ingredients_order_actual_template(
+    issue_id:     Optional[int] = Query(None, description="one cycle; omit to sweep"),
+    branch:       Optional[str] = Query(None),
+    period_start: Optional[str] = Query(None),
+):
+    """The "how much did the branch really order" sheet for issued cycles.
+
+    One row per cycle × ingredient, carrying the frozen recommendation and an
+    EMPTY 'สั่งจริง' column. The issue id and code travel with each row, so the
+    import needs no matching by name — an ingredient renamed between issuing and
+    filing still lands on the right line."""
+    with get_db() as con:
+        _ing_issue_tables(con)
+        issues = _ing_open_issues(con, issue_id, branch, period_start)
+        if not issues:
+            raise HTTPException(404, "ไม่พบรอบสั่งที่ออกไว้ — กด 📌 ออกรอบสั่ง ก่อน")
+        lines = {}
+        for i in issues:
+            lines[i["issue_id"]] = con.execute(
+                "SELECT * FROM ingredient_order_issue_line WHERE issue_id=? "
+                "ORDER BY rec_base * COALESCE(unit_cost,0) DESC", (i["issue_id"],)).fetchall()
+        prev = {}
+        for i in issues:
+            for a in con.execute("SELECT ingredient_code, qty_units FROM ingredient_order_actual "
+                                 "WHERE issue_id=?", (i["issue_id"],)):
+                prev[(i["issue_id"], a["ingredient_code"])] = a["qty_units"]
+    wb = _wb_new("ปริมาณสั่งจริง")
+    ws = wb.active
+    ws.append(["บันทึกปริมาณที่สั่งจริง — กรอกคอลัมน์ 'สั่งจริง (หน่วยสั่ง)' แล้วนำเข้ากลับ"])
+    ws.append(["ห้ามแก้คอลัมน์ 'รอบสั่ง ID' และ 'รหัส' · เว้นว่าง = ยังไม่บันทึก · 0 = ไม่ได้สั่งรายการนี้"])
+    ws.append(["รอบสั่ง ID", "สาขา", "รอบสั่ง", "รหัส", "วัตถุดิบ", "หน่วยสั่ง",
+               "แผน (หน่วยสั่ง)", "สั่งจริง (หน่วยสั่ง)", "หมายเหตุ"])
+    _style_header(ws, 3)
+    for i in issues:
+        for l in lines[i["issue_id"]]:
+            per = float(l["qty_per_order"] or 1) or 1.0
+            rec_units = l["rec_units"] if "rec_units" in l.keys() and l["rec_units"] is not None \
+                else round(float(l["rec_base"] or 0) / per, 2)
+            ws.append([i["issue_id"], i["branch"], i["period_start"], l["ingredient_code"],
+                       l["ingredient_name"], l["order_unit"], rec_units,
+                       prev.get((i["issue_id"], l["ingredient_code"])), None])
+    for idx, w in enumerate([11, 20, 12, 14, 32, 11, 16, 18, 24], start=1):
+        ws.column_dimensions[ws.cell(row=3, column=idx).column_letter].width = w
+    tag = f"{issue_id or branch or period_start or 'all'}".replace(" ", "_")
+    return _xlsx_attachment(wb, f"ORDER_ACTUAL_TEMPLATE_{tag}.xlsx")
+
+
+@router.post("/api/ingredients/order-actual/import",
+             dependencies=[Depends(require_write_token)])
+async def ingredients_order_actual_import(file: UploadFile = File(...),
+                                          dry_run: bool = Query(False)):
+    """Import the filled 'สั่งจริง' sheet. Rows are grouped by cycle and handed
+    to the same writer the on-screen form uses, so the pack size frozen in the
+    cycle — not today's — converts units to base."""
+    rows, hmap, sheet = await _read_upload_table(file, _ACTUAL_ALIASES)
+    if "issue_id" not in hmap or "code" not in hmap:
+        raise HTTPException(400, "ไฟล์ต้องมีคอลัมน์ 'รอบสั่ง ID' และ 'รหัส' — ใช้ template จากระบบ")
+    by_issue: Dict[int, List[ActualRow]] = {}
+    errors, blanks = [], 0
+    for i, r in enumerate(rows, start=1):
+        code = str(r.get("code") or "").strip()
+        iid = _to_num(r.get("issue_id"))
+        if not code and iid is None:
+            continue
+        if iid is None or not code:
+            errors.append({"row": i, "why": "ต้องมีทั้ง 'รอบสั่ง ID' และ 'รหัส'"})
+            continue
+        qty = _to_num(r.get("qty_units"))
+        if qty is None:
+            blanks += 1                    # not filled in yet — leave it untouched
+            continue
+        if qty < 0:
+            errors.append({"row": i, "code": code, "why": "ปริมาณติดลบ"})
+            continue
+        by_issue.setdefault(int(iid), []).append(ActualRow(
+            ingredient_code=code, qty_units=qty,
+            note=(str(r.get("note")).strip() if r.get("note") is not None else None)))
+    if dry_run:
+        return {"ok": True, "dry_run": True, "sheet": sheet, "rows_read": len(rows),
+                "would_save": sum(len(v) for v in by_issue.values()),
+                "cycles": sorted(by_issue), "blank": blanks, "errors": errors}
+    saved = 0
+    for iid, rs in by_issue.items():
+        try:
+            saved += ingredients_order_actual(ActualBody(issue_id=iid, rows=rs,
+                                                         source="excel"))["saved"]
+        except HTTPException as e:
+            errors.append({"issue_id": iid, "why": str(e.detail)})
+    return {"ok": True, "sheet": sheet, "saved": saved, "rows_read": len(rows),
+            "cycles": sorted(by_issue), "blank": blanks, "errors": errors}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# ยอดซื้อวัตถุดิบรายสาขา (weekly) vs ยอดขายของสาขานั้น
+# ═══════════════════════════════════════════════════════════════════════════
+# What each branch SPENT on ingredients comes from the purchasing system, not
+# from this database — it arrives as a spreadsheet of branch + week + amount.
+# Sales for the same week are ours, so the pair gives the one ratio ops actually
+# manage to: ฿ spent on ingredients per ฿ of sales.
+#
+# This is a different measure from the BoM food cost everywhere else in the
+# dashboard: BoM is what the recipes SAY the food sold should have cost, this is
+# what was BOUGHT. Buying runs ahead of selling (stock-ups, deliveries landing on
+# a Friday), so a single week can swing wildly while a 4-week view is stable —
+# the endpoint returns both and the tab says which is which.
+
+_ING_PURCHASE_DDL = """
+CREATE TABLE IF NOT EXISTS ingredient_purchase_week (
+  branch      TEXT NOT NULL,
+  week_start  TEXT NOT NULL,          -- Monday of the week (ISO)
+  amount      REAL NOT NULL,          -- ฿ purchased, as imported
+  note        TEXT,
+  source      TEXT,
+  updated_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (branch, week_start)
+)"""
+
+_PURCHASE_ALIASES = {
+    "branch": ("สาขา", "ชื่อสาขา", "branch", "branchname", "shop", "store", "สาขาที่"),
+    "week":   ("สัปดาห์", "สัปดาห์เริ่ม", "วันที่", "weekstart", "week", "date", "วันเริ่มสัปดาห์"),
+    "amount": ("ยอดซื้อวัตถุดิบ", "ยอดซื้อ", "ยอดรวม", "จำนวนเงิน", "มูลค่า", "amount",
+               "total", "purchase", "purchaseamount", "ยอดขายวัตถุดิบ"),
+    "note":   ("หมายเหตุ", "note", "remark"),
+}
+
+
+def _ing_branch_names(con) -> List[str]:
+    return [r[0] for r in con.execute(
+        "SELECT name FROM branches WHERE name <> 'ALL' AND COALESCE(active,1)=1 ORDER BY name")]
+
+
+def _ing_purchases_data(date_from=None, date_to=None, branch=None, group=None) -> dict:
+    """The body of /api/ingredients/purchases as a plain function.
+
+    The endpoint itself is @ttl_cache'd, which hands back a pre-serialised
+    Response — fine over HTTP, useless to the template builder below, which
+    needs the dict. Both call this."""
+    from rules import net_revenue_sum
+    with get_db() as con:
+        con.execute(_ING_PURCHASE_DDL)
+        maxd = con.execute("SELECT MAX(day) FROM v_sales_sku_daily").fetchone()[0]
+        end = (date_to or maxd or con.execute("SELECT date('now','localtime')").fetchone()[0])[:10]
+        start = (date_from or con.execute("SELECT date(:e,'-83 day')", {"e": end}).fetchone()[0])[:10]
+        w_start, w_end = _monday(start) or start, _monday(end) or end
+
+        pf, pp = ["week_start BETWEEN :s AND :e"], {"s": w_start, "e": w_end}
+        if branch:
+            pf.append("branch = :br"); pp["br"] = branch
+        buys = con.execute(f"SELECT branch, week_start, amount, note, source, updated_at "
+                           f"FROM ingredient_purchase_week WHERE {' AND '.join(pf)}", pp).fetchall()
+
+        sf = ["b.name <> 'ALL'", "date(st.sold_at) BETWEEN :s AND :e"]
+        sp: Dict = {"s": start, "e": end}
+        if branch:
+            sf.append("b.name = :br"); sp["br"] = branch
+        _group_filter(sf, sp, group)
+        sales = con.execute(f"""
+            SELECT b.name AS branch,
+                   date(st.sold_at, '-' || ((strftime('%w', st.sold_at) + 6) % 7) || ' day') AS week_start,
+                   ROUND({net_revenue_sum('st')}, 2) AS revenue,
+                   SUM(COALESCE(st.customer_count,0))  AS covers
+              FROM sales_transaction st
+              JOIN branches b ON b.branch_id = st.branch_id
+             WHERE {' AND '.join(sf)}
+             GROUP BY b.name, week_start""", sp).fetchall()
+        known = _ing_branch_names(con)
+
+    cells: Dict[tuple, dict] = {}
+    for r in sales:
+        cells[(r["branch"], r["week_start"])] = {
+            "branch": r["branch"], "week_start": r["week_start"],
+            "revenue": float(r["revenue"] or 0), "covers": int(r["covers"] or 0),
+            "amount": None, "note": "", "source": "", "updated_at": ""}
+    for r in buys:
+        c = cells.setdefault((r["branch"], r["week_start"]), {
+            "branch": r["branch"], "week_start": r["week_start"],
+            "revenue": 0.0, "covers": 0, "amount": None, "note": "",
+            "source": "", "updated_at": ""})
+        c["amount"] = float(r["amount"] or 0)
+        c["note"] = r["note"] or ""
+        c["source"] = r["source"] or ""
+        c["updated_at"] = r["updated_at"] or ""
+    rows = []
+    for c in cells.values():
+        c["pct"] = (round(c["amount"] / c["revenue"] * 100, 1)
+                    if c["amount"] is not None and c["revenue"] else None)
+        c["per_cover"] = (round(c["amount"] / c["covers"], 2)
+                          if c["amount"] is not None and c["covers"] else None)
+        c["revenue"] = round(c["revenue"], 2)
+        rows.append(c)
+    rows.sort(key=lambda r: (r["week_start"], r["branch"]), reverse=True)
+
+    per_branch: Dict[str, dict] = {}
+    for c in rows:
+        b = per_branch.setdefault(c["branch"], {"branch": c["branch"], "weeks": 0,
+                                                "weeks_missing": 0, "amount": 0.0,
+                                                "revenue": 0.0, "covers": 0})
+        b["weeks"] += 1
+        b["revenue"] += c["revenue"]
+        b["covers"] += c["covers"]
+        if c["amount"] is None:
+            b["weeks_missing"] += 1
+        else:
+            b["amount"] += c["amount"]
+    for b in per_branch.values():
+        b["amount"] = round(b["amount"], 2)
+        b["revenue"] = round(b["revenue"], 2)
+        b["pct"] = round(b["amount"] / b["revenue"] * 100, 1) if b["revenue"] else None
+        b["per_cover"] = round(b["amount"] / b["covers"], 2) if b["covers"] else None
+    branches_out = sorted(per_branch.values(), key=lambda b: -(b["pct"] or 0))
+
+    tot_amt = sum(b["amount"] for b in branches_out)
+    tot_rev = sum(b["revenue"] for b in branches_out)
+    weeks = sorted({c["week_start"] for c in rows})
+    return {
+        "available": True,
+        "meta": {"date_from": start, "date_to": end,
+                 "week_from": w_start, "week_to": w_end,
+                 "branch": branch or "", "group": group or "",
+                 "weeks": weeks, "branch_names": known,
+                 "imported_weeks": len({(c["branch"], c["week_start"]) for c in rows
+                                        if c["amount"] is not None}),
+                 "missing_weeks": sum(1 for c in rows if c["amount"] is None)},
+        "totals": {"amount": round(tot_amt, 2), "revenue": round(tot_rev, 2),
+                   "pct": round(tot_amt / tot_rev * 100, 1) if tot_rev else None},
+        "rows": rows,
+        "branches": branches_out,
+    }
+
+
+@router.get("/api/ingredients/purchases")
+@ttl_cache
+def ingredients_purchases(date_from: Optional[str] = Query(None),
+                          date_to:   Optional[str] = Query(None),
+                          branch:    Optional[str] = Query(None),
+                          group:     Optional[str] = Query(None)):
+    """Imported ingredient spend per branch per week, against that branch's own
+    sales for the same week.
+
+    A week appears when EITHER side has something, so a week that was sold but
+    never imported shows as a gap instead of quietly vanishing — the missing
+    import is the finding."""
+    return _ing_purchases_data(date_from, date_to, branch, group)
+
+
+class PurchaseRow(BaseModel):
+    branch: str
+    week_start: str
+    amount: float
+    note: Optional[str] = None
+
+
+@router.post("/api/ingredients/purchases", dependencies=[Depends(require_write_token)])
+def ingredients_purchases_save(rows: List[PurchaseRow], source: str = Query("manual")):
+    """Upsert weekly ingredient spend. The week is snapped to its Monday so the
+    same week filed as Wednesday and as Sunday is one row, not two."""
+    with get_db() as con:
+        con.execute(_ING_PURCHASE_DDL)
+        known = set(_ing_branch_names(con))
+        saved, errors = 0, []
+        for i, r in enumerate(rows, start=1):
+            br = (r.branch or "").strip()
+            wk = _monday(_to_day(r.week_start) or "")
+            if br not in known:
+                errors.append({"row": i, "branch": br, "why": "ไม่พบสาขานี้"}); continue
+            if not wk:
+                errors.append({"row": i, "branch": br, "why": "วันที่ไม่ถูกต้อง"}); continue
+            if r.amount is None or float(r.amount) < 0:
+                errors.append({"row": i, "branch": br, "why": "ยอดต้องไม่ติดลบ"}); continue
+            con.execute("""INSERT INTO ingredient_purchase_week
+                    (branch, week_start, amount, note, source, updated_at)
+                 VALUES (?,?,?,?,?, CURRENT_TIMESTAMP)
+                 ON CONFLICT(branch, week_start) DO UPDATE SET
+                     amount=excluded.amount, note=excluded.note,
+                     source=excluded.source, updated_at=CURRENT_TIMESTAMP""",
+                        (br, wk, float(r.amount), r.note, source))
+            saved += 1
+        con.commit()
+    invalidate_cache()
+    return {"ok": True, "saved": saved, "errors": errors}
+
+
+@router.delete("/api/ingredients/purchases", dependencies=[Depends(require_write_token)])
+def ingredients_purchases_delete(branch: str = Query(...), week_start: str = Query(...)):
+    with get_db() as con:
+        con.execute(_ING_PURCHASE_DDL)
+        wk = _monday(_to_day(week_start) or "") or week_start
+        cur = con.execute("DELETE FROM ingredient_purchase_week WHERE branch=? AND week_start=?",
+                          (branch, wk))
+        con.commit()
+    invalidate_cache()
+    return {"ok": True, "deleted": cur.rowcount}
+
+
+@router.get("/api/ingredients/purchases.template.xlsx")
+def ingredients_purchases_template(weeks: int = Query(8),
+                                   date_to: Optional[str] = Query(None),
+                                   branch: Optional[str] = Query(None)):
+    """A branch × week grid to fill in: one row per branch per week, with that
+    week's sales already shown so whoever fills it can sanity-check the amount
+    as they type. Anything already imported is pre-filled."""
+    n = max(1, min(int(weeks or 8), 52))
+    # Called in-process, so every argument goes in positionally — an omitted one
+    # would arrive as FastAPI's Query() placeholder object, not as None.
+    d = _ing_purchases_data(date_to=date_to, branch=branch)
+    have = {(r["branch"], r["week_start"]): r for r in d["rows"]}
+    with get_db() as con:
+        end_wk = _monday(d["meta"]["date_to"]) or d["meta"]["date_to"]
+        wks = [con.execute("SELECT date(:e, :o)", {"e": end_wk, "o": f"-{i * 7} day"}).fetchone()[0]
+               for i in range(n)][::-1]
+        names = [branch] if branch else _ing_branch_names(con)
+    wb = _wb_new("ยอดซื้อวัตถุดิบรายสัปดาห์")
+    ws = wb.active
+    ws.append(["ยอดซื้อวัตถุดิบรายสาขา (รายสัปดาห์) — กรอกคอลัมน์ 'ยอดซื้อวัตถุดิบ (บาท)' แล้วนำเข้ากลับ"])
+    ws.append(["'สัปดาห์เริ่ม' คือวันจันทร์ของสัปดาห์นั้น · กรอกวันไหนของสัปดาห์ก็ได้ ระบบจะปัดเป็นวันจันทร์ให้ "
+               "· 'ยอดขาย' เป็นตัวเลขของระบบเอง มีไว้ตรวจทาน ไม่ต้องแก้"])
+    ws.append(["สาขา", "สัปดาห์เริ่ม", "ยอดซื้อวัตถุดิบ (บาท)", "ยอดขาย (ระบบ)", "หมายเหตุ"])
+    _style_header(ws, 3, "7C3AED")
+    for b in names:
+        for w in wks:
+            h = have.get((b, w))
+            ws.append([b, w, (h or {}).get("amount"), (h or {}).get("revenue"),
+                       (h or {}).get("note") or None])
+    for i, wdt in enumerate([24, 14, 22, 16, 28], start=1):
+        ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = wdt
+    return _xlsx_attachment(wb, f"INGREDIENT_PURCHASES_TEMPLATE_{d['meta']['date_to']}.xlsx")
+
+
+@router.post("/api/ingredients/purchases/import", dependencies=[Depends(require_write_token)])
+async def ingredients_purchases_import(file: UploadFile = File(...),
+                                       dry_run: bool = Query(False)):
+    """Import the weekly spend sheet — the format the purchasing system exports:
+    branch, a date in the week, and the total. Nothing else is required."""
+    rows, hmap, sheet = await _read_upload_table(file, _PURCHASE_ALIASES)
+    if "branch" not in hmap or "amount" not in hmap:
+        raise HTTPException(400, "ไฟล์ต้องมีคอลัมน์ 'สาขา' และ 'ยอดซื้อวัตถุดิบ'")
+    with get_db() as con:
+        known = set(_ing_branch_names(con))
+    ok, errors, blanks = [], [], 0
+    for i, r in enumerate(rows, start=1):
+        br = str(r.get("branch") or "").strip()
+        if not br:
+            continue
+        amt = _to_num(r.get("amount"))
+        if amt is None:
+            blanks += 1                    # not filled in yet
+            continue
+        day = _to_day(r.get("week")) if "week" in hmap else None
+        wk = _monday(day) if day else None
+        if br not in known:
+            errors.append({"row": i, "branch": br, "why": "ไม่พบสาขานี้ในระบบ"}); continue
+        if not wk:
+            errors.append({"row": i, "branch": br,
+                           "why": "ไม่พบ/อ่านวันที่ของสัปดาห์ไม่ได้ (ใช้รูปแบบ 2026-09-08)"}); continue
+        if amt < 0:
+            errors.append({"row": i, "branch": br, "why": "ยอดติดลบ"}); continue
+        ok.append(PurchaseRow(branch=br, week_start=wk, amount=amt,
+                              note=(str(r.get("note")).strip() if r.get("note") is not None else None)))
+    if dry_run:
+        return {"ok": True, "dry_run": True, "sheet": sheet, "rows_read": len(rows),
+                "would_save": len(ok), "blank": blanks, "errors": errors}
+    res = ingredients_purchases_save(ok, source="excel") if ok else {"saved": 0, "errors": []}
+    return {"ok": True, "sheet": sheet, "saved": res["saved"], "rows_read": len(rows),
+            "blank": blanks, "errors": errors + res.get("errors", [])}

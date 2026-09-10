@@ -103,6 +103,29 @@ def test_september_vs_auto_previous_august_disables_comparison(era_client):
     assert len(j["insights"]) == 1 and "1 ก.ย." in j["insights"][0] or "2026-09-01" in j["insights"][0]
 
 
+def test_window_straddling_the_switchover_is_cut_to_the_live_menu(era_client):
+    """The DEFAULT view: the pickers open on the whole coverage, which reaches
+    back over the changeover. Blending the two price lists put retired tiers in
+    the table, gave the Top-N a column per dead tier and let the action card
+    read the old menu as a finding about the live one — so A is cut at the
+    changeover and only the live menu is analysed."""
+    j = era_client.get("/api/reports/price-tier",
+                       params={"date_from": "2026-07-01", "date_to": "2026-09-10"}).json()
+    assert j["ready"]
+    assert j["era_clamped"] is True
+    assert j["a_range"] == ["2026-09-01", "2026-09-10"]
+    # the retired price list is gone: from the tier table, the Top-N columns…
+    assert set(j["tier_keys"]) == {"459", "999"}
+    assert "799" not in {r["tier"] for r in j["tiers"]}
+    for row in j["top30"]:
+        assert "799" not in row["tiers"]
+    # …and from the monthly trend behind the mix / cost charts
+    assert all(r["ym"] >= "2026-09" for r in j["trend_month"])
+    # B now lands entirely in the old era, so the comparison stays suppressed
+    # until October has September to compare against.
+    assert j["comparison_available"] is False
+
+
 def test_both_periods_pre_switchover_still_compare(era_client):
     """Old era vs older-still old era — no menu change in between, comparison stays on."""
     j = era_client.get("/api/reports/price-tier",

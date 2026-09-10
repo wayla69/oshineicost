@@ -87,6 +87,7 @@ const TAB_MODULE = {
   simhub:'cost.simulator',
   gpbranch:'profit.pnl', pnlbranch:'profit.pnl', pnlbill:'profit.pnl', profit:'profit.pnl', benchmark:'profit.pnl',
   opsreport:'ops.report', ops:'ops.report', ordering:'ops.report', ordersetup:'ops.report',
+  ingpurchase:'cost.analysis',   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -845,6 +846,71 @@ function injectDiveBtn(chartId, canvas) {
   wrap.appendChild(btn);
 }
 
+// ── Sortable tables ─────────────────────────────────────────────────────────
+// makeSortable(id) turns the LAST header row of a table into click-to-sort
+// columns (first click = high→low, click again = low→high, a third click
+// restores the server's original order). Opt a column out with data-nosort.
+//
+// Cell values are read from data-sort when present, otherwise parsed out of the
+// cell text — the tables here render "฿1,234", "12.3%", "+4.5", "−2 (Δ+1%)" and
+// "-", so we take the FIRST numeric token and treat "-"/"" as missing (missing
+// always sorts last, whichever direction, so empty rows never top the table).
+function _tblSortVal(row, idx) {
+  const cell = row.cells[idx];
+  if (!cell) return { n: null, s: '' };
+  const raw = cell.dataset.sort;
+  const txt = (raw != null ? raw : cell.textContent).trim();
+  if (txt === '' || txt === '-' || txt === '—') return { n: null, s: '' };
+  // −  (U+2212, used for negatives in the reports) → ASCII minus
+  const m = txt.replace(/−/g, '-').replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+  return { n: m ? parseFloat(m[0]) : null, s: txt.toLowerCase() };
+}
+
+function makeSortable(tableOrId) {
+  const table = typeof tableOrId === 'string' ? document.getElementById(tableOrId) : tableOrId;
+  if (!table || !table.tHead || !table.tBodies[0]) return;
+  const headRow = table.tHead.rows[table.tHead.rows.length - 1];
+  if (!headRow) return;
+  const tbody = table.tBodies[0];
+  // Remember the served order so a third click can put it back.
+  Array.from(tbody.rows).forEach((r, i) => { if (!r.dataset.ord) r.dataset.ord = String(i); });
+  Array.from(headRow.cells).forEach((th, idx) => {
+    if (th.dataset.nosort != null || th.dataset.sortable) return;
+    th.dataset.sortable = '1';
+    th.classList.add('th-sortable');
+    th.title = (th.title ? th.title + ' · ' : '') + 'คลิกเพื่อเรียง มาก→น้อย / น้อย→มาก';
+    th.addEventListener('click', () => tblSort(th, idx));
+  });
+}
+
+function tblSort(th, idx) {
+  const table = th.closest('table');
+  if (!table || !table.tBodies[0]) return;
+  const headRow = th.parentElement;
+  const dir = th.dataset.sortDir === 'desc' ? 'asc' : th.dataset.sortDir === 'asc' ? '' : 'desc';
+  Array.from(headRow.cells).forEach(c => {
+    delete c.dataset.sortDir;
+    c.classList.remove('sorted-desc', 'sorted-asc');
+  });
+  if (dir) { th.dataset.sortDir = dir; th.classList.add('sorted-' + dir); }
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+  rows.sort((a, b) => {
+    if (!dir) return (+a.dataset.ord || 0) - (+b.dataset.ord || 0);
+    const va = _tblSortVal(a, idx), vb = _tblSortVal(b, idx);
+    if (va.n == null && vb.n == null) return va.s.localeCompare(vb.s, 'th') * (dir === 'desc' ? -1 : 1);
+    if (va.n == null) return 1;            // missing values sink, both directions
+    if (vb.n == null) return -1;
+    return dir === 'desc' ? vb.n - va.n : va.n - vb.n;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  // Rank columns must count the CURRENT order, not the one they were built in.
+  rows.forEach((r, i) => {
+    const c = r.querySelector('.rank-cell');
+    if (c) c.textContent = String(i + 1);
+  });
+}
+
 function badge(pct) {
   if (pct == null) return '<span class="pill pill-neu">N/A</span>';
   const cls = pct > 0 ? 'pill-up' : pct < 0 ? 'pill-down' : 'pill-neu';
@@ -1068,7 +1134,7 @@ async function onGroupChange() {
 }
 
 // ── Tab switching ──────────────────────────────────────────────
-const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', buffetperf:'🍱 ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', feedback:'💬 เสียงลูกค้า (Customer Feedback)', checklist:'✅ Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)' };
+const PAGE_TITLES = { home:'Daily Brief', overall:'Overall', action:'🔔 ต้องดูวันนี้ (Action Center)', buffetperf:'🍱 ผลงานบุฟเฟ่ต์ (Buffet Performance)', menu:'Menu Analysis', trend:'Trend', cost:'Cost Analysis', profit:'วิเคราะห์กำไร', pnl:'P&L Deep Dive', compare:'เปรียบเทียบช่วงเวลา (A vs B)', report:'Monthly Report (ฉบับเต็ม)', mgtreport:'Management Report (Daily · Weekly · Monthly)', ops:'🔬 วิเคราะห์เชิงลึก', settings:'Settings', guest:'Guest & SPH', benchmark:'Branch Benchmarks', engineering:'วิเคราะห์เมนู', staff:'Staff Scorecard', discounts:'Discounts & Leakage', childbuffet:'🧒 บุฟเฟ่ต์เด็ก', timeflow:'Time & Flow', gpbranch:'GP รายสาขา (Branch GP — NEW BoM)', branchbom:'🔬 BoM วิเคราะห์รายสาขา', bomcost:'🔬 BoM Cost Analysis', simhub:'🎮 Simulators (รวมตัวจำลอง)', menucompare:'🆚 เทียบเมนู A/B', menuefficiency:'🎯 เป้าลดต้นทุน (Menu Cost Efficiency)', menuactionboard:'⚡ ปรับเมนู (Menu Action Board)', menuopportunities:'💡 โอกาสเมนู (Menu Opportunities)', feedback:'💬 เสียงลูกค้า (Customer Feedback)', checklist:'✅ Checklist เสียงลูกค้า (Go-live · การตลาด)', coverage:'🎯 ความครอบคลุมต้นทุน (Cost Coverage)', pnlbranch:'💵 P&L รายสาขา (Branch P&L · BoM-based)', more:'📈 Insight เพิ่มเติม (More Analytics)', manual:'📖 คู่มือการใช้งาน', dailysales:'📅 ยอดขายรายวัน (Daily Sales)', costhead:'💸 ต้นทุน/หัว รายสาขา (BoM)', costheadtop60:'🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม)', menuimpact:'🧪 วิเคราะห์วัตถุดิบ (Menu Impact — มี vs ไม่มี)', pnlbill:'🧾 P&L ต่อบิล (Per-bill · BoM)', opsreport:'🛒 รายงานปฏิบัติการ (Payment · Void · โต๊ะ · โปรโมชัน)', cashctl:'💵 เงินสดขาด/เกิน (Cash Over/Short)', custtype:'👥 ประเภทลูกค้า & Delivery', modifiers:'🍽️ ความต้องการพิเศษ (Modifiers)', pricezone:'🏷️ ราคา & โซนโต๊ะ', cancelbill:'🗑️ บิลยกเลิก/ลบ (Voided Bills)', closetime:'⏰ เวลาปิดร้าน / ความสดของข้อมูล (Data Freshness)', heavyeater:'🍽️ ต่อหัว & นักกินหนัก (Per-cover & Heavy Eaters)', ordering:'🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)', ordersetup:'⚙️ ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -1097,6 +1163,7 @@ const TABS = {
   pnlbill: { load: () => loadPnlBill(), follow: { date: 'pbDate' } },
   opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
+  ingpurchase: { load: () => loadIngPurchase() },
   ordersetup: { load: () => loadOrderSetup() },
   cashctl: { load: () => loadCashCtl(), follow: { month: 'ccMonth' } },
   custtype: { load: () => loadCustType(), follow: { month: 'ctMonth' } },
@@ -1229,7 +1296,7 @@ const TAB_CLUSTERS = [
   { key: 'menufix',  label: '⚡ ปรับเมนู',       tabs: [['menuactionboard','ปรับเมนู'],['menuopportunities','💡 โอกาสเมนู'],['menuefficiency','🎯 เป้าลดต้นทุน']] },
   { key: 'cost',     label: '💰 ต้นทุน',         tabs: [['cost','ภาพรวม'],['bomcost','BoM Cost'],['simhub','🎮 Simulators'],['costhead','ต้นทุน/หัว'],['costheadtop60','🏅 Top60/หัว'],['heavyeater','🍽️ นักกินหนัก'],['coverage','ความครอบคลุม'],['branchbom','🔬 BoM รายสาขา']] },
   { key: 'profit',   label: '💵 กำไร & P&L',     tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['benchmark','Benchmark'],['profit','กำไร SKU']] },
-  { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
+  { key: 'supply',   label: '🧺 จัดซื้อ/วัตถุดิบ', tabs: [['ordering','แผนสั่งวัตถุดิบรายสาขา'],['ingpurchase','🧾 ยอดซื้อ vs ยอดขาย'],['ordersetup','⚙️ ตั้งค่าการสั่งซื้อ']] },
   { key: 'ops',      label: '🛒 ปฏิบัติการ',     tabs: [['opsreport','รายงานปฏิบัติการ'],['discounts','🏷️ ส่วนลด'],['ops','🔬 เชิงลึก'],['staff','👤 พนักงาน'],['cashctl','💵 เงินสด'],['cancelbill','🗑️ บิลยกเลิก'],['modifiers','🍽️ Modifiers'],['pricezone','🏷️ ราคา/โซน'],['closetime','⏰ ปิดร้าน/ข้อมูล']] },
 ];
 // ── Kill list — ON HOLD (owner's call, 2026-09-05) ─────────────────────────

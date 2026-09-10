@@ -990,6 +990,36 @@ async function loadOpsReport(force) {
 let _chtMonthsLoaded = false;
 // ══ 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) ═══════════════════════════════════════
 let _miEnts = null, _miChart = null;
+// Last payloads, kept so the dive-in panels can summarise the real numbers
+// instead of re-deriving them from the chart's datasets.
+let _miLast = null, _ptLast = null;
+
+// Tukey-fence outlier indices for a column of numbers — the same rule the
+// dive-in analyser uses (_detectOutliers in js/06-features.js), reused here to
+// paint the rows that sit outside the pack. Returns a Set of indices.
+function _miOutlierSet(nums) {
+  const clean = nums.filter(v => v != null && isFinite(v));
+  if (clean.length < 5) return new Set();
+  try { return new Set(_detectOutliers(nums.map(v => (v == null ? 0 : v))).indices); }
+  catch (e) { return new Set(); }
+}
+
+// A tier code as a price label. Server-side labels (tier_labels) win where a
+// payload carries them; this is the fallback for the menu-impact rows, which
+// send the bare code. Never hard-code a price list here — the Grand Menu
+// changeover retired one and this would silently mislabel the survivors.
+function _miTierLabel(t) {
+  const s = String(t);
+  if (s === 'promo') return 'โปร/ส่วนลด';
+  if (s === 'child') return 'เด็กล้วน';
+  return /^\d+$/.test(s) ? '฿' + Number(s).toLocaleString('en-US') : s;
+}
+
+// A magnitude bar for a numeric cell — "how far out" without reading digits.
+function _miBar(v, max, color) {
+  const w = (!max || v == null) ? 0 : Math.round(Math.min(Math.abs(v) / max, 1) * 26);
+  return w < 2 ? '' : `<span class="mi-bar" style="width:${w}px;background:${color}"></span>`;
+}
 function miFilterOptions() {
   const q = (document.getElementById('miSearch').value || '').trim().toLowerCase();
   const sel = document.getElementById('miEnt');
@@ -1042,10 +1072,15 @@ async function loadMenuImpact(force) {
     if (!sel.value && sel.options.length) sel.selectedIndex = 0;
     const [lo, hi] = _miEnts.coverage || [null, null];
     const fEl = document.getElementById('miFrom'), tEl = document.getElementById('miTo');
-    if (lo && !fEl.value) { fEl.value = lo; fEl.min = lo; tEl.min = lo; }
+    // Open on the live menu, not on the whole coverage: a range starting before
+    // the Grand Menu changeover blends two price lists (the server cuts it for
+    // the tier analysis anyway). The pickers still reach the full coverage.
+    const def0 = _miEnts.default_from || lo;
+    if (lo && !fEl.value) { fEl.value = def0; fEl.min = lo; tEl.min = lo; }
     if (hi && !tEl.value) { tEl.value = hi; fEl.max = hi; tEl.max = hi; }
     document.getElementById('miCoverage').textContent =
-      `ข้อมูล ${lo} → ${hi} · อัปเดต ${_miEnts.last_build || '-'}`;
+      `ข้อมูล ${lo} → ${hi} · อัปเดต ${_miEnts.last_build || '-'}`
+      + (def0 !== lo ? ` · เริ่มที่ ${def0} (เมนูใหม่)` : '');
   }
   const ent = document.getElementById('miEnt').value;
   if (!ent) { body.innerHTML = '<p class="text-center text-slate-400 py-10">เลือกวัตถุดิบ/เมนูก่อน</p>'; return; }
@@ -1075,7 +1110,7 @@ async function loadMenuImpact(force) {
     { l: 'ปริมาณ/หัว (เฉพาะบิลที่สั่ง)', v: Number(S.qty_head_takers || 0).toFixed(2), sub: 'รวม ' + n0(S.qty) + ' หน่วย', c: '#7c3aed' },
     { l: 'ต้นทุนของตัวมันเอง/หัว (บิลที่สั่ง)', v: b1(S.ecogs_head_takers), sub: 'รวม ' + b1(S.ecogs) + ' = ' + ((S.ecogs_share || 0) * 100).toFixed(1) + '% ของ COGS ทั้งหมด', c: RED },
     { l: 'Δ GP/หัว (มี − ไม่มี)', v: sg(C.gp.diff), sub: 'GP มี ' + b1(C.gp.with) + ' vs ไม่มี ' + b1(C.gp.without), c: C.gp.diff >= 0 ? GRN : RED },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  ].map(k => `<div class="card p-4 mi-kpi" style="border-top:3px solid ${k.c}"><p class="mi-kpi-label">${k.l}</p><p class="mi-kpi-value" style="color:${k.c}">${k.v}</p><p class="mi-kpi-sub">${k.sub}</p></div>`).join('');
   const cmpRow = (l, o, inv) => {
     const col = (inv ? o.diff < 0 : o.diff > 0) ? GRN : RED;
     return `<tr class="border-t border-slate-100"><td class="py-1.5 pr-2">${l}</td>
@@ -1094,32 +1129,52 @@ async function loadMenuImpact(force) {
     return t;
   })();
   const trm = d.trend_month || [];
-  const TIER_TH2 = { '350':'350', '590':'590', '649':'649', '689':'689', '799':'799', '999':'999', 'promo':'โปร/ส่วนลด', 'child':'เด็กล้วน' };
-  const tierRows = (d.tiers || []).map(t => `<tr class="border-t border-slate-100">
-    <td class="py-1 pr-2 font-semibold">Tier ${TIER_TH2[t.tier] || t.tier}</td>
+  // Δ GP/หัว far outside the pack = the tier where this item behaves differently
+  // from everywhere else. That is the row to look at first, so paint it.
+  const tGp = (d.tiers || []).map(t => t.d_gp);
+  const tOut = _miOutlierSet(tGp);
+  const tGpMax = Math.max(1, ...tGp.map(v => Math.abs(v || 0)));
+  const tierRows = (d.tiers || []).map((t, i) => {
+    const bad = tOut.has(i) && (t.d_gp || 0) < 0, good = tOut.has(i) && (t.d_gp || 0) > 0;
+    const flag = bad ? '<span class="mi-flag bad" title="ผิดปกติเทียบ tier อื่น — GP/หัวต่างจากกลุ่มมาก">⚠ ผิดปกติ</span>'
+               : good ? '<span class="mi-flag good" title="ผิดปกติเทียบ tier อื่น — GP/หัวดีกว่ากลุ่มมาก">★ เด่น</span>' : '';
+    return `<tr class="border-t border-slate-100${bad ? ' mi-outlier' : good ? ' mi-outlier-good' : ''}">
+    <td class="py-1 pr-2 font-semibold mi-name" data-sort="${esc(String(t.tier))}">Tier ${esc(_miTierLabel(t.tier))}${flag}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${n0(t.bills)}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${(t.pen * 100).toFixed(1)}%</td>
     <td class="py-1 pr-2 text-right tabular-nums">${t.qty_head_takers ?? '-'}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${b1(t.ecogs_head_takers)}</td>
     <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${(t.d_other_cogs || 0) < 0 ? GRN : RED}">${t.d_other_cogs == null ? '-' : sg(t.d_other_cogs)}</td>
-    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(t.d_gp || 0) >= 0 ? GRN : RED}">${t.d_gp == null ? '-' : sg(t.d_gp)}</td></tr>`).join('');
+    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(t.d_gp || 0) >= 0 ? GRN : RED}">${t.d_gp == null ? '-' : sg(t.d_gp)}${_miBar(t.d_gp, tGpMax, (t.d_gp || 0) >= 0 ? GRN : RED)}</td></tr>`;
+  }).join('');
+  const eraNote = d.era_tiers_only
+    ? ` · แสดงเฉพาะ tier ของเมนูใหม่ (ตั้งแต่ ${d.menu_era_from}) — ราคาเก่าถูกยกเลิกแล้ว จึงไม่นำมารวม`
+    : '';
   const tierCard = (d.tiers || []).length < 2 ? '' : `
     <div class="card p-5 overflow-x-auto mb-5">
       <h2 class="section-title mb-1">เจาะตาม Tier ราคาบุฟเฟ่ต์ — ใครสั่ง/กินเยอะ และผลต่อต้นทุน-กำไร</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนูของช่วงนั้น อ่านจากบรรทัดแพ็กเกจในบิลจริง (ถึง ส.ค. 2026 = ราคาก่อนบวก service charge 5% + VAT 7% · ตั้งแต่ 1 ก.ย. 2026 = ราคา NET รวมทั้งสองอย่างแล้ว) · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)</p>
-      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่หน้าเมนูของช่วงนั้น อ่านจากบรรทัดแพ็กเกจในบิลจริง (ราคา NET รวม service charge 5% + VAT 7% แล้ว) · Δ คำนวณเทียบมี/ไม่มี ภายใน Tier เดียวกัน (คุมสาขา×วัน)${eraNote}</p>
+      <table class="text-xs w-full" id="miTierTbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">Tier</th><th class="py-1.5 pr-2 text-right">บิลใน Tier</th><th class="py-1.5 pr-2 text-right">% สั่ง</th>
         <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนตัวเอง/หัว</th>
         <th class="py-1.5 pr-2 text-right">Δ ต้นทุนเมนูอื่น/หัว</th><th class="py-1.5 text-right">Δ GP/หัว</th></tr></thead>
       <tbody>${tierRows}</tbody></table>
     </div>`;
-  const brRows = (d.branches || []).map(b => `<tr class="border-t border-slate-100">
-    <td class="py-1 pr-2 font-semibold">${esc(b.name)}</td>
+  const brD = (d.branches || []).map(b => b.d_other_cogs);
+  const brOut = _miOutlierSet(brD);
+  const brMax = Math.max(1, ...brD.map(v => Math.abs(v || 0)));
+  const brRows = (d.branches || []).map((b, i) => {
+    const bad = brOut.has(i) && (b.d_other_cogs || 0) > 0, good = brOut.has(i) && (b.d_other_cogs || 0) < 0;
+    const flag = bad ? '<span class="mi-flag bad" title="ผิดปกติเทียบสาขาอื่น — บิลที่สั่งกินเมนูอื่นแพงขึ้นผิดปกติ">⚠ ผิดปกติ</span>'
+               : good ? '<span class="mi-flag good" title="ผิดปกติเทียบสาขาอื่น — ช่วยเบรกต้นทุนเมนูอื่นได้มากกว่าเพื่อน">★ เด่น</span>' : '';
+    return `<tr class="border-t border-slate-100${bad ? ' mi-outlier' : good ? ' mi-outlier-good' : ''}">
+    <td class="py-1 pr-2 font-semibold mi-name" data-sort="${esc(b.name)}">${esc(b.name)}${flag}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${n0(b.bills)}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${n0(b.qty)}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${b.qty_head_takers ?? '-'}</td>
     <td class="py-1 pr-2 text-right tabular-nums">${b1(b.ecogs)}</td>
-    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(b.d_other_cogs || 0) < 0 ? GRN : RED}">${b.d_other_cogs == null ? '-' : sg(b.d_other_cogs)}</td></tr>`).join('');
+    <td class="py-1 text-right tabular-nums font-semibold" style="color:${(b.d_other_cogs || 0) < 0 ? GRN : RED}">${b.d_other_cogs == null ? '-' : sg(b.d_other_cogs)}${_miBar(b.d_other_cogs, brMax, (b.d_other_cogs || 0) < 0 ? GRN : RED)}</td></tr>`;
+  }).join('');
   body.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
@@ -1135,34 +1190,44 @@ async function loadMenuImpact(force) {
           ${cmpRow('กำไรขั้นต้น (GP)', C.gp, false)}
         </tbody></table>
         ${mixLine}
-        <div class="mt-3 p-3 rounded text-xs" style="background:var(--bg-subtle);border-left:4px solid ${C.gp.diff >= 0 ? GRN : RED}">${verdict}</div>
+        <div class="mt-3 p-3 rounded text-xs mi-verdict" style="background:var(--bg-subtle);border-left:4px solid ${C.gp.diff >= 0 ? GRN : RED}">${verdict}</div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-3">แนวโน้มรายเดือน — ปริมาณ/หัว & % บิลที่สั่ง</h2>
+        <h2 class="section-title mb-3">แนวโน้มรายเดือน — ปริมาณ/หัว &amp; % บิลที่สั่ง</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มขยายมุมกราฟเพื่อเจาะลึก + อ่านสรุป · จุดสีแดงคือเดือนที่ผิดปกติ</p>
         <div style="height:280px"><canvas id="miChart"></canvas></div>
       </div>
     </div>
     ${tierCard}
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายสาขา — ใครขาย/ใครกินเยอะ และผลต่อต้นทุนเมนูอื่น</h2>
-      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+      <table class="text-xs w-full" id="miBranchTbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">บิลที่สั่ง</th><th class="py-1.5 pr-2 text-right">จำนวน</th>
         <th class="py-1.5 pr-2 text-right">ชิ้น/หัว (บิลที่สั่ง)</th><th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
         <th class="py-1.5 text-right">Δ ต้นทุนเมนูอื่น/หัว</th></tr></thead><tbody>${brRows}</tbody></table>
-      <p class="text-[11px] mt-2" style="color:var(--text-muted)">Δ ต้นทุนเมนูอื่น/หัว = บิลที่มีรายการนี้ กินเมนูอื่นแพงขึ้น/ถูกลงเท่าไร (คุมรายวันภายในสาขา) · เขียว = ช่วยลด</p>
+      <p class="text-[11px] mt-2" style="color:var(--text-muted)">Δ ต้นทุนเมนูอื่น/หัว = บิลที่มีรายการนี้ กินเมนูอื่นแพงขึ้น/ถูกลงเท่าไร (คุมรายวันภายในสาขา) · เขียว = ช่วยลด · ⚠ = ค่าหลุดกรอบเทียบสาขาอื่น (Tukey fence) · คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</p>
     </div>`;
-  if (_miChart) { _miChart.destroy(); _miChart = null; }
-  const ctx = document.getElementById('miChart');
-  if (ctx && trm.length) {
-    _miChart = new Chart(ctx, { data: {
+  ['miTierTbl', 'miBranchTbl'].forEach(makeSortable);
+  _miLast = d;
+  if (trm.length) {
+    // Outlier months get their own point colour so the anomaly is visible on
+    // the chart itself, not only in the dive-in panel.
+    const qh = trm.map(r => r.qty_head);
+    const qOut = _miOutlierSet(qh);
+    // mkChart (not `new Chart`) registers the instance, themes it for dark mode
+    // and injects the 🔍 dive-in button.
+    _miChart = mkChart('miChart', { type: 'bar', data: {
         labels: trm.map(r => r.ym),
         datasets: [
-          { type: 'bar', label: 'ปริมาณ/หัว', data: trm.map(r => r.qty_head), backgroundColor: 'rgba(31,122,77,.55)', yAxisID: 'y' },
+          { type: 'bar', label: 'ปริมาณ/หัว', data: qh, yAxisID: 'y',
+            backgroundColor: trm.map((r, i) => qOut.has(i) ? 'rgba(220,38,38,.75)' : 'rgba(31,122,77,.55)'),
+            borderColor: trm.map((r, i) => qOut.has(i) ? '#dc2626' : 'transparent'),
+            borderWidth: trm.map((r, i) => qOut.has(i) ? 1.5 : 0) },
           { type: 'line', label: '% บิลที่สั่ง', data: trm.map(r => r.pen == null ? null : r.pen * 100), borderColor: '#b0472d', backgroundColor: '#b0472d', tension: .25, yAxisID: 'y1' }]},
       options: { responsive: true, maintainAspectRatio: false,
         scales: { y: { title: { display: true, text: 'ชิ้น/หัว' } },
                   y1: { position: 'right', grid: { drawOnChartArea: false }, title: { display: true, text: '% บิล' } } } } });
-  }
+  } else if (_miChart) { _miChart.destroy(); _miChart = null; }
 }
 
 // ── 🏷️ วิเคราะห์ Tier ราคาขาย (section of the 🧪 tab) ───────────────────────
@@ -1195,15 +1260,18 @@ async function loadPriceTier(force) {
   const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
   const tcolor = {}; d.tier_keys.forEach((t, i) => tcolor[t] = PAL[i % PAL.length]);
   const modeLbl = d.mode === 'prev' ? 'ช่วงก่อนหน้า' : 'ครึ่งแรกของช่วง (ประวัติไม่พอ)';
-  document.getElementById('ptRange').textContent = d.comparison_available === false
+  // The window is cut at the Grand Menu changeover when it straddles it — say so,
+  // otherwise the range in the header wouldn't match the one in the pickers.
+  const eraCut = d.era_clamped ? ` · ตัดข้อมูลก่อน ${d.menu_era_from} ออก (ราคาเก่าเลิกขายแล้ว)` : '';
+  document.getElementById('ptRange').textContent = (d.comparison_available === false
     ? `A: ${d.a_range[0]} → ${d.a_range[1]} · ${d.scope_label} · ยังไม่เทียบช่วงก่อนหน้า (คนละเมนูกัน)`
-    : `A: ${d.a_range[0]} → ${d.a_range[1]} · เทียบ B (${modeLbl}): ${d.b_range[0]} → ${d.b_range[1]} · ${d.scope_label}`;
+    : `A: ${d.a_range[0]} → ${d.a_range[1]} · เทียบ B (${modeLbl}): ${d.b_range[0]} → ${d.b_range[1]} · ${d.scope_label}`) + eraCut;
 
   const B = d.blend;
-  const kpi = (l, v, dv, sub, inv) => `<div class="card p-4" style="border-top:3px solid ${dc(dv, inv)}">
-    <p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p>
-    <p class="text-2xl font-bold" style="color:var(--text-primary)">${v}</p>
-    <p class="text-[11px] font-semibold" style="color:${dc(dv, inv)}">${sub}</p></div>`;
+  const kpi = (l, v, dv, sub, inv) => `<div class="card p-4 mi-kpi" style="border-top:3px solid ${dc(dv, inv)}">
+    <p class="mi-kpi-label">${l}</p>
+    <p class="mi-kpi-value" style="color:var(--text-primary)">${v}</p>
+    <p class="mi-kpi-sub font-semibold" style="color:${dc(dv, inv)}">${sub}</p></div>`;
   const dd = (a, b) => (a != null && b != null) ? a - b : null;
   const kpis =
     kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${B.pax_b == null ? '-' : n0(B.pax_b)} คน)`, false) +
@@ -1211,8 +1279,21 @@ async function loadPriceTier(force) {
     kpi('ต้นทุนอาหาร/หัว', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
     kpi('Food cost %', (B.food_pct_a ?? '-') + '%', dd(B.food_pct_a, B.food_pct_b), `B: ${B.food_pct_b ?? '-'}% · Δ ${sg(dd(B.food_pct_a, B.food_pct_b), ' pp')}`, true);
 
-  const tierRows = d.tiers.map(x => `<tr class="border-t border-slate-100">
-    <td class="py-1.5 pr-2 font-bold" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">${esc(x.label)}</td>
+  // Two things earn a flag on this table: a food cost the business itself calls
+  // a problem (the 40% bar the action card uses), and a tier whose cost/head
+  // moved far more than the others did (Tukey fence over the Δ column).
+  const FOOD_PCT_BAR = 40;
+  const dCogsOut = _miOutlierSet(d.tiers.map(x => x.d_cogs_head));
+  const tierRows = d.tiers.map((x, i) => {
+    const hotFood = x.a.food_pct != null && x.a.food_pct >= FOOD_PCT_BAR;
+    const jumped = dCogsOut.has(i) && (x.d_cogs_head || 0) > 0;
+    const saved = dCogsOut.has(i) && (x.d_cogs_head || 0) < 0;
+    const flags =
+      (hotFood ? `<span class="mi-flag warn" title="food cost ≥ ${FOOD_PCT_BAR}% — เกินเกณฑ์ที่ใช้ตั้งข้อเสนอแนะ">🔥 ${x.a.food_pct}%</span>` : '') +
+      (jumped ? '<span class="mi-flag bad" title="ต้นทุน/หัวขยับผิดปกติเทียบ tier อื่น">⚠ ผิดปกติ</span>' : '') +
+      (saved ? '<span class="mi-flag good" title="ต้นทุน/หัวลดผิดปกติเทียบ tier อื่น (ในทางที่ดี)">★ เด่น</span>' : '');
+    return `<tr class="border-t border-slate-100${jumped || hotFood ? ' mi-outlier' : saved ? ' mi-outlier-good' : ''}">
+    <td class="py-1.5 pr-2 font-bold mi-name" data-sort="${esc(String(x.tier))}" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">${esc(x.label)}${flags}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.a.pax)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.b ? n0(x.b.pax) : '-'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${dc(x.d_pax_pct)}">${sg(x.d_pax_pct, '%')}</td>
@@ -1223,7 +1304,8 @@ async function loadPriceTier(force) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.bom_avg_cost != null ? b1(x.bom_avg_cost) : '-'}${x.bom_dish_count ? `<span class="text-[10px]" style="color:var(--text-muted)"> (${x.bom_dish_count} จาน)</span>` : ''}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.hc_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_hc_head, true)}"> (${sg(x.d_hc_head)})</span></td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${b1(x.a.gp_head)}</td>
-    <td class="py-1.5 text-right tabular-nums">${x.a.food_pct ?? '-'}%</td></tr>`).join('');
+    <td class="py-1.5 text-right tabular-nums${hotFood ? ' font-bold' : ''}" style="color:${hotFood ? RED : 'inherit'}">${x.a.food_pct ?? '-'}%</td></tr>`;
+  }).join('');
 
   const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">💡 ${esc(t)}</li>`).join('') || '<li>—</li>';
   const acts = (d.actions || []).map((a, i) => `<li style="margin:.45em 0"><b>${i + 1}. ${esc(a.title)}</b><br><span style="color:var(--text-secondary)">${esc(a.detail)}</span></li>`).join('');
@@ -1235,14 +1317,21 @@ async function loadPriceTier(force) {
   // belongs to made it unreadable.
   const STICKY_NUM_W = 22, STICKY_LBL_W = 190;
   const stickyTh = (left, w, extra = '') => `position:sticky;left:${left}px;width:${w}px;min-width:${w}px;background:var(--bg-card);z-index:2;${extra}`;
+  // A dish whose per-head consumption jumped far more than the rest of the
+  // Top-N is what actually moved the tier's cost — flag it rather than leaving
+  // the reader to scan 45 rows of Δ%.
+  const topOut = _miOutlierSet((d.top30 || []).map(r => r.d_qty_head_pct));
   const topRows = (d.top30 || []).map((r, i) => {
     const cells = d.tier_keys.map(t => {
       const c = r.tiers[t] || {};
-      return `<td class="py-1 pr-2 text-right tabular-nums">${c.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
+      return `<td class="py-1 pr-2 text-right tabular-nums" data-sort="${c.qty_head ?? ''}">${c.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
     }).join('');
-    return `<tr class="border-t border-slate-100">
-      <td class="py-1 pr-1 text-slate-400" style="${stickyTh(0, STICKY_NUM_W)}">${i + 1}</td>
-      <td class="py-1 pr-2 font-semibold" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W, 'box-shadow:2px 0 3px -2px rgba(0,0,0,.15)')}">${esc(r.label)}</td>
+    const up = topOut.has(i) && (r.d_qty_head_pct || 0) > 0, down = topOut.has(i) && (r.d_qty_head_pct || 0) < 0;
+    const flag = up ? '<span class="mi-flag bad" title="การทาน/หัวพุ่งผิดปกติเทียบเมนูอื่นในตารางนี้">⚠ พุ่ง</span>'
+               : down ? '<span class="mi-flag good" title="การทาน/หัวลดผิดปกติเทียบเมนูอื่น (ต้นทุนดีขึ้น)">▼ ลดแรง</span>' : '';
+    return `<tr class="border-t border-slate-100${up ? ' mi-outlier' : down ? ' mi-outlier-good' : ''}">
+      <td class="py-1 pr-1 text-slate-400 rank-cell" style="${stickyTh(0, STICKY_NUM_W)}">${i + 1}</td>
+      <td class="py-1 pr-2 font-semibold mi-name" data-sort="${esc(r.label)}" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W, 'box-shadow:2px 0 3px -2px rgba(0,0,0,.15)')}">${esc(r.label)}${flag}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b1(r.unit_cost)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.cogs_head)}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${r.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
@@ -1259,9 +1348,9 @@ async function loadPriceTier(force) {
     const outlierAt = x.bom_avg_cost ? x.bom_avg_cost * 2 : null;
     const rows = x.bom_dishes.map((r, i) => {
       const isOutlier = outlierAt != null && r.bom_cost != null && r.bom_cost > outlierAt;
-      return `<tr class="border-t border-slate-100"${isOutlier ? ' style="background:rgba(220,38,38,.07)"' : ''}>
-      <td class="py-1 pr-1 text-slate-400">${i + 1}</td>
-      <td class="py-1 pr-2">${esc(r.label)}${isOutlier ? ' <span title="ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้">🔺</span>' : ''}</td>
+      return `<tr class="border-t border-slate-100${isOutlier ? ' mi-outlier' : ''}">
+      <td class="py-1 pr-1 text-slate-400 rank-cell">${i + 1}</td>
+      <td class="py-1 pr-2 mi-name" data-sort="${esc(r.label)}">${esc(r.label)}${isOutlier ? ' <span class="mi-flag bad" title="ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้">🔺 แพงผิดปกติ</span>' : ''}</td>
       <td class="py-1 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.sku_code)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold"${isOutlier ? ' style="color:#dc2626"' : ''}>${b1(r.bom_cost)}</td></tr>`;
     }).join('');
@@ -1269,8 +1358,8 @@ async function loadPriceTier(force) {
       <summary class="cursor-pointer text-xs font-bold py-1" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">
         ${esc(x.label)} — ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)})
       </summary>
-      <table class="text-xs w-full mt-1"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-        <th class="py-1 pr-1">#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
+      <table class="text-xs w-full mt-1 pt-bom-tbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1 pr-1" data-nosort>#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
       </tr></thead><tbody>${rows}</tbody></table>
       <p class="text-[10px] mt-1" style="color:var(--text-muted)">🔺 = ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้</p>
     </details>`;
@@ -1280,7 +1369,7 @@ async function loadPriceTier(force) {
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">${kpis}</div>
     <div class="card p-5 mb-5 overflow-x-auto">
       <h2 class="section-title mb-3">Tier ราคา — คนทาน & ต้นทุน/หัว (A เทียบ B)</h2>
-      <table class="text-xs w-full"><thead>
+      <table class="text-xs w-full" id="ptTierTbl"><thead>
         <tr class="text-center" style="color:var(--text-muted)">
           <th></th>
           <th colspan="5" class="py-1 border-b-2" style="background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.35)">👥 ลูกค้า</th>
@@ -1293,15 +1382,19 @@ async function loadPriceTier(force) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">Food%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = food cost ≥ 40% · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
       <div class="card p-5" style="border-left:4px solid var(--indigo,#6366f1)"><h2 class="section-title mb-3">✅ สิ่งที่ต้องปรับปรุงและพัฒนา</h2><ol class="text-xs" style="list-style:none;padding:0;margin:0">${acts}</ol></div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์สัดส่วนคนทานตาม Tier (รายเดือน)</h2><div style="height:280px"><canvas id="ptChartMix"></canvas></div></div>
-      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier (รายเดือน)</h2><div style="height:280px"><canvas id="ptChartCogs"></canvas></div></div>
+      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์สัดส่วนคนทานตาม Tier (รายเดือน)</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>
+        <div style="height:280px"><canvas id="ptChartMix"></canvas></div></div>
+      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier (รายเดือน)</h2>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = เดือนที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
+        <div style="height:280px"><canvas id="ptChartCogs"></canvas></div></div>
     </div>
     <div class="card p-5 overflow-x-auto">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -1309,10 +1402,10 @@ async function loadPriceTier(force) {
         <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
       </div>
       <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
-        <th class="py-1.5 pr-1" style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
+        <th class="py-1.5 pr-1" data-nosort style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">ชิ้น/หัว รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>
     </div>
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละ Tier</h2>
@@ -1320,8 +1413,9 @@ async function loadPriceTier(force) {
       <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">ต้นทุนสูตรของแต่ละจานเรียงจากแพงไปถูก ใช้ดูว่าจานไหนใน tier ดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>
     </div>`;
 
-  if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }
-  if (_ptChartCogs) { _ptChartCogs.destroy(); _ptChartCogs = null; }
+  _ptLast = d;
+  ['ptTierTbl', 'ptTop30'].forEach(makeSortable);
+  document.querySelectorAll('#ptBody .pt-bom-tbl').forEach(makeSortable);
   const trm = d.trend_month || [];
   if (trm.length) {
     const labels = trm.map(r => r.ym);
@@ -1329,21 +1423,175 @@ async function loadPriceTier(force) {
       label: tl(t),
       data: trm.map(r => r.tiers[t]?.share ?? 0),
       backgroundColor: tcolor[t], stack: 's' }));
-    _ptChartMix = new Chart(document.getElementById('ptChartMix'), {
+    // mkChart registers the instance + injects the 🔍 dive-in button.
+    _ptChartMix = mkChart('ptChartMix', {
       type: 'bar', data: { labels, datasets: dsMix },
       options: { responsive: true, maintainAspectRatio: false,
         scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '% ของคนทาน' } } },
         plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
-    const dsCogs = d.tier_keys.filter(t => t !== 'child').map(t => ({
-      label: tl(t),
-      data: trm.map(r => r.tiers[t]?.cogs_head ?? null),
-      borderColor: tcolor[t], backgroundColor: tcolor[t], tension: .25, spanGaps: true }));
-    _ptChartCogs = new Chart(document.getElementById('ptChartCogs'), {
+    const dsCogs = d.tier_keys.filter(t => t !== 'child').map(t => {
+      const series = trm.map(r => r.tiers[t]?.cogs_head ?? null);
+      // A month whose cost/head breaks out of its own tier's range is the one
+      // worth opening — make its point large and red instead of one more dot.
+      const out = _miOutlierSet(series);
+      return { label: tl(t), data: series,
+               borderColor: tcolor[t], backgroundColor: tcolor[t], tension: .25, spanGaps: true,
+               pointRadius: series.map((_, i) => out.has(i) ? 6 : 3),
+               pointBackgroundColor: series.map((_, i) => out.has(i) ? '#dc2626' : tcolor[t]),
+               pointBorderColor: series.map((_, i) => out.has(i) ? '#dc2626' : tcolor[t]) };
+    });
+    _ptChartCogs = mkChart('ptChartCogs', {
       type: 'line', data: { labels, datasets: dsCogs },
       options: { responsive: true, maintainAspectRatio: false,
         scales: { y: { title: { display: true, text: '฿/หัว' } } } } });
+  } else {
+    if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }
+    if (_ptChartCogs) { _ptChartCogs.destroy(); _ptChartCogs = null; }
   }
 }
+
+// ── 🔍 Dive-in summaries for the 🧪 tab's three charts ──────────────────────
+// The generic analyser (analyzeChartForDive) only sees a chart's datasets, so on
+// these it could say "the peak is March" and nothing about the ingredient, the
+// tier or the menu era. These read the payload the tab already has and write the
+// summary in the report's own terms. Registered into the enhancer table from
+// here (js/06-features.js loads first, so _DIVE_ENHANCERS already exists).
+const _MI_D2 = v => v == null ? '-' : '฿' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 });
+const _MI_SG = v => v == null ? '-' : (v > 0 ? '+' : '') + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 });
+
+// The months whose value breaks out of the series' own range, as a bullet.
+function _miOutlierBullet(labels, series, fmtV, what) {
+  const out = _miOutlierSet(series);
+  if (!out.size) return _diveBullet('✅', `ไม่พบเดือนที่${what}ผิดปกติ — ซีรีส์นี้เคลื่อนไหวอยู่ในกรอบเดียวกันตลอดช่วง`, 'good');
+  const names = [...out].map(i => `<b>${esc(labels[i])}</b> (${fmtV(series[i])})`).join(', ');
+  return _diveBullet('🎯', `เดือนที่${what}หลุดกรอบ (Tukey fence): ${names} — เจาะดูเดือนเหล่านี้ก่อน`, 'warn');
+}
+
+async function _diveMenuImpact(_cfg) {
+  const d = _miLast;
+  if (!d) return '<p class="text-xs text-slate-400 p-2">ยังไม่มีข้อมูล — โหลดแท็บใหม่อีกครั้ง</p>';
+  const t = d.trend_month || [];
+  if (!t.length) return '<p class="text-xs text-slate-400 p-2">ไม่มีข้อมูลรายเดือนสำหรับรายการนี้</p>';
+  const labels = t.map(r => r.ym);
+  const qh = t.map(r => r.qty_head), pen = t.map(r => r.pen == null ? null : r.pen * 100);
+  const first = qh.find(v => v != null), last = [...qh].reverse().find(v => v != null);
+  const chg = (first && last != null) ? (last - first) / first * 100 : null;
+  const peak = qh.indexOf(Math.max(...qh.filter(v => v != null)));
+  const low = qh.indexOf(Math.min(...qh.filter(v => v != null)));
+  const S = d.summary, C = d.compare;
+  return _diveSection('รายการนี้คืออะไร', '🧪',
+      _diveMetric('วัตถุดิบ/เมนู', esc(d.label)) +
+      _diveMetric('ช่วง', `${d.date_from} → ${d.date_to}`) +
+      _diveMetric('ขอบเขต', esc(d.scope_label)) +
+      _diveMetric('สั่งใน % ของบิล', ((S.pen_bills || 0) * 100).toFixed(1) + '%') +
+      _diveMetric('ต้นทุนตัวเอง/หัว (บิลที่สั่ง)', _MI_D2(S.ecogs_head_takers), 'bad') +
+      _diveMetric('Δ GP/หัว (มี − ไม่มี)', _MI_SG(C.gp.diff), C.gp.diff >= 0 ? 'good' : 'bad')) +
+    _diveSection('อ่านกราฟนี้ยังไง', '📈',
+      _diveBullet('📊', `แท่ง = <b>ปริมาณ/หัว</b> (ทานกี่ชิ้นต่อหัวลูกค้าทั้งหมด) · เส้น = <b>% บิลที่สั่ง</b> (ความนิยม) — สองเส้นนี้แยกกัน: ของที่คนสั่งน้อยแต่สั่งทีเยอะ จะเห็นแท่งสูงพร้อมเส้นต่ำ`) +
+      (chg == null ? '' : _diveBullet(chg >= 0 ? '📈' : '📉',
+        `ปริมาณ/หัว ${chg >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} <b>${Math.abs(chg).toFixed(1)}%</b> จากเดือนแรก (${first}) มาเดือนล่าสุด (${last}) ของช่วงนี้`,
+        chg >= 0 ? 'warn' : 'good')) +
+      _diveBullet('🔺', `สูงสุด <b>${esc(labels[peak])}</b> (${qh[peak]} ชิ้น/หัว) · ต่ำสุด <b>${esc(labels[low])}</b> (${qh[low]} ชิ้น/หัว)`) +
+      (pen.some(v => v != null) ? _diveBullet('👥', `% บิลที่สั่งล่าสุด <b>${(pen.filter(v => v != null).slice(-1)[0]).toFixed(1)}%</b> ของบิลทั้งหมดในเดือนนั้น`) : '') +
+      _miOutlierBullet(labels, qh, v => v + ' ชิ้น/หัว', 'ปริมาณ/หัว')) +
+    _diveSection('สรุปเชิงธุรกิจ', '💰',
+      _diveBullet(C.gp.diff >= 0 ? '✅' : '⚠️',
+        `บิลที่สั่ง${esc(d.label)} ให้ GP/หัว ${C.gp.diff >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'} บิลที่ไม่สั่ง <b>${_MI_D2(Math.abs(C.gp.diff))}</b> ` +
+        `(${_MI_D2(C.gp.with)} vs ${_MI_D2(C.gp.without)}) — คุมความต่างของสาขา×วันแล้ว`,
+        C.gp.diff >= 0 ? 'good' : 'bad') +
+      (C.hc_rel_saving == null ? '' : _diveBullet(C.hc_rel_saving < 0 ? '🛑' : '🔥',
+        C.hc_rel_saving < 0
+          ? `ช่วย <b>เบรกการกินเมนูแพง</b> เชิงสัดส่วน ${_MI_D2(-C.hc_rel_saving)}/หัว — ของถูกที่ทำให้ทานของแพงน้อยลง`
+          : `มากับการกินเมนูแพง <b>เพิ่ม</b> ${_MI_D2(C.hc_rel_saving)}/หัว — ทานคู่กับของแพง ไม่ได้ทดแทน`,
+        C.hc_rel_saving < 0 ? 'good' : 'bad')));
+}
+
+async function _divePtMix(_cfg) {
+  const d = _ptLast;
+  if (!d || !(d.trend_month || []).length) return '<p class="text-xs text-slate-400 p-2">ยังไม่มีข้อมูลรายเดือน</p>';
+  const t = d.trend_month, labels = t.map(r => r.ym), keys = d.tier_keys || [];
+  const tl = k => (d.tier_labels || {})[k] || k;
+  const lastM = t[t.length - 1], firstM = t[0];
+  const shareNow = keys.map(k => ({ k, s: lastM.tiers[k]?.share ?? 0 })).sort((a, b) => b.s - a.s);
+  const shifts = keys.map(k => ({ k, dv: (lastM.tiers[k]?.share ?? 0) - (firstM.tiers[k]?.share ?? 0) }))
+                     .sort((a, b) => Math.abs(b.dv) - Math.abs(a.dv));
+  const up = shifts.find(x => x.dv > 0), dn = shifts.find(x => x.dv < 0);
+  return _diveSection('ช่วงที่กำลังดู', '🏷️',
+      _diveMetric('A', `${d.a_range[0]} → ${d.a_range[1]}`) +
+      _diveMetric('ขอบเขต', esc(d.scope_label)) +
+      _diveMetric('จำนวน tier ที่ยังขาย', String(keys.length)) +
+      _diveMetric('เดือนล่าสุดในกราฟ', esc(labels[labels.length - 1]))) +
+    _diveSection('สัดส่วนคนทานตอนนี้', '👥',
+      shareNow.slice(0, 5).map(x =>
+        _diveMetric(esc(tl(x.k)), x.s.toFixed(1) + '%')).join('') +
+      _diveBullet('🥇', `tier ที่คนทานเยอะสุดเดือนล่าสุดคือ <b>${esc(tl(shareNow[0].k))}</b> ที่ ${shareNow[0].s.toFixed(1)}% ของคนทานทั้งหมด`)) +
+    _diveSection('การย้าย tier ตลอดช่วง', '🔀',
+      (up ? _diveBullet('📈', `<b>${esc(tl(up.k))}</b> สัดส่วนเพิ่มมากสุด ${up.dv >= 0 ? '+' : ''}${up.dv.toFixed(1)} pp (${esc(labels[0])} → ${esc(labels[labels.length - 1])})`, 'good') : '') +
+      (dn ? _diveBullet('📉', `<b>${esc(tl(dn.k))}</b> สัดส่วนลดมากสุด ${dn.dv.toFixed(1)} pp — ถ้าเป็น tier ราคาสูง แปลว่ารายได้/หัวถูกกดจาก mix ไม่ใช่จากราคา`, 'warn') : '') +
+      (d.mix_effect == null ? _diveBullet('ℹ️', 'ยังไม่มีช่วงก่อนหน้าที่เทียบได้ จึงยังไม่คำนวณผลของ mix ต่อรายได้/หัว')
+        : _diveBullet(d.mix_effect < 0 ? '⚠️' : '✅',
+          `ผลจาก mix อย่างเดียว ${d.mix_effect < 0 ? 'กด' : 'ดัน'}รายได้/หัว <b>${_MI_D2(Math.abs(d.mix_effect))}</b> เทียบช่วงก่อนหน้า`,
+          d.mix_effect < 0 ? 'bad' : 'good')) +
+      (d.era_clamped ? _diveBullet('🗓️', `กราฟเริ่มที่ <b>${d.menu_era_from}</b> — ราคาเมนูเก่าถูกยกเลิกไปแล้ว จึงไม่นำมารวมในสัดส่วน`, 'info') : ''));
+}
+
+async function _divePtCogs(_cfg) {
+  const d = _ptLast;
+  if (!d || !(d.trend_month || []).length) return '<p class="text-xs text-slate-400 p-2">ยังไม่มีข้อมูลรายเดือน</p>';
+  const t = d.trend_month, labels = t.map(r => r.ym);
+  const keys = (d.tier_keys || []).filter(k => k !== 'child');
+  const tl = k => (d.tier_labels || {})[k] || k;
+  const lastM = t[t.length - 1];
+  const now = keys.map(k => ({ k, v: lastM.tiers[k]?.cogs_head })).filter(x => x.v != null)
+                  .sort((a, b) => b.v - a.v);
+  // Biggest month-on-month move across all tiers — the thing that moved the line.
+  let move = null;
+  keys.forEach(k => {
+    const s = t.map(r => r.tiers[k]?.cogs_head ?? null);
+    for (let i = 1; i < s.length; i++) {
+      if (s[i] == null || s[i - 1] == null) continue;
+      const dv = s[i] - s[i - 1];
+      if (!move || Math.abs(dv) > Math.abs(move.dv)) move = { k, dv, from: labels[i - 1], to: labels[i] };
+    }
+  });
+  const hot = (d.tiers || []).filter(x => x.a.food_pct != null && x.a.food_pct >= 40)
+                             .sort((a, b) => b.a.food_pct - a.a.food_pct);
+  // Outliers are judged per tier — a ฿1,299 tier costs more than a ฿459 one by
+  // design, so pooling them would flag the price list, not an anomaly.
+  const outBullets = keys.map(k => {
+    const s = t.map(r => r.tiers[k]?.cogs_head ?? null);
+    const o = _miOutlierSet(s);
+    if (!o.size) return '';
+    return _diveBullet('🎯', `<b>${esc(tl(k))}</b> — เดือนที่ต้นทุน/หัวหลุดกรอบ: ` +
+      [...o].map(i => `${esc(labels[i])} (${_MI_D2(s[i])})`).join(', '), 'warn');
+  }).join('');
+  return _diveSection('ช่วงที่กำลังดู', '💸',
+      _diveMetric('A', `${d.a_range[0]} → ${d.a_range[1]}`) +
+      _diveMetric('ต้นทุนอาหาร/หัว (รวมทุก tier)', _MI_D2(d.blend.cogs_head_a), 'bad') +
+      _diveMetric('Food cost %', (d.blend.food_pct_a ?? '-') + '%',
+                  (d.blend.food_pct_a || 0) >= 40 ? 'bad' : 'good') +
+      _diveMetric('รายได้/หัว', _MI_D2(d.blend.rev_head_a), 'good')) +
+    _diveSection('ต้นทุน/หัว รายเดือนล่าสุด', '📊',
+      now.map(x => _diveMetric(esc(tl(x.k)), _MI_D2(x.v))).join('') +
+      (now.length > 1 ? _diveBullet('↔️',
+        `ช่วงห่างระหว่าง tier แพงสุด (<b>${esc(tl(now[0].k))}</b> ${_MI_D2(now[0].v)}) กับถูกสุด ` +
+        `(<b>${esc(tl(now[now.length - 1].k))}</b> ${_MI_D2(now[now.length - 1].v)}) = ` +
+        `<b>${_MI_D2(now[0].v - now[now.length - 1].v)}</b>/หัว`) : '')) +
+    _diveSection('สิ่งที่ต้องดู', '⚠️',
+      (move ? _diveBullet(move.dv > 0 ? '📈' : '📉',
+        `ขยับแรงสุดคือ <b>${esc(tl(move.k))}</b> ${move.dv > 0 ? 'เพิ่ม' : 'ลด'} <b>${_MI_D2(Math.abs(move.dv))}</b>/หัว ` +
+        `(${esc(move.from)} → ${esc(move.to)})`, move.dv > 0 ? 'bad' : 'good') : '') +
+      (hot.length ? _diveBullet('🔥',
+        `tier ที่ food cost ≥ 40%: ${hot.map(x => `<b>${esc(x.label)}</b> (${x.a.food_pct}%)`).join(', ')} — ` +
+        `นี่คือเกณฑ์เดียวกับที่การ์ด "สิ่งที่ต้องปรับปรุงและพัฒนา" ใช้ตั้งข้อเสนอแนะ`, 'bad')
+        : _diveBullet('✅', 'ไม่มี tier ไหน food cost แตะ 40% ในช่วงนี้', 'good')) +
+      (outBullets || _diveBullet('✅', 'ไม่พบเดือนที่ต้นทุน/หัวหลุดกรอบของ tier ตัวเอง', 'good')) +
+      (d.era_clamped ? _diveBullet('🗓️', `เส้นเริ่มที่ <b>${d.menu_era_from}</b> — ต้นทุน/หัวของเมนูเก่าคนละชุดราคา จึงไม่ต่อเส้นกัน`, 'info') : ''));
+}
+
+_DIVE_ENHANCERS.miChart = _diveMenuImpact;
+_DIVE_ENHANCERS.ptChartMix = _divePtMix;
+_DIVE_ENHANCERS.ptChartCogs = _divePtCogs;
 
 async function loadCostHeadTop60(force) {
   const sel = document.getElementById('chtMonth');
@@ -1958,6 +2206,10 @@ async function loadDataQuality() {
   }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';
 }
 
+// Last payload + chart handles for the ⏰ tab, so the dive-in panels can read the
+// real numbers instead of re-deriving them from the chart datasets.
+let _ctmLast = null, _ctmChartDays = null, _ctmChartClose = null;
+
 async function loadCloseTime(force) {
   loadDataQuality();                          // integrity panel above the freshness table
   const dateSel = document.getElementById('ctmDate')?.value || '';
@@ -1978,6 +2230,12 @@ async function loadCloseTime(force) {
   const TH = (cols) => '<tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">' +
     cols.map(c => `<th class="py-1.5 pr-2${c.r ? ' text-right' : ''}">${c.t}</th>`).join('') + '</tr>';
 
+  _ctmLast = d;
+  // Charts only make sense in freshness mode — single-day mode is a snapshot,
+  // and a 30-day series under a one-day question is just noise.
+  const chartsEl = document.getElementById('ctmCharts');
+  if (chartsEl) chartsEl.style.display = d.mode === 'date' ? 'none' : '';
+
   if (d.mode === 'date') {
     // ── Single-day mode ──
     title.textContent = `รายสาขา — วันที่ ${d.date} (บนสุด = ไม่มีข้อมูลวันนี้)`;
@@ -1993,14 +2251,15 @@ async function loadCloseTime(force) {
       const bdg = rep
         ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#dcfce7;color:#15803d">มีข้อมูล</span>'
         : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#fee2e2;color:#b91c1c">ไม่มีข้อมูล</span>';
-      return `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
-        <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-        <td class="py-1.5 pr-2">${bdg}</td>
+      return `<tr class="border-t border-slate-100 hover:bg-amber-50/40${rep ? '' : ' mi-outlier'}">
+        <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
+        <td class="py-1.5 pr-2" data-sort="${rep ? 1 : 0}">${bdg}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${r.day_close || '—'}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${rep ? '#0f172a' : '#ef4444'}">${rep ? fmtN(r.day_bills) : '0'}</td>
         <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${esc(r.last_sold || '—')}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+    makeSortable('ctmTable');
     return;
   }
 
@@ -2011,6 +2270,8 @@ async function loadCloseTime(force) {
     _extKpi('อัปเดตล่าสุด', fmtN(s.current || 0), 'ข้อมูลถึงวันล่าสุด', '#10b981'),
     _extKpi('ข้อมูลล่าช้า', fmtN(s.behind || 0), 'ยังไม่ sync วันล่าสุด', s.behind ? '#ef4444' : '#94a3b8'),
     _extKpi('ค้างนานสุด', (s.max_days_behind || 0) + ' วัน', 'จากวันข้อมูลล่าสุด', s.max_days_behind ? '#f59e0b' : '#94a3b8'),
+    _extKpi('วันที่ข้อมูลไม่ครบ', fmtN(s.gap_days || 0),
+            `จาก ${fmtN(s.window_days || 0)} วันล่าสุด`, s.gap_days ? '#ef4444' : '#10b981'),
   ].join('');
   head.innerHTML = TH([{t:'สาขา'},{t:'สถานะ'},{t:'ข้อมูลล่าสุด'},{t:'ล่าช้า (วัน)',r:1},{t:'เวลาปิดเฉลี่ย',r:1},{t:'วันเปิด (30วัน)',r:1},{t:'บิลรวม',r:1}]);
   const badge = st => {
@@ -2018,20 +2279,152 @@ async function loadCloseTime(force) {
     if (st === 'inactive') return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#e2e8f0;color:#475569">ไม่เคลื่อนไหว</span>';
     return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#fee2e2;color:#b91c1c">ล่าช้า</span>';
   };
-  document.getElementById('ctmRows').innerHTML = (d.branches || []).map(r => {
+  // Two independent anomalies on this table: a branch far behind the others on
+  // sync, and one whose shop closes at a time unlike the rest of the chain.
+  const brs = d.branches || [];
+  const closeOut = _miOutlierSet(brs.map(r => r.avg_close_min));
+  const openOut = _miOutlierSet(brs.map(r => r.days_open));
+  document.getElementById('ctmRows').innerHTML = brs.map((r, i) => {
     const db = r.days_behind;
     const dbCol = db === 0 ? '#10b981' : db >= 14 ? '#64748b' : '#ef4444';
-    return `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
-      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-      <td class="py-1.5 pr-2">${badge(r.status)}</td>
+    const lateClose = closeOut.has(i);
+    const fewDays = openOut.has(i) && r.days_open < 20;
+    const rowCls = (db > 0 && db < 14) ? ' mi-outlier' : lateClose ? ' mi-outlier' : '';
+    return `<tr class="border-t border-slate-100 hover:bg-amber-50/40${rowCls}">
+      <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2" data-sort="${db == null ? '' : db}">${badge(r.status)}</td>
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-secondary)">${esc(r.last_sold || '—')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dbCol}">${db == null ? '—' : db}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${r.avg_close || '—'}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(r.days_open)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" data-sort="${r.avg_close_min == null ? '' : r.avg_close_min}">${r.avg_close || '—'}${lateClose ? ' <span class="mi-flag warn" title="เวลาปิดต่างจากสาขาอื่นมาก (หลุดกรอบ Tukey)">⚠ ต่างจากเพื่อน</span>' : ''}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${fewDays ? '#b45309' : 'var(--text-muted)'}">${fmtN(r.days_open)}${fewDays ? ' <span class="mi-flag warn" title="เปิดขายน้อยวันผิดปกติใน 30 วันล่าสุด — ปิดปรับปรุง หรือข้อมูลขาด">⚠</span>' : ''}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(r.total_bills)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  makeSortable('ctmTable');
+  _ctmRenderCharts(d);
 }
+
+function _ctmRenderCharts(d) {
+  const daily = d.daily || [], brs = d.branches || [];
+  if (daily.length) {
+    // A day where a branch is missing is not "slightly lower" — it is a hole in
+    // the data every other number on the dashboard is computed from, so it gets
+    // its own colour rather than being read off the bar height.
+    _ctmChartDays = mkChart('ctmChartDays', {
+      type: 'bar',
+      data: { labels: daily.map(r => r.day), datasets: [{
+        label: 'สาขาที่มีข้อมูล', data: daily.map(r => r.branches),
+        backgroundColor: daily.map(r => r.missing ? 'rgba(220,38,38,.75)' : 'rgba(14,116,144,.55)'),
+        borderColor: daily.map(r => r.missing ? '#dc2626' : 'transparent'),
+        borderWidth: daily.map(r => r.missing ? 1.5 : 0) }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 },
+                       title: { display: true, text: 'จำนวนสาขา' } } },
+        plugins: { tooltip: { callbacks: { afterLabel: c => {
+          const r = daily[c.dataIndex];
+          return `บิล ${fmtN(r.bills)}` + (r.missing ? ` · ขาด ${r.missing} สาขา` : '');
+        } } } } } });
+  } else if (_ctmChartDays) { _ctmChartDays.destroy(); _ctmChartDays = null; }
+
+  const withClose = brs.filter(r => r.avg_close_min != null);
+  if (withClose.length) {
+    const mins = withClose.map(r => r.avg_close_min);
+    const out = _miOutlierSet(mins);
+    _ctmChartClose = mkChart('ctmChartClose', {
+      type: 'bar',
+      data: { labels: withClose.map(r => r.branch), datasets: [{
+        label: 'เวลาปิดเฉลี่ย (นาทีจากเที่ยงคืน)', data: mins,
+        backgroundColor: mins.map((_, i) => out.has(i) ? 'rgba(220,38,38,.75)' : 'rgba(124,58,237,.55)'),
+        borderColor: mins.map((_, i) => out.has(i) ? '#dc2626' : 'transparent'),
+        borderWidth: mins.map((_, i) => out.has(i) ? 1.5 : 0) }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { title: { display: true, text: 'เวลาปิด' },
+                       ticks: { callback: v => _ctmHhmm(v) } } },
+        plugins: { legend: { display: false },
+                   tooltip: { callbacks: { label: c => 'ปิดเฉลี่ย ' + _ctmHhmm(c.parsed.x) } } } } });
+  } else if (_ctmChartClose) { _ctmChartClose.destroy(); _ctmChartClose = null; }
+}
+
+// Minutes from midnight → HH:MM. Values past 1440 are after-midnight closes the
+// endpoint pushed forward so 01:30 sorts after 23:00 — wrap them back for display.
+function _ctmHhmm(v) {
+  if (v == null) return '—';
+  const m = Math.round(v);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+// ── 🔍 Dive-in summaries for the ⏰ Data Freshness charts ────────────────────
+async function _diveCtmDays(_cfg) {
+  const d = _ctmLast;
+  const daily = (d && d.daily) || [];
+  if (!daily.length) return '<p class="text-xs text-slate-400 p-2">ไม่มีข้อมูลรายวันในช่วงนี้</p>';
+  const s = d.summary || {};
+  const gaps = daily.filter(r => r.missing > 0);
+  const worst = gaps.slice().sort((a, b) => b.missing - a.missing)[0];
+  const bills = daily.map(r => r.bills);
+  const billOut = _miOutlierSet(bills);
+  const streak = (() => {                    // longest run of complete days
+    let best = 0, cur = 0;
+    daily.forEach(r => { cur = r.missing ? 0 : cur + 1; best = Math.max(best, cur); });
+    return best;
+  })();
+  return _diveSection('ช่วงที่กำลังดู', '⏰',
+      _diveMetric('หน้าต่าง', `${esc(d.window_from || daily[0].day)} → ${esc(daily[daily.length - 1].day)}`) +
+      _diveMetric('สาขาทั้งหมด', fmtN(s.branch_count || 0)) +
+      _diveMetric('วันที่ข้อมูลครบทุกสาขา', fmtN(daily.length - gaps.length) + ' / ' + fmtN(daily.length),
+                  gaps.length ? 'bad' : 'good') +
+      _diveMetric('ข้อมูลล่าสุดทั้งระบบ', esc(d.data_max_date || '—'))) +
+    _diveSection('ช่องว่างของข้อมูล', '🕳️',
+      (gaps.length
+        ? _diveBullet('⚠️', `มี <b>${gaps.length}</b> วันที่ไม่ครบทุกสาขา — วันที่ขาดมากสุดคือ ` +
+            `<b>${esc(worst.day)}</b> (ขาด ${worst.missing} สาขา) · ทุกตัวเลขในแดชบอร์ดของวันเหล่านี้ ` +
+            `<b>ต่ำกว่าความจริง</b> ไม่ใช่ยอดตก`, 'bad')
+        : _diveBullet('✅', 'ทุกวันในช่วงนี้มีข้อมูลครบทุกสาขา', 'good')) +
+      _diveBullet('📆', `ช่วงที่ครบต่อเนื่องยาวสุด <b>${streak}</b> วัน`) +
+      (gaps.length > 3
+        ? _diveBullet('🔁', `ขาดถี่ (${gaps.length} วัน) — น่าจะเป็นปัญหา sync ที่เกิดซ้ำ ไม่ใช่เหตุการณ์เดียว ` +
+            `ตรวจตารางด้านล่างว่าสาขาเดิมหรือคนละสาขา`, 'warn')
+        : '')) +
+    _diveSection('ปริมาณบิลรายวัน', '🧾',
+      _diveBullet('📊', `เฉลี่ย <b>${fmtN(Math.round(bills.reduce((a, b) => a + b, 0) / bills.length))}</b> บิล/วัน ` +
+        `· สูงสุด ${fmtN(Math.max(...bills))} · ต่ำสุด ${fmtN(Math.min(...bills))}`) +
+      (billOut.size
+        ? _diveBullet('🎯', 'วันที่จำนวนบิลหลุดกรอบ: ' +
+            [...billOut].map(i => `<b>${esc(daily[i].day)}</b> (${fmtN(daily[i].bills)})`).join(', ') +
+            ' — เช็คก่อนว่าเป็นวันที่ข้อมูลไม่ครบหรือไม่ ก่อนสรุปว่าขายดี/ขายตก', 'warn')
+        : _diveBullet('✅', 'ไม่พบวันที่จำนวนบิลหลุดกรอบ', 'good')));
+}
+
+async function _diveCtmClose(_cfg) {
+  const d = _ctmLast;
+  const brs = ((d && d.branches) || []).filter(r => r.avg_close_min != null);
+  if (!brs.length) return '<p class="text-xs text-slate-400 p-2">ไม่มีข้อมูลเวลาปิดในช่วงนี้</p>';
+  const sorted = brs.slice().sort((a, b) => b.avg_close_min - a.avg_close_min);
+  const mins = brs.map(r => r.avg_close_min);
+  const out = _miOutlierSet(mins);
+  const avg = mins.reduce((a, b) => a + b, 0) / mins.length;
+  const spread = Math.max(...mins) - Math.min(...mins);
+  return _diveSection('เวลาปิดของเครือ', '🌙',
+      _diveMetric('ปิดเฉลี่ยทั้งเครือ', _ctmHhmm(avg)) +
+      _diveMetric('ปิดดึกสุด', `${esc(sorted[0].branch)} · ${_ctmHhmm(sorted[0].avg_close_min)}`) +
+      _diveMetric('ปิดเร็วสุด', `${esc(sorted[sorted.length - 1].branch)} · ${_ctmHhmm(sorted[sorted.length - 1].avg_close_min)}`) +
+      _diveMetric('ช่วงห่างหัว–ท้าย', Math.round(spread) + ' นาที', spread > 90 ? 'bad' : '')) +
+    _diveSection('อ่านยังไง', '📈',
+      _diveBullet('🕛', 'เวลานี้คือ<b>บิลสุดท้ายของวัน</b>เฉลี่ย 30 วันล่าสุด ไม่ใช่เวลาปิดตามป้าย — ' +
+        'เวลาก่อน 06:00 ถูกนับเป็นปิดหลังเที่ยงคืน จึงเรียงถัดจาก 23:00 ไม่ใช่ขึ้นต้นแถว') +
+      (out.size
+        ? _diveBullet('⚠️', 'สาขาที่เวลาปิดหลุดกรอบเทียบเพื่อน: ' +
+            [...out].map(i => `<b>${esc(brs[i].branch)}</b> (${_ctmHhmm(brs[i].avg_close_min)})`).join(', ') +
+            ' — ถ้าไม่ได้ตั้งใจให้ต่าง ให้เช็คว่าเป็นการปิดบิลช้า (ค้างบิลไว้) หรือเปิดจริงต่างจริง', 'warn')
+        : _diveBullet('✅', 'ทุกสาขาปิดในกรอบเวลาใกล้เคียงกัน', 'good')) +
+      (spread > 90
+        ? _diveBullet('↔️', `หัวกับท้ายห่างกัน <b>${Math.round(spread)}</b> นาที — ค่าแรงและค่าไฟของสาขาที่ปิดดึก ` +
+            `สูงกว่าเพื่อนโดยไม่จำเป็นหรือไม่ ควรดูคู่กับยอดขายช่วงชั่วโมงท้าย`, 'warn')
+        : ''));
+}
+
+_DIVE_ENHANCERS.ctmChartDays = _diveCtmDays;
+_DIVE_ENHANCERS.ctmChartClose = _diveCtmClose;
 
 // ── Industry & Economy context (curated figures + live news strip) ──
 async function loadMarket() {
