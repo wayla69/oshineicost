@@ -416,3 +416,87 @@ def update_sku_business_type(sku_code: str, body: BusinessTypeUpdate):
             raise HTTPException(404, f"sku_code '{sku_code}' not found")
     invalidate_cache("get_cost_detail", "bom_cost_", "branch_bom_analysis")
     return {"sku_code": sku_code, "business_type": bt, "updated": True}
+
+
+# ---------------------------------------------------------------------------
+# /api/branch-downtime  -  days a branch was legitimately not trading
+# ---------------------------------------------------------------------------
+# The data-health check (/api/data-quality) cannot tell a closure from a sync
+# that lost a day — the POS has no "closed today" record. These rows are the
+# human answer; the check then reports them as their own benign finding rather
+# than dropping them, so a wrong entry stays visible. Same table the
+# backend/mark_downtime.py CLI writes, and it is preserved across the daily push
+# (core._PRESERVED_EXACT) because nothing can re-derive it.
+_DOWNTIME_REASONS = ("closed", "pre_open", "renovation", "disaster")
+
+
+class DowntimeEntry(BaseModel):
+    branch:    str
+    date_from: str
+    date_to:   str
+    reason:    str = "closed"
+    note:      str = ""
+
+
+def _iso_or_400(s: str, field: str) -> str:
+    import datetime as _dt
+    try:
+        _dt.date.fromisoformat((s or "").strip())
+    except ValueError:
+        raise HTTPException(400, f"{field} ต้องเป็นวันที่รูปแบบ YYYY-MM-DD")
+    return s.strip()
+
+
+@router.get("/api/branch-downtime")
+def list_branch_downtime():
+    with get_db() as con:
+        con.execute("""CREATE TABLE IF NOT EXISTS branch_downtime (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, branch TEXT NOT NULL,
+                date_from TEXT NOT NULL, date_to TEXT NOT NULL,
+                reason TEXT NOT NULL DEFAULT 'closed', note TEXT DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(branch, date_from, date_to))""")
+        rows = con.execute("SELECT * FROM branch_downtime ORDER BY branch, date_from").fetchall()
+    out = []
+    for r in rows:
+        import datetime as _dt
+        days = (_dt.date.fromisoformat(r["date_to"]) - _dt.date.fromisoformat(r["date_from"])).days + 1
+        out.append({**dict(r), "days": days})
+    return {"reasons": list(_DOWNTIME_REASONS), "rows": out}
+
+
+@router.post("/api/branch-downtime", dependencies=[Depends(require_write_token)])
+def add_branch_downtime(body: DowntimeEntry):
+    d_from = _iso_or_400(body.date_from, "date_from")
+    d_to = _iso_or_400(body.date_to, "date_to")
+    if d_from > d_to:
+        raise HTTPException(400, "date_from ต้องไม่เกิน date_to")
+    if body.reason not in _DOWNTIME_REASONS:
+        raise HTTPException(400, f"reason ต้องเป็นหนึ่งใน {list(_DOWNTIME_REASONS)}")
+    branch = (body.branch or "").strip()
+    with get_db() as con:
+        # A typo would record downtime against a branch nobody can see, and the
+        # false "missing data" alarm it was meant to silence would stay up.
+        if not con.execute("SELECT 1 FROM branches WHERE name=?", (branch,)).fetchone():
+            raise HTTPException(400, f"ไม่พบสาขา '{branch}'")
+        try:
+            con.execute("INSERT INTO branch_downtime(branch,date_from,date_to,reason,note) "
+                        "VALUES (?,?,?,?,?)", (branch, d_from, d_to, body.reason, body.note or ""))
+            con.commit()
+        except Exception as e:
+            if "UNIQUE" in str(e):
+                raise HTTPException(409, "ช่วงวันนี้ของสาขานี้ถูกบันทึกไว้แล้ว")
+            raise
+    invalidate_cache("data_quality")
+    return {"ok": True}
+
+
+@router.delete("/api/branch-downtime/{row_id}", dependencies=[Depends(require_write_token)])
+def delete_branch_downtime(row_id: int):
+    with get_db() as con:
+        cur = con.execute("DELETE FROM branch_downtime WHERE id=?", (row_id,))
+        con.commit()
+    if cur.rowcount == 0:
+        raise HTTPException(404, "ไม่พบรายการนี้")
+    invalidate_cache("data_quality")
+    return {"ok": True, "deleted": row_id}
