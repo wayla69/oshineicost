@@ -258,6 +258,27 @@ def test_purchases_shows_a_sold_week_with_no_import_as_a_gap(client):
 
 
 # ── ปริมาณสั่งจริง: template needs an issued cycle ──────────────────────────
+def test_warning_letter_draft_is_visibly_a_draft(client):
+    """A warning notice names a branch and asks it to answer for a shortfall, so
+    the preview must never be mistakable for the issued letter."""
+    import conftest as _cf
+    ps = f"{_cf.LATEST_MONTH}-01"
+    r = client.post("/api/ingredients/order-plan/issue",
+                    json={"period_start": ps, "horizon": "week",
+                          "date_to": f"{_cf.LATEST_MONTH}-03", "days": 28})
+    if r.status_code != 200 or not r.json().get("issued"):
+        pytest.skip("no plan rows to issue on this fixture")
+    p = {"period_start": ps, "horizon": "week"}
+    sent = client.get("/api/ingredients/compliance-letter.print", params=p)
+    draft = client.get("/api/ingredients/compliance-letter.print",
+                       params={**p, "preview": "true"})
+    if sent.status_code == 404:
+        pytest.skip("every branch is compliant — no notice is produced")
+    assert sent.status_code == 200 and draft.status_code == 200
+    assert "ร่าง" in draft.text and "DRAFT" in draft.text
+    assert "ร่าง" not in sent.text, "the real letter must carry no draft stamp"
+
+
 def test_order_actual_template_needs_an_issued_cycle(client):
     r = client.get("/api/ingredients/order-actual.template.xlsx",
                    params={"period_start": "1999-01-04"})

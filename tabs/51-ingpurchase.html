@@ -1,0 +1,79 @@
+<!-- ══ 🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์) ══ -->
+<div id="tab-ingpurchase" style="display:none">
+
+  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#f5f3ff 0%,#ecfeff 100%);border-left:4px solid #7c3aed">
+    <div class="flex items-start gap-3">
+      <span style="font-size:28px">🧾</span>
+      <div class="flex-1">
+        <h2 class="text-base font-bold" style="color:#5b21b6">ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)</h2>
+        <p class="text-xs text-slate-600 mt-1">
+          <b>ยอดซื้อวัตถุดิบ</b> นำเข้าจากระบบจัดซื้อเป็นไฟล์ Excel (สาขา + สัปดาห์ + ยอดรวม) ·
+          <b>ยอดขาย</b> เป็นตัวเลขของระบบนี้เอง → ได้ <b>% ยอดซื้อต่อยอดขาย</b> ของแต่ละสาขา
+          <br><b style="color:#b45309">⚠️ คนละตัวกับ Food cost (BoM)</b> — BoM คือ “ตามสูตรควรใช้เท่าไร”, หน้านี้คือ “<b>ซื้อเข้าจริงเท่าไร</b>”
+          การซื้อมาก่อนขาย (ตุนของ/รอบส่งของ) ทำให้รายสัปดาห์แกว่งได้มาก จึงควรอ่านคู่กับค่าเฉลี่ยรวมช่วง
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+    <label class="text-xs" style="color:var(--text-muted)">สาขา</label>
+    <select id="ipBranch" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
+
+    <label class="text-xs" style="color:var(--text-muted)">ช่วง</label>
+    <input type="date" id="ipFrom" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs" style="color:var(--text-muted)">→</span>
+    <input type="date" id="ipTo" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+
+    <span class="ml-auto flex flex-wrap items-center gap-2">
+      <label class="text-xs" style="color:var(--text-muted)">จำนวนสัปดาห์ใน template</label>
+      <input type="number" id="ipWeeks" value="8" min="1" max="52" style="width:56px;border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <button onclick="ipTemplate()" style="background:#7c3aed;color:#fff;border:0;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer"
+              title="ไฟล์มีสาขา × สัปดาห์ พร้อมยอดขายของสัปดาห์นั้นไว้ให้ตรวจทาน — กรอกแค่ช่องยอดซื้อ">⬇️ โหลด template</button>
+      <label style="background:#0f766e;color:#fff;border-radius:var(--r-sm);padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">
+        ⬆️ นำเข้าไฟล์
+        <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="ipImport(this)">
+      </label>
+    </span>
+    <span id="ipStatus" class="text-xs w-full" style="color:var(--text-muted)"></span>
+  </div>
+
+  <div id="ipImportReport" class="mb-4"></div>
+  <div id="ipKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
+  <div id="ipGaps" class="mb-4"></div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
+    <div class="card p-5">
+      <h2 class="section-title mb-3">แนวโน้มรายสัปดาห์ — % ยอดซื้อวัตถุดิบต่อยอดขาย</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุป · จุดใหญ่สีแดง = สัปดาห์ที่หลุดกรอบของสาขานั้น</p>
+      <div style="height:280px"><canvas id="ipChartPct"></canvas></div>
+    </div>
+    <div class="card p-5">
+      <h2 class="section-title mb-3">ยอดซื้อ เทียบ ยอดขาย (รวมทุกสาขาในช่วง)</h2>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">แท่ง = ยอดขาย · เส้น = ยอดซื้อวัตถุดิบที่นำเข้า — ช่องว่างคือสัปดาห์ที่ยังไม่ได้นำเข้าไฟล์</p>
+      <div style="height:280px"><canvas id="ipChartAmt"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card p-5 mb-4 overflow-x-auto">
+    <h2 class="section-title mb-1">🏪 สรุปรายสาขา (ทั้งช่วง)</h2>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · ⚠ = % หลุดกรอบเทียบสาขาอื่น · สัปดาห์ที่ยังไม่นำเข้าไม่ถูกนับเป็น 0 แต่จะนับเป็น “ขาดไฟล์”</p>
+    <table class="text-xs w-full" id="ipBranchTbl"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">ยอดซื้อวัตถุดิบ</th>
+      <th class="py-1.5 pr-2 text-right">ยอดขาย (ex-VAT)</th><th class="py-1.5 pr-2 text-right">% ต่อยอดขาย</th>
+      <th class="py-1.5 pr-2 text-right">ซื้อ/หัวลูกค้า</th><th class="py-1.5 pr-2 text-right">สัปดาห์</th>
+      <th class="py-1.5 text-right">ขาดไฟล์</th>
+    </tr></thead><tbody id="ipBranchBody"></tbody></table>
+  </div>
+
+  <div class="card p-5 overflow-x-auto">
+    <h2 class="section-title mb-1">รายสัปดาห์ × สาขา</h2>
+    <p class="text-[11px] mb-2" style="color:var(--text-muted)"><b>คลิกหัวคอลัมน์เพื่อเรียง</b> · แก้ตัวเลขในช่อง “ยอดซื้อ” ได้โดยตรงแล้วกด Enter (ใช้เมื่อต้องแก้ทีละรายการ — ทั้งชุดให้ใช้ไฟล์ Excel)</p>
+    <table class="text-xs w-full" id="ipWeekTbl"><thead><tr class="text-left border-b" style="color:var(--text-muted)">
+      <th class="py-1.5 pr-2">สัปดาห์เริ่ม</th><th class="py-1.5 pr-2">สาขา</th>
+      <th class="py-1.5 pr-2 text-right">ยอดซื้อวัตถุดิบ</th><th class="py-1.5 pr-2 text-right">ยอดขาย (ex-VAT)</th>
+      <th class="py-1.5 pr-2 text-right">% ต่อยอดขาย</th><th class="py-1.5 pr-2 text-right">ซื้อ/หัวลูกค้า</th>
+      <th class="py-1.5">ที่มา</th>
+    </tr></thead><tbody id="ipWeekBody"></tbody></table>
+  </div>
+</div>

@@ -1203,6 +1203,7 @@ def ingredients_compliance_letter(
     due_date:      Optional[str] = Query(None, description="deadline to correct"),
     issuer:        Optional[str] = Query(None),
     note:          Optional[str] = Query(None),
+    preview:       bool          = Query(False, description="stamp it ร่าง — for reading before it is sent"),
 ):
     """Warning notice to branches that did not order centrally, or ordered more
     than `tolerance_pct` below the recommendation.
@@ -1327,8 +1328,24 @@ def ingredients_compliance_letter(
   </div>
 </section>""")
 
+    # A draft is read, not sent: it is stamped ร่าง on every page and says so in
+    # the toolbar, so a preview can never be mistaken for the issued notice —
+    # this letter names a branch and asks it to answer for a shortfall.
+    # Plain string, single braces: it is substituted INTO the f-string below, so
+    # its braces are never re-processed and must not be doubled.
+    draft_css = ("""
+  .draftmark { color:#b91c1c; border:2px dashed #b91c1c; border-radius:6px;
+               padding:3px 10px; font-size:12px; font-weight:700; display:inline-block;
+               margin-bottom:8px; letter-spacing:.5px; }
+""" if preview else "")
+    draft_bar = ('<span style="color:#b91c1c;font-weight:700;font-size:12px;'
+                 'margin-right:10px">📝 ร่าง — ตรวจก่อนออกจริง</span>' if preview else "")
+    if preview:
+        body = [b.replace('<div class="head">',
+                          '<div class="draftmark">ร่าง (DRAFT) — ยังไม่ได้ออกจดหมายฉบับนี้</div>'
+                          '<div class="head">', 1) for b in body]
     html_out = f"""<!doctype html><html lang="th"><head><meta charset="utf-8">
-<title>หนังสือแจ้งเตือนการสั่งวัตถุดิบ · {len(pages)} สาขา</title>
+<title>{'ร่าง · ' if preview else ''}หนังสือแจ้งเตือนการสั่งวัตถุดิบ · {len(pages)} สาขา</title>
 <style>
   @page {{ size: A4; margin: 14mm 12mm; }}
   * {{ box-sizing: border-box; }}
@@ -1372,8 +1389,9 @@ def ingredients_compliance_letter(
   @media print {{ body {{ background:#fff; }} .toolbar {{ display:none; }}
                   .page {{ margin:0; box-shadow:none; width:auto; min-height:0; padding:0; }}
                   table.grid th {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
+{draft_css}
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+<div class="toolbar">{draft_bar}<button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
   &nbsp;<span style="font-size:11px;color:#64748b">{len(pages)} สาขาที่ต้องแจ้งเตือน · 1 หน้าต่อสาขา</span></div>
 {''.join(body)}
 </body></html>"""
