@@ -176,6 +176,10 @@ function diveInChart(chartId) {
     mceScatter: '🎯 เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน',
     'cov-peak': 'ชั่วโมงขายดี', chartProfitBranch: 'กำไรรายสาขา',
     chartHomeForecast: 'Month-end Forecast',
+    // 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) — enhancers registered in js/07-home.js
+    miChart: 'วัตถุดิบ: แนวโน้มรายเดือน (ปริมาณ/หัว & % บิลที่สั่ง)',
+    ptChartMix: 'Tier ราคา: สัดส่วนคนทานรายเดือน',
+    ptChartCogs: 'Tier ราคา: ต้นทุนอาหาร/หัว รายเดือน',
   };
 
   try {

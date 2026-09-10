@@ -746,6 +746,90 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 }
 
 /* ════════════════════════════════════════════════════════════
+   SORTABLE TABLE HEADERS  (makeSortable() in js/01-core.js)
+════════════════════════════════════════════════════════════ */
+th.th-sortable {
+  cursor: pointer; user-select: none; position: relative;
+  padding-right: 14px !important; transition: color .15s;
+}
+th.th-sortable::after {
+  content: '⇅'; position: absolute; right: 3px; top: 50%;
+  transform: translateY(-50%);
+  font-size: 9px; opacity: .3; font-weight: 700;
+}
+th.th-sortable:hover { color: var(--indigo, #4f46e5); }
+th.th-sortable:hover::after { opacity: .7; }
+th.sorted-desc::after { content: '▼'; opacity: 1; color: var(--indigo, #4f46e5); }
+th.sorted-asc::after  { content: '▲'; opacity: 1; color: var(--indigo, #4f46e5); }
+th.sorted-desc, th.sorted-asc { color: var(--indigo, #4f46e5); }
+
+/* ════════════════════════════════════════════════════════════
+   🧪 MENU IMPACT TAB — typography + anomaly emphasis
+   Scoped to the tab so the rest of the dashboard is untouched.
+════════════════════════════════════════════════════════════ */
+#tab-menuimpact h2.section-title {
+  font-size: 12.5px; letter-spacing: 0.05em; color: var(--text-secondary);
+  text-transform: none; font-weight: 800;
+}
+#tab-menuimpact h2.section-title::before { width: 4px; height: 17px; }
+/* Numbers are the content here — give them a real numeric face so columns
+   line up and digits stop jittering between renders. */
+#tab-menuimpact table td, #tab-menuimpact table th,
+#tab-menuimpact .mi-figure {
+  font-variant-numeric: tabular-nums; font-feature-settings: 'tnum' 1, 'cv01' 1;
+}
+#tab-menuimpact thead th { font-size: 10px; letter-spacing: 0.07em; }
+#tab-menuimpact tbody td:first-child,
+#tab-menuimpact tbody td.mi-name { letter-spacing: -0.005em; }
+#tab-menuimpact table tbody tr:hover { background: var(--bg-subtle); }
+
+/* KPI hero — a display treatment for the four headline figures. */
+#tab-menuimpact .mi-kpi .mi-kpi-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--text-muted);
+}
+#tab-menuimpact .mi-kpi .mi-kpi-value {
+  font-size: 27px; font-weight: 800; line-height: 1.12;
+  letter-spacing: -0.025em; margin: 2px 0 1px;
+}
+#tab-menuimpact .mi-kpi .mi-kpi-sub { font-size: 11px; color: var(--text-muted); line-height: 1.45; }
+
+/* The verdict / narrative blocks read as prose, not as another table. */
+#tab-menuimpact .mi-verdict {
+  font-size: 12.5px; line-height: 1.65; letter-spacing: 0.005em;
+}
+#tab-menuimpact .mi-verdict b { font-weight: 800; }
+
+/* ── anomaly emphasis ─────────────────────────────────────── */
+/* A row far outside the rest of the column (Tukey fence) — the thing the eye
+   should land on first. */
+#tab-menuimpact tr.mi-outlier { background: rgba(220,38,38,.075); }
+#tab-menuimpact tr.mi-outlier > td:first-child { box-shadow: inset 3px 0 0 #dc2626; }
+#tab-menuimpact tr.mi-outlier-good { background: rgba(16,185,129,.075); }
+#tab-menuimpact tr.mi-outlier-good > td:first-child { box-shadow: inset 3px 0 0 #059669; }
+body.dark #tab-menuimpact tr.mi-outlier { background: rgba(248,113,113,.12); }
+body.dark #tab-menuimpact tr.mi-outlier-good { background: rgba(52,211,153,.12); }
+
+#tab-menuimpact .mi-flag {
+  font-size: 9.5px; font-weight: 800; padding: 1px 5px; border-radius: 999px;
+  margin-left: 4px; vertical-align: middle; white-space: nowrap;
+  letter-spacing: .03em;
+}
+#tab-menuimpact .mi-flag.bad  { background: rgba(220,38,38,.14);  color: #b91c1c; }
+#tab-menuimpact .mi-flag.good { background: rgba(16,185,129,.16); color: #047857; }
+#tab-menuimpact .mi-flag.warn { background: rgba(217,119,6,.16);  color: #b45309; }
+body.dark #tab-menuimpact .mi-flag.bad  { color: #fca5a5; }
+body.dark #tab-menuimpact .mi-flag.good { color: #6ee7b7; }
+body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
+
+/* A magnitude cell carries its own micro-bar, so "how far out" reads without
+   comparing digits down the column. */
+#tab-menuimpact .mi-bar {
+  display: inline-block; height: 3px; border-radius: 2px; vertical-align: middle;
+  margin-left: 5px; min-width: 2px; opacity: .75;
+}
+
+/* ════════════════════════════════════════════════════════════
    PRINT
 ════════════════════════════════════════════════════════════ */
 @media print {

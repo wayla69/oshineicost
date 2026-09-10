@@ -247,6 +247,12 @@ def menu_impact_entities():
                 skus.append(row)
         skus.sort(key=lambda r: -r["qty"])
         return {"ready": True, "coverage": [lo, hi], "last_build": state.get("last_build"),
+                # The tab opens on the live menu when the data reaches it: a range
+                # starting before the changeover mixes two price lists (see the
+                # era guard in price_tier_report). The pickers stay free — this is
+                # only where they land on first open.
+                "menu_era_from": GRAND_MENU_FROM,
+                "default_from": (GRAND_MENU_FROM if hi and hi >= GRAND_MENU_FROM else lo),
                 "hc_cost": float(state.get("hc_cost") or 30), "groups": groups, "skus": skus[:400]}
 
 
@@ -407,10 +413,19 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
          "d_other_cogs": round(v["d_oth"] / v["w"], 2) if v["w"] > 0 else None}
         for b, v in by_branch.items()), key=lambda r: -(r["ecogs"] or 0))
     rd = lambda x, nd=2: round(x, nd)
-    # per-tier breakdown (only meaningful when looking across all tiers)
+    # per-tier breakdown (only meaningful when looking across all tiers).
+    # A window reaching into the Grand Menu era shows the NEW price list only:
+    # the retired prices were a different product, and listing both side by side
+    # invited reading a ฿799 row as a peer of ฿789. The bills themselves stay in
+    # the with/without comparison above (each day is compared against itself, so
+    # the changeover never distorts it) — only the tier BREAKDOWN is narrowed.
+    tier_order = _MI_TIER_ORDER
+    era_tiers_only = has_tier and (date_to or hi) >= GRAND_MENU_FROM
+    if era_tiers_only:
+        tier_order = tier_codes_between(GRAND_MENU_FROM, date_to or hi)
     tiers_out = []
     if has_tier:
-        for tr_ in _MI_TIER_ORDER:
+        for tr_ in tier_order:
             v = by_tier.get(tr_)
             tt = tot_tier.get(tr_)
             if not v or not tt or not tt["bills"]:
@@ -427,7 +442,8 @@ def menu_impact(ent: str = Query(..., description="s:<sku_id> หรือ g:<sl
             })
     return {
         "ready": True, "ent": ent, "label": label, "kind": kind, "has_tier": has_tier,
-        "tier": tier, "tiers": tiers_out,
+        "tier": tier, "tiers": tiers_out, "era_tiers_only": bool(era_tiers_only),
+        "menu_era_from": GRAND_MENU_FROM,
         "unit_cost": rd(unit_cost or 0), "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
         "members": [m for m in (members or "").split(",") if m] if kind == "group" else None,
         "coverage": [lo, hi], "date_from": date_from, "date_to": date_to,
@@ -577,6 +593,24 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         a_to = min(date_to or hi, hi)
         if a_from > a_to:
             return {"ready": True, "error": "ช่วงวันที่ไม่ถูกต้อง", "coverage": [lo, hi]}
+        # ── Grand Menu era guard ────────────────────────────────────────────
+        # The whole buffet price list was replaced on 2026-09-01. A window that
+        # STRADDLES that date blends two price lists into one analysis: the tier
+        # table lists retired prices next to live ones, the Top-N gets a column
+        # per dead tier, and the "สิ่งที่ต้องปรับปรุงและพัฒนา" card reads a menu
+        # that stopped existing as a finding about the one on sale. That is the
+        # default view (the pickers open on the full coverage), so cut the
+        # pre-changeover part off and analyse the live menu alone.
+        #
+        # A window entirely BEFORE the changeover is left alone — that is an
+        # explicit look back at the old menu, consistently old on both sides.
+        # A window entirely after needs no cut. Comparison against a previous
+        # window then resumes on its own once both sides sit after the
+        # changeover (October vs September), via comparison_available below.
+        era_clamped = False
+        if a_from < _PT_NEW_MENU_FROM <= a_to:
+            a_from = _PT_NEW_MENU_FROM
+            era_clamped = True
         dA_from, dA_to = date.fromisoformat(a_from), date.fromisoformat(a_to)
         span = (dA_to - dA_from).days + 1
         b_to_d = dA_from - timedelta(days=1)
@@ -626,12 +660,16 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         meta = {ent: (label, uc) for ent, label, uc in con.execute(
             "SELECT ent, label, unit_cost FROM menu_fact_meta WHERE kind='sku'")}
 
-        # monthly trend x tier over the FULL coverage (scope-filtered)
+        # Monthly trend x tier over the full coverage (scope-filtered) — but when
+        # the analysis sits on the live menu, the trend starts at the changeover
+        # too, so the stacked mix chart can't put a retired ฿799 band next to a
+        # live ฿789 one.
+        trend_from = _PT_NEW_MENU_FROM if a_from >= _PT_NEW_MENU_FROM else lo
         trend = {}
         for ym, t, px, cg, rv in con.execute(
                 f"""SELECT substr(day,1,7), tier, SUM(pax), SUM(cogs), SUM(rev)
-                    FROM menu_fact_total WHERE branch_id IN ({ph})
-                    GROUP BY substr(day,1,7), tier""", bids):
+                    FROM menu_fact_total WHERE branch_id IN ({ph}) AND day >= ?
+                    GROUP BY substr(day,1,7), tier""", bids + [trend_from]):
             m = trend.setdefault(ym, {}).setdefault(str(t or "promo"),
                                                     {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
             m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
@@ -745,6 +783,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                       f"ด้านล่างคือฐานของเมนูใหม่ พอถึงเดือนถัดไปที่มีข้อมูลเทียบได้ ระบบจะวิเคราะห์แนวโน้มให้อัตโนมัติ"})
         return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
                 "coverage": [lo, hi], "mode": mode, "comparison_available": False,
+                "era_clamped": era_clamped, "menu_era_from": _PT_NEW_MENU_FROM,
                 "a_range": [a_from, a_to], "b_range": [b_from, b_to],
                 "blend": blend, "mix_effect": mix_effect,
                 "tiers": tiers, "tier_keys": tier_keys,
@@ -831,6 +870,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
 
     return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
             "coverage": [lo, hi], "mode": mode, "comparison_available": True,
+            "era_clamped": era_clamped, "menu_era_from": _PT_NEW_MENU_FROM,
             "a_range": [a_from, a_to], "b_range": [b_from, b_to],
             "blend": blend, "mix_effect": mix_effect,
             "tiers": tiers, "tier_keys": tier_keys,

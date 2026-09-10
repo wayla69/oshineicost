@@ -845,6 +845,71 @@ function injectDiveBtn(chartId, canvas) {
   wrap.appendChild(btn);
 }
 
+// ── Sortable tables ─────────────────────────────────────────────────────────
+// makeSortable(id) turns the LAST header row of a table into click-to-sort
+// columns (first click = high→low, click again = low→high, a third click
+// restores the server's original order). Opt a column out with data-nosort.
+//
+// Cell values are read from data-sort when present, otherwise parsed out of the
+// cell text — the tables here render "฿1,234", "12.3%", "+4.5", "−2 (Δ+1%)" and
+// "-", so we take the FIRST numeric token and treat "-"/"" as missing (missing
+// always sorts last, whichever direction, so empty rows never top the table).
+function _tblSortVal(row, idx) {
+  const cell = row.cells[idx];
+  if (!cell) return { n: null, s: '' };
+  const raw = cell.dataset.sort;
+  const txt = (raw != null ? raw : cell.textContent).trim();
+  if (txt === '' || txt === '-' || txt === '—') return { n: null, s: '' };
+  // −  (U+2212, used for negatives in the reports) → ASCII minus
+  const m = txt.replace(/−/g, '-').replace(/,/g, '').match(/-?\d+(\.\d+)?/);
+  return { n: m ? parseFloat(m[0]) : null, s: txt.toLowerCase() };
+}
+
+function makeSortable(tableOrId) {
+  const table = typeof tableOrId === 'string' ? document.getElementById(tableOrId) : tableOrId;
+  if (!table || !table.tHead || !table.tBodies[0]) return;
+  const headRow = table.tHead.rows[table.tHead.rows.length - 1];
+  if (!headRow) return;
+  const tbody = table.tBodies[0];
+  // Remember the served order so a third click can put it back.
+  Array.from(tbody.rows).forEach((r, i) => { if (!r.dataset.ord) r.dataset.ord = String(i); });
+  Array.from(headRow.cells).forEach((th, idx) => {
+    if (th.dataset.nosort != null || th.dataset.sortable) return;
+    th.dataset.sortable = '1';
+    th.classList.add('th-sortable');
+    th.title = (th.title ? th.title + ' · ' : '') + 'คลิกเพื่อเรียง มาก→น้อย / น้อย→มาก';
+    th.addEventListener('click', () => tblSort(th, idx));
+  });
+}
+
+function tblSort(th, idx) {
+  const table = th.closest('table');
+  if (!table || !table.tBodies[0]) return;
+  const headRow = th.parentElement;
+  const dir = th.dataset.sortDir === 'desc' ? 'asc' : th.dataset.sortDir === 'asc' ? '' : 'desc';
+  Array.from(headRow.cells).forEach(c => {
+    delete c.dataset.sortDir;
+    c.classList.remove('sorted-desc', 'sorted-asc');
+  });
+  if (dir) { th.dataset.sortDir = dir; th.classList.add('sorted-' + dir); }
+  const tbody = table.tBodies[0];
+  const rows = Array.from(tbody.rows);
+  rows.sort((a, b) => {
+    if (!dir) return (+a.dataset.ord || 0) - (+b.dataset.ord || 0);
+    const va = _tblSortVal(a, idx), vb = _tblSortVal(b, idx);
+    if (va.n == null && vb.n == null) return va.s.localeCompare(vb.s, 'th') * (dir === 'desc' ? -1 : 1);
+    if (va.n == null) return 1;            // missing values sink, both directions
+    if (vb.n == null) return -1;
+    return dir === 'desc' ? vb.n - va.n : va.n - vb.n;
+  });
+  rows.forEach(r => tbody.appendChild(r));
+  // Rank columns must count the CURRENT order, not the one they were built in.
+  rows.forEach((r, i) => {
+    const c = r.querySelector('.rank-cell');
+    if (c) c.textContent = String(i + 1);
+  });
+}
+
 function badge(pct) {
   if (pct == null) return '<span class="pill pill-neu">N/A</span>';
   const cls = pct > 0 ? 'pill-up' : pct < 0 ? 'pill-down' : 'pill-neu';
