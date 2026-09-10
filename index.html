@@ -49,6 +49,13 @@ body { background: var(--bg-page); color: var(--text-primary); margin: 0; transi
   box-shadow: var(--shadow-card);
 }
 body.dark .card { border-color: var(--border); }
+/* Tier table's "โปรฯ/ราคาอื่น" explainer. The amber reads on white but drops to a
+   3.46:1 contrast on the dark card, so the accent lightens with the theme. */
+.pt-promo-note { border-left: 3px solid #b45309; background: rgba(180,83,9,.05); color: var(--text-muted); }
+.pt-promo-note b.k { color: #b45309; }
+body.dark .pt-promo-note { border-left-color: #f59e0b; background: rgba(245,158,11,.09);
+  color: var(--text-secondary); }   /* --text-muted is 2.3:1 on the dark card */
+body.dark .pt-promo-note b.k { color: #f59e0b; }
 
 select, input[type="text"], input[type="date"], input[type="number"] {
   background: var(--bg-input);
