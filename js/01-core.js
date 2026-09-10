@@ -1370,10 +1370,10 @@ let costSearchTimer = null;
 function switchSettingsTab(name) {
   activeSettingsTab = name;
   document.querySelectorAll('#tab-settings .subtab-btn').forEach((b, i) => {
-    const subs = ['targets','costs','fixedcosts','branches','hours','prefs','usage','deactivate','users'];
+    const subs = ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','users'];
     b.classList.toggle('active', subs[i] === name);
   });
-  ['targets','costs','fixedcosts','branches','hours','prefs','usage','deactivate','users'].forEach(s => {
+  ['targets','costs','fixedcosts','branches','hours','downtime','prefs','usage','deactivate','users'].forEach(s => {
     document.getElementById('settab-' + s).classList.toggle('hidden', s !== name);
   });
   loadSettingsSubtab();
@@ -1456,6 +1456,81 @@ function loadSettingsSubtab() {
   if (activeSettingsTab === 'prefs')    loadPreferences();
   if (activeSettingsTab === 'users')    { loadUsers(); loadRolePermissions(); }
   if (activeSettingsTab === 'usage')    loadUsageStats();
+  if (activeSettingsTab === 'downtime') loadDowntime();
+}
+
+// ── Settings → 🚧 วันที่สาขาปิด ────────────────────────────────────────────
+// Recorded closures / pre-opening runs. The data-health check cannot tell these
+// from a sync that lost a day (the POS has no "closed today" field), so without
+// them it cries wolf for ever and a real gap drowns in the noise. Days recorded
+// here are MOVED to a benign finding, never hidden — a wrong entry must stay
+// visible rather than silently erase a genuine gap.
+const DT_REASON_TH = { closed: 'ปิดชั่วคราว', pre_open: 'ก่อนเปิดขายจริง',
+                       renovation: 'ปิดปรับปรุง', disaster: 'เหตุสุดวิสัย' };
+
+async function loadDowntime() {
+  const body = document.getElementById('dtBody');
+  if (!body) return;
+  body.innerHTML = '<tr><td colspan="8" class="py-3 text-sm" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  const sel = document.getElementById('dtBranch');
+  if (sel && !sel.options.length) {
+    try {
+      const bs = ((await api(`${API}/api/branches`)) || []).filter(b => b.active !== false);
+      bs.forEach(b => sel.add(new Option(b.name, b.name)));
+    } catch (e) { /* the add form simply stays empty; the list below still loads */ }
+  }
+  let d;
+  try { d = await api(`${API}/api/branch-downtime`); }
+  catch (e) { body.innerHTML = '<tr><td colspan="8" class="py-3 text-sm text-rose-500">โหลดไม่สำเร็จ</td></tr>'; return; }
+  const rs = document.getElementById('dtReason');
+  if (rs && !rs.options.length) (d.reasons || []).forEach(r => rs.add(new Option(DT_REASON_TH[r] || r, r)));
+  const rows = d.rows || [];
+  body.innerHTML = rows.length ? rows.map(r => `<tr class="border-t border-slate-100">
+    <td class="py-2 pr-3 font-semibold">${esc(r.branch)}</td>
+    <td class="py-2 pr-3 tabular-nums">${esc(r.date_from)}</td>
+    <td class="py-2 pr-3 tabular-nums">${esc(r.date_to)}</td>
+    <td class="py-2 pr-3 text-right tabular-nums font-semibold">${r.days}</td>
+    <td class="py-2 pr-3">${esc(DT_REASON_TH[r.reason] || r.reason)}</td>
+    <td class="py-2 pr-3 text-xs" style="color:var(--text-muted)">${esc(r.note || '')}</td>
+    <td class="py-2 pr-3 text-xs" style="color:var(--text-muted)">${esc((r.created_at || '').slice(0, 10))}</td>
+    <td class="py-2 text-right"><button onclick="deleteDowntime(${r.id})"
+      class="text-xs px-2 py-1 rounded border" style="border-color:var(--border);color:#b91c1c">ลบ</button></td></tr>`).join('')
+    : '<tr><td colspan="8" class="py-3 text-sm" style="color:var(--text-muted)">ยังไม่มีการบันทึกช่วงปิดร้าน</td></tr>';
+}
+
+async function addDowntime() {
+  const st = document.getElementById('dtStatus');
+  const g = id => (document.getElementById(id) || {}).value || '';
+  const payload = { branch: g('dtBranch'), date_from: g('dtFrom'), date_to: g('dtTo'),
+                    reason: g('dtReason') || 'closed', note: g('dtNote') };
+  if (!payload.branch || !payload.date_from || !payload.date_to) {
+    st.textContent = 'กรอกสาขาและช่วงวันที่ให้ครบ'; st.style.color = '#b45309'; return;
+  }
+  st.textContent = 'กำลังบันทึก…'; st.style.color = 'var(--text-muted)';
+  try {
+    const r = await fetch(`${API}/api/branch-downtime`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      st.textContent = j.detail || `บันทึกไม่สำเร็จ (${r.status})`; st.style.color = '#b91c1c'; return;
+    }
+    st.textContent = '✓ บันทึกแล้ว'; st.style.color = '#15803d';
+    document.getElementById('dtNote').value = '';
+    loadDowntime();
+  } catch (e) { st.textContent = 'บันทึกไม่สำเร็จ'; st.style.color = '#b91c1c'; }
+}
+
+async function deleteDowntime(id) {
+  // Deleting brings the days back as unexplained rather than losing them — say so,
+  // so nobody reads this button as "delete the sales data".
+  if (!confirm('ลบรายการนี้? วันเหล่านั้นจะกลับไปอยู่หมวด “ยังไม่ทราบสาเหตุ” ในการตรวจสุขภาพข้อมูล')) return;
+  const st = document.getElementById('dtStatus');
+  try {
+    const r = await fetch(`${API}/api/branch-downtime/${id}`, { method: 'DELETE' });
+    if (!r.ok) { st.textContent = `ลบไม่สำเร็จ (${r.status})`; st.style.color = '#b91c1c'; return; }
+    st.textContent = '✓ ลบแล้ว'; st.style.color = '#15803d';
+    loadDowntime();
+  } catch (e) { st.textContent = 'ลบไม่สำเร็จ'; st.style.color = '#b91c1c'; }
 }
 
 // ── Usage telemetry (Settings → 📈 การใช้งานจริง · lean-overhaul Phase 0) ──

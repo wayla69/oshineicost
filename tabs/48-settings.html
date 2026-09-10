@@ -6,10 +6,51 @@
     <button class="subtab-btn" onclick="switchSettingsTab('fixedcosts')">Fixed Costs</button>
     <button class="subtab-btn" onclick="switchSettingsTab('branches')">Branches</button>
     <button class="subtab-btn" onclick="switchSettingsTab('hours')">ชั่วโมงเปิดทำการ</button>
+    <button class="subtab-btn" onclick="switchSettingsTab('downtime')">🚧 วันที่สาขาปิด</button>
     <button class="subtab-btn" onclick="switchSettingsTab('prefs')">Preferences</button>
     <button class="subtab-btn" onclick="switchSettingsTab('usage')">📈 การใช้งานจริง</button>
     <button class="subtab-btn" onclick="switchSettingsTab('deactivate')">Deactivate</button>
     <button class="subtab-btn" id="settabbtn-users" onclick="switchSettingsTab('users')">👥 ผู้ใช้งาน</button>
+  </div>
+
+  <!-- ── Recorded closures / pre-opening runs ──────────────────────────────
+       Why this exists: /api/data-quality reports every no-sales day inside a
+       branch's own trading span as missing data, because the POS has no "closed
+       today" field. These rows are the human answer. Days recorded here are NOT
+       hidden — the check moves them into a separate benign finding, so a wrong
+       entry stays visible instead of silently erasing a real gap. -->
+  <div id="settab-downtime" class="hidden">
+    <div class="card p-5 mb-5" style="max-width:1000px">
+      <h2 class="section-title mb-1">🚧 วันที่สาขาปิด / ยังไม่เปิดขาย</h2>
+      <p class="text-xs mb-4" style="color:var(--text-muted)">
+        ระบบตรวจสุขภาพข้อมูลนับทุกวันที่ไม่มียอดขายกลางช่วงเปิดร้านว่าเป็น “ข้อมูลหาย” เพราะ POS ไม่มีช่องบันทึกว่าปิดร้าน
+        · บันทึกช่วงปิดไว้ที่นี่ แล้ววันเหล่านั้นจะ<b>ย้ายไปอยู่หมวด “บันทึกสาเหตุไว้แล้ว”</b> ไม่ได้ถูกลบทิ้ง
+        จึงยังตรวจย้อนหลังได้ว่าใครบันทึกด้วยเหตุผลใด
+        · <b>อย่าบันทึกวันที่ POS มีข้อมูลแต่ระบบเราไม่มี</b> — นั่นคือ sync มีปัญหา ต้องแก้ที่ sync ไม่ใช่กลบด้วยหน้านี้</p>
+      <div class="flex flex-wrap gap-3 items-end mb-3">
+        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">สาขา</label>
+          <select id="dtBranch" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></select></div>
+        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">ตั้งแต่</label>
+          <input id="dtFrom" type="date" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></div>
+        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">ถึง</label>
+          <input id="dtTo" type="date" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></div>
+        <div><label class="block text-xs mb-1" style="color:var(--text-muted)">เหตุผล</label>
+          <select id="dtReason" class="border rounded-lg px-3 py-1.5 text-sm" style="border-color:var(--border)"></select></div>
+        <div style="flex:1;min-width:220px"><label class="block text-xs mb-1" style="color:var(--text-muted)">หมายเหตุ</label>
+          <input id="dtNote" class="border rounded-lg px-3 py-1.5 text-sm w-full" style="border-color:var(--border)"
+                 placeholder="เช่น ปิดปรับปรุงครัว"></div>
+        <button onclick="addDowntime()" id="dtAddBtn"
+                class="text-sm px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">+ บันทึก</button>
+        <span id="dtStatus" class="text-sm"></span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="text-sm w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+          <th class="py-2 pr-3">สาขา</th><th class="py-2 pr-3">ตั้งแต่</th><th class="py-2 pr-3">ถึง</th>
+          <th class="py-2 pr-3 text-right">วัน</th><th class="py-2 pr-3">เหตุผล</th>
+          <th class="py-2 pr-3">หมายเหตุ</th><th class="py-2 pr-3">บันทึกเมื่อ</th><th class="py-2"></th>
+        </tr></thead><tbody id="dtBody"></tbody></table>
+      </div>
+    </div>
   </div>
 
   <!-- ── Usage telemetry (lean-overhaul Phase 0) ── -->
