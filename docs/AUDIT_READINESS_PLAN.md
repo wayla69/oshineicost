@@ -23,6 +23,10 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
 - ☐ Operational: give each person their own account (the 12 seeded users share
   the default `Oshinei@2026` with must_change=1, so each is forced to set an
   individual password on first login — just have everyone log in once).
+  A login that was never seeded (or was deleted) is provisioned the same way
+  with `python backend/provision_user.py <username> --role <role>` — the admin
+  API refuses the shared default on purpose, so this CLI is the only way to hand
+  it out. `--reset` re-arms it for someone who lost their password.
 
 ### AUD-2 ☑ Backup + restore evidence
 - ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;
