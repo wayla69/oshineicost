@@ -178,7 +178,7 @@ F4	'Rev/Head'		bc	0F766E
 G4	'Cost/Head'		bc	0F766E
 H4	'Cost/Head prev'		bc	0F766E
 I4	'GP/Head'		bc	0F766E
-J4	'Food %'		bc	0F766E
+J4	'COGS %'		bc	0F766E
 A5	'฿789'			
 B5	1116	#,##0		
 C5	1170	#,##0		
