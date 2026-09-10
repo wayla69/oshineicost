@@ -1077,6 +1077,46 @@ def test_export_xlsx(client):
     assert "attachment" in cd and "filename*=UTF-8''" in cd
 
 
+def test_export_working_paper_sheets(client):
+    """Auditor working paper: tie-out/sign-off + line-level detail, exception
+    listing, manual-match log and a source-document inventory with file hashes."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    _add_bank_line(db, "KTB", "QR", 100000)        # ties to KNNQR exactly → matched
+    _add_bank_line(db, "KTB", "TRANSFER", 777)     # no POS transfer → stays unmatched
+    client.post(f"/api/sessions/{sid}/run-match")
+
+    r = client.get(f"/api/sessions/{sid}/export.xlsx")
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    for name in ("Summary", "Tie-out & Sign-off", "Line detail", "Unmatched",
+                 "Manual matches", "Source documents"):
+        assert name in wb.sheetnames, f"missing sheet {name}"
+    # sign-off sits right behind the summary (front page of the working paper)
+    assert wb.sheetnames[:2] == ["Summary", "Tie-out & Sign-off"]
+
+    # Line detail lists both statement lines with their persisted match status
+    rows = list(wb["Line detail"].iter_rows(min_row=2, values_only=True))
+    by_amount = {x[5]: x for x in rows}                      # col F = gross in
+    assert set(by_amount) == {100000.0, 777.0}
+    assert by_amount[100000.0][10] == "matched"              # col K = match status
+    assert by_amount[777.0][10] == "unmatched"
+
+    # Unmatched sheet contains only the orphan credit
+    un = list(wb["Unmatched"].iter_rows(min_row=2, values_only=True))
+    assert [x[5] for x in un] == [777.0]
+
+    # Source documents lists both uploads with their SHA-256 column
+    docs = list(wb["Source documents"].iter_rows(min_row=2, values_only=True))
+    assert sum(1 for d in docs if d and d[1] == "bank") == 2
+
+    # Sign-off carries the signature block
+    so = [c[0] for c in wb["Tie-out & Sign-off"].iter_rows(values_only=True) if c and c[0]]
+    assert any("Signature" in str(v) for v in so)
+    assert any("Exported at" in str(v) for v in so)
+
+
 def test_lane_drilldown(client):
     db = main._DB_PATH
     pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
