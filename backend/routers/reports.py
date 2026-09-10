@@ -867,7 +867,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         worst_now = max(real_now, key=lambda x: x["a"]["food_pct"], default=None)
         if worst_now and worst_now["a"]["food_pct"] >= 40:
             actions.append({"title": f"ทบทวนความคุ้มของ tier {worst_now['label']}",
-                            "detail": f"food cost {worst_now['a']['food_pct']}% ของรายได้ "
+                            "detail": f"COGS {worst_now['a']['food_pct']}% ของรายได้ "
                                       f"(GP {fb(worst_now['a']['gp_head'])}/หัว) ในช่วง {a_from} ถึง {a_to} — "
                                       f"ยังไม่มีเดือนก่อนเทียบเพื่อดูเทรนด์ แต่ใช้ตัวเลขนี้ตั้งเป็นเป้าคุมต้นทุนของเมนูใหม่ได้เลย"})
         if not actions:
@@ -936,10 +936,10 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                          " — ไล่ดูเมนู Top-30 ของ tier นี้ในตารางด้านล่าง")})
     worst_fp = max((x for x in real_tiers if x["a"]["food_pct"]), key=lambda x: x["a"]["food_pct"], default=None)
     if worst_fp and worst_fp["a"]["food_pct"] >= 40:
-        insights.append(f"Tier {worst_fp['label']} food cost สูงสุด {worst_fp['a']['food_pct']}% "
+        insights.append(f"Tier {worst_fp['label']} COGS สูงสุด {worst_fp['a']['food_pct']}% ของรายได้ "
                         f"(GP/หัว {fb(worst_fp['a']['gp_head'])})")
         actions.append({"title": f"ทบทวนความคุ้มของ tier {worst_fp['label']}",
-                        "detail": f"food cost {worst_fp['a']['food_pct']}% ของรายได้ (GP เหลือ {fb(worst_fp['a']['gp_head'])}/หัว) — "
+                        "detail": f"COGS {worst_fp['a']['food_pct']}% ของรายได้ (GP เหลือ {fb(worst_fp['a']['gp_head'])}/หัว) — "
                                   f"พิจารณาปรับไลน์เมนูเฉพาะ tier (สลับเมนูต้นทุนสูงเป็นเมนูภาพลักษณ์ดีแต่ต้นทุนต่ำกว่า), "
                                   f"หรือทดลองขึ้นราคาแบบ A/B บางสาขา"})
     hc_up = [x for x in real_tiers if x["d_hc_head"] is not None and x["d_hc_head"] >= 2]
