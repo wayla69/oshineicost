@@ -81,6 +81,22 @@ def _ing_window(con, days: int, date_to: Optional[str], date_from: Optional[str]
     return start, end, days
 
 
+def _ing_letter_menu_era_line(start: str, end: str) -> str:
+    """§2 of the order letter: which recipe book the quantities came from.
+
+    Three cases, and the middle one is why the line exists — a reference window
+    spanning the changeover averages a menu that was withdrawn with one that had
+    just launched, so the branch is told the number is provisional instead of
+    ordering against a blend it cannot see."""
+    if start >= GRAND_MENU_FROM:
+        return f"อ้างอิงเมนูปัจจุบัน (Grand Menu) ที่เริ่มใช้ตั้งแต่ {GRAND_MENU_FROM} เป็นต้นไป"
+    if end >= GRAND_MENU_FROM:
+        return (f"<b style='color:#b91c1c'>ช่วงอ้างอิงคาบเกี่ยววันเปลี่ยนเมนู {GRAND_MENU_FROM}</b> "
+                f"— ปริมาณข้างต้นเป็นค่าเฉลี่ยของสูตรเมนูเดิมและเมนูปัจจุบันรวมกัน "
+                f"กรุณาใช้เป็นค่าประมาณเบื้องต้น และยืนยันปริมาณจริงกับสาขาอีกครั้ง")
+    return "อ้างอิงเมนูที่ใช้อยู่ในช่วงวันที่ระบุข้างต้น"
+
+
 def _ing_era_note(start: str, end: str) -> Optional[dict]:
     """A window straddling the Grand Menu changeover averages demand for dishes
     that were withdrawn with dishes that had just launched — the recipes behind
@@ -621,6 +637,8 @@ def ingredients_order_letter(
     top:        int           = Query(40, description="ingredients listed per branch"),
     issuer:     Optional[str] = Query(None, description="department line on the signature block"),
     note:       Optional[str] = Query(None, description="extra paragraph before the table"),
+    contract_ref: Optional[str] = Query(None, description="ข้อสัญญาแฟรนไชส์ที่อ้างถึง เช่น 'ข้อ 7.2 และ 9.1'"),
+    reply_by:   Optional[str] = Query(None, description="กำหนดยืนยันปริมาณสั่งกลับ (YYYY-MM-DD)"),
 ):
     """Printable Thai notice to each branch: how much of each ingredient to order.
 
@@ -648,6 +666,11 @@ def ingredients_order_letter(
                 bp["branch_group"] = group
             names = [r["name"] for r in con.execute(
                 f"SELECT name FROM branches WHERE {' AND '.join(bf)} ORDER BY name", bp)]
+        # Which branches are franchisees: the franchise-obligation section is a
+        # contractual reference and must NOT print on a company-owned branch's
+        # copy — that branch has no franchise agreement to be reminded of.
+        btype = {r["name"]: (r["branch_type"] or "master") for r in con.execute(
+            "SELECT name, branch_type FROM branches WHERE name != 'ALL'")}
         pages = []
         for nm in names:
             allrows = _ing_plan_rows(con, start, end, days, nm, None, basis, buffer_pct,
@@ -667,6 +690,17 @@ def ingredients_order_letter(
     issuer_line = esc(issuer or "ฝ่ายวิเคราะห์ต้นทุนและจัดซื้อ")
     basis_label = "ค่าเฉลี่ย 7 วันล่าสุด" if basis == "recent" else f"ค่าเฉลี่ยตลอด {days} วัน"
 
+    # ── §2 ข้อมูลอ้างอิงการออกเมนู ──────────────────────────────────────────
+    # Where the quantities came from, stated as facts the branch can check
+    # against its own POS. The menu era matters most: a recipe book changed on
+    # GRAND_MENU_FROM, so a reference window reaching before it produced these
+    # numbers from two different menus and the letter has to say so rather than
+    # let the branch order against a blend.
+    era_line = _ing_letter_menu_era_line(start, end)
+    reply_line = (f'<li>กรุณา<b>ยืนยันปริมาณที่จะสั่งกลับภายในวันที่ {esc(reply_by)}</b> '
+                  f'หากไม่ยืนยันภายในกำหนด จะถือตามปริมาณที่แนะนำในเอกสารนี้</li>'
+                  if reply_by else '')
+
     body = []
     for nm, rows, cov, local in pages:
         total_val = sum(r[val_key] for r in rows)
@@ -681,6 +715,40 @@ def ingredients_order_letter(
                 f"<td>{esc(r['name'])}</td><td class='r'>{esc(r['per_day_disp'])}</td>"
                 f"<td class='r b'>{esc(r[qty_key])}</td>"
                 f"<td class='r'>{r[val_key]:,.0f}</td><td class='c'>{trend_html}</td></tr>")
+        # ── §3 หน้าที่ตามสัญญาแฟรนไชส์ ──────────────────────────────────────
+        # Only on a franchisee's copy. The obligations below are the substance
+        # the agreement covers; the CLAUSE NUMBERS are not invented here — the
+        # caller passes contract_ref, and until it does the letter prints a blank
+        # to be filled in by hand. A fabricated clause citation in a notice sent
+        # to a franchisee is worse than no citation.
+        is_franchise = btype.get(nm, "master") == "franchise"
+        ref_txt = (f"ตามสัญญาแฟรนไชส์ {esc(contract_ref)}" if contract_ref
+                   else "ตามสัญญาแฟรนไชส์ ข้อ ................")
+        franchise_block = (f"""
+  <div class="sec duty">
+    <div class="sec-h">๓. หน้าที่ของสาขาตามสัญญาแฟรนไชส์</div>
+    <p class="lead" style="text-indent:0;margin-bottom:6px">{ref_txt}
+       สาขามีหน้าที่ที่เกี่ยวข้องกับเอกสารฉบับนี้ ดังนี้</p>
+    <ol class="duties">
+      <li><b>จัดหาวัตถุดิบผ่านช่องทางที่บริษัทกำหนด</b> — วัตถุดิบที่อยู่ในรายการข้างต้น
+          ต้องสั่งผ่านส่วนกลางหรือผู้จำหน่ายที่บริษัทรับรอง เพื่อรักษามาตรฐานรสชาติ
+          ความปลอดภัยของอาหาร และเงื่อนไขราคาที่ตกลงร่วมกัน
+          (รายการที่ระบุว่า “สาขาจัดหาเอง” ไม่อยู่ในข้อนี้)</li>
+      <li><b>คงสูตรและปริมาณการเสิร์ฟตามมาตรฐาน</b> — ปริมาณที่แนะนำคำนวณจากสูตรมาตรฐาน
+          การเปลี่ยนวัตถุดิบ ผู้จำหน่าย หรือขนาดเสิร์ฟเองโดยไม่ได้รับอนุมัติเป็นลายลักษณ์อักษร
+          ถือเป็นการไม่ปฏิบัติตามมาตรฐานที่ตกลงไว้</li>
+      <li><b>สั่งซื้อให้เพียงพอต่อการให้บริการ</b> — สาขาต้องมีวัตถุดิบเพียงพอตลอดเวลาทำการ
+          การสั่งต่ำกว่าปริมาณที่แนะนำอย่างมีนัยสำคัญจนทำให้ของขาดระหว่างให้บริการ
+          กระทบต่อลูกค้าและชื่อเสียงของแบรนด์โดยรวม</li>
+      <li><b>ส่งข้อมูลการขายและการสั่งซื้อตามรอบ</b> — ข้อมูลยอดขายรายวันคือฐานของการคำนวณนี้
+          หากข้อมูลขาดหรือส่งล่าช้า ปริมาณที่แนะนำจะคลาดเคลื่อน
+          และสาขาต้องบันทึกปริมาณที่สั่งจริงกลับเข้าระบบทุกรอบ</li>
+      <li><b>ให้ความร่วมมือในการตรวจสอบ</b> — บริษัทอาจขอตรวจสอบเอกสารการสั่งซื้อ
+          ใบส่งของ และสต๊อกคงเหลือ เพื่อสอบทานกับปริมาณที่แนะนำในเอกสารฉบับนี้</li>
+    </ol>
+    <p class="fineprint">หมายเหตุ: ข้อความข้างต้นเป็นการสรุปสาระสำคัญเพื่อความสะดวกในการปฏิบัติงาน
+       ไม่ได้แทนที่ข้อความในสัญญาแฟรนไชส์ หากมีข้อความใดขัดหรือแย้งกัน ให้ยึดตามสัญญาเป็นสำคัญ</p>
+  </div>""" if is_franchise else "")
         body.append(f"""
 <section class="page">
   <div class="head">
@@ -693,10 +761,11 @@ def ingredients_order_letter(
     <td><b>เรื่อง</b> ปริมาณวัตถุดิบที่ควรสั่งประจำ{hz_label}</td>
     <td><b>อ้างอิงยอดขายจริง</b> {start} ถึง {end} ({days} วัน)</td></tr>
   </table>
-  <p class="lead">ตามที่{issuer_line}ได้วิเคราะห์ปริมาณการใช้วัตถุดิบจริงของสาขา{esc(nm)}
+  <p class="lead">ตามที่{issuer_line}ได้วิเคราะห์ปริมาณการใช้วัตถุดิบจริงของสาขา {esc(nm)}
      จากยอดขายรายวันคูณกับสูตรมาตรฐาน (BoM) จึงขอแจ้งปริมาณที่ควรสั่งประจำ{hz_label}
      โดยคำนวณจาก{basis_label} และเผื่อความผันผวนไว้ {buffer_pct:g}% ดังรายการต่อไปนี้</p>
   {('<p class="lead">' + esc(note) + '</p>') if note else ''}
+  <div class="sec-h">๑. ปริมาณวัตถุดิบที่แนะนำให้สั่ง ประจำ{hz_label}</div>
   <table class="grid">
     <thead><tr><th>ลำดับ</th><th>รหัส</th><th>วัตถุดิบ</th><th>ใช้เฉลี่ย/วัน</th>
       <th>ควรสั่ง/{hz_label}</th><th>มูลค่าโดยประมาณ (บาท)</th><th>แนวโน้ม</th></tr></thead>
@@ -708,19 +777,33 @@ def ingredients_order_letter(
      + esc(' · '.join(x['name'] for x in local[:14]))
      + (f" และอื่น ๆ อีก {len(local) - 14} รายการ" if len(local) > 14 else '')
      + '</p>') if local else ''}
-  <div class="notes">
-    <b>หมายเหตุสำคัญ</b>
-    <ol>
-      <li><b>ตัวเลขนี้คือปริมาณที่คาดว่าจะ “ใช้” ยังไม่ได้หักสต๊อกคงเหลือในร้าน</b>
-          กรุณาตรวจนับของคงเหลือก่อนออกใบสั่งซื้อทุกครั้ง</li>
-      <li>คำนวณจากสูตร BoM ที่ครอบคลุม {cov['pct']:g}% ของจำนวนจานที่ขายในช่วงอ้างอิง
-          (เมนูที่ยังไม่มีสูตรจะไม่ปรากฏในรายการนี้)</li>
-      <li>ปริมาณข้างต้นเป็นการประมาณการจากยอดขายที่ผ่านมา หากมีเทศกาล โปรโมชัน
-          หรือการปิดปรับปรุง กรุณาปรับเพิ่ม–ลดตามความเหมาะสม</li>
-      <li>ช่อง “ควรสั่ง” ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่งแล้ว (ในวงเล็บคือปริมาณจริงที่จะได้รับ)
-          รายการที่ยังไม่ได้ตั้งขนาดบรรจุจะแสดงเป็นหน่วยมาตรฐาน (กก./ลิตร)</li>
-      <li>คอลัมน์ “แนวโน้ม” เทียบการใช้ 7 วันล่าสุดกับ 7 วันก่อนหน้า
-          (▲ = ใช้เพิ่มขึ้น ควรเผื่อเพิ่ม · ▼ = ใช้ลดลง ควรลดปริมาณสั่ง)</li>
+  <div class="sec">
+    <div class="sec-h">๒. ข้อมูลอ้างอิงและวิธีคำนวณ</div>
+    <table class="ref"><tbody>
+      <tr><td>ยอดขายที่ใช้อ้างอิง</td><td>{start} ถึง {end} ({days} วัน) · สาขา {esc(nm)}</td></tr>
+      <tr><td>ฐานการคำนวณ</td><td>{basis_label} × สูตรมาตรฐาน (BoM) และเผื่อความผันผวน {buffer_pct:g}%</td></tr>
+      <tr><td>เมนูที่อ้างอิง</td><td>{era_line}</td></tr>
+      <tr><td>ความครอบคลุมของสูตร</td><td>{cov['pct']:g}% ของจำนวนจานที่ขายในช่วงอ้างอิง
+          (เมนูที่ยังไม่มีสูตร BoM จะไม่ปรากฏในรายการนี้)</td></tr>
+      <tr><td>หน่วยสั่ง</td><td>ช่อง “ควรสั่ง” ปัดขึ้นเป็นจำนวนเต็มหน่วยสั่งแล้ว
+          (ในวงเล็บคือปริมาณจริงที่จะได้รับ) · รายการที่ยังไม่ได้ตั้งขนาดบรรจุแสดงเป็นหน่วยมาตรฐาน (กก./ลิตร)</td></tr>
+      <tr><td>คอลัมน์แนวโน้ม</td><td>เทียบการใช้ 7 วันล่าสุดกับ 7 วันก่อนหน้า
+          (▲ = ใช้เพิ่มขึ้น ควรเผื่อเพิ่ม · ▼ = ใช้ลดลง ควรลดปริมาณสั่ง)</td></tr>
+    </tbody></table>
+    <p class="warn"><b>ข้อควรทราบ:</b> ตัวเลขนี้คือปริมาณที่คาดว่าจะ<b>ใช้</b>
+       <b>ยังไม่ได้หักสต๊อกคงเหลือในร้าน</b> กรุณาตรวจนับของคงเหลือก่อนออกใบสั่งซื้อทุกครั้ง ·
+       เป็นการประมาณการจากยอดขายที่ผ่านมา หากมีเทศกาล โปรโมชัน หรือการปิดปรับปรุง
+       กรุณาปรับเพิ่ม–ลดตามความเหมาะสม</p>
+  </div>
+  {franchise_block}
+  <div class="sec">
+    <div class="sec-h">สิ่งที่ขอให้สาขาดำเนินการ</div>
+    <ol class="duties">
+      <li>ตรวจนับสต๊อกคงเหลือ แล้วหักออกจากปริมาณที่แนะนำก่อนออกใบสั่งซื้อ</li>
+      {reply_line}
+      <li>เมื่อสั่งแล้ว บันทึก<b>ปริมาณที่สั่งจริง</b>กลับเข้าระบบ เพื่อใช้สอบทานความแม่นของการพยากรณ์รอบถัดไป</li>
+      <li>หากปริมาณที่แนะนำไม่สอดคล้องกับหน้างาน (เช่น มีจัดเลี้ยง ปิดปรับปรุง หรือโปรโมชันเฉพาะสาขา)
+          กรุณาแจ้ง{issuer_line}ก่อนถึงรอบสั่ง</li>
     </ol>
   </div>
   <div class="sign">
@@ -769,6 +852,19 @@ def ingredients_order_letter(
   .notes {{ margin-top:10px; font-size:10.5px; background:#fffbeb; border-left:3px solid #f59e0b;
             padding:7px 10px; line-height:1.6; }}
   .notes ol {{ margin:4px 0 0 16px; padding:0; }}
+  .sec {{ margin-top:12px; }}
+  .sec-h {{ font-size:12.5px; font-weight:700; color:#0f766e; margin:0 0 5px;
+            border-left:4px solid #0f766e; padding-left:7px; }}
+  table.ref {{ width:100%; border-collapse:collapse; font-size:10.5px; }}
+  table.ref td {{ border:1px solid #e2e8f0; padding:4px 7px; vertical-align:top;
+                  line-height:1.55; }}
+  table.ref td:first-child {{ width:27%; background:#f8fafc; font-weight:600; color:#334155; }}
+  .warn {{ margin:7px 0 0; font-size:10.5px; background:#fffbeb; border-left:3px solid #f59e0b;
+           padding:7px 10px; line-height:1.6; }}
+  .duty {{ background:#f8fafc; border:1px solid #cbd5e1; border-radius:5px; padding:8px 10px; }}
+  ol.duties {{ margin:4px 0 0 17px; padding:0; font-size:10.5px; line-height:1.65; }}
+  ol.duties li {{ margin-bottom:3px; }}
+  .fineprint {{ margin:7px 0 0; font-size:9.5px; color:#64748b; line-height:1.55; }}
   .sign {{ display:flex; justify-content:space-between; gap:24px; margin-top:24px; }}
   .sign > div {{ width:46%; text-align:center; }}
   .line {{ border-bottom:1px dotted #475569; height:34px; }}

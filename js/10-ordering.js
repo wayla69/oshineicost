@@ -250,12 +250,30 @@ function opJumpBranch(name) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function opPrintLetter() {
+function opPrintLetter(preview) {
   const p = _opParams();
-  p.delete('type'); p.delete('q'); p.delete('group_family');
+  p.delete('type'); p.delete('q'); p.delete('group_family'); p.delete('split_branches');
   p.set('horizon', document.getElementById('opHorizon')?.value === 'month' ? 'month' : 'week');
   p.set('top', '40');
-  window.open(`${API}/api/ingredients/order-letter.print?${p}`, '_blank');
+  // §3 of the letter cites the franchise agreement. The clause number is typed
+  // here or left blank for hand-writing — never guessed by the app.
+  const cref = (document.getElementById('opContractRef')?.value || '').trim();
+  if (cref) p.set('contract_ref', cref);
+  const rby = (document.getElementById('opReplyBy')?.value || '').trim();
+  if (rby) p.set('reply_by', rby);
+  const url = `${API}/api/ingredients/order-letter.print?${p}`;
+  if (!preview) { window.open(url, '_blank'); return; }
+  const w = window.open('', '_blank');
+  if (!w) return;
+  w.document.write('<p style="font-family:sans-serif;padding:24px">กำลังสร้างร่างจดหมาย…</p>');
+  fetch(url).then(r => r.text()).then(html => {
+    w.document.open(); w.document.write(html); w.document.close();
+  }).catch(e => {
+    w.document.open();
+    w.document.write('<p style="font-family:sans-serif;padding:24px;color:#b91c1c">สร้างร่างไม่สำเร็จ: '
+                     + String(e).slice(0, 200) + '</p>');
+    w.document.close();
+  });
 }
 
 function opExportXlsx() {
