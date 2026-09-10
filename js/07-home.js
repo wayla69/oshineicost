@@ -2303,6 +2303,9 @@ async function loadDataQuality() {
   const sev = { high: ['#dc2626', '#fef2f2'], warn: ['#d97706', '#fffbeb'], info: ['#0891b2', '#f0f9ff'] };
   const rowLine = (k, r) => {
     if (k === 'missing_days') return `${esc(r.branch)} — ${r.missing_days} วัน (${(r.dates || []).slice(0, 3).join(', ')}${(r.dates || []).length > 3 ? ' …' : ''})`;
+    // Recorded closures are shown WITH their reason: the point of splitting them
+    // out is that a wrong entry stays auditable, not that the days disappear.
+    if (k === 'known_downtime') return `${esc(r.branch)} — ${r.missing_days} วัน · <b>${esc(r.reason || '')}</b> (${(r.dates || []).slice(0, 3).join(', ')}${(r.dates || []).length > 3 ? ' …' : ''})`;
     if (k === 'zero_covers') return `${esc(r.br)} — ${fmtN(r.n)} บิล · ฿${fmtN(r.rev)}`;
     if (k === 'discount_gt_total') return `${esc(r.br)} — ${fmtN(r.n)} บิล · ส่วนลด ฿${fmtN(r.disc)} เทียบยอดบิล ฿${fmtN(r.tot)}`;
     return '';

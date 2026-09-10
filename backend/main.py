@@ -1082,13 +1082,54 @@ def data_quality():
                 (sp["br"],))}
             miss = [(lo + _dt.timedelta(days=i)).isoformat() for i in range(expected)
                     if (lo + _dt.timedelta(days=i)).isoformat() not in have]
-            gaps.append({"branch": sp["br"], "missing_days": missing, "dates": miss[:20]})
-        gaps.sort(key=lambda g: -g["missing_days"])
+            gaps.append({"branch": sp["br"], "missing_days": missing, "dates": miss})
+
+        # A day the branch was shut is not a lost day. branch_downtime is the only
+        # place that knows the difference — the POS has no "closed today" record, so
+        # without it a renovation and a broken sync look identical. Recorded days are
+        # SPLIT OUT, never dropped: they keep their own finding so a wrong entry stays
+        # visible instead of quietly deleting a real gap from the report.
+        known = {}
+        try:
+            for r in con.execute("SELECT branch, date_from, date_to, reason, note "
+                                 "FROM branch_downtime").fetchall():
+                known.setdefault(r["branch"], []).append(
+                    (r["date_from"], r["date_to"], r["reason"], r["note"]))
+        except sqlite3.Error:
+            known = {}          # table not created yet — report everything as unknown
+
+        def _cover(branch, day):
+            for f, t, reason, note in known.get(branch, ()):
+                if f <= day <= t:
+                    return reason, note
+            return None
+
+        explained, unexplained = [], []
+        for g in gaps:
+            hit = [(d, _cover(g["branch"], d)) for d in g["dates"]]
+            ex = [d for d, c in hit if c]
+            un = [d for d, c in hit if not c]
+            if ex:
+                reasons = sorted({c[0] for _, c in hit if c})
+                explained.append({"branch": g["branch"], "missing_days": len(ex),
+                                  "dates": ex[:20], "reason": ", ".join(reasons)})
+            if un:
+                unexplained.append({"branch": g["branch"], "missing_days": len(un),
+                                    "dates": un[:20]})
+        unexplained.sort(key=lambda g: -g["missing_days"])
+        explained.sort(key=lambda g: -g["missing_days"])
         add("missing_days", "วันที่ไม่มีข้อมูล ระหว่างช่วงที่สาขาเปิดขายอยู่", "warn",
-            sum(g["missing_days"] for g in gaps),
-            "ช่องว่างกลางคาบการขายของสาขานั้นเอง (ไม่นับก่อนเปิด/หลังปิดสาขา) — "
-            "กู้คืนได้ด้วยการ re-sync ช่วงวันดังกล่าวจาก POS เท่านั้น ระบบจะไม่สร้างข้อมูลขึ้นเอง",
-            rows=gaps[:10])
+            sum(g["missing_days"] for g in unexplained),
+            "ช่องว่างกลางคาบการขายของสาขานั้นเอง ที่ยังไม่มีการบันทึกสาเหตุไว้ — "
+            "ตรวจก่อนว่าสาขาปิดจริงหรือไม่ (บันทึกได้ด้วย backend/mark_downtime.py) "
+            "ถ้าไม่ใช่ กู้คืนได้ด้วยการ re-sync ช่วงวันนั้นจาก POS เท่านั้น ระบบจะไม่สร้างข้อมูลขึ้นเอง",
+            rows=unexplained[:10])
+        if explained:
+            add("known_downtime", "วันที่ไม่มีข้อมูล — บันทึกสาเหตุไว้แล้ว", "info",
+                sum(g["missing_days"] for g in explained),
+                "สาขาปิดจริง/ยังไม่เปิดขายเต็มรูปแบบในวันเหล่านี้ จึงไม่ใช่ข้อมูลสูญหาย — "
+                "แสดงไว้เพื่อให้ตรวจสอบย้อนหลังได้ว่าใครบันทึกและด้วยเหตุผลใด",
+                benign=True, rows=explained[:10])
 
         # 2. Bills carrying revenue but zero covers — every per-head figure that
         #    divides by covers is guarded, but these bills still under-count pax.

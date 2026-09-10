@@ -462,6 +462,22 @@ def _init_settings_tables():
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL DEFAULT ''
             );
+            -- Days a branch was legitimately not trading: a temporary closure, a
+            -- renovation, or the soft-launch run before a grand opening. The POS has
+            -- no field for this, so the data-health check cannot tell "the branch was
+            -- shut" from "the sync lost a day" and reports both as missing data. This
+            -- table is the human answer, and it is PRESERVED across the daily push
+            -- (core._PRESERVED_EXACT) because nothing can re-derive it.
+            CREATE TABLE IF NOT EXISTS branch_downtime (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                branch     TEXT NOT NULL,
+                date_from  TEXT NOT NULL,
+                date_to    TEXT NOT NULL,
+                reason     TEXT NOT NULL DEFAULT 'closed',
+                note       TEXT DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(branch, date_from, date_to)
+            );
         """)
         # branch_type migration (idempotent). Guarded so a DB still missing the
         # core tables (schema.sql absent) can't crash import.
