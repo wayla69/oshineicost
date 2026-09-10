@@ -3159,7 +3159,7 @@ def _xlsx_tier(*, BOLD, NUM, NUM2, PCT, autofit, header, j, pdelta, wb):
             ws.append([f"Tier-mix effect on spend/head vs comparison period: {TIER['mix_effect']:+.2f} THB"])
         ws.append([])
         header(ws, ["Tier", "Guests", "Guests prev", "vs prev %", "Share %",
-                    "Rev/Head", "Cost/Head", "Cost/Head prev", "GP/Head", "Food %"])
+                    "Rev/Head", "Cost/Head", "Cost/Head prev", "GP/Head", "COGS %"])
         for r in TIER["rows"]:
             ws.append([r["label"], r["pax"], r.get("pax_prev"), pdelta(r.get("d_pax_pct")),
                        pdelta(r.get("share")), r.get("rev_head"), r.get("cogs_head"),
