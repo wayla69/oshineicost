@@ -180,6 +180,9 @@ function diveInChart(chartId) {
     miChart: 'วัตถุดิบ: แนวโน้มรายเดือน (ปริมาณ/หัว & % บิลที่สั่ง)',
     ptChartMix: 'Tier ราคา: สัดส่วนคนทานรายเดือน',
     ptChartCogs: 'Tier ราคา: ต้นทุนอาหาร/หัว รายเดือน',
+    // ⏰ ความสดของข้อมูล — enhancers registered in js/07-home.js
+    ctmChartDays: 'สาขาที่มีข้อมูล ต่อวัน (30 วันล่าสุด)',
+    ctmChartClose: 'เวลาปิดเฉลี่ยรายสาขา',
   };
 
   try {

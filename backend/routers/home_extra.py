@@ -430,6 +430,20 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
                     "summary": {"reported": reported, "missing": missing,
                                 "branch_count": len(out), "day_bills": day_bill_total}}
 
+        # Trailing-30d reporting coverage, one row per day: how many branches
+        # posted anything. This is the thing the per-branch table cannot show —
+        # a branch that is current today but went silent for three days last week
+        # reads as "อัปเดต" there, and the hole only appears here.
+        n_branches = len(last_rows) or 1
+        daily = [{"day": r["d"], "branches": int(r["nb"] or 0),
+                  "bills": int(r["nbill"] or 0),
+                  "missing": max(0, n_branches - int(r["nb"] or 0))}
+                 for r in con.execute(
+                     f"""SELECT date(t.sold_at) d, COUNT(DISTINCT t.branch_id) nb, COUNT(*) nbill
+                           FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
+                          WHERE {tw} AND t.sold_at >= :since
+                          GROUP BY date(t.sold_at) ORDER BY d""", {**p, "since": since})]
+
         # Trailing-30d typical close: average of each day's last-bill time-of-day.
         close_rows = {r["branch"]: r for r in con.execute(
             f"""WITH day_close AS (
@@ -479,9 +493,13 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
     branches.sort(key=lambda r: (-(r["days_behind"] if r["days_behind"] is not None else 9999)))
     summary = {"behind": behind, "current": current, "max_days_behind": max_behind,
                "branch_count": len(branches)}
+    # Days inside the window where NOT every branch reported — the silent gaps.
+    summary["gap_days"] = sum(1 for d in daily if d["missing"] > 0)
+    summary["window_days"] = len(daily)
     return {"mode": "latest", "data_max": dm, "data_max_date": data_max_date,
             "data_min_date": data_min_date, "today": _dt.date.today().isoformat(),
-            "branches": branches, "summary": summary}
+            "branches": branches, "daily": daily, "window_from": since,
+            "summary": summary}
 
 
 

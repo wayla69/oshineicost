@@ -2206,6 +2206,10 @@ async function loadDataQuality() {
   }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';
 }
 
+// Last payload + chart handles for the ⏰ tab, so the dive-in panels can read the
+// real numbers instead of re-deriving them from the chart datasets.
+let _ctmLast = null, _ctmChartDays = null, _ctmChartClose = null;
+
 async function loadCloseTime(force) {
   loadDataQuality();                          // integrity panel above the freshness table
   const dateSel = document.getElementById('ctmDate')?.value || '';
@@ -2226,6 +2230,12 @@ async function loadCloseTime(force) {
   const TH = (cols) => '<tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">' +
     cols.map(c => `<th class="py-1.5 pr-2${c.r ? ' text-right' : ''}">${c.t}</th>`).join('') + '</tr>';
 
+  _ctmLast = d;
+  // Charts only make sense in freshness mode — single-day mode is a snapshot,
+  // and a 30-day series under a one-day question is just noise.
+  const chartsEl = document.getElementById('ctmCharts');
+  if (chartsEl) chartsEl.style.display = d.mode === 'date' ? 'none' : '';
+
   if (d.mode === 'date') {
     // ── Single-day mode ──
     title.textContent = `รายสาขา — วันที่ ${d.date} (บนสุด = ไม่มีข้อมูลวันนี้)`;
@@ -2241,14 +2251,15 @@ async function loadCloseTime(force) {
       const bdg = rep
         ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#dcfce7;color:#15803d">มีข้อมูล</span>'
         : '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#fee2e2;color:#b91c1c">ไม่มีข้อมูล</span>';
-      return `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
-        <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-        <td class="py-1.5 pr-2">${bdg}</td>
+      return `<tr class="border-t border-slate-100 hover:bg-amber-50/40${rep ? '' : ' mi-outlier'}">
+        <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
+        <td class="py-1.5 pr-2" data-sort="${rep ? 1 : 0}">${bdg}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${r.day_close || '—'}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${rep ? '#0f172a' : '#ef4444'}">${rep ? fmtN(r.day_bills) : '0'}</td>
         <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${esc(r.last_sold || '—')}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+    makeSortable('ctmTable');
     return;
   }
 
@@ -2259,6 +2270,8 @@ async function loadCloseTime(force) {
     _extKpi('อัปเดตล่าสุด', fmtN(s.current || 0), 'ข้อมูลถึงวันล่าสุด', '#10b981'),
     _extKpi('ข้อมูลล่าช้า', fmtN(s.behind || 0), 'ยังไม่ sync วันล่าสุด', s.behind ? '#ef4444' : '#94a3b8'),
     _extKpi('ค้างนานสุด', (s.max_days_behind || 0) + ' วัน', 'จากวันข้อมูลล่าสุด', s.max_days_behind ? '#f59e0b' : '#94a3b8'),
+    _extKpi('วันที่ข้อมูลไม่ครบ', fmtN(s.gap_days || 0),
+            `จาก ${fmtN(s.window_days || 0)} วันล่าสุด`, s.gap_days ? '#ef4444' : '#10b981'),
   ].join('');
   head.innerHTML = TH([{t:'สาขา'},{t:'สถานะ'},{t:'ข้อมูลล่าสุด'},{t:'ล่าช้า (วัน)',r:1},{t:'เวลาปิดเฉลี่ย',r:1},{t:'วันเปิด (30วัน)',r:1},{t:'บิลรวม',r:1}]);
   const badge = st => {
@@ -2266,20 +2279,152 @@ async function loadCloseTime(force) {
     if (st === 'inactive') return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#e2e8f0;color:#475569">ไม่เคลื่อนไหว</span>';
     return '<span class="px-2 py-0.5 rounded-full text-[10px] font-semibold" style="background:#fee2e2;color:#b91c1c">ล่าช้า</span>';
   };
-  document.getElementById('ctmRows').innerHTML = (d.branches || []).map(r => {
+  // Two independent anomalies on this table: a branch far behind the others on
+  // sync, and one whose shop closes at a time unlike the rest of the chain.
+  const brs = d.branches || [];
+  const closeOut = _miOutlierSet(brs.map(r => r.avg_close_min));
+  const openOut = _miOutlierSet(brs.map(r => r.days_open));
+  document.getElementById('ctmRows').innerHTML = brs.map((r, i) => {
     const db = r.days_behind;
     const dbCol = db === 0 ? '#10b981' : db >= 14 ? '#64748b' : '#ef4444';
-    return `<tr class="border-t border-slate-100 hover:bg-amber-50/40">
-      <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
-      <td class="py-1.5 pr-2">${badge(r.status)}</td>
+    const lateClose = closeOut.has(i);
+    const fewDays = openOut.has(i) && r.days_open < 20;
+    const rowCls = (db > 0 && db < 14) ? ' mi-outlier' : lateClose ? ' mi-outlier' : '';
+    return `<tr class="border-t border-slate-100 hover:bg-amber-50/40${rowCls}">
+      <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-2" data-sort="${db == null ? '' : db}">${badge(r.status)}</td>
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-secondary)">${esc(r.last_sold || '—')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dbCol}">${db == null ? '—' : db}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${r.avg_close || '—'}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(r.days_open)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" data-sort="${r.avg_close_min == null ? '' : r.avg_close_min}">${r.avg_close || '—'}${lateClose ? ' <span class="mi-flag warn" title="เวลาปิดต่างจากสาขาอื่นมาก (หลุดกรอบ Tukey)">⚠ ต่างจากเพื่อน</span>' : ''}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${fewDays ? '#b45309' : 'var(--text-muted)'}">${fmtN(r.days_open)}${fewDays ? ' <span class="mi-flag warn" title="เปิดขายน้อยวันผิดปกติใน 30 วันล่าสุด — ปิดปรับปรุง หรือข้อมูลขาด">⚠</span>' : ''}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(r.total_bills)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
+  makeSortable('ctmTable');
+  _ctmRenderCharts(d);
 }
+
+function _ctmRenderCharts(d) {
+  const daily = d.daily || [], brs = d.branches || [];
+  if (daily.length) {
+    // A day where a branch is missing is not "slightly lower" — it is a hole in
+    // the data every other number on the dashboard is computed from, so it gets
+    // its own colour rather than being read off the bar height.
+    _ctmChartDays = mkChart('ctmChartDays', {
+      type: 'bar',
+      data: { labels: daily.map(r => r.day), datasets: [{
+        label: 'สาขาที่มีข้อมูล', data: daily.map(r => r.branches),
+        backgroundColor: daily.map(r => r.missing ? 'rgba(220,38,38,.75)' : 'rgba(14,116,144,.55)'),
+        borderColor: daily.map(r => r.missing ? '#dc2626' : 'transparent'),
+        borderWidth: daily.map(r => r.missing ? 1.5 : 0) }] },
+      options: { responsive: true, maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 },
+                       title: { display: true, text: 'จำนวนสาขา' } } },
+        plugins: { tooltip: { callbacks: { afterLabel: c => {
+          const r = daily[c.dataIndex];
+          return `บิล ${fmtN(r.bills)}` + (r.missing ? ` · ขาด ${r.missing} สาขา` : '');
+        } } } } } });
+  } else if (_ctmChartDays) { _ctmChartDays.destroy(); _ctmChartDays = null; }
+
+  const withClose = brs.filter(r => r.avg_close_min != null);
+  if (withClose.length) {
+    const mins = withClose.map(r => r.avg_close_min);
+    const out = _miOutlierSet(mins);
+    _ctmChartClose = mkChart('ctmChartClose', {
+      type: 'bar',
+      data: { labels: withClose.map(r => r.branch), datasets: [{
+        label: 'เวลาปิดเฉลี่ย (นาทีจากเที่ยงคืน)', data: mins,
+        backgroundColor: mins.map((_, i) => out.has(i) ? 'rgba(220,38,38,.75)' : 'rgba(124,58,237,.55)'),
+        borderColor: mins.map((_, i) => out.has(i) ? '#dc2626' : 'transparent'),
+        borderWidth: mins.map((_, i) => out.has(i) ? 1.5 : 0) }] },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+        scales: { x: { title: { display: true, text: 'เวลาปิด' },
+                       ticks: { callback: v => _ctmHhmm(v) } } },
+        plugins: { legend: { display: false },
+                   tooltip: { callbacks: { label: c => 'ปิดเฉลี่ย ' + _ctmHhmm(c.parsed.x) } } } } });
+  } else if (_ctmChartClose) { _ctmChartClose.destroy(); _ctmChartClose = null; }
+}
+
+// Minutes from midnight → HH:MM. Values past 1440 are after-midnight closes the
+// endpoint pushed forward so 01:30 sorts after 23:00 — wrap them back for display.
+function _ctmHhmm(v) {
+  if (v == null) return '—';
+  const m = Math.round(v);
+  return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+}
+
+// ── 🔍 Dive-in summaries for the ⏰ Data Freshness charts ────────────────────
+async function _diveCtmDays(_cfg) {
+  const d = _ctmLast;
+  const daily = (d && d.daily) || [];
+  if (!daily.length) return '<p class="text-xs text-slate-400 p-2">ไม่มีข้อมูลรายวันในช่วงนี้</p>';
+  const s = d.summary || {};
+  const gaps = daily.filter(r => r.missing > 0);
+  const worst = gaps.slice().sort((a, b) => b.missing - a.missing)[0];
+  const bills = daily.map(r => r.bills);
+  const billOut = _miOutlierSet(bills);
+  const streak = (() => {                    // longest run of complete days
+    let best = 0, cur = 0;
+    daily.forEach(r => { cur = r.missing ? 0 : cur + 1; best = Math.max(best, cur); });
+    return best;
+  })();
+  return _diveSection('ช่วงที่กำลังดู', '⏰',
+      _diveMetric('หน้าต่าง', `${esc(d.window_from || daily[0].day)} → ${esc(daily[daily.length - 1].day)}`) +
+      _diveMetric('สาขาทั้งหมด', fmtN(s.branch_count || 0)) +
+      _diveMetric('วันที่ข้อมูลครบทุกสาขา', fmtN(daily.length - gaps.length) + ' / ' + fmtN(daily.length),
+                  gaps.length ? 'bad' : 'good') +
+      _diveMetric('ข้อมูลล่าสุดทั้งระบบ', esc(d.data_max_date || '—'))) +
+    _diveSection('ช่องว่างของข้อมูล', '🕳️',
+      (gaps.length
+        ? _diveBullet('⚠️', `มี <b>${gaps.length}</b> วันที่ไม่ครบทุกสาขา — วันที่ขาดมากสุดคือ ` +
+            `<b>${esc(worst.day)}</b> (ขาด ${worst.missing} สาขา) · ทุกตัวเลขในแดชบอร์ดของวันเหล่านี้ ` +
+            `<b>ต่ำกว่าความจริง</b> ไม่ใช่ยอดตก`, 'bad')
+        : _diveBullet('✅', 'ทุกวันในช่วงนี้มีข้อมูลครบทุกสาขา', 'good')) +
+      _diveBullet('📆', `ช่วงที่ครบต่อเนื่องยาวสุด <b>${streak}</b> วัน`) +
+      (gaps.length > 3
+        ? _diveBullet('🔁', `ขาดถี่ (${gaps.length} วัน) — น่าจะเป็นปัญหา sync ที่เกิดซ้ำ ไม่ใช่เหตุการณ์เดียว ` +
+            `ตรวจตารางด้านล่างว่าสาขาเดิมหรือคนละสาขา`, 'warn')
+        : '')) +
+    _diveSection('ปริมาณบิลรายวัน', '🧾',
+      _diveBullet('📊', `เฉลี่ย <b>${fmtN(Math.round(bills.reduce((a, b) => a + b, 0) / bills.length))}</b> บิล/วัน ` +
+        `· สูงสุด ${fmtN(Math.max(...bills))} · ต่ำสุด ${fmtN(Math.min(...bills))}`) +
+      (billOut.size
+        ? _diveBullet('🎯', 'วันที่จำนวนบิลหลุดกรอบ: ' +
+            [...billOut].map(i => `<b>${esc(daily[i].day)}</b> (${fmtN(daily[i].bills)})`).join(', ') +
+            ' — เช็คก่อนว่าเป็นวันที่ข้อมูลไม่ครบหรือไม่ ก่อนสรุปว่าขายดี/ขายตก', 'warn')
+        : _diveBullet('✅', 'ไม่พบวันที่จำนวนบิลหลุดกรอบ', 'good')));
+}
+
+async function _diveCtmClose(_cfg) {
+  const d = _ctmLast;
+  const brs = ((d && d.branches) || []).filter(r => r.avg_close_min != null);
+  if (!brs.length) return '<p class="text-xs text-slate-400 p-2">ไม่มีข้อมูลเวลาปิดในช่วงนี้</p>';
+  const sorted = brs.slice().sort((a, b) => b.avg_close_min - a.avg_close_min);
+  const mins = brs.map(r => r.avg_close_min);
+  const out = _miOutlierSet(mins);
+  const avg = mins.reduce((a, b) => a + b, 0) / mins.length;
+  const spread = Math.max(...mins) - Math.min(...mins);
+  return _diveSection('เวลาปิดของเครือ', '🌙',
+      _diveMetric('ปิดเฉลี่ยทั้งเครือ', _ctmHhmm(avg)) +
+      _diveMetric('ปิดดึกสุด', `${esc(sorted[0].branch)} · ${_ctmHhmm(sorted[0].avg_close_min)}`) +
+      _diveMetric('ปิดเร็วสุด', `${esc(sorted[sorted.length - 1].branch)} · ${_ctmHhmm(sorted[sorted.length - 1].avg_close_min)}`) +
+      _diveMetric('ช่วงห่างหัว–ท้าย', Math.round(spread) + ' นาที', spread > 90 ? 'bad' : '')) +
+    _diveSection('อ่านยังไง', '📈',
+      _diveBullet('🕛', 'เวลานี้คือ<b>บิลสุดท้ายของวัน</b>เฉลี่ย 30 วันล่าสุด ไม่ใช่เวลาปิดตามป้าย — ' +
+        'เวลาก่อน 06:00 ถูกนับเป็นปิดหลังเที่ยงคืน จึงเรียงถัดจาก 23:00 ไม่ใช่ขึ้นต้นแถว') +
+      (out.size
+        ? _diveBullet('⚠️', 'สาขาที่เวลาปิดหลุดกรอบเทียบเพื่อน: ' +
+            [...out].map(i => `<b>${esc(brs[i].branch)}</b> (${_ctmHhmm(brs[i].avg_close_min)})`).join(', ') +
+            ' — ถ้าไม่ได้ตั้งใจให้ต่าง ให้เช็คว่าเป็นการปิดบิลช้า (ค้างบิลไว้) หรือเปิดจริงต่างจริง', 'warn')
+        : _diveBullet('✅', 'ทุกสาขาปิดในกรอบเวลาใกล้เคียงกัน', 'good')) +
+      (spread > 90
+        ? _diveBullet('↔️', `หัวกับท้ายห่างกัน <b>${Math.round(spread)}</b> นาที — ค่าแรงและค่าไฟของสาขาที่ปิดดึก ` +
+            `สูงกว่าเพื่อนโดยไม่จำเป็นหรือไม่ ควรดูคู่กับยอดขายช่วงชั่วโมงท้าย`, 'warn')
+        : ''));
+}
+
+_DIVE_ENHANCERS.ctmChartDays = _diveCtmDays;
+_DIVE_ENHANCERS.ctmChartClose = _diveCtmClose;
 
 // ── Industry & Economy context (curated figures + live news strip) ──
 async function loadMarket() {
