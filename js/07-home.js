@@ -1232,6 +1232,14 @@ async function loadMenuImpact(force) {
 
 // ── 🏷️ วิเคราะห์ Tier ราคาขาย (section of the 🧪 tab) ───────────────────────
 let _ptChartMix = null, _ptChartCogs = null, _ptSeq = 0;
+// Granularity of each trend card, independently switchable: the mix chart is
+// often read monthly while the cost chart is read weekly, so one shared toggle
+// would force a compromise on whichever card you are not looking at.
+let _ptGran = { mix: 'month', cogs: 'month' };
+// Top-45 consumption unit. Per-head is the stored figure but reads as 0.147;
+// per-100-covers is the same number a kitchen can act on (14.7 pieces per 100
+// guests), so both are offered and the choice sticks across redraws.
+let _ptQtyPer100 = false;
 async function loadPriceTier(force) {
   const body = document.getElementById('ptBody');
   if (!body) return;
@@ -1252,6 +1260,15 @@ async function loadPriceTier(force) {
     body.innerHTML = `<p class="text-center text-slate-400 py-10">${esc(d.error || d.hint || 'ไม่มีข้อมูล')}</p>`;
     document.getElementById('ptRange').textContent = ''; return;
   }
+  _ptRender(d);
+}
+
+// Everything the tab draws from one payload. Split out of loadPriceTier so the
+// granularity and per-100 toggles can redraw from _ptLast instead of re-running
+// an endpoint that scans the fact tables to change a label.
+function _ptRender(d) {
+  const body = document.getElementById('ptBody');
+  if (!body) return;
   const n0 = v => Number(v || 0).toLocaleString('en-US');
   const b1 = v => v == null ? '-' : '฿' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 });
   const sg = (v, suf = '') => v == null ? '-' : (v > 0 ? '+' : '') + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + suf;
@@ -1289,7 +1306,7 @@ async function loadPriceTier(force) {
     const jumped = dCogsOut.has(i) && (x.d_cogs_head || 0) > 0;
     const saved = dCogsOut.has(i) && (x.d_cogs_head || 0) < 0;
     const flags =
-      (hotFood ? `<span class="mi-flag warn" title="food cost ≥ ${FOOD_PCT_BAR}% — เกินเกณฑ์ที่ใช้ตั้งข้อเสนอแนะ">🔥 ${x.a.food_pct}%</span>` : '') +
+      (hotFood ? `<span class="mi-flag warn" title="COGS ≥ ${FOOD_PCT_BAR}% ของรายได้ — เกินเกณฑ์ที่ใช้ตั้งข้อเสนอแนะ">🔥 ${x.a.food_pct}%</span>` : '') +
       (jumped ? '<span class="mi-flag bad" title="ต้นทุน/หัวขยับผิดปกติเทียบ tier อื่น">⚠ ผิดปกติ</span>' : '') +
       (saved ? '<span class="mi-flag good" title="ต้นทุน/หัวลดผิดปกติเทียบ tier อื่น (ในทางที่ดี)">★ เด่น</span>' : '');
     return `<tr class="border-t border-slate-100${jumped || hotFood ? ' mi-outlier' : saved ? ' mi-outlier-good' : ''}">
@@ -1311,7 +1328,11 @@ async function loadPriceTier(force) {
   const acts = (d.actions || []).map((a, i) => `<li style="margin:.45em 0"><b>${i + 1}. ${esc(a.title)}</b><br><span style="color:var(--text-secondary)">${esc(a.detail)}</span></li>`).join('');
 
   const tl = t => (d.tier_labels || {})[t] || t;
-  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>ชิ้น/หัว (Δ%)</th>`).join('');
+  // per-head → per-100-covers is a pure ×100 on the same stored figure; Δ% is a
+  // ratio and therefore identical under either unit.
+  const qUnit = _ptQtyPer100 ? 'ชิ้น/100 คน' : 'ชิ้น/หัว';
+  const qv = v => v == null ? null : (_ptQtyPer100 ? Math.round(v * 100 * 10) / 10 : v);
+  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>${qUnit} (Δ%)</th>`).join('');
   // The menu name is frozen (sticky) while the tier columns scroll — with 5-8
   // tiers this table gets very wide, and losing track of which dish a column
   // belongs to made it unreadable.
@@ -1324,7 +1345,7 @@ async function loadPriceTier(force) {
   const topRows = (d.top30 || []).map((r, i) => {
     const cells = d.tier_keys.map(t => {
       const c = r.tiers[t] || {};
-      return `<td class="py-1 pr-2 text-right tabular-nums" data-sort="${c.qty_head ?? ''}">${c.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
+      return `<td class="py-1 pr-2 text-right tabular-nums" data-sort="${c.qty_head ?? ''}">${qv(c.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
     }).join('');
     const up = topOut.has(i) && (r.d_qty_head_pct || 0) > 0, down = topOut.has(i) && (r.d_qty_head_pct || 0) < 0;
     const flag = up ? '<span class="mi-flag bad" title="การทาน/หัวพุ่งผิดปกติเทียบเมนูอื่นในตารางนี้">⚠ พุ่ง</span>'
@@ -1334,7 +1355,7 @@ async function loadPriceTier(force) {
       <td class="py-1 pr-2 font-semibold mi-name" data-sort="${esc(r.label)}" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W, 'box-shadow:2px 0 3px -2px rgba(0,0,0,.15)')}">${esc(r.label)}${flag}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b1(r.unit_cost)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.cogs_head)}</td>
-      <td class="py-1 pr-2 text-right tabular-nums">${r.qty_head ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
+      <td class="py-1 pr-2 text-right tabular-nums">${qv(r.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
       ${cells}</tr>`;
   }).join('');
 
@@ -1380,33 +1401,40 @@ async function loadPriceTier(force) {
         <th class="py-1.5 pr-2 text-right">Δ คนทาน</th><th class="py-1.5 pr-2 text-right">สัดส่วน (Δpp)</th>
         <th class="py-1.5 pr-2 text-right">คน/บิล</th><th class="py-1.5 pr-2 text-right">รายได้/หัว</th>
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
-        <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">Food%</th>
+        <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">COGS%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = food cost ≥ 40% · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
-      <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>Food% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
+      <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
       <div class="card p-5" style="border-left:4px solid var(--indigo,#6366f1)"><h2 class="section-title mb-3">✅ สิ่งที่ต้องปรับปรุงและพัฒนา</h2><ol class="text-xs" style="list-style:none;padding:0;margin:0">${acts}</ol></div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์สัดส่วนคนทานตาม Tier (รายเดือน)</h2>
+      <div class="card p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <h2 class="section-title mb-0">เทรนด์สัดส่วนคนทานตาม Tier</h2>${ptGranBtns('mix')}</div>
         <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>
-        <div style="height:280px"><canvas id="ptChartMix"></canvas></div></div>
-      <div class="card p-5"><h2 class="section-title mb-3">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier (รายเดือน)</h2>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = เดือนที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
-        <div style="height:280px"><canvas id="ptChartCogs"></canvas></div></div>
+        <div style="height:280px"><canvas id="ptChartMix"></canvas></div>
+        <p class="text-[10.5px] mt-2" id="ptNoteMix" style="color:var(--text-muted)"></p></div>
+      <div class="card p-5">
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <h2 class="section-title mb-0">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier</h2>${ptGranBtns('cogs')}</div>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = ช่วงที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
+        <div style="height:280px"><canvas id="ptChartCogs"></canvas></div>
+        <p class="text-[10.5px] mt-2" id="ptNoteCogs" style="color:var(--text-muted)"></p></div>
     </div>
     <div class="card p-5 overflow-x-auto">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
         <h2 class="section-title mb-0">Top-${(d.top30 || []).length} เมนูหลักในต้นทุน — การทานต่อหัวแยกตาม Tier (A, วงเล็บ = Δ% เทียบ B)</h2>
-        <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <div class="flex gap-1 items-center">${ptQtyUnitBtns()}
+        <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button></div>
       </div>
       <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-1" data-nosort style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
-        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">ชิ้น/หัว รวม (Δ%)</th>${tierTh}
+        <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">${qUnit} รวม (Δ%)</th>${tierTh}
       </tr></thead><tbody>${topRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ชิ้น/หัว = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">เรียงตามต้นทุนรวมในช่วง A · ${qUnit} = จำนวนที่ทาน ÷ คนทานทั้งหมดของ tier นั้น${_ptQtyPer100 ? ' × 100' : ''} · เขียว = ทานลดลง (ต้นทุนดีขึ้น) · คอลัมน์ # และเมนู ตรึงไว้ขณะเลื่อนดู tier อื่น · <b>คลิกหัวคอลัมน์เพื่อเรียงมาก→น้อย / น้อย→มาก</b> (คลิกครั้งที่สามกลับลำดับเดิม) · ⚠ = การทาน/หัวหลุดกรอบเทียบเมนูอื่น</p>
     </div>
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละ Tier</h2>
@@ -1417,38 +1445,129 @@ async function loadPriceTier(force) {
   _ptLast = d;
   ['ptTierTbl', 'ptTop30'].forEach(makeSortable);
   document.querySelectorAll('#ptBody .pt-bom-tbl').forEach(makeSortable);
-  const trm = d.trend_month || [];
-  if (trm.length) {
-    const labels = trm.map(r => r.ym);
-    const dsMix = d.tier_keys.map(t => ({
-      label: tl(t),
-      data: trm.map(r => r.tiers[t]?.share ?? 0),
-      backgroundColor: tcolor[t], stack: 's' }));
-    // mkChart registers the instance + injects the 🔍 dive-in button.
+  _ptDrawTrends(d, tcolor);
+}
+
+// Both trend cards, drawn at whatever granularity each one is toggled to.
+// Split out of the renderer so the toggle can redraw a single card without
+// re-fetching or rebuilding the whole tab.
+function _ptDrawTrends(d, tcolor) {
+  const wkMeta = d.trend_week_meta || {};
+  const OLD = wkMeta.old_suffix || '@old';
+  // Weekly carries tiers the A-window never had (the pre-Grand-Menu price list),
+  // so its keys/labels come from the payload's own meta, not from tier_keys.
+  const pick = (which) => {
+    const weekly = _ptGran[which] === 'week';
+    const rows = (weekly ? d.trend_week : d.trend_month) || [];
+    return {
+      weekly, rows,
+      labels: rows.map(r => weekly ? r.wk.replace('-W', ' W') : r.ym),
+      keys: weekly ? (wkMeta.tier_keys || []) : (d.tier_keys || []),
+      label: k => weekly ? ((wkMeta.tier_labels || {})[k] || k)
+                         : ((d.tier_labels || {})[k] || k),
+      // an old-era series borrows its live twin's colour and is drawn faded +
+      // dashed, so "฿999" and "฿999 (เมนูเก่า)" read as related but distinct.
+      colour: k => tcolor[k.replace(OLD, '')] || '#94a3b8',
+      isOld: k => k.endsWith(OLD),
+    };
+  };
+
+  const M = pick('mix');
+  if (M.rows.length) {
+    const dsMix = M.keys.map(t => ({
+      label: M.label(t),
+      data: M.rows.map(r => r.tiers[t]?.share ?? 0),
+      backgroundColor: M.isOld(t) ? M.colour(t) + '66' : M.colour(t), stack: 's' }));
     _ptChartMix = mkChart('ptChartMix', {
-      type: 'bar', data: { labels, datasets: dsMix },
+      type: 'bar', data: { labels: M.labels, datasets: dsMix },
       options: { responsive: true, maintainAspectRatio: false,
         scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '% ของคนทาน' } } },
-        plugins: { tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%` } } } } });
-    const dsCogs = d.tier_keys.filter(t => t !== 'child').map(t => {
-      const series = trm.map(r => r.tiers[t]?.cogs_head ?? null);
-      // A month whose cost/head breaks out of its own tier's range is the one
+        plugins: {
+          // 8 weeks x up to 14 bands: printing every share turns the bars into a
+          // wall of digits. Label only the bands big enough to read.
+          datalabels: M.weekly ? { display: c => (c.dataset.data[c.dataIndex] || 0) >= 8 } : {},
+          tooltip: { callbacks: {
+          label: c => `${c.dataset.label}: ${c.parsed.y}%`,
+          afterBody: ci => _ptPartialTip(M.rows[ci[0].dataIndex]) } } } } });
+  } else if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }
+
+  const C = pick('cogs');
+  if (C.rows.length) {
+    const dsCogs = C.keys.filter(t => t.replace(OLD, '') !== 'child').map(t => {
+      const series = C.rows.map(r => r.tiers[t]?.cogs_head ?? null);
+      // A period whose cost/head breaks out of its own tier's range is the one
       // worth opening — make its point large and red instead of one more dot.
-      const out = _miOutlierSet(series);
-      return { label: tl(t), data: series,
-               borderColor: tcolor[t], backgroundColor: tcolor[t], tension: .25, spanGaps: true,
+      const out = _miOutlierSet(series), col = C.colour(t);
+      return { label: C.label(t), data: series,
+               borderColor: col, backgroundColor: col, tension: .25, spanGaps: true,
+               borderDash: C.isOld(t) ? [5, 3] : undefined,
                pointRadius: series.map((_, i) => out.has(i) ? 6 : 3),
-               pointBackgroundColor: series.map((_, i) => out.has(i) ? '#dc2626' : tcolor[t]),
-               pointBorderColor: series.map((_, i) => out.has(i) ? '#dc2626' : tcolor[t]) };
+               pointBackgroundColor: series.map((_, i) => out.has(i) ? '#dc2626' : col),
+               pointBorderColor: series.map((_, i) => out.has(i) ? '#dc2626' : col) };
     });
     _ptChartCogs = mkChart('ptChartCogs', {
-      type: 'line', data: { labels, datasets: dsCogs },
+      type: 'line', data: { labels: C.labels, datasets: dsCogs },
       options: { responsive: true, maintainAspectRatio: false,
-        scales: { y: { title: { display: true, text: '฿/หัว' } } } } });
-  } else {
-    if (_ptChartMix) { _ptChartMix.destroy(); _ptChartMix = null; }
-    if (_ptChartCogs) { _ptChartCogs.destroy(); _ptChartCogs = null; }
-  }
+        scales: { y: { title: { display: true, text: '฿/หัว' } } },
+        plugins: {
+          // Weekly can carry both price lists at once — 14 lines x 8 points, so the
+          // per-point values collide into noise. The tooltip still has every number.
+          datalabels: C.weekly ? { display: false } : {},
+          tooltip: { callbacks: {
+          afterBody: ci => _ptPartialTip(C.rows[ci[0].dataIndex]) } } } } });
+  } else if (_ptChartCogs) { _ptChartCogs.destroy(); _ptChartCogs = null; }
+
+  _ptTrendNote('ptNoteMix', M, wkMeta);
+  _ptTrendNote('ptNoteCogs', C, wkMeta);
+}
+
+// A short week is the single most misleading thing on these charts — the newest
+// one is nearly always cut off by the sync running a day behind. Say so on hover.
+function _ptPartialTip(row) {
+  return (row && row.partial) ? `⚠ สัปดาห์ไม่เต็ม — มีข้อมูล ${row.days} วัน` : '';
+}
+
+function _ptTrendNote(id, P, wkMeta) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (!P.weekly) { el.textContent = 'รายเดือน · เดือนล่าสุดอาจยังไม่ครบเดือน'; return; }
+  const short = P.rows.filter(r => r.partial).map(r => r.wk.replace('-W', ' W'));
+  el.innerHTML = `รายสัปดาห์ (จ.–อา. ตามมาตรฐาน ISO) ${P.rows.length} สัปดาห์ล่าสุด`
+    + (wkMeta.era_week ? ` · เส้นประ/สีจาง = ราคาเมนูเก่า (ก่อน ${esc(wkMeta.era_from || '')}) `
+        + `แยกเส้นไว้เพราะ ฿999 ของสองเมนูคนละราคากัน` : '')
+    + (short.length ? ` · <b style="color:#b45309">⚠ สัปดาห์ไม่เต็ม: ${short.map(esc).join(', ')}</b>` : '');
+}
+
+// Top-45's per-head ⇄ per-100-covers switch. Redraws the tab from the payload
+// already in hand (_ptLast) — the unit is a presentation choice, not new data.
+function ptQtyUnitBtns() {
+  const b = (on, txt) => `<button onclick="ptSetQtyUnit(${on})" class="text-xs rounded px-2 py-0.5 border"
+    style="${_ptQtyPer100 === on ? 'background:var(--bg-hover);font-weight:700;border-color:#6366f1'
+                                 : 'border-color:var(--border-soft);color:var(--text-muted)'}">${txt}</button>`;
+  return `${b(false, 'ต่อหัว')}${b(true, 'ต่อ 100 คน')}`;
+}
+
+function ptSetQtyUnit(on) {
+  if (_ptQtyPer100 === on || !_ptLast) return;
+  _ptQtyPer100 = on;
+  _ptRender(_ptLast);
+}
+
+// The toggle in each trend card header.
+function ptGranBtns(which) {
+  const b = (g, txt) => `<button onclick="ptSetGran('${which}','${g}')" class="text-xs rounded px-2 py-0.5 border"
+    style="${_ptGran[which] === g ? 'background:var(--bg-hover);font-weight:700;border-color:#6366f1'
+                                  : 'border-color:var(--border-soft);color:var(--text-muted)'}">${txt}</button>`;
+  return `<div class="flex gap-1" id="ptGran${which}">${b('month', 'รายเดือน')}${b('week', 'รายสัปดาห์')}</div>`;
+}
+
+function ptSetGran(which, g) {
+  if (_ptGran[which] === g || !_ptLast) return;
+  _ptGran[which] = g;
+  // The payload already carries BOTH granularities, so this is a redraw, not a
+  // reload — re-fetching the whole tier report to switch axis would be a wasted
+  // round-trip on an endpoint that scans the fact tables.
+  _ptRender(_ptLast);
 }
 
 // ── 🔍 Dive-in summaries for the 🧪 tab's three charts ──────────────────────
@@ -1583,9 +1702,9 @@ async function _divePtCogs(_cfg) {
         `ขยับแรงสุดคือ <b>${esc(tl(move.k))}</b> ${move.dv > 0 ? 'เพิ่ม' : 'ลด'} <b>${_MI_D2(Math.abs(move.dv))}</b>/หัว ` +
         `(${esc(move.from)} → ${esc(move.to)})`, move.dv > 0 ? 'bad' : 'good') : '') +
       (hot.length ? _diveBullet('🔥',
-        `tier ที่ food cost ≥ 40%: ${hot.map(x => `<b>${esc(x.label)}</b> (${x.a.food_pct}%)`).join(', ')} — ` +
+        `tier ที่ COGS ≥ 40% ของรายได้: ${hot.map(x => `<b>${esc(x.label)}</b> (${x.a.food_pct}%)`).join(', ')} — ` +
         `นี่คือเกณฑ์เดียวกับที่การ์ด "สิ่งที่ต้องปรับปรุงและพัฒนา" ใช้ตั้งข้อเสนอแนะ`, 'bad')
-        : _diveBullet('✅', 'ไม่มี tier ไหน food cost แตะ 40% ในช่วงนี้', 'good')) +
+        : _diveBullet('✅', 'ไม่มี tier ไหน COGS แตะ 40% ของรายได้ในช่วงนี้', 'good')) +
       (outBullets || _diveBullet('✅', 'ไม่พบเดือนที่ต้นทุน/หัวหลุดกรอบของ tier ตัวเอง', 'good')) +
       (d.era_clamped ? _diveBullet('🗓️', `เส้นเริ่มที่ <b>${d.menu_era_from}</b> — ต้นทุน/หัวของเมนูเก่าคนละชุดราคา จึงไม่ต่อเส้นกัน`, 'info') : ''));
 }
