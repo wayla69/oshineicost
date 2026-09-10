@@ -161,5 +161,298 @@
    "share_prev": 58.5,
    "tier": "789"
   }
- ]
+ ],
+ "trend_month": [
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 630.0,
+     "rev_head": 590.0,
+     "share": 32.6
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 1170.0,
+     "rev_head": 789.0,
+     "share": 60.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 135.0,
+     "rev_head": 600.0,
+     "share": 7.0
+    }
+   },
+   "ym": "2026-04"
+  },
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 651.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 1116.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 140.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "ym": "2026-05"
+  },
+  {
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 72.0,
+     "rev_head": 590.0,
+     "share": 42.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 90.0,
+     "rev_head": 789.0,
+     "share": 52.6
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 9.0,
+     "rev_head": 600.0,
+     "share": 5.3
+    }
+   },
+   "ym": "2026-06"
+  }
+ ],
+ "trend_week": [
+  {
+   "days": 3,
+   "partial": true,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 72.0,
+     "rev_head": 590.0,
+     "share": 42.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 90.0,
+     "rev_head": 789.0,
+     "share": 52.6
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 9.0,
+     "rev_head": 600.0,
+     "share": 5.3
+    }
+   },
+   "wk": "2026-W23"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 32.6
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 273.0,
+     "rev_head": 789.0,
+     "share": 60.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.0
+    }
+   },
+   "wk": "2026-W16"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 32.6
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 273.0,
+     "rev_head": 789.0,
+     "share": 60.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.0
+    }
+   },
+   "wk": "2026-W17"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 33.2
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 264.0,
+     "rev_head": 789.0,
+     "share": 59.7
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.1
+    }
+   },
+   "wk": "2026-W18"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 252.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "wk": "2026-W19"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 252.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "wk": "2026-W20"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 252.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "wk": "2026-W21"
+  },
+  {
+   "days": 7,
+   "partial": false,
+   "tiers": {
+    "590": {
+     "cogs_head": 180.0,
+     "pax": 147.0,
+     "rev_head": 590.0,
+     "share": 34.1
+    },
+    "789": {
+     "cogs_head": 210.0,
+     "pax": 252.0,
+     "rev_head": 789.0,
+     "share": 58.5
+    },
+    "promo": {
+     "cogs_head": 150.0,
+     "pax": 32.0,
+     "rev_head": 600.0,
+     "share": 7.3
+    }
+   },
+   "wk": "2026-W22"
+  }
+ ],
+ "trend_week_meta": {
+  "era_from": null,
+  "era_week": null,
+  "from": "2026-W16",
+  "old_suffix": "@old",
+  "straddles_menu_change": false,
+  "tier_keys": [
+   "789",
+   "590",
+   "promo"
+  ],
+  "tier_labels": {
+   "590": "฿590",
+   "789": "฿789",
+   "promo": "โปรฯ/ราคาอื่น"
+  },
+  "weeks_available": 10,
+  "weeks_shown": 8,
+  "weeks_wanted": 8
+ }
 }

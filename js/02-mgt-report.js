@@ -337,6 +337,12 @@ const MGT_I18N = {
     vNoActions:'No fixes recorded yet — create one from a theme in the 💬 tab, and this section will show whether it worked.',
     vRespBranch:'Answered by branch', vMedian:'median',
     tierCol:'Tier', tierGuests:'Guests', tierShare:'Share', tierRevHead:'Rev/Head',
+    tierTrendTitle:'Trend by tier — mix of guests & cost/head',
+    tierGranMonth:'Monthly', tierGranWeek:'Weekly',
+    tierTrendMonthNote:'Monthly · the newest month may still be in progress',
+    tierTrendWeekNote:'Weekly (Mon-Sun, ISO) · last {n} weeks',
+    tierTrendEra:'dashed / faded = the price list retired on {d}, kept as its own series because ฿999 is a different price on each menu',
+    tierTrendPartial:'short week: {w}', tierTrendPartialTip:'part week — {n} days of data',
     tierCostHead:'Cost/Head', tierGpHead:'GP/Head', tierFood:'COGS %', tierBuffetGuests:'buffet guests',
     tierMixDown:'Customers shifted to CHEAPER tiers — mix effect on spend/head ', tierMixUp:'Customers shifted to PRICIER tiers — mix effect on spend/head ',
     tierNote:'Tier = the adult buffet price printed on that period’s menu. Until Aug 2026 the menu quoted the price BEFORE service charge and VAT; the Grand Menu from 1 Sep 2026 quotes NET prices (5% service charge and 7% VAT already inside), so ฿789 net = ฿702.27 + SC + VAT. promo = a non-standard price (discount / promotion). Guests count buffet bills only, so the total can sit slightly under headline covers · Cost/Head = BoM food cost · Rev/Head is ex-VAT but still INCLUDES the 5% service charge.',
@@ -443,6 +449,12 @@ const MGT_I18N = {
     vNoActions:'ยังไม่มีงานแก้ที่บันทึกไว้ — สร้างจากหัวข้อในแท็บ 💬 แล้วส่วนนี้จะบอกว่าแก้แล้วได้ผลไหม',
     vRespBranch:'ตอบกลับรายสาขา', vMedian:'กลาง',
     tierCol:'Tier', tierGuests:'คนทาน', tierShare:'สัดส่วน', tierRevHead:'รายได้/หัว',
+    tierTrendTitle:'เทรนด์รายกลุ่มราคา — สัดส่วนคนทาน & ต้นทุน/หัว',
+    tierGranMonth:'รายเดือน', tierGranWeek:'รายสัปดาห์',
+    tierTrendMonthNote:'รายเดือน · เดือนล่าสุดอาจยังไม่ครบเดือน',
+    tierTrendWeekNote:'รายสัปดาห์ (จ.–อา. ตามมาตรฐาน ISO) {n} สัปดาห์ล่าสุด',
+    tierTrendEra:'เส้นประ/สีจาง = ราคาเมนูเก่าก่อน {d} แยกเส้นไว้เพราะ ฿999 ของสองเมนูคนละราคากัน',
+    tierTrendPartial:'สัปดาห์ไม่เต็ม: {w}', tierTrendPartialTip:'สัปดาห์ไม่เต็ม — มีข้อมูล {n} วัน',
     tierCostHead:'ต้นทุน/หัว', tierGpHead:'GP/หัว', tierFood:'COGS %', tierBuffetGuests:'คนทานบุฟเฟ่ต์',
     tierMixDown:'ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix ต่อยอด/หัว ', tierMixUp:'ลูกค้าย้ายขึ้น tier แพงขึ้น — ผลจาก mix ต่อยอด/หัว ',
     tierNote:'Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่ตามเมนูของช่วงนั้น · ถึง ส.ค. 2026 เมนูตั้งราคา “ก่อน” บวก service charge และ VAT · ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) เป็นราคา NET คือรวม service charge 5% และ VAT 7% ไว้แล้ว เช่น ฿789 net = ฿702.27 + SC + VAT · โปรฯ = ราคานอกมาตรฐาน (ส่วนลด/โปรโมชัน) · นับเฉพาะบิลบุฟเฟ่ต์ ยอดรวมจึงต่ำกว่าจำนวนหัวรวมเล็กน้อย · ต้นทุน/หัว = ต้นทุนอาหารอิงสูตร BoM · รายได้/หัว ถอด VAT แล้วแต่ยัง “รวม” service charge 5%',
@@ -1376,6 +1388,11 @@ function renderMgtReport(j, jM, jF) {
     // initTierDrivers IIFE below (interactive — tier picker, bars, ranks, heat,
     // auto-insight). Container only appears when j.tier.drivers.by_tier exists.
     const driversSlot = ((TD.drivers || {}).by_tier) ? `<div id="mgtTierDrivers" class="mt-4"></div>` : '';
+    // The table shows ONE period, so a tier drifting month after month is invisible
+    // in it and the reader has to leave the report to tell a blip from a trend.
+    // Charts are rendered post-innerHTML by initTierTrend below.
+    const trendSlot = (TD.trend_month || []).length
+      ? `<div id="mgtTierTrend" class="mt-4"></div>` : '';
     // "โปรฯ" is the one row whose label explains nothing, and it is not a small
     // row. Spell out what is inside it in prose: real discounts (named against
     // the tier they came off), bills carrying a comped or half-price head, and
@@ -1430,7 +1447,7 @@ function renderMgtReport(j, jM, jF) {
         <th class="text-right py-1.5 px-2">${T.tierShare}</th><th class="text-right py-1.5 px-2">${T.tierRevHead}</th>
         <th class="text-right py-1.5 px-2">${T.tierCostHead}</th><th class="text-right py-1.5 px-2">${T.tierGpHead}</th>
         <th class="text-right py-1.5 pl-2">${T.tierFood}</th></tr></thead><tbody>${rows}</tbody></table></div>
-      ${mix}${promoNote}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${driversSlot}`;
+      ${mix}${promoNote}<p class="text-[10px] text-slate-400 mt-2">${T.tierNote}</p>${trendSlot}${driversSlot}`;
   })();
 
   const body = document.getElementById('mgtRptBody');
@@ -1611,6 +1628,82 @@ function renderMgtReport(j, jM, jF) {
   // numbers, proportion bars, heat-tinted cost, % of tier cost, auto-insight.
   // Rendered here (after innerHTML so #mgtTierDrivers exists); the tier buttons
   // call window._mgtRenderDrivers to re-render in place without a refetch.
+  // §11 trend sub-block — the same monthly/weekly series the 🧪 tab draws, so a
+  // tier drifting over time is visible without leaving the report. Rendered after
+  // innerHTML so #mgtTierTrend exists. The report is a white island in dark mode
+  // (body.dark #mgtRptBody re-declares the tokens), so the charts are forced light.
+  (function initTierTrend() {
+    const TD = j.tier || {};
+    const slot = document.getElementById('mgtTierTrend');
+    if (!slot || !(TD.trend_month || []).length) return;
+    const WM = TD.trend_week_meta || {};
+    const OLD = WM.old_suffix || '@old';
+    const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
+    const colOf = {};
+    (TD.rows || []).forEach((r, i) => { colOf[r.tier] = PAL[i % PAL.length]; });
+    let gran = 'month';
+
+    const draw = () => {
+      const weekly = gran === 'week';
+      const rows = (weekly ? TD.trend_week : TD.trend_month) || [];
+      const keys = weekly ? (WM.tier_keys || []) : (TD.rows || []).map(r => r.tier);
+      const label = k => weekly ? ((WM.tier_labels || {})[k] || k)
+                                : ((TD.rows || []).find(r => r.tier === k) || {}).label || k;
+      const colour = k => colOf[k.replace(OLD, '')] || '#94a3b8';
+      const isOld = k => k.endsWith(OLD);
+      const labels = rows.map(r => weekly ? r.wk.replace('-W', ' W') : r.ym);
+      const short = rows.filter(r => r.partial).map(r => r.wk.replace('-W', ' W'));
+
+      slot.innerHTML = `
+        <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+          <div class="text-[12px] font-bold" style="color:#334155">${esc(T.tierTrendTitle)}</div>
+          <div class="flex gap-1">
+            ${['month', 'week'].map(g => `<button data-g="${g}" class="text-[11px] rounded px-2 py-0.5 border"
+               style="${gran === g ? 'background:#eef2ff;font-weight:700;border-color:#6366f1'
+                                   : 'border-color:#e2e8f0;color:#64748b'}">${g === 'month' ? T.tierGranMonth : T.tierGranWeek}</button>`).join('')}
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div style="height:230px"><canvas id="mgtTierTrendMix"></canvas></div>
+          <div style="height:230px"><canvas id="mgtTierTrendCogs"></canvas></div>
+        </div>
+        <p class="text-[10px] text-slate-400 mt-2">${esc(
+          weekly ? T.tierTrendWeekNote.replace('{n}', rows.length)
+                   + (WM.era_from ? ' · ' + T.tierTrendEra.replace('{d}', WM.era_from) : '')
+                   + (short.length ? ' · ⚠ ' + T.tierTrendPartial.replace('{w}', short.join(', ')) : '')
+                 : T.tierTrendMonthNote)}</p>`;
+
+      slot.querySelectorAll('button[data-g]').forEach(b =>
+        b.addEventListener('click', () => { gran = b.dataset.g; draw(); }));
+
+      const tip = i => (rows[i] && rows[i].partial)
+        ? `⚠ ${T.tierTrendPartialTip.replace('{n}', rows[i].days)}` : '';
+      mkChart('mgtTierTrendMix', {
+        type: 'bar',
+        data: { labels, datasets: keys.map(t => ({
+          label: label(t), data: rows.map(r => (r.tiers[t] || {}).share ?? 0),
+          backgroundColor: isOld(t) ? colour(t) + '66' : colour(t), stack: 's' })) },
+        options: { responsive: true, maintainAspectRatio: false,
+          scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '%' } } },
+          plugins: {
+            // 8 weeks x up to 14 bands would print a wall of digits.
+            datalabels: weekly ? { display: c => (c.dataset.data[c.dataIndex] || 0) >= 8 } : {},
+            tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%`,
+                                    afterBody: ci => tip(ci[0].dataIndex) } } } } });
+      mkChart('mgtTierTrendCogs', {
+        type: 'line',
+        data: { labels, datasets: keys.filter(t => t.replace(OLD, '') !== 'child').map(t => ({
+          label: label(t), data: rows.map(r => (r.tiers[t] || {}).cogs_head ?? null),
+          borderColor: colour(t), backgroundColor: colour(t), tension: .25, spanGaps: true,
+          borderDash: isOld(t) ? [5, 3] : undefined, pointRadius: 3 })) },
+        options: { responsive: true, maintainAspectRatio: false,
+          scales: { y: { title: { display: true, text: T.tierCostHead } } },
+          plugins: { datalabels: { display: false },
+                     tooltip: { callbacks: { afterBody: ci => tip(ci[0].dataIndex) } } } } });
+    };
+    draw();
+  })();
+
   (function initTierDrivers() {
     const DR = (j.tier || {}).drivers;
     const slot = document.getElementById('mgtTierDrivers');
