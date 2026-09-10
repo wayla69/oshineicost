@@ -128,6 +128,9 @@ def test_digest_counts_the_window_against_the_one_before(client, monkeypatch):
 
 
 def test_fetcher_sends_the_digest_on_mondays_and_on_demand(tmp_path, monkeypatch):
+    # Pin the digest clock: the seeded voice is dated, so against the REAL today
+    # it falls out of the 7-day window and the digest goes empty.
+    monkeypatch.setattr(A, "_today", lambda: "2026-09-05")
     db = tmp_path / "local.db"; _seed_db(db)
     sink = FF.DbSink(db)
     sink.upload([{"branch": "ขอนแก่น", "date": "2026-09-03", "source": "Google", "rating": 1, "text": "รอนานมาก", "external_id": "d1"}], by="t")

@@ -16,6 +16,7 @@ sys.path.insert(0, str(HERE))
 import auth  # noqa: E402
 import fetch_feedback as FF  # noqa: E402
 import notify  # noqa: E402
+from routers import feedback_actions as A  # noqa: E402
 from test_feedback_sources import _args, _seed_db  # noqa: E402
 
 PW = "Pw@1234567"
@@ -149,6 +150,9 @@ def test_token_carries_the_branch_and_scope_reads_it(monkeypatch):
 
 
 def test_branch_chats_get_their_own_alert_and_digest(tmp_path, monkeypatch):
+    # Pin the digest clock: the seeded voices are dated, so against the REAL
+    # today they fall out of the 7-day window and the digest goes empty.
+    monkeypatch.setattr(A, "_today", lambda: "2026-09-05")
     db = tmp_path / "local.db"; _seed_db(db)
     sink = FF.DbSink(db)
     sink.upload([{"branch": "ขอนแก่น", "date": "2026-09-03", "source": "Google", "rating": 1, "text": "รอนานมาก", "external_id": "b1"},
