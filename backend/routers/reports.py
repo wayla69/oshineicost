@@ -573,6 +573,121 @@ def _pt_metrics(v):
             "pax_bill": round(px / v["bills"], 2) if v["bills"] else None}
 
 
+def _pt_tier_trends(con, ph, bids, *, month_from, a_to):
+    """Monthly + weekly tier trend over menu_fact_total.
+
+    Shared by /api/reports/price-tier and §11 of the management report. Lifted out
+    of price_tier_report so the two cannot drift: the era split, the partial-week
+    flags and the choice of week window are each subtle enough that a second copy
+    would quietly disagree with the first.
+
+    `month_from` is the start of the MONTHLY series — the caller clamps it to the
+    menu changeover when the analysis sits on the live menu, so the stacked mix
+    chart can't put a retired ฿799 band next to a live ฿789 one. `a_to` is the date
+    the ANALYSIS ends, which is where the weekly window ends: a June report must
+    show June's weeks, not the newest eight in the database.
+    """
+    from datetime import date
+    rd = lambda x, nd=2: round(x, nd) if x is not None else None
+
+    trend = {}
+    for ym, t, px, cg, rv in con.execute(
+            f"""SELECT substr(day,1,7), tier, SUM(pax), SUM(cogs), SUM(rev)
+                FROM menu_fact_total WHERE branch_id IN ({ph}) AND day >= ?
+                GROUP BY substr(day,1,7), tier""", bids + [month_from]):
+        m = trend.setdefault(ym, {}).setdefault(str(t or "promo"),
+                                                {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
+        m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
+
+    # Weekly trend x tier — the last _PT_TREND_WEEKS ISO weeks. Monthly is too
+    # coarse to see a tier moving right after a menu change, so the same charts get
+    # a weekly granularity. _iso_week_sql is the app-wide week bucket (Mon-Sun,
+    # correct across the Jan-1 boundary), so a week here means the same days a week
+    # means everywhere else in the app.
+    #
+    # It deliberately does NOT take the monthly chart's era clamp: clamped to
+    # 2026-09-01 it would today hold two partial weeks, which is not a trend. What
+    # the clamp protects against is a retired price sitting beside a live one as if
+    # they were the same product — handled here instead by splitting the series on
+    # the era of the DAY (below) and marking the changeover on the axis.
+    wk_expr = _iso_week_sql("day")
+    # Split on the era of the DAY, not of the week: "999" exists on BOTH price lists
+    # and means different money on each (old ฿999 is quoted before the 5% service
+    # charge and 7% VAT, Grand ฿999 has both inside). Drawn as one series it would
+    # look like one product drifting. The week containing 1 Sep carries both.
+    week_rows = con.execute(
+        f"""SELECT {wk_expr} wk, tier, day < ? AS old_era, SUM(pax), SUM(cogs), SUM(rev)
+            FROM menu_fact_total WHERE branch_id IN ({ph})
+            GROUP BY wk, tier, old_era ORDER BY wk""",
+        [_PT_NEW_MENU_FROM] + bids).fetchall()
+    # Days present per week. The newest week is nearly always partial (the sync runs
+    # a day behind) and a 2-day week plotted next to 7-day ones reads as a collapse
+    # in covers that never happened — so each point carries its own day count and
+    # the chart marks the short ones.
+    wk_days = dict(con.execute(
+        f"""SELECT {wk_expr} wk, COUNT(DISTINCT day) FROM menu_fact_total
+            WHERE branch_id IN ({ph}) GROUP BY wk""", bids))
+    _ec = date.fromisoformat(_PT_NEW_MENU_FROM).isocalendar()
+    era_week = f"{_ec[0]}-W{_ec[1]:02d}"
+
+    _aw = a_to.isocalendar()
+    a_week = f"{_aw[0]}-W{_aw[1]:02d}"
+    all_weeks = sorted(w for w in {r[0] for r in week_rows} if w <= a_week)
+    keep_weeks = set(all_weeks[-_PT_TREND_WEEKS:])
+    weeks_available = len(all_weeks)
+    # Only label an era when the window actually SHOWS both. A report sitting
+    # entirely before the changeover is looking at the menu that was current then,
+    # and tagging every one of its tiers "(เมนูเก่า)" would be wrong.
+    eras = {bool(r[2]) for r in week_rows if r[0] in keep_weeks}
+    straddles = len(eras) > 1
+    trend_wk = {}
+    for wk, t, old_era, px, cg, rv in week_rows:
+        if wk not in keep_weeks:
+            continue
+        key = str(t or "promo") + (_PT_OLD_ERA if (old_era and straddles) else "")
+        m = trend_wk.setdefault(wk, {}).setdefault(key, {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
+        m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
+
+    def _points(buckets, key, days=None):
+        out = []
+        for b in sorted(buckets):
+            mt = buckets[b]
+            tot_px = sum(v["pax"] for v in mt.values())
+            pt = {key: b}
+            if days is not None:
+                pt["days"] = days.get(b, 0)
+                pt["partial"] = days.get(b, 0) < 7
+            out.append({**pt, "tiers": {
+                t: {"pax": rd(v["pax"], 0),
+                    "share": rd(v["pax"] / tot_px * 100, 1) if tot_px else None,
+                    "cogs_head": rd(v["cogs"] / v["pax"]) if v["pax"] else None,
+                    "rev_head": rd(v["rev"] / v["pax"]) if v["pax"] else None}
+                for t, v in mt.items()}})
+        return out
+
+    trend_month = _points(trend, "ym")
+    trend_week = _points(trend_wk, "wk", wk_days)
+    wk_seen = {t for pt in trend_week for t, v in pt["tiers"].items() if v["pax"]}
+    _ord = {t: i for i, t in enumerate(_PT_ORDER)}
+    wk_tier_keys = sorted(wk_seen, key=lambda k: (k.endswith(_PT_OLD_ERA),
+                                                  _ord.get(k.replace(_PT_OLD_ERA, ""), 99)))
+    wk_tier_labels = {k: _pt_label(k.replace(_PT_OLD_ERA, ""))
+                         + (" (เมนูเก่า)" if k.endswith(_PT_OLD_ERA) else "")
+                      for k in wk_tier_keys}
+    return {
+        "trend_month": trend_month,
+        "trend_week": trend_week,
+        "trend_week_meta": {
+            "weeks_shown": len(trend_week), "weeks_wanted": _PT_TREND_WEEKS,
+            "tier_keys": wk_tier_keys, "tier_labels": wk_tier_labels,
+            "old_suffix": _PT_OLD_ERA, "straddles_menu_change": straddles,
+            "weeks_available": weeks_available,
+            "from": trend_week[0]["wk"] if trend_week else None,
+            "era_week": era_week if straddles else None,
+            "era_from": _PT_NEW_MENU_FROM if straddles else None},
+    }
+
+
 @router.get("/api/reports/price-tier")
 @ttl_cache
 def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
@@ -662,85 +777,12 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         meta = {ent: (label, uc) for ent, label, uc in con.execute(
             "SELECT ent, label, unit_cost FROM menu_fact_meta WHERE kind='sku'")}
 
-        # Monthly trend x tier over the full coverage (scope-filtered) — but when
-        # the analysis sits on the live menu, the trend starts at the changeover
-        # too, so the stacked mix chart can't put a retired ฿799 band next to a
-        # live ฿789 one.
-        trend_from = _PT_NEW_MENU_FROM if a_from >= _PT_NEW_MENU_FROM else lo
-        trend = {}
-        for ym, t, px, cg, rv in con.execute(
-                f"""SELECT substr(day,1,7), tier, SUM(pax), SUM(cogs), SUM(rev)
-                    FROM menu_fact_total WHERE branch_id IN ({ph}) AND day >= ?
-                    GROUP BY substr(day,1,7), tier""", bids + [trend_from]):
-            m = trend.setdefault(ym, {}).setdefault(str(t or "promo"),
-                                                    {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
-            m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
-
-        # Weekly trend x tier — the last _PT_TREND_WEEKS ISO weeks of the coverage.
-        # Monthly is too coarse to see a tier moving right after a menu change (the
-        # Grand Menu is only ~5 weeks old), so the same two charts get a weekly
-        # granularity. _iso_week_sql is the app-wide week bucket (Mon-Sun, correct
-        # across the Jan-1 boundary) — the same one /api/sales/daily and the P&L use,
-        # so a week here means the same days a week means everywhere else.
-        wk_expr = _iso_week_sql("day")
-        # The weekly trend deliberately does NOT take the monthly chart's era clamp.
-        # Clamped to 2026-09-01 it would today hold two partial weeks, which is not
-        # a trend — and 8 weeks of weekly detail is the whole point of this chart.
-        # What the clamp protects against is a retired ฿799 band sitting next to a
-        # live ฿789 one as if they were the same product; here the changeover is
-        # instead marked on the axis (era_from below) so a price list that was
-        # renamed can never be misread as guests moving between tiers. The monthly
-        # chart keeps the clamp, so the conservative view is still one click away.
-        # Split by ERA OF THE DAY, not of the week: "999" exists on BOTH price lists
-        # and means different money on each (old ฿999 is quoted before the 5% service
-        # charge and 7% VAT, Grand ฿999 has both inside). Drawn as one series it would
-        # look like one product drifting, so pre-changeover tiers get the _PT_OLD_ERA
-        # suffix and become their own series that simply stops at the changeover. The
-        # week containing 1 Sep legitimately carries both.
-        week_rows = con.execute(
-            f"""SELECT {wk_expr} wk, tier, day < ? AS old_era, SUM(pax), SUM(cogs), SUM(rev)
-                FROM menu_fact_total WHERE branch_id IN ({ph})
-                GROUP BY wk, tier, old_era ORDER BY wk""",
-            [_PT_NEW_MENU_FROM] + bids).fetchall()
-        # Days actually present per week. The newest week is nearly always partial
-        # (the sync runs a day behind) and the oldest is cut by trend_from, and a
-        # 2-day week plotted next to 7-day ones reads as a collapse in covers that
-        # never happened — so each point carries its own day count and the chart
-        # marks the short ones instead of letting them look like a trend.
-        wk_days = dict(con.execute(
-            f"""SELECT {wk_expr} wk, COUNT(DISTINCT day) FROM menu_fact_total
-                WHERE branch_id IN ({ph}) GROUP BY wk""", bids))
-        # ISO week holding the menu changeover — the frontend draws the marker there.
-        # Computed in Python: _iso_week_sql() names its column twice, so feeding it
-        # a '?' placeholder would need the date bound twice.
-        _ec = date.fromisoformat(_PT_NEW_MENU_FROM).isocalendar()
-        era_week = f"{_ec[0]}-W{_ec[1]:02d}"
-        # The window ENDS at the week the analysis ends in, not at the end of the
-        # coverage: a June report must show June's weeks, not the newest eight weeks
-        # in the database. ISO labels are zero-padded, so a string compare orders
-        # them correctly.
-        _aw = dA_to.isocalendar()
-        a_week = f"{_aw[0]}-W{_aw[1]:02d}"
-        all_weeks = sorted(w for w in {r[0] for r in week_rows} if w <= a_week)
-        keep_weeks = set(all_weeks[-_PT_TREND_WEEKS:])
-        weeks_available = len(all_weeks)
-        # Only label an era when the window actually SHOWS both. A report sitting
-        # entirely before the changeover is looking at the menu that was current
-        # then — tagging every one of its tiers "(เมนูเก่า)" would be wrong, and a
-        # window entirely after it has nothing to distinguish. The suffix exists
-        # to separate two price lists on one axis, so it earns its place only when
-        # two price lists are on that axis.
-        eras = {bool(r[2]) for r in week_rows if r[0] in keep_weeks}
-        straddles = len(eras) > 1
-        trend_wk = {}
-        for wk, t, old_era, px, cg, rv in week_rows:
-            if wk not in keep_weeks:
-                continue
-            key = str(t or "promo") + (_PT_OLD_ERA if (old_era and straddles) else "")
-            m = trend_wk.setdefault(wk, {}).setdefault(key,
-                                                       {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
-            m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
-
+        # Monthly + weekly tier trend (shared with the management report §11).
+        # The monthly series is clamped to the changeover when the analysis sits
+        # on the live menu; the weekly one ends at the week the analysis ends in.
+        _tr = _pt_tier_trends(con, ph, bids,
+                              month_from=(_PT_NEW_MENU_FROM if a_from >= _PT_NEW_MENU_FROM else lo),
+                              a_to=dA_to)
         bom_by_tier = _pt_bom_cost_by_tier(con)
         bom_dishes_by_tier = _pt_bom_dishes_by_tier(con)
 
@@ -795,43 +837,9 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
                                "d_pct": pct(qha or 0, qhb) if qhb else None}
         top30.append(row)
 
-    # ── trend payloads: same shape monthly and weekly, one shaper ──
-    def _trend_points(buckets, key, days=None):
-        out = []
-        for b in sorted(buckets):
-            mt = buckets[b]
-            tot_px = sum(v["pax"] for v in mt.values())
-            pt = {key: b}
-            if days is not None:
-                pt["days"] = days.get(b, 0)
-                pt["partial"] = days.get(b, 0) < 7
-            out.append({**pt, "tiers": {
-                t: {"pax": rd(v["pax"], 0),
-                    "share": rd(v["pax"] / tot_px * 100, 1) if tot_px else None,
-                    "cogs_head": rd(v["cogs"] / v["pax"]) if v["pax"] else None,
-                    "rev_head": rd(v["rev"] / v["pax"]) if v["pax"] else None}
-                for t, v in mt.items()}})
-        return out
-
-    trend_month = _trend_points(trend, "ym")
-    trend_week = _trend_points(trend_wk, "wk", wk_days)
-    # How many weeks the era guard actually left us: on the Grand Menu the weekly
-    # trend starts at the changeover, so it fills up to _PT_TREND_WEEKS over time
-    # rather than reaching back into a price list that is no longer sold.
-    wk_seen = {t for pt in trend_week for t, v in pt["tiers"].items() if v["pax"]}
-    _ord = {t: i for i, t in enumerate(_PT_ORDER)}
-    wk_tier_keys = sorted(wk_seen, key=lambda k: (k.endswith(_PT_OLD_ERA),
-                                                  _ord.get(k.replace(_PT_OLD_ERA, ""), 99)))
-    wk_tier_labels = {k: _pt_label(k.replace(_PT_OLD_ERA, ""))
-                      + (" (เมนูเก่า)" if k.endswith(_PT_OLD_ERA) else "")
-                      for k in wk_tier_keys}
-    trend_week_meta = {"weeks_shown": len(trend_week), "weeks_wanted": _PT_TREND_WEEKS,
-                       "tier_keys": wk_tier_keys, "tier_labels": wk_tier_labels,
-                       "old_suffix": _PT_OLD_ERA, "straddles_menu_change": straddles,
-                       "weeks_available": weeks_available,
-                       "from": trend_week[0]["wk"] if trend_week else None,
-                       "era_week": era_week if straddles else None,
-                       "era_from": _PT_NEW_MENU_FROM if straddles else None}
+    trend_month = _tr["trend_month"]
+    trend_week = _tr["trend_week"]
+    trend_week_meta = _tr["trend_week_meta"]
 
     # ── blended per-head + mix effect ──
     cogs_a = sum(v["cogs"] for v in FA.values()); cogs_b = sum(v["cogs"] for v in FB.values())
@@ -2064,6 +2072,33 @@ def _mgt_tier_promo(*, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
     return {}
 
 
+def _mgt_tier_trend(*, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
+    """§11's trend charts — the same monthly/weekly series the 🧪 tab draws.
+
+    The tier TABLE only ever shows one period, so a tier drifting month after
+    month is invisible in it; the reader has to leave the report to see whether
+    today's number is a blip or a trend. Same helper as /api/reports/price-tier,
+    so the two cannot disagree about what a week is or where the menu changed.
+
+    Best-effort: a report is still worth reading without its charts, so a failure
+    here leaves §11 exactly as it was rather than taking the section down.
+    """
+    if not rows_t:
+        return {}
+    try:
+        lo = con.execute("SELECT MIN(day) FROM menu_fact_total").fetchone()[0]
+        if not lo:
+            return {}
+        month_from = _PT_NEW_MENU_FROM if cs.isoformat() >= _PT_NEW_MENU_FROM else lo
+        tr = _pt_tier_trends(con, t_ph, t_bids, month_from=month_from, a_to=ce)
+        tier_out["trend_month"] = tr["trend_month"]
+        tier_out["trend_week"] = tr["trend_week"]
+        tier_out["trend_week_meta"] = tr["trend_week_meta"]
+    except Exception as e:
+        print(f"[mgt] §11 trend unavailable: {e}")
+    return {}
+
+
 def _mgt_tier_drivers(*, TC, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
     # cost drivers per mainstream tier: which ingredient groups /
     # single menus push each tier's cost/head up — turns the Food%
@@ -2197,6 +2232,7 @@ def _mgt_tier(con, *, ce, cs, has_prev, pct, pe, ps, sp, sw, th):
                 ctx.update(_mgt_tier_rows(TC=ctx.get("TC"), TP=ctx.get("TP"), has_prev=ctx.get("has_prev"), pax_c=ctx.get("pax_c"), pax_p=ctx.get("pax_p"), pct=ctx.get("pct"), th=ctx.get("th")))
                 ctx.update(_mgt_tier_promo(ce=ctx.get("ce"), con=ctx.get("con"), cs=ctx.get("cs"), rows_t=ctx.get("rows_t"), t_bids=ctx.get("t_bids"), t_ph=ctx.get("t_ph"), tier_out=ctx.get("tier_out")))
                 ctx.update(_mgt_tier_drivers(TC=ctx.get("TC"), ce=ctx.get("ce"), con=ctx.get("con"), cs=ctx.get("cs"), rows_t=ctx.get("rows_t"), t_bids=ctx.get("t_bids"), t_ph=ctx.get("t_ph"), tier_out=ctx.get("tier_out")))
+                ctx.update(_mgt_tier_trend(ce=ctx.get("ce"), con=ctx.get("con"), cs=ctx.get("cs"), rows_t=ctx.get("rows_t"), t_bids=ctx.get("t_bids"), t_ph=ctx.get("t_ph"), tier_out=ctx.get("tier_out")))
                 tier_out = ctx["tier_out"]
     except Exception:
         tier_out = None
