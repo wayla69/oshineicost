@@ -1678,16 +1678,28 @@ function renderMgtReport(j, jM, jF) {
 
       const tip = i => (rows[i] && rows[i].partial)
         ? `⚠ ${T.tierTrendPartialTip.replace('{n}', rows[i].days)}` : '';
+      // The 🔍 dive-in reads this (see _diveMgtTierMix below) — the generic
+      // analyzer would treat a 100%-stacked share chart as a revenue trend.
+      window._mgtTierDive = { TD, weekly, rows, keys, label };
+      _mgtRegisterTierDives();
+      // Label styling lives on each DATASET, not in options: the dive-in modal
+      // clones options through JSON, which strips functions, and the default
+      // dark labels were unreadable on the dark bands.
+      const thr = weekly ? 8 : 4;   // 8 weeks × up to 14 bands would print a wall of digits
       mkChart('mgtTierTrendMix', {
         type: 'bar',
         data: { labels, datasets: keys.map(t => ({
           label: label(t), data: rows.map(r => (r.tiers[t] || {}).share ?? 0),
-          backgroundColor: isOld(t) ? colour(t) + '66' : colour(t), stack: 's' })) },
+          backgroundColor: isOld(t) ? colour(t) + '66' : colour(t), stack: 's',
+          borderColor: '#ffffff', borderWidth: 1, maxBarThickness: 110,
+          datalabels: { color: '#ffffff', font: { weight: '700', size: 11 },
+                        display: c => (c.dataset.data[c.dataIndex] || 0) >= thr,
+                        formatter: v => (+v).toFixed(v >= 10 ? 0 : 1) + '%' } })) },
         options: { responsive: true, maintainAspectRatio: false,
-          scales: { x: { stacked: true }, y: { stacked: true, max: 100, title: { display: true, text: '%' } } },
+          scales: { x: { stacked: true },
+                    y: { stacked: true, max: 100, ticks: { callback: v => v + '%' } } },
           plugins: {
-            // 8 weeks x up to 14 bands would print a wall of digits.
-            datalabels: weekly ? { display: c => (c.dataset.data[c.dataIndex] || 0) >= 8 } : {},
+            legend: { labels: { boxWidth: 10, font: { size: 11 } } },
             tooltip: { callbacks: { label: c => `${c.dataset.label}: ${c.parsed.y}%`,
                                     afterBody: ci => tip(ci[0].dataIndex) } } } } });
       mkChart('mgtTierTrendCogs', {
@@ -2036,3 +2048,103 @@ function renderMgtReport(j, jM, jF) {
 }
 
 // loadActiveTab() now lives in 01-core.js and dispatches through TABS.
+
+// ── 🔍 dive-in for §11 Buffet Price Tiers ────────────────────────────────────
+// The generic analyzer reads dataset[0] only and treats every chart as revenue
+// over time — on the 100%-stacked tier mix it reported "Total 2" (the ฿1,299
+// band's 1.8%) and promo-calendar advice. These read the report's own tier
+// payload (share, Δpp, rev/cogs/GP per head, mix effect) instead.
+const _mtB = v => v == null ? '—' : '฿' + Math.round(v).toLocaleString('en-US');
+const _mtPP = v => (v > 0 ? '+' : v < 0 ? '−' : '±') + Math.abs(v).toFixed(1) + ' pp';
+const _mtPrice = r => { const n = parseInt(String(r.tier).replace(/\D/g, ''), 10); return isNaN(n) ? null : n; };
+// Real price points only — promo/other and child are not a rung on the ladder.
+const _mgtTierPriced = TD => (TD.rows || []).filter(r => _mtPrice(r) != null && r.tier !== 'child');
+
+async function _diveMgtTierMix() {
+  const D = window._mgtTierDive;
+  if (!D || !D.TD) return '<p class="text-xs text-slate-400 p-2">ยังไม่มีข้อมูล — เปิดรายงานใหม่อีกครั้ง</p>';
+  const TD = D.TD, rows = (TD.rows || []).slice().sort((a, b) => (b.share || 0) - (a.share || 0));
+  const priced = _mgtTierPriced(TD).sort((a, b) => _mtPrice(b) - _mtPrice(a));   // dearest first
+  const top = rows[0];
+  const promo = rows.find(r => r.tier === 'promo');
+  const hasPrev = rows.some(r => r.share_prev != null);
+  const shift = hasPrev ? rows.filter(r => r.share_prev != null)
+    .map(r => ({ r, dv: (r.share || 0) - r.share_prev }))
+    .sort((a, b) => Math.abs(b.dv) - Math.abs(a.dv))[0] : null;
+  // The upsell a server can actually make: the most-eaten priced tier → the next rung up.
+  const mostEaten = priced.slice().sort((a, b) => (b.share || 0) - (a.share || 0))[0];
+  const idx = mostEaten ? priced.indexOf(mostEaten) : -1;
+  const from = idx >= 0 ? priced[idx] : null, to = idx > 0 ? priced[idx - 1] : null;
+  const upGp = (from && to && from.gp_head != null && to.gp_head != null) ? to.gp_head - from.gp_head : null;
+  const premium = priced.length >= 3 ? priced.slice(0, 2) : [];
+  const premShare = premium.reduce((s, r) => s + (r.share || 0), 0);
+  const nPeriods = (D.rows || []).length;
+  const unit = D.weekly ? 'สัปดาห์' : 'เดือน';
+  const paxChg = (TD.pax != null && TD.pax_prev) ? (TD.pax - TD.pax_prev) / TD.pax_prev * 100 : null;
+
+  return _diveSection('อ่านกราฟนี้ยังไง', '📖',
+      _diveBullet('📊', `แต่ละแท่ง = ลูกค้าบุฟเฟ่ต์ <b>100%</b> ของ${unit}นั้น แบ่งตามราคาที่จ่าย — ` +
+        'แถบราคาสูงหนาขึ้น = รายได้/หัวสูงขึ้น โดยไม่ต้องขึ้นราคา') +
+      (nPeriods <= 1 ? _diveBullet('🗓️', `ตอนนี้มีข้อมูลแค่ <b>${nPeriods} ${unit}</b> — ` +
+        'กดปุ่ม <b>รายสัปดาห์</b> เหนือกราฟเพื่อดูว่าสัดส่วนกำลังขยับไปทางไหน', 'info') : '')) +
+    _diveSection('สัดส่วนคนทาน · ช่วงรายงาน', '👥',
+      rows.map(r => _diveMetric(esc(r.label),
+        `${(r.share || 0).toFixed(1)}%` +
+        (r.share_prev != null ? ` <span style="font-weight:400;color:var(--text-muted)">${_mtPP((r.share || 0) - r.share_prev)}</span>` : '') +
+        (r.gp_head != null ? ` <span style="font-weight:400;color:var(--text-muted)">· GP ${_mtB(r.gp_head)}/หัว</span>` : ''))).join('') +
+      (TD.pax != null ? _diveMetric('ลูกค้าบุฟเฟ่ต์ทั้งหมด', Number(TD.pax).toLocaleString('en-US') + ' คน' +
+        (paxChg != null ? ` <span style="font-weight:400;color:var(--text-muted)">(${paxChg >= 0 ? '+' : ''}${paxChg.toFixed(1)}% vs ช่วงก่อน)</span>` : '')) : '')) +
+    _diveSection('แปลว่าอะไร', '💡', [
+      top ? _diveBullet('🥇', `ลูกค้าส่วนใหญ่ <b>${(top.share || 0).toFixed(0)}%</b> เลือก <b>${esc(top.label)}</b>` +
+        (top.rev_head != null ? ` (รายได้ ${_mtB(top.rev_head)}/หัว · ต้นทุนอาหาร ${_mtB(top.cogs_head)}/หัว)` : '') +
+        ' — ตัวเลขรวมของบุฟเฟ่ต์จะขยับตาม tier นี้เป็นหลัก') : '',
+      premium.length ? _diveBullet(premShare < 20 ? '⚠️' : '✅',
+        `สองราคาบนสุด (${premium.map(r => esc(r.label)).join(' + ')}) รวมกัน <b>${premShare.toFixed(1)}%</b> ของคนทาน` +
+        (premShare < 20 ? ' — ยังเป็นส่วนน้อย มีช่องให้ upsell' : ''), premShare < 20 ? 'warn' : 'good') : '',
+      upGp != null ? _diveBullet('💰',
+        `ถ้าลูกค้า <b>100 คน</b> ขยับจาก ${esc(from.label)} ขึ้นไป ${esc(to.label)} = GP เพิ่มราว <b>${_mtB(upGp * 100)}</b> ` +
+        `(${_mtB(from.gp_head)} → ${_mtB(to.gp_head)}/หัว) — ใช้ตั้งเป้าเชียร์ขายของพนักงานได้`, upGp > 0 ? 'good' : 'warn') : '',
+      shift && Math.abs(shift.dv) >= 0.5 ? _diveBullet(shift.dv > 0 ? '📈' : '📉',
+        `เทียบช่วงก่อน ขยับมากสุดคือ <b>${esc(shift.r.label)}</b> ${_mtPP(shift.dv)}`, 'info')
+        : (hasPrev ? _diveBullet('➡️', 'สัดส่วนแทบไม่เปลี่ยนจากช่วงก่อน (ไม่มี tier ไหนขยับเกิน 0.5 pp)') : ''),
+      TD.mix_effect != null ? _diveBullet(TD.mix_effect < 0 ? '🔻' : '🔺',
+        `ผลจากการเปลี่ยน mix อย่างเดียว ${TD.mix_effect < 0 ? 'กด' : 'ดัน'}รายได้/หัว <b>${_mtB(Math.abs(TD.mix_effect))}</b> เทียบช่วงก่อน`,
+        TD.mix_effect < 0 ? 'bad' : 'good') : '',
+      promo && (promo.share || 0) >= 3 ? _diveBullet('🏷️',
+        `<b>${esc(promo.label)}</b> ${(promo.share || 0).toFixed(1)}% = ลูกค้าที่ไม่ได้จ่ายราคาป้าย (โปรฯ คูปอง ราคาพิเศษ) — ` +
+        'ถ้าก้อนนี้โตขึ้นเรื่อย ๆ ให้ดูหัวข้อส่วนลดคู่กัน', (promo.share || 0) >= 10 ? 'warn' : 'info') : '',
+    ].filter(Boolean).join(''));
+}
+
+async function _diveMgtTierCogs() {
+  const D = window._mgtTierDive;
+  if (!D || !D.TD) return '<p class="text-xs text-slate-400 p-2">ยังไม่มีข้อมูล — เปิดรายงานใหม่อีกครั้ง</p>';
+  const priced = _mgtTierPriced(D.TD).sort((a, b) => _mtPrice(b) - _mtPrice(a));
+  const hot = priced.filter(r => r.food_pct != null && r.food_pct >= 40);
+  const moved = priced.filter(r => r.cogs_head != null && r.cogs_head_prev)
+    .map(r => ({ r, dv: r.cogs_head - r.cogs_head_prev }))
+    .sort((a, b) => Math.abs(b.dv) - Math.abs(a.dv))[0];
+  const best = priced.filter(r => r.gp_head != null).sort((a, b) => b.gp_head - a.gp_head)[0];
+  return _diveSection('อ่านกราฟนี้ยังไง', '📖',
+      _diveBullet('📈', 'แต่ละเส้น = <b>ต้นทุนอาหารต่อหัว</b> ของลูกค้าแต่ละราคา · ปกติเส้นราคาแพงอยู่บน — ' +
+        'ถ้าเส้นราคาถูกไต่ขึ้นมาใกล้เส้นราคาแพง แปลว่าลูกค้าราคาถูกกำลังกินเมนูแพงเยอะ')) +
+    _diveSection('ต่อหัว · ช่วงรายงาน', '💸',
+      priced.map(r => _diveMetric(esc(r.label),
+        `${_mtB(r.cogs_head)} <span style="font-weight:400;color:var(--text-muted)">· food ${r.food_pct != null ? r.food_pct + '%' : '—'}</span>`,
+        r.food_pct >= 40 ? 'bad' : '')).join('')) +
+    _diveSection('แปลว่าอะไร', '💡', [
+      hot.length ? _diveBullet('🔥', `food cost ≥ 40%: ${hot.map(r => `<b>${esc(r.label)}</b> (${r.food_pct}%)`).join(', ')} — ` +
+        'ดูเมนูที่ดันต้นทุนในตาราง "ตัวขับต้นทุน" ใต้กราฟ แล้วเลือกลดปริมาณหรือปรับสูตร', 'bad')
+        : _diveBullet('✅', 'ไม่มีราคาไหน food cost แตะ 40% ในช่วงนี้', 'good'),
+      moved && Math.abs(moved.dv) >= 1 ? _diveBullet(moved.dv > 0 ? '📈' : '📉',
+        `เทียบช่วงก่อน ต้นทุน/หัวขยับมากสุดที่ <b>${esc(moved.r.label)}</b> ${moved.dv > 0 ? '+' : '−'}${_mtB(Math.abs(moved.dv))}/หัว`,
+        moved.dv > 0 ? 'bad' : 'good') : '',
+      best ? _diveBullet('💰', `GP ต่อหัวสูงสุดคือ <b>${esc(best.label)}</b> ${_mtB(best.gp_head)}/หัว — ราคาที่ควรเชียร์ขาย`, 'good') : '',
+    ].filter(Boolean).join(''));
+}
+
+function _mgtRegisterTierDives() {
+  if (typeof _DIVE_ENHANCERS === 'undefined') return;   // js/06 not loaded yet — the next draw registers
+  _DIVE_ENHANCERS.mgtTierTrendMix = _diveMgtTierMix;
+  _DIVE_ENHANCERS.mgtTierTrendCogs = _diveMgtTierCogs;
+}
