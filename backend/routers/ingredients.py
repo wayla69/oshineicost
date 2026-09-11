@@ -2402,6 +2402,15 @@ def ingredients_purchases_delete(branch: str = Query(...), week_start: str = Que
     return {"ok": True, "deleted": cur.rowcount}
 
 
+def _week_span(monday: str):
+    """(sunday_iso, 'W37 · 07/09–13/09/2026') for the week starting `monday`."""
+    from datetime import date as _date, timedelta as _td
+    m = _date.fromisoformat(str(monday)[:10])
+    s = m + _td(days=6)
+    y, wk, _ = m.isocalendar()
+    return s.isoformat(), f"W{wk:02d}/{y} · {m:%d/%m}–{s:%d/%m/%Y}"
+
+
 @router.get("/api/ingredients/purchases.template.xlsx")
 def ingredients_purchases_template(weeks: int = Query(8),
                                    date_to: Optional[str] = Query(None),
@@ -2422,16 +2431,21 @@ def ingredients_purchases_template(weeks: int = Query(8),
     wb = _wb_new("ยอดซื้อวัตถุดิบรายสัปดาห์")
     ws = wb.active
     ws.append(["ยอดซื้อวัตถุดิบรายสาขา (รายสัปดาห์) — กรอกคอลัมน์ 'ยอดซื้อวัตถุดิบ (บาท)' แล้วนำเข้ากลับ"])
-    ws.append(["'สัปดาห์เริ่ม' คือวันจันทร์ของสัปดาห์นั้น · กรอกวันไหนของสัปดาห์ก็ได้ ระบบจะปัดเป็นวันจันทร์ให้ "
+    ws.append(["1 สัปดาห์ = จันทร์ถึงอาทิตย์ · ดึงยอดซื้อจากอีกระบบตามช่วง 'สัปดาห์เริ่ม' → 'ถึงวันที่' "
+               "· 'สัปดาห์ที่' เป็นเลขสัปดาห์แบบ ISO (W1 = สัปดาห์แรกที่มีวันพฤหัสของปี) "
                "· 'ยอดขาย' เป็นตัวเลขของระบบเอง มีไว้ตรวจทาน ไม่ต้องแก้"])
-    ws.append(["สาขา", "สัปดาห์เริ่ม", "ยอดซื้อวัตถุดิบ (บาท)", "ยอดขาย (ระบบ)", "หมายเหตุ"])
+    # The purchasing system is queried by date range, so each row spells out its
+    # own Monday→Sunday and ISO week. Only 'สัปดาห์เริ่ม' is read back on import.
+    ws.append(["สาขา", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
+               "ยอดซื้อวัตถุดิบ (บาท)", "ยอดขาย (ระบบ)", "หมายเหตุ"])
     _style_header(ws, 3, "7C3AED")
     for b in names:
         for w in wks:
             h = have.get((b, w))
-            ws.append([b, w, (h or {}).get("amount"), (h or {}).get("revenue"),
+            sun, wlabel = _week_span(w)
+            ws.append([b, w, sun, wlabel, (h or {}).get("amount"), (h or {}).get("revenue"),
                        (h or {}).get("note") or None])
-    for i, wdt in enumerate([24, 14, 22, 16, 28], start=1):
+    for i, wdt in enumerate([24, 13, 13, 26, 22, 16, 28], start=1):
         ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = wdt
     return _xlsx_attachment(wb, f"INGREDIENT_PURCHASES_TEMPLATE_{d['meta']['date_to']}.xlsx")
 
