@@ -176,7 +176,8 @@ def test_import_refuses_a_file_with_no_recognisable_header(client):
 # ── ยอดซื้อวัตถุดิบรายสัปดาห์ vs ยอดขาย ─────────────────────────────────────
 def test_purchases_template_lists_every_branch_and_week(client):
     ws = _sheet(client.get("/api/ingredients/purchases.template.xlsx", params={"weeks": 3}))
-    assert [c.value for c in ws[3]][:3] == ["สาขา", "สัปดาห์เริ่ม", "ยอดซื้อวัตถุดิบ (บาท)"]
+    assert [c.value for c in ws[3]][:5] == ["สาขา", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
+                                             "ยอดซื้อวัตถุดิบ (บาท)"]
     body = [[c.value for c in r] for r in ws.iter_rows(min_row=4)]
     assert {r[0] for r in body} == {"BranchA", "BranchB"}
     assert len({r[1] for r in body}) == 3                     # three weeks offered
@@ -184,6 +185,29 @@ def test_purchases_template_lists_every_branch_and_week(client):
         import datetime as _dt
         d = _dt.date.fromisoformat(str(r[1])[:10])
         assert d.weekday() == 0, "every week must be keyed on its Monday"
+        # the other system is queried by range — each row spells out its Mon→Sun + ISO week
+        assert _dt.date.fromisoformat(r[2]) == d + _dt.timedelta(days=6)
+        assert r[3].startswith(f"W{d.isocalendar()[1]:02d}/")
+
+
+def test_purchases_template_round_trips_with_its_extra_columns(client):
+    """The added 'ถึงวันที่'/'สัปดาห์ที่' columns must not steal the week or amount."""
+    from routers.ingredients import _week_span
+    assert _week_span("2026-09-07") == ("2026-09-13", "W37/2026 · 07/09–13/09/2026")
+    wk = "2026-06-01"
+    try:
+        r = _post(client, "/api/ingredients/purchases/import", _xlsx([
+            ["สาขา", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่", "ยอดซื้อวัตถุดิบ (บาท)", "ยอดขาย (ระบบ)"],
+            ["BranchA", wk, "2026-06-07", "W23/2026 · 01/06–07/06/2026", 4321, 99999],
+        ]))
+        assert r.status_code == 200 and r.json()["saved"] == 1, r.text[:300]
+        j = client.get("/api/ingredients/purchases",
+                       params={"date_from": wk, "date_to": "2026-06-07"}).json()
+        got = [x for x in j["rows"] if x["branch"] == "BranchA" and x["amount"] is not None]
+        assert got and got[0]["week_start"] == wk and got[0]["amount"] == 4321
+    finally:
+        client.request("DELETE", "/api/ingredients/purchases",
+                       params={"branch": "BranchA", "week_start": wk})
 
 
 def test_purchases_import_then_compare_against_sales(client):
