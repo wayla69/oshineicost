@@ -86,8 +86,10 @@ const TAB_MODULE = {
   heavyeater:'cost.analysis', coverage:'cost.analysis', branchbom:'cost.analysis',
   simhub:'cost.simulator',
   gpbranch:'profit.pnl', pnlbranch:'profit.pnl', pnlbill:'profit.pnl', profit:'profit.pnl', benchmark:'profit.pnl',
-  opsreport:'ops.report', ops:'ops.report', ordering:'ops.report', ordersetup:'ops.report',
-  ingpurchase:'cost.analysis',   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
+  opsreport:'ops.report', ops:'ops.report',
+  // จัดซื้อ/วัตถุดิบ: any ONE of the listed modules opens the tab (supply.ordering = Sales Support)
+  ordering:['ops.report','supply.ordering'], ordersetup:['ops.report','supply.ordering'],
+  ingpurchase:['cost.analysis','supply.ordering'],   // ยอดซื้อวัตถุดิบ vs ยอดขาย — เป็นตัวเลขต้นทุน
   staff:'ops.staff', discounts:'ops.discounts',
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
@@ -104,6 +106,7 @@ const ROLE_START = {
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
   analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['dailysales', 'ยอดขายรายวัน เทียบเดือน / ปีก่อน'], ['cost', 'ต้นทุนและ food cost']],
   innovation: [['menuactionboard', 'เมนูที่ควรปรับ 4 กลุ่ม'], ['menuimpact', 'วัตถุดิบ: มี vs ไม่มี กระทบอะไร'], ['menu', 'วิเคราะห์เมนูเชิงลึก']],
+  salessupport: [['ingpurchase', 'กรอก/นำเข้ายอดซื้อวัตถุดิบรายสัปดาห์ เทียบยอดขาย'], ['ordering', 'แผนสั่งวัตถุดิบรายสาขาเป็นแพ็ก'], ['ordersetup', 'ขนาดบรรจุ ราคา และปฏิทินเทศกาล']],
 };
 function _startKey() { return 'startCard:' + ((window.AUTH && window.AUTH.username) || 'anon'); }
 function showStartCard(role) {
@@ -136,6 +139,7 @@ async function maybeShowStartCard() {
 const ROLE_LABEL_TH = {
   management:'ผู้บริหาร', marketing:'การตลาด', operation:'ปฏิบัติการ',
   analyst:'นักวิเคราะห์', accounting:'บัญชี', innovation:'นวัตกรรม',
+  salessupport:'Sales Support (จัดซื้อ/วัตถุดิบ)',
 };
 // Display-only mirror of backend ROLE_MODULES (auth.py) for the admin cheatsheet
 // so the owner can see what each role unlocks before assigning it.
@@ -146,6 +150,7 @@ const MODULE_LABEL_TH = {
   'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
   'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
+  'supply.ordering':'จัดซื้อ/วัตถุดิบ',
 };
 const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
@@ -154,6 +159,7 @@ const ROLE_MODULES_TH = {
   analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings'],
+  salessupport: ['sales.overview','supply.ordering','report.export'],
 };
 
 function hasModule(m) {
@@ -162,12 +168,13 @@ function hasModule(m) {
 }
 function tabAllowed(name) {
   const m = TAB_MODULE[name];
+  if (Array.isArray(m)) return m.some(hasModule);           // any one of them opens it
   return !m || hasModule(m);                                // unmapped → always allowed
 }
 function firstAllowedTab() {
   const order = ['overall','home','action','dailysales','trend','compare','more',
     'menu','buffetperf','gpbranch','cost','simhub','opsreport','discounts','cashctl',
-    'staff','custtype','manual'];
+    'staff','custtype','ingpurchase','ordering','manual'];
   return order.find(tabAllowed) || 'manual';
 }
 
@@ -237,8 +244,8 @@ function openPasswordChange(force) {
   document.getElementById('pwConfirm').value = '';
   document.getElementById('pwError').style.display = 'none';
   document.getElementById('pwHint').textContent = force
-    ? 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 8 ตัวอักษร)'
-    : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 8 ตัวอักษร)';
+    ? 'กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งาน (อย่างน้อย 10 ตัวอักษร) — ช่อง "รหัสผ่านปัจจุบัน" ใส่รหัสที่ได้รับมา'
+    : 'ตั้งรหัสผ่านใหม่ (อย่างน้อย 10 ตัวอักษร)';
   // When forced, no cancel — the user must set a password before continuing.
   document.getElementById('pwCancel').style.display = force ? 'none' : '';
   ov.style.display = 'flex';
@@ -256,7 +263,7 @@ async function submitPasswordChange(ev) {
   const btn = document.getElementById('pwSubmit');
   const fail = (m) => { err.textContent = m; err.style.display = 'block'; };
   err.style.display = 'none';
-  if (nw.length < 8)  return fail('รหัสผ่านใหม่ต้องยาวอย่างน้อย 8 ตัวอักษร');
+  if (nw.length < 10) return fail('รหัสผ่านใหม่ต้องยาวอย่างน้อย 10 ตัวอักษร');   // = auth.MIN_PASSWORD_LEN
   if (nw !== cf)      return fail('รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน');
   btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
   try {
@@ -412,7 +419,7 @@ function _renderPermMatrix(canEdit) {
     'profit.pnl':'กำไร/P&L', 'ops.report':'Ops Report', 'ops.discounts':'ส่วนลด',
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'POS Detail',
     'report.export':'Export', 'system.settings':'Settings', 'system.admin':'Admin',
-    'data.upload':'Upload',
+    'data.upload':'Upload', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'จัดซื้อ',
   };
 
   const th_role = `<th class="py-2 pr-4 text-left text-xs font-semibold sticky left-0" style="background:var(--bg-subtle);color:var(--text-muted);min-width:120px">บทบาท</th>`;
@@ -478,25 +485,30 @@ async function saveRolePermissions() {
   }
 }
 
-function _userStatus(msg, ok) {
+function _userStatus(msg, ok, ms) {
   const s = document.getElementById('userSaveStatus');
   if (!s) return;
   s.textContent = msg; s.className = 'text-sm ' + (ok ? 'text-emerald-600' : 'text-rose-600');
-  setTimeout(() => { s.textContent = ''; }, 4000);
+  setTimeout(() => { s.textContent = ''; }, ms || 4000);
 }
 async function createUser() {
   const username = document.getElementById('newUserName').value.trim();
   const password = document.getElementById('newUserPass').value;
   const role = document.getElementById('newUserRole').value;
   const branch = (document.getElementById('newUserBranch') || {}).value || '';
-  if (!username || !password) { _userStatus('กรอกชื่อผู้ใช้และรหัสผ่าน', false); return; }
+  if (!username) { _userStatus('กรอกชื่อผู้ใช้', false); return; }
   const res = await fetch(`${API}/api/auth/users`, {
     method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ username, password, role, branch }) });
   if (res.ok) {
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserPass').value = '';
-    _userStatus('เพิ่มผู้ใช้แล้ว', true); loadUsers();
+    const d = await res.json().catch(()=>({}));
+    // Blank password → server used the shared default; say so, the admin has to pass it on.
+    _userStatus(d.default_password
+      ? `เพิ่ม ${username} แล้ว — รหัสเริ่มต้น ${d.default_password} (ระบบบังคับเปลี่ยนตอนเข้าครั้งแรก)`
+      : 'เพิ่มผู้ใช้แล้ว', true, 12000);
+    loadUsers();
   } else {
     const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'เพิ่มไม่สำเร็จ', false);
   }
@@ -511,8 +523,11 @@ function updateUserRole(username, role) { _putUser(username, { role }, `เป�
 function updateUserBranch(username, branch) { _putUser(username, { branch }, branch ? `${username} เห็นเฉพาะสาขา ${branch}` : `${username} เห็นทุกสาขา`); }
 function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
 function resetUserPassword(username) {
-  const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}:`);
+  const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}
+(เว้นว่างแล้วกด OK = กลับเป็นรหัสเริ่มต้น Oshinei@2026 และบังคับเปลี่ยนตอนเข้าครั้งถัดไป):`);
+  if (pw === null) return;                                  // cancelled
   if (pw) _putUser(username, { password: pw }, 'ตั้งรหัสผ่านใหม่แล้ว');
+  else _putUser(username, { reset_default: true }, `${username} กลับเป็นรหัสเริ่มต้น Oshinei@2026 แล้ว — ต้องเปลี่ยนตอนเข้าครั้งถัดไป`);
 }
 async function deleteUser(username) {
   if (!window.confirm(`ลบผู้ใช้ ${username}?`)) return;

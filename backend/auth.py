@@ -37,6 +37,7 @@ from typing import Optional, Dict, List, Set
 
 ROLES: List[str] = [
     "management", "marketing", "operation", "analyst", "accounting", "innovation",
+    "salessupport",
 ]
 
 MODULES: List[str] = [
@@ -57,6 +58,7 @@ MODULES: List[str] = [
     "system.admin",        # จัดการผู้ใช้
     "data.upload",         # อัปโหลด/seed ข้อมูล
     "customer.feedback",   # เสียงลูกค้า: รีวิว/ความรู้สึก/เมนูที่ถูกพูดถึง
+    "supply.ordering",     # จัดซื้อ/วัตถุดิบ: แผนสั่ง, ยอดซื้อ vs ยอดขาย, ตั้งค่าการสั่งซื้อ
 ]
 
 # Recommended starting matrix (owner can edit user roles from Settings; the
@@ -90,6 +92,11 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
         "bom.edit", "system.settings", "customer.feedback",
     },
+    "salessupport": {
+        # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
+        # sheet shows ingredient ฿ vs sales per branch, nothing chain-wide on cost.
+        "sales.overview", "supply.ordering", "report.export",
+    },
 }
 
 
@@ -120,8 +127,18 @@ def refresh_perm_cache(con: sqlite3.Connection) -> None:
     try:
         data = json.loads(row["value"])
         result: Dict[str, Set[str]] = {}
+        # The saved matrix predates any role/module added since. A role it has
+        # never heard of starts at its code default; a module NO saved role holds
+        # was introduced after the save, so it too starts at its defaults —
+        # otherwise a new role would log in to nothing and management would lose
+        # the new module's tabs.
+        saved_mods = set().union(*[set(v) for v in data.values() if isinstance(v, list)])
         for r in ROLES:
-            mods = set(data.get(r, []))
+            if r not in data:
+                mods = set(ROLE_MODULES.get(r, set()))
+            else:
+                mods = set(data.get(r, [])) | {m for m in ROLE_MODULES.get(r, set())
+                                               if m not in saved_mods}
             result[r] = mods & set(MODULES)  # only known modules
         _perm_cache = result
     except Exception:
@@ -213,7 +230,8 @@ MODULE_RULES = [
     ("GET", "/api/gp",                       {"profit.pnl"}),
     ("GET", "/api/reports/pnl-bill",         {"profit.pnl"}),
     ("GET", "/api/reports/ops",              {"ops.report"}),
-    ("GET", "/api/ingredients",              {"cost.analysis", "ops.report"}),  # order plan + branch letter
+    ("GET", "/api/ingredients",              {"cost.analysis", "ops.report",
+                                              "supply.ordering"}),  # order plan + branch letter + purchases
     ("GET", "/api/analysis/discount",        {"ops.discounts"}),
     ("GET", "/api/analysis/coupon",          {"ops.discounts"}),
     ("GET", "/api/extra/cash",               {"ops.cash"}),

@@ -402,3 +402,54 @@ def test_docs_requires_login_when_auth_on(client, app_db, auth_on):
     # renders the LOGIN page itself unstyled (live regression 2026-07-20)
     r = c2.get("/docs/ui-kit/tokens.css")
     assert r.status_code == 200 and ":root" in r.text
+
+
+# ── Sales Support role + create/reset without typing a password ─────────────
+def test_admin_can_create_user_with_no_password_on_the_default(client, app_db, auth_on):
+    mg = _fresh(app_db); _login(mg, "management1")
+    r = mg.post("/api/auth/users", json={"username": "ss_new", "role": "salessupport"})
+    assert r.status_code == 200, r.text
+    assert r.json()["default_password"] == DEFAULT_PW              # admin is told what to pass on
+    u = _fresh(app_db)
+    assert _login(u, "ss_new").json()["must_change"] is True       # forced off it at first login
+    # the forced change works from the default, and the default is refused as the NEW one
+    assert u.post("/api/auth/me/password",
+                  json={"current_password": DEFAULT_PW, "new_password": DEFAULT_PW}).status_code == 400
+    assert u.post("/api/auth/me/password",
+                  json={"current_password": DEFAULT_PW, "new_password": "MyOwnPass#99"}).status_code == 200
+    # admin 'reset to default' re-arms it
+    assert mg.put("/api/auth/users/ss_new", json={"reset_default": True}).status_code == 200
+    u2 = _fresh(app_db)
+    assert _login(u2, "ss_new").json()["must_change"] is True
+    mg.delete("/api/auth/users/ss_new")
+
+
+def test_sales_support_sees_the_supply_cluster_and_not_chain_cost(client, app_db, auth_on):
+    mg = _fresh(app_db); _login(mg, "management1")
+    mg.post("/api/auth/users", json={"username": "ss_scope", "role": "salessupport"})
+    u = _fresh(app_db); _login(u, "ss_scope")
+    assert "supply.ordering" in u.get("/api/auth/me").json()["modules"]
+    assert u.get("/api/ingredients/purchases").status_code == 200
+    assert u.get("/api/ingredients/purchases.template.xlsx", params={"weeks": 1}).status_code == 200
+    assert u.get("/api/cost/analysis").status_code == 403
+    assert u.get("/api/pnl/summary").status_code == 403
+    mg.delete("/api/auth/users/ss_scope")
+
+
+def test_saved_matrix_from_before_a_new_role_or_module_still_grants_defaults(app_db):
+    """A role_permissions blob saved before salessupport/supply.ordering existed
+    must not leave the new role with nothing, nor strip the new module from the
+    roles whose default holds it."""
+    import json, sqlite3
+    con = sqlite3.connect(app_db); con.row_factory = sqlite3.Row
+    old = {r: sorted(auth.ROLE_MODULES[r] - {"supply.ordering"}) for r in auth.ROLES if r != "salessupport"}
+    con.execute("CREATE TABLE IF NOT EXISTS app_settings(key TEXT PRIMARY KEY, value TEXT)")
+    con.execute("INSERT OR REPLACE INTO app_settings(key, value) VALUES ('role_permissions', ?)", (json.dumps(old),))
+    try:
+        auth.refresh_perm_cache(con)
+        assert auth.modules_for_role("salessupport") == auth.ROLE_MODULES["salessupport"]
+        assert "supply.ordering" in auth.modules_for_role("management")
+        assert "supply.ordering" not in auth.modules_for_role("marketing")
+    finally:
+        con.execute("DELETE FROM app_settings WHERE key='role_permissions'"); con.commit()
+        auth.refresh_perm_cache(con); con.close()

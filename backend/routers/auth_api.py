@@ -28,7 +28,7 @@ class _LoginBody(BaseModel):
 
 class _UserCreate(BaseModel):
     username: str
-    password: str
+    password: Optional[str] = None        # blank → shared default, forced change at first login
     role: str
     branch: Optional[str] = None          # E4: confine this login to one branch
 
@@ -36,6 +36,7 @@ class _UserCreate(BaseModel):
 class _UserUpdate(BaseModel):
     role: Optional[str] = None
     password: Optional[str] = None
+    reset_default: Optional[bool] = None  # True → back to the shared default, forced change
     active: Optional[bool] = None
     branch: Optional[str] = None          # "" clears the scope
 
@@ -188,10 +189,15 @@ def auth_users_create(body: _UserCreate, request: Request):
         with get_db() as con:
             if _auth.get_user(con, body.username):
                 raise HTTPException(status_code=409, detail="มีชื่อผู้ใช้นี้แล้ว.")
-            _auth.create_user(con, body.username, body.password, body.role, branch=body.branch)
+            if body.password:
+                _auth.create_user(con, body.username, body.password, body.role, branch=body.branch)
+            else:
+                # No password typed → the seeding path: shared default + must_change,
+                # so the person sets their own on first login.
+                _auth.provision_user(con, body.username, body.role, branch=body.branch)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True}
+    return {"ok": True, "default_password": None if body.password else _auth.DEFAULT_PASSWORD}
 
 
 @router.put("/api/auth/users/{username}", include_in_schema=False)
@@ -216,6 +222,8 @@ def auth_users_update(username: str, body: _UserUpdate, request: Request):
                 if _auth.count_active_admins(con) <= 1:
                     raise HTTPException(status_code=400,
                         detail="ต้องมีผู้ดูแล (Management) ที่ใช้งานได้อย่างน้อย 1 บัญชี.")
+            if body.reset_default:
+                _auth.provision_user(con, username, target["role"], reset_existing=True)
             _auth.update_user(con, username, role=body.role,
                               password=body.password, active=body.active,
                               branch=(body.branch if body.branch is not None else _auth.UNSET))
