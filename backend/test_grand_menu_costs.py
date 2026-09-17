@@ -388,9 +388,13 @@ def test_the_shipped_estimate_file_parses_and_is_plausible():
     import csv
     rows = list(csv.DictReader(open(main.ESTIMATED_COST_FILE, encoding="utf-8-sig")))
     assert len(rows) >= 20
+    seen = set()
     for r in rows:
-        assert r["sku_code"].startswith("OTH"), r
-        assert 0 < float(r["unit_cost"]) < 100, r        # a condiment, not a steak
+        # OTH* is the Grand Menu series; a handful of pre-Sep codes are still
+        # being sold and are costed here too (B0300, the old twin-pot soup).
+        assert r["sku_code"] and r["sku_code"] not in seen, r
+        seen.add(r["sku_code"])
+        assert 0 < float(r["unit_cost"]) < 200, r        # a dish, never a whole bill
         assert r["basis"] in ("requisition", "unit-price", "peer"), r
         assert r["note"].strip(), r
 
