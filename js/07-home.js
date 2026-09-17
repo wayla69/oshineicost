@@ -1300,6 +1300,13 @@ function _ptRender(d) {
   // a problem (the 40% bar the action card uses), and a tier whose cost/head
   // moved far more than the others did (Tukey fence over the Δ column).
   const FOOD_PCT_BAR = 40;
+  // COGS% is a FLOOR: a dish with no BoM cost books ฿0, so every uncosted plate
+  // makes its tier look cheaper than it eats. Say so on the number itself —
+  // ops reads its own food cost off requisitions and a silent 10-point gap is
+  // exactly how the two sides end up arguing about which report is broken.
+  const COV_BAR = 98;
+  const covNote = x => (x.cost_coverage_pct == null || x.cost_coverage_pct >= COV_BAR) ? ''
+    : `<span class="mi-flag warn" title="${n0(x.uncosted_plates)} จาน (${(100 - x.cost_coverage_pct).toFixed(1)}% ของจานที่เสิร์ฟใน tier นี้) ยังไม่มีต้นทุนในระบบ จึงคิดเป็น ฿0 — ตัวเลขนี้จึงเป็นค่า &quot;อย่างน้อย&quot; ไม่ใช่ต้นทุนจริง${x.est_food_pct != null ? ' · ถ้าคิดจานที่ยังไม่มีต้นทุนด้วยค่าเฉลี่ยของ tier นี้ จะอยู่ราว ' + x.est_food_pct + '%' : ''}">≥ ${x.est_food_pct != null ? '~' + x.est_food_pct + '%' : 'ยังไม่ครบ'}</span>`;
   const dCogsOut = _miOutlierSet(d.tiers.map(x => x.d_cogs_head));
   const tierRows = d.tiers.map((x, i) => {
     const hotFood = x.a.food_pct != null && x.a.food_pct >= FOOD_PCT_BAR;
@@ -1321,7 +1328,7 @@ function _ptRender(d) {
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.bom_avg_cost != null ? b1(x.bom_avg_cost) : '-'}${x.bom_dish_count ? `<span class="text-[10px]" style="color:var(--text-muted)"> (${x.bom_dish_count} จาน)</span>` : ''}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${b1(x.a.hc_head)}<span class="text-[10px] font-semibold" style="color:${dc(x.d_hc_head, true)}"> (${sg(x.d_hc_head)})</span></td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${b1(x.a.gp_head)}</td>
-    <td class="py-1.5 text-right tabular-nums${hotFood ? ' font-bold' : ''}" style="color:${hotFood ? RED : 'inherit'}">${x.a.food_pct ?? '-'}%</td></tr>`;
+    <td class="py-1.5 text-right tabular-nums${hotFood ? ' font-bold' : ''}" style="color:${hotFood ? RED : 'inherit'}">${x.a.food_pct ?? '-'}%${covNote(x)}</td></tr>`;
   }).join('');
 
   const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">💡 ${esc(t)}</li>`).join('') || '<li>—</li>';
@@ -1405,7 +1412,7 @@ function _ptRender(d) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">COGS%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
       <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
