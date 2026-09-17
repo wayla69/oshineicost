@@ -131,7 +131,7 @@ async function renderReportTier(month) {
         <th class="py-2 pr-4 text-right">GP/หัว</th><th class="py-2 text-right">Food%</th>
       </tr></thead><tbody>${rows}</tbody></table>
     ${mix}${bullets ? `<ul class="text-xs text-slate-600 mt-2 space-y-1" style="list-style:none;padding:0">${bullets}</ul>` : ''}
-    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของเมนูใน tier นั้น (ไม่ใช่ยอดขายจริง) มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
+    <p class="text-[11px] text-slate-400 mt-2">"BoM เฉลี่ย/จาน" = ต้นทุนสูตรอาหารเฉลี่ยของทุกจานที่ tier นั้นกินได้ (สะสม — รวมจานของ tier ที่ถูกกว่า) ไม่ใช่ยอดขายจริง มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · ดูเชิงลึก (Top-30 เมนูต้นทุนตาม tier, เทรนด์รายเดือน, ข้อเสนอแนะ) ได้ที่แท็บ 🧪 วิเคราะห์วัตถุดิบ → 🏷️ วิเคราะห์ Tier ราคาขาย</p>`;
 }
 
 // Run async thunks with bounded concurrency, preserving input order. Used by the

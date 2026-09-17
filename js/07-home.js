@@ -1359,8 +1359,10 @@ function _ptRender(d) {
       ${cells}</tr>`;
   }).join('');
 
-  // Per-dish BoM cost inside each tier — the average hides which dishes are
-  // driving it, so list them richest-cost-first (server already sorts).
+  // Per-dish BoM cost for each tier — CUMULATIVE: a ฿1,299 guest also eats
+  // every ฿459 dish, so the server folds the cheaper tiers in and sorts the
+  // whole list richest-cost-first. The average hides which dishes drive it.
+  // A tier's list is therefore a superset of the tier below it.
   const bomDetailTiers = d.tiers.filter(x => (x.bom_dishes || []).length > 0);
   const bomDetailSections = bomDetailTiers.map((x, ti) => {
     // A dish costing more than double its own tier's average is the one
@@ -1377,7 +1379,7 @@ function _ptRender(d) {
     }).join('');
     return `<details class="mb-2"${ti === 0 ? ' open' : ''}>
       <summary class="cursor-pointer text-xs font-bold py-1" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">
-        ${esc(x.label)} — ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)})
+        ${esc(x.label)} — กินได้ ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)}) · รวมจาน tier ที่ถูกกว่าแล้ว
       </summary>
       <table class="text-xs w-full mt-1 pt-bom-tbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1 pr-1" data-nosort>#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
@@ -1403,7 +1405,7 @@ function _ptRender(d) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">COGS%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของเมนูใน tier นี้ (จากสูตรอาหาร ไม่ใช่ยอดขายจริง) — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
       <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
@@ -1439,7 +1441,7 @@ function _ptRender(d) {
     <div class="card p-5 overflow-x-auto">
       <h2 class="section-title mb-3">รายละเอียดต้นทุน BoM ต่อจานในแต่ละ Tier</h2>
       ${bomDetailSections || '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีข้อมูล BoM รายจาน — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569</p>'}
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">ต้นทุนสูตรของแต่ละจานเรียงจากแพงไปถูก ใช้ดูว่าจานไหนใน tier ดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">แต่ละ tier = <b>ทุกจานที่ลูกค้า tier นั้นกินได้</b> (สะสมจาก tier ที่ถูกกว่าขึ้นมา) เรียงต้นทุนสูตรจากแพงไปถูก ใช้ดูว่าจานไหนดันค่าเฉลี่ยขึ้น/ลง — ไม่ใช่ยอดขายจริง</p>
     </div>`;
 
   _ptLast = d;
