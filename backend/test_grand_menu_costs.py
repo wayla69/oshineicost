@@ -254,6 +254,74 @@ def test_a_few_promo_sales_do_not_veto_the_owners_cost(monkeypatch, tmp_path):
     assert out["applied"] == 1 and out["rejected_price_as_cost"] == 0
 
 
+
+# ─── estimated costs for dishes with no recipe at all (_load_estimated_costs) ──
+
+EST_HEADER = "sku_code,unit_cost,basis,note\n"
+
+
+def _run_est(monkeypatch, tmp_path, con, csv_text):
+    p = tmp_path / "estimated_costs.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    class _Ctx:
+        def __enter__(self): return con
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(main, "get_db", lambda *a, **k: _Ctx())
+    monkeypatch.setattr(main, "invalidate_cache", lambda *a, **k: None)
+    return main._load_estimated_costs(p)
+
+
+def _est_db():
+    con = _db()
+    con.execute("CREATE TABLE bom_ingredients(sku_id INT, ingredient_cost REAL)")
+    return con
+
+
+def test_estimate_fills_a_dish_that_has_no_cost_at_all(monkeypatch, tmp_path):
+    """Drinks and dipping sauces book ฿0 because nobody wrote them a recipe, and
+    a ฿0 plate flatters every food-cost figure it lands in."""
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFBVR00001', '(BF) Pepsi')")
+    out = _run_est(monkeypatch, tmp_path, con, EST_HEADER + "OTHBFBVR00001,13.59,requisition,x\n")
+    assert out["applied"] == 1
+    assert con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0] == 13.59
+
+
+def test_estimate_never_overwrites_a_real_cost(monkeypatch, tmp_path):
+    """The weakest source in the chain: an owner's number and a recipe both
+    outrank it, so a bad estimate can never quietly re-cost a costed dish."""
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'A', 'owner-costed')")
+    con.execute("INSERT INTO skus VALUES(2, 'B', 'recipe-costed')")
+    con.execute("INSERT INTO sku_cost VALUES(1, 7.5, '2026-09-01', 'x')")
+    con.execute("INSERT INTO bom_ingredients VALUES(2, 4.25)")
+    out = _run_est(monkeypatch, tmp_path, con, EST_HEADER + "A,99.0,requisition,x\nB,99.0,requisition,y\n")
+    assert out["applied"] == 0 and out["already_costed"] == 2
+    assert con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0] == 7.5
+    assert con.execute("SELECT COUNT(*) FROM sku_cost WHERE sku_id=2").fetchone()[0] == 0
+
+
+def test_estimate_skips_unknown_codes_and_junk_values(monkeypatch, tmp_path):
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'REAL', 'x')")
+    out = _run_est(monkeypatch, tmp_path, con,
+                   EST_HEADER + "GHOST,5.0,requisition,x\nREAL,0,requisition,y\nREAL,-1,requisition,z\n")
+    assert out["unknown_sku"] == 1 and out["bad_value"] == 2 and out["applied"] == 0
+
+
+def test_the_shipped_estimate_file_parses_and_is_plausible():
+    """The file ships in the image; a typo in it would silently mis-cost a dish."""
+    import csv
+    rows = list(csv.DictReader(open(main.ESTIMATED_COST_FILE, encoding="utf-8-sig")))
+    assert len(rows) >= 20
+    for r in rows:
+        assert r["sku_code"].startswith("OTH"), r
+        assert 0 < float(r["unit_cost"]) < 100, r        # a condiment, not a steak
+        assert r["basis"] in ("requisition", "unit-price", "peer"), r
+        assert r["note"].strip(), r
+
 # ─── BoM cost averaged by price tier (routers/reports.py) ───────────────────
 
 def _tier_db(rows):

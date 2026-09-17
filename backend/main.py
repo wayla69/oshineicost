@@ -1973,6 +1973,69 @@ def _apply_cost_patches():
         print(f"[cost-patch] failed: {e}")
 
 
+ESTIMATED_COST_FILE = HERE / "data" / "estimated_costs_2026-09.csv"
+
+
+def _load_estimated_costs(path=None):
+    """Fill dishes that carry NO cost at all with an estimate, lowest priority.
+
+    Drinks, dipping sauces and ice cream book ฿0 today because nobody ever wrote
+    them a recipe — and a ฿0 plate silently flatters every food-cost figure it
+    lands in (12% of plates served in Sep 1-15). These numbers come from the
+    owner's requisition workbooks (พ.ค./มิ.ย. 69, 5 master branches): the pool of
+    ฿ actually drawn for an item, minus whatever a recipe already books, divided
+    by the covers that ate it, then by that line's requests per cover — so
+    booking them reproduces the real spend rate rather than a guess. A few are
+    priced straight off the purchase unit price (wasabi per gram), and the ice
+    creams take the cost the system already carries for their own twins.
+
+    Deliberately the WEAKEST source in the chain: a SKU with any real cost — its
+    own sku_cost, a Grand Menu master row, a patch, or a recipe — is left alone,
+    so this can never overwrite a costed dish. It is a floor under ฿0, not an
+    opinion about anything that is already costed. Replace an entry with a real
+    recipe and the estimate stops applying on the next start.
+    """
+    import csv as _csv
+    path = Path(path) if path else ESTIMATED_COST_FILE
+    out = {"applied": 0, "already_costed": 0, "unknown_sku": 0, "bad_value": 0}
+    if not path.exists():
+        print(f"[est-cost] file not found: {path} — skipped")
+        return out
+    try:
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        with get_db() as con:
+            for rec in _csv.DictReader(open(path, encoding="utf-8-sig", newline="")):
+                code = (rec.get("sku_code") or "").strip()
+                try:
+                    cost = float(rec.get("unit_cost") or 0)
+                except (TypeError, ValueError):
+                    cost = 0
+                if not code or cost <= 0:
+                    out["bad_value"] += 1
+                    continue
+                row = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
+                if row is None:
+                    out["unknown_sku"] += 1
+                    continue
+                sku_id = row[0]
+                have = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?", (sku_id,)).fetchone()
+                bom = con.execute("SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id=?",
+                                  (sku_id,)).fetchone()[0]
+                if (have and (have[0] or 0) > 0) or (bom or 0) > 0:
+                    out["already_costed"] += 1
+                    continue
+                con.execute(
+                    "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
+                    " VALUES(?, ?, ?, ?)", (sku_id, cost, "2026-09-01", now))
+                out["applied"] += 1
+            con.commit()
+        print(f"[est-cost] estimated costs: {out}")
+        invalidate_cache()
+    except Exception as e:
+        print(f"[est-cost] load failed: {e}")
+    return out
+
+
 def _sku_cost_monthly_ensure():
     """Create sku_cost_monthly table (Phase 8) if missing."""
     try:
@@ -2004,6 +2067,8 @@ def _bom_startup():
     # the alias fallback reads sku_effective_cost, which the sheet has just fed.
     _load_grand_menu_aliases()
     _apply_cost_patches()
+    # Weakest source last: fills ฿0 dishes only, never touches a costed one.
+    _load_estimated_costs()
     _sku_cost_monthly_ensure()
     _perf_startup()
     _month_summary_backfill()
