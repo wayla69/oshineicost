@@ -2142,11 +2142,12 @@ def _bom_startup():
     _load_grand_menu_costs()
     # Aliases after the sheet: a code in both should take the owner's number, and
     # the alias fallback reads sku_effective_cost, which the sheet has just fed.
+    # Before the aliases: a donor may be a dish whose recipe lives in the file,
+    # and an alias resolves against what is in the DB at the time it runs.
+    _load_recipe_file()
     _load_grand_menu_aliases()
     _apply_cost_patches()
-    # A recipe beats a flat estimate, so seed recipes first; both only ever
-    # fill a dish that has no cost at all, and neither touches a costed one.
-    _load_recipe_file()
+    # Weakest source last — flat numbers for what has no recipe at all.
     _load_estimated_costs()
     _sku_cost_monthly_ensure()
     _perf_startup()

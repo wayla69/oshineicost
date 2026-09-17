@@ -162,34 +162,13 @@ def main():
     # without this overlay every one of those plates would keep booking ฿0 in the
     # tab and in the tier report. Same rule as main._load_estimated_costs: fill
     # only what has no cost, never override one. See [[tier-cogs-is-a-floor]].
-    # Aliases (main._load_grand_menu_aliases) have the same problem again: a dish
-    # renamed by the Grand Menu is costed by summing its DONOR's recipe, and that
-    # resolution happens in the app, against the live DB. Mirror it here — one
-    # hop, the donor's bom_ingredients only, exactly like _build_sku_effective_cost
-    # (a donor with no recipe of its own yields nothing, which is the documented
-    # trap, not a bug to paper over here).
-    _ali = HERE / "data" / "grand_menu_aliases_2026-09.csv"
-    if _ali.exists():
-        import csv as _csv
-        bom_by_code = {c: s for c, s in sq.execute(
-            "SELECT s.sku_code, SUM(b.ingredient_cost) FROM bom_ingredients b "
-            "JOIN skus s USING(sku_id) GROUP BY s.sku_code") if s}
-        n = 0
-        for rec in _csv.DictReader(open(_ali, encoding="utf-8-sig", newline="")):
-            code = (rec.get("sku_code") or "").strip()
-            donor = (rec.get("donor_sku_code") or "").strip()
-            c = bom_by_code.get(donor)
-            if code and c and code not in TIER_CODES and not cost_by_code.get(code):
-                cost_by_code[code] = round(c, 4)
-                n += 1
-        print(f"[0/4] alias costs overlaid onto {n} uncosted SKUs ({_ali.name})")
-
+    _file_recipe_cost = {}
     # Recipes that ship as a file (main._load_recipe_file) have the same problem
     # and the same fix — a recipe outranks an estimate, so it goes on first.
     _rec = HERE / "data" / "recipes_2026-09.csv"
     if _rec.exists():
         import csv as _csv
-        _tot = {}
+        _tot = _file_recipe_cost
         for rec in _csv.DictReader(open(_rec, encoding="utf-8-sig", newline="")):
             code = (rec.get("sku_code") or "").strip()
             try:
@@ -204,6 +183,29 @@ def main():
                 cost_by_code[code] = round(c, 4)
                 n += 1
         print(f"[0/4] file recipes overlaid onto {n} uncosted SKUs ({_rec.name})")
+
+    # Aliases (main._load_grand_menu_aliases) have the same problem again: a dish
+    # renamed by the Grand Menu is costed by summing its DONOR's recipe, and that
+    # resolution happens in the app, against the live DB. Mirror it here — one
+    # hop, the donor's bom_ingredients only, exactly like _build_sku_effective_cost
+    # (a donor with no recipe of its own yields nothing, which is the documented
+    # trap, not a bug to paper over here).
+    _ali = HERE / "data" / "grand_menu_aliases_2026-09.csv"
+    if _ali.exists():
+        import csv as _csv
+        bom_by_code = {c: s for c, s in sq.execute(
+            "SELECT s.sku_code, SUM(b.ingredient_cost) FROM bom_ingredients b "
+            "JOIN skus s USING(sku_id) GROUP BY s.sku_code") if s}
+        bom_by_code.update(_file_recipe_cost)   # a donor may live in the recipe file
+        n = 0
+        for rec in _csv.DictReader(open(_ali, encoding="utf-8-sig", newline="")):
+            code = (rec.get("sku_code") or "").strip()
+            donor = (rec.get("donor_sku_code") or "").strip()
+            c = bom_by_code.get(donor)
+            if code and c and code not in TIER_CODES and not cost_by_code.get(code):
+                cost_by_code[code] = round(c, 4)
+                n += 1
+        print(f"[0/4] alias costs overlaid onto {n} uncosted SKUs ({_ali.name})")
 
     _est = HERE / "data" / "estimated_costs_2026-09.csv"
     if _est.exists():
