@@ -208,29 +208,6 @@
     }
    },
    "ym": "2026-05"
-  },
-  {
-   "tiers": {
-    "590": {
-     "cogs_head": 180.0,
-     "pax": 48.0,
-     "rev_head": 590.0,
-     "share": 42.1
-    },
-    "789": {
-     "cogs_head": 210.0,
-     "pax": 60.0,
-     "rev_head": 789.0,
-     "share": 52.6
-    },
-    "promo": {
-     "cogs_head": 150.0,
-     "pax": 6.0,
-     "rev_head": 600.0,
-     "share": 5.3
-    }
-   },
-   "ym": "2026-06"
   }
  ],
  "trend_week": [

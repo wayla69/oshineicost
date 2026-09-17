@@ -84,12 +84,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": 100.0,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": 14.3,
    "d_share_pp": 8.0,
+   "est_food_pct": 30.5,
    "label": "฿590",
-   "tier": "590"
+   "tier": "590",
+   "uncosted_plates": 0.0
   },
   {
    "a": {
@@ -117,12 +120,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": 100.0,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": -16.7,
    "d_share_pp": -5.9,
+   "est_food_pct": 26.6,
    "label": "฿789",
-   "tier": "789"
+   "tier": "789",
+   "uncosted_plates": 0.0
   },
   {
    "a": {
@@ -150,12 +156,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": null,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": -33.3,
    "d_share_pp": -2.0,
+   "est_food_pct": null,
    "label": "โปรฯ/ราคาอื่น",
-   "tier": "promo"
+   "tier": "promo",
+   "uncosted_plates": null
   }
  ],
  "top30": [

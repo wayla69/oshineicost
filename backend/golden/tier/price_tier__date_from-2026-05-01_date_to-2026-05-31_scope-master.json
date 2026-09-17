@@ -77,12 +77,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": 100.0,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": 6.7,
    "d_share_pp": 0.0,
+   "est_food_pct": 30.5,
    "label": "฿590",
-   "tier": "590"
+   "tier": "590",
+   "uncosted_plates": 0.0
   },
   {
    "a": {
@@ -110,12 +113,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": 100.0,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": 6.7,
    "d_share_pp": 0.0,
+   "est_food_pct": 26.6,
    "label": "฿789",
-   "tier": "789"
+   "tier": "789",
+   "uncosted_plates": 0.0
   },
   {
    "a": {
@@ -143,12 +149,15 @@
    "bom_avg_cost": null,
    "bom_dish_count": null,
    "bom_dishes": [],
+   "cost_coverage_pct": null,
    "d_cogs_head": 0.0,
    "d_hc_head": 0.0,
    "d_pax_pct": 6.7,
    "d_share_pp": 0.0,
+   "est_food_pct": null,
    "label": "โปรฯ/ราคาอื่น",
-   "tier": "promo"
+   "tier": "promo",
+   "uncosted_plates": null
   }
  ],
  "top30": [
@@ -247,29 +256,6 @@
     }
    },
    "ym": "2026-05"
-  },
-  {
-   "tiers": {
-    "590": {
-     "cogs_head": 180.0,
-     "pax": 48.0,
-     "rev_head": 590.0,
-     "share": 42.1
-    },
-    "789": {
-     "cogs_head": 210.0,
-     "pax": 60.0,
-     "rev_head": 789.0,
-     "share": 52.6
-    },
-    "promo": {
-     "cogs_head": 150.0,
-     "pax": 6.0,
-     "rev_head": 600.0,
-     "share": 5.3
-    }
-   },
-   "ym": "2026-06"
   }
  ],
  "trend_week": [

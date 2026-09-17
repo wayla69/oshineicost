@@ -50,6 +50,28 @@ def _seed(db: Path):
         # test can exercise the cross-era "flag the worst tier" action path.
         con.execute("INSERT INTO menu_fact_total VALUES(1,?,?,?,?,?,?,0)",
                     (day, "999", 2, 4.0, 1600.0, 3596.0))
+    # Two dishes eaten on the ฿999 bills, one of them not costed yet: COGS% must
+    # then be reported as a floor, not as the food cost. 10 plates each per day.
+    con.execute("INSERT INTO menu_fact_meta VALUES('s:801','(B) จานที่คีย์ต้นทุนแล้ว','sku',20.0,NULL)")
+    con.execute("INSERT INTO menu_fact_meta VALUES('s:802','(B) จานที่ยังไม่มีต้นทุน','sku',0.0,NULL)")
+    for day in NEW_DAYS:
+        con.execute("INSERT INTO menu_fact_day VALUES(1,?,'999','s:801',2,4.0,10.0,200.0,0,1600.0,3596.0,0)", (day,))
+        con.execute("INSERT INTO menu_fact_day VALUES(1,?,'999','s:802',2,4.0,10.0,0.0,0,1600.0,3596.0,0)", (day,))
+
+    # Grand Menu dishes: sku_tier only ever describes the NEW price list, so a
+    # report on the old one must not borrow them (see the two tests below).
+    # ฿999 unlocks the ฿50 dish; ฿459 unlocks the ฿10 one, which ฿999 also eats.
+    # The codes are deliberately NOT real Grand Menu codes: app startup loads
+    # backend/data/grand_menu_costs_2026-09.csv over whatever it recognises, which
+    # would replace these costs with the owner's real ones mid-fixture.
+    con.execute("CREATE TABLE IF NOT EXISTS sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
+    con.execute("CREATE TABLE IF NOT EXISTS sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
+    con.executemany("INSERT INTO skus(sku_id,sku_code,description) VALUES(?,?,?)",
+                    [(901, "OTHBFTEST0459", "(B) จานปลดล็อกที่ ฿459"),
+                     (902, "OTHBFTEST0999", "(B) จานปลดล็อกที่ ฿999")])
+    con.executemany("INSERT INTO sku_cost(sku_id,unit_cost) VALUES(?,?)", [(901, 10.0), (902, 50.0)])
+    con.executemany("INSERT INTO sku_tier VALUES(?,?)", [(901, "459"), (902, "999")])
+    con.executemany("INSERT INTO sku_effective_cost VALUES(?,?)", [(901, 10.0), (902, 50.0)])
     con.commit()
     con.close()
 
@@ -147,6 +169,49 @@ def test_both_periods_post_switchover_compare_once_history_exists(era_client):
     assert j["b_range"][0] >= "2026-09-01"
     row = next(r for r in j["tiers"] if r["tier"] == "459")
     assert row["b"] is not None
+
+
+
+def test_old_era_window_gets_no_grand_menu_bom_figures(era_client):
+    """sku_tier holds the 2026-09-01+ menu and nothing else, but "999" is a tier
+    on BOTH price lists. A July report asking about its own ฿999 must not be
+    handed September's dish list — that would describe a menu the branch was not
+    serving, at prices quoted on a different basis."""
+    j = era_client.get("/api/reports/price-tier",
+                       params={"date_from": "2026-07-01", "date_to": "2026-07-31"}).json()
+    assert j["ready"] and j["era_clamped"] is False
+    for row in j["tiers"]:
+        assert row["bom_avg_cost"] is None, row["tier"]
+        assert row["bom_dish_count"] is None and row["bom_dishes"] == []
+    # and the monthly series stops inside the window instead of running on into
+    # September, where the same "999" key is a different product
+    assert all(r["ym"] <= "2026-07" for r in j["trend_month"])
+
+
+def test_new_era_window_gets_the_cumulative_bom_figures(era_client):
+    """The same report on the live menu does get them — and ฿999 counts the ฿459
+    dish it also serves, not only its own unlock."""
+    j = era_client.get("/api/reports/price-tier",
+                       params={"date_from": "2026-09-01", "date_to": "2026-09-10"}).json()
+    rows = {r["tier"]: r for r in j["tiers"]}
+    assert rows["459"]["bom_dish_count"] == 1 and rows["459"]["bom_avg_cost"] == 10.0
+    assert rows["999"]["bom_dish_count"] == 2 and rows["999"]["bom_avg_cost"] == 30.0
+    assert [d["sku_code"] for d in rows["999"]["bom_dishes"]] == ["OTHBFTEST0999", "OTHBFTEST0459"]
+
+def test_cogs_pct_is_reported_as_a_floor_while_dishes_are_uncosted(era_client):
+    """Half the plates eaten on ฿999 carry no cost, so they book ฿0 and the tier
+    looks cheaper than it eats. The row must carry the coverage and an estimate
+    of where food% lands once those plates are priced — operations reads its own
+    number off requisitions, and a silent gap is how the two sides end up
+    arguing about which report is broken."""
+    j = era_client.get("/api/reports/price-tier",
+                       params={"date_from": "2026-09-01", "date_to": "2026-09-10"}).json()
+    row = next(r for r in j["tiers"] if r["tier"] == "999")
+    assert row["cost_coverage_pct"] == 50.0
+    assert row["uncosted_plates"] == 100         # 10 plates x 10 days
+    assert row["est_food_pct"] > row["a"]["food_pct"], "the estimate must be the higher, fuller number"
+    # the ฿459 bills ate nothing uncosted (no menu_fact_day rows at all) → no claim made
+    assert next(r for r in j["tiers"] if r["tier"] == "459")["cost_coverage_pct"] is None
 
 
 # ─── same guard, Management Report §11 (_mgt_tier) ──────────────────────────

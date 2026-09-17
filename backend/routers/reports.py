@@ -594,9 +594,11 @@ def _pt_tier_trends(con, ph, bids, *, month_from, a_to):
 
     `month_from` is the start of the MONTHLY series — the caller clamps it to the
     menu changeover when the analysis sits on the live menu, so the stacked mix
-    chart can't put a retired ฿799 band next to a live ฿789 one. `a_to` is the date
-    the ANALYSIS ends, which is where the weekly window ends: a June report must
-    show June's weeks, not the newest eight in the database.
+    chart can't put a retired ฿799 band next to a live ฿789 one. `a_to` ends BOTH
+    series at the date the ANALYSIS ends: a June report must show June's weeks, not
+    the newest eight in the database — and its monthly series must stop at June
+    rather than run on into September, where "999" is a different product at a
+    different price and the one line would read as one product drifting.
     """
     from datetime import date
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
@@ -604,8 +606,9 @@ def _pt_tier_trends(con, ph, bids, *, month_from, a_to):
     trend = {}
     for ym, t, px, cg, rv in con.execute(
             f"""SELECT substr(day,1,7), tier, SUM(pax), SUM(cogs), SUM(rev)
-                FROM menu_fact_total WHERE branch_id IN ({ph}) AND day >= ?
-                GROUP BY substr(day,1,7), tier""", bids + [month_from]):
+                FROM menu_fact_total WHERE branch_id IN ({ph}) AND day >= ? AND day <= ?
+                GROUP BY substr(day,1,7), tier""",
+            bids + [month_from, a_to.isoformat()]):
         m = trend.setdefault(ym, {}).setdefault(str(t or "promo"),
                                                 {"pax": 0.0, "cogs": 0.0, "rev": 0.0})
         m["pax"] += px or 0.0; m["cogs"] += cg or 0.0; m["rev"] += rv or 0.0
@@ -794,8 +797,40 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         _tr = _pt_tier_trends(con, ph, bids,
                               month_from=(_PT_NEW_MENU_FROM if a_from >= _PT_NEW_MENU_FROM else lo),
                               a_to=dA_to)
-        bom_dishes_by_tier = _pt_bom_dishes_by_tier(con)
-        bom_by_tier = _pt_bom_cost_by_tier(con, bom_dishes_by_tier)
+        # sku_tier describes the 2026-09-01+ Grand Menu ONLY, and "999" is a tier on
+        # both price lists — hanging Grand Menu dishes off a July ฿999 row would
+        # describe a menu that branch was not serving that month. A window that
+        # predates the changeover therefore gets no BoM figures at all; the tab and
+        # §11 already render that as "มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569".
+        if a_from >= _PT_NEW_MENU_FROM:
+            bom_dishes_by_tier = _pt_bom_dishes_by_tier(con)
+            bom_by_tier = _pt_bom_cost_by_tier(con, bom_dishes_by_tier)
+        else:
+            bom_dishes_by_tier, bom_by_tier = {}, {}
+
+        # ── cost coverage per tier: why COGS% here is a FLOOR, not a fact ──
+        # A dish with no unit cost books ฿0, so every uncosted plate silently
+        # flatters the tier it was eaten on — on 2026-09 that is drinks, dipping
+        # sauces and a handful of real premium dishes (มันปู, โอโทโร่สับอูนิ).
+        # Operations reads its own food cost off requisitions and sees a much
+        # higher number; this is the half of that gap the app can measure.
+        # Weighted by PLATES, never revenue: buffet dishes carry ~฿0 line revenue
+        # by design, so a revenue-weighted figure always says "fine".
+        # The buffet package line and the service charge are cost-free ON PURPOSE
+        # (the package would double-count every dish) and are not a gap.
+        skip_ents = {f"s:{r[0]}" for r in con.execute(
+            f"SELECT sku_id FROM skus WHERE {tier_code_sql('sku_code')} OR sku_code='SERVICECHARGE'")}
+        cover = {}
+        for ent, per in EA.items():
+            if ent in skip_ents:
+                continue
+            uc = (meta.get(ent) or (None, 0))[1] or 0
+            for t, m in per.items():
+                c = cover.setdefault(t, {"plates": 0.0, "costed": 0.0, "cogs": 0.0})
+                c["plates"] += m["qty"]
+                c["cogs"] += m["ecogs"]
+                if uc > 0:
+                    c["costed"] += m["qty"]
 
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
     pct = lambda c, p: round((c - p) / p * 100, 1) if p else None
@@ -811,11 +846,24 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             B = _pt_metrics(vb)
             B["share"] = rd(vb["pax"] / pax_b * 100, 1) if pax_b else None
         bt = bom_by_tier.get(t)
+        # …and price this tier's own uncosted plates at its own costed average,
+        # so the reader sees roughly where food% would land once the gap is
+        # filled. An estimate, labelled as one — never booked anywhere.
+        cv = cover.get(t)
+        cov_pct = est_food_pct = uncosted = None
+        if cv and cv["plates"]:
+            cov_pct = rd(cv["costed"] / cv["plates"] * 100, 1)
+            uncosted = rd(cv["plates"] - cv["costed"], 0)
+            if cv["costed"] and va["rev"]:
+                est_food_pct = rd((va["cogs"] + uncosted * (cv["cogs"] / cv["costed"]))
+                                  / va["rev"] * 100, 1)
         tiers.append({
             "tier": t, "label": _pt_label(t), "a": A, "b": B,
             "bom_avg_cost": bt["bom_avg_cost"] if bt else None,
             "bom_dish_count": bt["bom_dish_count"] if bt else None,
             "bom_dishes": bom_dishes_by_tier.get(t, []),
+            "cost_coverage_pct": cov_pct, "uncosted_plates": uncosted,
+            "est_food_pct": est_food_pct,
             "d_pax_pct": pct(va["pax"], vb["pax"]) if comparison_available else None,
             "d_share_pp": (rd((A["share"] or 0) - (B["share"] or 0), 1)
                            if comparison_available and A["share"] is not None and B["share"] is not None else None),
