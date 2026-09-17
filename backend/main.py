@@ -1973,6 +1973,83 @@ def _apply_cost_patches():
         print(f"[cost-patch] failed: {e}")
 
 
+RECIPE_FILE = HERE / "data" / "recipes_2026-09.csv"
+
+
+def _load_recipe_file(path=None):
+    """Seed bom_ingredients for dishes that have no recipe anywhere.
+
+    The BoM is normally ingested from the owner's Excel workbooks, which live in
+    a gitignored folder — nothing that reaches the image or Fly. So a dish the
+    workbooks never covered (the Grand Menu lines that shipped at ฿0) can only
+    get a recipe through a file that ships WITH the code, which is this one.
+
+    Each row is a real ingredient code at a real price: either the price a
+    sibling dish already books for that ingredient, or the purchase price from
+    the requisition workbooks. The GRAMS are the proposal — modelled on the
+    nearest sibling dish (ยำกุ้งขาว takes ยำไทยปูอัด's 45 g of protein, and so
+    on) — and are what the owner should check first. See docs/RECIPES_2026-09.md.
+
+    Skipped for any SKU that already has a recipe OR its own sku_cost, so it can
+    never overwrite the owner's numbers; loaded BEFORE _load_estimated_costs so a
+    recipe outranks a flat estimate. Delete a dish's rows here once the real
+    recipe lands in the workbooks and nothing changes but the source.
+    """
+    import csv as _csv
+    path = Path(path) if path else RECIPE_FILE
+    out = {"skus": 0, "rows": 0, "already_costed": 0, "unknown_sku": 0, "bad_row": 0}
+    if not path.exists():
+        print(f"[recipe] file not found: {path} — skipped")
+        return out
+    try:
+        by_sku = {}
+        for rec in _csv.DictReader(open(path, encoding="utf-8-sig", newline="")):
+            code = (rec.get("sku_code") or "").strip()
+            try:
+                qty = float(rec.get("qty_per_serving") or 0)
+                price = float(rec.get("price_per_unit") or 0)
+                seq = int(rec.get("seq") or 0)
+            except (TypeError, ValueError):
+                out["bad_row"] += 1
+                continue
+            if not code or qty <= 0 or price <= 0 or seq <= 0:
+                out["bad_row"] += 1
+                continue
+            by_sku.setdefault(code, []).append((seq, rec, qty, price))
+
+        with get_db() as con:
+            for code, rows in by_sku.items():
+                r = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
+                if r is None:
+                    out["unknown_sku"] += 1
+                    continue
+                sku_id = r[0]
+                have_bom = con.execute("SELECT COUNT(*) FROM bom_ingredients WHERE sku_id=?",
+                                       (sku_id,)).fetchone()[0]
+                have_cost = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?",
+                                        (sku_id,)).fetchone()
+                if have_bom or (have_cost and (have_cost[0] or 0) > 0):
+                    out["already_costed"] += 1
+                    continue
+                for seq, rec, qty, price in sorted(rows):
+                    con.execute(
+                        "INSERT OR REPLACE INTO bom_ingredients(sku_id, seq, ingredient_code,"
+                        " ingredient_name, qty_per_serving, unit, price_per_unit, ingredient_cost,"
+                        " ingredient_type, source_file) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                        (sku_id, seq, (rec.get("ingredient_code") or "").strip(),
+                         (rec.get("ingredient_name") or "").strip(), qty,
+                         (rec.get("unit") or "").strip(), price, round(qty * price, 4),
+                         (rec.get("ingredient_type") or "").strip() or None, path.name))
+                    out["rows"] += 1
+                out["skus"] += 1
+            con.commit()
+        print(f"[recipe] seeded recipes: {out}")
+        invalidate_cache()
+    except Exception as e:
+        print(f"[recipe] load failed: {e}")
+    return out
+
+
 ESTIMATED_COST_FILE = HERE / "data" / "estimated_costs_2026-09.csv"
 
 
@@ -2067,7 +2144,9 @@ def _bom_startup():
     # the alias fallback reads sku_effective_cost, which the sheet has just fed.
     _load_grand_menu_aliases()
     _apply_cost_patches()
-    # Weakest source last: fills ฿0 dishes only, never touches a costed one.
+    # A recipe beats a flat estimate, so seed recipes first; both only ever
+    # fill a dish that has no cost at all, and neither touches a costed one.
+    _load_recipe_file()
     _load_estimated_costs()
     _sku_cost_monthly_ensure()
     _perf_startup()
