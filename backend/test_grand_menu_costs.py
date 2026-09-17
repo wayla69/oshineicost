@@ -35,6 +35,7 @@ def _run(monkeypatch, tmp_path, con, csv_text):
     return main._load_grand_menu_costs(p)
 
 
+NL = chr(10)
 HEADER = "sku_code,tier,name_th,cost_per_serve\n"
 
 
@@ -254,6 +255,77 @@ def test_a_few_promo_sales_do_not_veto_the_owners_cost(monkeypatch, tmp_path):
     assert out["applied"] == 1 and out["rejected_price_as_cost"] == 0
 
 
+
+
+# ─── recipes that ship as a file (_load_recipe_file) ───────────────────────────
+
+REC_HEADER = ("sku_code,seq,ingredient_code,ingredient_name,qty_per_serving,unit,"
+              "price_per_unit,ingredient_type,note" + NL)
+
+
+def _run_rec(monkeypatch, tmp_path, con, csv_text):
+    p = tmp_path / "recipes.csv"
+    p.write_text(csv_text, encoding="utf-8")
+
+    class _Ctx:
+        def __enter__(self): return con
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(main, "get_db", lambda *a, **k: _Ctx())
+    monkeypatch.setattr(main, "invalidate_cache", lambda *a, **k: None)
+    return main._load_recipe_file(p)
+
+
+def _rec_db():
+    con = _db()
+    con.execute("""CREATE TABLE bom_ingredients(sku_id INT, seq INT, ingredient_code TEXT,
+                   ingredient_name TEXT, qty_per_serving REAL, unit TEXT, price_per_unit REAL,
+                   ingredient_cost REAL, ingredient_type TEXT, source_file TEXT,
+                   PRIMARY KEY(sku_id, seq))""")
+    return con
+
+
+def test_recipe_file_seeds_a_dish_with_no_recipe(monkeypatch, tmp_path):
+    """The owner's BoM workbooks are gitignored, so a dish they never covered can
+    only get a recipe from a file that ships with the code."""
+    con = _rec_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFSPC00007', '(BF) กิมจิ')")
+    out = _run_rec(monkeypatch, tmp_path, con, REC_HEADER
+                   + "OTHBFSPC00007,1,V-015,ผักกาดขาว,60,กรัม,0.0427,veg," + NL
+                   + "OTHBFSPC00007,2,13-04-304,ซอสหมักกิมจิ,15,มิลลิลิตร,0.1232,sauce," + NL)
+    assert out["skus"] == 1 and out["rows"] == 2
+    rows = con.execute("SELECT seq, ingredient_cost FROM bom_ingredients ORDER BY seq").fetchall()
+    assert [r[0] for r in rows] == [1, 2]
+    assert round(sum(r[1] for r in rows), 2) == 4.41
+
+
+def test_recipe_file_never_touches_a_dish_that_is_already_costed(monkeypatch, tmp_path):
+    """An existing recipe or the owner's own cost both outrank the file."""
+    con = _rec_db()
+    con.execute("INSERT INTO skus VALUES(1, 'HASBOM', 'x')")
+    con.execute("INSERT INTO skus VALUES(2, 'HASCOST', 'y')")
+    con.execute("INSERT INTO bom_ingredients VALUES(1,1,'A','a',1,'ก',2.0,2.0,'veg','wb.xlsx')")
+    con.execute("INSERT INTO sku_cost VALUES(2, 9.9, '2026-09-01', 'x')")
+    out = _run_rec(monkeypatch, tmp_path, con, REC_HEADER
+                   + "HASBOM,1,Z,z,99,กรัม,9.0,veg," + NL
+                   + "HASCOST,1,Z,z,99,กรัม,9.0,veg," + NL)
+    assert out["skus"] == 0 and out["already_costed"] == 2
+    assert con.execute("SELECT COUNT(*) FROM bom_ingredients").fetchone()[0] == 1
+    assert con.execute("SELECT ingredient_cost FROM bom_ingredients").fetchone()[0] == 2.0
+
+
+def test_the_shipped_recipe_file_is_well_formed():
+    import csv
+    rows = list(csv.DictReader(open(main.RECIPE_FILE, encoding="utf-8-sig")))
+    assert len(rows) >= 30
+    seen = set()
+    for r in rows:
+        assert r["sku_code"].startswith("OTH"), r
+        assert float(r["qty_per_serving"]) > 0 and float(r["price_per_unit"]) > 0, r
+        assert r["ingredient_code"] and r["ingredient_name"], r
+        key = (r["sku_code"], int(r["seq"]))
+        assert key not in seen, f"duplicate seq: {key}"      # PK collision would drop a line
+        seen.add(key)
 
 # ─── estimated costs for dishes with no recipe at all (_load_estimated_costs) ──
 

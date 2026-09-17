@@ -162,6 +162,27 @@ def main():
     # without this overlay every one of those plates would keep booking ฿0 in the
     # tab and in the tier report. Same rule as main._load_estimated_costs: fill
     # only what has no cost, never override one. See [[tier-cogs-is-a-floor]].
+    # Recipes that ship as a file (main._load_recipe_file) have the same problem
+    # and the same fix — a recipe outranks an estimate, so it goes on first.
+    _rec = HERE / "data" / "recipes_2026-09.csv"
+    if _rec.exists():
+        import csv as _csv
+        _tot = {}
+        for rec in _csv.DictReader(open(_rec, encoding="utf-8-sig", newline="")):
+            code = (rec.get("sku_code") or "").strip()
+            try:
+                c = float(rec.get("qty_per_serving") or 0) * float(rec.get("price_per_unit") or 0)
+            except (TypeError, ValueError):
+                continue
+            if code and c > 0:
+                _tot[code] = _tot.get(code, 0.0) + c
+        n = 0
+        for code, c in _tot.items():
+            if code not in TIER_CODES and not cost_by_code.get(code):
+                cost_by_code[code] = round(c, 4)
+                n += 1
+        print(f"[0/4] file recipes overlaid onto {n} uncosted SKUs ({_rec.name})")
+
     _est = HERE / "data" / "estimated_costs_2026-09.csv"
     if _est.exists():
         import csv as _csv
