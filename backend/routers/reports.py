@@ -522,42 +522,53 @@ def _pt_sum_tiers(con, ph, bids, d_from, d_to):
     return out
 
 
-def _pt_bom_cost_by_tier(con):
-    """{tier: {bom_avg_cost, bom_dish_count}} — average RECIPE cost of the dishes
-    assigned to each tier (sku_tier x sku_effective_cost), independent of what
-    actually sold in any date range. Only the 2026-09-01+ Grand Menu carries a
-    tier per SKU (à la carte and the pre-Sep menu have none), so older tiers
-    simply have no entry here."""
-    out = {}
-    try:
-        for tier, avg_cost, n in con.execute(
-                """SELECT st.tier, AVG(sec.recipe_cost), COUNT(*)
-                   FROM sku_tier st JOIN sku_effective_cost sec USING(sku_id)
-                   GROUP BY st.tier"""):
-            out[str(tier)] = {"bom_avg_cost": round(avg_cost, 2) if avg_cost is not None else None,
-                              "bom_dish_count": n}
-    except Exception:
-        pass                      # sku_tier not created yet (pre-migration DB copy)
-    return out
-
-
 def _pt_bom_dishes_by_tier(con):
     """{tier: [{sku_code, label, bom_cost}, …]}, richest recipe cost first —
-    every dish assigned to that tier with its OWN cost, so a reader can see
-    which dishes pull a tier's average up or down instead of only the blend.
-    Same source/scope as _pt_bom_cost_by_tier (sku_tier x sku_effective_cost)."""
-    out = {}
+    the dishes a diner on that tier may actually eat, CUMULATIVE over the
+    cheaper tiers: a ฿1,299 guest eats the ฿1,299 exclusives *and* everything
+    a ฿459 guest eats, so listing only the 15 exclusives made ฿1,299 look like
+    the cheapest menu in the house. sku_tier stores the tier a dish UNLOCKS at;
+    the accumulation happens here.
+
+    Tier keys are the price as text ("459"); anything non-numeric (promo, the
+    pre-Grand-Menu eras) carries no dishes and is left out. Only the
+    2026-09-01+ Grand Menu has a tier per SKU, so older menus yield {}."""
+    own = {}
     try:
         for tier, code, label, cost in con.execute(
                 """SELECT st.tier, s.sku_code, s.description, sec.recipe_cost
                    FROM sku_tier st JOIN skus s USING(sku_id)
-                   JOIN sku_effective_cost sec USING(sku_id)
-                   ORDER BY st.tier, sec.recipe_cost DESC"""):
-            out.setdefault(str(tier), []).append(
+                   JOIN sku_effective_cost sec USING(sku_id)"""):
+            own.setdefault(str(tier), []).append(
                 {"sku_code": code, "label": label or code,
                  "bom_cost": round(cost, 2) if cost is not None else None})
     except Exception:
-        pass                      # sku_tier not created yet (pre-migration DB copy)
+        return {}                 # sku_tier not created yet (pre-migration DB copy)
+
+    order = []
+    for t in own:
+        try:
+            order.append((float(t), t))
+        except (TypeError, ValueError):
+            pass                  # not a price tier — nothing to accumulate into
+    out, running = {}, []
+    for _, t in sorted(order):
+        running = running + own[t]
+        out[t] = sorted(running, key=lambda r: -(r["bom_cost"] or 0))
+    return out
+
+
+def _pt_bom_cost_by_tier(con, dishes=None):
+    """{tier: {bom_avg_cost, bom_dish_count}} — average RECIPE cost over the same
+    cumulative dish list the drilldown shows, so the headline figure and the
+    table underneath it can never disagree. Pass `dishes` to reuse a list already
+    built; independent of what actually sold in any date range."""
+    dishes = _pt_bom_dishes_by_tier(con) if dishes is None else dishes
+    out = {}
+    for t, rows in dishes.items():
+        costs = [r["bom_cost"] for r in rows if r["bom_cost"] is not None]
+        out[t] = {"bom_avg_cost": round(sum(costs) / len(costs), 2) if costs else None,
+                  "bom_dish_count": len(rows)}
     return out
 
 
@@ -783,8 +794,8 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         _tr = _pt_tier_trends(con, ph, bids,
                               month_from=(_PT_NEW_MENU_FROM if a_from >= _PT_NEW_MENU_FROM else lo),
                               a_to=dA_to)
-        bom_by_tier = _pt_bom_cost_by_tier(con)
         bom_dishes_by_tier = _pt_bom_dishes_by_tier(con)
+        bom_by_tier = _pt_bom_cost_by_tier(con, bom_dishes_by_tier)
 
     rd = lambda x, nd=2: round(x, nd) if x is not None else None
     pct = lambda c, p: round((c - p) / p * 100, 1) if p else None

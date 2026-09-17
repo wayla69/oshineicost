@@ -256,24 +256,34 @@ def test_a_few_promo_sales_do_not_veto_the_owners_cost(monkeypatch, tmp_path):
 
 # ─── BoM cost averaged by price tier (routers/reports.py) ───────────────────
 
-def test_bom_cost_by_tier_averages_recipe_cost_per_tier():
-    """_pt_bom_cost_by_tier is a static (non-date-scoped) average of recipe cost
-    across the dishes assigned to each tier — independent of what actually sold."""
-    from routers.reports import _pt_bom_cost_by_tier
+def _tier_db(rows):
+    """(sku_id, tier, cost) rows → the three tables the tier helpers read."""
     con = sqlite3.connect(":memory:")
+    con.execute("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT)")
     con.execute("CREATE TABLE sku_tier(sku_id INTEGER PRIMARY KEY, tier TEXT NOT NULL)")
     con.execute("CREATE TABLE sku_effective_cost(sku_id INTEGER PRIMARY KEY, recipe_cost REAL)")
-    con.executemany("INSERT INTO sku_tier VALUES(?,?)", [(1, "459"), (2, "459"), (3, "629")])
-    con.executemany("INSERT INTO sku_effective_cost VALUES(?,?)", [(1, 10.0), (2, 12.0), (3, 20.0)])
+    for sku_id, tier, cost in rows:
+        con.execute("INSERT INTO skus VALUES(?,?,?)", (sku_id, f"OTHBF{sku_id:05d}", f"dish {sku_id}"))
+        con.execute("INSERT INTO sku_tier VALUES(?,?)", (sku_id, tier))
+        con.execute("INSERT INTO sku_effective_cost VALUES(?,?)", (sku_id, cost))
+    return con
+
+
+def test_bom_cost_by_tier_averages_recipe_cost_cumulatively():
+    """_pt_bom_cost_by_tier is a static (non-date-scoped) average of recipe cost
+    over every dish a diner on that tier may eat — the tier's own dishes PLUS
+    every cheaper tier's, because the buffet is inclusive upward."""
+    from routers.reports import _pt_bom_cost_by_tier
+    con = _tier_db([(1, "459", 10.0), (2, "459", 12.0), (3, "629", 20.0)])
     out = _pt_bom_cost_by_tier(con)
     assert out == {"459": {"bom_avg_cost": 11.0, "bom_dish_count": 2},
-                   "629": {"bom_avg_cost": 20.0, "bom_dish_count": 1}}
+                   "629": {"bom_avg_cost": 14.0, "bom_dish_count": 3}}
 
 
-def test_bom_dishes_by_tier_lists_each_dish_richest_first():
-    """_pt_bom_dishes_by_tier backs the per-tier drilldown — every dish in a
-    tier with its OWN cost, sorted so the priciest (the ones pulling the
-    average up) come first."""
+def test_bom_dishes_by_tier_is_cumulative_and_richest_first():
+    """_pt_bom_dishes_by_tier backs the per-tier drilldown: every dish the tier
+    can eat — its own plus the cheaper tiers' — sorted so the priciest (the ones
+    pulling the average up) come first."""
     from routers.reports import _pt_bom_dishes_by_tier
     con = sqlite3.connect(":memory:")
     con.execute("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT)")
@@ -284,12 +294,20 @@ def test_bom_dishes_by_tier_lists_each_dish_richest_first():
     con.execute("INSERT INTO skus VALUES(3, 'OTHBF00003', 'สเต๊กหอยเชลล์')")
     con.executemany("INSERT INTO sku_tier VALUES(?,?)", [(1, "459"), (2, "459"), (3, "629")])
     con.executemany("INSERT INTO sku_effective_cost VALUES(?,?)", [(1, 10.0), (2, 18.13), (3, 60.0)])
+    yam = {"sku_code": "OTHBF00001", "label": "ยำไทยปูอัด", "bom_cost": 10.0}
+    salmon = {"sku_code": "OTHBF00002", "label": "หัวปลาแซลมอนย่างเกลือ", "bom_cost": 18.13}
+    scallop = {"sku_code": "OTHBF00003", "label": "สเต๊กหอยเชลล์", "bom_cost": 60.0}
     out = _pt_bom_dishes_by_tier(con)
-    assert out == {
-        "459": [{"sku_code": "OTHBF00002", "label": "หัวปลาแซลมอนย่างเกลือ", "bom_cost": 18.13},
-                {"sku_code": "OTHBF00001", "label": "ยำไทยปูอัด", "bom_cost": 10.0}],
-        "629": [{"sku_code": "OTHBF00003", "label": "สเต๊กหอยเชลล์", "bom_cost": 60.0}],
-    }
+    assert out == {"459": [salmon, yam], "629": [scallop, salmon, yam]}
+
+
+def test_bom_dishes_by_tier_ignores_a_non_numeric_tier():
+    """"promo" is a bucket of odd-priced bills, not a rung on the price ladder —
+    it must not swallow the real tiers' dishes or appear as one."""
+    from routers.reports import _pt_bom_dishes_by_tier
+    con = _tier_db([(1, "459", 10.0), (2, "promo", 99.0)])
+    out = _pt_bom_dishes_by_tier(con)
+    assert list(out) == ["459"] and len(out["459"]) == 1
 
 
 def test_bom_dishes_by_tier_falls_back_to_sku_code_without_a_description():
