@@ -156,6 +156,26 @@ def main():
     cost_by_code = {c: rc for c, rc in sq.execute(
         "SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e JOIN skus s USING(sku_id) "
         "WHERE e.recipe_cost > 0") if c not in TIER_CODES}
+    # Estimated costs for the dishes that never got a recipe (drinks, dipping
+    # sauces, ice cream) live in a CSV the APP applies at startup — but these fact
+    # tables are built here, against a staging DB the app never touches, so
+    # without this overlay every one of those plates would keep booking ฿0 in the
+    # tab and in the tier report. Same rule as main._load_estimated_costs: fill
+    # only what has no cost, never override one. See [[tier-cogs-is-a-floor]].
+    _est = HERE / "data" / "estimated_costs_2026-09.csv"
+    if _est.exists():
+        import csv as _csv
+        n = 0
+        for rec in _csv.DictReader(open(_est, encoding="utf-8-sig", newline="")):
+            code = (rec.get("sku_code") or "").strip()
+            try:
+                c = float(rec.get("unit_cost") or 0)
+            except (TypeError, ValueError):
+                continue
+            if code and c > 0 and code not in TIER_CODES and not cost_by_code.get(code):
+                cost_by_code[code] = c
+                n += 1
+        print(f"[0/4] estimated costs overlaid onto {n} uncosted SKUs ({_est.name})")
     code2sid = {c: i for i, c in sq.execute("SELECT sku_id, sku_code FROM skus")}
     name2bid = {nm: b for b, nm in sq.execute("SELECT branch_id, name FROM branches")}
     desc_by_code = {c: (d or "") for c, d in sq.execute("SELECT sku_code, description FROM skus")}
