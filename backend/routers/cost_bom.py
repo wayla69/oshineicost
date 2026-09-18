@@ -7,7 +7,7 @@ pattern as routers/reports.py.
 """
 # Shared infrastructure and helpers come from core.py by name — the old
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
-from fastapi import Depends, HTTPException, Query
+from fastapi import Depends, HTTPException, Query, Request
 from fastapi.responses import Response as _Response
 from pydantic import BaseModel
 from typing import Dict, List, Optional
@@ -3187,6 +3187,129 @@ def scenario_savings(scen_id: int):
         "items": per_item,
         "series": series,
     }
+
+
+# ─── cost review: let the kitchen confirm what the files only proposed ──────
+# Every dish costed by a file is a PROPOSAL — an estimate off the requisitions,
+# or a recipe whose grams were modelled on a sibling dish. This is where the
+# people who actually plate the food correct and sign off on them. A
+# confirmation is stored as an intent in cost_override (preserved across the
+# daily DB swap) and re-applied by cost_sources.apply_all, so it outlives the
+# swap that silently ate the durian correction in August.
+class _RecipeLine(BaseModel):
+    code: Optional[str] = ""
+    name: str
+    qty: float
+    unit: Optional[str] = ""
+    price: float
+    type: Optional[str] = None
+
+
+class _CostConfirm(BaseModel):
+    sku_code: str
+    kind: str                                   # 'cost' | 'recipe'
+    unit_cost: Optional[float] = None
+    lines: Optional[List[_RecipeLine]] = None
+    note: Optional[str] = ""
+
+
+_REVIEW_LABEL = {"estimate": "ประมาณการ", "recipe-file": "สูตรเสนอ (รอยืนยันปริมาณ)",
+                 "confirmed": "ยืนยันแล้ว"}
+
+
+@router.get("/api/cost/review")
+def cost_review(month: Optional[str] = Query(None)):
+    """Worklist: every dish whose cost came from a file or an in-app confirmation,
+    biggest seller first — so an hour of the kitchen's time lands where it moves
+    food cost the most. `month` defaults to the newest month with sales."""
+    import cost_sources as _cs
+    with get_db() as con:
+        con.execute(_cs.PROVENANCE_DDL)
+        con.execute(_cs.OVERRIDE_DDL)
+        if not month:
+            r = con.execute("SELECT MAX(period_month) FROM sales_sku_monthly").fetchone()
+            month = r[0] if r else None
+        rows = con.execute("""
+            SELECT s.sku_id, s.sku_code, COALESCE(s.description, s.sku_code) AS description,
+                   p.source, p.basis, p.value, p.note, p.applied_at,
+                   COALESCE(e.recipe_cost, 0) AS cost,
+                   COALESCE((SELECT SUM(m.qty) FROM sales_sku_monthly m
+                             WHERE m.sku_id = s.sku_id AND m.period_month = ?), 0) AS plates
+              FROM cost_provenance p JOIN skus s USING(sku_id)
+              LEFT JOIN sku_effective_cost e USING(sku_id)
+             ORDER BY (p.source = 'confirmed'), plates DESC""", (month,)).fetchall()
+        items = []
+        for r in rows:
+            lines = [dict(x) for x in con.execute(
+                """SELECT seq, ingredient_code AS code, ingredient_name AS name,
+                          qty_per_serving AS qty, unit, price_per_unit AS price,
+                          ingredient_cost AS cost, ingredient_type AS type
+                     FROM bom_ingredients WHERE sku_id=? ORDER BY seq""", (r["sku_id"],))]
+            items.append({
+                "sku_code": r["sku_code"], "description": r["description"],
+                "source": r["source"], "source_label": _REVIEW_LABEL.get(r["source"], r["source"]),
+                "basis": r["basis"], "note": r["note"], "applied_at": r["applied_at"],
+                "cost": round(r["cost"] or 0, 2), "plates": round(r["plates"] or 0),
+                "cogs_month": round((r["cost"] or 0) * (r["plates"] or 0)),
+                "lines": lines})
+    pending = [i for i in items if i["source"] != "confirmed"]
+    return {"month": month, "items": items,
+            "summary": {"pending": len(pending), "confirmed": len(items) - len(pending),
+                        "pending_cogs_month": sum(i["cogs_month"] for i in pending)}}
+
+
+@router.post("/api/cost/confirm", dependencies=[Depends(require_write_token)])
+def cost_confirm(body: _CostConfirm, request: Request):
+    """Confirm (or correct) one dish: a flat cost, or a recipe line by line."""
+    import json as _json
+    import cost_sources as _cs
+    code = (body.sku_code or "").strip()
+    if body.kind not in ("cost", "recipe"):
+        raise HTTPException(400, "kind must be 'cost' or 'recipe'")
+    lines_json, unit_cost = None, None
+    if body.kind == "cost":
+        if not body.unit_cost or body.unit_cost <= 0:
+            raise HTTPException(400, "unit_cost must be > 0")
+        unit_cost = round(float(body.unit_cost), 4)
+    else:
+        good = [ln for ln in (body.lines or []) if ln.qty > 0 and ln.price > 0 and (ln.name or "").strip()]
+        if not good:
+            raise HTTPException(400, "a recipe needs at least one line with qty and price > 0")
+        lines_json = _json.dumps([ln.dict() for ln in good], ensure_ascii=False)
+        unit_cost = round(sum(ln.qty * ln.price for ln in good), 4)
+    who = (_auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}).get("u") or "-"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+    with get_db() as con:
+        sku = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
+        if sku is None:
+            raise HTTPException(404, "sku not found")
+        # the same trap that has bitten three times: a selling price typed as a cost
+        p = con.execute("""SELECT SUM(subtotal_ex_vat), SUM(qty) FROM sales_sku_monthly
+                           WHERE sku_id=?""", (sku[0],)).fetchone()
+        if p and (p[1] or 0) >= 10 and (p[0] or 0) > 0 and is_price_as_cost(unit_cost, p[0] / p[1]):
+            raise HTTPException(422, f"฿{unit_cost} ดูเหมือนราคาขาย (฿{p[0] / p[1]:.2f} ex-VAT) ไม่ใช่ต้นทุน")
+        con.execute(_cs.OVERRIDE_DDL)
+        con.execute(
+            "INSERT OR REPLACE INTO cost_override(sku_code, kind, unit_cost, lines, note,"
+            " confirmed_by, confirmed_at) VALUES(?,?,?,?,?,?,?)",
+            (code, body.kind, unit_cost if body.kind == "cost" else None, lines_json,
+             (body.note or "").strip(), who, now))
+        _cs.apply_overrides(con)
+        _build_sku_effective_cost(con, force=True)
+    invalidate_cache()
+    return {"ok": True, "sku_code": code, "kind": body.kind, "cost": unit_cost, "confirmed_by": who}
+
+
+@router.delete("/api/cost/confirm/{sku_code}", dependencies=[Depends(require_write_token)])
+def cost_unconfirm(sku_code: str):
+    """Withdraw a confirmation; the file sources fill the dish again."""
+    import cost_sources as _cs
+    with get_db() as con:
+        if not _cs.remove_override(con, sku_code):
+            raise HTTPException(404, "no confirmation for this sku")
+        _cs.apply_all(con)
+    invalidate_cache()
+    return {"ok": True, "sku_code": sku_code}
 
 
 @router.get("/api/bom-cost/recipe/{sku_code}")

@@ -90,6 +90,52 @@ GROUPS = {
 BEEF_EXCLUDE = "%ปลาเนื้อ%"   # 'ปลาเนื้อขาว' is a fish, not beef
 
 
+def _pull_confirmed_costs(sq, cost_sources, api=None, timeout=25):
+    """Mirror the live site's cost_override rows into this staging DB.
+
+    Confirmations are made on Fly, and cost_override lives only there (the swap
+    preserves it). Without this the fact tables would cost a dish by the file
+    while the app costs it by what the kitchen confirmed. NON-FATAL: offline, no
+    token, or an older deploy without the endpoint just means the fact tables lag
+    the app by those dishes until the next run — never a failed sync."""
+    import json, urllib.parse, urllib.request
+    try:
+        import refresh_fly_db as _r
+        token = os.environ.get("OSHINEI_SEED_TOKEN", "").strip()
+        if ":" in token:
+            token = token.split(":", 1)[1].strip()
+        if not token:
+            for name in (".seed_token.txt", ".seed_tokens.txt"):
+                f = HERE / name
+                if f.exists():
+                    token = _r._parse_token_file(f) or ""
+                    if token:
+                        break
+        if not token:
+            print("[0/4] confirmed costs: no seed token here — skipped")
+            return 0
+        api = (api or os.environ.get("OSHINEI_API") or "https://oshinei-dashboard.fly.dev").rstrip("/")
+        url = f"{api}/api/_admin/cost-overrides?token={urllib.parse.quote(token)}"
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        cols, rows = data.get("columns") or [], data.get("rows") or []
+        sq.execute(cost_sources.OVERRIDE_DDL)
+        have = [r[1] for r in sq.execute("PRAGMA table_info(cost_override)")]
+        use = [c for c in cols if c in have]
+        idx = [cols.index(c) for c in use]
+        sq.execute("DELETE FROM cost_override")             # live is the truth; mirror it
+        if rows and use:
+            sq.executemany(
+                f"INSERT INTO cost_override({', '.join(use)}) VALUES({', '.join('?' * len(use))})",
+                [[r[i] for i in idx] for r in rows])
+        sq.commit()
+        print(f"[0/4] confirmed costs pulled from the live site: {len(rows)}")
+        return len(rows)
+    except Exception as e:
+        print(f"[0/4] confirmed costs NOT pulled ({type(e).__name__}: {e}) — continuing without")
+        return 0
+
+
 def connect_mssql():
     import pymssql
     required = ("OSH_SVR", "OSH_PORT", "OSH_USER", "OSH_PWD", "OSH_DB")
@@ -160,6 +206,7 @@ def main():
     # "overlays" re-implementing the precedence rules (#186, #188, #189).
     try:
         import cost_sources
+        _pull_confirmed_costs(sq, cost_sources)
         print(f"[0/4] cost sources applied: {cost_sources.apply_all(sq)}")
     except Exception as e:                      # never block the fact build
         print(f"[0/4] ⚠ cost sources NOT applied ({e}) — using the DB's costs as-is")
