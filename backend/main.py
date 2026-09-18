@@ -875,6 +875,23 @@ def app_js():
 # (backend/pull_fly_state.py, AUD-2). Same token gate as seed-db: OSHINEI_SEED_TOKEN
 # unset → 404, wrong token → 404. Streams row by row, so memory stays flat.
 # ---------------------------------------------------------------------------
+# /api/_admin/cost-overrides — the costs confirmed in the app, for the SYNC to
+# pull before it builds menu_fact_*: that build runs against a staging DB on
+# another machine, which would otherwise never hear about a confirmation made
+# here. Same token gate as export-state; a few dozen tiny rows, so plain JSON.
+@app.get("/api/_admin/cost-overrides", include_in_schema=False)
+def _cost_overrides(token: str = Query("")):
+    import cost_sources as _csrc
+    toks = _accepted_tokens()
+    if not toks or not _token_accepted(token):
+        raise HTTPException(status_code=404, detail="not found")
+    with get_db() as con:
+        con.execute(_csrc.OVERRIDE_DDL)
+        cols = [r[1] for r in con.execute("PRAGMA table_info(cost_override)")]
+        rows = [list(r) for r in con.execute(f"SELECT {', '.join(cols)} FROM cost_override")]
+    return {"columns": cols, "rows": rows}
+
+
 @app.get("/api/_admin/export-state", include_in_schema=False)
 def _export_state(token: str = Query("")):
     import base64 as _b64, datetime as _dt, json as _json, sqlite3 as _sq, zlib as _zlib

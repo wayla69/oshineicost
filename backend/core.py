@@ -184,8 +184,12 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      report a shut branch as missing data all over again
 # app_settings + branch_targets: edited on the running site (role permissions, discount ceiling,
 # fixed/labor costs, targets) — the daily push used to overwrite them with the local copy (found 2026-09-05)
+#   cost_override      costs / recipes the kitchen CONFIRMED in the app. sku_cost and
+#                      bom_ingredients arrive with each swap from the sync's base DB, so an
+#                      edit made on the site would last a day; the confirmation is kept here
+#                      as an intent and re-applied by cost_sources.apply_all
 _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings",
-                     "branch_downtime")
+                     "branch_downtime", "cost_override")
 _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
 
 

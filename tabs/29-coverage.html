@@ -53,6 +53,24 @@
     </div>
     <div id="cov-fixer-msg" class="text-xs mt-2"></div>
   </div>
+  <!-- ✅ Cost review: the kitchen confirms what the files only proposed -->
+  <div class="card p-4 mt-5" style="border:1px solid #bbf7d0">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="text-sm font-semibold text-slate-700">✅ ตรวจและยืนยันต้นทุนที่ระบบเสนอไว้</div>
+      <div id="cov-review-sum" class="text-xs text-slate-500"></div>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">เมนูเหล่านี้ระบบ<b>ประมาณต้นทุนให้เอง</b> (จากใบเบิก หรือจากสูตรของเมนูใกล้เคียง) — ราคาวัตถุดิบเป็นของจริง แต่<b>ปริมาณเป็นข้อเสนอ</b> · กดที่แถวเพื่อแก้ปริมาณ/ราคาให้ตรงกับที่ครัวทำจริง แล้วกด <b>ยืนยัน</b> · เรียงจากเมนูที่ขายมากสุด (แก้ตรงนี้กระทบต้นทุนมากสุด) · สิ่งที่ยืนยันแล้ว<b>ไม่หายเมื่อระบบ sync ข้อมูลรายวัน</b></p>
+    <div style="max-height:560px;overflow:auto">
+      <table class="w-full text-sm">
+        <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 text-xs border-b">
+          <th class="py-1.5 pr-2">เมนู</th><th class="py-1.5 pr-2">สถานะ</th>
+          <th class="py-1.5 pr-2 text-right">ต้นทุน/ที่</th><th class="py-1.5 pr-2 text-right">จานเดือนนี้</th>
+          <th class="py-1.5 pr-2 text-right">ต้นทุนรวม/เดือน</th><th class="py-1.5 text-center"></th>
+        </tr></thead>
+        <tbody id="cov-review"></tbody>
+      </table>
+    </div>
+  </div>
   <div class="card p-4 mt-5">
     <div class="text-sm font-semibold text-slate-700 mb-2">⏰ ชั่วโมงขายดี (Peak hours by revenue)</div>
     <div class="text-xs text-slate-400 mb-2">รายได้เฉลี่ยต่อชั่วโมง · ไม่รวมเวลาปิดร้าน · ใช้วางแผนกำลังคน/เตรียมของ</div>

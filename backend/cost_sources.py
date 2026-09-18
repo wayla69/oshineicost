@@ -24,6 +24,8 @@ Order is precedence, weakest last, and it is deliberate:
                                                      bulk source was wrong)
   5. estimates                 -> sku_cost          (fills ฿0 only, never
                                                      overwrites anything)
+  6. confirmed in the app      -> either            (cost_override: survives the
+                                                     daily swap, outranks all)
 then the derived sku_effective_cost table is rebuilt from the result.
 """
 from contextlib import contextmanager
@@ -505,6 +507,105 @@ def load_estimated_costs(con, path=None):
     return out
 
 
+# ─── confirmed in the app — the strongest source ────────────────────────────
+# A cost typed into the live DB dies at the next daily swap: sku_cost and
+# bom_ingredients come from the sync's base DB, not from Fly (that is how the
+# durian correction was lost in August). So a confirmation is stored as an
+# INTENT in cost_override — a table the swap preserves (core._PRESERVED_EXACT) —
+# and re-applied on every apply_all, on Fly and, once the sync has pulled the
+# rows down, in the staging DB the fact tables are built from.
+OVERRIDE_DDL = (
+    "CREATE TABLE IF NOT EXISTS cost_override("
+    "sku_code TEXT PRIMARY KEY, kind TEXT NOT NULL CHECK(kind IN ('cost','recipe')),"
+    " unit_cost REAL, lines TEXT, note TEXT, confirmed_by TEXT, confirmed_at TEXT)")
+IN_APP_SOURCE = "in-app"            # bom_ingredients.source_file for confirmed recipes
+
+
+def apply_overrides(con):
+    """Apply every cost_override row. kind='cost' pins sku_cost; kind='recipe'
+    replaces the dish's BoM rows and clears an ESTIMATE in sku_cost (a non-zero
+    sku_cost outranks a recipe in the engine, so a leftover estimate would hide
+    the very recipe the kitchen just confirmed)."""
+    import json as _json
+    out = {"cost": 0, "recipe": 0, "unknown_sku": 0, "bad": 0}
+    try:
+        con.execute(OVERRIDE_DDL)
+        con.execute(PROVENANCE_DDL)
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        for code, kind, unit_cost, lines, note, who, at in con.execute(
+                "SELECT sku_code, kind, unit_cost, lines, note, confirmed_by, confirmed_at"
+                " FROM cost_override").fetchall():
+            r = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
+            if r is None:
+                out["unknown_sku"] += 1
+                continue
+            sku_id = r[0]
+            label = f"ยืนยันโดย {who or '-'} เมื่อ {(at or '')[:10]}" + (f" · {note}" if note else "")
+            if kind == "cost":
+                if not unit_cost or unit_cost <= 0:
+                    out["bad"] += 1
+                    continue
+                con.execute(
+                    "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
+                    " VALUES(?, ?, ?, ?)", (sku_id, unit_cost, (at or now)[:10], now))
+                _tag(con, sku_id, "confirmed", "cost", unit_cost, label, now)
+                out["cost"] += 1
+                continue
+            try:
+                rows = [x for x in _json.loads(lines or "[]")
+                        if float(x.get("qty") or 0) > 0 and float(x.get("price") or 0) > 0]
+            except (TypeError, ValueError):
+                rows = []
+            if not rows:
+                out["bad"] += 1
+                continue
+            con.execute("DELETE FROM bom_ingredients WHERE sku_id=?", (sku_id,))
+            total = 0.0
+            for i, x in enumerate(rows, 1):
+                q, pr = float(x["qty"]), float(x["price"])
+                con.execute(
+                    "INSERT INTO bom_ingredients(sku_id, seq, ingredient_code, ingredient_name,"
+                    " qty_per_serving, unit, price_per_unit, ingredient_cost, ingredient_type,"
+                    " source_file) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (sku_id, i, (x.get("code") or "").strip(), (x.get("name") or "").strip(),
+                     q, (x.get("unit") or "").strip(), pr, round(q * pr, 4),
+                     (x.get("type") or None), IN_APP_SOURCE))
+                total += q * pr
+            # an estimate (or an older confirmed flat cost) must not outrank the recipe
+            tag = con.execute("SELECT source FROM cost_provenance WHERE sku_id=?", (sku_id,)).fetchone()
+            if tag and tag[0] in ("estimate", "confirmed"):
+                con.execute("DELETE FROM sku_cost WHERE sku_id=?", (sku_id,))
+            _tag(con, sku_id, "confirmed", "recipe", round(total, 4), label, now)
+            out["recipe"] += 1
+        con.commit()
+        if out["cost"] or out["recipe"] or out["bad"]:
+            print(f"[cost-override] confirmed in-app: {out}")
+    except Exception as e:
+        print(f"[cost-override] apply failed: {e}")
+    return out
+
+
+def remove_override(con, sku_code):
+    """Undo a confirmation: drop the intent AND what it wrote, so the next
+    apply_all lets the file sources fill the dish again."""
+    con.execute(OVERRIDE_DDL)
+    con.execute(PROVENANCE_DDL)
+    row = con.execute("SELECT kind FROM cost_override WHERE sku_code=?", (sku_code,)).fetchone()
+    r = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (sku_code,)).fetchone()
+    if row is None or r is None:
+        return False
+    sku_id = r[0]
+    if row[0] == "cost":
+        con.execute("DELETE FROM sku_cost WHERE sku_id=?", (sku_id,))
+    else:
+        con.execute("DELETE FROM bom_ingredients WHERE sku_id=? AND source_file=?",
+                    (sku_id, IN_APP_SOURCE))
+    con.execute("DELETE FROM cost_provenance WHERE sku_id=?", (sku_id,))
+    con.execute("DELETE FROM cost_override WHERE sku_code=?", (sku_code,))
+    con.commit()
+    return True
+
+
 def apply_all(con, rebuild=True):
     """Apply every file-borne cost source to `con`, in precedence order, then
     rebuild sku_effective_cost. Returns {source: summary}. Idempotent."""
@@ -517,6 +618,7 @@ def apply_all(con, rebuild=True):
     out["aliases"] = load_grand_menu_aliases(con)
     apply_cost_patches(con)
     out["estimates"] = load_estimated_costs(con)
+    out["confirmed"] = apply_overrides(con)          # last word: confirmed in the app
     if rebuild:
         _build_sku_effective_cost(con, force=True)
     return out

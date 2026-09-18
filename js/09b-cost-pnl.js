@@ -80,6 +80,7 @@ async function loadCostCoverage() {
   renderUncostedFixer(d.top_uncosted || []);
   // Top cost-driver ingredients (grouped families) + peak hours
   loadCoverageExtras();
+  loadCostReview();
 }
 
 // Render the editable "fill missing cost" worklist into #cov-fixer.
@@ -191,6 +192,140 @@ async function loadCoverageExtras() {
           tooltip:{callbacks:{label:ctx=>fmtN(ctx.raw)+' avg/hr'}} },
         scales:{ x:{ticks:{font:{size:9}}}, y:{ticks:{callback:v=>fmt(v)}} } } });
   }).catch(()=>{});
+}
+
+// ✅ Cost review — the kitchen confirms what the files only proposed.
+// Every row is a dish costed by an estimate or by a recipe whose GRAMS were
+// modelled on a sibling dish. Confirming stores an intent server-side that
+// survives the daily DB swap (see cost_sources.apply_overrides).
+let _covReview = [];
+const _CR_BADGE = {
+  'estimate':    ['ประมาณการ', '#b45309', '#fef3c7'],
+  'recipe-file': ['สูตรเสนอ',  '#1d4ed8', '#dbeafe'],
+  'confirmed':   ['ยืนยันแล้ว', '#047857', '#d1fae5'],
+};
+async function loadCostReview() {
+  const body = document.getElementById('cov-review');
+  if (!body) return;
+  let d;
+  try { d = await api(`${API}/api/cost/review`); }
+  catch (e) { body.innerHTML = '<tr><td colspan="6" class="py-3 text-center text-slate-400">โหลดไม่ได้</td></tr>'; return; }
+  _covReview = d.items || [];
+  const s = d.summary || {};
+  const sum = document.getElementById('cov-review-sum');
+  if (sum) sum.innerHTML = `รอตรวจ <b style="color:#b45309">${s.pending || 0}</b> เมนู (฿${fmtN(s.pending_cogs_month || 0)}/เดือน) · ยืนยันแล้ว <b style="color:#047857">${s.confirmed || 0}</b> · เดือน ${esc(d.month || '-')}`;
+  body.innerHTML = _covReview.map((r, i) => {
+    const [lab, fg, bg] = _CR_BADGE[r.source] || [r.source, '#475569', '#e2e8f0'];
+    return `<tr class="border-b border-slate-50 cursor-pointer hover:bg-slate-50" onclick="toggleCostReview(${i})">
+      <td class="py-1.5 pr-2">${esc(r.description)}<div class="text-[10px] text-slate-400">${esc(r.sku_code)}</div></td>
+      <td class="py-1.5 pr-2"><span class="text-[10px] font-semibold px-1.5 py-0.5 rounded" style="color:${fg};background:${bg}">${lab}</span></td>
+      <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">฿${(r.cost || 0).toFixed(2)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.plates || 0)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">฿${fmtN(r.cogs_month || 0)}</td>
+      <td class="py-1.5 text-center text-slate-400">▾</td></tr>
+      <tr id="cov-rv-${i}" style="display:none"><td colspan="6" class="pb-3"></td></tr>`;
+  }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">ไม่มีเมนูที่รอตรวจ 🎉</td></tr>';
+}
+
+function toggleCostReview(i) {
+  const row = document.getElementById('cov-rv-' + i);
+  if (!row) return;
+  if (row.style.display !== 'none') { row.style.display = 'none'; return; }
+  row.style.display = '';
+  _renderCostReviewEditor(i);
+}
+
+function _renderCostReviewEditor(i) {
+  const r = _covReview[i], cell = document.querySelector(`#cov-rv-${i} td`);
+  if (!r || !cell) return;
+  const inp = 'border border-slate-200 rounded px-1.5 py-0.5 text-xs text-right tabular-nums';
+  const lines = (r.lines || []).map((ln, k) => `
+    <tr data-k="${k}">
+      <td class="py-1 pr-2 text-xs">${ln._new
+        ? `<input data-f="name" class="border border-slate-200 rounded px-1.5 py-0.5 text-xs" style="width:100%" placeholder="ชื่อวัตถุดิบ" value="${esc(ln.name || '')}">`
+        : `${esc(ln.name || '')}<span class="text-[10px] text-slate-400"> ${esc(ln.code || '')}</span>`}</td>
+      <td class="py-1 pr-2 text-right"><input class="${inp}" style="width:70px" type="number" step="any" min="0" value="${ln.qty ?? ''}" oninput="_crRecalc(${i})" data-f="qty"> <span class="text-[10px] text-slate-400">${esc(ln.unit || '')}</span></td>
+      <td class="py-1 pr-2 text-right"><input class="${inp}" style="width:82px" type="number" step="any" min="0" value="${ln.price ?? ''}" oninput="_crRecalc(${i})" data-f="price"></td>
+      <td class="py-1 pr-2 text-right text-xs tabular-nums" data-f="cost">฿${((ln.qty || 0) * (ln.price || 0)).toFixed(2)}</td>
+      <td class="py-1 text-center"><button class="text-xs text-rose-500" title="ลบบรรทัดนี้" onclick="event.stopPropagation();_crDelLine(${i},${k})">✕</button></td>
+    </tr>`).join('');
+  const hasRecipe = (r.lines || []).length > 0;
+  cell.innerHTML = `<div class="rounded-lg p-3" style="background:#f8fafc;border:1px solid #e2e8f0" onclick="event.stopPropagation()">
+    ${r.note ? `<p class="text-[11px] text-slate-500 mb-2">ที่มา: ${esc(r.note)}</p>` : ''}
+    ${hasRecipe ? `<table class="w-full mb-2"><thead><tr class="text-left text-[10px] text-slate-400 border-b">
+        <th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">ปริมาณ/ที่</th><th class="py-1 pr-2 text-right">ราคา/หน่วย (฿)</th><th class="py-1 pr-2 text-right">ต้นทุน</th><th></th></tr></thead>
+        <tbody id="cov-rv-lines-${i}">${lines}</tbody></table>
+        <button class="text-[11px] text-indigo-600 mb-2" onclick="_crAddLine(${i})">+ เพิ่มวัตถุดิบ</button>`
+      : `<div class="flex items-center gap-2 mb-2 text-xs">ต้นทุนต่อที่ (฿)
+          <input id="cov-rv-flat-${i}" class="${inp}" style="width:90px" type="number" step="any" min="0" value="${r.cost || ''}"></div>`}
+    <div class="flex items-center flex-wrap gap-2">
+      <input id="cov-rv-note-${i}" class="border border-slate-200 rounded px-2 py-1 text-xs" style="flex:1;min-width:160px" placeholder="หมายเหตุ (เช่น ชั่งจริงที่สาขา…)">
+      ${hasRecipe ? `<span class="text-xs">รวม <b id="cov-rv-total-${i}" class="tabular-nums">฿${(r.cost || 0).toFixed(2)}</b></span>` : ''}
+      <button class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#059669;color:#fff" onclick="confirmCostReview(${i})">✅ ยืนยัน</button>
+      ${r.source === 'confirmed' ? `<button class="text-xs px-3 py-1.5 rounded-lg border border-slate-300" onclick="withdrawCostReview(${i})">ถอนการยืนยัน</button>` : ''}
+    </div></div>`;
+  if (hasRecipe) _crRecalc(i);
+}
+
+// read the editor back into plain line objects (what the API takes)
+function _crLines(i) {
+  return [...document.querySelectorAll(`#cov-rv-lines-${i} tr`)].map(tr => {
+    const base = (_covReview[i].lines || [])[+tr.dataset.k] || {};
+    const num = f => parseFloat(tr.querySelector(`input[data-f="${f}"]`)?.value) || 0;
+    const nameInp = tr.querySelector('input[data-f="name"]');
+    return { code: base.code || '', name: nameInp ? nameInp.value.trim() : (base.name || ''),
+             qty: num('qty'), unit: base.unit || 'กรัม', price: num('price'),
+             type: base.type || null, _new: !!base._new, _tr: tr };
+  });
+}
+function _crRecalc(i) {
+  let tot = 0;
+  _crLines(i).forEach(ln => {
+    const c = ln.qty * ln.price; tot += c;
+    const el = ln._tr.querySelector('td[data-f="cost"]'); if (el) el.textContent = '฿' + c.toFixed(2);
+  });
+  const t = document.getElementById('cov-rv-total-' + i); if (t) t.textContent = '฿' + tot.toFixed(2);
+}
+function _crDelLine(i, k) {
+  _covReview[i].lines = _crLines(i).filter(ln => +ln._tr.dataset.k !== k).map(({ _tr, ...ln }) => ln);
+  _renderCostReviewEditor(i);
+}
+function _crAddLine(i) {
+  _covReview[i].lines = _crLines(i).map(({ _tr, ...ln }) => ln);
+  _covReview[i].lines.push({ code: '', name: '', qty: 0, unit: 'กรัม', price: 0, type: null, _new: true });
+  _renderCostReviewEditor(i);
+}
+
+async function confirmCostReview(i) {
+  const r = _covReview[i];
+  const note = document.getElementById('cov-rv-note-' + i)?.value || '';
+  let body;
+  if ((r.lines || []).length) {
+    const lines = _crLines(i).map(({ _tr, _new, ...ln }) => ln).filter(ln => ln.qty > 0 && ln.price > 0 && ln.name);
+    if (!lines.length) { showToast('ต้องมีวัตถุดิบอย่างน้อย 1 บรรทัดที่มีปริมาณและราคา', 'error'); return; }
+    body = { sku_code: r.sku_code, kind: 'recipe', lines, note };
+  } else {
+    const c = parseFloat(document.getElementById('cov-rv-flat-' + i)?.value);
+    if (!(c > 0)) { showToast('กรอกต้นทุนต่อที่ให้มากกว่า 0', 'error'); return; }
+    body = { sku_code: r.sku_code, kind: 'cost', unit_cost: c, note };
+  }
+  try {
+    const res = await fetch(`${API}/api/cost/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(j.detail || ('HTTP ' + res.status));
+    showToast(`ยืนยัน ${r.description} แล้ว — ฿${(j.cost || 0).toFixed(2)}/ที่`, 'success');
+    await loadCostReview();
+  } catch (e) { showToast('ยืนยันไม่สำเร็จ: ' + e.message, 'error'); }
+}
+
+async function withdrawCostReview(i) {
+  const r = _covReview[i];
+  try {
+    const res = await fetch(`${API}/api/cost/confirm/${encodeURIComponent(r.sku_code)}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    showToast(`ถอนการยืนยัน ${r.description} แล้ว — กลับไปใช้ค่าที่ระบบเสนอ`, 'info');
+    await loadCostReview();
+  } catch (e) { showToast('ถอนไม่สำเร็จ: ' + e.message, 'error'); }
 }
 
 // 🏭 Prime Cost = Food% + Labor% per branch (the biggest controllable costs).
