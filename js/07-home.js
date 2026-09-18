@@ -253,7 +253,19 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
   });
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3)
     A.push({ p: 3, sev: 'amber', icon: '📉', text: `เดือนนี้ run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% ${sd.mom_basis === 'dow' ? '(เทียบฐานปกติตามวันในสัปดาห์)' : '(เทียบช่วงวันเท่ากัน)'}`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
-  ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad').slice(0, 3)
+  // /api/analysis/anomalies scans the WHOLE history (its own panel wants that), and its
+  // BoM-cost rule flags every month that ever jumped — so a spike from June 2025 sat in
+  // "สิ่งที่ต้องทำวันนี้" in September 2026. Today's list takes only what is still news:
+  // this month and the two before it. An insight with no period is kept — it cannot be
+  // judged stale.
+  const _y = String(brief.yesterday || '').slice(0, 7);
+  const _cut = (() => {
+    if (!/^\d{4}-\d{2}$/.test(_y)) return '';
+    const n = (+_y.slice(0, 4)) * 12 + (+_y.slice(5, 7)) - 1 - 2;
+    return `${Math.floor(n / 12)}-${String(n % 12 + 1).padStart(2, '0')}`;
+  })();
+  ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad')
+    .filter(a => !a.period || !_cut || String(a.period).slice(0, 7) >= _cut).slice(0, 3)
     .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠️', text: esc(a.message) }));
   const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
   if (up && up.vs_avg_pct >= 10)
