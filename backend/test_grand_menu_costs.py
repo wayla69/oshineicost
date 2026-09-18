@@ -130,19 +130,62 @@ def test_patches_outrank_the_master_file():
     import csv
     with open(main.GRAND_MENU_COST_FILE, encoding="utf-8-sig", newline="") as fh:
         sheet = {r["sku_code"]: float(r["cost_per_serve"]) for r in csv.DictReader(fh)}
-    src = (main.HERE / "main.py").read_text(encoding="utf-8")
-    startup = src.split("def _bom_startup()", 1)[1].split("_sku_cost_monthly_ensure", 1)[0]
-    # sheet, then aliases (whose fallback reads the effective cost the sheet just
-    # fed), then the hand-verified patches, which must have the last word.
-    assert (startup.index("_load_grand_menu_costs()")
-            < startup.index("_load_grand_menu_aliases()")
-            < startup.index("_apply_cost_patches()"))
+    # The order now lives in ONE place — cost_sources.apply_all — which both the
+    # app's startup and build_menu_fact call. Sheet, then file recipes (a donor
+    # may live there), then aliases (whose fallback reads the effective cost the
+    # sheet just fed), then the hand-verified patches, then the ฿0-only estimates.
+    src = (main.HERE / "cost_sources.py").read_text(encoding="utf-8")
+    body = src.split("def apply_all(", 1)[1]
+    assert (body.index("load_grand_menu_costs(con)")
+            < body.index("load_recipe_file(con)")
+            < body.index("load_grand_menu_aliases(con)")
+            < body.index("apply_cost_patches(con)")
+            < body.index("load_estimated_costs(con)"))
+    # …and neither caller may go back to applying sources on its own
+    for caller in ("main.py", "build_menu_fact.py"):
+        assert "apply_all" in (main.HERE / caller).read_text(encoding="utf-8"), caller
+    assert "estimated_costs_2026-09.csv" not in (
+        main.HERE / "build_menu_fact.py").read_text(encoding="utf-8"),         "build_menu_fact must not re-implement a cost source — use cost_sources.apply_all"
     for code, cost in main._COST_PATCHES:
         if code in sheet:
             assert abs(sheet[code] - cost) < 0.01, (
                 f"{code} is in both the master sheet ({sheet[code]}) and _COST_PATCHES "
                 f"({cost}); the patch wins at startup — reconcile them")
 
+
+
+def test_apply_all_gives_the_app_and_the_fact_builder_one_answer(tmp_path):
+    """The whole point of cost_sources: run it on ANY database — live or the
+    sync's staging copy — and the same dish gets the same cost, by the same
+    precedence. Patch > owner sheet; recipe and alias fill what has no cost;
+    an estimate only ever fills ฿0."""
+    import cost_sources, core
+    db = tmp_path / "t.db"
+    import conftest as _cf
+    _cf._build_db(str(db))
+    con = sqlite3.connect(str(db))
+    con.execute("CREATE TABLE IF NOT EXISTS bom_sku_alias(bom_sku_code TEXT PRIMARY KEY,"
+                " resolved_sku_id INT, match_method TEXT, confidence REAL, notes TEXT)")
+    mk = lambda i, code: con.execute(
+        "INSERT INTO skus(sku_id, sku_code, description) VALUES(?,?,?)", (i, code, code))
+    mk(9001, "KKN018")            # in _COST_PATCHES at 68.00
+    mk(9002, "OTHBFSPC00007")     # กิมจิ: recipe file only  -> 4.41
+    mk(9003, "OTHBFBVR00001")     # Pepsi: estimate only      -> 13.59
+    mk(9004, "OTHBFSUS00003")     # owner sheet               -> 7.5
+    con.execute("INSERT INTO sku_cost(sku_id, unit_cost) VALUES(9001, 20.0)")   # stale ฿20
+    con.commit()
+    cost_sources.apply_all(con)
+    got = dict(con.execute("SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e "
+                           "JOIN skus s USING(sku_id) WHERE s.sku_id >= 9001"))
+    assert got["KKN018"] == 68.0                       # the patch re-asserts itself
+    assert round(got["OTHBFSPC00007"], 2) == 4.41      # recipe from the file
+    assert got["OTHBFBVR00001"] == 13.59               # estimate fills ฿0
+    assert got["OTHBFSUS00003"] == 7.5                 # the owner's sheet
+    # idempotent: a second run (the builder after the app, or vice versa) changes nothing
+    cost_sources.apply_all(con)
+    again = dict(con.execute("SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e "
+                             "JOIN skus s USING(sku_id) WHERE s.sku_id >= 9001"))
+    assert again == got
 
 # ─── alias loader ────────────────────────────────────────────────────────────
 # Several Grand Menu codes are a renamed dish whose recipe still lives under the

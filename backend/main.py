@@ -9,7 +9,7 @@ import tempfile
 import hashlib
 import threading
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -163,6 +163,9 @@ __all__ = [
     "get_db",
     "invalidate_cache",
     "is_price_as_cost",
+    # cost_sources re-exports — tests and scripts still reach them through main
+    "GRAND_MENU_COST_FILE", "GRAND_MENU_ALIAS_FILE", "RECIPE_FILE",
+    "ESTIMATED_COST_FILE", "_COST_PATCHES",
     "net_revenue_row",
     "net_revenue_sum",
     "require_write_token",
@@ -1729,388 +1732,40 @@ def _bom_ensure_and_seed():
 # It runs BEFORE _apply_cost_patches() so a hand-verified patch always outranks
 # the sheet. Both write sku_cost, which _build_sku_effective_cost prefers over
 # any recipe — for these SKUs the owner's number IS the authority.
-GRAND_MENU_COST_FILE = HERE / "data" / "grand_menu_costs_2026-09.csv"
+# The loaders themselves live in cost_sources.py, shared with build_menu_fact so
+# the app and the fact tables can never cost a dish differently. These wrappers
+# keep the historical names, own the connection, and flush the cache.
+import cost_sources as _cs
+from cost_sources import (GRAND_MENU_COST_FILE, GRAND_MENU_ALIAS_FILE,          # noqa: F401
+                          RECIPE_FILE, ESTIMATED_COST_FILE,
+                          COST_PATCHES as _COST_PATCHES)
+
+
+def _with_db(fn, *a):
+    with get_db() as con:
+        out = fn(con, *a)
+    invalidate_cache()
+    return out
 
 
 def _load_grand_menu_costs(path=None):
-    """Upsert the Grand Menu master costs into sku_cost, and each buffet dish's
-    price tier into sku_tier (à la carte rows carry no tier). Returns a summary dict."""
-    import csv as _csv
-    path = Path(path) if path else GRAND_MENU_COST_FILE
-    out = {"applied": 0, "unknown_sku": 0, "rejected_price_as_cost": 0, "bad_value": 0}
-    if not path.exists():
-        print(f"[grand-menu] cost file not found: {path} — skipped")
-        return out
-    try:
-        rows = []
-        with open(path, encoding="utf-8-sig", newline="") as fh:
-            for rec in _csv.DictReader(fh):
-                code = (rec.get("sku_code") or "").strip()
-                if not code:
-                    continue
-                try:
-                    cost = float(rec.get("cost_per_serve") or 0)
-                except (TypeError, ValueError):
-                    out["bad_value"] += 1
-                    continue
-                if cost <= 0:
-                    out["bad_value"] += 1
-                    continue
-                # à la carte rows carry the literal text "None" in this column
-                # (Master Item Grand Menu.xlsx), not a blank — see grand-menu-2026-09.
-                tier = (rec.get("tier") or "").strip()
-                if tier.lower() == "none":
-                    tier = ""
-                rows.append((code, cost, tier))
-
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        with get_db() as con:
-            con.execute(
-                "CREATE TABLE IF NOT EXISTS sku_tier("
-                "sku_id INTEGER PRIMARY KEY REFERENCES skus(sku_id), tier TEXT NOT NULL)"
-            )
-            ids = {r[1]: r[0] for r in con.execute(
-                "SELECT sku_id, sku_code FROM skus WHERE sku_code IN (%s)"
-                % ",".join("?" * len(rows)), [c for c, _, _ in rows])} if rows else {}
-            # A selling price pasted into a cost column has reached this project
-            # three separate times. Where the SKU has actually sold we can tell
-            # the difference, so we check — and refuse the row rather than book
-            # a dish at its own menu price.
-            price = {}
-            if ids:
-                for r in con.execute(
-                    "SELECT sku_id, SUM(subtotal_ex_vat) rev, SUM(qty) qty "
-                    "FROM sales_sku_monthly WHERE sku_id IN (%s) GROUP BY 1"
-                    % ",".join("?" * len(ids)), list(ids.values())
-                ):
-                    # A handful of promo sales must not veto the owner's number: on
-                    # 2026-09-04 three discounted hand rolls made ฿53 look like a
-                    # price. Judge only once the dish has really sold.
-                    if (r[2] or 0) >= 10 and (r[1] or 0) > 0:
-                        price[r[0]] = r[1] / r[2]
-
-            for code, cost, tier in rows:
-                sku_id = ids.get(code)
-                if sku_id is None:
-                    out["unknown_sku"] += 1
-                    continue
-                if is_price_as_cost(cost, price.get(sku_id)):
-                    print(f"[grand-menu] {code}: {cost} looks like the selling price — rejected")
-                    out["rejected_price_as_cost"] += 1
-                    continue
-                con.execute(
-                    "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
-                    " VALUES(?, ?, ?, ?)",
-                    (sku_id, cost, "2026-09-01", now),
-                )
-                if tier:
-                    con.execute(
-                        "INSERT OR REPLACE INTO sku_tier(sku_id, tier) VALUES(?, ?)",
-                        (sku_id, tier),
-                    )
-                out["applied"] += 1
-            con.commit()
-        print(f"[grand-menu] master costs: {out}")
-        invalidate_cache()
-    except Exception as e:
-        print(f"[grand-menu] load failed: {e}")
-    return out
-
-
-# Some Grand Menu codes are a renamed dish that already has a recipe under its old
-# code. They are costed by pointing at that donor rather than by re-entering a
-# number, so the dish inherits the recipe itself — which is what lets the
-# ingredient order plan see it at all, something a flat cost cannot do.
-#
-# bom_sku_alias resolves in ONE hop: _build_sku_effective_cost sums the donor's
-# bom_ingredients rows directly. It does NOT chain and it does NOT read the
-# donor's sku_cost, so pointing at a donor that is itself aliased, or at one
-# priced by a flat cost, silently yields ฿0 — the failure this loader exists to
-# make impossible. Two of these needed the chain resolved by hand (the soup
-# stocks point past THBFSOU000xx to B0097/B0098) and one donor has no recipe at
-# all, so its cost is COPIED instead. The copy is refreshed on every boot, so it
-# tracks the donor rather than freezing a number into the database.
-GRAND_MENU_ALIAS_FILE = HERE / "data" / "grand_menu_aliases_2026-09.csv"
-
-
-def _load_grand_menu_aliases(path=None):
-    """Point Grand Menu codes at the donor that carries their recipe."""
-    import csv as _csv
-    path = Path(path) if path else GRAND_MENU_ALIAS_FILE
-    out = {"aliased": 0, "cost_copied": 0, "unknown_sku": 0,
-           "unknown_donor": 0, "donor_has_nothing": 0}
-    if not path.exists():
-        print(f"[grand-menu] alias file not found: {path} — skipped")
-        return out
-    try:
-        with open(path, encoding="utf-8-sig", newline="") as fh:
-            pairs = [((r.get("sku_code") or "").strip(),
-                      (r.get("donor_sku_code") or "").strip())
-                     for r in _csv.DictReader(fh)]
-        pairs = [p for p in pairs if p[0] and p[1]]
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        with get_db() as con:
-            for code, donor in pairs:
-                own = con.execute("SELECT sku_id FROM skus WHERE sku_code = ?", (code,)).fetchone()
-                if own is None:
-                    out["unknown_sku"] += 1
-                    continue
-                d = con.execute("SELECT sku_id FROM skus WHERE sku_code = ?", (donor,)).fetchone()
-                if d is None:
-                    print(f"[grand-menu] alias {code}: donor {donor} not found — skipped")
-                    out["unknown_donor"] += 1
-                    continue
-                donor_id = d[0]
-                bom = con.execute(
-                    "SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id = ?",
-                    (donor_id,)).fetchone()[0]
-                if bom:
-                    con.execute(
-                        "INSERT OR REPLACE INTO bom_sku_alias"
-                        "(bom_sku_code, resolved_sku_id, match_method, confidence, notes)"
-                        " VALUES(?, ?, 'grand-menu-2026-09', 1.0, ?)",
-                        (code, donor_id, f"Grand Menu 2026-09: same dish as {donor}"))
-                    out["aliased"] += 1
-                    continue
-                # No recipe to inherit. Fall back to the donor's effective cost so
-                # the dish is at least costed — an alias here would book it at ฿0.
-                eff = con.execute(
-                    "SELECT recipe_cost FROM sku_effective_cost WHERE sku_id = ?",
-                    (donor_id,)).fetchone()
-                eff = (eff[0] if eff else 0) or 0
-                if eff > 0:
-                    con.execute(
-                        "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
-                        " VALUES(?, ?, ?, ?)", (own[0], eff, "2026-09-01", now))
-                    out["cost_copied"] += 1
-                else:
-                    print(f"[grand-menu] alias {code}: donor {donor} has neither recipe nor cost")
-                    out["donor_has_nothing"] += 1
-            con.commit()
-        print(f"[grand-menu] aliases: {out}")
-        invalidate_cache()
-    except Exception as e:
-        print(f"[grand-menu] alias load failed: {e}")
-    return out
-
-
-# Manual cost corrections — applied at every startup after BOM seed.
-# Use when the BOM workbook has a verified-wrong ingredient cost and cannot
-# be corrected immediately. Each entry removes the SKU's BOM rows (so the
-# COALESCE falls through to sku_cost) and upserts the confirmed unit cost.
-_COST_PATCHES: list[tuple[str, float]] = [
-    ("B0040",    13.40),  # หอยเชลล์ต้มฮอกไกโด (1 ชิ้น)  — BOM workbook had ~38.2 (wrong)
-    ("B0322",    13.40),  # หอยเชลล์ฮอกไกโดซาชิมิ (1 ตัว) — same ingredient, same correction
-    ("1150-084", 13.40),  # HOKKAIDO HOTATE SASHIMI (1PCS) — same ingredient, same correction
-    # Durian: the requisition audit priced it at ฿68/serve, but the correction was
-    # applied to a database and then lost — sync copies the cost tables out of the
-    # LOCAL base DB into .incoming, which is hot-swapped over the live one, so a DB-only
-    # fix survives exactly until the next swap. It was found back at ฿20/฿30/฿40 on
-    # 2026-09-02, understating COGS by ฿36.7M across the history. Listed here so it
-    # re-asserts itself on every startup no matter which DB is swapped in.
-    # The BoM is NOT deleted: EST-DURIAN already totals ฿68, so the guard above leaves
-    # the recipe alone and the ingredient order plan keeps seeing durian.
-    ("KKN018",        68.00),  # (B) ทุเรียน (1 พู)
-    ("KKN019",        68.00),  # (B) ทุเรียน (1 เม็ด)
-    ("DUR-999",       68.00),  # ทุเรียน (B)(Buffet)
-    ("PM0010",        68.00),  # (B) ทุเรียนยำน้ำปลาร้า
-    ("PM0011",        68.00),  # (B) เทมปุระทุเรียนมัทชะ (5 ชิ้น)
-    ("PM0012",        68.00),  # (B) ทุเรียนไม่อั้น
-    ("OTHBFPMO00013", 68.00),  # (BF) ทุเรียน — Grand Menu 2026-09 code for the same dish
-    # เนื้อวากิวสไลด์ย่างใบโฮบะ. UBN002 was the only SKU in this dish family carrying
-    # any cost at all, and it carried ฿409.25 — 93.9% of its own ฿435.94 ex-VAT
-    # selling price. That is a price sitting in a cost column, not a cost. It slipped
-    # past is_price_as_cost because that guard only spots the 1.03-1.12 band, i.e. an
-    # INC-VAT price pasted in; a number just under the ex-VAT price is equally
-    # impossible for food and equally invisible to it.
-    # The Grand Menu code was inheriting that same figure through the alias file, so
-    # the alias row is gone and both codes are pinned here at the owner-confirmed ฿16.
-    ("UBN002",        16.00),  # (A) เนื้อวากิวสไลด์ย่างใบโฮบะ — retired code, 32 units ever
-    ("OTHBFSPC00045", 16.00),  # (BF) เนื้อวากิวสไลด์ย่างใบโฮบะ — Grand Menu 2026-09
-]
-
-
-def _apply_cost_patches():
-    """Delete BOM rows for patched SKUs and upsert the verified sku_cost."""
-    if not _COST_PATCHES:
-        return
-    try:
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        with get_db() as con:
-            for sku_code, unit_cost in _COST_PATCHES:
-                row = con.execute(
-                    "SELECT sku_id FROM skus WHERE sku_code = ?", (sku_code,)
-                ).fetchone()
-                if row is None:
-                    print(f"[cost-patch] SKU not found: {sku_code} — skipped")
-                    continue
-                sku_id = row[0]
-                # Only drop the BOM when it DISAGREES with the verified cost.
-                # The patch exists because these SKUs once carried a BOM saying
-                # ~฿38.2 against a true ฿13.40 — not because a recipe is unwanted.
-                # A recipe that already totals the verified cost is harmless to
-                # COGS (sku_cost still wins in _build_sku_effective_cost) and is
-                # what lets the ingredient order plan see the dish at all, so
-                # deleting it would keep หอยเชลล์ฮอกไกโด permanently unorderable.
-                bom_total = con.execute(
-                    "SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id = ?",
-                    (sku_id,)
-                ).fetchone()[0]
-                deleted = 0
-                if bom_total is not None and abs(float(bom_total) - float(unit_cost)) > 0.01:
-                    deleted = con.execute(
-                        "DELETE FROM bom_ingredients WHERE sku_id = ?", (sku_id,)
-                    ).rowcount
-                con.execute(
-                    """INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)
-                       VALUES(?, ?, ?, ?)""",
-                    (sku_id, unit_cost, now[:10], now),
-                )
-                print(f"[cost-patch] {sku_code}: bom rows removed={deleted}, sku_cost={unit_cost}")
-            con.commit()
-        invalidate_cache()
-    except Exception as e:
-        print(f"[cost-patch] failed: {e}")
-
-
-RECIPE_FILE = HERE / "data" / "recipes_2026-09.csv"
+    return _with_db(_cs.load_grand_menu_costs, path)
 
 
 def _load_recipe_file(path=None):
-    """Seed bom_ingredients for dishes that have no recipe anywhere.
-
-    The BoM is normally ingested from the owner's Excel workbooks, which live in
-    a gitignored folder — nothing that reaches the image or Fly. So a dish the
-    workbooks never covered (the Grand Menu lines that shipped at ฿0) can only
-    get a recipe through a file that ships WITH the code, which is this one.
-
-    Each row is a real ingredient code at a real price: either the price a
-    sibling dish already books for that ingredient, or the purchase price from
-    the requisition workbooks. The GRAMS are the proposal — modelled on the
-    nearest sibling dish (ยำกุ้งขาว takes ยำไทยปูอัด's 45 g of protein, and so
-    on) — and are what the owner should check first. See docs/RECIPES_2026-09.md.
-
-    Skipped for any SKU that already has a recipe OR its own sku_cost, so it can
-    never overwrite the owner's numbers; loaded BEFORE _load_estimated_costs so a
-    recipe outranks a flat estimate. Delete a dish's rows here once the real
-    recipe lands in the workbooks and nothing changes but the source.
-    """
-    import csv as _csv
-    path = Path(path) if path else RECIPE_FILE
-    out = {"skus": 0, "rows": 0, "already_costed": 0, "unknown_sku": 0, "bad_row": 0}
-    if not path.exists():
-        print(f"[recipe] file not found: {path} — skipped")
-        return out
-    try:
-        by_sku = {}
-        for rec in _csv.DictReader(open(path, encoding="utf-8-sig", newline="")):
-            code = (rec.get("sku_code") or "").strip()
-            try:
-                qty = float(rec.get("qty_per_serving") or 0)
-                price = float(rec.get("price_per_unit") or 0)
-                seq = int(rec.get("seq") or 0)
-            except (TypeError, ValueError):
-                out["bad_row"] += 1
-                continue
-            if not code or qty <= 0 or price <= 0 or seq <= 0:
-                out["bad_row"] += 1
-                continue
-            by_sku.setdefault(code, []).append((seq, rec, qty, price))
-
-        with get_db() as con:
-            for code, rows in by_sku.items():
-                r = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
-                if r is None:
-                    out["unknown_sku"] += 1
-                    continue
-                sku_id = r[0]
-                have_bom = con.execute("SELECT COUNT(*) FROM bom_ingredients WHERE sku_id=?",
-                                       (sku_id,)).fetchone()[0]
-                have_cost = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?",
-                                        (sku_id,)).fetchone()
-                if have_bom or (have_cost and (have_cost[0] or 0) > 0):
-                    out["already_costed"] += 1
-                    continue
-                for seq, rec, qty, price in sorted(rows):
-                    con.execute(
-                        "INSERT OR REPLACE INTO bom_ingredients(sku_id, seq, ingredient_code,"
-                        " ingredient_name, qty_per_serving, unit, price_per_unit, ingredient_cost,"
-                        " ingredient_type, source_file) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        (sku_id, seq, (rec.get("ingredient_code") or "").strip(),
-                         (rec.get("ingredient_name") or "").strip(), qty,
-                         (rec.get("unit") or "").strip(), price, round(qty * price, 4),
-                         (rec.get("ingredient_type") or "").strip() or None, path.name))
-                    out["rows"] += 1
-                out["skus"] += 1
-            con.commit()
-        print(f"[recipe] seeded recipes: {out}")
-        invalidate_cache()
-    except Exception as e:
-        print(f"[recipe] load failed: {e}")
-    return out
+    return _with_db(_cs.load_recipe_file, path)
 
 
-ESTIMATED_COST_FILE = HERE / "data" / "estimated_costs_2026-09.csv"
+def _load_grand_menu_aliases(path=None):
+    return _with_db(_cs.load_grand_menu_aliases, path)
+
+
+def _apply_cost_patches():
+    return _with_db(_cs.apply_cost_patches)
 
 
 def _load_estimated_costs(path=None):
-    """Fill dishes that carry NO cost at all with an estimate, lowest priority.
-
-    Drinks, dipping sauces and ice cream book ฿0 today because nobody ever wrote
-    them a recipe — and a ฿0 plate silently flatters every food-cost figure it
-    lands in (12% of plates served in Sep 1-15). These numbers come from the
-    owner's requisition workbooks (พ.ค./มิ.ย. 69, 5 master branches): the pool of
-    ฿ actually drawn for an item, minus whatever a recipe already books, divided
-    by the covers that ate it, then by that line's requests per cover — so
-    booking them reproduces the real spend rate rather than a guess. A few are
-    priced straight off the purchase unit price (wasabi per gram), and the ice
-    creams take the cost the system already carries for their own twins.
-
-    Deliberately the WEAKEST source in the chain: a SKU with any real cost — its
-    own sku_cost, a Grand Menu master row, a patch, or a recipe — is left alone,
-    so this can never overwrite a costed dish. It is a floor under ฿0, not an
-    opinion about anything that is already costed. Replace an entry with a real
-    recipe and the estimate stops applying on the next start.
-    """
-    import csv as _csv
-    path = Path(path) if path else ESTIMATED_COST_FILE
-    out = {"applied": 0, "already_costed": 0, "unknown_sku": 0, "bad_value": 0}
-    if not path.exists():
-        print(f"[est-cost] file not found: {path} — skipped")
-        return out
-    try:
-        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-        with get_db() as con:
-            for rec in _csv.DictReader(open(path, encoding="utf-8-sig", newline="")):
-                code = (rec.get("sku_code") or "").strip()
-                try:
-                    cost = float(rec.get("unit_cost") or 0)
-                except (TypeError, ValueError):
-                    cost = 0
-                if not code or cost <= 0:
-                    out["bad_value"] += 1
-                    continue
-                row = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
-                if row is None:
-                    out["unknown_sku"] += 1
-                    continue
-                sku_id = row[0]
-                have = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?", (sku_id,)).fetchone()
-                bom = con.execute("SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id=?",
-                                  (sku_id,)).fetchone()[0]
-                if (have and (have[0] or 0) > 0) or (bom or 0) > 0:
-                    out["already_costed"] += 1
-                    continue
-                con.execute(
-                    "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
-                    " VALUES(?, ?, ?, ?)", (sku_id, cost, "2026-09-01", now))
-                out["applied"] += 1
-            con.commit()
-        print(f"[est-cost] estimated costs: {out}")
-        invalidate_cache()
-    except Exception as e:
-        print(f"[est-cost] load failed: {e}")
-    return out
+    return _with_db(_cs.load_estimated_costs, path)
 
 
 def _sku_cost_monthly_ensure():
@@ -2137,18 +1792,13 @@ def _sku_cost_monthly_ensure():
 @app.on_event("startup")
 def _bom_startup():
     _bom_ensure_and_seed()
-    # Owner's Grand Menu master first, hand-verified patches second — a patch
-    # exists precisely because a bulk source was wrong, so it must win.
-    _load_grand_menu_costs()
-    # Aliases after the sheet: a code in both should take the owner's number, and
-    # the alias fallback reads sku_effective_cost, which the sheet has just fed.
-    # Before the aliases: a donor may be a dish whose recipe lives in the file,
-    # and an alias resolves against what is in the DB at the time it runs.
-    _load_recipe_file()
-    _load_grand_menu_aliases()
-    _apply_cost_patches()
-    # Weakest source last — flat numbers for what has no recipe at all.
-    _load_estimated_costs()
+    # Every file-borne cost source, in precedence order, through the SAME entry
+    # point build_menu_fact uses — see cost_sources.apply_all for the order and
+    # why it is what it is.
+    try:
+        print(f"[cost-sources] {_with_db(_cs.apply_all)}")
+    except Exception as e:
+        print(f"[cost-sources] apply_all failed: {e}")
     _sku_cost_monthly_ensure()
     _perf_startup()
     _month_summary_backfill()

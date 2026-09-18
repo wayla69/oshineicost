@@ -153,74 +153,19 @@ def main():
     """)
 
     # ── local maps: costs (non-tier), branch name → id, sku code → id ──
+    # Costs come from sku_effective_cost — but THIS database is the sync's staging
+    # copy, which the app (and its startup cost loaders) never touches. So apply
+    # the same file-borne sources here, through the same entry point the app uses,
+    # before reading a single cost. Until 2026-09-18 this was three hand-written
+    # "overlays" re-implementing the precedence rules (#186, #188, #189).
+    try:
+        import cost_sources
+        print(f"[0/4] cost sources applied: {cost_sources.apply_all(sq)}")
+    except Exception as e:                      # never block the fact build
+        print(f"[0/4] ⚠ cost sources NOT applied ({e}) — using the DB's costs as-is")
     cost_by_code = {c: rc for c, rc in sq.execute(
         "SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e JOIN skus s USING(sku_id) "
         "WHERE e.recipe_cost > 0") if c not in TIER_CODES}
-    # Estimated costs for the dishes that never got a recipe (drinks, dipping
-    # sauces, ice cream) live in a CSV the APP applies at startup — but these fact
-    # tables are built here, against a staging DB the app never touches, so
-    # without this overlay every one of those plates would keep booking ฿0 in the
-    # tab and in the tier report. Same rule as main._load_estimated_costs: fill
-    # only what has no cost, never override one. See [[tier-cogs-is-a-floor]].
-    _file_recipe_cost = {}
-    # Recipes that ship as a file (main._load_recipe_file) have the same problem
-    # and the same fix — a recipe outranks an estimate, so it goes on first.
-    _rec = HERE / "data" / "recipes_2026-09.csv"
-    if _rec.exists():
-        import csv as _csv
-        _tot = _file_recipe_cost
-        for rec in _csv.DictReader(open(_rec, encoding="utf-8-sig", newline="")):
-            code = (rec.get("sku_code") or "").strip()
-            try:
-                c = float(rec.get("qty_per_serving") or 0) * float(rec.get("price_per_unit") or 0)
-            except (TypeError, ValueError):
-                continue
-            if code and c > 0:
-                _tot[code] = _tot.get(code, 0.0) + c
-        n = 0
-        for code, c in _tot.items():
-            if code not in TIER_CODES and not cost_by_code.get(code):
-                cost_by_code[code] = round(c, 4)
-                n += 1
-        print(f"[0/4] file recipes overlaid onto {n} uncosted SKUs ({_rec.name})")
-
-    # Aliases (main._load_grand_menu_aliases) have the same problem again: a dish
-    # renamed by the Grand Menu is costed by summing its DONOR's recipe, and that
-    # resolution happens in the app, against the live DB. Mirror it here — one
-    # hop, the donor's bom_ingredients only, exactly like _build_sku_effective_cost
-    # (a donor with no recipe of its own yields nothing, which is the documented
-    # trap, not a bug to paper over here).
-    _ali = HERE / "data" / "grand_menu_aliases_2026-09.csv"
-    if _ali.exists():
-        import csv as _csv
-        bom_by_code = {c: s for c, s in sq.execute(
-            "SELECT s.sku_code, SUM(b.ingredient_cost) FROM bom_ingredients b "
-            "JOIN skus s USING(sku_id) GROUP BY s.sku_code") if s}
-        bom_by_code.update(_file_recipe_cost)   # a donor may live in the recipe file
-        n = 0
-        for rec in _csv.DictReader(open(_ali, encoding="utf-8-sig", newline="")):
-            code = (rec.get("sku_code") or "").strip()
-            donor = (rec.get("donor_sku_code") or "").strip()
-            c = bom_by_code.get(donor)
-            if code and c and code not in TIER_CODES and not cost_by_code.get(code):
-                cost_by_code[code] = round(c, 4)
-                n += 1
-        print(f"[0/4] alias costs overlaid onto {n} uncosted SKUs ({_ali.name})")
-
-    _est = HERE / "data" / "estimated_costs_2026-09.csv"
-    if _est.exists():
-        import csv as _csv
-        n = 0
-        for rec in _csv.DictReader(open(_est, encoding="utf-8-sig", newline="")):
-            code = (rec.get("sku_code") or "").strip()
-            try:
-                c = float(rec.get("unit_cost") or 0)
-            except (TypeError, ValueError):
-                continue
-            if code and c > 0 and code not in TIER_CODES and not cost_by_code.get(code):
-                cost_by_code[code] = c
-                n += 1
-        print(f"[0/4] estimated costs overlaid onto {n} uncosted SKUs ({_est.name})")
     code2sid = {c: i for i, c in sq.execute("SELECT sku_id, sku_code FROM skus")}
     name2bid = {nm: b for b, nm in sq.execute("SELECT branch_id, name FROM branches")}
     desc_by_code = {c: (d or "") for c, d in sq.execute("SELECT sku_code, description FROM skus")}
