@@ -46,6 +46,35 @@ def _is_price_as_cost(unit_cost, ex_vat_price):
     return is_price_as_cost(unit_cost, ex_vat_price)
 
 
+PROVENANCE_DDL = (
+    "CREATE TABLE IF NOT EXISTS cost_provenance("
+    "sku_id INTEGER PRIMARY KEY, source TEXT NOT NULL, basis TEXT, value REAL,"
+    " note TEXT, applied_at TEXT)")
+
+
+def _tag(con, sku_id, source, basis, value, note, now):
+    """Record that WE put this number there, and what it was.
+
+    Without this a loader cannot tell its own earlier estimate from a cost the
+    owner typed in: "skip anything already costed" then freezes the first value
+    it ever wrote, and every later edit to the file is silently ignored on any
+    database that has seen the old one (caught 2026-09-18, the day apply_all
+    started writing into the sync's base DB). The rule this enables: a cost is
+    still ours only while it equals what we last wrote — the moment anyone
+    changes it, it is theirs, and we never touch it again.
+    It is also the provenance the UI shows: confirmed / recipe / estimate."""
+    con.execute(
+        "INSERT OR REPLACE INTO cost_provenance(sku_id, source, basis, value, note, applied_at)"
+        " VALUES(?, ?, ?, ?, ?, ?)", (sku_id, source, basis, value, note, now))
+
+
+def _ours(con, sku_id, source, current):
+    """Is the cost on this SKU the one THIS source last wrote, untouched since?"""
+    r = con.execute("SELECT source, value FROM cost_provenance WHERE sku_id=?", (sku_id,)).fetchone()
+    return bool(r and r[0] == source and current is not None
+                and abs((r[1] or 0) - (current or 0)) < 0.005)
+
+
 GRAND_MENU_COST_FILE = HERE / "data" / "grand_menu_costs_2026-09.csv"
 
 
@@ -311,7 +340,8 @@ def load_recipe_file(con, path=None):
     """
     import csv as _csv
     path = Path(path) if path else RECIPE_FILE
-    out = {"skus": 0, "rows": 0, "already_costed": 0, "unknown_sku": 0, "bad_row": 0}
+    out = {"skus": 0, "updated": 0, "unchanged": 0, "rows": 0, "already_costed": 0,
+           "unknown_sku": 0, "bad_row": 0}
     if not path.exists():
         print(f"[recipe] file not found: {path} — skipped")
         return out
@@ -331,21 +361,48 @@ def load_recipe_file(con, path=None):
                 continue
             by_sku.setdefault(code, []).append((seq, rec, qty, price))
 
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         with _use(con) as con:
+            con.execute(PROVENANCE_DDL)
             for code, rows in by_sku.items():
                 r = con.execute("SELECT sku_id FROM skus WHERE sku_code=?", (code,)).fetchone()
                 if r is None:
                     out["unknown_sku"] += 1
                     continue
                 sku_id = r[0]
-                have_bom = con.execute("SELECT COUNT(*) FROM bom_ingredients WHERE sku_id=?",
-                                       (sku_id,)).fetchone()[0]
+                # A recipe is OURS while every one of its rows still carries this
+                # file's name — the workbook ingestors DELETE a SKU's rows before
+                # writing, and the in-app editor re-stamps source_file, so the first
+                # real recipe to arrive takes the dish away from us for good.
+                n_all, n_ours = con.execute(
+                    "SELECT COUNT(*), SUM(CASE WHEN source_file = ? THEN 1 ELSE 0 END)"
+                    " FROM bom_ingredients WHERE sku_id=?", (path.name, sku_id)).fetchone()
+                mine = bool(n_all) and n_all == (n_ours or 0)
                 have_cost = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?",
                                         (sku_id,)).fetchone()
-                if have_bom or (have_cost and (have_cost[0] or 0) > 0):
+                if (n_all and not mine) or (have_cost and (have_cost[0] or 0) > 0):
+                    con.execute("DELETE FROM cost_provenance WHERE sku_id=? AND source='recipe-file'",
+                                (sku_id,))
                     out["already_costed"] += 1
                     continue
-                for seq, rec, qty, price in sorted(rows):
+                want = [(seq, (rec.get("ingredient_code") or "").strip(), round(qty, 6), round(price, 6))
+                        for seq, rec, qty, price in sorted(rows, key=lambda r: r[0])]
+                if mine:
+                    got = [(s_, c_, round(q_ or 0, 6), round(p_ or 0, 6)) for s_, c_, q_, p_ in con.execute(
+                        "SELECT seq, ingredient_code, qty_per_serving, price_per_unit"
+                        " FROM bom_ingredients WHERE sku_id=? ORDER BY seq", (sku_id,))]
+                    if got == want:
+                        _tag(con, sku_id, "recipe-file", "proposed-grams",
+                             round(sum(q * p for _, _, q, p in want), 4),
+                             "ราคาวัตถุดิบจริง · ปริมาณเป็นข้อเสนอ รอครัวยืนยัน", now)
+                        out["unchanged"] += 1
+                        continue
+                    con.execute("DELETE FROM bom_ingredients WHERE sku_id=?", (sku_id,))
+                    out["updated"] += 1
+                else:
+                    out["skus"] += 1
+                total = 0.0
+                for seq, rec, qty, price in sorted(rows, key=lambda r: r[0]):
                     con.execute(
                         "INSERT OR REPLACE INTO bom_ingredients(sku_id, seq, ingredient_code,"
                         " ingredient_name, qty_per_serving, unit, price_per_unit, ingredient_cost,"
@@ -355,7 +412,9 @@ def load_recipe_file(con, path=None):
                          (rec.get("unit") or "").strip(), price, round(qty * price, 4),
                          (rec.get("ingredient_type") or "").strip() or None, path.name))
                     out["rows"] += 1
-                out["skus"] += 1
+                    total += qty * price
+                _tag(con, sku_id, "recipe-file", "proposed-grams", round(total, 4),
+                     "ราคาวัตถุดิบจริง · ปริมาณเป็นข้อเสนอ รอครัวยืนยัน", now)
             con.commit()
         print(f"[recipe] seeded recipes: {out}")
     except Exception as e:
@@ -387,13 +446,15 @@ def load_estimated_costs(con, path=None):
     """
     import csv as _csv
     path = Path(path) if path else ESTIMATED_COST_FILE
-    out = {"applied": 0, "already_costed": 0, "unknown_sku": 0, "bad_value": 0}
+    out = {"applied": 0, "updated": 0, "unchanged": 0, "already_costed": 0,
+           "unknown_sku": 0, "bad_value": 0}
     if not path.exists():
         print(f"[est-cost] file not found: {path} — skipped")
         return out
     try:
         now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         with _use(con) as con:
+            con.execute(PROVENANCE_DDL)
             for rec in _csv.DictReader(open(path, encoding="utf-8-sig", newline="")):
                 code = (rec.get("sku_code") or "").strip()
                 try:
@@ -409,15 +470,34 @@ def load_estimated_costs(con, path=None):
                     continue
                 sku_id = row[0]
                 have = con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=?", (sku_id,)).fetchone()
+                have = (have[0] or 0) if have else 0
                 bom = con.execute("SELECT SUM(ingredient_cost) FROM bom_ingredients WHERE sku_id=?",
                                   (sku_id,)).fetchone()[0]
-                if (have and (have[0] or 0) > 0) or (bom or 0) > 0:
+                mine = have > 0 and _ours(con, sku_id, "estimate", have)
+                if have > 0 and not mine and abs(have - cost) < 0.005 and not con.execute(
+                        "SELECT 1 FROM cost_provenance WHERE sku_id=?", (sku_id,)).fetchone():
+                    # Written before provenance existed (2026-09-17): untagged, and
+                    # exactly the number this file carries. Adopt it, or it could
+                    # never be corrected again.
+                    mine = True
+                if (have > 0 and not mine) or (bom or 0) > 0:
+                    # someone else's number (or a recipe) — not ours to touch; and if
+                    # it USED to be ours, it no longer is
+                    con.execute("DELETE FROM cost_provenance WHERE sku_id=? AND source='estimate'",
+                                (sku_id,))
                     out["already_costed"] += 1
+                    continue
+                if mine and abs(have - cost) < 0.005:
+                    _tag(con, sku_id, "estimate", (rec.get("basis") or "").strip(), cost,
+                         (rec.get("note") or "").strip(), now)
+                    out["unchanged"] += 1
                     continue
                 con.execute(
                     "INSERT OR REPLACE INTO sku_cost(sku_id, unit_cost, effective_from, updated_at)"
                     " VALUES(?, ?, ?, ?)", (sku_id, cost, "2026-09-01", now))
-                out["applied"] += 1
+                _tag(con, sku_id, "estimate", (rec.get("basis") or "").strip(), cost,
+                     (rec.get("note") or "").strip(), now)
+                out["updated" if mine else "applied"] += 1
             con.commit()
         print(f"[est-cost] estimated costs: {out}")
     except Exception as e:
