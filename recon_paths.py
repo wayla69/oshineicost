@@ -11,8 +11,13 @@ never committed) while the code lives in this repo. Resolution order:
 import os
 from pathlib import Path
 
-ONEDRIVE_RECON_DATA = Path(
-    r"C:\Users\ASUS\OneDrive\Daiki\2026\Cost Analysis\All recon data")
+# The old working copy is renamed "_ARCHIVED_Cost Analysis" as the last step of the
+# move off OneDrive (scripts/archive_onedrive_copy.ps1). Know BOTH names, or the
+# rename that finishes the migration silently breaks every recon script.
+_ONEDRIVE_2026 = Path(r"C:/Users/ASUS/OneDrive/Daiki/2026")
+_ONEDRIVE_CANDIDATES = (_ONEDRIVE_2026 / "_ARCHIVED_Cost Analysis" / "All recon data",
+                        _ONEDRIVE_2026 / "Cost Analysis" / "All recon data")
+ONEDRIVE_RECON_DATA = next((c for c in _ONEDRIVE_CANDIDATES if c.is_dir()), _ONEDRIVE_CANDIDATES[0])
 
 _REPO = Path(__file__).resolve().parent
 
