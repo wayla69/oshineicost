@@ -2003,7 +2003,100 @@ function setBbomViewMode(mode) {
   loadBranchBom(true);
 }
 
+// 📦 Requisitions vs recipes (routers/requisition.py). Two honest numbers that will
+// never be equal: what the stores DREW and what the recipes say they should have
+// used. The gap between them is the largest controllable cost in the business.
+let _reqInit = false;
+async function loadRequisitionGap() {
+  const body = document.getElementById('reqBody');
+  if (!body) return;
+  const mf = document.getElementById('reqMonthFrom'), mt = document.getElementById('reqMonthTo');
+  const qs = new URLSearchParams();
+  if (_reqInit && mf.value) qs.set('month', mf.value);
+  if (_reqInit && mt.value) qs.set('month_to', mt.value);
+  let d;
+  try { d = await api(`${API}/api/requisition/vs-recipe?${qs}`); }
+  catch (e) { body.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่ได้</p>'; return; }
+  if (!d.ready) {
+    body.innerHTML = `<p class="text-xs" style="color:#9a3412">📭 ${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
+    return;
+  }
+  if (!_reqInit) {                       // first load: fill the pickers from what exists
+    const opts = d.months.map(m => `<option value="${m}">${m}</option>`).join('');
+    mf.innerHTML = opts; mt.innerHTML = opts;
+    mf.value = d.month_from; mt.value = d.month_to;
+    _reqInit = true;
+  }
+  const b = v => v == null ? '-' : '฿' + fmtN(v);
+  const b2 = v => v == null ? '-' : '฿' + Number(v).toFixed(2);
+  const pc = v => v == null ? '-' : v.toFixed(1) + '%';
+  const ratioCol = r => r == null ? '#64748b' : r >= 1.4 ? '#dc2626' : r >= 1.25 ? '#ea580c' : '#059669';
+  const row = (r, bold) => `<tr class="border-t border-slate-100${bold ? ' font-semibold' : ''}" ${bold ? 'style="background:#fff7ed"' : ''}>
+      <td class="py-1.5 pr-2">${esc(r.branch)}${r.basis === 'used'
+        ? ' <span class="text-[10px] px-1 rounded" style="color:#047857;background:#d1fae5" title="มีมูลค่าสต๊อกต้นงวดและปลายงวดครบ — คิดเป็น ต้นงวด + เบิก − ปลายงวด">ใช้จริง</span>'
+        : (r.branch_id != null ? ' <span class="text-[10px] px-1 rounded" style="color:#9a3412;background:#ffedd5" title="ยังไม่มีมูลค่าสต๊อก — ตัวเลขนี้คือของที่เบิกออก เป็นค่าสูงสุด">เบิก</span>' : '')}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.covers || 0)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b2(r.actual_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${b2(r.recipe_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${ratioCol(r.ratio)}">${r.ratio == null ? '-' : r.ratio.toFixed(2) + '×'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_actual)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_recipe)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#dc2626">${b(r.gap_value)}</td>
+      <td class="py-1.5 text-right">${r.branch_id == null ? '' : `<button class="text-[11px] text-indigo-600 underline" onclick="enterStockCount(${r.branch_id},'${esc(r.branch)}')">กรอกสต๊อก</button>`}</td></tr>`;
+  const ing = (d.ingredients || []).slice(0, 15).map((x, i) => `<tr class="border-t border-slate-100">
+      <td class="py-1 pr-2 text-slate-400">${i + 1}</td>
+      <td class="py-1 pr-2">${esc(x.name || '')} <span class="text-[10px] text-slate-400">${esc(x.code)}</span>${x.in_recipes ? '' : ' <span class="text-[10px] px-1 rounded" style="color:#b91c1c;background:#fee2e2" title="ไม่มีสูตรอาหารใดอ้างถึงวัตถุดิบนี้เลย — เงินก้อนนี้ไม่เคยเข้าต้นทุนตามสูตร">ไม่อยู่ในสูตรใด</span>'}</td>
+      <td class="py-1 pr-2 text-right tabular-nums">${b(x.drawn)}</td>
+      <td class="py-1 pr-2 text-right tabular-nums">${b(x.booked)}</td>
+      <td class="py-1 text-right tabular-nums font-semibold" style="color:#dc2626">${b(x.gap)}</td></tr>`).join('');
+  body.innerHTML = `
+    <div style="overflow-x:auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-400 text-xs border-b">
+      <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">คนทาน</th>
+      <th class="py-1.5 pr-2 text-right">เบิก/ใช้จริง ต่อหัว</th><th class="py-1.5 pr-2 text-right">ตามสูตร ต่อหัว</th>
+      <th class="py-1.5 pr-2 text-right">เท่า</th><th class="py-1.5 pr-2 text-right">Food% (จริง)</th>
+      <th class="py-1.5 pr-2 text-right">Food% (สูตร)</th><th class="py-1.5 pr-2 text-right">ส่วนต่าง ฿</th><th></th>
+    </tr></thead><tbody>${d.branches.map(r => row(r, false)).join('')}${row(d.total, true)}</tbody></table></div>
+    <p class="text-[11px] mt-2 p-2 rounded" style="color:#9a3412;background:#fff7ed">⚠ ${esc(d.caveat)}</p>
+    <div class="text-xs font-semibold text-slate-600 mt-4 mb-1">วัตถุดิบที่ส่วนต่างสูงสุด (เบิก − ที่สูตรคิดไว้) · วัตถุดิบที่ไม่อยู่ในสูตรใดเลยรวม ${b(d.not_in_any_recipe)}</div>
+    <div style="max-height:340px;overflow:auto"><table class="w-full text-xs"><thead><tr class="text-left text-slate-400 border-b">
+      <th class="py-1 pr-2">#</th><th class="py-1 pr-2">วัตถุดิบ</th><th class="py-1 pr-2 text-right">เบิก</th>
+      <th class="py-1 pr-2 text-right">สูตรคิดไว้</th><th class="py-1 text-right">ส่วนต่าง</th></tr></thead><tbody>${ing}</tbody></table></div>`;
+}
+
+async function uploadRequisition(input) {
+  const f = input.files && input.files[0];
+  if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  try {
+    const res = await fetch(`${API}/api/requisition/upload`, { method: 'POST', body: fd });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error((j.detail && (j.detail.detail || j.detail)) || ('HTTP ' + res.status));
+    const s = (j.sheets || []).map(x => `${x.sheet.replace('Use ', '')} ${x.month}`).join(', ');
+    showToast(`อัปโหลดแล้ว: ${s}${(j.skipped || []).length ? ` · ข้าม ${j.skipped.length} ชีต` : ''}`, 'success', 7000);
+    _reqInit = false;
+    await loadRequisitionGap();
+  } catch (e) { showToast('อัปโหลดไม่สำเร็จ: ' + e.message, 'error', 8000); }
+  input.value = '';
+}
+
+async function enterStockCount(branchId, branchName) {
+  const m = document.getElementById('reqMonthTo')?.value;
+  const v = prompt(`มูลค่าสต๊อกวัตถุดิบคงเหลือสิ้นเดือน ${m} ของ ${branchName} (บาท)\n\nต้องมีทั้งเดือนนี้และเดือนก่อนหน้า ระบบจึงจะคิดเป็น "ใช้จริง"`);
+  if (v == null || v.trim() === '') return;
+  const n = parseFloat(v.replace(/,/g, ''));
+  if (!(n >= 0)) { showToast('กรอกเป็นตัวเลข', 'error'); return; }
+  try {
+    const res = await fetch(`${API}/api/requisition/stock-count`, { method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ period_month: m, branch_id: branchId, closing_value: n }) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    showToast(`บันทึกสต๊อกสิ้นเดือน ${m} ของ ${branchName} แล้ว`, 'success');
+    await loadRequisitionGap();
+  } catch (e) { showToast('บันทึกไม่สำเร็จ: ' + e.message, 'error'); }
+}
+
 async function loadBranchBom(force) {
+  loadRequisitionGap();            // independent of the BoM filters below — own month pickers
   await _bbomInitFilters();
   // Phase 16: when chain mode, send branch=ALL (backend aggregates across all active branches)
   const branch = (_bbomViewMode === 'chain') ? 'ALL' : document.getElementById('bbomBranch').value;

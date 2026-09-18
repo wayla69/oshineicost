@@ -188,8 +188,10 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      bom_ingredients arrive with each swap from the sync's base DB, so an
 #                      edit made on the site would last a day; the confirmation is kept here
 #                      as an intent and re-applied by cost_sources.apply_all
+#   requisition_line,  the stores' issue reports and month-end stock counts, uploaded/typed on
+#   stock_count        the site (routers/requisition.py) — the sync has never seen either
 _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings",
-                     "branch_downtime", "cost_override")
+                     "branch_downtime", "cost_override", "requisition_line", "stock_count")
 _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
 
 

@@ -118,6 +118,24 @@
     </div>
   </div>
 
+  <!-- 📦 Requisitions vs recipes: what the branches DREW vs what the recipes say -->
+  <div class="card p-4 mt-5" style="border:1px solid #fed7aa">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <div class="text-sm font-semibold text-slate-700">📦 เบิกจริง vs ต้นทุนตามสูตร — ช่องว่างที่บริหารได้</div>
+      <div class="flex items-center gap-2 text-xs">
+        <select id="reqMonthFrom" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
+        <span class="text-slate-400">ถึง</span>
+        <select id="reqMonthTo" class="border border-slate-200 rounded px-2 py-1" onchange="loadRequisitionGap()"></select>
+        <label class="px-3 py-1.5 rounded-lg font-semibold cursor-pointer" style="background:#ea580c;color:#fff">
+          ⬆ อัปโหลดใบเบิก (.xlsx)
+          <input id="reqFile" type="file" accept=".xlsx" style="display:none" onchange="uploadRequisition(this)">
+        </label>
+      </div>
+    </div>
+    <p class="text-xs text-slate-400 mb-3">ต้นทุนในแอปคิดจาก<b>สูตรอาหาร</b> ส่วนฝ่ายปฏิบัติการดูจาก<b>ใบเบิกวัตถุดิบ</b> — สองตัวเลขนี้ไม่มีวันเท่ากัน ส่วนต่างคือของที่เบิกออกจากคลังแล้วไม่กลายเป็นยอดขาย (ตักเกินสูตร · ของเสีย · ตุนสต๊อก · เมนูที่ยังไม่มีสูตร) · ไฟล์ที่ใช้: <b>รายงานจ่ายสินค้าภายใน</b> จากระบบบัญชี (ชีตละสาขา)</p>
+    <div id="reqBody"><p class="text-xs text-slate-400">กำลังโหลด…</p></div>
+  </div>
+
   <!-- Coverage stat footer -->
   <div id="bbomCoverage" class="text-xs text-slate-400 text-center mt-4 mb-8"></div>
 

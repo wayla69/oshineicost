@@ -249,6 +249,8 @@ MODULE_RULES = [
     ("GET", "/api/analysis/persona",         {"menu.analysis", "customer.buffet"}),
     # ── writes (also write-token gated in main.py — defense in depth) ───────
     ("W",   "/api/cost",                     {"bom.edit"}),
+    ("GET", "/api/requisition",              {"cost.analysis", "ops.report"}),
+    ("W",   "/api/requisition",              {"bom.edit", "data.upload"}),
     ("W",   "/api/skus",                     {"bom.edit"}),
     ("W",   "/api/bom",                      {"bom.edit"}),
     ("W",   "/api/settings",                 {"system.settings"}),

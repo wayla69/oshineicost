@@ -2080,6 +2080,11 @@ if __package__:
 else:
     from routers.ingredients import router as _ingredients_router
 app.include_router(_ingredients_router)
+try:
+    from .routers.requisition import router as _requisition_router
+except ImportError:
+    from routers.requisition import router as _requisition_router
+app.include_router(_requisition_router)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Ingredient ordering — per-branch purchase planning (🧺 แผนสั่งวัตถุดิบรายสาขา)
