@@ -64,7 +64,7 @@ async function loadHome() {
     renderHomeDecisionTiles(brief, fc, sd, scorecard);
     renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak);
     renderHomeForecast(fc);
-    renderHomeLeakWatch(leak);
+    renderHomeLeakWatch(leak, brief);
     renderHomeMenuMovers(movers);
     renderHomeMoversRevenue(movers);
     renderHomePeakHours(hourly, brief.yesterday);
@@ -84,10 +84,17 @@ function _homeStatus(brief, sd, scorecard) {
   const branches = (scorecard && scorecard.branches) || [];
   const worstDrift = branches.reduce((m, b) => (b.vs_avg_pct != null && b.vs_avg_pct < m ? b.vs_avg_pct : m), 0);
   const downCount = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8)).length;
+  // Food cost colours the whole page only when it is genuinely off: above THIS business's
+  // band (red), or climbing / not yet trustworthy (amber). The old bars (45% / 38%) are
+  // à-la-carte norms — for a buffet they were true every day, so the band at the top of
+  // the first screen anyone opens said "ต้องรีบดู" all year and meant nothing.
+  const H = _homeCostHealth(brief);
+  const fcRed = fcp != null && H.above;
+  const fcAmber = fcp != null && ((H.c.delta_pp != null && H.c.delta_pp >= 3) || (H.c.coverage_pct != null && H.c.coverage_pct < 95));
   let level = 'green';
-  if ((fcp != null && fcp > 45) || worstDrift <= -15 || (mom != null && mom < -8)) level = 'red';
-  else if ((fcp != null && fcp > 38) || worstDrift <= -8 || (mom != null && mom < -3)) level = 'amber';
-  return { level, mom, worstDrift, downCount };
+  if (fcRed || worstDrift <= -15 || (mom != null && mom < -8)) level = 'red';
+  else if (fcAmber || worstDrift <= -8 || (mom != null && mom < -3)) level = 'amber';
+  return { level, mom, worstDrift, downCount, H, fcRed, fcAmber };
 }
 
 function renderHomeStatusBand(brief, fc, sd, scorecard) {
@@ -104,7 +111,9 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
   const line1 = `เมื่อวาน (${brief.yesterday}) ทำได้ <b>${fmt(brief.revenue_yesterday || 0)}</b> ${wowTxt} · เดือนนี้ทำไป <b>${fmt(brief.mtd_revenue || 0)}</b> ใน ${brief.mtd_days || 0} วัน${projTxt}`;
   const bits = [];
   if (s.downCount) bits.push(`${s.downCount} สาขาต่ำกว่าปกติ`);
-  if (brief.food_cost_pct_mtd != null && brief.food_cost_pct_mtd > 45) bits.push(`ต้นทุนอาหารสูง ${brief.food_cost_pct_mtd.toFixed(0)}%`);
+  if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% สูงกว่าแถบเป้า ${s.H.hi}%`);
+  else if (s.fcAmber && s.H.c.delta_pp >= 3) bits.push(`ต้นทุนอาหารขึ้น ${s.H.c.delta_pp.toFixed(1)} จุดจากเดือนก่อน`);
+  else if (s.fcAmber) bits.push(`ต้นทุนครบแค่ ${s.H.c.coverage_pct.toFixed(0)}% ของจาน`);
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3) bits.push(`run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}%`);
   const line2 = bits.length ? bits.join(' · ') : 'ทุกตัวชี้วัดอยู่ในเกณฑ์ปกติ';
   el.innerHTML = `<div class="flex items-center gap-3 p-4 rounded-xl" style="background:${palette.bg};border:1px solid ${palette.bd}33">
@@ -117,6 +126,32 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
   </div>`;
 }
 
+// One reading of brief.cost_health for the tile AND the action queue, so the two can
+// never disagree about whether food cost is a problem today.
+function _homeCostHealth(brief) {
+  const c = (brief && brief.cost_health) || {};
+  const fcp = brief ? brief.food_cost_pct_mtd : null;
+  const lo = c.band_lo ?? 55, hi = c.band_hi ?? 70;
+  const above = fcp != null && fcp > hi, below = fcp != null && fcp < lo;
+  const d = c.delta_pp, moved = d != null && Math.abs(d) >= 2;
+  const lowCov = c.coverage_pct != null && c.coverage_pct < 98;
+  const color = fcp == null ? '#94a3b8' : above ? '#ef4444' : below ? '#64748b' : '#10b981';
+  const cov = c.coverage_pct != null ? ` · ต้นทุนครบ ${c.coverage_pct.toFixed(1)}% ของจาน` : '';
+  let foot, footColor;
+  if (lowCov && c.est_food_pct != null) {
+    foot = `ตัวเลขนี้เป็นค่าต่ำสุด — รวมจานที่ยังไม่มีต้นทุนแล้วราว ${c.est_food_pct.toFixed(1)}%`; footColor = '#d97706';
+  } else if (above) {
+    foot = `สูงกว่าแถบเป้า ${hi}%${moved ? ` · ${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุดจากเดือนก่อน` : ''}`; footColor = '#dc2626';
+  } else if (moved) {
+    foot = `${d > 0 ? '▲' : '▼'} ${Math.abs(d).toFixed(1)} จุดจากเดือนก่อน${below ? ' · ต่ำกว่าแถบเป้า' : ' · ยังอยู่ในแถบเป้า'}`;
+    footColor = d > 0 ? '#d97706' : '#059669';
+  } else {
+    foot = below ? 'ต่ำกว่าแถบเป้า — มักแปลว่าต้นทุนยังไม่ครบ หรือเสิร์ฟน้อยกว่าสูตร' : 'อยู่ในแถบเป้า · นิ่งเทียบเดือนก่อน';
+    footColor = below ? '#64748b' : '#059669';
+  }
+  return { c, lo, hi, above, below, moved, lowCov, color, foot, footColor, sub: `แถบเป้า ${lo}–${hi}%${cov}` };
+}
+
 function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
   const el = document.getElementById('home-decision-tiles'); if (!el) return;
   const branches = (scorecard && scorecard.branches) || [];
@@ -124,8 +159,12 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
                        .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
   const mom = sd && sd.total ? sd.total.mom_pct : null;
   const momColor = mom == null ? '#64748b' : mom >= 0 ? '#059669' : mom <= -5 ? '#dc2626' : '#f59e0b';
+  // Food cost is judged against THIS business's band (Settings → ค่าเริ่มต้น; 55-70% for a
+  // buffet), not the à-la-carte 38/45 this tile used to hard-code — that left it red
+  // every day and taught everyone to ignore it. What earns colour now: outside the band,
+  // or a real move against last month. And the figure says how complete its costing is.
   const fcp = brief.food_cost_pct_mtd;
-  const fcColor = fcp == null ? '#94a3b8' : fcp <= 38 ? '#10b981' : fcp <= 45 ? '#f59e0b' : '#ef4444';
+  const H = _homeCostHealth(brief);
   const tiles = [
     {
       icon: '📊', label: 'จังหวะเดือนนี้',
@@ -145,9 +184,9 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
     {
       icon: '🍽️', label: 'สุขภาพมาร์จิ้น (ต้นทุนอาหาร %)',
       value: fcp != null ? `${fcp.toFixed(1)}%` : '—',
-      sub: fcp != null ? 'เกณฑ์ดี ≤38% · เฝ้าระวัง ≤45%' : 'ยังไม่มีข้อมูลต้นทุน',
-      foot: fcp != null ? (fcp > 45 ? 'สูงกว่าเกณฑ์ — ตรวจเมนูต้นทุนสูง' : fcp > 38 ? 'เริ่มสูง — เฝ้าระวัง' : 'อยู่ในเกณฑ์ดี') : '',
-      footColor: fcColor, valColor: fcColor, go: "switchTab('costhead')",
+      sub: fcp != null ? H.sub : 'ยังไม่มีข้อมูลต้นทุน',
+      foot: fcp != null ? H.foot : '',
+      footColor: H.footColor, valColor: H.color, go: "switchTab('costhead')",
     },
   ];
   el.innerHTML = tiles.map(t => `
@@ -184,11 +223,25 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
     const rp = leak.reprinted || {};
     if (rp.bills) A.push({ p: 2, sev: 'amber', icon: '🖨️', text: `บิลมีส่วนลดถูกพิมพ์ซ้ำ ${rp.bills} บิล เมื่อวาน — ตรวจการพิมพ์ซ้ำ`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
   }
+  // Food cost: fires on what is actually wrong TODAY — outside this business's band, a
+  // real move against last month, or a figure that cannot be trusted yet. The old rule
+  // (> 45%) was true every day of the year for a buffet, so it was the permanent #1
+  // "urgent" item and pushed the real ones down.
   const fcp = brief.food_cost_pct_mtd;
-  if (fcp != null && fcp > 45)
-    A.push({ p: 0, sev: 'red', icon: '🍽️', text: `ต้นทุนอาหารเดือนนี้สูง ${fcp.toFixed(0)}% (เกณฑ์ ≤45%) — ตรวจเมนูต้นทุนสูง / สูตร BoM`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
-  else if (fcp != null && fcp > 38)
-    A.push({ p: 2, sev: 'amber', icon: '🍽️', text: `ต้นทุนอาหารเริ่มสูง ${fcp.toFixed(0)}% — เฝ้าระวังเมนูต้นทุนสูง`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+  const H = _homeCostHealth(brief), CH = H.c;
+  if (fcp != null && H.above)
+    A.push({ p: 0, sev: 'red', icon: '🍽️', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — สูงกว่าแถบเป้า ${H.lo}–${H.hi}%${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+  else if (fcp != null && CH.delta_pp != null && CH.delta_pp >= 3)
+    A.push({ p: 2, sev: 'amber', icon: '🍽️', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังอยู่ในแถบเป้า แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+  if (CH.coverage_pct != null && CH.coverage_pct < 95)
+    A.push({ p: 3, sev: 'amber', icon: '🧩', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: "switchTab('coverage')" });
+  const RQ = CH.requisition;
+  if (RQ && RQ.worst && RQ.worst.ratio >= 1.25)
+    A.push({ p: 3, sev: 'amber', icon: '📦', text: `${esc(RQ.worst.branch)} เบิกวัตถุดิบสูงกว่าต้นทุนตามสูตร ${RQ.worst.ratio.toFixed(2)} เท่า (${esc(RQ.worst.month)}) — ตักเกินสูตร ของเสีย หรือตุนสต๊อก`, act: 'ดูเบิก vs สูตร', go: "switchTab('branchbom')" });
+  if (RQ && RQ.missing_month)
+    A.push({ p: 6, sev: 'amber', icon: '📦', text: `ยังไม่ได้อัปโหลดใบเบิกวัตถุดิบเดือน ${esc(RQ.missing_month)} — รายงานเบิกจริง vs สูตรจึงยังไม่มีเดือนนั้น`, act: 'อัปโหลด', go: "switchTab('branchbom')" });
+  if (CH.pending_review && CH.pending_review.count)
+    A.push({ p: 6, sev: 'amber', icon: '🧾', text: `${CH.pending_review.count} เมนูใช้ต้นทุนที่ระบบประมาณให้ (฿${fmtN(CH.pending_review.cogs_month || 0)}/เดือน) — รอครัวตรวจปริมาณแล้วกดยืนยัน`, act: 'ตรวจและยืนยัน', go: "switchTab('coverage')" });
   const down = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
                        .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
   down.slice(0, 3).forEach(b => {
@@ -261,7 +314,7 @@ function renderHomeForecast(fc) {
 }
 
 // 🔎 Daily money-leak radar — heavy discount / cash+heavy / reprinted / zero-gross.
-function renderHomeLeakWatch(leak) {
+function renderHomeLeakWatch(leak, brief) {
   const el = document.getElementById('home-leak-watch'); if (!el) return;
   const dl = document.getElementById('home-leak-date');
   if (dl) dl.textContent = leak && leak.date ? `· ${leak.date}` : '';
@@ -280,12 +333,19 @@ function renderHomeLeakWatch(leak) {
       <span class="text-[11px]" style="color:var(--text-muted)">ส่วนลดรวมทั้งวัน <span style="opacity:.7">(ทุกบิล · ตรงกับหน้า Discounts)</span></span>
       <span class="text-sm font-bold" style="color:var(--text-primary)">฿${fmtN(lt.baht || 0)} <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ${fmtN(lt.bills || 0)} บิล</span></span>
     </div>`;
+  // Given away this month. Not a discount, so it never showed anywhere: a free dish
+  // books no revenue and — until it was costed on 2026-09-18 — no cost either.
+  const gv = brief && brief.cost_health && brief.cost_health.giveaways;
+  const giveBanner = gv && gv.value ? `<div class="flex items-center justify-between mb-2.5 px-2 py-2 rounded-lg cursor-pointer" style="background:rgba(217,119,6,0.07)" onclick="switchTab('coverage')" title="${gv.top.map(x => esc(x.name) + ' ' + fmtN(x.plates) + ' จาน').join(' · ')}">
+      <span class="text-[11px]" style="color:var(--text-muted)">🎁 ของแจกฟรี/แถม เดือนนี้ <span style="opacity:.7">(ต้นทุนจริง · ${fmtN(gv.plates)} จาน${gv.top[0] ? ' · มากสุด ' + esc(gv.top[0].name) : ''})</span></span>
+      <span class="text-sm font-bold" style="color:#b45309">฿${fmtN(gv.value)}</span>
+    </div>` : '';
   const anyHit = cards.some(c => (leak[c.key] || {}).bills);
   if (!anyHit) {
-    el.innerHTML = totalBanner + `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✅</span><span class="text-sm" style="color:var(--text-primary)">ไม่พบรายการผิดปกติเมื่อวาน</span></div>`;
+    el.innerHTML = totalBanner + giveBanner + `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✅</span><span class="text-sm" style="color:var(--text-primary)">ไม่พบรายการผิดปกติเมื่อวาน</span></div>`;
     return;
   }
-  el.innerHTML = totalBanner + `<div class="grid grid-cols-2 gap-2.5">` + cards.map(c => {
+  el.innerHTML = totalBanner + giveBanner + `<div class="grid grid-cols-2 gap-2.5">` + cards.map(c => {
     const v = leak[c.key] || { bills: 0, baht: 0 };
     const hot = v.bills > 0;
     const col = !hot ? '#94a3b8' : c.danger ? '#dc2626' : '#d97706';

@@ -1,5 +1,22 @@
 {
  "avg_ticket_yesterday": 950.0,
+ "cost_health": {
+  "band_hi": 70.0,
+  "band_lo": 55.0,
+  "coverage_pct": 100.0,
+  "delta_pp": 0.0,
+  "est_food_pct": 126.3,
+  "food_pct": 126.3,
+  "giveaways": null,
+  "pending_review": null,
+  "prev_food_pct": 30.0,
+  "requisition": {
+   "latest_month": null,
+   "missing_month": "2026-05",
+   "worst": null
+  },
+  "uncosted_plates": 0
+ },
  "customer_yesterday": 8,
  "dow_label": "Wednesday",
  "food_cost_pct_mtd": 126.3,

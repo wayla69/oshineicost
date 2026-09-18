@@ -1817,6 +1817,8 @@ async function loadPreferences() {
   document.getElementById('prefDefaultMonth').value  = settings.default_month  || '';
   document.getElementById('prefFiscalStart').value   = settings.fiscal_year_start || '1';
   document.getElementById('prefDiscountPolicy').value = settings.discount_policy_pct || '2.5';
+  document.getElementById('prefFoodBandLo').value = settings.food_cost_band_lo || '55';
+  document.getElementById('prefFoodBandHi').value = settings.food_cost_band_hi || '70';
 }
 
 async function savePreferences() {
@@ -1826,6 +1828,8 @@ async function savePreferences() {
     default_month:       document.getElementById('prefDefaultMonth').value,
     fiscal_year_start:   document.getElementById('prefFiscalStart').value,
     discount_policy_pct: document.getElementById('prefDiscountPolicy').value || '2.5',
+    food_cost_band_lo:   document.getElementById('prefFoodBandLo').value || '55',
+    food_cost_band_hi:   document.getElementById('prefFoodBandHi').value || '70',
   };
   try {
     status.textContent = 'Saving…'; status.className = 'text-sm text-slate-400';
