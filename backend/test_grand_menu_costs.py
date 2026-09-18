@@ -426,6 +426,54 @@ def test_estimate_skips_unknown_codes_and_junk_values(monkeypatch, tmp_path):
     assert out["unknown_sku"] == 1 and out["bad_value"] == 2 and out["applied"] == 0
 
 
+def test_a_corrected_estimate_replaces_our_own_earlier_one(monkeypatch, tmp_path):
+    """The 5-litre-gallon fix moved ซอสเทอริยากิ from 6.90 to 5.21. "Skip anything
+    already costed" would have frozen 6.90 forever on any DB that had seen it —
+    the loader could not tell its own estimate from the owner's number."""
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OTHBFAPP00016', 'teriyaki')")
+    _run_est(monkeypatch, tmp_path, con, EST_HEADER + "OTHBFAPP00016,6.90,unit-price,x" + NL)
+    out = _run_est(monkeypatch, tmp_path, con, EST_HEADER + "OTHBFAPP00016,5.21,unit-price,y" + NL)
+    assert out["updated"] == 1
+    assert con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0] == 5.21
+
+
+def test_an_estimate_the_owner_overrode_is_never_ours_again(monkeypatch, tmp_path):
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'X', 'x')")
+    _run_est(monkeypatch, tmp_path, con, EST_HEADER + "X,6.90,unit-price,x" + NL)
+    con.execute("UPDATE sku_cost SET unit_cost=9.99 WHERE sku_id=1")       # the owner speaks
+    out = _run_est(monkeypatch, tmp_path, con, EST_HEADER + "X,5.21,unit-price,y" + NL)
+    assert out["already_costed"] == 1 and out["updated"] == 0
+    assert con.execute("SELECT unit_cost FROM sku_cost WHERE sku_id=1").fetchone()[0] == 9.99
+    assert con.execute("SELECT COUNT(*) FROM cost_provenance").fetchone()[0] == 0
+
+
+def test_an_untagged_estimate_from_before_provenance_is_adopted(monkeypatch, tmp_path):
+    """Databases from 2026-09-17 hold estimates with no tag. If the value is
+    exactly the file's, it is ours — adopt it so it can still be corrected."""
+    con = _est_db()
+    con.execute("INSERT INTO skus VALUES(1, 'X', 'x')")
+    con.execute("INSERT INTO sku_cost VALUES(1, 6.90, '2026-09-01', 'x')")   # untagged
+    assert _run_est(monkeypatch, tmp_path, con, EST_HEADER + "X,6.90,unit-price,x" + NL)["unchanged"] == 1
+    assert _run_est(monkeypatch, tmp_path, con, EST_HEADER + "X,5.21,unit-price,y" + NL)["updated"] == 1
+
+
+def test_a_recipe_file_edit_replaces_our_rows_but_never_a_real_recipe(monkeypatch, tmp_path):
+    con = _rec_db()
+    con.execute("INSERT INTO skus VALUES(1, 'OURS', 'x')")
+    con.execute("INSERT INTO skus VALUES(2, 'THEIRS', 'y')")
+    con.execute("INSERT INTO bom_ingredients VALUES(2,1,'A','a',1,'ก',2.0,2.0,'veg','kitchen.xlsx')")
+    first = REC_HEADER + "OURS,1,V-015,ผักกาดขาว,60,กรัม,0.05,veg," + NL + "THEIRS,1,Z,z,9,กรัม,9,veg," + NL
+    assert _run_rec(monkeypatch, tmp_path, con, first)["skus"] == 1
+    again = REC_HEADER + "OURS,1,V-015,ผักกาดขาว,80,กรัม,0.05,veg," + NL + "THEIRS,1,Z,z,9,กรัม,9,veg," + NL
+    out = _run_rec(monkeypatch, tmp_path, con, again)
+    assert out["updated"] == 1 and out["already_costed"] == 1
+    assert con.execute("SELECT qty_per_serving FROM bom_ingredients WHERE sku_id=1").fetchone()[0] == 80
+    assert con.execute("SELECT ingredient_cost FROM bom_ingredients WHERE sku_id=2").fetchone()[0] == 2.0
+    assert _run_rec(monkeypatch, tmp_path, con, again)["unchanged"] == 1      # and then it is stable
+
+
 def test_the_shipped_estimate_file_parses_and_is_plausible():
     """The file ships in the image; a typo in it would silently mis-cost a dish."""
     import csv
