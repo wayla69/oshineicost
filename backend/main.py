@@ -255,7 +255,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db") \
-            or path.startswith("/api/_admin/export-state") \
+            or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
         # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch

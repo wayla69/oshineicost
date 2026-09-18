@@ -170,3 +170,10 @@ def test_the_sync_endpoint_is_token_gated(client, monkeypatch):
     assert client.get("/api/_admin/cost-overrides", params={"token": "wrong"}).status_code == 404
     r = client.get("/api/_admin/cost-overrides", params={"token": "tok"})
     assert r.status_code == 200 and r.json()["columns"][:2] == ["sku_code", "kind"]
+    # machine-to-machine: the sync has a seed token, not a login session. With the
+    # login gate ON the endpoint must still answer to the token — the first deploy
+    # returned 401 here, which the (non-fatal) pull would have swallowed forever.
+    monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret")
+    assert client.get("/api/_admin/cost-overrides", params={"token": "tok"}).status_code == 200
+    assert client.get("/api/_admin/cost-overrides", params={"token": "wrong"}).status_code == 404
+    assert client.get("/api/cost/review").status_code == 401          # the human endpoints stay gated
