@@ -507,6 +507,19 @@
           <input id="prefDiscountPolicy" type="number" min="0" max="100" step="0.1" placeholder="2.5"
             class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-indigo-400">
         </div>
+        <div class="border-t border-slate-100 pt-5 flex items-center justify-between gap-4">
+          <div>
+            <p class="text-sm font-medium text-slate-700">แถบเป้าต้นทุนอาหาร (%)</p>
+            <p class="text-xs text-slate-400 mt-0.5">ช่วงที่ถือว่าปกติของธุรกิจนี้ — หน้าแรกจะขึ้นสีแดงเมื่อสูงกว่าค่าบน และเตือนเมื่อขยับผิดปกติเทียบเดือนก่อน (บุฟเฟ่ต์: 55–70)</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="prefFoodBandLo" type="number" min="1" max="99" step="1" placeholder="55"
+              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <span class="text-slate-400">–</span>
+            <input id="prefFoodBandHi" type="number" min="2" max="100" step="1" placeholder="70"
+              class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-20 focus:outline-none focus:ring-2 focus:ring-indigo-400">
+          </div>
+        </div>
         <div class="border-t border-slate-100 pt-5 flex items-center gap-3">
           <button onclick="savePreferences()"
             class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium rounded-lg transition-colors">

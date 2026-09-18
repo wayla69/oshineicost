@@ -7,7 +7,7 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query
 from typing import Optional
-from rules import VAT_DIVISOR, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, food_cost_band, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql
 from targets import targets_for_month
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _group_filter, get_db, ttl_cache,
@@ -651,6 +651,7 @@ def home_brief(branch: Optional[str] = Query(None)):
         mtd_rev_val  = mtd_row["mtd_revenue"] if mtd_row else 0
         if mtd_bom_cost and mtd_rev_val and mtd_rev_val > 0:
             food_cost_pct_mtd = round(mtd_bom_cost / mtd_rev_val * 100, 1)
+        cost_health = _cost_health(con, current_month, branch, food_cost_pct_mtd, mtd_rev_val)
 
     return {
         "yesterday": yesterday,
@@ -666,7 +667,125 @@ def home_brief(branch: Optional[str] = Query(None)):
         "mtd_by_branch": mtd_by_branch,
         "food_cost_pct_mtd": food_cost_pct_mtd,
         "mtd_bom_cost": mtd_bom_cost,
+        "cost_health": cost_health,
     }
+
+
+def _prev_month(m: str) -> str:
+    y, mo = int(m[:4]), int(m[5:7])
+    return f"{y - 1}-12" if mo == 1 else f"{y}-{mo - 1:02d}"
+
+
+def _cost_health(con, month, branch, food_pct, mtd_rev):
+    """Everything the home page needs to say something TRUE about food cost.
+
+    A bare percentage against a fixed bar told the owner nothing: the bar was an
+    à-la-carte norm, so the tile was red every day, and the figure itself is a
+    floor whenever dishes are uncosted. This returns the band that applies to this
+    business, how the figure MOVED against last month (the signal worth a glance),
+    how complete the costing is, and the cost work that is waiting on a human.
+    Each part degrades to None on a DB that lacks its tables — never an error on
+    the first screen anyone sees."""
+    lo, hi = food_cost_band(con)
+    out = {"food_pct": food_pct, "band_lo": lo, "band_hi": hi, "delta_pp": None, "prev_food_pct": None,
+           "coverage_pct": None, "uncosted_plates": None, "est_food_pct": None,
+           "pending_review": None, "giveaways": None, "requisition": None}
+    bf = "AND b.name = :branch" if branch else ""
+    p = {"m": month, "pm": _prev_month(month), **({"branch": branch} if branch else {})}
+    cogs = _cogs_case("s", "sk", "c")
+    try:
+        # movement: both months on ONE basis (cogs over the same table's revenue), so
+        # the delta is a change in the business, not a change of denominator
+        rows = {r["period_month"]: r for r in con.execute(f"""
+            SELECT s.period_month, SUM({cogs}) AS cg, SUM(s.subtotal_ex_vat) AS rev
+              FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
+              LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
+              JOIN branches b ON b.branch_id = s.branch_id
+             WHERE s.period_month IN (:m, :pm) AND b.name != 'ALL' {bf}
+             GROUP BY s.period_month""", p).fetchall()}
+        cur, prev = rows.get(month), rows.get(p["pm"])
+        if cur and prev and cur["rev"] and prev["rev"]:
+            a, b_ = cur["cg"] / cur["rev"] * 100, prev["cg"] / prev["rev"] * 100
+            out["prev_food_pct"], out["delta_pp"] = round(b_, 1), round(a - b_, 1)
+    except Exception:
+        pass
+    try:
+        # coverage by PLATES (buffet dishes carry ~฿0 revenue, so a revenue-weighted
+        # figure always says "fine"); package lines and the service charge are ฿0 on
+        # purpose and are not a gap
+        r = con.execute(f"""
+            SELECT SUM(s.qty) AS plates,
+                   SUM(CASE WHEN COALESCE(e.recipe_cost, 0) > 0 THEN s.qty ELSE 0 END) AS costed,
+                   SUM(s.qty * COALESCE(e.recipe_cost, 0)) AS cg
+              FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
+              LEFT JOIN sku_effective_cost e ON e.sku_id = s.sku_id
+              JOIN branches b ON b.branch_id = s.branch_id
+             WHERE s.period_month = :m AND b.name != 'ALL' {bf} AND s.qty > 0
+               AND NOT {tier_code_sql('sk.sku_code')} AND sk.sku_code != 'SERVICECHARGE'
+            """, p).fetchone()
+        if r and r["plates"]:
+            gap = (r["plates"] or 0) - (r["costed"] or 0)
+            out["coverage_pct"] = round((r["costed"] or 0) / r["plates"] * 100, 1)
+            out["uncosted_plates"] = round(gap)
+            if food_pct is not None and r["costed"] and mtd_rev:
+                out["est_food_pct"] = round(food_pct + gap * (r["cg"] / r["costed"]) / mtd_rev * 100, 1)
+    except Exception:
+        pass
+    try:
+        r = con.execute("""
+            SELECT COUNT(*) AS n,
+                   SUM(COALESCE(e.recipe_cost, 0) * COALESCE((SELECT SUM(m.qty) FROM sales_sku_monthly m
+                        WHERE m.sku_id = p.sku_id AND m.period_month = ?), 0)) AS cg
+              FROM cost_provenance p LEFT JOIN sku_effective_cost e USING(sku_id)
+             WHERE p.source != 'confirmed'""", (month,)).fetchone()
+        if r and r["n"]:
+            out["pending_review"] = {"count": r["n"], "cogs_month": round(r["cg"] or 0)}
+    except Exception:
+        pass
+    try:
+        # given away: the dish's own name says so. Costed now, so it finally has a price tag.
+        rows = con.execute(f"""
+            SELECT COALESCE(sk.description, sk.sku_code) AS name, SUM(s.qty) AS q,
+                   SUM(s.qty * COALESCE(e.recipe_cost, 0)) AS v
+              FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
+              LEFT JOIN sku_effective_cost e ON e.sku_id = s.sku_id
+              JOIN branches b ON b.branch_id = s.branch_id
+             WHERE s.period_month = :m AND b.name != 'ALL' {bf} AND s.qty > 0
+               AND (sk.description LIKE '%ฟรี%' OR sk.description LIKE '%Free%' OR sk.description LIKE '%แถม%')
+               AND NOT {tier_code_sql('sk.sku_code')}
+             GROUP BY sk.sku_id HAVING v > 0 ORDER BY v DESC""", p).fetchall()
+        if rows:
+            out["giveaways"] = {"value": round(sum(x["v"] for x in rows)),
+                                "plates": round(sum(x["q"] for x in rows)),
+                                "top": [{"name": x["name"], "plates": round(x["q"]), "value": round(x["v"])}
+                                        for x in rows[:3]]}
+    except Exception:
+        pass
+    try:
+        last_full = _prev_month(month)
+        got = [x[0] for x in con.execute("SELECT DISTINCT period_month FROM requisition_line ORDER BY 1")]
+        req = {"latest_month": got[-1] if got else None,
+               "missing_month": last_full if last_full not in got else None, "worst": None}
+        if got:
+            lm = got[-1]
+            worst = None
+            for bname, d, cg in con.execute(f"""
+                    SELECT b.name, q.drawn,
+                           (SELECT SUM({cogs}) FROM v_sales_sku_monthly s JOIN skus sk ON sk.sku_id = s.sku_id
+                             LEFT JOIN sku_cost c ON c.sku_id = s.sku_id
+                             WHERE s.branch_id = q.branch_id AND s.period_month = ?) AS cg
+                      FROM (SELECT branch_id, SUM(value) AS drawn FROM requisition_line
+                             WHERE period_month = ? GROUP BY branch_id) q
+                      JOIN branches b ON b.branch_id = q.branch_id""", (lm, lm)):
+                if cg and d and (worst is None or d / cg > worst["ratio"]):
+                    worst = {"branch": bname, "ratio": round(d / cg, 2), "month": lm}
+            req["worst"] = worst
+        out["requisition"] = req
+    except Exception:
+        # no requisition_line table yet = nothing was ever uploaded, which is itself
+        # the thing to say (the table is only created by the first upload)
+        out["requisition"] = {"latest_month": None, "missing_month": _prev_month(month), "worst": None}
+    return out
 
 
 # ---------------------------------------------------------------------------

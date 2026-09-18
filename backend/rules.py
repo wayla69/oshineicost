@@ -68,6 +68,26 @@ def discount_policy_pct(con) -> float:
     return v if 0 <= v <= 100 else DISCOUNT_POLICY_PCT
 
 
+# Food-cost band for THIS business. The home page used to judge food cost against
+# 38% / 45% — à-la-carte norms — which left the tile permanently red for a buffet
+# whose honest recipe cost runs 52-68%, and put "ต้นทุนอาหารสูง" at the top of the
+# action queue every single day. 55-70 is the band the buffet tab has always used.
+FOOD_COST_BAND = (55.0, 70.0)
+
+
+def food_cost_band(con) -> tuple:
+    """(lo, hi) in force: app_settings food_cost_band_lo / _hi (Settings →
+    ค่าเริ่มต้น), else FOOD_COST_BAND. Unreadable, out of range or lo >= hi → default."""
+    try:
+        got = dict(con.execute("SELECT key, value FROM app_settings "
+                               "WHERE key IN ('food_cost_band_lo','food_cost_band_hi')").fetchall())
+        lo = float(got.get("food_cost_band_lo") or FOOD_COST_BAND[0])
+        hi = float(got.get("food_cost_band_hi") or FOOD_COST_BAND[1])
+    except Exception:
+        return FOOD_COST_BAND
+    return (lo, hi) if 0 < lo < hi <= 100 else FOOD_COST_BAND
+
+
 def discount_excess(discount: float, base: float, policy_pct: float) -> float:
     """Baht given beyond the ceiling: discount − policy% × pre-discount base, never negative."""
     return round(max(0.0, (discount or 0.0) - (policy_pct / 100.0) * (base or 0.0)), 2)

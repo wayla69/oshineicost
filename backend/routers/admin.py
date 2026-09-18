@@ -148,7 +148,8 @@ def put_settings(body: Dict[str, str]):
             )
         con.commit()
     # settings feed cached endpoints (e.g. discount_alerts thresholds) → drop stale
-    invalidate_cache("analysis_discount_alerts", "analysis_discounts", "report_management")
+    invalidate_cache("analysis_discount_alerts", "analysis_discounts", "report_management",
+                     "home_brief")     # the food-cost band drives the home tile
     return {"ok": True}
 
 
