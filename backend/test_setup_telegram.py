@@ -7,9 +7,16 @@ token on stdin - never as an argument.
 """
 import argparse
 
+import pytest
+
 import setup_telegram as st
 
 TOKEN = "123456789:AAH" + "x" * 32
+
+
+@pytest.fixture(autouse=True)
+def _no_real_trail(tmp_path, monkeypatch):
+    monkeypatch.setattr(st, "TRAIL_FILE", tmp_path / "trail.log")      # never the real backend/logs file
 GROUP = {"id": -1001234567890, "title": "Oshinei Alerts", "type": "supergroup"}
 ME = {"id": 99, "first_name": "Wayla", "type": "private"}
 
@@ -142,6 +149,29 @@ def test_test_and_fly_only_need_a_finished_setup(tmp_path):
     env = tmp_path / ".env"
     st.write_env({"OSHINEI_TG_TOKEN": TOKEN, "OSHINEI_TG_CHAT_ID": "5"}, env)
     assert st.run(args(test=True), FakeUI(), FakeTelegram(), env) == 0
+
+
+def test_the_trail_says_where_it_stopped_and_never_holds_the_token(tmp_path):
+    # 2026-09-21: a first run saved nothing and left nothing to read
+    trail = []
+    ui = FakeUI(secrets=["987654321:" + "y" * 35] * 5)               # a wrong token, five times
+    assert st.run(args(), ui, FakeTelegram([]), tmp_path / ".env", trail=trail.append) == 1
+    assert trail[0] == "--- started (setup)" and trail[-1] == "--- ended, exit 1 - NOT complete"
+    assert sum("Telegram refused it: Unauthorized" in ln for ln in trail) == 5
+
+    trail = []
+    ui = FakeUI(answers=["n"], secrets=[TOKEN])
+    assert st.run(args(), ui, FakeTelegram([added_to_group()]), tmp_path / ".env", trail=trail.append, busy=lambda: "") == 0
+    joined = "\n".join(st.scrub(ln) for ln in trail)
+    assert "found: Oshinei Alerts" in joined and "ok - delivered" in joined and trail[-1] == "--- ended, exit 0"
+    assert TOKEN not in joined and TOKEN[:4] + "..." not in joined     # not even the masked form
+    assert st.scrub(f"bot {st.mask(TOKEN)} / {TOKEN}") == "bot <bot> / <token>"
+
+
+def test_the_trail_file_is_written_scrubbed(tmp_path):
+    f = tmp_path / "logs" / "setup_telegram.log"
+    st.file_trail(f"x Telegram refused {TOKEN}", f)
+    assert f.read_text(encoding="utf-8").strip().endswith("x Telegram refused <token>")
 
 
 def test_the_bat_is_ascii_and_writes_no_log():
