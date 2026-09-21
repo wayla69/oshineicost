@@ -12,6 +12,8 @@
 # desktop session, and no password is stored. 11:15 = after the last morning job (10:45);
 # 17:00 = after the 16:00 live sync; at logon = when someone sits down at the PC, which is
 # also when the toast will actually be seen.
+# 30-minute limit: the watchdog may re-run DB Backup and Feedback Sync (one at a time, up to
+# 6 minutes each) before it reports.
 param([switch]$Remove)
 
 $name = 'Oshinei Task Watchdog'
@@ -32,7 +34,7 @@ $triggers = @(
     (New-ScheduledTaskTrigger -Daily -At '17:00')
 )
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries `
-    -ExecutionTimeLimit (New-TimeSpan -Minutes 15) -MultipleInstances IgnoreNew
+    -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
 
 Register-ScheduledTask -TaskName $name -Action $action -Trigger $triggers -Settings $settings -Principal $principal `
