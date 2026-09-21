@@ -20,6 +20,11 @@ never put on a command line (flyctl gets it on stdin), and is written to one pla
 backend/.env, which is gitignored and copied nightly to OneDrive/Oshinei Backups/
 secrets by "Backup DB.bat".
 
+What happened is kept in backend/logs/setup_telegram.log - the step reached and what
+Telegram answered, NEVER the token (not even masked). Added 2026-09-21 after a first run
+left nothing saved and nothing to read: the window keeps no log on purpose, so "did it
+work?" could not be answered.
+
 The one thing no program can do for you: create the bot. In Telegram open @BotFather,
 send /newbot, pick a name and a username ending in "bot", and copy the token it shows.
 """
@@ -42,6 +47,7 @@ sys.path.insert(0, str(HERE))
 import notify  # noqa: E402
 
 ENV_FILE = HERE / ".env"
+TRAIL_FILE = HERE / "logs" / "setup_telegram.log"
 FLY_APP = "oshinei-dashboard"
 TOKEN_RE = re.compile(r"^\d{6,12}:[A-Za-z0-9_-]{30,}$")
 FIND_CHAT_SECONDS = 180
@@ -149,6 +155,39 @@ def push_to_fly(token: str, chat_id: str, run=subprocess.run) -> tuple[bool, str
     return r.returncode == 0, (tail[-1] if tail else "")
 
 
+# ── what happened, without the secret ────────────────────────────────────────
+_MASKED = re.compile(r"\b\d{4}\.\.\.\S{4}")
+_TOKENISH = re.compile(r"\d{6,12}:[A-Za-z0-9_-]{30,}")
+
+
+def scrub(line: str) -> str:
+    return _TOKENISH.sub("<token>", _MASKED.sub("<bot>", line))
+
+
+def file_trail(line: str, path: Path = None) -> None:
+    try:
+        path = path or TRAIL_FILE
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(time.strftime("%Y-%m-%d %H:%M:%S  ") + scrub(line) + "\n")
+    except OSError:
+        pass                                        # a trail must never break the setup
+
+
+class Trailed:
+    """The console, plus a copy of every outcome line (ok / x / found / STEP / skipped)."""
+    _KEEP = ("ok ", "x ", "found:", "STEP ", "skipped", "Done.", "cancelled")
+
+    def __init__(self, ui, trail):
+        self._ui, self._trail = ui, trail
+        self.ask, self.secret, self.sleep, self.clock = ui.ask, ui.secret, ui.sleep, ui.clock
+
+    def out(self, s=""):
+        if str(s).strip().startswith(self._KEEP):
+            self._trail(str(s).strip())
+        self._ui.out(s)
+
+
 # ── the walk-through ─────────────────────────────────────────────────────────
 class UI:
     """Console I/O in one place so the flow can be driven by a test."""
@@ -233,7 +272,17 @@ def offer_fly(ui, token: str, chat_id: str, push=push_to_fly, busy=a_sync_is_run
     ui.out("  ok - the live app has them" + (f" ({last})" if last else "") if ok else f"  x flyctl failed: {last}")
 
 
-def run(args, ui=UI, call=tg_call, env_file: Path = ENV_FILE, push=push_to_fly, busy=a_sync_is_running) -> int:
+def run(args, ui=UI, call=tg_call, env_file: Path = ENV_FILE, push=push_to_fly, busy=a_sync_is_running,
+        trail=file_trail) -> int:
+    mode = "test" if args.test else "fly-only" if args.fly_only else "chat-only" if args.chat_only else "setup"
+    trail(f"--- started ({mode})")
+    ui = Trailed(ui, trail)
+    rc = _run(args, ui, call, env_file, push, busy)
+    trail(f"--- ended, exit {rc}" + ("" if rc == 0 else " - NOT complete"))
+    return rc
+
+
+def _run(args, ui, call, env_file, push, busy) -> int:
     saved = read_env(env_file)
     token, chat_id = saved.get("OSHINEI_TG_TOKEN", ""), saved.get("OSHINEI_TG_CHAT_ID", "")
     if args.test or args.fly_only:
@@ -244,7 +293,7 @@ def run(args, ui=UI, call=tg_call, env_file: Path = ENV_FILE, push=push_to_fly, 
             offer_fly(ui, token, chat_id, push, busy)
             return 0
         sent = call(token, "sendMessage", {"chat_id": chat_id, "text": "Oshinei alerts: test message"})
-        ui.out("ok - sent" if sent.get("ok") else f"x not sent: {sent.get('description')}")
+        ui.out("ok - test message sent" if sent.get("ok") else f"x not sent: {sent.get('description')}")
         return 0 if sent.get("ok") else 1
 
     ui.out("Oshinei - Telegram alerts setup. Nothing is saved until the test message arrives.")
@@ -281,6 +330,7 @@ def main(argv=None) -> int:
         return run(ap.parse_args(argv))
     except (KeyboardInterrupt, EOFError):
         print("\ncancelled - nothing was changed")
+        file_trail("cancelled by the user (Ctrl+C / window input closed)")
         return 1
 
 
