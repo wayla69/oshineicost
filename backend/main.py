@@ -961,7 +961,9 @@ def _export_state(token: str = Query("")):
         con = _sq.connect(f"file:{DB_PATH}?mode=ro", uri=True)
         counts = {}
         try:
-            names = [r[0] for r in con.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND {_pp('name')} ORDER BY name")]
+            from core import _MERGED_ROWS as _merged          # rows a person wrote on the site live only here too
+            _also = " OR name IN (" + ",".join(f"'{t}'" for t in _merged) + ")" if _merged else ""
+            names = [r[0] for r in con.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND ({_pp('name')}{_also}) ORDER BY name")]
             for t in names:
                 cols = [r[1] for r in con.execute(f"PRAGMA table_info([{t}])")]
                 yield z.compress((_json.dumps({"table": t, "columns": cols}, ensure_ascii=False) + "\n").encode("utf-8"))
