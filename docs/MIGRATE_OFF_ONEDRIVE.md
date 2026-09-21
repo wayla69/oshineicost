@@ -59,6 +59,9 @@
    อ่านค่า `Result`: **`0` = สำเร็จ** · **`1` = .bat เข้าสาย "SYNC FAILED"** (คือ `sync_mssql.py` ตาย —
    เช็ค `backend/.env` ก่อนอย่างอื่นเสมอ) · `267014` = task ถูกสั่งหยุด
    นี่คือวิธี**เร็วที่สุด**ในการวินิจฉัย sync ที่ไม่ทำงาน — เร็วกว่าไปไล่หาปัญหา network/SQL มาก
+   **ตั้งแต่ 2026-09-21 ไม่ต้องเช็คมือแล้ว:** task `Oshinei Task Watchdog` (11:15 / 17:00 / ตอน logon) อ่านค่าพวกนี้ทุกวัน
+   แล้วแจ้งที่หน้าแรกของแอป (admin) + Telegram + toast บนเครื่อง — `backend/task_watchdog.py`
+   เครื่องใหม่/ย้ายโฟลเดอร์: `powershell -ExecutionPolicy Bypass -File scriptsegister_task_watchdog.ps1`
 6. Deploy worktree: ลบ `~/oshinei_deploy_clean` เดิม (มันชี้ .git เก่า) — `deploy-clean.sh` สร้างใหม่เองจาก repo ใหม่
 7. ย้าย Claude Code memory: copy `~/.claude/projects/<key เดิม>/memory/` → `<key ใหม่>` (path เปลี่ยน = project key เปลี่ยน)
 8. เปลี่ยนชื่อโฟลเดอร์เดิมใน OneDrive เป็น `_ARCHIVED_Cost Analysis` **อย่าเพิ่งลบ** (กันเผลอเข้าไปแก้ + เผื่อไฟล์ตกหล่น เก็บไว้ 1–2 สัปดาห์)

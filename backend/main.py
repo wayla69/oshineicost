@@ -255,7 +255,7 @@ async def enforce_auth(request: Request, call_next):
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
             or path.startswith("/api/_admin/seed-db") \
-            or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides") \
+            or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
             or path.startswith("/api/feedback/webhook/") \
             or path.startswith("/api/feedback/survey/"):
         # …and so are guests' QR-survey answers (/api/feedback/survey/{code}): the branch
@@ -695,6 +695,58 @@ def usage_adoption_digest_send(request: Request):
     _usage_admin(request)
     rec = _adoption_digest_build(force=True)
     return {"ok": True, **rec}
+
+
+# ── scheduled-task health (the office PC's watchdog) ─────────────────────────
+# backend/task_watchdog.py runs on the office PC, reads Task Scheduler and POSTs
+# what it found. Kept in usage.db (survives the daily DB push) for the admins'
+# home banner. The receive time is OURS, not the PC's: a report that stops
+# arriving is itself the finding - the PC is off and nothing is syncing - and it
+# is the one failure nothing on that PC can report.
+TASK_HEALTH_SILENT_HOURS = 36
+_TASK_PROBLEM_LEVELS = ("fail", "stale", "stuck", "missed")
+
+
+@app.post("/api/_admin/task-health", include_in_schema=False)
+async def _task_health_report(request: Request):
+    """Machine-to-machine, seed token in the X-Seed-Token header (404 on mismatch,
+    like seed-db); exempt from the login gate for the same reason seed-db is."""
+    if not _accepted_tokens() or not _token_accepted(request.headers.get("X-Seed-Token", "")):
+        raise HTTPException(status_code=404, detail="not found")
+    raw = await request.body()
+    if len(raw) > 64_000:
+        raise HTTPException(status_code=413, detail="report too large")
+    try:
+        rep = _json.loads(raw.decode("utf-8"))
+        if not isinstance(rep, dict) or not isinstance(rep.get("tasks"), list):
+            raise ValueError
+    except ValueError:
+        raise HTTPException(status_code=400, detail="bad report")
+    _usage_meta_set("task_health", _json.dumps(
+        {"received_at": _thai_now().strftime("%Y-%m-%d %H:%M:%S"), "report": rep}, ensure_ascii=False))
+    return {"ok": True}
+
+
+def _task_health_view(now=None) -> dict:
+    raw = _usage_meta_get("task_health")
+    if not raw:
+        return {"known": False}
+    rec = _json.loads(raw)
+    rep = rec.get("report") or {}
+    now = now or _thai_now()
+    age = (now - datetime.strptime(rec["received_at"], "%Y-%m-%d %H:%M:%S")).total_seconds() / 3600
+    problems = [t for t in rep.get("tasks") or [] if t.get("level") in _TASK_PROBLEM_LEVELS]
+    return {"known": True, "received_at": rec["received_at"], "age_hours": round(age, 1),
+            "silent": age > TASK_HEALTH_SILENT_HOURS, "silent_after_hours": TASK_HEALTH_SILENT_HOURS,
+            "host": rep.get("host"), "checked_at": rep.get("checked_at"), "signature": rep.get("signature") or "",
+            "problems": problems, "tasks": rep.get("tasks") or []}
+
+
+@app.get("/api/usage/task-health")
+def usage_task_health(request: Request):
+    """What the office PC's watchdog last reported, and how long ago (admins)."""
+    _usage_admin(request)
+    return _task_health_view()
 
 
 # Serve vendor JS/CSS
