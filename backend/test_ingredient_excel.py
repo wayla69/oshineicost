@@ -176,18 +176,21 @@ def test_import_refuses_a_file_with_no_recognisable_header(client):
 # ── ยอดซื้อวัตถุดิบรายสัปดาห์ vs ยอดขาย ─────────────────────────────────────
 def test_purchases_template_lists_every_branch_and_week(client):
     ws = _sheet(client.get("/api/ingredients/purchases.template.xlsx", params={"weeks": 3}))
-    assert [c.value for c in ws[3]][:5] == ["สาขา", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
-                                             "ยอดซื้อวัตถุดิบ (บาท)"]
+    head = [c.value for c in ws[3]]
+    # column 2 is the sales team's branch code (2026-09-21); the week columns follow it
+    assert head[:6] == ["สาขา", "รหัสสาขา POS", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
+                        "ยอดซื้อวัตถุดิบ (บาท)"]
+    W, SUN, LABEL = head.index("สัปดาห์เริ่ม"), head.index("ถึงวันที่"), head.index("สัปดาห์ที่")
     body = [[c.value for c in r] for r in ws.iter_rows(min_row=4)]
     assert {r[0] for r in body} == {"BranchA", "BranchB"}
-    assert len({r[1] for r in body}) == 3                     # three weeks offered
+    assert len({r[W] for r in body}) == 3                     # three weeks offered
     for r in body:
         import datetime as _dt
-        d = _dt.date.fromisoformat(str(r[1])[:10])
+        d = _dt.date.fromisoformat(str(r[W])[:10])
         assert d.weekday() == 0, "every week must be keyed on its Monday"
         # the other system is queried by range — each row spells out its Mon→Sun + ISO week
-        assert _dt.date.fromisoformat(r[2]) == d + _dt.timedelta(days=6)
-        assert r[3].startswith(f"W{d.isocalendar()[1]:02d}/")
+        assert _dt.date.fromisoformat(r[SUN]) == d + _dt.timedelta(days=6)
+        assert r[LABEL].startswith(f"W{d.isocalendar()[1]:02d}/")
 
 
 def test_purchases_template_round_trips_with_its_extra_columns(client):
