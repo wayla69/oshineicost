@@ -20,7 +20,9 @@ BRANCH_TH = {"surin": "สุรินทร์", "ubon": "อุบลราช
 REV_BASE = "(total_inc_vat-COALESCE(service_charge,0))/1.07+discount"
 
 # Known location of the live production DB (used when the local copy is a stub / lacks tables).
-LIVE_DB = r"C:\Users\ASUS\OneDrive\Daiki\2026\Cost Analysis\backend\oshinei.db"
+# The working copy left OneDrive on 2026-07-20 (docs/MIGRATE_OFF_ONEDRIVE.md); the DB that
+# stayed behind in the archived folder is STALE and must never be read as "live".
+LIVE_DB = os.environ.get("OSHINEI_DB") or r"C:\Users\ASUS\Oshinei\backend\oshinei.db"
 
 
 # Read-only DB URI — never write, never run a server.

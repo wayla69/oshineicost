@@ -43,9 +43,10 @@ def _find_db(explicit: str | None) -> str:
     cands += [
         os.path.join(HERE, "oshinei.db"),
         os.path.join(REPO, "backend", "oshinei.db"),
-        # worktrees share the same OneDrive folder; the live DB lives in the
-        # canonical (non-worktree) backend dir.
-        r"C:\Users\ASUS\OneDrive\Daiki\2026\Cost Analysis\backend\oshinei.db",
+        # in a git worktree the checked-in DB is a stub; the live DB lives in the
+        # canonical (non-worktree) backend dir. NOT the archived OneDrive copy:
+        # that DB is stale, and "largest file wins" below would pick it silently.
+        r"C:\Users\ASUS\Oshinei\backend\oshinei.db",
     ]
     best = None
     for c in cands:

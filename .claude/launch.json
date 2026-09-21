@@ -110,23 +110,6 @@
         "OSHINEI_DB": "_uxtest.db"
       },
       "port": 8013
-    },
-    {
-      "name": "oshinei-sep",
-      "runtimeExecutable": "py",
-      "runtimeArgs": [
-        "-3.12",
-        "-m",
-        "uvicorn",
-        "main:app",
-        "--port",
-        "8020"
-      ],
-      "cwd": "${workspaceFolder}/backend",
-      "env": {
-        "OSHINEI_DB": "C:/Users/ASUS/AppData/Local/Temp/claude/C--Users-ASUS-OneDrive-Daiki-2026-Cost-Analysis/e075b584-65ef-49d9-be9f-d9c1d0fc14bd/scratchpad/view.db"
-      },
-      "port": 8020
     }
   ]
 }
