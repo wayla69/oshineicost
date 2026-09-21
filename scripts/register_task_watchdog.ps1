@@ -13,7 +13,7 @@
 # 17:00 = after the 16:00 live sync; at logon = when someone sits down at the PC, which is
 # also when the toast will actually be seen.
 # 30-minute limit: the watchdog may re-run DB Backup and Feedback Sync (one at a time, up to
-# 6 minutes each) before it reports.
+# 12 minutes each) before it reports.
 param([switch]$Remove)
 
 $name = 'Oshinei Task Watchdog'
