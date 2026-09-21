@@ -15,6 +15,7 @@ async function loadHome() {
   const _fk = _filterKey(); if (_tabLastKey.home === _fk) return; _tabLastKey.home = _fk;
   const loading = document.getElementById('home-brief-loading');
   try { renderAdoptionBanner(); } catch(e) {}     // admins: this week's adoption digest, once per week
+  try { renderTaskHealthBanner(); } catch(e) {}   // admins: a scheduled task on the office PC failed / went quiet
   const content = document.getElementById('home-brief-content');
   if (loading) loading.classList.remove('hidden');
   if (content) content.classList.add('hidden');
@@ -2763,6 +2764,38 @@ async function renderMarketBenchmark(b) {
 }
 
 
+
+// ── Scheduled-task health (admins): what the office PC's watchdog last reported ──
+// backend/task_watchdog.py POSTs every run; /api/usage/task-health adds how long ago
+// that was. Shown only when a task is red/late, or when the PC itself has gone quiet
+// (no report for 36 h = nothing is syncing). ✕ hides THIS problem set for today only —
+// it comes back tomorrow, because 15 silent red days (Push Invisible, 2026-09) is the
+// thing this exists to prevent.
+async function renderTaskHealthBanner() {
+  if (!window.AUTH || !window.AUTH.enabled || !hasModule('system.admin')) return;
+  let d = null;
+  try { d = await api(`${API}/api/usage/task-health`); } catch(e) { return; }
+  const old = document.getElementById('homeTaskHealthBanner');
+  const bad = (d && d.problems) || [];
+  if (!d || !d.known || (!d.silent && !bad.length)) { if (old) old.remove(); return; }
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+  const key = ('taskHealth:' + today + ':' + (d.silent ? 'silent' : d.signature)).replace(/[^\w:|=. ()-]/g, '_');   // safe inside the inline onclick
+  try { if (localStorage.getItem(key)) { if (old) old.remove(); return; } } catch(e) {}
+  const host = document.getElementById('tab-home'); if (!host) return;
+  let b = old;
+  if (!b) { b = document.createElement('div'); b.id = 'homeTaskHealthBanner'; host.insertBefore(b, host.firstChild); }
+  const red = d.silent || bad.some(t => t.level === 'fail' || t.level === 'stale' || t.level === 'stuck');
+  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3';
+  b.style.cssText = red ? 'background:#fef2f2;border:1px solid #fca5a5;color:#7f1d1d' : 'background:#fffbeb;border:1px solid #fcd34d;color:#78350f';
+  const TH = { fail: 'ล้มเหลว', stale: 'ไม่ได้รันหลายวัน', stuck: 'ค้าง', missed: 'ไม่ได้รันรอบล่าสุด' };
+  const when = s => s ? esc(String(s).replace('T', ' ').slice(5, 16)) : '—';
+  const rows = bad.map(t => `<li><b>${esc(String(t.name).replace(/^Oshinei /, ''))}</b> — ${TH[t.level] || esc(t.level)}${t.days ? ` <b>${t.days} วันแล้ว</b>` : ''} · รันล่าสุด ${when(t.last_run)}${t.log_line ? `<br><span class="text-[11px]" style="opacity:.85;font-family:ui-monospace,monospace">${esc(t.log_line)}</span>` : ` · <span class="text-[11px]" style="opacity:.85">${esc(t.meaning || '')}</span>`}</li>`).join('');
+  const head = d.silent
+    ? `⏰ <b>เครื่องสำนักงานไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ถ้าเครื่องปิดอยู่ งาน sync / backup / ดึงรีวิว จะไม่รันเลย <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)} จาก ${esc(d.host || '?')})</span>`
+    : `🛠️ <b>งานอัตโนมัติบนเครื่องสำนักงานมีปัญหา ${bad.length} งาน</b> <span class="text-[11px]" style="opacity:.8">(ตรวจล่าสุด ${when(d.checked_at)} · ${esc(d.host || '?')})</span>`;
+  b.innerHTML = `<div>${head}${rows ? `<ul class="mt-1 ml-4 list-disc space-y-0.5">${rows}</ul>` : ''}</div>
+    <button onclick="(function(){try{localStorage.setItem('${key}','1')}catch(e){};var el=document.getElementById('homeTaskHealthBanner');if(el)el.remove()})()" class="text-xs" style="color:inherit" title="ซ่อนวันนี้ (พรุ่งนี้กลับมาถ้ายังไม่หาย)">✕</button>`;
+}
 
 // ── Weekly adoption banner (admins): this week's digest from /api/usage/adoption-digest ──
 async function renderAdoptionBanner() {
