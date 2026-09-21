@@ -2027,7 +2027,8 @@ def _monday(day: str) -> Optional[str]:
     return (d - _td(days=d.weekday())).isoformat()
 
 
-async def _read_upload_table(file, aliases: Dict[str, tuple], max_rows: int = 20000):
+async def _read_upload_table(file, aliases: Dict[str, tuple], max_rows: int = 20000,
+                             optional: tuple = ()):
     """Read an uploaded .xlsx/.xlsm/.csv into dicts keyed by the names in
     `aliases` ({key: (header alias, ...)}).
 
@@ -2093,7 +2094,8 @@ async def _read_upload_table(file, aliases: Dict[str, tuple], max_rows: int = 20
                     if (c in al) if exact else any(len(a) >= 4 and c.startswith(a) for a in al):
                         m[k] = j
                         break
-        if len(m) >= max(1, (len(want) + 1) // 2):
+        # optional columns must not make a header row harder to recognise
+        if len([k for k in m if k not in optional]) >= max(1, (len(want) - len(optional) + 1) // 2):
             head_at, header_map = i, m
             break
     if head_at < 0:
@@ -2333,6 +2335,7 @@ CREATE TABLE IF NOT EXISTS ingredient_purchase_week (
 
 _PURCHASE_ALIASES = {
     "branch": ("สาขา", "ชื่อสาขา", "branch", "branchname", "shop", "store", "สาขาที่"),
+    "pos_code": ("รหัสสาขา POS", "รหัสสาขา", "branchcode", "poscode", "pos code", "branch code"),
     "week":   ("สัปดาห์", "สัปดาห์เริ่ม", "วันที่", "weekstart", "week", "date", "วันเริ่มสัปดาห์"),
     "amount": ("ยอดซื้อวัตถุดิบ", "ยอดซื้อ", "ยอดรวม", "จำนวนเงิน", "มูลค่า", "amount",
                "total", "purchase", "purchaseamount", "ยอดขายวัตถุดิบ"),
@@ -2343,6 +2346,42 @@ _PURCHASE_ALIASES = {
 def _ing_branch_names(con) -> List[str]:
     return [r[0] for r in con.execute(
         "SELECT name FROM branches WHERE name <> 'ALL' AND COALESCE(active,1)=1 ORDER BY name")]
+
+
+POS_CODE_HEADER = "รหัสสาขา POS"      # must NOT start with "สาขา": the import matches headers by prefix
+
+
+def _ing_branch_pos(con) -> Dict[str, dict]:
+    """{our branch name: {'code': '0001', 'pos_id': 5, 'pos_name': ..., 'branch_id': 3}} - the ids
+    the sales team / Easy POS use, written by the sync (sync_mssql.write_branch_pos). Empty on a
+    DB the sync has not rebuilt yet; a branch the POS knows under two rows keeps both codes."""
+    try:
+        rows = con.execute(
+            "SELECT b.name, p.branch_id, p.pos_branch_id, p.pos_branch_code, p.pos_branch_name "
+            "FROM branch_pos p JOIN branches b ON b.branch_id = p.branch_id ORDER BY p.pos_branch_id").fetchall()
+    except Exception:
+        return {}
+    out: Dict[str, dict] = {}
+    for name, bid, pid, code, pname in rows:
+        code = (code or "").strip()
+        o = out.setdefault(name, {"code": code, "pos_id": pid, "pos_name": pname, "branch_id": bid})
+        if code and code not in o["code"].split(", "):
+            o["code"] = ", ".join(x for x in (o["code"], code) if x)
+    return out
+
+
+def _add_branch_code_sheet(wb, pos: Dict[str, dict], names: List[str]) -> None:
+    """A second sheet spelling out which branch is which, in every numbering in use."""
+    ws = wb.create_sheet("รหัสสาขา")
+    ws.append(["สาขา (ชื่อในระบบนี้)", POS_CODE_HEADER, "POS BranchId", "ชื่อสาขาใน POS", "branch_id (ระบบนี้)"])
+    _style_header(ws, 1, "475569")
+    for n in names:
+        p = pos.get(n) or {}
+        ws.append([n, p.get("code"), p.get("pos_id"), p.get("pos_name"), p.get("branch_id")])
+    for col, w in zip("ABCDE", (24, 16, 14, 38, 20)):
+        ws.column_dimensions[col].width = w
+        for cell in ws[col][1:]:
+            cell.number_format = "@"                 # "0001" must stay text, not become 1
 
 
 def _ing_purchases_data(date_from=None, date_to=None, branch=None, group=None) -> dict:
@@ -2534,25 +2573,30 @@ def ingredients_purchases_template(weeks: int = Query(8),
         wks = [con.execute("SELECT date(:e, :o)", {"e": end_wk, "o": f"-{i * 7} day"}).fetchone()[0]
                for i in range(n)][::-1]
         names = [branch] if branch else _ing_branch_names(con)
+        pos = _ing_branch_pos(con)
     wb = _wb_new("ยอดซื้อวัตถุดิบรายสัปดาห์")
     ws = wb.active
     ws.append(["ยอดซื้อวัตถุดิบรายสาขา (รายสัปดาห์) — กรอกคอลัมน์ 'ยอดซื้อวัตถุดิบ (บาท)' แล้วนำเข้ากลับ"])
     ws.append(["1 สัปดาห์ = จันทร์ถึงอาทิตย์ · ดึงยอดซื้อจากอีกระบบตามช่วง 'สัปดาห์เริ่ม' → 'ถึงวันที่' "
                "· 'สัปดาห์ที่' เป็นเลขสัปดาห์แบบ ISO (W1 = สัปดาห์แรกที่มีวันพฤหัสของปี) "
-               "· 'ยอดขาย' เป็นตัวเลขของระบบเอง มีไว้ตรวจทาน ไม่ต้องแก้"])
+               "· 'ยอดขาย' เป็นตัวเลขของระบบเอง มีไว้ตรวจทาน ไม่ต้องแก้ "
+               "· 'รหัสสาขา POS' = รหัสที่ทีมขาย/Easy POS ใช้ (ดูตารางเทียบในแผ่น 'รหัสสาขา')"])
     # The purchasing system is queried by date range, so each row spells out its
     # own Monday→Sunday and ISO week. Only 'สัปดาห์เริ่ม' is read back on import.
-    ws.append(["สาขา", "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
+    ws.append(["สาขา", POS_CODE_HEADER, "สัปดาห์เริ่ม", "ถึงวันที่", "สัปดาห์ที่",
                "ยอดซื้อวัตถุดิบ (บาท)", "ยอดขาย (ระบบ)", "หมายเหตุ"])
     _style_header(ws, 3, "7C3AED")
     for b in names:
         for w in wks:
             h = have.get((b, w))
             sun, wlabel = _week_span(w)
-            ws.append([b, w, sun, wlabel, (h or {}).get("amount"), (h or {}).get("revenue"),
-                       (h or {}).get("note") or None])
-    for i, wdt in enumerate([24, 13, 13, 26, 22, 16, 28], start=1):
+            ws.append([b, (pos.get(b) or {}).get("code") or None, w, sun, wlabel,
+                       (h or {}).get("amount"), (h or {}).get("revenue"), (h or {}).get("note") or None])
+            ws.cell(row=ws.max_row, column=2).number_format = "@"      # "0001", not 1
+    for i, wdt in enumerate([24, 14, 13, 13, 26, 22, 16, 28], start=1):
         ws.column_dimensions[ws.cell(row=3, column=i).column_letter].width = wdt
+    _add_branch_code_sheet(wb, pos, names)
+    wb.active = 0                                    # the import reads the active sheet
     return _xlsx_attachment(wb, f"INGREDIENT_PURCHASES_TEMPLATE_{d['meta']['date_to']}.xlsx")
 
 
@@ -2561,14 +2605,20 @@ async def ingredients_purchases_import(file: UploadFile = File(...),
                                        dry_run: bool = Query(False)):
     """Import the weekly spend sheet — the format the purchasing system exports:
     branch, a date in the week, and the total. Nothing else is required."""
-    rows, hmap, sheet = await _read_upload_table(file, _PURCHASE_ALIASES)
+    rows, hmap, sheet = await _read_upload_table(file, _PURCHASE_ALIASES, optional=("pos_code",))
     if "branch" not in hmap or "amount" not in hmap:
         raise HTTPException(400, "ไฟล์ต้องมีคอลัมน์ 'สาขา' และ 'ยอดซื้อวัตถุดิบ'")
     with get_db() as con:
         known = set(_ing_branch_names(con))
+        by_code = {c: n for n, p in _ing_branch_pos(con).items() for c in p["code"].split(", ") if c}
     ok, errors, blanks = [], [], 0
     for i, r in enumerate(rows, start=1):
         br = str(r.get("branch") or "").strip()
+        code = str(r.get("pos_code") or "").strip()
+        if code.isdigit() and code not in by_code:       # Excel turned "0001" into 1
+            code = next((c for c in by_code if c.isdigit() and int(c) == int(code)), code)
+        if br not in known and code in by_code:          # the name was retyped, the code was not
+            br = by_code[code]
         if not br:
             continue
         amt = _to_num(r.get("amount"))

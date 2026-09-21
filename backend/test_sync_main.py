@@ -53,9 +53,9 @@ def make_source(*, may_scale=1.0, new_sale=False):
     front of the staging patterns test_sync_staging already keeps. Rows that a
     chunked query returns carry a date key (ym / d / dt / _d) so the fake can
     window them; `_d` is an extra key the consumer never reads."""
-    branches = [{"BranchId": BID_A, "BranchName": "BranchA"},
-                {"BranchId": BID_B, "BranchName": " BranchB "},           # stripped by short_name
-                {"BranchId": BID_X, "BranchName": "OSHINEI สาขา ไม่รู้จัก"}]  # not in branches → skipped
+    branches = [{"BranchId": BID_A, "BranchName": "BranchA", "BranchCode": "0001"},
+                {"BranchId": BID_B, "BranchName": " BranchB ", "BranchCode": None},   # stripped by short_name
+                {"BranchId": BID_X, "BranchName": "OSHINEI สาขา ไม่รู้จัก", "BranchCode": "0099"}]  # not in branches → skipped
     categories = [{"CategoryId": 1, "CategoryName": "Sashimi"},
                   {"CategoryId": 2, "CategoryName": "SOFT DRINK"},
                   {"CategoryId": 3, "CategoryName": "BUFFET PREMIUM"}]
@@ -107,7 +107,7 @@ def make_source(*, may_scale=1.0, new_sale=False):
                    "disc": 0.0, "rid": None, "svc": 0.0, "tip": 0.0, "total": 107.0, "cashier": "cashier1",
                    "ptimes": 0})
     return [
-        (r"SELECT BranchId, BranchName FROM Branch", branches),
+        (r"SELECT BranchId, BranchName, BranchCode FROM Branch", branches),
         (r"FROM ItemCategory", categories),
         (r"TABLE_NAME='Items'", [{"COLUMN_NAME": "ItemName"}, {"COLUMN_NAME": "ItemCode"}]),
         (r"COLUMN_NAME='PrintTimes'", [{"ok": 1}]),
@@ -241,6 +241,10 @@ def test_full_sync_builds_incoming_and_leaves_the_live_db_alone(scratch, capsys)
     assert not (scratch / "oshinei.db.incoming.new").exists()   # normal path: no fallback build
 
     con = _open(scratch / "oshinei.db.incoming")
+    # branch_pos: the POS's own id + code for every MAPPED branch (the live app cannot ask the POS);
+    # a branch without a code keeps NULL, an unmapped POS branch is not written at all
+    assert _rows(con, "SELECT branch_id, pos_branch_id, pos_branch_code, pos_branch_name FROM branch_pos "
+                      "ORDER BY branch_id") == [(1, BID_A, "0001", "BranchA"), (2, BID_B, None, " BranchB ")]
     # sales_sku_monthly: mapped branches only, tax rounded, stub sku created for NEW001
     assert _rows(con, "SELECT branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat "
                       "FROM sales_sku_monthly ORDER BY period_month,branch_id,sku_id") == [

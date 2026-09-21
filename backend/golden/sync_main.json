@@ -34,6 +34,16 @@
   ],
   "sha1": "da39a3ee5e6b"
  },
+ "branch_pos": {
+  "rows": 2,
+  "cols": [
+   "branch_id",
+   "pos_branch_id",
+   "pos_branch_code",
+   "pos_branch_name"
+  ],
+  "sha1": "88265d1cbf52"
+ },
  "branch_targets": {
   "rows": 0,
   "cols": [
