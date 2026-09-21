@@ -216,6 +216,18 @@ def test_heal_says_so_when_the_rerun_outlasts_the_wait():
     assert sch.heal()[0] == {BACKUP: "re-run by the watchdog at 12:17 - still running"}
 
 
+def test_a_rerun_that_finished_before_the_report_is_not_called_still_running():
+    # 2026-09-21: the midday backup took 6 min, the wait gave up at 6 - and the report, built a
+    # moment later against a finished task, still said "still running"
+    note = {BACKUP: "re-run by the watchdog at 12:50" + tw.STILL_RUNNING}
+    done = task(name=BACKUP, last="2026-09-21T12:50:53", triggers=[daily("07:30")])
+    rep, _ = tw.build_report([done], dt.datetime(2026, 9, 21, 12, 57), {}, note)
+    assert rep["tasks"][0]["rerun"] == "re-run by the watchdog at 12:50"
+    busy = task(name=BACKUP, state="Running", result=tw.RUNNING, last="2026-09-21T12:50:53", triggers=[daily("07:30")])
+    rep, _ = tw.build_report([busy], dt.datetime(2026, 9, 21, 12, 57), {}, note)
+    assert rep["tasks"][0]["rerun"].endswith(tw.STILL_RUNNING)
+
+
 def test_only_the_two_tasks_the_owner_approved_are_ever_started():
     assert tw.RERUN_WHEN_MISSED == ("Oshinei DB Backup", "Oshinei Feedback Sync")
     assert "fail" not in tw.RERUN_LEVELS and "stuck" not in tw.RERUN_LEVELS

@@ -76,7 +76,8 @@ PROBLEM_LEVELS = ("fail", "stale", "stuck", "missed")     # worst first
 RERUN_WHEN_MISSED = ("Oshinei DB Backup", "Oshinei Feedback Sync")   # safe to run late - see the docstring
 RERUN_LEVELS = ("missed", "stale")                        # never "fail": that needs a person
 RERUN_CLEAR_AHEAD = timedelta(minutes=10)                 # leave this much room before another task's slot
-RERUN_WAIT = timedelta(minutes=6)                         # how long to wait for one re-run to finish
+RERUN_WAIT = timedelta(minutes=12)                        # per re-run; DB Backup is ~2 min at 07:30 but took 6 at midday
+STILL_RUNNING = " - still running"
 
 RUNNING, NEVER_RAN = 0x41301, 0x41303
 RESULT_MEANING = {
@@ -246,7 +247,7 @@ def heal(findings: list[dict], tried: dict, *, read=None, start=None, clock=date
             if me.get("state") != "Running" and ran and ran >= began - timedelta(minutes=1):
                 finished = True
                 break
-        notes[name] = f"re-run by the watchdog at {began:%H:%M}" + ("" if finished else " - still running")
+        notes[name] = f"re-run by the watchdog at {began:%H:%M}" + ("" if finished else STILL_RUNNING)
     for k in [k for k, day in tried.items() if day != clock().strftime("%Y-%m-%d")]:
         del tried[k]                                   # older attempts no longer matter
     return notes
@@ -295,8 +296,11 @@ def last_telling_line(log: Path, limit: int = 220) -> str:
 def build_report(tasks: list[dict], now: datetime, prev_since: dict, reruns: dict = None) -> tuple[dict, dict]:
     findings = [judge(t, now) for t in tasks if t.get("name") != SELF_NAME]
     since = carry_since(findings, prev_since, now)
+    state_of = {t.get("name"): t.get("state") for t in tasks}
     for f in findings:
         note = (reruns or {}).get(f["name"])
+        if note and note.endswith(STILL_RUNNING) and state_of.get(f["name"]) != "Running":
+            note = note[:-len(STILL_RUNNING)]         # it finished between the wait and this report
         if note:
             f["rerun"] = note
             if f["level"] in PROBLEM_LEVELS:          # the banner in the app prints `meaning`
