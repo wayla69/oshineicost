@@ -199,12 +199,79 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      them - so every swap (12:00, 16:00, 06:00) erased them, and a compliance
 #                      letter could never have been judged against a cycle older than a day
 #                      (found 2026-09-21). NOT ingredient_order_unit: pack sizes are seeded on
-#                      the PC (seed_order_units.py) and travel WITH the base DB.
+#                      the PC (seed_order_units.py) and travel WITH the base DB - its rows a
+#                      PERSON wrote are carried forward one by one instead: see _MERGED_ROWS.
 _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings",
                      "branch_downtime", "cost_override", "requisition_line", "stock_count",
                      "ingredient_sourcing", "ingredient_order_issue", "ingredient_order_issue_line",
                      "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar")
 _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
+
+
+# Tables BOTH sides write, where neither copy may simply win:
+#   ingredient_order_unit   pack sizes. seed_order_units.py fills it on the PC from the supplier
+#                           sheet (source='supplier-sheet') and that must keep reaching the site
+#                           with the base DB; the ⚙️ tab and its Excel import write
+#                           source='manual' ON the site. The seeder has always refused to
+#                           overwrite a manual row - the swap did not, so a pack size corrected
+#                           in the app lasted until the next sync (owner, 2026-09-21). The rule
+#                           is per ROW, by who wrote it: {table: (key column, SQL picking the
+#                           rows a person wrote on the site)}. Those rows are laid over the
+#                           incoming table; everything else in it is the PC's.
+_MERGED_ROWS = {"ingredient_order_unit": ("ingredient_code", "COALESCE(source, '') = 'manual'")}
+
+
+def _merged_counts(db_path: str) -> dict:
+    """{table: rows a person wrote on the site} - what a swap must not lose."""
+    counts: dict = {}
+    if not _os_db.path.exists(db_path):
+        return counts
+    c = sqlite3.connect(db_path)
+    try:
+        for t, (_key, where) in _MERGED_ROWS.items():
+            try:
+                counts[t] = c.execute(f'SELECT COUNT(*) FROM "{t}" WHERE {where}').fetchone()[0]
+            except sqlite3.Error:
+                pass                                   # table not there (yet) on this side
+    finally:
+        c.close()
+    return counts
+
+
+def _carry_forward_merged(live_path: str, inc_path: str) -> None:
+    """Lay the site's hand-written rows of each _MERGED_ROWS table over the staged copy."""
+    if not _os_db.path.exists(live_path):
+        return
+    live = sqlite3.connect(live_path)
+    try:
+        for t, (key, where) in _MERGED_ROWS.items():
+            ddl = live.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone()
+            if not ddl or not ddl[0]:
+                continue
+            try:
+                cur = live.execute(f'SELECT * FROM "{t}" WHERE {where}')
+            except sqlite3.OperationalError:
+                continue                               # an older shape without the column the rule reads: nothing to keep
+            cols, rows = [d[0] for d in cur.description], cur.fetchall()
+            if not rows:
+                continue
+            dest = sqlite3.connect(inc_path)
+            try:
+                if not dest.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone():
+                    dest.execute(ddl[0])
+                have = {r[1] for r in dest.execute(f'PRAGMA table_info("{t}")')}
+                use = [c for c in cols if c in have]
+                if key not in use:
+                    raise sqlite3.OperationalError(f"{t}: key column {key} missing in the staged DB")
+                idx = [cols.index(c) for c in use]
+                dest.executemany(
+                    f'INSERT OR REPLACE INTO "{t}" ({", ".join(use)}) VALUES ({", ".join("?" * len(use))})',
+                    [[r[i] for i in idx] for r in rows])
+                dest.commit()
+            finally:
+                dest.close()
+    finally:
+        live.close()
 
 
 def _preserved_pred(col: str) -> str:
@@ -285,9 +352,10 @@ def _carry_forward_and_verify(live_path: str, inc_path: str) -> tuple[bool, str]
     routine data refresh. (The old code swallowed carry-forward errors and swapped
     anyway, which could silently wipe all recon uploads.)"""
     try:
-        live_counts = _preserved_counts(live_path)
+        live_counts = {**_preserved_counts(live_path), **_merged_counts(live_path)}
         _carry_forward_preserved(live_path, inc_path)
-        staged_counts = _preserved_counts(inc_path)
+        _carry_forward_merged(live_path, inc_path)
+        staged_counts = {**_preserved_counts(inc_path), **_merged_counts(inc_path)}
     except Exception as exc:
         return False, f"carry-forward failed: {exc!r}"
     lost = {t: (live_counts[t], staged_counts.get(t, 0))
