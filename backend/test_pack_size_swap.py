@@ -88,6 +88,21 @@ def test_a_live_db_that_never_had_the_table_is_fine(tmp_path):
     assert _units(inc) == {"NORI": ("แพ็ค 50", 50.0, "supplier-sheet")}
 
 
+def test_an_older_table_without_a_source_column_is_skipped_not_fatal(tmp_path):
+    # caught by the gate: test_forced_order builds exactly this shape, and the merge raised
+    live, inc = tmp_path / "live.db", tmp_path / "inc.db"
+    for path, val in ((live, "on the site"), (inc, "from the PC")):
+        c = sqlite3.connect(str(path))
+        c.execute("CREATE TABLE ingredient_order_unit(ingredient_code TEXT PRIMARY KEY, order_unit TEXT)")
+        c.execute("INSERT INTO ingredient_order_unit VALUES('X', ?)", (val,))
+        c.commit(); c.close()
+    safe, reason = main._carry_forward_and_verify(str(live), str(inc))
+    assert safe, reason
+    c = sqlite3.connect(str(inc))
+    assert c.execute("SELECT order_unit FROM ingredient_order_unit").fetchall() == [("from the PC",)]
+    c.close()
+
+
 def test_what_the_app_writes_is_what_the_swap_keeps(client, monkeypatch):
     """The tag is the contract: if the tab ever stops writing source='manual', the swap would
     start eating its edits again - silently."""

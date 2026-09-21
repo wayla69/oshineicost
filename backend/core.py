@@ -248,7 +248,10 @@ def _carry_forward_merged(live_path: str, inc_path: str) -> None:
             ddl = live.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (t,)).fetchone()
             if not ddl or not ddl[0]:
                 continue
-            cur = live.execute(f'SELECT * FROM "{t}" WHERE {where}')
+            try:
+                cur = live.execute(f'SELECT * FROM "{t}" WHERE {where}')
+            except sqlite3.OperationalError:
+                continue                               # an older shape without the column the rule reads: nothing to keep
             cols, rows = [d[0] for d in cur.description], cur.fetchall()
             if not rows:
                 continue
