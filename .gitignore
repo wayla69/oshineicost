@@ -80,3 +80,6 @@ All recon data/
 backend/.invisible_key.txt
 # ...and the day its last push succeeded (machine state)
 backend/.invisible_last_ok.txt
+
+# Task logs, and the task watchdog's state + report (machine state, not code)
+backend/logs/

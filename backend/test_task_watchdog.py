@@ -117,6 +117,110 @@ def test_notify_on_change_then_every_20_hours_then_once_on_recovery():
     assert not tw.should_notify(green, {"notified_signature": ""}, NOW)                    # green and quiet
 
 
+# ── healing: re-run what is safe to run late ─────────────────────────────────
+BACKUP, FEEDBACK = "Oshinei DB Backup", "Oshinei Feedback Sync"
+
+
+class FakeScheduler:
+    """Task Scheduler + a clock that only moves when the watchdog sleeps."""
+
+    def __init__(self, tasks, now=NOW, run_seconds=120, exit_code=0):
+        self.tasks = {t["name"]: dict(t) for t in tasks}
+        self.now, self.run_seconds, self.exit_code = now, run_seconds, exit_code
+        self.started, self.ends = [], {}
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += dt.timedelta(seconds=seconds)
+        for name, end in list(self.ends.items()):
+            if self.now >= end:
+                self.tasks[name].update(state="Ready", result=self.exit_code)
+                del self.ends[name]
+
+    def start(self, name):
+        self.started.append((name, self.now.strftime("%H:%M")))
+        self.tasks[name].update(state="Running", result=tw.RUNNING, last_run=self.now.strftime("%Y-%m-%dT%H:%M:%S"))
+        self.ends[name] = self.now + dt.timedelta(seconds=self.run_seconds)
+        return True
+
+    def read(self):
+        return [dict(t) for t in self.tasks.values()]
+
+    def heal(self, tried=None):
+        tried = {} if tried is None else tried
+        findings = [tw.judge(t, self.now) for t in self.read()]
+        return tw.heal(findings, tried, read=self.read, start=self.start, clock=self.clock, sleep=self.sleep), tried
+
+
+def slept_through_the_morning():
+    return [task(name="Oshinei Auto Sync", last="2026-09-20T06:00:01", triggers=[daily("06:00")]),
+            task(name=BACKUP, last="2026-09-20T07:30:01", triggers=[daily("07:30")]),
+            task(name=FEEDBACK, last="2026-09-20T09:00:01", triggers=[daily("09:00")]),
+            task(name="Oshinei Sync Live (Fly)", last="2026-09-20T16:00:01", triggers=[daily("12:00"), daily("16:00")])]
+
+
+def test_heal_reruns_only_the_two_safe_tasks_one_at_a_time_and_never_the_sync():
+    sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 11, 15))
+    notes, tried = sch.heal()
+    assert [n for n, _ in sch.started] == [BACKUP, FEEDBACK]                  # Auto Sync also missed - left alone
+    assert sch.started[1][1] > sch.started[0][1]                              # the second waited for the first
+    assert notes == {BACKUP: "re-run by the watchdog at 11:15", FEEDBACK: "re-run by the watchdog at 11:17"}
+    assert tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21"}
+    rep, _ = tw.build_report(sch.read(), sch.now, {}, notes)                  # rebuilt: says what is true NOW
+    levels = {f["name"]: f["level"] for f in rep["tasks"]}
+    assert levels[BACKUP] == levels[FEEDBACK] == "ok" and levels["Oshinei Auto Sync"] == "missed"
+    assert "healed: re-run by the watchdog at 11:15" in tw.text_report(rep)
+
+
+def test_heal_holds_back_while_a_sync_is_running():
+    tasks = slept_through_the_morning()
+    tasks[3].update(state="Running", result=tw.RUNNING, last="2026-09-21T12:00:00")
+    sch = FakeScheduler(tasks, now=dt.datetime(2026, 9, 21, 12, 25))
+    notes, tried = sch.heal()
+    assert sch.started == [] and tried == {}                                  # not counted as an attempt
+    assert notes[BACKUP] == "re-run held back - Oshinei Sync Live (Fly) is running"
+    rep, _ = tw.build_report(sch.read(), sch.now, {}, notes)
+    backup = next(f for f in rep["tasks"] if f["name"] == BACKUP)
+    assert backup["level"] == "missed" and backup["meaning"].endswith("held back - Oshinei Sync Live (Fly) is running")
+
+
+def test_heal_holds_back_when_another_task_is_due_within_ten_minutes():
+    sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 11, 52))     # logged on at 11:49
+    notes, _ = sch.heal()
+    assert sch.started == [] and notes[BACKUP] == "re-run held back - Oshinei Sync Live (Fly) starts at 12:00"
+    sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 11, 40))     # 20 min of room
+    assert [n for n, _ in sch.heal()[1].items()] == [BACKUP, FEEDBACK]
+
+
+def test_heal_tries_once_a_day_and_forgets_yesterday():
+    sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 17, 0))
+    notes, tried = sch.heal(tried={BACKUP: "2026-09-21", FEEDBACK: "2026-09-20"})
+    assert [n for n, _ in sch.started] == [FEEDBACK]
+    assert notes[BACKUP] == "not re-run again - already tried today" and tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21"}
+
+
+def test_heal_never_reruns_a_failed_task_and_reports_a_rerun_that_failed():
+    sch = FakeScheduler([task(name=BACKUP, last="2026-09-21T07:30:01", result=1, triggers=[daily("07:30")])])
+    assert sch.heal()[0] == {} and sch.started == []                          # red needs a person
+    sch = FakeScheduler([task(name=BACKUP, last="2026-09-20T07:30:01", triggers=[daily("07:30")])], exit_code=1)
+    notes, _ = sch.heal()
+    rep, _ = tw.build_report(sch.read(), sch.now, {}, notes)
+    f = rep["tasks"][0]
+    assert f["level"] == "fail" and f["meaning"].endswith("re-run by the watchdog at 12:17")
+
+
+def test_heal_says_so_when_the_rerun_outlasts_the_wait():
+    sch = FakeScheduler([task(name=BACKUP, last="2026-09-20T07:30:01", triggers=[daily("07:30")])], run_seconds=3600)
+    assert sch.heal()[0] == {BACKUP: "re-run by the watchdog at 12:17 - still running"}
+
+
+def test_only_the_two_tasks_the_owner_approved_are_ever_started():
+    assert tw.RERUN_WHEN_MISSED == ("Oshinei DB Backup", "Oshinei Feedback Sync")
+    assert "fail" not in tw.RERUN_LEVELS and "stuck" not in tw.RERUN_LEVELS
+
+
 # ── why it failed ────────────────────────────────────────────────────────────
 PUSH_LOG = """==================== Sun 09/20/2026 10:45:02.65 ====================
       python: C:\\Python\\python.exe

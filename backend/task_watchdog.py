@@ -9,6 +9,7 @@ renamed host) and the MSSQL sync was dead for 7 (2026-07-20 -> 07-27, a missing
     py task_watchdog.py              # check, record, notify
     py task_watchdog.py --dry-run    # check and print only - nothing is sent or saved
     py task_watchdog.py --json       # the report as JSON (implies nothing else changes)
+    py task_watchdog.py --no-rerun   # report only - do not start anything
 
 A problem, for every ENABLED task whose name starts with "Oshinei":
     fail    its last exit code is not 0 (and is not "running" / "has not run yet")
@@ -27,6 +28,17 @@ Where a problem is reported:
 while it lasts, and once more when everything is green again. 1 is sent every run:
 it is also the heartbeat.
 
+Healing: a task in RERUN_WHEN_MISSED that is `missed` or `stale` is started again,
+one at a time, and the report is rebuilt afterwards so it says what is true NOW.
+Only tasks that are safe to run late are listed (owner decision, 2026-09-21):
+DB Backup (~2 min, read-only on the DB) and Feedback Sync (talks to the live app
+only). NOT the syncs - a late Auto Sync can collide with the 12:00 live sync. And
+never blindly: a re-run is held back while any other Oshinei task is running or is
+due within 10 minutes (the sync swaps oshinei.db with os.replace, which Windows
+refuses while a backup holds the file open), and it is tried once per task per day.
+A task that FAILED is never re-run - that needs a person, and the next daily slot
+retries it anyway.
+
 The exit code is about the WATCHDOG (0 = it looked), never about what it found -
 otherwise it would become one more red task in the list it reads.
 """
@@ -39,6 +51,7 @@ import re
 import socket
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
@@ -59,6 +72,11 @@ STALE_AFTER = timedelta(days=2)
 STUCK_AFTER = timedelta(hours=3)       # the longest task limit is 2 h; the scheduler kills at the limit
 RENOTIFY_AFTER = timedelta(hours=20)
 PROBLEM_LEVELS = ("fail", "stale", "stuck", "missed")     # worst first
+
+RERUN_WHEN_MISSED = ("Oshinei DB Backup", "Oshinei Feedback Sync")   # safe to run late - see the docstring
+RERUN_LEVELS = ("missed", "stale")                        # never "fail": that needs a person
+RERUN_CLEAR_AHEAD = timedelta(minutes=10)                 # leave this much room before another task's slot
+RERUN_WAIT = timedelta(minutes=6)                         # how long to wait for one re-run to finish
 
 RUNNING, NEVER_RAN = 0x41301, 0x41303
 RESULT_MEANING = {
@@ -172,6 +190,68 @@ def carry_since(findings: list[dict], prev: dict, now: datetime) -> dict:
     return keep
 
 
+# ── heal: start what is safe to start late ───────────────────────────────────
+def rerun_blocker(name: str, tasks: list[dict], now: datetime):
+    """Why `name` must not be started right now, or None. Pure."""
+    for t in tasks:
+        other = t.get("name")
+        if other in (name, SELF_NAME) or t.get("state") == "Disabled":
+            continue
+        if t.get("state") == "Running" or (int(t.get("result") or 0) & 0xFFFFFFFF) == RUNNING:
+            return f"{other} is running"
+        for trig in t.get("triggers") or []:
+            first = _when(trig.get("start"))
+            if not first or not trig.get("enabled", True) or "Daily" not in (trig.get("kind") or ""):
+                continue
+            slot = now.replace(hour=first.hour, minute=first.minute, second=0, microsecond=0)
+            if timedelta(0) <= slot - now <= RERUN_CLEAR_AHEAD:
+                return f"{other} starts at {slot:%H:%M}"
+    return None
+
+
+def start_task(name: str) -> bool:
+    r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                        "Start-ScheduledTask -TaskName $env:OSH_TASK_NAME -ErrorAction Stop"],
+                       env={**os.environ, "OSH_TASK_NAME": name}, capture_output=True, timeout=60)
+    return r.returncode == 0
+
+
+def heal(findings: list[dict], tried: dict, *, read=None, start=None, clock=datetime.now, sleep=time.sleep) -> dict:
+    """Re-run what missed its slot and may be run late. Returns {task: what happened}.
+    `tried` ({task: 'YYYY-MM-DD'}) is updated in place - one attempt per task per day."""
+    read, start = read or read_tasks, start or start_task
+    notes = {}
+    for f in findings:
+        name = f["name"]
+        if name not in RERUN_WHEN_MISSED or f["level"] not in RERUN_LEVELS:
+            continue
+        today = clock().strftime("%Y-%m-%d")
+        if tried.get(name) == today:
+            notes[name] = "not re-run again - already tried today"
+            continue
+        blocker = rerun_blocker(name, read(), clock())
+        if blocker:
+            notes[name] = f"re-run held back - {blocker}"
+            continue
+        tried[name] = today
+        began = clock()
+        if not start(name):
+            notes[name] = "re-run could not be started"
+            continue
+        finished = False
+        while clock() - began < RERUN_WAIT:
+            sleep(10)
+            me = next((t for t in read() if t.get("name") == name), {})
+            ran = _when(me.get("last_run"))
+            if me.get("state") != "Running" and ran and ran >= began - timedelta(minutes=1):
+                finished = True
+                break
+        notes[name] = f"re-run by the watchdog at {began:%H:%M}" + ("" if finished else " - still running")
+    for k in [k for k, day in tried.items() if day != clock().strftime("%Y-%m-%d")]:
+        del tried[k]                                   # older attempts no longer matter
+    return notes
+
+
 def signature(findings: list[dict]) -> str:
     return "|".join(sorted(f"{f['name']}={f['level']}" for f in findings if f["level"] in PROBLEM_LEVELS))
 
@@ -212,9 +292,15 @@ def last_telling_line(log: Path, limit: int = 220) -> str:
 
 
 # ── tell ─────────────────────────────────────────────────────────────────────
-def build_report(tasks: list[dict], now: datetime, prev_since: dict) -> tuple[dict, dict]:
+def build_report(tasks: list[dict], now: datetime, prev_since: dict, reruns: dict = None) -> tuple[dict, dict]:
     findings = [judge(t, now) for t in tasks if t.get("name") != SELF_NAME]
     since = carry_since(findings, prev_since, now)
+    for f in findings:
+        note = (reruns or {}).get(f["name"])
+        if note:
+            f["rerun"] = note
+            if f["level"] in PROBLEM_LEVELS:          # the banner in the app prints `meaning`
+                f["meaning"] += " - " + note
     by_name = {t.get("name"): t for t in tasks}
     for f in findings:
         if f["level"] == "fail":
@@ -239,6 +325,8 @@ def text_report(rep: dict) -> str:
         if f.get("log_line"):
             out.append(f"{'':13}log: {f['log_line']}")
             out.append(f"{'':13}     {f['log_file']}")
+        if f.get("rerun") and f["level"] not in PROBLEM_LEVELS:
+            out.append(f"{'':13}healed: {f['rerun']}")
     return "\n".join(out) + "\n"
 
 
@@ -344,6 +432,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dry-run", action="store_true", help="check and print; send and save nothing")
     ap.add_argument("--json", action="store_true", help="print the report as JSON (implies --dry-run)")
+    ap.add_argument("--no-rerun", action="store_true", help="report only - never start a missed task")
     ap.add_argument("--api", default=os.environ.get("OSHINEI_API") or DEFAULT_API)
     a = ap.parse_args(argv)
     for s in (sys.stdout, sys.stderr):
@@ -358,6 +447,13 @@ def main(argv=None) -> int:
     except (OSError, ValueError):
         state = {}
     rep, since = build_report(read_tasks(), now, state.get("since") or {})
+    if not (a.json or a.dry_run or a.no_rerun):
+        notes = heal(rep["tasks"], state.setdefault("reruns", {}))
+        for name, note in notes.items():
+            print(f"heal     : {name} - {note}")
+        if notes:                                   # say what is true NOW, not what was true a minute ago
+            now = datetime.now()
+            rep, since = build_report(read_tasks(), now, state.get("since") or {}, notes)
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=1))
         return 0
