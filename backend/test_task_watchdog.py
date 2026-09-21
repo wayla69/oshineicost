@@ -5,6 +5,7 @@ with nobody told. The shapes below are that incident and the ones around it.
 """
 import datetime as dt
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -302,6 +303,8 @@ def test_the_line_that_explains_the_failure_is_found_in_either_log_encoding(tmp_
     assert "HTTP 404" in line and "Application not found" in line and "c1" in line     # last run, not the banner
 
 
+@pytest.mark.skipif(os.name != "nt", reason="a Task Scheduler action names a Windows path (drive letter + .bat); "
+                    "CI runs on Linux, where tmp_path is /tmp/... and cannot look like one")
 def test_the_log_is_found_through_the_bat_the_task_runs(tmp_path):
     bat = tmp_path / "Push Invisible.bat"
     bat.write_text('powershell -File "%~dp0_tee.ps1" -Bat "%~f0" -Log "%~dp0backend\\logs\\push_invisible.log" -ArgLine "%*"\r\n', encoding="ascii")
