@@ -111,6 +111,32 @@ def _norm_paycode(c):
     c = (c or "").strip()
     return "Cash" if c.upper() == "CASH" else c
 
+BRANCH_POS_DDL = """
+CREATE TABLE IF NOT EXISTS branch_pos (
+  branch_id       INTEGER NOT NULL,
+  pos_branch_id   INTEGER NOT NULL,
+  pos_branch_code TEXT,
+  pos_branch_name TEXT,
+  PRIMARY KEY (branch_id, pos_branch_id)
+)"""
+
+
+def write_branch_pos(sq, rows) -> int:
+    """Our branch -> the POS's own ids for it: Branch.BranchId and Branch.BranchCode
+    ("0001" = ขอนแก่น), the number the sales team and every Easy POS report use.
+
+    The app had only its own branch_id (1-29) and a Thai name, so a sheet sent to another
+    team could name a branch but not identify it the way THEY do (owner, 2026-09-21: "add
+    the branch ID using for sales team too"). The live app cannot ask the POS - it has no
+    MSSQL access - so the mapping travels with the data: rewritten on every sync."""
+    sq.execute(BRANCH_POS_DDL)
+    sq.execute("DELETE FROM branch_pos")
+    sq.executemany("INSERT OR REPLACE INTO branch_pos VALUES (?,?,?,?)",
+                   [(int(b), int(pid), (str(code).strip() if code is not None else None), name)
+                    for b, pid, code, name in rows])
+    return len(rows)
+
+
 def connect_mssql():
     import pymssql
     # Fail loud + clear if creds are missing, instead of a cryptic KeyError deep
@@ -579,15 +605,18 @@ def _sync_masters(*, code2sid, name2bid, sq):
     new_skus = None
     print("[2/6] connect MSSQL + load Branch / Items / ItemCategory")
     mc = ResilientCursor(connect_mssql)   # auto-reconnects on dropped connection (err 20047)
-    mc.execute("SELECT BranchId, BranchName FROM Branch")
+    mc.execute("SELECT BranchId, BranchName, BranchCode FROM Branch")
     bid_map = {}                       # MSSQL BranchId → sqlite branch_id
     unmatched_branches = []
+    pos_rows = []
     for r in mc.fetchall():
         sn = short_name(r["BranchName"])
         if sn in name2bid:
             bid_map[r["BranchId"]] = name2bid[sn]
+            pos_rows.append((name2bid[sn], r["BranchId"], r.get("BranchCode"), r["BranchName"]))
         else:
             unmatched_branches.append(r["BranchName"])
+    write_branch_pos(sq, pos_rows)
 
     mc.execute("SELECT CategoryId, CategoryName FROM ItemCategory")
     cat_bucket = {}                    # MSSQL CategoryId → bucket
