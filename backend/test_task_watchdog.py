@@ -118,7 +118,7 @@ def test_notify_on_change_then_every_20_hours_then_once_on_recovery():
 
 
 # ── healing: re-run what is safe to run late ─────────────────────────────────
-BACKUP, FEEDBACK = "Oshinei DB Backup", "Oshinei Feedback Sync"
+BACKUP, FEEDBACK, AUTOSYNC = "Oshinei DB Backup", "Oshinei Feedback Sync", "Oshinei Auto Sync"
 
 
 class FakeScheduler:
@@ -161,13 +161,14 @@ def slept_through_the_morning():
             task(name="Oshinei Sync Live (Fly)", last="2026-09-20T16:00:01", triggers=[daily("12:00"), daily("16:00")])]
 
 
-def test_heal_reruns_only_the_two_safe_tasks_one_at_a_time_and_never_the_sync():
+def test_heal_at_1115_reruns_the_two_short_tasks_but_never_a_40_minute_sync_before_noon():
     sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 11, 15))
     notes, tried = sch.heal()
-    assert [n for n, _ in sch.started] == [BACKUP, FEEDBACK]                  # Auto Sync also missed - left alone
+    assert [n for n, _ in sch.started] == [BACKUP, FEEDBACK]                  # Auto Sync also missed - 12:00 is too close
     assert sch.started[1][1] > sch.started[0][1]                              # the second waited for the first
-    assert notes == {BACKUP: "re-run by the watchdog at 11:15", FEEDBACK: "re-run by the watchdog at 11:17"}
-    assert tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21"}
+    assert notes == {BACKUP: "re-run by the watchdog at 11:15", FEEDBACK: "re-run by the watchdog at 11:17",
+                     AUTOSYNC: "re-run held back - Oshinei Sync Live (Fly) starts at 12:00"}
+    assert tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21"}            # a held-back sync keeps its attempt
     rep, _ = tw.build_report(sch.read(), sch.now, {}, notes)                  # rebuilt: says what is true NOW
     levels = {f["name"]: f["level"] for f in rep["tasks"]}
     assert levels[BACKUP] == levels[FEEDBACK] == "ok" and levels["Oshinei Auto Sync"] == "missed"
@@ -197,8 +198,9 @@ def test_heal_holds_back_when_another_task_is_due_within_ten_minutes():
 def test_heal_tries_once_a_day_and_forgets_yesterday():
     sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 17, 0))
     notes, tried = sch.heal(tried={BACKUP: "2026-09-21", FEEDBACK: "2026-09-20"})
-    assert [n for n, _ in sch.started] == [FEEDBACK]
-    assert notes[BACKUP] == "not re-run again - already tried today" and tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21"}
+    assert [n for n, _ in sch.started] == [FEEDBACK, AUTOSYNC]                # the backup already had its try today
+    assert notes[BACKUP] == "not re-run again - already tried today"
+    assert tried == {BACKUP: "2026-09-21", FEEDBACK: "2026-09-21", AUTOSYNC: "2026-09-21"}
 
 
 def test_heal_never_reruns_a_failed_task_and_reports_a_rerun_that_failed():
@@ -228,8 +230,45 @@ def test_a_rerun_that_finished_before_the_report_is_not_called_still_running():
     assert rep["tasks"][0]["rerun"].endswith(tw.STILL_RUNNING)
 
 
-def test_only_the_two_tasks_the_owner_approved_are_ever_started():
-    assert tw.RERUN_WHEN_MISSED == ("Oshinei DB Backup", "Oshinei Feedback Sync")
+def test_heal_at_1700_runs_the_sync_last_and_does_not_wait_for_it():
+    sch = FakeScheduler(slept_through_the_morning(), now=dt.datetime(2026, 9, 21, 17, 0), run_seconds=120)
+    sch.tasks["Oshinei Sync Live (Fly)"]["last_run"] = "2026-09-21T16:00:01"          # the 16:00 live sync is done
+    notes, tried = sch.heal()
+    assert [n for n, _ in sch.started] == [BACKUP, FEEDBACK, AUTOSYNC]                # config order: the long one last
+    assert notes[AUTOSYNC] == "re-run by the watchdog at 17:04 - still running"       # started, not waited on
+    assert sch.now < dt.datetime(2026, 9, 21, 17, 6) and tried[AUTOSYNC] == "2026-09-21"
+    rep, _ = tw.build_report(sch.read(), sch.now, {}, notes)
+    auto = next(f for f in rep["tasks"] if f["name"] == AUTOSYNC)
+    assert auto["level"] == "ok" and "started: re-run by the watchdog at 17:04 - still running" in tw.text_report(rep)
+    assert "healed: re-run by the watchdog at 17:00" in tw.text_report(rep)           # the backup did finish
+
+
+def test_the_sync_needs_75_clear_minutes_before_any_other_slot():
+    push = task(name="Oshinei Push Invisible", last="2026-09-20T10:45:01", triggers=[daily("10:45")])
+    morning = [t for t in slept_through_the_morning() if t["name"] in (AUTOSYNC, "Oshinei Sync Live (Fly)")] + [push]
+    sch = FakeScheduler(morning, now=dt.datetime(2026, 9, 21, 9, 20))                 # 85 min before 10:45
+    assert sch.heal()[0] == {AUTOSYNC: "re-run by the watchdog at 09:20 - still running"}
+    sch = FakeScheduler(morning, now=dt.datetime(2026, 9, 21, 9, 40))                 # 65 min: a 45-min sync could still be going
+    assert sch.heal()[0] == {AUTOSYNC: "re-run held back - Oshinei Push Invisible starts at 10:45"} and sch.started == []
+    # 2026-09-14: a manual run at 11:15 never reached "Done" - it ran into the 12:00 live sync
+    assert tw.rerun_blocker(AUTOSYNC, slept_through_the_morning(), dt.datetime(2026, 9, 14, 11, 15)) \
+        == "Oshinei Sync Live (Fly) starts at 12:00"
+
+
+def test_the_sync_is_never_started_beside_the_live_sync_and_a_slot_after_midnight_counts():
+    tasks = slept_through_the_morning()
+    tasks[3].update(state="Running", result=tw.RUNNING)
+    assert tw.rerun_blocker(AUTOSYNC, tasks, dt.datetime(2026, 9, 21, 16, 20)) == "Oshinei Sync Live (Fly) is running"
+    night = [task(name=AUTOSYNC, triggers=[daily("06:00")]), task(name="Oshinei Nightly", triggers=[daily("00:15")])]
+    assert tw.rerun_blocker(AUTOSYNC, night, dt.datetime(2026, 9, 21, 23, 30)) == "Oshinei Nightly starts at 00:15"
+    assert tw.rerun_blocker(BACKUP, night, dt.datetime(2026, 9, 21, 23, 30)) is None   # 45 min is room enough for 2
+
+
+def test_only_the_tasks_the_owner_approved_are_ever_started_and_the_long_one_is_last():
+    assert list(tw.RERUN_WHEN_MISSED) == ["Oshinei DB Backup", "Oshinei Feedback Sync", "Oshinei Auto Sync"]
+    ahead, wait = tw.RERUN_WHEN_MISSED["Oshinei Auto Sync"]
+    assert ahead >= dt.timedelta(minutes=60) and wait == dt.timedelta(0)              # > its 45-min worst case; never waited on
+    assert "Oshinei Sync Live (Fly)" not in tw.RERUN_WHEN_MISSED
     assert "fail" not in tw.RERUN_LEVELS and "stuck" not in tw.RERUN_LEVELS
 
 
