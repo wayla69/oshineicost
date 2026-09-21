@@ -78,3 +78,5 @@ All recon data/
 
 # Invisible Voice adapter key (never commit)
 backend/.invisible_key.txt
+# ...and the day its last push succeeded (machine state)
+backend/.invisible_last_ok.txt

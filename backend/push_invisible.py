@@ -12,6 +12,12 @@ sync and pushes the last few days (idempotent upserts, so re-runs are safe).
 
 Config: INVISIBLE_API_URL (default: the Railway api domain) and the API key in
 INVISIBLE_API_KEY or backend/.invisible_key.txt (gitignored; scope sales:write).
+
+Self-healing: a successful run records its day in backend/.invisible_last_ok.txt,
+and the next run reaches back to that day if it is further than --days. The
+window used to be a flat 3 days, so the 15 days this failed silently
+(2026-09-06 -> 09-21: the api domain was renamed and the old host answers
+404 "Application not found") would have stayed a hole forever.
 Revenue is the dashboard's rule (rules.net_revenue_sum: inc-VAT ÷ 1.07 minus
 service charge) — the same figure the P&L shows.
 """
@@ -32,8 +38,12 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from rules import net_revenue_sum
 
-DEFAULT_URL = "https://api-production-bffdb.up.railway.app"
+# Renamed from api-production-bffdb on 2026-09-06; a renamed Railway domain stops
+# serving at once (the edge answers 404 "Application not found"), it never redirects.
+DEFAULT_URL = "https://invisiblevoice-api.up.railway.app"
 KEY_FILE = HERE / ".invisible_key.txt"
+STATE_FILE = HERE / ".invisible_last_ok.txt"   # day of the last successful sales push
+MAX_CATCHUP_DAYS = 90                          # an outage longer than this needs --since
 DB_FILE = HERE / "oshinei.db"
 CHUNK = 4000                                   # the API caps a call at 5,000 rows
 
@@ -67,6 +77,19 @@ def post(path: str, rows: list[dict], *, base: str, key: str, dry: bool) -> dict
 
 def push_chunked(path: str, rows: list[dict], **kw) -> list[dict]:
     return [post(path, rows[i:i + CHUNK], **kw) for i in range(0, len(rows), CHUNK)] if rows else []
+
+
+def since_day(days: int, today, state_file: Path = STATE_FILE) -> str:
+    """First day to push: `days` back, or the last successful day if that is further.
+
+    The last good day itself is re-sent (it may have been a partial day when it
+    was pushed). An unreadable or absent state file means plain `days`."""
+    since = today - timedelta(days=days)
+    try:
+        last_ok = datetime.strptime(state_file.read_text(encoding="utf-8").strip(), "%Y-%m-%d").date()
+    except (OSError, ValueError):
+        return since.isoformat()
+    return max(min(since, last_ok), today - timedelta(days=MAX_CATCHUP_DAYS)).isoformat()
 
 
 def location_rows(con: sqlite3.Connection) -> list[dict]:
@@ -120,9 +143,12 @@ def main(argv=None) -> int:
     if a.locations:
         out["locations"] = push_chunked("/api/v1/adapters/locations", location_rows(con), **kw)
     if not a.no_sales:
-        since = a.since or (datetime.now(tz=ZoneInfo("Asia/Bangkok")).date() - timedelta(days=a.days)).isoformat()
+        today = datetime.now(tz=ZoneInfo("Asia/Bangkok")).date()
+        since = a.since or since_day(a.days, today)
         rows = sales_rows(con, since)
         out["sales"] = {"since": since, "rows": len(rows), "results": push_chunked("/api/v1/adapters/sales", rows, **kw)}
+        if not a.dry_run and a.db == str(DB_FILE):      # post() exits on any HTTP error, so this is a success
+            STATE_FILE.write_text(today.isoformat(), encoding="utf-8")
     if a.menu:
         rows = menu_rows(con)
         out["menu"] = {"rows": len(rows), "results": push_chunked("/api/v1/adapters/menu", rows, **kw)}
