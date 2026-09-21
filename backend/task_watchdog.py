@@ -30,12 +30,23 @@ it is also the heartbeat.
 
 Healing: a task in RERUN_WHEN_MISSED that is `missed` or `stale` is started again,
 one at a time, and the report is rebuilt afterwards so it says what is true NOW.
-Only tasks that are safe to run late are listed (owner decision, 2026-09-21):
-DB Backup (~2 min, read-only on the DB) and Feedback Sync (talks to the live app
-only). NOT the syncs - a late Auto Sync can collide with the 12:00 live sync. And
-never blindly: a re-run is held back while any other Oshinei task is running or is
-due within 10 minutes (the sync swaps oshinei.db with os.replace, which Windows
-refuses while a backup holds the file open), and it is tried once per task per day.
+Only the tasks the owner approved are listed (2026-09-21), each with the clear room
+it needs before ANY other task's slot:
+    DB Backup      10 min  (~2-6 min, read-only on the DB)
+    Feedback Sync  10 min  (talks to the live app only)
+    Auto Sync      75 min  - measured 38-45 min (max 45.1 over 35 runs), and it writes
+                   the SAME oshinei.db.incoming as the 12:00/16:00 live sync with no
+                   lock between them: a manual run at 11:15 on 2026-09-14 never reached
+                   "Done". So it is never started at 11:15 (12:00 is 45 min away); it
+                   heals at the 17:00 check or at a logon with a clear morning. It is
+                   the only job that refreshes the LOCAL db, which the backup and the
+                   Invisible push read - that is why a missed one is worth healing.
+                   It runs LAST and is not waited on (the watchdog's own limit is 30 min);
+                   the next check judges how it ended.
+The live sync itself is never re-run. And never blindly: a re-run is held back while
+any other Oshinei task is running (the sync swaps oshinei.db with os.replace, which
+Windows refuses while a backup holds the file open), and it is tried once per task
+per day.
 A task that FAILED is never re-run - that needs a person, and the next daily slot
 retries it anyway.
 
@@ -73,10 +84,16 @@ STUCK_AFTER = timedelta(hours=3)       # the longest task limit is 2 h; the sche
 RENOTIFY_AFTER = timedelta(hours=20)
 PROBLEM_LEVELS = ("fail", "stale", "stuck", "missed")     # worst first
 
-RERUN_WHEN_MISSED = ("Oshinei DB Backup", "Oshinei Feedback Sync")   # safe to run late - see the docstring
+RERUN_WAIT = timedelta(minutes=12)                        # DB Backup is ~2 min at 07:30 but took 6 at midday
+# task -> (clear room it needs before any other task's slot, how long to wait for it).
+# ORDER MATTERS: they run in this order, one at a time, and a task that is not waited on
+# blocks everything after it - so the 40-minute sync is last. See the docstring.
+RERUN_WHEN_MISSED = {
+    "Oshinei DB Backup": (timedelta(minutes=10), RERUN_WAIT),
+    "Oshinei Feedback Sync": (timedelta(minutes=10), RERUN_WAIT),
+    "Oshinei Auto Sync": (timedelta(minutes=75), timedelta(0)),
+}
 RERUN_LEVELS = ("missed", "stale")                        # never "fail": that needs a person
-RERUN_CLEAR_AHEAD = timedelta(minutes=10)                 # leave this much room before another task's slot
-RERUN_WAIT = timedelta(minutes=12)                        # per re-run; DB Backup is ~2 min at 07:30 but took 6 at midday
 STILL_RUNNING = " - still running"
 
 RUNNING, NEVER_RAN = 0x41301, 0x41303
@@ -192,8 +209,9 @@ def carry_since(findings: list[dict], prev: dict, now: datetime) -> dict:
 
 
 # ── heal: start what is safe to start late ───────────────────────────────────
-def rerun_blocker(name: str, tasks: list[dict], now: datetime):
+def rerun_blocker(name: str, tasks: list[dict], now: datetime, ahead: timedelta = None):
     """Why `name` must not be started right now, or None. Pure."""
+    ahead = RERUN_WHEN_MISSED[name][0] if ahead is None else ahead
     for t in tasks:
         other = t.get("name")
         if other in (name, SELF_NAME) or t.get("state") == "Disabled":
@@ -205,7 +223,9 @@ def rerun_blocker(name: str, tasks: list[dict], now: datetime):
             if not first or not trig.get("enabled", True) or "Daily" not in (trig.get("kind") or ""):
                 continue
             slot = now.replace(hour=first.hour, minute=first.minute, second=0, microsecond=0)
-            if timedelta(0) <= slot - now <= RERUN_CLEAR_AHEAD:
+            if slot < now:
+                slot += timedelta(days=1)             # 23:30 now, 00:15 slot
+            if slot - now <= ahead:
                 return f"{other} starts at {slot:%H:%M}"
     return None
 
@@ -221,10 +241,9 @@ def heal(findings: list[dict], tried: dict, *, read=None, start=None, clock=date
     """Re-run what missed its slot and may be run late. Returns {task: what happened}.
     `tried` ({task: 'YYYY-MM-DD'}) is updated in place - one attempt per task per day."""
     read, start = read or read_tasks, start or start_task
-    notes = {}
-    for f in findings:
-        name = f["name"]
-        if name not in RERUN_WHEN_MISSED or f["level"] not in RERUN_LEVELS:
+    notes, level_of = {}, {f["name"]: f["level"] for f in findings}
+    for name, (_ahead, wait) in RERUN_WHEN_MISSED.items():          # config order, not report order
+        if level_of.get(name) not in RERUN_LEVELS:
             continue
         today = clock().strftime("%Y-%m-%d")
         if tried.get(name) == today:
@@ -240,7 +259,7 @@ def heal(findings: list[dict], tried: dict, *, read=None, start=None, clock=date
             notes[name] = "re-run could not be started"
             continue
         finished = False
-        while clock() - began < RERUN_WAIT:
+        while clock() - began < wait:
             sleep(10)
             me = next((t for t in read() if t.get("name") == name), {})
             ran = _when(me.get("last_run"))
@@ -330,7 +349,8 @@ def text_report(rep: dict) -> str:
             out.append(f"{'':13}log: {f['log_line']}")
             out.append(f"{'':13}     {f['log_file']}")
         if f.get("rerun") and f["level"] not in PROBLEM_LEVELS:
-            out.append(f"{'':13}healed: {f['rerun']}")
+            word = "started" if f["rerun"].endswith(STILL_RUNNING) else "healed"     # not healed until it ends well
+            out.append(f"{'':13}{word}: {f['rerun']}")
     return "\n".join(out) + "\n"
 
 
