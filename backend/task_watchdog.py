@@ -102,7 +102,7 @@ RESULT_MEANING = {
     1: "the .bat ended on its FAILED branch - the reason is in its log",
     RUNNING: "running now",
     NEVER_RAN: "has not run yet",
-    0x41306: "someone stopped it (End task)",
+    0x41306: "cut off - it hit its own time limit in Task Scheduler, or someone pressed End task; the job may still have finished - read its log",
     0x8004131F: "skipped - the previous run was still going",
     0xC000013A: "its window was closed while it ran (not a bug - do not close the black window)",
     0x80070002: "a file it needs is gone - was the folder moved or renamed?",
