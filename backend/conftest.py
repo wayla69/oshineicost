@@ -7,6 +7,7 @@ exercises the real endpoints (monthly + daily + per-bill + staged pos_* tables).
 """
 import os
 os.environ["OSHINEI_NO_SWAP"] = "1"   # MUST be set before `import main`
+os.environ["OSHINEI_FORCED_ORDER_FILE"] = ""   # the fixture plan must not follow the owner's real forced-order list
 
 import sqlite3
 import sys

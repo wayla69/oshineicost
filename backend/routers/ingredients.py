@@ -5,6 +5,10 @@ letters, the festival calendar and buffer accuracy.
 Moved out of main.py in Phase 2b (2026-09) by the AST: these endpoints and
 the helpers only they use, unchanged. URLs are unchanged.
 """
+import csv as _csv
+import os as _os
+from pathlib import Path as _Path
+
 from fastapi import APIRouter
 from core import _group_filter
 from core import _ingredient_family
@@ -194,10 +198,80 @@ def _ing_sourcing(con):
     return defaults, per_branch
 
 
+# ── the forced-order list (บังคับสั่ง) ─────────────────────────────────────────
+# Owner, 2026-09-21: "ปริมาณที่ควรสั่ง รายวัตถุดิบ ให้ใช้ตามนี้ครับ ที่บังคับสั่ง เบื้องต้นจะได้
+# มอนิเตอร์ถูก" - with the central warehouse's own stock sheet. Until then EVERY ingredient
+# with a recipe (~196 codes) defaulted to "สั่งส่วนกลาง", so the branch letter and the
+# compliance check judged a branch on garnish it rightly buys at the market.
+#
+# backend/data/forced_order_*.csv (newest wins) IS the list: a listed code defaults to
+# 'central' (monitored), every other code to 'local'. It only moves the DEFAULT - a tick or
+# un-tick made in the app (ingredient_sourcing) still wins, per branch or chain-wide.
+# No file -> the old behaviour (everything central).
+#
+# `recipe_codes`: the warehouse and the recipes do not always share a code for the same
+# material (whole frozen salmon 03-03-438 is recipe ingredient 02-01-001 แซลมอน; 13-01-451
+# is NEW CODE-021 ตับปลาอังกิโมะ). Those recipe codes count as listed too, else a third of
+# the sheet could never be monitored. Membership only - quantities stay in recipe units.
+_FORCED_DIR = _Path(__file__).resolve().parents[1] / "data"
+_FORCED_CACHE: dict = {"key": None, "val": None}
+_FORCED_NONE: dict = {"file": "", "items": [], "codes": {}}
+
+
+def _forced_file():
+    override = _os.environ.get("OSHINEI_FORCED_ORDER_FILE")
+    if override is not None:                       # "" switches the list off (the test-suite does)
+        return _Path(override) if override else None
+    files = sorted(_FORCED_DIR.glob("forced_order_*.csv"))
+    return files[-1] if files else None
+
+
+def _num(v):
+    try:
+        return float(str(v).replace(",", ""))
+    except (TypeError, ValueError):
+        return None
+
+
+def _forced_order() -> dict:
+    """{'file', 'items': [...], 'codes': {warehouse OR recipe code: item}}"""
+    f = _forced_file()
+    if not f or not f.exists():
+        return _FORCED_NONE
+    key = (str(f), f.stat().st_mtime_ns)
+    if _FORCED_CACHE["key"] == key:
+        return _FORCED_CACHE["val"]
+    items, codes = [], {}
+    with open(f, encoding="utf-8-sig", newline="") as fh:
+        for row in _csv.DictReader(fh):
+            code = (row.get("code") or "").strip()
+            if not code or code in codes:
+                continue
+            item = {"code": code, "name": (row.get("name") or "").strip(),
+                    "unit": (row.get("unit") or "").strip(), "group": (row.get("group") or "").strip(),
+                    "remark": (row.get("remark") or "").strip(),
+                    "monthly_need": _num(row.get("monthly_need")), "stock_months": _num(row.get("stock_months")),
+                    "sheet_no": int(_num(row.get("sheet_no")) or 0),
+                    "recipe_codes": [c.strip() for c in (row.get("recipe_codes") or "").split("|") if c.strip()]}
+            items.append(item)
+            codes[code] = item
+    for item in items:                              # a warehouse code always beats an alias
+        for alias in item["recipe_codes"]:
+            codes.setdefault(alias, item)
+    val = {"file": f.name, "items": items, "codes": codes}
+    _FORCED_CACHE.update(key=key, val=val)
+    return val
+
+
+def _forced_default(code: str) -> str:
+    codes = _forced_order()["codes"]
+    return "central" if (not codes or code in codes) else "local"
+
+
 def _ing_mode(code: str, branch: str, defaults: dict, per_branch: dict) -> str:
     if not code:
         return "central"
-    return per_branch.get((code, branch or ""), defaults.get(code, "central"))
+    return per_branch.get((code, branch or ""), defaults.get(code, _forced_default(code)))
 
 
 def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
@@ -311,9 +385,14 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
     # tag sourcing BEFORE the family rollup — the rollup keys on it so a
     # central item never merges into the same line as a branch-sourced one
     src_def, src_branch = _ing_sourcing(con)
+    forced = _forced_order()["codes"]
     for r in out:
         r["sourcing"] = _ing_mode(r["code"], r.get("branch") or branch or "",
                                   src_def, src_branch)
+        item = forced.get(r["code"])
+        r["forced"] = bool(item)
+        r["forced_group"] = item["group"] if item else ""
+        r["forced_as"] = item["code"] if item and item["code"] != r["code"] else ""   # listed under this warehouse code
     if include == "central":
         out = [r for r in out if r["sourcing"] == "central"]
     elif include == "local":
@@ -337,6 +416,8 @@ def _ing_plan_rows(con, start: str, end: str, days: int, branch: Optional[str],
                             "value_week", "value_month"):
                     f[fld] = round(f[fld] + r[fld], 3)
                 f["n_menus"] = max(f["n_menus"], r["n_menus"])
+                f["forced"] = f["forced"] or r["forced"]
+                f["forced_group"] = f["forced_group"] or r["forced_group"]
             f["n_variants"] += 1
         out = list(fam.values())
         for f in out:
@@ -541,6 +622,7 @@ def ingredients_order_plan(
         "meta": {"date_from": start, "date_to": end, "days": days, "branch": branch or "",
                  "group": group or "", "basis": basis, "buffer_pct": buffer_pct,
                  "include": include, "local_count": n_local, "season": season_info,
+                 "forced": {"file": _forced_order()["file"], "items": len(_forced_order()["items"])},
                  "window_mode": "range" if date_from else "rolling",
                  "era": _ing_era_note(start, end), "menu_era_from": GRAND_MENU_FROM,
                  "branch_names": branch_names,
@@ -968,6 +1050,30 @@ class SourcingRow(BaseModel):
     branch: Optional[str] = ""      # "" = ค่าเริ่มต้นทุกสาขา
     mode: str = "central"           # central = แนะนำสั่ง · local = สาขาซื้อเอง
     note: Optional[str] = None
+
+
+@router.get("/api/ingredients/forced-order")
+def ingredients_forced_order():
+    """The forced-order list as the app understands it: each line of the owner's sheet,
+    whether any recipe uses it (directly or through `recipe_codes`), and so whether the
+    plan can put a number on it. A listed item no recipe uses can be neither recommended
+    nor monitored - that is the kitchen's worklist, not a silent gap."""
+    fo = _forced_order()
+    with get_db() as con:
+        used = {r[0]: r[1] for r in con.execute(
+            "SELECT ingredient_code, COUNT(DISTINCT sku_id) FROM bom_ingredients "
+            "WHERE ingredient_code IS NOT NULL AND ingredient_code <> '' GROUP BY 1")}
+    items = []
+    for it in fo["items"]:
+        found = [c for c in [it["code"]] + it["recipe_codes"] if c in used]
+        items.append({**it, "in_recipes": bool(found), "matched_codes": found,
+                      "menus": sum(used[c] for c in found),
+                      "via_alias": bool(found) and it["code"] not in found})
+    return {"file": fo["file"], "items": items,
+            "summary": {"items": len(items), "monitorable": sum(1 for i in items if i["in_recipes"]),
+                        "via_alias": sum(1 for i in items if i["via_alias"]),
+                        "not_in_recipes": sum(1 for i in items if not i["in_recipes"]),
+                        "import": sum(1 for i in items if i["group"] == "import")}}
 
 
 @router.get("/api/ingredients/sourcing")

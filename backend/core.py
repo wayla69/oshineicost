@@ -190,8 +190,20 @@ DB_PATH = Path(_os_db.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")))
 #                      as an intent and re-applied by cost_sources.apply_all
 #   requisition_line,  the stores' issue reports and month-end stock counts, uploaded/typed on
 #   stock_count        the site (routers/requisition.py) — the sync has never seen either
+#   ingredient_sourcing, ingredient_order_issue(+_line), ingredient_order_actual,
+#   ingredient_purchase_week, demand_calendar
+#                      everything typed in the two 🧺 ordering tabs: which ingredients a branch
+#                      must order centrally, the issued (frozen) order cycles and what branches
+#                      actually ordered against them, weekly purchases, the festival calendar.
+#                      They are created lazily ON THE SITE and the sync's base DB has never held
+#                      them - so every swap (12:00, 16:00, 06:00) erased them, and a compliance
+#                      letter could never have been judged against a cycle older than a day
+#                      (found 2026-09-21). NOT ingredient_order_unit: pack sizes are seeded on
+#                      the PC (seed_order_units.py) and travel WITH the base DB.
 _PRESERVED_EXACT = ("app_user", "customer_feedback", "branch_targets", "app_settings",
-                     "branch_downtime", "cost_override", "requisition_line", "stock_count")
+                     "branch_downtime", "cost_override", "requisition_line", "stock_count",
+                     "ingredient_sourcing", "ingredient_order_issue", "ingredient_order_issue_line",
+                     "ingredient_order_actual", "ingredient_purchase_week", "demand_calendar")
 _PRESERVED_PREFIXES = ("recon", "feedback", "checklist")        # + "_" (escaped in the LIKE)
 
 

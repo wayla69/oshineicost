@@ -164,6 +164,7 @@ async function loadOrderPlan(force) {
        : '');
   opLoadCycles();
   opLoadAccuracy();
+  opLoadForcedNote(m.forced);
 
   const brs = d.branches || [];
   const brCard = document.getElementById('opBranchCard');
@@ -209,7 +210,7 @@ async function loadOrderPlan(force) {
           onchange="opSetSourcing('${jsAttr(r.code)}', this.checked)"
           title="${central ? 'แนะนำให้สั่งผ่านส่วนกลาง' : 'สาขาซื้อเอง — ไม่อยู่ในจดหมาย'}"></td>
       <td class="py-1.5 pr-2" style="font-family:monospace;font-size:10.5px;color:var(--text-muted)">${esc(r.code)}</td>
-      <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}</td>
+      <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}${opForcedBadge(r)}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(OP_TYPE_TH[r.type] || r.type)}</td>
       <td class="py-1.5 pr-2 text-right">${esc(r.per_day_disp)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${r.pack_known ? '' : '<span style="color:#b45309">◇</span> '}${esc(r.order_unit || r.unit)}</td>
@@ -308,6 +309,36 @@ async function opSetSourcing(code, central) {
   }
 }
 
+
+// ── forced-order list (บังคับสั่ง) ────────────────────────────────────────
+// backend/data/forced_order_*.csv = the central warehouse's own sheet. A listed
+// ingredient defaults to "สั่งส่วนกลาง" (monitored), everything else to "สาขาซื้อเอง";
+// the tick box still overrides either way. The badge says WHY a row is ticked,
+// and the note names the listed items no recipe uses - those cannot be monitored.
+function opForcedBadge(r) {
+  if (!r.forced) return '';
+  const imp = r.forced_group === 'import';
+  const tip = (imp ? 'ซื้อต่างประเทศ — ส่วนกลางสั่งล็อตใหญ่ สาขาต้องสั่งจากส่วนกลาง' : 'รายการบังคับสั่งจากส่วนกลาง')
+    + (r.forced_as ? ` · ในใบคลังใช้รหัส ${r.forced_as}` : '');
+  return ` <span title="${esc(tip)}" style="font-size:10px;padding:1px 6px;border-radius:999px;white-space:nowrap;${imp
+    ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' : 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'}">📌 บังคับสั่ง${imp ? ' · ตปท.' : ''}</span>`;
+}
+
+async function opLoadForcedNote(meta) {
+  const anchor = document.getElementById('opCoverage'); if (!anchor) return;
+  let el = document.getElementById('opForcedNote');
+  if (!el) { el = document.createElement('div'); el.id = 'opForcedNote'; anchor.parentNode.insertBefore(el, anchor); }
+  if (!meta || !meta.items) { el.innerHTML = ''; return; }
+  let d = null;
+  try { d = await api(`${API}/api/ingredients/forced-order`); } catch(e) { el.innerHTML = ''; return; }
+  const sm = d.summary || {}, miss = (d.items || []).filter(i => !i.in_recipes);
+  el.innerHTML = `<div class="card p-3 text-xs mb-3" style="background:#f0fdfa;border-left:3px solid #0f766e;color:#134e4a">
+    📌 <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลังส่วนกลาง —
+    ติ๊ก “สั่งส่วนกลาง” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
+    · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
+    ${miss.length ? `<div class="mt-1" style="color:#92400e">⚠️ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
+    <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
+}
 
 // ── bulk sourcing ───────────────────────────────────────────────────────────
 // All 256 ingredients default to 'สั่งส่วนกลาง', so "monitor only the main
