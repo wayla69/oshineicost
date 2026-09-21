@@ -43,6 +43,14 @@ def test_the_window_closed_code_is_named_not_shown_as_a_number():
     assert f["level"] == "fail" and "window was closed" in f["meaning"]
 
 
+def test_terminated_names_the_time_limit_not_just_a_person():
+    # 2026-09-21: the healed Auto Sync ran 60 min (MSSQL drops + a busy PC) and Task Scheduler cut it at
+    # its PT1H limit - yet the batch finished the Fly push and the local apply on its own. "someone
+    # stopped it" would have sent the owner looking for a person.
+    f = tw.judge(task(result=267014), NOW)
+    assert f["level"] == "fail" and "time limit" in f["meaning"] and "read its log" in f["meaning"]
+
+
 def test_an_unknown_code_is_shown_in_hex():
     assert "0x80070005" in tw.judge(task(result=0x80070005), NOW)["meaning"]
 
