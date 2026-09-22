@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # The merge gate: everything a PR must pass, on the machine that merges it.
-# GitHub Actions is disabled on this repo (repo settings → Actions, since
-# 2026-08-10), so nothing runs the suites unless someone does — run this before
-# every merge and read the LAST line, which is the only thing that matters.
+# Run this before every merge and read the LAST line, which is the only thing
+# that matters. It is NECESSARY, not sufficient: GitHub Actions is enabled again
+# (.github/workflows/tests.yml runs the same suites on ubuntu for every push and
+# PR, and a red run emails the owner). This gate runs on Windows, so a test that
+# only works here passes it and fails CI - 28 red runs on 2026-09-21 from one such
+# test. Merge only when `gh pr checks <n>` is green as well.
 #
 #   bash scripts/gate.sh            # backend + recon suites + pyflakes
 #   bash scripts/gate.sh backend    # one area: backend | recon | js
