@@ -307,7 +307,7 @@ if _FRONTEND.exists():
 
 # ── Write auth + upload validation ────────────────────────────────────────────
 # Mirrors the dashboard's gate: when OSHINEI_SEED_TOKEN is set (hosted deploys) a
-# matching token is required via the `X-Upload-Token` header or `?token=`. Unset
+# matching token is required in the `X-Upload-Token` header (never `?token=`). Unset
 # locally → writes are open, so the gate is invisible in dev.
 
 

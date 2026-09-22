@@ -128,9 +128,10 @@ def test_the_sync_mirrors_live_confirmations_and_never_fails_the_build(monkeypat
                                "rows": [["PEPSI", "cost", 9.5, None, "", "chef1", "2026-09-18", "x"]]}).encode()
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
     seen = []
-    monkeypatch.setattr("urllib.request.urlopen", lambda url, timeout=0: (seen.append(url), _Resp())[1])
+    monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=0: (seen.append(req), _Resp())[1])
     assert b._pull_confirmed_costs(con, cs) == 1
-    assert "token=tok" in seen[0] and "cost-overrides" in seen[0]
+    assert "cost-overrides" in seen[0].full_url and "token" not in seen[0].full_url        # never in the URL: it is logged
+    assert {k.lower(): v for k, v in seen[0].header_items()}["x-seed-token"] == "tok"
     assert [r[0] for r in con.execute("SELECT sku_code FROM cost_override")] == ["PEPSI"]   # mirrored, OLD gone
 
     def boom(url, timeout=0): raise OSError("offline")
@@ -164,16 +165,18 @@ def test_confirm_review_and_withdraw_through_the_api(client):
 
 
 def test_the_sync_endpoint_is_token_gated(client, monkeypatch):
+    H = {"X-Seed-Token": "tok"}
     monkeypatch.delenv("OSHINEI_SEED_TOKEN", raising=False)
-    assert client.get("/api/_admin/cost-overrides", params={"token": "x"}).status_code == 404
+    assert client.get("/api/_admin/cost-overrides", headers=H).status_code == 404
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
-    assert client.get("/api/_admin/cost-overrides", params={"token": "wrong"}).status_code == 404
-    r = client.get("/api/_admin/cost-overrides", params={"token": "tok"})
+    assert client.get("/api/_admin/cost-overrides", headers={"X-Seed-Token": "wrong"}).status_code == 404
+    assert client.get("/api/_admin/cost-overrides", params={"token": "tok"}).status_code == 404   # the old way is refused
+    r = client.get("/api/_admin/cost-overrides", headers=H)
     assert r.status_code == 200 and r.json()["columns"][:2] == ["sku_code", "kind"]
     # machine-to-machine: the sync has a seed token, not a login session. With the
     # login gate ON the endpoint must still answer to the token — the first deploy
     # returned 401 here, which the (non-fatal) pull would have swallowed forever.
     monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret")
-    assert client.get("/api/_admin/cost-overrides", params={"token": "tok"}).status_code == 200
-    assert client.get("/api/_admin/cost-overrides", params={"token": "wrong"}).status_code == 404
+    assert client.get("/api/_admin/cost-overrides", headers=H).status_code == 200
+    assert client.get("/api/_admin/cost-overrides", headers={"X-Seed-Token": "wrong"}).status_code == 404
     assert client.get("/api/cost/review").status_code == 401          # the human endpoints stay gated

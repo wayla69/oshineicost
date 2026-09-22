@@ -29,7 +29,6 @@ from contextlib import contextmanager
 from datetime import datetime as _dt
 from fastapi import HTTPException
 from fastapi import Header
-from fastapi import Query
 from pathlib import Path
 import hmac
 import os
@@ -221,10 +220,10 @@ def _accepted_tokens() -> dict:
     return out
 
 
-def require_write_token(token: str = Query(""), x_upload_token: str = Header(None)):
+def require_write_token(x_upload_token: str = Header(None)):
     toks = _accepted_tokens()
     if toks:
-        provided = (x_upload_token or token or "").strip()
+        provided = (x_upload_token or "").strip()      # header only - a ?token= would be logged
         if not any(hmac.compare_digest(provided, t) for t in toks):
             raise HTTPException(403, "A valid write token is required.")
 

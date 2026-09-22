@@ -115,8 +115,8 @@ def _pull_confirmed_costs(sq, cost_sources, api=None, timeout=25):
             print("[0/4] confirmed costs: no seed token here — skipped")
             return 0
         api = (api or os.environ.get("OSHINEI_API") or "https://oshinei-dashboard.fly.dev").rstrip("/")
-        url = f"{api}/api/_admin/cost-overrides?token={urllib.parse.quote(token)}"
-        with urllib.request.urlopen(url, timeout=timeout) as resp:
+        req = urllib.request.Request(f"{api}/api/_admin/cost-overrides", headers={"X-Seed-Token": token})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
         cols, rows = data.get("columns") or [], data.get("rows") or []
         sq.execute(cost_sources.OVERRIDE_DDL)

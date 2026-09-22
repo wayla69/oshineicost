@@ -7,7 +7,7 @@ set of tables forward (core._PRESERVED_*): users, customer voices, survey links,
 actions, competitor snapshots, checklist ticks, the recon uploads. Those rows
 never exist on this PC, so the local DB backup does not cover them. This asks
 the live app for exactly that set through the token-gated export
-(GET /api/_admin/export-state?token=…) and writes it next to the DB backups:
+(GET /api/_admin/export-state, seed token in the X-Seed-Token header) and writes it next to the DB backups:
 
     fly_state_<stamp>.ndjson.gz     one JSON line per table header / row / final counts
     fly_state_<stamp>.manifest.txt  row counts + sha256 (the restore test reads it)
@@ -40,9 +40,10 @@ from fetch_feedback import DEFAULT_API, resolve_token  # noqa: E402
 FILE_RE = re.compile(r"^fly_state_(\d{4}-\d{2}-\d{2}_\d{4})\.ndjson\.gz$")
 
 
-def _open(url: str, timeout: int = 300):
+def _open(url: str, timeout: int = 300, headers: dict = None):
     """The network seam: a readable binary stream for the URL."""
-    return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Oshinei pull_fly_state"}), timeout=timeout)
+    return urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "Oshinei pull_fly_state", **(headers or {})}),
+                                  timeout=timeout)
 
 
 def _sha256(p: Path) -> str:
@@ -89,11 +90,11 @@ def cmd_pull(args) -> int:
     if not token:
         print("✗ no token — set OSHINEI_SEED_TOKEN or backend/.seed_tokens.txt")
         return 1
-    url = f"{args.api.rstrip('/')}/api/_admin/export-state?token={urllib.parse.quote(token)}"
+    url = f"{args.api.rstrip('/')}/api/_admin/export-state"
     dest = out / f"fly_state_{args.stamp}.ndjson.gz"
     tmp = dest.with_suffix(".part")
     try:
-        with _open(url) as r, open(tmp, "wb") as f:
+        with _open(url, headers={"X-Seed-Token": token}) as r, open(tmp, "wb") as f:
             while True:
                 chunk = r.read(1 << 20)
                 if not chunk:

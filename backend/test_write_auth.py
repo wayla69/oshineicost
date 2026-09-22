@@ -1,8 +1,8 @@
 """Auth gate on data-mutating endpoints (require_write_token).
 
 Invariant: when OSHINEI_SEED_TOKEN is set (hosted deploys), every write needs a
-matching X-Upload-Token header or ?token=; when unset (local dev), writes are
-open. Read-only endpoints — including the compute-only POST /api/bom-cost/simulate
+X-Upload-Token header (never ?token= - the access log prints the request line); when
+unset (local dev), writes are open. Read-only endpoints — including the compute-only POST /api/bom-cost/simulate
 — are never gated.
 """
 import pytest
@@ -31,10 +31,12 @@ def test_write_allowed_with_header_token(client, monkeypatch):
     assert r.status_code != 403, r.text
 
 
-def test_write_allowed_with_query_token(client, monkeypatch):
+def test_a_query_string_token_no_longer_counts(client, monkeypatch):
+    """Until 2026-09-22 ?token= was accepted as well - and so appeared in Fly's request
+    log on every call. A correct token in the URL is now the same as no token."""
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", TOKEN)
     r = client.post(f"/api/cost?token={TOKEN}", json=COST_BODY)
-    assert r.status_code != 403, r.text
+    assert r.status_code == 403, r.text
 
 
 def test_write_rejected_with_wrong_token(client, monkeypatch):
