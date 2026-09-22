@@ -144,7 +144,12 @@ def _ing_order_units(con) -> Dict[str, dict]:
 
 
 def _ing_to_order(need_base: float, unit: str, pack: Optional[dict]):
-    """Base-unit demand -> whole ordering units, always rounded UP.
+    """Base-unit demand -> a WHOLE number of ordering units, always rounded UP.
+
+    Owner, 2026-09-22: "ปัดเศษให้เป็นจำนวนเต็ม (ปัดขึ้นทุกกรณี)". So `units` is an int,
+    without exception: a pack step below 1 (half-cartons) is ignored, a step of 6
+    still rounds up to the next multiple of 6, a MOQ still applies, and the
+    กก./ลิตร fallback rounds up to whole kilos / litres.
 
     Returns the pack description, how many to order, and what actually arrives
     (packs x pack size) so the branch can see the carry-over it is accepting."""
@@ -152,22 +157,22 @@ def _ing_to_order(need_base: float, unit: str, pack: Optional[dict]):
     if pack:
         per = float(pack.get("qty_per_order") or 0) or 1.0
         label = pack.get("order_unit") or unit
-        step = float(pack.get("round_step") or 1) or 1.0
-        moq = float(pack.get("moq") or 0)
+        step = int(float(pack.get("round_step") or 1)) or 1        # never a fraction of a unit
+        moq = int(_m.ceil(float(pack.get("moq") or 0)))
         price = pack.get("price_per_order")
         known = True
     else:
         label, per = _ING_UNIT_FALLBACK.get(unit or "", (unit or "หน่วย", 1.0))
-        step, moq, price, known = 1.0, 0.0, None, False
-    units = 0.0
+        step, moq, price, known = 1, 0, None, False
+    units = 0
     if need_base > 0:
-        units = _m.ceil((need_base / per) / step) * step
+        units = int(_m.ceil(_m.ceil(need_base / per) / step) * step)
         if moq and units < moq:
             units = moq
     return {
         "order_unit": label,
         "qty_per_order": round(per, 4),
-        "units": int(units) if float(units).is_integer() else round(units, 2),
+        "units": units,
         "actual_base": round(units * per, 2),
         "price_per_order": price,
         "pack_known": known,
@@ -704,6 +709,147 @@ def ingredients_order_plan_xlsx(
                   headers={"Content-Disposition":
                            f"attachment; filename=ORDER_PLAN_{ascii_tag}_{end}.xlsx; "
                            f"filename*=UTF-8''{_q(f'ORDER_PLAN_{tag}_{end}.xlsx')}"})
+
+
+def _sheet_title(name: str, taken: set) -> str:
+    """An Excel sheet name: no []:*?/\\, at most 31 characters, unique."""
+    t = "".join(ch for ch in str(name or "สาขา") if ch not in '[]:*?/\\').strip()[:31] or "สาขา"
+    base, n = t, 2
+    while t in taken:
+        suffix = f" ({n})"
+        t = base[:31 - len(suffix)] + suffix
+        n += 1
+    taken.add(t)
+    return t
+
+
+@router.get("/api/ingredients/order-plan-by-branch.xlsx")
+def ingredients_order_plan_by_branch_xlsx(
+    branch:      Optional[str] = Query(None, description="one branch; omit for every branch (one sheet each)"),
+    group:       Optional[str] = Query(None),
+    days:        int           = Query(28),
+    date_to:     Optional[str] = Query(None),
+    date_from:   Optional[str] = Query(None),
+    basis:       str           = Query("avg"),
+    buffer_pct:  float         = Query(10.0),
+    include:     str           = Query("central", description="central (รายการที่สั่งผ่านส่วนกลาง) | all | local"),
+    season:      Optional[str] = Query(None, description="auto = scale each branch by its own festival factor"),
+    cycle_start: Optional[str] = Query(None),
+    top:         int           = Query(0, description="ingredients per branch, 0 = all"),
+):
+    """ปริมาณที่ควรสั่ง รายวัตถุดิบ — one sheet per branch, whole numbers, rounded up.
+
+    Owner, 2026-09-22: "ต้องทำเป็นรายงานแยกสาขาครับ จะได้แนะนำสาขาได้ถูก และปัดเศษให้เป็น
+    จำนวนเต็ม (ปัดขึ้นทุกกรณี)". The chain-level export lists every branch x ingredient
+    on one long sheet; this is the same numbers laid out for handing to A branch:
+    a สรุป sheet, then one sheet per branch with only what that branch should order.
+    Default include=central: the items branches must order through the warehouse —
+    the forced-order list plus anything ticked สั่งส่วนกลาง — because a branch is
+    advised on those, not on what it buys at the market."""
+    buffer_pct = max(0.0, min(float(buffer_pct or 0), 100.0))
+    basis = "recent" if str(basis).lower() == "recent" else "avg"
+    include = include if include in ("all", "central", "local") else "central"
+    with get_db() as con:
+        start, end, days = _ing_window(con, days, date_to, date_from)
+        if not start:
+            raise HTTPException(status_code=404, detail="ไม่มีข้อมูลยอดขายรายวัน")
+        names = [branch] if branch else _ing_branch_names(con)
+        per_b = _ing_plan_rows(con, start, end, days, branch, group, basis, buffer_pct,
+                               None, None, False, per_branch=not branch, include=include)
+        if branch:
+            for r in per_b:
+                r["branch"] = branch
+        by: Dict[str, list] = {}
+        for r in per_b:
+            by.setdefault(r["branch"], []).append(r)
+        c_start = cycle_start or con.execute("SELECT date('now','localtime')").fetchone()[0]
+        c_end = con.execute("SELECT date(:s,'+6 day')", {"s": c_start}).fetchone()[0]
+        factors: Dict[str, dict] = {}
+        for b, rows in by.items():
+            info = _ing_season_resolve(con, b, c_start, c_end, "auto" if season == "auto" else "off")
+            sf = float(info.get("factor") or 1.0)
+            factors[b] = info
+            if abs(sf - 1.0) > 1e-6:                    # each branch scaled by ITS OWN factor
+                for r in rows:
+                    for k in ("per_day", "per_week", "per_month", "order_week", "order_month",
+                              "value_week", "value_month"):
+                        r[k] = round(r[k] * sf, 4)
+                _ing_reapply_order_units(con, rows)
+            rows.sort(key=lambda x: x["value_month"], reverse=True)
+            if top and top > 0:
+                del rows[top:]
+
+    from openpyxl.styles import Alignment as _AL, Font as _F
+    wb = _wb_new("สรุป")
+    ws = wb.active
+    inc_th = {"central": "เฉพาะรายการที่สั่งผ่านส่วนกลาง (บังคับสั่ง + ที่ติ๊กสั่งส่วนกลาง)",
+              "all": "ทุกรายการ", "local": "เฉพาะรายการที่สาขาซื้อเอง"}[include]
+    note = (f"ข้อมูลขายจริง {start} ถึง {end} ({days} วัน) · ฐาน {'7 วันล่าสุด' if basis == 'recent' else 'เฉลี่ยทั้งช่วง'} · "
+            f"เผื่อ {buffer_pct:g}% · {inc_th} · ปริมาณสั่งปัดขึ้นเป็นจำนวนเต็มทุกรายการ"
+            + (" · ปรับตามเทศกาลรายสาขา" if season == "auto" else " · ไม่รวมปัจจัยเทศกาล"))
+    ws.append(["ปริมาณที่ควรสั่ง รายวัตถุดิบ — แยกสาขา (1 แผ่นต่อสาขา)"]); ws["A1"].font = _F(bold=True, size=13)
+    ws.append([note]); ws["A2"].font = _F(size=9, color="475569")
+    ws.append([])
+    ws.append(["สาขา", "จำนวนรายการ", "มูลค่าที่ควรสั่ง/สัปดาห์ (บาท)", "มูลค่าที่ควรสั่ง/เดือน (บาท)", "ปัจจัยเทศกาล", "แผ่น"])
+    _style_header(ws, 4)
+    taken: set = set()
+    titles = {b: _sheet_title(b, taken) for b in names}
+    order = sorted(names, key=lambda b: -sum(r["value_month"] for r in by.get(b, [])))
+    tw = tm = 0.0
+    for b in order:
+        rows = by.get(b, [])
+        vw, vm = sum(r["value_week"] for r in rows), sum(r["value_month"] for r in rows)
+        tw += vw; tm += vm
+        f = factors.get(b, {}).get("factor")
+        ws.append([b, len(rows), round(vw, 2), round(vm, 2), f"x{f:g}" if f and abs(f - 1) > 1e-6 else "—", titles[b]])
+    ws.append(["รวม", sum(len(by.get(b, [])) for b in names), round(tw, 2), round(tm, 2), "", ""])
+    for c in ws[ws.max_row]:
+        c.font = _F(bold=True)
+    for col, w in zip("ABCDEF", (24, 14, 26, 26, 14, 24)):
+        ws.column_dimensions[col].width = w
+    for row in ws.iter_rows(min_row=5, min_col=3, max_col=4):
+        for c in row:
+            c.number_format = "#,##0"
+    ws.freeze_panes = "A5"
+
+    head = ["ลำดับ", "รหัส", "วัตถุดิบ", "บังคับสั่ง", "หน่วยนับ", "ใช้เฉลี่ย/วัน", "หน่วยสั่ง",
+            "ขนาดบรรจุ (1 หน่วยสั่ง = ? หน่วยนับ)", "ควรสั่ง/สัปดาห์", "ควรสั่ง/เดือน",
+            "มูลค่า/เดือน (บาท)", "แนวโน้ม 7 วัน %", "หมายเหตุ"]
+    for b in order:
+        rows = by.get(b, [])
+        s = wb.create_sheet(titles[b])
+        s.append([f"ปริมาณที่ควรสั่ง รายวัตถุดิบ — {b}"]); s["A1"].font = _F(bold=True, size=13)
+        s.append([note]); s["A2"].font = _F(size=9, color="475569")
+        s.append([])
+        s.append(head)
+        _style_header(s, 4)
+        for i, r in enumerate(rows, start=1):
+            forced = ("ตปท." if r.get("forced_group") == "import" else "✓") if r.get("forced") else ""
+            remark = [] if r.get("pack_known") else ["ยังไม่ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐาน"]
+            if r.get("sourcing") == "local":
+                remark.append("สาขาซื้อเอง")
+            if r.get("forced_as"):
+                remark.append(f"รหัสในใบคลัง {r['forced_as']}")
+            s.append([i, r["code"], r["name"], forced, r["unit"], round(float(r["per_day"]), 2),
+                      r.get("order_unit") or r["unit"], r.get("qty_per_order"),
+                      int(r.get("order_week_units") or 0), int(r.get("order_month_units") or 0),
+                      round(float(r["value_month"]), 2), r.get("trend_pct"), " · ".join(remark) or None])
+        if rows:
+            s.append([]); s.append(["รวมมูลค่า/เดือน", None, None, None, None, None, None, None, None, None,
+                                    round(sum(r["value_month"] for r in rows), 2)])
+            for c in s[s.max_row]:
+                c.font = _F(bold=True)
+        else:
+            s.append(["ไม่มีรายการตามเงื่อนไขที่เลือก"])
+        for col, w in zip("ABCDEFGHIJKLM", (7, 13, 40, 10, 10, 13, 12, 22, 15, 15, 17, 14, 34)):
+            s.column_dimensions[col].width = w
+        for row in s.iter_rows(min_row=5, max_row=4 + len(rows)):
+            row[8].number_format = row[9].number_format = "#,##0"        # whole numbers, as promised
+            row[10].number_format = "#,##0"
+            row[5].number_format = "#,##0.00"
+            row[2].alignment = _AL(wrap_text=True, vertical="top")
+        s.freeze_panes = "A5"
+    return _xlsx_attachment(wb, f"ORDER_PLAN_BY_BRANCH_{end}.xlsx")
 
 
 @router.get("/api/ingredients/order-letter.print")
