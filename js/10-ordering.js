@@ -277,6 +277,18 @@ function opPrintLetter(preview) {
   });
 }
 
+// One sheet per branch, whole numbers rounded up - what the owner hands a branch
+// ("ปริมาณที่ควรสั่ง รายวัตถุดิบ ต้องทำเป็นรายงานแยกสาขา", 2026-09-22). The tab's
+// "ทุกรายการ" filter is deliberately NOT carried over: a branch is advised on what
+// it must order through the warehouse, so the default is the central list.
+function opExportByBranch() {
+  const p = _opParams();
+  p.delete('type'); p.delete('q'); p.delete('group_family'); p.delete('split_branches');
+  const inc = document.getElementById('opInclude')?.value || 'all';
+  p.set('include', inc === 'all' ? 'central' : inc);
+  window.open(`${API}/api/ingredients/order-plan-by-branch.xlsx?${p}`, '_blank');
+}
+
 function opExportXlsx() {
   const p = _opParams();
   p.delete('type'); p.delete('q'); p.delete('group_family');
