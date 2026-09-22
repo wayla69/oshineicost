@@ -43,11 +43,13 @@ def test_export_is_token_gated_and_streams_every_preserved_table(client, monkeyp
                                                             "text": "รอนานมาก", "external_id": "fs1"}], "by": "test"})
     assert r.status_code == 200
     try:
-        assert client.get("/api/_admin/export-state", params={"token": "x"}).status_code == 404       # endpoint off without a token
+        H = {"X-Seed-Token": "tok"}
+        assert client.get("/api/_admin/export-state", headers=H).status_code == 404       # endpoint off without a token
         monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
         assert client.get("/api/_admin/export-state").status_code == 404
-        assert client.get("/api/_admin/export-state", params={"token": "wrong"}).status_code == 404
-        r = client.get("/api/_admin/export-state", params={"token": "tok"})
+        assert client.get("/api/_admin/export-state", params={"token": "tok"}).status_code == 404   # the old way is refused
+        assert client.get("/api/_admin/export-state", headers={"X-Seed-Token": "wrong"}).status_code == 404
+        r = client.get("/api/_admin/export-state", headers=H)
         assert r.status_code == 200 and r.headers["content-type"].startswith("application/gzip")
         tables, rows, done = _parse(r.content)
         assert "customer_feedback" in tables and "app_user" in tables          # checklist_* appear once that router has run
@@ -59,7 +61,7 @@ def test_export_is_token_gated_and_streams_every_preserved_table(client, monkeyp
         assert done["counts"]["customer_feedback"] == 1 and done["counts"]["app_user"] >= 1 and len(done["exported_at"]) == 19
         # the export bypasses the login gate (machine-to-machine); the app's own reads do not
         monkeypatch.setenv("OSHINEI_AUTH", "1"); monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret")
-        assert client.get("/api/_admin/export-state", params={"token": "tok"}).status_code == 200
+        assert client.get("/api/_admin/export-state", headers=H).status_code == 200
         assert client.get("/api/feedback/summary").status_code == 401
     finally:
         _clean_voices()
@@ -71,18 +73,18 @@ def test_pull_verify_restore_and_prune(client, monkeypatch, tmp_path):
                                                         {"branch": "BranchB", "date": "2026-09-03", "source": "Google", "rating": 2, "text": "ช้า", "external_id": "fs3"}], "by": "test"})
     try:
         monkeypatch.setenv("OSHINEI_SEED_TOKEN", "tok")
-        seen_urls = []
+        seen_urls, seen_headers = [], []
 
-        def fake_open(url, timeout=300):
-            seen_urls.append(url)
+        def fake_open(url, timeout=300, headers=None):
+            seen_urls.append(url); seen_headers.append(headers or {})
             path = url.split("https://app", 1)[1]
-            r = client.get(path)
+            r = client.get(path, headers=headers or {})
             assert r.status_code == 200, r.text
             return io.BytesIO(r.content)
         monkeypatch.setattr(P, "_open", fake_open)
         out = tmp_path / "bk"
         assert P.cmd_pull(SimpleNamespace(out=str(out), stamp="2026-09-05_0730", api="https://app", token=None, keep=14)) == 0
-        assert seen_urls[0].startswith("https://app/api/_admin/export-state?token=tok")
+        assert seen_urls[0] == "https://app/api/_admin/export-state" and seen_headers[0] == {"X-Seed-Token": "tok"}   # never in the URL
         f = out / "fly_state_2026-09-05_0730.ndjson.gz"
         man = (out / "fly_state_2026-09-05_0730.manifest.txt").read_text(encoding="utf-8")
         assert f.exists() and "customer_feedback: 2" in man and "sha256: " in man

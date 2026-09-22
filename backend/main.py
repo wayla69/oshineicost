@@ -13,7 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, HTTPException, UploadFile, File, Header, Request
+from fastapi import Depends, FastAPI, Query, HTTPException, UploadFile, File, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -265,7 +265,7 @@ async def enforce_auth(request: Request, call_next):
         # calls it without a session; it verifies its own HMAC signature / verify token
         # (routers/feedback.py). The trailing slash keeps /api/feedback/webhook-events gated.
         # seed-db is a headless machine-to-machine endpoint with its OWN token auth
-        # (?token=, returns 404 on mismatch). It must bypass the login middleware,
+        # (X-Seed-Token header, returns 404 on mismatch). It must bypass the login middleware,
         # else enabling OSHINEI_AUTH silently breaks the hosted data-refresh push.
         return await call_next(request)
     def _deny():
@@ -711,8 +711,7 @@ _TASK_PROBLEM_LEVELS = ("fail", "stale", "stuck", "missed")
 async def _task_health_report(request: Request):
     """Machine-to-machine, seed token in the X-Seed-Token header (404 on mismatch,
     like seed-db); exempt from the login gate for the same reason seed-db is."""
-    if not _accepted_tokens() or not _token_accepted(request.headers.get("X-Seed-Token", "")):
-        raise HTTPException(status_code=404, detail="not found")
+    _seed_token_or_404(request.headers.get("X-Seed-Token", ""))
     raw = await request.body()
     if len(raw) > 64_000:
         raise HTTPException(status_code=413, detail="report too large")
@@ -912,7 +911,9 @@ def app_js():
 # seed an empty volume and to refresh an existing one with newer data.
 #
 # Safe by design:
-#   • token-gated — requires env OSHINEI_SEED_TOKEN set AND matching ?token=
+#   • token-gated — requires env OSHINEI_SEED_TOKEN set AND a matching X-Seed-Token
+#     header. NEVER ?token=: uvicorn's access log prints the request line, so a token
+#     in the query string landed in Fly's logs on every push (moved 2026-09-22)
 #     (unset the Fly secret to disable the endpoint entirely → 404).
 #   • the upload is STAGED to <DB_PATH>.incoming and validated (integrity_check
 #     + non-empty sales_transaction); the live DB is never touched here.
@@ -931,12 +932,18 @@ def app_js():
 # pull before it builds menu_fact_*: that build runs against a staging DB on
 # another machine, which would otherwise never hear about a confirmation made
 # here. Same token gate as export-state; a few dozen tiny rows, so plain JSON.
-@app.get("/api/_admin/cost-overrides", include_in_schema=False)
-def _cost_overrides(token: str = Query("")):
-    import cost_sources as _csrc
-    toks = _accepted_tokens()
-    if not toks or not _token_accepted(token):
+def _seed_token_or_404(x_seed_token: str = Header(None)) -> str:
+    """The machine-to-machine gate shared by the /api/_admin endpoints: the seed token
+    in the X-Seed-Token HEADER (never the URL - see the note above), 404 on anything
+    else so the endpoints do not even admit to existing."""
+    if not _accepted_tokens() or not _token_accepted(x_seed_token or ""):
         raise HTTPException(status_code=404, detail="not found")
+    return x_seed_token
+
+
+@app.get("/api/_admin/cost-overrides", include_in_schema=False)
+def _cost_overrides(_tok: str = Depends(_seed_token_or_404)):
+    import cost_sources as _csrc
     with get_db() as con:
         con.execute(_csrc.OVERRIDE_DDL)
         cols = [r[1] for r in con.execute("PRAGMA table_info(cost_override)")]
@@ -945,13 +952,10 @@ def _cost_overrides(token: str = Query("")):
 
 
 @app.get("/api/_admin/export-state", include_in_schema=False)
-def _export_state(token: str = Query("")):
+def _export_state(_tok: str = Depends(_seed_token_or_404)):
     import base64 as _b64, datetime as _dt, json as _json, sqlite3 as _sq, zlib as _zlib
     from fastapi.responses import StreamingResponse as _Stream
     from core import _preserved_pred as _pp
-    toks = _accepted_tokens()
-    if not toks or not _token_accepted(token):
-        raise HTTPException(status_code=404, detail="not found")
 
     def _cell(v):
         return {"b64": _b64.b64encode(v).decode("ascii")} if isinstance(v, (bytes, bytearray, memoryview)) else v
@@ -982,11 +986,8 @@ def _export_state(token: str = Query("")):
 
 
 @app.post("/api/_admin/seed-db", include_in_schema=False)
-async def _seed_db(file: UploadFile = File(...), token: str = Query("")):
+async def _seed_db(file: UploadFile = File(...), _tok: str = Depends(_seed_token_or_404)):
     import gzip, shutil, tempfile, os as _os2
-    toks = _accepted_tokens()
-    if not toks or not _token_accepted(token):
-        raise HTTPException(status_code=404, detail="not found")
     inc = str(DB_PATH) + ".incoming"
     # Decompress+validate into a .partial first, then atomically rename to the
     # .incoming name the hot-swap poller watches — as the LAST step. Otherwise the
@@ -1312,13 +1313,13 @@ _MAX_UPLOAD_BYTES = 150 * 1024 * 1024
 @app.post("/api/upload")
 def upload_file(
     file: UploadFile = File(...),
-    token: str = Query(""),
     x_upload_token: str = Header(None),
 ):
     """Accept a multipart Easy data upload, ingest it, return a summary.
 
     AUTH: when OSHINEI_SEED_TOKEN is set (hosted deploys), a matching token is
-    required via the `X-Upload-Token` header or `?token=` — otherwise this
+    required in the `X-Upload-Token` header (never `?token=`: the access log
+    prints the request line) — otherwise this
     public mutation could let anyone overwrite a month of sales data. When the
     env var is unset (local dev), uploads are allowed without a token.
 
@@ -1331,7 +1332,7 @@ def upload_file(
     # ── AUTH gate ──────────────────────────────────────────────────────────
     expected = _os_db.environ.get("OSHINEI_SEED_TOKEN")
     if expected:
-        provided = x_upload_token or token or ""
+        provided = x_upload_token or ""
         if not hmac.compare_digest(provided, expected):
             raise HTTPException(status_code=403, detail="A valid upload token is required.")
 

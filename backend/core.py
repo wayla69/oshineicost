@@ -32,7 +32,6 @@ from contextlib import closing
 from contextlib import contextmanager
 from fastapi import HTTPException
 from fastapi import Header
-from fastapi import Query
 from fastapi.responses import Response as _Response
 from pathlib import Path
 from pydantic import BaseModel
@@ -493,7 +492,8 @@ def is_price_as_cost(unit_cost, ex_vat_price) -> bool:
 # Write auth — gate data-mutating endpoints behind the owner token
 # ---------------------------------------------------------------------------
 # Mirrors /api/upload exactly: when OSHINEI_SEED_TOKEN is set (hosted deploys),
-# a matching token is required via the `X-Upload-Token` header or `?token=`.
+# a matching token is required in the `X-Upload-Token` header. Not `?token=`:
+# the access log prints the request line, so a query-string token is logged.
 # When the env var is unset (local dev), writes are allowed without a token, so
 # the gate is invisible locally. Applied via `dependencies=[Depends(...)]` on
 # the route decorator so endpoint signatures stay untouched.
@@ -528,11 +528,10 @@ def _token_accepted(provided: str) -> bool:
 
 
 def require_write_token(
-    token: str = Query(""),
     x_upload_token: str = Header(None),
 ):
     toks = _accepted_tokens()
-    if toks and not _token_accepted(x_upload_token or token or ""):
+    if toks and not _token_accepted(x_upload_token or ""):
         raise HTTPException(status_code=403, detail="A valid write token is required.")
 
 

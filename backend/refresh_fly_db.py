@@ -261,9 +261,9 @@ def main():
                 "Content-Type: application/gzip\r\n\r\n").encode()
         tail = f"\r\n--{boundary}--\r\n".encode()
         body = head + gz.read_bytes() + tail
-        req = urllib.request.Request(
-            f"{api}/api/_admin/seed-db?token={token}", data=body, method="POST",
-            headers={"Content-Type": f"multipart/form-data; boundary={boundary}"})
+        req = urllib.request.Request(                    # token in a header, never the URL (it is logged)
+            f"{api}/api/_admin/seed-db", data=body, method="POST",
+            headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "X-Seed-Token": token})
         try:
             with urllib.request.urlopen(req, timeout=600) as r:
                 resp = json.load(r)

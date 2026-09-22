@@ -123,7 +123,7 @@ def test_the_nightly_backup_includes_the_pack_sizes(client, monkeypatch):
     import gzip, json
     monkeypatch.setenv("OSHINEI_SEED_TOKEN", "owner:" + "cd" * 32)
     con = sqlite3.connect(str(main.DB_PATH)); con.execute(_DDL); con.commit(); con.close()
-    r = client.get("/api/_admin/export-state", params={"token": "cd" * 32})
+    r = client.get("/api/_admin/export-state", headers={"X-Seed-Token": "cd" * 32})
     assert r.status_code == 200
     tables = {json.loads(l)["table"] for l in gzip.decompress(r.content).decode("utf-8").splitlines() if '"table"' in l[:12]}
     assert "ingredient_order_unit" in tables
