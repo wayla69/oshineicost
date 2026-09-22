@@ -150,7 +150,11 @@ def test_the_shipped_sheet_is_well_formed(monkeypatch):
     assert all(i["monthly_need"] and i["monthly_need"] > 0 for i in fo["items"])
     unagi = fo["codes"]["13-01-184"]                       # 146,208 packs on hand = 11.96 months: WHY it is forced
     assert unagi["group"] == "import" and unagi["stock_months"] == 11.96
-    assert fo["codes"]["02-01-001"]["code"] == "03-03-438"  # recipe แซลมอน -> the warehouse's whole frozen salmon
+    # owner's answers 2026-09-22: the frozen-salmon lines are NOT the recipes' แซลมอน (02-01-001), and
+    # ปลาเงิน maps to HK-019 only; both frozen-salmon lines stay listed but no recipe uses them
+    assert "02-01-001" not in fo["codes"] and "CK-019" not in fo["codes"]
+    assert fo["codes"]["HK-019"]["code"] == "03-01-018" and fo["codes"]["NEW CODE-021"]["code"] == "13-01-451"
+    assert "ไม่อยู่ในสูตร" in fo["codes"]["11-01-325"]["remark"]      # soy sauce is a table condiment, not a gap
 
 
 def test_what_is_typed_in_the_ordering_tabs_survives_the_daily_swap(tmp_path):
