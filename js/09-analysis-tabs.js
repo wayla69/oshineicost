@@ -1479,15 +1479,15 @@ async function tfDrillBranch(branchName, cardEl) {
   const params = new URLSearchParams({ branch: branchName });
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const tv = await api(`${API}/api/analysis/table-turnover?view=dwell&${params}`).catch(()=>null);
+  const tv = await api(`${API}/api/analysis/table-turnover?view=branches&${params}`).catch(()=>null);
   const tvEl = document.getElementById('tfDrillTurnover');
   if (tvEl) {
-    const br = tv && tv.by_branch && tv.by_branch.find(x => x.branch === branchName);
+    const br = tv && tv.branches && tv.branches.find(x => x.branch === branchName);
     tvEl.innerHTML = br
       ? `<div class="flex gap-4 flex-wrap">
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#eef2ff;color:#4f46e5">หมุนเวียน <b>${br.avg_turns_per_day?.toFixed(1)||'—'}</b> รอบ/โต๊ะ/วัน</span>
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#059669">Dwell time ≈ <b>${br.est_dwell_min||'—'} min</b></span>
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#d97706">โต๊ะที่ใช้ <b>${br.avg_tables_per_day?.toFixed(0)||'—'}</b> โต๊ะ/วัน</span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#059669">Turn time ≈ <b>${br.avg_turn_min ?? '—'} min</b></span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#eef2ff;color:#4f46e5">รอบโต๊ะ <b>${br.turns?.toLocaleString()||'—'}</b> ครั้ง</span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#d97706">เฉลี่ย <b>${br.avg_covers_per_turn ?? '—'}</b> คน/รอบ</span>
          </div>`
       : '<p style="color:var(--text-muted)">ไม่มีข้อมูลหมุนเวียนโต๊ะสำหรับสาขานี้</p>';
   }
@@ -1505,33 +1505,40 @@ async function loadTableTurnover() {
   if (getBranch())    params.set('branch', getBranch());
   if (getMonthFrom()) params.set('month_from', getMonthFrom());
   if (getMonthTo())   params.set('month_to',   getMonthTo());
-  const d = await api(`${API}/api/analysis/table-turnover?view=dwell&${params}`).catch(() => null);
-  if (!d || !d.available) {
-    document.getElementById('tableTurnoverKpis').innerHTML = '<p class="text-xs text-slate-400 col-span-4">No table data available. Requires table_no field in transactions.</p>';
+  // view=dwell needs sales_transaction.table_no, which the MSSQL sync leaves
+  // empty — view=branches reads the real POS turn-time feed (pos_table_turn_day)
+  // instead, same source the More tab already relies on.
+  const d = await api(`${API}/api/analysis/table-turnover?view=branches&${params}`).catch(() => null);
+  if (!d || !d.branches || !d.branches.length) {
+    document.getElementById('tableTurnoverKpis').innerHTML = '<p class="text-xs text-slate-400 col-span-4">ไม่มีข้อมูลหมุนเวียนโต๊ะสำหรับช่วงที่เลือก</p>';
     return;
   }
-  const o = d.overall;
+  const byBranch = d.branches;
+  const validTurn = byBranch.filter(b => b.avg_turn_min != null);
+  const avgTurnMin = validTurn.length ? validTurn.reduce((s, b) => s + b.avg_turn_min, 0) / validTurn.length : null;
+  const totalTurns = byBranch.reduce((s, b) => s + (b.turns || 0), 0);
+  const fastest = validTurn.slice().sort((a, b) => a.avg_turn_min - b.avg_turn_min)[0];
   document.getElementById('tableTurnoverKpis').innerHTML = [
-    { label: 'Avg Turns/Table/Day', value: o.avg_turns_per_day?.toFixed(1) || '—', sub: 'network avg', color: '#4f46e5' },
-    { label: 'Est. Dwell Time', value: o.est_dwell_min ? `${o.est_dwell_min} min` : '—', sub: 'median gap between turns', color: '#0891b2' },
-    { label: 'Best Turnover', value: d.by_branch[0]?.branch || '—', sub: `${d.by_branch[0]?.avg_turns_per_day?.toFixed(1)} turns/day`, color: '#059669' },
-    { label: 'Branches Tracked', value: d.by_branch.length, sub: 'with table data', color: '#64748b' },
+    { label: 'Avg Turn Time', value: avgTurnMin != null ? `${avgTurnMin.toFixed(0)} min` : '—', sub: 'network avg, POS-measured', color: '#0891b2' },
+    { label: 'Total Table Occasions', value: totalTurns.toLocaleString(), sub: 'across selected branches', color: '#4f46e5' },
+    { label: 'Fastest Turnover', value: fastest?.branch || '—', sub: fastest ? `${fastest.avg_turn_min} min/turn` : '—', color: '#059669' },
+    { label: 'Branches Tracked', value: byBranch.length, sub: 'with table data', color: '#64748b' },
   ].map(k => `<div class="card p-3 text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p><p class="text-xs text-slate-400 mt-0.5">${k.sub}</p></div>`).join('');
 
   mkChart('chartTableTurnover', {
     type: 'bar',
     data: {
-      labels: d.by_branch.map(b => b.branch),
+      labels: byBranch.map(b => b.branch),
       datasets: [
-        { label: 'Avg Turns/Day', data: d.by_branch.map(b => b.avg_turns_per_day), backgroundColor: PALETTE_6[0] + 'cc', borderRadius: 4, yAxisID: 'turns' },
-        { label: 'Est. Dwell (min)', data: d.by_branch.map(b => b.est_dwell_min), type: 'line', borderColor: PALETTE_6[1], backgroundColor: 'transparent', tension: 0.3, pointRadius: 4, yAxisID: 'dwell' },
+        { label: 'Table Occasions', data: byBranch.map(b => b.turns), backgroundColor: PALETTE_6[0] + 'cc', borderRadius: 4, yAxisID: 'turns' },
+        { label: 'Avg Turn Time (min)', data: byBranch.map(b => b.avg_turn_min), type: 'line', borderColor: PALETTE_6[1], backgroundColor: 'transparent', tension: 0.3, pointRadius: 4, yAxisID: 'dwell' },
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
       plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: { display: false } },
       scales: {
-        turns: { type: 'linear', position: 'left',  title: { display: true, text: 'Turns/day' } },
+        turns: { type: 'linear', position: 'left',  title: { display: true, text: 'Table occasions' } },
         dwell: { type: 'linear', position: 'right', title: { display: true, text: 'Min' },
                  grid: { drawOnChartArea: false } }
       }
