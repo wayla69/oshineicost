@@ -1,0 +1,395 @@
+{
+  "v": 3,
+  "assetGroups": {
+    "Icons": {
+      "files": {
+        "action.svg": {
+          "blob": "b516c6d7f6ffee677029a34be988751f",
+          "name": "action.svg",
+          "size": 278,
+          "type": "image/svg+xml"
+        },
+        "benchmark.svg": {
+          "blob": "1b4a9ea958fce821dfa420056f2347ae",
+          "name": "benchmark.svg",
+          "size": 300,
+          "type": "image/svg+xml"
+        },
+        "bomcost.svg": {
+          "blob": "1066dab4b07ba0fc030a0c022be4767a",
+          "name": "bomcost.svg",
+          "size": 338,
+          "type": "image/svg+xml"
+        },
+        "branchbom.svg": {
+          "blob": "1ae66bf0885d3a83ccd6bd191e13e227",
+          "name": "branchbom.svg",
+          "size": 343,
+          "type": "image/svg+xml"
+        },
+        "buffetperf.svg": {
+          "blob": "ce3905d3d67e5cde8784448b1c71327f",
+          "name": "buffetperf.svg",
+          "size": 280,
+          "type": "image/svg+xml"
+        },
+        "cancelbill.svg": {
+          "blob": "f8ec79b066730acd0a1938ff345423fb",
+          "name": "cancelbill.svg",
+          "size": 355,
+          "type": "image/svg+xml"
+        },
+        "cashctl.svg": {
+          "blob": "677439ae5e1649efd63e9fb0b3c3771e",
+          "name": "cashctl.svg",
+          "size": 299,
+          "type": "image/svg+xml"
+        },
+        "childbuffet.svg": {
+          "blob": "b39b6224cf4483063eeb26ef4bcfea10",
+          "name": "childbuffet.svg",
+          "size": 264,
+          "type": "image/svg+xml"
+        },
+        "closetime.svg": {
+          "blob": "546d07ffefc9eddcb8e3f187b453e344",
+          "name": "closetime.svg",
+          "size": 240,
+          "type": "image/svg+xml"
+        },
+        "compare.svg": {
+          "blob": "e296d1875919e9923a276cbf3189db35",
+          "name": "compare.svg",
+          "size": 295,
+          "type": "image/svg+xml"
+        },
+        "cost.svg": {
+          "blob": "e278c61262513cf8cbda5138dbad0cd8",
+          "name": "cost.svg",
+          "size": 281,
+          "type": "image/svg+xml"
+        },
+        "costhead.svg": {
+          "blob": "f67ff6f3dbf32c97ab178bc621bc644d",
+          "name": "costhead.svg",
+          "size": 263,
+          "type": "image/svg+xml"
+        },
+        "costheadtop60.svg": {
+          "blob": "bfe1a0b7a541b76c8c9c304d538b0e24",
+          "name": "costheadtop60.svg",
+          "size": 333,
+          "type": "image/svg+xml"
+        },
+        "coverage.svg": {
+          "blob": "e5e341c81ea06b63bb4eb1d628cc892d",
+          "name": "coverage.svg",
+          "size": 265,
+          "type": "image/svg+xml"
+        },
+        "custtype.svg": {
+          "blob": "3d7b650a5b123abcdec9bc058b839552",
+          "name": "custtype.svg",
+          "size": 323,
+          "type": "image/svg+xml"
+        },
+        "dailysales.svg": {
+          "blob": "d98f6b7560a2edd9018d224b5604dcda",
+          "name": "dailysales.svg",
+          "size": 345,
+          "type": "image/svg+xml"
+        },
+        "discounts.svg": {
+          "blob": "89185db6e56cdef342a2494114921273",
+          "name": "discounts.svg",
+          "size": 256,
+          "type": "image/svg+xml"
+        },
+        "engineering.svg": {
+          "blob": "9b689905c568b85f4260d356343f624f",
+          "name": "engineering.svg",
+          "size": 300,
+          "type": "image/svg+xml"
+        },
+        "feedback.svg": {
+          "blob": "f889cdd98ba3cdd813e5c31bdc22cb8b",
+          "name": "feedback.svg",
+          "size": 250,
+          "type": "image/svg+xml"
+        },
+        "gpbranch.svg": {
+          "blob": "fedd94e89967bd5066182820d3d9ddfd",
+          "name": "gpbranch.svg",
+          "size": 237,
+          "type": "image/svg+xml"
+        },
+        "guest.svg": {
+          "blob": "d0c45d05840ab48a45c6fdfff5c71bf9",
+          "name": "guest.svg",
+          "size": 381,
+          "type": "image/svg+xml"
+        },
+        "heavyeater.svg": {
+          "blob": "a343eb2dd20e242f41335c159b110aa8",
+          "name": "heavyeater.svg",
+          "size": 237,
+          "type": "image/svg+xml"
+        },
+        "home.svg": {
+          "blob": "662529af5bf519c7145d2eb27802adab",
+          "name": "home.svg",
+          "size": 284,
+          "type": "image/svg+xml"
+        },
+        "ingpurchase.svg": {
+          "blob": "affa7a604dbabeec783478be7ea10792",
+          "name": "ingpurchase.svg",
+          "size": 302,
+          "type": "image/svg+xml"
+        },
+        "manual.svg": {
+          "blob": "02e2a463dd6f9d431991ae8938de4b21",
+          "name": "manual.svg",
+          "size": 297,
+          "type": "image/svg+xml"
+        },
+        "menu.svg": {
+          "blob": "682ab139e417536fb74df6b22ad5b33b",
+          "name": "menu.svg",
+          "size": 221,
+          "type": "image/svg+xml"
+        },
+        "menuactionboard.svg": {
+          "blob": "89f3cca03e4b9be3ba9cc7b2792cfecc",
+          "name": "menuactionboard.svg",
+          "size": 225,
+          "type": "image/svg+xml"
+        },
+        "menucompare.svg": {
+          "blob": "27b7c2d40bce57494121ac842ec52bd6",
+          "name": "menucompare.svg",
+          "size": 253,
+          "type": "image/svg+xml"
+        },
+        "menuefficiency.svg": {
+          "blob": "fa219199ebcd4baead91d38addf993ef",
+          "name": "menuefficiency.svg",
+          "size": 356,
+          "type": "image/svg+xml"
+        },
+        "menuimpact.svg": {
+          "blob": "69591368ce142cd3611030a3ddb12dfb",
+          "name": "menuimpact.svg",
+          "size": 292,
+          "type": "image/svg+xml"
+        },
+        "menuopportunities.svg": {
+          "blob": "d9b79bf4a4e291bc0caf869b1c15f57d",
+          "name": "menuopportunities.svg",
+          "size": 284,
+          "type": "image/svg+xml"
+        },
+        "mgtreport.svg": {
+          "blob": "2212b1df7bfad886f1f249fed8b71e89",
+          "name": "mgtreport.svg",
+          "size": 333,
+          "type": "image/svg+xml"
+        },
+        "modifiers.svg": {
+          "blob": "84d7915a5bccce14c8c88c7246c40be8",
+          "name": "modifiers.svg",
+          "size": 285,
+          "type": "image/svg+xml"
+        },
+        "more.svg": {
+          "blob": "48867f3d0bb0dd67213bf109f311e00b",
+          "name": "more.svg",
+          "size": 238,
+          "type": "image/svg+xml"
+        },
+        "ops.svg": {
+          "blob": "b2297855132ff0673fcb24610daf9d40",
+          "name": "ops.svg",
+          "size": 326,
+          "type": "image/svg+xml"
+        },
+        "opsreport.svg": {
+          "blob": "e9eb6f6c0830c6fc10d3c8cc749714c0",
+          "name": "opsreport.svg",
+          "size": 350,
+          "type": "image/svg+xml"
+        },
+        "ordering.svg": {
+          "blob": "7682c467012ee597931f9cb5e8a2daa3",
+          "name": "ordering.svg",
+          "size": 288,
+          "type": "image/svg+xml"
+        },
+        "ordersetup.svg": {
+          "blob": "70b0a1331300c444b691f0604ab5088b",
+          "name": "ordersetup.svg",
+          "size": 287,
+          "type": "image/svg+xml"
+        },
+        "overall.svg": {
+          "blob": "f4d4a942d0769047c364e7e637bb8396",
+          "name": "overall.svg",
+          "size": 378,
+          "type": "image/svg+xml"
+        },
+        "pnlbill.svg": {
+          "blob": "10d4a163478e8826d80ea1604bee803f",
+          "name": "pnlbill.svg",
+          "size": 256,
+          "type": "image/svg+xml"
+        },
+        "pnlbranch.svg": {
+          "blob": "3a2786d3339052a6344f0b0edb0ee803",
+          "name": "pnlbranch.svg",
+          "size": 333,
+          "type": "image/svg+xml"
+        },
+        "pricezone.svg": {
+          "blob": "6022237bc9a21c10072987655b4bbecc",
+          "name": "pricezone.svg",
+          "size": 311,
+          "type": "image/svg+xml"
+        },
+        "profit.svg": {
+          "blob": "5326f94d65726f532809f747359bc9f3",
+          "name": "profit.svg",
+          "size": 223,
+          "type": "image/svg+xml"
+        },
+        "report.svg": {
+          "blob": "4c072e44148b40e3c33d320d58918853",
+          "name": "report.svg",
+          "size": 362,
+          "type": "image/svg+xml"
+        },
+        "settings.svg": {
+          "blob": "6c1cb24eb7874a06be480e6a8a0d37c5",
+          "name": "settings.svg",
+          "size": 816,
+          "type": "image/svg+xml"
+        },
+        "simhub.svg": {
+          "blob": "cf267a4d6ae968aebc6a5e7882953517",
+          "name": "simhub.svg",
+          "size": 374,
+          "type": "image/svg+xml"
+        },
+        "staff.svg": {
+          "blob": "1ef2513c423b23dd5684ff14500d0087",
+          "name": "staff.svg",
+          "size": 267,
+          "type": "image/svg+xml"
+        },
+        "timeflow.svg": {
+          "blob": "75907c0ac825da182a8dc876af0a9acb",
+          "name": "timeflow.svg",
+          "size": 255,
+          "type": "image/svg+xml"
+        },
+        "trend.svg": {
+          "blob": "33a2db81cf7fad5b0c69ef74b3ae8d8e",
+          "name": "trend.svg",
+          "size": 271,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Icons",
+      "order": [
+        "action.svg",
+        "benchmark.svg",
+        "bomcost.svg",
+        "branchbom.svg",
+        "buffetperf.svg",
+        "cancelbill.svg",
+        "cashctl.svg",
+        "childbuffet.svg",
+        "closetime.svg",
+        "compare.svg",
+        "cost.svg",
+        "costhead.svg",
+        "costheadtop60.svg",
+        "coverage.svg",
+        "custtype.svg",
+        "dailysales.svg",
+        "discounts.svg",
+        "engineering.svg",
+        "feedback.svg",
+        "gpbranch.svg",
+        "guest.svg",
+        "heavyeater.svg",
+        "home.svg",
+        "ingpurchase.svg",
+        "manual.svg",
+        "menu.svg",
+        "menuactionboard.svg",
+        "menucompare.svg",
+        "menuefficiency.svg",
+        "menuimpact.svg",
+        "menuopportunities.svg",
+        "mgtreport.svg",
+        "modifiers.svg",
+        "more.svg",
+        "ops.svg",
+        "opsreport.svg",
+        "ordering.svg",
+        "ordersetup.svg",
+        "overall.svg",
+        "pnlbill.svg",
+        "pnlbranch.svg",
+        "pricezone.svg",
+        "profit.svg",
+        "report.svg",
+        "settings.svg",
+        "simhub.svg",
+        "staff.svg",
+        "timeflow.svg",
+        "trend.svg"
+      ],
+      "tile": "xs"
+    },
+    "Logos": {
+      "files": {
+        "oshinei-roundel.svg": {
+          "blob": "0dfed4d27f347eae372e0be99b76bc87",
+          "name": "oshinei-roundel.svg",
+          "size": 698,
+          "type": "image/svg+xml"
+        }
+      },
+      "name": "Logos",
+      "order": [
+        "oshinei-roundel.svg"
+      ],
+      "tile": "l"
+    }
+  },
+  "blobs": {},
+  "createdOnFiles": {
+    "at": "2026-09-30T03:51:00Z",
+    "v": 1
+  },
+  "docs": {
+    "readme": "project/README.md",
+    "sections": []
+  },
+  "groups": [
+    "Logos",
+    "Icons"
+  ],
+  "lastChange": {
+    "by": "wayla69",
+    "at": "2026-09-30T04:16:02Z",
+    "via": "GitHub · wayla69/oshineicost@5eb03b3",
+    "note": "Re-synced to live 5eb03b3 (#220 deployed): contrast values now match the app; dropped the old-value notes; added chart-tick and chart-grid; dark primary hover and per-chart ink documented."
+  },
+  "layout": "files",
+  "libraries": [],
+  "namespace": "Oshinei",
+  "sections": {},
+  "title": "Oshinei"
+}

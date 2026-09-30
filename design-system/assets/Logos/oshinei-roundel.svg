@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120">
+  <circle cx="60" cy="60" r="58" fill="#1f3a6b"/>
+  <circle cx="60" cy="60" r="54" fill="none" stroke="#ffffff" stroke-width="1.5" opacity="0.85"/>
+  <text x="60" y="52" text-anchor="middle" fill="#ffffff" font-size="20" font-weight="800" font-family="Prompt,sans-serif" letter-spacing="1">OSHINEI</text>
+  <text x="60" y="72" text-anchor="middle" fill="#ffffff" font-size="13" font-family="sans-serif" opacity="0.95">おしねい</text>
+  <path d="M22 92 L40 74 L52 84 L70 64 L84 78 L98 68" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+</svg>
