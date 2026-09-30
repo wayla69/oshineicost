@@ -130,7 +130,7 @@ function renderEngTable() {
   const QUAD_BADGE = {
     star: '⭐ ดาวเด่น', plowhorse: '🐴 ม้างาน', puzzle: '🔮 เพชรในตม', dog: '🐕 ตัวถ่วง', null: '—', undefined: '—'
   };
-  const QUAD_COLORS = { star: '#059669', plowhorse: '#d97706', puzzle: '#4f46e5', dog: '#dc2626' };
+  const QUAD_COLORS = { star: 'var(--good-ink)', plowhorse: '#d97706', puzzle: '#4f46e5', dog: 'var(--bad-ink)' };
   document.getElementById('engTableBody').innerHTML = [...items]
     .sort((a, b) => (b.revenue || 0) - (a.revenue || 0))
     .map(i => `
@@ -320,7 +320,7 @@ async function openDiscountBills(opts = {}) {
     ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)],['พิมพ์ซ้ำ (>1x)', `<span class="${(s.reprinted_bills||0)>0?'text-orange-600 font-bold':''}">${fmtN(s.reprinted_bills||0)}</span>`]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
-  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:#dc2626">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:#ea580c">เฉพาะ Reprint</b>':''}</p>`;
+  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:var(--bad-ink)">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:#ea580c">เฉพาะ Reprint</b>':''}</p>`;
   if (!d.bills.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">ไม่มีบิลส่วนลดในขอบเขตนี้</p>'; return; }
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
@@ -455,7 +455,7 @@ async function loadStaff() {
   const avgDisc = d.length ? d.reduce((s, r) => s + (r.discount_rate || 0), 0) / d.length : 0;
   document.getElementById('staff-kpi-row').innerHTML = [
     { label: 'Total Staff Revenue', value: `${fmt(totalRev)}`, sub: _staffByBranch ? `${d.length} บัญชี×สาขา` : `${d.length} บัญชีแคชเชียร์`, color: '#4f46e5' },
-    { label: 'Top Cashier', value: top.cashier || '—', sub: `${fmt(top.revenue || 0)}`, color: '#059669' },
+    { label: 'Top Cashier', value: top.cashier || '—', sub: `${fmt(top.revenue || 0)}`, color: 'var(--good-ink)' },
     { label: 'Network Avg Ticket', value: `${fmt(d.length ? d.reduce((s,r)=>s+(r.avg_ticket||0),0)/d.length : 0)}`, sub: 'ต่อใบเสร็จ', color: '#0891b2' },
     { label: 'Network Discount Rate', value: `${avgDisc.toFixed(1)}%`, sub: 'of transactions with discount', color: avgDisc > 15 ? '#ef4444' : '#f59e0b' },
   ].map(k => `<div class="card p-4"><p class="kpi-label">${k.label}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
@@ -524,7 +524,7 @@ async function loadChildBuffet() {
   if (!d || !d.by_branch) return;
   const bb = d.by_branch;
   const momChip = p => p == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${p>=0?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
 
   // Chain summary KPIs (latest vs prev from the trend)
   const tr = d.trend || [];
@@ -579,7 +579,7 @@ async function loadChildBuffet() {
   document.getElementById('childBranchSub').textContent =
     `${bb.length} สาขา · ${d.latest_month || ''}${d.prev_month ? ` · MoM เทียบ ${d.prev_month}` : ''}`;
   document.getElementById('childBranchBoxes').innerHTML = bb.map(b => {
-    const c = (b.mom_pct == null) ? '#94a3b8' : b.mom_pct >= 0 ? '#059669' : '#dc2626';
+    const c = (b.mom_pct == null) ? '#94a3b8' : b.mom_pct >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     return `<div class="rounded-xl border p-3" style="border-color:#ec489933;background:#fdf2f80a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:#db2777">${fmtN(b.covers)}</p>
@@ -897,7 +897,7 @@ async function loadPaymentDiscount(params, gen) {
     return `<div class="flex items-center gap-2 py-1">
       <span class="text-xs truncate ${isCash?'font-semibold text-red-600':'text-slate-600'}" style="width:108px" title="${esc(m.code)}">${esc(m.code)}</span>
       <div class="flex-1" style="background:#eef2ff;border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#6366f1'};border-radius:4px"></div></div>
-      <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'#dc2626':'#64748b'}">${m.disc_pct}%</b></span>
+      <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'var(--bad-ink)':'#64748b'}">${m.disc_pct}%</b></span>
     </div>`;
   }).join('');
 }
@@ -933,9 +933,9 @@ async function loadDiscountLeakage(params, gen) {
   wrap.innerHTML = d.branches.map(b => {
     const abn = b.is_abnormal;
     const pct = b.disc_pct || 0;
-    const pctColor = abn ? '#dc2626' : (pct >= avg ? '#d97706' : '#16a34a');
+    const pctColor = abn ? 'var(--bad-ink)' : (pct >= avg ? '#d97706' : 'var(--good-ink)');
     const vs = b.vs_avg_pts || 0;
-    const vsColor = vs > 0 ? '#dc2626' : '#16a34a';
+    const vsColor = vs > 0 ? 'var(--bad-ink)' : 'var(--good-ink)';
     const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(2) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain.toFixed(2) : '–') + ' ค่าเฉลี่ย';
     const reason = b.top_reason ? esc(b.top_reason) : '—';
     const untyped = b.top_reason && b.top_reason.indexOf('ไม่ระบุ') >= 0;
@@ -1032,7 +1032,7 @@ async function loadDiscountsTab() {
     { label: 'Discount Transactions', value: fmtN(o.discount_tx||0), sub: `of ${fmtN(o.total_tx||0)} total`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
     { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7c3aed' },
     { label: `เกินเพดานส่วนลด ${o.policy_pct != null ? o.policy_pct : (d.policy_pct != null ? d.policy_pct : 2.5)}%`, value: `${fmt(o.excess_baht||0)}`,
-      sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? '#dc2626' : '#16a34a' },
+      sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' },
   ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?' 🔍':''}</p><p class="kpi-value" style="color:${k.color}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   // Trend chart
@@ -1094,7 +1094,7 @@ async function loadDiscountsTab() {
     const tot = rows.reduce((s,r)=>s+(r.baht||0),0) || 1;
     const heavyBaht = rows.filter(r => (META[r.grp]||{}).heavy).reduce((s,r)=>s+(r.baht||0),0);
     const heavyPct = heavyBaht/tot*100;
-    const hc = heavyPct>=40 ? '#dc2626' : heavyPct>=20 ? '#d97706' : '#16a34a';
+    const hc = heavyPct>=40 ? '#b91c1c' : heavyPct>=20 ? '#d97706' : '#047857';
     const hi = heavyPct>=40 ? '🔻' : heavyPct>=20 ? '⚠️' : '✓';
     const seg = rows.map(r => { const w=(r.baht||0)/tot*100, m=META[r.grp]||{c:'#94a3b8'};
       return w<=0 ? '' : `<div title="${esc(r.grp)}: ${fmt(r.baht)} (${w.toFixed(0)}%)" style="width:${w}%;background:${m.c}"></div>`; }).join('');
@@ -1105,9 +1105,9 @@ async function loadDiscountsTab() {
       + rows.map(r => { const m=META[r.grp]||{c:'#94a3b8'}, share=(r.baht||0)/tot*100;
         return `<div class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-indigo-50/60 border-b border-slate-50" ${_discPatternDrillAttr(r.grp)}>
           <span style="width:11px;height:11px;border-radius:3px;background:${m.c};flex:none"></span>
-          <span class="text-sm ${m.heavy?'font-semibold':''}" style="color:${m.heavy?m.c:'#334155'}">${esc(r.grp)}</span>
+          <span class="text-sm ${m.heavy?'font-semibold':''}" style="color:${m.heavy?textInk(m.c):'#334155'}">${esc(r.grp)}</span>
           <span class="text-[10px] text-slate-400">${fmtN(r.bills)} บิล</span>
-          <span class="ml-auto text-sm font-bold tabular-nums" style="color:${m.c}">${share.toFixed(0)}%</span>
+          <span class="ml-auto text-sm font-bold tabular-nums" style="color:${textInk(m.c)}">${share.toFixed(0)}%</span>
           <span class="text-xs text-slate-500 tabular-nums" style="width:74px;text-align:right">${fmt(r.baht)}</span>
         </div>`; }).join('');
   })();
@@ -1485,7 +1485,7 @@ async function tfDrillBranch(branchName, cardEl) {
     const br = tv && tv.branches && tv.branches.find(x => x.branch === branchName);
     tvEl.innerHTML = br
       ? `<div class="flex gap-4 flex-wrap">
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#059669">Turn time ≈ <b>${br.avg_turn_min ?? '—'} min</b></span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#047857">Turn time ≈ <b>${br.avg_turn_min ?? '—'} min</b></span>
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#eef2ff;color:#4f46e5">รอบโต๊ะ <b>${br.turns?.toLocaleString()||'—'}</b> ครั้ง</span>
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#d97706">เฉลี่ย <b>${br.avg_covers_per_turn ?? '—'}</b> คน/รอบ</span>
          </div>`
@@ -1521,7 +1521,7 @@ async function loadTableTurnover() {
   document.getElementById('tableTurnoverKpis').innerHTML = [
     { label: 'Avg Turn Time', value: avgTurnMin != null ? `${avgTurnMin.toFixed(0)} min` : '—', sub: 'network avg, POS-measured', color: '#0891b2' },
     { label: 'Total Table Occasions', value: totalTurns.toLocaleString(), sub: 'across selected branches', color: '#4f46e5' },
-    { label: 'Fastest Turnover', value: fastest?.branch || '—', sub: fastest ? `${fastest.avg_turn_min} min/turn` : '—', color: '#059669' },
+    { label: 'Fastest Turnover', value: fastest?.branch || '—', sub: fastest ? `${fastest.avg_turn_min} min/turn` : '—', color: 'var(--good-ink)' },
     { label: 'Branches Tracked', value: byBranch.length, sub: 'with table data', color: '#64748b' },
   ].map(k => `<div class="card p-3 text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p><p class="text-xs text-slate-400 mt-0.5">${k.sub}</p></div>`).join('');
 

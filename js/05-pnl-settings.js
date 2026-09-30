@@ -535,8 +535,8 @@ async function loadFoodCostTrend() {
           <p class="text-[10px] text-slate-500">รายได้/เสิร์ฟ ${fmtN(last.rev_per_serving || 0)}</p>
         </div>
         <div class="rounded-lg border px-3 py-2" style="background:${(last.cost_pct||0)>parseFloat(threshold)?'#fef2f2':'#f0fdf4'};border-color:${(last.cost_pct||0)>parseFloat(threshold)?'#fecaca':'#bbf7d0'}">
-          <p class="text-[10px] font-semibold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#dc2626':'#16a34a'}">% Food Cost</p>
-          <p class="text-base font-bold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#dc2626':'#16a34a'}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
+          <p class="text-[10px] font-semibold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">% Food Cost</p>
+          <p class="text-base font-bold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
           ${dPct != null ? `<p class="text-[10px]" style="color:${trendColor}">${trendIcon} ${Math.abs(dPct).toFixed(1)}pp เทียบเดือนก่อน</p>` : ''}
         </div>
       </div>`;
@@ -2258,9 +2258,9 @@ async function loadActionCenter() {
     <span class="text-sm" style="color:var(--text-primary)">${esc(i.msg)}</span>
     <span class="text-[11px] text-indigo-500 whitespace-nowrap">ดู ›</span></div>`;
   body.innerHTML =
-    `<div class="mb-5"><h3 class="text-sm font-bold mb-2" style="color:#dc2626">🔴 ต้องดู / แก้ (${bad.length})</h3>` +
+    `<div class="mb-5"><h3 class="text-sm font-bold mb-2" style="color:var(--bad-ink)">🔴 ต้องดู / แก้ (${bad.length})</h3>` +
     (bad.length ? bad.map(i => card(i, '#ef4444')).join('') : '<p class="text-xs text-slate-400">ไม่มีสัญญาณเตือน 👍</p>') + '</div>' +
-    `<div><h3 class="text-sm font-bold mb-2" style="color:#059669">🟢 ไปได้ดี (${good.length})</h3>` +
+    `<div><h3 class="text-sm font-bold mb-2" style="color:var(--good-ink)">🟢 ไปได้ดี (${good.length})</h3>` +
     (good.length ? good.map(i => card(i, '#10b981')).join('') : '<p class="text-xs text-slate-400">—</p>') + '</div>';
   const st = document.getElementById('acStatus'); if (st) st.textContent = `รวม ${items.length} สัญญาณ · อัปเดตตามตัวกรองด้านบน`;
 }
