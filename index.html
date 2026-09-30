@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Oshinei — Sales & Cost Analysis</title>
-<link rel="stylesheet" href="vendor/prompt-font.css">
+<!-- KIRA UI (Noto Sans + Noto Sans Thai, SIL OFL 1.1): the app face since 2026-09-30 -->
+<link rel="stylesheet" href="vendor/kira-ui-font.css">
 <!-- Design tokens — single source of truth, shared with the UI kit.
      Served by the app at /docs/ui-kit/tokens.css (docs/ mounted in backend/main.py).
      Defines :root + body.dark CSS variables consumed by the inline styles below. -->
@@ -38,7 +39,7 @@
 /* Design tokens (:root + body.dark) are loaded from /docs/ui-kit/tokens.css
    (linked in <head> above) — the single source of truth shared with the UI kit.
    Everything below consumes those CSS variables. */
-* { font-family: 'Prompt', sans-serif; box-sizing: border-box; }
+* { font-family: 'KIRA UI', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
 body { background: var(--bg-page); color: var(--text-primary); margin: 0; transition: background 0.25s, color 0.25s; }
 
 .card {
@@ -1331,7 +1332,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 
 <!-- ── Login overlay (shown only when server auth is enabled & no session) ── -->
 <div id="loginOverlay" style="display:none;position:fixed;inset:0;z-index:9999;
-     background:#1e1b4b;align-items:center;justify-content:center">
+     background:#16294d;align-items:center;justify-content:center">
   <form id="loginForm" onsubmit="doLogin(event)"
         style="width:min(380px,92vw);background:#fff;border-radius:4px;padding:34px 30px;
                box-shadow:0 30px 80px rgba(0,0,0,.5)">

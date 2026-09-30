@@ -1,0 +1,2 @@
+KIRA UI 3.1 incorporates Noto Sans and Noto Sans Thai font software from Google. Upstream source: https://github.com/notofonts/noto-fonts
+The upstream font software is licensed under the SIL Open Font License, Version 1.1.
