@@ -4,3 +4,59 @@
 @font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap; src: url(./fonts/KIRA-UI-Medium.woff2) format('woff2'); }
 @font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/KIRA-UI-SemiBold.woff2) format('woff2'); }
 @font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/KIRA-UI-Bold.woff2) format('woff2'); }
+
+/* Symbols KIRA UI lacks (it is Noto Sans + Noto Sans Thai): arrows, math signs, ▲▼●■, ✓✗★⚠☐, ①②③.
+   Subsets of Noto Sans Math / Symbols 2 / Symbols (SIL OFL 1.1, fonts/symbols/*-OFL.txt), declared
+   under the same family with a unicode-range each, so every 'KIRA UI' stack picks them up and
+   the browser fetches a file only when a page uses one of its characters. Each file is declared
+   once per KIRA UI weight (same URL, fetched once): Chrome matches ONE weight group, so a single
+   100-900 face never joins the 400/700 groups - and at 800 it would take over the Latin text.
+   ● ○ ◉ ■ □ ◆ ◇ get size-adjust 60%: Noto draws them 0.73-1.0 em, the app uses them as small dots. */
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(./fonts/symbols/NotoSansMath.subset.woff2) format('woff2');
+  unicode-range: U+2190-2199, U+21A9-21AA, U+21B3, U+21BA-21BB, U+21C4-21C6, U+21D0, U+21D2, U+2208, U+2212, U+221A, U+221E, U+2248, U+2260-2261, U+2264-2265, U+2298, U+22EF, U+2591-2592, U+27F3; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url(./fonts/symbols/NotoSansMath.subset.woff2) format('woff2');
+  unicode-range: U+2190-2199, U+21A9-21AA, U+21B3, U+21BA-21BB, U+21C4-21C6, U+21D0, U+21D2, U+2208, U+2212, U+221A, U+221E, U+2248, U+2260-2261, U+2264-2265, U+2298, U+22EF, U+2591-2592, U+27F3; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(./fonts/symbols/NotoSansMath.subset.woff2) format('woff2');
+  unicode-range: U+2190-2199, U+21A9-21AA, U+21B3, U+21BA-21BB, U+21C4-21C6, U+21D0, U+21D2, U+2208, U+2212, U+221A, U+221E, U+2248, U+2260-2261, U+2264-2265, U+2298, U+22EF, U+2591-2592, U+27F3; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url(./fonts/symbols/NotoSansMath.subset.woff2) format('woff2');
+  unicode-range: U+2190-2199, U+21A9-21AA, U+21B3, U+21BA-21BB, U+21C4-21C6, U+21D0, U+21D2, U+2208, U+2212, U+221A, U+221E, U+2248, U+2260-2261, U+2264-2265, U+2298, U+22EF, U+2591-2592, U+27F3; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A2, U+25AC, U+25AE, U+25B2-25B4, U+25B6, U+25B8, U+25BC-25BE, U+25C0, U+25C2, U+25FB-25FC, U+2605-2606, U+2610-2612, U+26A0, U+2713-2718; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A2, U+25AC, U+25AE, U+25B2-25B4, U+25B6, U+25B8, U+25BC-25BE, U+25C0, U+25C2, U+25FB-25FC, U+2605-2606, U+2610-2612, U+26A0, U+2713-2718; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A2, U+25AC, U+25AE, U+25B2-25B4, U+25B6, U+25B8, U+25BC-25BE, U+25C0, U+25C2, U+25FB-25FC, U+2605-2606, U+2610-2612, U+26A0, U+2713-2718; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A2, U+25AC, U+25AE, U+25B2-25B4, U+25B6, U+25B8, U+25BC-25BE, U+25C0, U+25C2, U+25FB-25FC, U+2605-2606, U+2610-2612, U+26A0, U+2713-2718; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap; size-adjust: 60%;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A0-25A1, U+25C6-25C7, U+25C9, U+25CB, U+25CF; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap; size-adjust: 60%;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A0-25A1, U+25C6-25C7, U+25C9, U+25CB, U+25CF; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap; size-adjust: 60%;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A0-25A1, U+25C6-25C7, U+25C9, U+25CB, U+25CF; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap; size-adjust: 60%;
+  src: url(./fonts/symbols/NotoSansSymbols2.subset.woff2) format('woff2');
+  unicode-range: U+25A0-25A1, U+25C6-25C7, U+25C9, U+25CB, U+25CF; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols.subset.woff2) format('woff2');
+  unicode-range: U+238B, U+2460-2469, U+24D8, U+2690-2691; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols.subset.woff2) format('woff2');
+  unicode-range: U+238B, U+2460-2469, U+24D8, U+2690-2691; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols.subset.woff2) format('woff2');
+  unicode-range: U+238B, U+2460-2469, U+24D8, U+2690-2691; }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url(./fonts/symbols/NotoSansSymbols.subset.woff2) format('woff2');
+  unicode-range: U+238B, U+2460-2469, U+24D8, U+2690-2691; }
