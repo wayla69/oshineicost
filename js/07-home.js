@@ -2785,7 +2785,7 @@ async function renderTaskHealthBanner() {
   let b = old;
   if (!b) { b = document.createElement('div'); b.id = 'homeTaskHealthBanner'; host.insertBefore(b, host.firstChild); }
   const red = d.silent || bad.some(t => t.level === 'fail' || t.level === 'stale' || t.level === 'stuck');
-  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3';
+  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3 on-light';   // light fill set via cssText: the hex-list scope can't see rgb()
   b.style.cssText = red ? 'background:#fef2f2;border:1px solid #fca5a5;color:#7f1d1d' : 'background:#fffbeb;border:1px solid #fcd34d;color:#78350f';
   const TH = { fail: 'ล้มเหลว', stale: 'ไม่ได้รันหลายวัน', stuck: 'ค้าง', missed: 'ไม่ได้รันรอบล่าสุด' };
   const when = s => s ? esc(String(s).replace('T', ' ').slice(5, 16)) : '—';
@@ -2809,7 +2809,7 @@ async function renderAdoptionBanner() {
   const host = document.getElementById('tab-home'); if (!host) return;
   let b = document.getElementById('homeAdoptionBanner');
   if (!b) { b = document.createElement('div'); b.id = 'homeAdoptionBanner'; host.insertBefore(b, host.firstChild); }
-  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3';
+  b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3 on-light';   // light fill set via cssText: the hex-list scope can't see rgb()
   b.style.cssText = 'background:#fffbeb;border:1px solid #fcd34d;color:#78350f';
   const never = rec.never || [], away = rec.away || [];
   b.innerHTML = `<div><b>สรุปการเข้าใช้สัปดาห์ ${esc(rec.week)}</b> — ยังไม่เคยเข้าใช้ <b>${never.length}</b> คน${never.length ? ' (' + never.slice(0, 6).map(esc).join(', ') + (never.length > 6 ? ' …' : '') + ')' : ''} · หายไปเกิน 14 วัน <b>${away.length}</b> คน${away.length ? ' (' + away.slice(0, 6).map(esc).join(', ') + ')' : ''}${rec.sent ? ' · ส่ง Telegram แล้ว' : ' · ยังไม่ได้ตั้ง Telegram'} — <a href="#" onclick="switchTab('settings');switchSettingsTab('usage');return false" class="underline">ดูรายชื่อ</a></div>

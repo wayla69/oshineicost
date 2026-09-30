@@ -763,9 +763,9 @@ const _CYAN_HEX = ['#06b6d4', '#0891b2', '#0e7490'], _SKY_HEX = ['#0ea5e9', '#02
 // pass on white but drop to 2.9-3.9 on tints and the dark card; #d946ef 3.46, #ec4899 3.53:1 on white.
 const _NAVY_HEX = ['#4a70b0', '#4f46e5', '#6366f1', '#2563eb', '#1d4ed8'], _VIOLET_HEX = ['#7a66b8', '#8b5cf6', '#7c3aed'];
 const _FUCHSIA_HEX = ['#d946ef', '#c026d3', '#a21caf'], _PINK_HEX = ['#ec4899', '#db2777', '#be185d'];
-// Amber / yellow and orange (warnings, "near target"): #f59e0b 2.15, #d97706 3.19, #eab308 1.9,
+// Amber / yellow and orange (warnings, "near target"): #f59e0b 2.15, #d97706 3.19, #eab308 1.9, #facc15 1.5,
 // #f97316 2.8:1 on white; the deep #b45309 / #92400e / #9a3412 fail on the dark card.
-const _AMBER_HEX  = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#eab308', '#ca8a04', '#a16207', '#854d0e'],
+const _AMBER_HEX  = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#eab308', '#facc15', '#ca8a04', '#a16207', '#854d0e'],
       _ORANGE_HEX = ['#f97316', '#ea580c', '#c2410c', '#9a3412'];
 // Neutral greys as text: #94a3b8 2.56 and #cbd5e1 1.5:1 on white; #64748b / #6b7280 fail on
 // tints and the dark card. They become the muted text token, which adapts.
