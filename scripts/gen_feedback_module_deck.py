@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""A 12-slide introduction deck for the 💬 เสียงลูกค้า (customer-voice) module.
+"""A 12-slide introduction deck for the เสียงลูกค้า (customer-voice) module.
 
 For the audience that has never opened the tab: what problem it solves, the
 nine channels it reads, the two things that make it more than a review inbox
@@ -58,8 +58,8 @@ body{font-family:'Sarabun','Segoe UI',sans-serif;color:#0f172a}
 h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 
 :root{
-  --indigo:#4f46e5; --indigo-mid:#6366f1; --indigo-deep:#312e81; --indigo-ink:#1e1b4b;
-  --indigo-soft:#eef2ff; --indigo-line:#c7d2fe;
+  --indigo:#1f3a6b; --indigo-mid:#1f3a6b; --indigo-deep:#16294d; --indigo-ink:#1e1b4b;
+  --indigo-soft:#e8eef7; --indigo-line:#c9d5e8;
   --ink:#0f172a; --ink2:#334155; --ink3:#64748b; --ink4:#94a3b8;
   --paper:#ffffff; --page-bg:#f0f4f8; --line:#e2e8f0; --line-soft:#f1f5f9;
   --good:#0f9d78; --warn:#b45309; --bad:#be123c;
@@ -75,7 +75,7 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 
 /* ── cover ── */
 .cover{justify-content:center;padding:0 22mm;background:
-  radial-gradient(120% 140% at 82% -10%,#eef2ff 0%,#ffffff 46%),var(--paper)}
+  radial-gradient(120% 140% at 82% -10%,#e8eef7 0%,#ffffff 46%),var(--paper)}
 .cover .band{position:absolute;inset:0 0 auto 0;height:5mm;
   background:linear-gradient(90deg,var(--indigo-ink) 0%,var(--indigo-deep) 45%,var(--indigo) 100%)}
 .cover .wordmark{font:800 13pt 'Prompt';letter-spacing:.22em;color:var(--indigo-deep)}
@@ -93,7 +93,7 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 .pad.dense .lede{margin-bottom:5mm}
 .slide h2{font:700 24pt 'Prompt';margin:2mm 0 3mm;color:var(--ink)}
 .slide .lede{font:500 12.5pt/1.6 'Sarabun';color:var(--ink2);max-width:230mm;margin:0 0 8mm}
-.rule{height:2.4pt;width:26mm;background:linear-gradient(90deg,var(--indigo) 0%,var(--indigo-mid) 100%);
+.rule{height:2.4pt;width:26mm;background:var(--indigo);
   border-radius:2px;margin:4mm 0 0}
 
 /* ── problem slide (3) ── */
@@ -191,16 +191,15 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 .rs .l{font:500 9.5pt 'Sarabun';color:var(--ink3);margin-top:1mm}
 
 /* ── CTA (12) ── */
-.cta{justify-content:center;align-items:center;text-align:center;background:
-  linear-gradient(135deg,var(--indigo-ink) 0%,var(--indigo-deep) 52%,var(--indigo) 100%);color:#fff}
+.cta{justify-content:center;align-items:center;text-align:center;background:var(--indigo-ink);color:#fff}
 .cta h2{font:800 30pt 'Prompt';color:#fff;margin:0 0 5mm}
-.cta .lede{color:#e0e7ff;margin:0 auto 10mm;text-align:center}
+.cta .lede{color:#e8eef7;margin:0 auto 10mm;text-align:center}
 .cta-grid{display:flex;gap:8mm;justify-content:center;max-width:230mm;margin:0 auto}
 .cta .card{flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:5mm;
   padding:7mm 8mm;text-align:left;backdrop-filter:blur(2px)}
-.cta .card .n{font:800 15pt 'Prompt';color:#c7d2fe}
+.cta .card .n{font:800 15pt 'Prompt';color:#c9d5e8}
 .cta .card h3{font:700 12.5pt 'Prompt';margin:2mm 0 1.5mm;color:#fff}
-.cta .card p{font:400 10pt/1.5 'Sarabun';color:#e0e7ff;margin:0}
+.cta .card p{font:400 10pt/1.5 'Sarabun';color:#e8eef7;margin:0}
 """
 
 
@@ -216,7 +215,7 @@ def build_html() -> str:
     # ── 1. cover ─────────────────────────────────────────────────────────────
     s1 = slide(f'''<div class="band"></div>
     <div class="wordmark">OSHINEI</div>
-    <h1>โมดูล <em>💬 เสียงลูกค้า</em><br>ฟังทุกช่องทาง ให้ทุกสาขาได้ยิน</h1>
+    <h1>โมดูล <em>เสียงลูกค้า</em><br>ฟังทุกช่องทาง ให้ทุกสาขาได้ยิน</h1>
     <p class="sub">ระบบเดียวที่ดึงรีวิวและคอมเมนต์จากทุกช่องทางที่ร้านเป็นเจ้าของ วิเคราะห์ความรู้สึกและหัวข้อให้อัตโนมัติ
     แล้วปิดวงจรด้วยการมอบหมายงานและวัดผลว่าดีขึ้นจริงหรือไม่</p>
     <div class="chips">
@@ -246,7 +245,7 @@ def build_html() -> str:
       <div class="kicker">ภาพรวม</div>
       <h2>ดึง → วิเคราะห์ → แสดงในแท็บ → ปิดวงจร</h2>
       <p class="lede">งานประจำทุกเช้าดึงรีวิว/คอมเมนต์ใหม่จากทุกช่องทางที่เปิดไว้ วิเคราะห์อัตโนมัติ แล้วขึ้นในแท็บ
-      💬 เสียงลูกค้า พร้อมกล่องงานสำหรับสิ่งที่ต้องตามต่อ</p>
+      เสียงลูกค้า พร้อมกล่องงานสำหรับสิ่งที่ต้องตามต่อ</p>
       <div class="flow">
         <div class="step"><span class="k">1 · ดึง</span><h3>รับเสียงจากทุกช่องทาง</h3>
           <p>งาน Task Scheduler ทุกเช้า 09:00 ดึงของใหม่จากช่องทางที่เปิดไว้ + อัปโหลดเองสำหรับ Grab/LINE MAN/foodpanda</p></div>
@@ -264,15 +263,15 @@ def build_html() -> str:
 
     # ── 4. channels ───────────────────────────────────────────────────────────
     channels = [
-        ("🗺️", "Google Business Profile", "รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา — ดึงทุกคืนผ่าน API หรือเริ่มได้ทันทีด้วย Takeout", "live"),
-        ("📘", "Facebook Page", "Recommendations (แนะนำ/ไม่แนะนำ) และคอมเมนต์ใต้โพสต์ของเพจ", "live"),
-        ("📱", "แบบสอบถาม QR หน้าร้าน", "ช่องทางของร้านเอง: หน้า 1–5 + หัวข้อ + ข้อความ + เบอร์ติดต่อกลับ จากทุกโต๊ะทุกวัน ไม่ต้องขอสิทธิ์ใคร", "live"),
-        ("📸", "Instagram", "คอมเมนต์ใต้โพสต์ของร้าน โพสต์ที่แท็กบัญชี และ @mention ผ่าน webhook", "live"),
-        ("🎵", "TikTok", "คอมเมนต์ใต้วิดีโอของร้าน พร้อมตอบกลับได้จากในแท็บ", "live"),
+        ("", "Google Business Profile", "รีวิวทุกสาขา: ดาว ข้อความ วันที่ การตอบกลับของสาขา — ดึงทุกคืนผ่าน API หรือเริ่มได้ทันทีด้วย Takeout", "live"),
+        ("", "Facebook Page", "Recommendations (แนะนำ/ไม่แนะนำ) และคอมเมนต์ใต้โพสต์ของเพจ", "live"),
+        ("", "แบบสอบถาม QR หน้าร้าน", "ช่องทางของร้านเอง: หน้า 1–5 + หัวข้อ + ข้อความ + เบอร์ติดต่อกลับ จากทุกโต๊ะทุกวัน ไม่ต้องขอสิทธิ์ใคร", "live"),
+        ("", "Instagram", "คอมเมนต์ใต้โพสต์ของร้าน โพสต์ที่แท็กบัญชี และ @mention ผ่าน webhook", "live"),
+        ("", "TikTok", "คอมเมนต์ใต้วิดีโอของร้าน พร้อมตอบกลับได้จากในแท็บ", "live"),
         ("▶️", "YouTube + ข่าว + Alerts", "วิดีโอ/คอมเมนต์ที่พูดถึงร้าน และการพูดถึงทั่วเว็บผ่าน Google News + Google Alerts", "live"),
-        ("🛵", "Grab · LINE MAN · foodpanda", "รีวิวจาก merchant portal ของแต่ละแพลตฟอร์ม ส่งออกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ", "upload"),
+        ("", "Grab · LINE MAN · foodpanda", "รีวิวจาก merchant portal ของแต่ละแพลตฟอร์ม ส่งออกเป็น CSV/XLSX แล้วอัปโหลดในแท็บ", "upload"),
         ("𝕏", "X (Twitter)", "โพสต์สาธารณะที่พูดถึงร้านในรอบ 7 วันล่าสุด — ต้องสมัคร API แบบเสียเงิน จึงให้เจ้าของตัดสินใจก่อน", "paid"),
-        ("🔔", "Telegram", "ไม่ใช่แหล่งรีวิว แต่เป็นช่องแจ้งเตือน: รีวิวลบใหม่ทันที + สรุปรายสัปดาห์ทุกวันจันทร์", "live"),
+        ("", "Telegram", "ไม่ใช่แหล่งรีวิว แต่เป็นช่องแจ้งเตือน: รีวิวลบใหม่ทันที + สรุปรายสัปดาห์ทุกวันจันทร์", "live"),
     ]
     tag_label = {"live": "พร้อมใช้ทันที", "upload": "อัปโหลดเอง", "paid": "ต้องสมัคร (เสียเงิน)"}
     ch_html = "".join(
@@ -288,10 +287,10 @@ def build_html() -> str:
 
     # ── 5. QR deep dive ──────────────────────────────────────────────────────
     demo_url = "https://oshinei-dashboard.fly.dev/s/xxxxxxxx"
-    qr = qr_svg(demo_url, 30) or '<div style="width:30mm;height:30mm;background:#eef2ff"></div>'
+    qr = qr_svg(demo_url, 30) or '<div style="width:30mm;height:30mm;background:#e8eef7"></div>'
     s5 = slide(f'''<div class="pad">
       <div class="kicker">ช่องทางของร้านเอง</div>
-      <h2>📱 แบบสอบถาม QR หน้าร้าน</h2>
+      <h2>แบบสอบถาม QR หน้าร้าน</h2>
       <p class="lede">รีวิวสาธารณะมาไม่กี่ครั้งต่อเดือน แต่ QR บนโต๊ะถามได้ทุกโต๊ะทุกวัน ใช้เวลาแขก 20 วินาที
       ไม่ต้องขอสิทธิ์จากแพลตฟอร์มไหนเลย เพราะเป็นช่องทางของร้านเอง</p>
       <div class="qr-wrap">
@@ -317,11 +316,11 @@ def build_html() -> str:
       <h2>ทุกข้อความถูกอ่านให้ ไม่ใช่แค่เก็บไว้เฉยๆ</h2>
       <p class="lede">สองเอนจิน ผลลัพธ์รูปแบบเดียวกัน แต่ละแถวบันทึกว่าเอนจินไหนวิเคราะห์ เพื่อให้อ่านผลด้วยความมั่นใจที่เหมาะสม</p>
       <div class="split">
-        <div class="eng"><h3>🧠 Claude (เมื่อตั้งค่า API key)</h3>
+        <div class="eng"><h3>Claude (เมื่อตั้งค่า API key)</h3>
           <ul><li>อ่านบริบทได้ลึกกว่าคำต่อคำ เข้าใจประชด กันเอง แซว</li>
           <li>สรุปเรื่องราวรายสัปดาห์ + ตอบคำถามที่พิมพ์เป็นภาษาคน</li>
           <li>ร่างคำตอบรีวิวให้ ทีมแก้แล้วส่งได้เลย</li></ul></div>
-        <div class="eng"><h3>📖 เล็กซิคอนไทย (ใช้ได้เสมอ สำรอง)</h3>
+        <div class="eng"><h3>เล็กซิคอนไทย (ใช้ได้เสมอ สำรอง)</h3>
           <ul><li>จับคำในกลุ่มหัวข้อ + หน้าต่างคำปฏิเสธ ("ไม่อร่อย" ไม่ใช่ "อร่อย")</li>
           <li>ดาวเป็นตัวช่วยตัดสินเมื่อข้อความกำกวม</li>
           <li>ทำงานได้ทันทีแม้ไม่มี API key — ไม่มีวันหยุดวิเคราะห์</li></ul></div>
@@ -336,11 +335,11 @@ def build_html() -> str:
       <h2>อ่านเสียงลูกค้าคู่กับข้อมูลการขายจริง</h2>
       <p class="lede">รีวิวเฉยๆ บอกได้แค่ว่าใครบ่นเรื่องอะไร แต่เทียบกับยอดขายจริงถึงจะรู้ว่าควรแก้อะไรก่อน</p>
       <div class="cross">
-        <div class="card"><span class="e">⏱️</span><h3>ความบ่นคู่กับความยุ่ง</h3>
+        <div class="card"><span class="e"></span><h3>ความบ่นคู่กับความยุ่ง</h3>
           <p>"รอนาน" ในวันที่สาขายุ่งกว่าปกติ 20% คือปัญหากำลังคน/เตรียมของช่วงพีค แต่ถ้าวันนั้นเงียบ คือปัญหามาตรฐานงาน</p></div>
-        <div class="card"><span class="e">🍽️</span><h3>เมนูที่ถูกบ่นคู่กับยอดขาย/ต้นทุน</h3>
+        <div class="card"><span class="e"></span><h3>เมนูที่ถูกบ่นคู่กับยอดขาย/ต้นทุน</h3>
           <p>เมนูที่ถูกบ่นและติดขายดี 20% แรก คือเมนูที่ต้องแก้ก่อน เมนูที่ถูกชมและขายดี คือเมนูที่ต้องรักษาไว้</p></div>
-        <div class="card"><span class="e">📈</span><h3>เสียงคู่กับรายได้ต่อสาขา</h3>
+        <div class="card"><span class="e">▲</span><h3>เสียงคู่กับรายได้ต่อสาขา</h3>
           <p>เทียบกับรายได้ ยอดลูกค้า สัดส่วนส่วนลด และค่าใช้จ่ายต่อหัว — คำร้อง "ราคา/ความคุ้ม" ต้องวัดกับตัวเลขจริง ไม่ใช่ความรู้สึก</p></div>
       </div>
     </div>''', 7)
@@ -351,25 +350,25 @@ def build_html() -> str:
       <h2>จากเสียง → เป็นงาน → เป็นหลักฐานว่าดีขึ้นจริง</h2>
       <p class="lede">แท็บบอกว่าลูกค้าบ่นอะไรที่ไหน โมดูลนี้คือบันทึกว่าทำอะไรไปแล้วบ้าง</p>
       <div class="loop">
-        <div class="node"><div class="circ">📌</div><h3>ตั้งงาน</h3><p>หัวข้อ + สาขา → งานพร้อมเจ้าของและวันครบกำหนด</p></div>
+        <div class="node"><div class="circ"></div><h3>ตั้งงาน</h3><p>หัวข้อ + สาขา → งานพร้อมเจ้าของและวันครบกำหนด</p></div>
         <div class="conn">→</div>
-        <div class="node"><div class="circ">📊</div><h3>วัดค่าฐาน</h3><p>นับเสียงลบต่อ 100 ก่อนเริ่มงาน (baseline)</p></div>
+        <div class="node"><div class="circ"></div><h3>วัดค่าฐาน</h3><p>นับเสียงลบต่อ 100 ก่อนเริ่มงาน (baseline)</p></div>
         <div class="conn">→</div>
-        <div class="node"><div class="circ">✅</div><h3>ทำเสร็จ</h3><p>สถานะ เปิด → กำลังทำ → เสร็จ พร้อมบันทึกสิ่งที่ทำ</p></div>
+        <div class="node"><div class="circ">✓</div><h3>ทำเสร็จ</h3><p>สถานะ เปิด → กำลังทำ → เสร็จ พร้อมบันทึกสิ่งที่ทำ</p></div>
         <div class="conn">→</div>
-        <div class="node"><div class="circ">🔁</div><h3>วัดซ้ำ</h3><p>นับเสียงลบหลังทำเสร็จ เทียบกับค่าฐาน</p></div>
+        <div class="node"><div class="circ"></div><h3>วัดซ้ำ</h3><p>นับเสียงลบหลังทำเสร็จ เทียบกับค่าฐาน</p></div>
         <div class="conn">→</div>
-        <div class="node"><div class="circ">🏆</div><h3>ยืนยันผล</h3><p>ดีขึ้น / เท่าเดิม / แย่ลง — ตัวเลขจากลูกค้าจริง ไม่ใช่ความเห็นทีม</p></div>
+        <div class="node"><div class="circ"></div><h3>ยืนยันผล</h3><p>ดีขึ้น / เท่าเดิม / แย่ลง — ตัวเลขจากลูกค้าจริง ไม่ใช่ความเห็นทีม</p></div>
       </div>
-      <div class="loop-note">📨 สรุปรายสัปดาห์ส่งเข้า Telegram ทุกวันจันทร์ (และหัวข้อ §12 ของรายงานผู้บริหาร) — บอกทุกคนว่าเสียงลูกค้าขยับไปทางไหนแล้ว</div>
+      <div class="loop-note">สรุปรายสัปดาห์ส่งเข้า Telegram ทุกวันจันทร์ (และหัวข้อ §12 ของรายงานผู้บริหาร) — บอกทุกคนว่าเสียงลูกค้าขยับไปทางไหนแล้ว</div>
     </div>''', 8)
 
     # ── 9. competitors ────────────────────────────────────────────────────────
-    s9a = f'''<h3>🏁 เทียบคู่แข่งรอบสาขา</h3>
+    s9a = f'''<h3>เทียบคู่แข่งรอบสาขา</h3>
       <p>ภาพรวมรายเดือนจาก Google Places: คะแนนและจำนวนรีวิวของสาขาเทียบกับร้านคู่แข่งรอบๆ ค่ากลางและอันดับดีที่สุดในย่าน
       อันดับของสาขา และการเปลี่ยนแปลงจากเดือนก่อน</p>
       <p class="stat">ทุกสาขา · ทุกเดือน</p>'''
-    s9b = f'''<h3>🧠 AI เชิงลึก</h3>
+    s9b = f'''<h3>AI เชิงลึก</h3>
       <p>เรื่องเล่ารายสัปดาห์ 3 ย่อหน้าสั้นๆ พร้อม 3 สิ่งที่ควรทำ และถามคำถามเป็นภาษาคนได้ ("สาขาไหนบ่นเรื่องรอนานมากสุดเดือนนี้")
       ทำงานได้แม้ไม่มี Claude — ใช้เอนจินกฎเกณฑ์แทน ทุกคำตอบบอกว่าเอนจินไหนตอบ</p>
       <p class="stat">ไม่มี API key ก็ใช้ได้</p>'''
@@ -400,11 +399,11 @@ def build_html() -> str:
       <h2>สิ่งที่ต้องการจากเจ้าของ</h2>
       <p class="lede">แต่ละช่องทางต้องมีคนถือบัญชีของร้านยืนยันตัวตนครั้งเดียว หลังจากนั้นระบบดึงเองทุกคืน</p>
       <div class="cross">
-        <div class="card"><span class="e">🔑</span><h3>บัญชีของร้านเอง</h3>
+        <div class="card"><span class="e"></span><h3>บัญชีของร้านเอง</h3>
           <p>Google Business Profile · Facebook Page · Instagram Business ที่ผูกกับเพจ · TikTok — ต้องเป็นบัญชีที่ร้านจัดการอยู่แล้ว</p></div>
-        <div class="card"><span class="e">✅</span><h3>อนุมัติครั้งเดียวต่อช่องทาง</h3>
+        <div class="card"><span class="e">✓</span><h3>อนุมัติครั้งเดียวต่อช่องทาง</h3>
           <p>Google/TikTok ต้องรออนุมัติจากแพลตฟอร์ม 1–2 สัปดาห์ Facebook/Instagram อนุมัติทันที — ยื่นทุกช่องทางพร้อมกันได้เพื่อไม่ให้เสียเวลารอ</p></div>
-        <div class="card"><span class="e">💬</span><h3>คนตอบรีวิวประจำวัน</h3>
+        <div class="card"><span class="e"></span><h3>คนตอบรีวิวประจำวัน</h3>
           <p>ระบบร่างคำตอบให้ แต่ต้องมีคนอ่านผ่าน/แก้/กดส่งทุกเช้า และผู้จัดการเขตตามงานที่ตั้งไว้ทุกสัปดาห์</p></div>
       </div>
     </div>''', 11)
@@ -432,7 +431,7 @@ def build_gantt() -> str:
     d = json.load(io.open(PLAN_JSON, encoding="utf-8"))
     horizon = d["horizon_days"]
     phases = d["phases"]
-    colors = ["#312e81", "#4338ca", "#4f46e5", "#6366f1", "#818cf8"]
+    colors = ["#16294d", "#16294d", "#1f3a6b", "#1f3a6b", "#4a70b0"]
     rows = []
     for i, ph in enumerate(phases):
         d0, d1 = ph["days"]

@@ -250,10 +250,10 @@ def menu_action_board(
     """DECISION layer over Menu Engineering + lifecycle: sorts every food dish into
     one action bucket so a GM knows what to DO, not just what the numbers are.
 
-      🚀 feature     — Stars (popular & profitable) → ดันต่อ / จัดโปรโมชัน
-      🔍 market      — Puzzles (profitable but under-ordered) → โปรโมต/วางตำแหน่งใหม่
-      💰 fix_margin  — Plowhorses (popular but margin บาง) → ขึ้นราคา/ลดต้นทุน
-      ✂️ review_cut  — Dogs that are ALSO declining/dead & low-volume → ทบทวน/พิจารณาตัด
+      feature     — Stars (popular & profitable) → ดันต่อ / จัดโปรโมชัน
+      market      — Puzzles (profitable but under-ordered) → โปรโมต/วางตำแหน่งใหม่
+      fix_margin  — Plowhorses (popular but margin บาง) → ขึ้นราคา/ลดต้นทุน
+      review_cut  — Dogs that are ALSO declining/dead & low-volume → ทบทวน/พิจารณาตัด
       ℹ️ needs_cost  — no cost data → ยังจัดอันดับด้วยมาร์จิ้นไม่ได้ (honest, not hidden)
 
     Reuses _menu_engineering_compute (identical quadrant/margin) + _menu_lifecycle_stages
@@ -599,7 +599,7 @@ def menu_ai_ideas(body: MenuIdeasBody):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/menu/lifecycle   🟢9
+# GET /api/menu/lifecycle   ●9
 # Classify SKUs as New / Growing / Stable / Declining / Dead
 # ---------------------------------------------------------------------------
 @router.get("/api/menu/lifecycle")

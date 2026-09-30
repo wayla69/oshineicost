@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""📊 เสียงลูกค้า × ข้อมูลธุรกิจ — E2 of the expansion plan. The one thing a
+"""เสียงลูกค้า × ข้อมูลธุรกิจ — E2 of the expansion plan. The one thing a
 generic review tool cannot do: read the voices against the till.
   · "รอนาน" (and บริการ, ของหมด) against how busy the branch was that day — a
     complaint on a day 20 % busier than the branch's usual is a staffing /
@@ -288,7 +288,7 @@ def compute_business(con, month_from=None, month_to=None, branch=None, today=Non
         notes.append(f"\"รอนาน\" {tw['matched']} เสียง เกิดในวันที่แน่นกว่าปกติ {tw['busy_share']}% — {tw['verdict']}")
     hot = [m for m in menus if any("ขายดีแต่ถูกบ่น" in s for s in m["signals"])]
     if hot:
-        notes.append("เมนูขายดีที่ถูกบ่น: " + ", ".join(f"{m['menu']} (ลบ {m['neg']}, อันดับขาย {m['rank']})" for m in hot[:3]) + " — ส่งเข้า ⚡ปรับเมนู")
+        notes.append("เมนูขายดีที่ถูกบ่น: " + ", ".join(f"{m['menu']} (ลบ {m['neg']}, อันดับขาย {m['rank']})" for m in hot[:3]) + " — ส่งเข้า ปรับเมนู")
     flagged = [b for b in branches if b["signals"]]
     if flagged:
         notes.append("สาขาที่มีสัญญาณซ้อน: " + " · ".join(f"{b['branch']} ({b['signals'][0]})" for b in flagged[:3]))

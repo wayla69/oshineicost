@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""🔁 ปิดวงจร — from a voice to a fix to proof (E1 of the expansion plan).
+"""ปิดวงจร — from a voice to a fix to proof (E1 of the expansion plan).
 The tab shows what guests complain about and where. This module is the record
 of what was done about it: a theme on a branch becomes an action with an owner
 and a due date; the theme is measured over the WINDOW_DAYS before the action

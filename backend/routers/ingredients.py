@@ -1104,7 +1104,7 @@ def ingredients_order_letter(
                   .page {{ margin:0; box-shadow:none; width:auto; min-height:0; padding:0; }}
                   table.grid th {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
 </style></head><body>
-<div class="toolbar"><button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+<div class="toolbar"><button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button>
   &nbsp;<span style="font-size:11px;color:#64748b">{len(pages)} สาขา · 1 หน้าต่อสาขา</span></div>
 {''.join(body)}
 </body></html>"""
@@ -1596,7 +1596,7 @@ def ingredients_compliance_letter(
             return Response(content=
                 "<!doctype html><meta charset='utf-8'>"
                 "<div style=\"font-family:Sarabun,Tahoma,sans-serif;padding:40px;"
-                "text-align:center;color:#047857\"><h2>✅ ไม่มีสาขาที่ต้องออกหนังสือแจ้งเตือน</h2>"
+                "text-align:center;color:#047857\"><h2>ไม่มีสาขาที่ต้องออกหนังสือแจ้งเตือน</h2>"
                 "<p style='color:#475569'>ทุกสาขาสั่งวัตถุดิบผ่านส่วนกลางครบตามแผน "
                 f"(เกณฑ์: ต่ำกว่าที่แนะนำเกิน {tolerance_pct:g}%)</p></div>",
                 media_type="text/html; charset=utf-8")
@@ -1687,7 +1687,7 @@ def ingredients_compliance_letter(
                margin-bottom:8px; letter-spacing:.5px; }
 """ if preview else "")
     draft_bar = ('<span style="color:#b91c1c;font-weight:700;font-size:12px;'
-                 'margin-right:10px">📝 ร่าง — ตรวจก่อนออกจริง</span>' if preview else "")
+                 'margin-right:10px">ร่าง — ตรวจก่อนออกจริง</span>' if preview else "")
     if preview:
         body = [b.replace('<div class="head">',
                           '<div class="draftmark">ร่าง (DRAFT) — ยังไม่ได้ออกจดหมายฉบับนี้</div>'
@@ -1739,7 +1739,7 @@ def ingredients_compliance_letter(
                   table.grid th {{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }} }}
 {draft_css}
 </style></head><body>
-<div class="toolbar">{draft_bar}<button onclick="window.print()">🖨️ พิมพ์ / บันทึกเป็น PDF</button>
+<div class="toolbar">{draft_bar}<button onclick="window.print()">พิมพ์ / บันทึกเป็น PDF</button>
   &nbsp;<span style="font-size:11px;color:#64748b">{len(pages)} สาขาที่ต้องแจ้งเตือน · 1 หน้าต่อสาขา</span></div>
 {''.join(body)}
 </body></html>"""
@@ -2377,7 +2377,7 @@ def ingredients_order_actual_template(
         _ing_issue_tables(con)
         issues = _ing_open_issues(con, issue_id, branch, period_start)
         if not issues:
-            raise HTTPException(404, "ไม่พบรอบสั่งที่ออกไว้ — กด 📌 ออกรอบสั่ง ก่อน")
+            raise HTTPException(404, "ไม่พบรอบสั่งที่ออกไว้ — กด ออกรอบสั่ง ก่อน")
         lines = {}
         for i in issues:
             lines[i["issue_id"]] = con.execute(

@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Build the PRINT edition of a customer-feedback checklist (any plan the
-dashboard's ✅ Checklist tab can render).
+dashboard's Checklist tab can render).
 
 The plan the tab renders (backend/checklists/<plan>.json, served by
 /api/checklist/<plan>/plan) is the single source; it is inlined into a print
@@ -45,7 +45,7 @@ _ROLLOUT_BOX2 = [
     '<span style="background:#dff3e6;color:#14532d;padding:0 3pt;border-radius:2.5pt">เขียว = รู้ว่าสำเร็จเมื่อ</span> &nbsp; '
     '<span style="background:#fbe4e4;color:#7f1d1d;padding:0 3pt;border-radius:2.5pt">ชมพู = ถ้าติดให้ทำอย่างนี้</span>',
     '<mark class="warn">พีช</mark> = ข้อควรระวัง ห้าม หรือจุดที่พลาดแล้วเสียเวลามาก &nbsp; <span class="val">ม่วง</span> = ค่า/ตัวเลขที่ต้องจด',
-    'ช่อง ☐ ข้างขั้นตอน = ติ๊กเมื่อทำเสร็จ · แถบลายในไทม์ไลน์ = รอฝ่ายภายนอกอนุมัติ',
+    'ช่อง ข้างขั้นตอน = ติ๊กเมื่อทำเสร็จ · แถบลายในไทม์ไลน์ = รอฝ่ายภายนอกอนุมัติ',
 ]
 _ROLLOUT_SOURCE_NOTE = f'Oshinei · Checklist เปิดใช้งานเสียงลูกค้า · ฉบับพิมพ์'
 
@@ -70,7 +70,7 @@ TEMPLATE = r"""<!doctype html>
   .val { background: #e8e1f7; color: #3b2a6b; padding: 0 2.5pt; border-radius: 2.5pt; font-weight: 700; }
   /* cover */
   .cover { margin-bottom: 4mm; }          /* the phases follow on the same page: no blank third of a sheet */
-  .brand { font: 700 7.5pt "Bai Jamjuree"; letter-spacing: .12em; text-transform: uppercase; color: #0f766e; }
+  .brand { font: 700 7.5pt "Bai Jamjuree"; letter-spacing: .12em; text-transform: uppercase; color: #1f3a6b; }
   .cover h1 { font-size: 22pt; line-height: 1.15; margin: 3pt 0 4pt; }
   .lede { font-size: 10.2pt; color: #46535e; max-width: 165mm; margin: 0 0 6pt; }
   .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: 4mm; }
@@ -91,7 +91,7 @@ TEMPLATE = r"""<!doctype html>
   /* body: one column, full width; pagination rules keep every unit whole:
      a phase starts a new page and sticks to its first task, a task header sticks to
      its first step, a step never splits across pages */
-  .phase { break-after: avoid; break-inside: avoid; margin: 5mm 0 2.5mm; background: #d9efe9; border-left: 4pt solid #0f766e; padding: 3.5pt 7pt; }
+  .phase { break-after: avoid; break-inside: avoid; margin: 5mm 0 2.5mm; background: #d9efe9; border-left: 4pt solid #1f3a6b; padding: 3.5pt 7pt; }
   .phase:first-child { margin-top: 0; }
   .phase h2 { font-size: 12.5pt; line-height: 1.2; }
   .phase .meta { font-size: 8.2pt; color: #3a4a45; margin-top: 1pt; }
@@ -123,7 +123,7 @@ TEMPLATE = r"""<!doctype html>
 </head>
 <body>
 <section class="cover">
-  <div class="brand">Oshinei Dashboard · โมดูล 💬 เสียงลูกค้า</div>
+  <div class="brand">Oshinei Dashboard · โมดูล เสียงลูกค้า</div>
   <h1>__TITLE__</h1>
   <p class="lede">__LEDE__</p>
   <div class="cover-grid">

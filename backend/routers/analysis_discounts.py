@@ -818,7 +818,7 @@ def analysis_discount_leakage(
                  + (f" (×{b['ratio_vs_chain']:.2f} ของค่าเฉลี่ย)" if b["ratio_vs_chain"] else "")
                  + (f", ส่วนใหญ่: {b['top_reason']}" if b.get("top_reason") else "")
                  for b in abnormal[:6]]
-        headline = (f"🚩 {len(abnormal)} สาขาใช้ส่วนลดสูงผิดปกติ (เกิน {threshold:.2f}% ของยอดก่อนลด · "
+        headline = (f"{len(abnormal)} สาขาใช้ส่วนลดสูงผิดปกติ (เกิน {threshold:.2f}% ของยอดก่อนลด · "
                     f"ค่าเฉลี่ยทุกสาขา {chain_pct:.2f}%): " + " · ".join(parts))
     else:
         headline = (f"✓ ไม่พบสาขาที่ใช้ส่วนลดผิดปกติ — ทุกสาขาต่ำกว่าเกณฑ์ {threshold:.2f}% "

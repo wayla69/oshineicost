@@ -117,10 +117,10 @@ def test_severe_voice_pins_itself_and_leads_the_queue(client, monkeypatch):
     assert q[0]["severity"] == "high"
     d = client.get("/api/feedback/digest", params={"days": 7, "today": "2026-09-05"}).json()
     assert d["severe"] == 1 and any(x["name"] == "เก่ง" for x in d["staff"])
-    assert "🔥 ร้ายแรง <b>1</b>" in notify.weekly_digest(d)
+    assert "ร้ายแรง <b>1</b>" in notify.weekly_digest(d)
     alert = notify.negative_digest([{"branch": "BranchA", "rating": 3, "text": "ท้องเสีย", "severity": "high", "severity_note": "ท้องเสีย"},
                                     {"branch": "BranchB", "rating": 1, "text": "รอนาน"}], "Google")
-    assert alert.index("🔥") < alert.index("รอนาน") and "ร้ายแรง — ท้องเสีย" in alert
+    assert alert.index("ร้ายแรง — ท้องเสีย") < alert.index("รอนาน")   # the severe voice leads
 
 
 def test_narrative_rules_and_claude(client, monkeypatch):

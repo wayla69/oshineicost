@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""📰 รายงานประจำวัน/สัปดาห์/เดือน — เสียงลูกค้า, ออกแบบให้ทีมการตลาดใช้ได้ทันที:
+"""รายงานประจำวัน/สัปดาห์/เดือน — เสียงลูกค้า, ออกแบบให้ทีมการตลาดใช้ได้ทันที:
 เลือกช่วง (วันเดียว, สัปดาห์, เดือน หรือกำหนดเอง — และสาขาถ้าต้องการ) แล้วได้
 สรุปพร้อมใช้ — คะแนน/สัดส่วนความรู้สึกของช่วงนั้น กี่รายการตอบแล้ว/รอตอบ/เกิน
 SLA เคสร้ายแรงที่ต้องรู้ หัวข้อ/เมนูที่ถูกพูดถึง เสียงชมที่หยิบไปใช้ต่อได้ และ
@@ -12,7 +12,7 @@ summary — ที่นี่แค่เป็นหน้าต่าง [dat
 หรือเท่ากับ date) คือ "รายงานประจำวัน" เดิม — ใส่ date_to ให้ต่างจาก date จะได้
 รายงานตามช่วงที่เลือก (สัปดาห์/เดือน/กำหนดเอง แล้วแต่หน้าเว็บส่งมา).
 
-ต่อกับ routers/feedback_actions.py (โมดูล 🔁 ปิดวงจร) เพื่อสี่ส่วนนี้:
+ต่อกับ routers/feedback_actions.py (โมดูล ปิดวงจร) เพื่อสี่ส่วนนี้:
   - new_issues:      (สาขา,หัวข้อ) ที่มีเสียงลบในช่วงนี้ แต่ยังไม่มี action ใดรับผิดชอบ — "ปัญหามาใหม่"
   - resolved_issues: action ที่ปิด (done_at) อยู่ในช่วงนี้ — พร้อมระยะเวลาที่ใช้แก้และผลตรวจ (better/same/worse)
   - open_issues:     action ที่ยังเปิดอยู่ (open/doing) ณ วันนี้จริง — ไม่ผูกกับช่วงรายงาน เพราะเป็นสถานะสด
@@ -306,9 +306,9 @@ def _build_print_html(data: dict) -> str:
 
     def _neg_card(it):
         tel = _tel_href(it.get("contact") or "")
-        contact_html = f' · 📞 <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · 📞 {_esc(it["contact"])}' if it.get("contact") else "")
-        contacted_html = ' · <span style="color:#166534">✅ โทรกลับแล้ว</span>' if it.get("contacted") else ""
-        sev = ' <span class="tag">🔥 ร้ายแรง</span>' if it.get("severity") == "high" else ""
+        contact_html = f' · <a href="{tel}">{_esc(it["contact"])}</a>' if tel else (f' · {_esc(it["contact"])}' if it.get("contact") else "")
+        contacted_html = ' · <span style="color:#166534">โทรกลับแล้ว</span>' if it.get("contacted") else ""
+        sev = ' <span class="tag">ร้ายแรง</span>' if it.get("severity") == "high" else ""
         status = "ตอบแล้ว" if it["replied"] else ("เกิน SLA" if it["sla_breached"] else "รอตอบ")
         date_bit = f'{_esc((it.get("date") or "")[:10])} · ' if date_from != date_to else ""
         branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
@@ -322,10 +322,10 @@ def _build_print_html(data: dict) -> str:
 
     def negative_items():
         if not data["recent_negative"]:
-            return f'<p class="empty">ไม่มีรายการเชิงลบที่ต้องติดตาม{pw} 🎉</p>'
+            return f'<p class="empty">ไม่มีรายการเชิงลบที่ต้องติดตาม{pw}</p>'
         if data["branch"]:
             return "".join(_neg_card(it) for it in data["recent_negative"])
-        return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_neg_card(it) for it in items)
+        return "".join(f'<div class="branch-h">{_esc(b)} ({len(items)})</div>' + "".join(_neg_card(it) for it in items)
                        for b, items in _group_by_branch(data["recent_negative"]))
 
     def positive_quotes():
@@ -333,7 +333,7 @@ def _build_print_html(data: dict) -> str:
             return f'<p class="empty">ยังไม่มีเสียงชมที่หยิบไปใช้ได้{pw}</p>'
         if data["branch"]:
             return "".join(_pos_card(q) for q in data["recent_positive"][:5])
-        return "".join(f'<div class="branch-h">🏪 {_esc(b)} ({len(items)})</div>' + "".join(_pos_card(q) for q in items)
+        return "".join(f'<div class="branch-h">{_esc(b)} ({len(items)})</div>' + "".join(_pos_card(q) for q in items)
                        for b, items in _group_by_branch(data["recent_positive"]))
 
     def _star_line(rate):
@@ -342,7 +342,7 @@ def _build_print_html(data: dict) -> str:
     def new_issues_block():
         items = data["new_issues"]
         if not items:
-            return f'<p class="empty">ไม่มีปัญหาใหม่ที่ยังไม่มีคนตาม{pw} 🎉</p>'
+            return f'<p class="empty">ไม่มีปัญหาใหม่ที่ยังไม่มีคนตาม{pw}</p>'
         rows = []
         for it in items[:12]:
             ex = f' — “{_esc(it["examples"][0])}”' if it.get("examples") else ""
@@ -353,19 +353,19 @@ def _build_print_html(data: dict) -> str:
     def open_issues_block():
         items = data["open_issues"]
         if not items:
-            return '<p class="empty">ไม่มีปัญหาที่ค้างอยู่ 🎉</p>'
+            return '<p class="empty">ไม่มีปัญหาที่ค้างอยู่</p>'
         rows = []
         for it in items[:15]:
             branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
             due = f' · กำหนด {_esc(it["due"])}' if it.get("due") else ""
-            overdue = ' <span class="tag">⏰ เกินกำหนด</span>' if it.get("overdue") else ""
+            overdue = ' <span class="tag">เกินกำหนด</span>' if it.get("overdue") else ""
             status = "กำลังทำ" if it["status"] == "doing" else "ยังไม่เริ่ม"
             days = f' · เปิดมา {it["days_open"]} วัน' if it.get("days_open") is not None else ""
             rows.append(f'<div class="item">{branch_bit}<b>{_esc(it["title"])}</b>{overdue}'
                        f'<div class="m">{_esc(it.get("theme") or "-")} · {status} · {_esc(it.get("owner") or "ยังไม่มอบหมาย")}{due}{days}</div></div>')
         return "".join(rows)
 
-    _RESULT_TH = {"better": "✅ ดีขึ้น", "same": "➖ เท่าเดิม", "worse": "❌ แย่ลง", "no_data": "⏳ รอผล"}
+    _RESULT_TH = {"better": "ดีขึ้น", "same": "เท่าเดิม", "worse": "แย่ลง", "no_data": "รอผล"}
 
     def resolved_issues_block():
         items = data["resolved_issues"]
@@ -375,7 +375,7 @@ def _build_print_html(data: dict) -> str:
         for it in items[:15]:
             branch_bit = "" if data["branch"] else f'{_esc(it["branch"] or "-")} · '
             days = f'{it["days_to_fix"]} วัน' if it.get("days_to_fix") is not None else "—"
-            result = _RESULT_TH.get(it.get("result"), "⏳ รอผล" if it.get("after_days_left") is not None else "—")
+            result = _RESULT_TH.get(it.get("result"), "รอผล" if it.get("after_days_left") is not None else "—")
             rate_line = f' (ก่อน {_star_line(it.get("baseline_rate"))} → หลัง {_star_line(it.get("after_rate"))})' if it.get("after_rate") is not None else ""
             rows.append(f'<div class="quote">{branch_bit}<b>{_esc(it["title"])}</b><div class="m">{_esc(it.get("theme") or "-")} · '
                        f'ปิดเมื่อ {_esc(it["done_at"])} · ใช้เวลาแก้ {days} · ผล {result}{rate_line}</div></div>')
@@ -387,7 +387,7 @@ def _build_print_html(data: dict) -> str:
             return f'<p class="empty">ไม่มีสาขาที่ปัญหาเดิมวนซ้ำใน {CHRONIC_LOOKBACK} ช่วงล่าสุด</p>'
         claimed = {(it["branch"] or "", it["theme"] or "") for it in data["open_issues"]}
         rows = "".join(f'<tr><td>{_esc(it["branch"] or "-")}</td><td>{_esc(it["theme"])}</td><td>{it["periods"]}/{it["of_periods"]} ช่วง</td>'
-                       f'<td>{"🔧 มีงานอยู่แล้ว" if (it["branch"] or "", it["theme"] or "") in claimed else "🆕 ยังไม่มีงาน"}</td></tr>'
+                       f'<td>{"มีงานอยู่แล้ว" if (it["branch"] or "", it["theme"] or "") in claimed else "ยังไม่มีงาน"}</td></tr>'
                        for it in items[:15])
         return f'<table><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th><th>สถานะ</th></tr></thead><tbody>{rows}</tbody></table>'
 
@@ -396,7 +396,7 @@ def _build_print_html(data: dict) -> str:
             return ""
         rows = "".join(f'<tr><td>{_esc(b["branch"])}</td><td>{b["n"]}</td><td>{b["neg_pct"]}%</td><td>{b["avg_rating"] if b["avg_rating"] is not None else "—"}</td>'
                        f'<td>{b["unreplied"]}</td><td>{b["flagged"]}</td><td>{_esc(b["top_theme"] or "—")}</td></tr>' for b in data["branches"][:15])
-        return (f'<h2 class="sec">🏪 รายสาขาที่มีเสียง{pw} ({len(data["branches"])})</h2>'
+        return (f'<h2 class="sec">รายสาขาที่มีเสียง{pw} ({len(data["branches"])})</h2>'
                f'<table><thead><tr><th>สาขา</th><th>เสียง</th><th>ลบ%</th><th>★</th><th>รอตอบ</th><th>ปักหมุด</th><th>หัวข้อเด่น</th></tr></thead><tbody>{rows}</tbody></table>')
 
     def sources_block():
@@ -418,39 +418,39 @@ def _build_print_html(data: dict) -> str:
         if not data["staff"]:
             return f'<p class="empty">ยังไม่มีพนักงานถูกระบุชื่อ{pw}</p>'
         return "".join(f'<div style="display:flex;justify-content:space-between"><span>{_esc(s["name"])} <span class="ex">({_esc(s["branch"])})</span></span>'
-                       f'<b>👍{s["pos"]} 👎{s["neg"]}</b></div>' for s in data["staff"][:8])
+                       f'<b>{s["pos"]} {s["neg"]}</b></div>' for s in data["staff"][:8])
 
     return f"""<!doctype html>
 <html lang="th"><head><meta charset="utf-8"><title>{_esc(title)}</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=Sarabun:wght@400;500;600;700&display=swap">
 <style>{_PRINT_CSS}</style></head><body>
-<div class="head"><div><div class="brand">Oshinei Dashboard · โมดูล 💬 เสียงลูกค้า</div><h1>{_esc(title)}</h1></div>
+<div class="head"><div><div class="brand">Oshinei Dashboard · โมดูล เสียงลูกค้า</div><h1>{_esc(title)}</h1></div>
 <div class="meta">พิมพ์เมื่อ {datetime.datetime.now().strftime('%d/%m/%Y %H:%M')}<br>{data['branch_count']} สาขาในรายงานนี้</div></div>
 <div class="headline">{_esc(data['headline'])}<br><span style="font-weight:400;font-size:9pt;color:#3a4a45">{_esc(cmp_line)}</span></div>
 <div class="kpis">{kpi_html}</div>
 <div class="two">
-<div><h2 class="sec">🏷️ หัวข้อที่ถูกพูดถึง{pw}</h2>{theme_rows()}</div>
-<div><h2 class="sec">🍣 เมนูที่ถูกพูดถึง{pw}</h2>{menu_rows()}</div>
+<div><h2 class="sec">หัวข้อที่ถูกพูดถึง{pw}</h2>{theme_rows()}</div>
+<div><h2 class="sec">เมนูที่ถูกพูดถึง{pw}</h2>{menu_rows()}</div>
 </div>
-<h2 class="sec">🚩 ต้องติดตาม{pw} ({len(data['recent_negative'])})</h2>
+<h2 class="sec">ต้องติดตาม{pw} ({len(data['recent_negative'])})</h2>
 {negative_items()}
-<h2 class="sec">🆕 ปัญหาใหม่{pw} ยังไม่มีคนตาม ({len(data['new_issues'])})</h2>
+<h2 class="sec">ปัญหาใหม่{pw} ยังไม่มีคนตาม ({len(data['new_issues'])})</h2>
 {new_issues_block()}
-<h2 class="sec">🔧 ปัญหาที่ยังไม่ได้แก้ ({len(data['open_issues'])})</h2>
+<h2 class="sec">ปัญหาที่ยังไม่ได้แก้ ({len(data['open_issues'])})</h2>
 {open_issues_block()}
-<h2 class="sec">✅ ปัญหาที่แก้แล้วช่วงนี้ ({len(data['resolved_issues'])})</h2>
+<h2 class="sec">ปัญหาที่แก้แล้วช่วงนี้ ({len(data['resolved_issues'])})</h2>
 {resolved_issues_block()}
-<h2 class="sec">🔁 สาขาที่มีความผิดซ้ำสม่ำเสมอ ({len(data['chronic_branches'])})</h2>
+<h2 class="sec">สาขาที่มีความผิดซ้ำสม่ำเสมอ ({len(data['chronic_branches'])})</h2>
 {chronic_block()}
-<h2 class="sec">🌟 เสียงชมที่หยิบไปใช้ได้ ({len(data['recent_positive'])})</h2>
+<h2 class="sec">เสียงชมที่หยิบไปใช้ได้ ({len(data['recent_positive'])})</h2>
 {positive_quotes()}
 <div class="three">
-<div><h2 class="sec">📡 ช่องทางที่มา{pw}</h2>{sources_block()}</div>
-<div><h2 class="sec">⏱️ อัตราตอบกลับ</h2>{response_block()}</div>
-<div><h2 class="sec">👥 พนักงานที่ถูกพูดถึง</h2>{staff_block()}</div>
+<div><h2 class="sec">ช่องทางที่มา{pw}</h2>{sources_block()}</div>
+<div><h2 class="sec">อัตราตอบกลับ</h2>{response_block()}</div>
+<div><h2 class="sec">พนักงานที่ถูกพูดถึง</h2>{staff_block()}</div>
 </div>
 {branch_table()}
-<div class="foot">Oshinei · {_esc(kind)}เสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ 💬 เสียงลูกค้าในแอป</div>
+<div class="foot">Oshinei · {_esc(kind)}เสียงลูกค้า · คำนวณจากข้อมูลชุดเดียวกับแท็บ เสียงลูกค้าในแอป</div>
 </body></html>"""
 
 
@@ -522,13 +522,13 @@ def _build_xlsx(data: dict):
     ws = wb.create_sheet("งานแก้ปัญหา")
     header(ws, ["สถานะ", "สาขา", "หัวข้อ/ชื่องาน", "รายละเอียด", "วันที่/ผล"])
     for it in data["new_issues"]:
-        ws.append(["🆕 ใหม่ ยังไม่มีคนตาม", it["branch"] or "-", it["theme"], f'{it["n"]} เสียงลบ', ""])
+        ws.append(["ใหม่ ยังไม่มีคนตาม", it["branch"] or "-", it["theme"], f'{it["n"]} เสียงลบ', ""])
     for it in data["open_issues"]:
-        ws.append(["🔧 ยังไม่ได้แก้" + (" (เกินกำหนด)" if it.get("overdue") else ""), it["branch"] or "-", it["title"],
+        ws.append(["ยังไม่ได้แก้" + (" (เกินกำหนด)" if it.get("overdue") else ""), it["branch"] or "-", it["title"],
                   it.get("theme") or "", f'{it.get("owner") or "ยังไม่มอบหมาย"} · กำหนด {it.get("due") or "-"}'])
     for it in data["resolved_issues"]:
         result = {"better": "ดีขึ้น", "same": "เท่าเดิม", "worse": "แย่ลง"}.get(it.get("result"), "รอผล")
-        ws.append(["✅ แก้แล้ว", it["branch"] or "-", it["title"], it.get("theme") or "",
+        ws.append(["แก้แล้ว", it["branch"] or "-", it["title"], it.get("theme") or "",
                   f'ปิดเมื่อ {it["done_at"]} · ใช้เวลา {it.get("days_to_fix")} วัน · ผล {result}'])
     autofit(ws)
 

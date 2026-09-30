@@ -209,7 +209,7 @@ hr{border:none;border-top:1px solid var(--line);margin:1.3em 0}
 .tag.s{color:var(--accent);border-color:#e8cfc7} .tag.green{color:var(--green);border-color:#cfe4d8}
 .tag.red{color:var(--red);border-color:#e8cfc7} .tag.g{color:var(--gold);border-color:#e6dcc0}
 .pdfbtn{position:fixed;top:14px;right:14px;z-index:9999;background:var(--ink);color:#fff;border:none;
-  padding:9px 16px;border-radius:5px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
+  padding:9px 16px;border-radius:4px;font-size:12.5px;font-weight:700;cursor:pointer;font-family:inherit;
   box-shadow:0 2px 10px rgba(0,0,0,.22)}
 .pdfbtn:hover{background:#000}
 @media print{.pdfbtn{display:none!important}}
@@ -235,7 +235,7 @@ hr{border:none;border-top:1px solid var(--line);margin:1.3em 0}
 .fig .l{font-size:11px;color:var(--ink2);margin-top:5px;font-weight:600;line-height:1.35}
 .fig .h{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.35}
 /* callouts */
-.callout{border-left:3px solid var(--teal);background:var(--soft2);padding:10px 14px;margin:1em 0}
+.callout{border:1px solid var(--teal);background:var(--soft2);padding:10px 14px;margin:1em 0}
 .callout.s{border-left-color:var(--accent)} .callout.green{border-left-color:var(--green)}
 .callout.red{border-left-color:var(--red)} .callout.g{border-left-color:var(--gold)}
 .callout .ct{font-weight:700;font-size:13px;margin-bottom:.25em;color:var(--ink)}
@@ -593,7 +593,7 @@ def build_html(period, overview, branches, gen_dt, db_path, scope_label="Master"
     addp(action_inner, FOOT)
 
     pdfbtn = ('<button class="pdfbtn noprint" onclick="window.print()">'
-              '⬇ บันทึก / พิมพ์ PDF</button>')
+              'บันทึก / พิมพ์ PDF</button>')
     head = (f'<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Top 60 ต้นทุน/หัว สาขา {scope_label} — {th_period}</title>'

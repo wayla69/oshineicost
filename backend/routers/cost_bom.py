@@ -904,7 +904,7 @@ def cost_analysis(
 
 
 # ---------------------------------------------------------------------------
-# GET /api/cost/audit   🔴1
+# GET /api/cost/audit   ●1
 # Flag SKUs where unit_cost looks suspicious vs actual selling price
 # ---------------------------------------------------------------------------
 @router.get("/api/cost/audit")
@@ -1632,7 +1632,7 @@ def cost_bulk_update(updates: list[CostUpdate]):
 #     using bom_sku_alias as a fallback for SKUs without a direct recipe)
 #   • Cost concentration (top-5/10/20 share of branch COGS)
 #
-# This is the back-end for the "🔬 BoM รายสาขา" sidebar tab.
+# This is the back-end for the "BoM รายสาขา" sidebar tab.
 def _bba_setup(*, branch, granularity, month_from, month_to):
     # names this section hands on; None where a path never assigns one
     cogs_expr = None

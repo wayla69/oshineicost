@@ -135,7 +135,7 @@ def test_weekly_adoption_digest_builds_once_per_week_and_sends_when_configured(c
         assert len(sent) == 1
         # the stored record feeds the endpoint; sending now forces a new one
         j = client.get("/api/usage/adoption-digest").json()
-        assert j["latest"]["week"] == "2026-W37" and "adoption_never" in j["never"] and j["preview"].startswith("📣")
+        assert j["latest"]["week"] == "2026-W37" and "adoption_never" in j["never"] and j["preview"].startswith("<b>สรุปการเข้าใช้แดชบอร์ด</b>")
         import notify
         monkeypatch.setattr(notify, "send_telegram", fake_send)      # the endpoint sends through notify
         r = client.post("/api/usage/adoption-digest/send").json()
@@ -149,7 +149,7 @@ def test_weekly_adoption_digest_builds_once_per_week_and_sends_when_configured(c
         lists = main._adoption_lists(people, now=monday)
         assert [u["username"] for u in lists["never"]] == ["n"] and [u["username"] for u in lists["away"]] == ["b"] and [u["username"] for u in lists["active"]] == ["a"]
         text = main._adoption_digest_text(people, lists, "2026-W37")
-        assert "💤" in text and "b — ล่าสุด 2026-08-01" in text and "✅ ใช้งานอยู่: a (3 วัน)" in text
+        assert "หายไปเกิน" in text and "b — ล่าสุด 2026-08-01" in text and "ใช้งานอยู่: a (3 วัน)" in text
     finally:
         _drop("adoption_never")
 
