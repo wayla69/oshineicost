@@ -1077,7 +1077,7 @@ function renderMce2Actions() {
       <span class="text-lg leading-none mt-0.5">${a.icon}</span>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:${a.color};color:#fff">P${a.priority}</span>
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:${a.color};color:${inkOn(a.color)}">P${a.priority}</span>
           <span class="text-sm font-semibold" style="color:var(--text-primary)">${a.title}</span>
         </div>
         ${a.detail ? `<p class="text-[11px] mt-1" style="color:var(--text-secondary)">${a.detail}</p>` : ''}

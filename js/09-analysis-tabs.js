@@ -1568,10 +1568,10 @@ function renderTimeflowGrid() {
     return v >= 1000 ? (v/1000).toFixed(1)+'k' : Math.round(v);
   };
 
-  // Red (quiet) → amber → green (busiest); white text on saturated cells
+  // Red (quiet) → amber → green (busiest); the label takes whichever of white / navy reads
   const cellColor = intensity => {
     if (!intensity || intensity < 0.01) return { bg: '#f8fafc', fg: '#cbd5e1' };
-    return { bg: heatColor(intensity, false), fg: '#fff' };
+    const bg = heatColor(intensity, false); return { bg, fg: inkOn(bg) };
   };
 
   const cellW = Math.max(38, Math.floor((gridEl.offsetWidth - 50) / openHours.length));

@@ -261,7 +261,7 @@ function _renderCostReviewEditor(i) {
     <div class="flex items-center flex-wrap gap-2">
       <input id="cov-rv-note-${i}" class="border border-slate-200 rounded px-2 py-1 text-xs" style="flex:1;min-width:160px" placeholder="หมายเหตุ (เช่น ชั่งจริงที่สาขา…)">
       ${hasRecipe ? `<span class="text-xs">รวม <b id="cov-rv-total-${i}" class="tabular-nums">฿${(r.cost || 0).toFixed(2)}</b></span>` : ''}
-      <button class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#059669;color:#fff" onclick="confirmCostReview(${i})">ยืนยัน</button>
+      <button class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#047857;color:#fff" onclick="confirmCostReview(${i})">ยืนยัน</button>
       ${r.source === 'confirmed' ? `<button class="text-xs px-3 py-1.5 rounded-lg border border-slate-300" onclick="withdrawCostReview(${i})">ถอนการยืนยัน</button>` : ''}
     </div></div>`;
   if (hasRecipe) _crRecalc(i);

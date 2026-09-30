@@ -106,7 +106,7 @@ body.dark .anomaly-banner { background:#422006; color: #fde68a; }
 .heatmap-table { border-collapse: separate; border-spacing: 2px; }
 .heatmap-table th { background: transparent; font-size: 10px; color: var(--text-muted); font-weight: 500; padding: 4px 6px; position: static; }
 .heatmap-table td { padding: 0; }
-.heatmap-cell { width: 52px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: rgba(255,255,255,0.85); cursor: pointer; transition: transform 0.1s; }
+.heatmap-cell { width: 52px; height: 28px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; color: #0f172a;   /* white fails on the whole heat scale (2.2-3.8:1); navy clears it */ cursor: pointer; transition: transform 0.1s; }
 .heatmap-cell:hover { transform: scale(1.15); z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
 .heatmap-branch-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); padding-right: 8px; text-align: right; white-space: nowrap; }
 
@@ -694,6 +694,18 @@ body.dark .text-rose-800, body.dark .text-rose-900 { color: var(--rose-ink) !imp
 .text-sky-600, .text-sky-700 { color: var(--sky-ink) !important; }
 body.dark .text-cyan-800, body.dark .text-cyan-900 { color: var(--cyan-ink) !important; }
 body.dark .text-sky-800, body.dark .text-sky-900 { color: var(--sky-ink) !important; }
+/* White labels on mid-tone fills: emerald-500/600 2.5/3.8, amber-400/500/600 1.7-3.2,
+   sky-600 4.1, cyan-500/600 2.4/3.7:1. Paired with .text-white the fill steps down to
+   its 700 shade (5.0-5.9:1), 800 on hover; scripts toggle these class strings, so the
+   markup keeps them. */
+.text-white:is(.bg-emerald-500, .bg-emerald-600) { background-color: #047857 !important; }
+.text-white:is(.bg-emerald-500, .bg-emerald-600):hover { background-color: #065f46 !important; }
+.text-white:is(.bg-amber-400, .bg-amber-500, .bg-amber-600) { background-color: #b45309 !important; }
+.text-white:is(.bg-amber-400, .bg-amber-500, .bg-amber-600):hover { background-color: #92400e !important; }
+.text-white.bg-sky-600 { background-color: #0369a1 !important; }
+.text-white.bg-sky-600:hover { background-color: #075985 !important; }
+.text-white:is(.bg-cyan-500, .bg-cyan-600) { background-color: #0e7490 !important; }
+.text-white:is(.bg-cyan-500, .bg-cyan-600):hover { background-color: #155e75 !important; }
 /* Dark mode leaves some backgrounds light: the pale dark inks drop to ~1.9:1 on them and
    the dark text tokens (--text-primary #f1f5f9 ...) to ~1:1. Tokens inherit, so whichever
    of these is the NEAREST ancestor wins (:where keeps every layer at one specificity; the

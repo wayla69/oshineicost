@@ -667,7 +667,7 @@ async function loadReport() {
     const peakH = bh.length ? bh.reduce((mx,h)=>h.tx_count>(mx?.tx_count||0)?h:mx,null) : null;
     const fdAbs = persona.food_drink_split || {};
     const fdTot = (fdAbs.food_abs||0)+(fdAbs.drink_abs||0)+(fdAbs.other_abs||0);
-    const fdSeg = (lbl,val,color)=>{ const p = fdTot? val/fdTot*100:0; return p<0.5?'':`<div style="width:${p}%;background:${color}" class="h-full flex items-center justify-center text-[10px] text-white font-semibold" title="${lbl} ${p.toFixed(1)}%">${p>=8?p.toFixed(0)+'%':''}</div>`; };
+    const fdSeg = (lbl,val,color)=>{ const p = fdTot? val/fdTot*100:0; return p<0.5?'':`<div style="width:${p}%;background:${color};color:${inkOn(color)}" class="h-full flex items-center justify-center text-[10px] font-semibold" title="${lbl} ${p.toFixed(1)}%">${p>=8?p.toFixed(0)+'%':''}</div>`; };
     const PS_COLORS = ['#4a70b0','#0ea5e9','#10b981','#f59e0b','#ef4444','#a855f7','#14b8a6','#f97316'];
     const psSorted = [...ps].sort((a,b)=>(a.size||0)-(b.size||0));
     const rows = psSorted.map((p,i)=>{
