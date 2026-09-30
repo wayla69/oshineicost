@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T07:44:35Z",
-    "via": "GitHub · wayla69/oshineicost@cc59b9a",
-    "note": "Synced to live cc59b9a: amber-ink / orange-ink (#243); README: grey text = text tokens (#243), labels on coloured fills = inkOn() or the -700 fill (#241, #242)."
+    "at": "2026-09-30T08:07:02Z",
+    "via": "GitHub · wayla69/oshineicost@d62e81d",
+    "note": "Synced to live d62e81d (#245): blue-600/700 text maps to navy-ink in dark mode; textInk's navy family includes #2563eb / #1d4ed8."
   },
   "layout": "files",
   "libraries": [],
