@@ -33,7 +33,7 @@ async function _diveEnhanceTrend(_cfg) {
   const branchRows = branches.map(b => {
     const gpp = b.total_gp_pct != null ? b.total_gp_pct : (b.total_revenue ? (b.total_revenue - b.total_cogs) / b.total_revenue * 100 : null);
     const gv = gpp != null ? gpp.toFixed(1) : '—';
-    const color = gpp == null ? '' : gpp >= 60 ? '#059669' : gpp >= 40 ? '#d97706' : '#dc2626';
+    const color = gpp == null ? '' : gpp >= 60 ? 'var(--good-ink)' : gpp >= 40 ? '#d97706' : 'var(--bad-ink)';
     return `<tr class="border-b cursor-pointer hover:bg-indigo-50/30" style="border-color:var(--border)"
                 onclick="closeDive();drillIntoBranch('${jsAttr(b.branch)}')" title="เจาะลึก ${esc(b.branch)}">
       <td class="py-1.5 pr-2 font-medium">${esc(b.branch)} <span style="opacity:.4">›</span></td>
@@ -82,7 +82,7 @@ async function _diveEnhanceBranchCompare(_cfg) {
       <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
       <td class="py-1.5 pr-2 text-right">${fmt(b.total_revenue)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${share}%</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${parseFloat(gpp)>=60?'#059669':parseFloat(gpp)>=40?'#d97706':'#dc2626'}">${gpp}%</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${parseFloat(gpp)>=60?'var(--good-ink)':parseFloat(gpp)>=40?'#d97706':'var(--bad-ink)'}">${gpp}%</td>
     </tr>`;
   }).join('');
 
@@ -1207,7 +1207,7 @@ async function loadCohort() {
   const mLbl = ym => `${TH_M[+ym.slice(5,7)-1]} ${ym.slice(2,4)}`;
   const chip = (p, inv) => (p == null)
     ? '<span class="text-slate-300">—</span>'
-    : `<span style="font-weight:700;color:${(inv ? p <= 0 : p >= 0) ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    : `<span style="font-weight:700;color:${(inv ? p <= 0 : p >= 0) ? 'var(--good-ink)' : 'var(--bad-ink)'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
 
   // ── verdict line: latest FULL month vs prev + vs peak (partial months excluded) ──
   const full = M.filter(x => !x.partial);
@@ -1671,13 +1671,13 @@ function _gpbRenderNarrative(data) {
   const overFc = rows.filter(r => r.fc > hi);             // food cost over target = margin risk
   const inBand = rows.filter(r => r.fc >= lo && r.fc <= hi);
   const gap = best.gpp - worst.gpp;
-  const fcCol = (g.food_cost_pct > hi) ? '#dc2626' : (g.food_cost_pct < lo) ? '#0ea5e9' : '#059669';
+  const fcCol = (g.food_cost_pct > hi) ? 'var(--bad-ink)' : (g.food_cost_pct < lo) ? '#0ea5e9' : 'var(--good-ink)';
   const fmtB = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
   const lines = [
-    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? '#059669' : '#dc2626'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${fcCol}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
+    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${fcCol}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
     `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
     overFc.length
-      ? `⚠️ <b style="color:#dc2626">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
+      ? `⚠️ <b style="color:var(--bad-ink)">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
       : `✅ ทุกสาขา Food Cost อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
     `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
   ];
@@ -1719,13 +1719,13 @@ function _gpbRenderBoxes() {
   // band lives in the table/heatmap; here we want a clean progression read.
   el.innerHTML = boxes.map(b => {
     const gpColor = b.cur >= 50 ? '#059669' : b.cur >= 40 ? '#0ea5e9' : b.cur >= 30 ? '#d97706' : '#dc2626';
-    const dColor = b.delta == null ? '#94a3b8' : b.delta >= 0 ? '#059669' : '#dc2626';
+    const dColor = b.delta == null ? '#94a3b8' : b.delta >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     const dTxt = b.delta == null
       ? '<span class="text-slate-400">ไม่มีเดือนก่อนเทียบ</span>'
       : `${b.delta >= 0 ? '▲' : '▼'} ${Math.abs(b.delta).toFixed(1)} pp <span class="text-slate-400">vs ${b.prevM}</span>`;
     return `<div class="rounded-xl border p-3 gpb-box-drill" onclick="drillIntoBranch('${jsAttr(b.branch)}')" title="คลิกเพื่อดูเฉพาะ ${esc(b.branch)}" style="border-color:${gpColor}33;background:${gpColor}0a">
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
-      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${gpColor}">${b.cur.toFixed(1)}%</p>
+      <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${textInk(gpColor)}">${b.cur.toFixed(1)}%</p>
       <p class="text-[11px] text-slate-400 mt-0.5">GP% · ${b.lastM || ''}</p>
       <p class="text-xs font-semibold mt-1" style="color:${dColor}">${dTxt}</p>
       <p class="text-[11px] text-slate-400 mt-0.5">Food cost ${b.fc != null ? b.fc.toFixed(1) + '%' : '—'}</p>
@@ -2030,7 +2030,7 @@ async function loadRequisitionGap() {
   const b = v => v == null ? '-' : '฿' + fmtN(v);
   const b2 = v => v == null ? '-' : '฿' + Number(v).toFixed(2);
   const pc = v => v == null ? '-' : v.toFixed(1) + '%';
-  const ratioCol = r => r == null ? '#64748b' : r >= 1.4 ? '#dc2626' : r >= 1.25 ? '#ea580c' : '#059669';
+  const ratioCol = r => r == null ? '#64748b' : r >= 1.4 ? 'var(--bad-ink)' : r >= 1.25 ? '#ea580c' : 'var(--good-ink)';
   const row = (r, bold) => `<tr class="border-t border-slate-100${bold ? ' font-semibold' : ''}" ${bold ? 'style="background:#fff7ed"' : ''}>
       <td class="py-1.5 pr-2">${esc(r.branch)}${r.basis === 'used'
         ? ' <span class="text-[10px] px-1 rounded" style="color:#047857;background:#d1fae5" title="มีมูลค่าสต๊อกต้นงวดและปลายงวดครบ — คิดเป็น ต้นงวด + เบิก − ปลายงวด">ใช้จริง</span>'
@@ -2041,14 +2041,14 @@ async function loadRequisitionGap() {
       <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${ratioCol(r.ratio)}">${r.ratio == null ? '-' : r.ratio.toFixed(2) + '×'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_actual)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_recipe)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#dc2626">${b(r.gap_value)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--bad-ink)">${b(r.gap_value)}</td>
       <td class="py-1.5 text-right">${r.branch_id == null ? '' : `<button class="text-[11px] text-indigo-600 underline" onclick="enterStockCount(${r.branch_id},'${esc(r.branch)}')">กรอกสต๊อก</button>`}</td></tr>`;
   const ing = (d.ingredients || []).slice(0, 15).map((x, i) => `<tr class="border-t border-slate-100">
       <td class="py-1 pr-2 text-slate-400">${i + 1}</td>
       <td class="py-1 pr-2">${esc(x.name || '')} <span class="text-[10px] text-slate-400">${esc(x.code)}</span>${x.in_recipes ? '' : ' <span class="text-[10px] px-1 rounded" style="color:#b91c1c;background:#fee2e2" title="ไม่มีสูตรอาหารใดอ้างถึงวัตถุดิบนี้เลย — เงินก้อนนี้ไม่เคยเข้าต้นทุนตามสูตร">ไม่อยู่ในสูตรใด</span>'}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b(x.drawn)}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b(x.booked)}</td>
-      <td class="py-1 text-right tabular-nums font-semibold" style="color:#dc2626">${b(x.gap)}</td></tr>`).join('');
+      <td class="py-1 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${b(x.gap)}</td></tr>`).join('');
   body.innerHTML = `
     <div style="overflow-x:auto"><table class="w-full text-sm"><thead><tr class="text-left text-slate-400 text-xs border-b">
       <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">คนทาน</th>

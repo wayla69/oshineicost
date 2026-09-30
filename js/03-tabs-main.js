@@ -593,8 +593,8 @@ async function renderExecSummary() {
   const tgtTotal = (tg || []).reduce((s, r) => s + (r.revenue_target || 0), 0);
   const projVsTgt = tgtTotal > 0 ? fc.projected / tgtTotal * 100 : null;
   const gp = prof && prof.margin_pct != null ? prof.margin_pct : null;
-  const gpColor = gp == null ? 'var(--text-muted)' : gp >= 40 ? '#059669' : gp >= 30 ? '#f59e0b' : '#dc2626';
-  const tgtColor = projVsTgt == null ? 'var(--text-muted)' : projVsTgt >= 100 ? '#059669' : projVsTgt >= 90 ? '#f59e0b' : '#dc2626';
+  const gpColor = gp == null ? 'var(--text-muted)' : gp >= 40 ? 'var(--good-ink)' : gp >= 30 ? '#f59e0b' : 'var(--bad-ink)';
+  const tgtColor = projVsTgt == null ? 'var(--text-muted)' : projVsTgt >= 100 ? 'var(--good-ink)' : projVsTgt >= 90 ? '#f59e0b' : 'var(--bad-ink)';
   const tile = (label, value, sub, color) => `<div style="flex:1;min-width:150px">
       <div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
       <div class="text-xl font-bold" style="color:${color || 'var(--text-primary)'}">${value}</div>
@@ -639,7 +639,7 @@ function renderKpiHero(trendData, gpb, disc) {
   const phOf  = r => (r && r.customer_count) ? revOf(r) / r.customer_count : 0;
   const mom = (cur, pv) => (pv && pv > 0) ? (cur - pv) / pv * 100 : null;
   const badge = (p, goodUp = true) => p == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${(p>=0)===goodUp?'#059669':'#dc2626'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${(p>=0)===goodUp?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const spark = (arr, color) => (typeof mkSparkline === 'function' && arr.length >= 2) ? mkSparkline(arr.slice(-6), color) : '';
   const sparkOf = field => t.map(r => r[field] || 0);
 
@@ -687,7 +687,7 @@ function renderKpiHero(trendData, gpb, disc) {
     const cogsPct  = (lm && gpByMonth[lm].rev) ? cogsLast/gpByMonth[lm].rev*100 : null;
     const cogsMomPct = (cogsPrev && cogsPrev>0) ? (cogsLast-cogsPrev)/cogsPrev*100 : null;
     const cogsBadge = cogsMomPct==null ? '' :
-      `<span class="text-xs font-semibold" style="color:${cogsMomPct<=0?'#059669':'#dc2626'}">${cogsMomPct<=0?'▼':'▲'} ${Math.abs(cogsMomPct).toFixed(1)}%</span>`;
+      `<span class="text-xs font-semibold" style="color:${cogsMomPct<=0?'var(--good-ink)':'var(--bad-ink)'}">${cogsMomPct<=0?'▼':'▲'} ${Math.abs(cogsMomPct).toFixed(1)}%</span>`;
     cogsTile = tile('ต้นทุน (COGS)', fmt(cogsLast), cogsBadge, '#ef4444',
       cogsPct!=null?`${cogsPct.toFixed(1)}% ของรายได้ · BoM`:'BoM COGS', spark(cogsSeries, '#ef4444'));
   } else {
@@ -702,7 +702,7 @@ function renderKpiHero(trendData, gpb, disc) {
     const rate = dl?.rate, ratePrev = dp?.rate;
     const pts = (rate!=null && ratePrev!=null) ? (rate-ratePrev) : null;
     const ptsHtml = pts==null ? '<span class="text-slate-300 text-xs">—</span>'
-      : `<span class="text-xs font-semibold" style="color:${pts<=0?'#059669':'#dc2626'}">${pts<=0?'▼':'▲'} ${Math.abs(pts).toFixed(1)} pp</span>`;
+      : `<span class="text-xs font-semibold" style="color:${pts<=0?'var(--good-ink)':'var(--bad-ink)'}">${pts<=0?'▼':'▲'} ${Math.abs(pts).toFixed(1)} pp</span>`;
     discTile = tile('% ส่วนลด', rate!=null?rate.toFixed(1)+'%':'—', ptsHtml, '#f43f5e',
       'ของยอดขาย · ต่ำ = ดี', spark(dtr.map(x=>x.rate||0), '#f43f5e'));
   } else {
@@ -718,7 +718,7 @@ function renderKpiHero(trendData, gpb, disc) {
       `Margin ${margC!=null?margC.toFixed(1)+'%':'—'} · ${mtdSub}`, spark(gpSeriesM, '#059669'));
     const cogsMomPct = (p.cogs>0) ? (c.cogs - p.cogs) / p.cogs * 100 : null;
     const cogsBadge = cogsMomPct==null ? '' :
-      `<span class="text-xs font-semibold" style="color:${cogsMomPct<=0?'#059669':'#dc2626'}">${cogsMomPct<=0?'▼':'▲'} ${Math.abs(cogsMomPct).toFixed(1)}%</span>`;
+      `<span class="text-xs font-semibold" style="color:${cogsMomPct<=0?'var(--good-ink)':'var(--bad-ink)'}">${cogsMomPct<=0?'▼':'▲'} ${Math.abs(cogsMomPct).toFixed(1)}%</span>`;
     const cogsPct = c.revenue_ex_vat ? c.cogs / c.revenue_ex_vat * 100 : null;
     cogsTile = tile('ต้นทุน (COGS)', fmt(c.cogs), cogsBadge, '#ef4444',
       `${cogsPct!=null?cogsPct.toFixed(1)+'% ของรายได้ · ':''}BoM · ${mtdSub}`, spark(cogsSeriesM, '#ef4444'));
@@ -730,7 +730,7 @@ function renderKpiHero(trendData, gpb, disc) {
     const rateP = (p.revenue_ex_vat + p.discount) ? p.discount / (p.revenue_ex_vat + p.discount) * 100 : null;
     const pts = (rateC!=null && rateP!=null) ? (rateC - rateP) : null;
     const ptsHtml = pts==null ? '<span class="text-slate-300 text-xs">—</span>'
-      : `<span class="text-xs font-semibold" style="color:${pts<=0?'#059669':'#dc2626'}">${pts<=0?'▼':'▲'} ${Math.abs(pts).toFixed(1)} pp</span>`;
+      : `<span class="text-xs font-semibold" style="color:${pts<=0?'var(--good-ink)':'var(--bad-ink)'}">${pts<=0?'▼':'▲'} ${Math.abs(pts).toFixed(1)} pp</span>`;
     discTile = tile('% ส่วนลด', rateC!=null?rateC.toFixed(1)+'%':'—', ptsHtml, '#f43f5e',
       `ของยอดขาย · ต่ำ = ดี · ${mtdSub}`, spark((disc&&disc.trend)?disc.trend.map(x=>x.rate||0):[], '#f43f5e'));
   }
@@ -747,7 +747,7 @@ function renderKpiHero(trendData, gpb, disc) {
   function tile(label, value, deltaHtml, accent, sub, sparkHtml) {
     return `<div class="card p-4" style="border-top:3px solid ${accent}">
       <div class="flex items-center justify-between gap-2"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${label}</p>${deltaHtml||''}</div>
-      <p class="text-2xl font-bold" style="color:${accent}">${value}</p>
+      <p class="text-2xl font-bold" style="color:${textInk(accent)}">${value}</p>
       <div class="flex items-end justify-between gap-2"><p class="text-[11px] text-slate-400">${sub||''}</p>${sparkHtml||''}</div>
     </div>`;
   }
@@ -808,7 +808,7 @@ async function renderBranchHilite() {
   const worst = bl.reduce((a, b) => b.mom_pct < (a?.mom_pct ??  1e9) ? b : a, null);
   const hcard = (icon, title, b, color) => `<div class="card p-4 cursor-pointer hover:shadow-md transition-shadow" style="border-left:4px solid ${color}" onclick="switchTab('benchmark')">
     <div class="flex items-center justify-between"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${icon} ${title}</p>
-      <span class="text-sm font-semibold" style="color:${color}">${b.mom_pct>=0?'▲':'▼'} ${Math.abs(b.mom_pct).toFixed(1)}%</span></div>
+      <span class="text-sm font-semibold" style="color:${textInk(color)}">${b.mom_pct>=0?'▲':'▼'} ${Math.abs(b.mom_pct).toFixed(1)}%</span></div>
     <p class="text-lg font-bold text-slate-800">${esc(b.branch)}</p>
     <p class="text-[11px] text-slate-400">${curLbl} ${fmt(b.revenue)} · ${cmpLbl} ${fmt(b.mom_rev || 0)}</p>
   </div>`;
@@ -842,7 +842,7 @@ async function loadSummaryKpis() {
     ]);
   } catch(err) {
     if (err === STALE) return;   // a newer tab/filter load superseded this one
-    grid.innerHTML = `<div style="grid-column:1/-1;padding:16px;color:#dc2626;font-size:13px">⚠ Failed to load KPIs: ${err.message || err}</div>`;
+    grid.innerHTML = `<div style="grid-column:1/-1;padding:16px;color:var(--bad-ink);font-size:13px">⚠ Failed to load KPIs: ${err.message || err}</div>`;
     throw err;
   }
   _heroMtd = mtd;   // fair MTD-vs-MTD comparison when the latest month is incomplete
@@ -1354,7 +1354,7 @@ async function loadCatChart() {
     catTable.innerHTML = labels.map((lbl, i) => {
       const mom = momMap[lbl];
       const momHtml = mom == null ? '<span class="text-[10px] text-slate-300 w-12 text-right">—</span>'
-        : `<span class="text-[10px] font-semibold w-12 text-right" style="color:${mom>=0?'#059669':'#dc2626'}">${mom>=0?'▲':'▼'}${Math.abs(mom).toFixed(0)}%</span>`;
+        : `<span class="text-[10px] font-semibold w-12 text-right" style="color:${mom>=0?'var(--good-ink)':'var(--bad-ink)'}">${mom>=0?'▲':'▼'}${Math.abs(mom).toFixed(0)}%</span>`;
       return `
       <div class="flex items-center justify-between gap-2">
         <div class="flex items-center gap-1.5 min-w-0">
@@ -2028,7 +2028,7 @@ function _renderMostRev() {
   body.innerHTML = rows.map((r,i) => {
     const mpct = r.margin_pct;
     const isNeg = mpct != null && mpct < 0;
-    const mc = mpct==null ? '#94a3b8' : isNeg ? '#dc2626' : mpct>=60?'#10b981':mpct>=40?'#f59e0b':'#ef4444';
+    const mc = mpct==null ? '#94a3b8' : isNeg ? 'var(--bad-ink)' : mpct>=60?'#10b981':mpct>=40?'#f59e0b':'#ef4444';
     const name = esc((r.description||'—').replace(/^\((?:A|B|T)\)\s*/,''));
     const cat = esc((r.category||'').replace(/^Oshinei\s*/i,''));
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40${isNeg?' bg-red-50/60':''}">
@@ -2109,7 +2109,7 @@ function renderSphDistribution(sph) {
   ].filter(m => m.v != null);
   rulerEl.innerHTML = markers.map(m => {
     const pct = Math.max(0, Math.min(100, (m.v - lo) / span * 100));
-    return `<div class="absolute" style="left:${pct}%;transform:translateX(-50%);font-size:9px;color:${m.color};font-weight:600;white-space:nowrap"
+    return `<div class="absolute" style="left:${pct}%;transform:translateX(-50%);font-size:9px;color:${textInk(m.color)};font-weight:600;white-space:nowrap"
       title="${m.p} = ${fmtN(m.v)} บาท/หัว">
       <div style="width:1px;height:6px;background:${m.color};margin:0 auto"></div>
       ${m.p}<br><span class="font-normal text-[8px]">${fmtN(m.v)}</span>

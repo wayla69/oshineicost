@@ -670,6 +670,35 @@ body.dark .text-slate-700  { color: var(--text-primary) !important; }
 body.dark .text-slate-800  { color: var(--text-primary) !important; }
 body.dark .bg-white        { background: var(--bg-card) !important; }
 
+/* Up/down figures as text. Tailwind's emerald-600 / red-600 ARE #059669 / #dc2626
+   (3.4-4.4:1 on the page, same in both themes), so they take the theme inks. */
+.text-emerald-600 { color: var(--good-ink) !important; }
+.text-red-600     { color: var(--bad-ink) !important; }
+/* Dark mode leaves some backgrounds light, and the pale dark inks drop to ~1.9:1 on
+   them. The inks inherit, so whichever of these is the NEAREST ancestor wins
+   (:where keeps every layer at one specificity; the row rule outranks them).
+   1. Fixed light in both themes: the *-50 tints (nothing re-maps them; the /NN
+      translucent variants sit over the dark card and are excluded by name),
+      .on-light, and every hero .card with an inline gradient (all light stops, bar
+      the manual tab's indigo link card, which carries no up/down figures). */
+body.dark :where(.on-light, .card[style*="linear-gradient"], .bg-emerald-50, .bg-green-50,
+              .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50,
+              .bg-pink-50, .bg-fuchsia-50) {
+  --good-ink: #047857; --bad-ink: #b91c1c; }
+/* 2. Repainted dark by dark mode, even inside a light scope: back to the dark inks.
+      (indigo/violet-50 are --accent-soft in theme-formal.css; hovered rows are
+      --bg-hover; theme-formal.css clears even rows to transparent, tint or not.) */
+body.dark :where(.bg-white, .bg-slate-50, .bg-indigo-50, .bg-violet-50,
+              .card:not(.on-light):not([style*="linear-gradient"])),
+body.dark tbody tr:hover,
+body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50,
+              .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50) {
+  --good-ink: #34d399; --bad-ink: #f87171; }
+/* 3. The Management Report island re-declares --bg-card / --bg-subtle light, so
+      everything in it is light again. */
+body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr) {
+  --good-ink: #047857; --bad-ink: #b91c1c; }
+
 /* Primary indigo action buttons used inline throughout cards */
 .bg-indigo-600 { background: var(--indigo) !important; }
 .hover\:bg-indigo-500:hover { background: var(--indigo-mid) !important; }
@@ -1171,6 +1200,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 body.dark #mgtRptBody {
   --bg-card: #ffffff; --bg-subtle: #f8fafc; --border: #e2e8f0;
   --text-primary: #1e293b; --text-muted: #64748b;
+  --good-ink: #047857; --bad-ink: #b91c1c;   /* the dark inks are pale — unreadable on paper */
   color-scheme: light;
 }
 body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
@@ -1226,6 +1256,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the phone-only overlay must never reach paper, and the desktop shell has to
      be visible even when the phone was not in force-desktop mode */
   #mobileSummary, #msNav, #backToMobile { display: none !important; }
+  /* paper is white even when the screen is dark: up/down figures take the light inks */
+  body.dark { --good-ink: #047857; --bad-ink: #b91c1c; }
   body:not(.force-desktop) .app-layout { display: block !important; }
   .app-layout, .main-wrapper, .content-area { display: block !important; }
   .content-area { padding: 0 !important; }

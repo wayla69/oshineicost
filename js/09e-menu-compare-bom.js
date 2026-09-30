@@ -112,11 +112,11 @@ function _mcRenderInsights(items) {
   const neu  = items.filter(r => r.only_in_b).sort((a, b) => b.qty_b - a.qty_b).slice(0, 3);
   const gone = items.filter(r => r.only_in_a).sort((a, b) => b.qty_a - a.qty_a).slice(0, 3);
   const card = (title, color, rows, fmt) =>
-    `<div class="card p-3"><div class="text-xs font-bold mb-1.5" style="color:${color}">${title}</div>` +
+    `<div class="card p-3"><div class="text-xs font-bold mb-1.5" style="color:${textInk(color)}">${title}</div>` +
     (rows.length ? rows.map(fmt).join('') : '<div class="text-[11px] text-slate-400">—</div>') + '</div>';
   el.innerHTML =
-    card('🔼 มาแรง', '#16a34a', up, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#16a34a;font-weight:600">▲${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
-    card('🔽 ร่วงแรง', '#dc2626', down, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#dc2626;font-weight:600">▼${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('🔼 มาแรง', '#16a34a', up, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:var(--good-ink);font-weight:600">▲${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('🔽 ร่วงแรง', '#dc2626', down, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:var(--bad-ink);font-weight:600">▼${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
     card('🆕 เมนูใหม่ <span class="font-normal text-slate-400">(มีใน B)</span>', '#4f46e5', neu, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_b)}</span></div>`) +
     card('⛔ หายไป <span class="font-normal text-slate-400">(เหลือใน A)</span>', '#d97706', gone, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_a)}</span></div>`);
 }
@@ -182,7 +182,7 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
     <td class="num tabular font-semibold">${nQ(qa)}</td>
     <td class="num tabular font-semibold">${nQ(qb)}</td>
     <td class="num tabular"${dimQ}>${_momSpan(dp(qa, qb), true)}</td>
-    <td class="num tabular"><div>${(r._mix_b * 100).toFixed(1)}%</div><div class="text-[10px]" style="color:${dpp >= 0 ? '#16a34a' : '#dc2626'}">${dpp >= 0 ? '+' : ''}${dpp.toFixed(1)}pp</div></td>
+    <td class="num tabular"><div>${(r._mix_b * 100).toFixed(1)}%</div><div class="text-[10px]" style="color:${dpp >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dpp >= 0 ? '+' : ''}${dpp.toFixed(1)}pp</div></td>
     <td class="num tabular text-slate-500">${nM(ca)}</td>
     <td class="num tabular text-slate-500">${nM(cb)}</td>
     <td class="num tabular">${_momSpan(dp(ca, cb), false)}</td>
@@ -581,7 +581,7 @@ function bcRenderFoodCostBoxes(mom) {
     if (dp != null) {
       // Food cost: lower = better → a drop is good (green), a rise is bad (red)
       const good = dp < 0;
-      const col  = dp === 0 ? '#64748b' : (good ? '#059669' : '#dc2626');
+      const col  = dp === 0 ? '#64748b' : (good ? 'var(--good-ink)' : 'var(--bad-ink)');
       const arr  = dp === 0 ? '→' : (dp > 0 ? '▲' : '▼');
       momHtml = `<span class="text-[11px] font-semibold" style="color:${col}">${arr} ${dp>0?'+':''}${dp.toFixed(1)}pp</span>
              <span class="text-[10px] text-slate-400"> vs ${prevLbl}</span>`;
@@ -591,7 +591,7 @@ function bcRenderFoodCostBoxes(mom) {
         style="border-left:4px solid ${hex};cursor:pointer">
       <div class="text-xs font-medium text-slate-600 truncate" title="${esc(r.branch)}">${esc(r.branch)}</div>
       <div class="flex items-baseline gap-1 mt-0.5">
-        <span class="text-2xl font-bold" style="color:${hex}">${bcFmtPct(fcv)}</span>
+        <span class="text-2xl font-bold" style="color:${textInk(hex)}">${bcFmtPct(fcv)}</span>
       </div>
       <div class="mt-0.5">${momHtml}</div>
       <div class="text-[10px] text-slate-400 mt-1">COGS ${bcFmtN(r.cogs)} · ${monLbl}</div>
@@ -629,12 +629,12 @@ function bcDrillBranch(idx) {
   const prevLbl = bcFoodMomData.prev_month || '';
   const dpTxt = r.delta_pp == null ? '—'
     : `${r.delta_pp>0?'+':''}${r.delta_pp.toFixed(1)}pp`;
-  const dpCol = r.delta_pp == null ? '#64748b' : (r.delta_pp < 0 ? '#059669' : (r.delta_pp>0?'#dc2626':'#64748b'));
-  const cogsDeltaCol = r.cogs_delta > 0 ? '#dc2626' : (r.cogs_delta < 0 ? '#059669' : '#64748b');
+  const dpCol = r.delta_pp == null ? '#64748b' : (r.delta_pp < 0 ? 'var(--good-ink)' : (r.delta_pp>0?'var(--bad-ink)':'#64748b'));
+  const cogsDeltaCol = r.cogs_delta > 0 ? 'var(--bad-ink)' : (r.cogs_delta < 0 ? 'var(--good-ink)' : '#64748b');
 
   const moverRow = (m) => {
     const up = m.delta > 0;
-    const col = up ? '#dc2626' : '#059669';
+    const col = up ? 'var(--bad-ink)' : 'var(--good-ink)';
     const badge = m.is_new  ? '<span class="text-[9px] px-1 rounded bg-blue-100 text-blue-700 ml-1">ใหม่</span>'
               : (m.is_gone  ? '<span class="text-[9px] px-1 rounded bg-slate-200 text-slate-600 ml-1">หยุดขาย</span>' : '');
     return `<div class="flex items-center justify-between gap-2 py-1 border-b border-slate-100 text-xs">
@@ -661,7 +661,7 @@ function bcDrillBranch(idx) {
       <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 text-center">
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">Food Cost %</div>
-          <div class="text-lg font-bold" style="color:${bcFoodPctHex(r.food_cost_pct)}">${bcFmtPct(r.food_cost_pct)}</div>
+          <div class="text-lg font-bold" style="color:${textInk(bcFoodPctHex(r.food_cost_pct))}">${bcFmtPct(r.food_cost_pct)}</div>
           <div class="text-[10px] text-slate-400">ก่อน ${bcFmtPct(r.prev_food_cost_pct)}</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
@@ -682,11 +682,11 @@ function bcDrillBranch(idx) {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <h5 class="text-xs font-semibold mb-1" style="color:#dc2626">▲ เมนูที่ต้นทุนเพิ่มมากสุด (Top ${ups.length})</h5>
+          <h5 class="text-xs font-semibold mb-1" style="color:var(--bad-ink)">▲ เมนูที่ต้นทุนเพิ่มมากสุด (Top ${ups.length})</h5>
           ${ups.length ? ups.map(moverRow).join('') : empty}
         </div>
         <div>
-          <h5 class="text-xs font-semibold mb-1" style="color:#059669">▼ เมนูที่ต้นทุนลดมากสุด (Top ${downs.length})</h5>
+          <h5 class="text-xs font-semibold mb-1" style="color:var(--good-ink)">▼ เมนูที่ต้นทุนลดมากสุด (Top ${downs.length})</h5>
           ${downs.length ? downs.map(moverRow).join('') : empty}
         </div>
       </div>
@@ -704,7 +704,7 @@ function _bcHighlightBox(idx) {
 function bcKpiCard(label, val, sub, color) {
   return `<div class="card p-3" style="border-left:3px solid ${color}">
     <div class="text-[10px] text-slate-500 font-medium uppercase">${label}</div>
-    <div class="text-xl font-bold mt-0.5" style="color:${color}">${val}</div>
+    <div class="text-xl font-bold mt-0.5" style="color:${textInk(color)}">${val}</div>
     <div class="text-[10px] text-slate-400 mt-0.5">${sub||''}</div>
   </div>`;
 }
@@ -1261,7 +1261,7 @@ function bcRenderRoi(d, id) {
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(i.baseline_cost)}→${fmt(i.current_cost)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-400">${fmt(i.target_cost)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(i.qty_since_adopt)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${i.realized_saving>0?'#059669':'var(--text-muted)'}">${fmt(i.realized_saving)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${i.realized_saving>0?'var(--good-ink)':'var(--text-muted)'}">${fmt(i.realized_saving)}</td>
       <td class="py-1.5 text-right tabular-nums text-slate-400">${pp==null?'—':pp.toFixed(0)+'%'}</td></tr>`;
   }).join('');
   panel.innerHTML = `
@@ -1275,7 +1275,7 @@ function bcRenderRoi(d, id) {
     </div>
     <div class="flex flex-wrap items-end gap-6 mt-3 mb-2">
       <div><div class="text-[11px] text-slate-400">ประหยัดได้จริงสะสม</div>
-        <div class="text-2xl font-bold" style="color:#059669">${fmt(t.realized_saving)}</div></div>
+        <div class="text-2xl font-bold" style="color:var(--good-ink)">${fmt(t.realized_saving)}</div></div>
       <div><div class="text-[11px] text-slate-400">เป้าหมายเต็ม (ถ้าทำได้ครบ)</div>
         <div class="text-lg font-semibold text-slate-500">${fmt(t.potential_saving)}</div></div>
       <div class="flex-1 min-w-[160px]">

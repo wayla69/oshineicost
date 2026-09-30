@@ -526,7 +526,7 @@ function renderMgtReport(j, jM, jF) {
   const yoyOk = _pDate ? (new Date(_pDate) >= new Date('2026-05-15')) : true;
   const wow  = p => (p == null)
     ? '<span class="text-slate-400 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${p >= 0 ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${p >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const hasSplit = !!(jM && jF);
   // Compact key-value list used inside each split panel
   const mkKv = pairs => `<div class="space-y-0.5 text-xs">${pairs.map(([l, v]) =>
@@ -556,7 +556,7 @@ function renderMgtReport(j, jM, jF) {
   // is green (better) — the opposite of wow()'s default colouring.
   const wowInv = p => (p == null)
     ? '<span class="text-slate-400 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${p <= 0 ? '#059669' : '#dc2626'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${p <= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${p >= 0 ? '▲' : '▼'} ${Math.abs(p).toFixed(1)}%</span>`;
   const wowValInv = (cur, prev) => (prev == null) ? '' : wowInv(prev ? (cur - prev) / prev * 100 : null);
   // Compact "vs last week" comparison line for a card (prev value + WoW badge).
   const cmpLine = (label, prevTxt, badge) => (prevTxt == null) ? '' :
@@ -594,7 +594,7 @@ function renderMgtReport(j, jM, jF) {
   //   o.brk  -> force a page break before the section (same-orientation boundaries)
   const sec = (title, inner, accent = '#0f766e', o = {}) =>
     `<section class="card p-6 mgt-sec ${o.land ? 'pg-land' : 'pg-port'}${o.brk ? ' pg-break' : ''}"${o.id ? ` id="${o.id}"` : ''} style="border-top:3px solid ${accent}">
-       <h2 class="text-base font-bold mb-4 pb-2" style="color:${accent};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</section>`;
+       <h2 class="text-base font-bold mb-4 pb-2" style="color:${textInk(accent)};border-bottom:2px solid ${accent}33">${title}</h2>${inner}</section>`;
   // w = WoW delta, y = YoY delta (both optional). When given, a second line shows
   // "WoW ▲x% · YoY ▲y%" so management sees week-over-week AND year-over-year at a glance.
   const kpi = (title, value, sub, w, y) =>
@@ -690,7 +690,7 @@ function renderMgtReport(j, jM, jF) {
   const momBase  = fairMoM ? PMx.baseline_mtd : PMx.revenue_mtd;
   const lastMonthCaption = PMx.month
     ? `<p class="text-[11px] text-slate-500 mt-2">${T.lastMonth} (${PMx.month}): <b>${baht(PMx.revenue_full)}</b> ${T.total} · <b>${baht(momBase)}</b> ${fairMoM ? T.dowBase : T.overSame} ${P.days_elapsed || 0} ${(P.days_elapsed || 0) === 1 ? T.day1 : T.dayN}` +
-      `${P.mom_pct != null ? ` — ${T.thisMonthIs} <b style="color:${P.mom_pct >= 0 ? '#059669' : '#dc2626'}">${P.mom_pct >= 0 ? '+' : '−'}${Math.abs(P.mom_pct).toFixed(1)}%</b> ${fairMoM ? T.vsDowBase : T.vsSameDays}` : ''}.</p>`
+      `${P.mom_pct != null ? ` — ${T.thisMonthIs} <b style="color:${P.mom_pct >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${P.mom_pct >= 0 ? '+' : '−'}${Math.abs(P.mom_pct).toFixed(1)}%</b> ${fairMoM ? T.vsDowBase : T.vsSameDays}` : ''}.</p>`
     : '';
   const pace = `<div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       ${kpi(mc ? T.monthNetSales : T.mtdNetSales, baht(P.mtd_revenue), (P.month || '') + ' · ' + (P.mtd_days || 0) + (mc ? T.days : T.daysSoFar) + momBadge)}
@@ -761,7 +761,7 @@ function renderMgtReport(j, jM, jF) {
     if (rc == null) return '<span class="text-slate-300 text-xs">—</span>';
     if (rc === 0)   return '<span class="text-slate-400 text-xs font-bold">●</span>';
     const up = rc > 0;
-    return `<span class="text-xs font-bold" style="color:${up?'#16a34a':'#dc2626'}">${up?'▲':'▼'}${Math.abs(rc)}</span>`;
+    return `<span class="text-xs font-bold" style="color:${up?'var(--good-ink)':'var(--bad-ink)'}">${up?'▲':'▼'}${Math.abs(rc)}</span>`;
   };
   const _brs = j.branches || [];
   const _brMax = Math.max(1, ..._brs.map(b => b.revenue || 0));
@@ -769,7 +769,7 @@ function renderMgtReport(j, jM, jF) {
   const brRows = _brs.map((b, i) => `<tr class="border-b border-slate-50" ${_watch(b) ? 'style="background:#fef2f2"' : ''}>
       <td class="py-2 pl-1 text-slate-400 font-mono text-xs w-5 text-center">${b.rank || (i+1)}</td>
       <td class="py-2 w-7 text-center">${mvBadge(b.rank_change)}</td>
-      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}${_watch(b) ? ` <span class="text-[10px] px-1 rounded whitespace-nowrap" style="background:#fee2e2;color:#dc2626">${T.watch}</span>` : ''}</td>
+      <td class="py-2">${medals[i] !== undefined ? medals[i] + ' ' : ''}${esc(b.branch)}${_watch(b) ? ` <span class="text-[10px] px-1 rounded whitespace-nowrap" style="background:#fee2e2;color:var(--bad-ink)">${T.watch}</span>` : ''}</td>
       <td class="py-2 text-right" style="min-width:96px">
         <span class="font-semibold" title="${baht(b.revenue)}">${bigBaht(b.revenue)}</span>
         <span style="display:inline-block;height:4px;border-radius:2px;background:#7c3aed;vertical-align:middle;margin-left:6px;width:${Math.max(4, Math.round((b.revenue || 0) / _brMax * 48))}px"></span>
@@ -785,7 +785,7 @@ function renderMgtReport(j, jM, jF) {
   const branchVerdict = _brs.length ? `<p class="text-xs mb-3 flex flex-wrap items-center gap-x-3 gap-y-1">
       <span class="text-slate-500">${_brs.length} ${T.branchesWord}</span>
       ${_brTop ? `<span>🥇 <b>${esc(_brTop.branch)}</b> <span class="text-slate-400" title="${baht(_brTop.revenue)}">${bigBaht(_brTop.revenue)}</span></span>` : ''}
-      ${(_brDecl && _brDecl.wow_pct != null && _brDecl.wow_pct < 0) ? `<span style="color:#dc2626">${T.watch}: <b>${esc(_brDecl.branch)}</b> ${wow(_brDecl.wow_pct)}</span>` : ''}
+      ${(_brDecl && _brDecl.wow_pct != null && _brDecl.wow_pct < 0) ? `<span style="color:var(--bad-ink)">${T.watch}: <b>${esc(_brDecl.branch)}</b> ${wow(_brDecl.wow_pct)}</span>` : ''}
     </p>` : '';
   const branchTbl = branchVerdict + `<div class="overflow-x-auto"><table class="w-full text-sm">
       <thead><tr class="text-[11px] uppercase tracking-wide text-slate-400 border-b border-slate-200">
@@ -839,10 +839,10 @@ function renderMgtReport(j, jM, jF) {
       <div class="flex items-end justify-between flex-wrap gap-2">
         <div>
           <p class="text-[11px] uppercase tracking-wide text-slate-400 mb-0.5">${T.totalDiscounts} ${isDaily ? T.dayWord : isMonthly ? T.monthWord : T.weekWord}</p>
-          <p class="text-2xl font-bold" style="color:${_sevCol}" title="${baht(lt.baht || 0)}">${bigBaht(lt.baht || 0)}</p>
+          <p class="text-2xl font-bold" style="color:${textInk(_sevCol)}" title="${baht(lt.baht || 0)}">${bigBaht(lt.baht || 0)}</p>
         </div>
         <div class="text-right text-xs text-slate-500">
-          ${_discPct != null ? `<p><b style="color:${_sevCol}">${_discPct.toFixed(1)}%</b> ${T.ofSales}${_sevTxt ? ` · <span class="font-semibold" style="color:${_sevCol}">${_sevTxt}</span>` : ''}</p>` : ''}
+          ${_discPct != null ? `<p><b style="color:${textInk(_sevCol)}">${_discPct.toFixed(1)}%</b> ${T.ofSales}${_sevTxt ? ` · <span class="font-semibold" style="color:${textInk(_sevCol)}">${_sevTxt}</span>` : ''}</p>` : ''}
           <p>${num(lt.bills || 0)} ${T.bills}${lt.prev_baht != null ? ` · ${compShort} ${wow(lt.baht_wow)}` : ''}</p>
         </div>
       </div>
@@ -876,7 +876,7 @@ function renderMgtReport(j, jM, jF) {
     return `<li class="py-1.5 border-b border-slate-50 text-sm">
       <div class="flex items-center justify-between gap-3">
         <span class="truncate">${esc(x.menu)}</span>
-        <span class="font-semibold whitespace-nowrap" style="color:${up ? '#dc2626' : '#059669'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}<span class="text-[11px]">${T.perHead}</span></span>
+        <span class="font-semibold whitespace-nowrap" style="color:${up ? 'var(--bad-ink)' : 'var(--good-ink)'}">${up ? '▲ +' : '▼ −'}฿${cnum(Math.abs(x.delta))}<span class="text-[11px]">${T.perHead}</span></span>
       </div>
       <div class="text-[11px] text-slate-400">${cph(x.cost_per_head_prev)} → ${cph(x.cost_per_head)}${x.pct != null ? ` · ${x.pct >= 0 ? '+' : ''}${x.pct.toFixed(0)}%` : ''}</div>
     </li>`;
@@ -1121,7 +1121,7 @@ function renderMgtReport(j, jM, jF) {
   // 5 — Food cost
   if (P.food_cost_pct != null) {
     const fc = P.food_cost_pct;
-    const fcCol = fc >= 53 ? '#dc2626' : fc <= 47 ? '#16a34a' : '#d97706';
+    const fcCol = fc >= 53 ? 'var(--bad-ink)' : fc <= 47 ? 'var(--good-ink)' : '#d97706';
     if (isTH) {
       const v  = fc >= 53 ? 'สูงกว่าเกณฑ์ ~50% — อัตรากำไรกำลังถูกกดดัน'
                : fc <= 47 ? 'อยู่ในเกณฑ์ ~50% อย่างสบายๆ — อัตรากำไรแข็งแรง'
@@ -1141,11 +1141,11 @@ function renderMgtReport(j, jM, jF) {
   const h = L.heavy_discount || {}, chk = L.cash_heavy || {}, rp = L.reprinted || {}, zg = L.zero_gross || {};
   if (isTH) {
     const cashTxt = chk.unavailable ? '' : ' โดย <b>' + (chk.bills || 0) + '</b> บิลจ่ายด้วยเงินสดเป็นหลัก (' + baht(chk.baht || 0) + ') — สัญญาณเสี่ยงเงินขาดที่พบบ่อย';
-    ex.push({c:'#dc2626', lead:'เรดาร์ความเสี่ยงส่วนลด', body:(h.bills || 0) + ' บิลให้ส่วนลด ≥30% (' + baht(h.baht || 0) + ')' + cashTxt +
+    ex.push({c:'var(--bad-ink)', lead:'เรดาร์ความเสี่ยงส่วนลด', body:(h.bills || 0) + ' บิลให้ส่วนลด ≥30% (' + baht(h.baht || 0) + ')' + cashTxt +
             ' · ' + (rp.bills || 0) + ' บิลส่วนลดถูกพิมพ์ซ้ำมากกว่า 1 ครั้ง และ ' + (zg.bills || 0) + ' บิลยอดศูนย์ (แจกฟรี / ส่วนลดล้วน)'});
   } else {
     const cashTxt = chk.unavailable ? '' : ', of which <b>' + (chk.bills || 0) + '</b> were paid mostly in cash (' + baht(chk.baht || 0) + ') — the classic skim flag';
-    ex.push({c:'#dc2626', lead:'Discount-risk radar.', body:(h.bills || 0) + ' bill' + (h.bills === 1 ? '' : 's') + ' were discounted ≥30% (' + baht(h.baht || 0) + ')' + cashTxt +
+    ex.push({c:'var(--bad-ink)', lead:'Discount-risk radar.', body:(h.bills || 0) + ' bill' + (h.bills === 1 ? '' : 's') + ' were discounted ≥30% (' + baht(h.baht || 0) + ')' + cashTxt +
             '. ' + (rp.bills || 0) + ' discounted bill' + (rp.bills === 1 ? '' : 's') + ' were reprinted more than once and ' + (zg.bills || 0) + ' were zero-gross (free / discount-only).'});
   }
 
@@ -1221,7 +1221,7 @@ function renderMgtReport(j, jM, jF) {
       : `Sales shift driven mainly by <b>${byT ? 'customer traffic' : 'spend per head'}</b> (covers ${signed(H.cust_wow_pct)} · per-head ${signed(H.rph_wow_pct)})`);
   }
   if (_fc != null) {
-    const fCol = _fc >= 53 ? '#dc2626' : _fc <= 47 ? '#059669' : '#d97706';
+    const fCol = _fc >= 53 ? 'var(--bad-ink)' : _fc <= 47 ? 'var(--good-ink)' : '#d97706';
     _bul.push(isTH
       ? `ต้นทุนอาหาร <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'สูงกว่าเป้า ~50%' : _fc <= 47 ? 'ต่ำกว่าเป้า ~50% (ดี)' : 'ใกล้เป้า ~50%'}`
       : `Food cost <b style="color:${fCol}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'above the ~50% target' : _fc <= 47 ? 'below ~50% (good)' : 'near the ~50% target'}`);
@@ -1241,7 +1241,7 @@ function renderMgtReport(j, jM, jF) {
   }
   const _head = `${isTH ? 'ยอดขาย' : 'Sales'} <b>${bigBaht(H.revenue)}</b> · ${dLbl} ${wow(H.rev_wow_pct)} · GP <b>${G.gp_pct != null ? G.gp_pct.toFixed(0) + '%' : '—'}</b>${_fc != null ? ` · Food <b>${_fc.toFixed(1)}%</b>` : ''}`;
   const tldr = `<div class="rounded-xl p-3 mb-3" style="background:#f8fafc;border:1px solid var(--border);border-left:3px solid ${_tone}">
-      <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${_tone}">${T.tldr}</p>
+      <p class="text-xs font-bold uppercase tracking-wide mb-1" style="color:${textInk(_tone)}">${T.tldr}</p>
       <p class="text-sm text-slate-700 mb-2">${_head}</p>
       <ul class="text-[13px] text-slate-600 space-y-1">${_bul.map(b => `<li class="flex gap-2"><span style="color:${_tone}">•</span><span>${b}</span></li>`).join('')}</ul>
     </div>`;
@@ -1253,7 +1253,7 @@ function renderMgtReport(j, jM, jF) {
   const masterBranchDisc = (() => {
     const MB = L.by_master_branch || [];
     if (!MB.length) return '';
-    const pctCol = p => p == null ? '#94a3b8' : p >= 8 ? '#dc2626' : p >= 4 ? '#d97706' : '#475569';
+    const pctCol = p => p == null ? '#94a3b8' : p >= 8 ? 'var(--bad-ink)' : p >= 4 ? '#d97706' : '#475569';
     const pctTxt = p => p == null ? '—' : p.toFixed(1) + '%';
     const tot = MB.reduce((a, b) => ({ disc: a.disc + (b.disc||0), bills: a.bills + (b.bills||0), sales: a.sales + (b.sales||0) }), { disc:0, bills:0, sales:0 });
     const totPct = tot.sales ? tot.disc / tot.sales * 100 : null;
@@ -1372,7 +1372,7 @@ function renderMgtReport(j, jM, jF) {
     const dPrev = (cur, prev) => {
       if (cur == null || prev == null) return '';
       const d = cur - prev;
-      return `<div class="text-[8.5px] font-normal leading-none mt-0.5" style="color:${d > 0 ? '#dc2626' : d < 0 ? '#059669' : '#64748b'}">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
+      return `<div class="text-[8.5px] font-normal leading-none mt-0.5" style="color:${d > 0 ? 'var(--bad-ink)' : d < 0 ? 'var(--good-ink)' : '#64748b'}">${d >= 0 ? '+' : ''}${d.toFixed(2)}</div>`;
     };
     const rows = TD.rows.map(r => `<tr class="border-t border-slate-100">
       <td class="py-1.5 pr-3 font-semibold text-slate-700">${esc(r.label)}</td>
@@ -1383,7 +1383,7 @@ function renderMgtReport(j, jM, jF) {
       <td class="py-1.5 px-2 text-right tabular-nums font-semibold">${r.gp_head != null ? baht(r.gp_head) : '—'}</td>
       <td class="py-1.5 pl-2 text-right tabular-nums">${r.food_pct != null ? r.food_pct.toFixed(1) + '%' : '—'}</td></tr>`).join('');
     const mix = (TD.mix_effect != null && Math.abs(TD.mix_effect) >= 0.5)
-      ? `<p class="text-[11px] mt-2 font-medium" style="color:${TD.mix_effect < 0 ? '#dc2626' : '#059669'}">${TD.mix_effect < 0 ? T.tierMixDown : T.tierMixUp}${TD.mix_effect >= 0 ? '+' : ''}${TD.mix_effect.toFixed(2)} ${isTH ? 'บาท/หัว' : 'THB/head'} <span class="text-slate-400 font-normal">${compShort}</span></p>` : '';
+      ? `<p class="text-[11px] mt-2 font-medium" style="color:${TD.mix_effect < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${TD.mix_effect < 0 ? T.tierMixDown : T.tierMixUp}${TD.mix_effect >= 0 ? '+' : ''}${TD.mix_effect.toFixed(2)} ${isTH ? 'บาท/หัว' : 'THB/head'} <span class="text-slate-400 font-normal">${compShort}</span></p>` : '';
     // cost-driver sub-block: rendered post-innerHTML into #mgtTierDrivers by the
     // initTierDrivers IIFE below (interactive — tier picker, bars, ranks, heat,
     // auto-insight). Container only appears when j.tier.drivers.by_tier exists.
@@ -1467,8 +1467,8 @@ function renderMgtReport(j, jM, jF) {
     if (P.proj_vs_target_pct != null) {
       const p = P.proj_vs_target_pct;
       col = p >= 100 ? '#059669' : p >= 90 ? '#d97706' : '#dc2626';
-      parts.push(isTH ? `คาดทั้งเดือน <b style="color:${col}">${p.toFixed(0)}%</b> ของเป้า (${p >= 100 ? 'ถึงเป้า' : p >= 90 ? 'ใกล้เป้า' : 'ต่ำกว่าเป้า'})`
-                      : `Projected <b style="color:${col}">${p.toFixed(0)}%</b> of target (${p >= 100 ? 'on track' : p >= 90 ? 'near' : 'behind'})`);
+      parts.push(isTH ? `คาดทั้งเดือน <b style="color:${textInk(col)}">${p.toFixed(0)}%</b> ของเป้า (${p >= 100 ? 'ถึงเป้า' : p >= 90 ? 'ใกล้เป้า' : 'ต่ำกว่าเป้า'})`
+                      : `Projected <b style="color:${textInk(col)}">${p.toFixed(0)}%</b> of target (${p >= 100 ? 'on track' : p >= 90 ? 'near' : 'behind'})`);
     }
     if (P.mom_pct != null) parts.push(`MoM ${_sg(P.mom_pct)}`);
     if (P.food_cost_pct != null) parts.push(isTH ? `ต้นทุนอาหาร ${P.food_cost_pct.toFixed(1)}%` : `food cost ${P.food_cost_pct.toFixed(1)}%`);
@@ -1483,8 +1483,8 @@ function renderMgtReport(j, jM, jF) {
     const dir = isTH ? (gap >= 3 ? 'สูงกว่า' : gap <= -3 ? 'ต่ำกว่า' : 'ใกล้เคียง') : (gap >= 3 ? 'above' : gap <= -3 ? 'below' : 'near');
     const u = isDaily ? (isTH ? 'วัน' : 'day') : isMonthly ? (isTH ? 'เดือน' : 'month') : (isTH ? 'สัปดาห์' : 'week');
     return vLine(col, isTH
-      ? `ล่าสุด <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b>ค่าเฉลี่ย ${tr.length} ${u} ${_sg(gap)}`
-      : `Latest <b>${bigBaht(latest)}</b> — <b style="color:${col}">${dir}</b> the ${tr.length}-${u} average by ${_sg(gap)}`);
+      ? `ล่าสุด <b>${bigBaht(latest)}</b> — <b style="color:${textInk(col)}">${dir}</b>ค่าเฉลี่ย ${tr.length} ${u} ${_sg(gap)}`
+      : `Latest <b>${bigBaht(latest)}</b> — <b style="color:${textInk(col)}">${dir}</b> the ${tr.length}-${u} average by ${_sg(gap)}`);
   })();
   const v8 = (() => {
     if (!PK.peak_hour) return '';
@@ -1538,7 +1538,7 @@ function renderMgtReport(j, jM, jF) {
       if (cur == null || prev == null) return '';
       const d = cur - prev; if (Math.abs(d) < (digits ? 0.05 : 0.5)) return `<span class="text-slate-400 text-[10px]">=</span>`;
       const good = invert ? d < 0 : d > 0;
-      return `<span class="text-[10px] font-semibold" style="color:${good ? '#059669' : '#dc2626'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(digits)}${unit || ''}</span>`;
+      return `<span class="text-[10px] font-semibold" style="color:${good ? 'var(--good-ink)' : 'var(--bad-ink)'}">${d > 0 ? '▲' : '▼'}${Math.abs(d).toFixed(digits)}${unit || ''}</span>`;
     };
     const R = V.response || {}, A = V.actions || {}, S = V.survey || {};
     const tile = (l, v, d, sub) => `<div class="rounded-lg p-3" style="background:var(--bg-card);border:1px solid var(--border)"><p class="text-[10px] uppercase tracking-wide text-slate-400">${l}</p><p class="text-lg font-bold text-slate-800 leading-tight">${v} ${d}</p>${sub ? `<p class="text-[10px] text-slate-500 mt-0.5">${sub}</p>` : ''}</div>`;
@@ -1547,20 +1547,20 @@ function renderMgtReport(j, jM, jF) {
       tile(T.vNeg, V.neg_pct != null ? V.neg_pct + '%' : '—', delta(V.neg_pct, V.prev_neg_pct, 1, ' pt', true), '') +
       tile(T.vStars, V.avg_rating != null ? V.avg_rating.toFixed(2) : '—', delta(V.avg_rating, V.prev_avg_rating, 2), '') +
       tile(T.vResp, R.answerable ? R.rate + '%' : '—', delta(R.rate, V.prev_response_rate, 0, ' pt'), R.answerable ? `${R.answered}/${R.answerable}${R.median_days != null ? ' · ' + R.median_days + 'd' : ''}` : '') +
-      tile(T.vWait, V.unreplied || 0, '', V.sla_breached ? `<span style="color:#dc2626;font-weight:600">${V.sla_breached} ${T.vSla}</span>` : '') + `</div>`;
+      tile(T.vWait, V.unreplied || 0, '', V.sla_breached ? `<span style="color:var(--bad-ink);font-weight:600">${V.sla_breached} ${T.vSla}</span>` : '') + `</div>`;
     const themes = (V.themes || []).length ? `<table class="w-full text-[12px]"><thead><tr class="text-slate-400 text-[10px] uppercase"><th class="text-left py-1">${T.vThemes}</th><th class="text-right">${T.vVoices}</th><th class="text-right">${T.vNeg}</th><th class="text-right">Δ</th></tr></thead><tbody>` +
-      V.themes.map(t => `<tr class="border-t border-slate-100"><td class="py-1 font-medium text-slate-700">${esc(t.theme)}</td><td class="text-right tabular-nums">${t.n}</td><td class="text-right tabular-nums" style="color:${t.neg ? '#dc2626' : 'inherit'}">${t.neg}</td><td class="text-right">${delta(t.n, t.prev_n, 0, '', true)}</td></tr>`).join('') + '</tbody></table>' : '';
+      V.themes.map(t => `<tr class="border-t border-slate-100"><td class="py-1 font-medium text-slate-700">${esc(t.theme)}</td><td class="text-right tabular-nums">${t.n}</td><td class="text-right tabular-nums" style="color:${t.neg ? 'var(--bad-ink)' : 'inherit'}">${t.neg}</td><td class="text-right">${delta(t.n, t.prev_n, 0, '', true)}</td></tr>`).join('') + '</tbody></table>' : '';
     const watch = (V.branches_watch || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vWatch}</p>` +
-      V.branches_watch.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#dc2626">${b.neg_pct}% (${b.neg}/${b.n})${b.top_theme ? ` <span class="text-slate-400">· ${esc(b.top_theme)}</span>` : ''}</span></div>`).join('') : '';
+      V.branches_watch.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:var(--bad-ink)">${b.neg_pct}% (${b.neg}/${b.n})${b.top_theme ? ` <span class="text-slate-400">· ${esc(b.top_theme)}</span>` : ''}</span></div>`).join('') : '';
     const praised = (V.branches_praised || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vPraised}</p>` +
-      V.branches_praised.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:#059669">★${b.avg_rating.toFixed(2)} <span class="text-slate-400">(n=${b.n})</span></span></div>`).join('') : '';
+      V.branches_praised.map(b => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(b.branch)}</span><span class="tabular-nums" style="color:var(--good-ink)">★${b.avg_rating.toFixed(2)} <span class="text-slate-400">(n=${b.n})</span></span></div>`).join('') : '';
     const respB = (V.response_by_branch || []).length ? `<p class="text-[10px] uppercase tracking-wide text-slate-400 mt-3 mb-1">${T.vRespBranch}</p>` +
-      V.response_by_branch.map(x => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(x.branch)}</span><span class="tabular-nums" style="color:${(x.rate || 0) >= 80 ? '#059669' : (x.rate || 0) >= 50 ? '#b45309' : '#dc2626'}">${x.rate != null ? x.rate + '%' : '—'} <span class="text-slate-400">(${x.answered}/${x.answerable}${x.median_days != null ? ` · ${T.vMedian} ${x.median_days}d` : ''})</span></span></div>`).join('') : '';
+      V.response_by_branch.map(x => `<div class="flex justify-between text-[12px] py-0.5 border-t border-slate-100"><span class="font-medium text-slate-700">${esc(x.branch)}</span><span class="tabular-nums" style="color:${(x.rate || 0) >= 80 ? 'var(--good-ink)' : (x.rate || 0) >= 50 ? '#b45309' : 'var(--bad-ink)'}">${x.rate != null ? x.rate + '%' : '—'} <span class="text-slate-400">(${x.answered}/${x.answerable}${x.median_days != null ? ` · ${T.vMedian} ${x.median_days}d` : ''})</span></span></div>`).join('') : '';
     const survey = S.n ? `<p class="text-[11px] text-slate-500 mt-3">${T.vSurvey}: <b>${S.n}</b> ${T.vAnswers} ${delta(S.n, S.prev_n, 0)}${S.avg_rating != null ? ` · ★${S.avg_rating.toFixed(2)}` : ''}</p>` : '';
-    const resTag = r => ({ better: ['#059669', T.vBetter], same: ['#64748b', T.vSame], worse: ['#dc2626', T.vWorse], no_data: ['#94a3b8', '—'] }[r] || ['#b45309', T.vPending]);
+    const resTag = r => ({ better: ['var(--good-ink)', T.vBetter], same: ['#64748b', T.vSame], worse: ['var(--bad-ink)', T.vWorse], no_data: ['#94a3b8', '—'] }[r] || ['#b45309', T.vPending]);
     const loop = `<p class="text-[10px] uppercase tracking-wide text-slate-400 mb-1">${T.vActions}</p>` +
-      `<p class="text-[12px] text-slate-700">${T.vOpen} <b>${(A.open || 0) + (A.doing || 0)}</b>${A.overdue ? ` <span style="color:#dc2626">(${A.overdue} ${T.vOverdue})</span>` : ''} · ${T.vDone} <b>${A.done || 0}</b>` +
-      ((A.better || A.same || A.worse) ? ` · <span style="color:#059669">${T.vBetter} ${A.better || 0}</span> / ${T.vSame} ${A.same || 0} / <span style="color:#dc2626">${T.vWorse} ${A.worse || 0}</span>` : '') + `</p>` +
+      `<p class="text-[12px] text-slate-700">${T.vOpen} <b>${(A.open || 0) + (A.doing || 0)}</b>${A.overdue ? ` <span style="color:var(--bad-ink)">(${A.overdue} ${T.vOverdue})</span>` : ''} · ${T.vDone} <b>${A.done || 0}</b>` +
+      ((A.better || A.same || A.worse) ? ` · <span style="color:var(--good-ink)">${T.vBetter} ${A.better || 0}</span> / ${T.vSame} ${A.same || 0} / <span style="color:var(--bad-ink)">${T.vWorse} ${A.worse || 0}</span>` : '') + `</p>` +
       ((A.items || []).length ? `<table class="w-full text-[12px] mt-1"><tbody>` + A.items.map(it => { const [c, l] = resTag(it.result); return `<tr class="border-t border-slate-100"><td class="py-1 text-slate-700">${esc(it.title)}${it.branch ? ` <span class="text-slate-400">· ${esc(it.branch)}</span>` : ''}${it.theme ? ` <span class="text-slate-400">· ${esc(it.theme)}</span>` : ''}</td><td class="py-1 text-right tabular-nums whitespace-nowrap">${it.before_rate != null && it.after_rate != null ? `${it.before_rate} → ${it.after_rate} <span class="text-slate-400 text-[10px]">${T.vRate}</span>` : (it.days_left ? `<span class="text-slate-400 text-[10px]">${T.vPending} (${it.days_left})</span>` : '')}</td><td class="py-1 pl-2 text-right"><span class="text-[10px] font-semibold" style="color:${c}">${l}</span></td></tr>`; }).join('') + '</tbody></table>' : `<p class="text-[11px] text-slate-400 mt-1">${T.vNoActions}</p>`);
     return tiles + `<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8"><div>${themes}${survey}</div><div>${watch}${praised}${respB}</div></div><div class="mt-4">${loop}</div>`;
   })();
@@ -1722,7 +1722,7 @@ function renderMgtReport(j, jM, jF) {
     if (!DR || !DR.by_tier || !slot) return;
     const clean = s => esc(String(s).replace(/^\(B\)\s*/, '').replace(/\s*\(Buffet\)\s*$/i, ''));
     const vsCell = v => v == null ? '—'
-      : `<span style="color:${v > 0 ? '#dc2626' : v < 0 ? '#059669' : '#64748b'}">${v >= 0 ? '+' : '−'}${baht(Math.abs(v))}</span>`;
+      : `<span style="color:${v > 0 ? 'var(--bad-ink)' : v < 0 ? 'var(--good-ink)' : '#64748b'}">${v >= 0 ? '+' : '−'}${baht(Math.abs(v))}</span>`;
     const bar = (v, max) => `<span style="display:inline-block;height:6px;border-radius:3px;background:#f59e0b;width:${Math.max(3, Math.round((v / max) * 52))}px;vertical-align:middle;margin-right:5px"></span>`;
     const heat = (v, max) => `background:rgba(220,38,38,${(0.06 + 0.5 * (v / max)).toFixed(2)})`;
     const shareCell = p => p == null ? '' : `<span class="text-slate-500">${p.toFixed(0)}%</span>`;
@@ -1758,7 +1758,7 @@ function renderMgtReport(j, jM, jF) {
           <span class="text-[10px] text-slate-400">${T.tierDrvPick}:</span>${btns}
           <span class="text-[11px] ml-1"><span class="font-semibold" style="color:#b45309">${esc(cur.focus_label)}</span>${cur.focus_food_pct != null ? ` <span class="text-slate-400">Food ${cur.focus_food_pct.toFixed(1)}%</span>` : ''}${
             (cur.focus_share != null && cur.focus_share < 5)
-              ? ` <span style="color:#dc2626;font-weight:600">${isTH
+              ? ` <span style="color:var(--bad-ink);font-weight:600">${isTH
                   ? `· ${num(cur.focus_pax)} คน (${cur.focus_share.toFixed(1)}%) — กลุ่มเล็ก ตัวเลขแกว่ง`
                   : `· ${num(cur.focus_pax)} covers (${cur.focus_share.toFixed(1)}%) — small sample, figures swing`}</span>`
               : ''}</span>
@@ -1902,7 +1902,7 @@ function renderMgtReport(j, jM, jF) {
     const prv    = lastIdx > 0 ? (vals[lastIdx - 1] || 0) : 0;
     const wowP   = prv ? ((cur - prv) / prv * 100) : null;
     const vsAvg  = avg8 ? ((cur - avg8) / avg8 * 100) : null;
-    const ac     = d => d == null ? '#64748b' : d >= 0 ? '#16a34a' : '#dc2626';
+    const ac     = d => d == null ? '#64748b' : d >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)';
     const af     = d => d == null ? '—' : (d >= 0 ? '▲ ' : '▼ ') + Math.abs(d).toFixed(1) + '%';
     const pill   = (lbl, val, sub = '', sc = '#64748b') =>
       `<div style="flex:1;min-width:90px;padding:8px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px">
@@ -1951,8 +1951,8 @@ function renderMgtReport(j, jM, jF) {
         const noun = isDaily ? 'วัน' : isMonthly ? 'เดือน' : 'สัปดาห์', nounP = isDaily ? 'วันล่าสุด' : isMonthly ? 'เดือนล่าสุด' : 'สัปดาห์ล่าสุด';
         const dir = vsAvg == null ? 'ทรงตัว' : vsAvg > 5 ? 'กำลังเพิ่มขึ้น' : vsAvg < -5 ? 'กำลังอ่อนตัว' : 'ทรงตัว';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'ขาขึ้น' : maNow < maPrev * 0.98 ? 'ขาลง' : 'ทรงตัว') : 'ทรงตัว';
-        s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${dirCol}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
-        const streakTxt = streak >= 2 ? ` ล่าสุด <b style="color:${sdir > 0 ? '#16a34a' : '#dc2626'}">${sdir > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}ติดต่อกัน ${streak} ${noun}</b>;` : '';
+        s1 = `ในช่วง ${vals.length} ${nounP} ยอดขาย <b style="color:${textInk(dirCol)}">${dir}</b> — ${noun}ล่าสุด (<b>${fmtM(cur)}</b>) อยู่ <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> เทียบค่าเฉลี่ย ${vals.length} ${noun}${(peakGap != null && peakGap < -1) ? ` และ <b>ต่ำกว่า ${Math.abs(peakGap).toFixed(0)}%</b> จากจุดสูงสุดของช่วง (${maxT ? maxT.label : ''})` : ' และอยู่ที่/ใกล้จุดสูงสุดของช่วง'}`;
+        const streakTxt = streak >= 2 ? ` ล่าสุด <b style="color:${sdir > 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${sdir > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}ติดต่อกัน ${streak} ${noun}</b>;` : '';
         const maClause = `แนวโน้มค่าเฉลี่ยเคลื่อนที่ 3 ${noun}เป็น <b>${maTrend}</b> (${rises} จาก ${vals.length - 1} ${noun}ที่เพิ่มขึ้นเทียบ${noun}ก่อน)`;
         s2 = ` ${streakTxt}${maClause}`;
         if (hasSplit && trDataM.length && trDataF.length) {
@@ -1961,14 +1961,14 @@ function renderMgtReport(j, jM, jF) {
           const mVs = mAvg ? (mv[mv.length - 1] - mAvg) / mAvg * 100 : null;
           const fVs = fAvg ? (fv[fv.length - 1] - fAvg) / fAvg * 100 : null;
           const word = v => v == null ? 'เท่ากับ' : v > 3 ? 'เหนือ' : v < -3 ? 'ต่ำกว่า' : 'ใกล้';
-          s3 = ` สาขาบริษัทอยู่ <b style="color:${(mVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(mVs)}ค่าเฉลี่ยตัวเอง</b> และแฟรนไชส์อยู่ <b style="color:${(fVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(fVs)}ค่าเฉลี่ยตัวเอง</b>`;
+          s3 = ` สาขาบริษัทอยู่ <b style="color:${(mVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(mVs)}ค่าเฉลี่ยตัวเอง</b> และแฟรนไชส์อยู่ <b style="color:${(fVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(fVs)}ค่าเฉลี่ยตัวเอง</b>`;
         }
       } else {
         const noun = isDaily ? 'day' : isMonthly ? 'month' : 'week', nounP = isDaily ? 'days' : isMonthly ? 'months' : 'weeks';
         const dir = vsAvg == null ? 'holding steady' : vsAvg > 5 ? 'rising' : vsAvg < -5 ? 'softening' : 'holding steady';
         const maTrend = (maNow != null && maPrev != null) ? (maNow > maPrev * 1.02 ? 'upward' : maNow < maPrev * 0.98 ? 'downward' : 'flat') : 'flat';
-        s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${dirCol}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
-        const streakTxt = streak >= 2 ? ` The latest run is <b style="color:${sdir > 0 ? '#16a34a' : '#dc2626'}">${streak} ${nounP} ${sdir > 0 ? 'up' : 'down'}</b> in a row;` : '';
+        s1 = `Over the last ${vals.length} ${nounP}, net sales are <b style="color:${textInk(dirCol)}">${dir}</b> — the latest ${noun} (<b>${fmtM(cur)}</b>) sits <b style="color:${ac(vsAvg)}">${vsAvgTxt}</b> vs the ${vals.length}-${noun} average${(peakGap != null && peakGap < -1) ? ` and <b>${Math.abs(peakGap).toFixed(0)}% below</b> the period peak (${maxT ? maxT.label : ''})` : ' and is at/near the period peak'}.`;
+        const streakTxt = streak >= 2 ? ` The latest run is <b style="color:${sdir > 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${streak} ${nounP} ${sdir > 0 ? 'up' : 'down'}</b> in a row;` : '';
         const maClause = `the 3-${noun} moving-average trend is <b>${maTrend}</b> (${rises} of ${vals.length - 1} ${nounP} rose ${noun}-over-${noun}).`;
         s2 = streakTxt ? `${streakTxt} ${maClause}` : ` ${maClause.charAt(0).toUpperCase()}${maClause.slice(1)}`;
         if (hasSplit && trDataM.length && trDataF.length) {
@@ -1977,7 +1977,7 @@ function renderMgtReport(j, jM, jF) {
           const mVs = mAvg ? (mv[mv.length - 1] - mAvg) / mAvg * 100 : null;
           const fVs = fAvg ? (fv[fv.length - 1] - fAvg) / fAvg * 100 : null;
           const word = v => v == null ? 'flat' : v > 3 ? 'above' : v < -3 ? 'below' : 'near';
-          s3 = ` Master is running <b style="color:${(mVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(mVs)} its average</b> and franchise <b style="color:${(fVs || 0) >= 0 ? '#16a34a' : '#dc2626'}">${word(fVs)} its average</b>.`;
+          s3 = ` Master is running <b style="color:${(mVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(mVs)} its average</b> and franchise <b style="color:${(fVs || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${word(fVs)} its average</b>.`;
         }
       }
       analysisEl.innerHTML = `<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e8edf3;border-left:3px solid ${dirCol};border-radius:8px">

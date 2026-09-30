@@ -144,7 +144,7 @@ async function loadOrderPlan(force) {
     { l:'มูลค่าสั่ง/เดือน',  v:'฿'+fmt(t.value_month||0), s:'รวมเผื่อ '+(m.buffer_pct||0)+'%', c:'#7c3aed' },
     { l:'ครอบคลุมสูตร',     v:(cov.pct!=null?cov.pct+'%':'—'), s:'ของจำนวนจานที่ขาย', c:(cov.pct>=70?'#10b981':'#f59e0b') },
   ].concat(m.local_count ? [{ l:'สาขาซื้อเอง', v:fmtN(m.local_count), s:'ไม่อยู่ในจดหมายสั่งของ', c:'#64748b' }] : [])
-   .map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
+   .map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
 
   const miss = cov.top_missing || [];
   document.getElementById('opCoverage').innerHTML = miss.length
@@ -201,8 +201,8 @@ async function loadOrderPlan(force) {
   document.getElementById('opBody').innerHTML = (d.rows || []).map(r => {
     const tr = r.trend_pct;
     const trHtml = tr == null ? '<span style="color:var(--text-muted)">—</span>'
-      : tr >= 10 ? `<span style="color:#dc2626;font-weight:600">▲ ${tr.toFixed(0)}%</span>`
-      : tr <= -10 ? `<span style="color:#059669;font-weight:600">▼ ${Math.abs(tr).toFixed(0)}%</span>`
+      : tr >= 10 ? `<span style="color:var(--bad-ink);font-weight:600">▲ ${tr.toFixed(0)}%</span>`
+      : tr <= -10 ? `<span style="color:var(--good-ink);font-weight:600">▼ ${Math.abs(tr).toFixed(0)}%</span>`
       : `<span style="color:var(--text-muted)">${tr > 0 ? '+' : ''}${tr.toFixed(0)}%</span>`;
     const central = r.sourcing !== 'local';
     return `<tr class="border-b" style="border-color:var(--border);${central ? '' : 'opacity:.55'}">
@@ -523,7 +523,7 @@ function osRenderPacks() {
       <td class="py-1 pr-2 text-right">${inp(r.code, 'round_step', r.round_step, 55)}</td>
       <td class="py-1 pr-2 text-right">${inp(r.code, 'moq', r.moq, 55)}</td>
       <td class="py-1">${r.pack_known
-        ? '<span style="color:#059669">✓ ตั้งแล้ว</span>'
+        ? '<span style="color:var(--good-ink)">✓ ตั้งแล้ว</span>'
         : '<span style="color:#b45309">◇ ใช้หน่วยมาตรฐาน</span>'}</td>
     </tr>`).join('') ||
     '<tr><td colspan="10" class="py-4 text-center" style="color:var(--text-muted)">ไม่พบรายการ</td></tr>';
@@ -669,7 +669,7 @@ async function opLoadCycles() {
   document.getElementById('opCycleBody').innerHTML = rows.map(r => {
     const c = r.compliance || {};
     const badge = c.compliant
-      ? '<span style="color:#059669;font-weight:600">✓ ครบตามแผน</span>'
+      ? '<span style="color:var(--good-ink);font-weight:600">✓ ครบตามแผน</span>'
       : `<span style="color:#b91c1c;font-weight:600">⚠️ ต้องแจ้งเตือน</span>`;
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:#0f766e;font-weight:600">${esc(r.branch)}</a></td>
@@ -693,7 +693,7 @@ async function opOpenCycle(issueId) {
   try { d = await api(`${API}/api/ingredients/order-compliance?issue_id=${issueId}&tolerance_pct=${tol}`); }
   catch (e) { el.innerHTML = '<p class="text-xs" style="color:#b91c1c">โหลดไม่สำเร็จ</p>'; return; }
   const i = d.issue || {}, s = d.summary || {};
-  const cls = { not_ordered: '#b91c1c', under: '#b45309', ok: '#059669' };
+  const cls = { not_ordered: 'var(--bad-ink)', under: '#b45309', ok: 'var(--good-ink)' };
   const lab = { not_ordered: 'ไม่ได้สั่ง', under: 'ต่ำกว่าแผน', ok: 'ครบ' };
   el.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -844,7 +844,7 @@ async function _opImportFile(input, url, statusId, reportId, after) {
     show('กำลังนำเข้า…');
     const res = await send(false);
     if (rep) rep.innerHTML = _opImportReportHtml(res, false);
-    show(`✓ นำเข้าแล้ว ${res.saved || 0} แถว` + (res.blank ? ` · เว้นว่าง ${res.blank}` : ''), '#059669');
+    show(`✓ นำเข้าแล้ว ${res.saved || 0} แถว` + (res.blank ? ` · เว้นว่าง ${res.blank}` : ''), 'var(--good-ink)');
     if (typeof after === 'function') after();
   } catch (e) {
     show('นำเข้าไม่สำเร็จ — ' + String(e.message || e).slice(0, 160), '#b91c1c');
@@ -906,9 +906,9 @@ async function opLoadAccuracy() {
       s:(drift==null?'':drift>0?'พยากรณ์ต่ำไป':'พยากรณ์สูงไป'), c:(drift>5?'#dc2626':drift<-5?'#0891b2':'#059669') },
     { l:'% เผื่อที่ใช้อยู่', v:(h.buffer_used_median??'—')+'%', s:'ค่ากลางของรอบที่ผ่านมา', c:'#64748b' },
     { l:'% เผื่อที่ควรใช้', v:(h.suggested_buffer_pct??'—')+'%', s:`ครอบคลุม ${h.service_level_pct}% ของรอบ`, c:'#7c3aed' },
-  ].map(k => `<div class="card p-3" style="border-top:3px solid ${k.c}"><p class="text-[10.5px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[10.5px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('') + `</div>`;
+  ].map(k => `<div class="card p-3" style="border-top:3px solid ${k.c}"><p class="text-[10.5px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[10.5px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('') + `</div>`;
 
-  const vlab = { under:['พยากรณ์ต่ำไป','#dc2626'], over:['พยากรณ์สูงไป','#0891b2'], ok:['พอดี','#059669'] };
+  const vlab = { under:['พยากรณ์ต่ำไป','var(--bad-ink)'], over:['พยากรณ์สูงไป','#0891b2'], ok:['พอดี','var(--good-ink)'] };
   body.innerHTML = (d.by_ingredient || []).map(e => {
     const [txt, col] = vlab[e.verdict] || vlab.ok;
     return `<tr class="border-b" style="border-color:var(--border)">
@@ -994,7 +994,7 @@ async function loadIngPurchase(force) {
     { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2' },
     { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct) },
     { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981') },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
 
   // The gaps ARE the finding: a ratio computed over half the weeks is not a
   // small ratio, it is an unknown one.
@@ -1015,7 +1015,7 @@ async function loadIngPurchase(force) {
       <td class="py-1.5 pr-2 font-semibold" data-sort="${esc(b.branch)}">${esc(b.branch)}${odd ? ' <span class="mi-flag bad" title="% ต่อยอดขายหลุดกรอบเทียบสาขาอื่น">⚠ ผิดปกติ</span>' : ''}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">฿${fmtN(b.amount)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">฿${fmtN(b.revenue)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${pctCol(b.pct)}">${b.pct == null ? '—' : b.pct + '%'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(pctCol(b.pct))}">${b.pct == null ? '—' : b.pct + '%'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${b.per_cover == null ? '—' : '฿' + fmtN(b.per_cover)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(b.weeks)}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:${b.weeks_missing ? '#b45309' : 'var(--text-muted)'}">${fmtN(b.weeks_missing)}</td>
@@ -1035,7 +1035,7 @@ async function loadIngPurchase(force) {
                data-ipwas="${r.amount == null ? '' : r.amount}"
                style="width:110px;text-align:right;border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 6px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)"></td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">฿${fmtN(r.revenue)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${pctCol(r.pct)}">${r.pct == null ? '—' : r.pct + '%'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${textInk(pctCol(r.pct))}">${r.pct == null ? '—' : r.pct + '%'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.per_cover == null ? '—' : '฿' + fmtN(r.per_cover)}</td>
       <td class="py-1.5" style="color:var(--text-muted)">${r.source === 'excel' ? '📄 Excel' : r.source === 'manual' ? '✍️ กรอกเอง' : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีสัปดาห์ในช่วงที่เลือก</td></tr>';

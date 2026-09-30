@@ -661,6 +661,7 @@ function chartTheme(force) {
     ink:      dark ? '#94a3b8' : '#475569',
   };
 }
+const _CHART_SLATE = ['#64748b', '#94a3b8', '#334155', '#475569'];
 function applyChartTheme(cfg, force) {
   const t = chartTheme(force);
   if (!cfg.options) return;
@@ -674,8 +675,15 @@ function applyChartTheme(cfg, force) {
       ax.ticks.color = ax.ticks.color && /^#[0-9a-fA-F]{6}$/.test(ax.ticks.color) ? t.text : ax.ticks.color || t.text;
       // overwrite hard-coded slate colors
       if (ax.ticks.color === '#94a3b8' || ax.ticks.color === '#64748b') ax.ticks.color = t.text;
+      if (ax.title && _CHART_SLATE.includes(ax.title.color)) ax.title.color = t.text;
     });
   }
+  // Legend / title text hard-coded to a light-mode slate: #64748b is 3.65:1 on
+  // the dark card, #334155 1.8:1, and #94a3b8 is 2.56:1 on white. Theme ink instead.
+  const lab = cfg.options.plugins?.legend?.labels;
+  if (lab && _CHART_SLATE.includes(lab.color)) lab.color = t.ink;
+  const ttl = cfg.options.plugins?.title;
+  if (ttl && _CHART_SLATE.includes(ttl.color)) ttl.color = t.ink;
   if (cfg.options.plugins?.datalabels?.color === '#1e293b') {
     cfg.options.plugins.datalabels.color = t.labelStrong;
   }
@@ -706,6 +714,15 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
 // Safe interpolation into a single-quoted JS string inside an HTML attribute,
 // e.g. onclick="f('${jsAttr(v)}')". JS-escape first, then HTML-escape.
 const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"));
+
+// ── Up/down TEXT ink. #059669 / #16a34a / #dc2626 are fine for a border or a dot
+// but fail as text (3.4-4.4:1 on the page, and they never adapt to dark mode).
+// A helper whose colour feeds both a mark and a figure keeps the hex for the
+// mark and passes the text use through here (tokens.css --good-ink / --bad-ink).
+// #1f7a4d / #b0472d are the menu-impact pair in 07-home: 5.3:1 on white but
+// only 3.1-3.3 on the dark card.
+const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d'], _BAD_HEX = ['#dc2626', '#b0472d'];
+const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)' : c;
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
@@ -1616,9 +1633,9 @@ async function loadUsageStats() {
         <table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง</th><th class="py-1 pr-3 text-right">จำนวนวัน</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${tabs.map(row).join('') || '<tr><td class="py-2" colspan="4" style="color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มนับหลัง deploy เวอร์ชันนี้</td></tr>'}</tbody></table>
       </div>
       <div>
-        <div class="text-xs font-semibold mb-2" style="color:${onHold ? '#b45309' : '#dc2626'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
+        <div class="text-xs font-semibold mb-2" style="color:${onHold ? '#b45309' : 'var(--bad-ink)'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
         <table class="text-xs w-full mb-5"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง (${esc(days)} วัน)</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${killRows}</tbody></table>
-        <div class="text-xs font-semibold mb-2" style="color:#dc2626">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
+        <div class="text-xs font-semibold mb-2" style="color:var(--bad-ink)">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
         <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว 🎉</span>'}</div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">Top 20 API endpoints</div>
         <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
@@ -1671,7 +1688,7 @@ function _mabCard(r) {
     <div class="text-[10.5px] mt-0.5" style="color:var(--text-muted)">${esc(r.category || '')}</div>
     <div class="flex flex-wrap gap-1 mt-1 text-[10px]">
       ${quad ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(99,102,241,.1);color:#4f46e5">${quad}</span>` : ''}
-      ${stage ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.1);color:#059669">${stage}</span>` : ''}
+      ${stage ? `<span class="px-1.5 py-0.5 rounded" style="background:rgba(16,185,129,.1);color:var(--good-ink)">${stage}</span>` : ''}
       <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">มาร์จิ้น ${fmtP(r.margin_pct)}</span>
       <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">ส่วนแบ่ง ${fmtP(r.popularity_pct)}</span>
       <span class="px-1.5 py-0.5 rounded" style="background:rgba(0,0,0,.05);color:var(--text-secondary)">${fmtN(r.qty)} ชิ้น</span>
@@ -1751,7 +1768,7 @@ function renderOpportunities(d) {
     : _oppEmpty('ไม่พบช่องว่างเด่น (ต้องเป็นเมนูที่ขายใน ≥5 สาขา) — ลองเลือกทุกสาขา/ขยายช่วงเดือน');
 
   const ws = d.category_whitespace || [];
-  const wlabel = { expand: ['ขยายได้', '#059669', '#ecfdf5'], trim: ['ควรลด', '#dc2626', '#fef2f2'], watch: ['เฝ้าดู', '#64748b', '#f1f5f9'] };
+  const wlabel = { expand: ['ขยายได้', '#047857', '#ecfdf5'], trim: ['ควรลด', '#b91c1c', '#fef2f2'], watch: ['เฝ้าดู', '#64748b', '#f1f5f9'] };
   document.getElementById('oppWhitespace').innerHTML = ws.length ? `
     <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
       <th class="py-1.5 pr-2">หมวด</th><th class="py-1.5 pr-2 text-right">#เมนู</th>
@@ -1796,7 +1813,7 @@ async function genMenuIdeas() {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     });
   } catch (e) {
-    host.innerHTML = `<div class="text-xs" style="color:#dc2626">สร้างไอเดียไม่สำเร็จ</div>`;
+    host.innerHTML = `<div class="text-xs" style="color:var(--bad-ink)">สร้างไอเดียไม่สำเร็จ</div>`;
     btn.disabled = false; btn.textContent = old; return;
   }
   const ideas = d.ideas || [];
