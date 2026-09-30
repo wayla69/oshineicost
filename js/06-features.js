@@ -82,7 +82,7 @@ async function _diveEnhanceBranchCompare(_cfg) {
       <td class="py-1.5 pr-2 font-medium">${esc(b.branch)}</td>
       <td class="py-1.5 pr-2 text-right">${fmt(b.total_revenue)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${share}%</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${parseFloat(gpp)>=60?'var(--good-ink)':parseFloat(gpp)>=40?'#d97706':'var(--bad-ink)'}">${gpp}%</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${parseFloat(gpp)>=60?'var(--good-ink)':parseFloat(gpp)>=40?'var(--amber-ink)':'var(--bad-ink)'}">${gpp}%</td>
     </tr>`;
   }).join('');
 
@@ -1219,7 +1219,7 @@ async function loadCohort() {
     const col = mom == null ? '#64748b' : mom >= 1 ? '#059669' : mom <= -5 ? '#dc2626' : '#d97706';
     const vsPeak = (peak && peak.cohort !== last.cohort && peak.customers)
       ? ` · ต่ำกว่าพีค ${mLbl(peak.cohort)} (${fmtN(peak.customers)} คน) ${chip(-((peak.customers - last.customers) / peak.customers * 100))}` : '';
-    const partTag = last.partial ? ` <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#b45309">ไม่ครบเดือน (${last.days_covered}/${last.days_in_month} วัน)</span>` : '';
+    const partTag = last.partial ? ` <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#a44a08">ไม่ครบเดือน (${last.days_covered}/${last.days_in_month} วัน)</span>` : '';
     vEl.innerHTML = `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2 flex-wrap">
         <span style="color:${textInk(col)};line-height:1.5">●</span>
         <span class="text-slate-600">เดือนเต็มล่าสุด ${mLbl(last.cohort)}: <b>${fmtN(last.customers)}</b> คน
@@ -1284,7 +1284,7 @@ async function loadCohort() {
   };
   document.getElementById('cohortBody').innerHTML = M.map((r, i) => `
     <tr class="border-t border-slate-100 ${i === lastFullIdx ? 'font-semibold' : ''}" ${r.partial ? 'style="opacity:.65"' : ''}>
-      <td class="py-2 pr-3 font-semibold whitespace-nowrap">${fmtPeriod(r.cohort)}${r.partial ? ` <span class="text-[9px] px-1 py-0.5 rounded font-normal" style="background:#fef3c7;color:#b45309" title="มีข้อมูล ${r.days_covered} จาก ${r.days_in_month} วัน — ไม่ถูกนำไปเทียบ MoM/YoY">ไม่ครบเดือน</span>` : ''}</td>
+      <td class="py-2 pr-3 font-semibold whitespace-nowrap">${fmtPeriod(r.cohort)}${r.partial ? ` <span class="text-[9px] px-1 py-0.5 rounded font-normal" style="background:#fef3c7;color:#a44a08" title="มีข้อมูล ${r.days_covered} จาก ${r.days_in_month} วัน — ไม่ถูกนำไปเทียบ MoM/YoY">ไม่ครบเดือน</span>` : ''}</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmtN(r.tx)}</td>
       <td class="py-2 pr-3 text-right tabular-nums whitespace-nowrap">${fmtN(r.customers)}
         <span style="display:inline-block;height:5px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-left:5px;width:${Math.max(3, Math.round((r.customers || 0) / maxCust * 44))}px"></span></td>
@@ -1908,7 +1908,7 @@ function _gpbRenderHeatmap() {
     months.forEach(m => {
       const cell = byMonth[m];
       if (!cell || cell.revenue === 0) {
-        html += `<td style="padding:4px 6px;text-align:center;background:#f8fafc;color:#cbd5e1">—</td>`;
+        html += `<td style="padding:4px 6px;text-align:center;background:#f8fafc;color:#5f6c80">—</td>`;
       } else {
         const gp = cell.revenue - cell.cogs;
         const gpPct = cell.revenue > 0 ? (gp / cell.revenue * 100) : null;
@@ -2018,7 +2018,7 @@ async function loadRequisitionGap() {
   try { d = await api(`${API}/api/requisition/vs-recipe?${qs}`); }
   catch (e) { body.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่ได้</p>'; return; }
   if (!d.ready) {
-    body.innerHTML = `<p class="text-xs" style="color:#9a3412">${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
+    body.innerHTML = `<p class="text-xs" style="color:var(--orange-ink)">${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
     return;
   }
   if (!_reqInit) {                       // first load: fill the pickers from what exists
@@ -2176,7 +2176,7 @@ function _bbomRenderBranchSummary() {
     <tr class="border-b border-slate-50 hover:bg-fuchsia-50">
       <td class="py-1.5 pr-3 font-medium">${esc(b.branch)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(b.total_revenue)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmtN(b.total_cogs)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:var(--amber-ink)">${fmtN(b.total_cogs)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmtN(b.total_gp)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${b.total_gp_pct!=null?b.total_gp_pct.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 text-right font-semibold" style="color:${textInk(fcColor(b.total_food_cost_pct))}">${b.total_food_cost_pct!=null?b.total_food_cost_pct.toFixed(1)+'%':'—'}</td>
@@ -2185,7 +2185,7 @@ function _bbomRenderBranchSummary() {
   document.getElementById('bbomBranchSummaryFoot').innerHTML = g ? `
     <tr><td class="py-2 pr-3">รวมทุกสาขา (${rows.length})</td>
       <td class="py-2 pr-3 text-right">${fmtN(g.revenue)}</td>
-      <td class="py-2 pr-3 text-right" style="color:#b45309">${fmtN(g.cogs)}</td>
+      <td class="py-2 pr-3 text-right" style="color:var(--amber-ink)">${fmtN(g.cogs)}</td>
       <td class="py-2 pr-3 text-right" style="color:var(--good-ink)">${fmtN(g.gp)}</td>
       <td class="py-2 pr-3 text-right">${g.gp_pct}%</td>
       <td class="py-2 text-right" style="color:${textInk(fcColor(g.food_cost_pct))}">${g.food_cost_pct}%</td>
@@ -2213,7 +2213,7 @@ function _bbomRenderSummary(d) {
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
        <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${label}</p>
        <p class="text-lg font-bold" style="color:${textInk(color)}">${value}</p>
-       <p class="text-[10px] text-slate-400">${sub}</p>
+       <p class="text-[10px] text-slate-500">${sub}</p>
      </div>`;
   document.getElementById('bbomSummary').innerHTML = [
     card('รายได้',            _bbomFmtB(t.revenue),    `${d.period.months || 0} เดือน · ${esc(d.branch)}`, '#4a70b0'),
@@ -2317,7 +2317,7 @@ function _bbomRenderMenuTable() {
       : '<span class="text-slate-300">—</span>';
     const bomBadge = r.has_bom_recipe
       ? '<span title="มีสูตร BoM" style="color:var(--fuchsia-ink)"></span>'
-      : '<span title="ยังไม่มีสูตร BoM" style="color:#cbd5e1">○</span>';
+      : '<span title="ยังไม่มีสูตร BoM" style="color:var(--text-muted)">○</span>';
     return `<tr style="border-bottom:1px solid var(--border)">
       <td class="px-3 py-1.5 font-mono text-xs">${r.sku_code || ''}</td>
       <td class="px-3 py-1.5 text-xs">${esc(r.description || '')}</td>

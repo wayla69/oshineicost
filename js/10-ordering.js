@@ -158,7 +158,7 @@ async function loadOrderPlan(force) {
   if (snEl) snEl.innerHTML = (sn.factor && Math.abs(sn.factor - 1) > 0.001)
     ? `<div class="card p-3 text-xs" style="background:#fff7ed;border:1px solid #ea580c;color:#9a3412">
          <b>ปรับตามเทศกาล ×${sn.factor}</b>${sn.event ? ' — ' + esc(sn.event) : ''}
-         <span style="color:#a16207"> · ${esc(sn.reason || '')}</span></div>`
+         <span style="color:var(--amber-ink)"> · ${esc(sn.reason || '')}</span></div>`
     : (sn.mode === 'auto-nodata'
        ? `<div class="card p-3 text-xs" style="background:var(--bg-subtle);color:var(--text-muted)">เปิดปรับตามเทศกาลไว้ แต่${esc(sn.reason || '')}</div>`
        : '');
@@ -213,7 +213,7 @@ async function loadOrderPlan(force) {
       <td class="py-1.5 pr-2">${esc(r.name)}${r.n_variants > 1 ? ` <span style="color:var(--text-muted)">(${r.n_variants} ชื่อ)</span>` : ''}${opForcedBadge(r)}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(OP_TYPE_TH[r.type] || r.type)}</td>
       <td class="py-1.5 pr-2 text-right">${esc(r.per_day_disp)}</td>
-      <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${r.pack_known ? '' : '<span style="color:#b45309">◇</span> '}${esc(r.order_unit || r.unit)}</td>
+      <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${r.pack_known ? '' : '<span style="color:var(--amber-ink)">◇</span> '}${esc(r.order_unit || r.unit)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold" title="ใช้จริง ${esc(r.order_week_disp)}">${esc(r.order_week_units_disp || r.order_week_disp)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold" style="color:var(--teal-ink)" title="ใช้จริง ${esc(r.order_month_disp)}">${esc(r.order_month_units_disp || r.order_month_disp)}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(r.value_month)}</td>
@@ -348,7 +348,7 @@ async function opLoadForcedNote(meta) {
     <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลังส่วนกลาง —
     ติ๊ก “สั่งส่วนกลาง” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
     · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
-    ${miss.length ? `<div class="mt-1" style="color:#92400e">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
+    ${miss.length ? `<div class="mt-1" style="color:var(--amber-ink)">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
     <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
 }
 
@@ -369,7 +369,7 @@ function opRenderBulkNote() {
   const nLocal = _opLastRows.filter(r => r.sourcing === 'local').length;
   const nCodes = new Set(_opLastRows.filter(r => r.code).map(r => r.code)).size;
   el.innerHTML = fam
-    ? '<span style="color:#b45309">ปิด “รวมชื่อคล้ายกัน” ก่อนจึงจะเลือกเป็นชุดได้</span>'
+    ? '<span style="color:var(--amber-ink)">ปิด “รวมชื่อคล้ายกัน” ก่อนจึงจะเลือกเป็นชุดได้</span>'
     : 'กำลังแสดง <b>' + n + '</b> แถว (<b>' + nCodes + '</b> รหัส) · สาขาซื้อเอง <b>' + nLocal + '</b>'
       + (br ? ' · ตั้งเฉพาะ <b>' + esc(br) + '</b>' : ' · ตั้งเป็นค่าเริ่มต้น <b>ทุกสาขา</b>');
 }
@@ -524,7 +524,7 @@ function osRenderPacks() {
       <td class="py-1 pr-2 text-right">${inp(r.code, 'moq', r.moq, 55)}</td>
       <td class="py-1">${r.pack_known
         ? '<span style="color:var(--good-ink)">✓ ตั้งแล้ว</span>'
-        : '<span style="color:#b45309">◇ ใช้หน่วยมาตรฐาน</span>'}</td>
+        : '<span style="color:var(--amber-ink)">◇ ใช้หน่วยมาตรฐาน</span>'}</td>
     </tr>`).join('') ||
     '<tr><td colspan="10" class="py-4 text-center" style="color:var(--text-muted)">ไม่พบรายการ</td></tr>';
 }
@@ -677,7 +677,7 @@ async function opLoadCycles() {
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(String(r.issued_at || '').slice(0, 16))}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(c.lines)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:${c.not_ordered ? 'var(--bad-ink)' : 'var(--text-muted)'}">${fmtN(c.not_ordered)}</td>
-      <td class="py-1.5 pr-2 text-right" style="color:${c.under ? '#b45309' : 'var(--text-muted)'}">${fmtN(c.under)}</td>
+      <td class="py-1.5 pr-2 text-right" style="color:${c.under ? 'var(--amber-ink)' : 'var(--text-muted)'}">${fmtN(c.under)}</td>
       <td class="py-1.5 pr-2 text-right">${c.gap_value ? '฿' + fmtN(c.gap_value) : '—'}</td>
       <td class="py-1.5">${badge}</td></tr>`;
   }).join('') ||
@@ -1018,7 +1018,7 @@ async function loadIngPurchase(force) {
       <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(pctCol(b.pct))}">${b.pct == null ? '—' : b.pct + '%'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${b.per_cover == null ? '—' : '฿' + fmtN(b.per_cover)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(b.weeks)}</td>
-      <td class="py-1.5 text-right tabular-nums" style="color:${b.weeks_missing ? '#b45309' : 'var(--text-muted)'}">${fmtN(b.weeks_missing)}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:${b.weeks_missing ? 'var(--amber-ink)' : 'var(--text-muted)'}">${fmtN(b.weeks_missing)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ยังไม่มีข้อมูล — โหลด template แล้วนำเข้ายอดซื้อ</td></tr>';
 

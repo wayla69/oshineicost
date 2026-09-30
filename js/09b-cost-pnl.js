@@ -200,7 +200,7 @@ async function loadCoverageExtras() {
 // survives the daily DB swap (see cost_sources.apply_overrides).
 let _covReview = [];
 const _CR_BADGE = {
-  'estimate':    ['ประมาณการ', '#b45309', '#fef3c7'],
+  'estimate':    ['ประมาณการ', '#a44a08', '#fef3c7'],
   'recipe-file': ['สูตรเสนอ',  '#1d4ed8', '#dbeafe'],
   'confirmed':   ['ยืนยันแล้ว', '#047857', '#d1fae5'],
 };
@@ -213,7 +213,7 @@ async function loadCostReview() {
   _covReview = d.items || [];
   const s = d.summary || {};
   const sum = document.getElementById('cov-review-sum');
-  if (sum) sum.innerHTML = `รอตรวจ <b style="color:#b45309">${s.pending || 0}</b> เมนู (฿${fmtN(s.pending_cogs_month || 0)}/เดือน) · ยืนยันแล้ว <b style="color:var(--good-ink)">${s.confirmed || 0}</b> · เดือน ${esc(d.month || '-')}`;
+  if (sum) sum.innerHTML = `รอตรวจ <b style="color:var(--amber-ink)">${s.pending || 0}</b> เมนู (฿${fmtN(s.pending_cogs_month || 0)}/เดือน) · ยืนยันแล้ว <b style="color:var(--good-ink)">${s.confirmed || 0}</b> · เดือน ${esc(d.month || '-')}`;
   body.innerHTML = _covReview.map((r, i) => {
     const [lab, fg, bg] = _CR_BADGE[r.source] || [r.source, '#475569', '#e2e8f0'];
     return `<tr class="border-b border-slate-50 cursor-pointer hover:bg-slate-50" onclick="toggleCostReview(${i})">
@@ -355,10 +355,10 @@ async function loadPrimeCost() {
   document.getElementById('primeBody').innerHTML = rows.map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.rev)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? 'var(--bad-ink)' : r.food_pct > 50 ? '#f59e0b' : 'var(--good-ink)'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.food_pct > 55 ? 'var(--bad-ink)' : r.food_pct > 50 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${r.food_pct != null ? r.food_pct + '%' : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.labor_pct != null ? r.labor_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(pcCol(r.prime_pct))}">${r.prime_pct != null ? r.prime_pct + '%' : '<span class="text-slate-300">—</span>'}</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? '#94a3b8' : r.operating_pct < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums" style="color:${r.operating_pct == null ? 'var(--text-muted)' : r.operating_pct < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.operating_pct != null ? r.operating_pct + '%' : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
@@ -411,7 +411,7 @@ async function loadPnlBranch() {
     return `<tr class="border-b border-slate-50 hover:bg-indigo-50">
       <td class="py-1.5 pr-3 font-medium"><a onclick="openPnlDrill('${jsAttr(b.branch)}')" class="text-indigo-600 hover:underline cursor-pointer">${esc(b.branch)}</a></td>
       <td class="py-1.5 pr-3 text-right">${fmt(b.revenue)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmt(b.cogs)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:var(--amber-ink)">${fmt(b.cogs)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmt(b.gross_profit)}</td>
       <td class="py-1.5 pr-3 text-right">${b.gp_margin_pct!=null?b.gp_margin_pct+'%':'—'}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${b.fixed_cost_period?fmt(b.fixed_cost_period):'—'}</td>

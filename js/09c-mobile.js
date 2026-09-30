@@ -21,9 +21,9 @@ let _msView = 'summary', _msMonth = null, _msBranchesFilled = false,
     _msSalesGran = 'month', _msBranchSort = 'rev';
 function msBranch() { return document.getElementById('msBranch')?.value || ''; }
 function msPchip(v, goodUp = true) {
-  if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
+  if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#5f6c80">—</span>';
   const good = goodUp ? v >= 0 : v <= 0;
-  const c = v === 0 ? '#64748b' : good ? '#047857' : '#b91c1c';   // on a fixed light chip
+  const c = v === 0 ? '#5f6c80' : good ? '#047857' : '#b91c1c';   // on a fixed light chip
   const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
   return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
 }
@@ -327,7 +327,7 @@ async function loadMoreAnalytics() {
       if (slope == null) { fb.textContent = ''; }
       else if (slope > 0) { fb.textContent = '▲ ขาขึ้น'; fb.style.color = 'var(--good-ink)'; }
       else if (slope < 0) { fb.textContent = '▼ ขาลง'; fb.style.color = 'var(--bad-ink)'; }
-      else { fb.textContent = '→ ทรงตัว'; fb.style.color = '#64748b'; }
+      else { fb.textContent = '→ ทรงตัว'; fb.style.color = 'var(--text-muted)'; }
     }
     const hist = fc.history||[], fore = fc.forecast||[];
     const labels = [...hist.map(h=>h.period), ...fore.map(f=>f.period)];

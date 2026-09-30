@@ -24,7 +24,7 @@ function _fbContactHtml(c) {
   return tel ? `<a href="${tel}" style="color:inherit;text-decoration:underline" onclick="event.stopPropagation()" title="โทรออก">${_fbEsc(c)}</a>` : _fbEsc(c);
 }
 function _fbSentChip(s) {
-  const m = { pos: ['บวก', '#047857', '#ecfdf5'], neg: ['ลบ', '#b91c1c', '#fef2f2'], neu: ['กลาง', '#6b7280', '#f3f4f6'] }[s] || ['—', '#6b7280', '#f3f4f6'];
+  const m = { pos: ['บวก', '#047857', '#ecfdf5'], neg: ['ลบ', '#b91c1c', '#fef2f2'], neu: ['กลาง', '#5f6c80', '#f3f4f6'] }[s] || ['—', '#5f6c80', '#f3f4f6'];
   return `<span class="text-[11px] px-2 py-0.5 rounded-full" style="color:${m[1]};background:${m[2]}">${m[0]}</span>`;
 }
 function _fbQp() {
@@ -134,7 +134,7 @@ function renderFeedback(d) {
   document.getElementById('fbMix').innerHTML =
     `<div class="mb-2"><div class="flex justify-between text-[11px]" style="color:var(--text-muted)"><span>ความรู้สึก</span><span>${d.total} เสียง</span></div>
        <div class="flex rounded overflow-hidden mt-1" style="height:12px;background:#e5e7eb"><div style="width:${100 * (s.pos || 0) / tot}%;background:#047857"></div><div style="width:${100 * (s.neu || 0) / tot}%;background:#9ca3af"></div><div style="width:${100 * (s.neg || 0) / tot}%;background:#b91c1c"></div></div>
-       <div class="flex justify-between text-[11px] mt-0.5"><span style="color:var(--good-ink)">บวก ${(100 * (s.pos || 0) / tot).toFixed(0)}%</span><span style="color:#6b7280">กลาง ${(100 * (s.neu || 0) / tot).toFixed(0)}%</span><span style="color:var(--bad-ink)">ลบ ${(100 * (s.neg || 0) / tot).toFixed(0)}%</span></div></div>` +
+       <div class="flex justify-between text-[11px] mt-0.5"><span style="color:var(--good-ink)">บวก ${(100 * (s.pos || 0) / tot).toFixed(0)}%</span><span style="color:var(--text-muted)">กลาง ${(100 * (s.neu || 0) / tot).toFixed(0)}%</span><span style="color:var(--bad-ink)">ลบ ${(100 * (s.neg || 0) / tot).toFixed(0)}%</span></div></div>` +
     (srcs.length ? `<div class="text-[11px] mb-1" style="color:var(--text-muted)">ช่องทาง</div>` + srcs.map(([k, v]) => `<div class="flex items-center gap-2 text-xs mb-1"><span style="width:88px">${_fbEsc(k)}</span><div class="fb-bar" style="flex:1"><i style="width:${100 * v / mx}%;background:#0369a1"></i></div><span style="width:34px;text-align:right">${v}</span></div>`).join('') : '') +
     `<div class="text-[11px] mt-2" style="color:var(--text-muted)">วิเคราะห์โดย ${eng || '—'}${(d.analysed_by || {}).claude ? '' : ' · <span title="ตั้ง ANTHROPIC_API_KEY บน Fly เพื่อให้ Claude อ่านประชด/บริบทซับซ้อนได้">พจนานุกรม: ตั้ง Claude ได้ใน Checklist เฟส 7</span>'}</div>`;
   _fbThemes(d);
@@ -307,7 +307,7 @@ async function loadFeedbackSources() {
       return `<tr><td>${_fbEsc(s.source)}</td><td style="text-align:right">${(s.n || 0).toLocaleString()}</td><td style="text-align:right">${(s.fetched || 0).toLocaleString()}</td><td>${_fbEsc(s.latest || '—')}</td><td style="text-align:right;color:${s.unreplied ? 'var(--bad-ink)' : 'inherit'}">${s.unreplied || 0}</td><td class="whitespace-nowrap">${lr ? _fbEsc(lr.ran_at || '') : '<span style="color:var(--text-muted)">อัปโหลดเอง</span>'}</td><td style="color:${lr ? (ok ? 'var(--good-ink)' : 'var(--bad-ink)') : 'inherit'}">${result}</td></tr>`; }).join('') + '</tbody></table>';
   const q = d.reply_queue || {};
   if ((q.pending || 0) + (q.failed || 0) + (q.manual || 0) + (q.sent || 0) > 0) {
-    el.innerHTML += `<p class="text-[11px] mt-2" style="color:var(--text-muted)">คิวตอบรีวิว: <b style="color:#92400e">รอส่ง ${q.pending || 0}</b> (ส่งในรอบดึง 09:00) · ส่งแล้ว ${q.sent || 0}${q.failed ? ` · <b style="color:var(--bad-ink)">ส่งไม่สำเร็จ ${q.failed}</b>` : ''}${q.manual ? ` · ตอบเองในแอป ${q.manual}` : ''}</p>`;
+    el.innerHTML += `<p class="text-[11px] mt-2" style="color:var(--text-muted)">คิวตอบรีวิว: <b style="color:var(--amber-ink)">รอส่ง ${q.pending || 0}</b> (ส่งในรอบดึง 09:00) · ส่งแล้ว ${q.sent || 0}${q.failed ? ` · <b style="color:var(--bad-ink)">ส่งไม่สำเร็จ ${q.failed}</b>` : ''}${q.manual ? ` · ตอบเองในแอป ${q.manual}` : ''}</p>`;
   }
 }
 
@@ -445,7 +445,7 @@ async function loadFeedbackActions() {
   el.innerHTML = `<table class="fb-t"><thead><tr><th>งาน</th><th>สาขา · หัวข้อ</th><th>ผู้รับผิดชอบ</th><th>กำหนด</th><th>สถานะ</th><th style="text-align:right">ก่อน → หลัง (ลบ/100 เสียง)</th><th>ผล</th><th></th></tr></thead><tbody>` +
     items.map(a => { const st = _FB_ACT_STATUS[a.status] || [a.status, '#6b7280'];
       const seg = ['open', 'doing', 'done'].map(s => `<button type="button" class="fb-chip${a.status === s ? ' on' : ''}" style="padding:0 .4rem;font-size:10px" onclick="setActionStatus(${a.id}, '${s}')">${_FB_ACT_STATUS[s][0]}</button>`).join('');
-      const res = a.result ? `<span class="fb-tag" style="color:${textInk(_FB_ACT_RESULT[a.result][1])};background:transparent;border:1px solid ${_FB_ACT_RESULT[a.result][1]}">${_FB_ACT_RESULT[a.result][0]}</span>` : (a.status === 'done' ? `<span class="text-[11px]" style="color:#b45309">รอครบ 28 วัน${a.after_days_left ? ` (อีก ${a.after_days_left})` : ''}</span>` : '');
+      const res = a.result ? `<span class="fb-tag" style="color:${textInk(_FB_ACT_RESULT[a.result][1])};background:transparent;border:1px solid ${_FB_ACT_RESULT[a.result][1]}">${_FB_ACT_RESULT[a.result][0]}</span>` : (a.status === 'done' ? `<span class="text-[11px]" style="color:var(--amber-ink)">รอครบ 28 วัน${a.after_days_left ? ` (อีก ${a.after_days_left})` : ''}</span>` : '');
       const before = a.baseline_rate != null ? `${a.baseline_rate}` : '—', after = a.after_rate != null ? `${a.after_rate}` : (a.status === 'done' ? '…' : '');
       return `<tr class="align-top${a.status === 'dropped' ? '" style="opacity:.55' : ''}"><td><b>${_fbEsc(a.title)}</b>${a.detail ? `<div class="text-[11px]" style="color:var(--text-muted)">${_fbEsc(a.detail.slice(0, 160))}</div>` : ''}${a.note ? `<div class="text-[11px]" style="color:var(--good-ink)">↳ ${_fbEsc(a.note.slice(0, 160))}</div>` : ''}</td>
         <td>${_fbEsc(a.branch_name || 'ทุกสาขา')}${a.theme ? `<div><span class="fb-tag">${_fbEsc(a.theme)}</span></div>` : ''}</td>

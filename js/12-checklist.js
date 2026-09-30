@@ -171,8 +171,8 @@ function _clRenderNext(di, locked) {
   const waiting = _clPlan.phases.filter(ph => _clPhaseMode(ph, di) === 'waiting');
   host.innerHTML = `<div class="flex items-baseline justify-between flex-wrap gap-2"><h3 class="text-sm font-semibold">ทำต่อเลย</h3><span class="text-[11px]" style="color:var(--text-muted)">ขั้นตอนถัดไปตามลำดับแผน${next.length ? ` · เฟสปัจจุบัน ${_clEsc(next[0].ph.name.split(' · ')[0])}` : ''}</span></div>` +
     (next.length ? next.map(n => `<div class="cl-next-item"><span class="k">${_clEsc(n.ph.name.split(' · ')[0])}</span><span><b>${_clEsc(n.s.t)}</b><br><span class="k">${_clEsc(n.tk.name)} · ${_clEsc(n.ph.owner)}</span></span><button class="cl-ghost" onclick="clJump('${n.ph.id}','${n.s.id}')">ไปทำ →</button></div>`).join('') : '<p class="cl-empty mt-1">ติ๊กครบทุกขั้นตอนแล้ว — กดปิดสมบูรณ์ได้</p>') +
-    (blocked.length ? `<p class="text-xs mt-2" style="color:#991b1b"><b>ติดปัญหา ${blocked.length} งาน:</b> ${blocked.map(b => `<a href="#" onclick="clJump('${b.ph.id}','${b.tk.steps[0] ? b.tk.steps[0].id : ''}');return false;" style="color:#991b1b;text-decoration:underline">${_clEsc(b.tk.name)}</a>${b.ts.note ? ' (' + _clEsc(b.ts.note.slice(0, 60)) + ')' : ''}`).join(' · ')}</p>` : '') +
-    (waiting.length ? `<p class="text-xs mt-2" style="color:#92400e">รอฝ่ายภายนอกอนุมัติ: ${waiting.map(ph => _clEsc(_clShort(ph))).join(', ')} — ทำเฟสอื่นระหว่างรอ</p>` : '');
+    (blocked.length ? `<p class="text-xs mt-2" style="color:var(--bad-ink)"><b>ติดปัญหา ${blocked.length} งาน:</b> ${blocked.map(b => `<a href="#" onclick="clJump('${b.ph.id}','${b.tk.steps[0] ? b.tk.steps[0].id : ''}');return false;" style="color:var(--bad-ink);text-decoration:underline">${_clEsc(b.tk.name)}</a>${b.ts.note ? ' (' + _clEsc(b.ts.note.slice(0, 60)) + ')' : ''}`).join(' · ')}</p>` : '') +
+    (waiting.length ? `<p class="text-xs mt-2" style="color:var(--amber-ink)">รอฝ่ายภายนอกอนุมัติ: ${waiting.map(ph => _clEsc(_clShort(ph))).join(', ')} — ทำเฟสอื่นระหว่างรอ</p>` : '');
 }
 
 function _clRenderPhases(di, locked) {
@@ -192,7 +192,7 @@ function _clRenderPhases(di, locked) {
     if (onlyOpen && !tasks.length) return '';
     return `<section class="card p-4 mt-4" id="cl-${ph.id}" style="border-top:3px solid ${ps.complete ? '#047857' : mode === 'blocked' ? '#b91c1c' : '#0f766e'}">
       <div class="cl-phase-head"><h3 class="text-base font-bold">${_clEsc(ph.name)}</h3><span class="text-sm font-bold" style="color:var(--teal-ink)">${ps.done}/${ps.total}</span>
-        <span class="text-xs" style="color:var(--text-muted)">ผู้รับผิดชอบ: ${_clEsc(ph.owner)} · วันที่ ${ph.days[0] + 1}–${ph.days[1]} ของโครงการ${mode === 'waiting' ? ' · <b style="color:#92400e">อยู่ในช่วงรออนุมัติ</b>' : ''}</span></div>
+        <span class="text-xs" style="color:var(--text-muted)">ผู้รับผิดชอบ: ${_clEsc(ph.owner)} · วันที่ ${ph.days[0] + 1}–${ph.days[1]} ของโครงการ${mode === 'waiting' ? ' · <b style="color:var(--amber-ink)">อยู่ในช่วงรออนุมัติ</b>' : ''}</span></div>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">${_clHl(ph.why)}</p>
       ${tasks.map(tk => {
         const ts = _clTaskState(tk);

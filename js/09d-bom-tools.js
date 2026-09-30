@@ -424,11 +424,11 @@ function openMonthlyPackDialog() {
   dlg.innerHTML = `
     <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:4px;padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
       <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">Export Monthly Review Pack</h3>
-      <p style="font-size:12px;color:#64748b;margin:0 0 16px">รายงานสรุปรายเดือน — ภาพรวม, P&L รายสาขา, Top SKU, วัตถุดิบ, alerts, action items</p>
-      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:4px">เดือน (YYYY-MM)</label>
+      <p style="font-size:12px;color:var(--text-muted);margin:0 0 16px">รายงานสรุปรายเดือน — ภาพรวม, P&L รายสาขา, Top SKU, วัตถุดิบ, alerts, action items</p>
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:4px">เดือน (YYYY-MM)</label>
       <input id="mpackMonth" type="month" value="${defMonth}"
              style="width:100%;padding:8px 10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:13px;background:var(--bg-input,#fff);color:inherit;margin-bottom:14px">
-      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">รูปแบบไฟล์</label>
+      <label style="display:block;font-size:12px;color:var(--text-muted);margin-bottom:6px">รูปแบบไฟล์</label>
       <div style="display:flex;gap:10px;margin-bottom:18px">
         <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;cursor:pointer">
           <input type="radio" name="mpackFmt" value="xlsx" checked> <span style="font-size:13px">Excel (.xlsx)</span>

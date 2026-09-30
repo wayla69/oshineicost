@@ -143,7 +143,7 @@ function renderEngTable() {
         <td class="py-2 pr-3 text-right">${i.margin_per_unit != null ? '' + i.margin_per_unit.toFixed(1) : '—'}</td>
         <td class="py-2 pr-3 text-right">${i.margin_pct != null ? i.margin_pct.toFixed(1) + '%' : '—'}</td>
         <td class="py-2 text-right">
-          <span style="font-weight:600;color:${textInk(QUAD_COLORS[i.quadrant]||'#94a3b8')}">${QUAD_BADGE[i.quadrant] || (i.has_cost ? '—' : 'ไม่มีต้นทุน')}</span>
+          <span style="font-weight:600;color:${textInk(QUAD_COLORS[i.quadrant]||'var(--text-muted)')}">${QUAD_BADGE[i.quadrant] || (i.has_cost ? '—' : 'ไม่มีต้นทุน')}</span>
         </td>
       </tr>`).join('');
 }
@@ -192,7 +192,7 @@ async function openBillItems(row = {}) {
       ['สาขา', esc(rw.branch || '—')],
       ['ลูกค้า', fmtN(rw.cust || 0)],
       ['รายได้ก่อนลด', fmt(gross)],
-      ['ส่วนลดบิล', disc ? `<span style="color:#f59e0b">−${fmt(disc)}</span>` : '—'],
+      ['ส่วนลดบิล', disc ? `<span style="color:var(--amber-ink)">−${fmt(disc)}</span>` : '—'],
       ['รายได้สุทธิ', `<span style="color:var(--accent)">${fmt(net)}</span>`],
       ['COGS (BoM)', fmt(cogs)],
       [gp >= 0 ? 'กำไรขั้นต้น' : 'ขาดทุนสุทธิ',
@@ -320,7 +320,7 @@ async function openDiscountBills(opts = {}) {
     ${[['บิลมีส่วนลด', fmtN(s.bills||0)],['ส่วนลดรวม', fmt(s.total_discount||0)],['เฉลี่ย/บิล', fmt(s.avg_discount||0)],['สูงสุด', fmt(s.max_discount||0)],['พิมพ์ซ้ำ (>1x)', `<span class="${(s.reprinted_bills||0)>0?'text-orange-600 font-bold':''}">${fmtN(s.reprinted_bills||0)}</span>`]]
       .map(([k,v])=>`<div class="p-3 rounded-lg bg-slate-50 text-center"><p class="text-xs text-slate-500">${k}</p><p class="text-lg font-bold text-slate-800">${v}</p></div>`).join('')}
   </div>
-  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:var(--bad-ink)">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:#ea580c">เฉพาะ Reprint</b>':''}</p>`;
+  <p class="text-xs text-slate-400 mb-2">ไฮไลต์แดง = ส่วนลดเกิน p95 (${fmt(s.p95_discount||0)}) · ไฮไลต์ส้ม = Reprint · แสดง ${fmtN(s.returned||0)} บิลแรก${opts.payment?` · กรองเฉพาะ <b style="color:var(--bad-ink)">${esc(opts.payment)}</b>`:''}${opts.reprinted_only?' · <b style="color:var(--orange-ink)">เฉพาะ Reprint</b>':''}</p>`;
   if (!d.bills.length) { body.innerHTML = '<p class="text-sm text-slate-400 py-6 text-center">ไม่มีบิลส่วนลดในขอบเขตนี้</p>'; return; }
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
@@ -643,7 +643,7 @@ async function loadDiscountReasons(params, gen) {
     const up = d.untyped_pct || 0, tp = Math.max(0, 100 - up);
     splitEl.innerHTML = (d.total_amount ? `
       <div class="flex items-center justify-between text-[11px] mb-1">
-        <span style="color:#f59e0b;font-weight:700">⚠ ไม่ระบุเหตุผล ${up.toFixed(0)}%</span>
+        <span style="color:var(--amber-ink);font-weight:700">⚠ ไม่ระบุเหตุผล ${up.toFixed(0)}%</span>
         <span style="color:var(--good-ink);font-weight:700">ระบุเหตุผล ${tp.toFixed(0)}% ✓</span>
       </div>
       <div class="flex w-full rounded-full overflow-hidden" style="height:14px;background:#e2e8f0">
@@ -656,7 +656,7 @@ async function loadDiscountReasons(params, gen) {
     const unty = r.reason_id === 0;
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     return `<tr class="border-t border-slate-100">
-      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:#f59e0b' : ''}">${unty ? '⚠ ' : ''}${esc(r.reason)}</td>
+      <td class="py-1.5 pr-2 font-medium" style="${unty ? 'color:var(--amber-ink)' : ''}">${unty ? '⚠ ' : ''}${esc(r.reason)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(r.amount)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.pct}%</td>
@@ -705,7 +705,7 @@ async function loadCouponSeries(params, gen) {
   ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px] truncate" style="color:var(--text-muted)">${k.s2}</p></div>`).join('');
   const maxAmt = Math.max(1, ...s.map(r => r.amount || 0));
   const momCell = v => v == null ? '<span class="text-slate-300">—</span>'
-    : `<span style="color:${v === 0 ? '#94a3b8' : (v > 0 ? 'var(--bad-ink)' : 'var(--good-ink)')};font-weight:600">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
+    : `<span style="color:${v === 0 ? 'var(--text-muted)' : (v > 0 ? 'var(--bad-ink)' : 'var(--good-ink)')};font-weight:600">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
@@ -713,7 +713,7 @@ async function loadCouponSeries(params, gen) {
       <td class="num tabular text-slate-400">${i + 1}</td>
       <td class="font-medium">${esc(r.name)}${inactive ? ' <span class="text-[10px] text-slate-400">(ปิดใช้)</span>' : ''}${r.code && r.code !== r.name ? `<div class="text-[10px] text-slate-400">${esc(r.code)}</div>` : ''}</td>
       <td class="num tabular text-slate-500">${fmtN(r.uses)}</td>
-      <td class="num tabular font-semibold" style="color:#f59e0b">${fmt(r.amount)}</td>
+      <td class="num tabular font-semibold" style="color:var(--amber-ink)">${fmt(r.amount)}</td>
       <td class="num tabular text-slate-500">${fmt(r.avg)}</td>
       <td class="num tabular">${r.pct}%</td>
       <td class="num tabular">${momCell(r.mom_pct)}</td>
@@ -776,7 +776,7 @@ async function loadCouponDrill() {
     return `<tr class="border-t border-slate-100">
       <td class="py-1.5 pr-2">${esc(r.label)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.uses)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#f59e0b">${fmt(r.amount)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--amber-ink)">${fmt(r.amount)}</td>
       <td class="py-1.5" style="min-width:120px"><div style="background:var(--bg-subtle);border-radius:3px;overflow:hidden"><div style="width:${w}%;min-width:2px;height:8px;background:#f59e0b"></div></div></td>
     </tr>`;
   }).join('') || '<tr><td colspan="4" class="py-3 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
@@ -897,7 +897,7 @@ async function loadPaymentDiscount(params, gen) {
     return `<div class="flex items-center gap-2 py-1">
       <span class="text-xs truncate ${isCash?'font-semibold text-red-600':'text-slate-600'}" style="width:108px" title="${esc(m.code)}">${esc(m.code)}</span>
       <div class="flex-1" style="background:var(--accent-soft);border-radius:4px;overflow:hidden"><div style="width:${w}%;height:16px;background:${isCash?'#ef4444':'#4a70b0'};border-radius:4px"></div></div>
-      <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'var(--bad-ink)':'#64748b'}">${m.disc_pct}%</b></span>
+      <span class="text-xs tabular-nums" style="width:96px;text-align:right">${fmtN(m.bills)} · <b style="color:${heavy?'var(--bad-ink)':'var(--text-muted)'}">${m.disc_pct}%</b></span>
     </div>`;
   }).join('');
 }
@@ -939,7 +939,7 @@ async function loadDiscountLeakage(params, gen) {
     const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(2) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain.toFixed(2) : '–') + ' ค่าเฉลี่ย';
     const reason = b.top_reason ? esc(b.top_reason) : '—';
     const untyped = b.top_reason && b.top_reason.indexOf('ไม่ระบุ') >= 0;
-    const reasonColor = untyped ? '#b45309' : '#475569';
+    const reasonColor = untyped ? 'var(--amber-ink)' : 'var(--text-secondary)';
     const reasonPct = b.top_reason_pct ? ` (${Math.round(b.top_reason_pct)}%)` : '';
     return `<div class="card p-3 cursor-pointer hover:ring-2 hover:ring-indigo-200 ${abn ? 'ring-2 ring-red-300' : ''}"
         ${abn ? 'style="background:#fff7f7"' : ''}
@@ -1105,7 +1105,7 @@ async function loadDiscountsTab() {
       + rows.map(r => { const m=META[r.grp]||{c:'#94a3b8'}, share=(r.baht||0)/tot*100;
         return `<div class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-indigo-50/60 border-b border-slate-50" ${_discPatternDrillAttr(r.grp)}>
           <span style="width:11px;height:11px;border-radius:3px;background:${m.c};flex:none"></span>
-          <span class="text-sm ${m.heavy?'font-semibold':''}" style="color:${m.heavy?textInk(m.c):'#334155'}">${esc(r.grp)}</span>
+          <span class="text-sm ${m.heavy?'font-semibold':''}" style="color:${m.heavy?textInk(m.c):'var(--text-primary)'}">${esc(r.grp)}</span>
           <span class="text-[10px] text-slate-400">${fmtN(r.bills)} บิล</span>
           <span class="ml-auto text-sm font-bold tabular-nums" style="color:${textInk(m.c)}">${share.toFixed(0)}%</span>
           <span class="text-xs text-slate-500 tabular-nums" style="width:74px;text-align:right">${fmt(r.baht)}</span>
@@ -1487,7 +1487,7 @@ async function tfDrillBranch(branchName, cardEl) {
       ? `<div class="flex gap-4 flex-wrap">
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#f0fdf4;color:#047857">Turn time ≈ <b>${br.avg_turn_min ?? '—'} min</b></span>
            <span class="px-3 py-1.5 rounded-lg text-xs" style="background:var(--accent-soft);color:var(--accent)">รอบโต๊ะ <b>${br.turns?.toLocaleString()||'—'}</b> ครั้ง</span>
-           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#d97706">เฉลี่ย <b>${br.avg_covers_per_turn ?? '—'}</b> คน/รอบ</span>
+           <span class="px-3 py-1.5 rounded-lg text-xs" style="background:#fffbeb;color:#a44a08">เฉลี่ย <b>${br.avg_covers_per_turn ?? '—'}</b> คน/รอบ</span>
          </div>`
       : '<p style="color:var(--text-muted)">ไม่มีข้อมูลหมุนเวียนโต๊ะสำหรับสาขานี้</p>';
   }
@@ -1579,7 +1579,7 @@ function renderTimeflowGrid() {
   let html = `<table style="border-collapse:separate;border-spacing:3px 3px;font-size:11px;width:100%">
     <thead><tr>
       <th style="width:42px;text-align:left"></th>
-      ${openHours.map(h => `<th style="text-align:center;font-size:10px;color:#64748b;font-weight:600;padding-bottom:4px">${h}</th>`).join('')}
+      ${openHours.map(h => `<th style="text-align:center;font-size:10px;color:var(--text-muted);font-weight:600;padding-bottom:4px">${h}</th>`).join('')}
     </tr></thead>
     <tbody>`;
 
@@ -1592,7 +1592,7 @@ function renderTimeflowGrid() {
   rankData.forEach((r,i) => rankMap[`${r.dow}_${r.h}`] = i + 1);
 
   for (let dow = 0; dow < 7; dow++) {
-    html += `<tr><td style="font-size:11px;color:#475569;padding:2px 6px 2px 0;font-weight:600;white-space:nowrap">${DOW_LABELS[dow]}</td>`;
+    html += `<tr><td style="font-size:11px;color:var(--text-secondary);padding:2px 6px 2px 0;font-weight:600;white-space:nowrap">${DOW_LABELS[dow]}</td>`;
     for (const h of openHours) {
       const v = cellMap[`${dow}_${h}`] || 0;
       const { bg, fg } = cellColor(v / maxVal);
@@ -1610,7 +1610,7 @@ function renderTimeflowGrid() {
   }
 
   html += `</tbody></table>
-  <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10px;color:#64748b">
+  <div style="display:flex;align-items:center;gap:6px;margin-top:10px;font-size:10px;color:var(--text-muted)">
     <span style="opacity:.7">น้อย</span>
     ${[0,0.25,0.5,0.75,1].map(t=>`<div style="width:28px;height:8px;background:${heatColor(t,false)};border-radius:3px"></div>`).join('')}
     <span style="opacity:.7">มาก</span>

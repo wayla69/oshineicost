@@ -380,7 +380,7 @@ async function loadMCE() {
     ['Top 5 เมนู = % ต้นทุน', top5cost.toFixed(0) + '%',   '#f59e0b'],
     ['เมนูเสิร์ฟเยอะ+แพง',  hotCount + ' เมนู',         '#dc2626'],
     ['ต้นทุน/จาน เฉลี่ย',   fmt(avgCps),                   '#7a66b8'],
-  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-secondary)">${l}</span></span>`).join('');
 
   // Quadrant scatter
   window._mce2Data = d.items;
@@ -487,7 +487,7 @@ function renderMce2Table(col, dir) {
     // ABC badge
     const abc = abcMap[r.sku_code] || 'C';
     const abcColor = abc === 'A' ? '#ef4444' : abc === 'B' ? '#f59e0b' : '#94a3b8';
-    const abcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${abcColor}20;color:${textInk(abcColor)}">${abc}</span>`;
+    const abcBadge = `<span class="inline-block px-1 rounded text-[9px] font-bold" style="background:${abcColor}20;color:${abc === 'C' ? 'var(--text-secondary)' : textInk(abcColor)}">${abc}</span>`;
 
     // Source badge
     const src = r.cost_source || 'none';
@@ -515,7 +515,7 @@ function renderMce2Table(col, dir) {
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.servings)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${r.serving_pct.toFixed(1)}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.cost)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.cost_pct >= 5 ? 'var(--bad-ink)' : r.cost_pct >= 2 ? '#f59e0b' : 'inherit'}">${r.cost_pct.toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.cost_pct >= 5 ? 'var(--bad-ink)' : r.cost_pct >= 2 ? 'var(--amber-ink)' : 'inherit'}">${r.cost_pct.toFixed(1)}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cost_per_serving)}</td>
       <td class="py-1.5 text-right tabular-nums">${fcCell}</td>
     </tr>`;
@@ -552,7 +552,7 @@ async function loadMce2Ingredients() {
     ['ต้นทุนวัตถุดิบรวม', fmt(grand), '#7a66b8'],
     ['Top 3 = % ต้นทุน',  top3pct.toFixed(0) + '%', '#f59e0b'],
     ['จำนวนวัตถุดิบ', String(ing.length), '#4a70b0'],
-  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-secondary)">${l}</span></span>`).join('');
 
   const top20 = ing.slice(0, 20);
   mkChart('mce2IngBar', {
@@ -577,7 +577,7 @@ async function loadMce2Ingredients() {
       <td class="py-1.5 pr-2 font-medium">${i < 3 ? '' : ''}${esc(r.name || r.code || '')}</td>
       <td class="py-1.5 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.type || '')}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.total_cost)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.pct >= 10 ? '#7a66b8' : 'inherit'}">${(r.pct || 0).toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${textInk(r.pct >= 10 ? '#7a66b8' : 'inherit')}">${(r.pct || 0).toFixed(1)}%</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${r.n_menus || 0}</td>
     </tr>`).join('');
 }
@@ -887,7 +887,7 @@ function renderMce2CategoryRollup() {
       <td class="py-1.5 pr-2 font-medium">${i < 3 ? '★ ' : ''}${esc(c.name)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">${c.count}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(c.cost)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${c.cost_pct >= 20 ? 'var(--bad-ink)' : c.cost_pct >= 10 ? '#f59e0b' : 'inherit'}">${c.cost_pct.toFixed(1)}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${c.cost_pct >= 20 ? 'var(--bad-ink)' : c.cost_pct >= 10 ? 'var(--amber-ink)' : 'inherit'}">${c.cost_pct.toFixed(1)}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${textInk(fcColor)}">${c.fc_rate != null ? c.fc_rate.toFixed(1) + '%' : '—'}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(Math.round(c.avg_cps))}</td>
     </tr>`;
@@ -927,7 +927,7 @@ async function loadMce2Coverage() {
     ['มีสูตร BoM',         `${bomCount} (${(bomCount/total*100).toFixed(0)}%)`, '#10b981'],
     ['Cost เท่านั้น',      `${scCount} เมนู`,                       '#f59e0b'],
     ['ไม่มีข้อมูลต้นทุน', `${noneCount} เมนู · ฿${fmt(noneCost)}`, '#ef4444'],
-  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-muted)">${l}</span></span>`).join('');
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-secondary)">${l}</span></span>`).join('');
 
   // Donut chart
   mkChart('mce2CovDonut', {
@@ -1178,7 +1178,7 @@ async function loadBuffetPerformance() {
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${label}</p>
       <p class="text-lg font-bold" style="color:${textInk(color)}">${value}</p>
-      <p class="text-[10px] text-slate-400">${sub}</p>
+      <p class="text-[10px] text-slate-500">${sub}</p>
     </div>`;
   document.getElementById('bperfKpiRow').innerHTML = [
     kpiCard('รายได้รวม',         _fmtBaht(cRev),                            `รวมทุก SKU (บุฟเฟ่ต์ + อลาคาท)`,                '#4a70b0'),
@@ -2243,11 +2243,11 @@ async function loadHeavyEaterTail() {
     </div>`).join('') || '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>';
   document.getElementById('hetParty').innerHTML = (d.by_party_size || []).map(r => `<tr class="border-t border-slate-100">
     <td class="py-1 pr-2 font-medium">${esc(r.k)}</td>
-    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 5 ? 'var(--bad-ink)' : r.loss_cover_pct > 2 ? '#f59e0b' : 'var(--good-ink)'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 5 ? 'var(--bad-ink)' : r.loss_cover_pct > 2 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${r.loss_cover_pct}%</td>
     <td class="py-1 text-right tabular-nums">${fmt(r.avg_margin_head)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
   document.getElementById('hetBranch').innerHTML = (d.by_branch || []).slice(0, 8).map(r => `<tr class="border-t border-slate-100">
     <td class="py-1 pr-2 font-medium">${esc(r.branch)}</td>
-    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 3 ? 'var(--bad-ink)' : '#f59e0b'}">${r.loss_cover_pct}%</td>
+    <td class="py-1 pr-2 text-right tabular-nums font-semibold" style="color:${r.loss_cover_pct > 3 ? 'var(--bad-ink)' : 'var(--amber-ink)'}">${r.loss_cover_pct}%</td>
     <td class="py-1 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.loss_amount)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-3 text-center text-slate-400">—</td></tr>';
 }
 
@@ -2275,7 +2275,7 @@ async function loadTurnEfficiency() {
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.cov_per_tab != null ? r.cov_per_tab : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${(ch.gp_cover && r.gp_cover < ch.gp_cover) ? 'var(--bad-ink)' : 'var(--good-ink)'}">${r.gp_cover != null ? fmt(r.gp_cover) : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${r.gp_per_table_occasion != null ? fmt(r.gp_per_table_occasion) : '—'}</td>
-    <td class="py-1.5 text-right tabular-nums font-bold" style="color:${r.gp_per_table_min == null ? '#94a3b8' : r.gp_per_table_min >= (ch.gp_per_table_min || 0) ? 'var(--good-ink)' : '#f59e0b'}">${r.gp_per_table_min != null ? r.gp_per_table_min : '—'}</td>
+    <td class="py-1.5 text-right tabular-nums font-bold" style="color:${r.gp_per_table_min == null ? 'var(--text-muted)' : r.gp_per_table_min >= (ch.gp_per_table_min || 0) ? 'var(--good-ink)' : 'var(--amber-ink)'}">${r.gp_per_table_min != null ? r.gp_per_table_min : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูลการหมุนโต๊ะ</td></tr>';
 }
 
@@ -2306,7 +2306,7 @@ async function loadBuffetGP() {
     `<div class="rounded-lg p-3 border" style="background:${clr}10;border-color:${clr}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${lbl}</p>
       <p class="text-lg font-bold" style="color:${textInk(clr)}">${val}</p>
-      <p class="text-[10px] text-slate-400">${sub}</p>
+      <p class="text-[10px] text-slate-500">${sub}</p>
     </div>`;
   document.getElementById('gpBomKpis').innerHTML = [
     kpi('Revenue (period)',    fmt(pt.revenue),                       'ex-VAT · ช่วงที่เลือก',          '#4a70b0'),
@@ -2843,7 +2843,7 @@ async function saveFixedCosts() {
     if (le) { const v = parseFloat(le.value); if (!isNaN(v)) lcPayload[b.name] = v; }
   });
   const st = document.getElementById('fixedCostStatus');
-  st.textContent = 'กำลังบันทึก…'; st.style.color = '#94a3b8';
+  st.textContent = 'กำลังบันทึก…'; st.style.color = 'var(--text-muted)';
   const [r1, r2] = await Promise.all([
     api(`${API}/api/branches/fixed-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: fcPayload }) }).catch(() => null),
     api(`${API}/api/branches/labor-costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ costs: lcPayload }) }).catch(() => null),

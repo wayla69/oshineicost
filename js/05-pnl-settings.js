@@ -535,8 +535,8 @@ async function loadFoodCostTrend() {
           <p class="text-[10px] text-slate-500">รายได้/เสิร์ฟ ${fmtN(last.rev_per_serving || 0)}</p>
         </div>
         <div class="rounded-lg border px-3 py-2 on-light" style="background:${(last.cost_pct||0)>parseFloat(threshold)?'#fef2f2':'#f0fdf4'};border-color:${(last.cost_pct||0)>parseFloat(threshold)?'#fecaca':'#bbf7d0'}">
-          <p class="text-[10px] font-semibold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">% Food Cost</p>
-          <p class="text-base font-bold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
+          <p class="text-[10px] font-semibold" style="color:${textInk((last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857')}">% Food Cost</p>
+          <p class="text-base font-bold" style="color:${textInk((last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857')}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
           ${dPct != null ? `<p class="text-[10px]" style="color:${textInk(trendColor)}">${trendIcon} ${Math.abs(dPct).toFixed(1)}pp เทียบเดือนก่อน</p>` : ''}
         </div>
       </div>`;
@@ -946,7 +946,7 @@ function renderCostAnalysisBar() {
   el.innerHTML = [
     stat('Active SKUs',    fmtN(s.total_skus), '#4a70b0'),
     hasCosts ? stat('Avg Margin',    (s.overall_margin_pct?.toFixed(1)||'—')+'%', s.overall_margin_pct>=60?'#10b981':s.overall_margin_pct>=40?'#f59e0b':'#ef4444') : stat('Costed SKUs', '0 / '+s.total_skus, '#f59e0b'),
-    p20 >= 0 ? stat('80% Rev in',    (p20+1)+' SKUs', '#0f172a') : '',
+    p20 >= 0 ? stat('80% Rev in',    (p20+1)+' SKUs', 'var(--text-primary)') : '',
     '<hr class="border-slate-100">',
     topList,
   ].join('');
@@ -996,7 +996,7 @@ function renderCostDetail() {
       : mpv >= 60 ? '#10b981'
       : mpv >= 40 ? '#f59e0b' : '#ef4444';
     const mpShow = !priced
-      ? '<span class="text-[10px] font-normal" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      ? '<span class="text-[10px] font-normal" style="color:var(--amber-ink)" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
       : (mpv != null ? mpv.toFixed(1)+'%' : '<span class="text-slate-300 font-normal">—</span>');
     return `<tr class="border-t border-slate-100">
       <td class="py-2 pr-2 text-slate-400 text-xs">${i+1}</td>
@@ -1549,7 +1549,7 @@ function renderMenuPresetSelect() {
 const _costSaveTimers = {};
 function debounceCostSave(skuId, skuCode) {
   const stat = document.getElementById(`cost-stat-${skuId}`);
-  if (stat) { stat.textContent = '…'; stat.style.color = '#94a3b8'; }
+  if (stat) { stat.textContent = '…'; stat.style.color = 'var(--text-muted)'; }
   clearTimeout(_costSaveTimers[skuId]);
   _costSaveTimers[skuId] = setTimeout(() => saveCostRow(skuId, skuCode), 800);
 }
@@ -1567,7 +1567,7 @@ async function saveCostRow(skuId, skuCode) {
     return;
   }
   inp.style.borderColor = '';
-  if (stat) { stat.textContent = '…'; stat.style.color = '#94a3b8'; }
+  if (stat) { stat.textContent = '…'; stat.style.color = 'var(--text-muted)'; }
   try {
     const res  = await fetch(`${API}/api/cost`, {
       method: 'POST',
@@ -1577,7 +1577,7 @@ async function saveCostRow(skuId, skuCode) {
     const data = await res.json();
     if (data.skipped_price_as_cost) {   // guard rejected it as price-as-cost
       inp.style.borderColor = '#f59e0b';
-      if (stat) { stat.textContent = '⚠'; stat.style.color = '#f59e0b';
+      if (stat) { stat.textContent = '⚠'; stat.style.color = 'var(--amber-ink)';
         stat.title = 'ค่านี้ใกล้เคียงราคาขาย (×1.07) — ดูเหมือนราคา ไม่ใช่ต้นทุน · looks like price, not cost'; }
       return;
     }
@@ -2162,9 +2162,9 @@ async function loadHeavyEaters(force) {
   const H = d.heavy || {}, L = d.loss || {};
   document.getElementById('heCallouts').innerHTML = `
     <div class="card p-4" style="background:#fffbeb;border:1px solid #f59e0b">
-      <p class="text-sm font-bold" style="color:#b45309">นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
-      <p class="text-2xl font-bold mt-1" style="color:#b45309">${fmtN(H.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${H.pct_bills || 0}% ของบิล)</span></p>
-      <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? 'var(--bad-ink)' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
+      <p class="text-sm font-bold" style="color:var(--amber-ink)">นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
+      <p class="text-2xl font-bold mt-1" style="color:var(--amber-ink)">${fmtN(H.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${H.pct_bills || 0}% ของบิล)</span></p>
+      <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? 'var(--bad-ink)' : 'var(--amber-ink)'}">${fmt(H.avg_margin_head || 0)}</b></p>
     </div>
     <div class="card p-4" style="background:#fef2f2;border:1px solid #ef4444">
       <p class="text-sm font-bold" style="color:var(--bad-ink)">บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
