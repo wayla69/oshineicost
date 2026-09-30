@@ -13,6 +13,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from main import get_db, _menucmp_agg, _FOOD_CATEGORY_FILTER
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 BRANCHES = ['โคราช1', 'เชียงใหม่', 'สุรินทร์', 'อุดรธานี', 'อุบลราชธานี']
 MONTHS = ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05']
@@ -584,10 +585,10 @@ scallop_head_may = sum(head('2026-05', s) for s in scallop_grp)
 salmon_sids = find('แซลมอน ซาชิมิ')
 covers5 = cov['2026-05']
 
-CSS = """
+CSS = font_face_css() + """
 :root{--ink:#1e293b;--mut:#64748b;--line:#e2e8f0;--acc:#16294d;--red:#dc2626;--grn:#059669;--bg:#f8fafc}
 *{box-sizing:border-box}
-body{font-family:'Segoe UI','Leelawadee UI','Noto Sans Thai',Tahoma,sans-serif;color:var(--ink);margin:0;background:#fff;font-size:13px;line-height:1.55}
+body{font-family:'KIRA UI','Noto Sans Thai',sans-serif;color:var(--ink);margin:0;background:#fff;font-size:13px;line-height:1.55}
 .page{max-width:1080px;margin:0 auto;padding:28px 36px}
 h1{font-size:25px;margin:0 0 4px;color:#0f172a}
 h2{font-size:17.5px;margin:30px 0 8px;color:var(--acc);border-bottom:2px solid var(--acc);padding-bottom:4px}

@@ -11,6 +11,7 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from rules import discount_excess, discount_policy_pct  # noqa: E402
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 DATE_FROM, DATE_TO = "2026-01-01", "2026-05-31"
 BRANCH_IDS = {"surin": 24, "ubon": 26}
@@ -197,7 +198,7 @@ MONTH_SHORT = {"2026-01": "ม.ค.", "2026-02": "ก.พ.", "2026-03": "มี.
 # ── CSS (preserved, re-toned to a neutral teal review palette) ───────────────
 CSS = """
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Sarabun',sans-serif;font-size:13px;color:#1e293b;background:#e2e8f0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+body{font-family:'KIRA UI','Noto Sans Thai',sans-serif;font-size:13px;color:#1e293b;background:#e2e8f0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 :root{--teal:#1f3a6b;--rd:#dc2626;--am:#d97706;--em:#16a34a}
 .cover{width:100%;min-height:100vh;background:#134e4a;display:flex;flex-direction:column;justify-content:center;align-items:flex-start;padding:70px 80px;color:#fff;page-break-after:always}
 .cover-tag{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);padding:5px 14px;border-radius:4px;font-size:11px;letter-spacing:2px;text-transform:uppercase;margin-bottom:28px;display:inline-block}
@@ -267,7 +268,7 @@ def generate(db_data):
     add(f"""<!DOCTYPE html><html lang="th"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>รายงานทบทวนส่วนลด — สุรินทร์ &amp; อุบลฯ (Discount Review)</title>
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+<style>{font_face_css()}</style>
 <style>{CSS}</style></head><body>""")
 
     # ── COVER ────────────────────────────────────────────────────────────────

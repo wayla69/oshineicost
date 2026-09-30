@@ -30,6 +30,7 @@ import sqlite3
 import sys
 
 import rules   # the app's own revenue / cost definitions
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 # ── locate things ────────────────────────────────────────────────────────────
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -172,7 +173,7 @@ CSS = """
 }
 *{box-sizing:border-box}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-body{font-family:'IBM Plex Sans Thai','Sarabun',-apple-system,'Segoe UI',Tahoma,sans-serif;
+body{font-family:'KIRA UI','Noto Sans Thai',sans-serif;
   color:var(--ink);background:#EDEFF0;margin:0;line-height:1.62;font-size:14px}
 .page{width:210mm;min-height:296mm;margin:0 auto 9mm;padding:19mm 18mm 16mm;background:var(--bg);
   position:relative;box-shadow:0 1px 8px rgba(0,0,0,.07)}
@@ -597,9 +598,7 @@ def build_html(period, overview, branches, gen_dt, db_path, scope_label="Master"
     head = (f'<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">'
             f'<meta name="viewport" content="width=device-width,initial-scale=1">'
             f'<title>Top 60 ต้นทุน/หัว สาขา {scope_label} — {th_period}</title>'
-            f'<link rel="preconnect" href="https://fonts.googleapis.com">'
-            f'<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700'
-            f'&family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">'
+            f'<style>{font_face_css()}</style>'
             f'<style>{CSS}</style></head><body>{pdfbtn}')
     return head + "".join(pages) + "</body></html>"
 

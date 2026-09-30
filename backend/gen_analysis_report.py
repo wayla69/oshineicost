@@ -13,6 +13,7 @@ All numbers are pulled from the same unified-COGS endpoints the dashboard uses,
 so the report reconciles exactly with the app (no hand-typed figures).
 """
 import argparse, json, os, urllib.request
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 # ── data access ─────────────────────────────────────────────────────────────
 def fetch(api, path):
@@ -179,9 +180,10 @@ def build(api, gen_date, group, scope_label, out_name):
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Oshinei Enterprise — Business Analysis Report · {period}</title>
 <style>
+{font_face_css()}
 :root{{--ink:#0f172a;--mut:#64748b;--line:#e2e8f0;--indigo:#1f3a6b;--em:#10b981;--am:#f59e0b;--rd:#ef4444;--bg:#f8fafc}}
 *{{box-sizing:border-box}}
-body{{font-family:"Sarabun","Segoe UI",-apple-system,Roboto,sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.55;font-size:15px}}
+body{{font-family:'KIRA UI','Noto Sans Thai',sans-serif;color:var(--ink);background:var(--bg);margin:0;line-height:1.55;font-size:15px}}
 .wrap{{max-width:1080px;margin:0 auto;padding:0 24px 80px}}
 .cover{{background:#16294d;color:#fff;padding:54px 48px;border-radius:0 0 24px 24px;margin-bottom:34px}}
 .cover .eyebrow{{text-transform:uppercase;letter-spacing:3px;font-size:12px;opacity:.85;font-weight:600}}
