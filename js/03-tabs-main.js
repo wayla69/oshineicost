@@ -916,7 +916,7 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card kpi-neu p-4">
       <div class="kpi-card-top"><p class="kpi-label">ยอดบิลเฉลี่ย <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p></div>
-      <p class="kpi-value" style="color:#06b6d4">${fmtN(d.tx_count ? revShown / d.tx_count : 0)}</p>
+      <p class="kpi-value" style="color:var(--cyan-ink)">${fmtN(d.tx_count ? revShown / d.tx_count : 0)}</p>
       <div class="kpi-card-bottom"><p class="kpi-sub">ต่อใบเสร็จ</p></div>
     </div>
     <div class="card kpi-card kpi-neu p-4">

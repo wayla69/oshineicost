@@ -740,8 +740,10 @@ const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\
 const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c', '#ef4444'];
 // Teal and rose (categories, the ordering/checklist accent): #0d9488 3.74 and #f43f5e 3.67:1 on white.
 const _TEAL_HEX = ['#0d9488', '#14b8a6', '#0f766e'], _ROSE_HEX = ['#f43f5e', '#e11d48', '#be123c'];
-const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)'
-  : _TEAL_HEX.includes(c) ? 'var(--teal-ink)' : _ROSE_HEX.includes(c) ? 'var(--rose-ink)' : c;
+// Cyan and sky (margin %, delivery, links): #0891b2 3.68, #06b6d4 2.43, #0ea5e9 2.77:1 on white.
+const _CYAN_HEX = ['#06b6d4', '#0891b2', '#0e7490'], _SKY_HEX = ['#0ea5e9', '#0284c7', '#0369a1'];
+const _INK_OF = [[_GOOD_HEX, 'good'], [_BAD_HEX, 'bad'], [_TEAL_HEX, 'teal'], [_ROSE_HEX, 'rose'], [_CYAN_HEX, 'cyan'], [_SKY_HEX, 'sky']];
+const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); return k ? `var(--${k[1]}-ink)` : c; };
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
@@ -1782,7 +1784,7 @@ function renderOpportunities(d) {
       <td class="py-1 pr-2 font-semibold">${esc(g.branch)}</td><td class="py-1 pr-2">${esc(g.description)}</td>
       <td class="py-1 pr-2" style="color:var(--text-muted)">${esc(g.category)}</td>
       <td class="py-1 pr-2 text-right">${fmtN(g.branch_qty)}</td><td class="py-1 pr-2 text-right">${fmtN(g.chain_qty)}</td>
-      <td class="py-1 pr-2 text-right font-semibold" style="color:#0ea5e9">+${fmtN(g.potential_qty)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:var(--sky-ink)">+${fmtN(g.potential_qty)}</td>
       <td class="py-1" style="color:var(--text-muted)">${esc(g.note)}</td></tr>`).join('')}</tbody></table>`
     : _oppEmpty('ไม่พบช่องว่างเด่น (ต้องเป็นเมนูที่ขายใน ≥5 สาขา) — ลองเลือกทุกสาขา/ขยายช่วงเดือน');
 
