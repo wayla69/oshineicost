@@ -694,33 +694,118 @@ body.dark .text-rose-800, body.dark .text-rose-900 { color: var(--rose-ink) !imp
 .text-sky-600, .text-sky-700 { color: var(--sky-ink) !important; }
 body.dark .text-cyan-800, body.dark .text-cyan-900 { color: var(--cyan-ink) !important; }
 body.dark .text-sky-800, body.dark .text-sky-900 { color: var(--sky-ink) !important; }
-/* Dark mode leaves some backgrounds light, and the pale dark inks drop to ~1.9:1 on
-   them. The inks inherit, so whichever of these is the NEAREST ancestor wins
-   (:where keeps every layer at one specificity; the row rule outranks them).
-   1. Fixed light in both themes: the *-50 tints and the emerald/green/red/rose/sky/cyan-100
-      chips (nothing re-maps them; the /NN translucent variants are rule 4),
-      .on-light, and every .card with an inline gradient or an inline pastel
-      background (#d../#e../#f.. — #227 turned the hero gradients into these; the
-      only dark inline card fills are #16294d and var(--bg-subtle), which don't match). */
+/* Dark mode leaves some backgrounds light: the pale dark inks drop to ~1.9:1 on them and
+   the dark text tokens (--text-primary #f1f5f9 ...) to ~1:1. Tokens inherit, so whichever
+   of these is the NEAREST ancestor wins (:where keeps every layer at one specificity; the
+   row and header rules outrank them). Each layer re-declares the inks, the text tokens,
+   the accent (and its --indigo aliases, which body resolves once) and the input/border
+   tokens, with the values from docs/ui-kit/tokens.css. Plain text inherits body's COMPUTED
+   colour, so each layer also restarts `color` - at zero specificity, so a text-* class or
+   inline colour on the box itself still wins.
+   1. Fixed light in both themes: the *-50 tints and the -100 chips nothing re-maps (the /NN
+      translucent variants are rule 4), .on-light, every .card with an inline gradient or
+      #d../#e../#f.. fill (the only dark inline card fills are #16294d and var(--bg-subtle)),
+      and any element with an inline pastel fill - listed by exact hex (followed by ";" or
+      ending the attribute), because #d946ef, #ea580c, #ec4899, #ef4444, #f59e0b and
+      alpha fills like #fdf2f80a share those prefixes. Plus the stylesheet pastels with no
+      dark variant: pills/badges and the feedback and checklist tabs' own chips and notes. */
 body.dark :where(.on-light, .card[style*="linear-gradient"], .card[style*="background:#d"],
-              .card[style*="background:#e"], .card[style*="background:#f"], .bg-emerald-50, .bg-green-50,
-              .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50,
-              .bg-pink-50, .bg-fuchsia-50, .bg-emerald-100, .bg-green-100, .bg-red-100,
-              .bg-rose-100, .bg-sky-100, .bg-cyan-100) {
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; }
-/* 2. Repainted dark by dark mode, even inside a light scope: back to the dark inks.
+              .card[style*="background:#e"], .card[style*="background:#f"],
+              [style*="background:#cbd5d1;"], [style$="background:#cbd5d1"], [style*="background:#ccfbf1;"],
+              [style$="background:#ccfbf1"], [style*="background:#d1fae5;"], [style$="background:#d1fae5"],
+              [style*="background:#dbeafe;"], [style$="background:#dbeafe"], [style*="background:#dcfce7;"],
+              [style$="background:#dcfce7"], [style*="background:#e2e8f0;"], [style$="background:#e2e8f0"],
+              [style*="background:#e5e7eb;"], [style$="background:#e5e7eb"], [style*="background:#e8eef7;"],
+              [style$="background:#e8eef7"], [style*="background:#ecfdf5;"], [style$="background:#ecfdf5"],
+              [style*="background:#ecfeff;"], [style$="background:#ecfeff"], [style*="background:#eff6ff;"],
+              [style$="background:#eff6ff"], [style*="background:#f0f9ff;"], [style$="background:#f0f9ff"],
+              [style*="background:#f0fdf4;"], [style$="background:#f0fdf4"], [style*="background:#f0fdfa;"],
+              [style$="background:#f0fdfa"], [style*="background:#f1f5f9;"], [style$="background:#f1f5f9"],
+              [style*="background:#f3f4f6;"], [style$="background:#f3f4f6"], [style*="background:#f5f3ff;"],
+              [style$="background:#f5f3ff"], [style*="background:#f8fafc;"], [style$="background:#f8fafc"],
+              [style*="background:#faf5ff;"], [style$="background:#faf5ff"], [style*="background:#fafbfc;"],
+              [style$="background:#fafbfc"], [style*="background:#fde68a;"], [style$="background:#fde68a"],
+              [style*="background:#fdf2f8;"], [style$="background:#fdf2f8"], [style*="background:#fdf3f0;"],
+              [style$="background:#fdf3f0"], [style*="background:#fdf4ff;"], [style$="background:#fdf4ff"],
+              [style*="background:#fee2e2;"], [style$="background:#fee2e2"], [style*="background:#fef2f2;"],
+              [style$="background:#fef2f2"], [style*="background:#fef3c7;"], [style$="background:#fef3c7"],
+              [style*="background:#fef9c3;"], [style$="background:#fef9c3"], [style*="background:#fefce8;"],
+              [style$="background:#fefce8"], [style*="background:#ffedd5;"], [style$="background:#ffedd5"],
+              [style*="background:#fff;"], [style$="background:#fff"], [style*="background:#fff1f2;"],
+              [style$="background:#fff1f2"], [style*="background:#fff7ed;"], [style$="background:#fff7ed"],
+              [style*="background:#fff7f7;"], [style$="background:#fff7f7"], [style*="background:#fffbeb;"],
+              [style$="background:#fffbeb"], [style*="background:#ffffff;"], [style$="background:#ffffff"],
+              .bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50,
+              .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50, .bg-slate-100, .bg-emerald-100,
+              .bg-green-100, .bg-red-100, .bg-rose-100, .bg-sky-100, .bg-cyan-100, .bg-amber-100,
+              .bg-orange-100, .bg-fuchsia-100, .bg-blue-100, .bg-neutral-100, .bg-yellow-50, .bg-yellow-100,
+              .anomaly-good, .anomaly-bad, .badge-sku, .hours-cell, .pill-up, .pill-down, .pill-warn,
+              #tab-feedback :is(.fb-ghost.on, .fb-chip.on, .fb-delta.good, .fb-delta.bad, .fb-queue-item.hot, .fb-tag, .fb-quote),
+              #tab-checklist :is(.cl-chip b, .cl-chip.active, .cl-ghost.on, .cl-nav button.active, .cl-seg button.on,
+                  .cl-step.hot .cl-step-row, .cl-why, .cl-check, .cl-stuck, .cl-cmd, .cl-copy, mark.cl-warn)) {
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
+  --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
+  --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
+  --bg-input: #ffffff; --border: #d5dbe3; --border-soft: #e6eaf0; --border-control: #7d8aa0; }
+:where(body.dark) :where(.on-light, .card[style*="linear-gradient"], .card[style*="background:#d"],
+              .card[style*="background:#e"], .card[style*="background:#f"],
+              [style*="background:#cbd5d1;"], [style$="background:#cbd5d1"], [style*="background:#ccfbf1;"],
+              [style$="background:#ccfbf1"], [style*="background:#d1fae5;"], [style$="background:#d1fae5"],
+              [style*="background:#dbeafe;"], [style$="background:#dbeafe"], [style*="background:#dcfce7;"],
+              [style$="background:#dcfce7"], [style*="background:#e2e8f0;"], [style$="background:#e2e8f0"],
+              [style*="background:#e5e7eb;"], [style$="background:#e5e7eb"], [style*="background:#e8eef7;"],
+              [style$="background:#e8eef7"], [style*="background:#ecfdf5;"], [style$="background:#ecfdf5"],
+              [style*="background:#ecfeff;"], [style$="background:#ecfeff"], [style*="background:#eff6ff;"],
+              [style$="background:#eff6ff"], [style*="background:#f0f9ff;"], [style$="background:#f0f9ff"],
+              [style*="background:#f0fdf4;"], [style$="background:#f0fdf4"], [style*="background:#f0fdfa;"],
+              [style$="background:#f0fdfa"], [style*="background:#f1f5f9;"], [style$="background:#f1f5f9"],
+              [style*="background:#f3f4f6;"], [style$="background:#f3f4f6"], [style*="background:#f5f3ff;"],
+              [style$="background:#f5f3ff"], [style*="background:#f8fafc;"], [style$="background:#f8fafc"],
+              [style*="background:#faf5ff;"], [style$="background:#faf5ff"], [style*="background:#fafbfc;"],
+              [style$="background:#fafbfc"], [style*="background:#fde68a;"], [style$="background:#fde68a"],
+              [style*="background:#fdf2f8;"], [style$="background:#fdf2f8"], [style*="background:#fdf3f0;"],
+              [style$="background:#fdf3f0"], [style*="background:#fdf4ff;"], [style$="background:#fdf4ff"],
+              [style*="background:#fee2e2;"], [style$="background:#fee2e2"], [style*="background:#fef2f2;"],
+              [style$="background:#fef2f2"], [style*="background:#fef3c7;"], [style$="background:#fef3c7"],
+              [style*="background:#fef9c3;"], [style$="background:#fef9c3"], [style*="background:#fefce8;"],
+              [style$="background:#fefce8"], [style*="background:#ffedd5;"], [style$="background:#ffedd5"],
+              [style*="background:#fff;"], [style$="background:#fff"], [style*="background:#fff1f2;"],
+              [style$="background:#fff1f2"], [style*="background:#fff7ed;"], [style$="background:#fff7ed"],
+              [style*="background:#fff7f7;"], [style$="background:#fff7f7"], [style*="background:#fffbeb;"],
+              [style$="background:#fffbeb"], [style*="background:#ffffff;"], [style$="background:#ffffff"],
+              .bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50, .bg-cyan-50, .bg-amber-50,
+              .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50, .bg-slate-100, .bg-emerald-100,
+              .bg-green-100, .bg-red-100, .bg-rose-100, .bg-sky-100, .bg-cyan-100, .bg-amber-100,
+              .bg-orange-100, .bg-fuchsia-100, .bg-blue-100, .bg-neutral-100, .bg-yellow-50, .bg-yellow-100,
+              .anomaly-good, .anomaly-bad, .badge-sku, .hours-cell, .pill-up, .pill-down, .pill-warn,
+              #tab-feedback :is(.fb-ghost.on, .fb-chip.on, .fb-delta.good, .fb-delta.bad, .fb-queue-item.hot, .fb-tag, .fb-quote),
+              #tab-checklist :is(.cl-chip b, .cl-chip.active, .cl-ghost.on, .cl-nav button.active, .cl-seg button.on,
+                  .cl-step.hot .cl-step-row, .cl-why, .cl-check, .cl-stuck, .cl-cmd, .cl-copy, mark.cl-warn)) { color: var(--text-primary); }
+/* 2. Repainted dark by dark mode, even inside a light scope: back to the dark tokens.
       (indigo/violet-50 are --accent-soft in theme-formal.css; hovered rows are
-      --bg-hover; theme-formal.css clears even rows to transparent, tint or not.) */
+      --bg-hover; theme-formal.css clears even rows to transparent, tint or not;
+      table heads are --bg-subtle.) */
 body.dark :where(.bg-white, .bg-slate-50, .bg-indigo-50, .bg-violet-50,
               .card:not(.on-light, [style*="linear-gradient"], [style*="background:#d"], [style*="background:#e"], [style*="background:#f"])),
-body.dark tbody tr:hover,
+body.dark tbody tr:hover, body.dark thead th,
 body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50,
               .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50) {
-  --good-ink: #34d399; --bad-ink: #f87171; --teal-ink: #2dd4bf; --rose-ink: #fb7185; --cyan-ink: #22d3ee; --sky-ink: #38bdf8; }
-/* 3. The Management Report island re-declares --bg-card / --bg-subtle light, so
-      everything in it is light again. */
-body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr) {
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; }
+  --good-ink: #34d399; --bad-ink: #f87171; --teal-ink: #2dd4bf; --rose-ink: #fb7185; --cyan-ink: #22d3ee; --sky-ink: #38bdf8;
+  --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-muted: #8595a9;
+  --accent: #93b4e6; --accent-hover: #b7cbee; --accent-soft: #172a4a; --on-accent: #080e1c;
+  --indigo: #93b4e6; --indigo-mid: #b7cbee; --indigo-soft: #172a4a; --on-indigo: #080e1c;
+  --bg-input: #131f35; --border: #2b3b55; --border-soft: #1c2a42; --border-control: #63738d; }
+:where(body.dark) :where(.bg-white, .bg-slate-50, .bg-indigo-50, .bg-violet-50,
+              .card:not(.on-light, [style*="linear-gradient"], [style*="background:#d"], [style*="background:#e"], [style*="background:#f"])) { color: var(--text-primary); }
+/* 3. The Management Report island re-declares --bg-card / --bg-subtle / --bg-hover light,
+      so everything in it is light again. */
+body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr, thead th) {
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
+  --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
+  --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
+  --bg-input: #ffffff; --border: #d5dbe3; --border-soft: #e6eaf0; --border-control: #7d8aa0; }
 /* 4. The /NN translucent -50 tints composite over the dark card to a mid-grey
       (bg-red-50/50 -> ~#878690) where neither ink nor the body text clears 4.5:1.
       On screen in dark mode they become the same hue at ~12% (indigo: --accent-soft,
@@ -1237,8 +1322,11 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
    to every descendant; charts inside pick up light theming via
    [data-force-light] in mkChart. Fixed slate text classes are white-bg safe. */
 body.dark #mgtRptBody {
-  --bg-card: #ffffff; --bg-subtle: #f8fafc; --border: #e2e8f0;
-  --text-primary: #1e293b; --text-muted: #64748b;
+  --bg-card: #ffffff; --bg-subtle: #f8fafc; --bg-hover: #eef2f7; --border: #e2e8f0;
+  --text-primary: #1e293b; --text-secondary: #475569; --text-muted: #64748b;
+  --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
+  --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
+  --bg-input: #ffffff; --border-soft: #e6eaf0; --border-control: #7d8aa0;
   --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;   /* the dark inks are pale — unreadable on paper */
   color-scheme: light;
 }
