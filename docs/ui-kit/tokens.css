@@ -50,6 +50,11 @@
   --violet-ink:  #5b4a9e;  /* 7.20:1 on white */
   --fuchsia-ink: #a21caf;  /* 6.32:1 on white */
   --pink-ink:    #be185d;  /* 6.04:1 on white */
+  /* Amber and orange as TEXT (warnings, "near target", mid bands). #f59e0b 2.15,
+     #d97706 3.19 and #f97316 2.80:1 on white are fills only; #b45309 / #c2410c
+     dip under 4.5 on hover and the accent tint, so these go a step deeper. */
+  --amber-ink:  #a44a08;   /* 5.90:1 on white · >= 5.06 on every light surface and tint */
+  --orange-ink: #b43c0a;   /* 5.85:1 on white · >= 5.01 on every light surface and tint */
 
   /* Elevation: resting surfaces are flat; only floating things cast a shadow. */
   --shadow-xs:  none;
@@ -94,6 +99,8 @@ body.dark {
   --violet-ink:  #b4a5ec;  /* 6.5:1 */
   --fuchsia-ink: #e879f9;  /* 5.8:1 */
   --pink-ink:    #f472b6;  /* 5.4:1 */
+  --amber-ink:  #fbbf24;   /* 10.42:1 on the dark card */
+  --orange-ink: #fb923c;   /* 7.68:1 on the dark card */
 }
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */

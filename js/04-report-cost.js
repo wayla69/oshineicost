@@ -54,7 +54,7 @@ async function renderReportCost(branch) {
     const shareAll = totalCogsAll ? ((r.cogs||0)/totalCogsAll*100) : 0;
     cum += shareAll;
     const dCell = (v, round) => v==null ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${v>0?'var(--bad-ink)':v<0?'var(--good-ink)':'#64748b'}">${v>0?'+':''}${fmtN(round?Math.round(v):v)}</span>`;
+      : `<span style="color:${v>0?'var(--bad-ink)':v<0?'var(--good-ink)':'var(--text-muted)'}">${v>0?'+':''}${fmtN(round?Math.round(v):v)}</span>`;
     return `<tr class="border-t border-slate-100 ${i<5?'bg-red-50/30':''}">
       <td class="py-1.5 pr-3 text-slate-400">${i+1}</td>
       <td class="py-1.5 pr-3 font-medium text-slate-800">${esc(r.description||r.sku_code)}</td>
@@ -70,7 +70,7 @@ async function renderReportCost(branch) {
 
   if (foot && top60.length) {
     const dTot = (v, round) => !anyPrior ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${v>0?'var(--bad-ink)':v<0?'var(--good-ink)':'#64748b'}">${v>0?'+':''}${fmtN(round?Math.round(v):v)}</span>`;
+      : `<span style="color:${v>0?'var(--bad-ink)':v<0?'var(--good-ink)':'var(--text-muted)'}">${v>0?'+':''}${fmtN(round?Math.round(v):v)}</span>`;
     foot.innerHTML = `<tr class="border-t-2 border-slate-300 bg-slate-50">
       <td class="py-2 pr-3"></td>
       <td class="py-2 pr-3" colspan="2">รวม Top 60 เมนู</td>
@@ -107,7 +107,7 @@ async function renderReportTier(month) {
   if (note) note.textContent = d.comparison_available === false
     ? `เดือน ${fmtMonth(month)} · ${d.scope_label || ''} · ยังไม่มีเดือนก่อนหน้าที่ใช้เมนูเดียวกันสำหรับเปรียบเทียบ (เมนูเปลี่ยน 1 ก.ย. 2569) · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT)`
     : `เดือน ${fmtMonth(month)} (A) เทียบ ${d.b_range[0]} → ${d.b_range[1]} (B) · ${d.scope_label || ''} · Tier = ราคาบุฟเฟ่ต์ผู้ใหญ่บนบิล (ไม่รวม VAT) · นับเฉพาะบิลบุฟเฟ่ต์`;
-  const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? 'var(--bad-ink)' : v < 0 ? 'var(--good-ink)' : '#64748b'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
+  const sgn = v => v == null ? '—' : `<span style="color:${v > 0 ? 'var(--bad-ink)' : v < 0 ? 'var(--good-ink)' : 'var(--text-muted)'}">${v > 0 ? '+' : ''}${v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</span>`;
   const paxD = v => v == null ? '—' : `<span style="color:${v >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v >= 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
   const rows = d.tiers.map(x => `<tr class="border-t border-slate-100">
     <td class="py-2 pr-4 font-semibold">${esc(x.label)}</td>
@@ -381,7 +381,7 @@ async function loadReport() {
     // (branch roll-out / partial month) — see the guard in /api/analysis/yoy.
     alerts.push(
       (!latestYoy.comparable && latestYoy.same_store_pct != null)
-        ? `<b>YoY ${latestYoy.period_month} (เทียบสาขาเดิม):</b> ${latestYoy.same_store_pct>=0?'+':''}${latestYoy.same_store_pct.toFixed(1)}% vs ${latestYoy.ly_period} · <span style="color:#d97706">ตัวเลขดิบ ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% รวมผลขยายสาขา (${latestYoy.ly_branches}→${latestYoy.cur_branches} สาขา)</span>`
+        ? `<b>YoY ${latestYoy.period_month} (เทียบสาขาเดิม):</b> ${latestYoy.same_store_pct>=0?'+':''}${latestYoy.same_store_pct.toFixed(1)}% vs ${latestYoy.ly_period} · <span style="color:var(--amber-ink)">ตัวเลขดิบ ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% รวมผลขยายสาขา (${latestYoy.ly_branches}→${latestYoy.cur_branches} สาขา)</span>`
         : `<b>YoY ${latestYoy.period_month}:</b> ${latestYoy.yoy_pct>=0?'+':''}${latestYoy.yoy_pct.toFixed(1)}% vs ${latestYoy.ly_period}`);
   }
   const cs = costAnalysis.summary || {};
@@ -1696,7 +1696,7 @@ async function loadBuffetPerBill() {
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide">${lbl}</p>
       <p class="text-lg font-bold" style="color:${textInk(color)}">${val}</p>
-      <p class="text-[10px] text-slate-400">${sub}</p>
+      <p class="text-[10px] text-slate-500">${sub}</p>
     </div>`;
   document.getElementById('bpbKpiStrip').innerHTML = [
     kpi('บิลทั้งหมด',          fmtN(ov.bills),               `${fmtN(ov.pax)} pax`,        '#ec4899'),

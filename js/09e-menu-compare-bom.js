@@ -169,7 +169,7 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
   const badge = r => r.only_in_b
     ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">ใหม่</span>'
     : r.only_in_a
-      ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">หาย</span>' : '';
+      ? '<span style="font-size:9px;background:#fef3c7;color:#a44a08;padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">หาย</span>' : '';
   body.innerHTML = items.map((r, i) => {
     const qa = vD(r.qty_a, Ca), qb = vD(r.qty_b, Cb);
     const ca = vD(r.cogs_a, Ca), cb = vD(r.cogs_b, Cb);

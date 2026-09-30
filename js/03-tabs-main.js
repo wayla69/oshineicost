@@ -336,7 +336,7 @@ async function initDataCoverageNote() {
     if (c.last_day_missing) {
       el.textContent = `⚠ ข้อมูลถึง ${human}`;
       el.style.background = '#fef3c7';
-      el.style.color = '#92400e';
+      el.style.color = '#92400e';   // fixed light badge (#fef3c7) in both themes: 6.4:1
       el.title = `ข้อมูลล่าสุดถึง ${human} เท่านั้น — การ export จาก Easy POS ตัดวันสุดท้ายของเดือนออก `
                + `ยอดรวมของเดือนล่าสุดจึงยังไม่ครบ (ขาดวันสิ้นเดือน). อัตราส่วน เช่น Food Cost % กระทบน้อย. `
                + `แก้โดย re-export เดือนนั้นแบบรวมวันสิ้นเดือน แล้วอัปโหลดใหม่.`;
@@ -926,7 +926,7 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card kpi-neu p-4" id="marginCard">
       <div class="kpi-card-top"><p class="kpi-label">% กำไรขั้นต้น</p></div>
-      <p id="kpiMargin" class="kpi-value" style="color:#94a3b8">—</p>
+      <p id="kpiMargin" class="kpi-value" style="color:var(--text-muted)">—</p>
       <div class="kpi-card-bottom"><p id="kpiMarginNote" class="kpi-sub">อัพโหลดต้นทุนเพื่อดูค่านี้</p></div>
     </div>
   `;
@@ -1026,7 +1026,7 @@ function renderTrendAnalysisBar(trendData) {
   const periodLbl = {daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', quarterly:'รายไตรมาส'}[currentGranularity] || 'ช่วง';
   el.innerHTML = [
     stat('รายได้รวม',    fmt(total), data.length+' '+periodLbl.toLowerCase()+'s', '#4a70b0'),
-    stat(periodLbl+' Avg',   fmt(avg), '', '#0f172a'),
+    stat(periodLbl+' Avg',   fmt(avg), '', 'var(--text-primary)'),
     best  ? stat('สูงสุด',    fmt(best.revenue),  fmtPeriod(best.period_month),  '#10b981') : '',
     worst ? stat('ต่ำสุด', fmt(worst.revenue), fmtPeriod(worst.period_month), '#ef4444') : '',
     growth != null ? stat('เติบโต', (growth>0?'+':'')+growth.toFixed(1)+'%', fmtPeriod(first.period_month)+' → '+fmtPeriod(last.period_month), growth>=0?'#10b981':'#ef4444') : '',
@@ -1084,7 +1084,7 @@ function renderYearlyOverlay(rows) {
       stat('ปีปัจจุบัน', years[years.length - 1], fmt(totLatest), '#4a70b0'),
       stat('ปีก่อน', years[years.length - 2], fmt(totPrior), '#94a3b8'),
       yoyPct != null ? stat('YoY', `${arrow} ${Math.abs(yoyPct).toFixed(1)}%`, '', yoyColor) : '',
-      stat('จำนวนปี', String(years.length), `${years[0]} – ${years[years.length - 1]}`, '#0f172a'),
+      stat('จำนวนปี', String(years.length), `${years[0]} – ${years[years.length - 1]}`, 'var(--text-primary)'),
     ].filter(Boolean).join('<hr class="border-slate-100 my-0.5">');
   }
 
@@ -1420,7 +1420,7 @@ async function loadTopSkusChart() {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const mom = r.qty_mom_pct;
     const momHtml = mom == null ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${mom>0?'var(--good-ink)':mom<0?'var(--bad-ink)':'#94a3b8'}">${mom>0?'▲':mom<0?'▼':''} ${Math.abs(mom).toFixed(1)}%</span>`;
+      : `<span style="color:${mom>0?'var(--good-ink)':mom<0?'var(--bad-ink)':'var(--text-muted)'}">${mom>0?'▲':mom<0?'▼':''} ${Math.abs(mom).toFixed(1)}%</span>`;
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-3 text-slate-400">${i+1}</td>
       <td class="py-1.5 pr-3 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
@@ -1465,7 +1465,7 @@ async function loadMarginTable() {   // now: Category Movers (MoM revenue change
     const note = document.getElementById('kpiMarginNote');
     if (mp == null) { el.textContent = '—'; return; }
     el.textContent = fmtP(mp);
-    el.style.color = mp >= 50 ? 'var(--good-ink)' : mp >= 25 ? '#f59e0b' : 'var(--bad-ink)';
+    el.style.color = mp >= 50 ? 'var(--good-ink)' : mp >= 25 ? 'var(--amber-ink)' : 'var(--bad-ink)';
     if (note) note.textContent = `ต้นทุน BoM ${fmtP(100-mp)} · ครอบคลุม ${s.cost_coverage_pct||0}%`;
   }).catch(()=>{});
 
@@ -1573,7 +1573,7 @@ function renderMenuFinder() {
     const m  = priced ? r.margin_pct : null;
     const mc = m==null ? '#94a3b8' : m>=60?'#10b981':m>=40?'#f59e0b':'#ef4444';
     const mShow = !priced
-      ? '<span class="text-[10px]" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      ? '<span class="text-[10px]" style="color:var(--amber-ink)" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
       : (m!=null ? m.toFixed(1)+'%' : '—');
     const name = esc((r.description||r.sku_code||'—').replace(/^\((?:A|B|T)\)\s*/,''));
     return `<tr class="border-b border-slate-50 hover:bg-indigo-50/40">
@@ -1780,8 +1780,8 @@ function renderMenuEngTable() {
   const QUAD_BADGE = {
     star:      '<span class="pill" style="background:#10b98122;color:var(--good-ink)">ดาวเด่น</span>',
     puzzle:    '<span class="pill" style="background:var(--accent-soft);color:var(--accent)">เพชรในตม</span>',
-    plowhorse: '<span class="pill" style="background:#f59e0b22;color:#92400e">ม้างาน</span>',
-    dog:       '<span class="pill" style="background:#ef444422;color:#991b1b">ตัวถ่วง</span>',
+    plowhorse: '<span class="pill" style="background:#f59e0b22;color:var(--amber-ink)">ม้างาน</span>',
+    dog:       '<span class="pill" style="background:#ef444422;color:var(--bad-ink)">ตัวถ่วง</span>',
     uncosted:  '<span class="pill" style="background:#94a3b822;color:#475569">ไม่มีต้นทุน</span>',
   };
   const sorted = [...items].sort((a,b) => {
@@ -1801,7 +1801,7 @@ function renderMenuEngTable() {
                   : mp >= 30 ? 'text-amber-600'
                   : 'text-red-500 font-medium';
     const mpShow = !priced
-      ? '<span class="text-[10px]" style="color:#b45309" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
+      ? '<span class="text-[10px]" style="color:var(--amber-ink)" title="บุฟเฟต์ — รวมในแพ็กเกจ ไม่มีราคาขายรายจาน">บุฟเฟต์</span>'
       : (mp != null ? mp.toFixed(1)+'%' : '—');
     const gpShow = !priced ? '<span class="text-slate-300">—</span>'
       : (r.gross_profit != null ? fmtN(r.gross_profit) : '—');
@@ -1857,7 +1857,7 @@ function _top60MomLabel(d, prefix) {
 // ABC class badge from a running cumulative-share % (Pareto): A ≤80%, B ≤95%, C tail.
 function _abcBadge(cum) {
   const c = cum <= 80 ? 'A' : cum <= 95 ? 'B' : 'C';
-  const s = c === 'A' ? 'background:#dcfce7;color:#166534' : c === 'B' ? 'background:#fef9c3;color:#854d0e' : 'background:#f1f5f9;color:#64748b';
+  const s = c === 'A' ? 'background:#dcfce7;color:#166534' : c === 'B' ? 'background:#fef9c3;color:#854d0e' : 'background:#f1f5f9;color:#5f6c80';
   return `<span style="${s};font-weight:700;font-size:10px;padding:1px 6px;border-radius:999px">${c}</span>`;
 }
 function _renderTop60Sales(d) {
@@ -2068,7 +2068,7 @@ function renderSphDistribution(sph) {
     `<div class="rounded-lg p-2.5 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide">${lbl}</p>
       <p class="text-base font-bold" style="color:${textInk(color)}">${val}</p>
-      <p class="text-[10px] text-slate-400">${sub}</p>
+      <p class="text-[10px] text-slate-500">${sub}</p>
     </div>`;
   stripEl.innerHTML = [
     kpi('Median (มัธยฐาน)', fmtN(ov.median_sph), `ครึ่งหนึ่งของลูกค้าจ่ายเกินค่านี้`, '#4a70b0'),

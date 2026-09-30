@@ -708,6 +708,20 @@ body.dark .text-sky-800, body.dark .text-sky-900 { color: var(--sky-ink) !import
 .text-white:is(.bg-cyan-500, .bg-cyan-600):hover { background-color: #155e75 !important; }
 .text-white.bg-pink-600 { background-color: #be185d !important; }   /* #db2777 is 4.13:1 under white */
 .text-white.bg-pink-600:hover { background-color: #9d174d !important; }
+/* Grey text: slate-400 #94a3b8 is 2.56:1 and slate-300 #cbd5e1 1.5:1 on white (781 + 70
+   uses). They take the muted text token, which adapts to the theme and to the light
+   scopes below. The navy sidebar is dark in both themes and keeps its own greys. */
+:is(.text-slate-400, .text-slate-300):not(.sidebar *) { color: var(--text-muted) !important; }
+/* slate-500 #64748b clears white (4.76) but not the tints it sits on (3.9 on the accent
+   tint), so it takes the secondary token (#475569 light, 7.6:1 on white). */
+.text-slate-500:not(.sidebar *) { color: var(--text-secondary) !important; }
+/* Amber / orange / green leftovers, the same way as rose and cyan: -500/-600 fail on
+   white; -700 passes on white (4.8-5.2) but not on the tints or the dark card. The
+   -800 / -900 classes are headings inside light notice boxes, where the fixed dark hex
+   is right in both themes, so they stay as they are. */
+.text-amber-500, .text-amber-600, .text-amber-700 { color: var(--amber-ink) !important; }
+.text-orange-600, .text-orange-700 { color: var(--orange-ink) !important; }
+.text-green-600 { color: var(--good-ink) !important; }
 /* Dark mode leaves some backgrounds light: the pale dark inks drop to ~1.9:1 on them and
    the dark text tokens (--text-primary #f1f5f9 ...) to ~1:1. Tokens inherit, so whichever
    of these is the NEAREST ancestor wins (:where keeps every layer at one specificity; the
@@ -757,7 +771,7 @@ body.dark :where(.on-light, .card[style*="linear-gradient"], .card[style*="backg
               #tab-feedback :is(.fb-ghost.on, .fb-chip.on, .fb-delta.good, .fb-delta.bad, .fb-queue-item.hot, .fb-tag, .fb-quote),
               #tab-checklist :is(.cl-chip b, .cl-chip.active, .cl-ghost.on, .cl-nav button.active, .cl-seg button.on,
                   .cl-step.hot .cl-step-row, .cl-why, .cl-check, .cl-stuck, .cl-cmd, .cl-copy, mark.cl-warn)) {
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;
   --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
@@ -806,7 +820,7 @@ body.dark :where(.bg-white, .bg-slate-50, .bg-indigo-50, .bg-violet-50,
 body.dark tbody tr:hover, body.dark thead th,
 body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50,
               .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50) {
-  --good-ink: #34d399; --bad-ink: #f87171; --teal-ink: #2dd4bf; --rose-ink: #fb7185; --cyan-ink: #22d3ee; --sky-ink: #38bdf8;
+  --good-ink: #34d399; --bad-ink: #f87171; --teal-ink: #2dd4bf; --rose-ink: #fb7185; --cyan-ink: #22d3ee; --sky-ink: #38bdf8; --amber-ink: #fbbf24; --orange-ink: #fb923c;
   --navy-ink: #8fb3ec; --violet-ink: #b4a5ec; --fuchsia-ink: #e879f9; --pink-ink: #f472b6;
   --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-muted: #8595a9;
   --accent: #93b4e6; --accent-hover: #b7cbee; --accent-soft: #172a4a; --on-accent: #080e1c;
@@ -817,7 +831,7 @@ body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, 
 /* 3. The Management Report island re-declares --bg-card / --bg-subtle / --bg-hover light,
       so everything in it is light again. */
 body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr, thead th) {
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;
   --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
@@ -1344,7 +1358,7 @@ body.dark #mgtRptBody {
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
   --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
   --bg-input: #ffffff; --border-soft: #e6eaf0; --border-control: #7d8aa0;
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;   /* the dark inks are pale — unreadable on paper */
   color-scheme: light;
 }
@@ -1402,7 +1416,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
      be visible even when the phone was not in force-desktop mode */
   #mobileSummary, #msNav, #backToMobile { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
-  body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; --amber-ink: #a44a08; --orange-ink: #b43c0a;
   --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d; }
   body:not(.force-desktop) .app-layout { display: block !important; }
   .app-layout, .main-wrapper, .content-area { display: block !important; }
@@ -1868,7 +1882,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <div id="dateRangePickers" class="hidden items-center gap-1.5">
         <input type="date" id="selDateFrom" onchange="onFilterChange()"
           style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:130px">
-        <span style="color:var(--border);font-size:14px">–</span>
+        <span style="color:var(--text-muted);font-size:14px">–</span>
         <input type="date" id="selDateTo" onchange="onFilterChange()"
           style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12px;background:var(--bg-input);color:var(--text-primary);width:130px">
       </div>
@@ -1878,7 +1892,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
           style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:115px">
           <option value="">ทั้งหมด</option>
         </select>
-        <span style="color:var(--border);font-size:14px">–</span>
+        <span style="color:var(--text-muted);font-size:14px">–</span>
         <select id="selMonthTo" onchange="onFilterChange()"
           style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);max-width:115px">
           <option value="">ล่าสุด</option>

@@ -751,7 +751,10 @@ const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\
 // #1f7a4d / #b0472d are the menu-impact pair in 07-home: 5.3:1 on white but
 // only 3.1-3.3 on the dark card. #047857 / #b91c1c are the light inks themselves.
 // #10b981 / #ef4444 are 2.5 / 3.8:1 on white: marks only, never text.
-const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c', '#ef4444'];
+// #22c55e / #84cc16 (2.3 / 2.0:1) and the dark #065f46 / #991b1b / #7f1d1d (2.1-2.3:1
+// on the dark card) are the same good/bad families.
+const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981', '#22c55e', '#84cc16', '#065f46', '#15803d'],
+      _BAD_HEX  = ['#dc2626', '#b0472d', '#b91c1c', '#ef4444', '#991b1b', '#7f1d1d'];
 // Teal and rose (categories, the ordering/checklist accent): #0d9488 3.74 and #f43f5e 3.67:1 on white.
 const _TEAL_HEX = ['#0d9488', '#14b8a6', '#0f766e'], _ROSE_HEX = ['#f43f5e', '#e11d48', '#be123c'];
 // Cyan and sky (margin %, delivery, links): #0891b2 3.68, #06b6d4 2.43, #0ea5e9 2.77:1 on white.
@@ -760,9 +763,18 @@ const _CYAN_HEX = ['#06b6d4', '#0891b2', '#0e7490'], _SKY_HEX = ['#0ea5e9', '#02
 // pass on white but drop to 2.9-3.9 on tints and the dark card; #d946ef 3.46, #ec4899 3.53:1 on white.
 const _NAVY_HEX = ['#4a70b0', '#4f46e5', '#6366f1'], _VIOLET_HEX = ['#7a66b8', '#8b5cf6', '#7c3aed'];
 const _FUCHSIA_HEX = ['#d946ef', '#c026d3', '#a21caf'], _PINK_HEX = ['#ec4899', '#db2777', '#be185d'];
-const _INK_OF = [[_GOOD_HEX, 'good'], [_BAD_HEX, 'bad'], [_TEAL_HEX, 'teal'], [_ROSE_HEX, 'rose'], [_CYAN_HEX, 'cyan'], [_SKY_HEX, 'sky'],
-                 [_NAVY_HEX, 'navy'], [_VIOLET_HEX, 'violet'], [_FUCHSIA_HEX, 'fuchsia'], [_PINK_HEX, 'pink']];
-const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); return k ? `var(--${k[1]}-ink)` : c; };
+// Amber / yellow and orange (warnings, "near target"): #f59e0b 2.15, #d97706 3.19, #eab308 1.9,
+// #f97316 2.8:1 on white; the deep #b45309 / #92400e / #9a3412 fail on the dark card.
+const _AMBER_HEX  = ['#f59e0b', '#d97706', '#b45309', '#92400e', '#78350f', '#eab308', '#ca8a04', '#a16207', '#854d0e'],
+      _ORANGE_HEX = ['#f97316', '#ea580c', '#c2410c', '#9a3412'];
+// Neutral greys as text: #94a3b8 2.56 and #cbd5e1 1.5:1 on white; #64748b / #6b7280 fail on
+// tints and the dark card. They become the muted text token, which adapts.
+const _MUTED_HEX = ['#94a3b8', '#cbd5e1', '#64748b', '#6b7280', '#9ca3af'];
+const _INK_OF = [[_GOOD_HEX, '--good-ink'], [_BAD_HEX, '--bad-ink'], [_TEAL_HEX, '--teal-ink'], [_ROSE_HEX, '--rose-ink'],
+                 [_CYAN_HEX, '--cyan-ink'], [_SKY_HEX, '--sky-ink'], [_NAVY_HEX, '--navy-ink'], [_VIOLET_HEX, '--violet-ink'],
+                 [_FUCHSIA_HEX, '--fuchsia-ink'], [_PINK_HEX, '--pink-ink'], [_AMBER_HEX, '--amber-ink'],
+                 [_ORANGE_HEX, '--orange-ink'], [_MUTED_HEX, '--text-muted']];
+const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); return k ? `var(${k[1]})` : c; };
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };
@@ -1587,7 +1599,7 @@ async function addDowntime() {
   const payload = { branch: g('dtBranch'), date_from: g('dtFrom'), date_to: g('dtTo'),
                     reason: g('dtReason') || 'closed', note: g('dtNote') };
   if (!payload.branch || !payload.date_from || !payload.date_to) {
-    st.textContent = 'กรอกสาขาและช่วงวันที่ให้ครบ'; st.style.color = '#b45309'; return;
+    st.textContent = 'กรอกสาขาและช่วงวันที่ให้ครบ'; st.style.color = 'var(--amber-ink)'; return;
   }
   st.textContent = 'กำลังบันทึก…'; st.style.color = 'var(--text-muted)';
   try {
@@ -1597,7 +1609,7 @@ async function addDowntime() {
       const j = await r.json().catch(() => ({}));
       st.textContent = j.detail || `บันทึกไม่สำเร็จ (${r.status})`; st.style.color = 'var(--bad-ink)'; return;
     }
-    st.textContent = '✓ บันทึกแล้ว'; st.style.color = '#15803d';
+    st.textContent = '✓ บันทึกแล้ว'; st.style.color = 'var(--good-ink)';
     document.getElementById('dtNote').value = '';
     loadDowntime();
   } catch (e) { st.textContent = 'บันทึกไม่สำเร็จ'; st.style.color = 'var(--bad-ink)'; }
@@ -1611,7 +1623,7 @@ async function deleteDowntime(id) {
   try {
     const r = await fetch(`${API}/api/branch-downtime/${id}`, { method: 'DELETE' });
     if (!r.ok) { st.textContent = `ลบไม่สำเร็จ (${r.status})`; st.style.color = 'var(--bad-ink)'; return; }
-    st.textContent = '✓ ลบแล้ว'; st.style.color = '#15803d';
+    st.textContent = '✓ ลบแล้ว'; st.style.color = 'var(--good-ink)';
     loadDowntime();
   } catch (e) { st.textContent = 'ลบไม่สำเร็จ'; st.style.color = 'var(--bad-ink)'; }
 }
@@ -1633,13 +1645,13 @@ async function loadUsageStats() {
   const seen = new Set(tabs.map(t => t.name));
   const watched = new Set(SOFT_KILL.size ? SOFT_KILL : KILL_CANDIDATES);
   const never = Object.keys(PAGE_TITLES).filter(t => !seen.has(t) && !watched.has(t));
-  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}${watched.has(t.name) ? ' <span class="text-[10px]" style="color:#b45309">(เฝ้าดู)</span>' : ''}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
+  const row = t => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3">${esc(PAGE_TITLES[t.name] || t.name)}${watched.has(t.name) ? ' <span class="text-[10px]" style="color:var(--amber-ink)">(เฝ้าดู)</span>' : ''}</td><td class="py-1.5 pr-3 text-right font-semibold">${(+t.hits).toLocaleString()}</td><td class="py-1.5 pr-3 text-right">${esc(t.days_seen)}</td><td class="py-1.5 text-right" style="color:var(--text-muted)">${esc(t.last_seen || '')}</td></tr>`;
   const apiRows = (d.api || []).slice(0, 20);
   // the kill list: ON HOLD while adoption is incomplete (nothing hidden/deleted) — the
   // candidates are listed with live counts; when SOFT_KILL is non-empty, that is what is folded
   const onHold = SOFT_KILL.size === 0;
   const byName = Object.fromEntries(tabs.map(t => [t.name, t]));
-  const killRows = [...watched].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:#b45309' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
+  const killRows = [...watched].map(t => { const u = byName[t]; return `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3">${esc(PAGE_TITLES[t] || t)}</td><td class="py-1 pr-3 text-right font-semibold" style="${u ? 'color:var(--amber-ink)' : ''}">${u ? (+u.hits).toLocaleString() : 0}</td><td class="py-1 text-right" style="color:var(--text-muted)">${esc(u ? u.last_seen : '—')}</td></tr>`; }).join('');
   const killHead = onHold
     ? `Kill list — <b>พักไว้</b> (เจ้าของตัดสิน 2026-09-05: รอให้ทุกคนใช้งานครบก่อน) · ยังไม่ซ่อน/ไม่ลบแท็บใด · แท็บที่เฝ้าดู (${watched.size})`
     : `Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
@@ -1659,7 +1671,7 @@ async function loadUsageStats() {
   const ps = people && people.summary ? people.summary : null;
   const peopleHtml = people ? `
     <div class="mb-6">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:#15803d">${ps.active}</b> ใช้งานอยู่ · <b style="color:#b45309">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''}</div>
       <div class="text-[11px] mb-2" style="color:var(--text-muted)">"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</div>
       ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(digest.latest.week)}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
         <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
@@ -1673,7 +1685,7 @@ async function loadUsageStats() {
         <table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง</th><th class="py-1 pr-3 text-right">จำนวนวัน</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${tabs.map(row).join('') || '<tr><td class="py-2" colspan="4" style="color:var(--text-muted)">ยังไม่มีข้อมูล — เริ่มนับหลัง deploy เวอร์ชันนี้</td></tr>'}</tbody></table>
       </div>
       <div>
-        <div class="text-xs font-semibold mb-2" style="color:${onHold ? '#b45309' : 'var(--bad-ink)'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
+        <div class="text-xs font-semibold mb-2" style="color:${onHold ? 'var(--amber-ink)' : 'var(--bad-ink)'}">${killHead} · <a href="/docs/LEAN_KILL_LIST_2026-09.html" target="_blank" class="underline">รายงาน</a></div>
         <table class="text-xs w-full mb-5"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">แท็บ</th><th class="py-1 pr-3 text-right">ครั้ง (${esc(days)} วัน)</th><th class="py-1 text-right">ล่าสุด</th></tr></thead><tbody>${killRows}</tbody></table>
         <div class="text-xs font-semibold mb-2" style="color:var(--bad-ink)">แท็บอื่นที่ยังไม่ถูกเปิดในช่วงนี้ (${never.length})</div>
         <div class="flex flex-wrap gap-1.5 mb-5">${never.map(t => `<span class="text-[11px] px-2 py-0.5 rounded-full" style="background:var(--bg-input);color:var(--text-muted)">${esc(PAGE_TITLES[t])}</span>`).join('') || '<span class="text-xs" style="color:var(--text-muted)">— ทุกแท็บถูกเปิดแล้ว</span>'}</div>
@@ -1808,7 +1820,7 @@ function renderOpportunities(d) {
     : _oppEmpty('ไม่พบช่องว่างเด่น (ต้องเป็นเมนูที่ขายใน ≥5 สาขา) — ลองเลือกทุกสาขา/ขยายช่วงเดือน');
 
   const ws = d.category_whitespace || [];
-  const wlabel = { expand: ['ขยายได้', '#047857', '#ecfdf5'], trim: ['ควรลด', '#b91c1c', '#fef2f2'], watch: ['เฝ้าดู', '#64748b', '#f1f5f9'] };
+  const wlabel = { expand: ['ขยายได้', '#047857', '#ecfdf5'], trim: ['ควรลด', '#b91c1c', '#fef2f2'], watch: ['เฝ้าดู', '#5f6c80', '#f1f5f9'] };
   document.getElementById('oppWhitespace').innerHTML = ws.length ? `
     <table class="text-xs w-full"><thead><tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
       <th class="py-1.5 pr-2">หมวด</th><th class="py-1.5 pr-2 text-right">#เมนู</th>
@@ -1829,7 +1841,7 @@ function renderOpportunities(d) {
       <th class="py-1.5">ขายครั้งสุดท้าย</th></tr></thead>
     <tbody>${rv.map(r => `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1 pr-2">${esc(r.description)}</td><td class="py-1 pr-2" style="color:var(--text-muted)">${esc(r.category)}</td>
-      <td class="py-1 pr-2 text-right font-semibold" style="color:#f59e0b">${fmtN(r.avg_monthly_when_alive)}</td>
+      <td class="py-1 pr-2 text-right font-semibold" style="color:var(--amber-ink)">${fmtN(r.avg_monthly_when_alive)}</td>
       <td class="py-1 pr-2 text-right">${fmtN(r.total_qty)}</td><td class="py-1">${esc(r.last_active_month || '—')}</td></tr>`).join('')}</tbody></table>`
     : _oppEmpty('ไม่มีเมนูที่หยุดขายในช่วงนี้');
 
