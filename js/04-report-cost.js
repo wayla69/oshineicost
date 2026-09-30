@@ -994,7 +994,7 @@ async function loadReport() {
     const sumProj = branchProj.reduce((a,b)=>a+b.proj,0);
     const chip = p => p==null ? '' : `<span style="color:${p>=0?'var(--good-ink)':'var(--bad-ink)'}">${p>=0?'▲':'▼'} ${Math.abs(p).toFixed(1)}%</span>`;
     el.innerHTML = `
-      <div class="rounded-xl border-2 p-4 mb-3 on-light" style="border-color:var(--accent)33;background:#e8eef7">
+      <div class="rounded-xl border-2 p-4 mb-3" style="border-color:var(--accent);background:var(--accent-soft)">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <h3 class="text-sm font-bold text-indigo-900">พยากรณ์เดือนถัดไป — ${fmtMonth(nextMo)}</h3>
           <span class="text-[11px] text-slate-500">linear trend จาก ${series.length} เดือน · สิ้นเดือนนำ actual มาเทียบช่องนี้เพื่อติดตาม</span>

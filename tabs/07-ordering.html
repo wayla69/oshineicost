@@ -151,7 +151,7 @@
       <span class="text-[11px] font-semibold" style="color:var(--text-primary)">ปริมาณที่สั่งจริง (นำเข้าจาก Excel):</span>
       <button onclick="opActualTemplate()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer"
               title="ดาวน์โหลดไฟล์ที่มีรหัส/แผนของรอบสั่งอยู่แล้ว เหลือแค่กรอกช่อง 'สั่งจริง'">โหลด template</button>
-      <label style="background:var(--accent);color:#fff;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">
+      <label style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;cursor:pointer">
         นำเข้าไฟล์ที่กรอกแล้ว
         <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="opImportActual(this)">
       </label>
@@ -181,7 +181,7 @@
         <label class="text-xs" style="color:var(--text-muted)">ให้ครอบคลุม %</label>
         <input type="number" id="opServiceLevel" value="80" min="50" max="99" step="5" onchange="opLoadAccuracy()"
                style="width:60px;border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
-        <button onclick="opApplySuggestedBuffer()" style="background:var(--accent);color:#fff;border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">ใช้ % ที่แนะนำ</button>
+        <button onclick="opApplySuggestedBuffer()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">ใช้ % ที่แนะนำ</button>
       </span>
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">
@@ -215,7 +215,7 @@
         <input type="number" id="opTopN" value="30" min="1" max="999"
                style="width:58px;border:1px solid var(--border);border-radius:var(--r-sm);padding:3px 6px;font-size:11.5px;background:var(--bg-input);color:var(--text-primary)">
         รายการที่มูลค่าสูงสุด</label>
-      <button onclick="opKeepTopN()" style="background:var(--accent);color:#fff;border:0;border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
+      <button onclick="opKeepTopN()" style="background:var(--accent);color:var(--on-accent);border:0;border-radius:var(--r-sm);padding:4px 10px;font-size:11.5px;cursor:pointer"
               title="เก็บวัตถุดิบหลักไว้ติดตาม ที่เหลือให้สาขาซื้อเอง">ใช้เฉพาะวัตถุดิบหลัก</button>
       <span id="opBulkNote" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>

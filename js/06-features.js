@@ -2316,7 +2316,7 @@ function _bbomRenderMenuTable() {
          </svg>`
       : '<span class="text-slate-300">—</span>';
     const bomBadge = r.has_bom_recipe
-      ? '<span title="มีสูตร BoM" style="color:#d946ef"></span>'
+      ? '<span title="มีสูตร BoM" style="color:var(--fuchsia-ink)"></span>'
       : '<span title="ยังไม่มีสูตร BoM" style="color:#cbd5e1">○</span>';
     return `<tr style="border-bottom:1px solid var(--border)">
       <td class="px-3 py-1.5 font-mono text-xs">${r.sku_code || ''}</td>
@@ -2324,7 +2324,7 @@ function _bbomRenderMenuTable() {
       <td class="px-3 py-1.5 text-right text-xs">${(r.qty||0).toLocaleString('th-TH', {maximumFractionDigits:0})}</td>
       <td class="px-3 py-1.5 text-right text-xs">${(r.unit_cost||0).toFixed(2)}</td>
       <td class="px-3 py-1.5 text-right text-xs font-semibold">${_bbomFmtB(r.total_cogs)}</td>
-      <td class="px-3 py-1.5 text-right text-xs" style="color:#d946ef;font-weight:600">${(r.pct_of_branch_cogs||0).toFixed(2)}%</td>
+      <td class="px-3 py-1.5 text-right text-xs" style="color:var(--fuchsia-ink);font-weight:600">${(r.pct_of_branch_cogs||0).toFixed(2)}%</td>
       <td class="px-3 py-1.5 text-center">${spark}</td>
       <td class="px-3 py-1.5 text-center">${bomBadge}</td>
     </tr>`;
@@ -2340,7 +2340,7 @@ function _bbomRenderMenuTable() {
     <td class="px-3 py-2 text-right text-xs">${tQty.toLocaleString('th-TH', {maximumFractionDigits:0})}</td>
     <td class="px-3 py-2 text-right text-xs" style="color:var(--text-muted)">${wAvg.toFixed(2)}</td>
     <td class="px-3 py-2 text-right text-xs">${_bbomFmtB(tCogs)}</td>
-    <td class="px-3 py-2 text-right text-xs" style="color:#d946ef">${tPct.toFixed(2)}%</td>
+    <td class="px-3 py-2 text-right text-xs" style="color:var(--fuchsia-ink)">${tPct.toFixed(2)}%</td>
     <td class="px-3 py-2"></td>
     <td class="px-3 py-2"></td>
   </tr>`;
@@ -2374,7 +2374,7 @@ function _bbomRenderIngredients(d) {
         </div>
         <div class="text-right" style="flex:none">
           <span class="text-xs font-semibold">${_bbomFmtB(i.total_cost)}</span>
-          <span class="text-xs" style="color:#d946ef;font-weight:600;margin-left:4px">${(i.pct_of_branch_cogs||0).toFixed(2)}%</span>
+          <span class="text-xs" style="color:var(--fuchsia-ink);font-weight:600;margin-left:4px">${(i.pct_of_branch_cogs||0).toFixed(2)}%</span>
         </div>
       </div>
       <div class="flex items-center" style="gap:8px;margin-top:4px;padding-left:30px">

@@ -124,7 +124,7 @@ body.dark .anomaly-banner { background:#422006; color: #fde68a; }
   opacity: 0.6;
 }
 .dive-btn:hover {
-  background: var(--accent); color: #fff;
+  background: var(--accent); color: var(--on-accent);
   border-color: var(--accent);
   opacity: 1; transform: scale(1.08);
   box-shadow: 0 2px 8px rgba(31,58,107,0.3);
@@ -744,6 +744,7 @@ body.dark :where(.on-light, .card[style*="linear-gradient"], .card[style*="backg
               #tab-checklist :is(.cl-chip b, .cl-chip.active, .cl-ghost.on, .cl-nav button.active, .cl-seg button.on,
                   .cl-step.hot .cl-step-row, .cl-why, .cl-check, .cl-stuck, .cl-cmd, .cl-copy, mark.cl-warn)) {
   --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;
   --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
   --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
@@ -792,6 +793,7 @@ body.dark tbody tr:hover, body.dark thead th,
 body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, .bg-rose-50,
               .bg-cyan-50, .bg-amber-50, .bg-orange-50, .bg-sky-50, .bg-pink-50, .bg-fuchsia-50) {
   --good-ink: #34d399; --bad-ink: #f87171; --teal-ink: #2dd4bf; --rose-ink: #fb7185; --cyan-ink: #22d3ee; --sky-ink: #38bdf8;
+  --navy-ink: #8fb3ec; --violet-ink: #b4a5ec; --fuchsia-ink: #e879f9; --pink-ink: #f472b6;
   --text-primary: #f1f5f9; --text-secondary: #94a3b8; --text-muted: #8595a9;
   --accent: #93b4e6; --accent-hover: #b7cbee; --accent-soft: #172a4a; --on-accent: #080e1c;
   --indigo: #93b4e6; --indigo-mid: #b7cbee; --indigo-soft: #172a4a; --on-indigo: #080e1c;
@@ -802,6 +804,7 @@ body.dark tbody tr:nth-child(even):is(.bg-emerald-50, .bg-green-50, .bg-red-50, 
       so everything in it is light again. */
 body.dark #mgtRptBody :where(.bg-white, .bg-slate-50, .card, tbody tr, thead th) {
   --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;
   --text-primary: #0f172a; --text-secondary: #475569; --text-muted: #5f6c80;
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
   --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
@@ -1299,7 +1302,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-toggle { background: rgba(255,255,255,.18); color: #fff; border: 0; border-radius:4px;
   padding: 6px 10px; font-size: 12px; font-weight: 600; }
 #backToMobile { position: fixed; bottom: 84px; right: 16px; z-index: 60;
-  width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent); color: #fff;
+  width: 48px; height: 48px; border-radius: 50%; border: 0; background: var(--accent); color: var(--on-accent);
   font-size: 20px; box-shadow: 0 4px 14px rgba(31,58,107,.5); align-items: center; justify-content: center; }
 /* bottom tab bar for the mobile app */
 #msNav { position: fixed; bottom: 0; left: 0; right: 0; z-index: 40;
@@ -1314,7 +1317,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 #mobileSummary { padding-bottom: 80px; }
 .ms-seg { flex: 1; padding: 7px 6px; border-radius:4px; border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
-.ms-seg-on { background: var(--accent); color: #fff; border-color: var(--accent); }
+.ms-seg-on { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
 
 /* ── Management Report: white-paper island — the printable report keeps a light
    document look in dark mode. The report's inner styles consume these tokens
@@ -1327,7 +1330,8 @@ body.dark #mgtRptBody {
   --accent: #1f3a6b; --accent-hover: #16294d; --accent-soft: #e8eef7; --on-accent: #ffffff;
   --indigo: #1f3a6b; --indigo-mid: #16294d; --indigo-soft: #e8eef7; --on-indigo: #ffffff;
   --bg-input: #ffffff; --border-soft: #e6eaf0; --border-control: #7d8aa0;
-  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;   /* the dark inks are pale — unreadable on paper */
+  --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d;   /* the dark inks are pale — unreadable on paper */
   color-scheme: light;
 }
 body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
@@ -1384,7 +1388,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
      be visible even when the phone was not in force-desktop mode */
   #mobileSummary, #msNav, #backToMobile { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
-  body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1; }
+  body.dark { --good-ink: #047857; --bad-ink: #b91c1c; --teal-ink: #0f766e; --rose-ink: #be123c; --cyan-ink: #0e7490; --sky-ink: #0369a1;
+  --navy-ink: #2f5391; --violet-ink: #5b4a9e; --fuchsia-ink: #a21caf; --pink-ink: #be185d; }
   body:not(.force-desktop) .app-layout { display: block !important; }
   .app-layout, .main-wrapper, .content-area { display: block !important; }
   .content-area { padding: 0 !important; }
@@ -1452,7 +1457,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
                   padding:10px 12px;font-size:14px;margin-bottom:8px">
     <div id="loginError" style="display:none;color:#dc2626;font-size:12.5px;margin:4px 0 10px"></div>
     <button type="submit" id="loginBtn"
-            style="width:100%;margin-top:8px;background:var(--accent);color:#fff;border:none;border-radius:4px;
+            style="width:100%;margin-top:8px;background:var(--accent);color:var(--on-accent);border:none;border-radius:4px;
                    padding:11px;font-size:14px;font-weight:700;cursor:pointer">เข้าสู่ระบบ</button>
   </form>
 </div>
@@ -1476,7 +1481,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
       <button type="button" id="pwCancel" onclick="closePasswordChange()"
               style="flex:0 0 auto;background:#f1f5f9;color:#475569;border:none;border-radius:4px;padding:11px 16px;font-size:14px;font-weight:600;cursor:pointer">ยกเลิก</button>
       <button type="submit" id="pwSubmit"
-              style="flex:1;background:var(--accent);color:#fff;border:none;border-radius:4px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">บันทึกรหัสผ่านใหม่</button>
+              style="flex:1;background:var(--accent);color:var(--on-accent);border:none;border-radius:4px;padding:11px;font-size:14px;font-weight:700;cursor:pointer">บันทึกรหัสผ่านใหม่</button>
     </div>
   </form>
 </div>
