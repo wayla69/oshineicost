@@ -22,6 +22,7 @@ import html
 import subprocess
 import sys
 from pathlib import Path
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 HERE = Path(__file__).parent.resolve()
 sys.path.insert(0, str(HERE))
@@ -94,11 +95,10 @@ def pull_data():
 
 
 # ── CSS (matches gen_branch_report.py house style) ──────────────────────────
-CSS = """
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&display=swap');
+CSS = font_face_css() + """
 @page{size:A4;margin:0}
 *{box-sizing:border-box}
-body{margin:0;font-family:'IBM Plex Sans Thai',Sarabun,sans-serif;color:#1f2937;background:#e5e7eb;font-size:12.5px;line-height:1.55}
+body{margin:0;font-family:'KIRA UI','Noto Sans Thai',sans-serif;color:#1f2937;background:#e5e7eb;font-size:12.5px;line-height:1.55}
 .page{width:210mm;min-height:296mm;margin:0 auto 8mm;background:#fff;padding:16mm 16mm 14mm;position:relative;page-break-after:always;break-after:page}
 .page:last-child{break-after:auto;page-break-after:auto}
 @media print{body{background:#fff}.page{margin:0}}

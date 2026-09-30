@@ -17,6 +17,9 @@ import io
 import json
 import subprocess
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent / 'backend'))
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN_JSON = ROOT / "backend" / "checklists" / "feedback_rollout.json"
@@ -49,13 +52,12 @@ def qr_svg(url: str, size_mm: float = 26) -> str:
     return svg.replace("<svg ", f'<svg width="{size_mm}mm" height="{size_mm}mm" ', 1)
 
 
-CSS = """
-@import url('https://fonts.googleapis.com/css2?family=Prompt:wght@500;600;700;800&family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap');
+CSS = font_face_css() + """
 @page{size:338.67mm 190.5mm;margin:0}
 *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 html,body{margin:0;background:#e2e8f0}
-body{font-family:'Sarabun','Segoe UI',sans-serif;color:#0f172a}
-h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
+body{font-family:'KIRA UI','Noto Sans Thai',sans-serif;color:#0f172a}
+h1,h2,h3,.disp{font-family:'KIRA UI','Noto Sans Thai',sans-serif}
 
 :root{
   --indigo:#1f3a6b; --indigo-mid:#1f3a6b; --indigo-deep:#16294d; --indigo-ink:#1e1b4b;
@@ -69,47 +71,47 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
   page-break-after:always;break-after:page;display:flex;flex-direction:column}
 .slide:last-child{page-break-after:auto;break-after:auto}
 
-.kicker{font:700 10.5pt 'Prompt';letter-spacing:.14em;text-transform:uppercase;color:var(--indigo)}
-.pageno{position:absolute;right:14mm;bottom:8mm;font:600 8.5pt 'IBM Plex Mono';color:var(--ink4)}
-.brandline{position:absolute;left:14mm;bottom:8mm;font:600 8.5pt 'Prompt';letter-spacing:.08em;color:var(--ink4)}
+.kicker{font:700 10.5pt 'KIRA UI';letter-spacing:.14em;text-transform:uppercase;color:var(--indigo)}
+.pageno{position:absolute;right:14mm;bottom:8mm;font:600 8.5pt ui-monospace;color:var(--ink4)}
+.brandline{position:absolute;left:14mm;bottom:8mm;font:600 8.5pt 'KIRA UI';letter-spacing:.08em;color:var(--ink4)}
 
 /* ── cover ── */
 .cover{justify-content:center;padding:0 22mm;background:
   radial-gradient(120% 140% at 82% -10%,#e8eef7 0%,#ffffff 46%),var(--paper)}
 .cover .band{position:absolute;inset:0 0 auto 0;height:5mm;
   background:linear-gradient(90deg,var(--indigo-ink) 0%,var(--indigo-deep) 45%,var(--indigo) 100%)}
-.cover .wordmark{font:800 13pt 'Prompt';letter-spacing:.22em;color:var(--indigo-deep)}
-.cover h1{font:800 46pt/1.08 'Prompt';margin:9mm 0 6mm;color:var(--ink);max-width:200mm}
+.cover .wordmark{font:800 13pt 'KIRA UI';letter-spacing:.22em;color:var(--indigo-deep)}
+.cover h1{font:800 46pt/1.08 'KIRA UI';margin:9mm 0 6mm;color:var(--ink);max-width:200mm}
 .cover h1 em{font-style:normal;color:var(--indigo)}
-.cover .sub{font:500 15pt/1.55 'Sarabun';color:var(--ink2);max-width:150mm;margin:0 0 12mm}
+.cover .sub{font:500 15pt/1.55 'KIRA UI';color:var(--ink2);max-width:150mm;margin:0 0 12mm}
 .cover .chips{display:flex;gap:6mm;flex-wrap:wrap}
 .chip{display:flex;align-items:center;gap:3mm;background:var(--indigo-soft);border:.6pt solid var(--indigo-line);
-  border-radius:99px;padding:4mm 7mm;font:600 10.5pt 'Sarabun';color:var(--indigo-deep)}
-.chip b{font:800 15pt 'Prompt';color:var(--indigo-deep)}
+  border-radius:99px;padding:4mm 7mm;font:600 10.5pt 'KIRA UI';color:var(--indigo-deep)}
+.chip b{font:800 15pt 'KIRA UI';color:var(--indigo-deep)}
 
 /* ── generic content slide ── */
 .pad{padding:14mm 16mm 12mm;flex:1;display:flex;flex-direction:column;justify-content:center}
 .pad.top{justify-content:flex-start}
 .pad.dense .lede{margin-bottom:5mm}
-.slide h2{font:700 24pt 'Prompt';margin:2mm 0 3mm;color:var(--ink)}
-.slide .lede{font:500 12.5pt/1.6 'Sarabun';color:var(--ink2);max-width:230mm;margin:0 0 8mm}
+.slide h2{font:700 24pt 'KIRA UI';margin:2mm 0 3mm;color:var(--ink)}
+.slide .lede{font:500 12.5pt/1.6 'KIRA UI';color:var(--ink2);max-width:230mm;margin:0 0 8mm}
 .rule{height:2.4pt;width:26mm;background:var(--indigo);
   border-radius:2px;margin:4mm 0 0}
 
 /* ── problem slide (3) ── */
 .pain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;margin-top:4mm}
 .pain{background:var(--page-bg);border:.6pt solid var(--line);border-radius:5mm;padding:8mm}
-.pain .n{font:800 22pt 'Prompt';color:var(--indigo)}
-.pain h3{font:700 13pt 'Prompt';margin:3mm 0 2mm;color:var(--ink)}
-.pain p{font:400 10.8pt/1.55 'Sarabun';color:var(--ink2);margin:0}
+.pain .n{font:800 22pt 'KIRA UI';color:var(--indigo)}
+.pain h3{font:700 13pt 'KIRA UI';margin:3mm 0 2mm;color:var(--ink)}
+.pain p{font:400 10.8pt/1.55 'KIRA UI';color:var(--ink2);margin:0}
 
 /* ── flow (4) ── */
 .flow{display:flex;align-items:stretch;gap:0;margin-top:6mm}
 .flow .step{flex:1;background:var(--page-bg);border:.6pt solid var(--line);border-radius:5mm;
   padding:8mm 7mm;position:relative;display:flex;flex-direction:column;gap:2mm}
-.flow .step .k{font:700 8.5pt 'Prompt';letter-spacing:.1em;text-transform:uppercase;color:var(--indigo)}
-.flow .step h3{font:700 13.5pt 'Prompt';margin:0;color:var(--ink)}
-.flow .step p{font:400 10.3pt/1.5 'Sarabun';color:var(--ink2);margin:0}
+.flow .step .k{font:700 8.5pt 'KIRA UI';letter-spacing:.1em;text-transform:uppercase;color:var(--indigo)}
+.flow .step h3{font:700 13.5pt 'KIRA UI';margin:0;color:var(--ink)}
+.flow .step p{font:400 10.3pt/1.5 'KIRA UI';color:var(--ink2);margin:0}
 .flow .arrow{width:11mm;display:flex;align-items:center;justify-content:center;color:var(--indigo);font-size:16pt;flex-shrink:0}
 
 /* ── channel grid (5) ── */
@@ -117,9 +119,9 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 .ch{background:var(--paper);border:.6pt solid var(--line);border-radius:4mm;padding:4.5mm 6mm;
   box-shadow:0 1px 2px rgba(15,23,42,.04)}
 .ch .e{font-size:13pt}
-.ch h3{font:700 10.8pt 'Prompt';margin:1.6mm 0 1mm;color:var(--ink)}
-.ch p{font:400 9.1pt/1.4 'Sarabun';color:var(--ink3);margin:0}
-.ch .tag{display:inline-block;margin-top:1.6mm;font:600 7.6pt 'Sarabun';padding:.5mm 2.4mm;border-radius:99px}
+.ch h3{font:700 10.8pt 'KIRA UI';margin:1.6mm 0 1mm;color:var(--ink)}
+.ch p{font:400 9.1pt/1.4 'KIRA UI';color:var(--ink3);margin:0}
+.ch .tag{display:inline-block;margin-top:1.6mm;font:600 7.6pt 'KIRA UI';padding:.5mm 2.4mm;border-radius:99px}
 .tag.live{background:#ecfdf5;color:#047857}
 .tag.upload{background:#fffbeb;color:#92400e}
 .tag.paid{background:#fef2f2;color:#b91c1c}
@@ -132,19 +134,19 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 .fact{display:flex;gap:4mm;align-items:flex-start}
 .fact .dot{flex:0 0 auto;width:7mm;height:7mm;border-radius:99px;background:var(--indigo-soft);
   border:.6pt solid var(--indigo-line);display:flex;align-items:center;justify-content:center;
-  font:700 8.5pt 'Prompt';color:var(--indigo-deep);margin-top:.5mm}
-.fact p{font:400 10.8pt/1.55 'Sarabun';color:var(--ink2);margin:0}
+  font:700 8.5pt 'KIRA UI';color:var(--indigo-deep);margin-top:.5mm}
+.fact p{font:400 10.8pt/1.55 'KIRA UI';color:var(--ink2);margin:0}
 .fact b{color:var(--ink)}
 
 /* ── analysis (7) ── */
 .split{display:flex;gap:10mm;margin-top:4mm}
 .split>div{flex:1}
 .eng{background:var(--page-bg);border:.6pt solid var(--line);border-radius:5mm;padding:7mm 8mm;height:100%}
-.eng h3{font:700 13pt 'Prompt';margin:0 0 2mm;color:var(--indigo-deep)}
+.eng h3{font:700 13pt 'KIRA UI';margin:0 0 2mm;color:var(--indigo-deep)}
 .eng ul{margin:2mm 0 0;padding-left:5mm}
-.eng li{font:400 10.6pt/1.55 'Sarabun';color:var(--ink2);margin:1.4mm 0}
+.eng li{font:400 10.6pt/1.55 'KIRA UI';color:var(--ink2);margin:1.4mm 0}
 .pillbar{display:flex;gap:2.5mm;flex-wrap:wrap;margin-top:5mm}
-.pill{font:600 9pt 'Sarabun';padding:2mm 4mm;border-radius:99px;background:var(--indigo-soft);
+.pill{font:600 9pt 'KIRA UI';padding:2mm 4mm;border-radius:99px;background:var(--indigo-soft);
   color:var(--indigo-deep);border:.5pt solid var(--indigo-line)}
 
 /* ── business cross-read (8) ── */
@@ -152,54 +154,54 @@ h1,h2,h3,.disp{font-family:'Prompt','Sarabun',sans-serif}
 .cross .card{background:var(--paper);border:.6pt solid var(--line);border-radius:5mm;padding:7mm;
   display:flex;flex-direction:column;gap:2mm}
 .cross .card .e{font-size:16pt}
-.cross .card h3{font:700 12pt 'Prompt';margin:0;color:var(--ink)}
-.cross .card p{font:400 10.3pt/1.55 'Sarabun';color:var(--ink2);margin:0}
+.cross .card h3{font:700 12pt 'KIRA UI';margin:0;color:var(--ink)}
+.cross .card p{font:400 10.3pt/1.55 'KIRA UI';color:var(--ink2);margin:0}
 
 /* ── loop (9) ── */
 .loop{display:flex;align-items:center;gap:0;margin-top:8mm}
 .loop .node{flex:1;text-align:center}
 .loop .node .circ{width:22mm;height:22mm;margin:0 auto 3mm;border-radius:99px;background:var(--indigo-soft);
   border:1.4pt solid var(--indigo-line);display:flex;align-items:center;justify-content:center;font-size:15pt}
-.loop .node h3{font:700 11.5pt 'Prompt';margin:0 0 1mm;color:var(--ink)}
-.loop .node p{font:400 9.3pt/1.4 'Sarabun';color:var(--ink3);margin:0;padding:0 4mm}
+.loop .node h3{font:700 11.5pt 'KIRA UI';margin:0 0 1mm;color:var(--ink)}
+.loop .node p{font:400 9.3pt/1.4 'KIRA UI';color:var(--ink3);margin:0;padding:0 4mm}
 .loop .conn{flex:0 0 16mm;display:flex;align-items:flex-start;justify-content:center;padding-top:10mm;
   color:var(--indigo);font-size:15pt}
 .loop-note{margin-top:8mm;background:var(--indigo-soft);border-left:3pt solid var(--indigo);border-radius:2mm;
-  padding:5mm 7mm;font:500 10.8pt/1.6 'Sarabun';color:var(--indigo-deep)}
+  padding:5mm 7mm;font:500 10.8pt/1.6 'KIRA UI';color:var(--indigo-deep)}
 
 /* ── competitor + ai (10) ── */
 .two{display:flex;gap:10mm;margin-top:4mm}
 .two>div{flex:1;background:var(--page-bg);border:.6pt solid var(--line);border-radius:5mm;padding:7mm 8mm}
-.two h3{font:700 13pt 'Prompt';margin:0 0 2mm;color:var(--indigo-deep)}
-.two p{font:400 10.6pt/1.6 'Sarabun';color:var(--ink2);margin:0 0 2mm}
-.two .stat{font:800 20pt 'Prompt';color:var(--ink)}
+.two h3{font:700 13pt 'KIRA UI';margin:0 0 2mm;color:var(--indigo-deep)}
+.two p{font:400 10.6pt/1.6 'KIRA UI';color:var(--ink2);margin:0 0 2mm}
+.two .stat{font:800 20pt 'KIRA UI';color:var(--ink)}
 
 /* ── rollout (11) ── */
 .gantt-wrap{margin-top:4mm}
 .gantt{display:flex;flex-direction:column;gap:1.4mm}
 .grow{display:flex;align-items:center;gap:4mm}
-.glabel{flex:0 0 62mm;font:500 8.6pt 'Sarabun';color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.glabel{flex:0 0 62mm;font:500 8.6pt 'KIRA UI';color:var(--ink2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gtrack{flex:1;position:relative;height:4.6mm;background:var(--line-soft);border-radius:2px}
 .gbar{position:absolute;top:0;height:100%;border-radius:2px}
-.gdays{flex:0 0 20mm;font:500 7.8pt 'IBM Plex Mono';color:var(--ink4);text-align:left}
+.gdays{flex:0 0 20mm;font:500 7.8pt ui-monospace;color:var(--ink4);text-align:left}
 .gaxis{margin-top:1mm}
 .gaxis .gtrack{background:none;height:3mm}
-.gtick{position:absolute;top:0;transform:translateX(-50%);font:500 7.6pt 'IBM Plex Mono';color:var(--ink4)}
+.gtick{position:absolute;top:0;transform:translateX(-50%);font:500 7.6pt ui-monospace;color:var(--ink4)}
 .rollstat{display:flex;gap:8mm;margin-top:5mm}
 .rs{flex:1;background:var(--page-bg);border:.6pt solid var(--line);border-radius:5mm;padding:6mm 7mm;text-align:center}
-.rs .v{font:800 20pt 'Prompt';color:var(--indigo)}
-.rs .l{font:500 9.5pt 'Sarabun';color:var(--ink3);margin-top:1mm}
+.rs .v{font:800 20pt 'KIRA UI';color:var(--indigo)}
+.rs .l{font:500 9.5pt 'KIRA UI';color:var(--ink3);margin-top:1mm}
 
 /* ── CTA (12) ── */
 .cta{justify-content:center;align-items:center;text-align:center;background:var(--indigo-ink);color:#fff}
-.cta h2{font:800 30pt 'Prompt';color:#fff;margin:0 0 5mm}
+.cta h2{font:800 30pt 'KIRA UI';color:#fff;margin:0 0 5mm}
 .cta .lede{color:#e8eef7;margin:0 auto 10mm;text-align:center}
 .cta-grid{display:flex;gap:8mm;justify-content:center;max-width:230mm;margin:0 auto}
 .cta .card{flex:1;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.22);border-radius:5mm;
   padding:7mm 8mm;text-align:left;backdrop-filter:blur(2px)}
-.cta .card .n{font:800 15pt 'Prompt';color:#c9d5e8}
-.cta .card h3{font:700 12.5pt 'Prompt';margin:2mm 0 1.5mm;color:#fff}
-.cta .card p{font:400 10pt/1.5 'Sarabun';color:#e8eef7;margin:0}
+.cta .card .n{font:800 15pt 'KIRA UI';color:#c9d5e8}
+.cta .card h3{font:700 12.5pt 'KIRA UI';margin:2mm 0 1.5mm;color:#fff}
+.cta .card p{font:400 10pt/1.5 'KIRA UI';color:#e8eef7;margin:0}
 """
 
 
@@ -325,7 +327,7 @@ def build_html() -> str:
           <li>ดาวเป็นตัวช่วยตัดสินเมื่อข้อความกำกวม</li>
           <li>ทำงานได้ทันทีแม้ไม่มี API key — ไม่มีวันหยุดวิเคราะห์</li></ul></div>
       </div>
-      <p style="margin-top:6mm;font:600 10.5pt 'Sarabun';color:var(--ink3)">8 หัวข้อที่ระบบจับอัตโนมัติ + จับชื่อเมนูที่ถูกพูดถึงจากรายการขายจริง</p>
+      <p style="margin-top:6mm;font:600 10.5pt 'KIRA UI';color:var(--ink3)">8 หัวข้อที่ระบบจับอัตโนมัติ + จับชื่อเมนูที่ถูกพูดถึงจากรายการขายจริง</p>
       <div class="pillbar">{pills}</div>
     </div>''', 6)
 

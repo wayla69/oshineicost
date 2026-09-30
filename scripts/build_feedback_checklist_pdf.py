@@ -21,6 +21,9 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / 'backend'))
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 ROOT = Path(__file__).resolve().parents[1]
 PLANS_DIR = ROOT / "backend" / "checklists"
@@ -54,23 +57,23 @@ TEMPLATE = r"""<!doctype html>
 <head>
 <meta charset="utf-8">
 <title>__TITLE__ — ฉบับพิมพ์</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bai+Jamjuree:wght@600;700&family=Sarabun:wght@400;500;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>__FONTS__</style>
 <style>
   @page { size: A4; margin: 11mm 11mm 13mm 11mm;
-    @bottom-left { content: "__FOOTNOTE__"; font: 7.5pt "Sarabun", sans-serif; color: #7a8681; }
-    @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 7.5pt "Sarabun", sans-serif; color: #7a8681; } }
+    @bottom-left { content: "__FOOTNOTE__"; font: 7.5pt "KIRA UI", sans-serif; color: #7a8681; }
+    @bottom-right { content: "หน้า " counter(page) " / " counter(pages); font: 7.5pt "KIRA UI", sans-serif; color: #7a8681; } }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #fff; }
-  body { font: 9.3pt/1.36 "Sarabun", "Segoe UI", Tahoma, sans-serif; color: #1b232a; }
-  h1, h2, h3 { font-family: "Bai Jamjuree", "Sarabun", sans-serif; margin: 0; }
-  code, .cmd { font-family: "IBM Plex Mono", Consolas, monospace; }
+  body { font: 9.3pt/1.36 "KIRA UI", "Noto Sans Thai", sans-serif; color: #1b232a; }
+  h1, h2, h3 { font-family: "KIRA UI", "Noto Sans Thai", sans-serif; margin: 0; }
+  code, .cmd { font-family: ui-monospace, Consolas, monospace; }
   /* pastel palette: teal band, blue why, green done, rose stuck, yellow command, peach warning, lilac value */
   .cmd { background: #fff1bf; color: #4a3a00; padding: 0 2.5pt; border-radius: 2.5pt; font-size: 8.3pt; overflow-wrap: anywhere; word-break: break-all; }
   mark.warn { background: #ffd8c4; color: #7a2b0c; padding: 0 2.5pt; border-radius: 2.5pt; font-weight: 700; }
   .val { background: #e8e1f7; color: #3b2a6b; padding: 0 2.5pt; border-radius: 2.5pt; font-weight: 700; }
   /* cover */
   .cover { margin-bottom: 4mm; }          /* the phases follow on the same page: no blank third of a sheet */
-  .brand { font: 700 7.5pt "Bai Jamjuree"; letter-spacing: .12em; text-transform: uppercase; color: #1f3a6b; }
+  .brand { font: 700 7.5pt "KIRA UI"; letter-spacing: .12em; text-transform: uppercase; color: #1f3a6b; }
   .cover h1 { font-size: 22pt; line-height: 1.15; margin: 3pt 0 4pt; }
   .lede { font-size: 10.2pt; color: #46535e; max-width: 165mm; margin: 0 0 6pt; }
   .cover-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: 4mm; }
@@ -79,7 +82,7 @@ TEMPLATE = r"""<!doctype html>
   .box ul { margin: 0; padding-left: 12pt; }
   .box li { margin: 1pt 0; }
   table.sum { border-collapse: collapse; width: 100%; font-size: 8.6pt; margin-top: 4mm; }
-  table.sum th { text-align: left; font: 700 7.6pt "Bai Jamjuree"; letter-spacing: .05em; color: #556; background: #eef3f0; padding: 3pt 5pt; border-bottom: .8pt solid #b9c6c0; }
+  table.sum th { text-align: left; font: 700 7.6pt "KIRA UI"; letter-spacing: .05em; color: #556; background: #eef3f0; padding: 3pt 5pt; border-bottom: .8pt solid #b9c6c0; }
   table.sum td { padding: 2.5pt 5pt; border-bottom: .5pt solid #dfe6e2; vertical-align: top; }
   table.sum td.n { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
   .gantt { margin-top: 4mm; border: .6pt solid #c9d4cf; border-radius: 4pt; padding: 4pt 6pt; }
@@ -110,7 +113,7 @@ TEMPLATE = r"""<!doctype html>
   .step .t i { display: inline-block; width: 8.5pt; height: 8.5pt; border: 1pt solid #333; border-radius: 1.5pt; margin-top: 2pt; }
   .body { display: grid; grid-template-columns: 1.4fr 1fr; gap: 2pt 7pt; margin: 2pt 0 0 13pt; font-size: 8.9pt; align-items: start; }
   .body.nohow { grid-template-columns: 1fr; }
-  .body b { display: block; font: 700 7pt "Bai Jamjuree"; letter-spacing: .05em; text-transform: uppercase; color: #6b7680; margin-bottom: 1pt; }
+  .body b { display: block; font: 700 7pt "KIRA UI"; letter-spacing: .05em; text-transform: uppercase; color: #6b7680; margin-bottom: 1pt; }
   .body ol { margin: 0; padding-left: 11pt; }
   .body ol li { margin: .6pt 0; }
   .side > div { padding: 2pt 5pt 3pt; border-radius: 2.5pt; margin-bottom: 2.5pt; }
@@ -184,7 +187,7 @@ document.getElementById("sumTable").innerHTML = `<thead><tr><th>เฟส</th><t
   const th = d => d.toLocaleDateString("th-TH", {day:"numeric", month:"short"});
   const left = 150, dayW = 13, rowH = 17, top = 20, W = left + HORIZON * dayW + 30, H = top + PLAN.length * rowH + 12;
   const today = new Date(); today.setHours(0,0,0,0); const td = Math.round((today - start) / 86400000);
-  let g = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="Sarabun, sans-serif"><defs><pattern id="h" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="#e0a56a"/></pattern></defs>`;
+  let g = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" font-family="KIRA UI, sans-serif"><defs><pattern id="h" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2" height="4" fill="#e0a56a"/></pattern></defs>`;
   for (let d = 0; d <= HORIZON; d += 7) { const x = left + d * dayW; g += `<line x1="${x}" y1="${top-4}" x2="${x}" y2="${H-4}" stroke="#dfe6e2"/><text x="${x+2}" y="${top-8}" font-size="7.5" fill="#6b7680">${th(addDays(d))}</text>`; }
   PLAN.forEach((ph, i) => { const y = top + i * rowH, [a, b] = ph.days, x1 = left + a * dayW, w = Math.max(dayW * .6, (b - a) * dayW);
     g += `<text x="4" y="${y+12}" font-size="8" font-weight="700" fill="#1b232a">${esc(ph.name.split(" · ")[0])}</text><text x="38" y="${y+12}" font-size="7.6" fill="#46535e">${esc((ph.name.split(" · ")[1]||"").slice(0,26))}</text>`;
@@ -232,7 +235,7 @@ def build(plan_name: str = "feedback_rollout", no_pdf: bool = False, start: str 
     consts = ("const PLAN = " + json.dumps(plan["phases"], ensure_ascii=False) + ";\n"
               "const STATUS = " + json.dumps(plan["statuses"], ensure_ascii=False) + ";\n"
               f"const HORIZON = {int(plan.get('horizon_days') or 36)};\n")
-    page = (TEMPLATE.replace("__PLAN__", consts).replace("__START__", start)
+    page = (TEMPLATE.replace("__FONTS__", font_face_css()).replace("__PLAN__", consts).replace("__START__", start)
             .replace("__TITLE__", _esc(title)).replace("__LEDE__", lede)
             .replace("__HOWTO__", how_to_html).replace("__BOX2_TITLE__", _esc(box2_title)).replace("__BOX2__", box2_html)
             .replace("__FOOTNOTE__", _esc(f"Oshinei · {title} · ฉบับพิมพ์")))

@@ -4,6 +4,9 @@ Buffet-100% focus. Minimal/formal design. Reads scripts/menu_analysis.json
 (real DB figures, Jan-May 2026) and emits docs/COST_REDUCTION_REPORT.html.
 Sections are exec'd from scripts/_sec_*.py (share globals)."""
 import json, os, html
+import sys as _sys
+_sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent / 'backend'))
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = json.load(open(os.path.join(ROOT, "scripts", "menu_analysis.json"), encoding="utf-8"))
@@ -60,7 +63,7 @@ CSS = r"""
 *{box-sizing:border-box}
 html{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{
-  font-family:'IBM Plex Sans Thai','Sarabun',-apple-system,'Segoe UI',Tahoma,sans-serif;
+  font-family:'KIRA UI','Noto Sans Thai',sans-serif;
   color:var(--ink); background:#EDEFF0; margin:0; line-height:1.66; font-size:14.5px;
 }
 .page{
@@ -309,8 +312,7 @@ PTS_MID = SAVE_MID*1e6 / REV_Y * 100
 w('<!DOCTYPE html><html lang="th"><head><meta charset="utf-8">')
 w('<meta name="viewport" content="width=device-width,initial-scale=1">')
 w('<title>แผนกลยุทธ์ลดต้นทุนบุฟเฟ่ต์ — Oshinei Enterprise (2026)</title>')
-w('<link rel="preconnect" href="https://fonts.googleapis.com">')
-w('<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Sarabun:wght@400;500;600;700;800&display=swap" rel="stylesheet">')
+w(f'<style>{font_face_css()}</style>')
 w(f'<style>{CSS}</style></head><body>')
 w('<button class="pdfbtn noprint" onclick="window.print()">บันทึกเป็น PDF (Save as PDF)</button>')
 

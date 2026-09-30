@@ -25,6 +25,7 @@ from datetime import datetime
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from gen_surin_ubon_report import CSS, fmt, page_hdr, ro_uri, resolve_db  # noqa: E402
+from report_fonts import font_face_css  # KIRA UI, embedded (backend/report_fonts.py)
 
 COUPON_ID = 35
 BRANCH_LIKE = "%พิษณุโลก%"
@@ -117,7 +118,8 @@ def generate(d):
     out = []
     add = out.append
     add(f"""<!doctype html><html lang="th"><head><meta charset="utf-8">
-<title>พิษณุโลก — ทบทวนการใช้คูปองส่วนลดผู้สูงอายุ</title><style>{CSS}</style></head><body>""")
+<title>พิษณุโลก — ทบทวนการใช้คูปองส่วนลดผู้สูงอายุ</title><style>{font_face_css()}
+{CSS}</style></head><body>""")
 
     # ── COVER ───────────────────────────────────────────────────────────────
     add(f"""<div class="cover">
