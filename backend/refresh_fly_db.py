@@ -28,6 +28,8 @@ Restart step needs flyctl on PATH (or ~/.fly/bin).
 """
 import argparse, gzip, http.cookiejar, json, os, shutil, sqlite3, subprocess, sys, tempfile, time
 import urllib.request, urllib.error
+
+from sync_lock import sync_lock
 from pathlib import Path
 
 # Force UTF-8 stdout/stderr so the ✓/✗/… status glyphs don't raise
@@ -303,4 +305,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # The snapshot reads .incoming (or oshinei.db); a sync must not be rewriting it,
+    # and apply-local must not swap it away mid-read. See sync_lock.py.
+    with sync_lock("refresh_fly_db"):
+        main()

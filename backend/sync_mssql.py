@@ -26,6 +26,8 @@ Aggregation is done server-side (GROUP BY) so we never pull the 21M SaleItem row
 import os, sys, shutil, sqlite3, argparse, time
 from pathlib import Path
 
+from sync_lock import sync_lock
+
 HERE = Path(__file__).resolve().parent
 DB        = HERE / "oshinei.db"
 INCOMING  = HERE / "oshinei.db.incoming"
@@ -285,19 +287,22 @@ def apply_local_swap():
     file lock), the replace fails — we leave .incoming in place so the app's
     own startup swap picks it up on the next restart. Returns True if swapped.
     """
-    if not INCOMING.exists():
-        print("      [apply-local] no .incoming to apply"); return False
-    for suf in ("-wal", "-shm"):
-        try: os.remove(str(DB) + suf)
-        except OSError: pass
-    try:
-        os.replace(str(INCOMING), str(DB))   # atomic on same filesystem
-        print(f"      [apply-local] ✓ swapped → {DB.name} (local app now serves fresh data after reconnect)")
-        return True
-    except OSError as e:
-        print(f"      [apply-local] ⚠ could not swap now ({e}); .incoming kept — "
-              "restart the local app to apply (startup swap will pick it up).")
-        return False
+    # never swap a .incoming another job is still writing; the lock sits beside
+    # DB so a test that points DB at a temp dir never waits on a real sync
+    with sync_lock("apply-local", lock_path=DB.parent / "oshinei.db.sync.lock"):
+        if not INCOMING.exists():
+            print("      [apply-local] no .incoming to apply"); return False
+        for suf in ("-wal", "-shm"):
+            try: os.remove(str(DB) + suf)
+            except OSError: pass
+        try:
+            os.replace(str(INCOMING), str(DB))   # atomic on same filesystem
+            print(f"      [apply-local] ✓ swapped → {DB.name} (local app now serves fresh data after reconnect)")
+            return True
+        except OSError as e:
+            print(f"      [apply-local] ⚠ could not swap now ({e}); .incoming kept — "
+                  "restart the local app to apply (startup swap will pick it up).")
+            return False
 
 
 # ── staged-file preparation (step [1/6]) ─────────────────────────────────────
@@ -1644,4 +1649,5 @@ def reconcile(sq):
     return ok
 
 if __name__ == "__main__":
-    main()
+    with sync_lock("sync_mssql"):   # one job at a time on .incoming - see sync_lock.py
+        main()
