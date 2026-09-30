@@ -1,17 +1,17 @@
-<!-- ══ Phase 6: 🎯 เป้าลดต้นทุน — เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน ══ -->
+<!-- ══ Phase 6: เป้าลดต้นทุน — เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน ══ -->
 <div id="tab-menuefficiency" style="display:none">
   <!-- scope + controls bar -->
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
-    <span class="text-xs font-semibold" style="color:var(--text-secondary)">🎯 เป้าลดต้นทุน</span>
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">เป้าลดต้นทุน</span>
     <span id="mce2Scope" class="text-[11px] px-2 py-0.5 rounded-full" style="background:rgba(239,68,68,.1);color:#dc2626"></span>
-    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">แกนนอน = % จำนวนเสิร์ฟ · แกนตั้ง = % ต้นทุน · <b>มุมบนขวา (🔴) = ลดต้นทุนได้มากที่สุด</b></span>
+    <span class="text-[11px] ml-auto" style="color:var(--text-muted)">แกนนอน = % จำนวนเสิร์ฟ · แกนตั้ง = % ต้นทุน · <b>มุมบนขวา (●) = ลดต้นทุนได้มากที่สุด</b></span>
   </div>
   <!-- KPI chips -->
   <div id="mce2Kpis" class="flex flex-wrap gap-2 mb-4"></div>
   <!-- Quadrant scatter + legend -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">📊 Quadrant: เสิร์ฟ × ต้นทุน</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">Quadrant: เสิร์ฟ × ต้นทุน</h2>
       <div class="flex gap-3 text-[11px]" style="color:var(--text-muted)">
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#ef4444;margin-right:3px"></span>เสิร์ฟเยอะ + ต้นทุนสูง (ลดก่อน)</span>
         <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#f59e0b;margin-right:3px"></span>เสิร์ฟน้อย + ต้นทุนสูง (ตัดเมนู?)</span>
@@ -24,8 +24,8 @@
   <!-- Full sortable table -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">📋 รายการทั้งหมด (คลิกหัวคอลัมน์เพื่อเรียงลำดับ)</h2>
-      <button onclick="exportMce2Csv()" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">⬇ CSV</button>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">รายการทั้งหมด (คลิกหัวคอลัมน์เพื่อเรียงลำดับ)</h2>
+      <button onclick="exportMce2Csv()" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">CSV</button>
     </div>
     <div class="overflow-x-auto" style="max-height:420px;overflow-y:auto">
       <table class="text-xs w-full">
@@ -49,8 +49,8 @@
     </div>
   </div>
   <!-- Ingredient attack section -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #8b5cf6">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🧬 วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว)</h2>
+  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว)</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p>
     <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -77,9 +77,9 @@
   </div>
 
   <!-- Pareto 80/20 analysis -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #f59e0b">
+  <div class="card p-5 mb-4" style="border:1px solid #f59e0b">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">📐 Pareto 80/20 — กี่เมนูที่กิน 80% ของต้นทุน?</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">Pareto 80/20 — กี่เมนูที่กิน 80% ของต้นทุน?</h2>
       <span id="mce2ParetoLabel" class="text-xs px-2 py-0.5 rounded-full" style="background:rgba(245,158,11,.12);color:#d97706"></span>
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">แท่ง = % ต้นทุนรายเมนู · เส้น = % ต้นทุนสะสม · <b>จุดที่เส้นทะลุ 80% คือจำนวนเมนูที่ต้องโฟกัส</b></p>
@@ -87,8 +87,8 @@
   </div>
 
   <!-- What-If savings calculator -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">💡 What-If: ลดต้นทุนแล้วประหยัดได้เท่าไร?</h2>
+  <div class="card p-5 mb-4" style="border:1px solid #10b981">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">What-If: ลดต้นทุนแล้วประหยัดได้เท่าไร?</h2>
     <p class="text-[11px] mb-4" style="color:var(--text-muted)">เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p>
     <div class="flex flex-wrap items-center gap-4 mb-4">
       <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
@@ -113,9 +113,9 @@
   </div>
 
   <!-- Monthly cost trend (top 8 dishes) -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #4f46e5">
+  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="text-base font-bold" style="color:var(--text-primary)">📈 Cost Drift — เมนูไหนแพงขึ้น/ถูกลงตามเวลา?</h2>
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">Cost Drift — เมนูไหนแพงขึ้น/ถูกลงตามเวลา?</h2>
       <span id="mce2TrendStatus" class="text-[11px]" style="color:var(--text-muted)">กำลังโหลด…</span>
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">% ต้นทุนรายเมนูต่อเดือน (Top 8 เมนูที่กินต้นทุนสูงสุด) · เส้นที่พุ่งขึ้น = เมนูที่ต้องจัดการด่วน</p>
@@ -123,9 +123,9 @@
   </div>
 
   <!-- Per-branch dish efficiency (mini drill-down) -->
-  <div class="card p-5 mb-4 hidden" id="mce2BranchPanel" style="border-left:4px solid #0ea5e9">
+  <div class="card p-5 mb-4 hidden" id="mce2BranchPanel" style="border:1px solid #0ea5e9">
     <div class="flex items-center justify-between mb-3">
-      <h2 class="text-base font-bold" id="mce2BranchTitle" style="color:var(--text-primary)">🏪 เปรียบเทียบสาขา</h2>
+      <h2 class="text-base font-bold" id="mce2BranchTitle" style="color:var(--text-primary)">เปรียบเทียบสาขา</h2>
       <button onclick="document.getElementById('mce2BranchPanel').classList.add('hidden')" class="text-xs" style="color:var(--text-muted)">✕ ปิด</button>
     </div>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุน/จาน ของเมนูนี้ต่างกันอย่างไรในแต่ละสาขา — สาขาที่ต้นทุนต่ำคือ best practice</p>
@@ -136,8 +136,8 @@
   </div>
 
   <!-- Card A — Category cost rollup -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #0ea5e9">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🗂️ ต้นทุนรวมตามหมวดสินค้า</h2>
+  <div class="card p-5 mb-4" style="border:1px solid #0ea5e9">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">ต้นทุนรวมตามหมวดสินค้า</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">รวมต้นทุนทุกเมนูจัดกลุ่มตามหมวด — หมวดที่มียอดสูงสุดคือเป้าหมายต่อรองต้นทุนหรือปรับสูตรก่อน</p>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div style="height:300px"><canvas id="mce2CatBar"></canvas></div>
@@ -161,8 +161,8 @@
   </div>
 
   <!-- Card B — Recipe coverage / engineering potential -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #ef4444">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🔬 Engineering Potential — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
+  <div class="card p-5 mb-4" style="border:1px solid #ef4444">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">Engineering Potential — เมนูที่ยังเปลี่ยนต้นทุนไม่ได้</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">เมนูที่ไม่มีสูตร BoM = ปรับต้นทุนได้จำกัด · เมนูที่ไม่มีข้อมูลต้นทุนเลย = blind spot</p>
     <div id="mce2CovKpis" class="flex flex-wrap gap-2 mb-3"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -185,8 +185,8 @@
   </div>
 
   <!-- Card C — Priority action list -->
-  <div class="card p-5 mb-4" style="border-left:4px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">🚀 สิ่งที่ควรทำต่อไป (Auto-generated from data)</h2>
+  <div class="card p-5 mb-4" style="border:1px solid #10b981">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สิ่งที่ควรทำต่อไป (Auto-generated from data)</h2>
     <p class="text-[11px] mb-3" style="color:var(--text-muted)">วิเคราะห์จากข้อมูลจริง — ลำดับความสำคัญสูงสุดก่อน</p>
     <div id="mce2Actions" class="space-y-2 mt-2"></div>
   </div>

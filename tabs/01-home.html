@@ -17,9 +17,9 @@
     <!-- HERO — Action queue: anomalies + branch drift + margin, turned into a prioritised to-do list -->
     <div class="card p-5 mb-5">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-        <h2 class="section-title mb-0">✅ สิ่งที่ต้องทำวันนี้ <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· เรียงตามความเร่งด่วน · เทียบค่าปกติของแต่ละสาขา</span></h2>
+        <h2 class="section-title mb-0">สิ่งที่ต้องทำวันนี้ <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· เรียงตามความเร่งด่วน · เทียบค่าปกติของแต่ละสาขา</span></h2>
         <span id="home-action-count" class="text-[11px]" style="color:var(--text-muted)"></span>
-        <button onclick="switchTab('action')" class="text-xs px-3 py-1 rounded-lg font-medium transition-colors" style="background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)">🔔 สัญญาณทั้งระบบ →</button>
+        <button onclick="switchTab('action')" class="text-xs px-3 py-1 rounded-lg font-medium transition-colors" style="background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)">สัญญาณทั้งระบบ →</button>
       </div>
       <div id="home-action-queue" class="space-y-2.5"></div>
     </div>
@@ -29,30 +29,30 @@
          stretched leak card left a big blank half — each card sizes to content. -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5 items-start">
       <div class="card p-5">
-        <h2 class="section-title mb-1">🔎 จับเงินรั่ว / ผิดปกติ <span id="home-leak-date" class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)"></span></h2>
+        <h2 class="section-title mb-1">จับเงินรั่ว / ผิดปกติ <span id="home-leak-date" class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)"></span></h2>
         <p class="text-xs text-slate-400 mb-3">ส่วนลดหนัก ≥30% · เงินสด+ลดหนัก (เสี่ยงรั่ว) · บิลพิมพ์ซ้ำ · บิลลดล้วน</p>
         <div id="home-leak-watch"></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">🍜 เมนูเด่น / ตก เมื่อวาน <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· อัตราสั่งต่อหัว (จาน/100 ลูกค้า) เทียบค่าเฉลี่ย 21 วัน — ตัดผลจำนวนลูกค้าออก</span></h2>
+        <h2 class="section-title mb-1">เมนูเด่น / ตก เมื่อวาน <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· อัตราสั่งต่อหัว (จาน/100 ลูกค้า) เทียบค่าเฉลี่ย 21 วัน — ตัดผลจำนวนลูกค้าออก</span></h2>
         <div id="home-menu-movers" class="mt-2"></div>
       </div>
     </div>
 
     <!-- Movers ↔ revenue: how yesterday's menu-mix shift moved food sales -->
     <div class="card p-5 mb-5">
-      <h2 class="section-title mb-1">🔗 เมนูขยับ ↔ ยอดขาย <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· การสลับเมนูเมื่อวานกระทบรายได้อาหารยังไง (เทียบรายได้/วันเฉลี่ย 21 วันต่อเมนู)</span></h2>
+      <h2 class="section-title mb-1">เมนูขยับ ↔ ยอดขาย <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· การสลับเมนูเมื่อวานกระทบรายได้อาหารยังไง (เทียบรายได้/วันเฉลี่ย 21 วันต่อเมนู)</span></h2>
       <div id="home-movers-revenue" class="mt-2"></div>
     </div>
 
     <!-- Branch leaderboard + this-month daily pace -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5">
-        <h2 class="section-title mb-3">🏆 อันดับสาขาเมื่อวาน <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· เทียบค่าปกติ 7 วัน + สัปดาห์ก่อน · คลิกเพื่อเจาะ</span></h2>
+        <h2 class="section-title mb-3">อันดับสาขาเมื่อวาน <span class="font-normal normal-case" style="font-size:11px;color:var(--text-muted)">· เทียบค่าปกติ 7 วัน + สัปดาห์ก่อน · คลิกเพื่อเจาะ</span></h2>
         <div id="home-branch-scorecard" class="overflow-x-auto" style="max-height:360px;overflow-y:auto"></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">📊 จังหวะรายวันเดือนนี้</h2>
+        <h2 class="section-title mb-1">จังหวะรายวันเดือนนี้</h2>
         <p class="text-xs text-slate-400 mb-3" id="home-forecast-period">Loading…</p>
         <div id="home-forecast-kpis" class="grid grid-cols-3 gap-3 mb-4"></div>
         <div style="height:150px"><canvas id="chartHomeForecast"></canvas></div>
@@ -62,12 +62,12 @@
     <!-- Peak hours yesterday + last-7-day company trend -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5">
-        <h2 class="section-title mb-1">⏰ ชั่วโมงพีค &amp; ช่วงเงียบเมื่อวาน</h2>
+        <h2 class="section-title mb-1">ชั่วโมงพีค &amp; ช่วงเงียบเมื่อวาน</h2>
         <p class="text-xs text-slate-400 mb-2" id="home-peak-summary">Loading…</p>
         <div style="height:150px"><canvas id="chartHomePeak"></canvas></div>
       </div>
       <div class="card p-5">
-        <h2 class="section-title mb-1">📈 เทรนด์ 7 วันล่าสุด (ทั้งเครือ)</h2>
+        <h2 class="section-title mb-1">เทรนด์ 7 วันล่าสุด (ทั้งเครือ)</h2>
         <p class="text-xs text-slate-400 mb-2" id="home-trend7-summary">Loading…</p>
         <div style="height:150px"><canvas id="chartHomeTrend7"></canvas></div>
       </div>
@@ -76,20 +76,20 @@
     <!-- ── Industry & Economy Context (external data) ── -->
     <div class="card p-5 mb-5" id="home-market">
       <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
-        <h2 class="section-title mb-0">🌐 บริบทเศรษฐกิจ &amp; อุตสาหกรรมร้านอาหาร</h2>
+        <h2 class="section-title mb-0">บริบทเศรษฐกิจ &amp; อุตสาหกรรมร้านอาหาร</h2>
         <span class="text-[11px]" style="color:var(--text-muted)" id="market-asof">กำลังโหลดบริบทตลาด…</span>
       </div>
       <p class="text-xs mb-4" style="color:var(--text-secondary)">เศรษฐกิจไทยและตลาดร้านอาหาร/บุฟเฟ่ต์ญี่ปุ่น เพื่อวางผลประกอบการของเราเทียบกับตลาด</p>
 
       <!-- live FX / gold / oil quotes (server-fetched) -->
       <div class="flex items-center justify-between mb-1.5 flex-wrap gap-2">
-        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-muted)">💱 ค่าเงิน · ทอง · น้ำมัน <span class="normal-case font-normal" style="font-size:10px">(สด · เทียบวันก่อน)</span></p>
+        <p class="text-xs font-semibold uppercase tracking-wide" style="color:var(--text-muted)">ค่าเงิน · ทอง · น้ำมัน <span class="normal-case font-normal" style="font-size:10px">(สด · เทียบวันก่อน)</span></p>
         <span id="market-quotes-asof" class="text-[10px]" style="color:var(--text-muted)"></span>
       </div>
       <div id="market-quotes" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
 
       <!-- macro indicators -->
-      <p class="text-xs font-semibold uppercase tracking-wide mb-1.5" style="color:var(--text-muted)">📊 มหภาค &amp; อุตสาหกรรม</p>
+      <p class="text-xs font-semibold uppercase tracking-wide mb-1.5" style="color:var(--text-muted)">มหภาค &amp; อุตสาหกรรม</p>
       <div id="market-macro" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4"></div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
@@ -99,7 +99,7 @@
           <div id="market-benchmark"></div>
         </div>
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color:var(--text-muted)">📰 ข่าวอุตสาหกรรม (live)</p>
+          <p class="text-xs font-semibold uppercase tracking-wide mb-2" style="color:var(--text-muted)">ข่าวอุตสาหกรรม (live)</p>
           <div id="market-news" class="space-y-1.5"></div>
         </div>
       </div>

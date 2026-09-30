@@ -148,3 +148,13 @@ body .ms-seg-on { background: var(--accent); border-color: var(--accent); color:
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar-thumb { border-radius: 0; }
+
+/* ── Stroke icons for icon-only buttons (ICON in js/01-core.js; the nav icons' style) ── */
+.ui-icon { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round; vertical-align: -3px; flex-shrink: 0; }
+body .dive-btn .ui-icon { width: 14px; height: 14px; vertical-align: 0; }
+#msNav button .ic .ui-icon, #backToMobile .ui-icon { width: 20px; height: 20px; vertical-align: 0; }
+#msNav button .ic { display: flex; justify-content: center; }
+
+/* ── Amber notice box (Daily Sales anomalies): themed instead of a fixed cream ── */
+body .notice-warn { border: 1px solid #f59e0b; background: #fef3c7; color: #92400e; }   /* 6.4:1 */
+body.dark .notice-warn { border-color: #b45309; background: #422006; color: #fde68a; }  /* 11.7:1 */

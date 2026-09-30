@@ -1,12 +1,12 @@
 <!-- ══════════════════════════════════════════════════════════════════════════
-     TAB: 🍽️ HEAVY EATERS / PER-COVER ECONOMICS
+     TAB: HEAVY EATERS / PER-COVER ECONOMICS
      Per-bill revenue/head vs BoM COGS/head → margin/head distribution.
      "Heavy eater" = COGS/head in the costly tail (≥ p90). AYCE buffet: revenue
      per cover is ~fixed, so the COGS/head tail is exactly the margin risk.
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-heavyeater" style="display:none">
-  <div class="card p-4 mb-4" style="background:linear-gradient(135deg,#fff7ed 0%,#fffbeb 100%);border-left:4px solid #f59e0b">
-    <h2 class="text-base font-bold" style="color:#b45309">🍽️ ต่อหัว & นักกินหนัก (Heavy Eaters)</h2>
+  <div class="card p-4 mb-4" style="background:#fff7ed;border:1px solid #f59e0b">
+    <h2 class="text-base font-bold" style="color:#b45309">ต่อหัว & นักกินหนัก (Heavy Eaters)</h2>
     <p class="text-xs text-slate-500 mt-1">บุฟเฟ่ต์รายได้/หัวเกือบคงที่ → ความเสี่ยงกำไรอยู่ที่ <b>ต้นทุน(BoM)/หัว</b> ที่กระจายตัว · "นักกินหนัก" = บิลที่ต้นทุน/หัวอยู่หาง 10% บนสุด (≥ p90) · คำนวณต่อบิลจริง (sale_bill_cogs × จำนวนลูกค้า)</p>
   </div>
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -43,7 +43,7 @@
   <div class="card p-5">
     <div class="flex items-center justify-between mb-2">
       <h3 class="text-sm font-bold text-slate-700">บิลมาร์จิน/หัว แย่สุด (ตรวจสอบ/เฝ้าระวัง)</h3>
-      <button onclick="exportTable('heExTable','heavy_eaters_worst.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+      <button onclick="exportTable('heExTable','heavy_eaters_worst.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
     </div>
     <p class="text-[11px] text-slate-400 mb-3">ต้นทุน/หัว สูงกว่ารายได้/หัว = ขาดทุนต่อหัว · บิลต้นทุน/หัวสูงผิดปกติอาจเป็นข้อมูลผิด (จำนวนลูกค้าผิด) ที่ควรเช็ก</p>
     <div class="overflow-auto" style="max-height:520px">

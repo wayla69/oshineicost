@@ -1,18 +1,18 @@
-<!-- ══ 🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม) ══ -->
+<!-- ══ Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม) ══ -->
 <div id="tab-costheadtop60" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
-    <select id="chtMonth" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
+    <select id="chtMonth" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"></select>
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">ขอบเขต:</span>
-    <select id="chtScope" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="chtScope" onchange="loadCostHeadTop60(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
       <option value="master">Master (เจ้าของเอง)</option>
       <option value="franchise">แฟรนไชส์</option>
       <option value="all">ทั้งหมด</option>
     </select>
     <span id="chtRange" class="text-[11px]" style="color:var(--text-muted)"></span>
     <div class="ml-auto flex items-center gap-2">
-      <a id="chtPrint" href="#" target="_blank" rel="noopener" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="เปิดรายงานฉบับเต็มแบบพิมพ์ได้ (HTML)">🖨️ เปิดฉบับเต็ม</a>
-      <a id="chtXlsx" href="#" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="ดาวน์โหลด Excel (8 ชีต + ข้อมูลดิบ)">⬇ Excel</a>
+      <a id="chtPrint" href="#" target="_blank" rel="noopener" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="เปิดรายงานฉบับเต็มแบบพิมพ์ได้ (HTML)">เปิดฉบับเต็ม</a>
+      <a id="chtXlsx" href="#" class="text-xs rounded px-2.5 py-1" style="border:1px solid var(--border);color:var(--text-secondary)" title="ดาวน์โหลด Excel (8 ชีต + ข้อมูลดิบ)">Excel</a>
     </div>
   </div>
   <p class="text-[11px] mb-3" style="color:var(--text-muted)">ต้นทุนวัตถุดิบ (COGS) ต่อหัวลูกค้า · เลือกขอบเขต <b>Master / แฟรนไชส์ / ทั้งหมด</b> · เรียง Top 60 ตามต้นทุน/หัว · เทียบรายสาขากับภาพรวม · COGS สูตรมาตรฐานระบบ (ตัดแพ็กเกจบุฟเฟต์กันนับซ้ำ, ใช้ต้นทุนจริง sku_cost ก่อน BoM)</p>

@@ -1,14 +1,14 @@
-<!-- ══ 🧩 EXTRA: 🏷️ ราคา & โซนโต๊ะ ══ -->
+<!-- ══ EXTRA: ราคา & โซนโต๊ะ ══ -->
 <div id="tab-pricezone" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เดือน:</span>
-    <select id="pzMonth" onchange="loadPriceZone(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"><option value="">ทั้งหมด</option></select>
+    <select id="pzMonth" onchange="loadPriceZone(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary);min-width:130px"><option value="">ทั้งหมด</option></select>
     <span id="pzCount" class="text-[11px]" style="color:var(--text-muted)"></span>
-    <button onclick="exportTable('pzTable','price_changes.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5 ml-auto" style="color:var(--text-muted)">⬇ CSV</button>
+    <button onclick="exportTable('pzTable','price_changes.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5 ml-auto" style="color:var(--text-muted)">CSV</button>
   </div>
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
     <div class="card p-5 overflow-x-auto lg:col-span-2">
-      <h2 class="section-title mb-1">📝 ประวัติแก้ราคา + ความยืดหยุ่นราคา (Price elasticity)</h2>
+      <h2 class="section-title mb-1">ประวัติแก้ราคา + ความยืดหยุ่นราคา (Price elasticity)</h2>
       <p class="text-[10.5px] mb-3" style="color:var(--text-muted)">ขาย/วัน เฉลี่ย 14 วันก่อน→หลังวันแก้ราคา · ยืดหยุ่น = %ยอดขายเปลี่ยน ÷ %ราคาเปลี่ยน (ค่าติดลบ = ขึ้นราคาแล้วขายลด ตามปกติ · เป็นสัญญาณคร่าวๆ)</p>
       <div style="max-height:480px;overflow-y:auto">
         <table class="text-xs w-full" id="pzTable"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -19,7 +19,7 @@
       </div>
     </div>
     <div class="card p-5 overflow-x-auto">
-      <h2 class="section-title mb-3">🪑 โซนโต๊ะรายสาขา</h2>
+      <h2 class="section-title mb-3">โซนโต๊ะรายสาขา</h2>
       <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">โซน</th><th class="py-1.5 text-right">โต๊ะ</th>
       </tr></thead><tbody id="pzZones"></tbody></table>

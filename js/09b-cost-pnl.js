@@ -10,7 +10,7 @@
     if (!b) {
       b = document.createElement('div');
       b.id = '_errBanner';
-      b.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#fef2f2;border:1px solid #fca5a5;border-radius:8px;padding:10px 14px;font-size:12px;color:#991b1b;max-height:140px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)';
+      b.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;z-index:99999;background:#fef2f2;border:1px solid #fca5a5;border-radius:4px;padding:10px 14px;font-size:12px;color:#991b1b;max-height:140px;overflow:auto;box-shadow:0 4px 12px rgba(0,0,0,.15)';
       document.body.appendChild(b);
     }
     _errors.push(msg);
@@ -51,7 +51,7 @@ async function loadCostCoverage() {
   if (gen !== loadGen) return;
   const ch = d.chain || {};
   document.getElementById('cov-kpis').innerHTML = [
-    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4f46e5'],
+    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0'],
     ['มีต้นทุนแล้ว',        fmt(ch.costed_revenue), '#10b981'],
     ['ยังไม่มีต้นทุน',       fmt(ch.uncosted_revenue), '#ef4444'],
     ['% ยังไม่มีต้นทุน',     (ch.pct_uncosted != null ? ch.pct_uncosted.toFixed(1)+'%' : '—'), '#f59e0b'],
@@ -76,7 +76,7 @@ async function loadCostCoverage() {
       <td class="py-1.5 pr-3 text-right font-semibold">${(b.pct_uncosted??0).toFixed(1)}%</td>
       <td class="py-1.5 text-right">${b.uncosted_skus}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-slate-400 text-center">—</td></tr>';
-  // 🛠️ No-cost fixer worklist — editable unit_cost inputs
+  // No-cost fixer worklist — editable unit_cost inputs
   renderUncostedFixer(d.top_uncosted || []);
   // Top cost-driver ingredients (grouped families) + peak hours
   loadCoverageExtras();
@@ -103,9 +103,9 @@ function renderUncostedFixer(rows) {
                class="cov-cost-inp w-24 text-right border border-slate-200 rounded px-2 py-1 text-sm"
                onkeydown="if(event.key==='Enter')saveUncostedRow('${sku}')"></td>
       <td class="py-1.5 text-center"><button onclick="saveUncostedRow('${sku}')"
-            class="text-xs px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50">💾</button></td>
+            class="text-xs px-2 py-1 rounded border border-indigo-200 text-indigo-600 hover:bg-indigo-50">${ICON.save}</button></td>
     </tr>`;
-  }).join('') || '<tr><td colspan="8" class="py-4 text-center text-emerald-600">🎉 ไม่มี SKU ค้างต้นทุนในช่วงนี้</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="py-4 text-center text-emerald-600">ไม่มี SKU ค้างต้นทุนในช่วงนี้</td></tr>';
 }
 
 // POST one or more {sku_code, unit_cost} to /api/cost, then surface result + reload.
@@ -194,7 +194,7 @@ async function loadCoverageExtras() {
   }).catch(()=>{});
 }
 
-// ✅ Cost review — the kitchen confirms what the files only proposed.
+// Cost review — the kitchen confirms what the files only proposed.
 // Every row is a dish costed by an estimate or by a recipe whose GRAMS were
 // modelled on a sibling dish. Confirming stores an intent server-side that
 // survives the daily DB swap (see cost_sources.apply_overrides).
@@ -224,7 +224,7 @@ async function loadCostReview() {
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">฿${fmtN(r.cogs_month || 0)}</td>
       <td class="py-1.5 text-center text-slate-400">▾</td></tr>
       <tr id="cov-rv-${i}" style="display:none"><td colspan="6" class="pb-3"></td></tr>`;
-  }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">ไม่มีเมนูที่รอตรวจ 🎉</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">ไม่มีเมนูที่รอตรวจ</td></tr>';
 }
 
 function toggleCostReview(i) {
@@ -261,7 +261,7 @@ function _renderCostReviewEditor(i) {
     <div class="flex items-center flex-wrap gap-2">
       <input id="cov-rv-note-${i}" class="border border-slate-200 rounded px-2 py-1 text-xs" style="flex:1;min-width:160px" placeholder="หมายเหตุ (เช่น ชั่งจริงที่สาขา…)">
       ${hasRecipe ? `<span class="text-xs">รวม <b id="cov-rv-total-${i}" class="tabular-nums">฿${(r.cost || 0).toFixed(2)}</b></span>` : ''}
-      <button class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#059669;color:#fff" onclick="confirmCostReview(${i})">✅ ยืนยัน</button>
+      <button class="text-xs px-3 py-1.5 rounded-lg font-semibold" style="background:#059669;color:#fff" onclick="confirmCostReview(${i})">ยืนยัน</button>
       ${r.source === 'confirmed' ? `<button class="text-xs px-3 py-1.5 rounded-lg border border-slate-300" onclick="withdrawCostReview(${i})">ถอนการยืนยัน</button>` : ''}
     </div></div>`;
   if (hasRecipe) _crRecalc(i);
@@ -328,7 +328,7 @@ async function withdrawCostReview(i) {
   } catch (e) { showToast('ถอนไม่สำเร็จ: ' + e.message, 'error'); }
 }
 
-// 🏭 Prime Cost = Food% + Labor% per branch (the biggest controllable costs).
+// Prime Cost = Food% + Labor% per branch (the biggest controllable costs).
 let _primeKey = null;
 async function loadPrimeCost() {
   const msel = document.getElementById('pnlMonthSel');
@@ -347,7 +347,7 @@ async function loadPrimeCost() {
   const bn = document.getElementById('primeBanner');
   if (bn) {
     if (!ch.branches_with_labor) {
-      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border-left:3px solid #f59e0b">💼 ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">Settings → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
+      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">Settings → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
     } else if (ch.branches_with_labor < ch.branch_count) {
       bn.innerHTML = `<div class="text-xs" style="color:var(--text-muted)">ใส่ค่าแรงแล้ว ${ch.branches_with_labor}/${ch.branch_count} สาขา — ที่เหลือแสดงเฉพาะ Food%</div>`;
     } else { bn.innerHTML = ''; }
@@ -393,7 +393,7 @@ async function loadPnlBranch() {
   if (gen !== loadGen) return;
   const c = d.chain || {};
   document.getElementById('pnl-kpis').innerHTML = [
-    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4f46e5'],
+    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4a70b0'],
     ['ต้นทุน BoM',           fmt(c.cogs),             '#f59e0b'],
     ['กำไรขั้นต้น',          fmt(c.gross_profit) + (c.gp_margin_pct!=null?` · ${c.gp_margin_pct}%`:''), '#10b981'],
     ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444')],
@@ -409,7 +409,7 @@ async function loadPnlBranch() {
   document.getElementById('pnl-branches').innerHTML = (d.branches||[]).map(b => {
     const opCol = (b.operating_profit>=0) ? '#0891b2' : '#e11d48';
     return `<tr class="border-b border-slate-50 hover:bg-indigo-50">
-      <td class="py-1.5 pr-3 font-medium"><a onclick="openPnlDrill('${jsAttr(b.branch)}')" class="text-indigo-600 hover:underline cursor-pointer">${esc(b.branch)} 🔍</a></td>
+      <td class="py-1.5 pr-3 font-medium"><a onclick="openPnlDrill('${jsAttr(b.branch)}')" class="text-indigo-600 hover:underline cursor-pointer">${esc(b.branch)}</a></td>
       <td class="py-1.5 pr-3 text-right">${fmt(b.revenue)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmt(b.cogs)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:#047857">${fmt(b.gross_profit)}</td>
@@ -447,7 +447,7 @@ function _pnlWaterfallHtml(b, scopeLabel) {
   const beCovers = b.breakeven_covers ? `จุดคุ้มทุน ~${fmtN(b.breakeven_covers)} ที่นั่ง/ลูกค้า (จริง ${fmtN(b.covers||0)})` : '';
   return `<div class="card p-4 mb-4">
     <h4 class="text-sm font-bold text-slate-700 mb-2">งบกำไรขาดทุน (P&L Waterfall) <span class="font-normal text-xs text-slate-400">· ${esc(scopeLabel||'')}</span></h4>
-    ${row('รายได้ (ex-VAT)', rev, '#4f46e5', {bold:true})}
+    ${row('รายได้ (ex-VAT)', rev, '#4a70b0', {bold:true})}
     ${row('ต้นทุน BoM', b.cogs||0, '#f59e0b', {minus:true})}
     ${row('กำไรขั้นต้น', b.gross_profit||0, '#10b981', {eq:true, bold:true})}
     ${row('ค่าใช้จ่ายคงที่', fc, '#a855f7', {minus:true})}
@@ -471,7 +471,7 @@ async function openPnlDrill(branch) {
     if (msel) month = [...msel.options].map(o => o.value).find(v => v) || '';
   }
   if (!month) { alert('ยังไม่มีข้อมูลเดือนให้แสดง — โหลดข้อมูลก่อน'); return; }
-  title.textContent = `🔍 ${branch} · ${typeof fmtPeriod==='function'?fmtPeriod(month):month}`;
+  title.textContent = `${branch} · ${typeof fmtPeriod==='function'?fmtPeriod(month):month}`;
   body.innerHTML = '<p class="text-sm text-slate-400 py-8 text-center">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   modal.style.display = 'flex';
@@ -507,7 +507,7 @@ async function openPnlDrill(branch) {
   };
   body.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-      ${kpi('รายได้ '+deltaChip, fmtN(s.revenue), '#4f46e5')}
+      ${kpi('รายได้ '+deltaChip, fmtN(s.revenue), '#4a70b0')}
       ${kpi('ต้นทุน BoM', fmtN(s.cogs), '#f59e0b')}
       ${kpi('กำไรขั้นต้น', fmtN(s.gross_profit)+' · '+(s.gp_margin_pct??'—')+'%', '#10b981')}
       ${kpi('Food Cost %', (s.food_cost_pct??'—')+'%', '#ef4444')}
@@ -519,7 +519,7 @@ async function openPnlDrill(branch) {
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
       <div>
-        <h4 class="text-sm font-semibold text-slate-700 mb-2">🍽️ ต้นทุน BoM ประกอบด้วยเมนู (Top 40 · % ของต้นทุนเดือนนี้)</h4>
+        <h4 class="text-sm font-semibold text-slate-700 mb-2">ต้นทุน BoM ประกอบด้วยเมนู (Top 40 · % ของต้นทุนเดือนนี้)</h4>
         <div style="max-height:340px;overflow:auto"><table class="w-full text-xs">
           <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-400 border-b">
             <th class="py-1 pr-2">#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2 text-right">เสิร์ฟ</th>
@@ -528,12 +528,12 @@ async function openPnlDrill(branch) {
         </table></div>
       </div>
       <div>
-        <h4 class="text-sm font-semibold text-slate-700 mb-2">🥩 วัตถุดิบหลักที่ขับต้นทุน</h4>
+        <h4 class="text-sm font-semibold text-slate-700 mb-2">วัตถุดิบหลักที่ขับต้นทุน</h4>
         <div style="max-height:150px;overflow:auto;margin-bottom:14px"><table class="w-full text-xs">
           <tbody>${ingRows||'<tr><td class="py-3 text-center text-slate-400">—</td></tr>'}</tbody></table></div>
-        <h4 class="text-sm font-semibold text-emerald-700 mb-2">📈 เมนูคนนิยมมากขึ้น (vs ${fmtPeriod(d.prev_month)})</h4>
+        <h4 class="text-sm font-semibold text-emerald-700 mb-2">เมนูคนนิยมมากขึ้น (vs ${fmtPeriod(d.prev_month)})</h4>
         <div class="text-xs mb-3">${(d.rising_dishes||[]).slice(0,8).map(m=>moverRow(m,true)).join('')||'<span class="text-slate-400">—</span>'}</div>
-        <h4 class="text-sm font-semibold text-red-600 mb-2">📉 เมนูคนนิยมน้อยลง</h4>
+        <h4 class="text-sm font-semibold text-red-600 mb-2">เมนูคนนิยมน้อยลง</h4>
         <div class="text-xs">${(d.falling_dishes||[]).slice(0,6).map(m=>moverRow(m,false)).join('')||'<span class="text-slate-400">—</span>'}</div>
       </div>
     </div>
@@ -548,7 +548,7 @@ async function openPnlDrill(branch) {
       data: {
         labels: arr.map(r => fmtMonth(r.period_month)),
         datasets: [
-          { label: 'รายได้', data: arr.map(r=>r.revenue||0), backgroundColor: '#4f46e533', borderColor:'#4f46e5', borderWidth:1, order:3 },
+          { label: 'รายได้', data: arr.map(r=>r.revenue||0), backgroundColor: '#4a70b033', borderColor:'#4a70b0', borderWidth:1, order:3 },
           { label: 'กำไรขั้นต้น', data: arr.map(r=>r.gross_profit||0), backgroundColor: '#10b98155', borderColor:'#10b981', borderWidth:1, order:2 },
           { label: 'GP %', data: arr.map(r=>r.gp_margin_pct||0), type:'line', borderColor:'#f59e0b', backgroundColor:'transparent', tension:0.3, yAxisID:'pct', order:1 },
         ]

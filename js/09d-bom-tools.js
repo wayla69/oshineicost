@@ -282,7 +282,7 @@ async function loadRecalibration() {
   if (mf) params.set('month_from', mf);
   if (mt) params.set('month_to',   mt);
   const body = document.getElementById('recalibBody');
-  body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400">⏳ Loading…</td></tr>';
+  body.innerHTML = '<tr><td colspan="9" class="py-6 text-center text-slate-400">Loading…</td></tr>';
   try {
     const data = await api(`${API}/api/cost/recalibration?${params}`);
     _recalibData = data;
@@ -361,7 +361,7 @@ function recalibApplyAllSuggested() {
   document.querySelectorAll('.recalib-input').forEach(inp => {
     inp.value = inp.dataset.suggested;
   });
-  document.getElementById('recalibSaveStatus').textContent = 'พร้อม save → กด 💾';
+  document.getElementById('recalibSaveStatus').textContent = 'พร้อม save → กด';
   document.getElementById('recalibSaveStatus').className = 'text-xs text-amber-700 font-semibold';
 }
 
@@ -387,7 +387,7 @@ async function recalibSave() {
     return;
   }
   if (!confirm(`บันทึก ${updates.length} SKU? unit_cost เดิมจะถูกแทนที่`)) return;
-  status.textContent = '⏳ saving…';
+  status.textContent = 'saving…';
   status.className = 'text-xs text-amber-700';
   try {
     const res = await api(`${API}/api/cost/bulk-update`, {
@@ -395,11 +395,11 @@ async function recalibSave() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
     });
-    status.textContent = `✅ บันทึก ${res.written} SKU` + (res.unknown_skus?.length ? ` · unknown: ${res.unknown_skus.join(',')}` : '');
+    status.textContent = `บันทึก ${res.written} SKU` + (res.unknown_skus?.length ? ` · unknown: ${res.unknown_skus.join(',')}` : '');
     status.className = 'text-xs text-emerald-700 font-semibold';
     setTimeout(loadRecalibration, 700);   // refresh
   } catch (e) {
-    status.textContent = `❌ ${e.message}`;
+    status.textContent = `✗ ${e.message}`;
     status.className = 'text-xs text-red-600';
   }
 }
@@ -422,26 +422,26 @@ function openMonthlyPackDialog() {
   dlg.id = 'monthlyPackDlg';
   dlg.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:9999;display:flex;align-items:center;justify-content:center';
   dlg.innerHTML = `
-    <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:12px;padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
-      <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">📥 Export Monthly Review Pack</h3>
+    <div style="background:var(--bg-card,#fff);color:var(--text-primary,#0f172a);border-radius:4px;padding:24px;min-width:380px;max-width:92vw;box-shadow:0 20px 60px rgba(15,23,42,0.3)">
+      <h3 style="font-size:18px;font-weight:700;margin:0 0 4px;color:#1F4E79">Export Monthly Review Pack</h3>
       <p style="font-size:12px;color:#64748b;margin:0 0 16px">รายงานสรุปรายเดือน — ภาพรวม, P&L รายสาขา, Top SKU, วัตถุดิบ, alerts, action items</p>
       <label style="display:block;font-size:12px;color:#64748b;margin-bottom:4px">เดือน (YYYY-MM)</label>
       <input id="mpackMonth" type="month" value="${defMonth}"
-             style="width:100%;padding:8px 10px;border:1px solid var(--border,#cbd5e1);border-radius:6px;font-size:13px;background:var(--bg-input,#fff);color:inherit;margin-bottom:14px">
+             style="width:100%;padding:8px 10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;font-size:13px;background:var(--bg-input,#fff);color:inherit;margin-bottom:14px">
       <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">รูปแบบไฟล์</label>
       <div style="display:flex;gap:10px;margin-bottom:18px">
-        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:6px;cursor:pointer">
-          <input type="radio" name="mpackFmt" value="xlsx" checked> <span style="font-size:13px">📊 Excel (.xlsx)</span>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;cursor:pointer">
+          <input type="radio" name="mpackFmt" value="xlsx" checked> <span style="font-size:13px">Excel (.xlsx)</span>
         </label>
-        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:6px;cursor:pointer">
-          <input type="radio" name="mpackFmt" value="pdf"> <span style="font-size:13px">📄 PDF</span>
+        <label style="flex:1;display:flex;align-items:center;gap:6px;padding:10px;border:1px solid var(--border,#cbd5e1);border-radius:4px;cursor:pointer">
+          <input type="radio" name="mpackFmt" value="pdf"> <span style="font-size:13px">PDF</span>
         </label>
       </div>
       <div style="display:flex;justify-content:flex-end;gap:8px">
         <button onclick="document.getElementById('monthlyPackDlg').remove()"
-                style="padding:8px 16px;border:1px solid var(--border,#cbd5e1);background:transparent;color:inherit;border-radius:6px;font-size:13px;cursor:pointer">ยกเลิก</button>
+                style="padding:8px 16px;border:1px solid var(--border,#cbd5e1);background:transparent;color:inherit;border-radius:4px;font-size:13px;cursor:pointer">ยกเลิก</button>
         <button onclick="downloadMonthlyPack()"
-                style="padding:8px 18px;border:none;background:#1F4E79;color:white;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">⬇ ดาวน์โหลด</button>
+                style="padding:8px 18px;border:none;background:#1F4E79;color:white;border-radius:4px;font-size:13px;font-weight:600;cursor:pointer">ดาวน์โหลด</button>
       </div>
     </div>`;
   document.body.appendChild(dlg);
@@ -467,16 +467,16 @@ function downloadMonthlyPack() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 🏷️ business_type badge / inline editor (Phase 17c)
+// business_type badge / inline editor (Phase 17c)
 // ═════════════════════════════════════════════════════════════════════════════
 const BIZ_TYPE_META = {
-  buffet:      { icon:'🍱', bg:'bg-emerald-100', text:'text-emerald-700',  label:'buffet' },
-  buffet_tier: { icon:'💎', bg:'bg-fuchsia-100', text:'text-fuchsia-700',  label:'buffet_tier' },
-  alacarte:    { icon:'🍣', bg:'bg-sky-100',     text:'text-sky-700',      label:'alacarte' },
-  beverage:    { icon:'🥤', bg:'bg-amber-100',   text:'text-amber-700',    label:'beverage' },
-  takeaway:    { icon:'📦', bg:'bg-slate-200',   text:'text-slate-700',    label:'takeaway' },
-  fee:         { icon:'📋', bg:'bg-zinc-200',    text:'text-zinc-700',     label:'fee' },
-  other:       { icon:'⚪', bg:'bg-neutral-100', text:'text-neutral-600',  label:'other' },
+  buffet:      { icon:'', bg:'bg-emerald-100', text:'text-emerald-700',  label:'buffet' },
+  buffet_tier: { icon:'', bg:'bg-fuchsia-100', text:'text-fuchsia-700',  label:'buffet_tier' },
+  alacarte:    { icon:'', bg:'bg-sky-100',     text:'text-sky-700',      label:'alacarte' },
+  beverage:    { icon:'', bg:'bg-amber-100',   text:'text-amber-700',    label:'beverage' },
+  takeaway:    { icon:'', bg:'bg-slate-200',   text:'text-slate-700',    label:'takeaway' },
+  fee:         { icon:'', bg:'bg-zinc-200',    text:'text-zinc-700',     label:'fee' },
+  other:       { icon:'○', bg:'bg-neutral-100', text:'text-neutral-600',  label:'other' },
 };
 const BIZ_TYPES = Object.keys(BIZ_TYPE_META);
 
@@ -503,7 +503,7 @@ async function updateBizType(skuCode, newType, el) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// 🔬 BoM Cost Analysis — 4-mode tab (Phase 17d)
+// BoM Cost Analysis — 4-mode tab (Phase 17d)
 // ═════════════════════════════════════════════════════════════════════════════
 let bcMode = 'overview';
 let bcOverviewData = null;
@@ -516,7 +516,7 @@ let bcCompareSelection = [];
 
 function bcSetMode(mode) {
   bcMode = mode;
-  // 'simulator' moved to the unified 🎮 Simulators hub — no longer a mode here
+  // 'simulator' moved to the unified Simulators hub — no longer a mode here
   ['overview','branch','compare'].forEach(m => {
     document.getElementById('bc-mode-' + m)?.classList.toggle('active', m === mode);
     document.getElementById('bc-pane-' + m)?.classList.toggle('hidden', m !== mode);
@@ -532,7 +532,7 @@ function bcPeriod() {
 }
 
 // ════════════════════════════════════════════════════════════════
-// 🎮 UNIFIED SIMULATORS HUB
+// UNIFIED SIMULATORS HUB
 // Combines BoM Cost, Cost Sensitivity, Tier Upgrade, and What-If into
 // one tab. The three LIVE simulators are "adopted" — their existing DOM
 // node is physically moved into a hub host so all their original JS keeps
@@ -558,7 +558,7 @@ function simhubBuildTier() {
     <div class="card p-5">
       <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
-          <h2 class="text-base font-bold" style="color:#6d28d9">🍣 Tier Upgrade Simulator</h2>
+          <h2 class="text-base font-bold" style="color:var(--accent)">Tier Upgrade Simulator</h2>
           <p class="text-xs text-slate-400 mt-0.5">จำลองการดันลูกค้าขึ้น tier สูงกว่าแล้วดู GP ที่เพิ่ม — คู่ tier ใช้ตามเมนูที่ขายจริงในช่วงที่เลือก (ถึง ส.ค. 2026 = ฿590 → ฿799 · ตั้งแต่ 1 ก.ย. 2026 = ฿629 → ฿789)</p>
           <p id="simScenarioNote" class="text-[11px] text-indigo-500 mt-0.5"></p>
         </div>

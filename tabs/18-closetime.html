@@ -1,11 +1,11 @@
-<!-- ══ 🧩 EXTRA: ⏰ เวลาปิดร้าน / ความสดของข้อมูล ══ -->
+<!-- ══ EXTRA: เวลาปิดร้าน / ความสดของข้อมูล ══ -->
 <div id="tab-closetime" style="display:none">
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-3" style="background:var(--bg-subtle)">
     <span class="text-xs font-semibold" style="color:var(--text-secondary)">เลือกวันที่:</span>
     <input type="date" id="ctmDate" onchange="loadCloseTime(true)"
-      style="border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      style="border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
     <button onclick="document.getElementById('ctmDate').value='';loadCloseTime(true)"
-      style="border:1px solid var(--border);border-radius:6px;padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
+      style="border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-size:12px;background:var(--bg-input);color:var(--text-secondary);cursor:pointer">ล่าสุด (ทุกสาขา)</button>
     <span id="ctmFresh" class="text-xs font-semibold" style="color:var(--text-secondary)"></span>
     <span id="ctmHint" class="text-[11px] ml-auto" style="color:var(--text-muted)">เลือกวันเพื่อดูว่าวันนั้นสาขาไหนมี/ไม่มีข้อมูล + เวลาปิด · ไม่เลือก = ความสดล่าสุดต่อสาขา</span>
   </div>
@@ -15,7 +15,7 @@
        design — these are real records (deleting destroys history) and missing
        days can only return via a POS re-sync, never be invented. -->
   <div class="card p-5 mb-4">
-    <h2 class="section-title mb-1">🩺 ตรวจสุขภาพข้อมูล</h2>
+    <h2 class="section-title mb-1">ตรวจสุขภาพข้อมูล</h2>
     <p class="text-xs text-slate-400 mb-3">สิ่งที่ทำให้ตัวเลขเพี้ยนแบบเงียบ ๆ · ระบบ<b>รายงานอย่างเดียว ไม่แก้ไขข้อมูลให้</b> (เป็นบันทึกการเงินจริง และวันที่ขาดต้องกู้จาก POS เท่านั้น)</p>
     <div id="dqFindings"></div>
   </div>
@@ -25,12 +25,12 @@
   <div id="ctmCharts" class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
     <div class="card p-5">
       <h2 class="section-title mb-3">สาขาที่มีข้อมูล ต่อวัน (30 วันล่าสุด)</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุป · แท่งแดง = วันที่มีสาขาไม่ส่งข้อมูล</p>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุป · แท่งแดง = วันที่มีสาขาไม่ส่งข้อมูล</p>
       <div style="height:260px"><canvas id="ctmChartDays"></canvas></div>
     </div>
     <div class="card p-5">
       <h2 class="section-title mb-3">เวลาปิดเฉลี่ยรายสาขา (30 วันล่าสุด)</h2>
-      <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · แท่งแดง = เวลาปิดหลุดกรอบเทียบสาขาอื่น · เวลาก่อน 06:00 นับเป็นปิดหลังเที่ยงคืน</p>
+      <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก · แท่งแดง = เวลาปิดหลุดกรอบเทียบสาขาอื่น · เวลาก่อน 06:00 นับเป็นปิดหลังเที่ยงคืน</p>
       <div style="height:260px"><canvas id="ctmChartClose"></canvas></div>
     </div>
   </div>

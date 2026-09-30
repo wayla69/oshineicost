@@ -2,22 +2,22 @@
   <div class="card p-3 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2" style="background:var(--bg-subtle)">
     <div class="flex items-center gap-2">
       <span class="text-xs font-semibold" style="color:var(--text-secondary)">วันที่:</span>
-      <input type="date" id="pbDate" onchange="loadPnlBill(true)" style="border:1px solid var(--border);border-radius:6px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+      <input type="date" id="pbDate" onchange="loadPnlBill(true)" style="border:1px solid var(--border);border-radius:4px;padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
     </div>
-    <div id="pbGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+    <div id="pbGranTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
       <button class="gran-btn gran-active" data-g="day"   onclick="pbSetGran('day')">วัน</button>
       <button class="gran-btn"             data-g="week"  onclick="pbSetGran('week')">สัปดาห์</button>
       <button class="gran-btn"             data-g="month" onclick="pbSetGran('month')">เดือน</button>
     </div>
     <div class="flex items-center gap-1.5">
       <span class="text-xs font-semibold" style="color:var(--text-secondary)">มุมมอง:</span>
-      <div id="pbViewTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
-        <button class="gran-btn gran-active" data-v="gm"   onclick="pbSetView('gm')">📈 กำไร (GM)</button>
-        <button class="gran-btn"             data-v="cogs" onclick="pbSetView('cogs')">📉 ต้นทุน (COGS)</button>
+      <div id="pbViewTrack" style="display:inline-flex;background:var(--bg-input);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
+        <button class="gran-btn gran-active" data-v="gm"   onclick="pbSetView('gm')">กำไร (GM)</button>
+        <button class="gran-btn"             data-v="cogs" onclick="pbSetView('cogs')">ต้นทุน (COGS)</button>
       </div>
     </div>
     <span id="pbRange" class="text-[11px]" style="color:var(--text-muted)"></span>
-    <span class="text-[11px]" style="color:#92400e">🔴 ต้นทุน/บิล ใช้สูตร BoM เท่านั้น · ข้อมูลย้อนหลัง ~31 วัน</span>
+    <span class="text-[11px]" style="color:#92400e">ต้นทุน/บิล ใช้สูตร BoM เท่านั้น · ข้อมูลย้อนหลัง ~31 วัน</span>
   </div>
   <div id="pbKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4"></div>
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-4">
@@ -37,11 +37,11 @@
         </tr></thead><tbody id="pbWorst"></tbody></table>
     </div>
   </div>
-  <div id="pbDrill" class="card p-5 mb-4" style="display:none;border:1px solid var(--indigo);box-shadow:0 0 0 3px rgba(79,70,229,.08)">
+  <div id="pbDrill" class="card p-5 mb-4" style="display:none;border:1px solid var(--indigo);box-shadow:0 0 0 3px rgba(31,58,107,.08)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="section-title mb-0">🔎 เจาะลึกช่วง <span id="pbDrillBand" style="color:var(--indigo)"></span></h2>
+      <h2 class="section-title mb-0">เจาะลึกช่วง <span id="pbDrillBand" style="color:var(--indigo)"></span></h2>
       <div class="flex items-center gap-3">
-        <button onclick="exportTable('pbDrillTable','drill_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="exportTable('pbDrillTable','drill_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
         <button onclick="pbCloseDrill()" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">✕ ปิด (zoom out)</button>
       </div>
     </div>
@@ -58,10 +58,10 @@
   </div>
   <div class="card p-5 overflow-x-auto">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="section-title mb-0">🔴 บิลขาดทุนทั้งหมด (COGS &gt; รายได้)</h2>
+      <h2 class="section-title mb-0">บิลขาดทุนทั้งหมด (COGS &gt; รายได้)</h2>
       <div class="flex items-center gap-3">
         <span id="pbLossSummary" class="text-[11px]" style="color:var(--text-muted)"></span>
-        <button onclick="exportTable('pbLossTable','loss_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button>
+        <button onclick="exportTable('pbLossTable','loss_bills.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button>
       </div>
     </div>
     <div style="max-height:520px;overflow-y:auto">

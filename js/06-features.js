@@ -45,11 +45,11 @@ async function _diveEnhanceTrend(_cfg) {
   let catHtml = '';
   if (Array.isArray(cats) && cats.length) {
     const grand = cats.reduce((s, c) => s + (c.revenue || 0), 0) || 1;
-    catHtml = _diveSection('หมวดสินค้า Top 5', '🍱',
+    catHtml = _diveSection('หมวดสินค้า Top 5', '',
       cats.slice(0, 5).map(c => _diveMetric(c.category, `${fmt(c.revenue)} (${(c.revenue/grand*100).toFixed(0)}%)`)).join(''));
   }
 
-  return _diveSection('แยกรายสาขา (คลิกเพื่อเจาะลึก)', '🏪', `
+  return _diveSection('แยกรายสาขา (คลิกเพื่อเจาะลึก)', '', `
     <div style="overflow-x:auto;margin-top:4px">
       <table class="text-xs w-full">
         <thead><tr style="color:var(--text-muted)" class="border-b">
@@ -86,7 +86,7 @@ async function _diveEnhanceBranchCompare(_cfg) {
     </tr>`;
   }).join('');
 
-  return _diveSection('GP รายสาขา (คลิกเจาะลึก)', '💵', `
+  return _diveSection('GP รายสาขา (คลิกเจาะลึก)', '', `
     <div style="overflow-x:auto;margin-top:4px">
       <table class="text-xs w-full">
         <thead><tr style="color:var(--text-muted)" class="border-b">
@@ -123,7 +123,7 @@ async function _diveEnhanceCategory(_cfg) {
     </tr>`;
   }).join('');
 
-  return _diveSection('Top หมวดสินค้า (ช่วงนี้)', '🍱', `
+  return _diveSection('Top หมวดสินค้า (ช่วงนี้)', '', `
     <div style="overflow-x:auto;margin-top:4px">
       <table class="text-xs w-full">
         <thead><tr style="color:var(--text-muted)" class="border-b">
@@ -173,16 +173,16 @@ function diveInChart(chartId) {
     chartHourly: 'Hourly Revenue',         chartDowTime: 'DOW · Time Analysis',
     chartMenuScatter: 'Menu Engineering Scatter',
     chartCostCatMix: 'Cost · สัดส่วนหมวดสินค้า', cmpBranchChart: 'Branches — A vs B',
-    mceScatter: '🎯 เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน',
+    mceScatter: 'เมนูเสิร์ฟเยอะ × สัดส่วนต้นทุน',
     'cov-peak': 'ชั่วโมงขายดี', chartProfitBranch: 'กำไรรายสาขา',
     chartHomeForecast: 'Month-end Forecast',
-    // 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) — enhancers registered in js/07-home.js
+    // วิเคราะห์วัตถุดิบ (Menu Impact) — enhancers registered in js/07-home.js
     miChart: 'วัตถุดิบ: แนวโน้มรายเดือน (ปริมาณ/หัว & % บิลที่สั่ง)',
     ptChartMix: 'Tier ราคา: สัดส่วนคนทานรายเดือน',
     ptChartCogs: 'Tier ราคา: ต้นทุนอาหาร/หัว รายเดือน',
     mgtTierTrendMix: 'Tier ราคาบุฟเฟ่ต์: ลูกค้าเลือกราคาไหน (% ของคนทาน)',
     mgtTierTrendCogs: 'Tier ราคาบุฟเฟ่ต์: ต้นทุนอาหาร/หัว แต่ละราคา',
-    // ⏰ ความสดของข้อมูล — enhancers registered in js/07-home.js
+    // ความสดของข้อมูล — enhancers registered in js/07-home.js
     ctmChartDays: 'สาขาที่มีข้อมูล ต่อวัน (30 วันล่าสุด)',
     ctmChartClose: 'เวลาปิดเฉลี่ยรายสาขา',
   };
@@ -205,13 +205,13 @@ function diveInChart(chartId) {
     // 2. Build analysis sidebar — static baseline first; async enhancer replaces it
     const hasEnhancer = typeof _DIVE_ENHANCERS !== 'undefined' && !!_DIVE_ENHANCERS[chartId];
     const analysisHtml = hasEnhancer
-      ? '<div id="diveEnhancerPane" style="padding:16px 4px"><span class="text-xs" style="color:var(--text-muted)">⏳ กำลังโหลดข้อมูลเชิงลึก…</span></div>'
+      ? '<div id="diveEnhancerPane" style="padding:16px 4px"><span class="text-xs" style="color:var(--text-muted)">กำลังโหลดข้อมูลเชิงลึก…</span></div>'
       : ((typeof analyzeChartForDive === 'function')
           ? analyzeChartForDive(chartId, cfg)
           : '<p class="text-sm text-slate-400">No analysis available.</p>');
 
     // 3. Set ALL content BEFORE showing modal (lesson from the drill-down bug)
-    title.textContent = `🔍 ${titleMap[chartId] || chartId}`;
+    title.textContent = `${titleMap[chartId] || chartId}`;
     body.innerHTML = `
       <div class="dive-layout">
         <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative">
@@ -220,8 +220,8 @@ function diveInChart(chartId) {
         <div class="dive-insight-bar dive-side" id="diveInsightPanel">
           ${analysisHtml}
           <div class="dive-section" id="diveActionsSection">
-            <div class="dive-section-title">🛠️ Actions</div>
-            <button onclick="exportChartData('${chartId}')" class="dive-action-btn">⬇ Export this chart data (CSV)</button>
+            <div class="dive-section-title">Actions</div>
+            <button onclick="exportChartData('${chartId}')" class="dive-action-btn">Export this chart data (CSV)</button>
             <button onclick="if(chartInstances['zoomChart'])chartInstances['zoomChart'].resetZoom&&chartInstances['zoomChart'].resetZoom()" class="dive-action-btn">⟳ Reset zoom &amp; pan</button>
             <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button>
           </div>
@@ -260,7 +260,7 @@ function diveInChart(chartId) {
     }
   } catch (e) {
     console.error('diveInChart error:', e);
-    title.textContent = '🔍 Error';
+    title.textContent = 'Error';
     body.innerHTML = `<p class="text-sm text-red-500 py-4">⚠ Could not open dive-in: ${e.message}</p>`;
     modal.classList.remove('hidden');
   }
@@ -285,7 +285,7 @@ async function diveMostOrdered() {
   const title = document.getElementById('diveTitle');
   const body  = document.getElementById('diveBody');
   if (!modal || !title || !body) return;
-  title.textContent = '🔍 สั่งบ่อยที่สุด · TOP 50';
+  title.textContent = 'สั่งบ่อยที่สุด · TOP 50';
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด TOP 50…</p>';
   modal.classList.remove('hidden');
 
@@ -308,7 +308,7 @@ async function diveMostOrdered() {
   let outlierSection = '';
   if (o.hasOutliers) {
     const names = o.indices.map(i => clean(items[i].description)).slice(0, 3).join(', ');
-    outlierSection = _diveSection('การวิเคราะห์ Outlier', '🎯', _diveBullet('🎯',
+    outlierSection = _diveSection('การวิเคราะห์ Outlier', '', _diveBullet('',
       `พบ <b>${o.indices.length}</b> ค่าผิดปกติ (${names}${o.indices.length > 3 ? ', …' : ''}) — ทำให้ค่าเฉลี่ยเบี่ยงเบนไป <b>${o.gainPct.toFixed(1)}%</b><br>ถ้าตัด outlier ออก ค่าเฉลี่ยจะเป็น <b>${fmtN(Math.round(o.trimmedAvg))}</b> (จาก <b>${fmtN(Math.round(o.fullAvg))}</b>)`,
       'warn'));
   }
@@ -320,20 +320,20 @@ async function diveMostOrdered() {
   const newCnt = items.length - withMom.length;
   const momRow = (r, up) => `<div class="dive-metric"><span class="lbl">${clean(r.description)}${_sparkSvg(r.spark, up ? '#10b981' : '#ef4444')}</span><span class="val ${up ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${Math.abs(r.qty_mom_pct).toFixed(1)}%</span></div>`;
   const momHtml = withMom.length
-    ? `<p class="text-[11px] mb-1" style="color:var(--text-muted)">▲ ${ups.length} ขึ้น · ▼ ${downs.length} ลง${newCnt ? ` · ✦ ${newCnt} ใหม่` : ''} · เส้น = YTD</p>`
+    ? `<p class="text-[11px] mb-1" style="color:var(--text-muted)">▲ ${ups.length} ขึ้น · ▼ ${downs.length} ลง${newCnt ? ` · ${newCnt} ใหม่` : ''} · เส้น = YTD</p>`
         + (ups.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#10b981">มาแรง</p>` + ups.slice(0, 5).map(r => momRow(r, true)).join('') : '')
         + (downs.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#ef4444">แผ่วลง</p>` + downs.slice(0, 5).map(r => momRow(r, false)).join('') : '')
     : '<p class="text-xs" style="color:var(--text-muted)">ไม่มีข้อมูลเดือนก่อนให้เทียบ</p>';
 
   const analysisHtml =
-    _diveSection('Overview', '📊',
+    _diveSection('Overview', '',
       _diveMetric('Total', fmtN(sum)) +
       _diveMetric('Average', fmtN(Math.round(avg))) +
       _diveMetric('Peak', `${fmtN(peak.qty)} · ${clean(peak.description)}`, 'good') +
       _diveMetric('Low', `${fmtN(low.qty)} · ${clean(low.description)}`, 'bad') +
       _diveMetric('Points', String(items.length)))
     + outlierSection
-    + _diveSection('เทียบเดือนก่อน (MoM)', '🔄', momHtml);
+    + _diveSection('เทียบเดือนก่อน (MoM)', '', momHtml);
 
   body.innerHTML = `
     <div class="dive-layout">
@@ -343,8 +343,8 @@ async function diveMostOrdered() {
       <div class="dive-insight-bar dive-side">
         ${analysisHtml}
         <div class="dive-section">
-          <div class="dive-section-title">🛠️ Actions</div>
-          <button onclick="exportChartData('chartMostOrdered')" class="dive-action-btn">⬇ Export this chart data (CSV)</button>
+          <div class="dive-section-title">Actions</div>
+          <button onclick="exportChartData('chartMostOrdered')" class="dive-action-btn">Export this chart data (CSV)</button>
           <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button>
         </div>
       </div>
@@ -394,7 +394,7 @@ async function gpbSkuDrill(code) {
   const title = document.getElementById('diveTitle');
   const body  = document.getElementById('diveBody');
   if (!modal || !title || !body) return;
-  title.textContent = `🔍 ส่วนผสม (BoM) · ${esc(code)}`;
+  title.textContent = `ส่วนผสม (BoM) · ${esc(code)}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   let d;
@@ -429,8 +429,8 @@ async function gpbSkuDrill(code) {
       </tr></thead><tbody>${rowsHtml}</tbody></table>
     </div>
     <div class="dive-insight-bar dive-side">
-      ${_diveSection('สัดส่วนต้นทุนตามประเภท', '🧬', typeBars)}
-      <div class="dive-section"><div class="dive-section-title">🛠️ Actions</div>
+      ${_diveSection('สัดส่วนต้นทุนตามประเภท', '', typeBars)}
+      <div class="dive-section"><div class="dive-section-title">Actions</div>
         <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
     </div></div>`;
 }
@@ -444,24 +444,24 @@ function gpbCostDriverDive() {
   const body  = document.getElementById('diveBody');
   if (!modal || !title || !body) return;
   if (!skus.length) return;
-  title.textContent = '🔍 Top Cost-Driver SKUs · กินต้นทุนสูงสุด';
+  title.textContent = 'Top Cost-Driver SKUs · กินต้นทุนสูงสุด';
   const top = skus.slice(0, 30);
   const nums = top.map(s => Math.round(s.bom_cost || 0));
   const totalCost = skus.reduce((a, s) => a + (s.bom_cost || 0), 0);
   const top5 = skus.slice(0, 5).reduce((a, s) => a + (s.bom_cost || 0), 0);
   const conc = totalCost ? (top5 / totalCost * 100) : 0;
   const analysis =
-    _diveSection('Overview', '📊',
+    _diveSection('Overview', '',
       _diveMetric('ต้นทุน BoM รวม', fmt(totalCost)) +
       _diveMetric('อันดับ 1', `${esc(top[0].sku_code)} · ${fmt(top[0].bom_cost)}`, 'bad') +
       _diveMetric('Top 5 รวม', `${fmt(top5)} (${conc.toFixed(0)}%)`) +
       _diveMetric('จำนวน SKU', String(skus.length))) +
-    _diveSection('คำแนะนำ', '💡', _diveBullet('🎯',
+    _diveSection('คำแนะนำ', '', _diveBullet('',
       `Top 5 SKU กินต้นทุน <b>${conc.toFixed(0)}%</b> ของทั้งหมด — โฟกัสต่อรองราคา/สูตรที่ SKU เหล่านี้ให้ผลมากสุด`, 'info'));
   body.innerHTML = `<div class="dive-layout">
     <div class="dive-chart-wrap rounded-xl p-3" style="background:var(--bg-subtle);position:relative"><canvas id="zoomChart"></canvas></div>
     <div class="dive-insight-bar dive-side">${analysis}
-      <div class="dive-section"><div class="dive-section-title">🛠️ Actions <span class="text-[10px] font-normal text-slate-400">· คลิกแท่งเพื่อดูส่วนผสม</span></div>
+      <div class="dive-section"><div class="dive-section-title">Actions <span class="text-[10px] font-normal text-slate-400">· คลิกแท่งเพื่อดูส่วนผสม</span></div>
         <button onclick="closeDive()" class="dive-action-btn">✕ Close (Esc)</button></div>
     </div></div>`;
   modal.classList.remove('hidden');
@@ -505,7 +505,7 @@ function _diveBullet(icon, html, tone = 'info') {
 function analyzeChartForDive(chartId, cfg) {
   const ds = cfg.data?.datasets?.[0];
   if (!ds || !ds.data || !ds.data.length) {
-    return _diveSection('Insights', '💡', '<p class="text-xs text-slate-400">No data to analyze.</p>');
+    return _diveSection('Insights', '', '<p class="text-xs text-slate-400">No data to analyze.</p>');
   }
   // Bubble/scatter charts carry no labels and {x,y,r} points — the label-based
   // analyzers (mix/trend) would crash. Route them to the scatter analyzer.
@@ -578,7 +578,7 @@ function _outlierBullet(cfg) {
   if (!o.hasOutliers) return '';
   const outlierLabels = o.indices.map(i => labels[i]).filter(Boolean).slice(0, 3).join(', ');
   return _diveBullet(
-    '🎯',
+    '',
     `พบ <b>${o.indices.length}</b> ค่าผิดปกติ (${outlierLabels}${o.indices.length>3?', …':''}) — ทำให้ค่าเฉลี่ยเบี่ยงเบนไป <b>${o.gainPct.toFixed(1)}%</b><br>` +
     `ถ้าตัด outlier ออก ค่าเฉลี่ยจะเป็น <b>${f(o.trimmedAvg)}</b> (จาก <b>${f(o.fullAvg)}</b>) — แนะนำให้ <b>วิเคราะห์แบบตัด outlier</b> เพื่อภาพที่สะท้อนความเป็นจริงมากขึ้น`,
     'warn'
@@ -594,7 +594,7 @@ function analyzeTrend(cfg, chartId) {
   const prior = nums.slice(-2*w, -w).reduce((a,b)=>a+b,0) / Math.max(1, w);
   const trendPct = prior > 0 ? ((last - prior) / prior * 100) : 0;
   const trendTone = trendPct > 3 ? 'good' : trendPct < -3 ? 'bad' : 'info';
-  const trendIco  = trendPct > 3 ? '🚀' : trendPct < -3 ? '⚠️' : '➡️';
+  const trendIco  = trendPct > 3 ? '▲' : trendPct < -3 ? '⚠' : '→';
 
   // % of periods below average (consistency)
   const belowAvg = nums.filter(v => v < avg).length;
@@ -602,7 +602,7 @@ function analyzeTrend(cfg, chartId) {
   const cv = avg ? (sd / avg * 100) : 0;
   const volTone = cv > 30 ? 'warn' : cv > 15 ? 'info' : 'good';
 
-  return _diveSection('Overview', '📊', [
+  return _diveSection('Overview', '', [
     _diveMetric('Total',          f(sum)),
     _diveMetric('Periods',        n + ' points'),
     _diveMetric('Average',        f(avg)),
@@ -615,16 +615,16 @@ function analyzeTrend(cfg, chartId) {
       `Last ${w} periods avg <b>${f(last)}</b> vs prior <b>${f(prior)}</b> — <b>${trendPct >= 0 ? '+' : ''}${trendPct.toFixed(1)}%</b>`,
       trendTone)
   ) +
-  _diveSection('Insights & Actions', '💡', [
-    _diveBullet('📉', `<b>${belowAvg}</b> of ${n} periods fell below the average — review promo calendar for those windows.`, belowAvg > n/2 ? 'warn' : 'info'),
+  _diveSection('Insights & Actions', '', [
+    _diveBullet('▼', `<b>${belowAvg}</b> of ${n} periods fell below the average — review promo calendar for those windows.`, belowAvg > n/2 ? 'warn' : 'info'),
     cv > 30
-      ? _diveBullet('⚡', `High volatility (CV <b>${cv.toFixed(0)}%</b>) — investigate one-off spikes/dips before forecasting.`, 'warn')
-      : _diveBullet('✅', `Stable trajectory (CV <b>${cv.toFixed(0)}%</b>) — safe to use this baseline for targets.`, 'good'),
+      ? _diveBullet('', `High volatility (CV <b>${cv.toFixed(0)}%</b>) — investigate one-off spikes/dips before forecasting.`, 'warn')
+      : _diveBullet('✓', `Stable trajectory (CV <b>${cv.toFixed(0)}%</b>) — safe to use this baseline for targets.`, 'good'),
     trendPct < -5
-      ? _diveBullet('🎯', `Recent decline of <b>${Math.abs(trendPct).toFixed(1)}%</b> — push a campaign or revisit pricing.`, 'bad')
+      ? _diveBullet('', `Recent decline of <b>${Math.abs(trendPct).toFixed(1)}%</b> — push a campaign or revisit pricing.`, 'bad')
       : trendPct > 5
-        ? _diveBullet('🚀', `Momentum is +<b>${trendPct.toFixed(1)}%</b> — capitalize: increase staffing or stock for the upswing.`, 'good')
-        : _diveBullet('🔍', `Trend is flat — drill into branches or categories to find hidden movement.`, 'info'),
+        ? _diveBullet('▲', `Momentum is +<b>${trendPct.toFixed(1)}%</b> — capitalize: increase staffing or stock for the upswing.`, 'good')
+        : _diveBullet('', `Trend is flat — drill into branches or categories to find hidden movement.`, 'info'),
     _outlierBullet(cfg),
   ].filter(Boolean).join(''));
 }
@@ -637,27 +637,27 @@ function analyzeHourly(cfg) {
   const dinner  = labels.map((l,i)=>i).filter(i=>parseInt(labels[i])>=17 && parseInt(labels[i])<=21).reduce((s,i)=>s+nums[i],0);
   const late    = labels.map((l,i)=>i).filter(i=>{const h=parseInt(labels[i]); return h>=22 || h<=2;}).reduce((s,i)=>s+nums[i],0);
   const segments = [
-    {n:'Morning 🌅', v:morning}, {n:'Lunch 🍱', v:lunch},
-    {n:'Dinner 🍽️', v:dinner}, {n:'Late Night 🌙', v:late},
+    {n:'Morning', v:morning}, {n:'Lunch', v:lunch},
+    {n:'Dinner', v:dinner}, {n:'Late Night', v:late},
   ].sort((a,b)=>b.v-a.v);
   const peakSeg = segments[0];
   const deadHours = nums.map((v,i)=>({h:labels[i], v})).filter(x=>x.v < avg*0.3).length;
 
-  return _diveSection('Hourly Overview', '⏰', [
+  return _diveSection('Hourly Overview', '', [
     _diveMetric('Total revenue', f(sum)),
     _diveMetric('Hourly average', f(avg)),
     _diveMetric('Peak hour',      `${labels[peakIdx]} (${f(max)})`, 'good'),
     _diveMetric('Dead hours (<30% avg)', deadHours, deadHours > 6 ? 'bad' : ''),
   ].join('')) +
-  _diveSection('Dayparts Ranked', '🏆', segments.map((s,i) =>
+  _diveSection('Dayparts Ranked', '', segments.map((s,i) =>
     `<div class="dive-metric"><span class="lbl">#${i+1} ${s.n}</span><span class="val ${i===0?'good':''}">${f(s.v)} · ${sum?((s.v/sum*100).toFixed(0)):0}%</span></div>`
   ).join('')) +
-  _diveSection('Insights & Actions', '💡', [
-    _diveBullet('🎯', `<b>${peakSeg.n}</b> is your strongest daypart — protect it with full staffing & no maintenance.`, 'good'),
+  _diveSection('Insights & Actions', '', [
+    _diveBullet('', `<b>${peakSeg.n}</b> is your strongest daypart — protect it with full staffing & no maintenance.`, 'good'),
     deadHours > 6
-      ? _diveBullet('💤', `<b>${deadHours}</b> hours run at <30% of average — consider reduced hours or happy-hour promos to boost.`, 'warn')
-      : _diveBullet('✅', `Day spreads load well — keep current opening hours.`, 'good'),
-    _diveBullet('🍱', `Try to lift the weakest daypart (<b>${segments[3].n}</b>) — even a 10% gain there = <b>${f(segments[3].v*0.1)}</b>/period.`, 'info'),
+      ? _diveBullet('', `<b>${deadHours}</b> hours run at <30% of average — consider reduced hours or happy-hour promos to boost.`, 'warn')
+      : _diveBullet('✓', `Day spreads load well — keep current opening hours.`, 'good'),
+    _diveBullet('', `Try to lift the weakest daypart (<b>${segments[3].n}</b>) — even a 10% gain there = <b>${f(segments[3].v*0.1)}</b>/period.`, 'info'),
   ].join(''));
 }
 
@@ -666,19 +666,19 @@ function analyzeDow(cfg) {
   const weekend = labels.map((l,i)=>({l,i})).filter(x=>/sat|sun|fri/i.test(x.l)).reduce((s,x)=>s+nums[x.i],0);
   const weekday = sum - weekend;
   const ratio = weekday ? (weekend / weekday) : 0;
-  return _diveSection('Day-of-Week', '📅', [
+  return _diveSection('Day-of-Week', '', [
     _diveMetric('Total', f(sum)),
     _diveMetric('Daily average', f(avg)),
     _diveMetric('Best day', `${labels[peakIdx]} (${f(max)})`, 'good'),
     _diveMetric('Weekend / Weekday', ratio.toFixed(2) + '×', ratio > 1.2 ? 'good' : ratio < 0.7 ? 'bad' : ''),
   ].join('')) +
-  _diveSection('Insights', '💡', [
+  _diveSection('Insights', '', [
     ratio > 1.5
-      ? _diveBullet('🎉', `Weekends pull <b>${ratio.toFixed(1)}×</b> weekday volume — staff up Fri-Sun & limit weekend events.`, 'good')
+      ? _diveBullet('', `Weekends pull <b>${ratio.toFixed(1)}×</b> weekday volume — staff up Fri-Sun & limit weekend events.`, 'good')
       : ratio < 0.8
-        ? _diveBullet('🤔', `Weekday-heavy (${ratio.toFixed(2)}×) — explore weekend brunch / dinner sets to grow Sat-Sun.`, 'warn')
-        : _diveBullet('⚖️', `Week is well-balanced — no urgent rebalancing needed.`, 'info'),
-    _diveBullet('🔻', `<b>${labels[nums.indexOf(Math.min(...nums))]}</b> is the slowest day — perfect candidate for a recurring weekly promo.`, 'info'),
+        ? _diveBullet('', `Weekday-heavy (${ratio.toFixed(2)}×) — explore weekend brunch / dinner sets to grow Sat-Sun.`, 'warn')
+        : _diveBullet('', `Week is well-balanced — no urgent rebalancing needed.`, 'info'),
+    _diveBullet('▼', `<b>${labels[nums.indexOf(Math.min(...nums))]}</b> is the slowest day — perfect candidate for a recurring weekly promo.`, 'info'),
   ].join(''));
 }
 
@@ -691,7 +691,7 @@ function analyzeBranches(cfg) {
   const cntFor80 = cumul.findIndex(c => c >= sum * 0.8) + 1;
   const gap = bot3[0].v ? (top3[0].v / bot3[0].v).toFixed(1) : '∞';
 
-  return _diveSection('Branch Performance', '🏬', [
+  return _diveSection('Branch Performance', '', [
     _diveMetric('Total revenue', f(sum)),
     _diveMetric('Branches',      labels.length),
     _diveMetric('Average',       f(avg)),
@@ -699,18 +699,18 @@ function analyzeBranches(cfg) {
     _diveMetric('Pareto 80%',    `${cntFor80} of ${labels.length} branches`),
     _diveMetric('Top vs Bottom', gap + '×', Number(gap) > 5 ? 'bad' : ''),
   ].join('')) +
-  _diveSection('🏆 Top 3', '🏆',
-    top3.map((x,i) => `<div class="dive-metric"><span class="lbl">${['🥇','🥈','🥉'][i]} ${x.b}</span><span class="val good">${f(x.v)}</span></div>`).join('')) +
-  _diveSection('⚠️ Bottom 3', '⚠️',
+  _diveSection('Top 3', '',
+    top3.map((x,i) => `<div class="dive-metric"><span class="lbl">${['1.','2.','3.'][i]} ${x.b}</span><span class="val good">${f(x.v)}</span></div>`).join('')) +
+  _diveSection('⚠ Bottom 3', '⚠',
     bot3.map(x => `<div class="dive-metric"><span class="lbl">${x.b}</span><span class="val bad">${f(x.v)}</span></div>`).join('')) +
-  _diveSection('Insights & Actions', '💡', [
+  _diveSection('Insights & Actions', '', [
     cntFor80 <= labels.length * 0.4
-      ? _diveBullet('📊', `Heavy concentration — <b>${cntFor80}/${labels.length}</b> branches drive 80% of revenue. Bet on them, but de-risk by lifting the tail.`, 'warn')
-      : _diveBullet('📊', `Revenue is well-distributed across <b>${cntFor80}/${labels.length}</b> branches — healthy diversification.`, 'good'),
+      ? _diveBullet('', `Heavy concentration — <b>${cntFor80}/${labels.length}</b> branches drive 80% of revenue. Bet on them, but de-risk by lifting the tail.`, 'warn')
+      : _diveBullet('', `Revenue is well-distributed across <b>${cntFor80}/${labels.length}</b> branches — healthy diversification.`, 'good'),
     parseFloat(gap) > 5
-      ? _diveBullet('🎯', `Top branch is <b>${gap}×</b> the bottom — investigate the gap (location, menu mix, manager training).`, 'bad')
-      : _diveBullet('✅', `Performance gap is reasonable (<b>${gap}×</b>) — consistent operations.`, 'good'),
-    _diveBullet('🚀', `Lifting <b>${bot3[0].b}</b> by 20% would add <b>${f(bot3[0].v * 0.2)}</b> to system revenue.`, 'info'),
+      ? _diveBullet('', `Top branch is <b>${gap}×</b> the bottom — investigate the gap (location, menu mix, manager training).`, 'bad')
+      : _diveBullet('✓', `Performance gap is reasonable (<b>${gap}×</b>) — consistent operations.`, 'good'),
+    _diveBullet('▲', `Lifting <b>${bot3[0].b}</b> by 20% would add <b>${f(bot3[0].v * 0.2)}</b> to system revenue.`, 'info'),
     _outlierBullet(cfg),
   ].filter(Boolean).join(''));
 }
@@ -721,14 +721,14 @@ function analyzeMix(cfg) {
   const top3 = ranked.slice(0, 3);
   const top3Pct = top3.reduce((s,x)=>s+x.pct, 0);
   const top3Val = top3.reduce((s,x)=>s+x.v, 0);
-  const MEDALS = ['🥇','🥈','🥉'];
-  return _diveSection('สรุปภาพรวม', '🥧', [
+  const MEDALS = ['1.','2.','3.'];
+  return _diveSection('สรุปภาพรวม', '', [
     _diveMetric('ยอดรวม',      f(sum)),
     _diveMetric('จำนวนกลุ่ม',  labels.length),
     _diveMetric('กลุ่มสูงสุด', `${ranked[0].l} (${ranked[0].pct.toFixed(1)}%)`, 'good'),
     _diveMetric('% Top 3',     top3Pct.toFixed(1) + '%', top3Pct > 75 ? 'bad' : ''),
   ].join('')) +
-  _diveSection('🏆 Top 3 รายละเอียด', '🏆',
+  _diveSection('Top 3 รายละเอียด', '',
     top3.map((x, i) => {
       const rest = (i + 1 < top3.length) ? top3[i+1].v : 0;
       const gap  = rest ? (x.v / rest) : null;
@@ -743,18 +743,18 @@ function analyzeMix(cfg) {
       <span class="val">${f(top3Val)} · ${top3Pct.toFixed(1)}% ของทั้งหมด</span>
     </div>`
   ) +
-  _diveSection('รายละเอียดทุกกลุ่ม', '📋',
+  _diveSection('รายละเอียดทุกกลุ่ม', '',
     ranked.slice(0, 10).map((x, i) => `<div class="dive-metric"><span class="lbl">${i+1}. ${x.l}</span><span class="val">${f(x.v)} · ${x.pct.toFixed(1)}%</span></div>`).join('')) +
-  _diveSection('การวิเคราะห์', '💡', [
+  _diveSection('การวิเคราะห์', '', [
     top3Pct > 75
-      ? _diveBullet('⚠️', `Top 3 รวม <b>${top3Pct.toFixed(0)}%</b> ของยอดทั้งหมด — สัดส่วนกระจุก ควรกระจายความเสี่ยงหรือยอมรับการพึ่งพา`, 'warn')
-      : _diveBullet('✅', `สัดส่วนสมดุล (Top 3 = <b>${top3Pct.toFixed(0)}%</b>) — ไม่พึ่งพากลุ่มใดกลุ่มเดียวมากเกินไป`, 'good'),
+      ? _diveBullet('⚠', `Top 3 รวม <b>${top3Pct.toFixed(0)}%</b> ของยอดทั้งหมด — สัดส่วนกระจุก ควรกระจายความเสี่ยงหรือยอมรับการพึ่งพา`, 'warn')
+      : _diveBullet('✓', `สัดส่วนสมดุล (Top 3 = <b>${top3Pct.toFixed(0)}%</b>) — ไม่พึ่งพากลุ่มใดกลุ่มเดียวมากเกินไป`, 'good'),
     top3[0].pct > 50
-      ? _diveBullet('🎯', `<b>${top3[0].l}</b> ครองตลาดเดี่ยวที่ <b>${top3[0].pct.toFixed(0)}%</b> — เป็น core business ที่ต้องดูแลเป็นพิเศษ`, 'info')
+      ? _diveBullet('', `<b>${top3[0].l}</b> ครองตลาดเดี่ยวที่ <b>${top3[0].pct.toFixed(0)}%</b> — เป็น core business ที่ต้องดูแลเป็นพิเศษ`, 'info')
       : '',
     ranked[ranked.length-1].pct < 2
-      ? _diveBullet('🔻', `กลุ่มท้าย <b>${ranked[ranked.length-1].l}</b> มีเพียง <b>${ranked[ranked.length-1].pct.toFixed(1)}%</b> — พิจารณาเลิกขายหรือควบรวม`, 'info')
-      : _diveBullet('📊', `ทุกกลุ่มมีส่วนแบ่งสมเหตุสมผล — ไม่มี long-tail ที่ต้องตัดทิ้ง`, 'good'),
+      ? _diveBullet('▼', `กลุ่มท้าย <b>${ranked[ranked.length-1].l}</b> มีเพียง <b>${ranked[ranked.length-1].pct.toFixed(1)}%</b> — พิจารณาเลิกขายหรือควบรวม`, 'info')
+      : _diveBullet('', `ทุกกลุ่มมีส่วนแบ่งสมเหตุสมผล — ไม่มี long-tail ที่ต้องตัดทิ้ง`, 'good'),
     _outlierBullet(cfg),
   ].filter(Boolean).join(''));
 }
@@ -763,7 +763,7 @@ function analyzeScatter(cfg, chartId) {
   // Works for bubble/scatter where each point may carry an `item` payload.
   const ds = cfg.data?.datasets?.[0];
   const pts = (ds?.data || []).map(p => p && typeof p === 'object' ? p : {x:p,y:p});
-  if (!pts.length) return _diveSection('Insights','💡','<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>');
+  if (!pts.length) return _diveSection('Insights','','<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>');
   // Menu cost-efficiency scatter: item has servings/cost. Find top reduce targets.
   const withItem = pts.filter(p => p.item);
   if (withItem.length) {
@@ -771,28 +771,28 @@ function analyzeScatter(cfg, chartId) {
     const hot = withItem.filter(p => (p.item.serving_pct||0) >= 2 && (p.item.cost_pct||0) >= 2)
                         .sort((a,b)=>(b.item.cost_pct||0)-(a.item.cost_pct||0));
     const top5cost = byCost.slice(0,5).reduce((s,p)=>s+(p.item.cost_pct||0),0);
-    return _diveSection('สรุป', '🎯', [
+    return _diveSection('สรุป', '', [
       _diveMetric('จำนวนเมนู', withItem.length),
       _diveMetric('Top 5 = % ต้นทุน', top5cost.toFixed(0)+'%', top5cost>40?'bad':''),
       _diveMetric('เมนูเป้าลดต้นทุน (เสิร์ฟเยอะ+แพง)', hot.length, hot.length?'bad':'good'),
     ].join('')) +
-    _diveSection('🎯 เป้าหมายลดต้นทุนอันดับต้น', '🎯',
+    _diveSection('เป้าหมายลดต้นทุนอันดับต้น', '',
       (hot.length?hot:byCost).slice(0,8).map((p,i)=>{
         const it=p.item;
         return `<div class="dive-metric"><span class="lbl">${i+1}. ${esc((it.description||'').replace(/^\((?:A|B)\)\s*/,''))}</span>`+
                `<span class="val bad">ต้นทุน ${(it.cost_pct||0).toFixed(1)}% · เสิร์ฟ ${(it.serving_pct||0).toFixed(1)}% · ${fmtN(it.cost_per_serving||0)}/จาน</span></div>`;
       }).join('')) +
-    _diveSection('การวิเคราะห์', '💡', [
+    _diveSection('การวิเคราะห์', '', [
       hot.length
-        ? _diveBullet('🎯', `<b>${hot.length}</b> เมนูที่ <b>เสิร์ฟเยอะ + ต้นทุนสูง</b> — ปรับสูตร/ลด portion เมนูเหล่านี้ก่อน จะลดต้นทุนรวมได้มากสุด นำโดย <b>${esc((hot[0].item.description||'').replace(/^\((?:A|B)\)\s*/,''))}</b>`, 'warn')
-        : _diveBullet('✅', 'ไม่มีเมนูที่ทั้งเสิร์ฟเยอะและแพงผิดปกติ — ต้นทุนกระจายดี', 'good'),
-      _diveBullet('💡', 'จุดมุมขวาบน = เป้าหมายหลัก · มุมขวาล่าง = เสิร์ฟเยอะแต่ถูก (โปรโมทได้)', 'info'),
+        ? _diveBullet('', `<b>${hot.length}</b> เมนูที่ <b>เสิร์ฟเยอะ + ต้นทุนสูง</b> — ปรับสูตร/ลด portion เมนูเหล่านี้ก่อน จะลดต้นทุนรวมได้มากสุด นำโดย <b>${esc((hot[0].item.description||'').replace(/^\((?:A|B)\)\s*/,''))}</b>`, 'warn')
+        : _diveBullet('✓', 'ไม่มีเมนูที่ทั้งเสิร์ฟเยอะและแพงผิดปกติ — ต้นทุนกระจายดี', 'good'),
+      _diveBullet('', 'จุดมุมขวาบน = เป้าหมายหลัก · มุมขวาล่าง = เสิร์ฟเยอะแต่ถูก (โปรโมทได้)', 'info'),
     ].join(''));
   }
   // Generic scatter fallback (x/y stats)
   const xs=pts.map(p=>+p.x||0), ys=pts.map(p=>+p.y||0);
   const favg=a=>a.reduce((s,v)=>s+v,0)/a.length;
-  return _diveSection('Overview','📊',[
+  return _diveSection('Overview','',[
     _diveMetric('จุดข้อมูล', pts.length),
     _diveMetric('เฉลี่ย X', fmtN(favg(xs))),
     _diveMetric('เฉลี่ย Y', fmtN(favg(ys))),
@@ -802,14 +802,14 @@ function analyzeScatter(cfg, chartId) {
 function analyzeGeneric(cfg) {
   const { nums, labels, sum, avg, max, min, peakIdx, lowIdx, f } = _basics(cfg);
   const outlierHtml = _outlierBullet(cfg);
-  return _diveSection('Overview', '📊', [
+  return _diveSection('Overview', '', [
     _diveMetric('Total', f(sum)),
     _diveMetric('Average', f(avg)),
     _diveMetric('Peak', `${f(max)}${labels[peakIdx] ? ' · ' + labels[peakIdx] : ''}`, 'good'),
     _diveMetric('Low',  `${f(min)}${labels[lowIdx] ? ' · ' + labels[lowIdx] : ''}`, 'bad'),
     _diveMetric('Points', nums.length),
   ].join('')) +
-  (outlierHtml ? _diveSection('การวิเคราะห์ Outlier', '🎯', outlierHtml) : '');
+  (outlierHtml ? _diveSection('การวิเคราะห์ Outlier', '', outlierHtml) : '');
 }
 
 function exportChartData(chartId) {
@@ -839,10 +839,10 @@ async function loadHealthScores() {
     api(`${API}/api/analysis/percentiles?${params}`).catch(()=>[]),
   ]);
   const pctMap = Object.fromEntries(pcts.map(p => [p.branch, p]));
-  const colorFor = s => s >= 75 ? '#10b981' : s >= 55 ? '#4f46e5' : s >= 40 ? '#f59e0b' : '#ef4444';
+  const colorFor = s => s >= 75 ? '#10b981' : s >= 55 ? '#4a70b0' : s >= 40 ? '#f59e0b' : '#ef4444';
   const pctChip = (v) => {
     if (v == null) return '<span class="text-slate-300">—</span>';
-    const c = v >= 75 ? '#10b981' : v >= 50 ? '#4f46e5' : v >= 25 ? '#f59e0b' : '#ef4444';
+    const c = v >= 75 ? '#10b981' : v >= 50 ? '#4a70b0' : v >= 25 ? '#f59e0b' : '#ef4444';
     return `<span style="display:inline-block;min-width:36px;padding:2px 6px;border-radius:999px;background:${c}22;color:${c};font-weight:700">${v}<span style="opacity:0.7">th</span></span>`;
   };
   tbody.innerHTML = health.map((b, i) => {
@@ -982,7 +982,7 @@ function renderUserPresets() {
   if (!presets.length) { wrap.innerHTML = '<span class="text-xs text-slate-400 italic">none yet</span>'; return; }
   wrap.innerHTML = presets.map((p, i) => `
     <span class="preset-chip" onclick="applyUserPreset(${i})">
-      ⭐ ${p.name}
+      ★ ${p.name}
       <span class="x" onclick="deleteUserPreset(${i}, event)" title="Delete">✕</span>
     </span>`).join('');
 }
@@ -1189,7 +1189,7 @@ function toggleDarkMode() {
 
 function setDarkBtnIcon(isDark) {
   const btn = document.getElementById('darkBtn');
-  if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+  if (btn) btn.innerHTML = isDark ? ICON.sun : ICON.moon;
 }
 
 
@@ -1287,7 +1287,7 @@ async function loadCohort() {
       <td class="py-2 pr-3 font-semibold whitespace-nowrap">${fmtPeriod(r.cohort)}${r.partial ? ` <span class="text-[9px] px-1 py-0.5 rounded font-normal" style="background:#fef3c7;color:#b45309" title="มีข้อมูล ${r.days_covered} จาก ${r.days_in_month} วัน — ไม่ถูกนำไปเทียบ MoM/YoY">ไม่ครบเดือน</span>` : ''}</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmtN(r.tx)}</td>
       <td class="py-2 pr-3 text-right tabular-nums whitespace-nowrap">${fmtN(r.customers)}
-        <span style="display:inline-block;height:5px;border-radius:3px;background:#4f46e5;vertical-align:middle;margin-left:5px;width:${Math.max(3, Math.round((r.customers || 0) / maxCust * 44))}px"></span></td>
+        <span style="display:inline-block;height:5px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-left:5px;width:${Math.max(3, Math.round((r.customers || 0) / maxCust * 44))}px"></span></td>
       <td class="py-2 pr-3 text-right tabular-nums"><span class="rounded px-1" style="${r.partial ? '' : heat(r.cust_per_branch)}">${fmtN(r.cust_per_branch)}</span> <span class="text-slate-400 text-[10px]">(${r.branches})</span></td>
       <td class="py-2 pr-3 text-right tabular-nums">฿${fmtN(r.rev_per_cust)}</td>
       <td class="py-2 pr-3 text-right tabular-nums">${fmt(r.revenue)}</td>
@@ -1302,7 +1302,7 @@ async function loadCohort() {
     const years = [...new Set(SS.flatMap(s => Object.keys(s.years)))].sort();
     if (!SS.length || years.length < 1) { sEl.innerHTML = ''; }
     else {
-      const YC = { 0: '#c7d2fe', 1: '#4f46e5', 2: '#0f766e' };   // oldest → newest
+      const YC = { 0: '#c9d5e8', 1: '#4a70b0', 2: '#0f766e' };   // oldest → newest
       const mx = Math.max(1, ...SS.flatMap(s => Object.values(s.years).map(v => v.cpb || 0)));
       const bars = SS.map(s => {
         const grp = years.map((y, yi) => {
@@ -1445,12 +1445,12 @@ function renderAIBlankState() {
 // TOAST notifications
 // ════════════════════════════════════════════════════════════════
 function showToast(msg, type = 'info', duration = 4500) {
-  const colors = { info:'#4f46e5', good:'#10b981', warn:'#f59e0b', bad:'#ef4444' };
-  const icons  = { info:'ℹ️', good:'✅', warn:'⚠️', bad:'❌' };
+  const colors = { info:'#4a70b0', good:'#10b981', warn:'#f59e0b', bad:'#ef4444' };
+  const icons  = { info:'ℹ️', good:'✓', warn:'⚠', bad:'✗' };
   const t = document.createElement('div');
   t.style.cssText = [
     'position:fixed','bottom:24px','right:24px','z-index:9999',
-    'padding:12px 16px 12px 14px','border-radius:10px',
+    'padding:12px 16px 12px 14px','border-radius:4px',
     `background:${colors[type]||colors.info}`,
     'color:#fff','font-size:13px','font-weight:500',
     'max-width:380px','line-height:1.4',
@@ -1477,7 +1477,7 @@ async function checkCostSpikes() {
         const pct = r.pct_change != null ? (r.pct_change > 0 ? '+' : '') + r.pct_change.toFixed(0) + '%' : '?';
         return `${r.sku_code} ${pct}`;
       }).join(' · ');
-      showToast(`💸 Cost changes &gt;10% detected: ${lines}`, 'warn', 9000);
+      showToast(`Cost changes &gt;10% detected: ${lines}`, 'warn', 9000);
     }
   } catch(e) {}
 }
@@ -1571,9 +1571,9 @@ function setGpbGranularity(g) {
 function _gpbStatusBucket(foodPct, lo, hi) {
   if (foodPct == null) return { label:'—', cls:'text-slate-400', emoji:'·', color:'#94a3b8' };
   const band = (hi - lo); // typically 10
-  if (foodPct >= lo && foodPct <= hi) return { label:'ในเป้า', cls:'text-emerald-600', emoji:'✅', color:'#10b981' };
-  if (foodPct >= lo - band*0.4 && foodPct <= hi + band*0.4) return { label:'ใกล้ขอบ', cls:'text-amber-600', emoji:'⚠️', color:'#f59e0b' };
-  return { label:'นอกเป้า', cls:'text-rose-600', emoji:'🔴', color:'#ef4444' };
+  if (foodPct >= lo && foodPct <= hi) return { label:'ในเป้า', cls:'text-emerald-600', emoji:'✓', color:'#10b981' };
+  if (foodPct >= lo - band*0.4 && foodPct <= hi + band*0.4) return { label:'ใกล้ขอบ', cls:'text-amber-600', emoji:'⚠', color:'#f59e0b' };
+  return { label:'นอกเป้า', cls:'text-rose-600', emoji:'●', color:'#ef4444' };
 }
 
 function _gpbInitFilters() {
@@ -1651,12 +1651,12 @@ function _gpbRenderSummary(data) {
     card('รายได้รวม (ex VAT)', fmtB(g.revenue), `${data.rows.length} สาขา`, '#0ea5e9'),
     card('BoM Cost รวม',       fmtB(g.cogs),    'ตามสูตร BoM ใหม่',           '#f59e0b'),
     card('GP รวม',             fmtB(g.gp),      (g.gp >= 0 ? 'กำไร' : 'ขาดทุน'), g.gp >= 0 ? '#10b981' : '#ef4444'),
-    card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#8b5cf6'),
+    card('GP %',               fmtPct(g.gp_pct), `เป้า ${data.target_lo}-${data.target_hi}%`, '#7a66b8'),
     card('Food Cost %', `${bucket.emoji} ${fmtPct(g.food_cost_pct)}`, bucket.label, bucket.color),
   ].join('');
 }
 
-// 📝 Plain-Thai narrative summarising the GP picture across branches (page read).
+// Plain-Thai narrative summarising the GP picture across branches (page read).
 function _gpbRenderNarrative(data) {
   const el = document.getElementById('gpbNarrative'); if (!el) return;
   const g = data.grand_total || {};
@@ -1677,8 +1677,8 @@ function _gpbRenderNarrative(data) {
     `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? '#059669' : '#dc2626'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${fcCol}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
     `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
     overFc.length
-      ? `⚠️ <b style="color:#dc2626">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
-      : `✅ ทุกสาขา Food Cost อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
+      ? `⚠ <b style="color:#dc2626">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
+      : `ทุกสาขา Food Cost อยู่ในกรอบเป้า — มาร์จินสุขภาพดี`,
     `${inBand.length}/${rows.length} สาขาอยู่ในกรอบเป้า — ${gap > 15 ? 'ความเหลื่อมล้ำระหว่างสาขาสูง ควรถอดบทเรียนสาขาเด่นไปใช้กับสาขาท้าย' : 'การกระจาย GP ค่อนข้างสม่ำเสมอ'}`,
   ];
   el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
@@ -1955,7 +1955,7 @@ function setBbomGranularity(g) {
 }
 const _BBOM_TYPE_COLORS = {
   protein:'#ef4444', carb:'#f59e0b', veg:'#10b981',
-  sauce:'#8b5cf6', oil:'#f97316', seasoning:'#0891b2', other:'#64748b'
+  sauce:'#7a66b8', oil:'#f97316', seasoning:'#0891b2', other:'#64748b'
 };
 const _BBOM_TYPE_LABELS = {
   protein:'โปรตีน', carb:'คาร์โบไฮเดรต', veg:'ผัก',
@@ -2003,7 +2003,7 @@ function setBbomViewMode(mode) {
   loadBranchBom(true);
 }
 
-// 📦 Requisitions vs recipes (routers/requisition.py). Two honest numbers that will
+// Requisitions vs recipes (routers/requisition.py). Two honest numbers that will
 // never be equal: what the stores DREW and what the recipes say they should have
 // used. The gap between them is the largest controllable cost in the business.
 let _reqInit = false;
@@ -2018,7 +2018,7 @@ async function loadRequisitionGap() {
   try { d = await api(`${API}/api/requisition/vs-recipe?${qs}`); }
   catch (e) { body.innerHTML = '<p class="text-xs text-slate-400">โหลดไม่ได้</p>'; return; }
   if (!d.ready) {
-    body.innerHTML = `<p class="text-xs" style="color:#9a3412">📭 ${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
+    body.innerHTML = `<p class="text-xs" style="color:#9a3412">${esc(d.why || 'ยังไม่มีข้อมูล')}</p>`;
     return;
   }
   if (!_reqInit) {                       // first load: fill the pickers from what exists
@@ -2138,7 +2138,7 @@ async function loadBranchBom(force) {
     status.textContent = `อัพเดทเมื่อ ${new Date().toLocaleTimeString('th-TH')}`;
   } catch (err) {
     console.error('loadBranchBom failed', err);
-    status.textContent = '⚠️ โหลดข้อมูลไม่สำเร็จ';
+    status.textContent = '⚠ โหลดข้อมูลไม่สำเร็จ';
     document.getElementById('bbomSummary').innerHTML =
       `<p class="text-red-500 col-span-5 text-center py-8">เกิดข้อผิดพลาด: ${err.message}</p>`;
   }
@@ -2216,7 +2216,7 @@ function _bbomRenderSummary(d) {
        <p class="text-[10px] text-slate-400">${sub}</p>
      </div>`;
   document.getElementById('bbomSummary').innerHTML = [
-    card('รายได้',            _bbomFmtB(t.revenue),    `${d.period.months || 0} เดือน · ${esc(d.branch)}`, '#4f46e5'),
+    card('รายได้',            _bbomFmtB(t.revenue),    `${d.period.months || 0} เดือน · ${esc(d.branch)}`, '#4a70b0'),
     card('ต้นทุนรวม',          _bbomFmtB(t.cogs),       `${(t.menus_with_cost||0).toLocaleString('th-TH')} เมนูมีต้นทุน`, '#0891b2'),
     card('Gross Profit',      _bbomFmtB(t.gp),         `GP ${_bbomFmtPct(t.gp_pct)}`, gpColor),
     card('Food Cost %',       _bbomFmtPct(t.food_cost_pct), `เป้า ${lo}-${hi}%`, fcColor),
@@ -2233,7 +2233,7 @@ function _bbomRenderConcentration(d) {
   }
   wrap.style.display = '';
   wrap.querySelector('p').innerHTML =
-    `📊 <b>Top 5 เมนู</b> คิดเป็น <b>${_bbomFmtPct(c.top_5_menus_pct_of_cogs)}</b> ของต้นทุนสาขา · ` +
+    `<b>Top 5 เมนู</b> คิดเป็น <b>${_bbomFmtPct(c.top_5_menus_pct_of_cogs)}</b> ของต้นทุนสาขา · ` +
     `<b>Top 10</b> = <b>${_bbomFmtPct(c.top_10_menus_pct_of_cogs)}</b> · ` +
     `<b>Top 20</b> = <b>${_bbomFmtPct(c.top_20_menus_pct_of_cogs)}</b>`;
 }
@@ -2260,7 +2260,7 @@ function _bbomRenderTrend(d) {
     data: {
       labels,
       datasets: [
-        { label:'รายได้', data:t.map(r => r.revenue), borderColor:'#4f46e5', backgroundColor: chartType==='line' ? '#4f46e520' : '#4f46e5cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
+        { label:'รายได้', data:t.map(r => r.revenue), borderColor:'#4a70b0', backgroundColor: chartType==='line' ? '#4a70b020' : '#4a70b0cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
         { label:'COGS',  data:t.map(r => r.cogs),    borderColor:'#ef4444', backgroundColor: chartType==='line' ? '#ef444420' : '#ef4444cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
         { label:'GP',    data:t.map(r => r.gp),      borderColor:'#10b981', backgroundColor: chartType==='line' ? '#10b98120' : '#10b981cc', tension:.3, borderWidth:2, fill:false, pointRadius, borderRadius: 3 },
       ],
@@ -2316,7 +2316,7 @@ function _bbomRenderMenuTable() {
          </svg>`
       : '<span class="text-slate-300">—</span>';
     const bomBadge = r.has_bom_recipe
-      ? '<span title="มีสูตร BoM" style="color:#d946ef">🔬</span>'
+      ? '<span title="มีสูตร BoM" style="color:#d946ef"></span>'
       : '<span title="ยังไม่มีสูตร BoM" style="color:#cbd5e1">○</span>';
     return `<tr style="border-bottom:1px solid var(--border)">
       <td class="px-3 py-1.5 font-mono text-xs">${r.sku_code || ''}</td>
@@ -2370,7 +2370,7 @@ function _bbomRenderIngredients(d) {
           <span style="flex:none;width:9px;height:9px;border-radius:2px;background:${color}"></span>
           <span class="text-xs font-medium truncate" title="${esc(i.ingredient_name||'')}">${esc(i.ingredient_name||'')}</span>
           ${i.ingredient_code ? `<span class="text-xs font-mono text-slate-400" style="flex:none">${esc(i.ingredient_code)}</span>` : ''}
-          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:9px;background:${color}22;color:${color};font-weight:600">${esc(typeLbl)}</span>
+          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:4px;background:${color}22;color:${color};font-weight:600">${esc(typeLbl)}</span>
         </div>
         <div class="text-right" style="flex:none">
           <span class="text-xs font-semibold">${_bbomFmtB(i.total_cost)}</span>

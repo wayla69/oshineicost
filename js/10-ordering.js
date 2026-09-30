@@ -1,8 +1,8 @@
-// 10-ordering.js — 🧺 จัดซื้อ/วัตถุดิบ (order plan · pack sizes ·
+// 10-ordering.js — จัดซื้อ/วัตถุดิบ (order plan · pack sizes ·
 // sourcing · issued cycles · festival calendar). Loaded last; shares the
 // global scope of slices 01-09 (see index.html).
 // ═══════════════════════════════════════════════════════════════════════════
-// 🧺 แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)
+// แผนสั่งวัตถุดิบรายสาขา (Ingredient Order Plan)
 // Demand forecast: real daily sales × BoM. Deliberately blind to on-hand stock
 // (the app has no inventory feed), so every surface repeats that caveat rather
 // than letting the number read as a ready-to-send purchase order.
@@ -125,8 +125,8 @@ async function loadOrderPlan(force) {
   // books — say it where the numbers are, with the fix one click away.
   const eraEl = document.getElementById('opEraNote');
   if (eraEl) eraEl.innerHTML = m.era && m.era.straddles
-    ? `<div class="card p-3 text-xs flex flex-wrap items-center gap-2" style="background:#fff7ed;border-left:4px solid #ea580c;color:#9a3412">
-         <span>⚠️ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> — ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</span>
+    ? `<div class="card p-3 text-xs flex flex-wrap items-center gap-2" style="background:#fff7ed;border:1px solid #ea580c;color:#9a3412">
+         <span>⚠ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> — ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</span>
          <button onclick="opUseEraFrom()" style="background:#ea580c;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer">ใช้เฉพาะเมนูใหม่ (เริ่ม ${esc(m.era.suggest_from)})</button>
        </div>`
     : '';
@@ -141,14 +141,14 @@ async function loadOrderPlan(force) {
   document.getElementById('opKpis').innerHTML = [
     { l:'รายการวัตถุดิบ', v:fmtN(t.ingredients||0), s:'ที่มีสูตร BoM รองรับ', c:'#0f766e' },
     { l:'มูลค่าสั่ง/สัปดาห์', v:'฿'+fmt(t.value_week||0), s:brLabel, c:'#0891b2' },
-    { l:'มูลค่าสั่ง/เดือน',  v:'฿'+fmt(t.value_month||0), s:'รวมเผื่อ '+(m.buffer_pct||0)+'%', c:'#7c3aed' },
+    { l:'มูลค่าสั่ง/เดือน',  v:'฿'+fmt(t.value_month||0), s:'รวมเผื่อ '+(m.buffer_pct||0)+'%', c:'#7a66b8' },
     { l:'ครอบคลุมสูตร',     v:(cov.pct!=null?cov.pct+'%':'—'), s:'ของจำนวนจานที่ขาย', c:(cov.pct>=70?'#10b981':'#f59e0b') },
   ].concat(m.local_count ? [{ l:'สาขาซื้อเอง', v:fmtN(m.local_count), s:'ไม่อยู่ในจดหมายสั่งของ', c:'#64748b' }] : [])
    .map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');
 
   const miss = cov.top_missing || [];
   document.getElementById('opCoverage').innerHTML = miss.length
-    ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+    ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
         <b>เมนูที่ยังไม่มีสูตร BoM จึงไม่อยู่ในแผนสั่งนี้</b> (${cov.pct}% ของจานที่ขายมีสูตรแล้ว) —
         ${miss.slice(0,5).map(x => `${esc(x.name || x.code)} (${fmtN(x.qty)} จาน)`).join(' · ')}
        </div>` : '';
@@ -156,11 +156,11 @@ async function loadOrderPlan(force) {
   const sn = m.season || {};
   const snEl = document.getElementById('opSeasonNote');
   if (snEl) snEl.innerHTML = (sn.factor && Math.abs(sn.factor - 1) > 0.001)
-    ? `<div class="card p-3 text-xs" style="background:#fff7ed;border-left:3px solid #ea580c;color:#9a3412">
-         🎉 <b>ปรับตามเทศกาล ×${sn.factor}</b>${sn.event ? ' — ' + esc(sn.event) : ''}
+    ? `<div class="card p-3 text-xs" style="background:#fff7ed;border:1px solid #ea580c;color:#9a3412">
+         <b>ปรับตามเทศกาล ×${sn.factor}</b>${sn.event ? ' — ' + esc(sn.event) : ''}
          <span style="color:#a16207"> · ${esc(sn.reason || '')}</span></div>`
     : (sn.mode === 'auto-nodata'
-       ? `<div class="card p-3 text-xs" style="background:var(--bg-subtle);color:var(--text-muted)">🎉 เปิดปรับตามเทศกาลไว้ แต่${esc(sn.reason || '')}</div>`
+       ? `<div class="card p-3 text-xs" style="background:var(--bg-subtle);color:var(--text-muted)">เปิดปรับตามเทศกาลไว้ แต่${esc(sn.reason || '')}</div>`
        : '');
   opLoadCycles();
   opLoadAccuracy();
@@ -333,7 +333,7 @@ function opForcedBadge(r) {
   const tip = (imp ? 'ซื้อต่างประเทศ — ส่วนกลางสั่งล็อตใหญ่ สาขาต้องสั่งจากส่วนกลาง' : 'รายการบังคับสั่งจากส่วนกลาง')
     + (r.forced_as ? ` · ในใบคลังใช้รหัส ${r.forced_as}` : '');
   return ` <span title="${esc(tip)}" style="font-size:10px;padding:1px 6px;border-radius:999px;white-space:nowrap;${imp
-    ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' : 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'}">📌 บังคับสั่ง${imp ? ' · ตปท.' : ''}</span>`;
+    ? 'background:#fef2f2;color:#b91c1c;border:1px solid #fecaca' : 'background:#f0fdfa;color:#0f766e;border:1px solid #99f6e4'}">บังคับสั่ง${imp ? ' · ตปท.' : ''}</span>`;
 }
 
 async function opLoadForcedNote(meta) {
@@ -344,11 +344,11 @@ async function opLoadForcedNote(meta) {
   let d = null;
   try { d = await api(`${API}/api/ingredients/forced-order`); } catch(e) { el.innerHTML = ''; return; }
   const sm = d.summary || {}, miss = (d.items || []).filter(i => !i.in_recipes);
-  el.innerHTML = `<div class="card p-3 text-xs mb-3" style="background:#f0fdfa;border-left:3px solid #0f766e;color:#134e4a">
-    📌 <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลังส่วนกลาง —
+  el.innerHTML = `<div class="card p-3 text-xs mb-3" style="background:#f0fdfa;border:1px solid #0f766e;color:#134e4a">
+    <b>รายการบังคับสั่ง ${fmtN(sm.items)} รายการ</b> (ซื้อต่างประเทศ ${fmtN(sm.import)}) ตามใบคลังส่วนกลาง —
     ติ๊ก “สั่งส่วนกลาง” ให้อัตโนมัติ ส่วนวัตถุดิบอื่นถือเป็น “สาขาซื้อเอง” และไม่อยู่ในจดหมาย/การตรวจการสั่ง (ติ๊กเพิ่มหรือเอาออกเองได้ ระบบจำไว้)
     · ติดตามได้ <b>${fmtN(sm.monitorable)}</b>${sm.via_alias ? ` (ในนี้ ${fmtN(sm.via_alias)} รายการจับคู่ผ่านรหัสในสูตร)` : ''}
-    ${miss.length ? `<div class="mt-1" style="color:#92400e">⚠️ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
+    ${miss.length ? `<div class="mt-1" style="color:#92400e">⚠ ยังไม่มีในสูตรใดเลย ${miss.length} รายการ — ระบบจึงคำนวณ/ติดตามให้ไม่ได้: ${miss.map(i => esc(i.code + ' ' + i.name.slice(0, 28))).join(' · ')}</div>` : ''}
     <div class="mt-1" style="color:var(--text-muted)">ไฟล์: ${esc(d.file || '')}</div></div>`;
 }
 
@@ -474,7 +474,7 @@ function opKeepTopN() {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ⚙️ Order setup — pack sizes + festival calendar
+// Order setup — pack sizes + festival calendar
 // ═══════════════════════════════════════════════════════════════════════════
 let _osPacks = [], _osEdits = {}, _osSub = 'pack';
 
@@ -535,7 +535,7 @@ function osEdit(el) {
   if (!base) return;
   const e = _osEdits[code] || (_osEdits[code] = Object.assign({}, base));
   e[f] = (f === 'order_unit') ? el.value : (el.value === '' ? null : parseFloat(el.value));
-  el.style.borderColor = '#4f46e5';
+  el.style.borderColor = '#4a70b0';
 }
 
 async function osSavePacks() {
@@ -628,7 +628,7 @@ async function osDelEvent(id) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 📋 Order cycles — issue, record what was actually ordered, warn
+// Order cycles — issue, record what was actually ordered, warn
 // ═══════════════════════════════════════════════════════════════════════════
 let _opCycleId = null;
 
@@ -670,7 +670,7 @@ async function opLoadCycles() {
     const c = r.compliance || {};
     const badge = c.compliant
       ? '<span style="color:#059669;font-weight:600">✓ ครบตามแผน</span>'
-      : `<span style="color:#b91c1c;font-weight:600">⚠️ ต้องแจ้งเตือน</span>`;
+      : `<span style="color:#b91c1c;font-weight:600">⚠ ต้องแจ้งเตือน</span>`;
     return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:#0f766e;font-weight:600">${esc(r.branch)}</a></td>
       <td class="py-1.5 pr-2">${esc(r.period_start)} → ${esc(r.period_end)}</td>
@@ -702,9 +702,9 @@ async function opOpenCycle(issueId) {
       <div class="flex items-center gap-2">
         <span class="text-xs" style="color:var(--text-muted)">
           ไม่ได้สั่ง ${fmtN(s.not_ordered)} · ต่ำกว่าแผน ${fmtN(s.under)} · ครบ ${fmtN(s.ok)}</span>
-        <button onclick="opSaveActuals()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">💾 บันทึกที่สั่งจริง</button>
+        <button onclick="opSaveActuals()" style="background:#0f766e;color:#fff;border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">บันทึกที่สั่งจริง</button>
         <button onclick="window.open('${API}/api/ingredients/compliance-letter.print?issue_id=${issueId}&tolerance_pct=${tol}','_blank')"
-          style="background:#b91c1c;color:#fff;border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">⚠️ จดหมายแจ้งเตือนสาขานี้</button>
+          style="background:#b91c1c;color:#fff;border:0;border-radius:var(--r-sm);padding:5px 12px;font-size:12.5px;font-weight:600;cursor:pointer">⚠ จดหมายแจ้งเตือนสาขานี้</button>
       </div>
     </div>
     <div class="overflow-x-auto"><table class="text-xs w-full">
@@ -860,10 +860,10 @@ function _opImportReportHtml(d, dry) {
     : `นำเข้าแล้ว <b>${fmtN(d.saved || 0)}</b> แถว จากไฟล์ <b>${esc(d.sheet || '')}</b>`;
   const blank = d.blank ? ` · เว้นว่าง ${fmtN(d.blank)} แถว (ยังไม่กรอก — ไม่ถูกแก้ไข)` : '';
   if (!errs.length) {
-    return `<div class="card p-3 text-[11px]" style="background:#f0fdf4;border-left:3px solid #16a34a;color:#166534">
+    return `<div class="card p-3 text-[11px]" style="background:#f0fdf4;border:1px solid #16a34a;color:#166534">
       ✓ ${head}${blank}</div>`;
   }
-  return `<div class="card p-3 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+  return `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
     ${head}${blank}<br><b>แถวที่มีปัญหา (${errs.length}) — ถูกข้าม ไม่ได้บันทึก:</b>
     <ul style="margin:.35em 0 0;padding-left:1.2em">
       ${errs.slice(0, 12).map(e => `<li>แถว ${esc(e.row || e.issue_id || '-')}${e.code || e.branch ? ' · ' + esc(e.code || e.branch) : ''} — ${esc(e.why)}</li>`).join('')}
@@ -905,7 +905,7 @@ async function opLoadAccuracy() {
     { l:'ใช้จริง vs พยากรณ์', v:(drift==null?'—':(drift>0?'+':'')+drift.toFixed(1)+'%'),
       s:(drift==null?'':drift>0?'พยากรณ์ต่ำไป':'พยากรณ์สูงไป'), c:(drift>5?'#dc2626':drift<-5?'#0891b2':'#059669') },
     { l:'% เผื่อที่ใช้อยู่', v:(h.buffer_used_median??'—')+'%', s:'ค่ากลางของรอบที่ผ่านมา', c:'#64748b' },
-    { l:'% เผื่อที่ควรใช้', v:(h.suggested_buffer_pct??'—')+'%', s:`ครอบคลุม ${h.service_level_pct}% ของรอบ`, c:'#7c3aed' },
+    { l:'% เผื่อที่ควรใช้', v:(h.suggested_buffer_pct??'—')+'%', s:`ครอบคลุม ${h.service_level_pct}% ของรอบ`, c:'#7a66b8' },
   ].map(k => `<div class="card p-3" style="border-top:3px solid ${k.c}"><p class="text-[10.5px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[10.5px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('') + `</div>`;
 
   const vlab = { under:['พยากรณ์ต่ำไป','#dc2626'], over:['พยากรณ์สูงไป','#0891b2'], ok:['พอดี','#059669'] };
@@ -931,7 +931,7 @@ function opApplySuggestedBuffer() {
 
 
 // ═══════════════════════════════════════════════════════════════════════════
-// 🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)
+// ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)
 // What each branch SPENT on ingredients comes from the purchasing system as a
 // spreadsheet; sales for the same week are ours. The pair gives the ratio ops
 // actually manage to. Deliberately NOT the BoM food cost: that says what the
@@ -990,7 +990,7 @@ async function loadIngPurchase(force) {
 
   const pctCol = v => v == null ? '#94a3b8' : v >= 40 ? '#dc2626' : v >= 33 ? '#f59e0b' : '#059669';
   document.getElementById('ipKpis').innerHTML = [
-    { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7c3aed' },
+    { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7a66b8' },
     { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2' },
     { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct) },
     { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981') },
@@ -1000,7 +1000,7 @@ async function loadIngPurchase(force) {
   // small ratio, it is an unknown one.
   const gaps = (d.rows || []).filter(r => r.amount == null);
   document.getElementById('ipGaps').innerHTML = gaps.length
-    ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border-left:3px solid #f59e0b;color:#92400e">
+    ? `<div class="card p-3 text-[11px]" style="background:#fffbeb;border:1px solid #f59e0b;color:#92400e">
         <b>ยังไม่ได้นำเข้ายอดซื้อ ${gaps.length} ช่อง</b> — สัปดาห์เหล่านี้มียอดขายแล้วแต่ไม่มียอดซื้อ
         จึงไม่ถูกนำมาคิด % (ไม่ได้นับเป็น 0) · ล่าสุด:
         ${gaps.slice(0, 6).map(g => `${esc(g.branch)} ${esc(g.week_start)}`).join(' · ')}${gaps.length > 6 ? ' …' : ''}
@@ -1037,7 +1037,7 @@ async function loadIngPurchase(force) {
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--text-muted)">฿${fmtN(r.revenue)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${pctCol(r.pct)}">${r.pct == null ? '—' : r.pct + '%'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.per_cover == null ? '—' : '฿' + fmtN(r.per_cover)}</td>
-      <td class="py-1.5" style="color:var(--text-muted)">${r.source === 'excel' ? '📄 Excel' : r.source === 'manual' ? '✍️ กรอกเอง' : '—'}</td>
+      <td class="py-1.5" style="color:var(--text-muted)">${r.source === 'excel' ? 'Excel' : r.source === 'manual' ? 'กรอกเอง' : '—'}</td>
     </tr>`).join('') || '<tr><td colspan="7" class="py-4 text-center" style="color:var(--text-muted)">ไม่มีสัปดาห์ในช่วงที่เลือก</td></tr>';
 
   ['ipBranchTbl', 'ipWeekTbl'].forEach(makeSortable);
@@ -1051,7 +1051,7 @@ function _ipRenderCharts(d) {
     if (_ipChartAmt) { _ipChartAmt.destroy(); _ipChartAmt = null; }
     return;
   }
-  const PAL = ['#7c3aed', '#0891b2', '#b0472d', '#1f7a4d', '#d97706', '#be185d', '#64748b'];
+  const PAL = ['#7a66b8', '#0891b2', '#b0472d', '#1f7a4d', '#d97706', '#be185d', '#64748b'];
   const names = [...new Set((d.rows || []).map(r => r.branch))].sort();
   const at = {};
   (d.rows || []).forEach(r => { at[r.branch + '|' + r.week_start] = r; });
@@ -1084,8 +1084,8 @@ function _ipRenderCharts(d) {
     type: 'bar',
     data: { labels: weeks, datasets: [
       { type: 'bar', label: 'ยอดขาย (ex-VAT)', data: rev, backgroundColor: 'rgba(8,145,178,.45)' },
-      { type: 'line', label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: amt, borderColor: '#7c3aed',
-        backgroundColor: '#7c3aed', tension: .25, spanGaps: false }] },
+      { type: 'line', label: 'ยอดซื้อวัตถุดิบ (นำเข้า)', data: amt, borderColor: '#7a66b8',
+        backgroundColor: '#7a66b8', tension: .25, spanGaps: false }] },
     options: { responsive: true, maintainAspectRatio: false,
       scales: { y: { title: { display: true, text: '฿' } } } } });
 }

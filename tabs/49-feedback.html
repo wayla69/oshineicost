@@ -1,11 +1,11 @@
-<!-- ══ 💬 เสียงลูกค้า (Customer Feedback) — a working screen: pulse · queue · insight ══ -->
+<!-- ══ เสียงลูกค้า (Customer Feedback) — a working screen: pulse · queue · insight ══ -->
 <div id="tab-feedback" style="display:none">
 <style>
   #tab-feedback .fb-head { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem 1rem; }
   #tab-feedback .fb-head h2 { font-size: 1.05rem; font-weight: 800; margin: 0; }
-  #tab-feedback .fb-btn { background: #0f766e; color: #fff; border: 1px solid #0f766e; border-radius: 6px; padding: .35rem .8rem; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+  #tab-feedback .fb-btn { background: #0f766e; color: #fff; border: 1px solid #0f766e; border-radius:4px; padding: .35rem .8rem; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
   #tab-feedback .fb-btn:hover { filter: brightness(1.08); }
-  #tab-feedback .fb-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 6px; padding: .3rem .6rem; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  #tab-feedback .fb-ghost { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); border-radius:4px; padding: .3rem .6rem; font-size: 12px; cursor: pointer; text-decoration: none; white-space: nowrap; }
   #tab-feedback .fb-ghost.on { border-color: #0f766e; color: #065f46; background: #ecfdf5; }
   #tab-feedback .fb-chip { display: inline-flex; align-items: center; gap: .3rem; border: 1px solid var(--border); border-radius: 999px; padding: .1rem .55rem; font-size: 11px; color: var(--text-secondary); background: var(--bg-input); cursor: pointer; }
   #tab-feedback .fb-chip.on { border-color: #0369a1; background: #eff6ff; color: #0369a1; font-weight: 600; }
@@ -26,15 +26,15 @@
   #tab-feedback .fb-age { font-weight: 600; } #tab-feedback .fb-age.late { color: #b91c1c; }
   #tab-feedback .fb-tag { font-size: 10px; padding: .05rem .35rem; border-radius: 3px; background: #f3f4f6; color: #374151; }
   #tab-feedback .fb-tag.neg { background: #fef2f2; color: #b91c1c; } #tab-feedback .fb-tag.menu { background: #eff6ff; color: #0369a1; } #tab-feedback .fb-tag.flag { background: #fef3c7; color: #92400e; }
-  #tab-feedback .fb-theme { display: grid; grid-template-columns: 7.5rem 1fr auto auto; gap: .5rem; align-items: center; font-size: 12px; padding: .3rem .2rem; border-radius: 6px; cursor: pointer; }
+  #tab-feedback .fb-theme { display: grid; grid-template-columns: 7.5rem 1fr auto auto; gap: .5rem; align-items: center; font-size: 12px; padding: .3rem .2rem; border-radius:4px; cursor: pointer; }
   #tab-feedback .fb-theme:hover, #tab-feedback .fb-theme.on { background: var(--bg-input); }
-  #tab-feedback .fb-bar { height: 9px; background: #e5e7eb; border-radius: 5px; overflow: hidden; }
-  #tab-feedback .fb-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #047857 var(--pos, 50%), #b91c1c var(--pos, 50%)); }
+  #tab-feedback .fb-bar { height: 9px; background: #e5e7eb; border-radius:4px; overflow: hidden; }
+  #tab-feedback .fb-bar > i { display: block; height: 100%; background:#047857; }
   #tab-feedback table.fb-t { width: 100%; font-size: 12px; border-collapse: collapse; }
   #tab-feedback table.fb-t th { text-align: left; font-weight: 600; color: var(--text-muted); font-size: 11px; padding: .3rem .4rem; border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap; }
   #tab-feedback table.fb-t td { padding: .35rem .4rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   #tab-feedback table.fb-t tr.row { cursor: pointer; } #tab-feedback table.fb-t tr.row:hover { background: var(--bg-input); }
-  #tab-feedback .fb-quote { border-left: 3px solid #a7f3d0; padding: .3rem .6rem; margin: .35rem 0; font-size: 12.5px; background: #f0fdf4; border-radius: 0 6px 6px 0; }
+  #tab-feedback .fb-quote { border:1px solid #a7f3d0; padding: .3rem .6rem; margin: .35rem 0; font-size: 12.5px; background: #f0fdf4; border-radius: 0 6px 6px 0; }
   #tab-feedback .fb-quote .m { font-size: 11px; color: var(--text-muted); }
   #tab-feedback details > summary { cursor: pointer; font-size: 13px; font-weight: 600; list-style: none; }
   #tab-feedback details > summary::before { content: '▸ '; color: var(--text-muted); } #tab-feedback details[open] > summary::before { content: '▾ '; }
@@ -43,21 +43,21 @@
 
   <div class="card p-4 fb-head">
     <div style="flex:1;min-width:240px">
-      <h2>💬 เสียงลูกค้า <span class="text-xs font-normal" style="color:var(--text-muted)" id="fbPeriod"></span></h2>
+      <h2>เสียงลูกค้า <span class="text-xs font-normal" style="color:var(--text-muted)" id="fbPeriod"></span></h2>
       <p class="text-xs mt-0.5" style="color:var(--text-secondary)" id="fbStatus">กำลังโหลด…</p>
       <div class="flex flex-wrap items-center gap-1.5 mt-1.5"><span id="fbKindChips" class="flex flex-wrap gap-1"></span><span id="fbBranchChip"></span></div>
     </div>
     <div class="flex flex-wrap gap-1.5">
-      <button class="fb-ghost" onclick="switchTab('checklist')">✅ Checklist เปิดใช้</button>
-      <button class="fb-ghost" onclick="exportFeedbackCsv()">⬇ CSV</button>
-      <button class="fb-ghost" onclick="toggleFeedbackImport()">⬆ นำเข้าเอง</button>
+      <button class="fb-ghost" onclick="switchTab('checklist')">Checklist เปิดใช้</button>
+      <button class="fb-ghost" onclick="exportFeedbackCsv()">CSV</button>
+      <button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button>
       <a class="fb-ghost" href="/docs/FEEDBACK_SOURCES.html" target="_blank">คู่มือ</a>
     </div>
   </div>
 
   <div class="card p-4 mt-4" id="fbDrCard">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">📰 รายงานประจำวัน/สัปดาห์/เดือน <span class="text-[11px] font-normal" style="color:var(--text-muted)">— สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตาม · เสียงชมที่หยิบไปใช้ได้ · หัวข้อ/เมนูที่ถูกพูดถึง</span></h3>
+      <h3 class="text-sm font-semibold">รายงานประจำวัน/สัปดาห์/เดือน <span class="text-[11px] font-normal" style="color:var(--text-muted)">— สรุปพร้อมใช้สำหรับการตลาด: เคสที่ต้องติดตาม · เสียงชมที่หยิบไปใช้ได้ · หัวข้อ/เมนูที่ถูกพูดถึง</span></h3>
       <div class="flex items-center gap-2 flex-wrap">
         <div class="flex gap-1"><button class="fb-ghost" onclick="setDailyReportPeriod('day')">วันนี้</button><button class="fb-ghost" onclick="setDailyReportPeriod('week')">สัปดาห์นี้</button><button class="fb-ghost" onclick="setDailyReportPeriod('month')">เดือนนี้</button></div>
         <input type="date" id="fbDrDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
@@ -65,8 +65,8 @@
         <input type="date" id="fbDrDateTo" title="เว้นว่าง = วันเดียว" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
         <select id="fbDrBranch" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" onchange="this.dataset.touched='1';loadDailyReport()"><option value="">ทุกสาขา</option></select>
         <button class="fb-btn" onclick="loadDailyReport()">สร้างรายงาน</button>
-        <a class="fb-ghost" id="fbDrPrint" href="#" target="_blank" rel="noopener" style="display:none">🖨 พิมพ์ ↗</a>
-        <a class="fb-ghost" id="fbDrXlsx" href="#" style="display:none">⬇ Excel</a>
+        <a class="fb-ghost" id="fbDrPrint" href="#" target="_blank" rel="noopener" style="display:none">พิมพ์ ↗</a>
+        <a class="fb-ghost" id="fbDrXlsx" href="#" style="display:none">Excel</a>
       </div>
     </div>
     <div id="fbDailyReport" class="mt-3 text-sm"><p class="text-xs" style="color:var(--text-muted)">เลือกช่วงแล้วกด "สร้างรายงาน" — ค่าเริ่มต้นคือวันนี้ (ไม่ใส่ "ถึง" = วันเดียว)</p></div>
@@ -89,18 +89,18 @@
 
   <div class="card p-4 mt-4" id="fbQueueCard">
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">📥 กล่องงาน — ต้องตอบ</h3>
+      <h3 class="text-sm font-semibold">กล่องงาน — ต้องตอบ</h3>
       <div class="flex flex-wrap gap-1" id="fbQueueFilters"></div>
     </div>
-    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เรียงตามความเร่งด่วน: ยังไม่ตอบ → 🔥 ร้ายแรง / 🚩 ปักหมุด → เกิน <span id="fbSlaDays">1</span> วัน → ดาวต่ำสุด → เก่าสุด · ตอบผ่านระบบได้กับ Google · Facebook · Instagram · TikTok ส่วน Inbox/การพูดถึงให้ตอบในแอปแล้วกด "ตอบแล้ว"</p>
+    <p class="text-[11px] mt-1" style="color:var(--text-muted)">เรียงตามความเร่งด่วน: ยังไม่ตอบ → ร้ายแรง / ปักหมุด → เกิน <span id="fbSlaDays">1</span> วัน → ดาวต่ำสุด → เก่าสุด · ตอบผ่านระบบได้กับ Google · Facebook · Instagram · TikTok ส่วน Inbox/การพูดถึงให้ตอบในแอปแล้วกด "ตอบแล้ว"</p>
     <div id="fbReplyPanel" class="mt-3 rounded p-3" style="display:none;border:1px solid #93c5fd;background:#eff6ff"></div>
     <div id="fbNeg" class="mt-2"></div>
   </div>
 
   <div class="card p-4 mt-4" id="fbAiCard">
     <div class="flex items-baseline justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">🧠 สรุปและถามข้อมูล <span id="fbAiEngine" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
-      <div class="flex items-center gap-2"><select id="fbAiDays" class="rounded border px-1 text-[11px]" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"><option value="7">7 วัน</option><option value="14">14 วัน</option><option value="30">30 วัน</option></select><button class="fb-btn" onclick="loadFeedbackNarrative()">📝 สรุปช่วงนี้</button></div>
+      <h3 class="text-sm font-semibold">สรุปและถามข้อมูล <span id="fbAiEngine" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
+      <div class="flex items-center gap-2"><select id="fbAiDays" class="rounded border px-1 text-[11px]" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"><option value="7">7 วัน</option><option value="14">14 วัน</option><option value="30">30 วัน</option></select><button class="fb-btn" onclick="loadFeedbackNarrative()">สรุปช่วงนี้</button></div>
     </div>
     <div id="fbNarrative" class="mt-2 text-sm" style="color:var(--text-secondary)"><span class="text-xs" style="color:var(--text-muted)">กด "สรุปช่วงนี้" เพื่อให้ระบบเขียนสรุปเป็นย่อหน้า (Claude เมื่อตั้ง ANTHROPIC_API_KEY · ไม่งั้นสรุปจากกฎ)</span></div>
     <div class="flex gap-2 mt-3"><input id="fbAskQ" class="flex-1 rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)" placeholder="ถามข้อมูล เช่น ลูกค้าบ่นเรื่องแซลมอนสาขาไหนบ้าง / พนักงานคนไหนถูกชมมากสุด" onkeydown="if(event.key==='Enter') askFeedback()"><button class="fb-ghost" onclick="askFeedback()">ถาม</button></div>
@@ -121,8 +121,8 @@
 
   <div class="card p-4 mt-4" id="fbActionsCard">
     <div class="flex items-baseline justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-semibold">🔁 งานแก้ไข — ปิดวงจร <span id="fbActionsHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
-      <div class="flex items-center gap-2"><span id="fbActionFilters" class="flex gap-1"></span><button class="fb-btn" onclick="openActionForm({})">➕ งานใหม่</button></div>
+      <h3 class="text-sm font-semibold">งานแก้ไข — ปิดวงจร <span id="fbActionsHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></h3>
+      <div class="flex items-center gap-2"><span id="fbActionFilters" class="flex gap-1"></span><button class="fb-btn" onclick="openActionForm({})">งานใหม่</button></div>
     </div>
     <p class="text-[11px] mt-1" style="color:var(--text-muted)">หัวข้อบนสาขาหนึ่งกลายเป็นงานที่มีเจ้าของและกำหนดเสร็จ ระบบวัดหัวข้อนั้น 28 วันก่อนสร้างงาน (ฐาน) และ 28 วันหลังเสร็จ แล้วตัดสิน ดีขึ้น / เท่าเดิม / แย่ลง จาก "เสียงลบต่อ 100 เสียง" — งานแก้เป็นแค่คำอ้างจนกว่าลูกค้าจะยืนยัน</p>
     <div id="fbActionForm" class="mt-2 rounded p-3" style="display:none;border:1px solid #99f6e4;background:#f0fdfa"></div>
@@ -130,26 +130,26 @@
   </div>
 
   <details class="card p-4 mt-4" id="fbComp" ontoggle="if(this.open) loadFeedbackCompetitors()">
-    <summary class="text-sm font-semibold cursor-pointer">🏁 เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span> <a href="#" class="fb-ghost" style="font-size:10px;padding:0 .4rem" onclick="event.preventDefault();event.stopPropagation();toggleCompSettings()">⚙ ตั้งค่า</a></summary>
-    <div id="fbCompSettings" class="mt-2 text-xs" style="display:none;border:1px solid var(--border);border-radius:8px;padding:.7rem;background:var(--bg-input)"></div>
+    <summary class="text-sm font-semibold cursor-pointer">เทียบคู่แข่งรอบสาขา (Google Maps) <span id="fbCompHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— คะแนนและจำนวนรีวิวของร้านบุฟเฟ่ต์/ชาบู/ปิ้งย่างในรัศมี 3 กม. ถ่ายภาพเดือนละครั้ง</span> <a href="#" class="fb-ghost" style="font-size:10px;padding:0 .4rem" onclick="event.preventDefault();event.stopPropagation();toggleCompSettings()">ตั้งค่า</a></summary>
+    <div id="fbCompSettings" class="mt-2 text-xs" style="display:none;border:1px solid var(--border);border-radius:4px;padding:.7rem;background:var(--bg-input)"></div>
     <div id="fbCompBody" class="mt-2 text-xs"></div>
   </details>
 
   <details class="card p-4 mt-4" id="fbBiz" ontoggle="if(this.open) loadFeedbackBusiness()">
-    <summary class="text-sm font-semibold cursor-pointer">📊 เสียงลูกค้า × ข้อมูลธุรกิจ <span id="fbBizHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— รอนานเกิดตอนแน่นไหม · เมนูที่ถูกบ่นขายดีแค่ไหน · สาขาที่เสียงลบซ้อนกับยอดขาย/ส่วนลด</span> <span class="text-[11px] font-normal" style="color:var(--text-muted)" title="แผงนี้ใช้ช่วงเวลาเดียวกับทั้งแอป: กด Day / Week แล้วเลือกวันจาก–ถึง หรือ Month / Qtr / Year แล้วเลือกเดือน">· เปลี่ยนช่วงได้ที่ตัวเลือก Day / Week / Month ด้านบน ↑</span></summary>
+    <summary class="text-sm font-semibold cursor-pointer">เสียงลูกค้า × ข้อมูลธุรกิจ <span id="fbBizHint" class="text-[11px] font-normal" style="color:var(--text-muted)">— รอนานเกิดตอนแน่นไหม · เมนูที่ถูกบ่นขายดีแค่ไหน · สาขาที่เสียงลบซ้อนกับยอดขาย/ส่วนลด</span> <span class="text-[11px] font-normal" style="color:var(--text-muted)" title="แผงนี้ใช้ช่วงเวลาเดียวกับทั้งแอป: กด Day / Week แล้วเลือกวันจาก–ถึง หรือ Month / Qtr / Year แล้วเลือกเดือน">· เปลี่ยนช่วงได้ที่ตัวเลือก Day / Week / Month ด้านบน ↑</span></summary>
     <div id="fbBizNotes" class="mt-2 text-sm" style="color:var(--text-secondary)"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-3">
-      <div><h4 class="text-xs font-semibold mb-1">⏳ คำบ่น vs ความแน่นของวัน <span class="font-normal" style="color:var(--text-muted)">(แน่น = บิล ≥ 120% ของค่ากลางสาขา)</span></h4><div id="fbBizLoad" class="text-xs"></div></div>
-      <div><h4 class="text-xs font-semibold mb-1">🍣 เมนูที่ถูกพูดถึง vs ยอดขาย/ต้นทุน <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="switchTab('menuactionboard')">เปิด ⚡ปรับเมนู</button></h4><div id="fbBizMenus" class="text-xs"></div></div>
+      <div><h4 class="text-xs font-semibold mb-1">คำบ่น vs ความแน่นของวัน <span class="font-normal" style="color:var(--text-muted)">(แน่น = บิล ≥ 120% ของค่ากลางสาขา)</span></h4><div id="fbBizLoad" class="text-xs"></div></div>
+      <div><h4 class="text-xs font-semibold mb-1">เมนูที่ถูกพูดถึง vs ยอดขาย/ต้นทุน <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="switchTab('menuactionboard')">เปิด ปรับเมนู</button></h4><div id="fbBizMenus" class="text-xs"></div></div>
     </div>
-    <h4 class="text-xs font-semibold mt-3 mb-1">🏪 สาขา: เสียง vs ยอดขาย vs ส่วนลด vs ยอด/หัว</h4>
+    <h4 class="text-xs font-semibold mt-3 mb-1">สาขา: เสียง vs ยอดขาย vs ส่วนลด vs ยอด/หัว</h4>
     <div id="fbBizBranches" class="text-xs" style="max-height:380px;overflow:auto"></div>
   </details>
 
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
     <div class="card p-4"><h3 class="text-sm font-semibold mb-2">เมนูที่ถูกพูดถึง</h3><div id="fbMenus" style="max-height:340px;overflow:auto"></div></div>
-    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">👥 พนักงานที่ถูกพูดถึง</h3><span class="text-[11px]" style="color:var(--text-muted)">ชมและบ่นเป็นรายชื่อ</span></div><div id="fbStaff" class="mt-1" style="max-height:340px;overflow:auto"></div></div>
-    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">🌟 เสียงชม</h3><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>
+    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">พนักงานที่ถูกพูดถึง</h3><span class="text-[11px]" style="color:var(--text-muted)">ชมและบ่นเป็นรายชื่อ</span></div><div id="fbStaff" class="mt-1" style="max-height:340px;overflow:auto"></div></div>
+    <div class="card p-4"><div class="flex items-baseline justify-between"><h3 class="text-sm font-semibold">เสียงชม</h3><span class="text-[11px]" style="color:var(--text-muted)">คัดลอกส่งให้ทีมสาขาได้</span></div><div id="fbPos" class="mt-1"></div></div>
   </div>
 
   <details class="card p-4 mt-4" id="fbAllCard">
@@ -174,14 +174,14 @@
         </select>
         <input type="date" id="fbDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
         <input type="file" id="fbFile" accept=".csv,.tsv,.txt,.xlsx,.json,.zip" class="text-xs">
-        <button class="fb-btn" onclick="uploadFeedback()">⬆ นำเข้าและวิเคราะห์</button>
+        <button class="fb-btn" onclick="uploadFeedback()">นำเข้าและวิเคราะห์</button>
         <span id="fbUploadStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>
     </div>
   </details>
 
   <details class="card p-4 mt-4" id="fbSurvey" ontoggle="if(this.open) loadSurveyLinks()">
-    <summary class="text-sm font-semibold cursor-pointer">📱 QR แบบสอบถามหน้าร้าน — ช่องทางของเราเอง <span id="fbSurveyHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></summary>
+    <summary class="text-sm font-semibold cursor-pointer">QR แบบสอบถามหน้าร้าน — ช่องทางของเราเอง <span id="fbSurveyHint" class="text-[11px] font-normal" style="color:var(--text-muted)"></span></summary>
     <p class="text-xs mt-2" style="color:var(--text-secondary)">ลูกค้าสแกน QR ที่โต๊ะหรือใบเสร็จแล้วตอบใน 20 วินาที (หน้า 1–5 · เรื่องที่พูดถึง · ข้อความ · ช่องทางติดต่อกลับถ้าต้องการ) คำตอบเข้าหน้านี้เป็นประเภท "แบบสอบถาม" — คำตอบเชิงลบที่ฝากเบอร์ไว้ขึ้นในกล่องงานให้สาขาโทรกลับ · คะแนน 4–5 จะเห็นปุ่มชวนรีวิวบน Google เมื่อใส่ลิงก์รีวิวของสาขา</p>
     <div id="fbSurveyLinks" class="mt-2 text-xs">กำลังโหลด…</div>
     <p class="text-[11px] mt-2" style="color:var(--text-muted)">ลิงก์รีวิว Google ของสาขา: Google Business Profile → "ขอรีวิว" → คัดลอกลิงก์ (รูปแบบ https://g.page/r/…/review) · ข้อมูลติดต่อของลูกค้าถูกลบอัตโนมัติหลัง <span id="fbSurveyDays">90</span> วัน · โปสเตอร์เปิดในแท็บใหม่ กดพิมพ์ A5</p>

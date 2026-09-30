@@ -6,7 +6,7 @@
 // ════════════════════════════════════════════════════════════════
 // SHARED PALETTE
 // ════════════════════════════════════════════════════════════════
-const PALETTE_6 = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed'];
+const PALETTE_6 = ['#4a70b0','#0891b2','#059669','#d97706','#dc2626','#7a66b8'];
 
 // ════════════════════════════════════════════════════════════════
 // HOME — Daily Brief
@@ -168,22 +168,22 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
   const H = _homeCostHealth(brief);
   const tiles = [
     {
-      icon: '📊', label: 'จังหวะเดือนนี้',
+      icon: '', label: 'จังหวะเดือนนี้',
       value: fc && fc.available ? fmt(fc.projected) : (brief.mtd_revenue ? fmt(brief.mtd_revenue) : '—'),
       sub: fc && fc.available ? `วิ่ง ${fmt(fc.avg_daily)}/วัน · ${fc.days_elapsed}/${fc.days_total} วัน` : 'คาดการณ์ไม่ได้',
       foot: mom != null ? `${mom >= 0 ? '▲' : '▼'} ${Math.abs(mom).toFixed(0)}% ${sd && sd.mom_basis === 'dow' ? 'เทียบฐานปกติตามวันในสัปดาห์ของเดือนก่อน' : 'เทียบเดือนก่อน (ช่วงวันเท่ากัน)'}` : '',
-      footColor: momColor, valColor: '#4f46e5', go: "switchTab('dailysales')",
+      footColor: momColor, valColor: '#4a70b0', go: "switchTab('dailysales')",
     },
     {
-      icon: '🏬', label: 'สาขาที่ต้องดู',
+      icon: '', label: 'สาขาที่ต้องดู',
       value: down.length ? `${down.length} สาขา` : 'ครบทุกสาขา',
       sub: down.length ? 'ต่ำกว่าค่าปกติของตัวเอง' : 'ไม่มีสาขาต่ำกว่าปกติ',
-      foot: down.length ? down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}`).join(' · ') : '✅ ทุกสาขาปกติ',
+      foot: down.length ? down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}`).join(' · ') : 'ทุกสาขาปกติ',
       footColor: down.length ? '#dc2626' : '#059669', valColor: down.length ? '#dc2626' : '#059669',
       go: down.length ? `homeDrillBranch('${(down[0].branch || '').replace(/'/g, "\\'")}')` : '',
     },
     {
-      icon: '🍽️', label: 'สุขภาพมาร์จิ้น (ต้นทุนอาหาร %)',
+      icon: '', label: 'สุขภาพมาร์จิ้น (ต้นทุนอาหาร %)',
       value: fcp != null ? `${fcp.toFixed(1)}%` : '—',
       sub: fcp != null ? H.sub : 'ยังไม่มีข้อมูลต้นทุน',
       foot: fcp != null ? H.foot : '',
@@ -218,11 +218,11 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
   // Money-leak signals first — these are the things an owner can't eyeball daily.
   if (leak) {
     const ch = leak.cash_heavy || {};
-    if (ch.bills) A.push({ p: 0, sev: 'red', icon: '🔎', text: `เงินสด+ลดหนัก ${ch.bills} บิล (฿${fmtN(ch.baht || 0)}) เมื่อวาน — เสี่ยงเงินรั่ว ตรวจบิล`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
+    if (ch.bills) A.push({ p: 0, sev: 'red', icon: '', text: `เงินสด+ลดหนัก ${ch.bills} บิล (฿${fmtN(ch.baht || 0)}) เมื่อวาน — เสี่ยงเงินรั่ว ตรวจบิล`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
     const hd = leak.heavy_discount || {};
-    if (hd.bills >= 5 && !ch.bills) A.push({ p: 2, sev: 'amber', icon: '🔎', text: `ส่วนลดหนัก ≥30% ${hd.bills} บิล (฿${fmtN(hd.baht || 0)}) เมื่อวาน — ตรวจเหตุผลการลด`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
+    if (hd.bills >= 5 && !ch.bills) A.push({ p: 2, sev: 'amber', icon: '', text: `ส่วนลดหนัก ≥30% ${hd.bills} บิล (฿${fmtN(hd.baht || 0)}) เมื่อวาน — ตรวจเหตุผลการลด`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
     const rp = leak.reprinted || {};
-    if (rp.bills) A.push({ p: 2, sev: 'amber', icon: '🖨️', text: `บิลมีส่วนลดถูกพิมพ์ซ้ำ ${rp.bills} บิล เมื่อวาน — ตรวจการพิมพ์ซ้ำ`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
+    if (rp.bills) A.push({ p: 2, sev: 'amber', icon: '', text: `บิลมีส่วนลดถูกพิมพ์ซ้ำ ${rp.bills} บิล เมื่อวาน — ตรวจการพิมพ์ซ้ำ`, act: 'ดูส่วนลด', go: "switchTab('discounts')" });
   }
   // Food cost: fires on what is actually wrong TODAY — outside this business's band, a
   // real move against last month, or a figure that cannot be trusted yet. The old rule
@@ -231,29 +231,29 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
   const fcp = brief.food_cost_pct_mtd;
   const H = _homeCostHealth(brief), CH = H.c;
   if (fcp != null && H.above)
-    A.push({ p: 0, sev: 'red', icon: '🍽️', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — สูงกว่าแถบเป้า ${H.lo}–${H.hi}%${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+    A.push({ p: 0, sev: 'red', icon: '', text: `ต้นทุนอาหารเดือนนี้ ${fcp.toFixed(1)}% — สูงกว่าแถบเป้า ${H.lo}–${H.hi}%${H.moved && CH.delta_pp > 0 ? ` และขึ้นมา ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน` : ''}`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   else if (fcp != null && CH.delta_pp != null && CH.delta_pp >= 3)
-    A.push({ p: 2, sev: 'amber', icon: '🍽️', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังอยู่ในแถบเป้า แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
+    A.push({ p: 2, sev: 'amber', icon: '', text: `ต้นทุนอาหารขยับขึ้น ${CH.delta_pp.toFixed(1)} จุดจากเดือนก่อน (${(CH.prev_food_pct ?? 0).toFixed(1)}% → ตอนนี้) — ยังอยู่ในแถบเป้า แต่ควรดูว่าเมนูไหนดัน`, act: 'ดูต้นทุน/หัว', go: "switchTab('costhead')" });
   if (CH.coverage_pct != null && CH.coverage_pct < 95)
-    A.push({ p: 3, sev: 'amber', icon: '🧩', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: "switchTab('coverage')" });
+    A.push({ p: 3, sev: 'amber', icon: '', text: `จานที่เสิร์ฟ ${(100 - CH.coverage_pct).toFixed(1)}% ยังไม่มีต้นทุน (${fmtN(CH.uncosted_plates || 0)} จาน) — Food% ที่เห็นต่ำกว่าจริง`, act: 'เติมต้นทุน', go: "switchTab('coverage')" });
   const RQ = CH.requisition;
   if (RQ && RQ.worst && RQ.worst.ratio >= 1.25)
-    A.push({ p: 3, sev: 'amber', icon: '📦', text: `${esc(RQ.worst.branch)} เบิกวัตถุดิบสูงกว่าต้นทุนตามสูตร ${RQ.worst.ratio.toFixed(2)} เท่า (${esc(RQ.worst.month)}) — ตักเกินสูตร ของเสีย หรือตุนสต๊อก`, act: 'ดูเบิก vs สูตร', go: "switchTab('branchbom')" });
+    A.push({ p: 3, sev: 'amber', icon: '', text: `${esc(RQ.worst.branch)} เบิกวัตถุดิบสูงกว่าต้นทุนตามสูตร ${RQ.worst.ratio.toFixed(2)} เท่า (${esc(RQ.worst.month)}) — ตักเกินสูตร ของเสีย หรือตุนสต๊อก`, act: 'ดูเบิก vs สูตร', go: "switchTab('branchbom')" });
   if (RQ && RQ.missing_month)
-    A.push({ p: 6, sev: 'amber', icon: '📦', text: `ยังไม่ได้อัปโหลดใบเบิกวัตถุดิบเดือน ${esc(RQ.missing_month)} — รายงานเบิกจริง vs สูตรจึงยังไม่มีเดือนนั้น`, act: 'อัปโหลด', go: "switchTab('branchbom')" });
+    A.push({ p: 6, sev: 'amber', icon: '', text: `ยังไม่ได้อัปโหลดใบเบิกวัตถุดิบเดือน ${esc(RQ.missing_month)} — รายงานเบิกจริง vs สูตรจึงยังไม่มีเดือนนั้น`, act: 'อัปโหลด', go: "switchTab('branchbom')" });
   if (CH.pending_review && CH.pending_review.count)
-    A.push({ p: 6, sev: 'amber', icon: '🧾', text: `${CH.pending_review.count} เมนูใช้ต้นทุนที่ระบบประมาณให้ (฿${fmtN(CH.pending_review.cogs_month || 0)}/เดือน) — รอครัวตรวจปริมาณแล้วกดยืนยัน`, act: 'ตรวจและยืนยัน', go: "switchTab('coverage')" });
+    A.push({ p: 6, sev: 'amber', icon: '', text: `${CH.pending_review.count} เมนูใช้ต้นทุนที่ระบบประมาณให้ (฿${fmtN(CH.pending_review.cogs_month || 0)}/เดือน) — รอครัวตรวจปริมาณแล้วกดยืนยัน`, act: 'ตรวจและยืนยัน', go: "switchTab('coverage')" });
   const down = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
                        .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
   down.slice(0, 3).forEach(b => {
     const big = b.vs_avg_pct != null && b.vs_avg_pct <= -15;
     const wowBit = b.vs_wow_pct != null ? ` · เทียบสัปดาห์ก่อน ${b.vs_wow_pct >= 0 ? '+' : ''}${b.vs_wow_pct.toFixed(0)}%` : '';
-    A.push({ p: big ? 0 : 2, sev: big ? 'red' : 'amber', icon: '🏬',
+    A.push({ p: big ? 0 : 2, sev: big ? 'red' : 'amber', icon: '',
       text: `${esc(b.branch)} ต่ำกว่าค่าปกติ ${b.vs_avg_pct != null ? Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${wowBit} — เจาะดูสาเหตุ`,
       act: 'เจาะสาขา', go: `homeDrillBranch('${(b.branch || '').replace(/'/g, "\\'")}')` });
   });
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3)
-    A.push({ p: 3, sev: 'amber', icon: '📉', text: `เดือนนี้ run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% ${sd.mom_basis === 'dow' ? '(เทียบฐานปกติตามวันในสัปดาห์)' : '(เทียบช่วงวันเท่ากัน)'}`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
+    A.push({ p: 3, sev: 'amber', icon: '▼', text: `เดือนนี้ run-rate ต่ำกว่าเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% ${sd.mom_basis === 'dow' ? '(เทียบฐานปกติตามวันในสัปดาห์)' : '(เทียบช่วงวันเท่ากัน)'}`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
   // /api/analysis/anomalies scans the WHOLE history (its own panel wants that), and its
   // BoM-cost rule flags every month that ever jumped — so a spike from June 2025 sat in
   // "สิ่งที่ต้องทำวันนี้" in September 2026. Today's list takes only what is still news:
@@ -267,23 +267,23 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak) {
   })();
   ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad')
     .filter(a => !a.period || !_cut || String(a.period).slice(0, 7) >= _cut).slice(0, 3)
-    .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠️', text: esc(a.message) }));
+    .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠', text: esc(a.message) }));
   const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
   if (up && up.vs_avg_pct >= 10)
-    A.push({ p: 9, sev: 'green', icon: '📈', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
+    A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
   A.sort((a, b) => a.p - b.p);
 
   const cnt = document.getElementById('home-action-count');
   const reds = A.filter(a => a.sev === 'red').length, ambers = A.filter(a => a.sev === 'amber').length;
   if (cnt) cnt.textContent = A.length ? `${reds} เร่งด่วน · ${ambers} เฝ้าระวัง` : '';
   if (!A.length) {
-    el.innerHTML = `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✅</span><span class="text-sm" style="color:var(--text-primary)">ทุกอย่างอยู่ในเกณฑ์ปกติ ไม่มีเรื่องเร่งด่วนวันนี้</span></div>`;
+    el.innerHTML = `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✓</span><span class="text-sm" style="color:var(--text-primary)">ทุกอย่างอยู่ในเกณฑ์ปกติ ไม่มีเรื่องเร่งด่วนวันนี้</span></div>`;
     return;
   }
   const sevc = { red: { a: '#ef4444', t: 'rgba(239,68,68,0.06)' }, amber: { a: '#f59e0b', t: 'rgba(245,158,11,0.07)' }, green: { a: '#10b981', t: 'rgba(16,185,129,0.06)' } };
   el.innerHTML = A.slice(0, 8).map(a => {
     const c = sevc[a.sev];
-    return `<div class="flex items-center gap-3 p-3 rounded-lg" style="background:${c.t};border-left:3px solid ${c.a}">
+    return `<div class="flex items-center gap-3 p-3 rounded-lg" style="background:${c.t};border:1px solid ${c.a}">
       <span class="text-base">${a.icon}</span>
       <span class="flex-1 text-sm" style="color:var(--text-primary)">${a.text}</span>
       ${a.go ? `<button onclick="${a.go}" class="text-xs px-2.5 py-1 rounded-md whitespace-nowrap" style="border:1px solid var(--border);color:var(--text-secondary);background:var(--bg-card)">${a.act || 'ดู'} →</button>` : ''}
@@ -298,7 +298,7 @@ function renderHomeForecast(fc) {
   if (per) per.textContent = `${typeof fmtMonth === 'function' ? fmtMonth(fc.period) : fc.period} · วันที่ ${fc.days_elapsed} จาก ${fc.days_total}`;
   const prog = Math.round(fc.days_elapsed / fc.days_total * 100);
   document.getElementById('home-forecast-kpis').innerHTML = [
-    { label: 'MTD', value: fmt(fc.mtd), color: '#4f46e5' },
+    { label: 'MTD', value: fmt(fc.mtd), color: '#4a70b0' },
     { label: 'คาดจบเดือน', value: fmt(fc.projected), color: '#059669' },
     { label: 'ความคืบหน้า', value: `${prog}%`, color: '#0891b2' },
   ].map(k => `<div class="text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
@@ -312,7 +312,7 @@ function renderHomeForecast(fc) {
       labels: [...dailyLabels, ...projLabels],
       datasets: [
         { label: 'จริง', data: [...dailyData, ...Array(remain).fill(null)],
-          backgroundColor: '#4f46e522', borderColor: '#4f46e5', borderWidth: 1.5, borderRadius: 2 },
+          backgroundColor: '#4a70b022', borderColor: '#4a70b0', borderWidth: 1.5, borderRadius: 2 },
         { label: 'คาดการณ์', data: [...Array(dailyData.length).fill(null), ...Array(remain).fill(fc.avg_daily)],
           type: 'line', borderColor: '#059669', borderDash: [4, 3], borderWidth: 2,
           pointRadius: 0, fill: false, tension: 0 },
@@ -326,7 +326,7 @@ function renderHomeForecast(fc) {
   });
 }
 
-// 🔎 Daily money-leak radar — heavy discount / cash+heavy / reprinted / zero-gross.
+// Daily money-leak radar — heavy discount / cash+heavy / reprinted / zero-gross.
 function renderHomeLeakWatch(leak, brief) {
   const el = document.getElementById('home-leak-watch'); if (!el) return;
   const dl = document.getElementById('home-leak-date');
@@ -350,12 +350,12 @@ function renderHomeLeakWatch(leak, brief) {
   // books no revenue and — until it was costed on 2026-09-18 — no cost either.
   const gv = brief && brief.cost_health && brief.cost_health.giveaways;
   const giveBanner = gv && gv.value ? `<div class="flex items-center justify-between mb-2.5 px-2 py-2 rounded-lg cursor-pointer" style="background:rgba(217,119,6,0.07)" onclick="switchTab('coverage')" title="${gv.top.map(x => esc(x.name) + ' ' + fmtN(x.plates) + ' จาน').join(' · ')}">
-      <span class="text-[11px]" style="color:var(--text-muted)">🎁 ของแจกฟรี/แถม เดือนนี้ <span style="opacity:.7">(ต้นทุนจริง · ${fmtN(gv.plates)} จาน${gv.top[0] ? ' · มากสุด ' + esc(gv.top[0].name) : ''})</span></span>
+      <span class="text-[11px]" style="color:var(--text-muted)">ของแจกฟรี/แถม เดือนนี้ <span style="opacity:.7">(ต้นทุนจริง · ${fmtN(gv.plates)} จาน${gv.top[0] ? ' · มากสุด ' + esc(gv.top[0].name) : ''})</span></span>
       <span class="text-sm font-bold" style="color:#b45309">฿${fmtN(gv.value)}</span>
     </div>` : '';
   const anyHit = cards.some(c => (leak[c.key] || {}).bills);
   if (!anyHit) {
-    el.innerHTML = totalBanner + giveBanner + `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✅</span><span class="text-sm" style="color:var(--text-primary)">ไม่พบรายการผิดปกติเมื่อวาน</span></div>`;
+    el.innerHTML = totalBanner + giveBanner + `<div class="flex items-center gap-2 p-3 rounded-lg" style="background:rgba(16,185,129,0.07)"><span>✓</span><span class="text-sm" style="color:var(--text-primary)">ไม่พบรายการผิดปกติเมื่อวาน</span></div>`;
     return;
   }
   el.innerHTML = totalBanner + giveBanner + `<div class="grid grid-cols-2 gap-2.5">` + cards.map(c => {
@@ -373,7 +373,7 @@ function renderHomeLeakWatch(leak, brief) {
   }).join('') + `</div>`;
 }
 
-// 🍜 Yesterday's biggest menu movers — UP and DOWN, ranked by plates changed (impact).
+// Yesterday's biggest menu movers — UP and DOWN, ranked by plates changed (impact).
 function renderHomeMenuMovers(m) {
   const el = document.getElementById('home-menu-movers'); if (!el) return;
   if (!m) { el.innerHTML = '<p class="text-xs text-slate-400 py-2">โหลดไม่สำเร็จ</p>'; return; }
@@ -433,7 +433,7 @@ function renderHomeMenuMovers(m) {
   </div>`;
 }
 
-// 🔗 Movers ↔ sales: do the dish movements line up with how the BUFFET PACKAGE (the
+// Movers ↔ sales: do the dish movements line up with how the BUFFET PACKAGE (the
 // real revenue driver) sold, which price-tier moved, and the à-la-carte trend.
 function renderHomeMoversRevenue(m) {
   const el = document.getElementById('home-movers-revenue'); if (!el) return;
@@ -476,17 +476,17 @@ function renderHomeMoversRevenue(m) {
     lines.push(`เมนู<b>à-la-carte</b> (สั่งแยกจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${col(alaP)}">${sgn(alaP)}</b> — ส่วนเสริมรายได้นอกบุฟเฟต์`);
   el.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-      ${box('🍽️ โต๊ะบุฟเฟต์เมื่อวาน', fmtN(b.covers_today), col(covP), `เฉลี่ย ${fmtN(b.covers_avg)} · <span style="color:${col(covP)}">${sgn(covP)}</span>`)}
-      ${box('💰 รายได้บุฟเฟต์', '฿' + fmtN(b.rev_today), col(revP), `เฉลี่ย ฿${fmtN(b.rev_avg)} · <span style="color:${col(revP)}">${sgn(revP)}</span>`)}
-      ${box('🏷️ ราคาเฉลี่ย/หัว (ชุดราคา)', '฿' + fmtN(b.ppc_today), col(ppcP), `เฉลี่ย ฿${fmtN(b.ppc_avg)} · <span style="color:${col(ppcP)}">${sgn(ppcP)}</span>`)}
-      ${box('🍤 à-la-carte อาหาร', '฿' + fmtN(s.alacarte_today), col(alaP), `เฉลี่ย ฿${fmtN(s.alacarte_avg)} · <span style="color:${col(alaP)}">${sgn(alaP)}</span>`)}
+      ${box('โต๊ะบุฟเฟต์เมื่อวาน', fmtN(b.covers_today), col(covP), `เฉลี่ย ${fmtN(b.covers_avg)} · <span style="color:${col(covP)}">${sgn(covP)}</span>`)}
+      ${box('รายได้บุฟเฟต์', '฿' + fmtN(b.rev_today), col(revP), `เฉลี่ย ฿${fmtN(b.rev_avg)} · <span style="color:${col(revP)}">${sgn(revP)}</span>`)}
+      ${box('ราคาเฉลี่ย/หัว (ชุดราคา)', '฿' + fmtN(b.ppc_today), col(ppcP), `เฉลี่ย ฿${fmtN(b.ppc_avg)} · <span style="color:${col(ppcP)}">${sgn(ppcP)}</span>`)}
+      ${box('à-la-carte อาหาร', '฿' + fmtN(s.alacarte_today), col(alaP), `เฉลี่ย ฿${fmtN(s.alacarte_avg)} · <span style="color:${col(alaP)}">${sgn(alaP)}</span>`)}
     </div>
     <div class="text-xs rounded-lg p-3 space-y-1" style="background:var(--bg-subtle,rgba(0,0,0,0.03));color:var(--text-primary)">
       ${lines.map(t => `<div>• ${t}</div>`).join('')}
     </div>`;
 }
 
-// 📝 Menu Analysis tab: narrative tying menu movements to what actually sold —
+// Menu Analysis tab: narrative tying menu movements to what actually sold —
 // buffet package direction, price-tier shift, à-la-carte trend, and top movers.
 async function renderMenuSalesNarrative() {
   const el = document.getElementById('menuSalesNarrative'); if (!el) return;
@@ -516,11 +516,11 @@ async function renderMenuSalesNarrative() {
       : `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#d97706">สวนทาง</b>กับยอดบุฟเฟต์ — เป็นเรื่องรสนิยม/ความนิยม ไม่ใช่แค่จำนวนลูกค้า`);
   }
   if (alaP != null) lines.push(`เมนู<b>à-la-carte</b> (สั่งจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${c(alaP)}">${sgn(alaP)}</b>`);
-  lines.push(`📈 เทรนด์เมื่อวาน — มาแรง: <b style="color:#059669">${names(up)}</b> · แผ่วลง: <b style="color:#dc2626">${names(down)}</b>`);
+  lines.push(`เทรนด์เมื่อวาน — มาแรง: <b style="color:#059669">${names(up)}</b> · แผ่วลง: <b style="color:#dc2626">${names(down)}</b>`);
   el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
 }
 
-// ⏰ Yesterday's revenue by hour — peak + quietest open hour.
+// Yesterday's revenue by hour — peak + quietest open hour.
 function renderHomePeakHours(hourly, date) {
   const sumEl = document.getElementById('home-peak-summary');
   if (!Array.isArray(hourly) || !hourly.length) { if (sumEl) sumEl.textContent = 'ไม่มีข้อมูลรายชั่วโมง'; return; }
@@ -537,7 +537,7 @@ function renderHomePeakHours(hourly, date) {
     data: {
       labels: span.map(h => hh(h.hour)),
       datasets: [{ data: span.map(h => h.revenue),
-        backgroundColor: span.map(h => h.hour === peak.hour ? '#4f46e5' : 'rgba(79,70,229,0.30)'), borderRadius: 3 }]
+        backgroundColor: span.map(h => h.hour === peak.hour ? '#4a70b0' : 'rgba(31,58,107,0.30)'), borderRadius: 3 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -547,7 +547,7 @@ function renderHomePeakHours(hourly, date) {
   });
 }
 
-// 📈 Last-7-day company revenue trend + momentum read.
+// Last-7-day company revenue trend + momentum read.
 function renderHomeTrend7(sd) {
   const sumEl = document.getElementById('home-trend7-summary');
   const tr = (sd && sd.trend ? sd.trend : []).slice(-7);
@@ -592,9 +592,9 @@ async function renderHomeScorecard(focusDate) {
   // Leaderboard order: highest yesterday revenue first.
   const rows = (d.branches || []).slice().sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
   if (!rows.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-3">ไม่มีข้อมูล</p>'; return d; }
-  const dot = s => s === 'up' ? '<span title="เหนือปกติ">🟢</span>'
-                 : s === 'down' ? '<span title="ต่ำกว่าปกติ">🔴</span>'
-                 : '<span title="ปกติ">🟡</span>';
+  const dot = s => s === 'up' ? '<span title="เหนือปกติ">●</span>'
+                 : s === 'down' ? '<span title="ต่ำกว่าปกติ">●</span>'
+                 : '<span title="ปกติ">●</span>';
   const pctCell = (v, hb = true) => v == null ? '<span class="text-slate-300">—</span>'
     : `<span style="color:${(v >= 0) === hb ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(0)}%</span>`;
   el.innerHTML = `<table class="text-xs w-full">
@@ -617,7 +617,7 @@ async function renderHomeScorecard(focusDate) {
   return d;
 }
 
-// ── 📅 ยอดขายรายวัน (Daily Sales) tab ──
+// ── ยอดขายรายวัน (Daily Sales) tab ──
 let _dsGran = 'month';   // default to MTD (month view is MTD-fair when the month is partial)
 function dsSetGran(g) {
   _dsGran = g;
@@ -654,14 +654,14 @@ async function loadDailySales(force) {
   // signed "vs <prev period> ±x%" sub-line — shared by every KPI box for a consistent MTD-fair comparison
   const cmpSub = (v) => 'vs ' + cmpLbl + ' ' + (v != null ? (v >= 0 ? '+' : '') + v + '%' : '—');
   document.getElementById('dsKpis').innerHTML = [
-    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), s: cmpSub(t.mom_pct), c: '#4f46e5' },
+    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), s: cmpSub(t.mom_pct), c: '#4a70b0' },
     { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: cmpSub(t.cust_mom_pct), c: '#0891b2' },
-    { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), s: cmpSub(t.rph_mom_pct), c: '#7c3aed' },
+    { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), s: cmpSub(t.rph_mom_pct), c: '#7a66b8' },
     { l: 'เทียบปีก่อน (YoY)', v: t.yoy_pct != null ? (t.yoy_pct >= 0 ? '+' : '') + t.yoy_pct + '%' : '—', s: 'รายได้ vs ปีก่อน', c: t.yoy_pct == null ? '#94a3b8' : t.yoy_pct >= 0 ? '#059669' : '#ef4444' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
   const an = d.anomalies || [];
   document.getElementById('dsAnomaly').innerHTML = an.length
-    ? `<div class="card p-4" style="border-left:4px solid #f59e0b;background:linear-gradient(90deg,#fef3c7,#fffbeb)"><p class="text-xs font-semibold mb-2" style="color:#92400e">⚡ ผิดปกติ (เทียบค่าปกติ)</p>` + an.slice(0, 8).map(a => `<div class="text-xs" style="color:#92400e">• ${esc(a.msg)}</div>`).join('') + `</div>`
+    ? `<div class="card p-4 notice-warn"><p class="text-xs font-semibold mb-2">ผิดปกติ (เทียบค่าปกติ)</p>` + an.slice(0, 8).map(a => `<div class="text-xs">• ${esc(a.msg)}</div>`).join('') + `</div>`
     : '';
   document.getElementById('dsBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
@@ -674,7 +674,7 @@ async function loadDailySales(force) {
   const tr = d.trend || [];
   mkChart('dsTrend', { type: 'bar',
     data: { labels: tr.map(x => x.start.slice(5)), datasets: [{ data: tr.map(x => x.revenue),
-      backgroundColor: tr.map((x, i) => i === tr.length - 1 ? '#4f46e5' : 'rgba(79,70,229,0.4)'), borderRadius: 4 }] },
+      backgroundColor: tr.map((x, i) => i === tr.length - 1 ? '#4a70b0' : 'rgba(31,58,107,0.4)'), borderRadius: 4 }] },
     options: { responsive: true, maintainAspectRatio: false,
       plugins: { legend: { display: false }, datalabels: { display: false } },
       scales: { y: { ticks: { callback: v => fmt(v) } }, x: { ticks: { font: { size: 9 } } } } } });
@@ -722,7 +722,7 @@ async function renderMenuSpike(focusDate) {
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${s.is_new ? '<span class="text-amber-600">เมนูใหม่</span>' : fmtN(s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#f59e0b">+${fmtN(s.excess)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:#ef4444;font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : '🆕'}</span></td>
+      <td class="py-1.5 text-right tabular-nums"><span style="color:#ef4444;font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : ''}</span></td>
     </tr>`).join('') + `</tbody></table>`;
 }
 
@@ -759,7 +759,7 @@ async function loadCostHead(force) {
     { l: 'ต้นทุน% (food cost)', v: t.cost_pct != null ? t.cost_pct + '%' : '—', s: 'COGS ÷ รายได้', c: cpColor(t.cost_pct) },
     { l: 'รายได้/หัว', v: fmt(t.rev_per_head || 0), s: 'ยอดขายต่อลูกค้า', c: '#0891b2' },
     { l: 'GP/หัว', v: fmt(t.gp_per_head || 0), s: 'กำไรขั้นต้นต่อหัว', c: '#10b981' },
-    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: lbl + 'นี้', c: '#7c3aed' },
+    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), s: lbl + 'นี้', c: '#7a66b8' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
 
   const branches = d.branches || [];
@@ -770,8 +770,8 @@ async function loadCostHead(force) {
     const worst = withCp[0];                          // already sorted by cost_pct desc
     const best  = withCp[withCp.length - 1];
     ins.innerHTML = `<div class="card p-3 text-xs flex flex-wrap gap-x-6 gap-y-1" style="background:var(--bg-subtle)">
-      <span>⚠️ <b>${esc(worst.branch)}</b> ต้นทุนสูงสุด <b style="color:#ef4444">${worst.cost_pct}%</b> (รายได้/หัว ${fmt(worst.rev_per_head)}, GP/หัว ${fmt(worst.gp_per_head)}) — สูงกว่าเฉลี่ยเครือ ${(worst.cost_pct - avgCostPct).toFixed(1)} pp</span>
-      <span>✅ <b>${esc(best.branch)}</b> ประหยัดสุด <b style="color:#10b981">${best.cost_pct}%</b></span>
+      <span>⚠ <b>${esc(worst.branch)}</b> ต้นทุนสูงสุด <b style="color:#ef4444">${worst.cost_pct}%</b> (รายได้/หัว ${fmt(worst.rev_per_head)}, GP/หัว ${fmt(worst.gp_per_head)}) — สูงกว่าเฉลี่ยเครือ ${(worst.cost_pct - avgCostPct).toFixed(1)} pp</span>
+      <span>✓ <b>${esc(best.branch)}</b> ประหยัดสุด <b style="color:#10b981">${best.cost_pct}%</b></span>
       <span style="color:var(--text-muted)">เฉลี่ยเครือ ${avgCostPct}%</span></div>`;
   } else { ins.innerHTML = ''; }
 
@@ -793,7 +793,7 @@ async function loadCostHead(force) {
   }).join('') || '<tr><td colspan="8" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
-// ══ 🧾 P&L ต่อบิล (per-bill profit, COGS = BoM) ══
+// ══ P&L ต่อบิล (per-bill profit, COGS = BoM) ══
 let _pbGran = 'day', _pbView = 'gm', _pbData = null, _pbDrillIdx = null;
 function pbSetGran(g) {
   _pbGran = g;
@@ -843,11 +843,11 @@ async function pbDrill(idx, keepOpen) {
   const gpBill = st.n ? Math.round(st.gp / st.n) : 0;
   const stats = [
     { l: 'จำนวนบิล', v: fmtN(st.n || 0), c: '#0891b2' },
-    { l: cogsView ? 'COGS เฉลี่ย/บิล' : 'GM เฉลี่ย', v: (st.avg_gm != null ? (cogsView ? (100 - st.avg_gm).toFixed(1) : st.avg_gm.toFixed(1)) + '%' : '—'), c: '#4f46e5' },
-    { l: 'รายได้รวม', v: fmt(st.rev || 0), c: '#6366f1' },
+    { l: cogsView ? 'COGS เฉลี่ย/บิล' : 'GM เฉลี่ย', v: (st.avg_gm != null ? (cogsView ? (100 - st.avg_gm).toFixed(1) : st.avg_gm.toFixed(1)) + '%' : '—'), c: '#4a70b0' },
+    { l: 'รายได้รวม', v: fmt(st.rev || 0), c: '#4a70b0' },
     { l: 'COGS รวม (BoM)', v: fmt(st.cogs || 0), c: '#ef4444' },
     { l: 'กำไรรวม', v: fmt(st.gp || 0), c: '#10b981' },
-    { l: 'กำไร/บิล', v: fmt(gpBill), c: '#7c3aed' },
+    { l: 'กำไร/บิล', v: fmt(gpBill), c: '#7a66b8' },
     { l: 'ลูกค้า', v: fmtN(st.cust || 0), c: '#f59e0b' },
   ];
   document.getElementById('pbDrillStat').innerHTML = stats.map(k => `<div class="rounded-lg p-2.5" style="background:var(--bg-subtle);border-top:2px solid ${k.c}"><p class="text-[10px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-base font-bold" style="color:${k.c}">${k.v}</p></div>`).join('');
@@ -897,11 +897,11 @@ function renderPnlBill(d) {
     { l: 'จำนวนบิล', v: fmtN(s.bills || 0), sub: 'ลูกค้า ' + fmtN(s.customers || 0) + ' คน', c: '#0891b2' },
     { l: 'ต้นทุนรวม (COGS·BoM)', v: fmt(s.cogs || 0), sub: 'COGS ' + (cogsPct != null ? cogsPct.toFixed(1) + '% ของรายได้' : '—'), c: '#ef4444' },
     { l: 'COGS/บิล เฉลี่ย', v: fmt(cogsPerBill || 0), sub: 'รายได้รวม ' + fmt(s.revenue || 0), c: '#f59e0b' },
-    { l: 'COGS/หัว เฉลี่ย', v: fmt(cogsPerHead || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#7c3aed' },
+    { l: 'COGS/หัว เฉลี่ย', v: fmt(cogsPerHead || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#7a66b8' },
   ] : [
     { l: 'จำนวนบิล', v: fmtN(s.bills || 0), sub: 'ลูกค้า ' + fmtN(s.customers || 0) + ' คน', c: '#0891b2' },
     { l: 'กำไรขั้นต้นรวม (BoM)', v: fmt(s.gross_profit || 0), sub: 'GM ' + (s.gp_pct != null ? s.gp_pct + '%' : '—'), c: '#10b981' },
-    { l: 'กำไร/บิล เฉลี่ย', v: fmt(s.gp_per_bill || 0), sub: 'รายได้รวม ' + fmt(s.revenue || 0), c: '#7c3aed' },
+    { l: 'กำไร/บิล เฉลี่ย', v: fmt(s.gp_per_bill || 0), sub: 'รายได้รวม ' + fmt(s.revenue || 0), c: '#7a66b8' },
     { l: 'กำไร/หัว เฉลี่ย', v: fmt(s.gp_per_head || 0), sub: 'ส่วนลดรวม ' + fmt(s.discount || 0), c: '#f59e0b' },
   ];
   document.getElementById('pbKpis').innerHTML = kpis.map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
@@ -963,10 +963,10 @@ function renderPnlBill(d) {
   const ls = document.getElementById('pbLossSummary');
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
     ? `ขาดทุน <b style="color:#ef4444">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:#ef4444">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
-    : 'ไม่มีบิลขาดทุนในช่วงนี้ 🎉';
+    : 'ไม่มีบิลขาดทุนในช่วงนี้';
   document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
-    <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)} 🔍</td>
+    <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
@@ -978,7 +978,7 @@ function renderPnlBill(d) {
   </tr>`).join('') || '<tr><td colspan="10" class="py-4 text-center text-slate-400">— ไม่มีบิลขาดทุน —</td></tr>';
 }
 
-// ══ 🛒 รายงานปฏิบัติการ (Payment · Channel · Void · Table · Promo) ══
+// ══ รายงานปฏิบัติการ (Payment · Channel · Void · Table · Promo) ══
 let _opMonthsLoaded = false;
 async function _opFillMonths() {
   // populate month options from sales months (descending), once
@@ -1024,7 +1024,7 @@ async function loadOpsReport(force) {
   const payTot = (d.payment || []).reduce((a, b) => a + (b.amount || 0), 0);
   document.getElementById('opKpis').innerHTML = [
     { l: 'รับชำระรวม', v: fmt(payTot), sub: (d.payment || []).length + ' ช่องทาง', c: '#0891b2' },
-    { l: 'โต๊ะหมุนเวียน เฉลี่ย', v: (tbl.avg_turn_min || 0) + ' นาที', sub: fmtN(tbl.tabs || 0) + ' โต๊ะ', c: '#7c3aed' },
+    { l: 'โต๊ะหมุนเวียน เฉลี่ย', v: (tbl.avg_turn_min || 0) + ' นาที', sub: fmtN(tbl.tabs || 0) + ' โต๊ะ', c: '#7a66b8' },
     { l: 'ของเสีย/Void (ต้นทุน BoM)', v: fmt((d.void_total || {}).bom_cost || 0), sub: fmtN((d.void_total || {}).qty || 0) + ' รายการ · ขาย ' + fmt((d.void_total || {}).value || 0), c: '#ef4444' },
     { l: 'ส่วนลดโปรโมชัน', v: fmt((d.promo || []).reduce((a, b) => a + (b.discount || 0), 0)), sub: (d.promo || []).length + ' คูปอง', c: '#f59e0b' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
@@ -1059,9 +1059,9 @@ async function loadOpsReport(force) {
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
-// ══════════ 🏅 Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม) ══════════
+// ══════════ Top 60 ต้นทุน/หัว · สาขา Master (เทียบภาพรวม) ══════════
 let _chtMonthsLoaded = false;
-// ══ 🧪 วิเคราะห์วัตถุดิบ (Menu Impact) ═══════════════════════════════════════
+// ══ วิเคราะห์วัตถุดิบ (Menu Impact) ═══════════════════════════════════════
 let _miEnts = null, _miChart = null;
 // Last payloads, kept so the dive-in panels can summarise the real numbers
 // instead of re-deriving them from the chart's datasets.
@@ -1099,7 +1099,7 @@ function miFilterOptions() {
   if (!_miEnts) return;
   const cur = sel.value;
   const g = _miEnts.groups.map(e =>
-    `<option value="${e.ent}">🧺 ${esc(e.label)} (${e.n_members} เมนู)</option>`).join('');
+    `<option value="${e.ent}">${esc(e.label)} (${e.n_members} เมนู)</option>`).join('');
   const s = _miEnts.skus
     .filter(e => !q || e.label.toLowerCase().includes(q))
     .slice(0, 250)
@@ -1131,7 +1131,7 @@ async function miFillTiers(df, dt2) {
 }
 
 async function loadMenuImpact(force) {
-  loadPriceTier(force);   // 🏷️ tier section shares the same range/scope pickers
+  loadPriceTier(force);   // tier section shares the same range/scope pickers
   const body = document.getElementById('miBody');
   if (!_miEnts) {
     try { _miEnts = await api(`${API}/api/reports/menu-impact/entities`); }
@@ -1180,7 +1180,7 @@ async function loadMenuImpact(force) {
   const S = d.summary, C = d.compare;
   const kpis = [
     { l: 'สั่งใน % ของบิล', v: (S.pen_bills * 100).toFixed(1) + '%', sub: n0(S.bills_with) + ' บิล / ' + n0(d.totals.bills) + ' บิล', c: '#0e7490' },
-    { l: 'ปริมาณ/หัว (เฉพาะบิลที่สั่ง)', v: Number(S.qty_head_takers || 0).toFixed(2), sub: 'รวม ' + n0(S.qty) + ' หน่วย', c: '#7c3aed' },
+    { l: 'ปริมาณ/หัว (เฉพาะบิลที่สั่ง)', v: Number(S.qty_head_takers || 0).toFixed(2), sub: 'รวม ' + n0(S.qty) + ' หน่วย', c: '#7a66b8' },
     { l: 'ต้นทุนของตัวมันเอง/หัว (บิลที่สั่ง)', v: b1(S.ecogs_head_takers), sub: 'รวม ' + b1(S.ecogs) + ' = ' + ((S.ecogs_share || 0) * 100).toFixed(1) + '% ของ COGS ทั้งหมด', c: RED },
     { l: 'Δ GP/หัว (มี − ไม่มี)', v: sg(C.gp.diff), sub: 'GP มี ' + b1(C.gp.with) + ' vs ไม่มี ' + b1(C.gp.without), c: C.gp.diff >= 0 ? GRN : RED },
   ].map(k => `<div class="card p-4 mi-kpi" style="border-top:3px solid ${k.c}"><p class="mi-kpi-label">${k.l}</p><p class="mi-kpi-value" style="color:${k.c}">${k.v}</p><p class="mi-kpi-sub">${k.sub}</p></div>`).join('');
@@ -1263,11 +1263,11 @@ async function loadMenuImpact(force) {
           ${cmpRow('กำไรขั้นต้น (GP)', C.gp, false)}
         </tbody></table>
         ${mixLine}
-        <div class="mt-3 p-3 rounded text-xs mi-verdict" style="background:var(--bg-subtle);border-left:4px solid ${C.gp.diff >= 0 ? GRN : RED}">${verdict}</div>
+        <div class="mt-3 p-3 rounded text-xs mi-verdict" style="background:var(--bg-subtle);border:1px solid ${C.gp.diff >= 0 ? GRN : RED}">${verdict}</div>
       </div>
       <div class="card p-5">
         <h2 class="section-title mb-3">แนวโน้มรายเดือน — ปริมาณ/หัว &amp; % บิลที่สั่ง</h2>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มขยายมุมกราฟเพื่อเจาะลึก + อ่านสรุป · จุดสีแดงคือเดือนที่ผิดปกติ</p>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มขยายมุมกราฟเพื่อเจาะลึก + อ่านสรุป · จุดสีแดงคือเดือนที่ผิดปกติ</p>
         <div style="height:280px"><canvas id="miChart"></canvas></div>
       </div>
     </div>
@@ -1288,7 +1288,7 @@ async function loadMenuImpact(force) {
     const qh = trm.map(r => r.qty_head);
     const qOut = _miOutlierSet(qh);
     // mkChart (not `new Chart`) registers the instance, themes it for dark mode
-    // and injects the 🔍 dive-in button.
+    // and injects the dive-in button.
     _miChart = mkChart('miChart', { type: 'bar', data: {
         labels: trm.map(r => r.ym),
         datasets: [
@@ -1303,7 +1303,7 @@ async function loadMenuImpact(force) {
   } else if (_miChart) { _miChart.destroy(); _miChart = null; }
 }
 
-// ── 🏷️ วิเคราะห์ Tier ราคาขาย (section of the 🧪 tab) ───────────────────────
+// ── วิเคราะห์ Tier ราคาขาย (section of the tab) ───────────────────────
 let _ptChartMix = null, _ptChartCogs = null, _ptSeq = 0;
 // Granularity of each trend card, independently switchable: the mix chart is
 // often read monthly while the cost chart is read weekly, so one shared toggle
@@ -1347,7 +1347,7 @@ function _ptRender(d) {
   const sg = (v, suf = '') => v == null ? '-' : (v > 0 ? '+' : '') + Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }) + suf;
   const RED = '#b0472d', GRN = '#1f7a4d';
   const dc = (v, inv) => v == null ? 'var(--text-muted)' : (inv ? v < 0 : v > 0) ? GRN : RED;
-  const PAL = ['#b0472d', '#0e7490', '#7c3aed', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
+  const PAL = ['#b0472d', '#0e7490', '#7a66b8', '#1f7a4d', '#d97706', '#64748b', '#be185d'];
   const tcolor = {}; d.tier_keys.forEach((t, i) => tcolor[t] = PAL[i % PAL.length]);
   const modeLbl = d.mode === 'prev' ? 'ช่วงก่อนหน้า' : 'ครึ่งแรกของช่วง (ประวัติไม่พอ)';
   // The window is cut at the Grand Menu changeover when it straddles it — say so,
@@ -1386,7 +1386,7 @@ function _ptRender(d) {
     const jumped = dCogsOut.has(i) && (x.d_cogs_head || 0) > 0;
     const saved = dCogsOut.has(i) && (x.d_cogs_head || 0) < 0;
     const flags =
-      (hotFood ? `<span class="mi-flag warn" title="COGS ≥ ${FOOD_PCT_BAR}% ของรายได้ — เกินเกณฑ์ที่ใช้ตั้งข้อเสนอแนะ">🔥 ${x.a.food_pct}%</span>` : '') +
+      (hotFood ? `<span class="mi-flag warn" title="COGS ≥ ${FOOD_PCT_BAR}% ของรายได้ — เกินเกณฑ์ที่ใช้ตั้งข้อเสนอแนะ">${x.a.food_pct}%</span>` : '') +
       (jumped ? '<span class="mi-flag bad" title="ต้นทุน/หัวขยับผิดปกติเทียบ tier อื่น">⚠ ผิดปกติ</span>' : '') +
       (saved ? '<span class="mi-flag good" title="ต้นทุน/หัวลดผิดปกติเทียบ tier อื่น (ในทางที่ดี)">★ เด่น</span>' : '');
     return `<tr class="border-t border-slate-100${jumped || hotFood ? ' mi-outlier' : saved ? ' mi-outlier-good' : ''}">
@@ -1404,7 +1404,7 @@ function _ptRender(d) {
     <td class="py-1.5 text-right tabular-nums${hotFood ? ' font-bold' : ''}" style="color:${hotFood ? RED : 'inherit'}">${x.a.food_pct ?? '-'}%${covNote(x)}</td></tr>`;
   }).join('');
 
-  const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">💡 ${esc(t)}</li>`).join('') || '<li>—</li>';
+  const insights = (d.insights || []).map(t => `<li style="margin:.3em 0">${esc(t)}</li>`).join('') || '<li>—</li>';
   const acts = (d.actions || []).map((a, i) => `<li style="margin:.45em 0"><b>${i + 1}. ${esc(a.title)}</b><br><span style="color:var(--text-secondary)">${esc(a.detail)}</span></li>`).join('');
 
   const tl = t => (d.tier_labels || {})[t] || t;
@@ -1453,7 +1453,7 @@ function _ptRender(d) {
       const isOutlier = outlierAt != null && r.bom_cost != null && r.bom_cost > outlierAt;
       return `<tr class="border-t border-slate-100${isOutlier ? ' mi-outlier' : ''}">
       <td class="py-1 pr-1 text-slate-400 rank-cell">${i + 1}</td>
-      <td class="py-1 pr-2 mi-name" data-sort="${esc(r.label)}">${esc(r.label)}${isOutlier ? ' <span class="mi-flag bad" title="ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้">🔺 แพงผิดปกติ</span>' : ''}</td>
+      <td class="py-1 pr-2 mi-name" data-sort="${esc(r.label)}">${esc(r.label)}${isOutlier ? ' <span class="mi-flag bad" title="ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้">แพงผิดปกติ</span>' : ''}</td>
       <td class="py-1 pr-2 text-[10px]" style="color:var(--text-muted)">${esc(r.sku_code)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold"${isOutlier ? ' style="color:#dc2626"' : ''}>${b1(r.bom_cost)}</td></tr>`;
     }).join('');
@@ -1464,7 +1464,7 @@ function _ptRender(d) {
       <table class="text-xs w-full mt-1 pt-bom-tbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1 pr-1" data-nosort>#</th><th class="py-1 pr-2">เมนู</th><th class="py-1 pr-2">รหัส</th><th class="py-1 pr-2 text-right">ต้นทุน BoM</th>
       </tr></thead><tbody>${rows}</tbody></table>
-      <p class="text-[10px] mt-1" style="color:var(--text-muted)">🔺 = ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้</p>
+      <p class="text-[10px] mt-1" style="color:var(--text-muted)">= ต้นทุนเกิน 2 เท่าของค่าเฉลี่ย tier นี้</p>
     </details>`;
   }).join('');
 
@@ -1475,7 +1475,7 @@ function _ptRender(d) {
       <table class="text-xs w-full" id="ptTierTbl"><thead>
         <tr class="text-center" style="color:var(--text-muted)">
           <th></th>
-          <th colspan="5" class="py-1 border-b-2" style="background:rgba(99,102,241,.07);border-color:rgba(99,102,241,.35)">👥 ลูกค้า</th>
+          <th colspan="5" class="py-1 border-b-2" style="background:rgba(31,58,107,.07);border-color:rgba(31,58,107,.35)">ลูกค้า</th>
           <th colspan="6" class="py-1 border-b-2" style="background:rgba(176,71,45,.07);border-color:rgba(176,71,45,.35)">฿ ต้นทุน &amp; กำไร/หัว</th>
         </tr>
         <tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -1485,24 +1485,24 @@ function _ptRender(d) {
         <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว (Δ)</th><th class="py-1.5 pr-2 text-right">ต้นทุน BoM เฉลี่ย/จาน</th><th class="py-1.5 pr-2 text-right">เมนูแพง/หัว (Δ)</th>
         <th class="py-1.5 pr-2 text-right">GP/หัว</th><th class="py-1.5 text-right">COGS%</th>
       </tr></thead><tbody>${tierRows}</tbody></table>
-      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · 🔥 = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
+      <p class="text-[10.5px] mt-2" style="color:var(--text-muted)">"เมนูแพง" = เมนูต้นทุน ≥ ฿30/หน่วย · <b>COGS% เป็นค่าต่ำสุด</b> — จานที่ยังไม่มีต้นทุนในระบบ (เครื่องดื่ม/น้ำจิ้ม/เมนูที่ยังไม่ได้คีย์สูตร) ถูกคิดเป็น ฿0 ป้าย <span class="mi-flag warn">~%</span> คือค่าประมาณเมื่อคิดจานเหล่านั้นด้วยราคาเฉลี่ยของ tier นั้น · ต้นทุน/หัว มาจาก<b>บิลจริง</b> (ทุกจานที่ลูกค้าในบิลนั้นกิน ไม่ใช่เฉพาะเมนูของ tier) · GP/หัว = รายได้ − ต้นทุนอาหาร (ยังไม่หักค่าแรง/ค่าเช่า) · โปรฯ/ราคาอื่น = บิลที่ราคาบุฟเฟ่ต์ไม่ตรงราคามาตรฐาน (ส่วนลด/โปรโมชัน) · เด็กล้วน/อื่นๆ = บิลไม่มีบุฟเฟ่ต์ผู้ใหญ่ · "ต้นทุน BoM เฉลี่ย/จาน" = ต้นทุนสูตรเฉลี่ยของ<b>ทุกจานที่ tier นั้นกินได้</b> (สะสม — รวมจานของ tier ที่ถูกกว่าด้วย เพราะลูกค้า ฿1,299 กินจาน ฿459 ได้) จากสูตรอาหาร ไม่ใช่ยอดขายจริง — มีเฉพาะเมนูใหม่ตั้งแต่ 1 ก.ย. 2569 · <b>คลิกหัวคอลัมน์เพื่อเรียง</b> · = COGS ≥ 40% ของรายได้ · ⚠ = ต้นทุน/หัวขยับหลุดกรอบเทียบ tier อื่น</p>
       <p class="text-[10.5px] mt-2 p-2 pt-promo-note"><b class="k">“โปรฯ/ราคาอื่น” ไม่ใช่ tier ราคา</b> — เป็นถังรวมของบิลที่ราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ต่อหัว</b> ไม่ตรงรายการราคาที่ขายจริงในวันนั้น (ยอมคลาดได้ ±฿3 บนราคาก่อน SC+VAT ถึง 31 ส.ค. 2569 · ±฿4 บนราคา NET ของ Grand Menu ตั้งแต่ 1 ก.ย. 2569) เกิดได้ 3 ทาง: <b>ลดทั้งบิล</b> (ทุกหัวราคาเดียวกันแต่นอกเมนู เช่น ฿710 = ลดจาก ฿789) · <b>มีหัวฟรี/ครึ่งราคาปน</b> กับหัวเต็มราคา ทำให้ค่าเฉลี่ยต่อหัวตกอยู่ระหว่าง tier ซึ่ง<b>ไม่ใช่ราคาที่ตั้งขาย</b> · <b>ฟรีทั้งใบ</b> (ยอดผู้ใหญ่รวม = ฿0) · <b>วิธีอ่าน:</b> รายได้/หัว ของแถวนี้ต่ำกว่า tier ที่ลูกค้าทานจริง แต่ต้นทุน/หัว ยังเป็นของที่กินจริง → <b>COGS% สูงผิดตาเป็นเรื่องปกติ</b> ไม่ใช่สัญญาณว่าต้นทุนพุ่ง · ถ้าสัดส่วนคนทานแถวนี้โตผิดปกติ ให้ไปดูการอนุมัติส่วนลด ไม่ใช่ครัว · แยก 3 แบบ + รายสาขา ดูได้ในรายงานผู้บริหาร §11</p>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
-      <div class="card p-5"><h2 class="section-title mb-3">💡 สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
-      <div class="card p-5" style="border-left:4px solid var(--indigo,#6366f1)"><h2 class="section-title mb-3">✅ สิ่งที่ต้องปรับปรุงและพัฒนา</h2><ol class="text-xs" style="list-style:none;padding:0;margin:0">${acts}</ol></div>
+      <div class="card p-5"><h2 class="section-title mb-3">สิ่งที่เห็นจากข้อมูล (A เทียบ B)</h2><ul class="text-xs" style="list-style:none;padding:0;margin:0">${insights}</ul></div>
+      <div class="card p-5" style="border:1px solid var(--indigo,#4a70b0)"><h2 class="section-title mb-3">สิ่งที่ต้องปรับปรุงและพัฒนา</h2><ol class="text-xs" style="list-style:none;padding:0;margin:0">${acts}</ol></div>
     </div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-5">
       <div class="card p-5">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <h2 class="section-title mb-0">เทรนด์สัดส่วนคนทานตาม Tier</h2>${ptGranBtns('mix')}</div>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก + อ่านสรุปการย้าย tier</p>
         <div style="height:280px"><canvas id="ptChartMix"></canvas></div>
         <p class="text-[10.5px] mt-2" id="ptNoteMix" style="color:var(--text-muted)"></p></div>
       <div class="card p-5">
         <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
           <h2 class="section-title mb-0">เทรนด์ต้นทุนอาหาร/หัว ตาม Tier</h2>${ptGranBtns('cogs')}</div>
-        <p class="text-[11px] mb-2" style="color:var(--text-muted)">🔍 คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = ช่วงที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
+        <p class="text-[11px] mb-2" style="color:var(--text-muted)">คลิกปุ่มมุมกราฟเพื่อเจาะลึก · จุดใหญ่สีแดง = ช่วงที่ต้นทุน/หัวหลุดกรอบของ tier นั้น</p>
         <div style="height:280px"><canvas id="ptChartCogs"></canvas></div>
         <p class="text-[10.5px] mt-2" id="ptNoteCogs" style="color:var(--text-muted)"></p></div>
     </div>
@@ -1510,7 +1510,7 @@ function _ptRender(d) {
       <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
         <h2 class="section-title mb-0">Top-${(d.top30 || []).length} เมนูหลักในต้นทุน — การทานต่อหัวแยกตาม Tier (A, วงเล็บ = Δ% เทียบ B)</h2>
         <div class="flex gap-1 items-center">${ptQtyUnitBtns()}
-        <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button></div>
+        <button onclick="exportTable('ptTop30','price_tier_top30.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button></div>
       </div>
       <table class="text-xs w-full" id="ptTop30"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-1" data-nosort style="${stickyTh(0, STICKY_NUM_W)}">#</th><th class="py-1.5 pr-2" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W)}">เมนู</th><th class="py-1.5 pr-2 text-right">ต้นทุน/หน่วย</th>
@@ -1624,7 +1624,7 @@ function _ptTrendNote(id, P, wkMeta) {
 // already in hand (_ptLast) — the unit is a presentation choice, not new data.
 function ptQtyUnitBtns() {
   const b = (on, txt) => `<button onclick="ptSetQtyUnit(${on})" class="text-xs rounded px-2 py-0.5 border"
-    style="${_ptQtyPer100 === on ? 'background:var(--bg-hover);font-weight:700;border-color:#6366f1'
+    style="${_ptQtyPer100 === on ? 'background:var(--bg-hover);font-weight:700;border-color:var(--accent)'
                                  : 'border-color:var(--border-soft);color:var(--text-muted)'}">${txt}</button>`;
   return `${b(false, 'ต่อหัว')}${b(true, 'ต่อ 100 คน')}`;
 }
@@ -1638,7 +1638,7 @@ function ptSetQtyUnit(on) {
 // The toggle in each trend card header.
 function ptGranBtns(which) {
   const b = (g, txt) => `<button onclick="ptSetGran('${which}','${g}')" class="text-xs rounded px-2 py-0.5 border"
-    style="${_ptGran[which] === g ? 'background:var(--bg-hover);font-weight:700;border-color:#6366f1'
+    style="${_ptGran[which] === g ? 'background:var(--bg-hover);font-weight:700;border-color:var(--accent)'
                                   : 'border-color:var(--border-soft);color:var(--text-muted)'}">${txt}</button>`;
   return `<div class="flex gap-1" id="ptGran${which}">${b('month', 'รายเดือน')}${b('week', 'รายสัปดาห์')}</div>`;
 }
@@ -1652,7 +1652,7 @@ function ptSetGran(which, g) {
   _ptRender(_ptLast);
 }
 
-// ── 🔍 Dive-in summaries for the 🧪 tab's three charts ──────────────────────
+// ── Dive-in summaries for the tab's three charts ──────────────────────
 // The generic analyser (analyzeChartForDive) only sees a chart's datasets, so on
 // these it could say "the peak is March" and nothing about the ingredient, the
 // tier or the menu era. These read the payload the tab already has and write the
@@ -1664,9 +1664,9 @@ const _MI_SG = v => v == null ? '-' : (v > 0 ? '+' : '') + Number(v).toLocaleStr
 // The months whose value breaks out of the series' own range, as a bullet.
 function _miOutlierBullet(labels, series, fmtV, what) {
   const out = _miOutlierSet(series);
-  if (!out.size) return _diveBullet('✅', `ไม่พบเดือนที่${what}ผิดปกติ — ซีรีส์นี้เคลื่อนไหวอยู่ในกรอบเดียวกันตลอดช่วง`, 'good');
+  if (!out.size) return _diveBullet('✓', `ไม่พบเดือนที่${what}ผิดปกติ — ซีรีส์นี้เคลื่อนไหวอยู่ในกรอบเดียวกันตลอดช่วง`, 'good');
   const names = [...out].map(i => `<b>${esc(labels[i])}</b> (${fmtV(series[i])})`).join(', ');
-  return _diveBullet('🎯', `เดือนที่${what}หลุดกรอบ (Tukey fence): ${names} — เจาะดูเดือนเหล่านี้ก่อน`, 'warn');
+  return _diveBullet('', `เดือนที่${what}หลุดกรอบ (Tukey fence): ${names} — เจาะดูเดือนเหล่านี้ก่อน`, 'warn');
 }
 
 async function _diveMenuImpact(_cfg) {
@@ -1681,27 +1681,27 @@ async function _diveMenuImpact(_cfg) {
   const peak = qh.indexOf(Math.max(...qh.filter(v => v != null)));
   const low = qh.indexOf(Math.min(...qh.filter(v => v != null)));
   const S = d.summary, C = d.compare;
-  return _diveSection('รายการนี้คืออะไร', '🧪',
+  return _diveSection('รายการนี้คืออะไร', '',
       _diveMetric('วัตถุดิบ/เมนู', esc(d.label)) +
       _diveMetric('ช่วง', `${d.date_from} → ${d.date_to}`) +
       _diveMetric('ขอบเขต', esc(d.scope_label)) +
       _diveMetric('สั่งใน % ของบิล', ((S.pen_bills || 0) * 100).toFixed(1) + '%') +
       _diveMetric('ต้นทุนตัวเอง/หัว (บิลที่สั่ง)', _MI_D2(S.ecogs_head_takers), 'bad') +
       _diveMetric('Δ GP/หัว (มี − ไม่มี)', _MI_SG(C.gp.diff), C.gp.diff >= 0 ? 'good' : 'bad')) +
-    _diveSection('อ่านกราฟนี้ยังไง', '📈',
-      _diveBullet('📊', `แท่ง = <b>ปริมาณ/หัว</b> (ทานกี่ชิ้นต่อหัวลูกค้าทั้งหมด) · เส้น = <b>% บิลที่สั่ง</b> (ความนิยม) — สองเส้นนี้แยกกัน: ของที่คนสั่งน้อยแต่สั่งทีเยอะ จะเห็นแท่งสูงพร้อมเส้นต่ำ`) +
-      (chg == null ? '' : _diveBullet(chg >= 0 ? '📈' : '📉',
+    _diveSection('อ่านกราฟนี้ยังไง', '▲',
+      _diveBullet('', `แท่ง = <b>ปริมาณ/หัว</b> (ทานกี่ชิ้นต่อหัวลูกค้าทั้งหมด) · เส้น = <b>% บิลที่สั่ง</b> (ความนิยม) — สองเส้นนี้แยกกัน: ของที่คนสั่งน้อยแต่สั่งทีเยอะ จะเห็นแท่งสูงพร้อมเส้นต่ำ`) +
+      (chg == null ? '' : _diveBullet(chg >= 0 ? '▲' : '▼',
         `ปริมาณ/หัว ${chg >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'} <b>${Math.abs(chg).toFixed(1)}%</b> จากเดือนแรก (${first}) มาเดือนล่าสุด (${last}) ของช่วงนี้`,
         chg >= 0 ? 'warn' : 'good')) +
-      _diveBullet('🔺', `สูงสุด <b>${esc(labels[peak])}</b> (${qh[peak]} ชิ้น/หัว) · ต่ำสุด <b>${esc(labels[low])}</b> (${qh[low]} ชิ้น/หัว)`) +
-      (pen.some(v => v != null) ? _diveBullet('👥', `% บิลที่สั่งล่าสุด <b>${(pen.filter(v => v != null).slice(-1)[0]).toFixed(1)}%</b> ของบิลทั้งหมดในเดือนนั้น`) : '') +
+      _diveBullet('▲', `สูงสุด <b>${esc(labels[peak])}</b> (${qh[peak]} ชิ้น/หัว) · ต่ำสุด <b>${esc(labels[low])}</b> (${qh[low]} ชิ้น/หัว)`) +
+      (pen.some(v => v != null) ? _diveBullet('', `% บิลที่สั่งล่าสุด <b>${(pen.filter(v => v != null).slice(-1)[0]).toFixed(1)}%</b> ของบิลทั้งหมดในเดือนนั้น`) : '') +
       _miOutlierBullet(labels, qh, v => v + ' ชิ้น/หัว', 'ปริมาณ/หัว')) +
-    _diveSection('สรุปเชิงธุรกิจ', '💰',
-      _diveBullet(C.gp.diff >= 0 ? '✅' : '⚠️',
+    _diveSection('สรุปเชิงธุรกิจ', '',
+      _diveBullet(C.gp.diff >= 0 ? '✓' : '⚠',
         `บิลที่สั่ง${esc(d.label)} ให้ GP/หัว ${C.gp.diff >= 0 ? 'สูงกว่า' : 'ต่ำกว่า'} บิลที่ไม่สั่ง <b>${_MI_D2(Math.abs(C.gp.diff))}</b> ` +
         `(${_MI_D2(C.gp.with)} vs ${_MI_D2(C.gp.without)}) — คุมความต่างของสาขา×วันแล้ว`,
         C.gp.diff >= 0 ? 'good' : 'bad') +
-      (C.hc_rel_saving == null ? '' : _diveBullet(C.hc_rel_saving < 0 ? '🛑' : '🔥',
+      (C.hc_rel_saving == null ? '' : _diveBullet(C.hc_rel_saving < 0 ? '✗' : '',
         C.hc_rel_saving < 0
           ? `ช่วย <b>เบรกการกินเมนูแพง</b> เชิงสัดส่วน ${_MI_D2(-C.hc_rel_saving)}/หัว — ของถูกที่ทำให้ทานของแพงน้อยลง`
           : `มากับการกินเมนูแพง <b>เพิ่ม</b> ${_MI_D2(C.hc_rel_saving)}/หัว — ทานคู่กับของแพง ไม่ได้ทดแทน`,
@@ -1718,23 +1718,23 @@ async function _divePtMix(_cfg) {
   const shifts = keys.map(k => ({ k, dv: (lastM.tiers[k]?.share ?? 0) - (firstM.tiers[k]?.share ?? 0) }))
                      .sort((a, b) => Math.abs(b.dv) - Math.abs(a.dv));
   const up = shifts.find(x => x.dv > 0), dn = shifts.find(x => x.dv < 0);
-  return _diveSection('ช่วงที่กำลังดู', '🏷️',
+  return _diveSection('ช่วงที่กำลังดู', '',
       _diveMetric('A', `${d.a_range[0]} → ${d.a_range[1]}`) +
       _diveMetric('ขอบเขต', esc(d.scope_label)) +
       _diveMetric('จำนวน tier ที่ยังขาย', String(keys.length)) +
       _diveMetric('เดือนล่าสุดในกราฟ', esc(labels[labels.length - 1]))) +
-    _diveSection('สัดส่วนคนทานตอนนี้', '👥',
+    _diveSection('สัดส่วนคนทานตอนนี้', '',
       shareNow.slice(0, 5).map(x =>
         _diveMetric(esc(tl(x.k)), x.s.toFixed(1) + '%')).join('') +
-      _diveBullet('🥇', `tier ที่คนทานเยอะสุดเดือนล่าสุดคือ <b>${esc(tl(shareNow[0].k))}</b> ที่ ${shareNow[0].s.toFixed(1)}% ของคนทานทั้งหมด`)) +
-    _diveSection('การย้าย tier ตลอดช่วง', '🔀',
-      (up ? _diveBullet('📈', `<b>${esc(tl(up.k))}</b> สัดส่วนเพิ่มมากสุด ${up.dv >= 0 ? '+' : ''}${up.dv.toFixed(1)} pp (${esc(labels[0])} → ${esc(labels[labels.length - 1])})`, 'good') : '') +
-      (dn ? _diveBullet('📉', `<b>${esc(tl(dn.k))}</b> สัดส่วนลดมากสุด ${dn.dv.toFixed(1)} pp — ถ้าเป็น tier ราคาสูง แปลว่ารายได้/หัวถูกกดจาก mix ไม่ใช่จากราคา`, 'warn') : '') +
+      _diveBullet('1.', `tier ที่คนทานเยอะสุดเดือนล่าสุดคือ <b>${esc(tl(shareNow[0].k))}</b> ที่ ${shareNow[0].s.toFixed(1)}% ของคนทานทั้งหมด`)) +
+    _diveSection('การย้าย tier ตลอดช่วง', '',
+      (up ? _diveBullet('▲', `<b>${esc(tl(up.k))}</b> สัดส่วนเพิ่มมากสุด ${up.dv >= 0 ? '+' : ''}${up.dv.toFixed(1)} pp (${esc(labels[0])} → ${esc(labels[labels.length - 1])})`, 'good') : '') +
+      (dn ? _diveBullet('▼', `<b>${esc(tl(dn.k))}</b> สัดส่วนลดมากสุด ${dn.dv.toFixed(1)} pp — ถ้าเป็น tier ราคาสูง แปลว่ารายได้/หัวถูกกดจาก mix ไม่ใช่จากราคา`, 'warn') : '') +
       (d.mix_effect == null ? _diveBullet('ℹ️', 'ยังไม่มีช่วงก่อนหน้าที่เทียบได้ จึงยังไม่คำนวณผลของ mix ต่อรายได้/หัว')
-        : _diveBullet(d.mix_effect < 0 ? '⚠️' : '✅',
+        : _diveBullet(d.mix_effect < 0 ? '⚠' : '✓',
           `ผลจาก mix อย่างเดียว ${d.mix_effect < 0 ? 'กด' : 'ดัน'}รายได้/หัว <b>${_MI_D2(Math.abs(d.mix_effect))}</b> เทียบช่วงก่อนหน้า`,
           d.mix_effect < 0 ? 'bad' : 'good')) +
-      (d.era_clamped ? _diveBullet('🗓️', `กราฟเริ่มที่ <b>${d.menu_era_from}</b> — ราคาเมนูเก่าถูกยกเลิกไปแล้ว จึงไม่นำมารวมในสัดส่วน`, 'info') : ''));
+      (d.era_clamped ? _diveBullet('', `กราฟเริ่มที่ <b>${d.menu_era_from}</b> — ราคาเมนูเก่าถูกยกเลิกไปแล้ว จึงไม่นำมารวมในสัดส่วน`, 'info') : ''));
 }
 
 async function _divePtCogs(_cfg) {
@@ -1764,31 +1764,31 @@ async function _divePtCogs(_cfg) {
     const s = t.map(r => r.tiers[k]?.cogs_head ?? null);
     const o = _miOutlierSet(s);
     if (!o.size) return '';
-    return _diveBullet('🎯', `<b>${esc(tl(k))}</b> — เดือนที่ต้นทุน/หัวหลุดกรอบ: ` +
+    return _diveBullet('', `<b>${esc(tl(k))}</b> — เดือนที่ต้นทุน/หัวหลุดกรอบ: ` +
       [...o].map(i => `${esc(labels[i])} (${_MI_D2(s[i])})`).join(', '), 'warn');
   }).join('');
-  return _diveSection('ช่วงที่กำลังดู', '💸',
+  return _diveSection('ช่วงที่กำลังดู', '',
       _diveMetric('A', `${d.a_range[0]} → ${d.a_range[1]}`) +
       _diveMetric('ต้นทุนอาหาร/หัว (รวมทุก tier)', _MI_D2(d.blend.cogs_head_a), 'bad') +
       _diveMetric('Food cost %', (d.blend.food_pct_a ?? '-') + '%',
                   (d.blend.food_pct_a || 0) >= 40 ? 'bad' : 'good') +
       _diveMetric('รายได้/หัว', _MI_D2(d.blend.rev_head_a), 'good')) +
-    _diveSection('ต้นทุน/หัว รายเดือนล่าสุด', '📊',
+    _diveSection('ต้นทุน/หัว รายเดือนล่าสุด', '',
       now.map(x => _diveMetric(esc(tl(x.k)), _MI_D2(x.v))).join('') +
       (now.length > 1 ? _diveBullet('↔️',
         `ช่วงห่างระหว่าง tier แพงสุด (<b>${esc(tl(now[0].k))}</b> ${_MI_D2(now[0].v)}) กับถูกสุด ` +
         `(<b>${esc(tl(now[now.length - 1].k))}</b> ${_MI_D2(now[now.length - 1].v)}) = ` +
         `<b>${_MI_D2(now[0].v - now[now.length - 1].v)}</b>/หัว`) : '')) +
-    _diveSection('สิ่งที่ต้องดู', '⚠️',
-      (move ? _diveBullet(move.dv > 0 ? '📈' : '📉',
+    _diveSection('สิ่งที่ต้องดู', '⚠',
+      (move ? _diveBullet(move.dv > 0 ? '▲' : '▼',
         `ขยับแรงสุดคือ <b>${esc(tl(move.k))}</b> ${move.dv > 0 ? 'เพิ่ม' : 'ลด'} <b>${_MI_D2(Math.abs(move.dv))}</b>/หัว ` +
         `(${esc(move.from)} → ${esc(move.to)})`, move.dv > 0 ? 'bad' : 'good') : '') +
-      (hot.length ? _diveBullet('🔥',
+      (hot.length ? _diveBullet('',
         `tier ที่ COGS ≥ 40% ของรายได้: ${hot.map(x => `<b>${esc(x.label)}</b> (${x.a.food_pct}%)`).join(', ')} — ` +
         `นี่คือเกณฑ์เดียวกับที่การ์ด "สิ่งที่ต้องปรับปรุงและพัฒนา" ใช้ตั้งข้อเสนอแนะ`, 'bad')
-        : _diveBullet('✅', 'ไม่มี tier ไหน COGS แตะ 40% ของรายได้ในช่วงนี้', 'good')) +
-      (outBullets || _diveBullet('✅', 'ไม่พบเดือนที่ต้นทุน/หัวหลุดกรอบของ tier ตัวเอง', 'good')) +
-      (d.era_clamped ? _diveBullet('🗓️', `เส้นเริ่มที่ <b>${d.menu_era_from}</b> — ต้นทุน/หัวของเมนูเก่าคนละชุดราคา จึงไม่ต่อเส้นกัน`, 'info') : ''));
+        : _diveBullet('✓', 'ไม่มี tier ไหน COGS แตะ 40% ของรายได้ในช่วงนี้', 'good')) +
+      (outBullets || _diveBullet('✓', 'ไม่พบเดือนที่ต้นทุน/หัวหลุดกรอบของ tier ตัวเอง', 'good')) +
+      (d.era_clamped ? _diveBullet('', `เส้นเริ่มที่ <b>${d.menu_era_from}</b> — ต้นทุน/หัวของเมนูเก่าคนละชุดราคา จึงไม่ต่อเส้นกัน`, 'info') : ''));
 }
 
 _DIVE_ENHANCERS.miChart = _diveMenuImpact;
@@ -1843,7 +1843,7 @@ async function loadCostHeadTop60(force) {
   const kpis = [
     { l: 'จำนวนหัวลูกค้า (รวม)', v: n0(ov.covers), sub: d.branches.length + ' สาขา ' + sl, c: '#0e7490' },
     { l: 'ต้นทุนอาหาร/หัว เฉลี่ย', v: b2(ov.cph_total), sub: 'ฐานเทียบของทุกสาขา', c: RED },
-    { l: 'Food cost %', v: ov.food_pct.toFixed(1) + '%', sub: 'COGS ÷ ยอดขาย ex-VAT', c: '#7c3aed' },
+    { l: 'Food cost %', v: ov.food_pct.toFixed(1) + '%', sub: 'COGS ÷ ยอดขาย ex-VAT', c: '#7a66b8' },
     { l: 'ต้นทุนอาหารรวม', v: fmt(ov.total_cogs), sub: ov.menu_count + ' เมนูมีต้นทุน', c: '#0d9488' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
@@ -1859,7 +1859,7 @@ async function loadCostHeadTop60(force) {
       <td class="py-1.5 text-[11px]" style="color:var(--text-muted)">${esc(b.drivers || '')}</td></tr>`;
   }).join('');
   const rankTbl = `<div class="card p-5 mb-4 overflow-x-auto">
-    <h2 class="section-title mb-3">📊 จัดอันดับสาขา — ต้นทุน/หัว เทียบภาพรวม</h2>
+    <h2 class="section-title mb-3">จัดอันดับสาขา — ต้นทุน/หัว เทียบภาพรวม</h2>
     <table class="text-xs w-full"><thead><tr class="text-left border-b-2 border-slate-300" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">หัวลูกค้า</th>
       <th class="py-1.5 pr-2 text-right">ต้นทุน/หัว</th><th class="py-1.5 pr-2 text-right">Δ vs ภาพรวม</th>
@@ -1877,8 +1877,8 @@ async function loadCostHeadTop60(force) {
   let headline = '';
   if (A.hottest) {
     const drv = (A.hottest_drivers || []).map(x => `${esc(x.desc)} (+${q2(x.d)}/หัว)`).join(', ');
-    headline = `<div class="card p-4 mb-4" style="border-left:4px solid ${RED};background:linear-gradient(to right,#fdf3f0,var(--bg-card,#fff) 60%)">
-      <p class="text-sm font-bold" style="color:${RED}">🔺 สาขาต้นทุน/หัวสูงสุด: ${esc(A.hottest)} (${b2(d.branches.find(b=>b.name===A.hottest)?.cph_total||0)}/หัว · ${sgn(A.hottest_gap)} จากภาพรวม)</p>
+    headline = `<div class="card p-4 mb-4" style="border:1px solid ${RED};background:#fdf3f0">
+      <p class="text-sm font-bold" style="color:${RED}">สาขาต้นทุน/หัวสูงสุด: ${esc(A.hottest)} (${b2(d.branches.find(b=>b.name===A.hottest)?.cph_total||0)}/หัว · ${sgn(A.hottest_gap)} จากภาพรวม)</p>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">ตัวขับหลัก: ${drv}. ส่วนต่าง ${sgn(A.hottest_gap)} บาท/หัว × ${n0(A.hottest_covers)} หัว ≈ <b>${fmt(A.hottest_excess_month)}</b> ที่ใช้ต้นทุนต่างจากค่าเฉลี่ยกลุ่มเดือนนี้ — เป้าตรวจสอบพอร์ชั่น/ของเสีย/การ map รหัสลำดับแรก.</p></div>`;
   }
 
@@ -1891,8 +1891,8 @@ async function loadCostHeadTop60(force) {
     <td class="num">${r.share.toFixed(1)}%</td><td class="num text-slate-400">${r.cum.toFixed(1)}%</td></tr>`).join('');
   const ovTable = `<div class="card p-5 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">🥇 ภาพรวมทุกสาขา — Top 60 ต้นทุน/หัว</h2>
-      <button onclick="exportTable('chtOvTable','top60_costhead_overview_${m}.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">⬇ CSV</button></div>
+      <h2 class="section-title mb-0">ภาพรวมทุกสาขา — Top 60 ต้นทุน/หัว</h2>
+      <button onclick="exportTable('chtOvTable','top60_costhead_overview_${m}.csv')" class="text-xs border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">CSV</button></div>
     <div class="overflow-auto" style="max-height:560px"><table class="tbl-top60 w-full" id="chtOvTable"><thead><tr>
       <th class="num">#</th><th>เมนู</th><th class="num">จำนวน</th><th class="num">/หัว</th>
       <th class="num">ต้นทุนรวม</th><th class="num">ต้นทุน/หัว</th><th class="num">% ต้นทุน</th><th class="num">สะสม%</th>
@@ -1917,14 +1917,14 @@ async function loadCostHeadTop60(force) {
     }).join('');
     return `<div class="card p-5 mb-4">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-        <h2 class="section-title mb-0">🏪 ${esc(b.name)}</h2>
+        <h2 class="section-title mb-0">${esc(b.name)}</h2>
         <span class="text-xs tabular-nums" style="color:var(--text-muted)">หัวลูกค้า ${n0(b.covers)} · ต้นทุน/หัว <b style="color:${gc}">${b2(b.cph_total)}</b> · Δ <b style="color:${gc}">${sgn(b.gap)}</b> · Food ${b.food_pct.toFixed(1)}%</span>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 my-2 text-xs">
         <div><p class="font-semibold mb-1" style="color:${RED}">▲ ดันต้นทุนสูงกว่าภาพรวม</p><ul style="list-style:none;padding:0;margin:0">${hi}</ul></div>
         <div><p class="font-semibold mb-1" style="color:${GRN}">▼ ต่ำกว่าภาพรวม</p><ul style="list-style:none;padding:0;margin:0">${lo}</ul></div>
       </div>
-      <details class="mt-1"><summary class="cursor-pointer text-xs font-semibold select-none" style="color:var(--text-secondary)">📋 ดูตาราง Top 60 ทั้งหมด (${b.menu_count} เมนูมีต้นทุน) · <button onclick="event.preventDefault();exportTable('chtBr${b.branch_id}','top60_${esc(b.name)}_${m}.csv')" class="underline">⬇ CSV</button></summary>
+      <details class="mt-1"><summary class="cursor-pointer text-xs font-semibold select-none" style="color:var(--text-secondary)">ดูตาราง Top 60 ทั้งหมด (${b.menu_count} เมนูมีต้นทุน) · <button onclick="event.preventDefault();exportTable('chtBr${b.branch_id}','top60_${esc(b.name)}_${m}.csv')" class="underline">CSV</button></summary>
         <div class="overflow-auto mt-2" style="max-height:520px"><table class="tbl-top60 w-full" id="chtBr${b.branch_id}"><thead><tr>
           <th class="num">#</th><th>เมนู</th><th class="num">จำนวน</th><th class="num">/หัว</th>
           <th class="num">ต้นทุนรวม</th><th class="num">ต้นทุน/หัว</th><th class="num">ภาพรวม/หัว</th><th class="num">Δ/หัว</th><th class="num">Δ%</th>
@@ -1933,15 +1933,15 @@ async function loadCostHeadTop60(force) {
 
   // ── action plan (static guidance) ──
   const action = `<div class="card p-5 mb-4">
-    <h2 class="section-title mb-3">🧭 แนวทาง ตรวจสอบ · พัฒนา · ติดตามแก้ไข</h2>
+    <h2 class="section-title mb-3">แนวทาง ตรวจสอบ · พัฒนา · ติดตามแก้ไข</h2>
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs" style="color:var(--text-secondary)">
-      <div style="border-left:3px solid ${RED};padding-left:10px">
+      <div style="border:1px solid ${RED};padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">① ตรวจสอบ</p>
         <ul style="padding-left:1em;margin:0"><li>โฟกัสเมนูจุดแดงราคาแพงที่ Δ/หัวบวกมากก่อน — ดึงบิลขาดทุน/ส่วนลด/Void มาดูว่าเป็นการกินจริง/ของเสีย/แจกฟรี/map รหัสผิด</li><li>Yield test: ชั่ง/นับพอร์ชั่นจริงเทียบ BoM (แซลมอน/หอยเชลล์/กุ้ง/ทุเรียน)</li><li>ตรวจ sku_cost เทียบราคาซื้อจริง โดยเฉพาะเมนูที่ขึ้น “ใหม่”</li></ul></div>
-      <div style="border-left:3px solid #0d9488;padding-left:10px">
+      <div style="border:1px solid #0d9488;padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">② พัฒนา</p>
         <ul style="padding-left:1em;margin:0"><li>มาตรฐานพอร์ชั่นเป็นภาพ + เครื่องชั่งประจำสเตชั่นทะเล</li><li>คุมการเติม (refill) วัตถุดิบแพงในสาขาที่สูงผิดปกติ</li><li>Menu engineering + จัดซื้อ/สเปกรวมศูนย์ให้ทุกสาขาเท่ากัน</li></ul></div>
-      <div style="border-left:3px solid #7c3aed;padding-left:10px">
+      <div style="border:1px solid var(--accent);padding-left:10px">
         <p class="font-bold mb-1" style="color:var(--text-primary)">③ ติดตามแก้ไข</p>
         <ul style="padding-left:1em;margin:0"><li>ตั้งเป้าต้นทุน/หัวรายสาขา = ภาพรวม ${b2(ov.cph_total)} หรือดีกว่า</li><li>ทบทวนรายเดือนด้วยรายงานนี้ (เปลี่ยนเดือนด้านบน) ดูว่า Δ/หัวเมนูเป้าหมายลดลงไหม</li><li>มอบเจ้าของงานต่อสาขา + วัดซ้ำ 30 วัน (เกณฑ์ผ่าน Δ/หัวลด ≥ 50%)</li></ul></div>
     </div>
@@ -1949,9 +1949,9 @@ async function loadCostHeadTop60(force) {
 
   // ── charts row (canvases filled after innerHTML lands in the DOM) ──
   const chartsRow = `<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
-    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">📊 ต้นทุน/หัว รายสาขา เทียบค่าเฉลี่ย</h3>
+    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">ต้นทุน/หัว รายสาขา เทียบค่าเฉลี่ย</h3>
       <div style="height:300px"><canvas id="chtChartBranch"></canvas></div></div>
-    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">🍽️ Top 12 เมนูตัวขับต้นทุน/หัว (ภาพรวม)</h3>
+    <div class="card p-4"><h3 class="section-title mb-2" style="font-size:13px">Top 12 เมนูตัวขับต้นทุน/หัว (ภาพรวม)</h3>
       <div style="height:300px"><canvas id="chtChartMenus"></canvas></div></div>
   </div>`;
 
@@ -2001,7 +2001,7 @@ async function loadCostHeadTop60(force) {
   });
 }
 
-// ══════════ 🧩 EXTRA (POS เชิงลึก) ══════════
+// ══════════ EXTRA (POS เชิงลึก) ══════════
 async function _extraMonths(selId, valNow) {
   const sel = document.getElementById(selId);
   if (!sel || sel.dataset.loaded) return;
@@ -2095,7 +2095,7 @@ function _syncExtraMonthRange(fromId, toId, tabKey) {
   _extraLastGlobal[tabKey] = key;
 }
 
-// 💵 เงินสดขาด/เกิน
+// เงินสดขาด/เกิน
 async function loadCashCtl(force) {
   await _extraMonths('ccMonth');
   const mv = document.getElementById('ccMonth')?.value || '';
@@ -2125,10 +2125,10 @@ async function loadCashCtl(force) {
     <td class="py-1.5 pr-2 tabular-nums">${esc(r.day)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td><td class="py-1.5 text-right tabular-nums">${fmtN(r.pax)}</td>
-  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีวันที่ขาด/เกิน 🎉</td></tr>';
+  </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีวันที่ขาด/เกิน</td></tr>';
 }
 
-// 👥 ประเภทลูกค้า
+// ประเภทลูกค้า
 async function loadCustType(force) {
   await _extraMonths('ctMonth');
   const mv = document.getElementById('ctMonth')?.value || '';
@@ -2144,13 +2144,13 @@ async function loadCustType(force) {
   const deliv = types.filter(t => /Grab|Line|Food|Delivery/i.test(t.type)).reduce((a, b) => a + (b.customers || 0), 0);
   const tc = d.total_customers || 1;
   document.getElementById('ctKpis').innerHTML = [
-    _extKpi('ยอดรวม (ex-VAT)', fmt(d.total_net || 0), 'ทุกประเภทเดือนนี้', '#4f46e5'),
+    _extKpi('ยอดรวม (ex-VAT)', fmt(d.total_net || 0), 'ทุกประเภทเดือนนี้', '#4a70b0'),
     _extKpi('ทานที่ร้าน/เครดิต', (dineIn / tc * 100).toFixed(1) + '%', fmtN(dineIn) + ' ราย', '#10b981'),
     _extKpi('เดลิเวอรี (Grab/LINE)', (deliv / tc * 100).toFixed(1) + '%', fmtN(deliv) + ' ราย', '#f59e0b'),
     _extKpi('จำนวนประเภท', String(types.length), 'ช่องทางลูกค้า', '#0891b2'),
   ].join('');
   const maxC = Math.max(1, ...types.map(t => t.customers || 0));
-  const palette = ['#4f46e5', '#10b981', '#f59e0b', '#ef4444', '#0891b2', '#a855f7', '#64748b'];
+  const palette = ['#4a70b0', '#10b981', '#f59e0b', '#ef4444', '#0891b2', '#a855f7', '#64748b'];
   document.getElementById('ctBars').innerHTML = types.map((t, i) => `
     <div class="flex items-center gap-2 mb-2">
       <span class="text-[11px] w-28 shrink-0 truncate" style="color:var(--text-secondary)" title="${esc(t.type)}">${esc(t.type)}</span>
@@ -2175,7 +2175,7 @@ async function loadCustType(force) {
   }).join('') || '<tr><td colspan="6" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
-// 🍽️ ความต้องการพิเศษ (modifiers)
+// ความต้องการพิเศษ (modifiers)
 async function loadModifiers(force) {
   const _fk = _filterKey();
   if (!force && _tabLastKey.modifiers === _fk) return; _tabLastKey.modifiers = _fk;
@@ -2188,13 +2188,13 @@ async function loadModifiers(force) {
     <div class="flex items-center gap-2 mb-2">
       <span class="text-[11px] w-6 text-right tabular-nums" style="color:var(--text-muted)">${i + 1}</span>
       <span class="text-xs w-52 shrink-0 truncate" style="color:var(--text-secondary)" title="${esc(x.choice)}">${esc(x.choice)}</span>
-      <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${(x.n || 0) / maxN * 100}%;background:#6366f1"></div></div>
+      <div class="flex-1 rounded-full h-4" style="background:var(--bg-subtle)"><div class="h-4 rounded-full" style="width:${(x.n || 0) / maxN * 100}%;background:var(--accent)"></div></div>
       <span class="text-[11px] tabular-nums w-16 text-right font-semibold" style="color:var(--text-primary)">${fmtN(x.n)}</span>
       <span class="text-[10px] tabular-nums w-10 text-right" style="color:var(--text-muted)">${x.pct}%</span>
     </div>`).join('') || '<p class="text-slate-400 text-center py-4">ไม่มีข้อมูล</p>';
 }
 
-// 🏷️ ราคา & โซนโต๊ะ
+// ราคา & โซนโต๊ะ
 async function loadPriceZone(force) {
   await _extraMonths('pzMonth');
   const mv = document.getElementById('pzMonth')?.value || '';
@@ -2226,7 +2226,7 @@ async function loadPriceZone(force) {
     <td class="py-1.5 text-right tabular-nums">${fmtN(r.tables)}</td></tr>`).join('') || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
-// 🗑️ บิลยกเลิก/ลบ (whole-bill voids)
+// บิลยกเลิก/ลบ (whole-bill voids)
 async function loadCancelBill(force) {
   await _extraMonths('cbMonth');
   const mv = document.getElementById('cbMonth')?.value || '';
@@ -2240,9 +2240,9 @@ async function loadCancelBill(force) {
   const s = d.summary || {};
   // Whole-bill void rate benchmark: healthy < 2%, watch 2-3%, high > 3%.
   const cr = s.cancel_rate;
-  const crColor = cr == null ? '#7c3aed' : cr > 3 ? '#ef4444' : cr > 2 ? '#f59e0b' : '#10b981';
+  const crColor = cr == null ? '#7a66b8' : cr > 3 ? '#ef4444' : cr > 2 ? '#f59e0b' : '#10b981';
   const crSub = cr == null ? 'ของบิลทั้งหมด'
-    : cr > 3 ? `สูง · เกณฑ์ปกติ < 2% 🔴` : cr > 2 ? `ควรเฝ้าระวัง · ปกติ < 2% 🟡` : `ปกติดี (< 2%) 🟢`;
+    : cr > 3 ? `สูง · เกณฑ์ปกติ < 2% ●` : cr > 2 ? `ควรเฝ้าระวัง · ปกติ < 2% ●` : `ปกติดี (< 2%) ●`;
   document.getElementById('cbKpis').innerHTML = [
     _extKpi('บิลยกเลิก/ลบ', fmtN(s.bills || 0), 'ทั้งบิล (เดือนนี้)', '#ef4444'),
     _extKpi('มูลค่ารวม', fmt(s.amount || 0), 'ยอดบิลที่ถูกยกเลิก', '#f59e0b'),
@@ -2251,7 +2251,7 @@ async function loadCancelBill(force) {
   ].join('');
   const cbAlert = document.getElementById('cbAlert');
   if (cbAlert) cbAlert.innerHTML = (cr != null && cr > 2)
-    ? `<div class="card p-3 text-xs" style="background:${cr>3?'#fef2f2':'#fffbeb'};border-left:3px solid ${cr>3?'#ef4444':'#f59e0b'}">⚠️ อัตรายกเลิกบิล <b>${cr}%</b> ${cr>3?'สูงกว่าเกณฑ์ปกติ (&lt; 2%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
+    ? `<div class="card p-3 text-xs" style="background:${cr>3?'#fef2f2':'#fffbeb'};border:1px solid ${cr>3?'#ef4444':'#f59e0b'}">⚠ อัตรายกเลิกบิล <b>${cr}%</b> ${cr>3?'สูงกว่าเกณฑ์ปกติ (&lt; 2%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
     : '';
   const tb = (s.bills || 1);
   document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
@@ -2270,7 +2270,7 @@ async function loadCancelBill(force) {
 async function cashDayDrill(branch, month) {
   const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
   if (!modal) return;
-  title.textContent = `🔍 เงินสดขาด/เกิน รายวัน · ${branch} · ${month}`;
+  title.textContent = `เงินสดขาด/เกิน รายวัน · ${branch} · ${month}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   let d; try { d = await api(`${API}/api/extra/cash/detail?branch=${encodeURIComponent(branch)}&month=${encodeURIComponent(month)}`); }
@@ -2303,7 +2303,7 @@ async function cashDayDrill(branch, month) {
 async function cashWorstDayDrill(branch, day) {
   const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
   if (!modal) return;
-  title.textContent = `🔍 เงินสดขาด/เกิน · ${branch} · ${day}`;
+  title.textContent = `เงินสดขาด/เกิน · ${branch} · ${day}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   let d; try { d = await api(`${API}/api/extra/cash/day?branch=${encodeURIComponent(branch)}&day=${encodeURIComponent(day)}`); }
@@ -2346,7 +2346,7 @@ async function cashWorstDayDrill(branch, day) {
 async function cancelBillDrill(branch, month) {
   const modal = document.getElementById('diveModal'), title = document.getElementById('diveTitle'), body = document.getElementById('diveBody');
   if (!modal) return;
-  title.textContent = `🔍 บิลที่ถูกยกเลิก/ลบ · ${branch}${month?' · '+month:''}`;
+  title.textContent = `บิลที่ถูกยกเลิก/ลบ · ${branch}${month?' · '+month:''}`;
   body.innerHTML = '<p class="text-sm text-slate-400" style="padding:24px">กำลังโหลด…</p>';
   modal.classList.remove('hidden');
   let d; try { d = await api(`${API}/api/extra/cancel-bills/detail?branch=${encodeURIComponent(branch)}${month?'&month='+encodeURIComponent(month):''}`); }
@@ -2375,8 +2375,8 @@ async function cancelBillDrill(branch, month) {
     <button onclick="closeDive()" class="dive-action-btn" style="margin-top:12px">✕ Close (Esc)</button></div>`;
 }
 
-// ⏰ เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)
-// 🩺 Data-integrity findings — reported, never auto-repaired (real financial
+// เวลาปิดร้าน / ความสดของข้อมูล (data freshness per branch; optional single-day mode)
+// Data-integrity findings — reported, never auto-repaired (real financial
 // records; missing days can only come back from a POS re-sync).
 async function loadDataQuality() {
   const el = document.getElementById('dqFindings'); if (!el) return;
@@ -2395,7 +2395,7 @@ async function loadDataQuality() {
   el.innerHTML = (d.findings || []).map(f => {
     const [c, bg] = sev[f.severity] || sev.info;
     const rows = (f.rows || []).map(r => `<li class="text-[11px]" style="color:var(--text-muted)">• ${rowLine(f.key, r)}</li>`).join('');
-    return `<div class="mb-2 rounded-lg p-3" style="background:${f.benign ? 'var(--bg-subtle)' : bg};border-left:3px solid ${f.benign ? 'var(--border)' : c}">
+    return `<div class="mb-2 rounded-lg p-3" style="background:${f.benign ? 'var(--bg-subtle)' : bg};border:1px solid ${f.benign ? 'var(--border)' : c}">
         <div class="flex items-baseline justify-between gap-3 flex-wrap">
           <span class="text-sm font-semibold" style="color:var(--text-primary)">${esc(f.title)}
             ${f.benign ? '<span class="text-[10px] font-normal" style="color:var(--text-muted)">· ไม่กระทบตัวเลขการเงิน</span>' : ''}</span>
@@ -2405,13 +2405,13 @@ async function loadDataQuality() {
         ${rows ? `<ul class="mt-1 space-y-0.5">${rows}</ul>` : ''}
         ${f.key === 'uncosted_skus' ? `<a href="${API}/api/cost/suggestions.csv" download
              class="inline-block mt-2 text-[11px] font-semibold rounded px-2 py-1"
-             style="background:#fff;border:1px solid ${c};color:${c}">⬇ ดาวน์โหลดต้นทุนที่ระบบประมาณให้ (CSV)</a>
+             style="background:#fff;border:1px solid ${c};color:${c}">ดาวน์โหลดต้นทุนที่ระบบประมาณให้ (CSV)</a>
            <span class="text-[10px] ml-2" style="color:var(--text-muted)">ประมาณจากเมนูที่มีต้นทุนจริงแล้ว · ตรวจก่อนนำไปกรอก</span>` : ''}
       </div>`;
   }).join('') || '<p class="text-xs text-slate-400">ไม่พบปัญหา</p>';
 }
 
-// Last payload + chart handles for the ⏰ tab, so the dive-in panels can read the
+// Last payload + chart handles for the tab, so the dive-in panels can read the
 // real numbers instead of re-deriving them from the chart datasets.
 let _ctmLast = null, _ctmChartDays = null, _ctmChartClose = null;
 
@@ -2448,7 +2448,7 @@ async function loadCloseTime(force) {
       _extKpi('สาขาทั้งหมด', fmtN(s.branch_count || 0), 'ที่มีข้อมูลขาย', '#0891b2'),
       _extKpi('มีข้อมูลวันนี้', fmtN(s.reported || 0), `วันที่ ${d.date}`, '#10b981'),
       _extKpi('ไม่มีข้อมูล', fmtN(s.missing || 0), 'สาขาที่ไม่มีบิลวันนี้', s.missing ? '#ef4444' : '#94a3b8'),
-      _extKpi('บิลรวมวันนี้', fmtN(s.day_bills || 0), 'ทุกสาขารวมกัน', '#7c3aed'),
+      _extKpi('บิลรวมวันนี้', fmtN(s.day_bills || 0), 'ทุกสาขารวมกัน', '#7a66b8'),
     ].join('');
     head.innerHTML = TH([{t:'สาขา'},{t:'สถานะ'},{t:'เวลาปิด (วันนี้)',r:1},{t:'บิล (วันนี้)',r:1},{t:'ข้อมูลล่าสุด (all-time)'}]);
     document.getElementById('ctmRows').innerHTML = (d.branches || []).map(r => {
@@ -2539,7 +2539,7 @@ function _ctmRenderCharts(d) {
       type: 'bar',
       data: { labels: withClose.map(r => r.branch), datasets: [{
         label: 'เวลาปิดเฉลี่ย (นาทีจากเที่ยงคืน)', data: mins,
-        backgroundColor: mins.map((_, i) => out.has(i) ? 'rgba(220,38,38,.75)' : 'rgba(124,58,237,.55)'),
+        backgroundColor: mins.map((_, i) => out.has(i) ? 'rgba(220,38,38,.75)' : 'rgba(122,102,184,.55)'),
         borderColor: mins.map((_, i) => out.has(i) ? '#dc2626' : 'transparent'),
         borderWidth: mins.map((_, i) => out.has(i) ? 1.5 : 0) }] },
       options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -2558,7 +2558,7 @@ function _ctmHhmm(v) {
   return String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 }
 
-// ── 🔍 Dive-in summaries for the ⏰ Data Freshness charts ────────────────────
+// ── Dive-in summaries for the Data Freshness charts ────────────────────
 async function _diveCtmDays(_cfg) {
   const d = _ctmLast;
   const daily = (d && d.daily) || [];
@@ -2573,31 +2573,31 @@ async function _diveCtmDays(_cfg) {
     daily.forEach(r => { cur = r.missing ? 0 : cur + 1; best = Math.max(best, cur); });
     return best;
   })();
-  return _diveSection('ช่วงที่กำลังดู', '⏰',
+  return _diveSection('ช่วงที่กำลังดู', '',
       _diveMetric('หน้าต่าง', `${esc(d.window_from || daily[0].day)} → ${esc(daily[daily.length - 1].day)}`) +
       _diveMetric('สาขาทั้งหมด', fmtN(s.branch_count || 0)) +
       _diveMetric('วันที่ข้อมูลครบทุกสาขา', fmtN(daily.length - gaps.length) + ' / ' + fmtN(daily.length),
                   gaps.length ? 'bad' : 'good') +
       _diveMetric('ข้อมูลล่าสุดทั้งระบบ', esc(d.data_max_date || '—'))) +
-    _diveSection('ช่องว่างของข้อมูล', '🕳️',
+    _diveSection('ช่องว่างของข้อมูล', '',
       (gaps.length
-        ? _diveBullet('⚠️', `มี <b>${gaps.length}</b> วันที่ไม่ครบทุกสาขา — วันที่ขาดมากสุดคือ ` +
+        ? _diveBullet('⚠', `มี <b>${gaps.length}</b> วันที่ไม่ครบทุกสาขา — วันที่ขาดมากสุดคือ ` +
             `<b>${esc(worst.day)}</b> (ขาด ${worst.missing} สาขา) · ทุกตัวเลขในแดชบอร์ดของวันเหล่านี้ ` +
             `<b>ต่ำกว่าความจริง</b> ไม่ใช่ยอดตก`, 'bad')
-        : _diveBullet('✅', 'ทุกวันในช่วงนี้มีข้อมูลครบทุกสาขา', 'good')) +
-      _diveBullet('📆', `ช่วงที่ครบต่อเนื่องยาวสุด <b>${streak}</b> วัน`) +
+        : _diveBullet('✓', 'ทุกวันในช่วงนี้มีข้อมูลครบทุกสาขา', 'good')) +
+      _diveBullet('', `ช่วงที่ครบต่อเนื่องยาวสุด <b>${streak}</b> วัน`) +
       (gaps.length > 3
-        ? _diveBullet('🔁', `ขาดถี่ (${gaps.length} วัน) — น่าจะเป็นปัญหา sync ที่เกิดซ้ำ ไม่ใช่เหตุการณ์เดียว ` +
+        ? _diveBullet('', `ขาดถี่ (${gaps.length} วัน) — น่าจะเป็นปัญหา sync ที่เกิดซ้ำ ไม่ใช่เหตุการณ์เดียว ` +
             `ตรวจตารางด้านล่างว่าสาขาเดิมหรือคนละสาขา`, 'warn')
         : '')) +
-    _diveSection('ปริมาณบิลรายวัน', '🧾',
-      _diveBullet('📊', `เฉลี่ย <b>${fmtN(Math.round(bills.reduce((a, b) => a + b, 0) / bills.length))}</b> บิล/วัน ` +
+    _diveSection('ปริมาณบิลรายวัน', '',
+      _diveBullet('', `เฉลี่ย <b>${fmtN(Math.round(bills.reduce((a, b) => a + b, 0) / bills.length))}</b> บิล/วัน ` +
         `· สูงสุด ${fmtN(Math.max(...bills))} · ต่ำสุด ${fmtN(Math.min(...bills))}`) +
       (billOut.size
-        ? _diveBullet('🎯', 'วันที่จำนวนบิลหลุดกรอบ: ' +
+        ? _diveBullet('', 'วันที่จำนวนบิลหลุดกรอบ: ' +
             [...billOut].map(i => `<b>${esc(daily[i].day)}</b> (${fmtN(daily[i].bills)})`).join(', ') +
             ' — เช็คก่อนว่าเป็นวันที่ข้อมูลไม่ครบหรือไม่ ก่อนสรุปว่าขายดี/ขายตก', 'warn')
-        : _diveBullet('✅', 'ไม่พบวันที่จำนวนบิลหลุดกรอบ', 'good')));
+        : _diveBullet('✓', 'ไม่พบวันที่จำนวนบิลหลุดกรอบ', 'good')));
 }
 
 async function _diveCtmClose(_cfg) {
@@ -2609,19 +2609,19 @@ async function _diveCtmClose(_cfg) {
   const out = _miOutlierSet(mins);
   const avg = mins.reduce((a, b) => a + b, 0) / mins.length;
   const spread = Math.max(...mins) - Math.min(...mins);
-  return _diveSection('เวลาปิดของเครือ', '🌙',
+  return _diveSection('เวลาปิดของเครือ', '',
       _diveMetric('ปิดเฉลี่ยทั้งเครือ', _ctmHhmm(avg)) +
       _diveMetric('ปิดดึกสุด', `${esc(sorted[0].branch)} · ${_ctmHhmm(sorted[0].avg_close_min)}`) +
       _diveMetric('ปิดเร็วสุด', `${esc(sorted[sorted.length - 1].branch)} · ${_ctmHhmm(sorted[sorted.length - 1].avg_close_min)}`) +
       _diveMetric('ช่วงห่างหัว–ท้าย', Math.round(spread) + ' นาที', spread > 90 ? 'bad' : '')) +
-    _diveSection('อ่านยังไง', '📈',
-      _diveBullet('🕛', 'เวลานี้คือ<b>บิลสุดท้ายของวัน</b>เฉลี่ย 30 วันล่าสุด ไม่ใช่เวลาปิดตามป้าย — ' +
+    _diveSection('อ่านยังไง', '▲',
+      _diveBullet('', 'เวลานี้คือ<b>บิลสุดท้ายของวัน</b>เฉลี่ย 30 วันล่าสุด ไม่ใช่เวลาปิดตามป้าย — ' +
         'เวลาก่อน 06:00 ถูกนับเป็นปิดหลังเที่ยงคืน จึงเรียงถัดจาก 23:00 ไม่ใช่ขึ้นต้นแถว') +
       (out.size
-        ? _diveBullet('⚠️', 'สาขาที่เวลาปิดหลุดกรอบเทียบเพื่อน: ' +
+        ? _diveBullet('⚠', 'สาขาที่เวลาปิดหลุดกรอบเทียบเพื่อน: ' +
             [...out].map(i => `<b>${esc(brs[i].branch)}</b> (${_ctmHhmm(brs[i].avg_close_min)})`).join(', ') +
             ' — ถ้าไม่ได้ตั้งใจให้ต่าง ให้เช็คว่าเป็นการปิดบิลช้า (ค้างบิลไว้) หรือเปิดจริงต่างจริง', 'warn')
-        : _diveBullet('✅', 'ทุกสาขาปิดในกรอบเวลาใกล้เคียงกัน', 'good')) +
+        : _diveBullet('✓', 'ทุกสาขาปิดในกรอบเวลาใกล้เคียงกัน', 'good')) +
       (spread > 90
         ? _diveBullet('↔️', `หัวกับท้ายห่างกัน <b>${Math.round(spread)}</b> นาที — ค่าแรงและค่าไฟของสาขาที่ปิดดึก ` +
             `สูงกว่าเพื่อนโดยไม่จำเป็นหรือไม่ ควรดูคู่กับยอดขายช่วงชั่วโมงท้าย`, 'warn')
@@ -2743,7 +2743,7 @@ async function renderMarketBenchmark(b) {
 
   const ind = b.industry_growth_pct;
   if (ourPct == null) {
-    el.innerHTML = `<div class="p-3 rounded-lg" style="background:rgba(79,70,229,0.06);border-left:3px solid var(--indigo)">
+    el.innerHTML = `<div class="p-3 rounded-lg" style="background:rgba(31,58,107,0.06);border:1px solid var(--indigo)">
       <p class="text-xs" style="color:var(--text-secondary)">Benchmark ตลาด: ${esc(b.label)}</p></div>`;
     return;
   }
@@ -2751,12 +2751,12 @@ async function renderMarketBenchmark(b) {
   if (isYoY) {
     const out = ourPct >= ind;
     const accent = out ? '#10b981' : '#f59e0b';
-    el.innerHTML = `<div class="p-3 rounded-lg" style="background:${out ? 'rgba(16,185,129,0.07)' : 'rgba(245,158,11,0.07)'};border-left:3px solid ${accent}">
-      <p class="text-xs font-semibold" style="color:var(--text-primary)">เทียบกับตลาด ${out ? '— เหนือกว่าตลาด ✅' : '— ต่ำกว่าตลาด ⚠'}</p>
+    el.innerHTML = `<div class="p-3 rounded-lg" style="background:${out ? 'rgba(16,185,129,0.07)' : 'rgba(245,158,11,0.07)'};border:1px solid ${accent}">
+      <p class="text-xs font-semibold" style="color:var(--text-primary)">เทียบกับตลาด ${out ? '— เหนือกว่าตลาด ✓' : '— ต่ำกว่าตลาด ⚠'}</p>
       <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${pctColor}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาดร้านอาหารไทย ~+${ind}%/ปี</p>
     </div>`;
   } else {
-    el.innerHTML = `<div class="p-3 rounded-lg" style="background:rgba(79,70,229,0.06);border-left:3px solid var(--indigo)">
+    el.innerHTML = `<div class="p-3 rounded-lg" style="background:rgba(31,58,107,0.06);border:1px solid var(--indigo)">
       <p class="text-xs font-semibold" style="color:var(--text-primary)">ผลของเรา vs ตลาด</p>
       <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${pctColor}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาด ~+${ind}%/ปี <span style="color:var(--text-muted)">(ยังไม่ครบ 12 เดือนสำหรับ YoY)</span></p>
     </div>`;
@@ -2791,8 +2791,8 @@ async function renderTaskHealthBanner() {
   const when = s => s ? esc(String(s).replace('T', ' ').slice(5, 16)) : '—';
   const rows = bad.map(t => `<li><b>${esc(String(t.name).replace(/^Oshinei /, ''))}</b> — ${TH[t.level] || esc(t.level)}${t.days ? ` <b>${t.days} วันแล้ว</b>` : ''} · รันล่าสุด ${when(t.last_run)}${t.log_line ? `<br><span class="text-[11px]" style="opacity:.85;font-family:ui-monospace,monospace">${esc(t.log_line)}</span>` : ` · <span class="text-[11px]" style="opacity:.85">${esc(t.meaning || '')}</span>`}</li>`).join('');
   const head = d.silent
-    ? `⏰ <b>เครื่องสำนักงานไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ถ้าเครื่องปิดอยู่ งาน sync / backup / ดึงรีวิว จะไม่รันเลย <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)} จาก ${esc(d.host || '?')})</span>`
-    : `🛠️ <b>งานอัตโนมัติบนเครื่องสำนักงานมีปัญหา ${bad.length} งาน</b> <span class="text-[11px]" style="opacity:.8">(ตรวจล่าสุด ${when(d.checked_at)} · ${esc(d.host || '?')})</span>`;
+    ? `<b>เครื่องสำนักงานไม่ได้รายงานมา ${Math.round(d.age_hours)} ชม.</b> — ถ้าเครื่องปิดอยู่ งาน sync / backup / ดึงรีวิว จะไม่รันเลย <span class="text-[11px]" style="opacity:.8">(รายงานล่าสุด ${when(d.received_at)} จาก ${esc(d.host || '?')})</span>`
+    : `<b>งานอัตโนมัติบนเครื่องสำนักงานมีปัญหา ${bad.length} งาน</b> <span class="text-[11px]" style="opacity:.8">(ตรวจล่าสุด ${when(d.checked_at)} · ${esc(d.host || '?')})</span>`;
   b.innerHTML = `<div>${head}${rows ? `<ul class="mt-1 ml-4 list-disc space-y-0.5">${rows}</ul>` : ''}</div>
     <button onclick="(function(){try{localStorage.setItem('${key}','1')}catch(e){};var el=document.getElementById('homeTaskHealthBanner');if(el)el.remove()})()" class="text-xs" style="color:inherit" title="ซ่อนวันนี้ (พรุ่งนี้กลับมาถ้ายังไม่หาย)">✕</button>`;
 }
@@ -2812,6 +2812,6 @@ async function renderAdoptionBanner() {
   b.className = 'rounded-xl px-4 py-3 mb-4 text-sm flex items-start justify-between gap-3';
   b.style.cssText = 'background:#fffbeb;border:1px solid #fcd34d;color:#78350f';
   const never = rec.never || [], away = rec.away || [];
-  b.innerHTML = `<div>📣 <b>สรุปการเข้าใช้สัปดาห์ ${esc(rec.week)}</b> — ยังไม่เคยเข้าใช้ <b>${never.length}</b> คน${never.length ? ' (' + never.slice(0, 6).map(esc).join(', ') + (never.length > 6 ? ' …' : '') + ')' : ''} · หายไปเกิน 14 วัน <b>${away.length}</b> คน${away.length ? ' (' + away.slice(0, 6).map(esc).join(', ') + ')' : ''}${rec.sent ? ' · ส่ง Telegram แล้ว' : ' · ยังไม่ได้ตั้ง Telegram'} — <a href="#" onclick="switchTab('settings');switchSettingsTab('usage');return false" class="underline">ดูรายชื่อ</a></div>
+  b.innerHTML = `<div><b>สรุปการเข้าใช้สัปดาห์ ${esc(rec.week)}</b> — ยังไม่เคยเข้าใช้ <b>${never.length}</b> คน${never.length ? ' (' + never.slice(0, 6).map(esc).join(', ') + (never.length > 6 ? ' …' : '') + ')' : ''} · หายไปเกิน 14 วัน <b>${away.length}</b> คน${away.length ? ' (' + away.slice(0, 6).map(esc).join(', ') + ')' : ''}${rec.sent ? ' · ส่ง Telegram แล้ว' : ' · ยังไม่ได้ตั้ง Telegram'} — <a href="#" onclick="switchTab('settings');switchSettingsTab('usage');return false" class="underline">ดูรายชื่อ</a></div>
     <button onclick="(function(){try{localStorage.setItem('${key}','1')}catch(e){};var el=document.getElementById('homeAdoptionBanner');if(el)el.remove()})()" class="text-xs" style="color:#92400e" title="ซ่อนสัปดาห์นี้">✕</button>`;
 }

@@ -7,7 +7,7 @@
 // ════════════════════════════════════════════════════════════════
 function switchOpsSubtab(name) {
   activeOpsSubtab = name;
-  const subs = ['cohort','affinity'];   // 'whatif' moved to the 🎮 Simulators hub
+  const subs = ['cohort','affinity'];   // 'whatif' moved to the Simulators hub
   document.querySelectorAll('#tab-ops .subtab-btn').forEach((b, i) => {
     b.classList.toggle('active', subs[i] === name);
   });
@@ -57,10 +57,10 @@ function renderTimeKpis(hourly) {
   const el = document.getElementById('timeSegmentKpis');
   if (!el) return;
   const segments = [
-    { label: 'เช้า',   emoji: '🌅', hours: [6,7,8,9,10],          color: '#f59e0b' },
-    { label: 'กลางวัน',     emoji: '🍱', hours: [11,12,13],             color: '#10b981' },
-    { label: 'เย็น',    emoji: '🍽️', hours: [17,18,19,20,21],       color: '#4f46e5' },
-    { label: 'ดึก',emoji: '🌙', hours: [22,23,0,1,2],          color: '#8b5cf6' },
+    { label: 'เช้า',   emoji: '', hours: [6,7,8,9,10],          color: '#f59e0b' },
+    { label: 'กลางวัน',     emoji: '', hours: [11,12,13],             color: '#10b981' },
+    { label: 'เย็น',    emoji: '', hours: [17,18,19,20,21],       color: '#4a70b0' },
+    { label: 'ดึก',emoji: '', hours: [22,23,0,1,2],          color: '#7a66b8' },
   ];
   const total = hourly.reduce((s, r) => s + (r.avg_daily_revenue ?? r.revenue ?? 0), 0);
   el.innerHTML = segments.map(seg => {
@@ -600,22 +600,22 @@ async function renderExecSummary() {
       <div class="text-xl font-bold" style="color:${color || 'var(--text-primary)'}">${value}</div>
       <div class="text-[11px]" style="color:var(--text-muted)">${sub}</div></div>`;
   // plain-language headline
-  const onPace = projVsTgt == null ? '' : projVsTgt >= 100 ? 'เกินเป้า ✅' : projVsTgt >= 90 ? 'ใกล้เป้า ⚠️' : 'ต่ำกว่าเป้า 🔴';
+  const onPace = projVsTgt == null ? '' : projVsTgt >= 100 ? 'เกินเป้า ✓' : projVsTgt >= 90 ? 'ใกล้เป้า ⚠' : 'ต่ำกว่าเป้า ●';
   const gpWord = gp == null ? '' : gp >= 40 ? 'แข็งแรง' : gp >= 30 ? 'พอใช้' : 'ต่ำ';
   const narrative = `เดือน ${fmtMonth(fc.period)}: ทำไปแล้ว ${fc.days_elapsed}/${fc.days_total} วัน · คาดการณ์รายได้ทั้งเดือน <b>${fmt(fc.projected)}</b>` +
     (projVsTgt != null ? ` (<b style="color:${tgtColor}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
     (gp != null ? ` · GP <b style="color:${gpColor}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
   host.classList.remove('hidden');
-  host.innerHTML = `<div class="card p-4" style="background:linear-gradient(135deg,#eef2ff 0%,#ecfeff 100%);border-left:4px solid #4f46e5">
+  host.innerHTML = `<div class="card p-4" style="background:#e8eef7;border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
-      <h2 class="section-title mb-0">🧭 สรุปผู้บริหาร (Executive Summary)</h2>
+      <h2 class="section-title mb-0">สรุปผู้บริหาร (Executive Summary)</h2>
       <span class="text-[11px]" style="color:var(--text-muted)">${getBranch() || 'ทุกสาขา'} · อัปเดตตามข้อมูลล่าสุด</span>
     </div>
     <div class="flex flex-wrap gap-5 mb-2">
-      ${tile('🔮 คาดการณ์เดือนนี้', fmt(fc.projected), `ช่วง ${fmt(fc.lo)}–${fmt(fc.hi)} · ทำไป ${fc.days_elapsed}/${fc.days_total} วัน`, '#4f46e5')}
-      ${tile('🎯 เทียบเป้ารายได้', projVsTgt == null ? '—' : projVsTgt.toFixed(0) + '%', tgtTotal > 0 ? `เป้า ${fmt(tgtTotal)}` : 'ยังไม่ตั้งเป้า', tgtColor)}
-      ${tile('💰 GP เดือนนี้', gp == null ? '—' : gp.toFixed(1) + '%', 'กำไรขั้นต้น (BoM)', gpColor)}
-      ${tile('📅 ทำไปแล้ว', `${fc.days_elapsed}/${fc.days_total} วัน`, `MTD ${fmt(fc.mtd)}`, '#0891b2')}
+      ${tile('คาดการณ์เดือนนี้', fmt(fc.projected), `ช่วง ${fmt(fc.lo)}–${fmt(fc.hi)} · ทำไป ${fc.days_elapsed}/${fc.days_total} วัน`, '#4a70b0')}
+      ${tile('เทียบเป้ารายได้', projVsTgt == null ? '—' : projVsTgt.toFixed(0) + '%', tgtTotal > 0 ? `เป้า ${fmt(tgtTotal)}` : 'ยังไม่ตั้งเป้า', tgtColor)}
+      ${tile('GP เดือนนี้', gp == null ? '—' : gp.toFixed(1) + '%', 'กำไรขั้นต้น (BoM)', gpColor)}
+      ${tile('ทำไปแล้ว', `${fc.days_elapsed}/${fc.days_total} วัน`, `MTD ${fmt(fc.mtd)}`, '#0891b2')}
     </div>
     <p class="text-xs" style="color:var(--text-secondary)">${narrative}</p>
   </div>`;
@@ -771,14 +771,14 @@ function renderKpiHero(trendData, gpb, disc) {
     ? `${fmtMonth(nextMo)} · เทียบ ${fcBaseObj ? fmtMonth(fcBaseObj.period_month) : 'เดือนก่อน'} (${fmt(fcBase)}) · linear trend`
     : 'ต้องการ ≥3 เดือน';
   el.innerHTML =
-    tile('รายได้ (ไม่รวม VAT)', fmt(mtd ? mtd.cur.revenue_ex_vat : revOf(last)), revBadge, '#4f46e5', revSub, spark(sparkOf('revenue'), '#4f46e5')) +
+    tile('รายได้ (ไม่รวม VAT)', fmt(mtd ? mtd.cur.revenue_ex_vat : revOf(last)), revBadge, '#4a70b0', revSub, spark(sparkOf('revenue'), '#4a70b0')) +
     cogsTile +
     gpTile +
-    tile('ลูกค้า (Pax)', fmtN(mtd ? mtd.cur.customers : (last.customer_count||0)), custBadge, '#7c3aed', custSub, spark(sparkOf('customer_count'), '#7c3aed')) +
+    tile('ลูกค้า (Pax)', fmtN(mtd ? mtd.cur.customers : (last.customer_count||0)), custBadge, '#7a66b8', custSub, spark(sparkOf('customer_count'), '#7a66b8')) +
     tile('จำนวนบิล', fmtN(mtd ? mtd.cur.bills : (last.tx_count||0)), billBadge, '#10b981', billSub, spark(sparkOf('tx_count'), '#10b981')) +
     tile('ยอด/หัว', fmtN(Math.round(phCur)), phBadge, '#06b6d4', phSub, spark(t.map(phOf), '#06b6d4')) +
     discTile +
-    tile('🔮 คาดเดือนถัดไป', fc!=null?fmt(fc):'—', fcBadge, '#f59e0b', fcSub);
+    tile('คาดเดือนถัดไป', fc!=null?fmt(fc):'—', fcBadge, '#f59e0b', fcSub);
   wrap.classList.remove('hidden');
 
   // ── Best / needs-attention branch — MTD-fair MoM (see renderBranchHilite below) ──
@@ -806,14 +806,14 @@ async function renderBranchHilite() {
   if (bl.length < 2) { hl.innerHTML = ''; return; }
   const best  = bl.reduce((a, b) => b.mom_pct > (a?.mom_pct ?? -1e9) ? b : a, null);
   const worst = bl.reduce((a, b) => b.mom_pct < (a?.mom_pct ??  1e9) ? b : a, null);
-  const hcard = (icon, title, b, color) => `<div class="card p-4 cursor-pointer hover:shadow-md transition-shadow" style="border-left:4px solid ${color}" onclick="switchTab('benchmark')">
+  const hcard = (icon, title, b, color) => `<div class="card p-4 cursor-pointer hover:shadow-md transition-shadow" style="border:1px solid ${color}" onclick="switchTab('benchmark')">
     <div class="flex items-center justify-between"><p class="text-[11px] text-slate-500 uppercase tracking-wide">${icon} ${title}</p>
       <span class="text-sm font-semibold" style="color:${color}">${b.mom_pct>=0?'▲':'▼'} ${Math.abs(b.mom_pct).toFixed(1)}%</span></div>
     <p class="text-lg font-bold text-slate-800">${esc(b.branch)}</p>
     <p class="text-[11px] text-slate-400">${curLbl} ${fmt(b.revenue)} · ${cmpLbl} ${fmt(b.mom_rev || 0)}</p>
   </div>`;
-  hl.innerHTML = hcard('🏆','สาขาเด่นเดือนนี้ (โตสุด MoM)', best, '#059669')
-               + hcard('⚠️','ต้องดู (ตกสุด MoM)', worst, '#dc2626');
+  hl.innerHTML = hcard('','สาขาเด่นเดือนนี้ (โตสุด MoM)', best, '#059669')
+               + hcard('⚠','ต้องดู (ตกสุด MoM)', worst, '#dc2626');
 }
 
 async function loadSummaryKpis() {
@@ -900,10 +900,10 @@ async function loadSummaryKpis() {
   document.getElementById('kpiGrid').innerHTML = `
     <div class="card kpi-card ${revClass} p-4">
       <div class="kpi-card-top"><p class="kpi-label">รายได้รวม <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p>${trendBadge(revDelta)}</div>
-      <p class="kpi-value" style="color:#4f46e5">${fmt(revShown)}</p>
+      <p class="kpi-value" style="color:var(--accent)">${fmt(revShown)}</p>
       <div class="kpi-card-bottom">
         <p class="kpi-sub">${_periodScope} · รวม VAT ${fmt(d.revenue)}</p>
-        ${mkSparkline(revSpark, '#4f46e5')}
+        ${mkSparkline(revSpark, '#4a70b0')}
       </div>
     </div>
     <div class="card kpi-card ${txClass} p-4">
@@ -921,7 +921,7 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card kpi-neu p-4">
       <div class="kpi-card-top"><p class="kpi-label">เฉลี่ย/ลูกค้า <span class="text-[10px] font-normal text-slate-400">(ไม่รวม VAT)</span></p></div>
-      <p class="kpi-value" style="color:#8b5cf6">${perHead ? fmtN(Math.round(perHead)) : '—'}</p>
+      <p class="kpi-value" style="color:var(--accent)">${perHead ? fmtN(Math.round(perHead)) : '—'}</p>
       <div class="kpi-card-bottom"><p class="kpi-sub">ต่อหัว</p></div>
     </div>
     <div class="card kpi-card kpi-neu p-4" id="marginCard">
@@ -979,8 +979,8 @@ async function loadGroupBreakdown() {
         </div>
       </div>`;
     document.getElementById('groupBreakdownBody').innerHTML =
-      card('🏛️ Master',    '#4f46e5', masters.length,    sM, pctM) +
-      card('🏪 Franchise', '#f59e0b', franchises.length, sF, pctF);
+      card('Master',    '#4a70b0', masters.length,    sM, pctM) +
+      card('Franchise', '#f59e0b', franchises.length, sF, pctF);
 
     // Branch lists (no chart, just text per user request)
     const listMaster = masters.map(b => b.name).sort().join(' · ');
@@ -1025,7 +1025,7 @@ function renderTrendAnalysisBar(trendData) {
 
   const periodLbl = {daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', quarterly:'รายไตรมาส'}[currentGranularity] || 'ช่วง';
   el.innerHTML = [
-    stat('รายได้รวม',    fmt(total), data.length+' '+periodLbl.toLowerCase()+'s', '#4f46e5'),
+    stat('รายได้รวม',    fmt(total), data.length+' '+periodLbl.toLowerCase()+'s', '#4a70b0'),
     stat(periodLbl+' Avg',   fmt(avg), '', '#0f172a'),
     best  ? stat('สูงสุด',    fmt(best.revenue),  fmtPeriod(best.period_month),  '#10b981') : '',
     worst ? stat('ต่ำสุด', fmt(worst.revenue), fmtPeriod(worst.period_month), '#ef4444') : '',
@@ -1047,15 +1047,15 @@ function renderYearlyOverlay(rows) {
   });
   const years = Object.keys(byYear).sort();
   // Colour palette — newer years are bolder
-  const YEAR_PALETTE = ['#94a3b8', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#4f46e5', '#8b5cf6'];
+  const YEAR_PALETTE = ['#94a3b8', '#06b6d4', '#10b981', '#f59e0b', '#ef4444', '#4a70b0', '#7a66b8'];
   const datasets = years.map((y, idx) => {
     const isLatest = idx === years.length - 1;
-    const color = isLatest ? '#4f46e5' : (YEAR_PALETTE[idx % YEAR_PALETTE.length]);
+    const color = isLatest ? '#4a70b0' : (YEAR_PALETTE[idx % YEAR_PALETTE.length]);
     return {
       label: y,
       data: byYear[y],
       borderColor: color,
-      backgroundColor: isLatest ? 'rgba(79,70,229,0.10)' : 'transparent',
+      backgroundColor: isLatest ? 'rgba(31,58,107,0.10)' : 'transparent',
       borderWidth: isLatest ? 2.8 : 2,
       borderDash: isLatest ? [] : [5, 4],
       pointRadius: isLatest ? 4 : 3,
@@ -1081,7 +1081,7 @@ function renderYearlyOverlay(rows) {
         <p class="text-sm font-bold" style="color:${color}">${value}</p>
         ${sub ? `<p class="text-xs text-slate-400">${sub}</p>` : ''}</div>`;
     el.innerHTML = [
-      stat('ปีปัจจุบัน', years[years.length - 1], fmt(totLatest), '#4f46e5'),
+      stat('ปีปัจจุบัน', years[years.length - 1], fmt(totLatest), '#4a70b0'),
       stat('ปีก่อน', years[years.length - 2], fmt(totPrior), '#94a3b8'),
       yoyPct != null ? stat('YoY', `${arrow} ${Math.abs(yoyPct).toFixed(1)}%`, '', yoyColor) : '',
       stat('จำนวนปี', String(years.length), `${years[0]} – ${years[years.length - 1]}`, '#0f172a'),
@@ -1159,7 +1159,7 @@ async function loadTrendChart() {
     label: 'รายได้',
     data: revenues,
     borderColor: SEMANTIC.revenue,
-    backgroundColor: 'rgba(79,70,229,0.08)',
+    backgroundColor: 'rgba(31,58,107,0.08)',
     borderWidth: 2.5,
     pointRadius: 4,
     pointBackgroundColor: SEMANTIC.revenue,
@@ -1169,7 +1169,7 @@ async function loadTrendChart() {
   const unitIsTotal = getUnitMode() === 'total';
   if (unitIsTotal && Object.keys(targetMap).length) {
     datasets.push({
-      label: '🎯 เป้าหมาย',
+      label: 'เป้าหมาย',
       data: data.map(d => targetMap[d.period_month] || null),
       borderColor: SEMANTIC.discount,
       backgroundColor: 'transparent',
@@ -1204,7 +1204,7 @@ async function loadTrendChart() {
         loArr.push(Math.max(0, pred - cb));
       }
       datasets.push({
-        label: '🔮 พยากรณ์', data: fcArr,
+        label: 'พยากรณ์', data: fcArr,
         borderColor: SEMANTIC.margin, backgroundColor: 'rgba(20,184,166,0.15)',
         borderWidth: 2, borderDash: [5,4],
         pointRadius: ctx => ctx.dataIndex >= n ? 4 : 0, pointStyle: 'rectRot',
@@ -1387,7 +1387,7 @@ async function loadBreakdownChart() {
     if (u.startsWith('OSHINEI') || u.startsWith('(YAKI'))  return 'อาหาร à la carte';
     return 'อื่นๆ';
   };
-  const COLORS = { 'บุฟเฟ่ต์':'#6366f1', 'อาหาร à la carte':'#10b981', 'เครื่องดื่ม':'#f59e0b', 'เดลิเวอรี':'#06b6d4', 'อื่นๆ':'#94a3b8' };
+  const COLORS = { 'บุฟเฟ่ต์':'#4a70b0', 'อาหาร à la carte':'#10b981', 'เครื่องดื่ม':'#f59e0b', 'เดลิเวอรี':'#06b6d4', 'อื่นๆ':'#94a3b8' };
   const ORDER  = ['บุฟเฟ่ต์','อาหาร à la carte','เครื่องดื่ม','เดลิเวอรี','อื่นๆ'];
   const g = {}; data.forEach(r => { const k = groupOf(r.category); g[k] = (g[k] || 0) + (r.revenue || 0); });
   const labels = ORDER.filter(k => (g[k] || 0) > 0);
@@ -1622,8 +1622,8 @@ function renderMenuEngineering() {
   renderMenuEngActionBoard(items);
 
   // ── BCG scatter
-  const QUAD = { star:'#10b981', puzzle:'#4f46e5', plowhorse:'#f59e0b', dog:'#ef4444', uncosted:'#94a3b8' };
-  const QUAD_LABEL = { star:'⭐ Star', puzzle:'🔮 Puzzle', plowhorse:'🐴 Plowhorse', dog:'🐕 Dog', uncosted:'⚪ Uncosted' };
+  const QUAD = { star:'#10b981', puzzle:'#4a70b0', plowhorse:'#f59e0b', dog:'#ef4444', uncosted:'#94a3b8' };
+  const QUAD_LABEL = { star:'Star', puzzle:'Puzzle', plowhorse:'Plowhorse', dog:'Dog', uncosted:'Uncosted' };
   const maxRev = Math.max(1, ...items.map(r=>r.revenue||0));
   // Axis clamping: a few tiny-revenue SKUs have margins of ±thousands-of-% and
   // very-high-qty items stretch X, which squashes every real point into a blob.
@@ -1732,13 +1732,13 @@ function renderMenuEngActionBoard(items, hostId = 'meActionBoard', noteId = 'meB
   const host = document.getElementById(hostId);
   if (!host) return;
   const GROUPS = [
-    { q:'star',      emoji:'⭐', title:'ดาวเด่น',   color:'#10b981', bg:'#ecfdf5',
+    { q:'star',      emoji:'★', title:'ดาวเด่น',   color:'#10b981', bg:'#ecfdf5',
       meaning:'ขายดี + กำไรดี', action:'รักษาคุณภาพ ให้เห็นเด่นในเมนู คุมต้นทุนไว้' },
-    { q:'plowhorse', emoji:'🐴', title:'ม้างาน',    color:'#f59e0b', bg:'#fffbeb',
+    { q:'plowhorse', emoji:'', title:'ม้างาน',    color:'#f59e0b', bg:'#fffbeb',
       meaning:'ขายดีแต่กำไรบาง', action:'ขึ้นราคาเล็กน้อย หรือลดต้นทุน/ปรับ portion' },
-    { q:'puzzle',    emoji:'🔮', title:'เพชรในตม',  color:'#4f46e5', bg:'#eef2ff',
+    { q:'puzzle',    emoji:'', title:'เพชรในตม',  color:'#4a70b0', bg:'#e8eef7',
       meaning:'กำไรดีแต่ขายน้อย', action:'โปรโมท แนะนำที่โต๊ะ/POS จัดเซ็ต ทำให้คนเห็นมากขึ้น' },
-    { q:'dog',       emoji:'🐕', title:'ตัวถ่วง',   color:'#ef4444', bg:'#fef2f2',
+    { q:'dog',       emoji:'', title:'ตัวถ่วง',   color:'#ef4444', bg:'#fef2f2',
       meaning:'ขายน้อย + กำไรน้อย', action:'พิจารณาถอดออก หรือปรับสูตร/ราคาใหม่' },
   ];
   const fmtMoney = v => (Number(v)||0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
@@ -1758,7 +1758,7 @@ function renderMenuEngActionBoard(items, hostId = 'meActionBoard', noteId = 'meB
           <span class="text-lg font-extrabold" style="color:${g.color}">${list.length}</span>
         </div>
         <p class="text-[11px] text-slate-500 mb-0.5">${g.meaning}</p>
-        <p class="text-[11px] font-medium mb-2" style="color:${g.color}">👉 ${g.action}</p>
+        <p class="text-[11px] font-medium mb-2" style="color:${g.color}">${g.action}</p>
         <ul class="text-xs">${rows}</ul>
         ${list.length > 6 ? `<p class="text-[10px] text-slate-400 mt-1">+ อีก ${list.length-6} เมนู (ดูตารางด้านล่าง)</p>` : ''}
       </div>`;
@@ -1778,11 +1778,11 @@ function renderMenuEngTable() {
   if (!_meData) return;
   const items = _meData.items || [];
   const QUAD_BADGE = {
-    star:      '<span class="pill" style="background:#10b98122;color:#047857">⭐ ดาวเด่น</span>',
-    puzzle:    '<span class="pill" style="background:#4f46e522;color:#3730a3">🔮 เพชรในตม</span>',
-    plowhorse: '<span class="pill" style="background:#f59e0b22;color:#92400e">🐴 ม้างาน</span>',
-    dog:       '<span class="pill" style="background:#ef444422;color:#991b1b">🐕 ตัวถ่วง</span>',
-    uncosted:  '<span class="pill" style="background:#94a3b822;color:#475569">⚪ ไม่มีต้นทุน</span>',
+    star:      '<span class="pill" style="background:#10b98122;color:#047857">ดาวเด่น</span>',
+    puzzle:    '<span class="pill" style="background:var(--accent)22;color:var(--accent)">เพชรในตม</span>',
+    plowhorse: '<span class="pill" style="background:#f59e0b22;color:#92400e">ม้างาน</span>',
+    dog:       '<span class="pill" style="background:#ef444422;color:#991b1b">ตัวถ่วง</span>',
+    uncosted:  '<span class="pill" style="background:#94a3b822;color:#475569">ไม่มีต้นทุน</span>',
   };
   const sorted = [...items].sort((a,b) => {
     const av = a[_meSortKey], bv = b[_meSortKey];
@@ -1815,7 +1815,7 @@ function renderMenuEngTable() {
         <td class="py-1.5 pr-2 text-right">${r.unit_cost != null ? fmtN(r.unit_cost) : '<span class="text-slate-300">—</span>'}</td>
         <td class="py-1.5 pr-2 text-right ${gpCls}">${gpShow}</td>
         <td class="py-1.5 pr-2 text-right ${mpColor}">${mpShow}</td>
-        <td class="py-1.5 text-center">${priced ? (QUAD_BADGE[r.quadrant] || '') : '<span class="pill" style="background:#fef3c7;color:#92400e">🍽️ บุฟเฟต์</span>'}</td>
+        <td class="py-1.5 text-center">${priced ? (QUAD_BADGE[r.quadrant] || '') : '<span class="pill" style="background:#fef3c7;color:#92400e">บุฟเฟต์</span>'}</td>
       </tr>`;
   }).join('');
 }
@@ -1883,7 +1883,7 @@ function _renderTop60Sales(d) {
     cumCogs += r.cogs_share_pct || 0;                                // running Pareto of COGS share
     const costCell = cogs > 0 ? fmtN(cogs) : '<span class="text-slate-300">—</span>';  // TOTAL cost (BoM)
     const cumCogsCell = r.cogs_share_pct != null ? cumCogs.toFixed(1) + '%' : '<span class="text-slate-300">—</span>';
-    const spk = (typeof mkSparkline === 'function' && Array.isArray(r.spark) && r.spark.length >= 2) ? mkSparkline(r.spark.slice(-8), '#6366f1', 64, 22) : '';
+    const spk = (typeof mkSparkline === 'function' && Array.isArray(r.spark) && r.spark.length >= 2) ? mkSparkline(r.spark.slice(-8), '#4a70b0', 64, 22) : '';
     return `<tr>
       <td class="num tabular text-slate-400">${i + 1}</td>
       <td class="num">${_abcBadge(cum)}</td>
@@ -2011,7 +2011,7 @@ function _renderMostRev() {
     type: 'bar',
     data: {
       labels: top.map(r => (r.description || r.sku_code).replace(/^\((?:A|B|T)\)\s*/, '').slice(0, 18)),
-      datasets: [{ label:'', data: top.map(metric), backgroundColor:'#4f46e5', borderRadius:4 }]
+      datasets: [{ label:'', data: top.map(metric), backgroundColor:'#4a70b0', borderRadius:4 }]
     },
     options: {
       indexAxis: 'y', responsive: true, maintainAspectRatio: false,
@@ -2071,14 +2071,14 @@ function renderSphDistribution(sph) {
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   stripEl.innerHTML = [
-    kpi('Median (มัธยฐาน)', fmtN(ov.median_sph), `ครึ่งหนึ่งของลูกค้าจ่ายเกินค่านี้`, '#4f46e5'),
+    kpi('Median (มัธยฐาน)', fmtN(ov.median_sph), `ครึ่งหนึ่งของลูกค้าจ่ายเกินค่านี้`, '#4a70b0'),
     kpi('P75 (ลูกค้าเกรด A)', fmtN(ov.p75), `25% บนสุดจ่ายเกิน ${fmtN(ov.p75)}`, '#10b981'),
     // Stated as the spend it is, not as a tier name: the old label said
     // "เกิน Buffet 590" — a price withdrawn on 1 Sep 2026, and not the cut-off
     // either (the bands that pass it start at ฿700 ≈ ฿789 net on the new menu).
     kpi(`% จ่าย ≥ ฿${hiFrom}/หัว`, `${(ov.pct_above_700 ?? ov.pct_above_590 ?? 0).toFixed(1)}%`,
         `บิลที่ทำกำไรสูง (≈ tier ฿789 เมนูใหม่)`, '#f59e0b'),
-    kpi('ช่วงราคาที่นิยม', ov.dominant_tier || '—', `${(ov.dominant_pct || 0).toFixed(1)}% ของบิลทั้งหมด`, '#8b5cf6'),
+    kpi('ช่วงราคาที่นิยม', ov.dominant_tier || '—', `${(ov.dominant_pct || 0).toFixed(1)}% ของบิลทั้งหมด`, '#7a66b8'),
   ].join('');
 
   // 100% stacked horizontal bar — colored segments per tier
@@ -2103,7 +2103,7 @@ function renderSphDistribution(sph) {
   const markers = [
     { p: 'P10',    v: ov.p10,        color: '#94a3b8' },
     { p: 'P25',    v: ov.p25,        color: '#64748b' },
-    { p: 'Median', v: ov.median_sph, color: '#4f46e5' },
+    { p: 'Median', v: ov.median_sph, color: '#4a70b0' },
     { p: 'P75',    v: ov.p75,        color: '#10b981' },
     { p: 'P90',    v: ov.p90,        color: '#059669' },
   ].filter(m => m.v != null);
@@ -2147,7 +2147,7 @@ async function loadPersona() {
     type: 'bar',
     data: {
       labels: ps.map(r => r.label + (r.size>=6?' people+':' '+(r.size===1?'person':'people'))),
-      datasets: [{ label:'Receipts', data: ps.map(r=>r.tx_count), backgroundColor:'#4f46e5', borderRadius:4 }]
+      datasets: [{ label:'Receipts', data: ps.map(r=>r.tx_count), backgroundColor:'#4a70b0', borderRadius:4 }]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -2165,7 +2165,7 @@ async function loadPersona() {
     type: 'doughnut',
     data: {
       labels: ['Food','Drink','Other'],
-      datasets: [{ data:[fd.food,fd.drink,fd.other], backgroundColor:['#4f46e5','#10b981','#f59e0b'], borderWidth:1, borderColor:'#fff' }]
+      datasets: [{ data:[fd.food,fd.drink,fd.other], backgroundColor:['#4a70b0','#10b981','#f59e0b'], borderWidth:1, borderColor:'#fff' }]
     },
     options: {
       responsive: true, maintainAspectRatio: false, cutout: '60%',
@@ -2184,7 +2184,7 @@ async function loadPersona() {
     data: {
       labels: hrs.map(h => h.hour + ':00'),
       datasets: [{ label:'บิล', data: hrs.map(h=>h.tx_count),
-                   backgroundColor: hrs.map(h => h.tx_count === Math.max(...hrs.map(x=>x.tx_count)) ? '#ef4444' : '#4f46e5'),
+                   backgroundColor: hrs.map(h => h.tx_count === Math.max(...hrs.map(x=>x.tx_count)) ? '#ef4444' : '#4a70b0'),
                    borderRadius: 3 }]
     },
     options: {
@@ -2278,8 +2278,8 @@ async function loadGrossProfit(){
       datasets: [
         { label:'COGS',         data: rows.map(r=>r.cogs||0),         backgroundColor:'rgba(245,158,11,0.75)', stack:'rev', borderRadius:3 },
         { label:'Gross Profit', data: rows.map(r=>r.gross_profit||0), backgroundColor:'rgba(16,185,129,0.85)', stack:'rev', borderRadius:3 },
-        { label:'Margin %',     data: rows.map(r=>r.margin_pct||0),   type:'line', borderColor:'#4f46e5',
-          backgroundColor:'rgba(79,70,229,0.1)', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'yPct', fill:false },
+        { label:'Margin %',     data: rows.map(r=>r.margin_pct||0),   type:'line', borderColor:'#4a70b0',
+          backgroundColor:'rgba(31,58,107,0.1)', borderWidth:2, pointRadius:2, tension:0.3, yAxisID:'yPct', fill:false },
       ]
     },
     options: {
@@ -2296,7 +2296,7 @@ async function loadGrossProfit(){
       scales: {
         x:    { stacked:true, grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
         y:    { stacked:true, position:'left',  grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10},callback:v=>fmt(v)} },
-        yPct: { position:'right', grid:{display:false}, ticks:{color:'#4f46e5',font:{size:10},callback:v=>v+'%'} },
+        yPct: { position:'right', grid:{display:false}, ticks:{color:'#4a70b0',font:{size:10},callback:v=>v+'%'} },
       }
     }
   });
@@ -2374,7 +2374,7 @@ async function loadTrend() {
     data: {
       labels: daily.map(d => d.day.slice(8)),
       datasets: [
-        { label:'รายได้', data: daily.map(d=>d.revenue), borderColor:'#4f46e5', backgroundColor:'rgba(79,70,229,0.07)',
+        { label:'รายได้', data: daily.map(d=>d.revenue), borderColor:'#4a70b0', backgroundColor:'rgba(31,58,107,0.07)',
           borderWidth:2, pointRadius:3, fill:true, tension:0.3, yAxisID:'yRev' },
         { label:'ลูกค้า', data: daily.map(d=>d.customer_count), borderColor:'#10b981',
           borderWidth:1.5, pointRadius:2, tension:0.3, yAxisID:'yCust', borderDash:[4,3] },

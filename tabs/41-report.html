@@ -2,7 +2,7 @@
 
   <!-- Report cover band -->
   <div id="rptCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
-       style="background:linear-gradient(135deg,#4338ca 0%,#7c3aed 55%,#9333ea 100%)">
+       style="background:#1f3a6b">
     <div class="flex items-start justify-between flex-wrap gap-4">
       <div>
         <p class="text-[11px] uppercase tracking-[0.2em] opacity-80 mb-1">Oshinei Enterprise</p>
@@ -15,14 +15,14 @@
         <div id="rptScopeSel" class="no-print mt-3 inline-flex rounded-lg overflow-hidden text-xs font-semibold"
              style="background:rgba(255,255,255,0.14);border:1px solid rgba(255,255,255,0.22)">
           <button type="button" data-scope=""          onclick="setReportScope('')"          class="px-3.5 py-1.5 transition-colors">ภาพรวม · ทั้งหมด</button>
-          <button type="button" data-scope="master"    onclick="setReportScope('master')"    class="px-3.5 py-1.5 transition-colors">🏢 Master</button>
-          <button type="button" data-scope="franchise" onclick="setReportScope('franchise')" class="px-3.5 py-1.5 transition-colors">🤝 Franchise</button>
+          <button type="button" data-scope="master"    onclick="setReportScope('master')"    class="px-3.5 py-1.5 transition-colors">Master</button>
+          <button type="button" data-scope="franchise" onclick="setReportScope('franchise')" class="px-3.5 py-1.5 transition-colors">Franchise</button>
         </div>
       </div>
       <div class="text-right text-xs opacity-90">
         <div class="mb-3">Generated: <span id="rptDate">—</span></div>
-        <button onclick="openMonthlyReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">📊 แบบสรุปง่าย (ใหม่)</button>
-        <button onclick="printReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">🖨️ Print / Export PDF</button>
+        <button onclick="openMonthlyReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium mr-2" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">แบบสรุปง่าย (ใหม่)</button>
+        <button onclick="printReport()" class="no-print px-4 py-2 text-sm rounded-lg font-medium" style="background:rgba(255,255,255,0.18);backdrop-filter:blur(4px)">Print / Export PDF</button>
       </div>
     </div>
   </div>
@@ -167,7 +167,7 @@
       <div class="flex items-center justify-between flex-wrap gap-2 mb-4 pb-2 border-b border-slate-100">
         <h2 class="text-base font-bold text-slate-700">9. Pricing &amp; Discounts</h2>
         <button onclick="openDiscountBills({title:'บิลส่วนลดสูงสุด (ตามตัวกรองรายงาน)'})"
-                class="text-xs px-3 py-1.5 rounded-lg font-medium no-print" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">🔍 ดูบิลส่วนลดสูงสุด →</button>
+                class="text-xs px-3 py-1.5 rounded-lg font-medium no-print" style="background:#fef2f2;color:#dc2626;border:1px solid #fecaca">ดูบิลส่วนลดสูงสุด →</button>
       </div>
       <div id="rptDiscountSummary" class="text-sm text-slate-600 mb-3"></div>
       <table class="text-sm text-slate-700 w-full">
@@ -184,7 +184,7 @@
       <p class="text-xs text-slate-400 mb-2">แยกตามส่วนลดเป็น % ของบิล — บอกว่าสาขากดส่วนลดแบบไหน (เล็กน้อย vs หนัก 50%+/ฟรี) และเทียบกับเดือนก่อน</p>
       <div id="rptDiscountComposition" class="overflow-x-auto text-sm"></div>
 
-      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">🏷️ Tier ราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
+      <h3 class="text-sm font-bold text-slate-600 mt-5 mb-1">Tier ราคาขายบุฟเฟ่ต์ (ผู้ใหญ่) · เทียบช่วงก่อนหน้า</h3>
       <p class="text-xs text-slate-400 mb-2" id="rptTierNote">คนทาน สัดส่วน และต้นทุน/หัว แยกตามราคาบุฟเฟ่ต์บนบิล (ไม่รวม VAT) — เดือนที่รายงานเทียบช่วงก่อนหน้าความยาวเท่ากัน</p>
       <div id="rptTierBlock" class="overflow-x-auto text-sm"></div>
     </div>
@@ -229,13 +229,13 @@
       <ul id="rptActions" class="text-sm text-slate-700 space-y-1.5"></ul>
 
       <details class="mt-5 text-xs text-slate-500">
-        <summary class="cursor-pointer font-semibold text-slate-600 select-none">📐 วิธีคำนวณ (Methodology)</summary>
+        <summary class="cursor-pointer font-semibold text-slate-600 select-none">วิธีคำนวณ (Methodology)</summary>
         <div class="mt-2 space-y-1.5 pl-1 leading-relaxed">
           <p><b>พยากรณ์รายได้ (run-rate):</b> คาดสิ้นเดือน = MTD ÷ จำนวนวันที่ผ่านไป × จำนวนวันในเดือน. ทุกสาขาใช้ตัวหาร "วันที่ผ่านไป" เท่ากัน (วันในปฏิทินของวันที่ขายล่าสุด) วันที่ปิดร้านนับเป็นรายได้ 0 → ผลรวมรายสาขาเท่ากับยอดรวมพอดี. รายได้เป็นแบบ <b>ไม่รวม VAT</b> (หารด้วย 1.07).</p>
           <p><b>ช่วงความเชื่อมั่น (ทุกสาขา):</b> คาดสิ้นเดือน ± 1 SD ของรายได้รายวัน × √(จำนวนวันที่เหลือ).</p>
           <p><b>vs เดือนก่อน (MoM):</b> (คาดสิ้นเดือน − ยอดจริงเดือนก่อนเต็มเดือน) ÷ ยอดจริงเดือนก่อน × 100.</p>
           <p><b>Anomalies:</b> z-score ของรายได้รายวันเทียบค่าเฉลี่ย/ส่วนเบี่ยงเบนมาตรฐานของ 90 วันล่าสุด.</p>
-          <p><b>Action Items:</b> กฎอัตโนมัติจาก Menu Engineering quadrant (เส้นแบ่ง = median ปริมาณ × median margin), SKU ที่ยังไม่มีต้นทุน, อัตราส่วนลด, YoY, และพยากรณ์รายสาขา. ระดับ: 🔴 เร่งด่วน · 🟡 ควรทำ · 🟢 ข้อมูล.</p>
+          <p><b>Action Items:</b> กฎอัตโนมัติจาก Menu Engineering quadrant (เส้นแบ่ง = median ปริมาณ × median margin), SKU ที่ยังไม่มีต้นทุน, อัตราส่วนลด, YoY, และพยากรณ์รายสาขา. ระดับ: เร่งด่วน · ควรทำ · ข้อมูล.</p>
         </div>
       </details>
     </div>

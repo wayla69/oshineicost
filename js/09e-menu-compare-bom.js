@@ -3,7 +3,7 @@
 // statement keeps its load order). Shared global scope: index.html loads js/*.js in name order.
 
 // ════════════════════════════════════════════════════════════════
-// 🆚 MENU COMPARE A/B — Top menus across two arbitrary periods + dive-in
+// MENU COMPARE A/B — Top menus across two arbitrary periods + dive-in
 // ════════════════════════════════════════════════════════════════
 let _mcLast = null, _mcDrillData = null, _mcBomSku = null;
 function _mcDefaults() {
@@ -115,10 +115,10 @@ function _mcRenderInsights(items) {
     `<div class="card p-3"><div class="text-xs font-bold mb-1.5" style="color:${color}">${title}</div>` +
     (rows.length ? rows.map(fmt).join('') : '<div class="text-[11px] text-slate-400">—</div>') + '</div>';
   el.innerHTML =
-    card('🔼 มาแรง', '#16a34a', up, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#16a34a;font-weight:600">▲${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
-    card('🔽 ร่วงแรง', '#dc2626', down, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#dc2626;font-weight:600">▼${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
-    card('🆕 เมนูใหม่ <span class="font-normal text-slate-400">(มีใน B)</span>', '#4f46e5', neu, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_b)}</span></div>`) +
-    card('⛔ หายไป <span class="font-normal text-slate-400">(เหลือใน A)</span>', '#d97706', gone, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_a)}</span></div>`);
+    card('มาแรง', '#16a34a', up, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#16a34a;font-weight:600">▲${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('ร่วงแรง', '#dc2626', down, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span style="color:#dc2626;font-weight:600">▼${Math.abs(r._qd).toFixed(0)}%</span></div>`) +
+    card('เมนูใหม่ <span class="font-normal text-slate-400">(มีใน B)</span>', '#4a70b0', neu, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_b)}</span></div>`) +
+    card('หายไป <span class="font-normal text-slate-400">(เหลือใน A)</span>', '#d97706', gone, r => `<div class="text-[11px] truncate" title="${esc(r.description || '')}">${nm(r)} <span class="text-slate-400">${fmtN(r.qty_a)}</span></div>`);
 }
 function mcRenderTable() {
   const L = _mcLast; if (!L) return;
@@ -167,9 +167,9 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
   const nM = v => v == null ? '—' : (ph ? '฿' + v.toFixed(2) : fmt(v));
   const dp = (a, b) => a != null ? _cmpPctSafe(a, b) : null;
   const badge = r => r.only_in_b
-    ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:6px;margin-left:5px;font-weight:700">ใหม่</span>'
+    ? '<span style="font-size:9px;background:var(--indigo-soft);color:var(--indigo);padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">ใหม่</span>'
     : r.only_in_a
-      ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:6px;margin-left:5px;font-weight:700">หาย</span>' : '';
+      ? '<span style="font-size:9px;background:#fef3c7;color:#d97706;padding:1px 5px;border-radius:4px;margin-left:5px;font-weight:700">หาย</span>' : '';
   body.innerHTML = items.map((r, i) => {
     const qa = vD(r.qty_a, Ca), qb = vD(r.qty_b, Cb);
     const ca = vD(r.cogs_a, Ca), cb = vD(r.cogs_b, Cb);
@@ -245,7 +245,7 @@ function mcRenderPareto() {
     type: 'line',
     data: {
       labels, datasets: [
-        { label: aLbl, data: ca, borderColor: '#6366f1', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
+        { label: aLbl, data: ca, borderColor: '#4a70b0', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
         { label: bLbl, data: cb, borderColor: '#0891b2', backgroundColor: 'transparent', tension: .2, pointRadius: 0, borderWidth: 2 },
         // 80% guideline (hidden from legend + tooltip via filters below)
         { label: '_80', data: labels.map(() => 80), borderColor: 'rgba(148,163,184,0.8)', borderDash: [5, 4], borderWidth: 1, pointRadius: 0, fill: false, tension: 0 },
@@ -276,7 +276,7 @@ async function mcOpenDrill(sku) {
   _mcBomSku = null;
   const it = (_mcLast?.items || []).find(x => x.sku_code === sku) || { description: sku };
   const _mcName = (it.description || sku).replace(/^\((?:A|B|T)\)\s*/, '');   // strip channel prefix like the table
-  document.getElementById('mcDrillTitle').textContent = '🆚 ' + _mcName + ' · ' + sku;
+  document.getElementById('mcDrillTitle').textContent = '' + _mcName + ' · ' + sku;
   const _mcm = document.getElementById('mcDrillModal'); _mcm.style.display = 'block'; _mcm.classList.remove('hidden');
   _mcm.scrollIntoView({ behavior: 'smooth', block: 'start' });
   mcDrillTab('branch');
@@ -297,7 +297,7 @@ function mcRenderBranch() {
   const el = document.getElementById('mcDrillBranch'); if (!el || !_mcDrillData) return;
   const br = _mcDrillData.branches || [], ph = _mcDrillPerHead;
   const toggle = `<div class="flex items-center gap-2 mb-3 flex-wrap"><span class="text-xs text-slate-500">มุมมอง:</span>
-    <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:8px;padding:3px;gap:2px">
+    <div style="display:inline-flex;background:var(--bg-subtle);border:1px solid var(--border);border-radius:4px;padding:3px;gap:2px">
       <button class="gran-btn ${ph?'':'gran-active'}" onclick="mcSetBranchMode(false)">รวม</button>
       <button class="gran-btn ${ph?'gran-active':''}" onclick="mcSetBranchMode(true)">ต่อคน</button>
     </div>${ph?'<span class="text-[11px] text-slate-400">จำนวน/คน = จำนวนเมนู ÷ ลูกค้าของสาขา · ต้นทุน/คน = COGS ÷ ลูกค้า</span>':''}</div>`;
@@ -337,7 +337,7 @@ function mcRenderTrend() {
   const tr = _mcDrillData?.trend || [];
   if (!tr.length || typeof mkChart !== 'function') return;
   mkChart('mcDrillChart', { type: 'line', data: { labels: tr.map(x => x.month), datasets: [
-    { label: 'จำนวนขาย', data: tr.map(x => x.qty), borderColor: '#6366f1', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y' },
+    { label: 'จำนวนขาย', data: tr.map(x => x.qty), borderColor: '#4a70b0', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y' },
     { label: 'ต้นทุน (COGS)', data: tr.map(x => x.cogs), borderColor: '#ef4444', backgroundColor: 'transparent', tension: 0.3, pointRadius: 2, yAxisID: 'y1' },
   ] }, options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 10 } } }, datalabels: { display: false } },
     scales: { y: { position: 'left', ticks: { callback: v => fmtN(v) } }, y1: { position: 'right', grid: { display: false }, ticks: { callback: v => fmt(v) } } } } });
@@ -439,7 +439,7 @@ function bcCostDriverTable(cd, scopeLabel, extraNote) {
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${bcFmtN(r.total_cogs)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${bcFmtPct(r.pct_of_total, 1)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${momCell(r.mom_pct, r.prev_cogs)}</td>
-      <td class="py-1.5 text-center"><button onclick="bcShowRecipe('${esc(r.sku_code)}')" class="text-indigo-600 hover:underline text-[10px]">🔍</button></td>
+      <td class="py-1.5 text-center"><button onclick="bcShowRecipe('${esc(r.sku_code)}')" class="text-indigo-600 hover:underline text-[10px]">${ICON.search}</button></td>
     </tr>`;
   }).join('');
   const totalRow = `<tr class="border-t-2 border-slate-300 font-semibold" style="background:var(--bg-subtle)">
@@ -588,7 +588,7 @@ function bcRenderFoodCostBoxes(mom) {
     }
     return `<button type="button" onclick="bcDrillBranch(${i})"
         class="card p-3 text-left hover:shadow-md transition" data-bcbox="${i}"
-        style="border-left:4px solid ${hex};cursor:pointer">
+        style="border:1px solid ${hex};cursor:pointer">
       <div class="text-xs font-medium text-slate-600 truncate" title="${esc(r.branch)}">${esc(r.branch)}</div>
       <div class="flex items-baseline gap-1 mt-0.5">
         <span class="text-2xl font-bold" style="color:${hex}">${bcFmtPct(fcv)}</span>
@@ -697,12 +697,12 @@ function bcDrillBranch(idx) {
 
 function _bcHighlightBox(idx) {
   document.querySelectorAll('[data-bcbox]').forEach(b => {
-    b.style.outline = (idx != null && +b.dataset.bcbox === idx) ? '2px solid #6366f1' : 'none';
+    b.style.outline = (idx != null && +b.dataset.bcbox === idx) ? '2px solid var(--accent)' : 'none';
   });
 }
 
 function bcKpiCard(label, val, sub, color) {
-  return `<div class="card p-3" style="border-left:3px solid ${color}">
+  return `<div class="card p-3" style="border:1px solid ${color}">
     <div class="text-[10px] text-slate-500 font-medium uppercase">${label}</div>
     <div class="text-xl font-bold mt-0.5" style="color:${color}">${val}</div>
     <div class="text-[10px] text-slate-400 mt-0.5">${sub||''}</div>
@@ -749,7 +749,7 @@ async function bcLoadBranch() {
       ${bcKpiCard('COGS',         bcFmtN(t.cogs),          '',        '#dc2626')}
       ${bcKpiCard('GP',           bcFmtN(t.gp),            bcFmtPct(t.gp_pct), t.gp>=0?'#10b981':'#ef4444')}
       ${bcKpiCard('Food Cost %',  bcFmtPct(t.food_cost_pct), '(เป้า 55–70%)', '#f59e0b')}
-      ${bcKpiCard('Menus',        bcFmtN(t.menus_with_cost), `/ ${bcFmtN(t.menus_total)} ทั้งหมด`, '#6366f1')}
+      ${bcKpiCard('Menus',        bcFmtN(t.menus_with_cost), `/ ${bcFmtN(t.menus_total)} ทั้งหมด`, '#4a70b0')}
     </div>
     ${cd ? bcCostDriverTable(cd, '· ' + esc(useBranch)) : '<div class="card p-4 mb-5 text-sm text-slate-400">ไม่มีข้อมูล cost-driver</div>'}
     <div class="card p-4 mb-5">
@@ -941,23 +941,23 @@ async function bcLoadSimulator() {
           ${scenList.map(s => `<option value="${s.id}">${esc(s.name)} (${s.n_items})</option>`).join('')}
         </select>
       </label>
-      <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">💾 Save current</button>
-      <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">🗑 Delete</button>
-      <button onclick="bcAdoptScenario()" class="px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg font-medium" title="บันทึกว่าใช้จริง แล้วติดตามเงินที่ประหยัดได้สะสม">📌 Adopt & Track ROI</button>
-      <button onclick="bcShowRoi()" class="px-3 py-1.5 text-xs bg-violet-100 text-violet-700 rounded-lg font-medium" title="ดูผลประหยัดสะสมของ scenario ที่ adopt">💰 ROI</button>
+      <button onclick="bcSaveScenario()" class="px-3 py-1.5 text-xs bg-emerald-600 text-white rounded-lg font-medium">Save current</button>
+      <button onclick="bcDeleteScenario()" class="px-3 py-1.5 text-xs bg-rose-100 text-rose-700 rounded-lg font-medium">Delete</button>
+      <button onclick="bcAdoptScenario()" class="px-3 py-1.5 text-xs bg-violet-600 text-white rounded-lg font-medium" title="บันทึกว่าใช้จริง แล้วติดตามเงินที่ประหยัดได้สะสม">Adopt & Track ROI</button>
+      <button onclick="bcShowRoi()" class="px-3 py-1.5 text-xs bg-violet-100 text-violet-700 rounded-lg font-medium" title="ดูผลประหยัดสะสมของ scenario ที่ adopt">ROI</button>
       <button onclick="bcResetOverrides()" class="px-3 py-1.5 text-xs bg-slate-100 text-slate-700 rounded-lg">↺ Reset</button>
       <span class="border-l border-slate-200 h-5 mx-1"></span>
-      <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">⬇ Export template</button>
-      <button onclick="document.getElementById('bcTplFile').click()" class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg font-medium">⬆ Upload template</button>
+      <button onclick="bcExportTemplate()" class="px-3 py-1.5 text-xs bg-sky-600 text-white rounded-lg font-medium" title="ดาวน์โหลด CSV เปิดใน Excel แก้ตัวเลขแล้ว upload กลับ">Export template</button>
+      <button onclick="document.getElementById('bcTplFile').click()" class="px-3 py-1.5 text-xs bg-indigo-600 text-white rounded-lg font-medium">Upload template</button>
       <input type="file" id="bcTplFile" accept=".csv,text/csv" style="display:none" onchange="bcImportTemplate(this)">
       <span class="text-xs text-slate-400 ml-auto" id="bcSimMeta">SKUs ในตาราง: ${data.skus.length}</span>
     </div>
-    <div id="bcRoiPanel" class="card p-4 mb-4 hidden" style="border-left:4px solid #7c3aed"></div>
+    <div id="bcRoiPanel" class="card p-4 mb-4 hidden" style="border:1px solid var(--accent)"></div>
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div class="card p-4">
         <h3 class="font-semibold mb-3">Editor — ปรับต้นทุน · จำนวนเสิร์ฟ · ปิดเมนู</h3>
         <div class="flex flex-wrap gap-2 mb-3 text-xs">
-          <input id="bcSimSearch" placeholder="🔎 Search SKU/description" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
+          <input id="bcSimSearch" placeholder="Search SKU/description" oninput="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1 flex-1 min-w-[120px]">
           <select id="bcSimBizFilter" onchange="bcRenderSimEditor()" class="border border-slate-300 rounded-lg px-2 py-1">
             <option value="">ทั้งหมด</option>
             ${BIZ_TYPES.map(t => `<option value="${t}">${BIZ_TYPE_META[t].icon} ${t}</option>`).join('')}
@@ -967,7 +967,7 @@ async function bcLoadSimulator() {
           <button onclick="bcApplyPct(-5)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−5% all</button>
           <button onclick="bcApplyPct(-10)" class="px-2 py-1 bg-amber-100 text-amber-700 rounded">−10% all</button>
           <button onclick="bcApplyPct(10)" class="px-2 py-1 bg-rose-100 text-rose-700 rounded">+10% all</button>
-          <button onclick="bcApplyTargetFood()" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded">🎯 ตั้งเป้า Food% =
+          <button onclick="bcApplyTargetFood()" class="px-2 py-1 bg-indigo-100 text-indigo-700 rounded">ตั้งเป้า Food% =
             <input id="bcTargetFood" type="number" value="65" class="w-12 border border-indigo-300 rounded px-1" onclick="event.stopPropagation()"></button>
         </div>
         <div id="bcSimEditor" style="max-height:520px;overflow-y:auto"></div>
@@ -1086,7 +1086,7 @@ function bcRecomputeKpis() {
         <tr class="border-t"><td class="py-1">Food Cost %</td><td class="text-right ${bcFoodPctColor(b.food_cost_pct)}">${bcFmtPct(b.food_cost_pct)}</td><td class="text-right font-semibold ${bcFoodPctColor(scenFood)}">${bcFmtPct(scenFood)}</td><td class="text-right">${scenFood!=null&&b.food_cost_pct!=null?((scenFood-b.food_cost_pct>=0?'+':'')+(scenFood-b.food_cost_pct).toFixed(2)+'pp'):''}</td></tr>
       </tbody>
     </table>
-    <p class="text-[10px] text-slate-400 mt-3">ปรับใช้: ต้นทุน ${nOv} · จำนวนเสิร์ฟ ${nQ} · ปิดเมนู ${nD} · preview client-side · 🔴 COGS=BoM เท่านั้น</p>
+    <p class="text-[10px] text-slate-400 mt-3">ปรับใช้: ต้นทุน ${nOv} · จำนวนเสิร์ฟ ${nQ} · ปิดเมนู ${nD} · preview client-side · COGS=BoM เท่านั้น</p>
     <p class="text-[10px] text-slate-400 mt-1">หมายเหตุ: เมนูบุฟเฟ่ต์รายได้/จาน = 0 (ปิดเมนู = ประหยัดต้นทุน รายได้ค่าบุฟเฟ่ต์คงเดิม) · à la carte รายได้ปรับตามจำนวนเสิร์ฟ</p>`;
 }
 function bcApplyPct(p) {
@@ -1220,7 +1220,7 @@ async function bcDeleteScenario() {
 // ── Phase B: adopt a scenario + show its realized-savings (ROI) ledger ─────────
 async function bcAdoptScenario() {
   const id = document.getElementById('bcScenSel')?.value;
-  if (!id) { alert('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด 💾 Save current)'); return; }
+  if (!id) { alert('เลือก scenario ที่บันทึกไว้ก่อน (หรือกด Save current)'); return; }
   if (!confirm('บันทึกว่า "ใช้จริง" (adopt)?\nระบบจะจับภาพต้นทุนปัจจุบันเป็น baseline แล้วเริ่มนับเงินที่ประหยัดได้จริงตั้งแต่เดือนล่าสุดเป็นต้นไป')) return;
   const r = await fetch(`${API}/api/bom-cost/scenarios/${id}/adopt`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({})
@@ -1247,8 +1247,8 @@ function bcRenderRoi(d, id) {
   const panel = document.getElementById('bcRoiPanel'); if (!panel) return;
   const close = `<button onclick="document.getElementById('bcRoiPanel').classList.add('hidden')" class="topbar-icon-btn" aria-label="ปิด">✕</button>`;
   if (!d.adopted) {
-    panel.innerHTML = `<div class="flex items-center justify-between"><h3 class="text-sm font-bold" style="color:#7c3aed">💰 ผลประหยัดจริง (ROI)</h3>${close}</div>
-      <p class="text-sm text-slate-500 mt-2">scenario นี้ยังไม่ได้ adopt — กด <b>📌 Adopt &amp; Track ROI</b> เพื่อเริ่มจับ baseline แล้วติดตามเงินที่ประหยัดได้จริง</p>`;
+    panel.innerHTML = `<div class="flex items-center justify-between"><h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI)</h3>${close}</div>
+      <p class="text-sm text-slate-500 mt-2">scenario นี้ยังไม่ได้ adopt — กด <b>Adopt &amp; Track ROI</b> เพื่อเริ่มจับ baseline แล้วติดตามเงินที่ประหยัดได้จริง</p>`;
     return;
   }
   const t = d.totals || {}, sc = d.scenario || {};
@@ -1266,7 +1266,7 @@ function bcRenderRoi(d, id) {
   }).join('');
   panel.innerHTML = `
     <div class="flex items-center justify-between flex-wrap gap-2">
-      <h3 class="text-sm font-bold" style="color:#7c3aed">💰 ผลประหยัดจริง (ROI) — ${esc(sc.name||'')}</h3>
+      <h3 class="text-sm font-bold" style="color:var(--accent)">ผลประหยัดจริง (ROI) — ${esc(sc.name||'')}</h3>
       <div class="flex items-center gap-2">
         <span class="text-[11px] text-slate-400">adopt ${esc((sc.adopted_at||'').slice(0,10))} · baseline ${esc(sc.baseline_month||'')} · ${t.months_tracked||0} เดือน</span>
         <button onclick="bcUnadopt('${id}')" class="text-[11px] border border-slate-200 rounded px-2 py-0.5" style="color:var(--text-muted)">ยกเลิก adopt</button>
@@ -1280,8 +1280,8 @@ function bcRenderRoi(d, id) {
         <div class="text-lg font-semibold text-slate-500">${fmt(t.potential_saving)}</div></div>
       <div class="flex-1 min-w-[160px]">
         <div class="text-[11px] text-slate-400 mb-1">ความคืบหน้า ${t.progress_pct==null?'—':t.progress_pct.toFixed(0)+'%'}</div>
-        <div style="height:10px;background:var(--bg-subtle);border-radius:6px;overflow:hidden">
-          <div style="height:100%;width:${prog}%;background:linear-gradient(90deg,#7c3aed,#059669)"></div></div>
+        <div style="height:10px;background:var(--bg-subtle);border-radius:4px;overflow:hidden">
+          <div style="height:100%;width:${prog}%;background:#7a66b8"></div></div>
       </div>
     </div>
     <p class="text-[11px] text-slate-400 mb-3">ประหยัด "จริง" = (ต้นทุน/หน่วยตอน adopt − ต้นทุน/หน่วยปัจจุบัน) × จำนวนที่ขายตั้งแต่ adopt — จะขึ้นเมื่อต้นทุนจริงลดลงตามที่วางแผน</p>
