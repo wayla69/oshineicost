@@ -34,9 +34,14 @@ if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Ou
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Each log line starts with the time it was written, so a slow run shows WHICH step
+# took the time (2026-09-30: the 16:00 sync took 40 min against ~25, and nothing in the
+# log could say where). The run header ("==== date ====") and blank lines stay bare:
+# task_watchdog.py splits runs on lines that START with "====", and strips the stamp.
 & cmd.exe /c "`"$Bat`" $ArgLine 2>&1" | ForEach-Object {
-    $_                                       # screen
-    Add-Content -LiteralPath $Log -Value $_ -Encoding UTF8   # log, line by line
+    $_                                       # screen, as printed
+    $line = if ($_ -eq '' -or $_ -match '^={10,}') { $_ } else { '[{0:HH:mm:ss}] {1}' -f (Get-Date), $_ }
+    Add-Content -LiteralPath $Log -Value $line -Encoding UTF8   # log, line by line
 }
 
 if ($null -eq $LASTEXITCODE) { exit 1 }
