@@ -901,9 +901,9 @@ function renderAbcAnalysis() {
         <span class="text-xs text-slate-400">${classified.length} SKUs</span>
       </div>
       <div class="flex rounded-full overflow-hidden h-5" style="width:100%">
-        <div style="width:${pA}%;background:#10b981" class="flex items-center justify-center text-xs text-white font-bold" title="Class A: ${pA}%">${parseFloat(pA)>8?pA+'%':''}</div>
-        <div style="width:${pB}%;background:#f59e0b" class="flex items-center justify-center text-xs text-white font-bold" title="Class B: ${pB}%">${parseFloat(pB)>8?pB+'%':''}</div>
-        <div style="width:${pC}%;background:#ef4444" class="flex items-center justify-center text-xs text-white font-bold" title="Class C: ${pC}%">${parseFloat(pC)>8?pC+'%':''}</div>
+        <div style="width:${pA}%;background:#10b981;color:${inkOn('#10b981')}" class="flex items-center justify-center text-xs font-bold" title="Class A: ${pA}%">${parseFloat(pA)>8?pA+'%':''}</div>
+        <div style="width:${pB}%;background:#f59e0b;color:${inkOn('#f59e0b')}" class="flex items-center justify-center text-xs font-bold" title="Class B: ${pB}%">${parseFloat(pB)>8?pB+'%':''}</div>
+        <div style="width:${pC}%;background:#ef4444;color:${inkOn('#ef4444')}" class="flex items-center justify-center text-xs font-bold" title="Class C: ${pC}%">${parseFloat(pC)>8?pC+'%':''}</div>
       </div>
       <div class="flex gap-4 mt-1.5">
         <span class="text-xs text-slate-500">A: ${groupA.length} SKUs = ${pA}%</span>

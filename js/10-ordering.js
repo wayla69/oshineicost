@@ -127,7 +127,7 @@ async function loadOrderPlan(force) {
   if (eraEl) eraEl.innerHTML = m.era && m.era.straddles
     ? `<div class="card p-3 text-xs flex flex-wrap items-center gap-2" style="background:#fff7ed;border:1px solid #ea580c;color:#9a3412">
          <span>⚠ <b>ช่วงข้อมูลคร่อมวันเปลี่ยนเมนู (${esc(m.era.menu_era_from)})</b> — ปริมาณที่ได้เป็นค่าเฉลี่ยของสูตรเมนูเก่ากับเมนูใหม่ปนกัน จึงไม่ตรงกับรอบที่จะสั่งจริง</span>
-         <button onclick="opUseEraFrom()" style="background:#ea580c;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer">ใช้เฉพาะเมนูใหม่ (เริ่ม ${esc(m.era.suggest_from)})</button>
+         <button onclick="opUseEraFrom()" style="background:#c2410c;color:#fff;border:0;border-radius:var(--r-sm);padding:4px 12px;font-size:11.5px;font-weight:600;cursor:pointer">ใช้เฉพาะเมนูใหม่ (เริ่ม ${esc(m.era.suggest_from)})</button>
        </div>`
     : '';
   // a branch that opened mid-window is averaged over the days it actually sold —

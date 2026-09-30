@@ -1915,11 +1915,11 @@ function _gpbRenderHeatmap() {
         const fcPct = cell.revenue > 0 ? (cell.cogs / cell.revenue * 100) : null;
         const bg = cellColor(fcPct);
         const tip = `${r.branch} · ${m}\nรายได้: ${fmtB(cell.revenue)} \nBoM: ${fmtB(cell.cogs)} \nGP: ${fmtB(gp)}  (${gpPct == null ? '—' : gpPct.toFixed(1)}%)`;
-        html += `<td title="${tip}" style="padding:4px 6px;text-align:center;background:${bg};color:#fff;font-weight:600;min-width:48px">${gpPct == null ? '—' : gpPct.toFixed(0) + '%'}</td>`;
+        html += `<td title="${tip}" style="padding:4px 6px;text-align:center;background:${bg};color:${inkOn(bg)};font-weight:600;min-width:48px">${gpPct == null ? '—' : gpPct.toFixed(0) + '%'}</td>`;
       }
     });
     const totBucket = _gpbStatusBucket(r.total_food_cost_pct, lo, hi);
-    html += `<td style="padding:4px 8px;text-align:center;background:${totBucket.color};color:#fff;font-weight:700">${r.total_gp_pct == null ? '—' : r.total_gp_pct.toFixed(0)+'%'}</td>`;
+    html += `<td style="padding:4px 8px;text-align:center;background:${totBucket.color};color:${inkOn(totBucket.color)};font-weight:700">${r.total_gp_pct == null ? '—' : r.total_gp_pct.toFixed(0)+'%'}</td>`;
     html += '</tr>';
   });
   html += '</tbody></table>';

@@ -2088,7 +2088,7 @@ function renderSphDistribution(sph) {
     if (pct < 0.1) return '';
     const range = d.hi == null ? `≥ ${d.lo}` : `${d.lo}–${Math.round(d.hi)}`;
     const inner = pct > 4
-      ? `<div class="text-[11px] font-semibold text-white drop-shadow" style="text-shadow:0 1px 2px rgba(0,0,0,.4)">${pct.toFixed(1)}%</div>`
+      ? `<div class="text-[11px] font-semibold" style="color:${inkOn(d.color)}">${pct.toFixed(1)}%</div>`
       : '';
     return `<div title="${d.bucket} (${range} บาท/หัว) — ${d.count.toLocaleString()} บิล (${pct.toFixed(1)}%)"
       style="flex:${pct};background:${d.color};display:flex;align-items:center;justify-content:center;cursor:help;transition:filter .15s"

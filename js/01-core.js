@@ -652,6 +652,20 @@ function heatColor(t, invert) {
   const mix = i => Math.round(a[i] + (b[i] - a[i]) * f);
   return `rgb(${mix(0)},${mix(1)},${mix(2)})`;
 }
+// Label colour for text ON a data-driven fill (heat cells, bar segments, badges): white or
+// the light-theme primary ink, whichever contrasts more. Fixed hex both themes, like the fill.
+// White fails on the whole heat scale (#ef4444 3.76, #f59e0b 2.15, #16a34a 3.30); #0f172a clears it.
+function inkOn(bg) {
+  const m = String(bg || '').trim().match(/^#(?:([0-9a-f]{6})(?:[0-9a-f]{2})?|([0-9a-f]{3}))(?![0-9a-f])|^rgba?\(\s*(\d+)[\s,]+(\d+)[\s,]+(\d+)/i);
+  if (!m) return '#fff';
+  let rgb;
+  if (m[1] || m[2]) { const h = m[1] || m[2].replace(/./g, c => c + c); rgb = [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); }
+  else rgb = [m[3], m[4], m[5]].map(Number);
+  const lin = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+  const L = 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
+  const onWhite = 1.05 / (L + 0.05), onNavy = (L + 0.05) / (0.0093 + 0.05);   // #0f172a L = 0.0093
+  return onWhite >= onNavy ? '#fff' : '#0f172a';
+}
 // Deterministic, distinct colour per branch name (stable across reloads)
 function colorForBranch(name) {
   if (!name) return SEMANTIC.neutral;
