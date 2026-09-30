@@ -1,9 +1,9 @@
 > **About this folder.** A repo copy of the Oshinei design system published at
-> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 (formal theme + KIRA UI, app at `164480d`;
+> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 (formal theme, KIRA UI + Noto symbols, text inks; app at `ab0e852`;
 > navy accent in `docs/ui-kit/theme-formal.css`). The app itself never loads these files: its colours come from
 > `docs/ui-kit/tokens.css`. When a colour changes, change it there first, then update
 > `tokens.json` here (and republish the system) so the two stay in step.
-> Fonts are the app's own `vendor/fonts/KIRA-UI-*.woff2` (`tokens.json` names them as `fonts/...`; the OFL licence sits beside them).
+> Fonts are the app's own `vendor/fonts/KIRA-UI-*.woff2` and `vendor/fonts/symbols/*.subset.woff2` (`tokens.json` names them as `fonts/...`; the OFL licences sit beside them).
 > The `components/*/preview.html` cards render only inside the published system, which
 > generates `tokens.css` from `tokens.json`. This folder sits outside `docs/` on purpose:
 > `docs/` is copied into the Fly image, and parts of it are served without a login.
@@ -12,7 +12,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 ## Using this system
 
-- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the KIRA UI font files and `components/bundle.css`. Class names in the component cards are the app's own, so markup from a preview drops into `index.html` unchanged.
+- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the KIRA UI and Noto symbol font files and `components/bundle.css`. Class names in the component cards are the app's own, so markup from a preview drops into `index.html` unchanged.
 - The app switches themes with `body.dark`. Here the same rules key off `[data-theme="dark"]`; when porting to the app, write `body.dark`.
 - The app still calls the accent `--indigo` / `--indigo-mid` / `--indigo-soft`. Those are legacy aliases of `accent` / `accent-hover` / `accent-soft`; new code uses the accent names.
 - There is no JavaScript component library. Components are CSS classes on plain HTML; charts are Chart.js 4 with the defaults under **Charts**.
@@ -53,6 +53,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 ### Typography
 
 - One family: **KIRA UI** (Thai + Latin; a rebuild of Noto Sans + Noto Sans Thai under the SIL Open Font License), weights 400/500/600/700, shipped as local WOFF2 with its licence. Heavier requests resolve to 700. Fallback `'Noto Sans Thai', system-ui`.
+- **Symbols come from Noto too.** KIRA UI has no arrows, math signs, shapes or dingbats, so → − ≤ ≥ ≈ ▲ ▼ ● ■ ✓ ✗ ★ ⚠ ☐ ① ⓘ would fall back to whatever the device has. Three small subsets fill the gap (16 KB in all, SIL OFL): **Noto Sans Math** (arrows, − ≤ ≥ ≈ ≠ ∞ √), **Noto Sans Symbols 2** (▲ ▼ ▶ ● ■ ◆ ✓ ✗ ★ ⚠ ☐ ☑) and **Noto Sans Symbols** (① … ⑩ ⓘ ⚑). In the app they are declared under the family `'KIRA UI'` itself, with a `unicode-range` each and once per weight (400–700), so every stack picks them up and a file loads only when a page uses one of its characters; ● ○ ◉ ■ □ ◆ ◇ get `size-adjust: 60%` so they sit at bullet size (Noto draws them 0.73–1.0em). Here they follow KIRA UI in the `sans` stack instead. Reports and PDFs embed the same subsets, so a printed ▲ or ✓ is Noto, not Arial.
 - It stacks Thai tone marks correctly and has tabular figures, so figures line up in columns with `font-variant-numeric: tabular-nums`.
 - The scale is small and dense: `body` 13px, `control` 12.5px, `small` 12px, `caption` 11px. Figures use weight 700, never 800+: `kpi-value` 26px and `kpi-hero` 27px.
 - Labels (`kpi-label`, `section-label`, `table-head`, `nav-section`) are UPPERCASE at 10–11px, weight 700, tracked 0.05–0.1em. Thai text in those slots stays as written.
