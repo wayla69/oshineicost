@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T07:09:48Z",
-    "via": "GitHub · wayla69/oshineicost@ab0e852",
-    "note": "Synced to live ab0e852: Noto Sans Math / Symbols 2 / Symbols subsets for arrows, ▲▼, ✓✗★⚠, ① (#236); text inks teal/rose/cyan/sky (#233, #235) and navy/violet/fuchsia/pink (#238); README colour + typography notes incl. #237 light-box scoping."
+    "at": "2026-09-30T07:44:35Z",
+    "via": "GitHub · wayla69/oshineicost@cc59b9a",
+    "note": "Synced to live cc59b9a: amber-ink / orange-ink (#243); README: grey text = text tokens (#243), labels on coloured fills = inkOn() or the -700 fill (#241, #242)."
   },
   "layout": "files",
   "libraries": [],
