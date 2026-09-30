@@ -72,7 +72,7 @@ async function loadCostCoverage() {
     <tr class="border-b border-slate-50">
       <td class="py-1.5 pr-3">${esc(b.branch)}</td>
       <td class="py-1.5 pr-3 text-right">${fmt(b.total_revenue)}</td>
-      <td class="py-1.5 pr-3 text-right" style="color:#e11d48">${fmt(b.uncosted_revenue)}</td>
+      <td class="py-1.5 pr-3 text-right" style="color:var(--rose-ink)">${fmt(b.uncosted_revenue)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${(b.pct_uncosted??0).toFixed(1)}%</td>
       <td class="py-1.5 text-right">${b.uncosted_skus}</td>
     </tr>`).join('') || '<tr><td colspan="5" class="py-3 text-slate-400 text-center">—</td></tr>';

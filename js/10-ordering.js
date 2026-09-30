@@ -172,7 +172,7 @@ async function loadOrderPlan(force) {
     brCard.style.display = '';
     document.getElementById('opBranchBody').innerHTML = brs.map(b => `
       <tr class="border-b" style="border-color:var(--border)">
-        <td class="py-1.5 pr-2"><a href="#" onclick="opJumpBranch('${jsAttr(b.branch)}');return false" style="color:#0f766e;font-weight:600">${esc(b.branch)}</a></td>
+        <td class="py-1.5 pr-2"><a href="#" onclick="opJumpBranch('${jsAttr(b.branch)}');return false" style="color:var(--teal-ink);font-weight:600">${esc(b.branch)}</a></td>
         <td class="py-1.5 pr-2 text-right">${fmtN(b.ingredients)}</td>
         <td class="py-1.5 pr-2 text-right">฿${fmtN(b.value_week)}</td>
         <td class="py-1.5 text-right font-semibold">฿${fmtN(b.value_month)}</td>
@@ -192,7 +192,7 @@ async function loadOrderPlan(force) {
     bnames.forEach(b => {
       const th = document.createElement('th');
       th.className = 'py-1.5 pr-2 text-right op-br-th';
-      th.style.color = '#0f766e';
+      th.style.color = 'var(--teal-ink)';
       th.title = `ปริมาณสั่ง/เดือน ของ ${b}`;
       th.textContent = b;
       headRow.appendChild(th);
@@ -215,7 +215,7 @@ async function loadOrderPlan(force) {
       <td class="py-1.5 pr-2 text-right">${esc(r.per_day_disp)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)" title="${r.pack_known ? esc('1 ' + r.order_unit + ' = ' + fmtN(r.qty_per_order) + ' ' + r.unit) : 'ยังไม่ได้ตั้งขนาดบรรจุ — ใช้หน่วยมาตรฐานไปก่อน'}">${r.pack_known ? '' : '<span style="color:#b45309">◇</span> '}${esc(r.order_unit || r.unit)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold" title="ใช้จริง ${esc(r.order_week_disp)}">${esc(r.order_week_units_disp || r.order_week_disp)}</td>
-      <td class="py-1.5 pr-2 text-right font-semibold" style="color:#0f766e" title="ใช้จริง ${esc(r.order_month_disp)}">${esc(r.order_month_units_disp || r.order_month_disp)}</td>
+      <td class="py-1.5 pr-2 text-right font-semibold" style="color:var(--teal-ink)" title="ใช้จริง ${esc(r.order_month_disp)}">${esc(r.order_month_units_disp || r.order_month_disp)}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(r.value_month)}</td>
       <td class="py-1.5 pr-2 text-right" style="color:var(--text-muted)">${fmtN(r.n_menus)}</td>
       <td class="py-1.5 text-right">${trHtml}</td>
@@ -672,7 +672,7 @@ async function opLoadCycles() {
       ? '<span style="color:var(--good-ink);font-weight:600">✓ ครบตามแผน</span>'
       : `<span style="color:var(--bad-ink);font-weight:600">⚠ ต้องแจ้งเตือน</span>`;
     return `<tr class="border-b" style="border-color:var(--border)">
-      <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:#0f766e;font-weight:600">${esc(r.branch)}</a></td>
+      <td class="py-1.5 pr-2"><a href="#" onclick="opOpenCycle(${r.issue_id});return false" style="color:var(--teal-ink);font-weight:600">${esc(r.branch)}</a></td>
       <td class="py-1.5 pr-2">${esc(r.period_start)} → ${esc(r.period_end)}</td>
       <td class="py-1.5 pr-2" style="color:var(--text-muted)">${esc(String(r.issued_at || '').slice(0, 16))}</td>
       <td class="py-1.5 pr-2 text-right">${fmtN(c.lines)}</td>
