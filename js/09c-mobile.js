@@ -419,7 +419,7 @@ function ensureChartSetup() {
 // tooltips, rounded bars, tidy points/legends).
 function setupChartDefaults() {
   if (typeof Chart === 'undefined') return;
-  const FONT = "'Prompt','Noto Sans Thai',-apple-system,'Segoe UI',sans-serif";
+  const FONT = "'KIRA UI','Noto Sans Thai',-apple-system,'Segoe UI',sans-serif";
   Chart.defaults.font.family = FONT;
   Chart.defaults.font.size = 11.5;
   Chart.defaults.color = '#475569';

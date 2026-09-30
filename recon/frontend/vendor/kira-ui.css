@@ -1,0 +1,6 @@
+/* KIRA UI 3.1 (Noto Sans + Noto Sans Thai, SIL OFL 1.1 - see fonts/KIRA-UI-LICENSE-OFL-1.1.txt
+   and fonts/KIRA-UI-NOTICE.txt). 400/500/600/700; heavier weights resolve to 700. */
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 400; font-display: swap; src: url(./fonts/KIRA-UI-Regular.woff2) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 500; font-display: swap; src: url(./fonts/KIRA-UI-Medium.woff2) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 600; font-display: swap; src: url(./fonts/KIRA-UI-SemiBold.woff2) format('woff2'); }
+@font-face { font-family: 'KIRA UI'; font-style: normal; font-weight: 700; font-display: swap; src: url(./fonts/KIRA-UI-Bold.woff2) format('woff2'); }
