@@ -1,9 +1,9 @@
 <!doctype html><html lang='th'><head><meta charset='utf-8'><link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'><title>ติดตามเอกสารที่ขาด</title><style>
       @page{size:A4;margin:14mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:22px;background:#f8fafc}
-      .sheet{background:#fff;max-width:920px;margin:0 auto 16px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:920px;margin:0 auto 16px;padding:24px 28px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:19px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:6px}
-      h2{font-size:14px;margin:16px 0 6px;border-left:4px solid #ea580c;padding-left:8px}
+      h2{font-size:14px;margin:16px 0 6px;border:1px solid #ea580c;padding-left:8px}
       table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 6px}
       th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:right}
       th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
@@ -12,11 +12,11 @@
       .muted{color:#64748b;font-size:11px} tr.sub td{border-bottom:1px dashed #f1f5f9;padding:3px 9px}
       tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
       .chk{width:16px;height:16px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;vertical-align:middle}
-      .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}
-      .none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;color:#166534;font-size:12px}
+      .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:9px 13px;font-size:12px;margin-bottom:12px}
+      .none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:9px 13px;color:#166534;font-size:12px}
       .toolbar{max-width:920px;margin:0 auto 12px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
-      .ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;font:inherit;margin-right:8px}
       .sign{display:flex;gap:40px;margin-top:22px}.sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0}}
-    </style></head><body><div class='toolbar'><input type='month' value='2026-05' class='ctl' onchange="location.href='?period_month='+this.value+''"><select class='ctl' onchange="location.href='?period_month=2026-05'+(this.value?'&branch_id='+this.value:'')"><option value='' selected>ทุกสาขา (5 สาขาหลัก)</option><option value='4'>Korat1</option><option value='5'>อุดรธานี</option></select><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div><div class='sheet'><h1>รายงานติดตามเอกสารที่ยังขาด — งวด 2026-05</h1><div class='sub'>เอกสารที่แต่ละสาขายังต้องอัปโหลด + ยอดเงินที่รอเอกสารนั้นจับคู่ · รวมเงินที่รอเอกสารทั้งหมด <b class='big'>฿0</b></div><div class='none'>✓ ทุกสาขาอัปเอกสารครบสำหรับงวดนี้ — ไม่มีเอกสารค้าง</div></div></body></html>
+    </style></head><body><div class='toolbar'><input type='month' value='2026-05' class='ctl' onchange="location.href='?period_month='+this.value+''"><select class='ctl' onchange="location.href='?period_month=2026-05'+(this.value?'&branch_id='+this.value:'')"><option value='' selected>ทุกสาขา (5 สาขาหลัก)</option><option value='4'>Korat1</option><option value='5'>อุดรธานี</option></select><button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div><div class='sheet'><h1>รายงานติดตามเอกสารที่ยังขาด — งวด 2026-05</h1><div class='sub'>เอกสารที่แต่ละสาขายังต้องอัปโหลด + ยอดเงินที่รอเอกสารนั้นจับคู่ · รวมเงินที่รอเอกสารทั้งหมด <b class='big'>฿0</b></div><div class='none'>✓ ทุกสาขาอัปเอกสารครบสำหรับงวดนี้ — ไม่มีเอกสารค้าง</div></div></body></html>

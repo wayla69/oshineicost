@@ -591,8 +591,8 @@ def statement_codes_xlsx():
         codes = _statement_codes(conn)
     for c in codes:
         kind = "รหัสธนาคาร" if c["kind"] == "code" else "คำทั่วไป"
-        st = ("✏️ ทีมแก้แล้ว" if c["overridden"]
-              else "✅ ยืนยันแล้ว" if c["status"] == "confirmed" else "⚠️ รอตรวจ")
+        st = ("ทีมแก้แล้ว" if c["overridden"]
+              else "ยืนยันแล้ว" if c["status"] == "confirmed" else "⚠ รอตรวจ")
         ch_th = c.get("effective_channel_th", c["channel_th"])
         r = [c["code"], kind, c["bank"], c["meaning_th"], ch_th, st, c["note"], "", ""]
         ws.append(r)
@@ -620,29 +620,29 @@ def statement_codes_html():
     css = """<style>
       @page{size:A4 landscape;margin:12mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
-      .sheet{background:#fff;max-width:1100px;margin:0 auto;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:1100px;margin:0 auto;padding:26px 30px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:20px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:14px}
       table{width:100%;border-collapse:collapse;font-size:11.5px}
       th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
       th{color:#475569;font-size:10.5px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
-      code{background:#f1f5f9;padding:1px 6px;border-radius:5px;font-family:ui-monospace,monospace;font-weight:600}
+      code{background:#f1f5f9;padding:1px 6px;border-radius:4px;font-family:ui-monospace,monospace;font-weight:600}
       .badge{padding:1px 8px;border-radius:99px;font-size:10px;font-weight:600;white-space:nowrap}
       .b-ok{background:#dcfce7;color:#166534} .b-warn{background:#fef3c7;color:#854d0e}
       .b-edit{background:#dbeafe;color:#1e40af}
       .b-code{background:#e0e7ff;color:#3730a3} .b-kw{background:#f1f5f9;color:#475569}
       tr.review{background:#fffbeb} .note{color:#64748b;font-size:11px}
       .fill{color:#cbd5e1} .toolbar{max-width:1100px;margin:0 auto 14px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer;text-decoration:none}
-      .lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.6}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer;text-decoration:none}
+      .lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:10px 14px;margin-bottom:14px;font-size:12px;line-height:1.6}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none}}
     </style>"""
     rows = []
     for c in codes:
         kind = ('<span class="badge b-code">รหัสธนาคาร</span>' if c["kind"] == "code"
                 else '<span class="badge b-kw">คำทั่วไป</span>')
-        st = ('<span class="badge b-edit">✏️ ทีมแก้แล้ว</span>' if c["overridden"]
-              else '<span class="badge b-ok">✅ ยืนยันแล้ว</span>' if c["status"] == "confirmed"
-              else '<span class="badge b-warn">⚠️ รอตรวจ</span>')
+        st = ('<span class="badge b-edit">ทีมแก้แล้ว</span>' if c["overridden"]
+              else '<span class="badge b-ok">ยืนยันแล้ว</span>' if c["status"] == "confirmed"
+              else '<span class="badge b-warn">⚠ รอตรวจ</span>')
         ch_th = c.get("effective_channel_th", c["channel_th"])
         ch_cell = (f'{esc(ch_th)} <span class="note">(เดิม {esc(c["channel_th"])})</span>'
                    if c["overridden"] else esc(ch_th))
@@ -657,14 +657,14 @@ def statement_codes_html():
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>"
         "<title>พจนานุกรมรหัสในสเตทเมนต์</title>" + css + "</head><body>"
         "<div class='toolbar'>"
-        "<a class='btn' href='/api/statement-codes.xlsx' style='text-decoration:none;margin-right:8px;background:#16794f'>⬇ ดาวน์โหลด Excel</a>"
-        "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"
+        "<a class='btn' href='/api/statement-codes.xlsx' style='text-decoration:none;margin-right:8px;background:#16794f'>ดาวน์โหลด Excel</a>"
+        "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>"
         "<div class='sheet'>"
         "<h1>พจนานุกรมรหัสในสเตทเมนต์ธนาคาร</h1>"
         f"<div class='sub'>ระบบใช้ตารางนี้แยกประเภทรายการในสเตทเมนต์อัตโนมัติ · {len(codes)} รายการ · "
         f"<b>{review_n} รายการรอทีมตรวจ</b></div>"
         "<div class='lead'>ช่วยตรวจ <b>คอลัมน์ \"ความหมาย\" กับ \"ระบบจัดเป็นช่องทาง\"</b> ว่าตรงกับความจริงไหม "
-        "โดยเฉพาะแถวสีเหลือง (⚠️ รอตรวจ) ที่เป็นรหัสเฉพาะของธนาคาร เช่น <code>SDCH</code> "
+        "โดยเฉพาะแถวสีเหลือง (⚠ รอตรวจ) ที่เป็นรหัสเฉพาะของธนาคาร เช่น <code>SDCH</code> "
         "(เจ้าของยืนยันว่า = นำเงินสดไปฝาก ไม่ใช่ QR) · ทำเครื่องหมายในช่อง \"ทีมยืนยัน\" แล้วเขียนสิ่งที่ถูกต้องในช่องสุดท้าย</div>"
         "<table><thead><tr><th>รหัส / คำสำคัญ</th><th>ชนิด</th><th>ธนาคาร</th>"
         "<th>ความหมาย</th><th>ระบบจัดเป็นช่องทาง</th><th>สถานะ</th>"

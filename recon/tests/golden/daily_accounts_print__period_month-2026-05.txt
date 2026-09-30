@@ -1,13 +1,13 @@
 <!doctype html><html lang='th'><head><meta charset='utf-8'><link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'><title>สรุปบัญชีรายวัน (รายใบ)</title><style>
       @page{size:A4;margin:13mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:11.5px;margin:0;padding:22px;background:#f8fafc}
-      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:24px 28px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:14px}
       .legend{font-size:10px;color:#64748b;margin:2px 0 14px}
       .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-      .dc{border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;break-inside:avoid}
+      .dc{border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;break-inside:avoid}
       .dc-h{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#ecfdf5;border-bottom:1px solid #d1fae5}
-      .dc-date{font-weight:700;color:#0a523f;font-size:12.5px}
+      .dc-date{font-weight:700;color:#16294d;font-size:12.5px}
       .dc-net{font-weight:700;font-size:12.5px}
       table{width:100%;border-collapse:collapse;font-size:10.5px}
       th,td{padding:3px 12px;border-bottom:1px solid #f1f5f9;text-align:right}
@@ -16,11 +16,11 @@
       .mono{font-variant-numeric:tabular-nums}
       .disc{color:#9a3412} .code{color:#94a3b8;font-size:9px}
       tfoot td{border-top:1.4px solid #cbd5e1;border-bottom:none;font-weight:700;background:#f8fafc}
-      table.je{border-top:1px solid #d1fae5} table.je th{background:#ecfdf5;color:#0a523f}
-      .mtot{margin-top:14px;border:1.5px solid #0f6e56;border-radius:9px;overflow:hidden}
-      .mtot .dc-h{background:#0f6e56;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
+      table.je{border-top:1px solid #d1fae5} table.je th{background:#ecfdf5;color:#16294d}
+      .mtot{margin-top:14px;border:1.5px solid #1f3a6b;border-radius:4px;overflow:hidden}
+      .mtot .dc-h{background:#1f3a6b;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
       .empty{color:#64748b;font-size:12px;padding:10px 0}
       .toolbar{max-width:900px;margin:0 auto 12px;text-align:right}
-      .btn{background:#0f6e56;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .btn{background:#1f3a6b;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0;page-break-after:always}}
-    </style></head><body><div class='toolbar'><select onchange="location.href='?period_month=2026-05'+(this.value?'&branch_id='+this.value:'')" style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px'><option value='' selected>ทุกสาขา (2 สาขา)</option><option value='4'>Korat1</option><option value='5'>อุดรธานี</option></select><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div><div class='sheet'><h1>สรุปบัญชีรายวัน — สาขาKorat1</h1><div class='sub'>เดือน 2026-05 · แต่ละวัน = 1 ใบบันทึกบัญชี (บันทึกยอดเต็ม แล้วแยกบรรทัดส่วนลด)</div><div class='empty'>ไม่มีรายการบัญชีในเดือนนี้</div></div><div class='sheet'><h1>สรุปบัญชีรายวัน — สาขาอุดรธานี</h1><div class='sub'>เดือน 2026-05 · แต่ละวัน = 1 ใบบันทึกบัญชี (บันทึกยอดเต็ม แล้วแยกบรรทัดส่วนลด)</div><div class='empty'>ไม่มีรายการบัญชีในเดือนนี้</div></div></body></html>
+    </style></head><body><div class='toolbar'><select onchange="location.href='?period_month=2026-05'+(this.value?'&branch_id='+this.value:'')" style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;font:inherit;margin-right:8px'><option value='' selected>ทุกสาขา (2 สาขา)</option><option value='4'>Korat1</option><option value='5'>อุดรธานี</option></select><button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div><div class='sheet'><h1>สรุปบัญชีรายวัน — สาขาKorat1</h1><div class='sub'>เดือน 2026-05 · แต่ละวัน = 1 ใบบันทึกบัญชี (บันทึกยอดเต็ม แล้วแยกบรรทัดส่วนลด)</div><div class='empty'>ไม่มีรายการบัญชีในเดือนนี้</div></div><div class='sheet'><h1>สรุปบัญชีรายวัน — สาขาอุดรธานี</h1><div class='sub'>เดือน 2026-05 · แต่ละวัน = 1 ใบบันทึกบัญชี (บันทึกยอดเต็ม แล้วแยกบรรทัดส่วนลด)</div><div class='empty'>ไม่มีรายการบัญชีในเดือนนี้</div></div></body></html>

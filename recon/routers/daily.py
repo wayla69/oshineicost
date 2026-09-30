@@ -101,8 +101,8 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
     css = """<style>
       @page{size:A4;margin:14mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
-      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-      h1{font-size:19px;margin:0 0 2px} h2{font-size:15px;margin:22px 0 8px;border-left:4px solid #ea580c;padding-left:8px}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      h1{font-size:19px;margin:0 0 2px} h2{font-size:15px;margin:22px 0 8px;border:1px solid #ea580c;padding-left:8px}
       h3{font-size:13px;margin:14px 0 6px;color:#475569}
       .muted{color:#64748b;font-size:11px} .right{text-align:right} .mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
       table{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:11.5px}
@@ -110,13 +110,13 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
       th{color:#64748b;font-size:10px;text-transform:uppercase;border-bottom:1.5px solid #e2e8f0}
       tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
       .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
-      .kpi{flex:1;min-width:120px;border:1px solid #e5e7eb;border-radius:8px;padding:8px 10px}
+      .kpi{flex:1;min-width:120px;border:1px solid #e5e7eb;border-radius:4px;padding:8px 10px}
       .kpi .l{font-size:10px;color:#64748b} .kpi .v{font-size:17px;font-weight:700}
       .pos{color:#059669} .neg{color:#dc2626} .badge{padding:1px 7px;border-radius:99px;font-size:10px;font-weight:600}
       .b-ok{background:#dcfce7;color:#166534}.b-warn{background:#fef9c3;color:#854d0e}.b-err{background:#fee2e2;color:#b91c1c}.b-mut{background:#f1f5f9;color:#475569}
       .toolbar{max-width:900px;margin:0 auto 14px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
-      .note{background:#fff7ed;border-left:3px solid #f59e0b;padding:6px 10px;border-radius:4px;margin:4px 0}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .note{background:#fff7ed;border:1px solid #f59e0b;padding:6px 10px;border-radius:4px;margin:4px 0}
       .sign{display:flex;gap:40px;margin-top:34px} .sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0;page-break-after:always}}
     </style>"""
@@ -130,7 +130,7 @@ def _daily_report_html(conn, day: str, branch_id: int | None) -> str:
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              css, "</head><body>",
-             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึกเป็น PDF</button></div>"]
+             "<div class='toolbar'><button class='btn' onclick='window.print()'>พิมพ์ / บันทึกเป็น PDF</button></div>"]
 
     if not rows:
         parts.append(f"<div class='sheet'><h1>รายงานกระทบยอดรายวัน</h1><p class='muted'>{day} · {scope}</p>"
@@ -283,7 +283,7 @@ _MATCH_ST = {
 def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
     """Per-day accounting breakdown rendered as the table inside the monthly report.
     Same numbers as the daybook cards — see _daily_finance_data. The in-app section
-    (📅 สรุปบัญชีรายวัน รายใบ) renders one card per day from the same data."""
+    (สรุปบัญชีรายวัน รายใบ) renders one card per day from the same data."""
     import html as _html
     def esc(s): return _html.escape(str(s or ""))
     def m(v):  return f"{float(v or 0):,.2f}"
@@ -291,7 +291,7 @@ def _daily_finance_html(conn, branch_id: int, period_month: str) -> str:
     if not data["days"]:
         return ""
 
-    P = ["<h2 style='border-left-color:#0f6e56'>📅 สรุปบัญชีรายวัน (ยอดเต็ม / ส่วนลดแยกบรรทัด)</h2>",
+    P = ["<h2 style='border-left-color:#1f3a6b'>สรุปบัญชีรายวัน (ยอดเต็ม / ส่วนลดแยกบรรทัด)</h2>",
          "<table><thead><tr><th class='l'>วันที่</th><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th>"
          "<th class='l'>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
          "<th>VAT</th><th>สุทธิ</th></tr></thead><tbody>"]
@@ -384,8 +384,8 @@ def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
         code, name = acct.get(slot, ("", ""))
         return f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
 
-    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
-         "<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินทั้งเดือน · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
+    P = ["<div style='margin-top:14px;border-top:2px solid #1f3a6b;padding-top:6px'>"
+         "<h2 style='border-left-color:#1f3a6b'>สรุปการรับเงินทั้งเดือน · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
          "<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th><th class='l'>ช่องทาง</th>"
          "<th>ยอดรับเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
          "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
@@ -398,7 +398,7 @@ def _monthly_finance_html(conn, branch_id: int, period_month: str) -> str:
              f"<td class='mono'>{m(N)}</td></tr></tfoot></table>")
 
     # draft journal entry (money-received basis) — gross revenue, discount booked apart
-    P.append("<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน)</h2>")
+    P.append("<h2 style='border-left-color:#1f3a6b'>ร่างการบันทึกบัญชี (รับชำระเงิน)</h2>")
     P.append("<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>บัญชี</th>"
              "<th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
     je = [("BANK", "เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("DISCOUNT", "ส่วนลด / โปรโมชัน", D, 0),
@@ -430,7 +430,7 @@ def _day_finance_html(conn, branch_id: int, day: str) -> str:
     data = _daily_finance_data(conn, branch_id, day[:7])
     dd = next((x for x in data["days"] if x["day"] == day), None)
     if not dd or not dd["channels"]:
-        return ("<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน) — "
+        return ("<h2 style='border-left-color:#1f3a6b'>ร่างการบันทึกบัญชี (รับชำระเงิน) — "
                 f"วันที่ {esc(day)}</h2><div class='empty'>ไม่มีรายการรับเงินในวันนี้</div>")
     chans = dd["channels"]; t = dd["totals"]
     G, D, F, V, N = t["gross"], t["discount"], t["fee"], t["vat"], t["net"]
@@ -440,8 +440,8 @@ def _day_finance_html(conn, branch_id: int, day: str) -> str:
         code, name = acct.get(slot, ("", ""))
         return f"<td class='l mono'>{esc(code) or '—'}</td><td class='l'>{esc(name) or '—'}</td>"
 
-    P = ["<div style='margin-top:14px;border-top:2px solid #0f6e56;padding-top:6px'>"
-         f"<h2 style='border-left-color:#0f6e56'>💰 สรุปการรับเงินวันที่ {esc(day)} · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
+    P = ["<div style='margin-top:14px;border-top:2px solid #1f3a6b;padding-top:6px'>"
+         f"<h2 style='border-left-color:#1f3a6b'>สรุปการรับเงินวันที่ {esc(day)} · ส่วนลด · ค่าธรรมเนียม · VAT</h2>",
          "<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>ชื่อบัญชี</th><th class='l'>ช่องทาง</th>"
          "<th>ยอดรับเต็ม</th><th>ส่วนลด</th><th>ค่าธรรมเนียม</th>"
          "<th>VAT (ค่าธรรมเนียม)</th><th>สุทธิเข้าบัญชี</th></tr></thead><tbody>"]
@@ -454,7 +454,7 @@ def _day_finance_html(conn, branch_id: int, day: str) -> str:
              f"<td class='mono'>{m(N)}</td></tr></tfoot></table>")
 
     # draft journal entry for THIS day (money-received basis) — gross revenue, discount apart
-    P.append(f"<h2 style='border-left-color:#0f6e56'>📒 ร่างการบันทึกบัญชี (รับชำระเงิน) — วันที่ {esc(day)}</h2>")
+    P.append(f"<h2 style='border-left-color:#1f3a6b'>ร่างการบันทึกบัญชี (รับชำระเงิน) — วันที่ {esc(day)}</h2>")
     P.append("<table><thead><tr><th class='l'>รหัสบัญชี</th><th class='l'>บัญชี</th>"
              "<th>เดบิต (Dr)</th><th>เครดิต (Cr)</th></tr></thead><tbody>")
     je = [("BANK", "เงินสด / ธนาคาร (รับสุทธิ)", N, 0), ("DISCOUNT", "ส่วนลด / โปรโมชัน", D, 0),
@@ -585,7 +585,7 @@ def _audit_detail_html(conn, branch_id: int, period_month: str) -> str:
     if not P:
         return "<div class='empty'>ไม่มีข้อมูลหลักฐานสำหรับเดือนนี้</div>"
     return ("<div style='margin-top:14px;border-top:2px solid #ea580c;padding-top:6px'>"
-            "<h2 style='border:0;padding:0;color:#9a3412'>📑 หลักฐานประกอบ (สำหรับผู้ตรวจสอบ) — "
+            "<h2 style='border:0;padding:0;color:#9a3412'>หลักฐานประกอบ (สำหรับผู้ตรวจสอบ) — "
             "ตรวจทานได้ทุกบรรทัด</h2>" + "".join(P) + "</div>")
 
 
@@ -609,10 +609,10 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
     css = """<style>
       @page{size:A4;margin:13mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:11.5px;margin:0;padding:22px;background:#f8fafc}
-      .sheet{background:#fff;max-width:1000px;margin:0 auto 18px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:1000px;margin:0 auto 18px;padding:24px 28px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:12px}
       .kpis{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0 14px}
-      .kpi{border:1px solid #e5e7eb;border-radius:8px;padding:7px 12px;min-width:96px}
+      .kpi{border:1px solid #e5e7eb;border-radius:4px;padding:7px 12px;min-width:96px}
       .kpi .l{font-size:10px;color:#64748b} .kpi .v{font-size:16px;font-weight:700}
       .kpi.ok .v{color:#166534} .kpi.issue .v{color:#b91c1c} .kpi.wait .v{color:#92610e}
       table{width:100%;border-collapse:collapse;font-size:11px;margin-top:4px}
@@ -628,11 +628,11 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
       .m-warn{background:#ffedd5;color:#9a3412}.m-wait{background:#fef9c3;color:#854d0e}
       .m-info{background:#dbeafe;color:#1e40af}.m-mut{background:#f1f5f9;color:#475569}
       .neg{color:#b91c1c} .legend{font-size:10px;color:#64748b;margin:2px 0 10px}
-      h2{font-size:13px;margin:18px 0 6px;border-left:4px solid #ea580c;padding-left:8px}
+      h2{font-size:13px;margin:18px 0 6px;border:1px solid #ea580c;padding-left:8px}
       .sign{display:flex;gap:40px;margin-top:26px}.sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       .toolbar{max-width:1000px;margin:0 auto 12px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
-      .ok-all{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;color:#166534;font-size:12px;margin:8px 0}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .ok-all{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:9px 13px;color:#166534;font-size:12px;margin:8px 0}
       .empty{color:#64748b;font-size:12px;padding:10px 0}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0;page-break-after:always}th{position:static}}
     </style>"""
@@ -655,23 +655,23 @@ def _monthly_matching_html(conn, period_month: str, branch_id: int | None,
                        for b in master))
     picker = (f"<select onchange=\"location.href='?period_month={period_month}'"
               f"+(this.value?'&branch_id='+this.value:'')+'{_detail_q}{_day_q}'\" "
-              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;"
+              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;"
               "font:inherit;margin-right:8px'>" + bopts + "</select>")
     # date filter — pick ONE day to post that day's accounting; clear to view the whole month
     daypick = (f"<input type='date' value='{esc(day_sel or '')}' "
                f"min='{period_month}-01' max='{period_month}-31' title='เลือกวันเดียว' "
                f"onchange=\"location.href='?period_month={period_month}{_br_q}{_detail_q}'"
                "+(this.value?'&day='+this.value:'')\" "
-               "style='padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px'>")
+               "style='padding:7px 10px;border:1px solid #cbd5e1;border-radius:4px;font:inherit;margin-right:8px'>")
     clear = (f"<a href='?period_month={period_month}{_br_q}{_detail_q}' "
-             "style='margin-right:10px;font-size:12px;color:#0f6e56'>↺ ทั้งเดือน</a>"
+             "style='margin-right:10px;font-size:12px;color:#1f3a6b'>↺ ทั้งเดือน</a>"
              if day_sel else "")
 
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>รายงานการจับคู่รายวัน</title>", css, "</head><body>",
              "<div class='toolbar'>" + picker + daypick + clear
-             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+             + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>"]
 
     for b in brs:
         bid, bname = b["branch_id"], b["name"]
@@ -940,13 +940,13 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
     css = """<style>
       @page{size:A4;margin:13mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:11.5px;margin:0;padding:22px;background:#f8fafc}
-      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:24px 28px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:18px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:14px}
       .legend{font-size:10px;color:#64748b;margin:2px 0 14px}
       .cards{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-      .dc{border:1px solid #e2e8f0;border-radius:9px;overflow:hidden;break-inside:avoid}
+      .dc{border:1px solid #e2e8f0;border-radius:4px;overflow:hidden;break-inside:avoid}
       .dc-h{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:#ecfdf5;border-bottom:1px solid #d1fae5}
-      .dc-date{font-weight:700;color:#0a523f;font-size:12.5px}
+      .dc-date{font-weight:700;color:#16294d;font-size:12.5px}
       .dc-net{font-weight:700;font-size:12.5px}
       table{width:100%;border-collapse:collapse;font-size:10.5px}
       th,td{padding:3px 12px;border-bottom:1px solid #f1f5f9;text-align:right}
@@ -955,12 +955,12 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
       .mono{font-variant-numeric:tabular-nums}
       .disc{color:#9a3412} .code{color:#94a3b8;font-size:9px}
       tfoot td{border-top:1.4px solid #cbd5e1;border-bottom:none;font-weight:700;background:#f8fafc}
-      table.je{border-top:1px solid #d1fae5} table.je th{background:#ecfdf5;color:#0a523f}
-      .mtot{margin-top:14px;border:1.5px solid #0f6e56;border-radius:9px;overflow:hidden}
-      .mtot .dc-h{background:#0f6e56;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
+      table.je{border-top:1px solid #d1fae5} table.je th{background:#ecfdf5;color:#16294d}
+      .mtot{margin-top:14px;border:1.5px solid #1f3a6b;border-radius:4px;overflow:hidden}
+      .mtot .dc-h{background:#1f3a6b;border-bottom:none} .mtot .dc-date,.mtot .dc-net{color:#fff}
       .empty{color:#64748b;font-size:12px;padding:10px 0}
       .toolbar{max-width:900px;margin:0 auto 12px;text-align:right}
-      .btn{background:#0f6e56;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .btn{background:#1f3a6b;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0;page-break-after:always}}
     </style>"""
 
@@ -970,14 +970,14 @@ def _daily_accounts_print_html(conn, period_month: str, branch_id: int | None) -
                        for b in master))
     picker = (f"<select onchange=\"location.href='?period_month={period_month}'"
               f"+(this.value?'&branch_id='+this.value:'')\" "
-              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;"
+              "style='padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;"
               "font:inherit;margin-right:8px'>" + bopts + "</select>")
 
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>สรุปบัญชีรายวัน (รายใบ)</title>", css, "</head><body>",
              "<div class='toolbar'>" + picker
-             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+             + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>"]
 
     def card_table(channels, foot, foot_label):
         rows = ["<table><thead><tr><th>ช่องทาง</th><th>ยอดเต็ม</th><th>ส่วนลด</th>"

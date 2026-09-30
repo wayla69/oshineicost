@@ -544,9 +544,9 @@ def wrong_channel_report_print(period_month: str | None = None,
     css = """<style>
       @page{size:A4;margin:14mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:24px;background:#f8fafc}
-      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:900px;margin:0 auto 18px;padding:26px 30px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:19px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:4px}
-      h2{font-size:15px;margin:18px 0 8px;border-left:4px solid #ea580c;padding-left:8px}
+      h2{font-size:15px;margin:18px 0 8px;border:1px solid #ea580c;padding-left:8px}
       .muted{color:#64748b;font-size:11px} .right{text-align:right} .mono{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
       table{width:100%;border-collapse:collapse;margin:6px 0 10px;font-size:11.5px}
       th,td{padding:6px 8px;border-bottom:1px solid #eef2f7;text-align:left;vertical-align:top}
@@ -559,14 +559,14 @@ def wrong_channel_report_print(period_month: str | None = None,
       .tb{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:3px;font-size:10px;color:#64748b}
       .tb .bar{width:60%;min-height:3px;background:#fdba74;border-radius:3px 3px 0 0}
       .tb.cur .bar{background:#ea580c}
-      .target{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:9px 13px;margin:6px 0;font-size:12px}
+      .target{background:#eff6ff;border:1px solid #bfdbfe;border-radius:4px;padding:9px 13px;margin:6px 0;font-size:12px}
       .tips{margin:6px 0 2px;padding-left:0;list-style:none}
       .tips li{position:relative;padding:5px 0 5px 24px;font-size:12px;line-height:1.5;border-bottom:1px dashed #eef2f7}
-      .tips li::before{content:'💡';position:absolute;left:0;top:4px}
-      .ack{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:12px 14px;margin-top:14px;font-size:12px;line-height:1.6}
+      .tips li::before{content:'';position:absolute;left:0;top:4px}
+      .ack{background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:12px 14px;margin-top:14px;font-size:12px;line-height:1.6}
       .sign{display:flex;gap:40px;margin-top:30px} .sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       .toolbar{max-width:900px;margin:0 auto 14px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
       .empty{max-width:900px;margin:40px auto;text-align:center;color:#64748b}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;margin:0;max-width:none;border-radius:0;page-break-after:always}}
     </style>"""
@@ -574,12 +574,12 @@ def wrong_channel_report_print(period_month: str | None = None,
     parts = ["<!doctype html><html lang='th'><head><meta charset='utf-8'>",
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>รายงานข้อผิดพลาดประจำเดือน</title>", css, "</head><body>",
-             "<div class='toolbar'><button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"]
+             "<div class='toolbar'><button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>"]
 
     if not bids:
         parts.append("<div class='empty'>ไม่พบข้อผิดพลาดในการกระทบยอด"
                      f"{' สำหรับเดือน ' + _esc(period_month) if period_month else ''} — "
-                     "ทุกช่องทางตรง ไม่มียอดต่าง เอกสารครบ และไม่มีการบันทึกผิดช่อง 🎉</div>")
+                     "ทุกช่องทางตรง ไม่มียอดต่าง เอกสารครบ และไม่มีการบันทึกผิดช่อง</div>")
     period_label = period_month or "ทุกเดือน"
     _ST_PILL = {"open": ("p-up", "ค้าง"), "acknowledged": ("p-flat", "รับทราบแล้ว"),
                 "resolved": ("p-ok", "แก้ไขแล้ว")}
@@ -649,7 +649,7 @@ def wrong_channel_report_print(period_month: str | None = None,
                              f"<div class='bar' style='height:{h}px'></div>{_esc(_mth(t['month']))}</div>")
             parts.append("</div>")
             tg = det.get("target", 0)
-            parts.append(f"<div class='target'>🎯 <b>เป้าหมายเดือนถัดไป: ไม่เกิน {tg} ครั้ง</b> "
+            parts.append(f"<div class='target'><b>เป้าหมายเดือนถัดไป: ไม่เกิน {tg} ครั้ง</b> "
                          f"(เดือนนี้ {det.get('current', len(rows))} ครั้ง) — "
                          "ตั้งเป้าลดลงครึ่งหนึ่ง โดยตรวจปุ่มรับเงินให้ตรงทุกบิล</div>")
         # ② ช่องที่สับสนบ่อย
@@ -793,9 +793,9 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
     css = """<style>
       @page{size:A4;margin:14mm}
       *{box-sizing:border-box} body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;font-size:12px;margin:0;padding:22px;background:#f8fafc}
-      .sheet{background:#fff;max-width:920px;margin:0 auto 16px;padding:24px 28px;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+      .sheet{background:#fff;max-width:920px;margin:0 auto 16px;padding:24px 28px;border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
       h1{font-size:19px;margin:0 0 2px} .sub{color:#64748b;font-size:12px;margin-bottom:6px}
-      h2{font-size:14px;margin:16px 0 6px;border-left:4px solid #ea580c;padding-left:8px}
+      h2{font-size:14px;margin:16px 0 6px;border:1px solid #ea580c;padding-left:8px}
       table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 6px}
       th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:right}
       th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}
@@ -804,11 +804,11 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
       .muted{color:#64748b;font-size:11px} tr.sub td{border-bottom:1px dashed #f1f5f9;padding:3px 9px}
       tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}
       .chk{width:16px;height:16px;border:1.5px solid #94a3b8;border-radius:3px;display:inline-block;vertical-align:middle}
-      .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}
-      .none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;color:#166534;font-size:12px}
+      .partial{color:#92610e}.lead{background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:9px 13px;font-size:12px;margin-bottom:12px}
+      .none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:9px 13px;color:#166534;font-size:12px}
       .toolbar{max-width:920px;margin:0 auto 12px;text-align:right}
-      .btn{background:#ea580c;color:#fff;border:0;border-radius:8px;padding:9px 18px;font-size:13px;cursor:pointer}
-      .ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px}
+      .btn{background:#ea580c;color:#fff;border:0;border-radius:4px;padding:9px 18px;font-size:13px;cursor:pointer}
+      .ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;font:inherit;margin-right:8px}
       .sign{display:flex;gap:40px;margin-top:22px}.sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;font-size:11px;color:#475569}
       @media print{body{background:#fff;padding:0}.toolbar{display:none}.sheet{box-shadow:none;border-radius:0;max-width:none;margin:0}}
     </style>"""
@@ -828,7 +828,7 @@ def outstanding_docs_report_print(period_month: str, branch_id: int | None = Non
              "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
              "<title>ติดตามเอกสารที่ขาด</title>", css, "</head><body>",
              "<div class='toolbar'>" + picker
-             + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+             + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
              "<div class='sheet'>",
              f"<h1>รายงานติดตามเอกสารที่ยังขาด — งวด {esc(period_month)}</h1>",
              f"<div class='sub'>เอกสารที่แต่ละสาขายังต้องอัปโหลด + ยอดเงินที่รอเอกสารนั้นจับคู่ · "
@@ -1100,9 +1100,9 @@ def _ic_print_css(accent):
         "body{font-family:'Sarabun','TH Sarabun New',system-ui,sans-serif;color:#1e293b;"
         "font-size:12px;margin:0;padding:22px;background:#f8fafc}"
         ".sheet{background:#fff;max-width:960px;margin:0 auto 16px;padding:24px 28px;"
-        "border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.08)}"
+        "border-radius:4px;box-shadow:0 1px 4px rgba(0,0,0,.08)}"
         "h1{font-size:19px;margin:0 0 2px}.sub{color:#64748b;font-size:12px;margin-bottom:8px}"
-        f"h2{{font-size:14px;margin:16px 0 6px;border-left:4px solid {accent};padding-left:8px}}"
+        f"h2{{font-size:14px;margin:16px 0 6px;border:1px solid {accent};padding-left:8px}}"
         "table{width:100%;border-collapse:collapse;font-size:12px;margin:4px 0 8px}"
         "th,td{padding:6px 9px;border-bottom:1px solid #eef2f7;text-align:right}"
         "th{color:#64748b;font-size:10px;border-bottom:1.5px solid #e2e8f0;background:#f8fafc}"
@@ -1110,17 +1110,17 @@ def _ic_print_css(accent):
         ".mono{font-variant-numeric:tabular-nums}.muted{color:#64748b;font-size:11px}"
         ".big{color:#b91c1c;font-weight:700}.ok{color:#047857}.warn{color:#b45309}"
         "tfoot td{border-top:1.5px solid #cbd5e1;font-weight:700}"
-        f".lead{{background:#f8fafc;border:1px solid #e2e8f0;border-left:4px solid {accent};"
-        "border-radius:8px;padding:9px 13px;font-size:12px;margin-bottom:12px}"
-        ".none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:9px 13px;"
+        f".lead{{background:#f8fafc;border:1px solid #e2e8f0;border:1px solid {accent};"
+        "border-radius:4px;padding:9px 13px;font-size:12px;margin-bottom:12px}"
+        ".none{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:9px 13px;"
         "color:#166534;font-size:12px}"
         ".chip{display:inline-block;padding:1px 8px;border-radius:999px;font-size:10px;font-weight:600}"
         ".c-ok{background:#ecfdf5;color:#047857}.c-warn{background:#fef3c7;color:#92610e}"
         ".c-err{background:#fef2f2;color:#b91c1c}.c-mut{background:#f1f5f9;color:#475569}"
         ".toolbar{max-width:960px;margin:0 auto 12px;text-align:right}"
-        f".btn{{background:{accent};color:#fff;border:0;border-radius:8px;padding:9px 18px;"
+        f".btn{{background:{accent};color:#fff;border:0;border-radius:4px;padding:9px 18px;"
         "font-size:13px;cursor:pointer}"
-        ".ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font:inherit;margin-right:8px}"
+        ".ctl{padding:8px 10px;border:1px solid #cbd5e1;border-radius:4px;font:inherit;margin-right:8px}"
         ".sign{display:flex;gap:40px;margin-top:26px}"
         ".sign div{flex:1;border-top:1px solid #94a3b8;padding-top:5px;text-align:center;"
         "font-size:11px;color:#475569}"
@@ -1180,7 +1180,7 @@ def override_register_print(request: Request, period_month: str, branch_id: int 
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
         "<title>ทะเบียนการปรับปรุงด้วยมือ</title>", _ic_print_css("#4f46e5"), "</head><body>",
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
         "<div class='sheet'>",
         f"<h1>ทะเบียนการปรับปรุงด้วยมือ (Management Override Register) — งวด {esc(period_month)}</h1>",
         f"<div class='sub'>ทุกรายการที่คนแก้ไขด้วยมือในเดือนนี้: จับคู่เอง · ย้ายช่อง · "
@@ -1236,7 +1236,7 @@ def open_items_aging_print(request: Request, period_month: str, branch_id: int |
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
         "<title>อายุรายการค้าง</title>", _ic_print_css("#b45309"), "</head><body>",
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
         "<div class='sheet'>",
         f"<h1>อายุรายการค้าง (Aging of Open Items) — ณ {esc(ag['as_of'])}</h1>",
         f"<div class='sub'>รายการกระทบยอดที่ยังไม่ปิด นับอายุจากสิ้นงวด · "
@@ -1355,9 +1355,9 @@ def recon_certificate_print(period_month: str, branch_id: int | None = None,
         "<div class='sheet'><div class='none'>ไม่มีข้อมูลสาขาสำหรับงวดนี้</div></div>"
     html_doc = ("<!doctype html><html lang='th'><head><meta charset='utf-8'>"
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>"
-        "<title>ใบรับรองการกระทบยอด</title>" + _ic_print_css("#0F6E56") + "</head><body>"
+        "<title>ใบรับรองการกระทบยอด</title>" + _ic_print_css("#1f3a6b") + "</head><body>"
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>"
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>"
         + body + "</body></html>")
     return Response(content=html_doc, media_type="text/html; charset=utf-8")
 
@@ -1501,7 +1501,7 @@ def close_register_print(request: Request, period_month: str, months: int = 6, b
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
         "<title>ทะเบียนการปิดเดือน</title>", _ic_print_css("#1d4ed8"), "</head><body>",
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
         "<div class='sheet'>",
         f"<h1>ทะเบียนการปิดเดือน (Close Register) — {esc(months)} เดือนล่าสุดถึง {esc(period_month)}</h1>",
         f"<div class='sub'>สถานะการปิดงวดของทุกสาขาหลัก · ใครอนุมัติ · เมื่อไหร่ · กระทบยอดแล้วกี่ % · "
@@ -1556,7 +1556,7 @@ def accepted_variance_print(request: Request, period_month: str, branch_id: int 
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
         "<title>สรุปผลต่างที่รับทราบ</title>", _ic_print_css("#b91c1c"), "</head><body>",
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
         "<div class='sheet'>",
         f"<h1>สรุปผลต่างที่รับทราบ (Accepted-Variance / Write-off) — งวด {esc(period_month)}</h1>",
         f"<div class='sub'>ยอดผลต่างที่ถูก “รับทราบ” แล้วปล่อยผ่าน (ทั้งช่อง + รายวัน) · "
@@ -1679,7 +1679,7 @@ def audit_trail_print(request: Request, period_month: str, branch_id: int | None
         "<link href='https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap' rel='stylesheet'>",
         "<title>ประวัติการแก้ไข</title>", _ic_print_css("#0891b2"), "</head><body>",
         "<div class='toolbar'>" + picker
-        + "<button class='btn' onclick='window.print()'>🖨️ พิมพ์ / บันทึก PDF</button></div>",
+        + "<button class='btn' onclick='window.print()'>พิมพ์ / บันทึก PDF</button></div>",
         "<div class='sheet'>",
         f"<h1>ประวัติการแก้ไข (Audit Trail) — งวด {esc(period_month)}</h1>",
         f"<div class='sub'>ทุกการเปลี่ยนแปลงที่ระบบบันทึกไว้ (เรียงใหม่สุดก่อน) · บันทึกแบบเพิ่มอย่างเดียว "
