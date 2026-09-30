@@ -377,3 +377,40 @@ def test_the_view_is_admin_only_and_the_report_passes_the_login_gate(client, mon
         assert r.status_code == 200                       # machine-to-machine: its own token, no session
     finally:
         monkeypatch.delenv("OSHINEI_AUTH", raising=False)
+
+
+# ── 2026-09-30: a failed Auto Sync gets one retry a day; other failures still need a person ──
+def test_a_failed_auto_sync_is_retried_once_at_1700():
+    tasks = [task(name=AUTOSYNC, last="2026-09-30T09:36:45", result=1, triggers=[daily("06:00")]),
+             task(name="Oshinei Sync Live (Fly)", last="2026-09-30T16:00:02", triggers=[daily("12:00"), daily("16:00")])]
+    sch = FakeScheduler(tasks, now=dt.datetime(2026, 9, 30, 17, 0))
+    notes, tried = sch.heal()
+    assert [n for n, _ in sch.started] == [AUTOSYNC] and tried == {AUTOSYNC: "2026-09-30"}
+    assert notes[AUTOSYNC] == "re-run by the watchdog at 17:00 - still running"
+    again, _ = FakeScheduler([task(name=AUTOSYNC, last="2026-09-30T17:00:00", result=1, triggers=[daily("06:00")])],
+                             now=dt.datetime(2026, 9, 30, 17, 50)).heal(tried)
+    assert again == {AUTOSYNC: "not re-run again - already tried today"}          # a repeat failure stays red
+
+
+def test_a_failed_auto_sync_is_not_retried_into_the_noon_sync():
+    tasks = [task(name=AUTOSYNC, last="2026-09-30T09:36:45", result=1, triggers=[daily("06:00")]),
+             task(name="Oshinei Sync Live (Fly)", last="2026-09-29T16:00:02", triggers=[daily("12:00"), daily("16:00")])]
+    sch = FakeScheduler(tasks, now=dt.datetime(2026, 9, 30, 11, 15))
+    assert sch.heal()[0] == {AUTOSYNC: "re-run held back - Oshinei Sync Live (Fly) starts at 12:00"} and sch.started == []
+
+
+def test_other_failed_tasks_are_still_not_retried():
+    sch = FakeScheduler([task(name=BACKUP, last="2026-09-30T07:30:01", result=1, triggers=[daily("07:30")])],
+                        now=dt.datetime(2026, 9, 30, 17, 0))
+    assert sch.heal()[0] == {} and sch.started == []
+
+
+def test_timestamped_log_lines_are_read_without_the_stamp(tmp_path):
+    # _tee.ps1 prefixes every line with [HH:MM:SS] since 2026-09-30; the run header stays bare
+    log = tmp_path / "auto_sync_local.log"
+    log.write_text("==================== Wed 09/30/2026  9:36:48.09 ====================\n"
+                   "[09:36:49] [1/6] copy oshinei.db\n"
+                   "[09:36:51] sqlite3.OperationalError: no such table: branches\n"
+                   "\n"
+                   "[09:36:51] *** SYNC/RECONCILE FAILED - nothing pushed or applied. ***\n", encoding="utf-8")
+    assert tw.last_telling_line(log) == "sqlite3.OperationalError: no such table: branches"

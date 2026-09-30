@@ -28,7 +28,8 @@ Where a problem is reported:
 while it lasts, and once more when everything is green again. 1 is sent every run:
 it is also the heartbeat.
 
-Healing: a task in RERUN_WHEN_MISSED that is `missed` or `stale` is started again,
+Healing: a task in RERUN_WHEN_MISSED that is `missed` or `stale` - or Auto Sync after a
+`fail` (RERUN_ON_FAIL, once a day, 2026-09-30) - is started again,
 one at a time, and the report is rebuilt afterwards so it says what is true NOW.
 Only the tasks the owner approved are listed (2026-09-21), each with the clear room
 it needs before ANY other task's slot:
@@ -93,7 +94,12 @@ RERUN_WHEN_MISSED = {
     "Oshinei Feedback Sync": (timedelta(minutes=10), RERUN_WAIT),
     "Oshinei Auto Sync": (timedelta(minutes=75), timedelta(0)),
 }
-RERUN_LEVELS = ("missed", "stale")                        # never "fail": that needs a person
+RERUN_LEVELS = ("missed", "stale")                        # "fail" needs a person - except:
+# Auto Sync is the only job that refreshes the LOCAL db (the backup and the Invisible push read it),
+# so a failed one leaves both a day stale. On 2026-09-30 it failed on a race at the 09:36 logon
+# catch-up and nothing retried it. It gets ONE retry a day under the same guards (75 clear minutes,
+# nothing else running); a failure that repeats stays red for a person. (Owner-approved 2026-09-30.)
+RERUN_ON_FAIL = ("Oshinei Auto Sync",)
 STILL_RUNNING = " - still running"
 
 RUNNING, NEVER_RAN = 0x41301, 0x41303
@@ -243,7 +249,8 @@ def heal(findings: list[dict], tried: dict, *, read=None, start=None, clock=date
     read, start = read or read_tasks, start or start_task
     notes, level_of = {}, {f["name"]: f["level"] for f in findings}
     for name, (_ahead, wait) in RERUN_WHEN_MISSED.items():          # config order, not report order
-        if level_of.get(name) not in RERUN_LEVELS:
+        level = level_of.get(name)
+        if level not in RERUN_LEVELS and not (level == "fail" and name in RERUN_ON_FAIL):
             continue
         today = clock().strftime("%Y-%m-%d")
         if tried.get(name) == today:
@@ -279,6 +286,7 @@ def signature(findings: list[dict]) -> str:
 # ── why it failed: the last telling line of the task's own log ───────────────
 _TELLING = re.compile(r"HTTP \d{3}|Error|ERROR|Traceback|FAILED|failed|refused|denied|not found|timed? ?out|cannot|can't", re.I)
 _BANNER = re.compile(r"^\*{3}.*\*{3}$")
+_STAMP = re.compile(r"^\[\d{2}:\d{2}:\d{2}\]\s*")          # _tee.ps1 prefixes each log line (2026-09-30)
 
 
 def log_path_for(action: str):
@@ -305,7 +313,8 @@ def last_telling_line(log: Path, limit: int = 220) -> str:
     # older logs are UTF-16, newer lines UTF-8 (_tee.ps1 changed 2026-09-07) - sometimes in ONE file
     text = raw.decode("utf-16-le", "replace") if raw.count(b"\x00") > len(raw) // 4 else raw.decode("utf-8", "replace")
     run = re.split(r"(?m)^={10,}.*$", text)[-1]                  # the last run only
-    lines = [ln.strip() for ln in run.splitlines() if ln.strip()]
+    lines = [_STAMP.sub("", ln.strip()) for ln in run.splitlines() if ln.strip()]
+    lines = [ln for ln in lines if ln]
     telling = [ln for ln in lines if _TELLING.search(ln) and not _BANNER.match(ln)]
     pick = telling[-1] if telling else (lines[-1] if lines else "")
     return pick[:limit]
