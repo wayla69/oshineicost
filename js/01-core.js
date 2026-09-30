@@ -738,7 +738,10 @@ const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\
 // only 3.1-3.3 on the dark card. #047857 / #b91c1c are the light inks themselves.
 // #10b981 / #ef4444 are 2.5 / 3.8:1 on white: marks only, never text.
 const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c', '#ef4444'];
-const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)' : c;
+// Teal and rose (categories, the ordering/checklist accent): #0d9488 3.74 and #f43f5e 3.67:1 on white.
+const _TEAL_HEX = ['#0d9488', '#14b8a6', '#0f766e'], _ROSE_HEX = ['#f43f5e', '#e11d48', '#be123c'];
+const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)'
+  : _TEAL_HEX.includes(c) ? 'var(--teal-ink)' : _ROSE_HEX.includes(c) ? 'var(--rose-ink)' : c;
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
 const _num = n => { const v = Number(n); return (n == null || isNaN(v)) ? null : v; };

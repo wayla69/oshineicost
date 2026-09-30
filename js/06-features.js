@@ -1420,7 +1420,7 @@ function renderWhatIf() {
   document.getElementById('whatifResult').innerHTML = `
     <div class="card p-3"><p class="kpi-label">Projected Revenue</p><p class="kpi-value text-indigo-600">${fmt(newRev)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(drev)}</p></div>
     <div class="card p-3"><p class="kpi-label">Projected Profit</p><p class="kpi-value" style="color:var(--good-ink)">${fmt(newProfit)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(dprof)}</p></div>
-    <div class="card p-3"><p class="kpi-label">Margin %</p><p class="kpi-value" style="color:#14b8a6">${newMarg.toFixed(1)}%</p><p class="text-xs mt-1">${fmtDelta(newMarg - _wiBase.margin, true)} vs base</p></div>
+    <div class="card p-3"><p class="kpi-label">Margin %</p><p class="kpi-value" style="color:var(--teal-ink)">${newMarg.toFixed(1)}%</p><p class="text-xs mt-1">${fmtDelta(newMarg - _wiBase.margin, true)} vs base</p></div>
     <div class="card p-3"><p class="kpi-label">Tx · Avg Ticket</p><p class="text-sm font-semibold">${fmtN(newTx)} × ${fmtN(newAvg)}</p><p class="text-xs text-slate-500 mt-1">${(newRev/_wiBase.revenue*100).toFixed(1)}% of base</p></div>
   `;
   mkChart('chartWhatIf', {

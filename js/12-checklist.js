@@ -191,7 +191,7 @@ function _clRenderPhases(di, locked) {
     const tasks = ph.tasks.filter(tk => !(onlyOpen && _clTaskState(tk).allDone));
     if (onlyOpen && !tasks.length) return '';
     return `<section class="card p-4 mt-4" id="cl-${ph.id}" style="border-top:3px solid ${ps.complete ? '#047857' : mode === 'blocked' ? '#b91c1c' : '#0f766e'}">
-      <div class="cl-phase-head"><h3 class="text-base font-bold">${_clEsc(ph.name)}</h3><span class="text-sm font-bold" style="color:#0f766e">${ps.done}/${ps.total}</span>
+      <div class="cl-phase-head"><h3 class="text-base font-bold">${_clEsc(ph.name)}</h3><span class="text-sm font-bold" style="color:var(--teal-ink)">${ps.done}/${ps.total}</span>
         <span class="text-xs" style="color:var(--text-muted)">ผู้รับผิดชอบ: ${_clEsc(ph.owner)} · วันที่ ${ph.days[0] + 1}–${ph.days[1]} ของโครงการ${mode === 'waiting' ? ' · <b style="color:#92400e">อยู่ในช่วงรออนุมัติ</b>' : ''}</span></div>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">${_clHl(ph.why)}</p>
       ${tasks.map(tk => {
