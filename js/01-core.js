@@ -536,7 +536,9 @@ async function deleteUser(username) {
   else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'ลบไม่สำเร็จ', false); }
 }
 
-const PALETTE = ['#4f46e5','#10b981','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#f97316','#84cc16','#ec4899','#14b8a6','#a78bfa','#fb923c'];
+// Formal theme: muted, deep hues that each reach 3:1 on BOTH the light and the dark card,
+// so one palette serves both themes (design-system/tokens.json chart-1..12).
+const PALETTE = ['#4a70b0','#2f8a74','#c08a1e','#c2413b','#7a66b8','#2b86b8','#c8672a','#6f9a2e','#b0457a','#3a9a9a','#8a93ad','#c4862f'];
 
 // ── World-class semantic color system ─────────────────────────
 const SEMANTIC = {
@@ -1282,7 +1284,7 @@ function switchTab(name) {
   document.getElementById('monthRangePickers')?.classList.toggle('invisible', hidePeriod);
   const _pb = document.getElementById('presetBar');
   if (_pb) _pb.style.display = hidePeriod ? 'none' : '';
-  document.getElementById('pageTitle').textContent = PAGE_TITLES[name] || name;
+  document.getElementById('pageTitle').textContent = _noEmoji(PAGE_TITLES[name] || name);
   _updateClusterBar(name);
   // Reset buffet subtab to overview whenever user navigates to/from buffetperf
   if (name === 'buffetperf') switchBperfTab('overview');
@@ -1332,6 +1334,11 @@ const KILL_CANDIDATES = ['action', 'pnl', 'profit', 'compare', 'costhead', 'pnlb
   'costheadtop60'];
 const SOFT_KILL = new Set([]);          // on hold — nothing folded
 const KILL_REVIEW_DATE = '';            // no deletion date while on hold
+// Formal theme: no emoji in the chrome (page title, cluster tabs). The labels in
+// PAGE_TITLES / TAB_CLUSTERS still carry them; strip at render so the data stays put.
+const _EMOJI_RE = /(?:[\u{1F000}-\u{1FAFF}☀-➿⬀-⯿⌀-⏿←-⇿ℹ〰〽][️‍]*)+/gu;
+function _noEmoji(s) { return String(s).replace(_EMOJI_RE, '').replace(/\s{2,}/g, ' ').trim(); }
+
 let _clusterMoreOpen = false;
 
 function _updateClusterBar(name) {
@@ -1349,13 +1356,13 @@ function _updateClusterBar(name) {
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
     return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
       ? 'background:var(--indigo);color:var(--on-indigo);font-weight:600'
-      : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${lbl}</button>`;
+      : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${_noEmoji(lbl)}</button>`;
   };
   const more = !folded.length ? '' : open
     ? folded.map(c => chip(c, true)).join('') +
       `<button id="clusterFold" onclick="_clusterMoreOpen=false;_updateClusterBar('${name}')" title="ซ่อนแท็บที่ไม่ได้ใช้" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">‹</button>`
     : `<button id="clusterMore" onclick="_clusterMoreOpen=true;_updateClusterBar('${name}')" title="แท็บที่ไม่มีใครเปิดตั้งแต่ 2026-07-20 (${folded.length}) — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ', ทบทวน ' + KILL_REVIEW_DATE : ''}" class="text-xs rounded-lg px-2 py-1" style="background:transparent;color:var(--text-muted);border:1px dashed var(--border)">⋯ ${folded.length}</button>`;
-  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${cl.label}:</span>` +
+  bar.innerHTML = `<span class="text-xs font-semibold mr-1" style="color:var(--text-muted)">${_noEmoji(cl.label)}:</span>` +
     shown.map(c => chip(c, false)).join('') + more;
 }
 

@@ -1,5 +1,5 @@
 # SectionTitle
 
-The eyebrow that opens a card or section: 10.5px uppercase, tracked 0.08em, in `text-muted`, behind a 3×14px indigo gradient tick.
+The heading that opens a card or section: 11px uppercase in `text-secondary`, behind a solid 3×12px `accent` tick.
 
-- One per card, as its first child. Keep it to a few words; the tick is part of the class, not markup.
+- One per card, as its first child. A few words, no emoji.

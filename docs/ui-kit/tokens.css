@@ -9,67 +9,74 @@
    see backend/main.py).
    ════════════════════════════════════════════════════════════════════════ */
 :root {
+  /* Formal theme (2026-09-30): navy accent, crisp 1px borders, 3-4px corners, no
+     shadows on resting surfaces. Every text pair below clears WCAG AA 4.5:1 on the
+     surfaces it is used on; --border-control clears 3:1 for control edges. */
   --bg-page:    #f0f4f8;
   --bg-card:    #ffffff;
   --bg-input:   #ffffff;
   --bg-subtle:  #f8fafc;
-  --bg-sidebar: #0c1525;
+  --bg-sidebar: #16294d;   /* navy rail; its text: #aab9d2 7.3:1, white 14.4:1 */
   --bg-topbar:  #ffffff;
-  --bg-hover:   #eef2ff;
+  --bg-hover:   #eef2f7;
   --text-primary:   #0f172a;
   --text-secondary: #475569;
-  /* Was #94a3b8 (2.56:1 on the card, 2.32 on the page). #5f6c80 clears AA 4.5 on
-     every light surface: card 5.33 · subtle 5.09 · page 4.82 · hover 4.76. */
-  --text-muted:     #5f6c80;
-  --border:     #e2e8f0;
-  --border-soft:#f1f5f9;
-  --indigo:     #4f46e5;
-  --indigo-mid: #6366f1;
-  --indigo-soft:#eef2ff;
-  /* Label on an indigo fill. White on #4f46e5 = 6.29:1; dark mode lightens
-     --indigo to #818cf8, where white drops to 2.98, so the label flips dark. */
-  --on-indigo:  #ffffff;
+  --text-muted:     #5f6c80;   /* card 5.33 · subtle 5.09 · page 4.82 · hover 4.74 */
+  --border:         #d5dbe3;   /* card / panel / table edges: structure, not controls */
+  --border-soft:    #e6eaf0;   /* row separators */
+  --border-control: #7d8aa0;   /* inputs, selects, outlined buttons: 3.49:1 on white */
+
+  /* The one accent: navy. White on it = 11.2:1; as text on white = 11.2:1. */
+  --accent:       #1f3a6b;
+  --accent-hover: #16294d;
+  --accent-soft:  #e8eef7;     /* accent on it = 9.6:1 */
+  --on-accent:    #ffffff;
   /* Up/down figures as TEXT. The bright fills (#10b981 2.54:1, #ef4444 3.76:1
      on white) are for rules, bars and dots only. */
   --good-ink:   #047857;
   --bad-ink:    #b91c1c;
 
-  /* Elevation */
-  --shadow-xs:  0 1px 2px rgba(15,23,42,0.05);
-  --shadow-sm:  0 1px 3px rgba(15,23,42,0.04), 0 2px 8px rgba(15,23,42,0.06);
-  --shadow-md:  0 4px 8px rgba(15,23,42,0.05), 0 12px 24px rgba(15,23,42,0.08);
-  --shadow-lg:  0 12px 32px rgba(15,23,42,0.12), 0 4px 10px rgba(15,23,42,0.05);
-  --shadow-card: 0 1px 3px rgba(15,23,42,0.04), 0 2px 10px rgba(15,23,42,0.05);
+  /* Elevation: resting surfaces are flat; only floating things cast a shadow. */
+  --shadow-xs:  none;
+  --shadow-sm:  none;
+  --shadow-card: none;
+  --shadow-md:  0 4px 12px rgba(15,23,42,0.12);   /* menus, dropdowns */
+  --shadow-lg:  0 12px 32px rgba(15,23,42,0.24);  /* the modal */
 
   /* Radii */
-  --r-sm: 8px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-sm: 3px;
+  --r-md: 4px;
+  --r-lg: 4px;
 }
 body.dark {
   --bg-page:    #080e1c;
   --bg-card:    #0f1a2e;
   --bg-input:   #131f35;
   --bg-subtle:  #111828;
-  --bg-sidebar: #060d1a;
+  --bg-sidebar: #0b1730;
   --bg-topbar:  #0f1a2e;
-  --bg-hover:   #1e2a4a;
+  --bg-hover:   #1a2742;
   --text-primary:   #f1f5f9;
   --text-secondary: #94a3b8;
-  /* NOT the light theme's muted/secondary pair swapped over — that is what this
-     was, and it is why every footnote in dark mode sat at 2.30:1 on the card
-     (AA wants 4.5). Inverting a hierarchy that works on white does not preserve
-     contrast on near-black. #8595a9 clears 4.5 on EVERY dark surface:
-     card 5.69 · page 6.30 · subtle 5.80 · hover 4.62. */
+  /* NOT the light theme's muted/secondary pair swapped over - inverting a hierarchy
+     that works on white does not preserve contrast on near-black. #8595a9 clears
+     4.5 on EVERY dark surface: card 5.69 · page 6.30 · subtle 5.80 · hover 4.86. */
   --text-muted:     #8595a9;
-  --border:     #1e2d45;
-  --border-soft:#131f35;
-  --indigo:     #818cf8;
-  --indigo-mid: #6366f1;
-  --indigo-soft:#1c2060;
-  --on-indigo:  #080e1c;   /* 6.46:1 on #818cf8 */
+  --border:         #2b3b55;
+  --border-soft:    #1c2a42;
+  --border-control: #63738d;   /* 3.43:1 on the dark input */
+  --accent:       #93b4e6;     /* 8.2:1 on the dark card */
+  --accent-hover: #b7cbee;
+  --accent-soft:  #172a4a;     /* accent on it = 6.8:1 */
+  --on-accent:    #080e1c;     /* 9.1:1 on #93b4e6 */
   --good-ink:   #34d399;   /* 9.05:1 on the dark card */
   --bad-ink:    #f87171;   /* 6.29:1 on the dark card */
-
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.2), 0 2px 10px rgba(0,0,0,0.15);
+}
+/* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
+   declared on BOTH selectors so body.dark re-resolves them against its own accent. */
+:root, body.dark {
+  --indigo:      var(--accent);
+  --indigo-mid:  var(--accent-hover);
+  --indigo-soft: var(--accent-soft);
+  --on-indigo:   var(--on-accent);
 }

@@ -1269,6 +1269,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   #mgtTierDriversPrint { display: block !important; }
 }
 </style>
+<!-- Formal theme: loaded last so it restyles the classes above (see the file header). -->
+<link rel="stylesheet" href="/docs/ui-kit/theme-formal.css">
 </head>
 <body>
 
@@ -1450,203 +1452,203 @@ body.mgt-reading .content-area { padding-top: 10px; }
 
   <div class="nav-item active" id="nav-home" onclick="switchTab('home')" title="Daily Brief · Yesterday vs target, alerts, forecast">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-    <span class="nav-label">🏠 หน้าแรก</span>
+    <span class="nav-label">หน้าแรก</span>
   </div>
   <div class="nav-item" id="nav-action" style="display:none" onclick="switchTab('action')" title="🔔 ต้องดูวันนี้ — รวมสัญญาณเตือน/โอกาส ทั้งระบบไว้ที่เดียว (MTD-fair) · เข้าถึงจากปุ่มในหน้าแรก">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-    <span class="nav-label">🔔 ต้องดูวันนี้</span>
+    <span class="nav-label">ต้องดูวันนี้</span>
   </div>
-  <div class="nav-section">📊 วิเคราะห์</div>
+  <div class="nav-section">วิเคราะห์</div>
   <div class="nav-item" id="nav-overall" onclick="switchTab('overall')" title="ภาพรวม & KPI · ตัวชี้วัดหลัก, heatmap, insights · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-    <span class="nav-label">📊 ภาพรวม &amp; KPI</span>
+    <span class="nav-label">ภาพรวม &amp; KPI</span>
   </div>
   <div class="nav-item" id="nav-dailysales" style="display:none" onclick="switchTab('dailysales')" title="ยอดขายรายวัน · รายสาขา วัน/สัปดาห์/เดือน + เทียบเดือนก่อน/ปีก่อน + ผิดปกติ">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>
-    <span class="nav-label">📅 ยอดขายรายวัน</span>
+    <span class="nav-label">ยอดขายรายวัน</span>
   </div>
   <div class="nav-item" id="nav-trend" style="display:none" onclick="switchTab('trend')" title="แนวโน้ม · MoM trajectory & sparklines">
     <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
-    <span class="nav-label">📈 แนวโน้ม</span>
+    <span class="nav-label">แนวโน้ม</span>
   </div>
   <div class="nav-item" id="nav-compare" style="display:none" onclick="switchTab('compare')" title="เปรียบเทียบช่วงเวลา · A vs B side-by-side">
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="3" x2="12" y2="21"/><polyline points="6 9 3 12 6 15"/><polyline points="18 9 21 12 18 15"/></svg>
-    <span class="nav-label">⚖️ เปรียบเทียบ A/B</span>
+    <span class="nav-label">เปรียบเทียบ A/B</span>
   </div>
   <div class="nav-item" id="nav-more" style="display:none" onclick="switchTab('more')" title="Insight เพิ่มเติม · daypart, category mix, table turnover, forecast">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M19 9l-5 5-4-4-3 3"/></svg>
-    <span class="nav-label">📊 Insight เพิ่มเติม</span>
+    <span class="nav-label">Insight เพิ่มเติม</span>
   </div>
   <div class="nav-item" id="nav-buffetperf" onclick="switchTab('buffetperf')" title="ผลงานบุฟเฟ่ต์ · seat utilization, tier mix, waste, beverage attach · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M7 21h10M12 21V7M3 7h18a4 4 0 01-4 4H7a4 4 0 01-4-4z"/><circle cx="12" cy="3" r="1"/></svg>
-    <span class="nav-label">🍱 บุฟเฟ่ต์ &amp; ลูกค้า</span>
+    <span class="nav-label">บุฟเฟ่ต์ &amp; ลูกค้า</span>
   </div>
   <div class="nav-item" id="nav-childbuffet" style="display:none" onclick="switchTab('childbuffet')" title="บุฟเฟ่ต์เด็ก · child-tier covers, %, MoM, YTD trend per branch">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M6 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/></svg>
-    <span class="nav-label">🧒 บุฟเฟ่ต์เด็ก</span>
+    <span class="nav-label">บุฟเฟ่ต์เด็ก</span>
   </div>
   <div class="nav-item" id="nav-guest" style="display:none" onclick="switchTab('guest')" title="ลูกค้า & ยอด/หัว · Spend-per-head, party size, daypart">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="21" x2="23" y2="19"/><line x1="19" y1="21" x2="19" y2="19"/><path d="M21 8a2 2 0 10-4 0v5h4V8z"/></svg>
-    <span class="nav-label">👥 ลูกค้า &amp; ยอด/หัว</span>
+    <span class="nav-label">ลูกค้า &amp; ยอด/หัว</span>
   </div>
   <div class="nav-item" id="nav-timeflow" style="display:none" onclick="switchTab('timeflow')" title="ช่วงเวลา & การไหล · Daypart heatmap, peak hours">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    <span class="nav-label">⏰ ช่วงเวลา &amp; การไหล</span>
+    <span class="nav-label">ช่วงเวลา &amp; การไหล</span>
   </div>
   <div class="nav-item" id="nav-custtype" style="display:none" onclick="switchTab('custtype')" title="ประเภทลูกค้า & Delivery · walk-in vs Grab vs Line Man vs ห่อกลับ vs เครดิต">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3"/><path d="M3 21v-2a4 4 0 014-4h4a4 4 0 014 4v2"/><path d="M16 3.13a4 4 0 010 7.75M21 21v-2a4 4 0 00-3-3.87"/></svg>
-    <span class="nav-label">👥 ประเภทลูกค้า</span>
+    <span class="nav-label">ประเภทลูกค้า</span>
   </div>
   <div class="nav-item" id="nav-menu" onclick="switchTab('menu')" title="วิเคราะห์เมนู · Most ordered, persona, item mix · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h12"/></svg>
-    <span class="nav-label">📋 วิเคราะห์เมนู</span>
+    <span class="nav-label">วิเคราะห์เมนู</span>
   </div>
   <div class="nav-item" id="nav-engineering" style="display:none" onclick="switchTab('engineering')" title="เมนูทำเงิน (Menu Engineering) · ดูได้ในแท็บ วิเคราะห์เมนู → 🔬 Menu Engineering">
     <svg class="nav-icon" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-    <span class="nav-label">⭐ เมนูทำเงิน</span>
+    <span class="nav-label">เมนูทำเงิน</span>
   </div>
   <div class="nav-item" id="nav-menucompare" style="display:none" onclick="switchTab('menucompare')" title="🆚 เทียบเมนู A vs B — เลือกช่วงเวลา 2 ช่วง (เดือน/ช่วงวันที่) + dive-in รายสาขา/เทรนด์/BoM">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M8 3v18M16 3v18"/><path d="M3 8h5M3 16h5M16 8h5M16 16h5"/></svg>
-    <span class="nav-label">🆚 เทียบเมนู A/B</span>
+    <span class="nav-label">เทียบเมนู A/B</span>
   </div>
   <div class="nav-item" id="nav-menuimpact" style="display:none" onclick="switchTab('menuimpact')" title="🧪 วิเคราะห์วัตถุดิบ (Menu Impact) — เลือกวัตถุดิบ/เมนู + ช่วงเวลา → เทียบบิลที่มี vs ไม่มี (ต้นทุน/หัว, การกินเมนูแพง, GP) จากข้อมูลบิลจริง MSSQL">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 3h6"/><path d="M10 3v6L4.5 19a2 2 0 001.8 3h11.4a2 2 0 001.8-3L14 9V3"/><path d="M6.5 15h11"/></svg>
-    <span class="nav-label">🧪 วิเคราะห์วัตถุดิบ</span>
+    <span class="nav-label">วิเคราะห์วัตถุดิบ</span>
   </div>
   <div class="nav-item" id="nav-menuactionboard" onclick="switchTab('menuactionboard')" title="⚡ ปรับเมนู (Menu Action Board) — รวมเมนูทุกจานเป็น 4 กลุ่มสิ่งที่ควรทำ: ดันต่อ/โปรโมต · ผลักดันยอด · ปรับราคา-ลดต้นทุน · ทบทวน/ตัด · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
-    <span class="nav-label">⚡ ปรับเมนู</span>
+    <span class="nav-label">ปรับเมนู</span>
   </div>
   <div class="nav-item" id="nav-menuopportunities" style="display:none" onclick="switchTab('menuopportunities')" title="💡 โอกาสเมนู (Menu Opportunities) — เมนูที่สาขาอื่นขายดีแต่สาขานี้ยังไม่มี · หมวดที่ยังขยายได้ · เมนูที่เคยขายดีควรรื้อฟื้น + ✨ สร้างไอเดียด้วย AI">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 18h6M10 22h4M12 2a7 7 0 00-4 12.7c.6.5 1 1.3 1 2.1h6c0-.8.4-1.6 1-2.1A7 7 0 0012 2z"/></svg>
-    <span class="nav-label">💡 โอกาสเมนู</span>
+    <span class="nav-label">โอกาสเมนู</span>
   </div>
   <div class="nav-item" id="nav-feedback" onclick="switchTab('feedback')" title="💬 เสียงลูกค้า (Customer Feedback) — วาง/อัปโหลดรีวิวจาก Google · Facebook · Grab · LINE MAN แล้วดูความรู้สึก หัวข้อ และเมนูที่ถูกพูดถึง">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H8l-5 3 1.5-4.5A8 8 0 1 1 21 12z"/></svg>
-    <span class="nav-label">💬 เสียงลูกค้า</span>
+    <span class="nav-label">เสียงลูกค้า</span>
   </div>
   <div class="nav-item" id="nav-menuefficiency" style="display:none" onclick="switchTab('menuefficiency')" title="🎯 เมนูเสิร์ฟเยอะ × ต้นทุน — เป้าหมายลดต้นทุนพร้อมวัตถุดิบที่ควรโจมตีก่อน">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="11"/><line x1="22" y1="12" x2="18" y2="12"/><line x1="2" y1="12" x2="6" y2="12"/></svg>
-    <span class="nav-label">🎯 เป้าลดต้นทุน</span>
+    <span class="nav-label">เป้าลดต้นทุน</span>
   </div>
   <div class="nav-item" id="nav-cost" onclick="switchTab('cost')" title="ต้นทุน (Cost Analysis) · Margins, ABC, Pareto · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-    <span class="nav-label">💰 ต้นทุน</span>
+    <span class="nav-label">ต้นทุน</span>
   </div>
   <div class="nav-item" id="nav-bomcost" onclick="switchTab('bomcost')" title="🔬 BoM Cost Analysis · เข้าถึงผ่านแถบ 💰 ต้นทุน" style="display:none">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.22 4.22l4.24 4.24m7.08 7.08l4.24 4.24M1 12h6m10 0h6M4.22 19.78l4.24-4.24m7.08-7.08l4.24-4.24"/></svg>
-    <span class="nav-label">🎮 BoM + Simulator</span>
+    <span class="nav-label">BoM + Simulator</span>
   </div>
   <div class="nav-item" id="nav-simhub" style="display:none" onclick="switchTab('simhub')" title="🎮 รวมตัวจำลองทั้งหมด — BoM Cost · Cost Sensitivity · Tier Upgrade · What-If">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><line x1="6" y1="12" x2="10" y2="12"/><line x1="8" y1="10" x2="8" y2="14"/><circle cx="16.5" cy="11" r="1"/><circle cx="18" cy="14" r="1"/></svg>
-    <span class="nav-label">🎮 Simulators</span>
+    <span class="nav-label">Simulators</span>
   </div>
   <div class="nav-item" id="nav-costhead" style="display:none" onclick="switchTab('costhead')" title="ต้นทุน/หัว รายสาขา (BoM) · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-    <span class="nav-label">💸 ต้นทุน/หัว</span>
+    <span class="nav-label">ต้นทุน/หัว</span>
   </div>
   <div class="nav-item" id="nav-costheadtop60" style="display:none" onclick="switchTab('costheadtop60')" title="Top 60 เมนู ต้นทุน/หัว · สาขา Master — ภาพรวม → แยกสาขา → เทียบภาพรวม + แผนตรวจสอบ/พัฒนา/ติดตาม · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="14" width="3" height="3"/></svg>
-    <span class="nav-label">🏅 Top60 ต้นทุน/หัว</span>
+    <span class="nav-label">Top60 ต้นทุน/หัว</span>
   </div>
   <div class="nav-item" id="nav-heavyeater" style="display:none" onclick="switchTab('heavyeater')" title="🍽️ ต่อหัว & นักกินหนัก · เศรษฐศาสตร์ต่อคน + การกระจาย COGS/หัว + บิลขาดทุน · เข้าถึงผ่านแถบ 💰 ต้นทุน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l3-4 3 3 5-7"/></svg>
-    <span class="nav-label">🍽️ นักกินหนัก</span>
+    <span class="nav-label">นักกินหนัก</span>
   </div>
   <div class="nav-item" id="nav-coverage" style="display:none" onclick="switchTab('coverage')" title="ความครอบคลุมต้นทุน · top cost-driver ingredients + peak hours">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12A10 10 0 1 1 12 2"/><path d="M22 2 12 12"/><path d="M16 2h6v6"/></svg>
-    <span class="nav-label">🎯 ความครอบคลุมต้นทุน</span>
+    <span class="nav-label">ความครอบคลุมต้นทุน</span>
   </div>
   <div class="nav-item" id="nav-branchbom" style="display:none" onclick="switchTab('branchbom')" title="BoM วิเคราะห์รายสาขา · per-branch cost deep-dive (Phase 12)">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.22 4.22l4.24 4.24M15.54 15.54l4.24 4.24M1 12h6M17 12h6M4.22 19.78l4.24-4.24M15.54 8.46l4.24-4.24"/></svg>
-    <span class="nav-label">🔬 BoM รายสาขา</span>
+    <span class="nav-label">BoM รายสาขา</span>
   </div>
   <div class="nav-item" id="nav-gpbranch" onclick="switchTab('gpbranch')" title="GP รายสาขา · Gross Profit per branch (unified BoM COGS) · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 3 5-6"/></svg>
-    <span class="nav-label">💵 กำไร &amp; P&amp;L</span>
+    <span class="nav-label">กำไร &amp; P&amp;L</span>
   </div>
   <div class="nav-item" id="nav-pnlbranch" style="display:none" onclick="switchTab('pnlbranch')" title="P&amp;L รายสาขา · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="10" width="3" height="7"/><rect x="12" y="6" width="3" height="11"/><rect x="17" y="13" width="3" height="4"/></svg>
-    <span class="nav-label">💵 P&amp;L รายสาขา</span>
+    <span class="nav-label">P&amp;L รายสาขา</span>
   </div>
   <div class="nav-item" id="nav-pnlbill" style="display:none" onclick="switchTab('pnlbill')" title="P&amp;L ต่อบิล · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M9 2h6l2 2v16l-2-1-2 1-2-1-2 1V4z"/><path d="M9 8h6M9 12h6"/></svg>
-    <span class="nav-label">🧾 P&amp;L ต่อบิล</span>
+    <span class="nav-label">P&amp;L ต่อบิล</span>
   </div>
   <div class="nav-item" id="nav-benchmark" style="display:none" onclick="switchTab('benchmark')" title="Branch Benchmark · เข้าถึงผ่านแถบ 💵 กำไร & P&L">
     <svg class="nav-icon" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-    <span class="nav-label">🏆 Benchmark สาขา</span>
+    <span class="nav-label">Benchmark สาขา</span>
   </div>
   <div class="nav-item" id="nav-profit" style="display:none" onclick="switchTab('profit')" title="Profit Analysis · Margins by branch and SKU">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-    <span class="nav-label">📈 กำไร</span>
+    <span class="nav-label">กำไร</span>
   </div>
   <div class="nav-item" id="nav-opsreport" onclick="switchTab('opsreport')" title="รายงานปฏิบัติการ · การชำระเงิน, ช่องทางขาย, การยกเลิก/Void, โต๊ะหมุนเวียน, โปรโมชัน · เลือกมุมมองย่อยได้ที่แถบบนของหน้า">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-    <span class="nav-label">🛒 ปฏิบัติการ &amp; ส่วนลด</span>
+    <span class="nav-label">ปฏิบัติการ &amp; ส่วนลด</span>
   </div>
   <div class="nav-item" id="nav-discounts" style="display:none" onclick="switchTab('discounts')" title="ส่วนลด (Discounts & Leakage) · Monitor discount patterns">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-    <span class="nav-label">🏷️ ส่วนลด</span>
+    <span class="nav-label">ส่วนลด</span>
   </div>
   <div class="nav-item" id="nav-ops" style="display:none" onclick="switchTab('ops')" title="วิเคราะห์เชิงลึก · Cohort, Affinity, What-If">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-    <span class="nav-label">🔬 วิเคราะห์เชิงลึก</span>
+    <span class="nav-label">วิเคราะห์เชิงลึก</span>
   </div>
   <div class="nav-item" id="nav-staff" style="display:none" onclick="switchTab('staff')" title="พนักงาน (Staff Scorecard) · Cashier performance, AOV, discount rate">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-    <span class="nav-label">👤 พนักงาน</span>
+    <span class="nav-label">พนักงาน</span>
   </div>
   <div class="nav-item" id="nav-cashctl" style="display:none" onclick="switchTab('cashctl')" title="เงินสดขาด/เกิน · over/short รายวันต่อสาขา (loss prevention) จาก CashCount">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/></svg>
-    <span class="nav-label">💵 เงินสดขาด/เกิน</span>
+    <span class="nav-label">เงินสดขาด/เกิน</span>
   </div>
   <div class="nav-item" id="nav-cancelbill" style="display:none" onclick="switchTab('cancelbill')" title="บิลที่ยกเลิก/ลบทั้งบิล (Sale.Active=0) · ตามเหตุผล + รายสาขา">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h2a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-    <span class="nav-label">🗑️ บิลยกเลิก/ลบ</span>
+    <span class="nav-label">บิลยกเลิก/ลบ</span>
   </div>
   <div class="nav-item" id="nav-modifiers" style="display:none" onclick="switchTab('modifiers')" title="ความต้องการพิเศษยอดฮิต · พริก/ไข่/ระดับเผ็ด (วางแผนเตรียมครัว)">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h0a2 2 0 002-2V2M5 11v11M11 2v20M11 12h3a2 2 0 002-2V5a3 3 0 00-3-3"/></svg>
-    <span class="nav-label">🍽️ ความต้องการพิเศษ</span>
+    <span class="nav-label">ความต้องการพิเศษ</span>
   </div>
   <div class="nav-item" id="nav-pricezone" style="display:none" onclick="switchTab('pricezone')" title="ประวัติแก้ราคา (governance) + โซนโต๊ะรายสาขา">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-    <span class="nav-label">🏷️ ราคา &amp; โซนโต๊ะ</span>
+    <span class="nav-label">ราคา &amp; โซนโต๊ะ</span>
   </div>
   <div class="nav-item" id="nav-closetime" style="display:none" onclick="switchTab('closetime')" title="ความสดของข้อมูล + เวลาปิดร้าน · สาขาไหนข้อมูลล่าช้า (ยังไม่ sync) + เวลาปิดบิลใบสุดท้ายเฉลี่ย">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-    <span class="nav-label">⏰ เวลาปิดร้าน/ความสดข้อมูล</span>
+    <span class="nav-label">เวลาปิดร้าน/ความสดข้อมูล</span>
   </div>
-  <div class="nav-section">🧺 จัดซื้อ/วัตถุดิบ</div>
+  <div class="nav-section">จัดซื้อ/วัตถุดิบ</div>
   <div class="nav-item" id="nav-ordering" onclick="switchTab('ordering')" title="🧺 แผนสั่งวัตถุดิบรายสาขา — ปริมาณที่ควรสั่งต่อสัปดาห์/เดือน จากยอดขายจริง × BoM + ออกจดหมายแจ้งสาขา">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 6h18l-2 13H5L3 6z"/><path d="M8 6V4a4 4 0 018 0v2"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-    <span class="nav-label">🧺 แผนสั่งวัตถุดิบ</span>
+    <span class="nav-label">แผนสั่งวัตถุดิบ</span>
   </div>
   <div class="nav-item" id="nav-ingpurchase" onclick="switchTab('ingpurchase')" title="🧾 ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา — นำเข้ายอดซื้อรายสัปดาห์จาก Excel แล้วเทียบกับยอดขายของสาขานั้น">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z"/><line x1="9" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="15" y2="11"/></svg>
-    <span class="nav-label">🧾 ยอดซื้อ vs ยอดขาย</span>
+    <span class="nav-label">ยอดซื้อ vs ยอดขาย</span>
   </div>
   <div class="nav-item" id="nav-ordersetup" onclick="switchTab('ordersetup')" title="⚙️ ตั้งค่าการสั่งซื้อ — ขนาดบรรจุ (หน่วยสั่ง) และปฏิทินเทศกาล/โปรโมชัน">
     <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M3 11h18"/><path d="M8 7V5a4 4 0 018 0v2"/></svg>
-    <span class="nav-label">⚙️ ตั้งค่าการสั่งซื้อ</span>
+    <span class="nav-label">ตั้งค่าการสั่งซื้อ</span>
   </div>
-  <div class="nav-section">📄 รายงาน</div>
+  <div class="nav-section">รายงาน</div>
   <!-- nav-report hidden 2026-07-20: it duplicated nav-mgtreport (both open
        #tab-mgtreport since the Monthly mode landed). Stays in the DOM for
        applyPermissions' safety net; the LEGACY full pack (#tab-report) is
        reached via the 📑 ฉบับเต็ม button inside the report's Monthly mode. -->
   <div class="nav-item" id="nav-report" style="display:none" onclick="openMonthlyReport()" title="Monthly Report (รายงานประจำเดือน) · เปิดผ่าน 📊 Management Report โหมด Monthly">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-    <span class="nav-label">📄 Monthly Report</span>
+    <span class="nav-label">Monthly Report</span>
   </div>
   <div class="nav-item" id="nav-mgtreport" onclick="switchTab('mgtreport')" title="Management Report · Daily / Weekly / Monthly summary for management (printable) · โหมด Monthly = รายงานประจำเดือน">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M3 3v18h18"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
-    <span class="nav-label">📊 Management Report</span>
+    <span class="nav-label">Management Report</span>
   </div>
-  <div class="nav-section">⚙️ เครื่องมือ</div>
+  <div class="nav-section">เครื่องมือ</div>
   <div class="nav-item" id="nav-manual" onclick="switchTab('manual')" title="คู่มือการใช้งาน · How to use each tab, hard rules, common workflows">
     <svg class="nav-icon" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
-    <span class="nav-label">📖 คู่มือ</span>
+    <span class="nav-label">คู่มือ</span>
   </div>
   <div class="nav-item" id="nav-settings" onclick="switchTab('settings')" title="Settings · Targets, costs, branches, hours, prefs">
     <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
