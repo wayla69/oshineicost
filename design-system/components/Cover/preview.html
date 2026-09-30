@@ -1,0 +1,59 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Oshinei</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--bg-page); color:var(--text-primary); font-family:var(--font-sans); overflow:hidden; }
+  .cover { position:relative; height:288px; overflow:hidden; }
+  .art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .art svg { display:block; width:480px; height:288px; }
+  .navy { fill:var(--navy); }
+  .ind { fill:var(--indigo); }
+  .soft { fill:var(--indigo-soft); }
+  .vio { fill:var(--violet); }
+  .blk { rx:var(--r-lg); }
+  .tab { rx:var(--r-bar); }
+  .bar { rx:var(--r-xs); }
+  .bar.on-navy { fill:var(--indigo-light); }
+  .bar.on-soft { fill:var(--indigo); }
+  .words { position:absolute; left:32px; bottom:32px; max-width:440px; }
+  .name { margin:0; font-size:96px; line-height:.92; font-weight:800; letter-spacing:-.02em; color:var(--text-primary); }
+  .tag { margin:12px 0 0 4px; font-size:14px; line-height:20px; color:var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      navy 144x256 slab bled off the top (the deck/sidebar ground) · indigo 160x176 (the one accent, largest in the UI) · violet 96x32 (the logo gradient's end) · indigo-soft 160x128 bleeding off the right edge — about a third of 960x288
+  arrangement one tall navy slab with satellites, bottoms on one line (y=240, space-content-ish margin), space-4 (16px) gutters
+  pattern     rising chart bars, from "numbers first" and the Chart.js defaults (bar radius 6 = r-xs): 16px bars at a space-2 (8px) gap, indigo-light inside the navy slab, indigo inside the tint — ten bars, a revenue trend in two blocks
+  scales      sides in space-4 multiples; gutters space-4; bar pitch 24 (16 + space-2); corners r-lg on blocks, r-bar on the violet tab, r-xs on bars
+-->
+<rect class="navy blk" x="16" y="-16" width="144" height="256" rx="16"/>
+<rect class="bar on-navy" x="32" y="184" width="16" height="40" rx="6"/>
+<rect class="bar on-navy" x="56" y="160" width="16" height="64" rx="6"/>
+<rect class="bar on-navy" x="80" y="176" width="16" height="48" rx="6"/>
+<rect class="bar on-navy" x="104" y="128" width="16" height="96" rx="6"/>
+<rect class="bar on-navy" x="128" y="104" width="16" height="120" rx="6"/>
+<rect class="vio tab" x="176" y="16" width="96" height="32" rx="10"/>
+<rect class="ind blk" x="176" y="64" width="160" height="176" rx="16"/>
+<rect class="soft blk" x="352" y="112" width="160" height="128" rx="16"/>
+<rect class="bar on-soft" x="368" y="192" width="16" height="32" rx="6"/>
+<rect class="bar on-soft" x="392" y="168" width="16" height="56" rx="6"/>
+<rect class="bar on-soft" x="416" y="180" width="16" height="44" rx="6"/>
+<rect class="bar on-soft" x="440" y="152" width="16" height="72" rx="6"/>
+<rect class="bar on-soft" x="464" y="136" width="16" height="88" rx="6"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">Oshinei</h1>
+<p class="tag">Sales &amp; Cost Analysis for a Thai buffet chain.</p>
+</div>
+</div>
+</body>
+</html>
