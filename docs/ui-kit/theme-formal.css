@@ -1,0 +1,150 @@
+/* ════════════════════════════════════════════════════════════════════════
+   Oshinei — formal theme (2026-09-30)
+   Loaded by index.html AFTER its own <style>, so these rules restyle the app's
+   existing classes without touching the markup: navy accent, 1px borders
+   instead of shadows, 3–4px corners, no gradients, no hover lifts.
+   Colours come from tokens.css. `body …` prefixes win over the Tailwind
+   utilities (which the play CDN injects after this file) by specificity.
+   Mirrors the design system in design-system/ (README "Visual foundations").
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Flat, bordered surfaces ─────────────────────────────────────────────── */
+body .card { border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: none; }
+body .card:hover, body .kpi-card:hover, body .cmp-card:hover, body .gpb-box-drill:hover { box-shadow: none; transform: none; }
+body .kpi-card.card { border-top-width: 3px; }
+body .kpi-value, body .mi-kpi-value { font-weight: 700; letter-spacing: -0.01em; }
+body .skeleton-kpi { border: 1px solid var(--border); border-top: 3px solid var(--border); border-radius: var(--r-md); box-shadow: none; }
+
+/* Tailwind utilities used across the tabs: square the corners, drop the shadows */
+body .rounded, body .rounded-md, body .rounded-lg { border-radius: var(--r-sm); }
+body .rounded-xl, body .rounded-2xl, body .rounded-3xl { border-radius: var(--r-md); }
+body .rounded-t-xl, body .rounded-t-lg { border-top-left-radius: var(--r-md); border-top-right-radius: var(--r-md); }
+body .shadow, body .shadow-sm, body .shadow-md, body .shadow-lg, body .shadow-xl { box-shadow: none; }
+body .hover\:shadow-md:hover, body .hover\:shadow-lg:hover { box-shadow: none; }
+body .hover\:-translate-y-0\.5:hover, body .hover\:-translate-y-1:hover { transform: none; }
+
+/* Tailwind indigo/violet tints → the navy accent family */
+body .bg-indigo-50, body .bg-violet-50 { background-color: var(--accent-soft); }
+body .bg-indigo-100, body .bg-violet-100 { background-color: var(--accent-soft); }
+body .bg-indigo-500, body .bg-indigo-600, body .bg-violet-600 { background-color: var(--accent); }
+body .hover\:bg-indigo-700:hover, body .hover\:bg-indigo-500:hover { background-color: var(--accent-hover); }
+body .text-indigo-500, body .text-indigo-600, body .text-indigo-700, body .text-indigo-800, body .text-indigo-900,
+body .text-violet-600, body .text-violet-700, body .text-violet-900 { color: var(--accent); }
+body .border-indigo-100, body .border-indigo-200, body .border-indigo-300 { border-color: var(--border); }
+body .border-indigo-400, body .border-indigo-500 { border-color: var(--accent); }
+body .bg-indigo-500, body .bg-indigo-600, body .bg-violet-600 { color: var(--on-accent); }
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+body select, body input[type="text"], body input[type="date"], body input[type="number"],
+body input[type="search"], body input[type="month"], body textarea {
+  border: 1px solid var(--border-control); border-radius: var(--r-sm);
+}
+body select:hover, body input[type="text"]:hover { border-color: var(--text-secondary) !important; }
+body select:focus, body input:focus, body textarea:focus {
+  border-color: var(--accent) !important; box-shadow: 0 0 0 3px rgba(31,58,107,0.18) !important; outline: none;
+}
+body.dark select:focus, body.dark input:focus, body.dark textarea:focus { box-shadow: 0 0 0 3px rgba(147,180,230,0.25) !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 0; }
+button:active:not(:disabled) { transform: none; }
+
+body .upload-btn, body .topbar-icon-btn, body .period-preset {
+  border: 1px solid var(--border-control); border-radius: var(--r-sm); color: var(--text-primary);
+}
+body .upload-btn:hover, body .topbar-icon-btn:hover { transform: none; background: var(--bg-hover); border-color: var(--accent); color: var(--accent); }
+body .period-preset.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+body .preset-chip { border-radius: var(--r-sm); border-color: var(--border); background: var(--accent-soft); color: var(--accent); }
+body .preset-chip:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+body #offlineOverlay .retry-btn { border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); }
+body #offlineOverlay .retry-btn:hover { filter: none; transform: none; box-shadow: none; background: var(--accent-hover); }
+body .dive-btn { border-radius: var(--r-sm); border-color: var(--border-control); opacity: .85; }
+body .dive-btn:hover { background: var(--accent); border-color: var(--accent); color: var(--on-accent); transform: none; box-shadow: none; }
+body .dive-action-btn { border-radius: var(--r-sm); border-color: var(--border-control); background: var(--bg-card); color: var(--text-primary); }
+body .dive-action-btn:hover { transform: none; }
+body .kbd { border-radius: var(--r-sm); box-shadow: none; border-bottom-width: 2px; }
+
+/* Subtab bar → underline tabs */
+body .subtab-bar { background: none; border: none; border-bottom: 1px solid var(--border); border-radius: 0; padding: 0; gap: 0; }
+body.dark .subtab-bar { background: none; border-color: var(--border); }
+body .subtab-btn { border-radius: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 14px; font-size: 13px; }
+body .subtab-btn:hover:not(.active) { background: none; color: var(--text-primary); }
+body .subtab-btn.active, body.dark .subtab-btn.active { background: none; box-shadow: none; color: var(--accent); border-bottom-color: var(--accent); }
+body .revsort-btn { border-radius: var(--r-sm); }
+
+/* Granularity toggle → bordered segments, active filled */
+body .gran-btn { border-radius: 0; }
+body .gran-btn:hover:not(.gran-active) { background: var(--bg-hover); }
+body .gran-active, body.dark .gran-active { background: var(--accent) !important; color: var(--on-accent) !important; box-shadow: none; }
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+body .sidebar { border-right: none; }
+body .sidebar-logo { border-bottom-color: rgba(255,255,255,0.12); }
+body .logo-mark { background: #ffffff; color: #1f3a6b; box-shadow: none; border-radius: var(--r-sm); width: 32px; height: 32px; font-size: 16px; font-weight: 700; letter-spacing: 0; }
+body .sidebar-nav { padding-left: 0; padding-right: 0; }
+body .nav-section { color: #8fa2c2; font-size: 10px; padding-left: 16px; }
+body .nav-item { color: #aab9d2; border: none; border-radius: 0; margin-bottom: 0; padding: 7px 16px; }
+body .nav-item:hover { background: rgba(255,255,255,0.08); color: #ffffff; }
+body .nav-item:hover .nav-icon, body .nav-item.active .nav-icon { color: #ffffff; }
+body .nav-item.active { background: rgba(255,255,255,0.12); color: #ffffff; font-weight: 600; }
+body .nav-item.active::before { left: 0; top: 0; bottom: 0; transform: none; height: auto; width: 3px; background: #ffffff; border-radius: 0; }
+body .sidebar.collapsed .nav-item { padding: 9px; }
+body .toggle-btn { color: #8fa2c2; border-radius: 0; }
+body .toggle-btn:hover { color: #ffffff; background: rgba(255,255,255,0.08); }
+body .sidebar-logo-text p:first-child { letter-spacing: .08em; text-transform: uppercase; }
+
+/* ── Top bar ────────────────────────────────────────────────────────────── */
+body .top-bar { background: var(--bg-topbar); border-bottom: 1px solid var(--border); box-shadow: none; backdrop-filter: none; }
+body.dark .top-bar { background: var(--bg-topbar); }
+body .page-title { font-size: 16px; letter-spacing: 0; }
+body .search-results { border-radius: var(--r-sm); box-shadow: var(--shadow-md); }
+body .search-item { border-radius: 0; }
+body .search-item .badge { border-radius: var(--r-sm); background: var(--accent-soft); color: var(--accent); }
+body .db-status { border-radius: var(--r-sm); }
+body .db-status.online .db-dot, body .db-status.checking .db-dot { animation: none; box-shadow: none; }
+
+/* ── Section titles, tags, flags ────────────────────────────────────────── */
+body .section-title { color: var(--text-secondary); font-size: 11px; letter-spacing: .06em; }
+body .section-title::before { background: var(--accent); border-radius: 0; height: 12px; }
+body .dive-section-title { color: var(--accent); }
+body .pill, body .anomaly-item, body .ms-chip, body .mi-flag { border-radius: var(--r-sm); }
+body .pill-neu { background: var(--accent-soft); color: var(--accent); }
+
+/* ── Tables: ruled like a statement ─────────────────────────────────────── */
+body thead th { border-bottom: 1px solid var(--text-secondary); color: var(--text-secondary); letter-spacing: .05em; }
+body tbody tr { border-bottom-color: var(--border-soft); }
+body tbody tr:nth-child(even), body.dark tbody tr:nth-child(even) { background: transparent; }
+body tbody tr:hover { background: var(--bg-hover) !important; }
+body th.th-sortable:hover, body th.sorted-desc, body th.sorted-asc { color: var(--accent); }
+body th.sorted-desc::after, body th.sorted-asc::after { color: var(--accent); }
+
+/* ── Notices: bordered boxes, no side stripes, no gradients ─────────────── */
+body .anomaly-banner { background: #fef3c7; border: 1px solid #f59e0b; border-radius: var(--r-md); animation: none; }
+body.dark .anomaly-banner { background: #422006; border-color: #b45309; color: #fde68a; }
+body .dive-bullet { border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--bg-card); }
+body .dive-bullet.good { border-color: rgba(16,185,129,.55); background: var(--bg-card); }
+body .dive-bullet.bad  { border-color: rgba(239,68,68,.55);  background: var(--bg-card); }
+body .dive-bullet.warn { border-color: rgba(245,158,11,.7);  background: var(--bg-card); }
+body .dive-bullet.info { border-color: var(--accent);        background: var(--bg-card); }
+body .pt-promo-note { border: 1px solid #b45309; background: rgba(180,83,9,.05); }
+body.dark .pt-promo-note { border-color: #f59e0b; }
+
+/* ── Motion: colour changes only ────────────────────────────────────────── */
+body .tab-active { animation: none; }
+body .skeleton { background: var(--border-soft); animation: skeletonPulse 1.4s ease infinite; }
+body #loadingBar { background: var(--accent); animation: none; }
+body .heatmap-cell { border-radius: 2px; }
+body .heatmap-cell:hover { transform: none; box-shadow: 0 0 0 2px var(--text-primary); }
+body .hours-cell { border-radius: 2px; }
+body .pb-band { border-radius: var(--r-sm); }
+
+/* ── Modal ──────────────────────────────────────────────────────────────── */
+body .drill-modal { backdrop-filter: none; -webkit-backdrop-filter: none; animation: none; }
+body .drill-panel { border: 1px solid var(--border); border-radius: var(--r-md); box-shadow: var(--shadow-lg); animation: none; }
+
+/* ── Mobile owner summary ───────────────────────────────────────────────── */
+body .ms-header { background: var(--bg-sidebar); }
+body .ms-header .ms-logo { background: #ffffff; color: #1f3a6b; border-radius: var(--r-sm); font-weight: 700; }
+body .ms-kpi { border-radius: var(--r-md); box-shadow: none; border: 1px solid var(--border); }
+body .ms-seg-on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* ── Scrollbars ─────────────────────────────────────────────────────────── */
+::-webkit-scrollbar-thumb { border-radius: 0; }

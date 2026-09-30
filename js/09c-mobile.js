@@ -426,19 +426,20 @@ function setupChartDefaults() {
   Chart.defaults.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2); // crisp lines
 
   // Rounded, cleaner bars
-  Chart.defaults.elements.bar.borderRadius = 6;
+  Chart.defaults.elements.bar.borderRadius = 2;      // formal theme: square bars
   Chart.defaults.elements.bar.borderSkipped = false;
   Chart.defaults.elements.bar.maxBarThickness = 46;
 
   // Smoother lines, smaller resting points that grow on hover (less clutter)
-  Chart.defaults.elements.line.tension = 0.32;
-  Chart.defaults.elements.line.borderWidth = 2.5;
+  Chart.defaults.elements.line.tension = 0.25;
+  Chart.defaults.elements.line.borderWidth = 2;
   Chart.defaults.elements.point.radius = 2.2;     // visible (keeps scatter charts alive) but small
   Chart.defaults.elements.point.hoverRadius = 6;
   Chart.defaults.elements.point.hitRadius = 10;
 
   // Tidier legends
   Chart.defaults.plugins.legend.labels.usePointStyle = true;
+  Chart.defaults.plugins.legend.labels.pointStyle = 'rect';   // square legend markers
   Chart.defaults.plugins.legend.labels.boxWidth = 8;
   Chart.defaults.plugins.legend.labels.boxHeight = 8;
   Chart.defaults.plugins.legend.labels.padding = 14;
@@ -446,15 +447,16 @@ function setupChartDefaults() {
   // Readable tooltips: dark card, generous padding, bold title, thousand-separated
   // numbers. A custom per-chart tooltip.callbacks.label still overrides this.
   const tt = Chart.defaults.plugins.tooltip;
-  tt.backgroundColor = 'rgba(15,23,42,0.94)';
+  tt.backgroundColor = 'rgba(15,23,42,0.96)';
   tt.titleColor = '#f8fafc';
   tt.bodyColor = '#e2e8f0';
   tt.titleFont = { family: FONT, size: 12.5, weight: '600' };
   tt.bodyFont = { family: FONT, size: 12 };
   tt.padding = 11;
-  tt.cornerRadius = 9;
+  tt.cornerRadius = 3;
   tt.boxPadding = 5;
   tt.usePointStyle = true;
+  tt.pointStyle = 'rect';
   tt.borderColor = 'rgba(148,163,184,0.25)';
   tt.borderWidth = 1;
   tt.callbacks.label = function(ctx) {

@@ -1,6 +1,6 @@
 # AnomalyBanner
 
-A page-top banner that lists today's anomalies as clickable chips: warm amber gradient, 4px `warn` left rule.
+A page-top notice that lists yesterday's anomalies as clickable chips: a pale amber box with a 1px `warn` border. No side stripe, no gradient.
 
-- `.anomaly-banner` holding a short lead and `.anomaly-item.anomaly-good|anomaly-bad` chips; each chip opens its drill-down.
-- One banner per page, only when there is something to act on. It slides down 6px on arrival.
+- `.anomaly-banner` holding a `.lead` label and `.anomaly-item.anomaly-good|anomaly-bad` chips; each chip opens its drill-down.
+- One banner per page, only when there is something to act on.

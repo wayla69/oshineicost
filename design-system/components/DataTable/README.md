@@ -1,8 +1,7 @@
 # DataTable
 
-The workhorse: sticky uppercase header on `bg-subtle`, 10×14px cells, soft row rules, faint zebra, indigo hover.
+The workhorse, ruled like a financial statement: an uppercase header on `bg-subtle` over a strong 1px rule, 8×12px cells, hairline row rules, no zebra.
 
-- Right-align figures with `.num` (tabular numerals). Make headers sortable with `th.th-sortable`; the sorted one gets `.sorted-desc` or `.sorted-asc`.
-- Mark a row far outside its column with `tr.mi-outlier` (bad) or `tr.mi-outlier-good`, and flag a cell with `.mi-flag.bad|good|warn` (⚠ ★ 🔥).
+- Right-align figures with `.num` (tabular numerals). Sortable headers: `th.th-sortable`, with `.sorted-desc` / `.sorted-asc` on the active one.
+- A row far outside its column gets `tr.mi-outlier` (bad) or `tr.mi-outlier-good`; flag the cell with an outlined `.mi-flag.bad|good|warn` holding a word, not a symbol alone.
 - Branch names use `.branch-drillable` to open the branch drill-down.
-- Wrap wide tables in a card that scrolls horizontally on phones.

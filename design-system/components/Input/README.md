@@ -1,6 +1,6 @@
 # Input
 
-Selects and text, date and number inputs share one look: `bg-input`, `border`, 8px radius, 12.5px text.
+Selects and text, date and number inputs share one look: `bg-input`, a 1px `border-control` edge (3:1), 3px corner, 12.5px text.
 
-- Hover turns the border `border-hover`; focus turns it `indigo` with the `focus-halo` ring.
+- Hover darkens the edge to `text-secondary`; focus turns it `accent` with the `focus-halo` ring.
 - Style the native elements; no wrapper class is needed.

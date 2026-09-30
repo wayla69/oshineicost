@@ -1,6 +1,6 @@
 > **About this folder.** A repo copy of the Oshinei design system published at
-> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 against the app at
-> `5eb03b3`. The app itself never loads these files: its colours come from
+> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 with the formal theme
+> (navy accent, `docs/ui-kit/theme-formal.css`). The app itself never loads these files: its colours come from
 > `docs/ui-kit/tokens.css`. When a colour changes, change it there first, then update
 > `tokens.json` here (and republish the system) so the two stay in step.
 > Fonts are the app's own `vendor/fonts/prompt-*.ttf` (`tokens.json` names them as `fonts/...`).
@@ -8,77 +8,83 @@
 > generates `tokens.css` from `tokens.json`. This folder sits outside `docs/` on purpose:
 > `docs/` is copied into the Fly image, and parts of it are served without a login.
 
-Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 branches, one owner, branch managers, accounting and kitchen staff. People open it to answer "how did yesterday go, what is leaking money, and what do I order". Every screen is a working screen: numbers first, one accent, calm surfaces.
+Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 branches, one owner, branch managers, accounting and kitchen staff. People open it to answer "how did yesterday go, what is leaking money, and what do I order". It should read like a well-kept management report: navy, ruled, exact. Numbers first, one accent, nothing decorative.
 
 ## Using this system
 
-- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the Prompt font files and `components/bundle.css`. Class names in the component cards are the live product's own — markup copied from a preview drops into `index.html` unchanged.
-- The product switches themes with `body.dark`. In this system the same rules key off `[data-theme="dark"]`; when porting to the app, write `body.dark` instead.
-- There is no JavaScript component library. Components are CSS classes on plain HTML; charts are Chart.js 4 with the defaults under **Charts** below.
-- Style through tokens. Never type a hex that has a token (`#4f46e5` is `indigo`, `#e2e8f0` is `border`).
+- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the Prompt font files and `components/bundle.css`. Class names in the component cards are the app's own, so markup from a preview drops into `index.html` unchanged.
+- The app switches themes with `body.dark`. Here the same rules key off `[data-theme="dark"]`; when porting to the app, write `body.dark`.
+- The app still calls the accent `--indigo` / `--indigo-mid` / `--indigo-soft`. Those are legacy aliases of `accent` / `accent-hover` / `accent-soft`; new code uses the accent names.
+- There is no JavaScript component library. Components are CSS classes on plain HTML; charts are Chart.js 4 with the defaults under **Charts**.
+- Style through tokens. Never type a hex that has a token.
 
 ## Content fundamentals
 
-- **Thai first, English terms of art.** Labels are Thai; keep the business vocabulary in English where the team uses it: KPI, MoM, YoY, MTD, BoM, P&L, GP, SKU. Examples from the product: "ยอดขายรายวัน", "เปรียบเทียบ A/B", "BoM + Simulator", "P&L ต่อบิล".
-- **Page titles pair Thai with a short English gloss** separated by a middle dot: "หน้าแรก · Daily Brief", "ภาพรวม & KPI". Tooltips follow the same pattern and say what the page answers: "ยอดขายรายวัน · รายสาขา วัน/สัปดาห์/เดือน + เทียบเดือนก่อน/ปีก่อน".
-- **Emoji mark navigation, not content.** Every nav label and nav section starts with one emoji (🏠 หน้าแรก, 🧾 P&L ต่อบิล, 📊 วิเคราะห์). Don't add emoji to body copy, table cells or KPI values. Flags in tables use the fixed vocabulary ⚠ bad · ★ good · 🔥 warn.
-- **Money is Thai baht with a ฿ prefix and thousand separators**, no decimals above ฿100 (`฿1,284,560`). Percentages carry one decimal (`66.3%`); deltas carry an arrow and sign (`▲ 12.4%`, `▼ 3.1%`).
+- **Thai first, English terms of art.** Labels are Thai; keep the business vocabulary in English where the team uses it: KPI, MoM, YoY, MTD, BoM, P&L, GP, SKU. For example "ยอดขายรายวัน", "เปรียบเทียบ A/B", "BoM + Simulator", "P&L ต่อบิล".
+- **Page titles pair Thai with a short English gloss** separated by a middle dot: "หน้าแรก · Daily Brief". Tooltips say what the page answers.
+- **No emoji anywhere in the interface**: not in navigation, headings, buttons, findings or table flags. Status is a word in a tag (ดี, ต้องแก้, เฝ้าดู, ข้อมูล); direction is ▲ ▼ with a sign; pictograms are the stroke icons.
+- **Money is Thai baht with a ฿ prefix and thousand separators**, no decimals above ฿100 (`฿1,284,560`). In a table column whose header names the unit, drop the ฿. Percentages carry one decimal (`66.3%`); deltas carry an arrow and sign (`▲ 12.4%`).
 - **Revenue is ex-VAT.** Never show VAT as revenue; a figure labelled ยอดขาย is net of VAT and service charge unless the label says otherwise.
-- **Headlines are the latest period plus movement** (vs last month, vs same month last year, year-to-date change) — never an accumulated all-time total. Partial months compare against a weekday-fair baseline and say so in the kpi-sub line ("เทียบวันเดียวกันสัปดาห์ก่อน").
-- **Recommendations are imperative and specific**: name the branch, the menu item and the baht at stake. "ลดปริมาณแซลมอนต่อจาน สาขาสุรินทร์ — ประหยัด ฿38,000/เดือน", not "consider optimising portions".
+- **Headlines are the latest period plus movement** (vs last month, vs same month last year, year-to-date change), never an accumulated all-time total. Partial months compare against a weekday-fair baseline and say so ("เทียบวันเดียวกันสัปดาห์ก่อน").
+- **Recommendations are imperative and specific**: name the branch, the menu item and the baht at stake. "ลดขนาดชิ้นปลาไหล 20% — ประหยัดราว ฿41,000/เดือน", not "consider optimising portions".
 
 ## Visual foundations
 
+### Principles
+
+- **Borders, not shadows.** Surfaces separate with a 1px `border` and the grid gap. Only floating things (menus, the modal) cast a shadow.
+- **Square, not soft.** Corners are 2–4px (`r-xs`, `r-sm`, `r-md`). `r-pill` is only for dots and progress tracks; tags and chips are square-cornered.
+- **Flat colour.** No gradients: fills, rules, bars and the logo are solid.
+- **Still.** No hover lifts, no shimmer, no slide-ins. Hover changes colour or border only, in 0.12s.
+
 ### Color
 
-- `indigo` is the only accent. Use it for the active tab, the focus ring, links, the primary button and the default KPI top rule. `indigo-soft` is its tinted ground; `indigo-mid` its hover in light — in dark, hover goes lighter to `border-hover`, since neither label colour reaches 4.5:1 on `indigo-mid` there. Label an indigo fill with `on-indigo` — white in light, near-black in dark, where indigo lightens — never a literal white. The logo tile and mobile header, which keep white text in both themes, use the fixed `brand-indigo`.
-- `good`, `bad` and `warn` carry direction only: up/on-track, down/off-track, near/needs a look. They appear as rules, fills and dots — a 3px KPI top rule (`kpi-up` / `kpi-down`), a progress fill, a bullet's left rule. For coloured TEXT use `good-ink`, `bad-ink`, `warn-ink` (the `.up` / `.down` classes do); the fills read 2.5–3.8:1 as text. Direction is never colour alone: pair it with ▲ ▼ or a word.
-- Surfaces are cool slate: `bg-page` behind everything, `bg-card` for cards, `bg-subtle` for table heads and quiet wells, `bg-hover` for row hover. The sidebar is `bg-sidebar` navy in both themes.
-- Text runs `text-primary` → `text-secondary` → `text-muted`. Every text token clears 4.5:1 on every surface its note names, in both themes; `text-muted` is the floor (4.76:1 on `bg-hover`), so never go lighter for text.
-- Pills keep their light colours in both themes (`pill-up-bg` / `pill-up-ink` etc.); they read 6.4–8.1:1.
-- Charts cycle `chart-1` … `chart-12`; a branch hashes to a fixed slot so it keeps its colour across every chart. Year-over-year charts draw the latest year in `indigo` and earlier years in slate, cyan, green, amber.
-- `navy` and `navy-deep` belong to the business deck and printed reports. `salmon`, `salmon-deep` and `teal` are an optional marketing extension — never put them in the dashboard.
+- `accent` (navy `#1f3a6b`; `#93b4e6` in dark) is the only accent: the active tab underline, the active nav marker, the focus ring, links, the primary button and the default KPI rule. `accent-soft` is its tinted ground; `accent-hover` its hover. Label an accent fill with `on-accent`, never a literal white.
+- `good`, `bad` and `warn` carry direction only (up/on-track, down/off-track, needs a look), as the KPI top rule, a progress fill or a status dot. For coloured text use `good-ink`, `bad-ink`, `warn-ink`; tags use the `pill-*` pairs. Status always comes with a word or ▲ ▼, never colour alone.
+- Surfaces: `bg-page` behind everything, `bg-card` for cards, `bg-subtle` for table heads and wells, `bg-hover` for row hover. The sidebar is `bg-sidebar` navy in both themes.
+- Lines: `border` for card and panel edges, `border-soft` between rows, `border-control` (3:1) around inputs, selects and outlined buttons, and `text-secondary` for the strong rule under a table header.
+- Text runs `text-primary` → `text-secondary` → `text-muted`. Every text token clears 4.5:1 on the surfaces its note names, in both themes.
+- Charts cycle `chart-1` … `chart-12`: muted, deep hues that each reach 3:1 on both the light and the dark card. A branch hashes to a fixed slot and keeps its colour across charts.
+- `navy` / `navy-deep` belong to decks and printed reports. `salmon`, `salmon-deep` and `teal` are an optional marketing extension, never used in the dashboard.
 
 ### Typography
 
 - One family: **Prompt** (Thai + Latin), weights 300–900, shipped as local files. Fallback `'Noto Sans Thai', system-ui`.
-- The scale is small and dense: `body` 13px, `control` 12.5px, `small` 12px, `caption` 11px. Numbers get the weight: `kpi-value` 26px/800 and `kpi-hero` 27px/800 with −0.02em tracking.
-- Eyebrows and table heads are UPPERCASE at 9.5–10.5px, weight 700, tracked 0.06–0.1em (`kpi-label`, `section-label`, `table-head`, `nav-section`). Thai text in those slots stays as written.
-- Set every column of figures with `font-variant-numeric: tabular-nums` (the `.num` class right-aligns and does this).
+- The scale is small and dense: `body` 13px, `control` 12.5px, `small` 12px, `caption` 11px. Figures use weight 700, never 800+: `kpi-value` 26px and `kpi-hero` 27px.
+- Labels (`kpi-label`, `section-label`, `table-head`, `nav-section`) are UPPERCASE at 10–11px, weight 700, tracked 0.05–0.1em. Thai text in those slots stays as written.
+- Every column of figures is `font-variant-numeric: tabular-nums` and right-aligned (`.num`).
 
 ### Layout and spacing
 
-- Desktop shell: 224px navy sidebar (64px collapsed), sticky top bar, content area padded `space-content` (28px); 12px on phones.
-- Cards sit in a `.grid` with a `space-4` (16px) gap; `.card.pad` is 18px (`space-card`). Grids of 3–5 columns fall to 2 under 1000px and 1 under 640px.
-- Table cells pad `cell-y` × `cell-x` (10 × 14px). Rows separate with `border-soft`; even rows tint faintly; hover turns the row `bg-hover`.
-- Under 700px the desktop app is replaced by the mobile owner summary (indigo header, stacked KPI cards, chips).
+- Desktop shell: 224px navy sidebar (64px collapsed), sticky top bar with a bottom rule, content padded `space-content` (28px); 12px on phones.
+- Cards sit in a grid with a `space-4` (16px) gap; `.card.pad` is 16px. Grids of 3–5 columns fall to 2 under 1000px and 1 under 640px.
+- Tables pad cells 8 × 12px. Header over a strong rule, hairlines between rows, no zebra striping.
+- Under 700px the desktop app is replaced by the mobile owner summary (navy header, stacked KPI cards, bordered chips).
 
-### Shape, depth and motion
+### Depth, motion and focus
 
-- Radii step by use: `r-xs` 6 (segments, chart bars), `r-sm` 8 (inputs, buttons), `r-nav` 9, `r-bar` 10 (bars, banners, logo tile), `r-md` 12 (tiles, modal), `r-lg` 16 (cards), `r-pill` for pills and tracks.
-- Cards rest on `shadow-card` with a 1px border at 70% of `border`; on hover they lift 1px to `shadow-card-hover`. Quadrant tiles lift 2px to `shadow-md`. The modal panel uses `shadow-modal` over a blurred `scrim`.
-- Motion is quick and small: 0.15s ease on hover and colour, 0.2s on card lift, 0.22s `cubic-bezier(.16,1,.3,1)` fade-up when a tab opens, a 0.97 press scale on buttons. Loading shows a shimmering skeleton and a 3px indigo bar across the top. Honour `prefers-reduced-motion`.
-- Focus: 2px solid `indigo` outline, 2px offset, on every focusable element; inputs add the `focus-halo` ring.
+- `shadow-none` on every resting surface. `shadow-popover` for menus, `shadow-modal` for the drill-down panel over the `scrim`.
+- Motion is limited to colour and border changes (0.12s) and a gentle pulse on loading skeletons. Honour `prefers-reduced-motion`.
+- Focus: a 2px solid `accent` outline with a 2px offset on every focusable element; inputs add the `focus-halo` ring. It reaches 3:1 on every surface in both themes.
 
 ### Charts
 
-Chart.js 4 defaults set once in `setupChartDefaults()`:
+Chart.js 4 defaults, set once in `setupChartDefaults()` and themed per chart by `applyChartTheme()`:
 
-- Font Prompt 11.5px. Legends and titles use `chart-ink`, axis ticks `chart-tick`, gridlines `chart-grid`, all per theme: `applyChartTheme()` writes them into each chart when it is built, and toggling the theme destroys and rebuilds every chart. Don't rely on the global `Chart.defaults.color`; it is a fixed light-theme value.
-- Bars: corner radius 6, no skipped border, max 46px thick.
-- Lines: tension 0.32, width 2.5; points 2.2px at rest, 6px on hover.
-- Legends: point-style, 8px boxes, 14px padding.
-- Tooltip: `tooltip-bg` card, radius 9, padding 11, title 12.5px/600 in `tooltip-title`, body 12px in `tooltip-body`; values thousand-separated, 2 decimals only under 100.
+- Font Prompt 11.5px. Legends and titles use `chart-ink`, axis ticks `chart-tick`, gridlines `chart-grid`, all per theme; toggling the theme rebuilds every chart. Don't rely on the global `Chart.defaults.color`.
+- Bars: 2px corners (`r-xs`), max 46px thick. Lines: width 2, tension 0.25; points 2px at rest (scatter charts need them), 6px on hover.
+- Legends: square markers, 8px, 14px padding.
+- Tooltip: `tooltip-bg` card with a 3px corner and no border glow; title 12.5px/600 in `tooltip-title`, body 12px in `tooltip-body`; values thousand-separated, 2 decimals only under 100.
 - On-chart data labels are rounded to 4 decimals so float dust never prints.
 
 ## Iconography
 
-- Navigation uses 49 stroke icons in `assets/Icons/`, one per page (named by page id: `home`, `dailysales`, `pnlbill` …). They are drawn on a 24 grid with a 1.75 stroke, round caps and joins, no fill — the Feather/Lucide idiom — and shown at 17px (`nav-icon-size`).
-- In the app they are inline `<svg class="nav-icon">` using `currentColor`: `nav-ink` at rest (5.8:1 on the rail), `nav-active-icon` when hovered or active. The files here are stroked in `indigo` so they show as images; when inlining, drop the stroke attribute.
-- Emoji prefix nav labels (see Content). They are not a substitute for the stroke icons.
-- Table sort state uses text glyphs ⇅ ▲ ▼; direction in figures uses ▲ ▼.
+- 49 stroke icons in `assets/Icons/`, one per page (named by page id: `home`, `dailysales`, `pnlbill` …): a 24 grid, 1.75 stroke, round caps and joins, no fill. Shown at 16px in the nav and inside 32px icon buttons.
+- In the app they are inline `<svg class="nav-icon">` using `currentColor`: `nav-ink` at rest, `nav-active-icon` when hovered or active. The files here are stroked in navy so they show as images; drop the stroke attribute when inlining.
+- Top-bar tools (theme, refresh, search) use stroke icons in the same style, never emoji.
+- Table sort state uses ⇅ ▲ ▼; direction in figures uses ▲ ▼.
 
 ## Logo
 
-- **App mark:** the hiragana お in white Prompt 800 on a 36px `r-bar` tile filled with a 135° gradient from `brand-indigo` to `violet`, glowing with `shadow-logo`, beside "Oshinei" (14px/800, `sidebar-title`) and "Sales & Cost Analysis". It is CSS, not an image — see the LogoMark card.
-- **Deck roundel:** `assets/Logos/oshinei-roundel.svg` — a `navy` disc with a white hairline ring, OSHINEI over おしねい and a rising sparkline. Use it on white for decks, printed reports and document corners. It sets its type in Prompt, so it needs the font on the page when inlined.
+- **App mark:** the hiragana お in navy Prompt 700 on a 32px white tile with a 3px corner, beside "OSHINEI" (14px/700, tracked 0.08em, `sidebar-title`) and "Sales & Cost Analysis". It is CSS, not an image; see the LogoMark card.
+- **Deck roundel:** `assets/Logos/oshinei-roundel.svg`, a `navy` disc with a white hairline ring, OSHINEI over おしねい and a rising sparkline. Use it on white for decks, printed reports and document corners. Its text is live SVG text in Prompt, so it needs the font on the page when inlined.
