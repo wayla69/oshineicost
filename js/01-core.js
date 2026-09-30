@@ -761,7 +761,7 @@ const _TEAL_HEX = ['#0d9488', '#14b8a6', '#0f766e'], _ROSE_HEX = ['#f43f5e', '#e
 const _CYAN_HEX = ['#06b6d4', '#0891b2', '#0e7490'], _SKY_HEX = ['#0ea5e9', '#0284c7', '#0369a1'];
 // Navy / violet / fuchsia / pink (chart series, quadrant labels, price tiers): #4a70b0 and #7a66b8
 // pass on white but drop to 2.9-3.9 on tints and the dark card; #d946ef 3.46, #ec4899 3.53:1 on white.
-const _NAVY_HEX = ['#4a70b0', '#4f46e5', '#6366f1'], _VIOLET_HEX = ['#7a66b8', '#8b5cf6', '#7c3aed'];
+const _NAVY_HEX = ['#4a70b0', '#4f46e5', '#6366f1', '#2563eb', '#1d4ed8'], _VIOLET_HEX = ['#7a66b8', '#8b5cf6', '#7c3aed'];
 const _FUCHSIA_HEX = ['#d946ef', '#c026d3', '#a21caf'], _PINK_HEX = ['#ec4899', '#db2777', '#be185d'];
 // Amber / yellow and orange (warnings, "near target"): #f59e0b 2.15, #d97706 3.19, #eab308 1.9,
 // #f97316 2.8:1 on white; the deep #b45309 / #92400e / #9a3412 fail on the dark card.

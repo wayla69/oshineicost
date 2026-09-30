@@ -694,6 +694,9 @@ body.dark .text-rose-800, body.dark .text-rose-900 { color: var(--rose-ink) !imp
 .text-sky-600, .text-sky-700 { color: var(--sky-ink) !important; }
 body.dark .text-cyan-800, body.dark .text-cyan-900 { color: var(--cyan-ink) !important; }
 body.dark .text-sky-800, body.dark .text-sky-900 { color: var(--sky-ink) !important; }
+/* Blue the same way: blue-600 / -700 pass on white (5.2 / 6.7) but drop to 3.4:1 on the
+   dark card, so they move only in dark mode, to the navy ink (#8fb3ec, 6.7:1). */
+body.dark .text-blue-600, body.dark .text-blue-700 { color: var(--navy-ink) !important; }
 /* White labels on mid-tone fills: emerald-500/600 2.5/3.8, amber-400/500/600 1.7-3.2,
    sky-600 4.1, cyan-500/600 2.4/3.7:1. Paired with .text-white the fill steps down to
    its 700 shade (5.0-5.9:1), 800 on hover; scripts toggle these class strings, so the
@@ -1363,6 +1366,9 @@ body.dark #mgtRptBody {
   color-scheme: light;
 }
 body.dark #mgtRptBody .card { background: #ffffff; border-color: #e2e8f0; color: #0f172a; }
+/* The footnote sits between the white cards, on the dark page itself, so on screen it takes
+   the dark-mode muted grey (#8595a9, 6.3:1 on the page); on paper it stays with the island. */
+@media screen { body.dark #mgtRptBody .mgt-foot { color: #8595a9 !important; } }
 
 /* ── Management Report cover band: collapsible (mobile starts collapsed) ──
    Collapsed = a slim bar that STICKS to the top while scrolling, so the
