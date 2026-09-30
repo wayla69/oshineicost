@@ -606,7 +606,7 @@ async function renderExecSummary() {
     (projVsTgt != null ? ` (<b style="color:${textInk(tgtColor)}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
     (gp != null ? ` · GP <b style="color:${textInk(gpColor)}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
   host.classList.remove('hidden');
-  host.innerHTML = `<div class="card p-4" style="background:#e8eef7;border:1px solid var(--accent)">
+  host.innerHTML = `<div class="card p-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
       <h2 class="section-title mb-0">สรุปผู้บริหาร (Executive Summary)</h2>
       <span class="text-[11px]" style="color:var(--text-muted)">${getBranch() || 'ทุกสาขา'} · อัปเดตตามข้อมูลล่าสุด</span>

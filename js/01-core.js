@@ -742,7 +742,12 @@ const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981'], _BAD_
 const _TEAL_HEX = ['#0d9488', '#14b8a6', '#0f766e'], _ROSE_HEX = ['#f43f5e', '#e11d48', '#be123c'];
 // Cyan and sky (margin %, delivery, links): #0891b2 3.68, #06b6d4 2.43, #0ea5e9 2.77:1 on white.
 const _CYAN_HEX = ['#06b6d4', '#0891b2', '#0e7490'], _SKY_HEX = ['#0ea5e9', '#0284c7', '#0369a1'];
-const _INK_OF = [[_GOOD_HEX, 'good'], [_BAD_HEX, 'bad'], [_TEAL_HEX, 'teal'], [_ROSE_HEX, 'rose'], [_CYAN_HEX, 'cyan'], [_SKY_HEX, 'sky']];
+// Navy / violet / fuchsia / pink (chart series, quadrant labels, price tiers): #4a70b0 and #7a66b8
+// pass on white but drop to 2.9-3.9 on tints and the dark card; #d946ef 3.46, #ec4899 3.53:1 on white.
+const _NAVY_HEX = ['#4a70b0', '#4f46e5', '#6366f1'], _VIOLET_HEX = ['#7a66b8', '#8b5cf6', '#7c3aed'];
+const _FUCHSIA_HEX = ['#d946ef', '#c026d3', '#a21caf'], _PINK_HEX = ['#ec4899', '#db2777', '#be185d'];
+const _INK_OF = [[_GOOD_HEX, 'good'], [_BAD_HEX, 'bad'], [_TEAL_HEX, 'teal'], [_ROSE_HEX, 'rose'], [_CYAN_HEX, 'cyan'], [_SKY_HEX, 'sky'],
+                 [_NAVY_HEX, 'navy'], [_VIOLET_HEX, 'violet'], [_FUCHSIA_HEX, 'fuchsia'], [_PINK_HEX, 'pink']];
 const textInk = c => { const k = _INK_OF.find(([hexes]) => hexes.includes(c)); return k ? `var(--${k[1]}-ink)` : c; };
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────

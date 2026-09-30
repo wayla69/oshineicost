@@ -43,6 +43,13 @@
      #06b6d4 2.43 and #0ea5e9 2.77:1 on white are fills only. */
   --cyan-ink:   #0e7490;   /* 5.36:1 on white */
   --sky-ink:    #0369a1;   /* 5.93:1 on white */
+  /* Navy, violet, fuchsia and pink as TEXT (chart-series figures, quadrant labels, price tiers).
+     #4a70b0 4.9, #7a66b8 4.9, #d946ef 3.46 and #ec4899 3.53:1 on white - and all of them
+     fall to 2.8-3.9 on tinted boxes or the dark card - are fills only. */
+  --navy-ink:    #2f5391;  /* 7.59:1 on white, 5.94 on the #dde4f0 tint */
+  --violet-ink:  #5b4a9e;  /* 7.20:1 on white */
+  --fuchsia-ink: #a21caf;  /* 6.32:1 on white */
+  --pink-ink:    #be185d;  /* 6.04:1 on white */
 
   /* Elevation: resting surfaces are flat; only floating things cast a shadow. */
   --shadow-xs:  none;
@@ -83,6 +90,10 @@ body.dark {
   --rose-ink:   #fb7185;   /* 6.46:1 on the dark card */
   --cyan-ink:   #22d3ee;   /* 9.62:1 on the dark card */
   --sky-ink:    #38bdf8;   /* 8.12:1 on the dark card */
+  --navy-ink:    #8fb3ec;  /* 6.7:1 or more on the dark cards */
+  --violet-ink:  #b4a5ec;  /* 6.5:1 */
+  --fuchsia-ink: #e879f9;  /* 5.8:1 */
+  --pink-ink:    #f472b6;  /* 5.4:1 */
 }
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */
