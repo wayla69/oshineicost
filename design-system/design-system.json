@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T08:07:02Z",
-    "via": "GitHub · wayla69/oshineicost@d62e81d",
-    "note": "Synced to live d62e81d (#245): blue-600/700 text maps to navy-ink in dark mode; textInk's navy family includes #2563eb / #1d4ed8."
+    "at": "2026-09-30T08:25:40Z",
+    "via": "GitHub · wayla69/oshineicost@8c19443",
+    "note": "Synced to main 8c19443 (#247): yellows join the amber ink family; script-set light fills need .on-light; near-zero heat cells use text-muted."
   },
   "layout": "files",
   "libraries": [],
