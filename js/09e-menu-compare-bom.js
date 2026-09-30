@@ -425,7 +425,7 @@ function bcCostDriverTable(cd, scopeLabel, extraNote) {
   const items = cd.items || []; const tt = cd.total || {};
   const momNote = cd.mom_basis === 'mtd' ? `เทียบ 1–${cd.mtd_cutoff_day} วันเท่ากัน (MTD)` : 'เทียบเดือนก่อน';
   const momCell = (v, prev) => v == null ? '<span class="text-slate-300">—</span>'
-    : `<span title="ช่วงก่อน ${prev != null ? bcFmtN(prev) : '—'}" style="color:${v <= 0 ? '#10b981' : '#ef4444'};font-weight:600">${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
+    : `<span title="ช่วงก่อน ${prev != null ? bcFmtN(prev) : '—'}" style="color:${v <= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'};font-weight:600">${v > 0 ? '▲' : '▼'} ${Math.abs(v).toFixed(1)}%</span>`;
   const pctLabel = cd.scope === 'branch' ? '% สาขา' : '% chain';
   const rows = items.map((r, i) => {
     const m = (typeof BIZ_TYPE_META !== 'undefined' ? (BIZ_TYPE_META[r.business_type] || BIZ_TYPE_META.other) : {icon:'',label:r.business_type,bg:'bg-slate-100',text:'text-slate-600'});
@@ -583,7 +583,7 @@ function bcRenderFoodCostBoxes(mom) {
       const good = dp < 0;
       const col  = dp === 0 ? '#64748b' : (good ? 'var(--good-ink)' : 'var(--bad-ink)');
       const arr  = dp === 0 ? '→' : (dp > 0 ? '▲' : '▼');
-      momHtml = `<span class="text-[11px] font-semibold" style="color:${col}">${arr} ${dp>0?'+':''}${dp.toFixed(1)}pp</span>
+      momHtml = `<span class="text-[11px] font-semibold" style="color:${textInk(col)}">${arr} ${dp>0?'+':''}${dp.toFixed(1)}pp</span>
              <span class="text-[10px] text-slate-400"> vs ${prevLbl}</span>`;
     }
     return `<button type="button" onclick="bcDrillBranch(${i})"
@@ -643,7 +643,7 @@ function bcDrillBranch(idx) {
         <span class="text-slate-600">${esc(m.description||'')}</span>${badge}
       </div>
       <div class="text-right whitespace-nowrap" style="flex:none">
-        <span class="font-semibold" style="color:${col}">${up?'+':''}${bcFmtN(m.delta)}</span>
+        <span class="font-semibold" style="color:${textInk(col)}">${up?'+':''}${bcFmtN(m.delta)}</span>
         <span class="text-[10px] text-slate-400 ml-1">${bcFmtN(m.prev_cogs)}→${bcFmtN(m.cogs)}</span>
       </div>
     </div>`;
@@ -666,13 +666,13 @@ function bcDrillBranch(idx) {
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">MoM</div>
-          <div class="text-lg font-bold" style="color:${dpCol}">${dpTxt}</div>
+          <div class="text-lg font-bold" style="color:${textInk(dpCol)}">${dpTxt}</div>
           <div class="text-[10px] text-slate-400">เป้า 55–70%</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">COGS</div>
           <div class="text-base font-bold">${bcFmtN(r.cogs)}</div>
-          <div class="text-[10px]" style="color:${cogsDeltaCol}">${r.cogs_delta>0?'+':''}${bcFmtN(r.cogs_delta)} MoM</div>
+          <div class="text-[10px]" style="color:${textInk(cogsDeltaCol)}">${r.cogs_delta>0?'+':''}${bcFmtN(r.cogs_delta)} MoM</div>
         </div>
         <div class="bg-white rounded p-2 border border-slate-100">
           <div class="text-[10px] text-slate-400">รายได้ฐานคิดต้นทุน (costed)</div>

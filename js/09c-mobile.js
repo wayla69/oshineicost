@@ -23,7 +23,7 @@ function msBranch() { return document.getElementById('msBranch')?.value || ''; }
 function msPchip(v, goodUp = true) {
   if (v == null) return '<span class="ms-chip" style="background:#f1f5f9;color:#94a3b8">—</span>';
   const good = goodUp ? v >= 0 : v <= 0;
-  const c = v === 0 ? '#64748b' : good ? '#10b981' : '#ef4444';
+  const c = v === 0 ? '#64748b' : good ? '#047857' : '#b91c1c';   // on a fixed light chip
   const bg = v === 0 ? '#f1f5f9' : good ? '#dcfce7' : '#fee2e2';
   return `<span class="ms-chip" style="background:${bg};color:${c}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v)}%</span>`;
 }
@@ -114,7 +114,7 @@ function msRenderSummary() {
     { l: 'ลูกค้า', v: fmtN(t.customers || 0), chip: msPchip(t.cust_mom_pct), c: '#0891b2' },
     { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', chip: msPchip(t.rph_mom_pct), c: '#7a66b8' },
   ].map(k => `<div class="ms-kpi" style="${k.span ? 'grid-column:1/-1;' : ''}">
-      <p class="lbl">${k.l}</p><p class="val" style="color:${k.c}">${k.v}</p>
+      <p class="lbl">${k.l}</p><p class="val" style="color:${textInk(k.c)}">${k.v}</p>
       <p class="sub">${k.chip} <span style="color:var(--text-muted,#94a3b8);font-size:11px">vs เดือนก่อน</span></p>
     </div>`).join('');
 
@@ -261,12 +261,12 @@ async function msLoadProfit() {
     { l: 'ต้นทุน/หัว (BoM)', v: t.cost_per_head != null ? fmt(t.cost_per_head) : '—', c: '#ef4444' },
     { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', c: '#10b981' },
     { l: 'Food cost %', v: t.cost_pct != null ? t.cost_pct + '%' : '—', c: cpColor(t.cost_pct) },
-  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${k.c}">${k.v}</p></div>`).join('');
+  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p></div>`).join('');
   const branches = (d.branches || []).filter(r => r.cost_pct != null);
   br.innerHTML = branches.map(r => `<div class="ms-row">
       <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
       <span style="font-size:12px;color:var(--text-muted,#64748b);font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
-      <span class="ms-chip" style="background:${cpColor(r.cost_pct)}22;color:${cpColor(r.cost_pct)}">${r.cost_pct}%</span>
+      <span class="ms-chip" style="background:${cpColor(r.cost_pct)}22;color:${textInk(cpColor(r.cost_pct))}">${r.cost_pct}%</span>
     </div>`).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
 
@@ -311,7 +311,7 @@ async function loadMoreAnalytics() {
         <td class="py-1.5 pr-2 text-right tabular-nums">${x.rev_per_cover!=null?fmtN(x.rev_per_cover):'—'}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${x.avg_bill!=null?fmtN(x.avg_bill):'—'}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${x.drink_pct}%</td>
-        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${gpCol(x.est_gp_margin_pct)}">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}${isTopGp?'':''}</td>
+        <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${textInk(gpCol(x.est_gp_margin_pct))}">${fmt(x.est_gross_profit)}${x.est_gp_margin_pct!=null?' · '+x.est_gp_margin_pct+'%':''}${isTopGp?'':''}</td>
       </tr>`;
     }).join('');
     const topRev = dayparts.slice().sort((a,b)=>(b.revenue||0)-(a.revenue||0))[0];
@@ -325,8 +325,8 @@ async function loadMoreAnalytics() {
     const fb = document.getElementById('more-forecast-badge');
     if (fb) {
       if (slope == null) { fb.textContent = ''; }
-      else if (slope > 0) { fb.textContent = '▲ ขาขึ้น'; fb.style.color = '#10b981'; }
-      else if (slope < 0) { fb.textContent = '▼ ขาลง'; fb.style.color = '#ef4444'; }
+      else if (slope > 0) { fb.textContent = '▲ ขาขึ้น'; fb.style.color = 'var(--good-ink)'; }
+      else if (slope < 0) { fb.textContent = '▼ ขาลง'; fb.style.color = 'var(--bad-ink)'; }
       else { fb.textContent = '→ ทรงตัว'; fb.style.color = '#64748b'; }
     }
     const hist = fc.history||[], fore = fc.forecast||[];
@@ -360,9 +360,9 @@ async function loadMoreAnalytics() {
       const fast = t!=null && t<=med;
       const col = t==null ? '#94a3b8' : fast ? '#10b981' : '#f59e0b';
       const bg  = t==null ? '#f8fafc' : fast ? '#ecfdf5' : '#fffbeb';
-      return `<div class="rounded-lg p-2.5 text-center" style="background:${bg};border:1px solid ${col}33">
+      return `<div class="rounded-lg p-2.5 text-center on-light" style="background:${bg};border:1px solid ${col}33">
         <div class="text-[11px] font-medium text-slate-500 truncate" title="${esc(b.branch)}">${medal(i)} ${esc(b.branch)}</div>
-        <div class="font-bold tabular-nums leading-tight" style="color:${col};font-size:1.35rem">${t!=null?t:'—'}<span class="text-[10px] font-normal text-slate-400"> น./รอบ</span></div>
+        <div class="font-bold tabular-nums leading-tight" style="color:${textInk(col)};font-size:1.35rem">${t!=null?t:'—'}<span class="text-[10px] font-normal text-slate-400"> น./รอบ</span></div>
         <div class="text-[10px] text-slate-400 tabular-nums mt-0.5">${fmtN(b.turns)} รอบ · ${b.avg_covers_per_turn!=null?b.avg_covers_per_turn:'—'} คน/รอบ</div>
       </div>`;
     }).join('') || '<div class="col-span-full py-3 text-center text-slate-400 text-sm">—</div>';
@@ -392,7 +392,7 @@ async function loadMoreAnalytics() {
   if (hc) hc.innerHTML = chips.map(c=>`
     <div class="card p-3" style="border:1px solid ${c.c}">
       <p class="text-[11px] text-slate-400">${c.icon} ${c.label}</p>
-      <p class="text-lg font-bold leading-tight" style="color:${c.c}">${c.val}</p>
+      <p class="text-lg font-bold leading-tight" style="color:${textInk(c.c)}">${c.val}</p>
       <p class="text-[11px] text-slate-500 mt-0.5">${c.sub}</p>
     </div>`).join('');
 }

@@ -123,7 +123,7 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
       <p class="text-sm" style="color:var(--text-primary)">${line1}</p>
       <p class="text-xs mt-1" style="color:var(--text-secondary)">${line2}</p>
     </div>
-    <span class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="background:var(--bg-card);color:${palette.wc};font-weight:600">${palette.word}</span>
+    <span class="text-xs px-3 py-1 rounded-lg whitespace-nowrap" style="background:var(--bg-card);color:${textInk(palette.wc)};font-weight:600">${palette.word}</span>
   </div>`;
 }
 
@@ -301,7 +301,7 @@ function renderHomeForecast(fc) {
     { label: 'MTD', value: fmt(fc.mtd), color: '#4a70b0' },
     { label: 'คาดจบเดือน', value: fmt(fc.projected), color: 'var(--good-ink)' },
     { label: 'ความคืบหน้า', value: `${prog}%`, color: '#0891b2' },
-  ].map(k => `<div class="text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${k.color}">${k.value}</p></div>`).join('');
+  ].map(k => `<div class="text-center"><p class="text-xs text-slate-500">${k.label}</p><p class="text-base font-bold" style="color:${textInk(k.color)}">${k.value}</p></div>`).join('');
   const dailyLabels = fc.daily.map(d => d.day.slice(5));
   const dailyData   = fc.daily.map(d => d.revenue);
   const remain      = fc.days_total - fc.days_elapsed;
@@ -367,7 +367,7 @@ function renderHomeLeakWatch(leak, brief) {
       ? esc(v.by_branch[0].branch) + (v.by_branch.length > 1 ? ` +${v.by_branch.length - 1}` : '') : c.hint;
     return `<div class="p-3 rounded-lg ${hot ? 'cursor-pointer' : ''}" style="background:${bg}" ${hot ? `onclick="switchTab('discounts')"` : ''}>
       <p class="text-[11px]" style="color:var(--text-muted)">${c.label}</p>
-      <p class="text-xl font-bold" style="color:${col}">${fmtN(v.bills)} <span class="text-xs font-normal">บิล</span></p>
+      <p class="text-xl font-bold" style="color:${textInk(col)}">${fmtN(v.bills)} <span class="text-xs font-normal">บิล</span></p>
       <p class="text-[11px]" style="color:var(--text-muted)">${v.baht ? '฿' + fmtN(v.baht) + ' · ' : ''}${branchHint}</p>
     </div>`;
   }).join('') + `</div>`;
@@ -397,7 +397,7 @@ function renderHomeMenuMovers(m) {
     // convention), so a literal "฿+0" on every row read as broken data. Only show
     // the ฿ chip when this menu actually moved money.
     const revTxt = (x.rev_delta)
-      ? ` · <span style="color:${col};font-weight:600">฿${x.rev_delta >= 0 ? '+' : ''}${fmtN(x.rev_delta)}</span>`
+      ? ` · <span style="color:${textInk(col)};font-weight:600">฿${x.rev_delta >= 0 ? '+' : ''}${fmtN(x.rev_delta)}</span>`
       : '';
     // An un-named SKU (description still equals the POS code — a new-branch code
     // series the sync hasn't backfilled) is labelled honestly instead of showing
@@ -412,7 +412,7 @@ function renderHomeMenuMovers(m) {
     return `<div class="py-1 border-b" style="border-color:var(--border)">
       <div class="flex items-baseline justify-between gap-2">
         <span class="text-xs font-medium truncate min-w-0" style="color:var(--text-primary)" title="${esc(x.menu)}">${tag}${nameHtml}</span>
-        <span class="text-xs font-semibold whitespace-nowrap tabular-nums" style="color:${col}">${main}</span>
+        <span class="text-xs font-semibold whitespace-nowrap tabular-nums" style="color:${textInk(col)}">${main}</span>
       </div>
       <div class="text-[10px] tabular-nums" style="color:var(--text-muted)">${ctx}${revTxt}</div>
     </div>`;
@@ -451,14 +451,14 @@ function renderHomeMoversRevenue(m) {
   const box = (label, val, c, sub) => `
     <div class="rounded-lg p-3" style="border:1px solid var(--border);background:var(--bg-input)">
       <div class="text-[11px] mb-0.5" style="color:var(--text-muted)">${label}</div>
-      <div class="text-lg font-bold tabular-nums" style="color:${c}">${val}</div>
+      <div class="text-lg font-bold tabular-nums" style="color:${textInk(c)}">${val}</div>
       ${sub ? `<div class="text-[10px] mt-0.5" style="color:var(--text-muted)">${sub}</div>` : ''}
     </div>`;
   // ── narrative: align dish movement with buffet package + price tier + à-la-carte ──
   const lines = [];
   if (revP != null) {
     const dir = revP >= 0 ? 'โตขึ้น' : 'ลดลง';
-    lines.push(`ยอด<b>บุฟเฟต์</b>เมื่อวาน${dir} <b style="color:${col(revP)}">${sgn(revP)}</b> (โต๊ะ ${sgn(covP)} · เทียบเฉลี่ย 21 วัน) — เป็นรายได้หลักของร้าน`);
+    lines.push(`ยอด<b>บุฟเฟต์</b>เมื่อวาน${dir} <b style="color:${textInk(col(revP))}">${sgn(revP)}</b> (โต๊ะ ${sgn(covP)} · เทียบเฉลี่ย 21 วัน) — เป็นรายได้หลักของร้าน`);
   }
   if (ppcP != null) {
     lines.push(ppcP >= 0
@@ -473,13 +473,13 @@ function renderHomeMoversRevenue(m) {
       : `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#d97706">สวนทาง</b>กับโต๊ะบุฟเฟต์ — การเปลี่ยนเป็นเรื่องรสนิยม/ความนิยมเมนู ไม่ใช่แค่จำนวนลูกค้า`);
   }
   if (alaP != null)
-    lines.push(`เมนู<b>à-la-carte</b> (สั่งแยกจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${col(alaP)}">${sgn(alaP)}</b> — ส่วนเสริมรายได้นอกบุฟเฟต์`);
+    lines.push(`เมนู<b>à-la-carte</b> (สั่งแยกจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${textInk(col(alaP))}">${sgn(alaP)}</b> — ส่วนเสริมรายได้นอกบุฟเฟต์`);
   el.innerHTML = `
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-      ${box('โต๊ะบุฟเฟต์เมื่อวาน', fmtN(b.covers_today), col(covP), `เฉลี่ย ${fmtN(b.covers_avg)} · <span style="color:${col(covP)}">${sgn(covP)}</span>`)}
-      ${box('รายได้บุฟเฟต์', '฿' + fmtN(b.rev_today), col(revP), `เฉลี่ย ฿${fmtN(b.rev_avg)} · <span style="color:${col(revP)}">${sgn(revP)}</span>`)}
-      ${box('ราคาเฉลี่ย/หัว (ชุดราคา)', '฿' + fmtN(b.ppc_today), col(ppcP), `เฉลี่ย ฿${fmtN(b.ppc_avg)} · <span style="color:${col(ppcP)}">${sgn(ppcP)}</span>`)}
-      ${box('à-la-carte อาหาร', '฿' + fmtN(s.alacarte_today), col(alaP), `เฉลี่ย ฿${fmtN(s.alacarte_avg)} · <span style="color:${col(alaP)}">${sgn(alaP)}</span>`)}
+      ${box('โต๊ะบุฟเฟต์เมื่อวาน', fmtN(b.covers_today), col(covP), `เฉลี่ย ${fmtN(b.covers_avg)} · <span style="color:${textInk(col(covP))}">${sgn(covP)}</span>`)}
+      ${box('รายได้บุฟเฟต์', '฿' + fmtN(b.rev_today), col(revP), `เฉลี่ย ฿${fmtN(b.rev_avg)} · <span style="color:${textInk(col(revP))}">${sgn(revP)}</span>`)}
+      ${box('ราคาเฉลี่ย/หัว (ชุดราคา)', '฿' + fmtN(b.ppc_today), col(ppcP), `เฉลี่ย ฿${fmtN(b.ppc_avg)} · <span style="color:${textInk(col(ppcP))}">${sgn(ppcP)}</span>`)}
+      ${box('à-la-carte อาหาร', '฿' + fmtN(s.alacarte_today), col(alaP), `เฉลี่ย ฿${fmtN(s.alacarte_avg)} · <span style="color:${textInk(col(alaP))}">${sgn(alaP)}</span>`)}
     </div>
     <div class="text-xs rounded-lg p-3 space-y-1" style="background:var(--bg-subtle,rgba(0,0,0,0.03));color:var(--text-primary)">
       ${lines.map(t => `<div>• ${t}</div>`).join('')}
@@ -505,7 +505,7 @@ async function renderMenuSalesNarrative() {
   const dishDir = up.length > down.length ? 'พุ่ง' : (down.length > up.length ? 'ตก' : 'ทรงตัว');
   const names = arr => arr.slice(0, 3).map(x => esc(x.menu)).join(', ') || '—';
   const lines = [];
-  if (revP != null) lines.push(`ยอด<b>บุฟเฟต์</b> (${m.date}) ${revP >= 0 ? 'โต' : 'ลด'} <b style="color:${c(revP)}">${sgn(revP)}</b> · โต๊ะ ${sgn(covP)} เทียบเฉลี่ย 21 วัน — เป็นรายได้หลักของร้าน`);
+  if (revP != null) lines.push(`ยอด<b>บุฟเฟต์</b> (${m.date}) ${revP >= 0 ? 'โต' : 'ลด'} <b style="color:${textInk(c(revP))}">${sgn(revP)}</b> · โต๊ะ ${sgn(covP)} เทียบเฉลี่ย 21 วัน — เป็นรายได้หลักของร้าน`);
   if (ppcP != null) lines.push(ppcP >= 0
     ? `ราคาเฉลี่ย/หัว <b style="color:var(--good-ink)">${sgn(ppcP)}</b> → ลูกค้าเลือก<b>ชุดราคาสูงขึ้น</b> (มื้อเย็น/พรีเมียม)`
     : `ราคาเฉลี่ย/หัว <b style="color:var(--bad-ink)">${sgn(ppcP)}</b> → mix เอียงไป<b>ชุดราคาถูกลง</b> (กลางวัน/เด็ก)`);
@@ -515,7 +515,7 @@ async function renderMenuSalesNarrative() {
       ? `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:var(--good-ink)">ไปทางเดียวกัน</b>กับยอดบุฟเฟต์ — สอดคล้องกับจำนวนลูกค้า`
       : `เมนูที่กินต่อหัว<b>${dishDir}</b> <b style="color:#d97706">สวนทาง</b>กับยอดบุฟเฟต์ — เป็นเรื่องรสนิยม/ความนิยม ไม่ใช่แค่จำนวนลูกค้า`);
   }
-  if (alaP != null) lines.push(`เมนู<b>à-la-carte</b> (สั่งจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${c(alaP)}">${sgn(alaP)}</b>`);
+  if (alaP != null) lines.push(`เมนู<b>à-la-carte</b> (สั่งจ่ายเพิ่ม) ${alaP >= 0 ? 'โต' : 'หด'} <b style="color:${textInk(c(alaP))}">${sgn(alaP)}</b>`);
   lines.push(`เทรนด์เมื่อวาน — มาแรง: <b style="color:var(--good-ink)">${names(up)}</b> · แผ่วลง: <b style="color:var(--bad-ink)">${names(down)}</b>`);
   el.innerHTML = `<div class="text-xs space-y-1.5" style="color:var(--text-primary);line-height:1.5">${lines.map(t => `<div>• ${t}</div>`).join('')}</div>`;
 }
@@ -596,7 +596,7 @@ async function renderHomeScorecard(focusDate) {
                  : s === 'down' ? '<span title="ต่ำกว่าปกติ">●</span>'
                  : '<span title="ปกติ">●</span>';
   const pctCell = (v, hb = true) => v == null ? '<span class="text-slate-300">—</span>'
-    : `<span style="color:${(v >= 0) === hb ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(0)}%</span>`;
+    : `<span style="color:${(v >= 0) === hb ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(0)}%</span>`;
   el.innerHTML = `<table class="text-xs w-full">
     <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2"></th><th class="py-1.5 pr-2">สาขา</th>
@@ -649,7 +649,7 @@ async function loadDailySales(force) {
     : `· เทียบ${lbl}ก่อน (${(d.prev_range || [''])[0]}) · ปีก่อน (${(d.yoy_range || [''])[0]})`;
   const t = d.total || {};
   const badge = (v, hb = true) => v == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${(v >= 0) === hb ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${(v >= 0) === hb ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
   const cmpLbl = isMtd ? (d.mom_basis === 'dow' ? 'ฐานวันในสัปดาห์เดือนก่อน' : 'MTD เดือนก่อน') : (lbl + 'ก่อน');
   // signed "vs <prev period> ±x%" sub-line — shared by every KPI box for a consistent MTD-fair comparison
   const cmpSub = (v) => 'vs ' + cmpLbl + ' ' + (v != null ? (v >= 0 ? '+' : '') + v + '%' : '—');
@@ -722,7 +722,7 @@ async function renderMenuSpike(focusDate) {
       <td class="py-1.5 pr-2 text-right font-semibold tabular-nums">${fmtN(s.today)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${s.is_new ? '<span class="text-amber-600">เมนูใหม่</span>' : fmtN(s.avg)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#f59e0b">+${fmtN(s.excess)}</td>
-      <td class="py-1.5 text-right tabular-nums"><span style="color:#ef4444;font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : ''}</span></td>
+      <td class="py-1.5 text-right tabular-nums"><span style="color:var(--bad-ink);font-weight:700">${s.x != null ? '×' + s.x + (s.pct != null ? ' (+' + s.pct + '%)' : '') : ''}</span></td>
     </tr>`).join('') + `</tbody></table>`;
 }
 
@@ -752,7 +752,7 @@ async function loadCostHead(force) {
   const avgCostPct = t.cost_pct;   // chain food-cost ratio = benchmark
   // cost: lower is better → green when delta <= 0
   const badge = v => v == null ? '<span class="text-slate-300 text-xs">—</span>'
-    : `<span class="text-xs font-semibold" style="color:${v <= 0 ? '#10b981' : '#ef4444'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
+    : `<span class="text-xs font-semibold" style="color:${v <= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</span>`;
   const cpColor = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
   document.getElementById('chKpis').innerHTML = [
     { l: 'ต้นทุน/หัว (BoM)', v: fmt(t.cost_per_head || 0), s: 'เทียบช่วงก่อน ' + (t.delta_pct != null ? (t.delta_pct > 0 ? '+' : '') + t.delta_pct + '%' : '—'), c: '#ef4444' },
@@ -770,23 +770,23 @@ async function loadCostHead(force) {
     const worst = withCp[0];                          // already sorted by cost_pct desc
     const best  = withCp[withCp.length - 1];
     ins.innerHTML = `<div class="card p-3 text-xs flex flex-wrap gap-x-6 gap-y-1" style="background:var(--bg-subtle)">
-      <span>⚠ <b>${esc(worst.branch)}</b> ต้นทุนสูงสุด <b style="color:#ef4444">${worst.cost_pct}%</b> (รายได้/หัว ${fmt(worst.rev_per_head)}, GP/หัว ${fmt(worst.gp_per_head)}) — สูงกว่าเฉลี่ยเครือ ${(worst.cost_pct - avgCostPct).toFixed(1)} pp</span>
-      <span>✓ <b>${esc(best.branch)}</b> ประหยัดสุด <b style="color:#10b981">${best.cost_pct}%</b></span>
+      <span>⚠ <b>${esc(worst.branch)}</b> ต้นทุนสูงสุด <b style="color:var(--bad-ink)">${worst.cost_pct}%</b> (รายได้/หัว ${fmt(worst.rev_per_head)}, GP/หัว ${fmt(worst.gp_per_head)}) — สูงกว่าเฉลี่ยเครือ ${(worst.cost_pct - avgCostPct).toFixed(1)} pp</span>
+      <span>✓ <b>${esc(best.branch)}</b> ประหยัดสุด <b style="color:var(--good-ink)">${best.cost_pct}%</b></span>
       <span style="color:var(--text-muted)">เฉลี่ยเครือ ${avgCostPct}%</span></div>`;
   } else { ins.innerHTML = ''; }
 
   document.getElementById('chBody').innerHTML = branches.map(r => {
     const dev = (r.cost_pct != null && avgCostPct != null) ? (r.cost_pct - avgCostPct) : null;
     const devHtml = dev == null ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${dev > 1 ? '#ef4444' : dev < -1 ? '#10b981' : '#94a3b8'}">${dev > 0 ? '+' : ''}${dev.toFixed(1)} pp</span>`;
+      : `<span style="color:${dev > 1 ? 'var(--bad-ink)' : dev < -1 ? 'var(--good-ink)' : '#94a3b8'}">${dev > 0 ? '+' : ''}${dev.toFixed(1)} pp</span>`;
     const rowBg = (dev != null && dev > 1) ? 'background:rgba(239,68,68,0.05)' : '';
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40" style="${rowBg}">
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.customers)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.rev_per_head != null ? fmt(r.rev_per_head) : '—'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${cpColor(r.cost_pct)}">${r.cost_pct != null ? r.cost_pct + '%' : '—'}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:#10b981">${r.gp_per_head != null ? fmt(r.gp_per_head) : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(cpColor(r.cost_pct))}">${r.cost_pct != null ? r.cost_pct + '%' : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--good-ink)">${r.gp_per_head != null ? fmt(r.gp_per_head) : '—'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${badge(r.delta_pct)}</td>
       <td class="py-1.5 text-right tabular-nums">${devHtml}</td>
     </tr>`;
@@ -850,13 +850,13 @@ async function pbDrill(idx, keepOpen) {
     { l: 'กำไร/บิล', v: fmt(gpBill), c: '#7a66b8' },
     { l: 'ลูกค้า', v: fmtN(st.cust || 0), c: '#f59e0b' },
   ];
-  document.getElementById('pbDrillStat').innerHTML = stats.map(k => `<div class="rounded-lg p-2.5" style="background:var(--bg-subtle);border-top:2px solid ${k.c}"><p class="text-[10px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-base font-bold" style="color:${k.c}">${k.v}</p></div>`).join('');
+  document.getElementById('pbDrillStat').innerHTML = stats.map(k => `<div class="rounded-lg p-2.5" style="background:var(--bg-subtle);border-top:2px solid ${k.c}"><p class="text-[10px] uppercase" style="color:var(--text-muted)">${k.l}</p><p class="text-base font-bold" style="color:${textInk(k.c)}">${k.v}</p></div>`).join('');
   const metricCell = r => {
     if (r.gp_pct == null) return '—';
     const val = cogsView ? (100 - r.gp_pct) : r.gp_pct;
     const color = cogsView ? (val > 100 ? '#ef4444' : val > 70 ? '#f59e0b' : '#10b981')
                            : (r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981');
-    return `<span style="color:${color}">${val.toFixed(1)}%</span>`;
+    return `<span style="color:${textInk(color)}">${val.toFixed(1)}%</span>`;
   };
   document.getElementById('pbDrillBody').innerHTML = (d.bills || []).map((r, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
@@ -864,7 +864,7 @@ async function pbDrill(idx, keepOpen) {
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.rev - r.cogs < 0 ? '#ef4444' : '#10b981'}">${fmt(Math.round(r.rev - r.cogs))}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.rev - r.cogs < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(Math.round(r.rev - r.cogs))}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cust)}</td>
     <td class="py-1.5 text-right tabular-nums font-semibold">${metricCell(r)}</td>
@@ -944,7 +944,7 @@ function renderPnlBill(d) {
     const val = cogsView ? (100 - r.gp_pct) : r.gp_pct;
     const color = cogsView ? (val > 100 ? '#ef4444' : val > 70 ? '#f59e0b' : '#10b981')
                            : (r.gp_pct < 0 ? '#ef4444' : r.gp_pct < 30 ? '#f59e0b' : '#10b981');
-    return `<span style="color:${color}">${val.toFixed(1)}%</span>`;
+    return `<span style="color:${textInk(color)}">${val.toFixed(1)}%</span>`;
   };
   // กำไรต่อบิล รายสาขา — aggregate margin per branch, worst GM% on top.
   document.getElementById('pbWorst').innerHTML = (d.by_branch || []).map(r => {
@@ -953,16 +953,16 @@ function renderPnlBill(d) {
     return `<tr class="border-t border-slate-100 hover:bg-rose-50/40" style="${rowBg}">
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${gmCol}">${r.gm_pct != null ? r.gm_pct + '%' : '—'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(gmCol)}">${r.gm_pct != null ? r.gm_pct + '%' : '—'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.gp_per_bill != null ? fmt(r.gp_per_bill) : '—'}</td>
-      <td class="py-1.5 text-right tabular-nums" style="color:${r.loss_bills > 0 ? '#ef4444' : '#94a3b8'}">${r.loss_bills > 0 ? fmtN(r.loss_bills) : '0'}</td>
+      <td class="py-1.5 text-right tabular-nums" style="color:${r.loss_bills > 0 ? 'var(--bad-ink)' : '#94a3b8'}">${r.loss_bills > 0 ? fmtN(r.loss_bills) : '0'}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   // ALL loss-making bills
   const loss = d.loss || [];
   const ls = document.getElementById('pbLossSummary');
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
-    ? `ขาดทุน <b style="color:#ef4444">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:#ef4444">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
+    ? `ขาดทุน <b style="color:var(--bad-ink)">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:var(--bad-ink)">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
     : 'ไม่มีบิลขาดทุนในช่วงนี้';
   document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
@@ -970,7 +970,7 @@ function renderPnlBill(d) {
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.cogs)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(Math.round(r.cogs - r.rev))}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(Math.round(r.cogs - r.rev))}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.disc ? fmt(r.disc) : '—'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.cust)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${r.dwell_min == null ? '#cbd5e1' : r.dwell_min >= 120 ? '#f59e0b' : 'var(--text-secondary)'}">${r.dwell_min != null ? r.dwell_min + ' น.' : '—'}</td>
@@ -1049,7 +1049,7 @@ async function loadOpsReport(force) {
   document.getElementById('opVoid').innerHTML = (d.void || []).map(x => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
     <td class="py-1.5 pr-2">${esc(x.menu)}</td><td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(x.qty)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(x.value)}</td>
-    <td class="py-1.5 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(x.bom_cost)}</td></tr>`).join('')
+    <td class="py-1.5 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(x.bom_cost)}</td></tr>`).join('')
     || (d.void_pending
       ? '<tr><td colspan="4" class="py-4 text-center text-amber-600 text-xs">Void รายวันจะแสดงหลัง sync รอบถัดไป</td></tr>'
       : '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>');
@@ -1390,7 +1390,7 @@ function _ptRender(d) {
       (jumped ? '<span class="mi-flag bad" title="ต้นทุน/หัวขยับผิดปกติเทียบ tier อื่น">⚠ ผิดปกติ</span>' : '') +
       (saved ? '<span class="mi-flag good" title="ต้นทุน/หัวลดผิดปกติเทียบ tier อื่น (ในทางที่ดี)">★ เด่น</span>' : '');
     return `<tr class="border-t border-slate-100${jumped || hotFood ? ' mi-outlier' : saved ? ' mi-outlier-good' : ''}">
-    <td class="py-1.5 pr-2 font-bold mi-name" data-sort="${esc(String(x.tier))}" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">${esc(x.label)}${flags}</td>
+    <td class="py-1.5 pr-2 font-bold mi-name" data-sort="${esc(String(x.tier))}" style="color:${textInk(tcolor[String(x.tier)] || 'var(--text-primary)')}">${esc(x.label)}${flags}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${n0(x.a.pax)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${x.b ? n0(x.b.pax) : '-'}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(dc(x.d_pax_pct))}">${sg(x.d_pax_pct, '%')}</td>
@@ -1412,7 +1412,7 @@ function _ptRender(d) {
   // ratio and therefore identical under either unit.
   const qUnit = _ptQtyPer100 ? 'ชิ้น/100 คน' : 'ชิ้น/หัว';
   const qv = v => v == null ? null : (_ptQtyPer100 ? Math.round(v * 100 * 10) / 10 : v);
-  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${tcolor[t]}">${esc(tl(t))}<br>${qUnit} (Δ%)</th>`).join('');
+  const tierTh = d.tier_keys.map(t => `<th class="py-1.5 pr-2 text-right" style="color:${textInk(tcolor[t])}">${esc(tl(t))}<br>${qUnit} (Δ%)</th>`).join('');
   // The menu name is frozen (sticky) while the tier columns scroll — with 5-8
   // tiers this table gets very wide, and losing track of which dish a column
   // belongs to made it unreadable.
@@ -1425,7 +1425,7 @@ function _ptRender(d) {
   const topRows = (d.top30 || []).map((r, i) => {
     const cells = d.tier_keys.map(t => {
       const c = r.tiers[t] || {};
-      return `<td class="py-1 pr-2 text-right tabular-nums" data-sort="${c.qty_head ?? ''}">${qv(c.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(c.d_pct, true)}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
+      return `<td class="py-1 pr-2 text-right tabular-nums" data-sort="${c.qty_head ?? ''}">${qv(c.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${textInk(dc(c.d_pct, true))}"> ${c.d_pct == null ? '' : '(' + sg(c.d_pct, '%') + ')'}</span></td>`;
     }).join('');
     const up = topOut.has(i) && (r.d_qty_head_pct || 0) > 0, down = topOut.has(i) && (r.d_qty_head_pct || 0) < 0;
     const flag = up ? '<span class="mi-flag bad" title="การทาน/หัวพุ่งผิดปกติเทียบเมนูอื่นในตารางนี้">⚠ พุ่ง</span>'
@@ -1435,7 +1435,7 @@ function _ptRender(d) {
       <td class="py-1 pr-2 font-semibold mi-name" data-sort="${esc(r.label)}" style="${stickyTh(STICKY_NUM_W, STICKY_LBL_W, 'box-shadow:2px 0 3px -2px rgba(0,0,0,.15)')}">${esc(r.label)}${flag}</td>
       <td class="py-1 pr-2 text-right tabular-nums">${b1(r.unit_cost)}</td>
       <td class="py-1 pr-2 text-right tabular-nums font-semibold">${b1(r.cogs_head)}</td>
-      <td class="py-1 pr-2 text-right tabular-nums">${qv(r.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${dc(r.d_qty_head_pct, true)}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
+      <td class="py-1 pr-2 text-right tabular-nums">${qv(r.qty_head) ?? '-'}<span class="text-[10px] font-semibold" style="color:${textInk(dc(r.d_qty_head_pct, true))}"> (${sg(r.d_qty_head_pct, '%')})</span></td>
       ${cells}</tr>`;
   }).join('');
 
@@ -1458,7 +1458,7 @@ function _ptRender(d) {
       <td class="py-1 pr-2 text-right tabular-nums font-semibold"${isOutlier ? ' style="color:var(--bad-ink)"' : ''}>${b1(r.bom_cost)}</td></tr>`;
     }).join('');
     return `<details class="mb-2"${ti === 0 ? ' open' : ''}>
-      <summary class="cursor-pointer text-xs font-bold py-1" style="color:${tcolor[String(x.tier)] || 'var(--text-primary)'}">
+      <summary class="cursor-pointer text-xs font-bold py-1" style="color:${textInk(tcolor[String(x.tier)] || 'var(--text-primary)')}">
         ${esc(x.label)} — กินได้ ${x.bom_dishes.length} จาน (เฉลี่ย ${b1(x.bom_avg_cost)}) · รวมจาน tier ที่ถูกกว่าแล้ว
       </summary>
       <table class="text-xs w-full mt-1 pt-bom-tbl"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -2013,7 +2013,7 @@ async function _extraMonths(selId, valNow) {
     sel.dataset.loaded = '1';
   } catch (e) {}
 }
-const _extKpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${c}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub||''}</p></div>`;
+const _extKpi = (l, v, sub, c) => `<div class="card p-4" style="border-top:3px solid ${c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${l}</p><p class="text-2xl font-bold" style="color:${textInk(c)}">${v}</p><p class="text-[11px]" style="color:var(--text-muted)">${sub||''}</p></div>`;
 
 // Make a LOCAL picker follow the GLOBAL period. These endpoints take a single
 // month/day, so the picker snaps to the global END month/day whenever the global
@@ -2116,14 +2116,14 @@ async function loadCashCtl(force) {
   const ccMon = d.month || '';
   document.getElementById('ccBody').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cashDayDrill('${jsAttr(r.branch)}','${ccMon}')" title="คลิกดูรายวันของ ${esc(r.branch)}">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(r.over_short)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.short_days || 0}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td>
     <td class="py-1.5 text-right tabular-nums">${r.sales ? (r.over_short / r.sales * 100).toFixed(2) + '%' : '—'}</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   document.getElementById('ccWorst').innerHTML = (d.worst_days || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cashWorstDayDrill('${jsAttr(r.branch)}','${jsAttr(r.day)}')" title="คลิกดูรายละเอียดของ ${esc(r.branch)} วันที่ ${esc(r.day)}">
     <td class="py-1.5 pr-2 tabular-nums">${esc(r.day)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2">${esc(r.branch)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? '#ef4444' : '#10b981'}">${fmt(r.over_short)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${r.over_short < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fmt(r.over_short)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.sales)}</td><td class="py-1.5 text-right tabular-nums">${fmtN(r.pax)}</td>
   </tr>`).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีวันที่ขาด/เกิน</td></tr>';
 }
@@ -2168,7 +2168,7 @@ async function loadCustType(force) {
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-400">${fmtN(r.customers)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.delivery_cust)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dCol}">${r.delivery_pct}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${textInk(dCol)}">${r.delivery_pct}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.net)}</td>
       <td class="py-1.5 text-right tabular-nums font-semibold">${r.net_pct != null ? r.net_pct + '%' : '—'}</td>
     </tr>`;
@@ -2208,14 +2208,14 @@ async function loadPriceZone(force) {
     const dn = (r.delta || 0) < 0;
     const qp = r.qty_pct;
     const qpHtml = qp == null ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${qp > 0 ? '#10b981' : qp < 0 ? '#ef4444' : '#94a3b8'}">${qp > 0 ? '+' : ''}${qp.toFixed(1)}%</span>`;
+      : `<span style="color:${qp > 0 ? 'var(--good-ink)' : qp < 0 ? 'var(--bad-ink)' : '#94a3b8'}">${qp > 0 ? '+' : ''}${qp.toFixed(1)}%</span>`;
     const baq = (r.before_qty != null) ? `${fmtN(r.before_qty)}→${fmtN(r.after_qty)}` : '—';
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
     <td class="py-1.5 pr-2 tabular-nums text-[10.5px]">${esc((r.date || '').replace('T', ' ').slice(0, 16))}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td><td class="py-1.5 pr-2">${esc(r.item || '')}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmt(r.default_price)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.new_price)}</td>
-    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dn ? '#ef4444' : '#10b981'}">${dn ? '' : '+'}${fmt(r.delta)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dn ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dn ? '' : '+'}${fmt(r.delta)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${baq}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${qpHtml}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${r.elasticity != null ? r.elasticity.toFixed(2) : '<span class="text-slate-300">—</span>'}</td>
@@ -2257,12 +2257,12 @@ async function loadCancelBill(force) {
   document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">
     <td class="py-1.5 pr-2">${esc(r.reason)}</td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
     <td class="py-1.5 pr-2 text-right tabular-nums">${(r.bills / tb * 100).toFixed(1)}%</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
+    <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="4" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
   const cbMon = d.month || '';
   document.getElementById('cbBranches').innerHTML = (d.branches || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer" onclick="cancelBillDrill('${jsAttr(r.branch)}','${cbMon}')" title="คลิกดูบิลที่ถูกยกเลิกของ ${esc(r.branch)}">
     <td class="py-1.5 pr-2 font-medium">${esc(r.branch)} <span class="text-slate-300">›</span></td><td class="py-1.5 pr-2 text-right tabular-nums font-semibold">${fmtN(r.bills)}</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(r.amount)}</td></tr>`).join('')
+    <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(r.amount)}</td></tr>`).join('')
     || '<tr><td colspan="3" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
 }
 
@@ -2280,14 +2280,14 @@ async function cashDayDrill(branch, month) {
   const shortDays = days.filter(x=>x.over_short<0).length;
   const rows = days.map(x => `<tr class="border-t border-slate-100">
     <td class="py-1.5 pr-3 tabular-nums">${esc(x.day)}</td>
-    <td class="py-1.5 pr-3 text-right tabular-nums font-semibold" style="color:${x.over_short<0?'#ef4444':x.over_short>0?'#10b981':'#94a3b8'}">${fmt(x.over_short)}</td>
+    <td class="py-1.5 pr-3 text-right tabular-nums font-semibold" style="color:${x.over_short<0?'var(--bad-ink)':x.over_short>0?'var(--good-ink)':'#94a3b8'}">${fmt(x.over_short)}</td>
     <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(x.sales)}</td>
     <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(x.pax)}</td>
     <td class="py-1.5 pr-3 text-right tabular-nums text-slate-500">${fmt(x.discount)}</td>
     <td class="py-1.5 text-right tabular-nums text-slate-500">${fmt(x.cancel)}</td></tr>`).join('');
   body.innerHTML = `<div style="padding:4px 8px">
     <div class="flex gap-4 text-sm mb-3 flex-wrap">
-      <span>ขาด/เกินสุทธิ: <b style="color:${net<0?'#ef4444':'#10b981'}">${fmt(net)}</b></span>
+      <span>ขาด/เกินสุทธิ: <b style="color:${net<0?'var(--bad-ink)':'var(--good-ink)'}">${fmt(net)}</b></span>
       <span class="text-slate-500">วันที่ขาด: <b>${shortDays}</b>/${days.length}</span>
     </div>
     <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
@@ -2311,7 +2311,7 @@ async function cashWorstDayDrill(branch, day) {
   const h = d.head || {};
   const kpi = (label, val, col) => `<div class="card p-3" style="background:var(--bg-subtle)">
     <div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
-    <div class="text-base font-semibold tabular-nums"${col?` style="color:${col}"`:''}>${val}</div></div>`;
+    <div class="text-base font-semibold tabular-nums"${col?` style="color:${textInk(col)}"`:''}>${val}</div></div>`;
   const os = h.over_short || 0;
   const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
     ${kpi('ขาด/เกิน', fmt(os), os<0?'#ef4444':os>0?'#10b981':'#94a3b8')}
@@ -2331,8 +2331,8 @@ async function cashWorstDayDrill(branch, day) {
       <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
       <td class="py-1.5 pr-3">${esc(x.reason)}</td>
       <td class="py-1.5 pr-3">${x.cancel_user ? esc(x.cancel_user) : '<span class="text-slate-300">—</span>'}</td>
-      <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
-    billsHtml = `<h3 class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">บิลที่ถูกยกเลิก/ลบ ในวันนี้ · ${fmtN(bills.length)} ใบ · รวม <span style="color:#ef4444">${fmt(total)}</span></h3>
+      <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(x.amount)}</td></tr>`).join('');
+    billsHtml = `<h3 class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">บิลที่ถูกยกเลิก/ลบ ในวันนี้ · ${fmtN(bills.length)} ใบ · รวม <span style="color:var(--bad-ink)">${fmt(total)}</span></h3>
       <div style="max-height:48vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
         <th class="py-1.5 pr-3">เวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล</th><th class="py-1.5 text-right">มูลค่า</th>
       </tr></thead><tbody>${rows || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีบิลที่ถูกยกเลิกในวันนี้</td></tr>'}</tbody></table></div>`;
@@ -2363,11 +2363,11 @@ async function cancelBillDrill(branch, month) {
     <td class="py-1.5 pr-3 font-mono text-[11px]">${esc(x.receipt_no)}</td>
     <td class="py-1.5 pr-3">${esc(x.reason)}</td>
     <td class="py-1.5 pr-3">${x.cancel_user ? esc(x.cancel_user) : '<span class="text-slate-300">—</span>'}</td>
-    <td class="py-1.5 text-right tabular-nums" style="color:#ef4444">${fmt(x.amount)}</td></tr>`).join('');
+    <td class="py-1.5 text-right tabular-nums" style="color:var(--bad-ink)">${fmt(x.amount)}</td></tr>`).join('');
   body.innerHTML = `<div style="padding:4px 8px">
     <div class="flex gap-4 text-sm mb-3 flex-wrap">
       <span>บิลที่ยกเลิก: <b>${fmtN(bills.length)}</b>${d.capped?' (แสดงล่าสุด)':''}</span>
-      <span class="text-slate-500">มูลค่ารวม: <b style="color:#ef4444">${fmt(total)}</b></span>
+      <span class="text-slate-500">มูลค่ารวม: <b style="color:var(--bad-ink)">${fmt(total)}</b></span>
     </div>
     <div style="max-height:60vh;overflow:auto"><table class="text-xs w-full"><thead class="sticky top-0" style="background:var(--bg-card)"><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
       <th class="py-1.5 pr-3">วันเวลา</th><th class="py-1.5 pr-3">เลขบิล</th><th class="py-1.5 pr-3">เหตุผล</th><th class="py-1.5 pr-3">ผู้ลบบิล <span class="text-[10px] text-slate-400">(login)</span></th><th class="py-1.5 text-right">มูลค่า</th>
@@ -2460,7 +2460,7 @@ async function loadCloseTime(force) {
         <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
         <td class="py-1.5 pr-2" data-sort="${rep ? 1 : 0}">${bdg}</td>
         <td class="py-1.5 pr-2 text-right tabular-nums">${r.day_close || '—'}</td>
-        <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${rep ? '#0f172a' : '#ef4444'}">${rep ? fmtN(r.day_bills) : '0'}</td>
+        <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${rep ? '#0f172a' : 'var(--bad-ink)'}">${rep ? fmtN(r.day_bills) : '0'}</td>
         <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-muted)">${esc(r.last_sold || '—')}</td>
       </tr>`;
     }).join('') || '<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>';
@@ -2499,7 +2499,7 @@ async function loadCloseTime(force) {
       <td class="py-1.5 pr-2 font-medium" data-sort="${esc(r.branch)}">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2" data-sort="${db == null ? '' : db}">${badge(r.status)}</td>
       <td class="py-1.5 pr-2 tabular-nums" style="color:var(--text-secondary)">${esc(r.last_sold || '—')}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${dbCol}">${db == null ? '—' : db}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:${textInk(dbCol)}">${db == null ? '—' : db}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" data-sort="${r.avg_close_min == null ? '' : r.avg_close_min}">${r.avg_close || '—'}${lateClose ? ' <span class="mi-flag warn" title="เวลาปิดต่างจากสาขาอื่นมาก (หลุดกรอบ Tukey)">⚠ ต่างจากเพื่อน</span>' : ''}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:${fewDays ? '#b45309' : 'var(--text-muted)'}">${fmtN(r.days_open)}${fewDays ? ' <span class="mi-flag warn" title="เปิดขายน้อยวันผิดปกติใน 30 วันล่าสุด — ปิดปรับปรุง หรือข้อมูลขาด">⚠</span>' : ''}</td>
       <td class="py-1.5 text-right tabular-nums" style="color:var(--text-muted)">${fmtN(r.total_bills)}</td>
@@ -2653,7 +2653,7 @@ async function loadMarket() {
           const col = c == null ? 'var(--text-muted)' : c > 0 ? '#d97706' : c < 0 ? 'var(--good-ink)' : 'var(--text-muted)';
           return `<div class="rounded-lg p-3" style="background:var(--bg-subtle);border:1px solid var(--border-soft)">
             <p class="text-[10px] font-semibold uppercase tracking-wide" style="color:var(--text-muted)">${esc(x.label)}</p>
-            <p class="text-lg font-bold mt-0.5" style="color:var(--text-primary)">${esc(x.value)}${c != null ? ` <span style="font-size:11px;color:${col}">${arrow} ${Math.abs(c).toFixed(1)}%</span>` : ''}</p>
+            <p class="text-lg font-bold mt-0.5" style="color:var(--text-primary)">${esc(x.value)}${c != null ? ` <span style="font-size:11px;color:${textInk(col)}">${arrow} ${Math.abs(c).toFixed(1)}%</span>` : ''}</p>
             <p class="text-[10.5px]" style="color:var(--text-secondary)">${esc(x.sub || '')}</p>
           </div>`;
         }).join('');
@@ -2667,7 +2667,7 @@ async function loadMarket() {
     document.getElementById('market-macro').innerHTML = (m.macro || []).map(x => `
       <div class="rounded-lg p-3" style="background:var(--bg-subtle);border:1px solid var(--border-soft)">
         <p class="text-[10px] font-semibold uppercase tracking-wide" style="color:var(--text-muted)">${esc(x.label)}</p>
-        <p class="text-lg font-bold mt-0.5" style="color:var(--text-primary)">${esc(x.value)} <span style="font-size:11px;color:${trCol(x.trend)}">${trIco(x.trend)}</span></p>
+        <p class="text-lg font-bold mt-0.5" style="color:var(--text-primary)">${esc(x.value)} <span style="font-size:11px;color:${textInk(trCol(x.trend))}">${trIco(x.trend)}</span></p>
         <p class="text-[10.5px]" style="color:var(--text-secondary)">${esc(x.sub)}</p>
         <p class="text-[9.5px] mt-1" style="color:var(--text-muted)">${esc(x.year)} · ${esc(x.source)}</p>
       </div>`).join('');
@@ -2753,12 +2753,12 @@ async function renderMarketBenchmark(b) {
     const accent = out ? '#10b981' : '#f59e0b';
     el.innerHTML = `<div class="p-3 rounded-lg" style="background:${out ? 'rgba(16,185,129,0.07)' : 'rgba(245,158,11,0.07)'};border:1px solid ${accent}">
       <p class="text-xs font-semibold" style="color:var(--text-primary)">เทียบกับตลาด ${out ? '— เหนือกว่าตลาด ✓' : '— ต่ำกว่าตลาด ⚠'}</p>
-      <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${pctColor}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาดร้านอาหารไทย ~+${ind}%/ปี</p>
+      <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${textInk(pctColor)}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาดร้านอาหารไทย ~+${ind}%/ปี</p>
     </div>`;
   } else {
     el.innerHTML = `<div class="p-3 rounded-lg" style="background:rgba(31,58,107,0.06);border:1px solid var(--indigo)">
       <p class="text-xs font-semibold" style="color:var(--text-primary)">ผลของเรา vs ตลาด</p>
-      <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${pctColor}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาด ~+${ind}%/ปี <span style="color:var(--text-muted)">(ยังไม่ครบ 12 เดือนสำหรับ YoY)</span></p>
+      <p class="text-[11px] mt-0.5" style="color:var(--text-secondary)">${esc(label)}: <b style="color:${textInk(pctColor)}">${ourPct >= 0 ? '+' : ''}${ourPct.toFixed(1)}%</b> · ตลาด ~+${ind}%/ปี <span style="color:var(--text-muted)">(ยังไม่ครบ 12 เดือนสำหรับ YoY)</span></p>
     </div>`;
   }
 }

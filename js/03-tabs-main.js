@@ -72,7 +72,7 @@ function renderTimeKpis(hourly) {
     }, seg.hours[0]);
     return `<div class="card kpi-card p-4">
       <div class="kpi-card-top"><p class="kpi-label">${seg.emoji} ${seg.label}</p></div>
-      <p class="kpi-value" style="color:${seg.color}">${fmt(rev)}</p>
+      <p class="kpi-value" style="color:${textInk(seg.color)}">${fmt(rev)}</p>
       <div class="kpi-card-bottom">
         <p class="kpi-sub">${pct}% of ${{ daily:'day', weekly:'week', monthly:'month' }[_timeGranularity]||'day'} · peak ${peakHour}:00</p>
       </div>
@@ -597,14 +597,14 @@ async function renderExecSummary() {
   const tgtColor = projVsTgt == null ? 'var(--text-muted)' : projVsTgt >= 100 ? 'var(--good-ink)' : projVsTgt >= 90 ? '#f59e0b' : 'var(--bad-ink)';
   const tile = (label, value, sub, color) => `<div style="flex:1;min-width:150px">
       <div class="text-[11px]" style="color:var(--text-muted)">${label}</div>
-      <div class="text-xl font-bold" style="color:${color || 'var(--text-primary)'}">${value}</div>
+      <div class="text-xl font-bold" style="color:${textInk(color || 'var(--text-primary)')}">${value}</div>
       <div class="text-[11px]" style="color:var(--text-muted)">${sub}</div></div>`;
   // plain-language headline
   const onPace = projVsTgt == null ? '' : projVsTgt >= 100 ? 'เกินเป้า ✓' : projVsTgt >= 90 ? 'ใกล้เป้า ⚠' : 'ต่ำกว่าเป้า ●';
   const gpWord = gp == null ? '' : gp >= 40 ? 'แข็งแรง' : gp >= 30 ? 'พอใช้' : 'ต่ำ';
   const narrative = `เดือน ${fmtMonth(fc.period)}: ทำไปแล้ว ${fc.days_elapsed}/${fc.days_total} วัน · คาดการณ์รายได้ทั้งเดือน <b>${fmt(fc.projected)}</b>` +
-    (projVsTgt != null ? ` (<b style="color:${tgtColor}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
-    (gp != null ? ` · GP <b style="color:${gpColor}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
+    (projVsTgt != null ? ` (<b style="color:${textInk(tgtColor)}">${projVsTgt.toFixed(0)}% ของเป้า</b> ${onPace})` : ' · <span style="opacity:.7">ยังไม่ได้ตั้งเป้า — ไปที่ Settings → Monthly Targets</span>') +
+    (gp != null ? ` · GP <b style="color:${textInk(gpColor)}">${gp.toFixed(1)}%</b> (${gpWord})` : '');
   host.classList.remove('hidden');
   host.innerHTML = `<div class="card p-4" style="background:#e8eef7;border:1px solid var(--accent)">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
@@ -908,7 +908,7 @@ async function loadSummaryKpis() {
     </div>
     <div class="card kpi-card ${txClass} p-4">
       <div class="kpi-card-top"><p class="kpi-label">จำนวนบิล</p>${trendBadge(txDelta)}</div>
-      <p class="kpi-value" style="color:#10b981">${fmtN(d.tx_count)}</p>
+      <p class="kpi-value" style="color:var(--good-ink)">${fmtN(d.tx_count)}</p>
       <div class="kpi-card-bottom">
         <p class="kpi-sub">${fmtN(d.customer_count)} ลูกค้า</p>
         ${mkSparkline(txSpark, '#10b981')}
@@ -967,10 +967,10 @@ async function loadGroupBreakdown() {
     const card = (title, color, count, s, pct) => `
       <div class="rounded-xl p-4" style="background:${color}10;border:1px solid ${color}33">
         <div class="flex items-center justify-between mb-2">
-          <p class="font-semibold text-sm" style="color:${color}">${title}</p>
-          <span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background:${color}22;color:${color}">${count} สาขา</span>
+          <p class="font-semibold text-sm" style="color:${textInk(color)}">${title}</p>
+          <span class="text-xs font-medium px-2 py-0.5 rounded-full" style="background:${color}22;color:${textInk(color)}">${count} สาขา</span>
         </div>
-        <p class="text-2xl font-bold" style="color:${color}">${fmt(s.revenue_ex_vat || 0)}</p>
+        <p class="text-2xl font-bold" style="color:${textInk(color)}">${fmt(s.revenue_ex_vat || 0)}</p>
         <p class="text-[11px] text-slate-500 mb-2">${pct.toFixed(1)}% ของยอดรวม · รวม VAT ${fmt(s.revenue || 0)}</p>
         <div class="grid grid-cols-3 gap-2 text-[11px]">
           <div><span class="text-slate-400">บิล</span><br><b>${fmtN(s.tx_count || 0)}</b></div>
@@ -1019,7 +1019,7 @@ function renderTrendAnalysisBar(trendData) {
   const stat = (label, value, sub = '', color = '#64748b') =>
     `<div>
       <p class="text-xs text-slate-400 mb-0.5">${label}</p>
-      <p class="text-sm font-bold" style="color:${color}">${value}</p>
+      <p class="text-sm font-bold" style="color:${textInk(color)}">${value}</p>
       ${sub ? `<p class="text-xs text-slate-400">${sub}</p>` : ''}
     </div>`;
 
@@ -1078,7 +1078,7 @@ function renderYearlyOverlay(rows) {
     const yoyColor = yoyPct == null ? '#64748b' : (yoyPct >= 0 ? '#10b981' : '#ef4444');
     const stat = (label, value, sub = '', color = '#64748b') =>
       `<div><p class="text-xs text-slate-400 mb-0.5">${label}</p>
-        <p class="text-sm font-bold" style="color:${color}">${value}</p>
+        <p class="text-sm font-bold" style="color:${textInk(color)}">${value}</p>
         ${sub ? `<p class="text-xs text-slate-400">${sub}</p>` : ''}</div>`;
     el.innerHTML = [
       stat('ปีปัจจุบัน', years[years.length - 1], fmt(totLatest), '#4a70b0'),
@@ -1420,13 +1420,13 @@ async function loadTopSkusChart() {
     const name = esc((r.description || '—').replace(/^\((?:A|B|T)\)\s*/, ''));
     const mom = r.qty_mom_pct;
     const momHtml = mom == null ? '<span class="text-slate-300">—</span>'
-      : `<span style="color:${mom>0?'#10b981':mom<0?'#ef4444':'#94a3b8'}">${mom>0?'▲':mom<0?'▼':''} ${Math.abs(mom).toFixed(1)}%</span>`;
+      : `<span style="color:${mom>0?'var(--good-ink)':mom<0?'var(--bad-ink)':'#94a3b8'}">${mom>0?'▲':mom<0?'▼':''} ${Math.abs(mom).toFixed(1)}%</span>`;
     return `<tr class="border-t border-slate-100 hover:bg-indigo-50/40">
       <td class="py-1.5 pr-3 text-slate-400">${i+1}</td>
       <td class="py-1.5 pr-3 font-mono text-slate-300 text-[10px]">${esc(r.sku_code)}</td>
       <td class="py-1.5 pr-3 max-w-xs truncate" title="${esc(r.description||'')}">${name}</td>
       <td class="py-1.5 pr-3 text-right tabular-nums">${fmtN(r.qty)}</td>
-      <td class="py-1.5 pr-3 text-right font-semibold tabular-nums" style="color:#ef4444">${fmtN(r.cogs)}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold tabular-nums" style="color:var(--bad-ink)">${fmtN(r.cogs)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-600">${r.cogs_share_pct!=null?r.cogs_share_pct.toFixed(1)+'%':'—'}</td>
       <td class="py-1.5 text-right">${momHtml}</td>
     </tr>`;
@@ -1450,7 +1450,7 @@ function _moverRow(m, positive) {
     </span>
     <span class="flex items-center gap-2 flex-shrink-0">
       <span class="text-xs text-slate-400">${deltaTxt}</span>
-      <span class="text-sm font-semibold" style="color:${color};min-width:52px;text-align:right">${arrow} ${pct}</span>
+      <span class="text-sm font-semibold" style="color:${textInk(color)};min-width:52px;text-align:right">${arrow} ${pct}</span>
     </span>
   </div>`;
 }
@@ -1465,7 +1465,7 @@ async function loadMarginTable() {   // now: Category Movers (MoM revenue change
     const note = document.getElementById('kpiMarginNote');
     if (mp == null) { el.textContent = '—'; return; }
     el.textContent = fmtP(mp);
-    el.style.color = mp >= 50 ? '#10b981' : mp >= 25 ? '#f59e0b' : '#ef4444';
+    el.style.color = mp >= 50 ? 'var(--good-ink)' : mp >= 25 ? '#f59e0b' : 'var(--bad-ink)';
     if (note) note.textContent = `ต้นทุน BoM ${fmtP(100-mp)} · ครอบคลุม ${s.cost_coverage_pct||0}%`;
   }).catch(()=>{});
 
@@ -1581,7 +1581,7 @@ function renderMenuFinder() {
       <td class="py-1.5 pr-2 text-xs text-slate-400">${esc(r.category||'')}</td>
       <td class="py-1.5 pr-2 text-right text-slate-600">${fmtN(r.qty)}</td>
       <td class="py-1.5 pr-2 text-right font-semibold">${fmt(r.revenue)}</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${mShow}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${textInk(mc)}">${mShow}</td>
     </tr>`;
   }).join('') || `<tr><td colspan="5" class="py-4 text-center text-slate-400">ไม่พบเมนูที่ตรงกับ “${esc(q)}”</td></tr>`;
 }
@@ -1752,13 +1752,13 @@ function renderMenuEngActionBoard(items, hostId = 'meActionBoard', noteId = 'meB
         <span class="flex-shrink-0 text-[11px] text-slate-400">${fmtN(r.qty||0)} ขาย · ${r.margin_pct!=null?r.margin_pct.toFixed(0)+'%':'—'}</span>
       </li>`).join('') || '<li class="italic text-slate-400 py-1">— ไม่มีเมนูในกลุ่มนี้ —</li>';
     return `
-      <div class="rounded-xl border p-4" style="background:${g.bg};border-color:${g.color}44">
+      <div class="rounded-xl border p-4 on-light" style="background:${g.bg};border-color:${g.color}44">
         <div class="flex items-center justify-between mb-1">
-          <span class="font-bold text-sm" style="color:${g.color}">${g.emoji} ${g.title}</span>
-          <span class="text-lg font-extrabold" style="color:${g.color}">${list.length}</span>
+          <span class="font-bold text-sm" style="color:${textInk(g.color)}">${g.emoji} ${g.title}</span>
+          <span class="text-lg font-extrabold" style="color:${textInk(g.color)}">${list.length}</span>
         </div>
         <p class="text-[11px] text-slate-500 mb-0.5">${g.meaning}</p>
-        <p class="text-[11px] font-medium mb-2" style="color:${g.color}">${g.action}</p>
+        <p class="text-[11px] font-medium mb-2" style="color:${textInk(g.color)}">${g.action}</p>
         <ul class="text-xs">${rows}</ul>
         ${list.length > 6 ? `<p class="text-[10px] text-slate-400 mt-1">+ อีก ${list.length-6} เมนู (ดูตารางด้านล่าง)</p>` : ''}
       </div>`;
@@ -1848,7 +1848,7 @@ async function loadMostOrdered() {
 function _momSpan(pct, goodUp = true) {
   if (pct == null) return '<span class="text-slate-300">—</span>';
   const c = pct === 0 ? '#94a3b8' : ((pct >= 0) === goodUp ? '#10b981' : '#ef4444');
-  return `<span style="color:${c};font-weight:600">${pct>0?'▲':pct<0?'▼':''} ${Math.abs(pct).toFixed(1)}%</span>`;
+  return `<span style="color:${textInk(c)};font-weight:600">${pct>0?'▲':pct<0?'▼':''} ${Math.abs(pct).toFixed(1)}%</span>`;
 }
 function _top60MomLabel(d, prefix) {
   return (d && d.mom_basis === 'mtd') ? `${prefix}1–${d.mtd_cutoff_day} วันเท่ากัน (MTD)` : `${prefix}เดือนก่อน`;
@@ -1993,7 +1993,7 @@ function _renderMostRev() {
   const neg = all.filter(r => r.margin_pct != null && r.margin_pct < 0).length;
   const cov = document.getElementById('mostRevCoverage');
   if (cov) cov.innerHTML = `มีข้อมูลต้นทุน <b>${costed}/${all.length}</b> เมนู (${(costed/all.length*100).toFixed(0)}%) · ${all.length - costed} เมนูยังไม่มีต้นทุน → กำไร% แสดง —`
-    + (neg ? ` · <span style="color:#ef4444">⚠ ${neg} เมนูต้นทุน > ราคาขาย (ข้อมูลต้นทุนน่าจะผิด)</span>` : '');
+    + (neg ? ` · <span style="color:var(--bad-ink)">⚠ ${neg} เมนูต้นทุน > ราคาขาย (ข้อมูลต้นทุนน่าจะผิด)</span>` : '');
   // Sort a copy by the chosen key (nulls sink to the bottom)
   const sorted = [...all].sort((a, b) => {
     if (_mostRevSort === 'margin') return (b.margin_pct ?? -1e9) - (a.margin_pct ?? -1e9);
@@ -2039,7 +2039,7 @@ function _renderMostRev() {
       <td class="py-1.5 pr-3 text-right tabular text-slate-600">${fmtN(r.qty)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${fmtN(r.revenue)}</td>
       <td class="py-1.5 pr-3 text-right text-slate-500">${r.unit_cost!=null?fmtN(r.unit_cost):'—'}</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${mc}">${isNeg?'⚠ ':''}${fmtP(mpct)}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${textInk(mc)}">${isNeg?'⚠ ':''}${fmtP(mpct)}</td>
     </tr>`;
   }).join('');
 }
@@ -2067,7 +2067,7 @@ function renderSphDistribution(sph) {
   const kpi = (lbl, val, sub, color) =>
     `<div class="rounded-lg p-2.5 border" style="background:${color}10;border-color:${color}33">
       <p class="text-[10px] text-slate-500 uppercase tracking-wide">${lbl}</p>
-      <p class="text-base font-bold" style="color:${color}">${val}</p>
+      <p class="text-base font-bold" style="color:${textInk(color)}">${val}</p>
       <p class="text-[10px] text-slate-400">${sub}</p>
     </div>`;
   stripEl.innerHTML = [
@@ -2128,7 +2128,7 @@ function renderSphDistribution(sph) {
         <div class="font-medium text-slate-700 truncate">${d.bucket}</div>
         <div class="text-slate-400 text-[10px]">${range} บาท · ${d.count.toLocaleString()} บิล</div>
       </div>
-      <span class="font-semibold" style="color:${d.color}">${pct.toFixed(1)}%</span>
+      <span class="font-semibold" style="color:${textInk(d.color)}">${pct.toFixed(1)}%</span>
     </div>`;
   }).join('');
 }

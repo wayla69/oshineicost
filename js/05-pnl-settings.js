@@ -163,7 +163,7 @@ function renderPnlBranchTable() {
           <span class="text-emerald-600 font-semibold">${fmtN(gp)}</span>
         </div>
       </td>
-      <td class="py-1.5 pr-3 text-right font-bold" style="color:${mColor}">${r.margin_pct != null ? r.margin_pct.toFixed(1)+'%' : '—'}</td>
+      <td class="py-1.5 pr-3 text-right font-bold" style="color:${textInk(mColor)}">${r.margin_pct != null ? r.margin_pct.toFixed(1)+'%' : '—'}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.tx_count||0)}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.avg_ticket||0)}</td>
       <td class="py-1.5 text-right font-medium" style="color:var(--accent)">${r.profit_per_bill != null ? fmtN(r.profit_per_bill) : '—'}</td>
@@ -534,10 +534,10 @@ async function loadFoodCostTrend() {
           <p class="text-base font-bold text-cyan-700">${fmtN(last.servings)}</p>
           <p class="text-[10px] text-slate-500">รายได้/เสิร์ฟ ${fmtN(last.rev_per_serving || 0)}</p>
         </div>
-        <div class="rounded-lg border px-3 py-2" style="background:${(last.cost_pct||0)>parseFloat(threshold)?'#fef2f2':'#f0fdf4'};border-color:${(last.cost_pct||0)>parseFloat(threshold)?'#fecaca':'#bbf7d0'}">
+        <div class="rounded-lg border px-3 py-2 on-light" style="background:${(last.cost_pct||0)>parseFloat(threshold)?'#fef2f2':'#f0fdf4'};border-color:${(last.cost_pct||0)>parseFloat(threshold)?'#fecaca':'#bbf7d0'}">
           <p class="text-[10px] font-semibold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">% Food Cost</p>
           <p class="text-base font-bold" style="color:${(last.cost_pct||0)>parseFloat(threshold)?'#b91c1c':'#047857'}">${last.cost_pct != null ? last.cost_pct.toFixed(1)+'%' : '—'}</p>
-          ${dPct != null ? `<p class="text-[10px]" style="color:${trendColor}">${trendIcon} ${Math.abs(dPct).toFixed(1)}pp เทียบเดือนก่อน</p>` : ''}
+          ${dPct != null ? `<p class="text-[10px]" style="color:${textInk(trendColor)}">${trendIcon} ${Math.abs(dPct).toFixed(1)}pp เทียบเดือนก่อน</p>` : ''}
         </div>
       </div>`;
   }
@@ -568,7 +568,7 @@ function renderCostOverview() {
   ].map(k => `
     <div class="card kpi-card p-4">
       <div class="kpi-card-top"><p class="kpi-label">${k.label}</p></div>
-      <p class="kpi-value" style="color:${k.color}">${k.value}</p>
+      <p class="kpi-value" style="color:${textInk(k.color)}">${k.value}</p>
       <div class="kpi-card-bottom"><p class="kpi-sub">${k.sub}</p></div>
     </div>`).join('');
 
@@ -856,12 +856,12 @@ function renderAbcAnalysis() {
     return `
     <div class="card p-4" style="border-top:3px solid ${border}">
       <div class="flex items-center gap-2 mb-2">
-        <span class="text-lg font-black" style="color:${border}">Class ${cls}</span>
-        <span class="pill text-xs ml-auto" style="background:${color};color:${border}">${items2.length} SKUs · ${((items2.length/classified.length)*100).toFixed(0)}%</span>
+        <span class="text-lg font-black" style="color:${textInk(border)}">Class ${cls}</span>
+        <span class="pill text-xs ml-auto on-light" style="background:${color};color:${textInk(border)}">${items2.length} SKUs · ${((items2.length/classified.length)*100).toFixed(0)}%</span>
       </div>
-      <p class="text-xl font-bold" style="color:${border}">${valFmt(val)}</p>
+      <p class="text-xl font-bold" style="color:${textInk(border)}">${valFmt(val)}</p>
       <p class="text-xs text-slate-400 mt-0.5">${pct.toFixed(1)}% ของ${metricLabel}</p>
-      <p class="text-[11px] font-semibold mt-0.5" style="color:${border}">${cogsPct.toFixed(1)}% ของต้นทุน BoM รวม</p>
+      <p class="text-[11px] font-semibold mt-0.5" style="color:${textInk(border)}">${cogsPct.toFixed(1)}% ของต้นทุน BoM รวม</p>
       <div class="mt-2 space-y-0.5 overflow-auto" style="max-height:240px">
         ${items2.slice(0,TOPN).map((r,i)=>`<div class="flex items-baseline justify-between gap-2 text-xs">
           <span class="text-slate-600 truncate" title="${esc(r.description)}">${i+1}. ${esc(r.description)}</span>
@@ -930,7 +930,7 @@ function renderCostAnalysisBar() {
   const stat = (label, value, color = '#64748b') =>
     `<div>
       <p class="text-xs text-slate-400 mb-0.5">${label}</p>
-      <p class="text-sm font-bold" style="color:${color}">${value}</p>
+      <p class="text-sm font-bold" style="color:${textInk(color)}">${value}</p>
     </div>`;
 
   const topList = `
@@ -1013,7 +1013,7 @@ function renderCostDetail() {
         </div>
       </td>
       <td class="py-2 pr-3 text-right text-slate-500">${r.unit_cost != null ? fmtN(r.unit_cost) : '<span class="text-slate-300">—</span>'}</td>
-      <td class="py-2 pr-3 text-right font-bold" style="color:${mc}">${mpShow}</td>
+      <td class="py-2 pr-3 text-right font-bold" style="color:${textInk(mc)}">${mpShow}</td>
       <td class="py-2 text-center">
         ${priced
           ? `<span class="pill ${QPILLS[r.quadrant]||''} text-xs">${QLABELS[r.quadrant]||''} ${r.quadrant !== 'uncosted' ? r.quadrant : '—'}</span>`
@@ -1563,7 +1563,7 @@ async function saveCostRow(skuId, skuCode) {
   const value = parseFloat(raw);
   if (isNaN(value) || value < 0) {
     inp.style.borderColor = '#ef4444';
-    if (stat) { stat.textContent = '✗'; stat.style.color = '#ef4444'; }
+    if (stat) { stat.textContent = '✗'; stat.style.color = 'var(--bad-ink)'; }
     return;
   }
   inp.style.borderColor = '';
@@ -1581,10 +1581,10 @@ async function saveCostRow(skuId, skuCode) {
         stat.title = 'ค่านี้ใกล้เคียงราคาขาย (×1.07) — ดูเหมือนราคา ไม่ใช่ต้นทุน · looks like price, not cost'; }
       return;
     }
-    if (stat) { stat.textContent = '✓'; stat.style.color = '#10b981'; stat.title = 'บันทึกแล้ว · saved'; }
+    if (stat) { stat.textContent = '✓'; stat.style.color = 'var(--good-ink)'; stat.title = 'บันทึกแล้ว · saved'; }
   } catch(e) {
     inp.style.borderColor = '#ef4444';
-    if (stat) { stat.textContent = '✗'; stat.style.color = '#ef4444'; }
+    if (stat) { stat.textContent = '✗'; stat.style.color = 'var(--bad-ink)'; }
   }
 }
 
@@ -1961,7 +1961,7 @@ function renderComparison(data) {
 
   // Header: Metric | A | B | C? | D? | Δ A-B | Δ A-C? | Δ A-D?
   const headValCols = periods.map(p =>
-    `<th class="py-2 px-3 text-right font-bold" style="color:${p.color}">${shortLabel(p)}</th>`
+    `<th class="py-2 px-3 text-right font-bold" style="color:${textInk(p.color)}">${shortLabel(p)}</th>`
   ).join('');
   const headDeltaCols = periods.slice(1).map(p =>
     `<th class="py-2 px-2 text-right text-slate-400">Δ vs ${p.key.toUpperCase()}</th>`
@@ -2030,7 +2030,7 @@ function renderComparison(data) {
     .slice(0, 15);
 
   const skuHeadCols = periods.map(p =>
-    `<th class="py-2 px-2 text-right font-semibold" style="color:${p.color}">${shortLabel(p)}</th>`
+    `<th class="py-2 px-2 text-right font-semibold" style="color:${textInk(p.color)}">${shortLabel(p)}</th>`
   ).join('');
   document.getElementById('cmpSkuHead').innerHTML =
     `<tr class="text-left text-xs border-b border-slate-200" style="background:var(--bg-subtle)">
@@ -2054,8 +2054,8 @@ function renderComparison(data) {
 
   // ── Branch rank-shift table ──
   const rankHeadCols = periods.map(p =>
-    `<th class="py-2 px-2 text-center font-semibold" style="color:${p.color}">#${p.key.toUpperCase()}</th>
-     <th class="py-2 px-2 text-right font-semibold" style="color:${p.color}">${shortLabel(p)}</th>`
+    `<th class="py-2 px-2 text-center font-semibold" style="color:${textInk(p.color)}">#${p.key.toUpperCase()}</th>
+     <th class="py-2 px-2 text-right font-semibold" style="color:${textInk(p.color)}">${shortLabel(p)}</th>`
   ).join('');
   const hasShift = periods.length >= 2;
 
@@ -2157,19 +2157,19 @@ async function loadHeavyEaters(force) {
     { l: 'ต้นทุน(BoM)/หัว', v: fmt(d.avg_cogs_head || 0), s: `มัธยฐาน ${fmt(pc.p50 || 0)} · p90 ${fmt(pc.p90 || 0)}`, c: '#ef4444' },
     { l: 'มาร์จิน/หัว (เฉลี่ย)', v: fmt(d.avg_margin_head || 0), s: 'รายได้ − ต้นทุน ต่อหัว', c: '#10b981' },
     { l: 'เกณฑ์นักกินหนัก', v: fmt(d.heavy_threshold || 0), s: 'ต้นทุน/หัว ≥ p90', c: '#f59e0b' },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${k.c}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
+  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
 
   const H = d.heavy || {}, L = d.loss || {};
   document.getElementById('heCallouts').innerHTML = `
     <div class="card p-4" style="background:#fffbeb;border:1px solid #f59e0b">
       <p class="text-sm font-bold" style="color:#b45309">นักกินหนัก (ต้นทุน/หัว หาง 10% บน)</p>
       <p class="text-2xl font-bold mt-1" style="color:#b45309">${fmtN(H.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${H.pct_bills || 0}% ของบิล)</span></p>
-      <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? '#ef4444' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
+      <p class="text-xs text-slate-600 mt-1">กินต้นทุนรวม <b>${H.pct_cogs || 0}%</b> · ต้นทุน/หัว ${fmt(H.avg_cogs_head || 0)} · มาร์จิน/หัว เหลือเพียง <b style="color:${(H.avg_margin_head || 0) < 0 ? 'var(--bad-ink)' : '#b45309'}">${fmt(H.avg_margin_head || 0)}</b></p>
     </div>
     <div class="card p-4" style="background:#fef2f2;border:1px solid #ef4444">
       <p class="text-sm font-bold" style="color:var(--bad-ink)">บิลขาดทุนต่อหัว (มาร์จิน/หัว < 0)</p>
       <p class="text-2xl font-bold mt-1" style="color:var(--bad-ink)">${fmtN(L.bills || 0)} บิล <span class="text-sm font-normal text-slate-500">(${L.pct_bills || 0}% ของบิล)</span></p>
-      <p class="text-xs text-slate-600 mt-1">ขาดทุนเฉลี่ย/หัว <b style="color:#ef4444">${fmt(L.avg_margin_head || 0)}</b> · รวมต้นทุน ${fmt(L.cogs || 0)} (${L.pct_cogs || 0}% ของต้นทุน)</p>
+      <p class="text-xs text-slate-600 mt-1">ขาดทุนเฉลี่ย/หัว <b style="color:var(--bad-ink)">${fmt(L.avg_margin_head || 0)}</b> · รวมต้นทุน ${fmt(L.cogs || 0)} (${L.pct_cogs || 0}% ของต้นทุน)</p>
     </div>`;
 
   const hist = d.histogram || []; const maxc = Math.max(1, ...hist.map(h => h.count || 0));
@@ -2195,10 +2195,10 @@ async function loadHeavyEaters(force) {
       <td class="py-1.5 pr-2 font-medium">${esc(r.branch)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.bills)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums text-slate-500">${fmtN(r.heavy_bills)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${hpCol}">${r.heavy_pct}%</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(hpCol)}">${r.heavy_pct}%</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev_head)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.cogs_head)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${mCol}">${fmt(r.margin_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(r.cogs_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(mCol)}">${fmt(r.margin_head)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="text-center text-slate-400 py-4">ไม่มีข้อมูล</td></tr>';
 
@@ -2210,8 +2210,8 @@ async function loadHeavyEaters(force) {
       <td class="py-1.5 pr-2 text-slate-400 text-[11px]">${esc(r.receipt)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.covers)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.rev_head)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:#ef4444">${fmt(r.cogs_head)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${mCol}">${fmt(r.margin_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-semibold" style="color:var(--bad-ink)">${fmt(r.cogs_head)}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(mCol)}">${fmt(r.margin_head)}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="7" class="text-center text-slate-400 py-4">ไม่มีข้อมูล</td></tr>';
 }

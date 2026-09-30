@@ -736,7 +736,8 @@ const jsAttr = s => esc(String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\
 // mark and passes the text use through here (tokens.css --good-ink / --bad-ink).
 // #1f7a4d / #b0472d are the menu-impact pair in 07-home: 5.3:1 on white but
 // only 3.1-3.3 on the dark card. #047857 / #b91c1c are the light inks themselves.
-const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c'];
+// #10b981 / #ef4444 are 2.5 / 3.8:1 on white: marks only, never text.
+const _GOOD_HEX = ['#059669', '#16a34a', '#1f7a4d', '#047857', '#10b981'], _BAD_HEX = ['#dc2626', '#b0472d', '#b91c1c', '#ef4444'];
 const textInk = c => _GOOD_HEX.includes(c) ? 'var(--good-ink)' : _BAD_HEX.includes(c) ? 'var(--bad-ink)' : c;
 
 // ── Formatters (guard against null / NaN / numeric-string from the API) ──────
@@ -1719,7 +1720,7 @@ function renderActionBoard(d) {
   const kpiHost = document.getElementById('mabKpis');
   if (kpiHost) kpiHost.innerHTML = order.map(k => {
     const m = _MAB_META[k];
-    return `<span class="text-xs px-3 py-1 rounded-full font-semibold" style="background:${m.bg};color:${m.color}">${m.icon} ${m.title}: ${fmtN(((d.buckets || {})[k] || []).length)}</span>`;
+    return `<span class="text-xs px-3 py-1 rounded-full font-semibold on-light" style="background:${m.bg};color:${textInk(m.color)}">${m.icon} ${m.title}: ${fmtN(((d.buckets || {})[k] || []).length)}</span>`;
   }).join('');
   const board = document.getElementById('mabBoard');
   board.innerHTML = order.map(k => {
@@ -1727,8 +1728,8 @@ function renderActionBoard(d) {
     const body = rows.length ? rows.map(_mabCard).join('')
       : `<div class="text-xs text-center py-4" style="color:var(--text-muted)">— ไม่มีเมนูในกลุ่มนี้ —</div>`;
     return `<div class="card p-0 overflow-hidden" style="border-top:3px solid ${m.color}">
-      <div class="p-3" style="background:${m.bg}">
-        <div class="font-bold text-sm" style="color:${m.color}">${m.icon} ${m.title} <span class="font-normal">(${rows.length})</span></div>
+      <div class="p-3 on-light" style="background:${m.bg}">
+        <div class="font-bold text-sm" style="color:${textInk(m.color)}">${m.icon} ${m.title} <span class="font-normal">(${rows.length})</span></div>
         <div class="text-[11px]" style="color:var(--text-muted)">${m.sub}</div>
       </div>
       <div class="p-2 space-y-1" style="max-height:520px;overflow-y:auto">${body}</div>

@@ -38,7 +38,7 @@ async function _diveEnhanceTrend(_cfg) {
                 onclick="closeDive();drillIntoBranch('${jsAttr(b.branch)}')" title="เจาะลึก ${esc(b.branch)}">
       <td class="py-1.5 pr-2 font-medium">${esc(b.branch)} <span style="opacity:.4">›</span></td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(b.total_revenue)}</td>
-      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${color}">${gv}%</td>
+      <td class="py-1.5 text-right tabular-nums font-semibold" style="color:${textInk(color)}">${gv}%</td>
     </tr>`;
   }).join('');
 
@@ -321,8 +321,8 @@ async function diveMostOrdered() {
   const momRow = (r, up) => `<div class="dive-metric"><span class="lbl">${clean(r.description)}${_sparkSvg(r.spark, up ? '#10b981' : '#ef4444')}</span><span class="val ${up ? 'good' : 'bad'}">${up ? '▲' : '▼'} ${Math.abs(r.qty_mom_pct).toFixed(1)}%</span></div>`;
   const momHtml = withMom.length
     ? `<p class="text-[11px] mb-1" style="color:var(--text-muted)">▲ ${ups.length} ขึ้น · ▼ ${downs.length} ลง${newCnt ? ` · ${newCnt} ใหม่` : ''} · เส้น = YTD</p>`
-        + (ups.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#10b981">มาแรง</p>` + ups.slice(0, 5).map(r => momRow(r, true)).join('') : '')
-        + (downs.length ? `<p class="text-[10px] font-semibold mt-1" style="color:#ef4444">แผ่วลง</p>` + downs.slice(0, 5).map(r => momRow(r, false)).join('') : '')
+        + (ups.length ? `<p class="text-[10px] font-semibold mt-1" style="color:var(--good-ink)">มาแรง</p>` + ups.slice(0, 5).map(r => momRow(r, true)).join('') : '')
+        + (downs.length ? `<p class="text-[10px] font-semibold mt-1" style="color:var(--bad-ink)">แผ่วลง</p>` + downs.slice(0, 5).map(r => momRow(r, false)).join('') : '')
     : '<p class="text-xs" style="color:var(--text-muted)">ไม่มีข้อมูลเดือนก่อนให้เทียบ</p>';
 
   const analysisHtml =
@@ -843,7 +843,7 @@ async function loadHealthScores() {
   const pctChip = (v) => {
     if (v == null) return '<span class="text-slate-300">—</span>';
     const c = v >= 75 ? '#10b981' : v >= 50 ? '#4a70b0' : v >= 25 ? '#f59e0b' : '#ef4444';
-    return `<span style="display:inline-block;min-width:36px;padding:2px 6px;border-radius:999px;background:${c}22;color:${c};font-weight:700">${v}<span style="opacity:0.7">th</span></span>`;
+    return `<span style="display:inline-block;min-width:36px;padding:2px 6px;border-radius:999px;background:${c}22;color:${textInk(c)};font-weight:700">${v}<span style="opacity:0.7">th</span></span>`;
   };
   tbody.innerHTML = health.map((b, i) => {
     const p = pctMap[b.branch] || {};
@@ -1221,7 +1221,7 @@ async function loadCohort() {
       ? ` · ต่ำกว่าพีค ${mLbl(peak.cohort)} (${fmtN(peak.customers)} คน) ${chip(-((peak.customers - last.customers) / peak.customers * 100))}` : '';
     const partTag = last.partial ? ` <span class="text-[10px] px-1.5 py-0.5 rounded" style="background:#fef3c7;color:#b45309">ไม่ครบเดือน (${last.days_covered}/${last.days_in_month} วัน)</span>` : '';
     vEl.innerHTML = `<p class="text-[13px] mb-3 pb-2 border-b border-slate-100 flex items-start gap-2 flex-wrap">
-        <span style="color:${col};line-height:1.5">●</span>
+        <span style="color:${textInk(col)};line-height:1.5">●</span>
         <span class="text-slate-600">เดือนเต็มล่าสุด ${mLbl(last.cohort)}: <b>${fmtN(last.customers)}</b> คน
         ${mom != null ? `· MoM ${chip(mom)}` : ''}${last.yoy_pct != null ? ` · YoY ${chip(last.yoy_pct)}` : ''}
         · <b>${fmtN(last.cust_per_branch)}</b> คน/สาขา (${last.branches} สาขา) · ยอด/หัว <b>฿${fmtN(last.rev_per_cust)}</b>${vsPeak}${partTag}</span></p>`;
@@ -1415,11 +1415,11 @@ function renderWhatIf() {
   const fmtDelta = (d, isPct=false) => {
     const c = d > 0 ? '#10b981' : d < 0 ? '#ef4444' : '#64748b';
     const sign = d > 0 ? '+' : '';
-    return `<span style="color:${c};font-weight:700">${sign}${isPct?d.toFixed(1)+'%':fmt(d)}</span>`;
+    return `<span style="color:${textInk(c)};font-weight:700">${sign}${isPct?d.toFixed(1)+'%':fmt(d)}</span>`;
   };
   document.getElementById('whatifResult').innerHTML = `
     <div class="card p-3"><p class="kpi-label">Projected Revenue</p><p class="kpi-value text-indigo-600">${fmt(newRev)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(drev)}</p></div>
-    <div class="card p-3"><p class="kpi-label">Projected Profit</p><p class="kpi-value" style="color:#10b981">${fmt(newProfit)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(dprof)}</p></div>
+    <div class="card p-3"><p class="kpi-label">Projected Profit</p><p class="kpi-value" style="color:var(--good-ink)">${fmt(newProfit)}</p><p class="text-xs mt-1">vs base · ${fmtDelta(dprof)}</p></div>
     <div class="card p-3"><p class="kpi-label">Margin %</p><p class="kpi-value" style="color:#14b8a6">${newMarg.toFixed(1)}%</p><p class="text-xs mt-1">${fmtDelta(newMarg - _wiBase.margin, true)} vs base</p></div>
     <div class="card p-3"><p class="kpi-label">Tx · Avg Ticket</p><p class="text-sm font-semibold">${fmtN(newTx)} × ${fmtN(newAvg)}</p><p class="text-xs text-slate-500 mt-1">${(newRev/_wiBase.revenue*100).toFixed(1)}% of base</p></div>
   `;
@@ -1642,7 +1642,7 @@ function _gpbRenderSummary(data) {
   const card = (label, value, sub, color) => `
     <div class="card p-4" style="border-top:3px solid ${color || '#10b981'}">
       <div class="text-xs text-slate-500 mb-1">${label}</div>
-      <div class="text-xl font-bold" style="color:${color || 'var(--text-primary)'}">${value}</div>
+      <div class="text-xl font-bold" style="color:${textInk(color || 'var(--text-primary)')}">${value}</div>
       ${sub ? `<div class="text-xs text-slate-400 mt-1">${sub}</div>` : ''}
     </div>`;
   const fmtB = n => (n == null) ? '—' : Number(n).toLocaleString('th-TH', {maximumFractionDigits:0}) + ' ';
@@ -1674,7 +1674,7 @@ function _gpbRenderNarrative(data) {
   const fcCol = (g.food_cost_pct > hi) ? 'var(--bad-ink)' : (g.food_cost_pct < lo) ? '#0ea5e9' : 'var(--good-ink)';
   const fmtB = n => Number(n || 0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
   const lines = [
-    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${fcCol}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
+    `ภาพรวมช่วงนี้: รายได้ <b>฿${fmtB(g.revenue)}</b> · ต้นทุน BoM <b>฿${fmtB(g.cogs)}</b> · GP <b style="color:${(g.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">฿${fmtB(g.gp)} (${(g.gp_pct || 0).toFixed(1)}%)</b> · Food Cost <b style="color:${textInk(fcCol)}">${(g.food_cost_pct || 0).toFixed(1)}%</b> (เป้า ${lo}–${hi}%)`,
     `GP สูงสุด <b>${esc(best.branch)}</b> ${best.gpp.toFixed(1)}% · ต่ำสุด <b>${esc(worst.branch)}</b> ${worst.gpp.toFixed(1)}% — ห่างกัน <b>${gap.toFixed(1)} จุด</b>`,
     overFc.length
       ? `⚠ <b style="color:var(--bad-ink)">${overFc.length} สาขา</b> Food Cost เกินเป้า (${overFc.sort((a,b)=>b.fc-a.fc).slice(0, 3).map(r => esc(r.branch)).join(', ')}${overFc.length > 3 ? ' …' : ''}) — กดดันมาร์จิน ควรตรวจสูตร/ปริมาณเสิร์ฟ/ของเสีย`
@@ -1727,7 +1727,7 @@ function _gpbRenderBoxes() {
       <p class="text-sm font-semibold text-slate-700 truncate" title="${esc(b.branch)}">${esc(b.branch)}</p>
       <p class="text-2xl font-extrabold mt-1 leading-none" style="color:${textInk(gpColor)}">${b.cur.toFixed(1)}%</p>
       <p class="text-[11px] text-slate-400 mt-0.5">GP% · ${b.lastM || ''}</p>
-      <p class="text-xs font-semibold mt-1" style="color:${dColor}">${dTxt}</p>
+      <p class="text-xs font-semibold mt-1" style="color:${textInk(dColor)}">${dTxt}</p>
       <p class="text-[11px] text-slate-400 mt-0.5">Food cost ${b.fc != null ? b.fc.toFixed(1) + '%' : '—'}</p>
     </div>`;
   }).join('');
@@ -1768,7 +1768,7 @@ function _gpbRenderTable() {
         <td class="px-3 py-2 font-medium">${arrow} ${esc(r.branch)}<button class="drill-branch-btn" onclick="event.stopPropagation();drillIntoBranch('${jsAttr(r.branch)}')" title="ดูเฉพาะสาขานี้">เจาะลึก →</button></td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_revenue)}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_cogs)}</td>
-        <td class="px-3 py-2 text-right" style="color:${(r.total_gp || 0) >= 0 ? '#10b981' : '#ef4444'};font-weight:600">${fmtB(r.total_gp)}</td>
+        <td class="px-3 py-2 text-right" style="color:${(r.total_gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'};font-weight:600">${fmtB(r.total_gp)}</td>
         <td class="px-3 py-2 text-right" style="font-weight:600">${fmtPct(r.total_gp_pct)}</td>
         <td class="px-3 py-2 text-right">${fmtPct(r.total_food_cost_pct)}</td>
         <td class="px-3 py-2 text-center"><span class="${bucket.cls}" style="font-weight:600">${bucket.emoji} ${bucket.label}</span></td>
@@ -1787,7 +1787,7 @@ function _gpbRenderTable() {
           <td class="px-3 py-1 pl-8 text-xs text-slate-500">${label}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.revenue)}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.cogs)}</td>
-          <td class="px-3 py-1 text-right text-xs" style="color:${(m.gp || 0) >= 0 ? '#10b981' : '#ef4444'}">${fmtB(m.gp)}</td>
+          <td class="px-3 py-1 text-right text-xs" style="color:${(m.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${fmtB(m.gp)}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtPct(m.gp_pct)}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtPct(m.food_cost_pct)}</td>
           <td class="px-3 py-1 text-center text-xs"><span class="${bk.cls}">${bk.emoji}</span></td>
@@ -2038,7 +2038,7 @@ async function loadRequisitionGap() {
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmtN(r.covers || 0)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${b2(r.actual_head)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${b2(r.recipe_head)}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${ratioCol(r.ratio)}">${r.ratio == null ? '-' : r.ratio.toFixed(2) + '×'}</td>
+      <td class="py-1.5 pr-2 text-right tabular-nums font-bold" style="color:${textInk(ratioCol(r.ratio))}">${r.ratio == null ? '-' : r.ratio.toFixed(2) + '×'}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_actual)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${pc(r.food_pct_recipe)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums" style="color:var(--bad-ink)">${b(r.gap_value)}</td>
@@ -2179,7 +2179,7 @@ function _bbomRenderBranchSummary() {
       <td class="py-1.5 pr-3 text-right" style="color:#b45309">${fmtN(b.total_cogs)}</td>
       <td class="py-1.5 pr-3 text-right" style="color:var(--good-ink)">${fmtN(b.total_gp)}</td>
       <td class="py-1.5 pr-3 text-right font-semibold">${b.total_gp_pct!=null?b.total_gp_pct.toFixed(1)+'%':'—'}</td>
-      <td class="py-1.5 text-right font-semibold" style="color:${fcColor(b.total_food_cost_pct)}">${b.total_food_cost_pct!=null?b.total_food_cost_pct.toFixed(1)+'%':'—'}</td>
+      <td class="py-1.5 text-right font-semibold" style="color:${textInk(fcColor(b.total_food_cost_pct))}">${b.total_food_cost_pct!=null?b.total_food_cost_pct.toFixed(1)+'%':'—'}</td>
     </tr>`).join('') || '<tr><td colspan="6" class="py-3 text-center text-slate-400">—</td></tr>';
   const g = _bbomGrand;
   document.getElementById('bbomBranchSummaryFoot').innerHTML = g ? `
@@ -2188,7 +2188,7 @@ function _bbomRenderBranchSummary() {
       <td class="py-2 pr-3 text-right" style="color:#b45309">${fmtN(g.cogs)}</td>
       <td class="py-2 pr-3 text-right" style="color:var(--good-ink)">${fmtN(g.gp)}</td>
       <td class="py-2 pr-3 text-right">${g.gp_pct}%</td>
-      <td class="py-2 text-right" style="color:${fcColor(g.food_cost_pct)}">${g.food_cost_pct}%</td>
+      <td class="py-2 text-right" style="color:${textInk(fcColor(g.food_cost_pct))}">${g.food_cost_pct}%</td>
     </tr>` : '';
 }
 
@@ -2212,7 +2212,7 @@ function _bbomRenderSummary(d) {
   const card = (label, value, sub, color) =>
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
        <p class="text-[10px] text-slate-500 uppercase tracking-wide font-semibold">${label}</p>
-       <p class="text-lg font-bold" style="color:${color}">${value}</p>
+       <p class="text-lg font-bold" style="color:${textInk(color)}">${value}</p>
        <p class="text-[10px] text-slate-400">${sub}</p>
      </div>`;
   document.getElementById('bbomSummary').innerHTML = [
@@ -2370,7 +2370,7 @@ function _bbomRenderIngredients(d) {
           <span style="flex:none;width:9px;height:9px;border-radius:2px;background:${color}"></span>
           <span class="text-xs font-medium truncate" title="${esc(i.ingredient_name||'')}">${esc(i.ingredient_name||'')}</span>
           ${i.ingredient_code ? `<span class="text-xs font-mono text-slate-400" style="flex:none">${esc(i.ingredient_code)}</span>` : ''}
-          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:4px;background:${color}22;color:${color};font-weight:600">${esc(typeLbl)}</span>
+          <span style="flex:none;font-size:10px;padding:1px 6px;border-radius:4px;background:${color}22;color:${textInk(color)};font-weight:600">${esc(typeLbl)}</span>
         </div>
         <div class="text-right" style="flex:none">
           <span class="text-xs font-semibold">${_bbomFmtB(i.total_cost)}</span>
