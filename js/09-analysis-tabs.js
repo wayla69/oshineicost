@@ -1570,7 +1570,7 @@ function renderTimeflowGrid() {
 
   // Red (quiet) → amber → green (busiest); the label takes whichever of white / navy reads
   const cellColor = intensity => {
-    if (!intensity || intensity < 0.01) return { bg: '#f8fafc', fg: '#cbd5e1' };
+    if (!intensity || intensity < 0.01) return { bg: '#f8fafc', fg: 'var(--text-muted)' };
     const bg = heatColor(intensity, false); return { bg, fg: inkOn(bg) };
   };
 
