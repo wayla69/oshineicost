@@ -383,9 +383,9 @@
   ],
   "lastChange": {
     "by": "wayla69",
-    "at": "2026-09-30T04:42:40Z",
-    "via": "Claude Code",
-    "note": "Formal direction: navy accent (indigo retired), 2-4px corners, borders instead of shadows, no gradients or emoji, underline tabs, outlined tags, ruled tables, muted 12-colour chart palette; icons re-stroked navy; new cover."
+    "at": "2026-09-30T06:09:23Z",
+    "via": "GitHub · wayla69/oshineicost@164480d",
+    "note": "Type face is now KIRA UI (Noto Sans + Noto Sans Thai, OFL) 400-700, as live in the app and Recon since #231; Prompt files removed."
   },
   "layout": "files",
   "libraries": [],

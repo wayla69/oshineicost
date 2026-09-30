@@ -1,9 +1,9 @@
 > **About this folder.** A repo copy of the Oshinei design system published at
-> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 with the formal theme
-> (navy accent, `docs/ui-kit/theme-formal.css`). The app itself never loads these files: its colours come from
+> https://claude.ai/artifact/3UfNoQPSWHZzAav4TF1Fup, last synced 2026-09-30 (formal theme + KIRA UI, app at `164480d`;
+> navy accent in `docs/ui-kit/theme-formal.css`). The app itself never loads these files: its colours come from
 > `docs/ui-kit/tokens.css`. When a colour changes, change it there first, then update
 > `tokens.json` here (and republish the system) so the two stay in step.
-> Fonts are the app's own `vendor/fonts/prompt-*.ttf` (`tokens.json` names them as `fonts/...`).
+> Fonts are the app's own `vendor/fonts/KIRA-UI-*.woff2` (`tokens.json` names them as `fonts/...`; the OFL licence sits beside them).
 > The `components/*/preview.html` cards render only inside the published system, which
 > generates `tokens.css` from `tokens.json`. This folder sits outside `docs/` on purpose:
 > `docs/` is copied into the Fly image, and parts of it are served without a login.
@@ -12,7 +12,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 ## Using this system
 
-- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the Prompt font files and `components/bundle.css`. Class names in the component cards are the app's own, so markup from a preview drops into `index.html` unchanged.
+- Load `tokens.css` (or the product's `/docs/ui-kit/tokens.css`), the KIRA UI font files and `components/bundle.css`. Class names in the component cards are the app's own, so markup from a preview drops into `index.html` unchanged.
 - The app switches themes with `body.dark`. Here the same rules key off `[data-theme="dark"]`; when porting to the app, write `body.dark`.
 - The app still calls the accent `--indigo` / `--indigo-mid` / `--indigo-soft`. Those are legacy aliases of `accent` / `accent-hover` / `accent-soft`; new code uses the accent names.
 - There is no JavaScript component library. Components are CSS classes on plain HTML; charts are Chart.js 4 with the defaults under **Charts**.
@@ -41,6 +41,9 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 - `accent` (navy `#1f3a6b`; `#93b4e6` in dark) is the only accent: the active tab underline, the active nav marker, the focus ring, links, the primary button and the default KPI rule. `accent-soft` is its tinted ground; `accent-hover` its hover. Label an accent fill with `on-accent`, never a literal white.
 - `good`, `bad` and `warn` carry direction only (up/on-track, down/off-track, needs a look), as the KPI top rule, a progress fill or a status dot. For coloured text use `good-ink`, `bad-ink`, `warn-ink`; tags use the `pill-*` pairs. Status always comes with a word or ▲ ▼, never colour alone.
+- Up/down figures are TEXT in `good-ink` / `bad-ink`, never in the mark colours. In markup use `.up` / `.down` (Tailwind `.text-emerald-600/700` and `.text-red-600/700` are remapped to the inks too); in scripts, a colour that feeds both a mark and a figure keeps its hex for the mark and passes the figure through `textInk(hex)`, which returns `var(--good-ink)` / `var(--bad-ink)` for the known greens and reds.
+- The inks follow the nearest light or dark ground. In dark mode, anything that stays light keeps the light inks: add `.on-light` to such a box; the `-50` tints, the emerald/green/red/rose `-100` chips and pastel inline card fills (`background:#d…/#e…/#f…`) are scoped the same way. Anything dark mode repaints (`.bg-white`, `.bg-slate-50`, plain cards, hovered rows) takes the dark inks again. Paper is white, so print always uses the light inks.
+- Translucent tints (`bg-red-50/50` and similar) would composite to a mid-grey over the dark card; in dark mode they become the same hue at about 12% (`accent-soft` for indigo), so both the text and the inks stay above 4.5:1.
 - Surfaces: `bg-page` behind everything, `bg-card` for cards, `bg-subtle` for table heads and wells, `bg-hover` for row hover. The sidebar is `bg-sidebar` navy in both themes.
 - Lines: `border` for card and panel edges, `border-soft` between rows, `border-control` (3:1) around inputs, selects and outlined buttons, and `text-secondary` for the strong rule under a table header.
 - Text runs `text-primary` → `text-secondary` → `text-muted`. Every text token clears 4.5:1 on the surfaces its note names, in both themes.
@@ -49,7 +52,8 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 ### Typography
 
-- One family: **Prompt** (Thai + Latin), weights 300–900, shipped as local files. Fallback `'Noto Sans Thai', system-ui`.
+- One family: **KIRA UI** (Thai + Latin; a rebuild of Noto Sans + Noto Sans Thai under the SIL Open Font License), weights 400/500/600/700, shipped as local WOFF2 with its licence. Heavier requests resolve to 700. Fallback `'Noto Sans Thai', system-ui`.
+- It stacks Thai tone marks correctly and has tabular figures, so figures line up in columns with `font-variant-numeric: tabular-nums`.
 - The scale is small and dense: `body` 13px, `control` 12.5px, `small` 12px, `caption` 11px. Figures use weight 700, never 800+: `kpi-value` 26px and `kpi-hero` 27px.
 - Labels (`kpi-label`, `section-label`, `table-head`, `nav-section`) are UPPERCASE at 10–11px, weight 700, tracked 0.05–0.1em. Thai text in those slots stays as written.
 - Every column of figures is `font-variant-numeric: tabular-nums` and right-aligned (`.num`).
@@ -71,7 +75,7 @@ Oshinei is the sales and cost dashboard for a Thai buffet restaurant chain: 29 b
 
 Chart.js 4 defaults, set once in `setupChartDefaults()` and themed per chart by `applyChartTheme()`:
 
-- Font Prompt 11.5px. Legends and titles use `chart-ink`, axis ticks `chart-tick`, gridlines `chart-grid`, all per theme; toggling the theme rebuilds every chart. Don't rely on the global `Chart.defaults.color`.
+- Font KIRA UI 11.5px. Legends and titles use `chart-ink`, axis ticks `chart-tick`, gridlines `chart-grid`, all per theme; toggling the theme rebuilds every chart. Don't rely on the global `Chart.defaults.color`. Legend, title and axis-title colours hard-coded to a light-mode slate are rewritten to the theme ink, so a chart written for light mode still reads in dark.
 - Bars: 2px corners (`r-xs`), max 46px thick. Lines: width 2, tension 0.25; points 2px at rest (scatter charts need them), 6px on hover.
 - Legends: square markers, 8px, 14px padding.
 - Tooltip: `tooltip-bg` card with a 3px corner and no border glow; title 12.5px/600 in `tooltip-title`, body 12px in `tooltip-body`; values thousand-separated, 2 decimals only under 100.
@@ -86,5 +90,5 @@ Chart.js 4 defaults, set once in `setupChartDefaults()` and themed per chart by 
 
 ## Logo
 
-- **App mark:** the hiragana お in navy Prompt 700 on a 32px white tile with a 3px corner, beside "OSHINEI" (14px/700, tracked 0.08em, `sidebar-title`) and "Sales & Cost Analysis". It is CSS, not an image; see the LogoMark card.
-- **Deck roundel:** `assets/Logos/oshinei-roundel.svg`, a `navy` disc with a white hairline ring, OSHINEI over おしねい and a rising sparkline. Use it on white for decks, printed reports and document corners. Its text is live SVG text in Prompt, so it needs the font on the page when inlined.
+- **App mark:** the hiragana お in navy KIRA UI 700 on a 32px white tile with a 3px corner, beside "OSHINEI" (14px/700, tracked 0.08em, `sidebar-title`) and "Sales & Cost Analysis". It is CSS, not an image; see the LogoMark card.
+- **Deck roundel:** `assets/Logos/oshinei-roundel.svg`, a `navy` disc with a white hairline ring, OSHINEI over おしねい and a rising sparkline. Use it on white for decks, printed reports and document corners. Its text is live SVG text set in Prompt (the deck face), so it needs that font on the page when inlined; otherwise it falls back to a system sans.
