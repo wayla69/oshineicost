@@ -208,8 +208,8 @@ body.dark .dive-btn { background: rgba(30,41,59,0.8); }
 .dive-metric:last-child { border-bottom: 0; }
 .dive-metric .lbl { color: var(--text-muted); font-weight: 500; }
 .dive-metric .val { font-weight: 700; color: var(--text-primary); font-size: 13px; }
-.dive-metric .val.good { color: #059669; }
-.dive-metric .val.bad  { color: #dc2626; }
+.dive-metric .val.good { color: var(--good-ink); }
+.dive-metric .val.bad  { color: var(--bad-ink); }
 body.dark .dive-metric .val.good { color: #34d399; }
 body.dark .dive-metric .val.bad  { color: #f87171; }
 
@@ -236,7 +236,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   border: 1px solid var(--border-soft); border-radius: 8px;
   cursor: pointer; transition: all 0.15s;
 }
-.dive-action-btn:hover { background: var(--indigo); color: #fff; border-color: var(--indigo); transform: translateX(2px); }
+.dive-action-btn:hover { background: var(--indigo); color: var(--on-indigo); border-color: var(--indigo); transform: translateX(2px); }
 @keyframes drillIn { from { opacity:0; transform:scale(0.96); } to { opacity:1; transform:scale(1); } }
 
 /* ── Presets bar ── */
@@ -248,7 +248,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
   border-radius: 999px; cursor: pointer;
   transition: all 0.15s;
 }
-.preset-chip:hover { background: var(--indigo); color: #fff; border-color: transparent; }
+.preset-chip:hover { background: var(--indigo); color: var(--on-indigo); border-color: transparent; }
 .preset-chip .x { opacity: 0.5; }
 .preset-chip:hover .x { opacity: 1; }
 
@@ -329,7 +329,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 
 .sidebar-nav { flex: 1; overflow-y: auto; padding: 10px 8px; }
 .nav-section {
-  font-size: 9.5px; font-weight: 700; color: #2d4060;
+  font-size: 9.5px; font-weight: 700; color: #74879f;   /* 4.97:1 on the rail (was #2d4060, 1.75) */
   text-transform: uppercase; letter-spacing: 0.1em;
   padding: 16px 10px 5px; white-space: nowrap;
   overflow: hidden; transition: opacity 0.15s;
@@ -340,7 +340,7 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 .nav-item {
   position: relative;
   display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; color: #4a6080;
+  padding: 8px 10px; color: #8093b0;   /* 5.84:1 on the rail (was #4a6080, 2.85) */
   cursor: pointer; border-radius: 9px; margin-bottom: 1px;
   transition: all 0.15s ease; white-space: nowrap; user-select: none;
   border: 1px solid transparent;
@@ -379,12 +379,12 @@ body.dark .dive-metric .val.bad  { color: #f87171; }
 }
 .toggle-btn {
   width: 100%; display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; color: #2d4060; cursor: pointer;
+  padding: 8px 10px; color: #74879f; cursor: pointer;
   border-radius: 8px; background: none; border: none;
   font: inherit; font-size: 12px; font-weight: 500;
   transition: all 0.15s; white-space: nowrap;
 }
-.toggle-btn:hover { background: rgba(255,255,255,0.05); color: #4a6080; }
+.toggle-btn:hover { background: rgba(255,255,255,0.05); color: #8093b0; }
 .sidebar.collapsed .toggle-btn { justify-content: center; padding: 8px; }
 .toggle-label { transition: opacity 0.15s; }
 .sidebar.collapsed .toggle-label { opacity: 0; width: 0; overflow: hidden; }
@@ -458,7 +458,7 @@ body.dark .subtab-bar { background: rgba(11,18,34,0.8); border-color: var(--bord
 body.dark .subtab-btn.active { background: rgba(20,32,56,0.95); }
 .revsort-btn { cursor: pointer; color: var(--text-secondary); background: none; transition: all 0.15s ease; white-space: nowrap; }
 .revsort-btn:hover:not(.active) { color: var(--indigo); background: rgba(79,70,229,0.06); }
-.revsort-btn.active { background: var(--indigo); color: #fff; border-color: var(--indigo) !important; font-weight: 600; }
+.revsort-btn.active { background: var(--indigo); color: var(--on-indigo); border-color: var(--indigo) !important; font-weight: 600; }
 
 /* ════════════════════════════════════════════════════════════
    CARDS
@@ -583,7 +583,7 @@ body.dark tbody tr:hover { background: var(--bg-hover) !important; }
   white-space: nowrap; transition: all 0.15s ease; line-height: 1.4;
 }
 .period-preset:hover { border-color: var(--indigo); color: var(--indigo); background: rgba(99,102,241,0.06); }
-.period-preset.active { background: var(--indigo); color: #fff; border-color: var(--indigo); font-weight: 600; }
+.period-preset.active { background: var(--indigo); color: var(--on-indigo); border-color: var(--indigo); font-weight: 600; }
 /* Phase 5 — branch drill-down: clickable branch names across all views */
 .branch-drillable {
   cursor: pointer; font-weight: 600; white-space: nowrap; transition: color 0.15s;
@@ -673,6 +673,10 @@ body.dark .bg-white        { background: var(--bg-card) !important; }
 /* Primary indigo action buttons used inline throughout cards */
 .bg-indigo-600 { background: var(--indigo) !important; }
 .hover\:bg-indigo-500:hover { background: var(--indigo-mid) !important; }
+/* Dark mode lightens --indigo, so a white label on it drops to 2.98:1: flip the
+   label dark (6.46:1), and hover lighter rather than to #6366f1 (4.3-4.5 either way). */
+body.dark .bg-indigo-600 { color: var(--on-indigo) !important; }
+body.dark .hover\:bg-indigo-500:hover { background: #a5b4fc !important; }
 .text-indigo-600 { color: var(--indigo) !important; }
 .hover\:text-indigo-600:hover { color: var(--indigo) !important; }
 
@@ -685,7 +689,7 @@ body.dark .bg-white        { background: var(--bg-card) !important; }
 }
 .db-status.online  { background: #d1fae5; color: #065f46; border-color: #a7f3d0; }
 .db-status.offline { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-.db-status.checking { background: #f1f5f9; color: #64748b; border-color: #e2e8f0; }
+.db-status.checking { background: #f1f5f9; color: #5f6c80; border-color: #e2e8f0; }
 body.dark .db-status.online  { background: #064e3b; color: #6ee7b7; border-color: #065f46; }
 body.dark .db-status.offline { background: #450a0a; color: #fca5a5; border-color: #7f1d1d; }
 body.dark .db-status.checking { background: #1e293b; color: #94a3b8; border-color: #334155; }
@@ -733,7 +737,7 @@ body.dark .skeleton-kpi { border-color: var(--border); }
 #offlineOverlay h2 { font-size: 20px; font-weight: 700; color: var(--text-primary); margin: 0; }
 #offlineOverlay p  { font-size: 14px; color: var(--text-secondary); max-width: 380px; margin: 0; }
 #offlineOverlay .retry-btn {
-  padding: 10px 24px; background: var(--indigo); color: #fff;
+  padding: 10px 24px; background: var(--indigo); color: var(--on-indigo);
   border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
   cursor: pointer; transition: all 0.15s;
 }
@@ -857,7 +861,7 @@ body.dark #tab-menuimpact tr.mi-outlier-good { background: rgba(52,211,153,.12);
 #tab-menuimpact .mi-flag.good { background: rgba(16,185,129,.16); color: #047857; }
 #tab-closetime .mi-flag.warn,
 #tab-ingpurchase .mi-flag.warn,
-#tab-menuimpact .mi-flag.warn { background: rgba(217,119,6,.16);  color: #b45309; }
+#tab-menuimpact .mi-flag.warn { background: rgba(217,119,6,.16);  color: #92400e; }   /* 5.96:1 (was #b45309, 4.22) */
 body.dark #tab-closetime .mi-flag.bad,
 body.dark #tab-ingpurchase .mi-flag.bad,
 body.dark #tab-menuimpact .mi-flag.bad  { color: #fca5a5; }
@@ -1122,7 +1126,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 }
 #mobileSummary { min-height: 100vh; background: var(--bg-page, #f1f5f9); padding-bottom: 40px; }
 .ms-header { position: sticky; top: 0; z-index: 20; background: #4338ca;
-  background: linear-gradient(135deg,#4338ca,#6366f1); color: #fff;
+  background: linear-gradient(135deg,#4338ca,#4f46e5); color: #fff;   /* white >= 6.29:1 end to end (#6366f1 was 4.47) */
   padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
 .ms-header .ms-logo { width: 34px; height: 34px; border-radius: 9px; background: rgba(255,255,255,.18);
   display: flex; align-items: center; justify-content: center; font-size: 18px; }
@@ -1157,7 +1161,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 #mobileSummary { padding-bottom: 80px; }
 .ms-seg { flex: 1; padding: 7px 6px; border-radius: 9px; border: 1px solid var(--border,#e2e8f0);
   background: var(--bg-card,#fff); color: var(--text-muted,#64748b); font-size: 12px; font-weight: 600; cursor: pointer; }
-.ms-seg-on { background: #6366f1; color: #fff; border-color: #6366f1; }
+.ms-seg-on { background: #4f46e5; color: #fff; border-color: #4f46e5; }
 
 /* ── Management Report: white-paper island — the printable report keeps a light
    document look in dark mode. The report's inner styles consume these tokens
@@ -1342,7 +1346,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
     <div class="ms-logo">お</div>
     <div style="flex:1;min-width:0">
       <p style="font-weight:700;font-size:15px;line-height:1.1">Oshinei</p>
-      <p id="msSubtitle" style="font-size:11px;opacity:.85">สรุปสำหรับเจ้าของ</p>
+      <p id="msSubtitle" style="font-size:11px">สรุปสำหรับเจ้าของ</p>
     </div>
     <button class="ms-toggle" onclick="loadMobileSummary(true)" aria-label="รีเฟรช">↻</button>
     <button class="ms-toggle" onclick="showFullDashboard()">เต็ม →</button>

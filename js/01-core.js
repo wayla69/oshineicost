@@ -654,11 +654,15 @@ function chartTheme(force) {
     grid:     dark ? 'rgba(148,163,184,0.12)' : '#f1f5f9',
     labelStrong: dark ? '#f1f5f9' : '#1e293b',
     bg:       dark ? '#1e293b' : '#ffffff',
+    // Legend / title ink. Chart.defaults.color is a fixed #475569, which is
+    // 2.3:1 on the dark card, so each chart gets a theme-aware default.
+    ink:      dark ? '#94a3b8' : '#475569',
   };
 }
 function applyChartTheme(cfg, force) {
   const t = chartTheme(force);
   if (!cfg.options) return;
+  if (cfg.options.color === undefined) cfg.options.color = t.ink;
   if (cfg.options.scales) {
     Object.values(cfg.options.scales).forEach(ax => {
       if (!ax) return;
@@ -1344,7 +1348,7 @@ function _updateClusterBar(name) {
     const on = t === name;
     const title = dim && !on ? ` title="ไม่มีใครเปิดตั้งแต่ 2026-07-20 — ซ่อนไว้ก่อนลบ${KILL_REVIEW_DATE ? ' (ทบทวน ' + KILL_REVIEW_DATE + ')' : ''}"` : '';
     return `<button onclick="switchTab('${t}')"${title} class="text-xs rounded-lg px-3 py-1 transition-colors" style="${on
-      ? 'background:var(--indigo);color:#fff;font-weight:600'
+      ? 'background:var(--indigo);color:var(--on-indigo);font-weight:600'
       : 'background:var(--bg-input);color:var(--text-secondary);border:1px solid var(--border)'}${dim && !on ? ';opacity:.55' : ''}">${lbl}</button>`;
   };
   const more = !folded.length ? '' : open
